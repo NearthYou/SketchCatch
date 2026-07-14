@@ -4,7 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `test/sw/378-complete-sandbox-e2e`; the workstream remains `in_progress` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are still unverified.
+- Branch: `test/sw/378-runtime-acceptance`; the code implementation is complete while the workstream remains `in_progress` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are still unverified.
+- The sandbox runner now exposes one fail-closed three-stage orchestration contract (`prepare`, `deploy`, `finalize`), executes the exact Direct/GitOps matrix through injected adapters, always cleans up after mutation starts, and cannot report success before evidence verification.
+- Repository analysis now creates standalone AWS SAM and CodeDeploy application units. Static target inference prefers the application-local lockfile, and generated npm/yarn workflows install inside the confirmed source root.
 - The 2026-07-15 sandbox preflight passed against AWS account `614935468487`, the verified AWS Connection, the private fixture repository, and the approved USD 1 budget.
 - Web Push now persists the successful provider HTTP status without response bodies or subscription material, and generated Destroy workflows remove Lambda, EC2/ASG, and Static versioned artifacts.
 - ECS GitOps Infra run `29334708442` and chained App run `29334822683` succeeded for commit `3a12e55c13e7be1a769cfbe920b112516d8c14ce`.
@@ -13,87 +15,35 @@ Short English-only working log for the current agent context. Older records are 
 - Application release `8025a2f3-455a-41bb-abbd-b8149105d004` and Pipeline Run `4defade1-18ca-437b-8cf6-3857b058353e` persist the GitOps SHA, digest, provider revision, Output URL, and healthy ECS evidence.
 - The AWS Connection external ID was rotated in memory and verified with a fresh Operator session: the new value is accepted and the prior value is rejected. No value was printed or written to a file.
 - Destroy run `29337235499` succeeded. Direct queries confirm zero VPC, active ECS cluster, ECR repository, CodeBuild project, log group, release/state bucket, OIDC provider, issue task definition, and issue IAM role. Resource Groups still has three delayed deleted-ECS tag index entries.
-- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused tests, harness, lint, typecheck, build, and diff checks pass.
+- Focused sandbox, runtime contract, three-stage UI, and target-state tests pass. Full Web/API suites remain intentionally omitted; final lint, typecheck, and build are recorded before PR handoff.
 - Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
+- After merging `origin/dev` at `f16a4546` and resolving PR feedback, final checks passed: 25 sandbox runner tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks. Full Web/API suites were intentionally omitted.
+- Cleanup is complete: local API and HTTPS proxy ports are closed, the Redis container, temporary certificate/TLS files/logs/fixture clone are removed, and read-only AWS checks show zero Issue #378 ECR repositories, CodeBuild projects, and S3 buckets.
+- The automated suite retains 52 essential protection test files. Tests outside the reviewed protection line, including three superseded feature-specific tests from this branch, remain deleted after merging the latest `dev`.
+- No Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during the final code-integration pass.
 
 ## Session Record
 
-### 2026-07-15 - Move project source repository connection out of Settings
+### 2026-07-15 - Restore five reviewed security tests
 
-- Added `/dashboard/projects/:projectId/repository` as the dedicated project source repository surface and redirected the legacy `settings?tab=github` URL there.
-- Removed repository selection and analysis from project Settings, preserved AWS deployment target and CI/CD monitoring settings, and separated global GitHub account permissions from project repository selection.
-- Kept active repository details and analysis on the dedicated surface, collapsed replacement candidates by default, and required explicit confirmation before replacing an active repository.
-- Verification passed: TDD red-green coverage, 127 focused Web tests, Web tests 1,333/1,333, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
-- Authenticated browser verification stopped at the login guard while preserving the requested return URL; no API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+- Restored exactly five tests from the merged dev source: API auth/error boundaries, Live Observation HTTPS/SSRF transport, filesystem path traversal, Live Observation capability tokens, and Web Push subscription encryption.
+- Focused execution passed 54/57 checks; the three failures occurred before assertions because this Windows environment denied test symlink creation with `EPERM`.
+- API lint and typecheck pass. Full workspace test/build were intentionally not rerun to keep the merge path minimal.
 
-### 2026-07-15 - Fix disconnected GitHub account CTA routing
+### 2026-07-15 - Resolve latest dev merge after test reduction
 
-- Traced the incorrect project Settings navigation to `GIT_APP_GITHUB_IDENTITY_REQUIRED` being classified by the broad `GIT_APP_*` permission-error rule.
-- Classified the missing GitHub OAuth identity as an account-disconnected state, so CI/CD now renders the global `/dashboard/settings#github-account-settings-title` action while preserving project Settings for repository-level permission failures.
-- Verification passed: TDD red-green regression, 17 focused CI/CD tests, Web tests 1,336/1,336, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
-- Authenticated browser click verification was unavailable because the local Workspace redirected to login; no API, database, dependency, Git handoff, deployment, or cloud mutation was performed.
+- Preserved the incoming `dev` runtime and contract changes while resolving delete/modify conflicts in favor of the 47-file essential protection line.
+- Removed 33 reintroduced non-protection tests and four new non-protection tests; retained incoming updates to the protected deployment, Terraform safety, route, and Web deployment tests.
+- Combined the current test policy with the latest imported sandbox and Issue #360 progress evidence.
+- Verification passed: `pnpm test` (518 checks), `pnpm migration:compatibility:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
 
-### 2026-07-15 - Fix oversized GitHub settings icons
+### 2026-07-15 - Reduce tests to the essential protection line
 
-- Reproduced the global GitHub settings layout with mocked authenticated browser data and traced the breakage to unconstrained custom `DashboardIcon` SVG dimensions.
-- Bounded the GitHub settings header icon to 20px and the install action icon to 16px, preserving the existing account-scoped installation flow and responsive card layout.
-- Verified a TDD red-green cycle, 9 focused Web tests, desktop 1440x900 and mobile 390x844 browser renders, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
-- No API tests, API/DB/dependency changes, Git handoff, deployment, or cloud mutation were performed.
-
-### 2026-07-15 - Route disconnected CI/CD users to the correct GitHub settings
-
-- Added an account-aware CI/CD empty state: users without a GitHub App installation go to global Settings, while connected accounts without an active project repository keep the project GitHub Settings action.
-- Reused the global GitHub account settings section already rendered after the connected AWS accounts list; active project repositories keep the existing Pipeline Run console without an extra account lookup.
-- Verification passed: focused CI/CD/Dashboard/Workspace/API tests 160/160, Web tests 1,331/1,331, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
-- No database migration, dependency, lockfile, GitHub installation, deployment, Git handoff, or cloud mutation was performed.
-
-### 2026-07-15 - Move GitHub App permissions to global settings
-
-- Added account-scoped GitHub App installation listing and install callbacks without creating or changing project `SourceRepository` rows.
-- Added the global `GitHub 계정 연결` section immediately below connected AWS accounts; project settings now keep only repository selection and analysis and link permission management to global settings.
-- Verification passed: 39 focused API tests, 64 focused Web tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
-- Authenticated visual QA redirected to login, so the rendered settings body was not inspected; source placement coverage and the production build passed.
-- No DB migration, dependency, lockfile, external GitHub permission change, deployment, or cloud mutation was performed.
-
-### 2026-07-15 - Remove deployment run details from the modal
-
-- Removed the `실행 세부정보` section, execution-record selector, refresh action, and the recent-result card's now-invalid details link.
-- Removed the section-only failure explanation request/state and presentation helpers while preserving deployment selection, execution actions, release history, resources, outputs, logs, and all deployment mutation contracts.
-- Focused Web tests passed 112/112 and `pnpm lint`, `pnpm harness:check`, and `git diff --check` passed. No API tests were run.
-- `pnpm typecheck` and `pnpm build` remain blocked by the concurrent GitHub callback union handling errors in `apps/web/app/integrations/github/callback/page.tsx:62-63`; the deployment modal files reported no type or lint errors.
-- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
-
-### 2026-07-15 - Rebuild the Workspace deployment modal for operational clarity
-
-- Reorganized the deployment modal into a bounded 1280px operational layout with a compact three-step flow, a 320px recent-result card, and a single-column fallback below 1200px.
-- Added explicit deployment setting labels and help text, icon-and-text status badges, truthful recent validation/deployment results, localized execution details, and a normal-flow deployment history with a clear empty state.
-- Preserved the existing deployment APIs, state, automatic verified AWS connection selection, and safety gates; the removed AWS selector and legacy context panel were not restored.
-- Verification passed: Web tests 1,325/1,325, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Full API tests were intentionally not run because no API path changed.
-- Authenticated visual QA could not reach the modal because the local Workspace route redirected to login; source-level responsive/accessibility coverage and production build passed.
-- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
-
-### 2026-07-15 - Open the deployment modal without a pre-save wait
-
-- Changed the Workspace `배포` entry to open the deployment modal synchronously without waiting for project draft or Board thumbnail persistence.
-- Removed the entry button's save-dependent pending state, spinner, and obsolete pre-open save failure toast; the visible label remains `배포`.
-- Kept deployment safety in the modal: `저장 후 검증 실행` still synchronizes Terraform, saves the project draft, requires its revision, saves the Architecture/Terraform artifacts, and then runs validation.
-- Verification passed through a focused TDD red-green cycle, Web tests 1,325/1,325, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
-- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
-
-### 2026-07-15 - Simplify the Workspace deployment entry and validation layout
-
-- Removed the AWS connection dropdown and the right-side deployment context panel, then expanded the remaining validation content to the full row.
-- Kept the Workspace deployment button label fixed as `배포` while idle and pending, without removing the save-before-open safety flow.
-- Kept the first verified AWS connection auto-selection and `awsConnectionId` deployment request contract unchanged.
-- Verification passed: 121 focused Web tests, Web tests 1,319/1,319, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
-- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
-
-### 2026-07-15 - Remove the Dashboard external connections band
-
-- Removed the populated Dashboard's `외부 연결` band while preserving the `연결 상태` metric and the underlying AWS/Git connection workflows.
-- Removed the unused connection icons and responsive CSS selectors, and added a focused source regression test.
-- Verification passed: Web tests 1,317/1,317, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
-- No API, database, dependency, deployment, Git handoff, or cloud mutation was performed.
+- Removed 343 non-core test files and retained 47 explicitly reviewed safety and core-workflow test files.
+- Added the retained Web component test, shared type contracts, sandbox preflight/evidence test, and Terraform routing test to the normal `pnpm test` path; the lockfile changed only for the existing `tsx` test runner in `packages/types`.
+- Removed stale deleted-test references from active deployment and asset documentation, and recorded the new protection-line policy in `feature_list.json` while preserving older feature evidence as historical audit records.
+- Verification before this merge: reduced `pnpm test` passed 511 checks across all 47 retained files, and migration compatibility, lint, typecheck, build, harness, and diff checks passed.
+- Risk: AI Architecture, GitOps runtime reconcilers, Reverse Engineering, Cost, Live Observation, notifications, detailed diagram editing, Templates, and presentation behavior no longer have their previous dedicated regression suites.
 
 ### 2026-07-15 - Resolve Issue #360 branch conflicts with latest dev
 
@@ -181,7 +131,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Open and babysit the `codex/ecs-deployment-speed` PR against `dev`, address CI/review feedback, and merge only after GitHub reports it ready.
-- No production Terraform apply is required for this change set.
-- If pursuing the 5m30s stretch target, profile the 1m28s validation job and 3m13s API service stabilization before changing safety thresholds.
-- Continue issue #378 only on its dedicated branch; do not mix its sandbox matrix work into this release optimization branch.
+- No continuation is required for the completed test reduction after this branch is reviewed.
+- Resume Issue #378 only on its dedicated branch after its recorded blockers can be addressed.
+- Add future automated coverage only through an explicit update to the essential protection-line policy.

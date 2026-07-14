@@ -734,12 +734,8 @@ Diagram-to-Terraform의 Live Observation v2 output은 Terraform reference와 pro
 
 CloudWatch 관측은 선택된 동일 Target Group의 `HTTPCode_Target_2XX_Count`, `HTTPCode_Target_3XX_Count`, `HTTPCode_Target_4XX_Count`, `HTTPCode_Target_5XX_Count`를 합산해 request 수를 만들고, 같은 Target Group의 `TargetResponseTime` p95와 하나의 완료 60초 period로 정렬합니다. 각 query result가 유일한 `StatusCode=Complete`여야 하며 `PartialData`, `InternalError`, `Forbidden`, 누락 status는 unavailable입니다. p95가 선택한 period는 response result의 최신 point만 비교하지 않고 전체 finite point에서 정확히 찾습니다. 같은 period에 하나 이상의 response class가 있어야 하며 status가 Complete인 sparse class만 0으로 취급합니다. 다른 period의 class를 합치거나 whole-ALB `RequestCount`를 분모로 사용하지 않습니다. ASG running은 `InService` instance, ECS/Fargate running은 service task count이며 healthy는 `DescribeTargetHealth`의 실제 healthy target 수를 사용합니다. STS와 AWS read는 5초 abort deadline을 공유합니다. metric이 60초보다 지연되거나 period가 어긋나거나 metric/capacity/log 조회가 실패하면 UI와 Store는 기존 숫자를 재사용하지 않고 정량 필드를 `null`로 표시합니다. CloudWatch Logs는 최근 5분 최대 50건만 읽고 credential-shaped 값은 저장 전 중앙 masker로 제거합니다.
 
-로컬 자동 검증은 AWS 리소스를 만들지 않습니다.
-
-```bash
-pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/*.test.ts src/routes/live-observations-v2.test.ts src/routes/live-observation-public-collector.test.ts
-pnpm --filter @sketchcatch/web exec tsx --test features/workspace/live-observation.test.ts features/workspace/live-observation-modal.test.ts
-```
+Live Observation 전용 자동 회귀 테스트는 현재 보호선에 포함되지 않습니다. 이 절의 동작은
+자동 검증된 것으로 간주하지 않습니다.
 
 실제 `scripts/smoke/live-demo-web-service.ps1` 실행은 AWS 비용 리소스를 생성하므로 명시적 승인과 verified AWS Connection이 있을 때만 수행합니다. smoke 또는 실제 acceptance를 마치면 관측 `stop`이 아니라 기존 Deployment Destroy 흐름으로 ALB, ASG, EC2, S3 리소스를 cleanup하고 결과를 기록해야 합니다.
 

@@ -4,9 +4,11 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  createSandboxOrchestrationPlan,
   evaluateSandboxPreflight,
   redactSensitiveEvidence,
   runSandboxCli,
+  runSandboxOrchestration,
   runSandboxPreflight,
   validateSandboxEvidence
 } from "./deployment-sandbox-e2e.mjs";
@@ -27,6 +29,75 @@ const STARTED_AT = "2026-07-14T01:00:00.000Z";
 const FINISHED_AT = "2026-07-14T01:30:00.000Z";
 const RUNTIMES = ["ecs_fargate", "lambda", "ec2_asg", "static_site"];
 const SCOPES = ["infrastructure", "application", "full_stack"];
+
+test("sandbox orchestration exposes three developer-facing stages", () => {
+  const plan = createSandboxOrchestrationPlan();
+
+  assert.equal(plan.implementationStatus, "complete");
+  assert.equal(plan.acceptanceStatus, "pending");
+  assert.deepEqual(plan.stages.map(({ id }) => id), ["prepare", "deploy", "finalize"]);
+  assert.deepEqual(plan.stages[1].units, [
+    ...SCOPES.map((scope) => `direct:${scope}`),
+    ...RUNTIMES.map((runtime) => `gitops:${runtime}`),
+    "observation",
+    "notifications"
+  ]);
+});
+
+test("sandbox orchestration blocks safely when adapters are missing", async () => {
+  const result = await runSandboxOrchestration(null);
+
+  assert.equal(result.acceptanceStatus, "blocked");
+  assert.equal(result.errorCode, "adapters_missing");
+  assert.deepEqual(result.events, []);
+});
+
+test("sandbox orchestration runs the exact matrix and passes only after cleanup and verification", async () => {
+  const calls = [];
+  const result = await runSandboxOrchestration({
+    async preflight() { calls.push("preflight"); return { ready: true }; },
+    async runDirect(scope) { calls.push(`direct:${scope}`); },
+    async runGitOps(runtime) { calls.push(`gitops:${runtime}`); },
+    async collectObservation() { calls.push("observation"); },
+    async collectNotifications() { calls.push("notifications"); },
+    async cleanup() { calls.push("cleanup"); },
+    async verify() { calls.push("verify"); return { valid: true }; }
+  }, { now: () => new Date(STARTED_AT) });
+
+  assert.deepEqual(calls, [
+    "preflight",
+    ...SCOPES.map((scope) => `direct:${scope}`),
+    ...RUNTIMES.map((runtime) => `gitops:${runtime}`),
+    "observation",
+    "notifications",
+    "cleanup",
+    "verify"
+  ]);
+  assert.equal(result.acceptanceStatus, "passed");
+  assert.equal(result.events.at(-1)?.unit, "verify");
+});
+
+test("sandbox orchestration stops on failure, always cleans up, and never reports success", async () => {
+  const calls = [];
+  const result = await runSandboxOrchestration({
+    async preflight() { return { ready: true }; },
+    async runDirect(scope) { calls.push(`direct:${scope}`); },
+    async runGitOps(runtime) {
+      calls.push(`gitops:${runtime}`);
+      if (runtime === "lambda") throw Object.assign(new Error("failed"), { code: "lambda_failed" });
+    },
+    async collectObservation() { calls.push("observation"); },
+    async collectNotifications() { calls.push("notifications"); },
+    async cleanup() { calls.push("cleanup"); },
+    async verify() { calls.push("verify"); return { valid: true }; }
+  });
+
+  assert.equal(result.acceptanceStatus, "failed");
+  assert.equal(result.errorCode, "lambda_failed");
+  assert.equal(calls.at(-1), "cleanup");
+  assert.equal(calls.includes("gitops:ec2_asg"), false);
+  assert.equal(calls.includes("verify"), false);
+});
 
 test("live deployment smoke retries once after an access token expires", () => {
   const scriptPath = fileURLToPath(new URL("./live-demo-web-service.ps1", import.meta.url));
