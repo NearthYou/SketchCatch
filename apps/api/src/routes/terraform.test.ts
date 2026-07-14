@@ -758,7 +758,11 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
             kind: "resource",
             label: "main_vpc",
             metadata: {
-              parentAreaNodeId: "area-1"
+              parentAreaNodeId: "area-1",
+              areaAutoSizeBaseline: {
+                position: { x: 0, y: 0 },
+                size: { width: 240, height: 180 }
+              }
             },
             parameters: {
               resourceType: "aws_vpc",
@@ -797,7 +801,11 @@ test("POST /api/terraform/sync-to-diagram updates matching DiagramJson values", 
     cidrBlock: "10.1.0.0/16"
   });
   assert.deepEqual(body.diagramJson.nodes[0]?.metadata, {
-    parentAreaNodeId: "area-1"
+    parentAreaNodeId: "area-1",
+    areaAutoSizeBaseline: {
+      position: { x: 0, y: 0 },
+      size: { width: 240, height: 180 }
+    }
   });
   assert.deepEqual(body.diagramJson.edges, [
     {

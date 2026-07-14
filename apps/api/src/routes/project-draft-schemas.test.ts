@@ -180,7 +180,11 @@ test("save project draft body preserves diagram node metadata", () => {
         {
           ...validDiagram.nodes[0]!,
           metadata: {
-            parentAreaNodeId: "area-1"
+            parentAreaNodeId: "area-1",
+            areaAutoSizeBaseline: {
+              position: { x: 100, y: 80 },
+              size: { width: 240, height: 180 }
+            }
           }
         }
       ]
@@ -188,8 +192,33 @@ test("save project draft body preserves diagram node metadata", () => {
   });
 
   assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata, {
-    parentAreaNodeId: "area-1"
+    parentAreaNodeId: "area-1",
+    areaAutoSizeBaseline: {
+      position: { x: 100, y: 80 },
+      size: { width: 240, height: 180 }
+    }
   });
+});
+
+test("save project draft body rejects an invalid area auto-size baseline", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          metadata: {
+            areaAutoSizeBaseline: {
+              position: { x: 0, y: 0 },
+              size: { width: 0, height: 180 }
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
 });
 
 test("save project draft body accepts reverse engineering node metadata", () => {

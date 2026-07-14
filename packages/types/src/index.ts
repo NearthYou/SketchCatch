@@ -2335,6 +2335,18 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  areaAutoSizeBaseline?:
+    | {
+        position: {
+          x: number;
+          y: number;
+        };
+        size: {
+          width: number;
+          height: number;
+        };
+      }
+    | undefined;
   liveObservationRole?:
     | "traffic-source"
     | "traffic-hop"
