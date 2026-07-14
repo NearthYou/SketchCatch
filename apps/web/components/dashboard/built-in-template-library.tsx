@@ -11,7 +11,7 @@ export function BuiltInTemplateLibrary() {
     <div className="dashboardRouteStack">
       <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div>
-          <h1>탬플릿</h1>
+          <h1>템플릿</h1>
         </div>
       </header>
 

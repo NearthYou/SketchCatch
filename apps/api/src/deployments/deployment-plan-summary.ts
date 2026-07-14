@@ -27,13 +27,19 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
   "aws_security_group",
   "aws_security_group_rule",
   "aws_cloudfront_distribution",
+  "aws_cloudfront_origin_access_control",
   "aws_cloudwatch_log_group",
+  "aws_ecr_repository",
   "aws_ecs_cluster",
   "aws_ecs_service",
   "aws_ecs_task_definition",
+  "aws_eip",
   "aws_instance",
+  "aws_nat_gateway",
   "aws_s3_bucket",
+  "aws_s3_bucket_policy",
   "aws_s3_bucket_public_access_block",
+  "aws_s3_object",
   "aws_codebuild_project",
   "aws_codedeploy_app",
   "aws_codedeploy_deployment_group",
@@ -117,6 +123,10 @@ const demoWebServiceWithRdsLiveApplySupportedResourceTypes = new Set([
   "kubernetes_service"
 ]);
 
+const terraformPlanSupportedResourceTypes = new Set([
+  ...demoWebServiceWithRdsLiveApplySupportedResourceTypes
+]);
+
 export function getLiveApplySupportedResourceTypes(
   liveProfile: DeploymentLiveProfile = "practice"
 ): ReadonlySet<string> {
@@ -129,6 +139,10 @@ export function getLiveApplySupportedResourceTypes(
   }
 
   return practiceLiveApplySupportedResourceTypes;
+}
+
+export function getTerraformPlanSupportedResourceTypes(): ReadonlySet<string> {
+  return terraformPlanSupportedResourceTypes;
 }
 
 export class DeploymentPlanSummaryParseError extends Error {

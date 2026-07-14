@@ -308,6 +308,7 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.equal(loadBalancer?.config.parentAreaNodeId, albSecurityGroup?.id);
   assert.equal(taskSecurityGroup?.config.parentAreaNodeId, privateAppSubnets[0]?.id);
   assert.equal(fargateRuntime?.config.parentAreaNodeId, taskSecurityGroup?.id);
+  assert.equal(fargateRuntime?.config.sketchcatchReferenceTerraform, true);
   assert.match(loadBalancer?.label ?? "", /Public A\/B/u);
   assert.match(fargateRuntime?.label ?? "", /Private App A\/B/u);
   assert.equal(service?.config.desiredCount, 1);

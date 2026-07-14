@@ -4,7 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `codex/fix-live-observation-error-diagnostics`.
+
 - `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
 - This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
 - Before the merge, focused notification SSE fixes passed API notification tests 17/17, Web notification tests 6/6, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
@@ -16,14 +16,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-15 - Explain disabled Live Observation routes and expose API diagnostics
-
-- Reproduced the reported `POST /api/deployments/:deploymentId/live-observations` 404 on both the Web proxy and API origin and traced it to conditional route registration while Live Observation was disabled.
-- Registered fail-closed session routes while disabled; they return `503 LIVE_OBSERVATION_DISABLED` without initializing the capability keyring, Store, manifest materializer, or AWS adapter.
-- Added `x-request-id` to API responses and safe Web diagnostics containing method, query/fragment-free path, HTTP status or no-response state, error code, and optional request ID.
-- Verified focused API tests 3/3 and Web tests 5/5. `pnpm harness:check`, `pnpm lint`, standalone `pnpm typecheck`, and `pnpm build` passed. A temporary disabled API on port 4010 returned 503, `x-request-id`, and the explicit code.
-- Known unrelated baseline: `pnpm test` remains non-green on the existing three three-tier Template position/parent contract failures in `packages/types`.
-- Known local boundary: the tracked code does not enable Live Observation or generate secrets; local runtime configuration must still satisfy the capability keyring and HTTPS audience-origin requirements before enabling the feature.
 
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 
@@ -93,7 +85,16 @@ Short English-only working log for the current agent context. Older records are 
 - Dev brought in ECS GitOps persistence and cleanup evidence, production ECS deployment speed optimization, live sandbox Direct recovery hardening, deployment sandbox E2E gates, Web UI clarity/accessibility improvements, dashboard navigation/copy simplification, and Brainboard AWS Template branch integration records.
 - Detailed older dev records remain available in `docs/agent-history/2026-07.md` and the merge commit history.
 
+### 2026-07-15 - Restore production Amazon Q deployment configuration
+
+- Found that the active ECS API task definition preserved disabled Terraform defaults even though the GitHub production environment contained the intended Amazon Q settings.
+- Updated the ECS deployment workflow to require, validate, and inject the production Amazon Q runtime configuration; added a structural regression check for the contract.
+- Added least-privilege `qbusiness:ChatSync` permission for the configured application to the production API task role and completed the missing GitHub production environment variable.
+- Verification passed: focused production infrastructure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production ECS deployment was not run following the user's explicit instruction.
+
 ## Next Action
 
+- Review and merge `codex/fix-production-amazon-q-runtime`; run the production ECS deployment only after explicit approval.
+- Review and apply the approved production Terraform change, then re-run the signed-in production browser loop to confirm the AWS Console launch link is rendered.
 - Continue notification work separately from the completed repository diagram commit.
 - Run local API DB migrations before testing deployment notifications locally.

@@ -129,7 +129,7 @@ export async function runDeploymentInit(
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     assertTerraformArtifactIsSafe(
       createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
-      { liveProfile: deployment.liveProfile }
+      { liveProfile: deployment.liveProfile, resourceValidationMode: "plan" }
     );
 
     const awsCredentials = await prepareAwsCredentialsForInit({

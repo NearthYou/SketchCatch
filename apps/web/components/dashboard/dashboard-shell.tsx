@@ -21,7 +21,7 @@ import { ProductState } from "../ui/ProductState";
 const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "작업 현황" },
   { href: "/dashboard/projects", icon: FolderKanban, label: "내 프로젝트" },
-  { href: "/dashboard/templates", icon: Shapes, label: "탬플릿" },
+  { href: "/dashboard/templates", icon: Shapes, label: "템플릿" },
   { href: "/dashboard/costs", icon: WalletCards, label: "비용 관리" },
   { href: "/dashboard/settings", icon: Settings, label: "설정" }
 ] as const;

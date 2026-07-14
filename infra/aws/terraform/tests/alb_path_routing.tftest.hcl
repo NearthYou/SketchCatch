@@ -172,6 +172,15 @@ run "routes_directly_to_cost_scaled_services" {
     )
     error_message = "API and web autoscaling must keep the cost-first min=1, max=2 range."
   }
+
+  assert {
+    condition = (
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_origins, "https://sketchcatch.example") &&
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_origins, "http://localhost:3000") &&
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_methods, "PUT")
+    )
+    error_message = "Artifact bucket CORS must allow browser uploads from the configured public site and approved development origins."
+  }
 }
 
 run "https_routes_and_enables_worker_dispatch" {
@@ -292,8 +301,8 @@ run "https_routes_and_enables_worker_dispatch" {
       {
         for item in one(jsondecode(aws_ecs_task_definition.api.container_definitions)).environment :
         item.name => item.value
-      }.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN == aws_iam_role.ecs_worker_task.arn
+      }.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN == aws_iam_role.ecs_task.arn
     )
-    error_message = "Worker-enabled API tasks must dispatch to ECS and publish the worker principal for connection trust."
+    error_message = "Worker-enabled API tasks must dispatch to ECS while publishing the API principal for connection trust."
   }
 }
