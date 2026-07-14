@@ -20,6 +20,7 @@ import type {
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Mic, Send, Sparkles, Trash2, X } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
+import { compileArchitectureDraftProposal } from "../architecture-board-compiler";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createAiArchitecturePatchPreview,
@@ -28,10 +29,21 @@ import {
   runAiTerraformErrorExplanation
 } from "./api";
 import {
-  convertDiagramJsonToArchitectureJson,
-  getDiagramJsonForArchitectureDraft
+  convertDiagramJsonToArchitectureJson
 } from "./workspace-ai-diagram-adapter";
-import { createWorkspaceAiBoardSnapshot } from "./workspace-ai-panel-state";
+import {
+  createWorkspaceAiBoardSnapshot,
+  isWorkspaceAiResultStale
+} from "./workspace-ai-panel-state";
+import {
+  createWorkspaceAiChatComposerStates,
+  getAdjacentWorkspaceAiChatScope,
+  getWorkspaceAiChatScopeDefinition,
+  isWorkspaceAiChatScope,
+  workspaceAiChatScopes,
+  type WorkspaceAiChatComposerState,
+  type WorkspaceAiChatScope
+} from "./workspace-ai-chat-conversation";
 import {
   WorkspaceAiExplanation,
   WorkspaceAiTerraformPreviewResult,
@@ -90,8 +102,6 @@ type WorkspaceAiChatMessageKind =
   | "status"
   | "terraform_issue";
 type WorkspaceAiChatSelectionMode = "single" | "multiple";
-type WorkspaceAiChatScope = "draft" | "errors" | "preview";
-
 type WorkspaceAiChatMessage = {
   readonly id: string;
   readonly content: string;
@@ -128,8 +138,26 @@ type TerraformPreviewExplanationState = {
   readonly state: AiRequestState;
 };
 
+type LastPatchPreviewRequest = {
+  readonly connectionTargetResourceId?: string | undefined;
+  readonly instruction: string;
+  readonly selectedTargetResourceId?: string | undefined;
+  readonly skipConnection?: boolean | undefined;
+};
+
+type VoiceInputBase = {
+  readonly scope: WorkspaceAiChatScope;
+  readonly value: string;
+};
+
+type WorkspaceAiProposalSource = {
+  readonly fingerprint: string;
+  readonly revision: number;
+};
+
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
+const ACTIVE_SCOPE_STORAGE_KEY_SUFFIX = "activeScope";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
 const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
@@ -185,11 +213,15 @@ export function WorkspaceAiChatDock({
   terraformSafeFixApplyResult
 }: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
-  const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>("draft");
-  const [composerValue, setComposerValue] = useState("");
-  const [isVoiceListening, setVoiceListening] = useState(false);
+  const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>(() =>
+    readStoredActiveChatScope(projectId)
+  );
+  const [composerStates, setComposerStates] = useState<
+    Record<WorkspaceAiChatScope, WorkspaceAiChatComposerState>
+  >(() => createWorkspaceAiChatComposerStates());
+  const [voiceListeningScope, setVoiceListeningScope] = useState<WorkspaceAiChatScope | null>(null);
   const [isVoiceInputSupported, setVoiceInputSupported] = useState(true);
-  const [voiceStatusMessage, setVoiceStatusMessage] = useState("");
+  const [isMobileChatSurface, setMobileChatSurface] = useState(false);
   const [messages, setMessages] = useState<WorkspaceAiChatMessage[]>(() =>
     readStoredChatMessages(projectId)
   );
@@ -208,6 +240,14 @@ export function WorkspaceAiChatDock({
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
     null
   );
+  const [lastPatchPreviewRequest, setLastPatchPreviewRequest] =
+    useState<LastPatchPreviewRequest | null>(null);
+  const [draftSourceFingerprint, setDraftSourceFingerprint] = useState<string | null>(null);
+  const [patchPreviewSourceFingerprint, setPatchPreviewSourceFingerprint] = useState<string | null>(
+    null
+  );
+  const [draftSourceRevision, setDraftSourceRevision] = useState<number | null>(null);
+  const [patchPreviewSourceRevision, setPatchPreviewSourceRevision] = useState<number | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<TerraformPreviewExplanationState | null>(null);
   const [terraformIssueResolution, setTerraformIssueResolution] =
@@ -229,24 +269,41 @@ export function WorkspaceAiChatDock({
   );
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
+  const chatDialogRef = useRef<HTMLElement | null>(null);
+  const tabButtonRefs = useRef<Record<WorkspaceAiChatScope, HTMLButtonElement | null>>({
+    draft: null,
+    errors: null,
+    preview: null
+  });
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollFrameRef = useRef<number | null>(null);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const voiceInputBaseRef = useRef("");
+  const voiceInputBaseRef = useRef<VoiceInputBase>({ scope: "draft", value: "" });
   const voiceNoSpeechTimerRef = useRef<number | null>(null);
   const loadedProjectIdRef = useRef(projectId);
   const latestTerraformIssueRequestIdRef = useRef<number | null>(null);
   const latestTerraformPreviewRequestIdRef = useRef<number | null>(null);
   const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
-  const dismissedTerraformIssueRequestIdRef = useRef<number | null>(null);
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
     [context.diagram]
   );
+  const currentBoardRevision = context.getDiagramRevision();
   const draftSafetyWarnings = useMemo(
     () => createDraftSafetyWarnings(draft, boardSnapshot.hasResources),
     [boardSnapshot.hasResources, draft]
   );
+  const activeComposer = composerStates[activeChatTab];
+  const activeScopeDefinition = getWorkspaceAiChatScopeDefinition(activeChatTab);
+  const isVoiceListening = voiceListeningScope === activeChatTab;
+  const draftIsStale =
+    draft !== null &&
+    (isWorkspaceAiResultStale(draftSourceFingerprint, boardSnapshot.fingerprint) ||
+      (draftSourceRevision !== null && draftSourceRevision !== currentBoardRevision));
+  const patchPreviewIsStale =
+    patchPreviewModel !== null &&
+    (isWorkspaceAiResultStale(patchPreviewSourceFingerprint, boardSnapshot.fingerprint) ||
+      (patchPreviewSourceRevision !== null && patchPreviewSourceRevision !== currentBoardRevision));
 
   const visibleMessages = useMemo(
     () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
@@ -258,33 +315,35 @@ export function WorkspaceAiChatDock({
     (activeChatTab === "draft" && draft !== null) ||
     (activeChatTab === "errors" && terraformIssueResolution !== null) ||
     (activeChatTab === "preview" && terraformPreviewExplanation !== null);
-  const hasTerraformLoading =
-    terraformIssueResolution?.state === "loading" || terraformPreviewExplanation?.state === "loading";
-  const hasTerraformError =
-    terraformIssueResolution?.state === "error" || terraformPreviewExplanation?.state === "error";
+  const activeRequestState: AiRequestState =
+    activeChatTab === "draft"
+      ? draftState
+      : activeChatTab === "errors"
+        ? terraformIssueResolution?.state ?? "idle"
+        : terraformPreviewExplanation?.state ?? "idle";
+  const activeHasCompletedResponse =
+    visibleMessages.length > 0 ||
+    (activeChatTab === "errors" && terraformIssueResolution?.explanation != null) ||
+    (activeChatTab === "preview" && terraformPreviewExplanation?.explanation != null);
+  const activeHasPendingApproval =
+    activeChatTab === "draft" && (draft !== null || patchPreviewModel !== null);
+  const activeProposalIsStale =
+    activeChatTab === "draft" && (draftIsStale || patchPreviewIsStale);
   const chatDockStatus = getWorkspaceAiChatDockStatus({
-    draftState,
-    hasCompletedResponse:
-      visibleMessages.length > 0 ||
-      terraformIssueResolution?.explanation != null ||
-      terraformPreviewExplanation?.explanation != null,
-    hasPendingApproval: draft !== null || patchPreviewModel !== null,
-    hasTerraformError,
-    hasTerraformLoading
+    hasCompletedResponse: activeHasCompletedResponse,
+    hasPendingApproval: activeHasPendingApproval,
+    isStale: activeProposalIsStale,
+    requestState: activeRequestState,
+    scope: activeChatTab
   });
-  const isChatBusy = draftState === "loading" || hasTerraformLoading;
-  const activeTerraformIssueRequestId =
-    terraformIssueResolution?.request.id ?? terraformIssueRequest?.id ?? null;
+  const isChatBusy = activeRequestState === "loading";
 
   const closeChatDock = useCallback(() => {
-    dismissedTerraformIssueRequestIdRef.current = activeTerraformIssueRequestId;
     setOpen(false);
-    setTerraformIssueResolution(null);
-    setApplyingTerraformFixRequestId(null);
     window.requestAnimationFrame(() => {
       launcherButtonRef.current?.focus();
     });
-  }, [activeTerraformIssueRequestId]);
+  }, []);
 
   useEffect(() => {
     if (loadedProjectIdRef.current !== projectId) {
@@ -295,9 +354,25 @@ export function WorkspaceAiChatDock({
   }, [messages, projectId]);
 
   useEffect(() => {
+    storeActiveChatScope(projectId, activeChatTab);
+  }, [activeChatTab, projectId]);
+
+  useEffect(() => {
     setMessages(readStoredChatMessages(projectId));
+    setActiveChatTab(readStoredActiveChatScope(projectId));
+    setComposerStates(createWorkspaceAiChatComposerStates());
+    setVoiceListeningScope(null);
     setSelectedSuggestionLabelsByMessageId({});
     setCompletedTerraformFixRequestIds([]);
+    setDraft(null);
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
+    setDraftClarification(null);
+    setDraftFollowUpSession(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     loadedProjectIdRef.current = projectId;
   }, [projectId]);
 
@@ -307,9 +382,19 @@ export function WorkspaceAiChatDock({
     }
 
     const focusFrame = window.requestAnimationFrame(() => {
-      composerTextareaRef.current?.focus();
+      if (activeScopeDefinition.inputAvailable) {
+        composerTextareaRef.current?.focus();
+        return;
+      }
+
+      tabButtonRefs.current[activeChatTab]?.focus();
     });
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab" && isMobileChatSurface && chatDialogRef.current) {
+        trapFocusWithin(chatDialogRef.current, event);
+        return;
+      }
+
       if (event.key !== "Escape") {
         return;
       }
@@ -324,7 +409,22 @@ export function WorkspaceAiChatDock({
       window.cancelAnimationFrame(focusFrame);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeChatDock, isOpen]);
+  }, [
+    activeChatTab,
+    activeScopeDefinition.inputAvailable,
+    closeChatDock,
+    isMobileChatSurface,
+    isOpen
+  ]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 768px)");
+    const update = () => setMobileChatSurface(query.matches);
+
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -378,7 +478,6 @@ export function WorkspaceAiChatDock({
     }
 
     latestTerraformIssueRequestIdRef.current = request.id;
-    dismissedTerraformIssueRequestIdRef.current = null;
     setOpen(true);
     setActiveChatTab("errors");
     setTerraformIssueResolution({
@@ -407,7 +506,7 @@ export function WorkspaceAiChatDock({
           terraformCodeContext: request.terraformCode
         });
 
-        if (dismissedTerraformIssueRequestIdRef.current === request.id) {
+        if (latestTerraformIssueRequestIdRef.current !== request.id) {
           return;
         }
 
@@ -427,7 +526,7 @@ export function WorkspaceAiChatDock({
       } catch (error) {
         const message = getApiErrorMessage(error, "Terraform 이슈 AI 해결 가이드를 불러오지 못했습니다.");
 
-        if (dismissedTerraformIssueRequestIdRef.current === request.id) {
+        if (latestTerraformIssueRequestIdRef.current !== request.id) {
           return;
         }
 
@@ -564,10 +663,83 @@ export function WorkspaceAiChatDock({
     ]));
   }
 
+  function setComposerValue(value: string, scope: WorkspaceAiChatScope = activeChatTab): void {
+    setComposerStates((currentStates) => ({
+      ...currentStates,
+      [scope]: {
+        ...currentStates[scope],
+        value
+      }
+    }));
+  }
+
+  function setVoiceStatusMessage(
+    voiceStatusMessage: string | ((currentMessage: string) => string),
+    scope: WorkspaceAiChatScope = activeChatTab
+  ): void {
+    setComposerStates((currentStates) => ({
+      ...currentStates,
+      [scope]: {
+        ...currentStates[scope],
+        voiceStatusMessage:
+          typeof voiceStatusMessage === "function"
+            ? voiceStatusMessage(currentStates[scope].voiceStatusMessage)
+            : voiceStatusMessage
+      }
+    }));
+  }
+
+  function setVoiceListening(
+    isListening: boolean,
+    scope: WorkspaceAiChatScope = activeChatTab
+  ): void {
+    setVoiceListeningScope((currentScope) => (isListening ? scope : currentScope === scope ? null : currentScope));
+  }
+
+  function createProposalSource(): WorkspaceAiProposalSource {
+    return {
+      fingerprint: boardSnapshot.fingerprint,
+      revision: context.getDiagramRevision()
+    };
+  }
+
+  function selectChatTab(scope: WorkspaceAiChatScope): void {
+    if (scope === activeChatTab) {
+      return;
+    }
+
+    stopVoiceRecognition();
+    setActiveChatTab(scope);
+  }
+
+  function handleChatTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>): void {
+    let nextScope: WorkspaceAiChatScope | null = null;
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextScope = getAdjacentWorkspaceAiChatScope(activeChatTab, -1);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextScope = getAdjacentWorkspaceAiChatScope(activeChatTab, 1);
+    } else if (event.key === "Home") {
+      nextScope = workspaceAiChatScopes[0] ?? "draft";
+    } else if (event.key === "End") {
+      nextScope = workspaceAiChatScopes.at(-1) ?? "preview";
+    }
+
+    if (nextScope === null) {
+      return;
+    }
+
+    event.preventDefault();
+    selectChatTab(nextScope);
+    window.requestAnimationFrame(() => {
+      tabButtonRefs.current[nextScope]?.focus();
+    });
+  }
+
   async function submitChatPrompt(event?: FormEvent<HTMLFormElement>): Promise<void> {
     event?.preventDefault();
 
-    await submitUserMessage(composerTextareaRef.current?.value ?? composerValue);
+    await submitUserMessage(activeComposer.value);
   }
 
   function clearActiveChatHistory(): void {
@@ -599,13 +771,17 @@ export function WorkspaceAiChatDock({
     ]);
     setComposerValue("");
     setDraft(null);
+    setPatchPreviewModel(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
+    setLastDraftRequest(null);
+    setLastPatchPreviewRequest(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setDraftErrorMessage("");
     setDraftState("idle");
-    setTerraformIssueResolution(null);
-    setApplyingTerraformFixRequestId(null);
-    setCompletedTerraformFixRequestIds([]);
     context.setPreviewDiagram(null);
   }
 
@@ -615,11 +791,11 @@ export function WorkspaceAiChatDock({
   ): Promise<void> {
     const trimmedPrompt = value.trim();
 
-    if (trimmedPrompt.length === 0 || draftState === "loading") {
+    if (!activeScopeDefinition.inputAvailable || trimmedPrompt.length === 0 || isChatBusy) {
       return;
     }
 
-    const userMessage = createChatMessage("user", "status", trimmedPrompt, [], "single", "draft");
+    const userMessage = createChatMessage("user", "status", trimmedPrompt, [], "single", activeChatTab);
     const messagesWithSelection = suggestionSelection
       ? markChatMessageSuggestionsSelected(messages, suggestionSelection)
       : messages;
@@ -800,13 +976,25 @@ export function WorkspaceAiChatDock({
       readonly skipConnection?: boolean | undefined;
     } = {}
   ): Promise<void> {
+    const proposalSource = createProposalSource();
+
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setPatchClarification(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
+    setLastPatchPreviewRequest({
+      connectionTargetResourceId: options.connectionTargetResourceId,
+      instruction,
+      selectedTargetResourceId: options.selectedTargetResourceId,
+      skipConnection: options.skipConnection
+    });
     context.setPreviewDiagram(null);
 
     try {
@@ -834,7 +1022,7 @@ export function WorkspaceAiChatDock({
         return;
       }
 
-      showPatchPreview(response, options.baseDiagram);
+      showPatchPreview(response, options.baseDiagram, proposalSource);
     } catch (error) {
       const message = getApiErrorMessage(error, "수정 미리보기 생성 중 오류가 발생했습니다.");
 
@@ -844,10 +1032,16 @@ export function WorkspaceAiChatDock({
     }
   }
 
-  function showPatchPreview(preview: ArchitecturePatchPreview, baseDiagram = context.diagram): void {
+  function showPatchPreview(
+    preview: ArchitecturePatchPreview,
+    baseDiagram = context.diagram,
+    proposalSource: WorkspaceAiProposalSource = createProposalSource()
+  ): void {
     const model = createWorkspaceAiPatchPreviewModel(baseDiagram, preview);
 
     setPatchPreviewModel(model);
+    setPatchPreviewSourceFingerprint(proposalSource.fingerprint);
+    setPatchPreviewSourceRevision(proposalSource.revision);
     context.setPreviewDiagram(model.visualPreviewDiagram, model.annotations);
     setDraftState("idle");
     appendAssistantMessage("patch", createPatchPreviewSummary(preview));
@@ -926,11 +1120,16 @@ export function WorkspaceAiChatDock({
           ? { templateId: draftRequest.templateId }
           : {})
     };
+    const proposalSource = createProposalSource();
 
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setPatchClarification(null);
     setDraftFollowUpSession(null);
     setLastDraftRequest(normalizedDraftRequest);
@@ -961,7 +1160,7 @@ export function WorkspaceAiChatDock({
         return;
       }
 
-      showDraftPreview(previewDecision.result);
+      showDraftPreview(previewDecision.result, proposalSource);
     } catch (error) {
       const message = getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다.");
 
@@ -971,11 +1170,16 @@ export function WorkspaceAiChatDock({
     }
   }
 
-  function showDraftPreview(result: AiArchitectureDraftResult): void {
-    const previewDiagram = getDiagramJsonForArchitectureDraft(result);
+  function showDraftPreview(
+    result: AiArchitectureDraftResult,
+    proposalSource: WorkspaceAiProposalSource = createProposalSource()
+  ): void {
+    const previewDiagram = compileArchitectureDraftProposal(result, context.diagram).diagram;
 
     setDraft(result);
     setDraftClarification(null);
+    setDraftSourceFingerprint(proposalSource.fingerprint);
+    setDraftSourceRevision(proposalSource.revision);
     context.setPreviewDiagram(previewDiagram);
     setDraftState("idle");
     appendAssistantMessage(
@@ -985,11 +1189,14 @@ export function WorkspaceAiChatDock({
   }
 
   function applyDraftToBoard(): void {
-    if (draft === null) {
+    if (draft === null || draftIsStale) {
+      if (draftIsStale) {
+        appendAssistantMessage("status", "보드 기준이 바뀌어 이 제안은 적용하지 않았습니다. 최신 기준으로 다시 생성하세요.");
+      }
       return;
     }
 
-    context.applyDiagramJson(getDiagramJsonForArchitectureDraft(draft));
+    context.applyDiagramJson(compileArchitectureDraftProposal(draft, context.diagram).diagram);
     context.requestTerraformRefresh();
     requestImmediateDiagramSave();
     setDraft(null);
@@ -997,11 +1204,16 @@ export function WorkspaceAiChatDock({
     setPatchClarification(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
+    setDraftSourceFingerprint(null);
+    setDraftSourceRevision(null);
     appendAssistantMessage("status", "생성했습니다. 현재 보드가 AI 초안으로 전체 교체되었습니다.");
   }
 
   function applyPatchPreviewToBoard(): void {
-    if (patchPreviewModel === null) {
+    if (patchPreviewModel === null || patchPreviewIsStale) {
+      if (patchPreviewIsStale) {
+        appendAssistantMessage("status", "보드 기준이 바뀌어 이 수정안은 적용하지 않았습니다. 최신 기준으로 다시 생성하세요.");
+      }
       return;
     }
 
@@ -1010,6 +1222,8 @@ export function WorkspaceAiChatDock({
     requestImmediateDiagramSave();
     setPatchPreviewModel(null);
     setPatchClarification(null);
+    setPatchPreviewSourceFingerprint(null);
+    setPatchPreviewSourceRevision(null);
     appendAssistantMessage("status", "수정 사항을 보드에 적용했습니다.");
   }
 
@@ -1027,6 +1241,10 @@ export function WorkspaceAiChatDock({
     setPatchPreviewModel(null);
     setPatchClarification(null);
     setDraftFollowUpSession(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setDraftErrorMessage("");
     setDraftState("idle");
     appendAssistantMessage("status", "초안 미리보기를 취소했습니다.");
@@ -1036,6 +1254,8 @@ export function WorkspaceAiChatDock({
     context.setPreviewDiagram(null);
     setPatchPreviewModel(null);
     setPatchClarification(null);
+    setPatchPreviewSourceFingerprint(null);
+    setPatchPreviewSourceRevision(null);
     setDraftErrorMessage("");
     setDraftState("idle");
     appendAssistantMessage("status", "수정 미리보기를 취소했습니다.");
@@ -1047,7 +1267,26 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    await createDraftFromConversation(messages);
+    await createDraftFromConversation(messages.filter((message) => getChatMessageScope(message) === "draft"));
+  }
+
+  async function regeneratePatchPreview(): Promise<void> {
+    if (lastPatchPreviewRequest === null) {
+      appendAssistantMessage("question", "다시 생성할 수정 요청이 없습니다. 원하는 변경을 다시 입력해주세요.");
+      return;
+    }
+
+    await createPatchPreviewFromPrompt(lastPatchPreviewRequest.instruction, {
+      ...(lastPatchPreviewRequest.connectionTargetResourceId !== undefined
+        ? { connectionTargetResourceId: lastPatchPreviewRequest.connectionTargetResourceId }
+        : {}),
+      ...(lastPatchPreviewRequest.selectedTargetResourceId !== undefined
+        ? { selectedTargetResourceId: lastPatchPreviewRequest.selectedTargetResourceId }
+        : {}),
+      ...(lastPatchPreviewRequest.skipConnection === true
+        ? { skipConnection: true }
+        : {})
+    });
   }
 
   function toggleSuggestionSelection(messageId: string, suggestion: string): void {
@@ -1100,16 +1339,21 @@ export function WorkspaceAiChatDock({
   }
 
   function startVoiceRecognition(): void {
+    if (!activeScopeDefinition.inputAvailable) {
+      return;
+    }
+
+    const voiceScope = activeChatTab;
     const SpeechRecognitionConstructor = getBrowserSpeechRecognitionConstructor();
 
     if (SpeechRecognitionConstructor === undefined) {
       setVoiceInputSupported(false);
-      setVoiceStatusMessage("이 브라우저는 음성 인식을 지원하지 않습니다.");
+      setVoiceStatusMessage("이 브라우저는 음성 인식을 지원하지 않습니다.", voiceScope);
       return;
     }
 
     if (!window.isSecureContext) {
-      setVoiceStatusMessage("음성 인식은 HTTPS 또는 localhost 주소에서만 사용할 수 있습니다.");
+      setVoiceStatusMessage("음성 인식은 HTTPS 또는 localhost 주소에서만 사용할 수 있습니다.", voiceScope);
       return;
     }
 
@@ -1117,7 +1361,7 @@ export function WorkspaceAiChatDock({
     releaseSpeechRecognition("abort");
 
     const recognition = new SpeechRecognitionConstructor();
-    voiceInputBaseRef.current = composerValue;
+    voiceInputBaseRef.current = { scope: voiceScope, value: activeComposer.value };
     recognition.lang = "ko-KR";
     recognition.continuous = false;
     recognition.interimResults = true;
@@ -1126,7 +1370,8 @@ export function WorkspaceAiChatDock({
       const transcript = getSpeechRecognitionTranscript(event);
 
       if (transcript.length > 0) {
-        setComposerValue(mergeVoiceTranscript(voiceInputBaseRef.current, transcript));
+        const voiceInputBase = voiceInputBaseRef.current;
+        setComposerValue(mergeVoiceTranscript(voiceInputBase.value, transcript), voiceInputBase.scope);
       }
     };
     recognition.onspeechstart = () => {
@@ -1134,41 +1379,44 @@ export function WorkspaceAiChatDock({
     };
     recognition.onerror = (event) => {
       clearVoiceNoSpeechTimer();
-      setVoiceListening(false);
+      setVoiceListening(false, voiceScope);
       speechRecognitionRef.current = null;
-      setVoiceStatusMessage(getVoiceRecognitionErrorMessage(event.error));
+      setVoiceStatusMessage(getVoiceRecognitionErrorMessage(event.error), voiceScope);
     };
     recognition.onend = () => {
       clearVoiceNoSpeechTimer();
-      setVoiceListening(false);
+      setVoiceListening(false, voiceScope);
       speechRecognitionRef.current = null;
-      setVoiceStatusMessage((currentMessage) =>
-        currentMessage === "음성 인식 중입니다." ? "" : currentMessage
+      setVoiceStatusMessage(
+        (currentMessage) => (currentMessage === "음성 인식 중입니다." ? "" : currentMessage),
+        voiceScope
       );
     };
 
     try {
       speechRecognitionRef.current = recognition;
-      setVoiceListening(true);
-      setVoiceStatusMessage("음성 인식 중입니다.");
+      setVoiceListening(true, voiceScope);
+      setVoiceStatusMessage("음성 인식 중입니다.", voiceScope);
       recognition.start();
       voiceNoSpeechTimerRef.current = window.setTimeout(() => {
         releaseSpeechRecognition("abort");
-        setVoiceListening(false);
-        setVoiceStatusMessage("8초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.");
+        setVoiceListening(false, voiceScope);
+        setVoiceStatusMessage("8초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.", voiceScope);
       }, VOICE_NO_SPEECH_TIMEOUT_MS);
     } catch {
       speechRecognitionRef.current = null;
-      setVoiceListening(false);
-      setVoiceStatusMessage("음성 인식을 시작하지 못했습니다.");
+      setVoiceListening(false, voiceScope);
+      setVoiceStatusMessage("음성 인식을 시작하지 못했습니다.", voiceScope);
     }
   }
 
   function stopVoiceRecognition(): void {
+    const voiceScope = voiceListeningScope ?? activeChatTab;
+
     clearVoiceNoSpeechTimer();
     releaseSpeechRecognition("stop");
-    setVoiceListening(false);
-    setVoiceStatusMessage("");
+    setVoiceListening(false, voiceScope);
+    setVoiceStatusMessage("", voiceScope);
   }
 
   function releaseSpeechRecognition(action: "abort" | "stop"): void {
@@ -1223,11 +1471,14 @@ export function WorkspaceAiChatDock({
         aria-busy={isChatBusy}
         aria-label="AI 채팅"
         aria-labelledby="workspace-ai-chat-title"
+        aria-modal={isMobileChatSurface || undefined}
         className={styles.aiChatDock}
         data-chat-tab={activeChatTab}
         data-right-panel-open={context.isRightPanelOpen}
         data-terraform-leave-guard-ignore
+        ref={chatDialogRef}
         role="dialog"
+        tabIndex={-1}
       >
         <header className={styles.aiChatHeader}>
           <div>
@@ -1269,33 +1520,25 @@ export function WorkspaceAiChatDock({
 
       <div className={styles.aiChatTabBar} aria-label="AI 채팅 기능">
         <div className={styles.aiChatTabs} role="tablist" aria-label="AI 기능">
-          <button
-            aria-selected={activeChatTab === "draft"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("draft")}
-            role="tab"
-            type="button"
-          >
-            설계 제안
-          </button>
-          <button
-            aria-selected={activeChatTab === "errors"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("errors")}
-            role="tab"
-            type="button"
-          >
-            오류 분석
-          </button>
-          <button
-            aria-selected={activeChatTab === "preview"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("preview")}
-            role="tab"
-            type="button"
-          >
-            에이전트 리뷰
-          </button>
+          {workspaceAiChatScopes.map((scope) => (
+            <button
+              aria-controls={`workspace-ai-chat-panel-${scope}`}
+              aria-selected={activeChatTab === scope}
+              className={styles.aiChatTabButton}
+              id={`workspace-ai-chat-tab-${scope}`}
+              key={scope}
+              onClick={() => selectChatTab(scope)}
+              onKeyDown={handleChatTabKeyDown}
+              ref={(element) => {
+                tabButtonRefs.current[scope] = element;
+              }}
+              role="tab"
+              tabIndex={activeChatTab === scope ? 0 : -1}
+              type="button"
+            >
+              {getWorkspaceAiChatScopeDefinition(scope).label}
+            </button>
+          ))}
         </div>
         <button
           className={styles.aiChatClearButton}
@@ -1308,7 +1551,19 @@ export function WorkspaceAiChatDock({
         </button>
       </div>
 
-      <div className={styles.aiChatTranscript} ref={transcriptRef}>
+      <div
+        aria-labelledby={`workspace-ai-chat-tab-${activeChatTab}`}
+        className={styles.aiChatTranscript}
+        id={`workspace-ai-chat-panel-${activeChatTab}`}
+        ref={transcriptRef}
+        role="tabpanel"
+      >
+        {!hasActiveChatHistory ? (
+          <article className={styles.aiChatAssistantMessage} data-kind="question">
+            <span>안내</span>
+            <p>{activeScopeDefinition.emptyDescription}</p>
+          </article>
+        ) : null}
         {visibleMessages.map((message) => {
           const isMultiSelect = message.selectionMode === "multiple";
           const submittedSuggestions = message.selectedSuggestions ?? [];
@@ -1331,7 +1586,7 @@ export function WorkspaceAiChatDock({
                 <div className={styles.aiChatSuggestions} aria-label="추천 답안">
                   {message.suggestions.map((suggestion) => {
                     const isSelected = selectedSuggestions.includes(suggestion);
-                    const isSuggestionDisabled = draftState === "loading" || hasSubmittedSuggestion;
+                    const isSuggestionDisabled = isChatBusy || hasSubmittedSuggestion;
                     const suggestionButtonClassName = isSelected
                       ? `${styles.aiChatSuggestionButton} ${styles.aiChatSuggestionButtonSelected}`
                       : styles.aiChatSuggestionButton;
@@ -1361,7 +1616,7 @@ export function WorkspaceAiChatDock({
                     <button
                       className={styles.aiChatSelectionSubmitButton}
                       disabled={
-                        draftState === "loading" ||
+                        isChatBusy ||
                         hasSubmittedSuggestion ||
                         selectedSuggestions.length === 0
                       }
@@ -1482,6 +1737,7 @@ export function WorkspaceAiChatDock({
             <div className={styles.aiActionRow}>
               <button
                 className={styles.aiPrimaryButton}
+                disabled={draftIsStale}
                 onClick={applyDraftToBoard}
                 type="button"
               >
@@ -1492,11 +1748,11 @@ export function WorkspaceAiChatDock({
               </button>
               <button
                 className={styles.aiSecondaryButton}
-                disabled={draftState === "loading"}
+                disabled={isChatBusy}
                 onClick={() => void regenerateDraft()}
                 type="button"
               >
-                다시 생성
+                {draftIsStale ? "최신 기준으로 다시 생성" : "다시 생성"}
               </button>
             </div>
             {draftSafetyWarnings.length > 0 ? (
@@ -1506,10 +1762,15 @@ export function WorkspaceAiChatDock({
                 ))}
               </div>
             ) : null}
+            {draftIsStale ? (
+              <div className={styles.aiSafetyNotice} role="status">
+                <p>보드가 변경되어 이 제안은 적용할 수 없습니다. 최신 기준으로 다시 생성하세요.</p>
+              </div>
+            ) : null}
           </article>
         ) : null}
 
-        {patchPreviewModel !== null ? (
+        {activeChatTab === "draft" && patchPreviewModel !== null ? (
           <article className={styles.aiChatDraftCard}>
             <div className={styles.aiResultHeader}>
               <h3>수정 미리보기</h3>
@@ -1524,18 +1785,39 @@ export function WorkspaceAiChatDock({
               ))}
             </div>
             <div className={styles.aiActionRow}>
-              <button className={styles.aiPrimaryButton} onClick={applyPatchPreviewToBoard} type="button">
+              <button
+                className={styles.aiPrimaryButton}
+                disabled={patchPreviewIsStale}
+                onClick={applyPatchPreviewToBoard}
+                type="button"
+              >
                 적용
               </button>
               <button className={styles.aiSecondaryButton} onClick={cancelPatchPreview} type="button">
                 취소
               </button>
+              {patchPreviewIsStale ? (
+                <button
+                  className={styles.aiSecondaryButton}
+                  disabled={isChatBusy}
+                  onClick={() => void regeneratePatchPreview()}
+                  type="button"
+                >
+                  최신 기준으로 다시 생성
+                </button>
+              ) : null}
             </div>
+            {patchPreviewIsStale ? (
+              <div className={styles.aiSafetyNotice} role="status">
+                <p>보드가 변경되어 이 수정안은 적용할 수 없습니다. 최신 기준으로 다시 생성하세요.</p>
+              </div>
+            ) : null}
           </article>
         ) : null}
 
       </div>
 
+      {activeScopeDefinition.inputAvailable ? (
       <form className={styles.aiChatComposer} onSubmit={(event) => void submitChatPrompt(event)}>
         <label className={styles.aiChatInput}>
           <textarea
@@ -1544,7 +1826,7 @@ export function WorkspaceAiChatDock({
             onKeyDown={handleComposerKeyDown}
             ref={composerTextareaRef}
             rows={2}
-            value={composerValue}
+            value={activeComposer.value}
           />
         </label>
         <button
@@ -1552,7 +1834,7 @@ export function WorkspaceAiChatDock({
           aria-pressed={isVoiceListening}
           className={styles.aiChatVoiceButton}
           data-listening={isVoiceListening}
-          disabled={!isVoiceInputSupported || draftState === "loading"}
+          disabled={!isVoiceInputSupported || isChatBusy}
           onClick={toggleVoiceRecognition}
           title={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
           type="button"
@@ -1561,18 +1843,23 @@ export function WorkspaceAiChatDock({
         </button>
         <button
           className={styles.aiChatSendButton}
-          disabled={composerValue.trim().length === 0 || draftState === "loading"}
+          disabled={activeComposer.value.trim().length === 0 || isChatBusy}
           type="submit"
         >
           <Send size={16} aria-hidden="true" />
           보내기
         </button>
-        {voiceStatusMessage.length > 0 ? (
+        {activeComposer.voiceStatusMessage.length > 0 ? (
           <p className={styles.aiChatVoiceStatus} role="status">
-            {voiceStatusMessage}
+            {activeComposer.voiceStatusMessage}
           </p>
         ) : null}
       </form>
+      ) : (
+        <div className={styles.aiChatComposerUnavailable}>
+          <p>{activeScopeDefinition.emptyDescription}</p>
+        </div>
+      )}
       </section>
     </div>
   );
@@ -1580,6 +1867,64 @@ export function WorkspaceAiChatDock({
 
 export function createWorkspaceAiChatStorageKey(projectId: string): string {
   return `${STORAGE_KEY_PREFIX}.${projectId}`;
+}
+
+export function createWorkspaceAiChatActiveScopeStorageKey(projectId: string): string {
+  return `${createWorkspaceAiChatStorageKey(projectId)}.${ACTIVE_SCOPE_STORAGE_KEY_SUFFIX}`;
+}
+
+export function readStoredActiveChatScope(
+  projectId: string,
+  storage: Pick<Storage, "getItem"> | null = getBrowserLocalStorage()
+): WorkspaceAiChatScope {
+  if (storage === null) return "draft";
+
+  try {
+    const storedScope = storage.getItem(createWorkspaceAiChatActiveScopeStorageKey(projectId));
+    return isWorkspaceAiChatScope(storedScope) ? storedScope : "draft";
+  } catch {
+    return "draft";
+  }
+}
+
+export function storeActiveChatScope(
+  projectId: string,
+  scope: WorkspaceAiChatScope,
+  storage: Pick<Storage, "setItem"> | null = getBrowserLocalStorage()
+): void {
+  if (storage === null) return;
+
+  try {
+    storage.setItem(createWorkspaceAiChatActiveScopeStorageKey(projectId), scope);
+  } catch {
+    // localStorage가 막혀도 현재 session의 대화 전환은 계속 동작합니다.
+  }
+}
+
+function getBrowserLocalStorage(): Storage | null {
+  return typeof window === "undefined" ? null : window.localStorage;
+}
+
+function trapFocusWithin(container: HTMLElement, event: KeyboardEvent): void {
+  const focusableElements = [...container.querySelectorAll<HTMLElement>(
+    "button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex='-1'])"
+  )].filter((element) => element.getAttribute("aria-hidden") !== "true");
+  const first = focusableElements[0];
+  const last = focusableElements.at(-1);
+
+  if (!first || !last) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function TerraformIssueExplanationCard({

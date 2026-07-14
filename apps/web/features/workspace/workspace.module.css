@@ -6034,6 +6034,19 @@
   }
 }
 
+.aiChatComposerUnavailable {
+  background: var(--workspace-surface, #ffffff);
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 14px 20px max(16px, env(safe-area-inset-bottom));
+}
+
+.aiChatComposerUnavailable p {
+  margin: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aiChatLauncher,
   .aiChatCloseButton,
@@ -9282,5 +9295,39 @@
   .deploymentHistoryGrid {
     padding-bottom: 0;
     padding-top: 0;
+  }
+}
+
+/* Keep the rebuilt AI Chat surface authoritative over legacy Workspace theme rules above. */
+.aiChatDock,
+.aiChatDock[data-right-panel-open="true"] {
+  border-radius: 0;
+  bottom: 0;
+  max-height: none;
+  top: 64px;
+}
+
+.aiChatTranscript {
+  background: var(--workspace-surface, #ffffff);
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: transparent;
+  border-bottom-color: var(--workspace-accent, #000000);
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatStatusBar[data-status="오래된 제안"] .aiChatStatusMark {
+  background: #b42318;
+}
+
+@media (max-width: 768px) {
+  .aiChatDock,
+  .aiChatDock[data-right-panel-open="true"] {
+    height: 100dvh;
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
   }
 }
