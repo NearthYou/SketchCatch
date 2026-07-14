@@ -62,6 +62,6 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /템플릿 추천/);
   assert.match(source, /questions\?\.slice\(0, 5\)/);
   assert.match(source, /환경설정에서 권한 관리/);
-  assert.match(source, /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/);
+  assert.match(source, /const githubSettingsHref = "\/dashboard\/settings"/);
   assert.doesNotMatch(source, /createGitHubSourceRepositoryInstallUrl/);
 });

@@ -8,7 +8,6 @@ import { getApiErrorMessage } from "../../../../lib/api-client";
 import {
   analyzeSourceRepository,
   connectGitHubSourceRepository,
-  createGitHubSourceRepositoryInstallUrl,
   getProject,
   listGitHubInstalledRepositories,
   listSourceRepositories
@@ -115,20 +114,6 @@ export function ProjectGitHubSettingsClient({ projectId }: { readonly projectId:
     }
   }
 
-  async function openGitHubInstallation(): Promise<void> {
-    setActionState("loading");
-    setErrorMessage("");
-
-    try {
-      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
-
-      window.location.assign(installUrl);
-    } catch (error) {
-      setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "GitHub App 설치 화면을 열지 못했습니다."));
-    }
-  }
-
   // active repository 분석을 한 번만 실행하고 저장된 AI Handoff를 현재 화면에도 반영합니다.
   async function runRepositoryAnalysis(): Promise<void> {
     if (!canRunRepositoryAnalysis(activeRepository, analysisState)) {
@@ -228,7 +213,6 @@ export function ProjectGitHubSettingsClient({ projectId }: { readonly projectId:
         installedRepositories={installedRepositories}
         onConnectRepository={(repository) => void connectRepository(repository)}
         onLoadInstalledRepositories={() => void loadInstalledRepositories()}
-        onOpenGitHubInstallation={() => void openGitHubInstallation()}
         repositoryState={repositoryState}
       />
 

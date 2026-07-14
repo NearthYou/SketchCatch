@@ -13,7 +13,9 @@ test("GitHub App callback keeps repository selection and return flow visible", a
   assert.match(source, /Repository 선택/);
   assert.match(source, /router\.replace/);
   assert.match(source, /Manage permissions in settings/);
-  assert.match(source, /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/);
+  assert.match(source, /result\.scope === "account"/);
+  assert.match(source, /router\.replace\("\/dashboard\/settings\?github=connected"\)/);
+  assert.match(source, /router\.push\("\/dashboard\/settings"\)/);
   assert.doesNotMatch(source, /createGitHubSourceRepositoryInstallUrl/);
   assert.doesNotMatch(source, /return null/);
 });

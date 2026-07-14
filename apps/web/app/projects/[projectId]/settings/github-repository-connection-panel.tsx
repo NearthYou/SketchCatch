@@ -1,4 +1,5 @@
 import type { GitHubInstalledRepositoryCandidate } from "@sketchcatch/types";
+import Link from "next/link";
 import { DashboardIcon } from "../../../../components/dashboard/dashboard-icons";
 
 type RequestState = "idle" | "loading" | "error";
@@ -9,7 +10,6 @@ type GitHubRepositoryConnectionPanelProps = {
   readonly installedRepositories: readonly GitHubInstalledRepositoryCandidate[];
   readonly onConnectRepository: (repository: GitHubInstalledRepositoryCandidate) => void;
   readonly onLoadInstalledRepositories: () => void;
-  readonly onOpenGitHubInstallation: () => void;
   readonly repositoryState: RequestState;
 };
 
@@ -20,7 +20,6 @@ export function GitHubRepositoryConnectionPanel({
   installedRepositories,
   onConnectRepository,
   onLoadInstalledRepositories,
-  onOpenGitHubInstallation,
   repositoryState
 }: GitHubRepositoryConnectionPanelProps) {
   return (
@@ -37,15 +36,13 @@ export function GitHubRepositoryConnectionPanel({
             {repositoryState === "loading" ? "불러오는 중" : "연결 가능한 repository 보기"}
           </span>
         </button>
-        <button
+        <Link
           className="dashboardTopbarAction"
-          disabled={actionState === "loading"}
-          onClick={onOpenGitHubInstallation}
-          type="button"
+          href="/dashboard/settings"
         >
           <DashboardIcon name="link" />
-          <span>GitHub App 설치/권한 추가</span>
-        </button>
+          <span>GitHub 권한 관리</span>
+        </Link>
       </div>
 
       {installedRepositories.length > 0 ? (
@@ -78,7 +75,7 @@ export function GitHubRepositoryConnectionPanel({
         </div>
       ) : repositoryState === "idle" && installationState ? (
         <p className="dashboardMessage" role="status">
-          현재 GitHub App 권한으로 접근 가능한 repository가 없습니다.
+          먼저 설정에서 GitHub App을 연결하거나 repository 권한을 추가하세요.
         </p>
       ) : null}
     </>

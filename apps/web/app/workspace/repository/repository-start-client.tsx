@@ -102,7 +102,7 @@ export function RepositoryStartClient({
   const questions = activeHandoff?.questions?.slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
-  const githubSettingsHref = createProjectGitHubSettingsHref(projectId);
+  const githubSettingsHref = "/dashboard/settings";
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(projectId && !activeRepository);
 
@@ -871,8 +871,4 @@ function createRepositoryBoardHref(
     sourceRepositoryId: repository.id,
     templateId
   }).toString()}`;
-}
-
-function createProjectGitHubSettingsHref(projectId: string): string {
-  return `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 }

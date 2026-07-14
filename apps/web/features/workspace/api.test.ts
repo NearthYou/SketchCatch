@@ -12,6 +12,7 @@ import {
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  createGitHubAccountInstallUrl,
   executeDeployment,
   createLiveObservation,
   createGitCicdGitHubOAuthStartUrl,
@@ -37,6 +38,7 @@ import {
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
   listGitHubInstalledRepositories,
+  listGitHubAccountInstallations,
   listTerraformOutputs,
   listCostUsageAnalysis,
   listProjects,
@@ -479,6 +481,52 @@ test("listGitHubInstalledRepositories fetches GitHub App installation repository
   assert.equal(result.state, "signed-state");
   assert.equal(result.repositories[0]?.fullName, "NearthYou/sketchcatch-iac-handoff-test");
   assert.equal(result.repositories[0]?.installationId, "12345");
+});
+
+test("global GitHub settings clients list installations and create an account install URL", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    if (String(input).endsWith("/install-url")) {
+      return Response.json({
+        installUrl: "https://github.com/apps/sketchcatch/installations/new",
+        expiresAt: "2026-07-15T00:10:00.000Z"
+      });
+    }
+
+    return Response.json({
+      installations: [
+        {
+          installationId: "12345",
+          accountLogin: "NearthYou",
+          accountType: "Organization",
+          repositorySelection: "selected",
+          repositoryCount: 2,
+          htmlUrl: "https://github.com/settings/installations/12345"
+        }
+      ]
+    });
+  };
+
+  const installations = await listGitHubAccountInstallations();
+  const install = await createGitHubAccountInstallUrl();
+
+  assert.equal(String(requests[0]?.input), "/api/source-repositories/github/installations");
+  assert.equal(requests[0]?.init?.method, undefined);
+  assert.equal(installations[0]?.accountLogin, "NearthYou");
+  assert.equal(String(requests[1]?.input), "/api/source-repositories/github/install-url");
+  assert.equal(requests[1]?.init?.method, "POST");
+  assert.equal(install.installUrl, "https://github.com/apps/sketchcatch/installations/new");
 });
 
 test("CI/CD monitoring clients use authenticated repository-scoped paths and the exact update body", async (context) => {

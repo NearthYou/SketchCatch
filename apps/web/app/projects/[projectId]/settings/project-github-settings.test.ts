@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import type {
   AnalyzeSourceRepositoryResponse,
   SourceRepository
@@ -11,6 +13,19 @@ import {
   shouldLoadProjectSettings
 } from "./project-github-settings-state";
 import { resolveRepositoryAnalysisTemplate } from "../../../../features/workspace/repository-template-handoff";
+
+test("project settings selects repositories but sends GitHub permission management to global settings", () => {
+  const clientSource = readLocalFile("project-github-settings-client.tsx");
+  const panelSource = readLocalFile("github-repository-connection-panel.tsx");
+
+  assert.doesNotMatch(
+    clientSource,
+    /createGitHubSourceRepositoryInstallUrl|openGitHubInstallation/
+  );
+  assert.doesNotMatch(panelSource, /onOpenGitHubInstallation|GitHub App 설치\/권한 추가/);
+  assert.match(panelSource, /href="\/dashboard\/settings"/);
+  assert.match(clientSource, /connectGitHubSourceRepository|analyzeSourceRepository/);
+});
 
 test("project settings waits for authentication before loading repository data", () => {
   assert.equal(shouldLoadProjectSettings("loading"), false);
@@ -147,4 +162,8 @@ function createRepository(overrides: Partial<SourceRepository> = {}): SourceRepo
     updatedAt: "2026-07-11T00:00:00.000Z",
     ...overrides
   };
+}
+
+function readLocalFile(path: string): string {
+  return readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
 }
