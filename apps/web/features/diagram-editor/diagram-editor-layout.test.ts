@@ -615,7 +615,7 @@ test("Area auto expansion is a persistent pressed toolbar preference after canva
   );
   assert.match(
     diagramEditorSource,
-    /const nodesWithExpandedParents = autoExpandAreasEnabled\s*\? expandParentAreaNodesForEnteredChild\(nodesWithAssignedParents, nextNode\.id\)\s*:\s*nodesWithAssignedParents;/s
+    /const nodesWithReconciledAreas = autoExpandAreasEnabled\s*\? reconcileAreaNodeGeometry\(\s*currentDiagram\.nodes,\s*nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)\s*\)\s*:\s*nodesWithAssignedParents;/s
   );
   assert.match(diagramEditorSource, /<Expand aria-hidden="true" size=\{16\} \/>/);
 });
@@ -639,21 +639,27 @@ test("canvas tools dock vertically along the left center", () => {
   );
 });
 
-test("new and existing resources expand newly assigned parent areas before applying reference targets", () => {
+test("committed child changes reconcile affected areas before applying reference targets", () => {
   assert.match(
     diagramEditorSource,
-    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithExpandedParents = autoExpandAreasEnabled\s*\? expandParentAreaNodesForEnteredChild\(nodesWithAssignedParents, nextNode\.id\)\s*:\s*nodesWithAssignedParents;\s*return \{\s*\.\.\.currentDiagram,\s*nodes: applyContainingReferenceDropTargets\(\s*nodesWithExpandedParents,/s
+    /const nodesWithAssignedParents = applyAreaNodeParentAssignments\(\s*nodesWithNextNode,\s*new Set\(\[nextNode\.id\]\)\s*\);\s*const nodesWithReconciledAreas = autoExpandAreasEnabled\s*\? reconcileAreaNodeGeometry\(\s*currentDiagram\.nodes,\s*nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)\s*\)\s*:\s*nodesWithAssignedParents;/s
+  );
+  assert.match(dragTransactionSource, /reconcileAreaNodeGeometry\(snapshotNodes, nodesWithAssignedParents, movedNodeIds\)/);
+  assert.match(
+    diagramEditorSource,
+    /nodes: autoExpandAreasEnabled\s*\? reconcileAreaNodeGeometry\(\s*currentDiagram\.nodes,\s*nodesWithoutDeletedParents,\s*deletedNodeIds\s*\)/s
   );
   assert.match(
     diagramEditorSource,
-    /expandParentAreaNodesForEnteredChild\(nodesWithAssignedParents,\s*nextNode\.id\)/s
+    /reconcileAreaNodeGeometry\(\s*currentDiagram\.nodes,\s*nodesWithAssignedParents,\s*pastedNodeIds\s*\)/s
   );
-  assert.match(dragTransactionSource, /expandParentAreaNodesForEnteredChild/);
-  assert.match(dragTransactionSource, /autoExpandAreasEnabled\s*\? enteredResourceNodeIds\.reduce/);
-  assert.match(dragTransactionSource, /getEnteredResourceNodeIds/);
+  assert.match(
+    diagramEditorSource,
+    /reconcileAreaNodeGeometry\(\s*before\?\.nodes \?\? diagramRef\.current\.nodes,\s*resizedDiagram\.nodes,\s*new Set\(\[nodeId\]\)\s*\)/s
+  );
   assert.doesNotMatch(
     diagramEditorSource,
-    /nodes: applyContainingReferenceDropTargets\(\s*nodesWithAssignedParents,\s*new Set\(\[nextNode\.id\]\)/s
+    /expandParentAreaNodesForEnteredChild/
   );
 });
 

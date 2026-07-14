@@ -67,7 +67,7 @@ import {
   clearOutOfBoundsAreaParentAssignments,
   placeDroppedNodeInsideArea
 } from "./area-node-movement";
-import { expandParentAreaNodesForEnteredChild } from "./area-node-expansion";
+import { reconcileAreaNodeGeometry } from "./area-node-geometry";
 import {
   readAutoExpandAreasEnabled,
   writeAutoExpandAreasEnabled
@@ -1041,7 +1041,13 @@ function DiagramEditorInner({
       };
       const after = {
         ...resizedDiagram,
-        nodes: clearOutOfBoundsAreaParentAssignments(resizedDiagram.nodes, new Set([nodeId]))
+        nodes: autoExpandAreasEnabled
+          ? reconcileAreaNodeGeometry(
+              before?.nodes ?? diagramRef.current.nodes,
+              resizedDiagram.nodes,
+              new Set([nodeId])
+            )
+          : clearOutOfBoundsAreaParentAssignments(resizedDiagram.nodes, new Set([nodeId]))
       };
 
       replaceDiagram(after);
@@ -1052,7 +1058,7 @@ function DiagramEditorInner({
 
       resizeSnapshotRef.current = null;
     },
-    [pushHistory, replaceDiagram]
+    [autoExpandAreasEnabled, pushHistory, replaceDiagram]
   );
 
   const flowNodeHandlers = useMemo<DiagramFlowNodeHandlers>(
@@ -1842,14 +1848,18 @@ function DiagramEditorInner({
           nodesWithNextNode,
           new Set([nextNode.id])
         );
-        const nodesWithExpandedParents = autoExpandAreasEnabled
-          ? expandParentAreaNodesForEnteredChild(nodesWithAssignedParents, nextNode.id)
+        const nodesWithReconciledAreas = autoExpandAreasEnabled
+          ? reconcileAreaNodeGeometry(
+              currentDiagram.nodes,
+              nodesWithAssignedParents,
+              new Set([nextNode.id])
+            )
           : nodesWithAssignedParents;
 
         return {
           ...currentDiagram,
           nodes: applyContainingReferenceDropTargets(
-            nodesWithExpandedParents,
+            nodesWithReconciledAreas,
             new Set([nextNode.id]),
             terraformParameterCatalog
           )
@@ -1957,15 +1967,31 @@ function DiagramEditorInner({
         removeNodesFromDiagram(currentDiagram, nodeIds),
         edgeIds
       );
+      const nodesWithoutDeletedParents = clearDeletedAreaParentAssignments(
+        diagramWithoutSelection.nodes,
+        deletedNodeIds
+      );
 
       return {
         ...diagramWithoutSelection,
-        nodes: clearDeletedAreaParentAssignments(diagramWithoutSelection.nodes, deletedNodeIds)
+        nodes: autoExpandAreasEnabled
+          ? reconcileAreaNodeGeometry(
+              currentDiagram.nodes,
+              nodesWithoutDeletedParents,
+              deletedNodeIds
+            )
+          : nodesWithoutDeletedParents
       };
     });
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
-  }, [cancelSnapAnimation, commitDiagramUpdate, selectedEdgeIds, selectedNodeIds]);
+  }, [
+    autoExpandAreasEnabled,
+    cancelSnapAnimation,
+    commitDiagramUpdate,
+    selectedEdgeIds,
+    selectedNodeIds
+  ]);
 
   const copySelectedNodes = useCallback(() => {
     if (selectedNodeIds.length === 0) {
@@ -1989,18 +2015,26 @@ function DiagramEditorInner({
 
     commitDiagramUpdate((currentDiagram) => {
       const nodesWithPastedNodes = [...currentDiagram.nodes, ...pastedNodes];
+      const pastedNodeIds = new Set(pastedNodes.map((node) => node.id));
+      const nodesWithAssignedParents = applyAreaNodeParentAssignments(
+        nodesWithPastedNodes,
+        pastedNodeIds
+      );
 
       return {
         ...currentDiagram,
-        nodes: applyAreaNodeParentAssignments(
-          nodesWithPastedNodes,
-          new Set(pastedNodes.map((node) => node.id))
-        )
+        nodes: autoExpandAreasEnabled
+          ? reconcileAreaNodeGeometry(
+              currentDiagram.nodes,
+              nodesWithAssignedParents,
+              pastedNodeIds
+            )
+          : nodesWithAssignedParents
       };
     });
     setSelectedNodeIds(pastedNodes.map((node) => node.id));
     setSelectedEdgeIds([]);
-  }, [cancelSnapAnimation, commitDiagramUpdate]);
+  }, [autoExpandAreasEnabled, cancelSnapAnimation, commitDiagramUpdate]);
 
   const updateEdgeStyle = useCallback(
     (edgeId: string, style: DiagramEdge["style"]) => {
