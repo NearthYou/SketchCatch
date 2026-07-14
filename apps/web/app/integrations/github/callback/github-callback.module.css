@@ -31,9 +31,53 @@
 
 .content {
   display: grid;
-  width: min(100%, 760px);
+  width: min(100%, 1040px);
   margin: 0 auto;
   padding: 72px 0 96px;
+  gap: 20px;
+}
+
+.connectedRepository,
+.requiredSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-card);
+  padding: 16px 18px;
+  background: var(--color-canvas);
+}
+
+.connectedRepository > div {
+  display: grid;
+  gap: 3px;
+}
+
+.connectedRepository strong {
+  font-size: 14px;
+}
+
+.connectedRepository span {
+  color: var(--color-body);
+  font-size: 12px;
+}
+
+.requiredSummary {
+  justify-content: space-between;
+}
+
+.requiredSummary span {
+  color: var(--color-body);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.requiredSummary span[data-saved="true"] {
+  color: var(--color-success);
+}
+
+.settingsStack {
+  display: grid;
   gap: 20px;
 }
 
@@ -213,6 +257,7 @@
   .heading h1 { font-size: 30px; }
   .errorState { flex-wrap: wrap; }
   .errorState a { width: 100%; margin-left: 30px; }
+  .requiredSummary { align-items: flex-start; flex-direction: column; }
   .repositoryList > button { min-height: 68px; }
 }
 

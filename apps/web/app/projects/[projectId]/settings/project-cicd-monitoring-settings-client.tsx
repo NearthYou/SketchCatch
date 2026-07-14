@@ -18,9 +18,20 @@ import { CicdMonitoringSettings } from "../../../../features/workspace/CicdMonit
 type RequestState = "loading" | "idle" | "saving" | "error";
 
 export function ProjectCicdMonitoringSettingsClient({
-  projectId
+  projectId,
+  initialDraft,
+  onDirty,
+  onSaved
 }: {
   readonly projectId: string;
+  readonly initialDraft?: {
+    readonly enabled: boolean;
+    readonly monitorBranch: string;
+    readonly appPath: UpdateGitCicdMonitoringConfigRequest["appPath"];
+    readonly infraPath: UpdateGitCicdMonitoringConfigRequest["infraPath"];
+  } | undefined;
+  readonly onDirty?: (() => void) | undefined;
+  readonly onSaved?: (() => void) | undefined;
 }) {
   const { status: authStatus } = useAuth();
   const [repository, setRepository] = useState<SourceRepository | null>(null);
@@ -67,6 +78,7 @@ export function ProjectCicdMonitoringSettingsClient({
       setConfig(saved);
       setRequestState("idle");
       setMessage("CI/CD branch와 경로를 저장했습니다.");
+      onSaved?.();
     } catch (error) {
       setRequestState("error");
       setMessage(getApiErrorMessage(error, "CI/CD 설정을 저장하지 못했습니다."));
@@ -89,7 +101,9 @@ export function ProjectCicdMonitoringSettingsClient({
       {config ? (
         <CicdMonitoringSettings
           config={config}
+          initialDraft={initialDraft}
           isSaving={requestState === "saving"}
+          onDirty={onDirty}
           onSave={save}
         />
       ) : null}

@@ -37,10 +37,14 @@ const runtimeLabels: Record<RuntimeTargetKind, string> = {
 
 export function ProjectDeploymentTargetSettingsClient({
   projectId,
-  ecsDefaults = null
+  ecsDefaults = null,
+  onDirty,
+  onSaved
 }: {
   readonly projectId: string;
   readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
+  readonly onDirty?: (() => void) | undefined;
+  readonly onSaved?: (() => void) | undefined;
 }) {
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
@@ -51,6 +55,10 @@ export function ProjectDeploymentTargetSettingsClient({
   );
   const [requestState, setRequestState] = useState<RequestState>("loading");
   const [message, setMessage] = useState("");
+  const ecsDefaultsProjectName = ecsDefaults?.projectName;
+  const ecsDefaultsRepositoryRevision = ecsDefaults?.repositoryRevision;
+  const ecsDefaultsSourceRoot = ecsDefaults?.sourceRoot;
+  const ecsDefaultsDockerfilePath = ecsDefaults?.dockerfilePath;
   const verifiedConnections = useMemo(
     () => connections.filter((connection) => connection.status === "verified"),
     [connections]
@@ -83,12 +91,24 @@ export function ProjectDeploymentTargetSettingsClient({
         setConnections(nextConnections);
         setTarget(nextTarget);
         setSourceRepository(nextSourceRepository ?? null);
+        const nextEcsDefaults =
+          ecsDefaultsProjectName &&
+          ecsDefaultsRepositoryRevision &&
+          ecsDefaultsSourceRoot &&
+          ecsDefaultsDockerfilePath
+            ? {
+                projectName: ecsDefaultsProjectName,
+                repositoryRevision: ecsDefaultsRepositoryRevision,
+                sourceRoot: ecsDefaultsSourceRoot,
+                dockerfilePath: ecsDefaultsDockerfilePath
+              }
+            : null;
         setDraft(
           createDeploymentTargetDraft(
             nextTarget,
             nextConnections,
             nextSourceRepository,
-            ecsDefaults
+            nextEcsDefaults
           )
         );
         setRequestState("idle");
@@ -103,17 +123,26 @@ export function ProjectDeploymentTargetSettingsClient({
     return () => {
       cancelled = true;
     };
-  }, [authStatus, projectId, ecsDefaults]);
+  }, [
+    authStatus,
+    ecsDefaultsDockerfilePath,
+    ecsDefaultsProjectName,
+    ecsDefaultsRepositoryRevision,
+    ecsDefaultsSourceRoot,
+    projectId
+  ]);
 
   function updateDraft<K extends keyof ProjectDeploymentTargetDraft>(
     key: K,
     value: ProjectDeploymentTargetDraft[K]
   ) {
+    onDirty?.();
     setDraft((current) => ({ ...current, [key]: value }));
     setMessage("");
   }
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
+    onDirty?.();
     setDraft((current) =>
       changeDeploymentTargetRuntime(current, runtimeTargetKind, sourceRepository)
     );
@@ -133,6 +162,7 @@ export function ProjectDeploymentTargetSettingsClient({
       setDraft(createDeploymentTargetDraft(saved, connections));
       setRequestState("idle");
       setMessage("배포 타깃을 저장했습니다.");
+      onSaved?.();
     } catch (error) {
       setRequestState("error");
       setMessage(getApiErrorMessage(error, "배포 타깃을 저장하지 못했습니다."));
