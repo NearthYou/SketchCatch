@@ -15,6 +15,10 @@ const editorTypesSource = readFileSync(
   fileURLToPath(new URL("../diagram-editor/types.ts", import.meta.url)),
   "utf8"
 );
+const thumbnailSource = readFileSync(
+  fileURLToPath(new URL("./project-board-thumbnail.ts", import.meta.url)),
+  "utf8"
+);
 
 test("successful stable server draft saves await the lifecycle before showing success", () => {
   const successBranch = managerSource.slice(
@@ -54,4 +58,11 @@ test("DiagramEditor delivers the exact marked ReactFlow element from its current
   assert.match(initBranch, /onBoardReady\?\.\(captureElement\)/);
   assert.match(editorSource, /data-architecture-board-capture-source="true"/);
   assert.match(managerSource, /onBoardReady=\{handleBoardReady\}/);
+});
+
+test("project Board thumbnails capture a fitted offscreen Board instead of the current viewport crop", () => {
+  assert.match(thumbnailSource, /createFullBoardCaptureClone/);
+  assert.match(thumbnailSource, /getLogicalBoardBoundsFromRenderedNodes/);
+  assert.match(thumbnailSource, /getFullBoardThumbnailViewport/);
+  assert.match(thumbnailSource, /cloneViewport\.style\.transform/);
 });

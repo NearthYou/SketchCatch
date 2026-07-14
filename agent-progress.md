@@ -17,6 +17,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Capture complete Project Boards for Dashboard cards
+
+- Replaced the current-viewport capture with an offscreen 1280x720 React Flow clone. It derives the full logical bounds of rendered Resources from the active viewport transform, applies an 8% contain margin, and removes the clone after WebP encoding.
+- The user-visible Board viewport, server draft save, thumbnail upload/confirm ordering, and Dashboard card rendering remain unchanged. Existing thumbnails refresh the next time their Workspace saves a Board revision.
+- TDD evidence: full-bound normalization, CSS transform parsing, fitted viewport, and capture-path regression tests passed. The complete Web suite passed 1,231/1,231; harness, root lint, and root typecheck passed.
+- Root `pnpm test` has four unrelated API failures: three macOS path-separator lock-file fixture assertions and the existing EKS route-table-association orphan fixture. Root `pnpm build` remains blocked before Web compilation by the pre-existing missing `apps/web/.codegraph` path.
+
 ### 2026-07-14 - Connect the Workspace Template start flow
 
 - Split the template path into catalog and detail states while retaining the existing project creation, draft persistence, rollback, and Workspace navigation boundary. Only the detail CTA now creates a project from the selected available template.

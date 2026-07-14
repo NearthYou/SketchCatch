@@ -7,6 +7,11 @@ import {
   createProjectAssetUpload,
   uploadProjectAsset
 } from "./api";
+import {
+  getBoardViewportFromCssTransform,
+  getFullBoardThumbnailViewport,
+  getLogicalBoardBoundsFromRenderedNodes
+} from "./project-board-thumbnail-viewbox";
 
 type ProjectBoardThumbnailCaptureDependencies = {
   readonly abortProjectAssetUpload: typeof abortProjectAssetUpload;
@@ -39,53 +44,107 @@ function findActualBoardCaptureElement(): HTMLElement | null {
   return document.querySelector<HTMLElement>(BOARD_THUMBNAIL_CAPTURE_CONTRACT.sourceSelector);
 }
 
-// 현재 렌더링된 Board DOM 전체를 16:9 canvas 안에 contain 방식으로 보존합니다.
+// 화면 밖 Resource도 보존하려고 현재 Board를 숨은 16:9 복제본으로 맞춘 뒤 렌더링합니다.
 export async function captureActualBoardElement(element: HTMLElement): Promise<Blob> {
-  const sourceCanvas = await toCanvas(element, {
-    backgroundColor: BOARD_THUMBNAIL_CAPTURE_CONTRACT.backgroundColor,
-    cacheBust: true,
-    pixelRatio: Math.min(globalThis.devicePixelRatio || 1, 2)
+  const captureClone = createFullBoardCaptureClone(element);
+
+  try {
+    const sourceCanvas = await toCanvas(captureClone ?? element, {
+      backgroundColor: BOARD_THUMBNAIL_CAPTURE_CONTRACT.backgroundColor,
+      cacheBust: true,
+      pixelRatio: Math.min(globalThis.devicePixelRatio || 1, 2)
+    });
+    const outputCanvas = document.createElement("canvas");
+    outputCanvas.width = BOARD_THUMBNAIL_CAPTURE_CONTRACT.width;
+    outputCanvas.height = BOARD_THUMBNAIL_CAPTURE_CONTRACT.height;
+
+    const context = outputCanvas.getContext("2d");
+
+    if (!context || sourceCanvas.width === 0 || sourceCanvas.height === 0) {
+      throw new Error("Board 캡처 canvas를 만들지 못했습니다.");
+    }
+
+    context.fillStyle = BOARD_THUMBNAIL_CAPTURE_CONTRACT.backgroundColor;
+    context.fillRect(
+      0,
+      0,
+      BOARD_THUMBNAIL_CAPTURE_CONTRACT.width,
+      BOARD_THUMBNAIL_CAPTURE_CONTRACT.height
+    );
+
+    const scale = Math.min(
+      BOARD_THUMBNAIL_CAPTURE_CONTRACT.width / sourceCanvas.width,
+      BOARD_THUMBNAIL_CAPTURE_CONTRACT.height / sourceCanvas.height
+    );
+    const renderedWidth = sourceCanvas.width * scale;
+    const renderedHeight = sourceCanvas.height * scale;
+
+    context.drawImage(
+      sourceCanvas,
+      (BOARD_THUMBNAIL_CAPTURE_CONTRACT.width - renderedWidth) / 2,
+      (BOARD_THUMBNAIL_CAPTURE_CONTRACT.height - renderedHeight) / 2,
+      renderedWidth,
+      renderedHeight
+    );
+
+    const blob = await canvasToWebpBlob(outputCanvas);
+
+    if (blob.type !== BOARD_THUMBNAIL_CAPTURE_CONTRACT.contentType) {
+      throw new Error("이 브라우저는 WebP Board 캡처를 지원하지 않습니다.");
+    }
+
+    return blob;
+  } finally {
+    captureClone?.remove();
+  }
+}
+
+function createFullBoardCaptureClone(element: HTMLElement): HTMLElement | null {
+  const sourceViewport = element.querySelector<HTMLElement>(".react-flow__viewport");
+
+  if (!sourceViewport || typeof document === "undefined") {
+    return null;
+  }
+
+  const viewport = getBoardViewportFromCssTransform(getComputedStyle(sourceViewport).transform);
+  const bounds = viewport
+    ? getLogicalBoardBoundsFromRenderedNodes({
+        nodeRects: Array.from(element.querySelectorAll<HTMLElement>(".react-flow__node"), (node) =>
+          node.getBoundingClientRect()
+        ),
+        rootRect: element.getBoundingClientRect(),
+        viewport
+      })
+    : null;
+
+  if (!bounds) {
+    return null;
+  }
+
+  const thumbnailViewport = getFullBoardThumbnailViewport(bounds, {
+    height: BOARD_THUMBNAIL_CAPTURE_CONTRACT.height,
+    width: BOARD_THUMBNAIL_CAPTURE_CONTRACT.width
   });
-  const outputCanvas = document.createElement("canvas");
-  outputCanvas.width = BOARD_THUMBNAIL_CAPTURE_CONTRACT.width;
-  outputCanvas.height = BOARD_THUMBNAIL_CAPTURE_CONTRACT.height;
+  const clone = element.cloneNode(true) as HTMLElement;
+  const cloneViewport = clone.querySelector<HTMLElement>(".react-flow__viewport");
 
-  const context = outputCanvas.getContext("2d");
-
-  if (!context || sourceCanvas.width === 0 || sourceCanvas.height === 0) {
-    throw new Error("Board 캡처 canvas를 만들지 못했습니다.");
+  if (!cloneViewport) {
+    return null;
   }
 
-  context.fillStyle = BOARD_THUMBNAIL_CAPTURE_CONTRACT.backgroundColor;
-  context.fillRect(
-    0,
-    0,
-    BOARD_THUMBNAIL_CAPTURE_CONTRACT.width,
-    BOARD_THUMBNAIL_CAPTURE_CONTRACT.height
-  );
+  clone.style.height = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.height}px`;
+  clone.style.left = "-100000px";
+  clone.style.maxWidth = "none";
+  clone.style.minHeight = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.height}px`;
+  clone.style.pointerEvents = "none";
+  clone.style.position = "fixed";
+  clone.style.top = "0";
+  clone.style.width = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.width}px`;
+  clone.style.zIndex = "-1";
+  cloneViewport.style.transform = `translate(${thumbnailViewport.x}px, ${thumbnailViewport.y}px) scale(${thumbnailViewport.zoom})`;
+  document.body.append(clone);
 
-  const scale = Math.min(
-    BOARD_THUMBNAIL_CAPTURE_CONTRACT.width / sourceCanvas.width,
-    BOARD_THUMBNAIL_CAPTURE_CONTRACT.height / sourceCanvas.height
-  );
-  const renderedWidth = sourceCanvas.width * scale;
-  const renderedHeight = sourceCanvas.height * scale;
-
-  context.drawImage(
-    sourceCanvas,
-    (BOARD_THUMBNAIL_CAPTURE_CONTRACT.width - renderedWidth) / 2,
-    (BOARD_THUMBNAIL_CAPTURE_CONTRACT.height - renderedHeight) / 2,
-    renderedWidth,
-    renderedHeight
-  );
-
-  const blob = await canvasToWebpBlob(outputCanvas);
-
-  if (blob.type !== BOARD_THUMBNAIL_CAPTURE_CONTRACT.contentType) {
-    throw new Error("이 브라우저는 WebP Board 캡처를 지원하지 않습니다.");
-  }
-
-  return blob;
+  return clone;
 }
 
 // Canvas encoder의 callback 결과를 실패 가능한 Promise로 정규화합니다.
