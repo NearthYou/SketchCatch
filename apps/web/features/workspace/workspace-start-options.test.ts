@@ -22,6 +22,7 @@ test("workspace start cards execute directly without a separate continue button"
   );
 
   assert.match(source, /onClick=\{\(\) => startWithKind\(option\.kind\)\}/);
+  assert.match(source, /function startWithKind[\s\S]*?if \(!validateProjectName\(\)\)[\s\S]*?handleContinue\(kind\)/);
   assert.doesNotMatch(source, /className=\{styles\.primaryAction\}/);
   assert.doesNotMatch(source, /RepositoryUrlStartPanel/);
   assert.match(source, /onClick=\{\(\) => void handleContinue\("blank"\)\}/);
