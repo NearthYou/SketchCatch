@@ -145,9 +145,6 @@ export function ProductEntry() {
                 설계 시작
                 <span className={styles.buttonIcon} aria-hidden="true">→</span>
               </Link>
-              <a className={`${styles.button} ${styles.buttonSecondary}`} href="#workflow">
-                흐름 먼저 보기
-              </a>
             </div>
           </div>
         </section>
