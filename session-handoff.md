@@ -12,11 +12,16 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Verification
 
+- Current code verification passes 24 sandbox orchestration tests, 19 focused API runtime/workflow tests, 27 focused Web target/three-stage/CI-console tests, harness, lint, typecheck, build, and diff checks.
+- Local API/proxy/Redis/certificate/TLS/log/fixture-clone cleanup is complete. Read-only AWS checks show zero Issue #378 ECR, CodeBuild, and S3 resources.
 - After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused GitHub client/provider/persistence/workflow tests pass, including red-green coverage for historical stale handling and actual-job stage precedence.
 - `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
 
 ## Changes This Session
 
+- Completed the code-side acceptance runner as a fail-closed three-stage orchestration contract with exact Direct/GitOps matrices, cleanup-on-failure, event hooks, and verification-gated success.
+- Added standalone SAM/CodeDeploy application-unit detection, application-local Static lockfile selection, and source-root npm/yarn installs in generated workflows.
+- Reconnected the private fixture repository after its GitHub App installation changed and confirmed Static/Lambda/EC2 evidence at fixture commit `97c98d2640d7af3af79bfcb10f4bd3780addb02d`.
 - Reopened Issue #378, passed the live sandbox preflight, and restored the execution-role trust to the current encrypted AWS Connection external ID.
 - Added persisted Web Push provider status evidence and runtime-aware GitOps artifact cleanup with migration and focused regression coverage.
 - Hardened GitHub run selection/log hydration and nullable handoff persistence.
@@ -30,5 +35,5 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
-- Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.
+- Merge the code-completion PR after focused CI and review.
+- Keep Issue #378 open for a separately approved real-environment acceptance run covering Static, Lambda, EC2/ASG, rollback, QR/CloudWatch, and Web Push.

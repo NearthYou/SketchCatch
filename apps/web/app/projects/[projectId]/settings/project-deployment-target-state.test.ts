@@ -210,6 +210,42 @@ test("Static runtime selection suggests one current output and requires CloudFro
   assert.equal(request.confirmedBuildConfig.staticOutputPath, "apps/web/dist");
 });
 
+test("Static runtime prefers the application lockfile over an unrelated repository lockfile", () => {
+  const repository = createSourceRepository({
+    analysis: {
+      repositoryRevision: "1".repeat(40),
+      analyzedAt: "2026-07-14T00:00:00.000Z",
+      aiHandoff: {
+        status: "template_selected",
+        templateId: "static-web-hosting",
+        applicationUnits: [{
+          id: "static",
+          rootPath: "apps/static",
+          kind: "frontend",
+          frameworks: ["Vite"],
+          evidencePaths: ["apps/static/package.json"]
+        }],
+        evidence: [
+          { kind: "static_output", path: "apps/static/dist", applicationUnitId: "static", signals: [] },
+          { kind: "lockfile", path: "pnpm-lock.yaml", applicationUnitId: null, signals: [] },
+          { kind: "lockfile", path: "apps/static/package-lock.json", applicationUnitId: null, signals: [] }
+        ],
+        missingEvidence: [],
+        selectionReasons: ["Static output detected"]
+      }
+    }
+  });
+
+  const draft = changeDeploymentTargetRuntime(
+    createDeploymentTargetDraft(null, [connection]),
+    "static_site",
+    repository
+  );
+
+  assert.equal(draft.sourceRoot, "apps/static");
+  assert.equal(draft.installPreset, "npm_ci");
+});
+
 test("deployment target draft restores the persisted project target", () => {
   const target = {
     projectId: "33333333-3333-4333-8333-333333333333",

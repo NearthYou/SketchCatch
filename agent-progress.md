@@ -4,7 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `test/sw/378-complete-sandbox-e2e`; the workstream remains `in_progress` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are still unverified.
+- Branch: `test/sw/378-runtime-acceptance`; the code implementation is complete while the workstream remains `in_progress` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are still unverified.
+- The sandbox runner now exposes one fail-closed three-stage orchestration contract (`prepare`, `deploy`, `finalize`), executes the exact Direct/GitOps matrix through injected adapters, always cleans up after mutation starts, and cannot report success before evidence verification.
+- Repository analysis now creates standalone AWS SAM and CodeDeploy application units. Static target inference prefers the application-local lockfile, and generated npm/yarn workflows install inside the confirmed source root.
 - The 2026-07-15 sandbox preflight passed against AWS account `614935468487`, the verified AWS Connection, the private fixture repository, and the approved USD 1 budget.
 - Web Push now persists the successful provider HTTP status without response bodies or subscription material, and generated Destroy workflows remove Lambda, EC2/ASG, and Static versioned artifacts.
 - ECS GitOps Infra run `29334708442` and chained App run `29334822683` succeeded for commit `3a12e55c13e7be1a769cfbe920b112516d8c14ce`.
@@ -13,8 +15,10 @@ Short English-only working log for the current agent context. Older records are 
 - Application release `8025a2f3-455a-41bb-abbd-b8149105d004` and Pipeline Run `4defade1-18ca-437b-8cf6-3857b058353e` persist the GitOps SHA, digest, provider revision, Output URL, and healthy ECS evidence.
 - The AWS Connection external ID was rotated in memory and verified with a fresh Operator session: the new value is accepted and the prior value is rejected. No value was printed or written to a file.
 - Destroy run `29337235499` succeeded. Direct queries confirm zero VPC, active ECS cluster, ECR repository, CodeBuild project, log group, release/state bucket, OIDC provider, issue task definition, and issue IAM role. Resource Groups still has three delayed deleted-ECS tag index entries.
-- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused tests, harness, lint, typecheck, build, and diff checks pass.
+- Focused sandbox, runtime contract, three-stage UI, and target-state tests pass. Full Web/API suites remain intentionally omitted; final lint, typecheck, and build are recorded before PR handoff.
 - Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
+- Final code checks passed: 24 sandbox runner tests, 19 API runtime/workflow tests, 27 Web target/three-stage/CI-console tests, harness, lint, typecheck, build, and diff checks. Full Web/API suites were intentionally omitted.
+- Cleanup is complete: local API and HTTPS proxy ports are closed, the Redis container, temporary certificate/TLS files/logs/fixture clone are removed, and read-only AWS checks show zero Issue #378 ECR repositories, CodeBuild projects, and S3 buckets.
 
 ## Session Record
 
