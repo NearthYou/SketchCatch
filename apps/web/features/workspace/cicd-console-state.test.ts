@@ -220,6 +220,14 @@ test("successful CI/CD requests recover a previous permission failure", () => {
   assert.deepEqual(recovered, initialCicdConsoleRequestState);
 });
 
+test("missing GitHub identity is classified as an account connection state", () => {
+  const classifier = Reflect.get(cicdConsoleState, "isGitHubIdentityRequiredError");
+
+  assert.equal(typeof classifier, "function", "GitHub identity classifier is missing");
+  assert.equal(classifier(new Error("GIT_APP_GITHUB_IDENTITY_REQUIRED")), true);
+  assert.equal(classifier(new Error("GIT_APP_INSTALLATION_FORBIDDEN")), false);
+});
+
 test("a successful logs retry clears only the logs error", () => {
   const screenFailed = reduceCicdConsoleRequestState(initialCicdConsoleRequestState, {
     type: "failure",

@@ -35,3 +35,11 @@ test("Repository start screen selects a fetched branch before reanalysis", () =>
   assert.match(source, /analyzePublicRepositoryUrl\(repositoryUrl, defaultBranch\)/);
   assert.doesNotMatch(source, /placeholder="main"/);
 });
+
+test("Repository start sends GitHub permission management to global settings", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /const githubSettingsHref = "\/dashboard\/settings"/);
+  assert.match(source, /전역 설정에서 GitHub 권한 연결이 필요합니다/);
+  assert.doesNotMatch(source, /프로젝트 환경설정에서 GitHub 권한 연결이 필요합니다/);
+});

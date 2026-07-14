@@ -15,7 +15,7 @@ import {
   listSourceRepositories
 } from "../../../../features/workspace/api";
 import { GitHubRepositoryConnectionPanel } from "./github-repository-connection-panel";
-import { RepositoryAnalysisResult } from "../settings/repository-analysis-result";
+import { RepositoryAnalysisResult } from "./repository-analysis-result";
 import {
   applyRepositoryAnalysis,
   canRunRepositoryAnalysis,

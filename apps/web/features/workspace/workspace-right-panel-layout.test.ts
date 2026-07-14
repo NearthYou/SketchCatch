@@ -1552,11 +1552,11 @@ test("deployment creation prepares fresh snapshot and terraform artifact before 
   assert.match(componentSource, /onPrepareDeploymentArtifacts=\{prepareDeploymentArtifacts\}/);
 });
 
-test("GitHub repository setup is owned by project settings, not the deployment panel", () => {
-  assert.match(cicdConsoleSource, /settingsHref/);
+test("GitHub repository setup is owned by the project repository page, not the deployment panel", () => {
+  assert.match(cicdConsoleSource, /repositoryHref/);
   assert.match(
     cicdConsoleSource,
-    /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/settings\?tab=github/
+    /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/repository/
   );
   assert.doesNotMatch(directDeploymentSource, /createGitCicdAutoDeployHandoff/);
   assert.match(cicdConsoleSource, /item\.provider === "github"/);
@@ -1712,7 +1712,7 @@ test("CI/CD settings require explicit monitored paths and user acceptance", () =
     /userAcceptedChangeId: `cicd-monitoring-\$\{crypto\.randomUUID\(\)\}`/
   );
   assert.match(cicdConsoleSource, /GitHub 권한을 확인해 주세요\./);
-  assert.match(cicdConsoleSource, /프로젝트 GitHub 설정 열기/);
+  assert.match(cicdConsoleSource, /GitHub 계정 설정 열기/);
 });
 
 test("deployment baseline save button shows pending and saved icons", () => {
