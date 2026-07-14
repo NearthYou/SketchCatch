@@ -60,9 +60,16 @@ test("DiagramEditor delivers the exact marked ReactFlow element from its current
   assert.match(managerSource, /onBoardReady=\{handleBoardReady\}/);
 });
 
-test("project Board thumbnails capture a fitted offscreen Board instead of the current viewport crop", () => {
+test("project Board thumbnails capture a fitted full Board instead of the current viewport crop", () => {
   assert.match(thumbnailSource, /createFullBoardCaptureClone/);
   assert.match(thumbnailSource, /getLogicalBoardBoundsFromRenderedNodes/);
   assert.match(thumbnailSource, /getFullBoardThumbnailViewport/);
   assert.match(thumbnailSource, /cloneViewport\.style\.transform/);
+});
+
+test("fitted Board clone stays in the paint tree while it is captured", () => {
+  assert.match(thumbnailSource, /clone\.style\.left = "0"/);
+  assert.match(thumbnailSource, /clone\.style\.zIndex = "2147483647"/);
+  assert.doesNotMatch(thumbnailSource, /clone\.style\.left = "-100000px"/);
+  assert.doesNotMatch(thumbnailSource, /clone\.style\.zIndex = "-1"/);
 });

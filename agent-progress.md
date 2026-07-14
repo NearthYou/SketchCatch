@@ -89,4 +89,11 @@ Short English-only working log for the current agent context. Older records are 
 ## Next Action
 
 - Commit or push the reviewed bounded thumbnail retry diff only when requested. Keep the unrelated untracked `docs/gg/feat-infrastructure-template/brainboard-captures/aws-vpc-subnets-security-groups-2az.json` outside this change.
+
+### 2026-07-14 - Render full Board thumbnail clones inside the browser paint tree
+
+- Fixed a real browser regression where manual Workspace saves uploaded a 1280x720 WebP that contained only the Board background. The full-Board clone had been positioned offscreen, which `html-to-image` rendered as blank.
+- The clone now renders at the paint-tree origin only while it is captured, remains pointer-inert, and is removed immediately after encoding. The save endpoint, asset upload/confirm sequence, Dashboard image loader, and Board data are unchanged.
+- Browser evidence: opened project `ㅜ`, clicked `지금 저장`, observed `저장됨`, then opened Dashboard Projects. The resulting card at 26. 7. 14. 오후 4:52 displayed the fitted diagram; browser error and warning logs were empty.
+- Focused regression suite passed 5/5; the full Web suite passed 1,234/1,234; harness and typecheck passed. Root lint passed with the existing API `setNow` unused-argument warning. Root build remains blocked before Web compilation by the existing missing `apps/web/.codegraph` path.
 - Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; root API test still needs the three Windows-path fixtures made platform-neutral before it can be green on macOS.

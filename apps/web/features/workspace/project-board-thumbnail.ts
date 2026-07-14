@@ -44,7 +44,7 @@ function findActualBoardCaptureElement(): HTMLElement | null {
   return document.querySelector<HTMLElement>(BOARD_THUMBNAIL_CAPTURE_CONTRACT.sourceSelector);
 }
 
-// 화면 밖 Resource도 보존하려고 현재 Board를 숨은 16:9 복제본으로 맞춘 뒤 렌더링합니다.
+// 화면 밖 Resource도 보존하려고 현재 Board를 16:9 복제본으로 맞춘 뒤 렌더링합니다.
 export async function captureActualBoardElement(element: HTMLElement): Promise<Blob> {
   const captureClone = createFullBoardCaptureClone(element);
 
@@ -133,14 +133,16 @@ function createFullBoardCaptureClone(element: HTMLElement): HTMLElement | null {
   }
 
   clone.style.height = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.height}px`;
-  clone.style.left = "-100000px";
+  // html-to-image는 화면 밖에 놓인 복제본을 빈 Canvas로 렌더링할 수 있습니다.
+  // 캡처가 끝나는 즉시 제거하므로, 실제 paint tree 안의 원점에서만 잠깐 렌더링합니다.
+  clone.style.left = "0";
   clone.style.maxWidth = "none";
   clone.style.minHeight = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.height}px`;
   clone.style.pointerEvents = "none";
   clone.style.position = "fixed";
   clone.style.top = "0";
   clone.style.width = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.width}px`;
-  clone.style.zIndex = "-1";
+  clone.style.zIndex = "2147483647";
   cloneViewport.style.transform = `translate(${thumbnailViewport.x}px, ${thumbnailViewport.y}px) scale(${thumbnailViewport.zoom})`;
   document.body.append(clone);
 
