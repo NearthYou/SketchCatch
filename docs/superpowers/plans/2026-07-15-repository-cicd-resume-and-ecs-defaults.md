@@ -701,8 +701,8 @@ Run `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web 
 - The primary CTA explains the outcome with `설정 저장 후 계속`, exposes loading and disabled states, and retains the existing sequential save handler.
 - The panel presents save errors near the CTA and becomes a single-column, full-width action on small screens.
 
-- [ ] Add a failing source/CSS contract test for the completion copy, 48px target, focus state, and mobile full-width layout.
-- [ ] Run `pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts` and verify RED.
-- [ ] Replace the generic action row with the responsive completion panel and explicit loading/error presentation.
-- [ ] Rerun the focused test, Web lint, Web typecheck, required repository checks, and diff checks.
-- [ ] Commit the source, CSS, and test files with `Style: Callback 완료 액션 영역 개선`.
+- [x] Add a failing source/CSS contract test for the completion copy, 48px target, focus state, and mobile full-width layout.
+- [x] Run `pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts` and verify RED.
+- [x] Replace the generic action row with the responsive completion panel and explicit loading/error presentation.
+- [x] Rerun the focused test, Web lint, Web typecheck, required repository checks, and diff checks.
+- [x] Commit the source, CSS, and test files with `Style: Callback 완료 액션 영역 개선`.

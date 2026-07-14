@@ -83,13 +83,26 @@ test("callback creates ECS defaults even when another architecture was selected"
   });
 });
 
-test("callback uses one temporary confirmation instead of child save buttons", () => {
+test("callback uses one polished completion action instead of child save buttons", () => {
   const pageSource = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+  const styleSource = readFileSync(
+    new URL("./github-callback.module.css", import.meta.url),
+    "utf8"
+  );
   const hiddenSaveButtons = pageSource.match(/showSaveButton=\{false\}/g) ?? [];
 
   assert.equal(hiddenSaveButtons.length, 2);
   assert.match(pageSource, /onClick=\{saveSettingsAndReturn\}/);
-  assert.match(pageSource, /isSavingSettings \? "저장 중" : "확인"/);
+  assert.match(pageSource, /설정 저장 후 계속/);
+  assert.match(pageSource, /설정 저장 중/);
+  assert.match(pageSource, /styles\.completionPanel/);
+  assert.match(pageSource, /styles\.completionButton/);
+  assert.match(styleSource, /\.completionButton\s*\{[^}]*min-height:\s*48px/s);
+  assert.match(styleSource, /\.completionButton:focus-visible/);
+  assert.match(
+    styleSource,
+    /@media \(max-width:\s*640px\)[\s\S]*\.completionButton\s*\{[^}]*width:\s*100%/s
+  );
   assert.doesNotMatch(pageSource, /onSaved=/);
 });
 

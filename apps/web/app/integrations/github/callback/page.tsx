@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, LoaderCircle, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, Save, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -234,15 +234,50 @@ export default function GitHubIntegrationCallbackPage() {
               />
             </div>
 
-            {confirmationMessage ? <p role="alert">{confirmationMessage}</p> : null}
-            <div className="settingsActionRow">
+            <section
+              aria-labelledby="callback-completion-title"
+              className={styles.completionPanel}
+            >
+              <div className={styles.completionCopy}>
+                <span aria-hidden="true" className={styles.completionIcon}>
+                  <Save size={19} strokeWidth={2.2} />
+                </span>
+                <div className={styles.completionText}>
+                  <strong id="callback-completion-title">설정을 저장하고 다음 단계로 이동합니다</strong>
+                  <p>배포 타깃과 GitOps 감시 설정을 함께 저장한 뒤 보드 선택 화면으로 돌아갑니다.</p>
+                </div>
+              </div>
+
+              {confirmationMessage ? (
+                <p className={styles.completionError} role="alert">
+                  <TriangleAlert aria-hidden="true" size={17} />
+                  <span>{confirmationMessage}</span>
+                </p>
+              ) : null}
+
               <button
-                className="dashboardTopbarAction"
+                className={styles.completionButton}
                 disabled={isSavingSettings}
                 onClick={saveSettingsAndReturn}
                 type="button"
-              >{isSavingSettings ? "저장 중" : "확인"}</button>
-            </div>
+              >
+                {isSavingSettings ? (
+                  <>
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className={styles.buttonSpinner}
+                      size={17}
+                    />
+                    <span>설정 저장 중</span>
+                  </>
+                ) : (
+                  <>
+                    <span>설정 저장 후 계속</span>
+                    <ArrowRight aria-hidden="true" size={17} />
+                  </>
+                )}
+              </button>
+            </section>
           </>
         ) : null}
       </section>
