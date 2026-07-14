@@ -129,8 +129,8 @@
 }
 
 .dashboardAccountText span {
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .dashboardLogoutButton,
@@ -194,7 +194,7 @@
 }
 
 .dashboardTopbarTitle span {
-  color: #777b84;
+  color: #60646c;
   font-size: 12px;
   font-weight: 600;
 }
