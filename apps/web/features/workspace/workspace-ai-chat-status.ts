@@ -9,12 +9,14 @@ export type WorkspaceAiChatDockStatus = {
 
 export function hasCompletedWorkspaceAiChatResponse({
   hasExplanation,
-  messageRoles
+  messageRoles,
+  requestWasCancelled = false
 }: {
   readonly hasExplanation: boolean;
   readonly messageRoles: readonly ("assistant" | "user")[];
+  readonly requestWasCancelled?: boolean | undefined;
 }): boolean {
-  return hasExplanation || messageRoles.includes("user");
+  return !requestWasCancelled && (hasExplanation || messageRoles.includes("user"));
 }
 
 export function getWorkspaceAiChatDockStatus({

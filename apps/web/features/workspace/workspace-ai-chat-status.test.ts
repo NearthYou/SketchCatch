@@ -76,3 +76,14 @@ test("초기 안내 메시지만으로 응답 완료 상태가 되지 않는다"
     true
   );
 });
+
+test("사용자가 요청을 중지하면 새 입력이 가능한 상태로 돌아간다", () => {
+  assert.equal(
+    hasCompletedWorkspaceAiChatResponse({
+      hasExplanation: false,
+      messageRoles: ["user", "assistant"],
+      requestWasCancelled: true
+    }),
+    false
+  );
+});

@@ -165,6 +165,7 @@ const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
 const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
+const REQUEST_CANCELLED_MESSAGE = "요청을 중지했습니다.";
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
 
 type BrowserSpeechRecognitionAlternative = {
@@ -332,7 +333,8 @@ export function WorkspaceAiChatDock({
     hasExplanation:
       (activeChatTab === "errors" && terraformIssueResolution?.explanation != null) ||
       (activeChatTab === "preview" && terraformPreviewExplanation?.explanation != null),
-    messageRoles: visibleMessages.map((message) => message.role)
+    messageRoles: visibleMessages.map((message) => message.role),
+    requestWasCancelled: visibleMessages.at(-1)?.content === REQUEST_CANCELLED_MESSAGE
   });
   const activeHasPendingApproval =
     activeChatTab === "draft" && (draft !== null || patchPreviewModel !== null);
@@ -1326,7 +1328,7 @@ export function WorkspaceAiChatDock({
       );
     }
 
-    appendAssistantMessage("status", "요청을 중지했습니다.", [], "single", activeChatTab);
+    appendAssistantMessage("status", REQUEST_CANCELLED_MESSAGE, [], "single", activeChatTab);
   }
 
   function cancelDraftPreview(): void {
