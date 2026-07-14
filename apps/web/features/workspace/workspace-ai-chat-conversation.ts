@@ -1,4 +1,6 @@
 export const workspaceAiChatScopes = ["draft", "errors", "preview"] as const;
+const WORKSPACE_AI_CHAT_STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
+const ACTIVE_SCOPE_STORAGE_KEY_SUFFIX = "activeScope";
 
 export type WorkspaceAiChatScope = (typeof workspaceAiChatScopes)[number];
 
@@ -60,4 +62,40 @@ export function getAdjacentWorkspaceAiChatScope(
 
 export function isWorkspaceAiChatScope(value: unknown): value is WorkspaceAiChatScope {
   return typeof value === "string" && workspaceAiChatScopes.includes(value as WorkspaceAiChatScope);
+}
+
+export function createWorkspaceAiChatActiveScopeStorageKey(projectId: string): string {
+  return `${WORKSPACE_AI_CHAT_STORAGE_KEY_PREFIX}.${projectId}.${ACTIVE_SCOPE_STORAGE_KEY_SUFFIX}`;
+}
+
+export function readStoredActiveChatScope(
+  projectId: string,
+  storage: Pick<Storage, "getItem"> | null = getBrowserLocalStorage()
+): WorkspaceAiChatScope {
+  if (storage === null) return "draft";
+
+  try {
+    const storedScope = storage.getItem(createWorkspaceAiChatActiveScopeStorageKey(projectId));
+    return isWorkspaceAiChatScope(storedScope) ? storedScope : "draft";
+  } catch {
+    return "draft";
+  }
+}
+
+export function storeActiveChatScope(
+  projectId: string,
+  scope: WorkspaceAiChatScope,
+  storage: Pick<Storage, "setItem"> | null = getBrowserLocalStorage()
+): void {
+  if (storage === null) return;
+
+  try {
+    storage.setItem(createWorkspaceAiChatActiveScopeStorageKey(projectId), scope);
+  } catch {
+    // localStorage가 막혀도 현재 session의 대화 전환은 계속 동작합니다.
+  }
+}
+
+function getBrowserLocalStorage(): Storage | null {
+  return typeof window === "undefined" ? null : window.localStorage;
 }

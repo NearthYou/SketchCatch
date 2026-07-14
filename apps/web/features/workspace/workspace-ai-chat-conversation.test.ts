@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createWorkspaceAiChatActiveScopeStorageKey,
   createWorkspaceAiChatComposerStates,
   getAdjacentWorkspaceAiChatScope,
   getWorkspaceAiChatScopeDefinition,
   isWorkspaceAiChatScope,
+  readStoredActiveChatScope,
+  storeActiveChatScope,
   workspaceAiChatScopes
 } from "./workspace-ai-chat-conversation";
 
@@ -15,6 +18,19 @@ test("AI Chat은 세 개의 독립 대화 범위를 제공한다", () => {
   assert.equal(getWorkspaceAiChatScopeDefinition("preview").label, "에이전트 리뷰");
   assert.equal(getWorkspaceAiChatScopeDefinition("draft").inputAvailable, true);
   assert.equal(getWorkspaceAiChatScopeDefinition("errors").inputAvailable, false);
+});
+
+test("AI Chat launcher는 프로젝트별 마지막 대화를 저장하고 잘못된 값은 무시한다", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value)
+  };
+
+  storeActiveChatScope("project-1", "preview", storage);
+  assert.equal(readStoredActiveChatScope("project-1", storage), "preview");
+  values.set(createWorkspaceAiChatActiveScopeStorageKey("project-1"), "invalid");
+  assert.equal(readStoredActiveChatScope("project-1", storage), "draft");
 });
 
 test("AI Chat 탭은 화살표 이동에서 순환한다", () => {

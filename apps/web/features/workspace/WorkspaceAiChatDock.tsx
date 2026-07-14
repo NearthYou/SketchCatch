@@ -39,7 +39,8 @@ import {
   createWorkspaceAiChatComposerStates,
   getAdjacentWorkspaceAiChatScope,
   getWorkspaceAiChatScopeDefinition,
-  isWorkspaceAiChatScope,
+  readStoredActiveChatScope,
+  storeActiveChatScope,
   workspaceAiChatScopes,
   type WorkspaceAiChatComposerState,
   type WorkspaceAiChatScope
@@ -157,7 +158,6 @@ type WorkspaceAiProposalSource = {
 
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
-const ACTIVE_SCOPE_STORAGE_KEY_SUFFIX = "activeScope";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
 const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
@@ -1818,43 +1818,43 @@ export function WorkspaceAiChatDock({
       </div>
 
       {activeScopeDefinition.inputAvailable ? (
-      <form className={styles.aiChatComposer} onSubmit={(event) => void submitChatPrompt(event)}>
-        <label className={styles.aiChatInput}>
-          <textarea
-            aria-label="AI 채팅 입력"
-            onChange={(event) => setComposerValue(event.target.value)}
-            onKeyDown={handleComposerKeyDown}
-            ref={composerTextareaRef}
-            rows={2}
-            value={activeComposer.value}
-          />
-        </label>
-        <button
-          aria-label={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
-          aria-pressed={isVoiceListening}
-          className={styles.aiChatVoiceButton}
-          data-listening={isVoiceListening}
-          disabled={!isVoiceInputSupported || isChatBusy}
-          onClick={toggleVoiceRecognition}
-          title={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
-          type="button"
-        >
-          <Mic size={17} aria-hidden="true" />
-        </button>
-        <button
-          className={styles.aiChatSendButton}
-          disabled={activeComposer.value.trim().length === 0 || isChatBusy}
-          type="submit"
-        >
-          <Send size={16} aria-hidden="true" />
-          보내기
-        </button>
-        {activeComposer.voiceStatusMessage.length > 0 ? (
-          <p className={styles.aiChatVoiceStatus} role="status">
-            {activeComposer.voiceStatusMessage}
-          </p>
-        ) : null}
-      </form>
+        <form className={styles.aiChatComposer} onSubmit={(event) => void submitChatPrompt(event)}>
+          <label className={styles.aiChatInput}>
+            <textarea
+              aria-label="AI 채팅 입력"
+              onChange={(event) => setComposerValue(event.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              ref={composerTextareaRef}
+              rows={2}
+              value={activeComposer.value}
+            />
+          </label>
+          <button
+            aria-label={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
+            aria-pressed={isVoiceListening}
+            className={styles.aiChatVoiceButton}
+            data-listening={isVoiceListening}
+            disabled={!isVoiceInputSupported || isChatBusy}
+            onClick={toggleVoiceRecognition}
+            title={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
+            type="button"
+          >
+            <Mic size={17} aria-hidden="true" />
+          </button>
+          <button
+            className={styles.aiChatSendButton}
+            disabled={activeComposer.value.trim().length === 0 || isChatBusy}
+            type="submit"
+          >
+            <Send size={16} aria-hidden="true" />
+            보내기
+          </button>
+          {activeComposer.voiceStatusMessage.length > 0 ? (
+            <p className={styles.aiChatVoiceStatus} role="status">
+              {activeComposer.voiceStatusMessage}
+            </p>
+          ) : null}
+        </form>
       ) : (
         <div className={styles.aiChatComposerUnavailable}>
           <p>{activeScopeDefinition.emptyDescription}</p>
@@ -1867,42 +1867,6 @@ export function WorkspaceAiChatDock({
 
 export function createWorkspaceAiChatStorageKey(projectId: string): string {
   return `${STORAGE_KEY_PREFIX}.${projectId}`;
-}
-
-export function createWorkspaceAiChatActiveScopeStorageKey(projectId: string): string {
-  return `${createWorkspaceAiChatStorageKey(projectId)}.${ACTIVE_SCOPE_STORAGE_KEY_SUFFIX}`;
-}
-
-export function readStoredActiveChatScope(
-  projectId: string,
-  storage: Pick<Storage, "getItem"> | null = getBrowserLocalStorage()
-): WorkspaceAiChatScope {
-  if (storage === null) return "draft";
-
-  try {
-    const storedScope = storage.getItem(createWorkspaceAiChatActiveScopeStorageKey(projectId));
-    return isWorkspaceAiChatScope(storedScope) ? storedScope : "draft";
-  } catch {
-    return "draft";
-  }
-}
-
-export function storeActiveChatScope(
-  projectId: string,
-  scope: WorkspaceAiChatScope,
-  storage: Pick<Storage, "setItem"> | null = getBrowserLocalStorage()
-): void {
-  if (storage === null) return;
-
-  try {
-    storage.setItem(createWorkspaceAiChatActiveScopeStorageKey(projectId), scope);
-  } catch {
-    // localStorage가 막혀도 현재 session의 대화 전환은 계속 동작합니다.
-  }
-}
-
-function getBrowserLocalStorage(): Storage | null {
-  return typeof window === "undefined" ? null : window.localStorage;
 }
 
 function trapFocusWithin(container: HTMLElement, event: KeyboardEvent): void {
