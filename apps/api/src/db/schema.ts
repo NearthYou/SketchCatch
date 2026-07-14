@@ -290,6 +290,42 @@ export const oauthAccounts = pgTable(
   ]
 );
 
+export const githubInstallationConnections = pgTable(
+  "github_installation_connections",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    githubInstallationId: varchar("github_installation_id", { length: 128 }).notNull(),
+    accountId: varchar("account_id", { length: 255 }).notNull(),
+    accountLogin: varchar("account_login", { length: 255 }).notNull(),
+    accountType: varchar("account_type", { length: 64 }),
+    repositorySelection: varchar("repository_selection", { length: 32 }),
+    htmlUrl: text("html_url"),
+    status: varchar("status", { length: 32 }).notNull().default("active"),
+    connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+    lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull().defaultNow(),
+    disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("github_installation_connections_installation_unique").on(
+      table.githubInstallationId
+    ),
+    index("github_installation_connections_user_status_idx").on(table.userId, table.status),
+    check(
+      "github_installation_connections_status_check",
+      sql`${table.status} IN ('active', 'disconnected')`
+    ),
+    check(
+      "github_installation_connections_repository_selection_check",
+      sql`${table.repositorySelection} IS NULL OR ${table.repositorySelection} IN ('all', 'selected')`
+    )
+  ]
+);
+
 export const projects = pgTable(
   "projects",
   {
@@ -1155,6 +1191,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   passwordResetTokens: many(passwordResetTokens),
   loginAttempts: many(loginAttempts),
   oauthAccounts: many(oauthAccounts),
+  githubInstallationConnections: many(githubInstallationConnections),
   awsConnections: many(awsConnections),
   sourceRepositories: many(sourceRepositories),
   reverseEngineeringScans: many(reverseEngineeringScans),
@@ -1191,6 +1228,16 @@ export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
     references: [users.id]
   })
 }));
+
+export const githubInstallationConnectionsRelations = relations(
+  githubInstallationConnections,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [githubInstallationConnections.userId],
+      references: [users.id]
+    })
+  })
+);
 
 export const projectsRelations = relations(projects, ({ many, one }) => ({
   owner: one(users, {

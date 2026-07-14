@@ -2581,7 +2581,26 @@ Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. reposit
 
 ### GitHub 계정 연결과 프로젝트 repository 선택 경계
 
-GitHub App installation과 repository 접근 권한은 사용자 계정 단위 외부 연결입니다. Dashboard 전역 설정은 GitHub API에서 현재 사용자가 소유한 installation을 조회하며, 이 목록을 `source_repositories`에 저장하지 않습니다.
+SketchCatch 로그인 계정과 GitHub App installation 연결은 별도 인증 경계입니다. 비밀번호, Naver, Kakao, GitHub 중 어떤 방식으로 로그인했는지와 무관하게 현재 SketchCatch `user_id`가 GitHub App 설치 흐름을 시작하고 callback을 완료하면 `github_installation_connections`에 installation 소유 관계를 저장합니다. GitHub OAuth 로그인 이력인 `oauth_accounts`는 GitHub App installation 소유권 판정에 사용하지 않습니다.
+
+`github_installation_connections`는 사용자 계정 단위 외부 연결만 저장하며 프로젝트 repository 선택 결과는 저장하지 않습니다.
+
+| 필드                     | 설명                                                |
+| ------------------------ | --------------------------------------------------- |
+| `id`                     | GitHub installation 연결 식별자                     |
+| `user_id`                | 연결을 시작한 SketchCatch 사용자                    |
+| `github_installation_id` | GitHub App installation id, 전체 사용자에서 unique |
+| `account_id`             | GitHub user 또는 organization id                    |
+| `account_login`          | GitHub account login                                |
+| `account_type`           | GitHub account type                                 |
+| `repository_selection`   | `all`, `selected`, 또는 `null`                      |
+| `html_url`               | GitHub installation 관리 URL                        |
+| `status`                 | `active` 또는 `disconnected`                        |
+| `connected_at`           | 최초 연결 시각                                      |
+| `last_verified_at`       | GitHub App API로 마지막 확인한 시각                 |
+| `disconnected_at`        | installation 접근이 사라진 시각                     |
+
+GitHub installation access token과 GitHub App private key는 이 테이블에 저장하지 않습니다. repository 목록과 repository 개수도 요청 시 GitHub API에서 조회하며 RDS에 저장하지 않습니다.
 
 Dashboard 전역 설정은 계정 단위 GitHub App installation을 관리하는 보조 경로입니다. Repository Analysis에서 Architecture Draft를 시작하는 흐름은 전역 설정으로 이동시키지 않고, 추천 Template 선택 화면 안에서 프로젝트 단위 CI/CD 연결을 직접 제공합니다. 사용자가 GitHub App 연결을 시작하거나 접근 가능한 repository를 선택하면 기존 프로젝트 연결 API가 `source_repositories`를 생성하거나 활성화합니다. active Source Repository가 생기기 전에는 다음 단계로 이동할 수 없으며, 이동을 시도하면 같은 화면의 CI/CD 연결 구역에 경고를 표시합니다.
 
@@ -2597,10 +2616,10 @@ type GitHubInstallationConnection = {
 ```
 
 - `GitHubInstallationConnection`은 installation ID, 계정 표시 정보, repository 권한 범위와 개수, GitHub 관리 URL만 반환합니다. installation access token과 GitHub App private key는 반환하거나 저장하지 않습니다.
-- account scope callback은 로그인 사용자와 installation 소유권만 검증하고 `SourceRepository`를 생성하거나 변경하지 않습니다.
+- account scope callback은 서명된 state의 SketchCatch 사용자와 installation을 연결하지만 `SourceRepository`를 생성하거나 변경하지 않습니다.
 - project scope callback과 사용자가 repository를 선택한 요청만 프로젝트별 `SourceRepository`를 생성하거나 기존 active 연결을 교체합니다.
 - account scope와 project scope의 서명 state는 구분되며 서로 바꿔 사용할 수 없습니다.
-- 전역 GitHub 연결 추가에 별도 RDS row나 DB migration은 필요하지 않습니다.
+- 다른 SketchCatch 사용자에게 이미 연결된 installation은 현재 사용자가 사용할 수 없습니다.
 
 ### Repository Analysis와 AI Handoff
 
