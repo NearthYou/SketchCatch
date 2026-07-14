@@ -82,16 +82,12 @@ test("callback creates ECS defaults even when another architecture was selected"
   });
 });
 
-test("return indicator state cannot cancel the scheduled Repository redirect", () => {
+test("callback uses one temporary confirmation instead of child save buttons", () => {
   const pageSource = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-  const redirectEffect = pageSource.match(
-    /useEffect\(\(\) => \{[\s\S]*?setIsReturning\(true\);[\s\S]*?\}, \[([\s\S]*?)\]\);/
-  );
+  const hiddenSaveButtons = pageSource.match(/showSaveButton=\{false\}/g) ?? [];
 
-  assert.ok(redirectEffect, "redirect effect must exist");
-  assert.doesNotMatch(
-    redirectEffect[1] ?? "",
-    /\bisReturning\b/,
-    "isReturning rerenders must not clean up the pending redirect timer"
-  );
+  assert.equal(hiddenSaveButtons.length, 2);
+  assert.match(pageSource, /onClick=\{returnToRepositoryAnalysis\}/);
+  assert.match(pageSource, />확인<\/button>/);
+  assert.doesNotMatch(pageSource, /onSaved=/);
 });

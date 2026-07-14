@@ -16,13 +16,15 @@ export function CicdMonitoringSettings({
   initialDraft,
   isSaving,
   onDirty,
-  onSave
+  onSave,
+  showSaveButton = true
 }: {
   readonly config: GitCicdMonitoringConfig;
   readonly initialDraft?: Partial<CicdMonitoringDraft> | undefined;
   readonly isSaving: boolean;
   readonly onDirty?: (() => void) | undefined;
   readonly onSave: (request: UpdateGitCicdMonitoringConfigRequest) => Promise<void>;
+  readonly showSaveButton?: boolean | undefined;
 }) {
   const [draft, setDraft] = useState<CicdMonitoringDraft>(() => toDraft(config, initialDraft));
 
@@ -58,14 +60,16 @@ export function CicdMonitoringSettings({
           <h3 id="cicd-settings-title">모니터링 설정</h3>
           <p>저장소 branch와 앱·인프라 변경 범위를 명시적으로 선택합니다.</p>
         </div>
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canSave}
-          onClick={() => void save()}
-          type="button"
-        >
-          {isSaving ? "저장 중" : "설정 저장"}
-        </button>
+        {showSaveButton ? (
+          <button
+            className={styles.deploymentPrimaryButton}
+            disabled={!canSave}
+            onClick={() => void save()}
+            type="button"
+          >
+            {isSaving ? "저장 중" : "설정 저장"}
+          </button>
+        ) : null}
       </div>
 
       <label className={styles.cicdToggleField}>

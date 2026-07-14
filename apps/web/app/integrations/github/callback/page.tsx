@@ -18,7 +18,6 @@ import {
   type RepositoryAnalysisResumeState
 } from "../../../workspace/repository/repository-analysis-resume";
 import {
-  canResumeRepositoryAnalysis,
   createCallbackEcsDefaults,
   selectCallbackTarget
 } from "./github-callback-state";
@@ -39,9 +38,6 @@ type CallbackState =
 export default function GitHubIntegrationCallbackPage() {
   const router = useRouter();
   const [callbackState, setCallbackState] = useState<CallbackState>({ status: "loading" });
-  const [deploymentTargetSaved, setDeploymentTargetSaved] = useState(false);
-  const [gitOpsMonitoringSaved, setGitOpsMonitoringSaved] = useState(false);
-  const [isReturning, setIsReturning] = useState(false);
   const ecsDefaults = useMemo(
     () => callbackState.status === "configuring"
       ? createCallbackEcsDefaults(callbackState.resume)
@@ -130,26 +126,16 @@ export default function GitHubIntegrationCallbackPage() {
     };
   }, [router]);
 
-  useEffect(() => {
-    if (
-      callbackState.status !== "configuring" ||
-      !canResumeRepositoryAnalysis({ deploymentTargetSaved, gitOpsMonitoringSaved })
-    ) {
-      return;
-    }
+  function returnToRepositoryAnalysis(): void {
+    if (callbackState.status !== "configuring") return;
 
-    setIsReturning(true);
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({
-        projectId: callbackState.projectId,
-        projectName: callbackState.resume.projectName,
-        resumeKey: callbackState.resumeKey
-      });
-      router.replace(`/workspace/repository?${params.toString()}`);
-    }, 700);
-
-    return () => window.clearTimeout(timer);
-  }, [callbackState, deploymentTargetSaved, gitOpsMonitoringSaved, router]);
+    const params = new URLSearchParams({
+      projectId: callbackState.projectId,
+      projectName: callbackState.resume.projectName,
+      resumeKey: callbackState.resumeKey
+    });
+    router.replace(`/workspace/repository?${params.toString()}`);
+  }
 
   return (
     <main className={styles.page}>
@@ -165,7 +151,7 @@ export default function GitHubIntegrationCallbackPage() {
         <header className={styles.heading}>
           <span>GitHub App</span>
           <h1 id="github-callback-title">필수 배포 설정</h1>
-          <p>분석한 Repository를 연결했습니다. 두 설정을 모두 저장하면 보드 생성 흐름으로 돌아갑니다.</p>
+          <p>분석한 Repository를 연결했습니다. 설정을 확인한 뒤 보드 생성 흐름으로 돌아갑니다.</p>
         </header>
 
         {callbackState.status === "loading" || callbackState.status === "connecting" ? (
@@ -196,35 +182,26 @@ export default function GitHubIntegrationCallbackPage() {
               </div>
             </div>
 
-            <div className={styles.requiredSummary} aria-live="polite">
-              <span data-saved={deploymentTargetSaved}>1. 프로젝트 배포 타깃 {deploymentTargetSaved ? "저장 완료" : "저장 필요"}</span>
-              <span data-saved={gitOpsMonitoringSaved}>2. GitOps 감시 설정 {gitOpsMonitoringSaved ? "저장 완료" : "저장 필요"}</span>
-            </div>
-
-            {isReturning ? (
-              <div className={styles.progress} role="status">
-                <Check aria-hidden="true" size={18} />
-                <div>
-                  <strong>설정을 저장했습니다. Repository 분석으로 돌아갑니다.</strong>
-                  <span>기존 분석 결과와 ECS Fargate 선택을 그대로 복원합니다.</span>
-                </div>
-              </div>
-            ) : null}
-
             <div className={styles.settingsStack}>
               <ProjectDeploymentTargetSettingsClient
                 ecsDefaults={ecsDefaults}
-                onDirty={() => setDeploymentTargetSaved(false)}
-                onSaved={() => setDeploymentTargetSaved(true)}
                 preferEcsDefaults
                 projectId={callbackState.projectId}
+                showSaveButton={false}
               />
               <ProjectCicdMonitoringSettingsClient
                 initialDraft={monitoringDefaults}
-                onDirty={() => setGitOpsMonitoringSaved(false)}
-                onSaved={() => setGitOpsMonitoringSaved(true)}
                 projectId={callbackState.projectId}
+                showSaveButton={false}
               />
+            </div>
+
+            <div className="settingsActionRow">
+              <button
+                className="dashboardTopbarAction"
+                onClick={returnToRepositoryAnalysis}
+                type="button"
+              >확인</button>
             </div>
           </>
         ) : null}

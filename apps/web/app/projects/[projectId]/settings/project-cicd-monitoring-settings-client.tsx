@@ -21,7 +21,8 @@ export function ProjectCicdMonitoringSettingsClient({
   projectId,
   initialDraft,
   onDirty,
-  onSaved
+  onSaved,
+  showSaveButton = true
 }: {
   readonly projectId: string;
   readonly initialDraft?: {
@@ -32,6 +33,7 @@ export function ProjectCicdMonitoringSettingsClient({
   } | undefined;
   readonly onDirty?: (() => void) | undefined;
   readonly onSaved?: (() => void) | undefined;
+  readonly showSaveButton?: boolean | undefined;
 }) {
   const { status: authStatus } = useAuth();
   const [repository, setRepository] = useState<SourceRepository | null>(null);
@@ -105,6 +107,7 @@ export function ProjectCicdMonitoringSettingsClient({
           isSaving={requestState === "saving"}
           onDirty={onDirty}
           onSave={save}
+          showSaveButton={showSaveButton}
         />
       ) : null}
       {message ? <p role={requestState === "error" ? "alert" : "status"}>{message}</p> : null}

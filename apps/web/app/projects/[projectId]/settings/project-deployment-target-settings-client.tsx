@@ -40,13 +40,15 @@ export function ProjectDeploymentTargetSettingsClient({
   ecsDefaults = null,
   onDirty,
   onSaved,
-  preferEcsDefaults = false
+  preferEcsDefaults = false,
+  showSaveButton = true
 }: {
   readonly projectId: string;
   readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
   readonly onDirty?: (() => void) | undefined;
   readonly onSaved?: (() => void) | undefined;
   readonly preferEcsDefaults?: boolean | undefined;
+  readonly showSaveButton?: boolean | undefined;
 }) {
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
@@ -380,16 +382,18 @@ export function ProjectDeploymentTargetSettingsClient({
       {message ? (
         <p className="dashboardMessage" role={requestState === "error" ? "alert" : "status"}>{message}</p>
       ) : null}
-      <div className="settingsActionRow">
-        <button
-          className="dashboardTopbarAction"
-          disabled={!canSave}
-          onClick={() => void saveTarget()}
-          type="button"
-        >
-          {requestState === "saving" ? "저장 중" : "배포 타깃 저장"}
-        </button>
-      </div>
+      {showSaveButton ? (
+        <div className="settingsActionRow">
+          <button
+            className="dashboardTopbarAction"
+            disabled={!canSave}
+            onClick={() => void saveTarget()}
+            type="button"
+          >
+            {requestState === "saving" ? "저장 중" : "배포 타깃 저장"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
