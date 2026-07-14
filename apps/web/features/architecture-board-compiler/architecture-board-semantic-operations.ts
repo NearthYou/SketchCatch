@@ -3,12 +3,14 @@ import type {
   ArchitectureEdge,
   ArchitectureJson,
   ArchitectureNode,
+  DiagramJson,
   ResourceConfig
 } from "@sketchcatch/types";
 
 export type ArchitectureBoardSemanticOperationIssue = {
   readonly code:
     | "compiler.semantic_operation_duplicate_resource"
+    | "compiler.semantic_operation_invalid_presentation"
     | "compiler.semantic_operation_invalid_relationship"
     | "compiler.semantic_operation_missing_target";
   readonly operationId: string;
@@ -23,6 +25,12 @@ export type ArchitectureBoardSemanticOperationResult = {
     ArchitectureBoardCompilationSemanticOperation,
     { readonly kind: "presentation-add" | "presentation-remove" }
   >[];
+};
+
+export type ArchitectureBoardPresentationOperationResult = {
+  readonly appliedOperationIds: readonly string[];
+  readonly diagram: DiagramJson;
+  readonly issues: readonly ArchitectureBoardSemanticOperationIssue[];
 };
 
 /**
@@ -62,6 +70,62 @@ export function applyArchitectureBoardSemanticOperations(
       (left, right) => left.code.localeCompare(right.code) || left.operationId.localeCompare(right.operationId)
     ),
     presentationOperations: presentationOperations.sort((left, right) => left.id.localeCompare(right.id))
+  };
+}
+
+/**
+ * Presentation operations are deliberately restricted to design nodes, so a visual
+ * Group/Area cannot introduce a Terraform Resource outside the Architecture graph.
+ */
+export function applyArchitectureBoardPresentationOperations(
+  input: DiagramJson,
+  operations: readonly Extract<
+    ArchitectureBoardCompilationSemanticOperation,
+    { readonly kind: "presentation-add" | "presentation-remove" }
+  >[]
+): ArchitectureBoardPresentationOperationResult {
+  const diagram = structuredClone(input);
+  const issues: ArchitectureBoardSemanticOperationIssue[] = [];
+  const appliedOperationIds: string[] = [];
+
+  for (const operation of [...operations].sort((left, right) => left.id.localeCompare(right.id))) {
+    if (operation.kind === "presentation-add") {
+      if (operation.node.kind !== "design" || diagram.nodes.some((node) => node.id === operation.node.id)) {
+        issues.push({
+          code: "compiler.semantic_operation_invalid_presentation",
+          operationId: operation.id,
+          relatedResourceIds: [operation.node.id]
+        });
+        continue;
+      }
+      diagram.nodes.push(structuredClone(operation.node));
+      appliedOperationIds.push(operation.id);
+      continue;
+    }
+
+    const node = diagram.nodes.find((candidate) => candidate.id === operation.targetId);
+    if (!node || node.kind !== "design") {
+      issues.push({
+        code: "compiler.semantic_operation_invalid_presentation",
+        operationId: operation.id,
+        relatedResourceIds: [operation.targetId]
+      });
+      continue;
+    }
+
+    diagram.nodes = diagram.nodes.filter((candidate) => candidate.id !== operation.targetId);
+    diagram.edges = diagram.edges.filter(
+      (edge) => edge.sourceNodeId !== operation.targetId && edge.targetNodeId !== operation.targetId
+    );
+    appliedOperationIds.push(operation.id);
+  }
+
+  return {
+    diagram,
+    appliedOperationIds,
+    issues: issues.sort(
+      (left, right) => left.code.localeCompare(right.code) || left.operationId.localeCompare(right.operationId)
+    )
   };
 }
 

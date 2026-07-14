@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ArchitectureJson } from "@sketchcatch/types";
-import { applyArchitectureBoardSemanticOperations } from "./architecture-board-semantic-operations";
+import type { ArchitectureJson, DiagramJson } from "@sketchcatch/types";
+import {
+  applyArchitectureBoardPresentationOperations,
+  applyArchitectureBoardSemanticOperations
+} from "./architecture-board-semantic-operations";
 
 const architecture: ArchitectureJson = {
   nodes: [
@@ -110,4 +113,57 @@ test("semantic operation은 존재하지 않는 대상과 중복 Resource를 dia
     result.issues.map((issue) => issue.code),
     ["compiler.semantic_operation_duplicate_resource", "compiler.semantic_operation_missing_target"]
   );
+});
+
+test("presentation operation은 Resource graph를 건드리지 않고 design Group을 추가·삭제한다", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      {
+        id: "app",
+        type: "aws_instance",
+        kind: "resource",
+        label: "App",
+        locked: false,
+        position: { x: 100, y: 100 },
+        size: { width: 48, height: 48 },
+        zIndex: 100
+      },
+      {
+        id: "obsolete-group",
+        type: "design_group",
+        kind: "design",
+        label: "Obsolete",
+        locked: false,
+        position: { x: 0, y: 0 },
+        size: { width: 320, height: 220 },
+        zIndex: 1
+      }
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const result = applyArchitectureBoardPresentationOperations(diagram, [
+    { id: "remove-old-group", kind: "presentation-remove", targetId: "obsolete-group" },
+    {
+      id: "add-platform-group",
+      kind: "presentation-add",
+      node: {
+        id: "platform-group",
+        type: "design_group",
+        kind: "design",
+        label: "Platform",
+        locked: false,
+        position: { x: 40, y: 40 },
+        size: { width: 240, height: 160 },
+        zIndex: 1
+      }
+    }
+  ]);
+
+  assert.deepEqual(
+    result.diagram.nodes.map((node) => node.id).sort(),
+    ["app", "platform-group"]
+  );
+  assert.deepEqual(result.appliedOperationIds, ["add-platform-group", "remove-old-group"]);
+  assert.deepEqual(result.issues, []);
 });
