@@ -273,6 +273,27 @@ test("source-exact Board도 명시적 자동 정리 제안을 만들되 원본 f
   assert.ok(proposal.changes.some(({ kind }) => kind === "geometry"));
 });
 
+test("source-exact Board의 명시적 자동 정리는 이미 정렬된 경우에도 별도 compiled variant를 설명한다", () => {
+  const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
+  const exact: DiagramJson = {
+    ...structuredClone(source),
+    presentation: { geometryPolicy: "source-exact" }
+  };
+
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram: exact,
+    trigger: "board-auto-organize"
+  });
+
+  assert.ok(proposal.provenance.candidateId.startsWith("compiled:"));
+  assert.ok(
+    proposal.changes.some(
+      ({ kind, targetIds }) => kind === "presentation" && targetIds.includes("board-presentation")
+    )
+  );
+});
+
 test("자동 정리는 기존 Board의 variable, viewport, presentation 상태를 보존한다", () => {
   const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
   const currentDiagram: DiagramJson = {

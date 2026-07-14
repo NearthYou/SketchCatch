@@ -151,11 +151,12 @@ export function compileArchitectureBoard(
     comparisonDiagram,
     requestedArchitecture
   );
-  const selectableCandidates =
+  const sourceExactNeedsCompiledVariant =
     comparisonDiagram.presentation?.geometryPolicy === "source-exact" &&
-    input.trigger === "template-review"
-      ? [presentationCandidate, semanticCandidate]
-      : [originalCandidate, presentationCandidate, semanticCandidate];
+    (input.trigger === "template-review" || input.trigger === "board-auto-organize");
+  const selectableCandidates = sourceExactNeedsCompiledVariant
+    ? [presentationCandidate, semanticCandidate]
+    : [originalCandidate, presentationCandidate, semanticCandidate];
   const selected = selectableCandidates.sort(
     (left, right) => left.quality.score - right.quality.score || left.id.localeCompare(right.id)
   )[0];
@@ -1118,6 +1119,38 @@ function compareDiagramPresentationAndGeometry(
         COMPILATION_DISTANCE_COST.position,
         before.viewport,
         after.viewport
+      )
+    );
+  }
+
+  const beforeBoardPresentation = before.presentation ?? null;
+  const afterBoardPresentation = after.presentation ?? null;
+  if (!sameValue(beforeBoardPresentation, afterBoardPresentation)) {
+    changes.push(
+      change(
+        "presentation",
+        "modify",
+        ["board-presentation"],
+        "Board 표현 정책 변경",
+        COMPILATION_DISTANCE_COST.presentation,
+        beforeBoardPresentation,
+        afterBoardPresentation
+      )
+    );
+  }
+
+  const beforeVariables = before.variables ?? null;
+  const afterVariables = after.variables ?? null;
+  if (!sameValue(beforeVariables, afterVariables)) {
+    changes.push(
+      change(
+        "configuration",
+        "modify",
+        ["board-variables"],
+        "Board 변수 변경",
+        COMPILATION_DISTANCE_COST.configuration,
+        beforeVariables,
+        afterVariables
       )
     );
   }
