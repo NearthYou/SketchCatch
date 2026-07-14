@@ -11,7 +11,14 @@ import {
 
 const architecture: ArchitectureJson = {
   nodes: [
-    { id: "api", type: "API_GATEWAY_REST_API", label: "API", positionX: 0, positionY: 0, config: {} },
+    {
+      id: "api",
+      type: "API_GATEWAY_REST_API",
+      label: "API",
+      positionX: 0,
+      positionY: 0,
+      config: {}
+    },
     { id: "function", type: "LAMBDA", label: "Function", positionX: 0, positionY: 0, config: {} }
   ],
   edges: [{ id: "api-function", sourceId: "api", targetId: "function", label: "invokes" }]
@@ -33,7 +40,9 @@ test("29개 사례 leave-one-out report는 매 사례를 나머지 28개와 비�
   assert.ok(report.every((result) => result.heldOutCaseId !== result.nearestCaseId));
   assert.ok(
     report.every((result) =>
-      [result.resourceTypeRecall, result.aspectRatioError, result.siblingGapError].every(Number.isFinite)
+      [result.resourceTypeRecall, result.aspectRatioError, result.siblingGapError].every(
+        Number.isFinite
+      )
     )
   );
 });
@@ -59,7 +68,10 @@ test("Compiler는 original 후보를 선택할 수 있고 빈 Board로 Resource�
     trigger: "board-auto-organize"
   });
 
-  assert.ok(proposal.provenance.candidateId === "original" || proposal.provenance.candidateId.startsWith("compiled:"));
+  assert.ok(
+    proposal.provenance.candidateId === "original" ||
+      proposal.provenance.candidateId.startsWith("compiled:")
+  );
   assert.equal(proposal.diagram.nodes.length, 2);
 });
 
@@ -85,6 +97,6 @@ test("Compiler changes는 승인 전 proposal일 뿐 현재 Diagram을 mutation�
   const proposal = compileArchitectureBoard({ architecture, currentDiagram, trigger: "ai-draft" });
 
   assert.deepEqual(currentDiagram, before);
-  assert.ok(proposal.changes.some(({ category, operation }) => category === "resource" && operation === "add"));
+  assert.ok(proposal.changes.some(({ action, kind }) => kind === "resource" && action === "add"));
   assert.ok(proposal.quality.compilationDistance > 0);
 });

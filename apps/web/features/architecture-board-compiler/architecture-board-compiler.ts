@@ -1,4 +1,16 @@
-import type { ArchitectureJson, DiagramEdge, DiagramJson, DiagramNode } from "@sketchcatch/types";
+import type {
+  ArchitectureBoardCompilationChange,
+  ArchitectureBoardCompilationChangeAction,
+  ArchitectureBoardCompilationChangeKind,
+  ArchitectureBoardCompilationDiagnostic,
+  ArchitectureBoardCompilationInput,
+  ArchitectureBoardCompilationProposal,
+  ArchitectureBoardCompilationQuality,
+  ArchitectureJson,
+  DiagramEdge,
+  DiagramJson,
+  DiagramNode
+} from "@sketchcatch/types";
 import { cloneDiagram } from "../diagram-editor/diagram-utils";
 import {
   evaluateAutomaticDiagramLayout,
@@ -13,56 +25,19 @@ import { architectureBoardKnowledge } from "./architecture-board-knowledge";
 
 export const ARCHITECTURE_BOARD_COMPILER_VERSION = "architecture-board-compiler/v1";
 
-export type ArchitectureBoardCompilationTrigger =
-  | "ai-draft"
-  | "board-auto-organize"
-  | "reverse-engineering"
-  | "template-review";
-
-export type ArchitectureBoardCompilationInput = {
-  readonly architecture: ArchitectureJson;
-  readonly currentDiagram?: DiagramJson | undefined;
-  readonly trigger: ArchitectureBoardCompilationTrigger;
-};
-
-export type ArchitectureBoardCompilationChange = {
-  readonly category: "resource" | "relationship" | "configuration" | "containment" | "geometry";
-  readonly operation: "add" | "delete" | "update";
-  readonly subjectId: string;
-  readonly summary: string;
-  readonly distance: number;
-};
-
-export type ArchitectureBoardCompilationDiagnostic = {
-  readonly code: string;
-  readonly severity: "info" | "warning" | "error";
-  readonly subjectId?: string | undefined;
-  readonly message: string;
-};
-
-export type ArchitectureBoardCompilationQuality = AutomaticDiagramLayoutQuality;
-
-export type ArchitectureBoardCompilationProposal = {
-  readonly architecture: ArchitectureJson;
-  readonly diagram: DiagramJson;
-  readonly changes: readonly ArchitectureBoardCompilationChange[];
-  readonly diagnostics: readonly ArchitectureBoardCompilationDiagnostic[];
-  readonly quality: {
-    readonly before: ArchitectureBoardCompilationQuality;
-    readonly after: ArchitectureBoardCompilationQuality;
-    readonly compilationDistance: number;
-  };
-  readonly provenance: {
-    readonly compilerVersion: typeof ARCHITECTURE_BOARD_COMPILER_VERSION;
-    readonly candidateId: string;
-    readonly referenceTemplateIds: readonly string[];
-  };
-};
+export type {
+  ArchitectureBoardCompilationChange,
+  ArchitectureBoardCompilationDiagnostic,
+  ArchitectureBoardCompilationInput,
+  ArchitectureBoardCompilationProposal,
+  ArchitectureBoardCompilationQuality,
+  ArchitectureBoardCompilationTrigger
+} from "@sketchcatch/types";
 
 type Candidate = {
   readonly id: string;
   readonly diagram: DiagramJson;
-  readonly quality: ArchitectureBoardCompilationQuality;
+  readonly quality: AutomaticDiagramLayoutQuality;
 };
 
 export function compileArchitectureBoard(
@@ -78,7 +53,9 @@ export function compileArchitectureBoard(
     : undefined;
   const comparisonDiagram = currentDiagram ?? baseDiagram;
   const originalDiagram =
-    currentDiagram && currentArchitecture && sameArchitectureShape(currentArchitecture, architecture)
+    currentDiagram &&
+    currentArchitecture &&
+    sameArchitectureShape(currentArchitecture, architecture)
       ? currentDiagram
       : baseDiagram;
   const originalCandidate: Candidate = {
@@ -99,6 +76,10 @@ export function compileArchitectureBoard(
   const candidate = selectCandidate(originalCandidate, compiledCandidate, architecture);
   const changes = compareCompilationChanges(comparisonDiagram, candidate.diagram, architecture);
   const diagnostics = createDiagnostics(architecture, candidate.diagram);
+  const semanticDiagnosticPenalty = diagnostics.reduce(
+    (total, diagnostic) => total + diagnostic.penalty,
+    0
+  );
 
   return {
     architecture,
@@ -106,19 +87,23 @@ export function compileArchitectureBoard(
     changes,
     diagnostics,
     quality: {
-      before: evaluateDiagram(comparisonDiagram),
-      after: candidate.quality,
-      compilationDistance: changes.reduce((total, change) => total + change.distance, 0)
+      before: toCompilationQuality(evaluateDiagram(comparisonDiagram), 0),
+      after: toCompilationQuality(candidate.quality, semanticDiagnosticPenalty),
+      compilationDistance: changes.reduce((total, change) => total + change.cost, 0)
     },
     provenance: {
       compilerVersion: ARCHITECTURE_BOARD_COMPILER_VERSION,
       candidateId: candidate.id,
-      referenceTemplateIds: findReferenceTemplateIds(candidate.diagram)
+      referenceTemplateIds: [...findReferenceTemplateIds(candidate.diagram)]
     }
   };
 }
 
-function selectCandidate(original: Candidate, compiled: Candidate, architecture: ArchitectureJson): Candidate {
+function selectCandidate(
+  original: Candidate,
+  compiled: Candidate,
+  architecture: ArchitectureJson
+): Candidate {
   if (original.diagram.presentation?.geometryPolicy === "source-exact") {
     return original;
   }
@@ -128,18 +113,36 @@ function selectCandidate(original: Candidate, compiled: Candidate, architecture:
   }
 
   const changes = compareCompilationChanges(original.diagram, compiled.diagram, architecture);
-  const distance = changes.reduce((total, change) => total + change.distance, 0);
+  const distance = changes.reduce((total, change) => total + change.cost, 0);
   return compiled.quality.score + distance < original.quality.score ? compiled : original;
 }
 
-function evaluateDiagram(diagram: DiagramJson): ArchitectureBoardCompilationQuality {
+function evaluateDiagram(diagram: DiagramJson): AutomaticDiagramLayoutQuality {
   return evaluateAutomaticDiagramLayout({
     edges: diagram.edges.map(toLayoutEdge),
     nodes: diagram.nodes
   });
 }
 
-function toLayoutEdge(edge: DiagramEdge): { id: string; sourceId: string; targetId: string; label?: string } {
+function toCompilationQuality(
+  quality: AutomaticDiagramLayoutQuality,
+  semanticDiagnosticPenalty: number
+): ArchitectureBoardCompilationQuality {
+  return {
+    score: quality.score + semanticDiagnosticPenalty,
+    visualPenalty: quality.score,
+    structuralPenalty: 0,
+    semanticDiagnosticPenalty,
+    metrics: { ...quality }
+  };
+}
+
+function toLayoutEdge(edge: DiagramEdge): {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label?: string;
+} {
   return {
     id: edge.id,
     sourceId: edge.sourceNodeId,
@@ -150,10 +153,12 @@ function toLayoutEdge(edge: DiagramEdge): { id: string; sourceId: string; target
 
 function withRoutedEdges(base: DiagramJson, nodes: readonly DiagramNode[]): DiagramJson {
   const movedNodeIds = new Set(
-    nodes.filter((node) => {
-      const previous = base.nodes.find((candidate) => candidate.id === node.id);
-      return previous && !sameValue(previous.position, node.position);
-    }).map((node) => node.id)
+    nodes
+      .filter((node) => {
+        const previous = base.nodes.find((candidate) => candidate.id === node.id);
+        return previous && !sameValue(previous.position, node.position);
+      })
+      .map((node) => node.id)
   );
 
   return {
@@ -174,7 +179,9 @@ function compareCompilationChanges(
 ): ArchitectureBoardCompilationChange[] {
   const changes: ArchitectureBoardCompilationChange[] = [];
   const beforeArchitecture = convertDiagramJsonToArchitectureJson(before);
-  const beforeArchitectureNodeById = new Map(beforeArchitecture.nodes.map((node) => [node.id, node]));
+  const beforeArchitectureNodeById = new Map(
+    beforeArchitecture.nodes.map((node) => [node.id, node])
+  );
   const desiredNodeById = new Map(desiredArchitecture.nodes.map((node) => [node.id, node]));
   const beforeNodeById = new Map(before.nodes.map((node) => [node.id, node]));
   const afterNodeById = new Map(after.nodes.map((node) => [node.id, node]));
@@ -183,25 +190,57 @@ function compareCompilationChanges(
     const previous = beforeNodeById.get(id);
     const next = afterNodeById.get(id);
     if (!previous && next) {
-      changes.push(change("resource", "add", id, `Resource ${id} 추가`, 100));
+      changes.push(change("resource", "add", id, `Resource ${id} 추가`, 100, null, next));
       continue;
     }
     if (previous && !next) {
-      changes.push(change("resource", "delete", id, `Resource ${id} 삭제`, 140));
+      changes.push(change("resource", "remove", id, `Resource ${id} 삭제`, 140, previous, null));
       continue;
     }
     if (!previous || !next) continue;
     if (!sameValue(previous.position, next.position)) {
-      changes.push(change("geometry", "update", id, `Resource ${id} 위치 변경`, 1));
+      changes.push(
+        change(
+          "geometry",
+          "modify",
+          id,
+          `Resource ${id} 위치 변경`,
+          1,
+          previous.position,
+          next.position
+        )
+      );
     }
     if (!sameValue(previous.size, next.size)) {
-      changes.push(change("geometry", "update", id, `Resource ${id} 크기 변경`, 4));
+      changes.push(
+        change("geometry", "modify", id, `Resource ${id} 크기 변경`, 4, previous.size, next.size)
+      );
     }
     if (previous.zIndex !== next.zIndex) {
-      changes.push(change("geometry", "update", id, `Resource ${id} z-index 변경`, 2));
+      changes.push(
+        change(
+          "geometry",
+          "modify",
+          id,
+          `Resource ${id} z-index 변경`,
+          2,
+          previous.zIndex,
+          next.zIndex
+        )
+      );
     }
     if (previous.metadata?.parentAreaNodeId !== next.metadata?.parentAreaNodeId) {
-      changes.push(change("containment", "update", id, `Resource ${id} 소속 변경`, 12));
+      changes.push(
+        change(
+          "containment",
+          "modify",
+          id,
+          `Resource ${id} 소속 변경`,
+          12,
+          previous.metadata?.parentAreaNodeId ?? null,
+          next.metadata?.parentAreaNodeId ?? null
+        )
+      );
     }
   }
 
@@ -209,7 +248,17 @@ function compareCompilationChanges(
     const previous = beforeArchitectureNodeById.get(id);
     const next = desiredNodeById.get(id);
     if (previous && next && !sameValue(previous.config, next.config)) {
-      changes.push(change("configuration", "update", id, `Resource ${id} 설정 변경`, 35));
+      changes.push(
+        change(
+          "configuration",
+          "modify",
+          id,
+          `Resource ${id} 설정 변경`,
+          35,
+          previous.config,
+          next.config
+        )
+      );
     }
   }
 
@@ -219,16 +268,18 @@ function compareCompilationChanges(
     const previous = beforeEdges.get(id);
     const next = afterEdges.get(id);
     if (!previous && next) {
-      changes.push(change("relationship", "add", id, `관계 ${id} 추가`, 20));
+      changes.push(change("relationship", "add", id, `관계 ${id} 추가`, 20, null, next));
     } else if (previous && !next) {
-      changes.push(change("relationship", "delete", id, `관계 ${id} 삭제`, 20));
+      changes.push(change("relationship", "remove", id, `관계 ${id} 삭제`, 20, previous, null));
     } else if (previous && next && !sameValue(previous, next)) {
-      changes.push(change("relationship", "update", id, `관계 ${id} 경로 또는 속성 변경`, 8));
+      changes.push(
+        change("edge-routing", "modify", id, `관계 ${id} 경로 또는 속성 변경`, 8, previous, next)
+      );
     }
   }
 
-  return changes.sort((left, right) =>
-    left.category.localeCompare(right.category) || left.subjectId.localeCompare(right.subjectId)
+  return changes.sort(
+    (left, right) => left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id)
   );
 }
 
@@ -242,9 +293,12 @@ function createDiagnostics(
     if (nodeIds.has(node.id)) {
       diagnostics.push({
         code: "compiler.duplicate_resource_id",
-        severity: "error",
-        subjectId: node.id,
-        message: `중복 Resource id ${node.id}를 확인하세요.`
+        level: "error",
+        summary: "중복 Resource id",
+        message: `중복 Resource id ${node.id}를 확인하세요.`,
+        relatedChangeIds: [],
+        relatedResourceIds: [node.id],
+        penalty: 1_000
       });
     }
     nodeIds.add(node.id);
@@ -253,17 +307,24 @@ function createDiagnostics(
     if (!nodeIds.has(edge.sourceId) || !nodeIds.has(edge.targetId)) {
       diagnostics.push({
         code: "compiler.dangling_relationship",
-        severity: "error",
-        subjectId: edge.id,
-        message: `관계 ${edge.id}의 시작 또는 대상 Resource가 없습니다.`
+        level: "error",
+        summary: "연결 대상이 없는 관계",
+        message: `관계 ${edge.id}의 시작 또는 대상 Resource가 없습니다.`,
+        relatedChangeIds: [],
+        relatedResourceIds: [edge.sourceId, edge.targetId],
+        penalty: 1_000
       });
     }
   }
   if (architecture.nodes.length > 0 && diagram.nodes.length === 0) {
     diagnostics.push({
       code: "compiler.empty_candidate_rejected",
-      severity: "error",
-      message: "Resource가 있는 Architecture를 빈 Board로 바꾸는 후보를 거부했습니다."
+      level: "error",
+      summary: "빈 Board 후보 거부",
+      message: "Resource가 있는 Architecture를 빈 Board로 바꾸는 후보를 거부했습니다.",
+      relatedChangeIds: [],
+      relatedResourceIds: architecture.nodes.map((node) => node.id),
+      penalty: 10_000
     });
   }
   return diagnostics.sort((left, right) => left.code.localeCompare(right.code));
@@ -288,13 +349,24 @@ function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number 
 }
 
 function change(
-  category: ArchitectureBoardCompilationChange["category"],
-  operation: ArchitectureBoardCompilationChange["operation"],
+  kind: ArchitectureBoardCompilationChangeKind,
+  action: ArchitectureBoardCompilationChangeAction,
   subjectId: string,
   summary: string,
-  distance: number
+  cost: number,
+  before: unknown = null,
+  after: unknown = null
 ): ArchitectureBoardCompilationChange {
-  return { category, operation, subjectId, summary, distance };
+  return {
+    id: `${kind}:${action}:${subjectId}`,
+    kind,
+    action,
+    targetIds: [subjectId],
+    before,
+    after,
+    summary,
+    cost
+  };
 }
 
 function sortedUnion(left: Iterable<string>, right: Iterable<string>): string[] {
