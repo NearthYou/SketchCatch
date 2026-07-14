@@ -23,6 +23,12 @@ const workspaceCoreStyles = [
 const architectureBoardStyles = readWebFile(
   "features/diagram-editor/diagram-editor.module.css"
 );
+const terraformAndImportStyles = [
+  readWebFile("features/workspace/reverse-engineering.module.css"),
+  readWebFile("features/workspace/TerraformCodeStatus.module.css"),
+  readWebFile("features/workspace/TerraformCodeToolbar.module.css"),
+  readWebFile("features/workspace/TerraformIssuesPanel.module.css")
+].join("\n");
 
 test("landing user-facing text keeps the minimum size and muted contrast", () => {
   assert.doesNotMatch(landingStyles, /font-size:\s*(?:8|9|10|11)px/);
@@ -42,6 +48,11 @@ test("workspace core panel text keeps the minimum size and muted contrast", () =
 test("architecture board text keeps the minimum size and muted contrast", () => {
   assert.doesNotMatch(architectureBoardStyles, /font-size:\s*(?:8|9|10|11)px/);
   assert.doesNotMatch(architectureBoardStyles, /#(?:777b84|999999)/i);
+});
+
+test("terraform and cloud import text keeps the minimum size and muted contrast", () => {
+  assert.doesNotMatch(terraformAndImportStyles, /font-size:\s*(?:8|9|10|11)px/);
+  assert.doesNotMatch(terraformAndImportStyles, /#(?:777b84|999999)/i);
 });
 
 test("dashboard text keeps the minimum size and muted contrast", () => {

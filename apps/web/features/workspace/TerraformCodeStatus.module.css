@@ -4,7 +4,7 @@
   border-bottom: 1px solid #f0f0f3;
   color: #60646c;
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   gap: 12px;
   justify-content: space-between;
   min-height: 32px;
@@ -56,7 +56,7 @@
 .terraformIssueBanner {
   align-items: center;
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   gap: 10px;
   justify-content: space-between;
