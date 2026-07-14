@@ -6,18 +6,18 @@ import styles from "./product-entry.module.css";
 
 const WORKFLOW_STEPS = [
   {
-    description: "Requirement Input을 편집 가능한 Architecture Draft로 만듭니다.",
-    label: "AI Architecture Recommendation",
+    description: "요구사항을 바탕으로 편집 가능한 아키텍처 초안을 생성합니다.",
+    label: "AI Architecture Draft",
     value: "draft"
   },
   {
-    description: "Practice Architecture가 어떤 코드가 되는지 Resource별로 확인합니다.",
-    label: "IaC Preview 확인하기",
+    description: "설계가 어떤 Terraform 코드로 변환되는지 리소스별로 확인합니다.",
+    label: "Terraform Preview",
     value: "terraform"
   },
   {
-    description: "Cost Risk, Security Risk와 Plan 변경 내용을 보고 Deployment를 승인합니다.",
-    label: "Pre-Deployment Check",
+    description: "비용·보안 위험과 변경 내역을 검토한 뒤 배포를 승인합니다.",
+    label: "Pre-Deployment Review",
     value: "deploy"
   }
 ] as const;
@@ -31,12 +31,12 @@ export function LandingWorkflowSection() {
     <section className={`${styles.section} ${styles.sectionSoft}`} id="workspace" aria-labelledby="workspace-title">
       <div className={styles.container}>
         <header className={styles.sectionHeading}>
-          <p className={styles.sectionKicker}>One continuous workspace</p>
-          <h2 id="workspace-title">설계와 코드와 배포가<br />따로 놀지 않도록.</h2>
+          <p className={styles.sectionKicker}>ONE CONTINUOUS WORKSPACE</p>
+          <h2 id="workspace-title">설계에서 배포까지,<br />하나의 흐름으로 이어집니다.</h2>
           <p>
-            Architecture Board에서 바꾼 구조는 IaC Preview로 이어지고, Check Finding은 어떤
-            Resource가 문제인지 다시 보드를 가리킵니다. 사용자는 창을 옮겨 다니지 않고 같은
-            프로젝트 안에서 판단할 수 있습니다.
+            아키텍처를 수정하면 Terraform 미리보기도 함께 업데이트됩니다.<br />
+            비용·보안 검토 결과는 해당 리소스에서 바로 확인할 수 있습니다.<br />
+            설계와 코드, 배포 판단을 한 프로젝트에서 이어가세요.
           </p>
         </header>
 
