@@ -543,7 +543,7 @@
           "pnpm harness:check",
           "Playwright visual QA at 1440x900 and 390x844"
         ],
-        "notes": "The Web suite passed 1,205/1,205 after retrying outside the restricted Windows runner that returned spawn EPERM. The recursive legibility guard covers pixel, decimal, relative, calc, and clamp values; documented graphical exceptions retain accessible names. Visual QA covered /, /login, /signup, /dashboard, /dashboard/templates, /workspace/new, /workspace?diagramFixture=conventions, and /workspace/reverse at 1440x900 and 390x844 with no page-level horizontal overflow or unintended text clipping."
+        "notes": "The Web suite passed 1,207/1,207 after retrying outside the restricted Windows runner that returned spawn EPERM. Dashboard navigation now uses the requested Korean labels, redundant overview copy is removed, and visual QA at 1440x900 and 390x844 confirmed no horizontal overflow, clipping, or unintended wrapping. The broader accessibility and legibility coverage remains passing."
       },
       "notes": "Frontend-only UI work. No API contract, database migration, deployment action, or cloud mutation is included."
     }

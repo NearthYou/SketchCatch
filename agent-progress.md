@@ -12,16 +12,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-14 - Address signup fallback review
-
-- Replaced nullish fallback with falsy fallback for password and confirmation feedback so a future empty-string Caps Lock helper result cannot suppress validation copy.
-- Added a focused regression for both fallback chains. Verification passed: focused signup tests 9/9, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The local environment does not provide the `gh` executable, so the GitHub review conversation must be resolved manually after the pushed commit is visible.
-
-### 2026-07-14 - Compact stable signup field spacing
-
-- Reduced only the signup form row gap from 20px to 8px, preserving the reserved validation slots that prevent fields and the centered card from shifting during input.
-- Verification passed: the focused spacing regression failed before the fix and passed 8/8 afterward, Web 1,182/1,182, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The next action is manual pixel confirmation only if another spacing adjustment is requested.
-
 ### 2026-07-14 - Stabilize signup validation layout
 
 - Reserved a persistent feedback slot below the username, password, password confirmation, and email controls so validation state changes no longer insert new layout rows.
@@ -198,6 +188,14 @@ Short English-only working log for the current agent context. Older records are 
 - Verified public, dashboard, workspace entry, Architecture Board, Terraform, Reverse Engineering, and Template surfaces at 1440x900 and 390x844 with a local QA account that has no AWS, GitHub, or deployment privileges.
 - Verification: Web tests passed 1,205/1,205 outside the restricted runner after its `spawn EPERM`; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
 - Risk: authenticated visual QA used fixture and disconnected states only; no cloud, deployment, Git handoff, or database mutation was performed.
+
+### 2026-07-14 - Localize dashboard navigation and remove redundant overview copy
+
+- Renamed the dashboard navigation to the requested Korean labels and reduced the top bar to the localized page title.
+- Removed redundant overview eyebrows, explanatory filler, metric details, and empty project-description placeholders while preserving operational status data.
+- Verified the authenticated dashboard at 1440x900 and 390x844 with no horizontal overflow, clipping, or unintended navigation wrapping.
+- Verification: 10 focused dashboard tests, Web tests 1,207/1,207, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
+- Risk: visual QA used a new local account with no projects or external connections; populated overview behavior is covered by focused source and data tests.
 
 ## Next Action
 

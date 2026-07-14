@@ -494,6 +494,12 @@ a.dashboardActivityRow:hover {
   border-bottom: 1px solid var(--color-hairline);
 }
 
+.dashboardPageHeaderCompact h1,
+.dashboardSectionHeader > div > h2:only-child,
+.dashboardConnectionBand > div:first-child > h2:only-child {
+  margin-top: 0;
+}
+
 .settingsField.projectSortField {
   min-width: 176px;
 }

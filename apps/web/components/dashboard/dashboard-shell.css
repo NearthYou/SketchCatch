@@ -193,12 +193,6 @@
   gap: 9px;
 }
 
-.dashboardTopbarTitle span {
-  color: #60646c;
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .dashboardTopbarTitle strong {
   overflow: hidden;
   font-size: 14px;
@@ -363,10 +357,6 @@
   .dashboardTopbar {
     min-height: 64px;
     padding: 0 16px;
-  }
-
-  .dashboardTopbarTitle > div > span {
-    display: none;
   }
 
   .dashboardPrimaryAction,
