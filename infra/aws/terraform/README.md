@@ -11,6 +11,8 @@ API -> ECS RunTask one-off worker
 
 기존 EC2, EC2 ALB, legacy nginx ECS service와 target group은 삭제되었습니다. warm rollback은 없으며 복구는 암호화된 sanitized AMI, 검증된 Docker artifact, `infra/aws/production/legacy-rollback` Terraform root와 `docs/deployment.md` runbook을 사용하는 cold rollback입니다.
 
+배포 안정화 시간은 service 특성에 맞춰 관리합니다. API target group은 SSE와 장시간 요청을 위해 60초, web은 30초의 deregistration delay를 사용합니다. 두 target group은 10초 간격과 healthy threshold 2를 사용하며, ECS health check grace period는 API 60초와 web 30초입니다. 안전한 교체를 위해 두 service 모두 `minimumHealthyPercent=100`, `maximumPercent=200`, circuit breaker rollback을 유지합니다.
+
 ## 관리 리소스
 
 - API/web ECR repository와 최근 tagged image 20개 lifecycle

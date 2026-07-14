@@ -11,6 +11,31 @@ SketchCatch production steady state는 Docker image를 ECR에 push하고 ECS/Far
 | Direct Deployment Path    | SketchCatch가 사용자가 승인한 IaC Preview를 직접 실행                     | Terraform Plan/Apply/Destroy, approval, logs, cleanup               |
 | Git/CI/CD Deployment Path | SketchCatch가 IaC Preview를 Source Repository PR과 외부 pipeline으로 넘김 | Terraform commit/PR, pipeline template/status, team review          |
 
+## ECS 배포 속도와 측정
+
+`Deploy Production ECS` workflow는 검증이 끝난 뒤 API와 web image를 별도 job에서 병렬로 build/push합니다. 각 repository의 `buildcache-v1` tag는 BuildKit registry cache 전용이며 배포 대상이 아닙니다. ECS task definition에는 workflow가 ECR에서 확인한 release image digest만 기록합니다.
+
+- `deploy=true`는 image build/push 후 worker task definition을 등록하고 API와 web service를 배포합니다.
+- `deploy=false`는 ECR image와 cache만 만들며 ECS service와 task definition은 변경하지 않습니다. Production 실측에서는 이 모드로 cold cache를 한 번 채운 뒤 같은 commit을 `deploy=true`로 배포합니다.
+- GitHub Step Summary에는 image별 digest, ECR compressed size, build/push 시간과 전체 안정화 시간이 남습니다.
+- 실제 배포 전 read-only preflight가 API와 web의 desired/running count, pending task, primary rollout 상태를 확인하고 이전 API/web/worker task definition ARN을 rollback 기준으로 기록합니다.
+- 기준선은 최근 성공 4회 중앙값인 전체 7분 51초와 순차 build/push 81초입니다. 목표는 전체 5분 30초 이하, 병렬 image build critical path 60초 이하입니다.
+
+2026-07-14 production 실측에서는 동일 commit의 cache를 먼저 채운 뒤 `deploy=true`로 배포했습니다.
+
+| 항목 | 기준선 | 실측 | 결과 |
+| --- | ---: | ---: | ---: |
+| 전체 workflow | 7분 51초 | 6분 9초 | 1분 42초, 21.7% 단축 |
+| image build/push critical path | 81초 | 7초 | 74초, 91.4% 단축 |
+| API ECS service 안정화 | 3분 43초 | 3분 13초 | 30초 단축 |
+| web ECS service 안정화 | 4분 50초 | 2분 56초 | 1분 54초 단축 |
+
+실측 workflow run은 GitHub Actions `29333857003`이며 API와 web release image는 각각 `sha256:f9726dbead5597539a6501d709bd762890fbd3ba68c8fa551e2eee304800ee4c`, `sha256:383a249b11f9e8d5548a3c3daa82c976a24dd1f6b36a2fc42cb408c7f92d9997`로 고정되었습니다. 배포 후 `https://sketchcatch.net/`, `/health`, `/health/db`는 모두 200을 반환했습니다. 전체 5분 30초 목표에는 39초 미달했으므로 validation 1분 28초와 API 안정화 3분 13초가 다음 최적화 대상입니다. 같은 branch의 read-only runtime Terraform plan `29334381609`는 production state와 선언 사이에 변경점이 없음을 확인했습니다.
+
+ALB는 API의 장시간 연결을 고려해 API 60초, web 30초의 deregistration delay를 사용합니다. 두 target group은 10초 간격으로 2회 성공하면 healthy가 됩니다. API health check grace period는 runtime 준비를 위해 60초를 유지하고 web은 30초를 사용합니다. `minimumHealthyPercent=100`, `maximumPercent=200`, circuit breaker rollback은 변경하지 않습니다.
+
+SketchCatch가 사용자 Source Repository에 생성하는 ECS/Fargate CodeBuild buildspec도 같은 원칙으로 `sketchcatch-buildcache-v1` registry cache를 사용합니다. 사용자의 CodeBuild role에는 해당 ECR repository의 layer pull/push와 image read/write 권한이 필요합니다. 최초 cache miss는 정상 build로 처리되고 cache export 실패는 release publication을 막지 않지만, SHA release tag와 digest 검증은 항상 성공해야 합니다. 사용자 repository의 Dockerfile layer 구조와 ECR lifecycle은 사용자가 검토해야 합니다.
+
 ## 핵심 서비스 실행 기준
 
 1차 MVP의 최우선 실행 흐름은 아래와 같습니다.

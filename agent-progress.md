@@ -4,7 +4,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `test/sw/378-deployment-sandbox-e2e`; issue #378 remains `in_progress` because the complete four-runtime matrix and service-side GitOps persistence did not pass.
+- Branch: `codex/ecs-deployment-speed`; the focused optimization commits are pushed to `origin/codex/ecs-deployment-speed`.
+- Production ECS workflow run `29333857003` succeeded in 6m09s. Warm API/web build-push completed in 7s/6s, ECS stabilization in 3m13s/2m56s, and all public health endpoints returned 200.
+- The measured API/web digests are `sha256:f9726dbead5597539a6501d709bd762890fbd3ba68c8fa551e2eee304800ee4c` and `sha256:383a249b11f9e8d5548a3c3daa82c976a24dd1f6b36a2fc42cb408c7f92d9997`.
+- Read-only production runtime plan `29334381609` passed and reported no infrastructure changes, so the production state already matches the committed ECS/ALB timing values.
+- Focused API tests, generator tests, Terraform tests, infrastructure checks, smoke preflight, lint, typecheck, build, and harness pass. The full workspace test attempt timed out after 15 minutes; no changed-path failure was observed.
+- Issue #378 remains independently `in_progress`; this branch does not change or claim its unfinished four-runtime matrix.
+- Previous verified sandbox evidence remains recorded below for that separate workstream.
 - Direct ECS infrastructure deployment `3f2e03ec-8b5c-46e3-af74-43d4e21c368e` created 19 resources and Direct application deployment `13f0f6c2-1890-46ce-8044-be754c810b5f` persisted release `5fcb826c-4bb4-45c8-8f59-3bae9790a82e`.
 - Direct evidence matched commit `9c4251baf058a8e0a6513236068d819fecfcdfd5`, ECR digest `3152546fc2cd37ce929dd63b20b161cae58124921fc27e7028a514db2f52a81e`, ECS task definition revision 2, and HTTPS health 200.
 - The API returned five project deployments, 808 infrastructure logs, 17 application logs, and five persisted notifications. CloudWatch returned real ECS CPU metrics. Web Push delivery was not claimed because no browser subscription existed.
@@ -16,6 +22,13 @@ Short English-only working log for the current agent context. Older records are 
 - Focused changed-path tests pass 89/89 plus workflow tests 9/9. Workspace lint, typecheck, and build pass; the full API suite retains known unrelated failures and one now-corrected deployment-plan expectation.
 
 ## Session Record
+
+### 2026-07-14 - Production ECS deployment speed optimization
+
+- Parallelized API/web image jobs, added ECR registry cache, digest-only releases, pre-deploy stability evidence, and per-phase timing.
+- Reduced Docker build contexts with filtered workspace installs and added the same remote-cache behavior to generated ECS/Fargate CodeBuild workflows.
+- Tuned and verified ALB/ECS health timing without weakening minimum healthy percent or circuit-breaker rollback.
+- Completed one real production release and post-deploy health smoke; the total improved from the 7m51s baseline to 6m09s, while the 5m30s stretch target remains unmet.
 
 ### 2026-07-14 - Real Direct ECS and bounded GitOps validation
 
@@ -55,3 +68,10 @@ Short English-only working log for the current agent context. Older records are 
 - Final build result: `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path. Type/API/UI builds started successfully; this is the documented pre-existing local blocker.
 - Applied both PR #393 Workspace Template color-token reviews after merging `origin/dev` at `e322afd2`; harness, lint, typecheck, 14 focused Web tests, and diff checks pass.
 - Next: commit and push, resolve both review threads, wait for CI, and merge PR #393.
+
+## Next Action
+
+- Open and babysit the `codex/ecs-deployment-speed` PR against `dev`, address CI/review feedback, and merge only after GitHub reports it ready.
+- No production Terraform apply is required for this change set.
+- If pursuing the 5m30s stretch target, profile the 1m28s validation job and 3m13s API service stabilization before changing safety thresholds.
+- Continue issue #378 only on its dedicated branch; do not mix its sandbox matrix work into this release optimization branch.

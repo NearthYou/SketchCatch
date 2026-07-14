@@ -7,6 +7,8 @@ const manifestPath = path.join(repositoryRoot, "infra/aws/production/import-mani
 const workflowPath = path.join(repositoryRoot, ".github/workflows/production-infra-plan.yml");
 const deployWorkflowPath = path.join(repositoryRoot, ".github/workflows/deploy-ecs.yml");
 const migrationWorkflowPath = path.join(repositoryRoot, ".github/workflows/migrate.yml");
+const apiDockerfilePath = path.join(repositoryRoot, "docker/api.Dockerfile");
+const webDockerfilePath = path.join(repositoryRoot, "docker/web.Dockerfile");
 
 const failures = [];
 const check = (condition, message) => {
@@ -270,7 +272,32 @@ for (const marker of [
 
 const deployWorkflow = fs.readFileSync(deployWorkflowPath, "utf8");
 for (const marker of [
+  "deploy:",
+  "type: boolean",
+  "default: true",
+  "validate:",
+  "build-api:",
+  "build-web:",
+  "production-preflight:",
+  "Verify current ECS services are stable",
+  "previous-api-task-definition",
+  "previous-web-task-definition",
+  "previous-worker-task-definition",
   "register-worker:",
+  "docker/setup-buildx-action@v4",
+  "docker/build-push-action@v7",
+  "cache-from:",
+  "cache-to:",
+  "buildcache-v1",
+  "image: ${{ needs.build-api.outputs.image }}",
+  "image: ${{ needs.build-web.outputs.image }}",
+  "@${IMAGE_DIGEST}",
+  "if: ${{ inputs.deploy }}",
+  "API_DEPLOY_SECONDS",
+  "WEB_DEPLOY_SECONDS",
+  "docker buildx imagetools inspect --raw",
+  ".layers[].size",
+  "GITHUB_STEP_SUMMARY",
   "ECS_WORKER_TASK_DEFINITION_FAMILY",
   "ECS_WORKER_CONTAINER_NAME",
   "Register worker task definition",
@@ -283,6 +310,90 @@ for (const marker of [
   "SKETCHCATCH_PUBLIC_BASE_URL=${{ env.SKETCHCATCH_PUBLIC_BASE_URL }}"
 ]) {
   check(deployWorkflow.includes(marker), `ECS deploy workflow is missing ${marker}`);
+}
+check(
+  !/\bdocker\s+(?:build|push)\b/.test(deployWorkflow),
+  "ECS deploy workflow must use Buildx action instead of sequential docker build/push commands"
+);
+
+const dockerfiles = [
+  {
+    path: apiDockerfilePath,
+    install: "RUN pnpm install --frozen-lockfile --filter @sketchcatch/api...",
+    manifests: [
+      "COPY apps/api/package.json ./apps/api/package.json",
+      "COPY packages/types/package.json ./packages/types/package.json"
+    ],
+    sourceCopies: [
+      "COPY tsconfig.base.json ./",
+      "COPY apps/api/src ./apps/api/src",
+      "COPY apps/api/drizzle ./apps/api/drizzle",
+      "COPY apps/api/tsconfig.json ./apps/api/tsconfig.json",
+      "COPY packages/types/src ./packages/types/src"
+    ]
+  },
+  {
+    path: webDockerfilePath,
+    install: "RUN pnpm install --frozen-lockfile --filter @sketchcatch/web...",
+    manifests: [
+      "COPY apps/web/package.json ./apps/web/package.json",
+      "COPY packages/types/package.json ./packages/types/package.json",
+      "COPY packages/ui/package.json ./packages/ui/package.json"
+    ],
+    sourceCopies: [
+      "COPY tsconfig.base.json ./",
+      "COPY apps/web/app ./apps/web/app",
+      "COPY apps/web/components ./apps/web/components",
+      "COPY apps/web/features ./apps/web/features",
+      "COPY apps/web/lib ./apps/web/lib",
+      "COPY apps/web/public ./apps/web/public",
+      "COPY apps/web/next-env.d.ts apps/web/next.config.mjs apps/web/tsconfig.json ./apps/web/",
+      "COPY packages/types/src ./packages/types/src",
+      "COPY packages/ui/src ./packages/ui/src"
+    ]
+  }
+];
+
+for (const definition of dockerfiles) {
+  const dockerfilePath = definition.path;
+  const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
+  const installIndex = dockerfile.indexOf(definition.install);
+  const sourceCopyIndex = dockerfile.indexOf("COPY tsconfig.base.json ./");
+  for (const manifest of ["COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./"]) {
+    check(dockerfile.includes(manifest), `${path.basename(dockerfilePath)} is missing ${manifest}`);
+  }
+  for (const manifest of definition.manifests) {
+    check(
+      dockerfile.includes(manifest) && dockerfile.indexOf(manifest) < installIndex,
+      `${path.basename(dockerfilePath)} must copy ${manifest} before dependency installation`
+    );
+  }
+  for (const sourceCopy of definition.sourceCopies) {
+    check(
+      dockerfile.includes(sourceCopy),
+      `${path.basename(dockerfilePath)} is missing ${sourceCopy}`
+    );
+  }
+  check(
+    !dockerfile.includes("COPY . ."),
+    `${path.basename(dockerfilePath)} must not invalidate its build with unrelated repository files`
+  );
+  check(
+    installIndex >= 0 && sourceCopyIndex > installIndex,
+    `${path.basename(dockerfilePath)} must install dependencies before copying source files`
+  );
+}
+
+const dockerIgnore = read(".dockerignore");
+for (const marker of [
+  "**/.terraform",
+  "coverage",
+  ".local-data",
+  "*.tsbuildinfo",
+  "**/*.test.ts",
+  "**/*.test.tsx"
+]) {
+  check(dockerIgnore.includes(marker), `.dockerignore is missing ${marker}`);
 }
 
 const runtimeLocals = read("infra/aws/terraform/locals.tf");

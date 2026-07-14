@@ -107,11 +107,11 @@ Test-FileContains `
   -CheckName "API, web, and worker routing/log locals"
 Test-FileContains `
   -RelativePath "infra/aws/terraform/alb.tf" `
-  -Patterns @('aws_lb_target_group" "api"', 'aws_lb_target_group" "web"', 'aws_lb_listener_rule" "api_http"', 'aws_lb_listener_rule" "api_https"') `
+  -Patterns @('aws_lb_target_group" "api"', 'aws_lb_target_group" "web"', 'deregistration_delay = 60', 'deregistration_delay = 30', 'interval            = 10', 'aws_lb_listener_rule" "api_http"', 'aws_lb_listener_rule" "api_https"') `
   -CheckName "ALB API/web path routing"
 Test-FileContains `
   -RelativePath "infra/aws/terraform/ecs.tf" `
-  -Patterns @('aws_ecs_service" "api"', 'aws_ecs_service" "web"', 'container_name   = "api"', 'container_name   = "web"') `
+  -Patterns @('aws_ecs_service" "api"', 'aws_ecs_service" "web"', 'health_check_grace_period_seconds  = 60', 'health_check_grace_period_seconds  = 30', 'container_name   = "api"', 'container_name   = "web"') `
   -CheckName "Split API and web ECS services"
 Test-FileContains `
   -RelativePath "infra/aws/terraform/variables.tf" `
@@ -119,7 +119,7 @@ Test-FileContains `
   -CheckName "Opt-in alarm cost gate"
 Test-FileContains `
   -RelativePath ".github/workflows/deploy-ecs.yml" `
-  -Patterns @("workflow_dispatch:", "cancel-in-progress: false", "environment: production", "ECS_API_SERVICE_NAME", "ECS_WEB_SERVICE_NAME", "ECS_API_TASK_DEFINITION_FAMILY", "ECS_WEB_TASK_DEFINITION_FAMILY") `
+  -Patterns @("workflow_dispatch:", "deploy:", "default: true", "cancel-in-progress: false", "environment: production", "build-api:", "build-web:", "docker/setup-buildx-action@v4", "docker/build-push-action@v7", "buildcache-v1", 'if: ${{ inputs.deploy }}', "ECS_API_SERVICE_NAME", "ECS_WEB_SERVICE_NAME", "ECS_API_TASK_DEFINITION_FAMILY", "ECS_WEB_TASK_DEFINITION_FAMILY") `
   -CheckName "Split ECS deployment workflow gate"
 Test-FileExcludes `
   -RelativePath ".github/workflows/deploy-ecs.yml" `
@@ -127,7 +127,7 @@ Test-FileExcludes `
   -CheckName "No nginx in ECS deployment workflow"
 Test-FileContains `
   -RelativePath ".github/workflows/migrate.yml" `
-  -Patterns @("workflow_dispatch:", "environment: production", "Run migrations on EC2 with SSM") `
+  -Patterns @("workflow_dispatch:", "environment: production", "Run migration as one-off ECS task") `
   -CheckName "Manual migration workflow gate"
 Test-FileContains `
   -RelativePath "infra/aws/terraform/variables.tf" `

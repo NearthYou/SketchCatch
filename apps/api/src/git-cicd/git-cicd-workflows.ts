@@ -1421,14 +1421,23 @@ phases:
       - test -f "$SKETCHCATCH_DOCKERFILE_PATH"
       - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - SKETCHCATCH_ECR_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$SKETCHCATCH_ECR_REPOSITORY"
+      - SKETCHCATCH_CACHE_URI="$SKETCHCATCH_ECR_URI:sketchcatch-buildcache-v1"
       - aws ecr describe-repositories --repository-names "$SKETCHCATCH_ECR_REPOSITORY" >/dev/null
       - aws ecr get-login-password | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
+      - docker buildx create --use --name sketchcatch-builder || docker buildx use sketchcatch-builder
+      - docker buildx inspect --bootstrap
   build:
     commands:
-      - docker build --file "$SKETCHCATCH_DOCKERFILE_PATH" --tag "$SKETCHCATCH_ECR_URI:$SKETCHCATCH_COMMIT_SHA" "$SKETCHCATCH_SOURCE_ROOT"
+      - >-
+        docker buildx build
+        --file "$SKETCHCATCH_DOCKERFILE_PATH"
+        --tag "$SKETCHCATCH_ECR_URI:$SKETCHCATCH_COMMIT_SHA"
+        --cache-from type=registry,ref="$SKETCHCATCH_CACHE_URI"
+        --cache-to type=registry,ref="$SKETCHCATCH_CACHE_URI",mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
+        --push
+        "$SKETCHCATCH_SOURCE_ROOT"
   post_build:
     commands:
-      - docker push "$SKETCHCATCH_ECR_URI:$SKETCHCATCH_COMMIT_SHA"
       - SKETCHCATCH_IMAGE_DIGEST=$(aws ecr describe-images --repository-name "$SKETCHCATCH_ECR_REPOSITORY" --image-ids imageTag="$SKETCHCATCH_COMMIT_SHA" --query 'imageDetails[0].imageDigest' --output text)
       - test "$(aws ecr describe-images --repository-name "$SKETCHCATCH_ECR_REPOSITORY" --image-ids imageDigest="$SKETCHCATCH_IMAGE_DIGEST" --query 'imageDetails[0].imageDigest' --output text)" = "$SKETCHCATCH_IMAGE_DIGEST"
 `;
