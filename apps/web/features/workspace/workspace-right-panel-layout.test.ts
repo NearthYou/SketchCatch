@@ -692,11 +692,17 @@ test("resource card menu omits data source switch and maximize actions", () => {
   assert.match(resourceCardMenuSource, /삭제/);
 });
 
-test("workspace AI has a dedicated error tab for Terraform issue resolution", () => {
+test("workspace AI exposes three independently scoped conversations", () => {
   assert.match(aiChatDockSource, /type WorkspaceAiChatScope = "draft" \| "errors" \| "preview"/);
+  assert.match(
+    aiChatDockSource,
+    /messages\.filter\(\(message\) => getChatMessageScope\(message\) === activeChatTab\)/
+  );
+  assert.match(aiChatDockSource, /설계 제안/);
+  assert.match(aiChatDockSource, /오류 분석/);
+  assert.match(aiChatDockSource, /에이전트 리뷰/);
   assert.match(aiChatDockSource, /setActiveChatTab\("errors"\)/);
   assert.match(aiChatDockSource, /activeChatTab === "errors" && terraformIssueResolution !== null/);
-  assert.match(aiChatDockSource, /AI 오류/);
   assert.match(stylesSource, /\.aiChatDock\[data-chat-tab="errors"\] \.aiChatComposer/);
 });
 
@@ -2034,7 +2040,7 @@ test("terraform preview explanation is triggered from the terraform code panel",
   assert.match(aiChatDockSource, /runAiTerraformPreviewExplanation/);
   assert.match(aiChatDockSource, /WorkspaceAiTerraformPreviewResult/);
   assert.match(aiChatDockSource, /activeChatTab === "preview"/);
-  assert.match(aiChatDockSource, /Preview 설명/);
+  assert.match(aiChatDockSource, /에이전트 리뷰/);
   assert.doesNotMatch(aiChatDockSource, /WorkspaceAiTerraformPanel/);
   assert.doesNotMatch(
     terraformPanelSource,

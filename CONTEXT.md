@@ -48,6 +48,18 @@ _Avoid_: AI result, generated diagram, draft infrastructure
 The service capability that interprets a Requirement Prompt, proposes an Architecture Draft, explains the trade-offs, and lets the user accept it onto the Architecture Board.
 _Avoid_: Chatbot answer, auto-generated diagram, magic design
 
+**설계 제안**:
+The independent Workspace AI conversation for Architecture Drafts and Architecture Suggestions that remain unapplied until the user accepts them.
+_Avoid_: 초안 제안, general AI chat
+
+**오류 분석**:
+The independent Workspace AI conversation for interpreting a Terraform issue and presenting an explanation or safe remediation proposal without applying it.
+_Avoid_: AI 오류, auto fix
+
+**에이전트 리뷰**:
+The independent Workspace AI conversation for reviewing an IaC Preview and explaining its expected changes without executing or applying it.
+_Avoid_: Preview 설명, Deployment approval
+
 **User-Accepted Change**:
 A state-changing update that only happens after the user explicitly accepts an Architecture Draft, Architecture Suggestion, IaC handoff, Git change, or Deployment action. AI may propose or explain the change, but it does not silently alter the Practice Architecture or execution path.
 _Avoid_: Auto apply, silent fix, AI edit

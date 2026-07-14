@@ -20,6 +20,16 @@ Board 위에 떠 있는 AI 버튼과 채팅 패널을 새로 만들되, **AI가 
 
 그래서 예전 JSX와 CSS를 되살리지 않고, 남아 있던 API와 상태 계산 코드만 새 화면에 연결하기로 했다.
 
+### 독립 대화 체계
+
+Workspace AI Chat은 하나의 대화를 기능별로 필터링하지 않는다. 아래 세 대화가 각각 독립된 내역과 작업 문맥을 가진다.
+
+- `설계 제안`: Architecture Draft와 Board 변경 제안을 다룬다.
+- `오류 분석`: Terraform Issue의 원인과 안전한 수정 제안을 다룬다.
+- `에이전트 리뷰`: Terraform Preview를 검토하고 예상 변경을 설명한다.
+
+이 세 이름을 사용자 화면과 AI Chat 전용 문서의 기준 용어로 사용한다. `초안 제안`, `AI 오류`, `Preview 설명`은 이전 명칭으로 취급한다.
+
 ## 3. 실제로 조사한 레퍼런스
 
 임시 clone 위치는 `/tmp/sketchcatch-ai-chat-references`다. 이 폴더는 제품 저장소에 넣지 않는다.

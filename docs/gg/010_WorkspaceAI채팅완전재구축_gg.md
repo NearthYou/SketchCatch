@@ -54,6 +54,14 @@ AI가 열릴 때는 다음 순서로 충돌을 막는다.
 3. 오른쪽 Inspector를 닫는다.
 4. AI panel만 연다.
 
+AI Chat 내부에는 다음 세 개의 독립 대화가 있다.
+
+- `설계 제안`: Architecture Draft와 Board 변경 제안
+- `오류 분석`: Terraform Issue 원인과 수정 제안
+- `에이전트 리뷰`: Terraform Preview 검토와 예상 변경 설명
+
+각 대화는 별도의 내역과 문맥을 유지한다. 화면에서는 `초안 제안`, `AI 오류`, `Preview 설명` 명칭을 사용하지 않는다.
+
 ## 4. 실제로 읽은 공개 저장소
 
 임시 clone 위치는 `/tmp/sketchcatch-ai-chat-references`다. 이 폴더는 제품 저장소에 커밋하지 않는다.

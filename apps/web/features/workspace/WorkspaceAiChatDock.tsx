@@ -466,7 +466,7 @@ export function WorkspaceAiChatDock({
     });
     appendAssistantMessage(
       "preview",
-      `Preview 설명을 요청했습니다. ${request.label}`,
+      `에이전트 리뷰를 요청했습니다. ${request.label}`,
       [],
       "single",
       "preview"
@@ -488,13 +488,13 @@ export function WorkspaceAiChatDock({
         });
         appendAssistantMessage(
           "preview",
-          `Preview 설명 완료: ${explanation.summary}`,
+          `에이전트 리뷰 완료: ${explanation.summary}`,
           [],
           "single",
           "preview"
         );
       } catch (error) {
-        const message = getApiErrorMessage(error, "Terraform Preview 설명 중 오류가 발생했습니다.");
+        const message = getApiErrorMessage(error, "에이전트 리뷰 중 오류가 발생했습니다.");
 
         if (latestTerraformPreviewRequestIdRef.current !== request.id) {
           return;
@@ -1276,7 +1276,7 @@ export function WorkspaceAiChatDock({
             role="tab"
             type="button"
           >
-            초안 제안
+            설계 제안
           </button>
           <button
             aria-selected={activeChatTab === "errors"}
@@ -1285,7 +1285,7 @@ export function WorkspaceAiChatDock({
             role="tab"
             type="button"
           >
-            AI 오류
+            오류 분석
           </button>
           <button
             aria-selected={activeChatTab === "preview"}
@@ -1294,7 +1294,7 @@ export function WorkspaceAiChatDock({
             role="tab"
             type="button"
           >
-            Preview 설명
+            에이전트 리뷰
           </button>
         </div>
         <button
@@ -1384,7 +1384,7 @@ export function WorkspaceAiChatDock({
         {activeChatTab === "preview" && terraformPreviewExplanation !== null ? (
           <article className={styles.aiChatDraftCard}>
             <div className={styles.aiResultHeader}>
-              <h3>Preview 설명</h3>
+              <h3>에이전트 리뷰</h3>
               <span>{terraformPreviewExplanation.request.label}</span>
             </div>
             {terraformPreviewExplanation.state === "loading" ? (
