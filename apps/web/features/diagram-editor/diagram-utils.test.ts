@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DiagramNode, ResourceItem } from "../../../../packages/types/src";
+import type { DiagramJson, DiagramNode, ResourceItem } from "../../../../packages/types/src";
 import {
   applyNodeParametersUpdateWithAutoTagSync,
   clearActiveResourceDragPayload,
+  clearAuthoredRoutesForNodeIds,
+  cloneDiagram,
   createDiagramEdge,
   createDiagramNodeFromPayload,
   createPastedNodes,
   getActiveResourceDragPayload,
+  getNodeGeometryChangedIds,
   writeResourceDragPayload
 } from "./diagram-utils";
 
@@ -28,6 +31,207 @@ const resourceItem: ResourceItem = {
     }
   }
 };
+
+test("cloneDiagram preserves source-exact node rotation and deeply clones authored data", () => {
+  const source: DiagramJson = {
+    nodes: [
+      {
+        id: "rotated-node",
+        type: "sketchcatch_user_client",
+        kind: "design",
+        position: { x: 40, y: 60 },
+        size: { width: 60, height: 60 },
+        label: "Rotated source",
+        locked: false,
+        zIndex: 4,
+        rotation: -90
+      }
+    ],
+    edges: [
+      {
+        id: "edge-1",
+        sourceNodeId: "source-node",
+        targetNodeId: "target-node",
+        sourceHandleId: "handle-right",
+        targetHandleId: "handle-left",
+        zIndex: 8,
+        route: {
+          svgPath: "M 40 60 L 160 60 L 160 240 L 300 240",
+          sourcePoint: { x: 40, y: 60 },
+          targetPoint: { x: 300, y: 240 },
+          waypoints: [
+            { x: 160, y: 60 },
+            { x: 160, y: 240 }
+          ],
+          labelPosition: { x: 170, y: 146 },
+          arrowDirection: "source-to-target",
+          arrowAngle: 90
+        }
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    variables: [
+      {
+        id: "variable-1",
+        name: "allowedCidrs",
+        type: "list(string)",
+        value: {
+          entries: ["10.0.0.0/8"]
+        },
+        bindings: [{ nodeId: "source-node", parameterKey: "cidrBlocks" }],
+        source: "user"
+      }
+    ],
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -120, y: -80, width: 1440, height: 900 },
+      initialViewportPending: true
+    }
+  };
+
+  const cloned = cloneDiagram(source);
+
+  assert.deepEqual(cloned, source);
+  assert.notEqual(cloned.nodes[0], source.nodes[0]);
+  assert.equal(cloned.nodes[0]?.rotation, -90);
+  assert.deepEqual(cloned.edges[0], source.edges[0]);
+  assert.notEqual(cloned.presentation, source.presentation);
+  assert.notEqual(cloned.presentation?.sourceViewBox, source.presentation?.sourceViewBox);
+  assert.notEqual(cloned.edges[0]?.route, source.edges[0]?.route);
+  assert.notEqual(cloned.edges[0]?.route?.sourcePoint, source.edges[0]?.route?.sourcePoint);
+  assert.notEqual(cloned.edges[0]?.route?.targetPoint, source.edges[0]?.route?.targetPoint);
+  assert.notEqual(cloned.edges[0]?.route?.waypoints, source.edges[0]?.route?.waypoints);
+  assert.notEqual(cloned.edges[0]?.route?.waypoints[0], source.edges[0]?.route?.waypoints[0]);
+  assert.notEqual(cloned.edges[0]?.route?.labelPosition, source.edges[0]?.route?.labelPosition);
+  assert.notEqual(cloned.variables, source.variables);
+  assert.notEqual(cloned.variables?.[0]?.bindings, source.variables?.[0]?.bindings);
+  assert.notEqual(cloned.variables?.[0]?.value, source.variables?.[0]?.value);
+
+  cloned.presentation!.sourceViewBox!.x = 999;
+  cloned.edges[0]!.route!.sourcePoint.x = 999;
+  cloned.edges[0]!.route!.waypoints[0]!.y = 999;
+  cloned.edges[0]!.route!.labelPosition!.x = 999;
+  cloned.variables![0]!.bindings[0]!.nodeId = "mutated-node";
+  ((cloned.variables![0]!.value as { entries: string[] }).entries)[0] = "0.0.0.0/0";
+
+  assert.equal(source.presentation?.sourceViewBox?.x, -120);
+  assert.equal(source.edges[0]?.route?.sourcePoint.x, 40);
+  assert.equal(source.edges[0]?.route?.waypoints[0]?.y, 60);
+  assert.equal(source.edges[0]?.route?.labelPosition?.x, 170);
+  assert.equal(source.variables?.[0]?.bindings[0]?.nodeId, "source-node");
+  assert.deepEqual(source.variables?.[0]?.value, { entries: ["10.0.0.0/8"] });
+});
+
+test("clearAuthoredRoutesForNodeIds immutably clears only routes connected to changed nodes", () => {
+  const route = {
+    svgPath: "M 0 0 L 100 100",
+    sourcePoint: { x: 0, y: 0 },
+    targetPoint: { x: 100, y: 100 },
+    waypoints: [{ x: 50, y: 50 }],
+    labelPosition: { x: 50, y: 45 },
+    arrowDirection: "source-to-target" as const,
+    arrowAngle: 45
+  };
+  const sourceRouteEdge = {
+    id: "changed-source",
+    sourceNodeId: "changed-node",
+    targetNodeId: "other-node",
+    type: "smoothstep",
+    style: { color: "#123456" },
+    route
+  };
+  const targetRouteEdge = {
+    id: "changed-target",
+    sourceNodeId: "other-node",
+    targetNodeId: "changed-node",
+    route
+  };
+  const unrelatedRouteEdge = {
+    id: "unrelated",
+    sourceNodeId: "other-node",
+    targetNodeId: "third-node",
+    route
+  };
+  const routeLessConnectedEdge = {
+    id: "legacy-connected",
+    sourceNodeId: "changed-node",
+    targetNodeId: "third-node"
+  };
+  const diagram: DiagramJson = {
+    nodes: [],
+    edges: [
+      sourceRouteEdge,
+      targetRouteEdge,
+      unrelatedRouteEdge,
+      routeLessConnectedEdge
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const cleared = clearAuthoredRoutesForNodeIds(diagram, new Set(["changed-node"]));
+
+  assert.notEqual(cleared, diagram);
+  assert.equal(cleared.nodes, diagram.nodes);
+  assert.equal(cleared.edges[0]?.route, undefined);
+  assert.equal(cleared.edges[0]?.type, "smoothstep");
+  assert.equal(cleared.edges[0]?.style, sourceRouteEdge.style);
+  assert.equal(cleared.edges[1]?.route, undefined);
+  assert.equal(cleared.edges[2], unrelatedRouteEdge);
+  assert.equal(cleared.edges[3], routeLessConnectedEdge);
+  assert.equal(diagram.edges[0]?.route, route);
+});
+
+test("clearAuthoredRoutesForNodeIds reuses the diagram when no authored route is affected", () => {
+  const diagram: DiagramJson = {
+    nodes: [],
+    edges: [
+      {
+        id: "legacy-edge",
+        sourceNodeId: "source-node",
+        targetNodeId: "target-node"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  assert.equal(clearAuthoredRoutesForNodeIds(diagram, new Set(["source-node"])), diagram);
+  assert.equal(clearAuthoredRoutesForNodeIds(diagram, new Set()), diagram);
+});
+
+test("getNodeGeometryChangedIds detects position, size, and rotation but ignores style and z-order", () => {
+  const makeGeometryNode = (id: string): DiagramNode => ({
+    id,
+    type: "sketchcatch_shape",
+    kind: "design",
+    position: { x: 10, y: 20 },
+    size: { width: 100, height: 80 },
+    label: id,
+    locked: false,
+    rotation: 0,
+    zIndex: 1
+  });
+  const previous = [
+    makeGeometryNode("moved"),
+    makeGeometryNode("resized-parent"),
+    makeGeometryNode("rotated"),
+    makeGeometryNode("style-only")
+  ];
+  const current = [
+    { ...previous[0]!, position: { x: 30, y: 40 } },
+    { ...previous[1]!, size: { width: 160, height: 120 } },
+    { ...previous[2]!, rotation: -90 },
+    {
+      ...previous[3]!,
+      style: { textColor: "#ffffff" },
+      zIndex: 999
+    }
+  ];
+
+  assert.deepEqual(
+    [...getNodeGeometryChangedIds(previous, current)].sort(),
+    ["moved", "resized-parent", "rotated"]
+  );
+});
 
 test("active resource drag payload is available when dragover dataTransfer reads are empty", () => {
   const dragStartDataTransfer = createFakeDataTransfer();
@@ -110,11 +314,11 @@ test("createDiagramNodeFromPayload does not set desiredCapacity for new Auto Sca
   assert.equal("desiredCapacity" in (node.parameters?.values ?? {}), false);
 });
 
-test("createDiagramNodeFromPayload does not apply RDS instance defaults to read replicas", () => {
+test("createDiagramNodeFromPayload uses the authoritative RDS defaults before read replica configuration", () => {
   const node = createDiagramNodeFromPayload(
     makeResourceDragPayload(
       makeResourceItem({
-        id: "aws-rds-read-replica",
+        id: "aws-rds-instance",
         resourceType: "aws_db_instance",
         label: "RDS Read Replica"
       })
@@ -123,7 +327,12 @@ test("createDiagramNodeFromPayload does not apply RDS instance defaults to read 
     1
   );
 
-  assert.deepEqual(node.parameters?.values, {});
+  assert.deepEqual(node.parameters?.values, {
+    publiclyAccessible: false,
+    storageEncrypted: true,
+    storageType: "gp3"
+  });
+  assert.equal("replicateSourceDb" in (node.parameters?.values ?? {}), false);
 });
 
 test("createDiagramNodeFromPayload appends a numeric suffix for duplicate resource icon names", () => {

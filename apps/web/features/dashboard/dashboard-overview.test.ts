@@ -24,7 +24,7 @@ test("dashboard overview renders loading, empty, partial, and error states", () 
 
 test("dashboard shell provides navigation, one create action, and mobile controls", () => {
   assert.match(shellSource, /shouldShowCreateAction/);
-  assert.match(shellSource, /href="\/workspace\/new"/);
+  assert.match(shellSource, /href="\/workspace\/new\?fresh=1"/);
   assert.match(shellSource, /aria-label="Dashboard 메뉴 열기"/);
   assert.match(shellSource, /aria-label="Dashboard 메뉴 닫기"/);
   assert.match(shellSource, /logout/);

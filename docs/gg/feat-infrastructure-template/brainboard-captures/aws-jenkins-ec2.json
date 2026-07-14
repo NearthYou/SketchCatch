@@ -1,0 +1,1493 @@
+{
+  "id": "brainboard-aws-jenkins-ec2",
+  "sourceTemplateId": "c884d82a-6fab-454f-a984-619d65ad6044",
+  "title": "AWS Jenkins architecture on EC2",
+  "downloads": 637,
+  "status": "captured",
+  "error": null,
+  "origin": {
+    "platform": "brainboard",
+    "author": "Chafik Belhaoues",
+    "sourceTemplateId": "c884d82a-6fab-454f-a984-619d65ad6044",
+    "sourceUrl": "https://app.brainboard.co/templates/c884d82a-6fab-454f-a984-619d65ad6044",
+    "cloneBoardUrl": "https://app.brainboard.co/a/3ff1b689-c574-4ff7-9e00-ae3a29197cc0/design",
+    "downloads": 637,
+    "capturedAt": "2026-07-14"
+  },
+  "provider": "aws",
+  "viewport": {
+    "viewBox": "-2858.95 -1907.89 8809.548387096775 4820.7806451612905"
+  },
+  "nodes": [
+    {
+      "height": 1185,
+      "onboarding": "design-area-region",
+      "order": 0,
+      "position": {
+        "x": -370,
+        "y": -100
+      },
+      "resourceType": "region",
+      "sourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69",
+      "title": "US East (Ohio)",
+      "transform": "translate(-370, -100), rotate(0 910 592.5)",
+      "width": 1820,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 690,
+      "onboarding": "design-area-aws_vpc",
+      "order": 1,
+      "position": {
+        "x": -180,
+        "y": 315
+      },
+      "resourceType": "aws_vpc",
+      "sourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3",
+      "title": "vpc_master",
+      "transform": "translate(-180, 315), rotate(0 792.5 345)",
+      "width": 1585,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 320,
+      "onboarding": "design-area-availability_zone",
+      "order": 2,
+      "position": {
+        "x": 700,
+        "y": 355
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "7284b103-be2a-4159-b7f4-b6ab0cb802fa",
+      "title": "us-east-2a",
+      "transform": "translate(700, 355), rotate(0 157.5 160)",
+      "width": 315,
+      "parentSourceNodeId": "b55a1748-7a18-424f-b047-ffa56acd1a92"
+    },
+    {
+      "height": 315,
+      "onboarding": "design-area-availability_zone",
+      "order": 3,
+      "position": {
+        "x": 1070,
+        "y": 355
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "8894d2b3-f035-4824-ae9c-ed68cae67835",
+      "title": "us-east-2b",
+      "transform": "translate(1070, 355), rotate(0 155 157.5)",
+      "width": 310,
+      "parentSourceNodeId": "0521d44b-15ce-40f0-abb8-6f2bd189eafa"
+    },
+    {
+      "height": 945,
+      "onboarding": "design-area-region",
+      "order": 4,
+      "position": {
+        "x": 1510,
+        "y": 135
+      },
+      "resourceType": "region",
+      "sourceNodeId": "e4672c0f-349e-4a5f-951e-1950b90adbea",
+      "title": "US West (Oregon)",
+      "transform": "translate(1510, 135), rotate(0 725 472.5)",
+      "width": 1450,
+      "parentSourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e"
+    },
+    {
+      "height": 705,
+      "onboarding": "design-area-aws_vpc",
+      "order": 5,
+      "position": {
+        "x": 1700,
+        "y": 260
+      },
+      "resourceType": "aws_vpc",
+      "sourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998",
+      "title": "vpc_master_us_west_2",
+      "transform": "translate(1700, 260), rotate(0 605 352.5)",
+      "width": 1210,
+      "parentSourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e"
+    },
+    {
+      "height": 310,
+      "onboarding": "design-area-availability_zone",
+      "order": 6,
+      "position": {
+        "x": 2120,
+        "y": 360
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "050262e9-c94b-48b6-90b1-7298da1a70a2",
+      "title": "us-west-2a",
+      "transform": "translate(2120, 360), rotate(0 180 155)",
+      "width": 360,
+      "parentSourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e"
+    },
+    {
+      "height": 200,
+      "onboarding": "design-area-aws_subnet",
+      "order": 7,
+      "position": {
+        "x": 735,
+        "y": 435
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "b55a1748-7a18-424f-b047-ffa56acd1a92",
+      "title": "subnet_1",
+      "transform": "translate(735, 435), rotate(0 125 100)",
+      "width": 250,
+      "parentSourceNodeId": "7284b103-be2a-4159-b7f4-b6ab0cb802fa"
+    },
+    {
+      "height": 200,
+      "onboarding": "design-area-aws_subnet",
+      "order": 8,
+      "position": {
+        "x": 1100,
+        "y": 435
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "0521d44b-15ce-40f0-abb8-6f2bd189eafa",
+      "title": "subnet_2",
+      "transform": "translate(1100, 435), rotate(0 125 100)",
+      "width": 250,
+      "parentSourceNodeId": "8894d2b3-f035-4824-ae9c-ed68cae67835"
+    },
+    {
+      "height": 200,
+      "onboarding": "design-area-aws_subnet",
+      "order": 9,
+      "position": {
+        "x": 2180,
+        "y": 420
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e",
+      "title": "subnet_1_oregon",
+      "transform": "translate(2180, 420), rotate(0 125 100)",
+      "width": 250,
+      "parentSourceNodeId": "050262e9-c94b-48b6-90b1-7298da1a70a2"
+    },
+    {
+      "height": 275,
+      "onboarding": "design-area-aws_security_group",
+      "order": 10,
+      "position": {
+        "x": 200,
+        "y": 355
+      },
+      "resourceType": "aws_security_group",
+      "sourceNodeId": "5b91539b-dc2d-4d8d-9aac-a1c52e9b7200",
+      "title": "lb-sg",
+      "transform": "translate(200, 355), rotate(0 212.5 137.5)",
+      "width": 425,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 305,
+      "onboarding": "design-area-aws_security_group",
+      "order": 11,
+      "position": {
+        "x": 200,
+        "y": 685
+      },
+      "resourceType": "aws_security_group",
+      "sourceNodeId": "33ce152b-f405-4f28-86e5-4e894df70cd4",
+      "title": "jenkins-sg",
+      "transform": "translate(200, 685), rotate(0 212.5 152.5)",
+      "width": 425,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 305,
+      "onboarding": "design-area-aws_security_group",
+      "order": 12,
+      "position": {
+        "x": 2540,
+        "y": 360
+      },
+      "resourceType": "aws_security_group",
+      "sourceNodeId": "714b53d2-89b3-465a-9151-2318985dbd2d",
+      "title": "jenkins-sg-oregon",
+      "transform": "translate(2540, 360), rotate(0 160 152.5)",
+      "width": 320,
+      "parentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_internet_gateway",
+      "order": 13,
+      "position": {
+        "x": -210,
+        "y": 565
+      },
+      "resourceType": "aws_internet_gateway",
+      "sourceNodeId": "19c57b20-0ebb-4efb-b35e-8c37e175e918",
+      "title": "Internet gateway",
+      "transform": "translate(-210, 565), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_internet_gateway",
+      "order": 14,
+      "position": {
+        "x": 1670,
+        "y": 580
+      },
+      "resourceType": "aws_internet_gateway",
+      "sourceNodeId": "08a82fc0-d9d9-46af-a271-b7b182986246",
+      "title": "igw-oregon",
+      "transform": "translate(1670, 580), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_vpc_peering_connection",
+      "order": 15,
+      "position": {
+        "x": 1190,
+        "y": 910
+      },
+      "resourceType": "aws_vpc_peering_connection",
+      "sourceNodeId": "606e1369-d916-490e-94c7-4aedeeafe7e0",
+      "title": "useast2-uswest2 VPC peering connection",
+      "transform": "translate(1190, 910), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table",
+      "order": 16,
+      "position": {
+        "x": 60,
+        "y": 565
+      },
+      "resourceType": "aws_route_table",
+      "sourceNodeId": "651d53c3-cceb-4967-b5c3-e025e140fa3b",
+      "title": "Route table",
+      "transform": "translate(60, 565), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_main_route_table_association",
+      "order": 17,
+      "position": {
+        "x": 60,
+        "y": 765
+      },
+      "resourceType": "aws_main_route_table_association",
+      "sourceNodeId": "fa46f093-d66a-4f84-8568-a3c04fdc2c44",
+      "title": "Route table association",
+      "transform": "translate(60, 765), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table",
+      "order": 18,
+      "position": {
+        "x": 1930,
+        "y": 580
+      },
+      "resourceType": "aws_route_table",
+      "sourceNodeId": "bb82de1b-7d92-41fc-a0a9-d1c5e3634d11",
+      "title": "internet_route_oregon",
+      "transform": "translate(1930, 580), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_main_route_table_association",
+      "order": 19,
+      "position": {
+        "x": 1930,
+        "y": 770
+      },
+      "resourceType": "aws_main_route_table_association",
+      "sourceNodeId": "cac8d6c9-02a8-4984-8a5d-c398d6c7e50a",
+      "title": "set-worker-default-rt-assoc",
+      "transform": "translate(1930, 770), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 20,
+      "position": {
+        "x": 295,
+        "y": 435
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "4fd77125-9a08-4a94-8900-6d00c4037415",
+      "title": "SG rule ingress 443",
+      "transform": "translate(295, 435), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 21,
+      "position": {
+        "x": 385,
+        "y": 545
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "cd3c4233-a339-4f9a-b03f-a60ade2ce25c",
+      "title": "SG rule ingress 80",
+      "transform": "translate(385, 545), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 22,
+      "position": {
+        "x": 260,
+        "y": 765
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "f4ae7e8a-8781-4991-a258-6bc4fdeebb62",
+      "title": "SG rule ingress 22",
+      "transform": "translate(260, 765), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 23,
+      "position": {
+        "x": 260,
+        "y": 895
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "322e3f91-de14-40e9-95e7-d2961ebe5add",
+      "title": "SG rule ingress 8080",
+      "transform": "translate(260, 895), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 24,
+      "position": {
+        "x": 2600,
+        "y": 450
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "66ebe038-ae86-4ec6-8f43-6ddddf3a1f9d",
+      "title": "SG rule ingress 22",
+      "transform": "translate(2600, 450), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 25,
+      "position": {
+        "x": 485,
+        "y": 435
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "ec1ee03a-b434-450d-83f4-a3c881aca9e9",
+      "title": "SG rule egress",
+      "transform": "translate(485, 435), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 26,
+      "position": {
+        "x": 470,
+        "y": 755
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "7e0371f7-989e-4443-81f4-ba9507600c5b",
+      "title": "SG rule egress",
+      "transform": "translate(470, 755), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 27,
+      "position": {
+        "x": 470,
+        "y": 895
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "a0bc45ed-9de6-4e39-acaf-669b0ece77ea",
+      "title": "SG rule ingress from us-west-2",
+      "transform": "translate(470, 895), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 28,
+      "position": {
+        "x": 2690,
+        "y": 560
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "054d907a-9682-42cd-a2fe-58e6c2d8bff7",
+      "title": "SG rule ingress from us-east-2",
+      "transform": "translate(2690, 560), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 29,
+      "position": {
+        "x": 2770,
+        "y": 450
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "69b98bc5-0d94-4536-839a-fc59f824e62c",
+      "title": "SG rule egress",
+      "transform": "translate(2770, 450), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "4c8d5064-37af-4f69-84ae-093f1652e998"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_key_pair",
+      "order": 30,
+      "position": {
+        "x": 1010,
+        "y": 220
+      },
+      "resourceType": "aws_key_pair",
+      "sourceNodeId": "876fa860-938e-4e32-b1d1-14ff0746f644",
+      "title": "master-key",
+      "transform": "translate(1010, 220), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_key_pair",
+      "order": 31,
+      "position": {
+        "x": 2460,
+        "y": 180
+      },
+      "resourceType": "aws_key_pair",
+      "sourceNodeId": "822a6dc6-00bf-40cb-9929-7042413ebe17",
+      "title": "worker-key",
+      "transform": "translate(2460, 180), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "e4672c0f-349e-4a5f-951e-1950b90adbea"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_instance",
+      "order": 32,
+      "position": {
+        "x": 870,
+        "y": 495
+      },
+      "resourceType": "aws_instance",
+      "sourceNodeId": "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
+      "title": "jenkins-master",
+      "transform": "translate(870, 495), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "b55a1748-7a18-424f-b047-ffa56acd1a92"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_instance",
+      "order": 33,
+      "position": {
+        "x": 2270,
+        "y": 490
+      },
+      "resourceType": "aws_instance",
+      "sourceNodeId": "f80213b2-c624-4641-ba30-a1ae3839a93f",
+      "title": "jenkins-worker-oregon",
+      "transform": "translate(2270, 490), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "be92d4fa-43ef-4fbf-a4ee-71ae6647998e"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route53_record",
+      "order": 34,
+      "position": {
+        "x": -320,
+        "y": 90
+      },
+      "resourceType": "aws_route53_record",
+      "sourceNodeId": "a9e9123e-b88b-49c5-8266-81e77ef12a9a",
+      "title": "cert_validation",
+      "transform": "translate(-320, 90), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route53_record",
+      "order": 35,
+      "position": {
+        "x": -150,
+        "y": 90
+      },
+      "resourceType": "aws_route53_record",
+      "sourceNodeId": "21b5bc02-743e-423f-8262-d210ad83825a",
+      "title": "jenkins",
+      "transform": "translate(-150, 90), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_vpc_peering_connection_accepter",
+      "order": 36,
+      "position": {
+        "x": 1590,
+        "y": 910
+      },
+      "resourceType": "aws_vpc_peering_connection_accepter",
+      "sourceNodeId": "08d05e4d-826e-4c51-a218-ed4448ecb8a2",
+      "title": "accept_peering",
+      "transform": "translate(1590, 910), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "e4672c0f-349e-4a5f-951e-1950b90adbea"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb",
+      "order": 37,
+      "position": {
+        "x": 280,
+        "y": 90
+      },
+      "resourceType": "aws_lb",
+      "sourceNodeId": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
+      "title": "application-lb",
+      "transform": "translate(280, 90), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb_target_group",
+      "order": 38,
+      "position": {
+        "x": 40,
+        "y": 375
+      },
+      "resourceType": "aws_lb_target_group",
+      "sourceNodeId": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
+      "title": "app-lb-tg",
+      "transform": "translate(40, 375), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb_listener",
+      "order": 39,
+      "position": {
+        "x": 645,
+        "y": 90
+      },
+      "resourceType": "aws_lb_listener",
+      "sourceNodeId": "a45b829c-0e30-4596-aebd-815bdfed85b5",
+      "title": "jenkins-listener-http",
+      "transform": "translate(645, 90), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb_listener",
+      "order": 40,
+      "position": {
+        "x": 645,
+        "y": -50
+      },
+      "resourceType": "aws_lb_listener",
+      "sourceNodeId": "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
+      "title": "jenkins-listener-https",
+      "transform": "translate(645, -50), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb_target_group_attachment",
+      "order": 41,
+      "position": {
+        "x": 645,
+        "y": 220
+      },
+      "resourceType": "aws_lb_target_group_attachment",
+      "sourceNodeId": "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
+      "title": "jenkins-master-attach",
+      "transform": "translate(645, 220), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_acm_certificate",
+      "order": 42,
+      "position": {
+        "x": 935,
+        "y": -50
+      },
+      "resourceType": "aws_acm_certificate",
+      "sourceNodeId": "ae51f41c-19a4-4161-abaa-b89059718743",
+      "title": "ACM certificate",
+      "transform": "translate(935, -50), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_acm_certificate_validation",
+      "order": 43,
+      "position": {
+        "x": 1275,
+        "y": -50
+      },
+      "resourceType": "aws_acm_certificate_validation",
+      "sourceNodeId": "c0387977-4047-43de-ae43-6edc8dbd91d9",
+      "title": "ACM certificate validation",
+      "transform": "translate(1275, -50), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
+    }
+  ],
+  "edges": [
+    {
+      "arrow": {
+        "points": "\n            895,490\n            900,495\n            895,500\n          ",
+        "transform": "rotate(90, 900, 495)"
+      },
+      "id": "1e7aed42-7d87-49c2-91e3-1198d030c7f7",
+      "order": 0,
+      "svgPath": "M675,280 L675,402.1685546454947 Q675,410.1685546454947 683,410.1685546454947 L892,410.1685546454947 Q900,410.1685546454947 900,418.1685546454947 L900,495",
+      "sourceNodeId": "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
+      "targetNodeId": "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
+      "sourcePort": "bottom",
+      "targetPort": "top",
+      "sourcePoint": {
+        "x": 675,
+        "y": 280
+      },
+      "targetPoint": {
+        "x": 900,
+        "y": 495
+      },
+      "waypoints": [
+        {
+          "x": 675,
+          "y": 280
+        },
+        {
+          "x": 675,
+          "y": 402.1685546454947
+        },
+        {
+          "x": 675,
+          "y": 410.1685546454947
+        },
+        {
+          "x": 683,
+          "y": 410.1685546454947
+        },
+        {
+          "x": 892,
+          "y": 410.1685546454947
+        },
+        {
+          "x": 900,
+          "y": 410.1685546454947
+        },
+        {
+          "x": 900,
+          "y": 418.1685546454947
+        },
+        {
+          "x": 900,
+          "y": 495
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            65,370\n            70,375\n            65,380\n          ",
+        "transform": "rotate(90, 70, 375)"
+      },
+      "id": "2b31bcb4-e462-4bc8-91f9-946e86c57fbb",
+      "order": 1,
+      "svgPath": "M645,250 L78,250 Q70,250 70,258 L70,375",
+      "sourceNodeId": "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
+      "targetNodeId": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
+      "sourcePort": "left",
+      "targetPort": "top",
+      "sourcePoint": {
+        "x": 645,
+        "y": 250
+      },
+      "targetPoint": {
+        "x": 70,
+        "y": 375
+      },
+      "waypoints": [
+        {
+          "x": 645,
+          "y": 250
+        },
+        {
+          "x": 78,
+          "y": 250
+        },
+        {
+          "x": 70,
+          "y": 250
+        },
+        {
+          "x": 70,
+          "y": 258
+        },
+        {
+          "x": 70,
+          "y": 375
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            65,370\n            70,375\n            65,380\n          ",
+        "transform": "rotate(90, 70, 375)"
+      },
+      "id": "363c9ed9-4e18-43d2-a017-80718fd2a7a3",
+      "order": 2,
+      "svgPath": "M645,120 L582,120 Q574,120 574,128 L574,197.34044101833283 Q574,205.34044101833283 566,205.34044101833283 L78,205.34044101833283 Q70,205.34044101833283 70,213.34044101833283 L70,375",
+      "sourceNodeId": "a45b829c-0e30-4596-aebd-815bdfed85b5",
+      "targetNodeId": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
+      "sourcePort": "left",
+      "targetPort": "top",
+      "sourcePoint": {
+        "x": 645,
+        "y": 120
+      },
+      "targetPoint": {
+        "x": 70,
+        "y": 375
+      },
+      "waypoints": [
+        {
+          "x": 645,
+          "y": 120
+        },
+        {
+          "x": 582,
+          "y": 120
+        },
+        {
+          "x": 574,
+          "y": 120
+        },
+        {
+          "x": 574,
+          "y": 128
+        },
+        {
+          "x": 574,
+          "y": 197.34044101833283
+        },
+        {
+          "x": 574,
+          "y": 205.34044101833283
+        },
+        {
+          "x": 566,
+          "y": 205.34044101833283
+        },
+        {
+          "x": 78,
+          "y": 205.34044101833283
+        },
+        {
+          "x": 70,
+          "y": 205.34044101833283
+        },
+        {
+          "x": 70,
+          "y": 213.34044101833283
+        },
+        {
+          "x": 70,
+          "y": 375
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            275,115\n            280,120\n            275,125\n          ",
+        "transform": "rotate(0, 280, 120)"
+      },
+      "id": "371fb0d7-8d72-4a69-b727-dceb93d53b69",
+      "order": 3,
+      "svgPath": "M-90,120 L280,120",
+      "sourceNodeId": "21b5bc02-743e-423f-8262-d210ad83825a",
+      "targetNodeId": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": -90,
+        "y": 120
+      },
+      "targetPoint": {
+        "x": 280,
+        "y": 120
+      },
+      "waypoints": [
+        {
+          "x": -90,
+          "y": 120
+        },
+        {
+          "x": 280,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            275,115\n            280,120\n            275,125\n          ",
+        "transform": "rotate(0, 280, 120)"
+      },
+      "id": "45fab82b-09ac-4c89-9e25-3ba50121fd2f",
+      "order": 4,
+      "svgPath": "M-90,120 L280,120",
+      "sourceNodeId": "21b5bc02-743e-423f-8262-d210ad83825a",
+      "targetNodeId": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": -90,
+        "y": 120
+      },
+      "targetPoint": {
+        "x": 280,
+        "y": 120
+      },
+      "waypoints": [
+        {
+          "x": -90,
+          "y": 120
+        },
+        {
+          "x": 280,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            -155,590\n            -150,595\n            -155,600\n          ",
+        "transform": "rotate(180, -150, 595)"
+      },
+      "id": "647ff8ae-9e11-45ff-b11e-236723aca99e",
+      "order": 5,
+      "svgPath": "M60,595 L-150,595",
+      "sourceNodeId": "651d53c3-cceb-4967-b5c3-e025e140fa3b",
+      "targetNodeId": "19c57b20-0ebb-4efb-b35e-8c37e175e918",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 60,
+        "y": 595
+      },
+      "targetPoint": {
+        "x": -150,
+        "y": 595
+      },
+      "waypoints": [
+        {
+          "x": 60,
+          "y": 595
+        },
+        {
+          "x": -150,
+          "y": 595
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1035,275\n            1040,280\n            1035,285\n          ",
+        "transform": "rotate(-90, 1040, 280)"
+      },
+      "id": "70f14fac-751b-45c6-82c6-d465fb130652",
+      "order": 6,
+      "svgPath": "M900,495 L900,419.5019990364061 Q900,411.5019990364061 908,411.5019990364061 L1032,411.5019990364061 Q1040,411.5019990364061 1040,403.5019990364061 L1040,280",
+      "sourceNodeId": "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
+      "targetNodeId": "876fa860-938e-4e32-b1d1-14ff0746f644",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 900,
+        "y": 495
+      },
+      "targetPoint": {
+        "x": 1040,
+        "y": 280
+      },
+      "waypoints": [
+        {
+          "x": 900,
+          "y": 495
+        },
+        {
+          "x": 900,
+          "y": 419.5019990364061
+        },
+        {
+          "x": 900,
+          "y": 411.5019990364061
+        },
+        {
+          "x": 908,
+          "y": 411.5019990364061
+        },
+        {
+          "x": 1032,
+          "y": 411.5019990364061
+        },
+        {
+          "x": 1040,
+          "y": 411.5019990364061
+        },
+        {
+          "x": 1040,
+          "y": 403.5019990364061
+        },
+        {
+          "x": 1040,
+          "y": 280
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1725,605\n            1730,610\n            1725,615\n          ",
+        "transform": "rotate(180, 1730, 610)"
+      },
+      "id": "75cb82c6-9edd-4b16-bff3-4726385cef5e",
+      "order": 7,
+      "svgPath": "M1930,610 L1730,610",
+      "sourceNodeId": "bb82de1b-7d92-41fc-a0a9-d1c5e3634d11",
+      "targetNodeId": "08a82fc0-d9d9-46af-a271-b7b182986246",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 1930,
+        "y": 610
+      },
+      "targetPoint": {
+        "x": 1730,
+        "y": 610
+      },
+      "waypoints": [
+        {
+          "x": 1930,
+          "y": 610
+        },
+        {
+          "x": 1730,
+          "y": 610
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            335,115\n            340,120\n            335,125\n          ",
+        "transform": "rotate(180, 340, 120)"
+      },
+      "id": "86af3a8d-21bd-4b49-b0bd-8bc2b6a4e778",
+      "order": 8,
+      "svgPath": "M645,-20 L500.5,-20 Q492.5,-20 492.5,-12 L492.5,112 Q492.5,120 484.5,120 L340,120",
+      "sourceNodeId": "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
+      "targetNodeId": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 645,
+        "y": -20
+      },
+      "targetPoint": {
+        "x": 340,
+        "y": 120
+      },
+      "waypoints": [
+        {
+          "x": 645,
+          "y": -20
+        },
+        {
+          "x": 500.5,
+          "y": -20
+        },
+        {
+          "x": 492.5,
+          "y": -20
+        },
+        {
+          "x": 492.5,
+          "y": -12
+        },
+        {
+          "x": 492.5,
+          "y": 112
+        },
+        {
+          "x": 492.5,
+          "y": 120
+        },
+        {
+          "x": 484.5,
+          "y": 120
+        },
+        {
+          "x": 340,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            990,-25\n            995,-20\n            990,-15\n          ",
+        "transform": "rotate(180, 995, -20)"
+      },
+      "id": "a48f54e0-d5c6-4488-b094-71a1abcbfea1",
+      "order": 9,
+      "svgPath": "M1275,-20 L995,-20",
+      "sourceNodeId": "c0387977-4047-43de-ae43-6edc8dbd91d9",
+      "targetNodeId": "ae51f41c-19a4-4161-abaa-b89059718743",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 1275,
+        "y": -20
+      },
+      "targetPoint": {
+        "x": 995,
+        "y": -20
+      },
+      "waypoints": [
+        {
+          "x": 1275,
+          "y": -20
+        },
+        {
+          "x": 995,
+          "y": -20
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            85,620\n            90,625\n            85,630\n          ",
+        "transform": "rotate(-90, 90, 625)"
+      },
+      "id": "a829d282-4218-475a-b997-96e13ad3806d",
+      "order": 10,
+      "svgPath": "M90,765 L90,625",
+      "sourceNodeId": "fa46f093-d66a-4f84-8568-a3c04fdc2c44",
+      "targetNodeId": "651d53c3-cceb-4967-b5c3-e025e140fa3b",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 90,
+        "y": 765
+      },
+      "targetPoint": {
+        "x": 90,
+        "y": 625
+      },
+      "waypoints": [
+        {
+          "x": 90,
+          "y": 765
+        },
+        {
+          "x": 90,
+          "y": 625
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            930,-25\n            935,-20\n            930,-15\n          ",
+        "transform": "rotate(0, 935, -20)"
+      },
+      "id": "b7b9e1b3-e881-4964-97c5-7a4ae0465b8f",
+      "order": 11,
+      "svgPath": "M705,-20 L935,-20",
+      "sourceNodeId": "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
+      "targetNodeId": "ae51f41c-19a4-4161-abaa-b89059718743",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 705,
+        "y": -20
+      },
+      "targetPoint": {
+        "x": 935,
+        "y": -20
+      },
+      "waypoints": [
+        {
+          "x": 705,
+          "y": -20
+        },
+        {
+          "x": 935,
+          "y": -20
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            65,370\n            70,375\n            65,380\n          ",
+        "transform": "rotate(90, 70, 375)"
+      },
+      "id": "babe477e-6a9e-47bf-a3b1-4bc53b045260",
+      "order": 12,
+      "svgPath": "M645,-20 L78,-20 Q70,-20 70,-12 L70,375",
+      "sourceNodeId": "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
+      "targetNodeId": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
+      "sourcePort": "left",
+      "targetPort": "top",
+      "sourcePoint": {
+        "x": 645,
+        "y": -20
+      },
+      "targetPoint": {
+        "x": 70,
+        "y": 375
+      },
+      "waypoints": [
+        {
+          "x": 645,
+          "y": -20
+        },
+        {
+          "x": 78,
+          "y": -20
+        },
+        {
+          "x": 70,
+          "y": -20
+        },
+        {
+          "x": 70,
+          "y": -12
+        },
+        {
+          "x": 70,
+          "y": 375
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            2455,205\n            2460,210\n            2455,215\n          ",
+        "transform": "rotate(0, 2460, 210)"
+      },
+      "id": "c4cdbbb8-1947-4380-a928-2abaa52108a1",
+      "order": 13,
+      "svgPath": "M2300,490 L2300,218 Q2300,210 2308,210 L2460,210",
+      "sourceNodeId": "f80213b2-c624-4641-ba30-a1ae3839a93f",
+      "targetNodeId": "822a6dc6-00bf-40cb-9929-7042413ebe17",
+      "sourcePort": "top",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 2300,
+        "y": 490
+      },
+      "targetPoint": {
+        "x": 2460,
+        "y": 210
+      },
+      "waypoints": [
+        {
+          "x": 2300,
+          "y": 490
+        },
+        {
+          "x": 2300,
+          "y": 218
+        },
+        {
+          "x": 2300,
+          "y": 210
+        },
+        {
+          "x": 2308,
+          "y": 210
+        },
+        {
+          "x": 2460,
+          "y": 210
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1955,635\n            1960,640\n            1955,645\n          ",
+        "transform": "rotate(-90, 1960, 640)"
+      },
+      "id": "cbfbd09c-be21-4662-9657-d084e40dcec9",
+      "order": 14,
+      "svgPath": "M1960,770 L1960,640",
+      "sourceNodeId": "cac8d6c9-02a8-4984-8a5d-c398d6c7e50a",
+      "targetNodeId": "bb82de1b-7d92-41fc-a0a9-d1c5e3634d11",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 1960,
+        "y": 770
+      },
+      "targetPoint": {
+        "x": 1960,
+        "y": 640
+      },
+      "waypoints": [
+        {
+          "x": 1960,
+          "y": 770
+        },
+        {
+          "x": 1960,
+          "y": 640
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1245,935\n            1250,940\n            1245,945\n          ",
+        "transform": "rotate(180, 1250, 940)"
+      },
+      "id": "dddcdb6f-81c9-4188-a02c-96809ec0dd3f",
+      "order": 15,
+      "svgPath": "M1590,940 L1250,940",
+      "sourceNodeId": "08d05e4d-826e-4c51-a218-ed4448ecb8a2",
+      "targetNodeId": "606e1369-d916-490e-94c7-4aedeeafe7e0",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 1590,
+        "y": 940
+      },
+      "targetPoint": {
+        "x": 1250,
+        "y": 940
+      },
+      "waypoints": [
+        {
+          "x": 1590,
+          "y": 940
+        },
+        {
+          "x": 1250,
+          "y": 940
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            335,115\n            340,120\n            335,125\n          ",
+        "transform": "rotate(180, 340, 120)"
+      },
+      "id": "e3facca6-cd56-441b-8987-21a12ef89b70",
+      "order": 16,
+      "svgPath": "M645,120 L340,120",
+      "sourceNodeId": "a45b829c-0e30-4596-aebd-815bdfed85b5",
+      "targetNodeId": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 645,
+        "y": 120
+      },
+      "targetPoint": {
+        "x": 340,
+        "y": 120
+      },
+      "waypoints": [
+        {
+          "x": 645,
+          "y": 120
+        },
+        {
+          "x": 340,
+          "y": 120
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            620,832.5\n            625,837.5\n            620,842.5\n          ",
+        "transform": "rotate(180, 625, 837.5)"
+      },
+      "id": "f27ef04a-df3f-4136-aeec-3d1c5ba924c2",
+      "order": 17,
+      "svgPath": "M900,555 L900,829.5 Q900,837.5 892,837.5 L625,837.5",
+      "sourceNodeId": "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
+      "targetNodeId": "33ce152b-f405-4f28-86e5-4e894df70cd4",
+      "sourcePort": "bottom",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 900,
+        "y": 555
+      },
+      "targetPoint": {
+        "x": 625,
+        "y": 837.5
+      },
+      "waypoints": [
+        {
+          "x": 900,
+          "y": 555
+        },
+        {
+          "x": 900,
+          "y": 829.5
+        },
+        {
+          "x": 900,
+          "y": 837.5
+        },
+        {
+          "x": 892,
+          "y": 837.5
+        },
+        {
+          "x": 625,
+          "y": 837.5
+        }
+      ]
+    }
+  ],
+  "terraform": {
+    "files": [
+      {
+        "fileName": "main.tf",
+        "code": "resource \"aws_lb\" \"application-lb\" {\n  provider = aws.us-east-2\n\n  name               = \"jenkins-lb\"\n  load_balancer_type = \"application\"\n  internal           = false\n\n  security_groups = [\n    aws_security_group.lb-sg.id,\n  ]\n\n  subnets = [\n    aws_subnet.subnet_1.id,\n    aws_subnet.subnet_2.id,\n  ]\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"Jenkins-LB\"\n  }\n}\n\nresource \"aws_main_route_table_association\" \"set-worker-default-rt-assoc\" {\n  provider = aws.us-west-2\n\n  vpc_id         = aws_vpc.vpc_master_us_west_2.id\n  route_table_id = aws_route_table.internet_route_oregon.id\n}\n\nresource \"aws_vpc\" \"vpc_master\" {\n  provider = aws.us-east-2\n\n  enable_dns_support   = true\n  enable_dns_hostnames = true\n  cidr_block           = \"10.0.0.0/16\"\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"matts-master-vpc\"\n  }\n}\n\nresource \"aws_lb_listener\" \"aws_lb_listener_117174a9\" {\n  provider = aws.us-east-2\n\n  port              = 80\n  load_balancer_arn = aws_lb.application-lb.arn\n\n  default_action {\n    type             = \"redirect\"\n    target_group_arn = aws_lb_target_group.app-lb-tg.id\n\n    redirect {\n      status_code = \"HTTP_301\"\n      protocol    = \"HTTPS\"\n      port        = \"443\"\n    }\n  }\n}\n\nresource \"aws_subnet\" \"subnet_1\" {\n  provider = aws.us-east-2\n\n  vpc_id            = aws_vpc.vpc_master.id\n  cidr_block        = \"10.0.1.0/24\"\n  availability_zone = \"us-east-2b\"\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_lb_target_group\" \"app-lb-tg\" {\n  provider = aws.us-east-2\n\n  vpc_id      = aws_vpc.vpc_master.id\n  target_type = \"instance\"\n  protocol    = \"HTTP\"\n  port        = var.webserver-port\n  name        = \"app-lb-tg\"\n\n  health_check {\n    protocol = \"HTTP\"\n    port     = var.webserver-port\n    path     = \"/\"\n    matcher  = \"200-299\"\n    interval = 10\n    enabled  = true\n  }\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"jenkins-target-group\"\n  }\n}\n\nresource \"aws_security_group\" \"jenkins-sg-oregon\" {\n  provider = aws.us-west-2\n\n  vpc_id      = aws_vpc.vpc_master_us_west_2.id\n  name        = \"jenkins-sg-oregon\"\n  description = \"Allow TCP/8080 & TCP/22\"\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_lb_listener\" \"jenkins-listener-https\" {\n  provider = aws.us-east-2\n\n  ssl_policy        = \"ELBSecurityPolicy-2016-08\"\n  protocol          = \"HTTPS\"\n  port              = 443\n  load_balancer_arn = aws_lb.application-lb.arn\n  certificate_arn   = aws_acm_certificate.jenkins-lb-https.arn\n\n  default_action {\n    type             = \"forward\"\n    target_group_arn = aws_lb_target_group.app-lb-tg.arn\n  }\n}\n\nresource \"aws_key_pair\" \"worker-key\" {\n  provider = aws.us-west-2\n\n  public_key = var.worker_pub_key\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-6a963203\" {\n  provider = aws.us-east-2\n\n  type              = \"ingress\"\n  to_port           = 0\n  security_group_id = aws_security_group.jenkins-sg.id\n  protocol          = \"-1\"\n  from_port         = 0\n  description       = \"Allow traffic from us-west-2\"\n\n  cidr_blocks = [\n    \"192.168.1.0/24\",\n  ]\n}\n\nresource \"aws_key_pair\" \"master-key\" {\n  provider = aws.us-east-2\n\n  public_key = var.master_pub_key\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_internet_gateway\" \"igw-oregon\" {\n  provider = aws.us-west-2\n\n  vpc_id = aws_vpc.vpc_master_us_west_2.id\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_vpc_peering_connection\" \"useast2-uswest2\" {\n  provider = aws.us-east-2\n\n  vpc_id      = aws_vpc.vpc_master.id\n  peer_vpc_id = aws_vpc.vpc_master_us_west_2.id\n  peer_region = var.region-worker\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_security_group_rule\" \"ingress_443\" {\n  provider = aws.us-east-2\n\n  type              = \"ingress\"\n  to_port           = 443\n  security_group_id = aws_security_group.lb-sg.id\n  protocol          = \"tcp\"\n  from_port         = 443\n  description       = \"Allow 443 from anywhere\"\n\n  cidr_blocks = [\n    \"0.0.0.0/0\",\n  ]\n}\n\nresource \"aws_internet_gateway\" \"igw\" {\n  provider = aws.us-east-2\n\n  vpc_id = aws_vpc.vpc_master.id\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_acm_certificate\" \"jenkins-lb-https\" {\n  provider = aws.us-east-2\n\n  validation_method = \"DNS\"\n  domain_name       = \"jenkins.brainboard.co\"\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"Jenkins-ACM\"\n  }\n}\n\nresource \"aws_route_table\" \"internet_route_oregon\" {\n  provider = aws.us-west-2\n\n  vpc_id = aws_vpc.vpc_master_us_west_2.id\n\n  route {\n    gateway_id = aws_internet_gateway.igw-oregon.id\n    cidr_block = \"0.0.0.0/0\"\n  }\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"Worker-Region-RT\"\n  }\n}\n\nresource \"aws_route53_record\" \"jenkins\" {\n  provider = aws.us-east-2\n\n  zone_id = var.zone-id\n  type    = \"A\"\n  name    = \"jenkins.brainboard.co\"\n\n  alias {\n    zone_id                = aws_lb.application-lb.zone_id\n    name                   = aws_lb.application-lb.dns_name\n    evaluate_target_health = true\n  }\n}\n\nresource \"aws_security_group\" \"lb-sg\" {\n  provider = aws.us-east-2\n\n  vpc_id      = aws_vpc.vpc_master.id\n  name        = \"lb-sg\"\n  description = \"Allow 443 and traffic to Jenkins SG\"\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_vpc_peering_connection_accepter\" \"accept_peering\" {\n  provider = aws.us-west-2\n\n  vpc_peering_connection_id = aws_vpc_peering_connection.useast2-uswest2.id\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_instance\" \"jenkins-worker-oregon\" {\n  provider = aws.us-west-2\n\n  subnet_id                   = aws_subnet.subnet_1_oregon.id\n  key_name                    = aws_key_pair.worker-key.key_name\n  instance_type               = \"t3.micro\"\n  count                       = var.workers-count\n  availability_zone           = \"us-west-2a\"\n  associate_public_ip_address = true\n  ami                         = var.ami\n\n  depends_on = [\n    aws_main_route_table_association.set-worker-default-rt-assoc,\n    aws_instance.jenkins-master,\n  ]\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = join(\"_\", [\"jenkins_worker_tf\", count.index + 1])\n  }\n\n  vpc_security_group_ids = [\n    aws_security_group.jenkins-sg-oregon.id,\n  ]\n}\n\nresource \"aws_vpc\" \"vpc_master_us_west_2\" {\n  provider = aws.us-west-2\n\n  enable_dns_support   = true\n  enable_dns_hostnames = true\n  cidr_block           = \"192.168.0.0/16\"\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"matts-worker-vpc\"\n  }\n}\n\nresource \"aws_route_table\" \"internet_route\" {\n  provider = aws.us-east-2\n\n  vpc_id = aws_vpc.vpc_master.id\n\n  lifecycle {\n    ignore_changes = \"\"\n  }\n\n  route {\n    gateway_id = aws_internet_gateway.igw.id\n    cidr_block = \"0.0.0.0/0\"\n  }\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"Master-Region-RT\"\n  }\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-a5db6d6d\" {\n  provider = aws.us-east-2\n\n  type              = \"ingress\"\n  to_port           = var.webserver-port\n  security_group_id = aws_security_group.jenkins-sg.id\n  protocol          = \"tcp\"\n  from_port         = var.webserver-port\n  description       = \"Allow anyone on port 8080\"\n\n  cidr_blocks = [\n    \"0.0.0.0/0\",\n  ]\n}\n\nresource \"aws_instance\" \"jenkins-master\" {\n  provider = aws.us-east-2\n\n  subnet_id                   = aws_subnet.subnet_1.id\n  key_name                    = aws_key_pair.master-key.key_name\n  instance_type               = \"t3.micro\"\n  availability_zone           = \"us-east-2a\"\n  associate_public_ip_address = true\n  ami                         = var.ami\n\n  depends_on = [\n    aws_main_route_table_association.set-worker-default-rt-assoc,\n  ]\n\n  tags = {\n    Source = \"Brainboard\"\n    Name   = \"jenkins_master_tf\"\n  }\n\n  vpc_security_group_ids = [\n    aws_security_group.jenkins-sg.id,\n  ]\n}\n\nresource \"aws_subnet\" \"subnet_2\" {\n  provider = aws.us-east-2\n\n  vpc_id            = aws_vpc.vpc_master.id\n  cidr_block        = \"10.0.2.0/24\"\n  availability_zone = \"us-east-2b\"\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_lb_target_group_attachment\" \"jenkins-master-attach\" {\n  provider = aws.us-east-2\n\n  target_id        = aws_instance.jenkins-master.id\n  target_group_arn = aws_lb_target_group.app-lb-tg.arn\n  port             = var.webserver-port\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-bba6e6bc\" {\n  provider = aws.us-east-2\n\n  type              = \"ingress\"\n  to_port           = 22\n  security_group_id = aws_security_group.jenkins-sg.id\n  protocol          = \"tcp\"\n  from_port         = 22\n  description       = \"Allow 22 from our public IP\"\n\n  cidr_blocks = [\n    var.external_ip,\n  ]\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-bcdf5fec\" {\n  provider = aws.us-west-2\n\n  type              = \"ingress\"\n  to_port           = 22\n  security_group_id = aws_security_group.jenkins-sg-oregon.id\n  protocol          = \"tcp\"\n  from_port         = 22\n  description       = \"Allow 22 from our public IP\"\n\n  cidr_blocks = [\n    var.external_ip,\n  ]\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-becf1315\" {\n  provider = aws.us-east-2\n\n  type              = \"egress\"\n  to_port           = 0\n  security_group_id = aws_security_group.lb-sg.id\n  protocol          = \"-1\"\n  from_port         = 0\n  description       = \"Allow all from anywhere\"\n\n  cidr_blocks = [\n    \"0.0.0.0/0\",\n  ]\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-c0f59b71\" {\n  provider = aws.us-west-2\n\n  type              = \"egress\"\n  to_port           = 0\n  security_group_id = aws_security_group.jenkins-sg-oregon.id\n  protocol          = \"-1\"\n  from_port         = 0\n  description       = \"Allow all from anywhere\"\n\n  cidr_blocks = [\n    \"0.0.0.0/0\",\n  ]\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-cd816426\" {\n  provider = aws.us-east-2\n\n  type              = \"ingress\"\n  to_port           = 80\n  security_group_id = aws_security_group.lb-sg.id\n  protocol          = \"tcp\"\n  from_port         = 80\n  description       = \"Allow 80 from anywhere\"\n\n  cidr_blocks = [\n    \"0.0.0.0/0\",\n  ]\n}\n\nresource \"aws_security_group\" \"jenkins-sg\" {\n  provider = aws.us-east-2\n\n  vpc_id      = aws_vpc.vpc_master.id\n  name        = \"jenkins-sg\"\n  description = \"Allow TCP/8080 & TCP/22\"\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_main_route_table_association\" \"aws_main_route_table_association_d71db21a\" {\n  provider = aws.us-east-2\n\n  vpc_id         = aws_vpc.vpc_master.id\n  route_table_id = aws_route_table.internet_route.id\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-d771cb77\" {\n  provider = aws.us-west-2\n\n  type              = \"ingress\"\n  to_port           = 0\n  security_group_id = aws_security_group.jenkins-sg-oregon.id\n  protocol          = \"-1\"\n  from_port         = 0\n  description       = \"Allow traffic from us-east-2\"\n\n  cidr_blocks = [\n    \"10.0.1.0/24\",\n  ]\n}\n\nresource \"aws_security_group_rule\" \"aws_security_group_rule-dc61e49a\" {\n  provider = aws.us-east-2\n\n  type              = \"egress\"\n  to_port           = 0\n  security_group_id = aws_security_group.jenkins-sg.id\n  protocol          = \"-1\"\n  from_port         = 0\n  description       = \"Allow all from anywhere\"\n\n  cidr_blocks = [\n    \"0.0.0.0/0\",\n  ]\n}\n\nresource \"aws_route53_record\" \"cert_validation\" {\n  provider = aws.us-east-2\n\n  zone_id = var.zone-id\n  type    = \"A\"\n  name    = \"jenkins.brainboard.co\"\n\n  records = [\n    \"1.2.3.4\",\n  ]\n}\n\nresource \"aws_subnet\" \"subnet_1_oregon\" {\n  provider = aws.us-west-2\n\n  vpc_id            = aws_vpc.vpc_master_us_west_2.id\n  cidr_block        = \"192.168.1.0/24\"\n  availability_zone = \"us-west-2a\"\n\n  tags = {\n    Source = \"Brainboard\"\n  }\n}\n\nresource \"aws_acm_certificate_validation\" \"cert\" {\n  provider = aws.us-east-2\n\n  for_each        = aws_route53_record.cert_validation\n  certificate_arn = aws_acm_certificate.jenkins-lb-https.arn\n\n  validation_record_fqdns = [\n    aws_route53_record.cert_validation.fqdn,\n  ]\n}\n\n",
+        "lineCount": 547,
+        "sha256": "2d50f07ffb8d592537aa721209fa13d6b4c22e1da98d432d801bb06360665e89",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "backend.tf",
+        "code": "# This architecture uses Brainboard managed storage\n",
+        "lineCount": 2,
+        "sha256": "9bd86a80fa787dddd0ec09ee56ad995ddc8e504826d124a2fa09717444751c31",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "locals.tf",
+        "code": "locals {\n}\n",
+        "lineCount": 3,
+        "sha256": "0b88e8de9a5058ee4a8129450c5c0561b6a0d9306f454517271927ccdcc347f5",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "outputs.tf",
+        "code": "",
+        "lineCount": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "providers.tf",
+        "code": "terraform {\n  required_providers {\n    aws = {\n      version = \"= 5.52.0\"\n    }\n  }\n}\n\n# Brainboard aliases for AWS regions\nprovider \"aws\" {\n  alias  = \"us-east-2\"\n  region = \"us-east-2\"\n}\nprovider \"aws\" {\n  alias  = \"us-west-2\"\n  region = \"us-west-2\"\n}\n",
+        "lineCount": 18,
+        "sha256": "ff20243d28454bd391d0e2e151cf835fd1066be7507a9dcf1fafc4591b4e1c3d",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "terraform.tfvars",
+        "code": "# All variables as it would be defined in the .tfvars file.\n\ntags = {\n  archuuid = \"3ff1b689-c574-4ff7-9e00-ae3a29197cc0\"\n  env      = \"Production\"\n}\n",
+        "lineCount": 7,
+        "sha256": "940acb4708b22e7ecd041d15c485becf2ef43b48a4239e338ef0945a91e364e8",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "variables.tf",
+        "code": "variable \"ami\" {\n  type    = string\n  default = \"your-ami\"\n}\n\nvariable \"external_ip\" {\n  type    = string\n  default = \"0.0.0.0/0\"\n}\n\nvariable \"master_pub_key\" {\n  type    = string\n  default = \"your key\"\n}\n\nvariable \"region-master\" {\n  type    = string\n  default = \"us-east-2\"\n}\n\nvariable \"region-worker\" {\n  type    = string\n  default = \"us-west-2\"\n}\n\nvariable \"tags\" {\n  description = \"Default tags to apply to all resources.\"\n  type        = map(any)\n  default = {\n    archuuid = \"c884d82a-6fab-454f-a984-619d65ad6044\"\n    env      = \"Development\"\n  }\n}\n\nvariable \"webserver-port\" {\n  type    = string\n  default = \"8080\"\n}\n\nvariable \"worker_pub_key\" {\n  type    = string\n  default = \"your key\"\n}\n\nvariable \"workers-count\" {\n  type    = number\n  default = 1\n}\n\nvariable \"zone-id\" {\n  type    = string\n  default = \"brainboard.co\"\n}\n\n",
+        "lineCount": 55,
+        "sha256": "49deceb95aa1752bec8b351b4f2a5f8efad25a746ccc2d6bbb3c41d8fdc97e67",
+        "includeInWorkspace": true
+      }
+    ],
+    "resourceAddresses": [
+      "aws_lb.application-lb",
+      "aws_main_route_table_association.set-worker-default-rt-assoc",
+      "aws_vpc.vpc_master",
+      "aws_lb_listener.aws_lb_listener_117174a9",
+      "aws_subnet.subnet_1",
+      "aws_lb_target_group.app-lb-tg",
+      "aws_security_group.jenkins-sg-oregon",
+      "aws_lb_listener.jenkins-listener-https",
+      "aws_key_pair.worker-key",
+      "aws_security_group_rule.aws_security_group_rule-6a963203",
+      "aws_key_pair.master-key",
+      "aws_internet_gateway.igw-oregon",
+      "aws_vpc_peering_connection.useast2-uswest2",
+      "aws_security_group_rule.ingress_443",
+      "aws_internet_gateway.igw",
+      "aws_acm_certificate.jenkins-lb-https",
+      "aws_route_table.internet_route_oregon",
+      "aws_route53_record.jenkins",
+      "aws_security_group.lb-sg",
+      "aws_vpc_peering_connection_accepter.accept_peering",
+      "aws_instance.jenkins-worker-oregon",
+      "aws_vpc.vpc_master_us_west_2",
+      "aws_route_table.internet_route",
+      "aws_security_group_rule.aws_security_group_rule-a5db6d6d",
+      "aws_instance.jenkins-master",
+      "aws_subnet.subnet_2",
+      "aws_lb_target_group_attachment.jenkins-master-attach",
+      "aws_security_group_rule.aws_security_group_rule-bba6e6bc",
+      "aws_security_group_rule.aws_security_group_rule-bcdf5fec",
+      "aws_security_group_rule.aws_security_group_rule-becf1315",
+      "aws_security_group_rule.aws_security_group_rule-c0f59b71",
+      "aws_security_group_rule.aws_security_group_rule-cd816426",
+      "aws_security_group.jenkins-sg",
+      "aws_main_route_table_association.aws_main_route_table_association_d71db21a",
+      "aws_security_group_rule.aws_security_group_rule-d771cb77",
+      "aws_security_group_rule.aws_security_group_rule-dc61e49a",
+      "aws_route53_record.cert_validation",
+      "aws_subnet.subnet_1_oregon",
+      "aws_acm_certificate_validation.cert"
+    ]
+  }
+}

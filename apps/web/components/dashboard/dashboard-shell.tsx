@@ -156,7 +156,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
           </div>
 
           {shouldShowCreateAction ? (
-            <Link className="dashboardPrimaryAction" href="/workspace/new">
+            <Link className="dashboardPrimaryAction" href="/workspace/new?fresh=1">
               <Plus aria-hidden="true" size={17} />
               <span>새 프로젝트</span>
             </Link>

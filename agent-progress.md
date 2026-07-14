@@ -62,8 +62,20 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: 10 focused dashboard tests, Web tests 1,207/1,207, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
 - Risk: visual QA used a new local account with no projects or external connections; populated overview behavior is covered by focused source and data tests.
 
-## Next Action
+### 2026-07-14 - Simplify dashboard page headings
 
-- Preserve the verified zero-resource cleanup result; recreate sandbox control-plane resources only for a new approved run.
-- Fix GitOps run-to-handoff correlation so a workflow-fix commit can still persist CI logs and release history without accepting unrelated runs.
-- Provision dedicated Static, Lambda, and EC2/ASG project targets before rerunning the remaining matrix; add a real custom domain/ACM/Route53 target before QR verification.
+- Replaced redundant English eyebrows and introduction copy on Templates, Costs, Projects, and Settings with the requested Korean page titles.
+- Verified all four authenticated routes at 1440x900 and 390x844 with no horizontal overflow, clipping, or unintended wrapping.
+- Verification: 17 focused tests and Web tests 1,211/1,211 passed; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
+- Risk: visual QA used an account without external connections; no API, database, deployment, Git handoff, or cloud mutation was performed.
+
+### 2026-07-14 - Merge latest dev into the Brainboard AWS Template branch
+
+- Merged `origin/dev` at `e322afd2` into `feature/gg/381-brainboard-aws-templates` before PR completion without dropping either workstream.
+- Preserved the branch's 24 Brainboard source fixtures, source-exact Board geometry, Terraform authority and refresh rules, repository Template ID boundary, Template start flow, Project Board thumbnails, Dashboard card improvements, and Workspace navigation fixes.
+- Preserved dev's Repository AI, deployment/release, Live Observation, notification, authentication, and sandbox E2E updates.
+- Verification passed: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm migration:compatibility:check`, 114 focused API tests, 1,266 Web tests, 60 Brainboard type/source-contract tests, 37 capture tests, and `git diff --check`.
+- Known environment limit: `pnpm catalog:check` and `pnpm templates:validate` cannot run Terraform because this machine has no Terraform executable (`spawn terraform ENOENT`). No Terraform Apply, Destroy, or AWS mutation was performed.
+- Final build result: `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path. Type/API/UI builds started successfully; this is the documented pre-existing local blocker.
+- Applied both PR #393 Workspace Template color-token reviews after merging `origin/dev` at `e322afd2`; harness, lint, typecheck, 14 focused Web tests, and diff checks pass.
+- Next: commit and push, resolve both review threads, wait for CI, and merge PR #393.

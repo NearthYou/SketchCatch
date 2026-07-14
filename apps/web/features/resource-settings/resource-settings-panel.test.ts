@@ -32,7 +32,7 @@ test("workspace Template panel renders the complete catalog inside its scrollabl
   assert.doesNotMatch(panelSource, /templates\.slice\(0,\s*3\)/);
 });
 
-test("workspace Template cards apply their own template while the library control opens the modal", () => {
+test("workspace Template cards apply available templates and disable preview-only evidence", () => {
   const libraryControl = readContainingJsxElement(
     panelSource,
     "button",
@@ -48,9 +48,10 @@ test("workspace Template cards apply their own template while the library contro
     libraryControl,
     /onClick=\{\(\) => setModalOpen\(true\)\}/
   );
+  assert.match(applyControl, /disabled=\{!isBoardTemplateAvailable\(template\)\}/);
   assert.match(
-    panelSource,
-    /templateCatalogCard templateApplyCard"[\s\S]*key=\{template\.id\}[\s\S]*onClick=\{\(\) => onTemplateApply\?\.\(template\)\}/
+    applyControl,
+    /if \(isBoardTemplateAvailable\(template\)\) onTemplateApply\?\.\(template\)/
   );
   assert.match(libraryControl, /aria-label="템플릿 전체보기"/);
   assert.match(

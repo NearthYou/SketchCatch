@@ -1,0 +1,500 @@
+{
+  "id": "brainboard-aws-elastic-beanstalk",
+  "sourceTemplateId": "eb84baae-e3a7-4d39-b80d-a22466e5ea16",
+  "title": "AWS Elastic Beanstalk",
+  "downloads": 216,
+  "status": "captured",
+  "error": null,
+  "origin": {
+    "platform": "brainboard",
+    "author": "Chafik Belhaoues",
+    "sourceTemplateId": "eb84baae-e3a7-4d39-b80d-a22466e5ea16",
+    "sourceUrl": "https://app.brainboard.co/templates/eb84baae-e3a7-4d39-b80d-a22466e5ea16",
+    "cloneBoardUrl": "https://app.brainboard.co/a/be7e639a-5c0c-40bc-b20d-cc80576d7a75/design",
+    "downloads": 216,
+    "capturedAt": "2026-07-14"
+  },
+  "provider": "aws",
+  "viewport": {
+    "viewBox": "-1058.09 -271.14 3622.451612903226 1982.2860215053763"
+  },
+  "nodes": [
+    {
+      "height": 960,
+      "onboarding": "design-area-region",
+      "order": 0,
+      "position": {
+        "x": -10,
+        "y": 230
+      },
+      "resourceType": "region",
+      "sourceNodeId": "f2425c88-44c6-439d-b3f3-d8b0f76b130b",
+      "title": "Asia Pacific (Sydney)",
+      "transform": "translate(-10, 230), rotate(0 660 480)",
+      "width": 1320,
+      "parentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0"
+    },
+    {
+      "height": 800,
+      "onboarding": "design-area-aws_vpc",
+      "order": 1,
+      "position": {
+        "x": 55,
+        "y": 340
+      },
+      "resourceType": "aws_vpc",
+      "sourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0",
+      "title": "default",
+      "transform": "translate(55, 340), rotate(0 595 400)",
+      "width": 1190,
+      "parentSourceNodeId": "f2425c88-44c6-439d-b3f3-d8b0f76b130b"
+    },
+    {
+      "height": 155,
+      "onboarding": "design-area-aws_autoscaling_group",
+      "order": 2,
+      "position": {
+        "x": 140,
+        "y": 745
+      },
+      "resourceType": "aws_autoscaling_group",
+      "sourceNodeId": "21fc0544-3752-484e-8b4b-ba2e5d1a62f4",
+      "title": "",
+      "transform": "translate(140, 745), rotate(0 510 77.5)",
+      "width": 1020,
+      "parentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0"
+    },
+    {
+      "height": 560,
+      "onboarding": "design-area-availability_zone",
+      "order": 3,
+      "position": {
+        "x": 220,
+        "y": 520
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "7eb561cf-2bc5-4d66-933a-2242b1a6567f",
+      "title": "ap-southeast-2a",
+      "transform": "translate(220, 520), rotate(0 147.5 280)",
+      "width": 295,
+      "parentSourceNodeId": "5817b9fb-4c2c-4e1f-bb4d-61b71657a381"
+    },
+    {
+      "height": 565,
+      "onboarding": "design-area-availability_zone",
+      "order": 4,
+      "position": {
+        "x": 790,
+        "y": 520
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "9a33d988-aa5c-4ab1-9c0e-fd1b80102646",
+      "title": "ap-southeast-2b",
+      "transform": "translate(790, 520), rotate(0 147.5 282.5)",
+      "width": 295,
+      "parentSourceNodeId": "a5c63292-27e8-447b-b4fc-2d231bb3580f"
+    },
+    {
+      "height": 340,
+      "onboarding": "design-area-aws_subnet",
+      "order": 5,
+      "position": {
+        "x": 240,
+        "y": 600
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "5817b9fb-4c2c-4e1f-bb4d-61b71657a381",
+      "title": "subnet_2a",
+      "transform": "translate(240, 600), rotate(0 127.5 170)",
+      "width": 255,
+      "parentSourceNodeId": "7eb561cf-2bc5-4d66-933a-2242b1a6567f"
+    },
+    {
+      "height": 340,
+      "onboarding": "design-area-aws_subnet",
+      "order": 6,
+      "position": {
+        "x": 815,
+        "y": 600
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "a5c63292-27e8-447b-b4fc-2d231bb3580f",
+      "title": "subnet_2b",
+      "transform": "translate(815, 600), rotate(0 125 170)",
+      "width": 250,
+      "parentSourceNodeId": "9a33d988-aa5c-4ab1-9c0e-fd1b80102646"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_internet_gateway",
+      "order": 7,
+      "position": {
+        "x": 620,
+        "y": 310
+      },
+      "resourceType": "aws_internet_gateway",
+      "sourceNodeId": "97044051-a775-4409-8077-9c1e1f468426",
+      "title": "default",
+      "transform": "translate(620, 310), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_instance",
+      "order": 8,
+      "position": {
+        "x": 330,
+        "y": 810
+      },
+      "resourceType": "aws_instance",
+      "sourceNodeId": "0b61aaf6-6cd1-497d-8a4d-9df7c71157b1",
+      "title": "t2_7",
+      "transform": "translate(330, 810), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "5817b9fb-4c2c-4e1f-bb4d-61b71657a381"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_instance",
+      "order": 9,
+      "position": {
+        "x": 920,
+        "y": 810
+      },
+      "resourceType": "aws_instance",
+      "sourceNodeId": "1cb32ea4-78fa-41f1-aaa4-8bd6de25c903",
+      "title": "t2_7_c",
+      "transform": "translate(920, 810), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a5c63292-27e8-447b-b4fc-2d231bb3580f"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_elastic_beanstalk_environment",
+      "order": 10,
+      "position": {
+        "x": 620,
+        "y": 810
+      },
+      "resourceType": "aws_elastic_beanstalk_environment",
+      "sourceNodeId": "002f83ee-6206-4b3b-a473-e684f6504631",
+      "title": "default",
+      "transform": "translate(620, 810), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_elastic_beanstalk_application",
+      "order": 11,
+      "position": {
+        "x": 620,
+        "y": 1020
+      },
+      "resourceType": "aws_elastic_beanstalk_application",
+      "sourceNodeId": "553a42d0-41d3-4c72-a135-0ef20079465d",
+      "title": "default elastic beanstalk app",
+      "transform": "translate(620, 1020), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table",
+      "order": 12,
+      "position": {
+        "x": 620,
+        "y": 660
+      },
+      "resourceType": "aws_route_table",
+      "sourceNodeId": "2e07a06a-d2b6-4ae1-9424-895648bce499",
+      "title": "default",
+      "transform": "translate(620, 660), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "d40ff46e-9c47-41ae-ac6d-94b6ee7e82a0"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table_association",
+      "order": 13,
+      "position": {
+        "x": 920,
+        "y": 660
+      },
+      "resourceType": "aws_route_table_association",
+      "sourceNodeId": "3657c666-e254-4beb-9895-baef2c9ff360",
+      "title": "rt association",
+      "transform": "translate(920, 660), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a5c63292-27e8-447b-b4fc-2d231bb3580f"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table_association",
+      "order": 14,
+      "position": {
+        "x": 330,
+        "y": 660
+      },
+      "resourceType": "aws_route_table_association",
+      "sourceNodeId": "5ffcf553-4f13-488e-9f55-675ad24b98fe",
+      "title": "rt association",
+      "transform": "translate(330, 660), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "5817b9fb-4c2c-4e1f-bb4d-61b71657a381"
+    }
+  ],
+  "edges": [
+    {
+      "arrow": {
+        "points": "\n            385,835\n            390,840\n            385,845\n          ",
+        "transform": "rotate(180, 390, 840)"
+      },
+      "id": "1e00d822-6eee-4771-b383-16d4e3de0636",
+      "order": 0,
+      "svgPath": "M620,840 L390,840",
+      "sourceNodeId": "002f83ee-6206-4b3b-a473-e684f6504631",
+      "targetNodeId": "0b61aaf6-6cd1-497d-8a4d-9df7c71157b1",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 620,
+        "y": 840
+      },
+      "targetPoint": {
+        "x": 390,
+        "y": 840
+      },
+      "waypoints": [
+        {
+          "x": 620,
+          "y": 840
+        },
+        {
+          "x": 390,
+          "y": 840
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            915,835\n            920,840\n            915,845\n          ",
+        "transform": "rotate(0, 920, 840)"
+      },
+      "id": "2f7daa2e-b273-4cd7-9558-0bd6502fe288",
+      "order": 1,
+      "svgPath": "M680,840 L920,840",
+      "sourceNodeId": "002f83ee-6206-4b3b-a473-e684f6504631",
+      "targetNodeId": "1cb32ea4-78fa-41f1-aaa4-8bd6de25c903",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 680,
+        "y": 840
+      },
+      "targetPoint": {
+        "x": 920,
+        "y": 840
+      },
+      "waypoints": [
+        {
+          "x": 680,
+          "y": 840
+        },
+        {
+          "x": 920,
+          "y": 840
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            615,685\n            620,690\n            615,695\n          ",
+        "transform": "rotate(0, 620, 690)"
+      },
+      "id": "36cb492d-1ff9-411a-a1b6-a46df266ffe0",
+      "order": 2,
+      "svgPath": "M390,690 L620,690",
+      "sourceNodeId": "5ffcf553-4f13-488e-9f55-675ad24b98fe",
+      "targetNodeId": "2e07a06a-d2b6-4ae1-9424-895648bce499",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 390,
+        "y": 690
+      },
+      "targetPoint": {
+        "x": 620,
+        "y": 690
+      },
+      "waypoints": [
+        {
+          "x": 390,
+          "y": 690
+        },
+        {
+          "x": 620,
+          "y": 690
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            675,685\n            680,690\n            675,695\n          ",
+        "transform": "rotate(180, 680, 690)"
+      },
+      "id": "b83160d3-f894-4701-aa9d-0e55b4ff462e",
+      "order": 3,
+      "svgPath": "M920,690 L680,690",
+      "sourceNodeId": "3657c666-e254-4beb-9895-baef2c9ff360",
+      "targetNodeId": "2e07a06a-d2b6-4ae1-9424-895648bce499",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 920,
+        "y": 690
+      },
+      "targetPoint": {
+        "x": 680,
+        "y": 690
+      },
+      "waypoints": [
+        {
+          "x": 920,
+          "y": 690
+        },
+        {
+          "x": 680,
+          "y": 690
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            645,1015\n            650,1020\n            645,1025\n          ",
+        "transform": "rotate(90, 650, 1020)"
+      },
+      "id": "cf290c16-a575-4b15-b75a-a35e1797e5d8",
+      "order": 4,
+      "svgPath": "M650,870 L650,1020",
+      "sourceNodeId": "002f83ee-6206-4b3b-a473-e684f6504631",
+      "targetNodeId": "553a42d0-41d3-4c72-a135-0ef20079465d",
+      "sourcePort": "bottom",
+      "targetPort": "top",
+      "sourcePoint": {
+        "x": 650,
+        "y": 870
+      },
+      "targetPoint": {
+        "x": 650,
+        "y": 1020
+      },
+      "waypoints": [
+        {
+          "x": 650,
+          "y": 870
+        },
+        {
+          "x": 650,
+          "y": 1020
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            645,365\n            650,370\n            645,375\n          ",
+        "transform": "rotate(-90, 650, 370)"
+      },
+      "id": "f0c32538-3862-4712-ad7f-9f5bc7c82224",
+      "order": 5,
+      "svgPath": "M650,660 L650,370",
+      "sourceNodeId": "2e07a06a-d2b6-4ae1-9424-895648bce499",
+      "targetNodeId": "97044051-a775-4409-8077-9c1e1f468426",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 650,
+        "y": 660
+      },
+      "targetPoint": {
+        "x": 650,
+        "y": 370
+      },
+      "waypoints": [
+        {
+          "x": 650,
+          "y": 660
+        },
+        {
+          "x": 650,
+          "y": 370
+        }
+      ]
+    }
+  ],
+  "terraform": {
+    "files": [
+      {
+        "fileName": "main.tf",
+        "code": "resource \"aws_vpc\" \"default\" {\n  tags       = merge(var.tags, {})\n  cidr_block = var.vpc_cidr\n}\n\nresource \"aws_subnet\" \"subnet_2a\" {\n  vpc_id                  = aws_vpc.default.id\n  tags                    = merge(var.tags, {})\n  map_public_ip_on_launch = true\n  cidr_block              = var.subnets.a\n  availability_zone       = \"ap-southeast-2a\"\n}\n\nresource \"aws_subnet\" \"subnet_2b\" {\n  vpc_id                  = aws_vpc.default.id\n  tags                    = merge(var.tags, {})\n  map_public_ip_on_launch = true\n  cidr_block              = var.subnets.b\n  availability_zone       = \"ap-southeast-2b\"\n}\n\nresource \"aws_internet_gateway\" \"default\" {\n  vpc_id = aws_vpc.default.id\n  tags   = merge(var.tags, {})\n}\n\nresource \"aws_elastic_beanstalk_environment\" \"default\" {\n  wait_for_ready_timeout = \"1h\"\n  tier                   = \"WebServer\"\n  tags                   = merge(var.tags, {})\n  solution_stack_name    = \"64bit Amazon Linux 2 v3.4.3 running Python 3.8\"\n  name                   = var.beanstalk_env_name\n  application            = aws_elastic_beanstalk_application.default.id\n\n  setting {\n    value     = \"application\"\n    namespace = \"aws:elasticbeanstalk:environment\"\n    name      = \"LoadBalancerType\"\n  }\n\n  setting {\n    value     = var.asg_max_size\n    namespace = \"aws:autoscaling:asg\"\n    name      = \"MaxSize\"\n  }\n\n  setting {\n    value     = join(\",\", [aws_subnet.subnet_2a.id, aws_subnet.subnet_2b.id])\n    namespace = \"aws:ec2:vpc\"\n    name      = \"ELBSubnets\"\n  }\n\n  setting {\n    value     = aws_vpc.default.id\n    namespace = \"aws:ec2:vpc\"\n    name      = \"VPCId\"\n  }\n\n  setting {\n    value     = \"200\"\n    namespace = \"aws:elasticbeanstalk:environment:process:default\"\n    name      = \"MatcherHTTPCode\"\n  }\n\n  setting {\n    value     = join(\",\", [aws_subnet.subnet_2a.id, aws_subnet.subnet_2b.id])\n    resource  = \"\"\n    namespace = \"aws:ec2:vpc\"\n    name      = \"Subnets\"\n  }\n\n  setting {\n    value     = \"True\"\n    namespace = \"aws:elb:loadbalancer\"\n    name      = \"CrossZone\"\n  }\n\n  setting {\n    value     = \"True\"\n    resource  = \"\"\n    namespace = \"aws:ec2:vpc\"\n    name      = \"AssociatePublicIpAddress\"\n  }\n\n  setting {\n    value     = \"enhanced\"\n    namespace = \"aws:elasticbeanstalk:healthreporting:system\"\n    name      = \"SystemType\"\n  }\n\n  setting {\n    value     = var.asg_min_size\n    namespace = \"aws:autoscaling:asg\"\n    name      = \"MinSize\"\n  }\n\n  setting {\n    value     = \"aws-elasticbeanstalk-ec2-role\"\n    namespace = \"aws:autoscaling:launchconfiguration\"\n    name      = \"IamInstanceProfile\"\n  }\n\n  setting {\n    value     = \"internet facing\"\n    namespace = \"aws:ec2:vpc\"\n    name      = \"ELBScheme\"\n  }\n\n  setting {\n    value     = \"t2.medium\"\n    namespace = \"aws:autoscaling:launchconfiguration\"\n    name      = \"InstanceType\"\n  }\n}\n\nresource \"aws_elastic_beanstalk_application\" \"default\" {\n  tags = merge(var.tags, {})\n  name = var.beastalk_app_name\n}\n\nresource \"aws_route_table\" \"default\" {\n  vpc_id = aws_vpc.default.id\n  tags   = merge(var.tags, {})\n\n  route {\n    gateway_id = aws_internet_gateway.default.id\n    cidr_block = \"0.0.0.0/0\"\n  }\n}\n\nresource \"aws_route_table_association\" \"route_table_association_2b\" {\n  subnet_id      = aws_subnet.subnet_2b.id\n  route_table_id = aws_route_table.default.id\n}\n\nresource \"aws_route_table_association\" \"route_table_association_2a\" {\n  subnet_id      = aws_subnet.subnet_2a.id\n  route_table_id = aws_route_table.default.id\n}\n\n",
+        "lineCount": 141,
+        "sha256": "a8520a13d4e534e61429bc25cb687d7532d24675b1ea5f64495670194eb4277e",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "backend.tf",
+        "code": "# This architecture uses Brainboard managed storage\n",
+        "lineCount": 2,
+        "sha256": "9bd86a80fa787dddd0ec09ee56ad995ddc8e504826d124a2fa09717444751c31",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "locals.tf",
+        "code": "locals {\n}\n",
+        "lineCount": 3,
+        "sha256": "0b88e8de9a5058ee4a8129450c5c0561b6a0d9306f454517271927ccdcc347f5",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "outputs.tf",
+        "code": "",
+        "lineCount": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "providers.tf",
+        "code": "terraform {\n  required_providers {\n    aws = {\n      version = \"= 5.52.0\"\n    }\n  }\n}\n\nprovider \"aws\" {\n  region = \"ap-southeast-2\"\n}\n",
+        "lineCount": 12,
+        "sha256": "017bc4b30cc2efb1325026a76798b52e7b9483799a85f0b9ab328cbf50d849d2",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "terraform.tfvars",
+        "code": "# All variables as it would be defined in the .tfvars file.\n\ntags = {\n  archuuid = \"be7e639a-5c0c-40bc-b20d-cc80576d7a75\"\n  env      = \"Production\"\n}\n",
+        "lineCount": 7,
+        "sha256": "75a34c1835b3f1d1df5e13dc763abf3a527c88e4068cb4bbad6909fa3d848b48",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "variables.tf",
+        "code": "variable \"asg_max_size\" {\n  type    = number\n  default = 2\n}\n\nvariable \"asg_min_size\" {\n  type    = number\n  default = 1\n}\n\nvariable \"beanstalk_env_name\" {\n  type    = string\n  default = \"brainboard\"\n}\n\nvariable \"beastalk_app_name\" {\n  type    = string\n  default = \"brainboard\"\n}\n\nvariable \"subnets\" {\n  type = any\n  default = {\n    a = \"10.0.1.0/24\"\n    b = \"10.0.2.0/24\"\n  }\n}\n\nvariable \"tags\" {\n  description = \"Default tags to apply to all resources.\"\n  type        = map(any)\n  default = {\n    archuuid = \"eb84baae-e3a7-4d39-b80d-a22466e5ea16\"\n    env      = \"Misc\"\n  }\n}\n\nvariable \"vpc_cidr\" {\n  type    = string\n  default = \"10.0.0.0/16\"\n}\n\nvariable \"vpc_name\" {\n  type    = string\n  default = \"brainboard\"\n}\n\n",
+        "lineCount": 48,
+        "sha256": "0602189cfbf2acf472392560a228f4519e35ff651212040fc2123801c6c027f1",
+        "includeInWorkspace": true
+      }
+    ],
+    "resourceAddresses": [
+      "aws_vpc.default",
+      "aws_subnet.subnet_2a",
+      "aws_subnet.subnet_2b",
+      "aws_internet_gateway.default",
+      "aws_elastic_beanstalk_environment.default",
+      "aws_elastic_beanstalk_application.default",
+      "aws_route_table.default",
+      "aws_route_table_association.route_table_association_2b",
+      "aws_route_table_association.route_table_association_2a"
+    ]
+  }
+}

@@ -520,7 +520,7 @@ a.dashboardActivityRow:hover {
 .dashboardCardGrid {
   display: grid;
   margin-top: 20px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -565,7 +565,7 @@ a.dashboardActivityRow:hover {
 .projectPreview {
   position: relative;
   min-width: 0;
-  height: 150px;
+  height: auto;
   overflow: hidden;
   border-bottom: 1px solid #f0f0f3;
   background-color: #f8fafc;

@@ -34,6 +34,9 @@ type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terraformResour
 
 const DEFAULT_RESOURCE_TYPE: ResourceType = "UNKNOWN";
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const DEFAULT_RESOURCE_DEFINITION_ALIASES = [
+  ["RDS_READ_REPLICA", "aws-rds-instance"]
+] as const satisfies readonly (readonly [ResourceType, string])[];
 
 export const resourceDefinitions = [
   createAwsResourceDefinition({
@@ -432,14 +435,6 @@ export const resourceDefinitions = [
   createAwsResourceDefinition({
     id: "aws-rds-instance",
     resourceType: "RDS",
-    terraformPreview: true,
-    terraformResourceType: "aws_db_instance",
-    terraformSync: true
-  }),
-  createAwsResourceDefinition({
-    id: "aws-rds-read-replica",
-    parameterPanel: false,
-    resourceType: "RDS_READ_REPLICA",
     terraformPreview: true,
     terraformResourceType: "aws_db_instance",
     terraformSync: true
@@ -954,6 +949,255 @@ export const resourceDefinitions = [
     terraformPreview: true,
     terraformResourceType: "aws_guardduty_detector",
     terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-api-gateway-integration-response",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_api_gateway_integration_response",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-api-gateway-method-response",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_api_gateway_method_response",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-budgets-budget",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_budgets_budget",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-cloudfront-origin-access-identity",
+    parameterPanel: false,
+    resourceType: "CLOUDFRONT",
+    terraformPreview: true,
+    terraformResourceType: "aws_cloudfront_origin_access_identity",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-docdb-cluster",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_docdb_cluster",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-dynamodb-global-table",
+    parameterPanel: false,
+    resourceType: "DYNAMODB_TABLE",
+    terraformPreview: true,
+    terraformResourceType: "aws_dynamodb_global_table",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-elastic-beanstalk-application",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_elastic_beanstalk_application",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-elastic-beanstalk-environment",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_elastic_beanstalk_environment",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-elb",
+    parameterPanel: false,
+    resourceType: "LOAD_BALANCER",
+    terraformPreview: true,
+    terraformResourceType: "aws_elb",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-flow-log",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_flow_log",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-fsx-lustre-file-system",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_fsx_lustre_file_system",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-iam-group",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_group",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-iam-group-policy-attachment",
+    parameterPanel: false,
+    resourceType: "IAM_POLICY",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_group_policy_attachment",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-iam-user",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_user",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-iam-user-group-membership",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_user_group_membership",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-iam-user-login-profile",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_user_login_profile",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-launch-configuration",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_launch_configuration",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-main-route-table-association",
+    parameterPanel: false,
+    resourceType: "ROUTE_TABLE_ASSOCIATION",
+    terraformPreview: true,
+    terraformResourceType: "aws_main_route_table_association",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-network-interface",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_network_interface",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-organizations-account",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_organizations_account",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-bucket-acl",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformPreview: true,
+    terraformResourceType: "aws_s3_bucket_acl",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-bucket-logging",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformPreview: true,
+    terraformResourceType: "aws_s3_bucket_logging",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-bucket-notification",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformPreview: true,
+    terraformResourceType: "aws_s3_bucket_notification",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-bucket-object",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformPreview: true,
+    terraformResourceType: "aws_s3_bucket_object",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-s3-bucket-replication-configuration",
+    parameterPanel: false,
+    resourceType: "S3",
+    terraformPreview: true,
+    terraformResourceType: "aws_s3_bucket_replication_configuration",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-ses-email-identity",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_ses_email_identity",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-vpc-peering-connection-accepter",
+    parameterPanel: false,
+    resourceType: "VPC_PEERING_CONNECTION",
+    terraformPreview: true,
+    terraformResourceType: "aws_vpc_peering_connection_accepter",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-waf-ipset",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_waf_ipset",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-waf-rule",
+    parameterPanel: false,
+    resourceType: "UNKNOWN",
+    terraformPreview: true,
+    terraformResourceType: "aws_waf_rule",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-waf-web-acl",
+    parameterPanel: false,
+    resourceType: "WAF_WEB_ACL",
+    terraformPreview: true,
+    terraformResourceType: "aws_waf_web_acl",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
+    id: "aws-iam-policy-data",
+    parameterPanel: false,
+    resourceType: "IAM_POLICY",
+    terraformBlockType: "data",
+    terraformPreview: true,
+    terraformResourceType: "aws_iam_policy",
+    terraformSync: true
   })
 ] as const satisfies readonly ResourceDefinition[];
 
@@ -994,6 +1238,16 @@ function createDefaultResourceDefinitionByResourceType(): Map<ResourceType, Reso
     }
 
     definitions.set(definition.resourceType, definition);
+  }
+
+  for (const [resourceType, definitionId] of DEFAULT_RESOURCE_DEFINITION_ALIASES) {
+    const definition = resourceDefinitionById.get(definitionId);
+
+    if (!definition) {
+      throw new Error(`Missing default resource definition alias target: ${definitionId}`);
+    }
+
+    definitions.set(resourceType, definition);
   }
 
   return definitions;

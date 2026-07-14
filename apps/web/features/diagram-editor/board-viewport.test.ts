@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  applyInitialSourceViewBoxViewport,
   getBoardZoomPresentationScale,
   getCenteredBoardViewport,
+  getSourceViewBoxMinimumZoom,
+  getSourceViewBoxViewport,
   getUnobscuredBoardViewportFrame,
   offsetBoardViewportToFrame,
   rebaseBoardViewport,
@@ -117,3 +120,147 @@ test("keeps low-zoom labels readable and coarse controls screen-sized", () => {
     controlScale: 1
   });
 });
+
+test("fits negative wide source bounds exactly inside the unobscured frame at padding zero", () => {
+  const sourceViewBox = { x: -500, y: -40, width: 1_500, height: 900 };
+  const frame = { x: 370, y: 84, width: 630, height: 644 };
+  const viewport = getSourceViewBoxViewport(sourceViewBox, frame);
+
+  assert.equal(viewport.zoom, 0.42);
+  assertSourceBoundsAreContained(sourceViewBox, frame, viewport);
+  assertAlmostEqual(sourceViewBox.x * viewport.zoom + viewport.x, frame.x);
+  assertAlmostEqual(
+    (sourceViewBox.x + sourceViewBox.width) * viewport.zoom + viewport.x,
+    frame.x + frame.width
+  );
+});
+
+test("fits tall source bounds exactly inside the unobscured frame at padding zero", () => {
+  const sourceViewBox = { x: -120, y: -600, width: 400, height: 1_600 };
+  const frame = { x: 70, y: 84, width: 930, height: 644 };
+  const viewport = getSourceViewBoxViewport(sourceViewBox, frame);
+
+  assert.equal(viewport.zoom, 0.4025);
+  assertSourceBoundsAreContained(sourceViewBox, frame, viewport);
+  assertAlmostEqual(sourceViewBox.y * viewport.zoom + viewport.y, frame.y);
+  assertAlmostEqual(
+    (sourceViewBox.y + sourceViewBox.height) * viewport.zoom + viewport.y,
+    frame.y + frame.height
+  );
+});
+
+test("uses a stable one-pixel fallback when fitting a source viewBox without a valid frame", () => {
+  assert.deepEqual(
+    getSourceViewBoxViewport(
+      { x: 0, y: 0, width: 100, height: 100 },
+      { x: Number.NaN, y: Number.POSITIVE_INFINITY, width: 0, height: Number.NaN }
+    ),
+    { x: 0, y: 0, zoom: 0.01 }
+  );
+});
+
+test("lowers the board minimum zoom only when source bounds require it", () => {
+  const frame = { x: 0, y: 0, width: 1_000, height: 800 };
+  const extremelyLargeSourceViewBox = {
+    x: -500_000,
+    y: -500_000,
+    width: 1_000_000,
+    height: 1_000_000
+  };
+  const exactViewport = getSourceViewBoxViewport(extremelyLargeSourceViewBox, frame);
+
+  assert.equal(
+    getSourceViewBoxMinimumZoom({ x: 0, y: 0, width: 2_000, height: 1_000 }, frame),
+    0.25
+  );
+  assert.equal(
+    getSourceViewBoxMinimumZoom({ x: 0, y: 0, width: 50_000, height: 20_000 }, frame),
+    0.02
+  );
+  assert.equal(
+    getSourceViewBoxMinimumZoom(extremelyLargeSourceViewBox, frame),
+    0.01
+  );
+  assert.equal(exactViewport.zoom, 0.0008);
+  assertSourceBoundsAreContained(extremelyLargeSourceViewBox, frame, exactViewport);
+});
+
+test("consumes a pending source viewport once and preserves the saved viewport on reload", () => {
+  const frame = { x: 370, y: 84, width: 630, height: 644 };
+  const pendingDiagram = {
+    nodes: [],
+    edges: [],
+    viewport: { x: 17, y: 23, zoom: 0.8 },
+    presentation: {
+      geometryPolicy: "source-exact" as const,
+      sourceViewBox: { x: -500, y: -40, width: 1_500, height: 900 },
+      initialViewportPending: true
+    }
+  };
+
+  const appliedDiagram = applyInitialSourceViewBoxViewport(pendingDiagram, frame);
+  const independentlyAppliedDiagram = applyInitialSourceViewBoxViewport(
+    structuredClone(pendingDiagram),
+    frame
+  );
+
+  assert.notStrictEqual(appliedDiagram, pendingDiagram);
+  assert.deepEqual(appliedDiagram, independentlyAppliedDiagram);
+  assert.deepEqual(appliedDiagram.viewport, { x: 580, y: 233.8, zoom: 0.42 });
+  assert.equal(appliedDiagram.presentation?.initialViewportPending, false);
+  assert.equal(pendingDiagram.presentation.initialViewportPending, true);
+  assert.strictEqual(applyInitialSourceViewBoxViewport(appliedDiagram, frame), appliedDiagram);
+
+  const savedReloadDiagram = {
+    ...appliedDiagram,
+    viewport: { x: -91, y: 124, zoom: 0.3 }
+  };
+
+  assert.strictEqual(
+    applyInitialSourceViewBoxViewport(savedReloadDiagram, frame),
+    savedReloadDiagram
+  );
+});
+
+test("leaves legacy diagrams unchanged even if they carry source-like metadata", () => {
+  const legacyDiagram = {
+    nodes: [],
+    edges: [],
+    viewport: { x: 10, y: 20, zoom: 0.8 },
+    presentation: {
+      geometryPolicy: "catalog-normalized" as const,
+      sourceViewBox: { x: 0, y: 0, width: 50_000, height: 20_000 },
+      initialViewportPending: true
+    }
+  };
+
+  assert.strictEqual(
+    applyInitialSourceViewBoxViewport(
+      legacyDiagram,
+      { x: 0, y: 0, width: 1_000, height: 800 }
+    ),
+    legacyDiagram
+  );
+});
+
+function assertSourceBoundsAreContained(
+  sourceViewBox: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+  frame: { readonly x: number; readonly y: number; readonly width: number; readonly height: number },
+  viewport: { readonly x: number; readonly y: number; readonly zoom: number }
+): void {
+  const left = sourceViewBox.x * viewport.zoom + viewport.x;
+  const top = sourceViewBox.y * viewport.zoom + viewport.y;
+  const right = (sourceViewBox.x + sourceViewBox.width) * viewport.zoom + viewport.x;
+  const bottom = (sourceViewBox.y + sourceViewBox.height) * viewport.zoom + viewport.y;
+
+  const epsilon = 1e-9;
+
+  assert.ok(left >= frame.x - epsilon);
+  assert.ok(top >= frame.y - epsilon);
+  assert.ok(right <= frame.x + frame.width + epsilon);
+  assert.ok(bottom <= frame.y + frame.height + epsilon);
+}
+
+function assertAlmostEqual(actual: number, expected: number): void {
+  assert.ok(Math.abs(actual - expected) <= 1e-9, `${actual} !== ${expected}`);
+}
