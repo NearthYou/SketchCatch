@@ -7,6 +7,7 @@ const dashboardRoutes = [
   "dashboard/page.tsx",
   "dashboard/projects/page.tsx",
   "dashboard/projects/[projectId]/page.tsx",
+  "dashboard/projects/[projectId]/repository/page.tsx",
   "dashboard/projects/[projectId]/settings/page.tsx",
   "dashboard/templates/page.tsx",
   "dashboard/costs/page.tsx",

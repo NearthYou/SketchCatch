@@ -8,6 +8,7 @@ const dashboardRoutes = [
   "dashboard/page.tsx",
   "dashboard/projects/page.tsx",
   "dashboard/projects/[projectId]/page.tsx",
+  "dashboard/projects/[projectId]/repository/page.tsx",
   "dashboard/projects/[projectId]/settings/page.tsx",
   "dashboard/templates/page.tsx",
   "dashboard/costs/page.tsx",
@@ -31,8 +32,12 @@ test("dashboard route entry points keep every rebuilt product surface active", (
   assert.match(readAppFile("dashboard/projects/page.tsx"), /DashboardProjectsRoute/);
   assert.match(readAppFile("dashboard/templates/page.tsx"), /BuiltInTemplateLibrary/);
   assert.match(readAppFile("dashboard/projects/[projectId]/page.tsx"), /ProjectDetailClient/);
-  assert.match(
+  assert.doesNotMatch(
     readAppFile("dashboard/projects/[projectId]/settings/page.tsx"),
+    /ProjectGitHubSettingsClient/
+  );
+  assert.match(
+    readAppFile("dashboard/projects/[projectId]/repository/page.tsx"),
     /ProjectGitHubSettingsClient/
   );
   assert.match(readAppFile("dashboard/costs/page.tsx"), /CostDashboardClient/);
