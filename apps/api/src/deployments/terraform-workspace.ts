@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TerraformArtifactBundle } from "@sketchcatch/types";
 import { requireS3BucketName } from "../config/env.js";
+import { createProjectAssetStorage } from "../projects/project-asset-storage-factory.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 import { getS3Client } from "../s3/client.js";
 
 export const defaultTerraformArtifactMaxBytes = 1024 * 1024;
@@ -18,6 +20,7 @@ export type PrepareTerraformWorkspaceInput = {
 export type PrepareTerraformWorkspaceOptions = {
   rootDir?: string;
   downloadTerraformArtifact?: (objectKey: string) => Promise<Buffer | Uint8Array | string>;
+  projectAssetStorage?: ProjectAssetStorage;
   maxTerraformArtifactBytes?: number;
 };
 
@@ -43,9 +46,7 @@ export async function prepareTerraformWorkspace(
     const downloadTerraformArtifact =
       options.downloadTerraformArtifact ??
       ((objectKey: string) =>
-        downloadTerraformArtifactFromS3(objectKey, {
-          maxBytes: maxTerraformArtifactBytes
-        }));
+        (options.projectAssetStorage ?? createProjectAssetStorage()).getObject({ objectKey }));
 
     const content = await downloadTerraformArtifact(input.objectKey);
     const buffer = toBuffer(content);

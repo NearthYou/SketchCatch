@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createFilesystemProjectAssetStorage } from "../projects/filesystem-project-asset-storage.js";
 import {
   createTerraformArtifactCanonicalContent,
   prepareTerraformWorkspace
@@ -36,6 +37,39 @@ test("prepareTerraformWorkspace writes safe Terraform files into an isolated tem
         terraformCode: "terraform { required_version = \">= 1.6.0\" }\n"
       }
     ]);
+  } finally {
+    await workspace.cleanup();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("prepareTerraformWorkspace reads from the configured Project asset storage", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "sketchcatch-workspace-test-"));
+  const assetRoot = join(await realpath(rootDir), "project-assets");
+  const projectAssetStorage = createFilesystemProjectAssetStorage({ rootDirectory: assetRoot });
+  const objectKey = "projects/project-id/assets/terraform_file/main.tf";
+  const terraformCode = 'resource "aws_s3_bucket" "assets" {}\n';
+
+  await projectAssetStorage.putObject({
+    objectKey,
+    contentType: "text/plain",
+    body: terraformCode
+  });
+
+  const workspace = await prepareTerraformWorkspace(
+    {
+      objectKey,
+      fileName: "main.tf",
+      contentType: "text/plain"
+    },
+    {
+      rootDir,
+      projectAssetStorage
+    }
+  );
+
+  try {
+    assert.equal(await readFile(workspace.mainFilePath, "utf8"), terraformCode);
   } finally {
     await workspace.cleanup();
     await rm(rootDir, { recursive: true, force: true });

@@ -68,6 +68,7 @@ import {
 } from "./deployment-availability";
 import {
   getDirectDeploymentFlow,
+  shouldStartQueuedApplyPlan,
   type DirectDeploymentPreflightState,
   type DirectDeploymentStepId
 } from "./deployment-console-state";
@@ -148,6 +149,7 @@ export function DirectDeploymentScreen({
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedScope, setSelectedScope] = useState<DeploymentScope | "auto">("auto");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
+  const [queuedApplyPlanDeploymentId, setQueuedApplyPlanDeploymentId] = useState("");
   const [durationNow, setDurationNow] = useState(() => Date.now());
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
@@ -282,6 +284,43 @@ export function DirectDeploymentScreen({
   useEffect(() => {
     setSelectedDirectStepId(directDeploymentFlow.activeStepId);
   }, [directDeploymentFlow.activeStepId]);
+
+  useEffect(() => {
+    if (!queuedApplyPlanDeploymentId || !selectedDeployment) {
+      return;
+    }
+
+    if (
+      selectedDeployment.id === queuedApplyPlanDeploymentId &&
+      (selectedDeployment.currentPlanArtifactId ||
+        selectedDeployment.status === "FAILED" ||
+        selectedDeployment.status === "CANCELLED")
+    ) {
+      setQueuedApplyPlanDeploymentId("");
+      return;
+    }
+
+    if (
+      !canRunPlan ||
+      !shouldStartQueuedApplyPlan({
+        deployment: selectedDeployment,
+        queuedDeploymentId: queuedApplyPlanDeploymentId,
+        requestState
+      })
+    ) {
+      return;
+    }
+
+    setQueuedApplyPlanDeploymentId("");
+    void startTerraformPlan();
+  }, [
+    canRunPlan,
+    queuedApplyPlanDeploymentId,
+    requestState,
+    selectedDeployment?.currentPlanArtifactId,
+    selectedDeployment?.id,
+    selectedDeployment?.status
+  ]);
 
   useEffect(() => {
     if (shouldShowApplyButton) {
@@ -735,10 +774,17 @@ export function DirectDeploymentScreen({
         draftRevision: savedArtifacts.preparedDraftRevision,
         scope: selectedScope
       });
-      const prewarmedDeployment = await runDeploymentInit(deployment.id).catch(() => deployment);
+      let shouldQueueApplyPlan = false;
+      const prewarmedDeployment = await runDeploymentInit(deployment.id)
+        .then((runningDeployment) => {
+          shouldQueueApplyPlan = true;
+          return runningDeployment;
+        })
+        .catch(() => deployment);
 
       setDeployments((currentDeployments) => [prewarmedDeployment, ...currentDeployments]);
       setSelectedDeploymentId(prewarmedDeployment.id);
+      setQueuedApplyPlanDeploymentId(shouldQueueApplyPlan ? prewarmedDeployment.id : "");
       setDeploymentLogs([]);
       setDeploymentResources([]);
       dispatchTerraformOutputState({
@@ -754,6 +800,8 @@ export function DirectDeploymentScreen({
     if (!selectedDeployment || !canRunPlan) {
       return;
     }
+
+    setQueuedApplyPlanDeploymentId("");
 
     dispatchTerraformOutputState({
       type: "clear",
