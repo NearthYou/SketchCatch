@@ -9,11 +9,9 @@ export function DashboardProjectsRoute() {
 
   return (
     <div className="dashboardRouteStack">
-      <header className="dashboardPageHeader dashboardPageHeaderWithControl">
+      <header className="dashboardPageHeader dashboardPageHeaderWithControl dashboardPageHeaderCompact">
         <div>
-          <p className="dashboardEyebrow">Project workspace</p>
-          <h1>프로젝트</h1>
-          <p>설계한 프로젝트를 확인하고, 이어서 작업하거나 배포 상태를 관리합니다.</p>
+          <h1>내 프로젝트</h1>
         </div>
         <label className="dashboardSearchField">
           <Search aria-hidden="true" size={17} />

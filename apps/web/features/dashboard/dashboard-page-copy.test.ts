@@ -22,6 +22,17 @@ test("cost management uses one Korean page title without redundant introduction 
   );
 });
 
+test("projects page uses the requested Korean title without redundant introduction copy", () => {
+  const source = readWorkspaceFile("features/dashboard/dashboard-projects-route.tsx");
+
+  assert.match(source, /<h1>내 프로젝트<\/h1>/);
+  assert.doesNotMatch(source, /Project workspace|<h1>프로젝트<\/h1>/);
+  assert.doesNotMatch(
+    source,
+    /설계한 프로젝트를 확인하고, 이어서 작업하거나 배포 상태를 관리합니다/,
+  );
+});
+
 function readWorkspaceFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../../${path}`, import.meta.url)), "utf8");
 }
