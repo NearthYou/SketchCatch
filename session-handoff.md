@@ -9,12 +9,15 @@ Use this file only for compact continuation context. Write it in English.
 - Three Direct Terraform runs labeled `infrastructure`, `application`, and `full_stack` reached Apply success, healthy Output probes, and Destroyed.
 - Full-stack observation evidence matched: 12 accepted traffic requests, 12 CloudWatch log events, and metric sum 12.
 - AWS cleanup returned zero demo ASGs, ALBs, active EC2 instances, demo S3 buckets, and demo CloudWatch log groups.
+- Direct application/full_stack execution now prepares immutable CodeBuild artifacts, validates the active GitHub repository and CODECONNECTIONS source, re-queries AWS runtime state, and persists a Direct ApplicationRelease.
+- Application-only Destroy now uses an approved cleanup manifest and restores the prior AWS revision without Terraform state.
 
 ## Verification
 
 - Sandbox E2E focused tests pass 20/20.
 - Destroy-plan retry regression passes 3/3; demo artifact and Terraform safety focused tests pass.
 - Final workspace harness, lint, typecheck, and build must be rerun after the dev merge and remaining implementation.
+- Deployment/release integration passes 109 tests, Web target state passes 10 tests, and workspace lint, typecheck, and build pass after the implementation.
 
 ## Changes This Session
 
@@ -24,12 +27,13 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Broken Or Unverified
 
-- Direct `application` and `full_stack` currently execute Terraform but do not build an application artifact or create an `ApplicationRelease`; the successful sandbox runs left `application_releases` at zero.
-- The local API has no `GIT_APP_ID`, `GIT_APP_SLUG`, `GIT_APP_PRIVATE_KEY_BASE64`, callback configuration, or installed sandbox-repository GitHub App, so service-owned GitOps handoff/monitoring cannot run.
+- GitHub App `4294146` is installed only on the sandbox repository as installation `146476093`; its private key is stored at `%USERPROFILE%/.sketchcatch/secrets/sketchcatch-deployment-sandbox.pem` with restricted ACL.
+- AWS CodeConnections `sketchcatch-sandbox-github` was created in `ap-northeast-2` but remains `PENDING`. GitHub's `AWS Connector for GitHub` authorization page has a disabled Authorize button, and CodeBuild creation correctly fails closed until the connection becomes available.
+- The new Direct ApplicationRelease and application-only cleanup paths are automated-test verified but not yet live-verified against the sandbox CodeBuild release plane.
 - GitOps four-runtime deployment/rollback, QR public session, Inbox/Web Push provider delivery, and the complete verifier report remain unverified.
 
 ## Best Next Action
 
-- Implement the Direct application build/release adapter and persist a release only from immutable commit/artifact/provider evidence.
-- Install a least-privilege GitHub App on the sandbox repository and provide its runtime configuration through secret environment variables.
+- Complete the pending AWS Connector OAuth authorization, verify CodeConnections is `AVAILABLE`, then create `sketchcatch-issue-378-ecs` from the prepared sandbox configuration.
+- Inject GitHub App credentials through runtime environment variables without committing them, then live-verify Direct application/full_stack release and application cleanup.
 - Rerun the GitOps four-runtime matrix, rollback drills, QR/notification checks, final cleanup, and strict report verification.

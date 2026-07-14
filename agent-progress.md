@@ -9,7 +9,11 @@ Short English-only working log for the current agent context. Older records are 
 - The sandbox preflight passed against AWS account `614935468487`, `ap-northeast-2`, a verified local API connection, and `NearthYou/sketchcatch-deployment-sandbox`.
 - Direct Terraform runs labeled `infrastructure`, `application`, and `full_stack` each reached Apply success, healthy Output probes, and Destroyed; provider cleanup returned zero demo ASGs, ALBs, active EC2 instances, S3 buckets, and CloudWatch log groups.
 - Full-stack traffic produced 12 accepted API requests, 12 CloudWatch log events, and a `traffic_requests` metric sum of 12.
-- Full issue #378 acceptance is not verified: Direct application/full-stack runs create no ApplicationRelease, and GitOps cannot start without a GitHub App installation and credentials. The feature remains `in_progress`.
+- Full issue #378 acceptance is not verified: the earlier live Direct application/full-stack runs predate the new ApplicationRelease path, and GitOps cannot start without a GitHub App installation and credentials. The feature remains `in_progress`.
+- The missing Direct release path is now implemented locally: application/full_stack prepare immutable CodeBuild artifacts, verify AWS runtime evidence, persist ApplicationRelease, and application-only cleanup restores an approved previous revision without Terraform state.
+- Focused deployment/release integration passes 109 tests, Web target state passes 10 tests, and workspace lint, typecheck, and build pass.
+- GitHub App `4294146` is installed only on `NearthYou/sketchcatch-deployment-sandbox` as installation `146476093`; its private key is stored outside the repository with restricted ACL.
+- AWS CodeConnections `sketchcatch-sandbox-github` exists in `PENDING`. The GitHub `AWS Connector for GitHub` OAuth page renders its Authorize button disabled, so CodeBuild project creation and live release execution remain blocked.
 
 ## Session Record
 
@@ -36,6 +40,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Implement the Direct application build/release adapter and persist a release only from immutable commit, artifact, provider, health, and rollback evidence.
-- Install and configure a least-privilege GitHub App only on the sandbox repository.
+- Complete the pending AWS Connector for GitHub authorization and verify the CodeConnections status is `AVAILABLE`.
+- Create the prepared sandbox CodeBuild project, then run the new Direct ApplicationRelease path live.
 - Run the GitOps runtime matrix, rollback drills, QR/notification checks, final cleanup, and strict report verification before opening the PR.

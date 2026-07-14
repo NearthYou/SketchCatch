@@ -484,9 +484,14 @@
         "lastVerified": "2026-07-14",
         "commands": [
           "pnpm test:sandbox-e2e",
-          "pnpm sandbox:e2e preflight"
+          "pnpm sandbox:e2e preflight",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-destroy-service.test.ts src/deployments/direct-application-release-service.test.ts src/deployments/aws-codebuild-direct-application-release-gateway.test.ts src/deployments/direct-application-release-evidence-verifier.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/projects/[[]projectId[]]/settings/project-deployment-target-state.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
         ],
-        "notes": "The strict preflight and evidence verifier pass 20 automated tests. Non-production AWS preflight passed, and three Direct Terraform runs labeled infrastructure, application, and full_stack reached Apply success, healthy Output probes, and Destroyed with zero provider leftovers. Full acceptance remains open because application/full_stack create no ApplicationRelease and the sandbox repository has no installed/configured GitHub App for the four GitOps runtimes."
+        "notes": "The strict preflight and evidence verifier pass 20 automated tests. Non-production AWS preflight passed, and three earlier Direct Terraform runs reached Apply success, healthy Output probes, and zero provider leftovers. Direct application/full_stack now prepare an immutable CodeBuild artifact, persist ApplicationRelease evidence only after AWS runtime re-query, and support approved application-only rollback cleanup without Terraform state. The deployment/release integration suite passes 109 tests, Web target state passes 10 tests, and lint, typecheck, and build pass. GitHub App 4294146 is installed only on the sandbox repository as installation 146476093 and its private key is stored outside the repository with restricted ACL. AWS CodeConnections exists in PENDING state; GitHub's AWS Connector authorization button remains disabled, so the new Direct release and four GitOps runtimes have not yet been exercised live."
       },
       "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
     },
