@@ -82,6 +82,18 @@ export function SignupForm() {
     [emailAvailabilityRequest, usernameAvailabilityRequest]
   );
 
+  function handleUsernameChange(value: string): void {
+    usernameAvailabilityRequest.cancel();
+    setUsername(value);
+    setUsernameAvailability(INITIAL_AVAILABILITY_STATE);
+  }
+
+  function handleEmailChange(value: string): void {
+    emailAvailabilityRequest.cancel();
+    setEmail(value);
+    setEmailAvailability(INITIAL_AVAILABILITY_STATE);
+  }
+
   async function handleUsernameAvailabilityCheck(): Promise<void> {
     const normalizedUsername = normalizeUsername(username);
     await runAvailabilityCheck({
@@ -273,10 +285,7 @@ export function SignupForm() {
               minLength={3}
               name="username"
               onBlur={handleUsernameAvailabilityBlur}
-              onChange={(event) => {
-                setUsername(event.target.value);
-                setUsernameAvailability(INITIAL_AVAILABILITY_STATE);
-              }}
+              onChange={(event) => handleUsernameChange(event.target.value)}
               placeholder="아이디를 입력하세요."
               required
               type="text"
@@ -413,10 +422,7 @@ export function SignupForm() {
               id="signup-email"
               name="email"
               onBlur={handleEmailAvailabilityBlur}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setEmailAvailability(INITIAL_AVAILABILITY_STATE);
-              }}
+              onChange={(event) => handleEmailChange(event.target.value)}
               placeholder="user@example.com"
               required
               type="email"

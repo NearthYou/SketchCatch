@@ -55,6 +55,19 @@ test("signup checks valid username and email on blur without repeating the same 
   assert.match(signupFormSource, /state\.value === value && state\.status !== "error"/);
 });
 
+test("signup input changes cancel stale availability requests before resetting feedback", () => {
+  assert.match(
+    signupFormSource,
+    /function handleUsernameChange\([^)]*\)[\s\S]*?usernameAvailabilityRequest\.cancel\(\)[\s\S]*?setUsernameAvailability\(INITIAL_AVAILABILITY_STATE\)/
+  );
+  assert.match(
+    signupFormSource,
+    /function handleEmailChange\([^)]*\)[\s\S]*?emailAvailabilityRequest\.cancel\(\)[\s\S]*?setEmailAvailability\(INITIAL_AVAILABILITY_STATE\)/
+  );
+  assert.match(signupFormSource, /onChange=\{\(event\) => handleUsernameChange\(event\.target\.value\)\}/);
+  assert.match(signupFormSource, /onChange=\{\(event\) => handleEmailChange\(event\.target\.value\)\}/);
+});
+
 test("signup legal dialog uses the shared modal accessibility lifecycle", () => {
   assert.match(signupFormSource, /import \{ setupModalAccessibility \}/);
   assert.match(signupFormSource, /return setupModalAccessibility\(\{/);

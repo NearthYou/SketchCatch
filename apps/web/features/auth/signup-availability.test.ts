@@ -20,3 +20,22 @@ test("availability coordinator aborts the previous request and ignores its late 
   assert.equal(await first, null);
   assert.equal(await second, "latest");
 });
+
+test("availability coordinator cancel aborts an active request and ignores its late result", async () => {
+  const coordinator = createAvailabilityRequestCoordinator();
+  let activeSignal: AbortSignal | null = null;
+  let finishRequest!: (value: string) => void;
+  const request = coordinator.run(
+    (signal) =>
+      new Promise<string>((resolve) => {
+        activeSignal = signal;
+        finishRequest = resolve;
+      })
+  );
+
+  coordinator.cancel();
+  finishRequest("stale");
+
+  assert.equal((activeSignal as AbortSignal | null)?.aborted, true);
+  assert.equal(await request, null);
+});
