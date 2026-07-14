@@ -161,6 +161,32 @@ type DiagramJson = {
 `contains`, `hosts`처럼 포함 관계를 나타내는 edge는 렌더링 선으로 남기지 않고 `node.metadata.parentAreaNodeId`
 containment로 변환한다.
 
+### 자동 다이어그램 배치 정책
+
+AI가 `ArchitectureJson`만 반환하거나 새 리소스를 제안한 경우 프론트 어댑터는 고정 서비스 좌표표가 아니라
+결정론적 자동 배치 pipeline으로 `DiagramJson`을 만든다. pipeline은 provider-neutral semantic role과 방향성
+graph를 기준으로 다음 순서를 지킨다.
+
+1. `contains`/`hosts`와 Terraform 참조에서 parent-child containment를 확정한다.
+2. 가장 깊은 영역의 자식부터 배치하고 실제 자식 경계로 Region, VPC, AZ, Subnet, Group 크기를 계산한다.
+3. 사용자/진입점에서 compute/data로 이어지는 주 흐름을 우선 한 축으로 정렬한다.
+4. IAM, 보안, 관측, 배포 같은 지원 리소스는 주 흐름의 상단·하단 lane으로 분리하고 연결 대상 가까이에 둔다.
+5. 반복 AZ/Subnet/resource 묶음은 같은 순서와 크기로 정렬한다.
+6. support lane 배치가 다른 복수 후보를 만들고 node/area 겹침, parent 경계 위반, 역방향 edge,
+   edge-resource 및 Area 제목 교차, edge 교차, 반복 정렬 오차, canvas 면적·공백률·세로 비율을 점수화해
+   최저 점수를 선택한다.
+7. 최종 node와 영역 위치가 정해진 뒤 edge handle과 장애물 회피 경로를 계산한다.
+
+AWS resource type은 MVP Provider Adapter의 첫 분류 입력이지만 배치 모델의 role, graph, containment, 반복 패턴,
+품질 점수는 AWS 전용 좌표를 전제하지 않는다. `docs/diagram-layout-reference`의 이미지와 설명은 설계·회귀 근거이며
+production runtime 입력이 아니다.
+
+정확한 `draft.diagramJson` fixture와 `templateResourceId`가 있는 명시적 Template 좌표는 작성된 위치를 그대로
+우선한다. 기존 Board를 대상으로 한 AI patch에서는 같은 node id의 `position`, `size`, `locked`를 보존하고 새
+node만 자동 배치한다. 단, 저장된 Area에 새 자식이 추가되면 Area 위치와 기존 최소 크기는 유지하면서 경계 위반을
+막는 데 필요한 방향으로만 크기를 확장할 수 있다. 자동 배치는 resource type, Terraform parameters, containment
+identity, edge identity를 수정하지 않으며 사용자가 patch를 승인하기 전에는 현재 Board를 변경하지 않는다.
+
 파라미터가 다른 Terraform resource를 참조할 때 보드가 만든 자동 연결선은 `DiagramEdge.metadata`로 구분한다.
 
 ```ts
