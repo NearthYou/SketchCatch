@@ -520,6 +520,25 @@
         "notes": "All 60 focused tests passed. The full Web suite passed 1,123/1,124 and retains one unrelated Windows Korean day-period locale failure. Workspace visual QA covered 11-node Serverless and 18-resource VPC/ALB/Fargate/Data/CI-CD/Observability fixtures. The live AI generation endpoint returned 503, so manual patch UI behavior is supported by integration tests rather than claimed as live-screen verified."
       },
       "notes": "No runtime dependency, Terraform execution, cloud mutation, commit, push, or PR was created."
+    },
+    {
+      "id": "WEB-UI-ACCESSIBILITY-001",
+      "priority": 1,
+      "area": "web-ui-accessibility",
+      "title": "Web UI clarity, accessibility, and responsive legibility",
+      "user_visible_behavior": "첫 화면과 인증·대시보드·작업 공간에서 목적이 분명한 안내와 조작을 제공하고, 작은 화면에서도 읽기 쉬운 글자와 안정적인 줄바꿈을 유지한다.",
+      "status": "in_progress",
+      "verification": [
+        "첫 화면과 회원가입·로그인 주요 동작의 문구와 키보드 접근성을 검증한다.",
+        "사용자용 텍스트는 12px 이상, 일반 본문은 14px 이상을 유지하고 낮은 대비 보조 문구를 개선한다.",
+        "공개 화면과 인증 화면을 데스크톱 및 모바일 뷰포트에서 확인한다."
+      ],
+      "evidence": {
+        "lastVerified": null,
+        "commands": [],
+        "notes": "Implementation and visual verification are in progress."
+      },
+      "notes": "Frontend-only UI work. No API contract, database migration, deployment action, or cloud mutation is included."
     }
   ]
 }
