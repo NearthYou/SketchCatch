@@ -86,6 +86,45 @@ test("Reverse Engineering은 Compiler proposal을 생성하고 적용 후보와 
   assert.deepEqual(scanResult, inputBefore);
 });
 
+test("Reverse Engineering은 scan finding·제외·provider error를 Compiler context signal로 보존한다", () => {
+  const proposal = compileReverseEngineeringArchitecture({
+    ...scanResult,
+    findings: [
+      {
+        id: "finding-public-vpc",
+        category: "security",
+        severity: "high",
+        resourceId: "vpc-1",
+        title: "Public exposure",
+        description: "VPC ingress를 확인해야 합니다.",
+        recommendation: "inbound rule을 제한하세요."
+      }
+    ],
+    analysisExclusions: [
+      {
+        id: "excluded-unknown",
+        resourceId: "unknown-1",
+        reason: "unsupported_resource_type",
+        message: "지원하지 않는 리소스입니다."
+      }
+    ],
+    scanErrors: [
+      {
+        id: "scan-permission",
+        resourceType: "UNKNOWN",
+        stage: "inventory",
+        reason: "permission_denied",
+        message: "권한이 부족합니다.",
+        retryable: false
+      }
+    ]
+  });
+
+  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.deployment:finding-public-vpc"));
+  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:excluded-unknown"));
+  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:scan-permission"));
+});
+
 test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하나의 Compiler proposal로 검토하고 적용한다", () => {
   const currentBoard: DiagramJson = {
     nodes: [

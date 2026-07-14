@@ -222,6 +222,50 @@ test("Compiler는 승인된 semantic operation과 외부 충돌 신호를 하나
   assert.ok(proposal.quality.after.semanticDiagnosticPenalty >= 321);
 });
 
+test("semantic operation이 있으면 진짜 원본을 보존하되 요청된 graph를 무음으로 되돌리지 않는다", () => {
+  const proposal = compileArchitectureBoard({
+    architecture: {
+      nodes: [
+        {
+          id: "api",
+          type: "API_GATEWAY_REST_API",
+          label: "API",
+          positionX: 0,
+          positionY: 0,
+          config: { terraformResourceType: "aws_api_gateway_rest_api" }
+        }
+      ],
+      edges: []
+    },
+    semanticContext: {
+      operations: [
+        {
+          id: "add-vpc",
+          kind: "resource-add",
+          node: {
+            id: "vpc",
+            type: "VPC",
+            label: "VPC",
+            positionX: 0,
+            positionY: 0,
+            config: { terraformResourceType: "aws_vpc" }
+          }
+        }
+      ]
+    },
+    trigger: "ai-draft"
+  });
+
+  assert.ok(proposal.provenance.candidateIds?.includes("original"));
+  assert.ok(proposal.provenance.candidateIds?.includes("requested-original"));
+  assert.ok(proposal.architecture.nodes.some((node) => node.id === "vpc"));
+  assert.ok(
+    proposal.changes.some(
+      ({ action, kind, targetIds }) => action === "add" && kind === "resource" && targetIds.includes("vpc")
+    )
+  );
+});
+
 test("Compiler는 contains/hosts와 Terraform 참조에서 Security Group을 제외한 containment를 제안한다", () => {
   const proposal = compileArchitectureBoard({
     architecture: {

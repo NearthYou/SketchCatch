@@ -1,4 +1,5 @@
 import type {
+  ArchitectureBoardCompilationContextSignal,
   ArchitectureJson,
   DiagramEdge,
   DiagramJson,
@@ -83,7 +84,8 @@ export function createReverseEngineeringBoardApplication(
   const compilation = compileReverseEngineeringAppendArchitecture(
     input.currentDiagram,
     appendDiagram,
-    new Set(comparison.additions.map((item) => item.nodeId))
+    new Set(comparison.additions.map((item) => item.nodeId)),
+    input.result
   );
 
   return {
@@ -124,11 +126,13 @@ function createReverseEngineeringPreview(result: ReverseEngineeringScanResult): 
 function compileReverseEngineeringAppendArchitecture(
   currentDiagram: DiagramJson,
   appendDiagram: DiagramJson,
-  reverseEngineeringNodeIds: ReadonlySet<string>
+  reverseEngineeringNodeIds: ReadonlySet<string>,
+  result: ReverseEngineeringScanResult
 ): ArchitectureBoardCompilationProposal {
   const compilation = compileArchitectureBoard({
     architecture: convertDiagramJsonToArchitectureJson(appendDiagram),
     currentDiagram,
+    semanticContext: { signals: createReverseEngineeringContextSignals(result) },
     trigger: "reverse-engineering"
   });
 
@@ -143,8 +147,52 @@ export function compileReverseEngineeringArchitecture(
 ): ArchitectureBoardCompilationProposal {
   return compileArchitectureBoard({
     architecture: removeUnsupportedNodes(result.architectureJson),
+    semanticContext: { signals: createReverseEngineeringContextSignals(result) },
     trigger: "reverse-engineering"
   });
+}
+
+// Scan facts are not hard gates. Passing them through the Compiler keeps the imported
+// diagram, the review summary, and the user-accepted apply boundary on the same proposal.
+function createReverseEngineeringContextSignals(
+  result: ReverseEngineeringScanResult
+): readonly ArchitectureBoardCompilationContextSignal[] {
+  return [
+    ...result.findings.map((finding) => ({
+      id: finding.id,
+      kind: "deployment" as const,
+      level: toFindingDiagnosticLevel(finding.severity),
+      summary: finding.title,
+      message: `${finding.description} ${finding.recommendation}`.trim(),
+      ...(finding.resourceId ? { relatedResourceIds: [finding.resourceId] } : {}),
+      penalty: finding.severity === "high" ? 500 : finding.severity === "medium" ? 200 : 50
+    })),
+    ...result.analysisExclusions.map((exclusion) => ({
+      id: exclusion.id,
+      kind: "provider" as const,
+      level: "warning" as const,
+      summary: `분석 제외: ${exclusion.reason}`,
+      message: exclusion.message,
+      relatedResourceIds: [exclusion.resourceId],
+      penalty: 150
+    })),
+    ...result.scanErrors.map((error) => ({
+      id: error.id,
+      kind: "provider" as const,
+      level: error.retryable ? "warning" as const : "error" as const,
+      summary: `스캔 ${error.stage}: ${error.reason}`,
+      message: error.message,
+      penalty: error.retryable ? 200 : 500
+    }))
+  ].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function toFindingDiagnosticLevel(
+  severity: ReverseEngineeringScanResult["findings"][number]["severity"]
+): ArchitectureBoardCompilationContextSignal["level"] {
+  if (severity === "high") return "error";
+  if (severity === "medium") return "warning";
+  return "info";
 }
 
 // 지원하지 않는 리소스는 오른쪽 확인 목록에서 보게 하고 Architecture Board에서는 제외합니다.

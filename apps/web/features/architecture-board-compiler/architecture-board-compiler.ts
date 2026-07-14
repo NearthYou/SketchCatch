@@ -126,9 +126,10 @@ export function compileArchitectureBoard(
   input: ArchitectureBoardCompilationInput
 ): ArchitectureBoardCompilationProposal {
   const sourceArchitecture = cloneArchitecture(input.architecture);
+  const semanticOperations = input.semanticContext?.operations ?? [];
   const semanticOperationResult = applyArchitectureBoardSemanticOperations(
     sourceArchitecture,
-    input.semanticContext?.operations ?? []
+    semanticOperations
   );
   const requestedArchitecture = cloneArchitecture(semanticOperationResult.architecture);
   const diagnosticContext: CompilationDiagnosticContext = {
@@ -146,39 +147,39 @@ export function compileArchitectureBoard(
     baseDiagram,
     architectureBoardKnowledge
   );
-  const sourceDiagram = currentDiagram
-    ? undefined
-    : convertArchitectureJsonToDiagramJson(sourceArchitecture);
-  // board-auto-organize is deliberately a layout-only operation over the live Board, so
-  // its current Diagram remains a valid original candidate. Other triggers can change
-  // config or relationship labels without changing the graph shape; using their current
-  // Diagram there would pair the requested Architecture with stale node/edge values.
-  const originalDiagram =
-    input.trigger === "board-auto-organize" &&
+  const sourceDiagram =
+    (input.trigger === "board-auto-organize" || input.trigger === "template-review") &&
     currentDiagram &&
     currentArchitecture &&
-    sameArchitectureShape(currentArchitecture, requestedArchitecture)
+    sameArchitectureShape(currentArchitecture, sourceArchitecture)
       ? currentDiagram
-      : baseDiagram;
+      : convertArchitectureJsonToDiagramJson(sourceArchitecture);
+  // Only Board organization and Template review treat the current Diagram as the authored
+  // source. AI and reverse-engineering may keep node IDs/types while changing config or
+  // relationship labels, so their source candidate must be re-materialized instead of
+  // pairing the requested Architecture with stale Board values.
   const comparisonArchitecture = currentArchitecture ?? sourceArchitecture;
   const comparisonDiagram = currentDiagram ?? sourceDiagram ?? baseDiagram;
-
-  const originalPresentation = applyArchitectureBoardPresentationOperations(
-    originalDiagram,
-    semanticOperationResult.presentationOperations
-  );
   const originalCandidate = createCandidate(
     "original",
-    requestedArchitecture,
-    originalPresentation.diagram,
+    sourceArchitecture,
+    sourceDiagram,
     comparisonArchitecture,
     comparisonDiagram,
     sourceArchitecture,
-    {
-      ...diagnosticContext,
-      operationIssues: [...diagnosticContext.operationIssues, ...originalPresentation.issues]
-    }
+    diagnosticContext
   );
+  const requestedOriginalCandidate = semanticOperations.length > 0
+    ? createRequestedOriginalCandidate(
+        requestedArchitecture,
+        baseDiagram,
+        comparisonArchitecture,
+        comparisonDiagram,
+        sourceArchitecture,
+        diagnosticContext,
+        semanticOperationResult.presentationOperations
+      )
+    : undefined;
   const presentationArchitecture = inferPresentationArchitecture(requestedArchitecture);
   const presentationCandidate = createMaterializedCandidate(
     "presentation",
@@ -204,10 +205,17 @@ export function compileArchitectureBoard(
   const sourceExactNeedsCompiledVariant =
     comparisonDiagram.presentation?.geometryPolicy === "source-exact" &&
     (input.trigger === "template-review" || input.trigger === "board-auto-organize");
-  const candidates = [originalCandidate, presentationCandidate, semanticCandidate];
+  const candidates = [
+    originalCandidate,
+    ...(requestedOriginalCandidate ? [requestedOriginalCandidate] : []),
+    presentationCandidate,
+    semanticCandidate
+  ];
   const selectableCandidates = sourceExactNeedsCompiledVariant
     ? [presentationCandidate, semanticCandidate]
-    : candidates;
+    : requestedOriginalCandidate
+      ? [requestedOriginalCandidate, presentationCandidate, semanticCandidate]
+      : candidates;
   const selected = selectableCandidates.sort(
     (left, right) => left.quality.score - right.quality.score || left.id.localeCompare(right.id)
   )[0];
@@ -249,6 +257,31 @@ export function compileArchitectureBoard(
       referenceTemplateIds: [...findReferenceTemplateIds(selected.diagram)]
     }
   };
+}
+
+function createRequestedOriginalCandidate(
+  requestedArchitecture: ArchitectureJson,
+  baseDiagram: DiagramJson,
+  beforeArchitecture: ArchitectureJson,
+  beforeDiagram: DiagramJson,
+  sourceArchitecture: ArchitectureJson,
+  diagnosticContext: CompilationDiagnosticContext,
+  presentationOperations: Parameters<typeof applyArchitectureBoardPresentationOperations>[1]
+): Candidate {
+  const requestedPresentation = applyArchitectureBoardPresentationOperations(baseDiagram, presentationOperations);
+
+  return createCandidate(
+    "requested-original",
+    requestedArchitecture,
+    requestedPresentation.diagram,
+    beforeArchitecture,
+    beforeDiagram,
+    sourceArchitecture,
+    {
+      ...diagnosticContext,
+      operationIssues: [...diagnosticContext.operationIssues, ...requestedPresentation.issues]
+    }
+  );
 }
 
 function createMaterializedCandidate(
