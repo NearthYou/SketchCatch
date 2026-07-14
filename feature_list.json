@@ -560,10 +560,14 @@
       "evidence": {
         "lastVerified": "2026-07-15",
         "commands": [
-          "pnpm --filter @sketchcatch/web typecheck",
-          "pnpm --filter @sketchcatch/web exec tsx --test features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-quality.test.ts features/resource-settings/template-library-review.test.ts features/workspace/reverse-engineering-board-application.test.ts features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-chat-status.test.ts"
+          "pnpm harness:check",
+          "pnpm architecture-board-knowledge:check",
+          "pnpm architecture-board-evidence:check",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/workspace-ai-start-client.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/repository/repository-start-client.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm lint",
+          "pnpm typecheck"
         ],
-        "notes": "Initial Compiler, proposal preview, shared contracts, and AI Chat state separation are implemented. The generated knowledge artifact, broad semantic candidate policy, full-suite verification, and PR review remain in progress."
+        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact, v3 candidate/quality policy, source-exact compiled variants, and four integration paths are implemented. AI and Repository start show proposal evidence before the explicit Board application boundary. The aggregate feature remains in_progress while the separately owned 001 Workspace AI Chat and final aggregate review finish. Root pnpm test retains three unrelated three-tier Template contract failures in packages/types; pnpm build retains the pre-existing apps/web/.codegraph ENOENT blocker."
       },
       "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
     },

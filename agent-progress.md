@@ -4,17 +4,31 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/ck/391-diagram-positioning`.
-- `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
-- This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
-- Before the merge, focused notification SSE fixes passed API notification tests 17/17, Web notification tests 6/6, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
-- Before the merge, focused repository template layout tests passed: workspace adapter 45/45, public repository recommendation 8/8, repository template recommendation 10/10, plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
-- Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
-- Incoming dev verification recorded 25 sandbox runner tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks as passing; full Web/API suites were intentionally omitted.
-- Incoming cleanup evidence records no remaining cost-bearing Issue #378 resources; no Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during this code-integration pass.
-- Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
+- Branch: `feat/gg/409-architecture-board-compiler-chat`.
+- `origin/dev` was merged at `a9424469`; the branch is ahead of the remote integration branch and contains the current Workspace AI Chat commits.
+- 000 Architecture Board Compiler is implemented as `architecture-board-compiler/v3`: versioned 29+1 Template knowledge, original/presentation/semantic candidates, semantic containment repair, complete visible diff recording, and source-exact compiled variants are in place.
+- AI Draft, Board automatic organization, Reverse Engineering, and Template review use the same Compiler interface. AI and Repository starts show a proposal summary and only save after `Board에 적용`.
+- Latest focused Compiler/AI/Repository suite passed 27/27; knowledge and evidence checks, `pnpm harness:check`, `pnpm lint`, and root `pnpm typecheck` passed.
+- Known unrelated baseline: `pnpm test` stops at three existing `packages/types` three-tier Template contract failures; `pnpm build` stops at the pre-existing missing `apps/web/.codegraph` path.
+- No migration, DB schema change, Terraform execution, cloud mutation, or Git/CI/CD handoff was performed.
+- The 001 Workspace AI Chat commit is already present independently on this integration branch. Uncommitted clipboard work remains outside the 000 Compiler commit.
 
 ## Session Record
+
+### 2026-07-15 - Implement Architecture Board Compiler 000
+
+- Implemented the versioned 29-usable-Template knowledge policy, provenance ranking, source-exact compiled variants, protected-node layout preservation, viewport/presentation state handling, and visible edge/viewport diff accounting.
+- Connected the same proposal contract to AI Draft, Board automatic organization, Reverse Engineering, and Template review. Repository-based draft creation now stages a compiled Board review instead of saving immediately; AI and Repository review show score, distance, grouped changes, diagnostics, and evidence before user application.
+- Updated the 000 design record with implemented behavior and verification commands. `ARCHITECTURE-BOARD-COMPILER-409` remains in progress because the aggregate feature includes separately owned 001 AI Chat completion.
+- Verification passed: `pnpm harness:check`, focused 27-test Compiler/AI/Repository suite, `pnpm architecture-board-knowledge:check`, `pnpm architecture-board-evidence:generate`, `pnpm architecture-board-evidence:check`, `pnpm lint`, and `pnpm typecheck`.
+- Known baselines: root `pnpm test` fails only in three existing three-tier Template contract checks in `packages/types`; root `pnpm build` fails before compilation because `apps/web/.codegraph` is absent. The unauthenticated local browser redirected to login, so visual review was covered by component/source contracts rather than a live authenticated flow.
+
+### 2026-07-15 - Rebuild the Workspace AI launcher
+
+- Removed the Sparkles-only launcher JSX and all legacy `.aiChatLauncher` rules from the shared Workspace stylesheet.
+- Added a focused 44px black AI monogram launcher component and isolated CSS module following the DESIGN.md CTA, radius, type, focus, and reduced-motion rules.
+- Chrome QA confirmed the 44x44 launcher does not overlap the deployment notification, opens the existing dock, and receives focus again after Escape closes the dock.
+- Verification: AI Chat focused tests passed 14/14; lint, typecheck, production build, harness, and diff checks passed. The full test command remains non-green only on three existing three-tier Template geometry/parent contract failures.
 
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 
@@ -100,6 +114,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- On `feat/gg/409-architecture-board-compiler-chat`, complete the documented 29-Template Architecture Board Compiler implementation and its verification.
-- Continue notification work separately from the completed repository diagram commit.
-- Run local API DB migrations before testing deployment notifications locally.
+- Review the final Compiler diff, commit only 000-related files, push `feat/gg/409-architecture-board-compiler-chat`, and open the integration PR.
+- Leave the independently committed 001 work and the uncommitted clipboard work untouched for their owner.
