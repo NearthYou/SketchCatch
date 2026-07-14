@@ -1,4 +1,5 @@
 import type { DiagramEdge, DiagramJson, DiagramNode, DiagramPoint } from "@sketchcatch/types";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 import type { ArchitectureBoardKnowledgeCase } from "./architecture-board-knowledge-contract";
 
 export function extractArchitectureBoardKnowledgeCase(
@@ -7,7 +8,7 @@ export function extractArchitectureBoardKnowledgeCase(
 ): ArchitectureBoardKnowledgeCase {
   const nodes = [...diagram.nodes].sort((left, right) => left.id.localeCompare(right.id));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const areas = nodes.filter((node) => node.metadata?.presentationArea === true);
+  const areas = nodes.filter(isAreaNode);
   const parentedNodes = nodes.filter((node) => node.metadata?.parentAreaNodeId !== undefined);
   const sortedX = nodes.map((node) => node.position.x).sort((left, right) => left - right);
   const sortedY = nodes.map((node) => node.position.y).sort((left, right) => left - right);

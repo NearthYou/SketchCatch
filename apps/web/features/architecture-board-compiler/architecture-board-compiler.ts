@@ -20,6 +20,7 @@ import {
 import {
   evaluateAutomaticDiagramLayout,
   layoutAutomaticDiagram,
+  type AutomaticDiagramLayoutCandidateProfile,
   type AutomaticDiagramLayoutQuality
 } from "../workspace/automatic-diagram-layout";
 import {
@@ -28,6 +29,7 @@ import {
 } from "../workspace/workspace-ai-diagram-adapter";
 import { architectureBoardKnowledge } from "./architecture-board-knowledge";
 import {
+  deriveArchitectureBoardKnowledgeLayoutProfiles,
   evaluateArchitectureBoardKnowledgeQuality,
   rankArchitectureBoardKnowledgeCases
 } from "./architecture-board-knowledge-policy";
@@ -140,6 +142,10 @@ export function compileArchitectureBoard(
   const baseDiagram = convertArchitectureJsonToDiagramJson(requestedArchitecture, {
     preserveLayoutFrom: input.trigger === "board-auto-organize" ? undefined : currentDiagram
   });
+  const layoutProfiles = deriveArchitectureBoardKnowledgeLayoutProfiles(
+    baseDiagram,
+    architectureBoardKnowledge
+  );
   const sourceDiagram = currentDiagram
     ? undefined
     : convertArchitectureJsonToDiagramJson(sourceArchitecture);
@@ -181,7 +187,8 @@ export function compileArchitectureBoard(
     comparisonDiagram,
     sourceArchitecture,
     diagnosticContext,
-    semanticOperationResult.presentationOperations
+    semanticOperationResult.presentationOperations,
+    layoutProfiles
   );
   const semanticArchitecture = createSemanticArchitecture(presentationArchitecture);
   const semanticCandidate = createMaterializedCandidate(
@@ -191,7 +198,8 @@ export function compileArchitectureBoard(
     comparisonDiagram,
     sourceArchitecture,
     diagnosticContext,
-    semanticOperationResult.presentationOperations
+    semanticOperationResult.presentationOperations,
+    layoutProfiles
   );
   const sourceExactNeedsCompiledVariant =
     comparisonDiagram.presentation?.geometryPolicy === "source-exact" &&
@@ -237,6 +245,7 @@ export function compileArchitectureBoard(
       compilerVersion: ARCHITECTURE_BOARD_COMPILER_VERSION,
       candidateId: selected.id,
       candidateIds: candidates.map((candidate) => candidate.id).sort((left, right) => left.localeCompare(right)),
+      layoutProfileIds: layoutProfiles.map((profile) => profile.id),
       referenceTemplateIds: [...findReferenceTemplateIds(selected.diagram)]
     }
   };
@@ -249,7 +258,8 @@ function createMaterializedCandidate(
   beforeDiagram: DiagramJson,
   sourceArchitecture: ArchitectureJson,
   diagnosticContext: CompilationDiagnosticContext,
-  presentationOperations: Parameters<typeof applyArchitectureBoardPresentationOperations>[1]
+  presentationOperations: Parameters<typeof applyArchitectureBoardPresentationOperations>[1],
+  layoutProfiles: readonly AutomaticDiagramLayoutCandidateProfile[]
 ): Candidate {
   const materialized = applyCompilerPresentationMetadata(
     preserveCurrentBoardState(convertArchitectureJsonToDiagramJson(architecture), beforeDiagram),
@@ -259,6 +269,7 @@ function createMaterializedCandidate(
     materialized.nodes.filter((node) => node.locked).map((node) => node.id)
   );
   const layout = layoutAutomaticDiagram({
+    candidateProfiles: layoutProfiles,
     edges: architecture.edges,
     nodes: materialized.nodes,
     protectedNodeIds

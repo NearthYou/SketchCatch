@@ -32,6 +32,10 @@ test("generator는 실제 6개 authored와 23개 usable Brainboard 사례를 정
   assert.equal(brainboardCases.length, 23);
   assert.equal(sourceArtifact.unavailableTemplateIds.length, 1);
   assert.ok(
+    sourceArtifact.cases.find(({ id }) => id === "brainboard:brainboard-aws-asg-lb-vpc-subnets")!
+      .areaCount > 0
+  );
+  assert.ok(
     sourceArtifact.cases.every((entry) =>
       [
         entry.maxContainmentDepth,

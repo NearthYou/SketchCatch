@@ -117,6 +117,39 @@ test("Compiler changes는 승인 전 proposal일 뿐 현재 Diagram을 mutation�
   assert.ok(proposal.quality.compilationDistance > 0);
 });
 
+test("Compiler는 유사 Template의 spacing profile을 실제 geometry 후보군에 포함한다", () => {
+  const proposal = compileArchitectureBoard({
+    architecture: {
+      nodes: [
+        {
+          id: "api",
+          type: "API_GATEWAY_REST_API",
+          label: "API",
+          positionX: 0,
+          positionY: 0,
+          config: { terraformResourceType: "aws_api_gateway_rest_api" }
+        },
+        {
+          id: "handler",
+          type: "LAMBDA",
+          label: "Handler",
+          positionX: 260,
+          positionY: 0,
+          config: { terraformResourceType: "aws_lambda_function" }
+        }
+      ],
+      edges: [{ id: "api-handler", sourceId: "api", targetId: "handler", label: "invokes" }]
+    },
+    trigger: "ai-draft"
+  });
+
+  assert.ok(
+    (proposal.provenance as { layoutProfileIds?: readonly string[] }).layoutProfileIds?.some((id) =>
+      id.startsWith("knowledge:")
+    )
+  );
+});
+
 test("Compiler는 승인된 semantic operation과 외부 충돌 신호를 하나의 proposal로 설명한다", () => {
   const proposal = compileArchitectureBoard({
     architecture: {

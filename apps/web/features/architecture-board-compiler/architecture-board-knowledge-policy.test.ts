@@ -3,7 +3,10 @@ import test from "node:test";
 import type { DiagramJson } from "@sketchcatch/types";
 import { ARCHITECTURE_BOARD_KNOWLEDGE_VERSION } from "./architecture-board-knowledge-contract";
 import type { ArchitectureBoardKnowledgeArtifact } from "./architecture-board-knowledge-contract";
-import { evaluateArchitectureBoardKnowledgeQuality } from "./architecture-board-knowledge-policy";
+import {
+  deriveArchitectureBoardKnowledgeLayoutProfiles,
+  evaluateArchitectureBoardKnowledgeQuality
+} from "./architecture-board-knowledge-policy";
 
 const diagram: DiagramJson = {
   nodes: [
@@ -45,6 +48,26 @@ test("knowledge 사례가 바뀌면 같은 Board의 사례 기반 품질 비용�
   assert.equal(compact.referenceTemplateIds[0], "compact");
   assert.equal(spacious.referenceTemplateIds[0], "spacious");
   assert.notEqual(compact.penalty, spacious.penalty);
+});
+
+test("knowledge policy는 가장 가까운 사례의 간격을 bounded layout profile로 만든다", () => {
+  const profiles = deriveArchitectureBoardKnowledgeLayoutProfiles(
+    diagram,
+    createArtifact({
+      id: "wide-reference",
+      meanSiblingGap: 999,
+      meanVerticalGap: 1
+    })
+  );
+
+  assert.deepEqual(profiles, [
+    {
+      id: "knowledge:wide-reference",
+      referenceTemplateId: "wide-reference",
+      columnGap: 160,
+      rowGap: 24
+    }
+  ]);
 });
 
 function createArtifact(

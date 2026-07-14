@@ -11,10 +11,20 @@ export type ArchitectureBoardKnowledgeEvaluation = {
   readonly referenceTemplateIds: readonly string[];
 };
 
+export type ArchitectureBoardKnowledgeLayoutProfile = {
+  readonly columnGap: number;
+  readonly id: string;
+  readonly referenceTemplateId: string;
+  readonly rowGap: number;
+};
+
 type RankedKnowledgeCase = {
   readonly knowledgeCase: ArchitectureBoardKnowledgeCase;
   readonly similarity: number;
 };
+
+const KNOWLEDGE_LAYOUT_COLUMN_GAP = { maximum: 160, minimum: 40 } as const;
+const KNOWLEDGE_LAYOUT_ROW_GAP = { maximum: 112, minimum: 24 } as const;
 
 // 사례는 좌표를 복사하는 blueprint가 아니라, 비슷한 graph가 어느 정도의 간격·흐름·밀도를
 // 가지는지 알려 주는 비용 기준이다. 이 정책은 Compiler 내부에서만 사용한다.
@@ -65,6 +75,39 @@ export function evaluateArchitectureBoardKnowledgeQuality(
       knowledgeEdgeLength: reference.knowledgeCase.meanEdgeLength
     }
   };
+}
+
+/**
+ * The existing layout engine owns lane/order variants. Knowledge contributes a bounded
+ * spacing profile derived from the nearest real Board, so it expands that candidate set
+ * instead of replacing the deterministic baseline layouts.
+ */
+export function deriveArchitectureBoardKnowledgeLayoutProfiles(
+  diagram: DiagramJson,
+  artifact: ArchitectureBoardKnowledgeArtifact
+): readonly ArchitectureBoardKnowledgeLayoutProfile[] {
+  const reference = rankArchitectureBoardKnowledgeCases(diagram, artifact)[0];
+
+  if (!reference || reference.similarity <= 0) {
+    return [];
+  }
+
+  return [
+    {
+      id: `knowledge:${reference.knowledgeCase.id}`,
+      referenceTemplateId: reference.knowledgeCase.id,
+      columnGap: clamp(
+        reference.knowledgeCase.meanSiblingGap,
+        KNOWLEDGE_LAYOUT_COLUMN_GAP.minimum,
+        KNOWLEDGE_LAYOUT_COLUMN_GAP.maximum
+      ),
+      rowGap: clamp(
+        reference.knowledgeCase.meanVerticalGap,
+        KNOWLEDGE_LAYOUT_ROW_GAP.minimum,
+        KNOWLEDGE_LAYOUT_ROW_GAP.maximum
+      )
+    }
+  ];
 }
 
 export function rankArchitectureBoardKnowledgeCases(
@@ -119,6 +162,10 @@ function weightedAbsoluteError(actual: number, expected: number, weight: number)
 function relativeError(actual: number, expected: number): number {
   if (expected === 0) return actual === 0 ? 0 : 1;
   return Math.min(1, Math.abs(actual - expected) / Math.abs(expected));
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function round(value: number): number {

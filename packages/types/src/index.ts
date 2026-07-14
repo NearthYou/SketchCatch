@@ -3317,6 +3317,8 @@ export type ArchitectureBoardCompilationProposal = {
     candidateId: string;
     /** Every candidate generated for this proposal, including the retained original baseline. */
     candidateIds?: string[] | undefined;
+    /** Knowledge-derived spacing profiles added to the geometry candidate search. */
+    layoutProfileIds?: string[] | undefined;
     referenceTemplateIds: string[];
   };
 };
