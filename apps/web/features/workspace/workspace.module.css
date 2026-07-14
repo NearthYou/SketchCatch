@@ -5795,6 +5795,294 @@
   color: #ffffff;
 }
 
+/* AI Chat Dock: the only Workspace surface intentionally rebuilt on this branch. */
+.aiChatLauncher {
+  bottom: 20px;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgb(23 23 23 / 18%);
+  height: 44px;
+  right: 20px;
+  width: 44px;
+  z-index: 1302;
+}
+
+.aiChatLauncher[data-right-panel-open="true"] {
+  right: calc(var(--right-panel-width, 0px) + 20px);
+}
+
+.aiChatLauncher:focus-visible,
+.aiChatCloseButton:focus-visible,
+.aiChatTabButton:focus-visible,
+.aiChatClearButton:focus-visible,
+.aiChatSuggestionButton:focus-visible,
+.aiChatSelectionSubmitButton:focus-visible,
+.aiChatVoiceButton:focus-visible,
+.aiChatSendButton:focus-visible {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #171717;
+  outline: none;
+}
+
+.aiChatOverlay {
+  z-index: 1300;
+}
+
+.aiChatDock {
+  border-radius: 0;
+  border-width: 1px 0 0 1px;
+  bottom: 0;
+  box-shadow: -20px 0 48px rgb(23 23 23 / 12%);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  max-height: none;
+  min-height: 0;
+  right: 0;
+  top: 64px;
+  width: clamp(360px, 31vw, 420px);
+  z-index: 1301;
+}
+
+.aiChatDock[data-right-panel-open="true"] {
+  right: var(--right-panel-width, 0px);
+  width: min(420px, calc(100vw - var(--right-panel-width, 0px)));
+}
+
+.aiChatHeader {
+  min-height: 64px;
+  padding: 12px 20px;
+}
+
+.aiChatHeader span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.aiChatHeader h2 {
+  font-size: 18px;
+}
+
+.aiChatStatusBar {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 20px;
+}
+
+.aiChatStatusBar > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aiChatStatusBar strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+}
+
+.aiChatStatusBar p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aiChatStatusMark {
+  background: #16a34a;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.aiChatStatusBar[data-status="처리 중"] .aiChatStatusMark {
+  background: #ab6400;
+}
+
+.aiChatStatusBar[data-status="요청 오류"] .aiChatStatusMark {
+  background: #b42318;
+}
+
+.aiChatStatusBar[data-status="적용 대기"] .aiChatStatusMark {
+  background: #8145b5;
+}
+
+.aiChatTabBar {
+  gap: 10px;
+  padding: 10px 20px;
+}
+
+.aiChatTabs {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0;
+}
+
+.aiChatTabButton {
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: transparent;
+  border-bottom-color: var(--workspace-accent, #000000);
+  box-shadow: none;
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatClearButton {
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.aiChatTranscript {
+  background: var(--workspace-surface, #ffffff);
+  gap: 20px;
+  padding: 20px;
+}
+
+.aiChatAssistantMessage,
+.aiChatUserMessage {
+  max-width: 92%;
+}
+
+.aiChatAssistantMessage p,
+.aiChatUserMessage p {
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 12px 14px;
+}
+
+.aiChatAssistantMessage p {
+  box-shadow: none;
+}
+
+.aiChatUserMessage p {
+  border-radius: 12px 12px 4px 12px;
+}
+
+.aiChatAssistantMessage[data-kind="question"] p {
+  box-shadow: inset 3px 0 0 var(--workspace-accent, #000000);
+}
+
+.aiChatDraftCard {
+  border-radius: 12px;
+  gap: 12px;
+  padding: 16px;
+}
+
+.aiChatComposer,
+.aiChatDock[data-chat-tab="errors"] .aiChatComposer,
+.aiChatDock[data-chat-tab="preview"] .aiChatComposer {
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  gap: 8px;
+  padding: 12px 20px max(16px, env(safe-area-inset-bottom));
+}
+
+.aiChatInput {
+  gap: 4px;
+}
+
+.aiChatInput textarea {
+  border-radius: 8px;
+  max-height: 132px;
+  min-height: 48px;
+  padding: 11px 12px;
+}
+
+.aiChatVoiceButton,
+.aiChatSendButton {
+  min-height: 48px;
+}
+
+.aiChatSendButton {
+  border-radius: 8px;
+  padding: 0 16px;
+}
+
+@media (max-width: 768px) {
+  .aiChatLauncher,
+  .aiChatLauncher[data-right-panel-open="true"] {
+    bottom: max(16px, env(safe-area-inset-bottom));
+    right: 16px;
+  }
+
+  .aiChatLauncher[data-right-panel-open="true"] {
+    display: none;
+  }
+
+  .aiChatOverlay {
+    background: var(--workspace-surface, #ffffff);
+  }
+
+  .aiChatDock,
+  .aiChatDock[data-right-panel-open="true"] {
+    border: 0;
+    bottom: 0;
+    height: 100dvh;
+    left: 0;
+    min-height: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  .aiChatHeader,
+  .aiChatStatusBar,
+  .aiChatTabBar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .aiChatTranscript {
+    padding: 16px;
+  }
+
+  .aiChatComposer,
+  .aiChatDock[data-chat-tab="errors"] .aiChatComposer,
+  .aiChatDock[data-chat-tab="preview"] .aiChatComposer {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .aiChatInput {
+    grid-column: 1 / -1;
+  }
+
+  .aiChatVoiceButton,
+  .aiChatSendButton {
+    align-self: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiChatLauncher,
+  .aiChatCloseButton,
+  .aiChatTabButton,
+  .aiChatSuggestionButton,
+  .aiChatVoiceButton,
+  .aiChatSendButton {
+    transition: none;
+  }
+}
+
+.aiChatSendButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
 .workspaceNotificationHost {
   align-items: end;
   bottom: 18px;

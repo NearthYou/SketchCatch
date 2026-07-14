@@ -1937,9 +1937,10 @@ test("terraform source navigation scrolls and focuses the target line determinis
 });
 
 test("terraform issue AI resolution can close the chat dock without trapping the issue card", () => {
-  assert.match(aiChatDockSource, /function closeChatDock/);
+  assert.match(aiChatDockSource, /const closeChatDock = useCallback/);
   assert.match(aiChatDockSource, /setTerraformIssueResolution\(null\)/);
   assert.match(aiChatDockSource, /setApplyingTerraformFixRequestId\(null\)/);
+  assert.match(aiChatDockSource, /launcherButtonRef\.current\?\.focus\(\)/);
   assert.match(aiChatDockSource, /onClick=\{closeChatDock\}/);
 });
 

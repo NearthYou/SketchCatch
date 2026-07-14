@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { templateDefinitions } from "@sketchcatch/types";
 import type { TemplateId } from "@sketchcatch/types";
 import type {
@@ -66,6 +66,7 @@ import {
   type TerraformSafeFixApplyRequest,
   type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
+import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiChatDockProps = {
@@ -227,6 +228,7 @@ export function WorkspaceAiChatDock({
     [repositoryTemplateId]
   );
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollFrameRef = useRef<number | null>(null);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
@@ -256,6 +258,33 @@ export function WorkspaceAiChatDock({
     (activeChatTab === "draft" && draft !== null) ||
     (activeChatTab === "errors" && terraformIssueResolution !== null) ||
     (activeChatTab === "preview" && terraformPreviewExplanation !== null);
+  const hasTerraformLoading =
+    terraformIssueResolution?.state === "loading" || terraformPreviewExplanation?.state === "loading";
+  const hasTerraformError =
+    terraformIssueResolution?.state === "error" || terraformPreviewExplanation?.state === "error";
+  const chatDockStatus = getWorkspaceAiChatDockStatus({
+    draftState,
+    hasCompletedResponse:
+      visibleMessages.length > 0 ||
+      terraformIssueResolution?.explanation != null ||
+      terraformPreviewExplanation?.explanation != null,
+    hasPendingApproval: draft !== null || patchPreviewModel !== null,
+    hasTerraformError,
+    hasTerraformLoading
+  });
+  const isChatBusy = draftState === "loading" || hasTerraformLoading;
+  const activeTerraformIssueRequestId =
+    terraformIssueResolution?.request.id ?? terraformIssueRequest?.id ?? null;
+
+  const closeChatDock = useCallback(() => {
+    dismissedTerraformIssueRequestIdRef.current = activeTerraformIssueRequestId;
+    setOpen(false);
+    setTerraformIssueResolution(null);
+    setApplyingTerraformFixRequestId(null);
+    window.requestAnimationFrame(() => {
+      launcherButtonRef.current?.focus();
+    });
+  }, [activeTerraformIssueRequestId]);
 
   useEffect(() => {
     if (loadedProjectIdRef.current !== projectId) {
@@ -271,6 +300,31 @@ export function WorkspaceAiChatDock({
     setCompletedTerraformFixRequestIds([]);
     loadedProjectIdRef.current = projectId;
   }, [projectId]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      composerTextareaRef.current?.focus();
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      closeChatDock();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeChatDock, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -917,14 +971,6 @@ export function WorkspaceAiChatDock({
     }
   }
 
-  function closeChatDock(): void {
-    dismissedTerraformIssueRequestIdRef.current =
-      terraformIssueResolution?.request.id ?? terraformIssueRequest?.id ?? null;
-    setOpen(false);
-    setTerraformIssueResolution(null);
-    setApplyingTerraformFixRequestId(null);
-  }
-
   function showDraftPreview(result: AiArchitectureDraftResult): void {
     const previewDiagram = getDiagramJsonForArchitectureDraft(result);
 
@@ -1150,10 +1196,12 @@ export function WorkspaceAiChatDock({
     return (
       <button
         aria-label="AI 채팅 열기"
+        aria-expanded={false}
         className={styles.aiChatLauncher}
         data-right-panel-open={context.isRightPanelOpen}
         data-terraform-leave-guard-ignore
         onClick={() => setOpen(true)}
+        ref={launcherButtonRef}
         title="AI 채팅"
         type="button"
       >
@@ -1172,36 +1220,52 @@ export function WorkspaceAiChatDock({
       }}
     >
       <section
-      aria-label="AI 채팅"
+        aria-busy={isChatBusy}
+        aria-label="AI 채팅"
+        aria-labelledby="workspace-ai-chat-title"
         className={styles.aiChatDock}
         data-chat-tab={activeChatTab}
         data-right-panel-open={context.isRightPanelOpen}
         data-terraform-leave-guard-ignore
+        role="dialog"
       >
-      <header className={styles.aiChatHeader}>
-        <div>
-          <span>자연어 다이어그램</span>
-          <h2>AI 채팅</h2>
-        </div>
-        <button
-          aria-label="AI 채팅 닫기"
-          className={styles.aiChatCloseButton}
-          onClick={closeChatDock}
-          title="닫기"
-          type="button"
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-      </header>
+        <header className={styles.aiChatHeader}>
+          <div>
+            <span>Workspace Assistant</span>
+            <h2 id="workspace-ai-chat-title">AI 채팅</h2>
+          </div>
+          <button
+            aria-label="AI 채팅 닫기"
+            className={styles.aiChatCloseButton}
+            onClick={closeChatDock}
+            title="닫기"
+            type="button"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
 
-      {repositoryTemplate ? (
-        <div className={styles.aiChatTemplateContext} role="status">
-          <span>Repository Analysis Template</span>
-          <strong>{repositoryTemplate.title}</strong>
-          <code>{repositoryTemplate.id}</code>
-          <p>AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다.</p>
+        <div
+          aria-live="polite"
+          className={styles.aiChatStatusBar}
+          data-status={chatDockStatus.label}
+          role="status"
+        >
+          <span aria-hidden="true" className={styles.aiChatStatusMark} />
+          <div>
+            <strong>{chatDockStatus.label}</strong>
+            <p>{chatDockStatus.description}</p>
+          </div>
         </div>
-      ) : null}
+
+        {repositoryTemplate ? (
+          <div className={styles.aiChatTemplateContext} role="status">
+            <span>Repository Analysis Template</span>
+            <strong>{repositoryTemplate.title}</strong>
+            <code>{repositoryTemplate.id}</code>
+            <p>AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다.</p>
+          </div>
+        ) : null}
 
       <div className={styles.aiChatTabBar} aria-label="AI 채팅 기능">
         <div className={styles.aiChatTabs} role="tablist" aria-label="AI 기능">
