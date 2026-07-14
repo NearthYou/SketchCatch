@@ -22,6 +22,7 @@ import {
 import { useAuth } from "../../components/auth/auth-provider";
 import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
+import { getSignupReadiness } from "../../features/auth/signup-readiness";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { requestSignupAvailability } from "../../lib/auth-api";
 import { LEGAL_DOCUMENTS, type LegalDocument, type LegalDocumentKey } from "./legal-documents";
@@ -245,17 +246,17 @@ export function SignupForm() {
   const currentNormalizedUsername = normalizeUsername(username);
   const currentNormalizedEmail = normalizeEmail(email);
   const currentNormalizedNickname = nickname.trim();
-  const isSignupReady =
-    currentNormalizedNickname.length > 0 &&
-    currentNormalizedUsername.length > 0 &&
-    currentNormalizedEmail.length > 0 &&
-    isCurrentValueAvailable(usernameAvailability, currentNormalizedUsername) &&
-    isCurrentValueAvailable(emailAvailability, currentNormalizedEmail) &&
-    getPasswordPolicyErrorMessage(password) === null &&
-    passwordConfirm.length > 0 &&
-    password === passwordConfirm &&
-    termsAccepted &&
-    privacyAccepted;
+  const signupReadiness = getSignupReadiness({
+    emailAvailable: isCurrentValueAvailable(emailAvailability, currentNormalizedEmail),
+    emailEntered: currentNormalizedEmail.length > 0,
+    nicknameEntered: currentNormalizedNickname.length > 0,
+    passwordConfirmed: passwordConfirm.length > 0 && password === passwordConfirm,
+    passwordValid: getPasswordPolicyErrorMessage(password) === null,
+    privacyAccepted,
+    termsAccepted,
+    usernameAvailable: isCurrentValueAvailable(usernameAvailability, currentNormalizedUsername),
+    usernameEntered: currentNormalizedUsername.length > 0
+  });
 
   function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
     setIsPasswordCapsLockOn(isCapsLockActive(event));
@@ -502,7 +503,7 @@ export function SignupForm() {
         <button
           aria-busy={isSubmitting}
           className="authSubmit fullField"
-          disabled={isSubmitting || !isSignupReady}
+          disabled={isSubmitting || !signupReadiness.isReady}
           type="submit"
         >
           {isSubmitting ? "가입 중" : "회원가입"}
