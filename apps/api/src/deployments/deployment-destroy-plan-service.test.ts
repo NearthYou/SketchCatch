@@ -360,6 +360,44 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });
 
+test("application cleanup creates an approved rollback manifest without Terraform state", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate",
+    stateObjectKey: null
+  });
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let manifest = "";
+
+  const result = await runDeploymentDestroyPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      ...createDestroyPlanOptions([]),
+      planArtifactStorage,
+      generatePlanArtifactId: () => planArtifactId,
+      prepareApplicationCleanupPlan: async () => ({
+        releaseId: "55555555-5555-4555-8555-555555555555",
+        runtimeTargetKind: "ecs_fargate",
+        currentRevision: "task-definition/api:42",
+        previousRevision: "task-definition/api:41"
+      }),
+      writeApplicationCleanupPlanFile: async (_filePath, content) => {
+        manifest = content;
+      },
+      runTerraformInit: async () => {
+        throw new Error("application cleanup must not run Terraform init");
+      }
+    }
+  );
+
+  assert.equal(result.deployment.currentPlanArtifactId, planArtifactId);
+  assert.equal(repository.savedPlans[0]?.planArtifact.operation, "destroy");
+  assert.match(manifest, /application_release_cleanup_plan/);
+  assert.match(manifest, /task-definition\/api:41/);
+});
+
 test("runDeploymentDestroyPlan rejects deployments without cleanup state", async () => {
   const rejectedStatuses: Array<{
     status: DeploymentStatus;
@@ -392,6 +430,33 @@ test("runDeploymentDestroyPlan rejects deployments without cleanup state", async
       /Deployment cannot be destroyed in this state/
     );
   }
+});
+
+test("failed cleanup planning preserves the original apply failure stage for retry", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    status: "FAILED",
+    failureStage: "apply",
+    errorSummary: "Original apply failure",
+    stateObjectKey
+  });
+
+  const result = await runDeploymentDestroyPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      ...createDestroyPlanOptions([]),
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      writeTerraformStateFile: async () => undefined,
+      runTerraformDestroyPlan: async () =>
+        createRunnerResult("plan", { exitCode: 1, stderr: "Invalid destroy plan" })
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "apply");
+  assert.match(result.deployment.errorSummary ?? "", /Invalid destroy plan/);
 });
 
 function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyPlanOptions {

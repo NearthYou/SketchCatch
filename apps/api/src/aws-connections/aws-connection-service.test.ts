@@ -303,6 +303,19 @@ test("createAwsConnection creates a pending connection with server-generated ext
       {
         Effect: "Allow",
         Action: [
+          "codebuild:BatchGetProjects",
+          "codebuild:StartBuild",
+          "codebuild:BatchGetBuilds",
+          "codebuild:StopBuild"
+        ],
+        Resource: [
+          "arn:aws:codebuild:ap-northeast-2:*:project/sketchcatch-*",
+          "arn:aws:codebuild:ap-northeast-2:*:build/sketchcatch-*:*"
+        ]
+      },
+      {
+        Effect: "Allow",
+        Action: [
           "iam:CreateRole",
           "iam:DeleteRole",
           "iam:GetRole",

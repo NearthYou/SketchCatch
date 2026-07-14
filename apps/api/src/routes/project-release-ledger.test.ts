@@ -66,6 +66,7 @@ test("project deployment target API accepts a complete Lambda runtime contract",
       runtimeTargetKind: "lambda",
       runtimeConfig: {
         runtimeTargetKind: "lambda",
+        codeBuildProjectName: "sketchcatch-lambda-build",
         functionLogicalId: "ApiFunction",
         functionName: "sketchcatch-api",
         aliasName: "live",
@@ -103,6 +104,7 @@ test("project deployment target API accepts a complete EC2 ASG runtime contract"
       runtimeTargetKind: "ec2_asg",
       runtimeConfig: {
         runtimeTargetKind: "ec2_asg",
+        codeBuildProjectName: "sketchcatch-ec2-build",
         codeDeployApplicationName: "sketchcatch-api",
         codeDeployDeploymentGroupName: "sketchcatch-api-asg",
         autoScalingGroupName: "sketchcatch-api-asg",
@@ -138,6 +140,7 @@ test("project deployment target API accepts a complete static site runtime contr
       runtimeTargetKind: "static_site",
       runtimeConfig: {
         runtimeTargetKind: "static_site",
+        codeBuildProjectName: "sketchcatch-static-build",
         hostingBucketName: "sketchcatch-static-releases",
         cloudFrontDistributionId: "E1234567890ABC",
         cloudFrontOriginId: "static-origin",

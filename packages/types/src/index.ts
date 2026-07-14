@@ -1156,6 +1156,7 @@ export type EcsFargateRuntimeConfig = {
 
 export type LambdaRuntimeConfig = {
   runtimeTargetKind: "lambda";
+  codeBuildProjectName?: string | undefined;
   functionLogicalId: string;
   functionName: string;
   aliasName: string;
@@ -1166,6 +1167,7 @@ export type LambdaRuntimeConfig = {
 
 export type Ec2AsgRuntimeConfig = {
   runtimeTargetKind: "ec2_asg";
+  codeBuildProjectName?: string | undefined;
   codeDeployApplicationName: string;
   codeDeployDeploymentGroupName: string;
   autoScalingGroupName: string;
@@ -1174,6 +1176,7 @@ export type Ec2AsgRuntimeConfig = {
 
 export type StaticSiteRuntimeConfig = {
   runtimeTargetKind: "static_site";
+  codeBuildProjectName?: string | undefined;
   hostingBucketName: string;
   cloudFrontDistributionId: string;
   cloudFrontOriginId: string;

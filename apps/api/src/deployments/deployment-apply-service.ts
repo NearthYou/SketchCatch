@@ -58,6 +58,11 @@ import {
   restoreTerraformLockFile,
   uploadTerraformLockFile
 } from "./terraform-lock-file-workspace.js";
+import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./aws-codebuild-direct-application-release-gateway.js";
+import {
+  executeDirectApplicationRelease as defaultExecuteDirectApplicationRelease,
+  type DirectApplicationReleaseRepository
+} from "./direct-application-release-service.js";
 
 const defaultPlanFileName = "tfplan";
 const materializePlanFileName = "materialize.tfplan";
@@ -84,6 +89,12 @@ export type RunDeploymentApplyOptions = {
   readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
   writePlanFile?: (filePath: string, content: Buffer) => Promise<void>;
   generateResultId?: () => string;
+  executeApplicationRelease?: (input: {
+    deployment: DeploymentRecord;
+    accessContext: ProjectAccessContext;
+    abortSignal?: AbortSignal;
+    repository: DeploymentRepository;
+  }) => Promise<void>;
 };
 
 export type RunDeploymentApplyResult = {
@@ -122,6 +133,8 @@ export async function runDeploymentApply(
     options.readTerraformArtifactFile ?? readFile;
   const writePlanFile = options.writePlanFile ?? writeFile;
   const generateResultId = options.generateResultId ?? randomUUID;
+  const executeApplicationRelease =
+    options.executeApplicationRelease ?? defaultExecuteApplicationRelease;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -146,6 +159,19 @@ export async function runDeploymentApply(
 
     if ((input.startedFromStatus ?? deployment.status) === "SUCCESS") {
       throw new DeploymentConflictError("Deployment apply has already completed");
+    }
+
+    if (deployment.scope === "application") {
+      return await runApplicationOnlyDeploymentApply({
+        deployment,
+        input,
+        repository,
+        prepareTerraformWorkspace,
+        applyArtifactStorage,
+        readTerraformArtifactFile,
+        executeApplicationRelease,
+        terraform
+      });
     }
 
     const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
@@ -445,6 +471,40 @@ export async function runDeploymentApply(
       repository
     });
 
+    if (deployment.scope !== "infrastructure") {
+      try {
+        const releaseExecution = await runLoggedDeploymentOperation({
+          deploymentId: deployment.id,
+          accessContext: input.accessContext,
+          sequence,
+          stage: "apply",
+          label: "application runtime release",
+          repository,
+          operation: () =>
+            executeApplicationRelease({
+              deployment,
+              accessContext: input.accessContext,
+              repository,
+              ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+            })
+        });
+        sequence = releaseExecution.sequence;
+      } catch (error) {
+        return failDeploymentApplyRun({
+          deployment,
+          repository,
+          terraform,
+          stateObjectKey,
+          resultWarningSummary: warnings.length > 0 ? warnings.join("; ") : null,
+          errorSummary: maskDeploymentMessage(
+            `Application runtime release failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        });
+      }
+    }
+
     const applyResultSave = await runLoggedDeploymentOperation({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
@@ -503,6 +563,148 @@ export async function runDeploymentApply(
   } finally {
     await workspace?.cleanup();
   }
+}
+
+async function runApplicationOnlyDeploymentApply(input: {
+  deployment: DeploymentRecord;
+  input: RunDeploymentApplyInput;
+  repository: DeploymentRepository;
+  prepareTerraformWorkspace: typeof defaultPrepareTerraformWorkspace;
+  applyArtifactStorage: DeploymentApplyArtifactStorage;
+  readTerraformArtifactFile: (filePath: string) => Promise<Buffer | Uint8Array | string>;
+  executeApplicationRelease: NonNullable<RunDeploymentApplyOptions["executeApplicationRelease"]>;
+  terraform: RunDeploymentApplyResult["terraform"];
+}): Promise<RunDeploymentApplyResult> {
+  let workspace: PreparedTerraformWorkspace | undefined;
+  try {
+    const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
+      requireDeploymentTerraformArtifact(input.deployment, input.repository),
+      requireCurrentPlanArtifact(input.deployment, input.repository),
+      requireDeploymentAwsConnection(
+        input.deployment,
+        input.input.accessContext,
+        input.repository
+      )
+    ]);
+    const [planBuffer, preparedWorkspace] = await Promise.all([
+      input.applyArtifactStorage.downloadDeploymentArtifact({
+        deploymentId: input.deployment.id,
+        planArtifactId: currentPlanArtifact.id,
+        objectKey: currentPlanArtifact.objectKey
+      }),
+      input.prepareTerraformWorkspace({
+        objectKey: terraformArtifact.objectKey,
+        fileName: terraformArtifact.fileName,
+        contentType: terraformArtifact.contentType
+      })
+    ]);
+    workspace = preparedWorkspace;
+    const terraformArtifactContent = await input.readTerraformArtifactFile(workspace.mainFilePath);
+    assertDeploymentApplyPreconditions({
+      deployment: input.deployment,
+      currentPlanArtifact,
+      currentTerraformArtifactHash: createSha256(terraformArtifactContent),
+      currentTfplanHash: createSha256(planBuffer),
+      currentAwsConnection: awsConnection
+    });
+    const wasPreMarkedRunning =
+      input.deployment.status === "RUNNING" && input.input.startedFromStatus !== undefined;
+    if (!wasPreMarkedRunning) {
+      const running = await input.repository.markDeploymentApplyRunning(input.deployment.id);
+      if (!running) throw new DeploymentConflictError("Application release could not be started");
+    }
+    const sequence = await input.repository.getNextDeploymentLogSequence(input.deployment.id);
+    try {
+      await runLoggedDeploymentOperation({
+        deploymentId: input.deployment.id,
+        accessContext: input.input.accessContext,
+        sequence,
+        stage: "apply",
+        label: "application runtime release",
+        repository: input.repository,
+        operation: () =>
+          input.executeApplicationRelease({
+            deployment: input.deployment,
+            accessContext: input.input.accessContext,
+            repository: input.repository,
+            ...(input.input.abortSignal ? { abortSignal: input.input.abortSignal } : {})
+          })
+      });
+    } catch (error) {
+      return failDeploymentApplyRun({
+        deployment: input.deployment,
+        repository: input.repository,
+        terraform: input.terraform,
+        errorSummary: maskDeploymentMessage(
+          `Application runtime release failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      });
+    }
+    const completed = await input.repository.completeDeploymentApply(input.deployment.id, {
+      stateObjectKey: null,
+      resultWarningSummary: null,
+      resources: [],
+      outputs: []
+    });
+    if (!completed) throw new DeploymentNotFoundError("Deployment not found");
+    return { deployment: completed, terraform: input.terraform };
+  } finally {
+    await workspace?.cleanup();
+  }
+}
+
+async function defaultExecuteApplicationRelease(input: {
+  deployment: DeploymentRecord;
+  accessContext: ProjectAccessContext;
+  abortSignal?: AbortSignal;
+  repository: DeploymentRepository;
+}): Promise<void> {
+  const release = await defaultExecuteDirectApplicationRelease(
+    {
+      deploymentId: input.deployment.id,
+      userId: input.accessContext.userId,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+    },
+    requireDirectApplicationReleaseRepository(input.repository),
+    createAwsCodeBuildDirectApplicationReleaseGateway()
+  );
+  if (release && release.status !== "succeeded") {
+    throw new DirectApplicationReleaseOutcomeError(
+      `Application runtime release ended as ${release.status}`
+    );
+  }
+}
+
+class DirectApplicationReleaseOutcomeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DirectApplicationReleaseOutcomeError";
+  }
+}
+
+function requireDirectApplicationReleaseRepository(
+  repository: DeploymentRepository
+): DirectApplicationReleaseRepository {
+  if (
+    !repository.findContext ||
+    !repository.findRelease ||
+    !repository.savePreparedRelease ||
+    !repository.saveCompletedRelease ||
+    !repository.saveFailedRelease ||
+    !repository.resetReleaseForRetry
+  ) {
+    throw new DeploymentConflictError("Direct application release repository is unavailable");
+  }
+  return {
+    findContext: repository.findContext.bind(repository),
+    findRelease: repository.findRelease.bind(repository),
+    savePreparedRelease: repository.savePreparedRelease.bind(repository),
+    saveCompletedRelease: repository.saveCompletedRelease.bind(repository),
+    saveFailedRelease: repository.saveFailedRelease.bind(repository),
+    resetReleaseForRetry: repository.resetReleaseForRetry.bind(repository)
+  };
 }
 
 async function requireDeploymentTerraformArtifact(

@@ -519,7 +519,7 @@ function validateBoundedLiveObservationAutoScalingPolicy(
       "autoscaling_group_name",
       "aws_autoscaling_group.api.name"
     ) &&
-    findNumericAttribute(body, "cooldown") === 180 &&
+    findNumericAttribute(body, "cooldown") === null &&
     findNumericAttribute(body, "estimated_instance_warmup") === 60 &&
     stepAdjustments.length === 1 &&
     findNumericAttribute(stepAdjustment, "metric_interval_lower_bound") === 0 &&

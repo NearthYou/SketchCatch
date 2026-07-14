@@ -291,9 +291,9 @@
   display: grid;
   overflow: hidden;
   min-height: 580px;
-  border: 1px solid #dcdee0;
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
   border-radius: 20px;
-  background: #ffffff;
+  background: var(--workspace-surface, #ffffff);
   box-shadow: var(--shadow-card);
   grid-template-columns: minmax(0, 1.45fr) minmax(330px, 0.75fr);
 }
@@ -302,7 +302,7 @@
   display: grid;
   min-width: 0;
   padding: 26px;
-  background: #f2f3f5;
+  background: var(--workspace-surface-muted, #f2f3f5);
   place-items: center;
 }
 
