@@ -66,6 +66,9 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
   assert.match(files[2]?.content ?? "", /backend "s3" \{\}/);
   assert.match(files[2]?.content ?? "", /Existing Terraform backend must be s3\./);
   assert.doesNotMatch(files[2]?.content ?? "", /cat > sketchcatch-backend\.tf/);
+  assert.match(files[2]?.content ?? "", /aws s3 rm .*\/lambda\/" --recursive/);
+  assert.match(files[2]?.content ?? "", /aws s3 rm .*\/demo-project\/ec2-asg\/" --recursive/);
+  assert.match(files[2]?.content ?? "", /SKETCHCATCH_STATIC_BUCKET.*\/releases\/" --recursive/);
   const manifest = files.find(
     (file) => file.path === "sketchcatch/demo-project/ci-cd/handoff.json"
   );

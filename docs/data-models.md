@@ -1277,6 +1277,7 @@ DB 기준은 `notifications`, `notification_outbox`, `web_push_subscriptions`다
 생성 시각부터 90일 보관한다. Web Push subscription endpoint와 `auth`/`p256dh` key는 AES-256-GCM으로
 암호화하고 endpoint SHA-256 hash만 별도 검색 키로 저장한다. 원문 subscription과 VAPID private key는
 API 응답, 로그, 브라우저 저장소에 남기지 않는다.
+`notification_outbox.provider_status_code`는 Web Push provider가 성공 응답으로 반환한 HTTP 상태 코드만 저장하며, 응답 본문이나 subscription 정보는 저장하지 않는다.
 
 조회와 전달 API:
 

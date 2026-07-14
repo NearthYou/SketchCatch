@@ -19,6 +19,20 @@ test("durable notifications keep one inbox row and one outbox row per terminal e
   assert(outbox.indexes.some((index) => index.config.name === "notification_outbox_notification_unique"));
   assert(outbox.columns.some((column) => column.name === "next_attempt_at"));
   assert(outbox.columns.some((column) => column.name === "last_error_code"));
+  assert(outbox.columns.some((column) => column.name === "provider_status_code"));
+});
+
+test("web push delivery migration persists only a bounded provider status code", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0042_notification_provider_status.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /provider_status_code/);
+  assert.match(migration, /BETWEEN 100 AND 599/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
 });
 
 test("web push subscriptions store only a hash and encrypted payload", () => {
