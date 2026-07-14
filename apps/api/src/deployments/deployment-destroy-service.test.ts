@@ -264,6 +264,8 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   downloadedPlanObjectKey: string | undefined;
   downloadedStateObjectKey: string | undefined;
 
+  constructor(private readonly downloadedPlan: Buffer = planBuffer) {}
+
   async downloadDeploymentArtifact(input: {
     deploymentId: string;
     planArtifactId: string;
@@ -271,7 +273,7 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   }) {
     this.downloadedPlanObjectKey = input.objectKey;
 
-    return planBuffer;
+    return this.downloadedPlan;
   }
 
   async downloadDeploymentState(input: { deploymentId: string; objectKey: string }) {
@@ -369,6 +371,62 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
       log.message.startsWith("[duration] deployment destroy result save completed in ")
     )
   );
+});
+
+test("application cleanup restores its release without Terraform state or destroy apply", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applicationPlanBuffer = Buffer.from(JSON.stringify({
+    schemaVersion: 1,
+    kind: "application_release_cleanup_plan",
+    deploymentId,
+    projectId,
+    releaseId: "88888888-8888-4888-8888-888888888888",
+    runtimeTargetKind: "ecs_fargate",
+    currentRevision: "task-definition/api:42",
+    previousRevision: "task-definition/api:41"
+  }));
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate",
+    stateObjectKey: null,
+    approvedTfplanHash: createSha256(applicationPlanBuffer)
+  });
+  let cleanupCalls = 0;
+
+  const result = await runDeploymentDestroy(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(applicationPlanBuffer),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-application-cleanup",
+        mainFilePath: "C:/tmp/sketchcatch-application-cleanup/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      executeApplicationCleanup: async ({ cleanupPlan }) => {
+        assert.deepEqual(cleanupPlan, {
+          releaseId: "88888888-8888-4888-8888-888888888888",
+          runtimeTargetKind: "ecs_fargate",
+          currentRevision: "task-definition/api:42",
+          previousRevision: "task-definition/api:41"
+        });
+        cleanupCalls += 1;
+      },
+      runTerraformInit: async () => {
+        throw new Error("application cleanup must not run Terraform init");
+      },
+      runTerraformApply: async () => {
+        throw new Error("application cleanup must not run Terraform apply");
+      }
+    }
+  );
+
+  assert.equal(cleanupCalls, 1);
+  assert.equal(result.deployment.status, "DESTROYED");
+  assert.equal(result.terraform.init, null);
+  assert.equal(result.terraform.destroy, null);
 });
 
 test("runDeploymentDestroy reports Terraform apply timeouts without marking duration as completed", async () => {

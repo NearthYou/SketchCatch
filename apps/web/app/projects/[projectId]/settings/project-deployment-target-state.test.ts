@@ -372,6 +372,7 @@ function createEcsCoordinates() {
 
 function createLambdaCoordinates() {
   return {
+    codeBuildProjectName: "sketchcatch-lambda-build",
     functionLogicalId: "ApiFunction",
     functionName: "sketchcatch-api",
     aliasName: "live",
@@ -384,6 +385,7 @@ function createLambdaCoordinates() {
 
 function createEc2AsgCoordinates() {
   return {
+    codeBuildProjectName: "sketchcatch-ec2-build",
     codeDeployApplicationName: "sketchcatch-api",
     codeDeployDeploymentGroupName: "sketchcatch-api-asg",
     autoScalingGroupName: "sketchcatch-api-asg",
@@ -394,6 +396,7 @@ function createEc2AsgCoordinates() {
 
 function createStaticSiteCoordinates() {
   return {
+    codeBuildProjectName: "sketchcatch-static-build",
     installPreset: "pnpm_frozen_lockfile" as const,
     hostingBucketName: "sketchcatch-static-site",
     cloudFrontDistributionId: "E1234567890ABC",

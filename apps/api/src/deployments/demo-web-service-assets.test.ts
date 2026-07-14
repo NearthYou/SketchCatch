@@ -20,11 +20,13 @@ test("demo web service smoke uses the bounded 1/1/2 ALB ASG scaling structure", 
   assert.match(smokeSource, /max_size\s*=\s*2/);
   assert.match(smokeSource, /health_check_type\s*=\s*"ELB"/);
   assert.match(smokeSource, /health_check_grace_period\s*=\s*120/);
+  assert.match(smokeSource, /deregistration_delay\s*=\s*10/);
   assert.match(smokeSource, /default_instance_warmup\s*=\s*60/);
   assert.match(smokeSource, /resource "aws_autoscaling_policy" "scale_out"/);
   assert.match(smokeSource, /adjustment_type\s*=\s*"ChangeInCapacity"/);
   assert.match(smokeSource, /scaling_adjustment\s*=\s*1/);
-  assert.match(smokeSource, /cooldown\s*=\s*180/);
+  assert.doesNotMatch(smokeSource, /resource "aws_autoscaling_policy" "scale_out"[\s\S]*?cooldown\s*=/);
+  assert.match(smokeSource, /estimated_instance_warmup\s*=\s*60/);
   assert.match(smokeSource, /resource "aws_cloudwatch_metric_alarm" "scale_out"/);
   assert.match(smokeSource, /resource "aws_cloudwatch_log_group" "traffic"/);
   assert.match(smokeSource, /resource "aws_iam_role" "api_agent"/);
@@ -56,6 +58,12 @@ test("demo web service exposes all Live Observation outputs", () => {
   ]) {
     assert.match(smokeSource, new RegExp(`output "${outputName}"`));
   }
+});
+
+test("demo web service smoke records an explicit deployment scope and runtime target", () => {
+  assert.match(smokeSource, /\[ValidateSet\("infrastructure", "application", "full_stack"\)\]\s*\[string\]\$DeploymentScope/);
+  assert.match(smokeSource, /scope\s*=\s*\$DeploymentScope/);
+  assert.match(smokeSource, /targetKind\s*=\s*"ec2_asg"/);
 });
 
 test("generated smoke Terraform passes the bounded demo safety gate", () => {

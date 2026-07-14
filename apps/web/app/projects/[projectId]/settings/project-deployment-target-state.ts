@@ -95,7 +95,7 @@ export function createDeploymentTargetDraft(
     version: config?.exactSemVerTag ?? config?.manifestVersion ?? "",
     installPreset: config?.installPreset ?? suggestion?.installPreset ?? "none",
     healthCheckPath: config?.healthCheckPath ?? "/health",
-    codeBuildProjectName: ecsConfig?.codeBuildProjectName ?? "",
+    codeBuildProjectName: target?.runtimeConfig?.codeBuildProjectName ?? "",
     ecrRepositoryName: ecsConfig?.ecrRepositoryName ?? "",
     clusterName: ecsConfig?.clusterName ?? "",
     serviceName: ecsConfig?.serviceName ?? "",
@@ -217,6 +217,7 @@ export function createDeploymentTargetRequest(
         : draft.runtimeTargetKind === "lambda"
           ? {
               runtimeTargetKind: "lambda",
+              codeBuildProjectName: draft.codeBuildProjectName.trim(),
               functionLogicalId: draft.functionLogicalId.trim(),
               functionName: draft.functionName.trim(),
               aliasName: draft.aliasName.trim(),
@@ -227,6 +228,7 @@ export function createDeploymentTargetRequest(
           : draft.runtimeTargetKind === "ec2_asg"
             ? {
                 runtimeTargetKind: "ec2_asg",
+                codeBuildProjectName: draft.codeBuildProjectName.trim(),
                 codeDeployApplicationName: draft.codeDeployApplicationName.trim(),
                 codeDeployDeploymentGroupName: draft.codeDeployDeploymentGroupName.trim(),
                 autoScalingGroupName: draft.autoScalingGroupName.trim(),
@@ -234,6 +236,7 @@ export function createDeploymentTargetRequest(
               }
             : {
                 runtimeTargetKind: "static_site",
+                codeBuildProjectName: draft.codeBuildProjectName.trim(),
                 hostingBucketName: draft.hostingBucketName.trim(),
                 cloudFrontDistributionId: draft.cloudFrontDistributionId.trim(),
                 cloudFrontOriginId: draft.cloudFrontOriginId.trim(),
@@ -345,6 +348,7 @@ function hasCompleteEcsCoordinates(draft: ProjectDeploymentTargetDraft): boolean
 
 function hasCompleteLambdaCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
   const values = [
+    draft.codeBuildProjectName,
     draft.functionLogicalId,
     draft.functionName,
     draft.aliasName,
@@ -356,6 +360,7 @@ function hasCompleteLambdaCoordinates(draft: ProjectDeploymentTargetDraft): bool
 
 function hasCompleteEc2AsgCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
   const values = [
+    draft.codeBuildProjectName,
     draft.codeDeployApplicationName,
     draft.codeDeployDeploymentGroupName,
     draft.autoScalingGroupName
@@ -365,6 +370,7 @@ function hasCompleteEc2AsgCoordinates(draft: ProjectDeploymentTargetDraft): bool
 
 function hasCompleteStaticSiteCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
   const values = [
+    draft.codeBuildProjectName,
     draft.hostingBucketName,
     draft.cloudFrontDistributionId,
     draft.cloudFrontOriginId
