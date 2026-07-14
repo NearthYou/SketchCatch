@@ -12,6 +12,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Address signup fallback review
+
+- Replaced nullish fallback with falsy fallback for password and confirmation feedback so a future empty-string Caps Lock helper result cannot suppress validation copy.
+- Added a focused regression for both fallback chains. Verification passed: focused signup tests 9/9, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The local environment does not provide the `gh` executable, so the GitHub review conversation must be resolved manually after the pushed commit is visible.
+
 ### 2026-07-14 - Compact stable signup field spacing
 
 - Reduced only the signup form row gap from 20px to 8px, preserving the reserved validation slots that prevent fields and the centered card from shifting during input.

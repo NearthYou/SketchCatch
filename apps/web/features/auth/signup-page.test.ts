@@ -77,6 +77,17 @@ test("signup keeps reserved feedback slots without oversized vertical gaps", () 
   assert.match(authStylesSource, /\.authSignupForm\s*\{[^}]*gap:\s*8px;/s);
 });
 
+test("signup feedback falls back when a warning helper returns an empty string", () => {
+  assert.match(
+    signupFormSource,
+    /passwordCapsLockWarning \|\| passwordValidationMessage \|\| PASSWORD_POLICY_HELP_TEXT/
+  );
+  assert.match(
+    signupFormSource,
+    /passwordConfirmCapsLockWarning \|\| passwordConfirmMismatchMessage/
+  );
+});
+
 function readAppFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/${path}`, import.meta.url)), "utf8");
 }

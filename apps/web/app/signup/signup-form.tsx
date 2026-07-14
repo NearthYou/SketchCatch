@@ -251,9 +251,9 @@ export function SignupForm() {
     passwordConfirm
   );
   const passwordFeedbackMessage =
-    passwordCapsLockWarning ?? passwordValidationMessage ?? PASSWORD_POLICY_HELP_TEXT;
+    passwordCapsLockWarning || passwordValidationMessage || PASSWORD_POLICY_HELP_TEXT;
   const passwordConfirmFeedbackMessage =
-    passwordConfirmCapsLockWarning ?? passwordConfirmMismatchMessage;
+    passwordConfirmCapsLockWarning || passwordConfirmMismatchMessage;
   const currentNormalizedUsername = normalizeUsername(username);
   const currentNormalizedEmail = normalizeEmail(email);
   const currentNormalizedNickname = nickname.trim();
