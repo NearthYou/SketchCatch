@@ -16,6 +16,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-15 - Merge latest dev into Compiler integration
+
+- Fetched and merged `origin/dev` at `cb3ead40` into `feat/gg/409-architecture-board-compiler-chat` after the Compiler commits were pushed.
+- Resolved only the shared progress-log conflict by preserving the Compiler, Workspace AI launcher, AWS Console permission, and Repository ECS records. Existing uncommitted clipboard and unrelated Web edits stayed outside the merge commit.
+- Post-merge verification passed: `pnpm harness:check`, focused 27-test Compiler/AI/Repository suite, `pnpm lint`, and `pnpm typecheck`.
+- Root `pnpm build` remains blocked before Web compilation by the existing missing `apps/web/.codegraph` path. Root `pnpm test` was previously confirmed to stop only at the unchanged three-tier Template contract baseline.
+
 ### 2026-07-15 - Implement Architecture Board Compiler 000
 
 - Implemented the versioned 29-usable-Template knowledge policy, provenance ranking, source-exact compiled variants, protected-node layout preservation, viewport/presentation state handling, and visible edge/viewport diff accounting.
