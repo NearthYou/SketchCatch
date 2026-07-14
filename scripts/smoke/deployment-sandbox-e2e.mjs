@@ -550,8 +550,8 @@ async function resolveAwsCliIdentity(profile) {
 
 function resolveApiRoot(apiBaseUrl) {
   const url = new URL(apiBaseUrl);
-  url.pathname = url.pathname.replace(/\/$/, "");
-  if (!url.pathname.endsWith("/api")) url.pathname = `${url.pathname}/api`;
+  const basePath = url.pathname.replace(/\/+$/, "");
+  url.pathname = basePath.endsWith("/api") ? basePath : `${basePath}/api`;
   url.search = "";
   url.hash = "";
   return url.toString().replace(/\/$/, "");

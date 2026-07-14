@@ -126,6 +126,7 @@ export async function runDeploymentDestroyPlan(
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
   let failureRecorded = false;
+  let failureStage: DeploymentFailureStage = "plan";
   const terraform: RunDeploymentDestroyPlanResult["terraform"] = {
     init: null,
     plan: null,
@@ -144,6 +145,7 @@ export async function runDeploymentDestroyPlan(
     const sourceStatus = input.startedFromStatus ?? deployment.status;
     const sourceFailureStage = input.startedFromFailureStage ?? deployment.failureStage;
     const sourceErrorSummary = input.startedFromErrorSummary ?? deployment.errorSummary;
+    failureStage = resolveDestroyPlanFailureStage(sourceStatus, sourceFailureStage);
 
     assertDeploymentCanStartDestroyPlan(deployment, sourceStatus, sourceFailureStage);
 
@@ -240,6 +242,7 @@ export async function runDeploymentDestroyPlan(
         deployment,
         repository,
         terraform,
+        failureStage,
         errorSummary: summarizeTerraformFailure("Terraform init before destroy plan", terraform.init)
       });
     }
@@ -289,6 +292,7 @@ export async function runDeploymentDestroyPlan(
         deployment,
         repository,
         terraform,
+        failureStage,
         errorSummary: summarizeTerraformFailure("Terraform destroy plan", terraform.plan)
       });
     }
@@ -320,6 +324,7 @@ export async function runDeploymentDestroyPlan(
         deployment,
         repository,
         terraform,
+        failureStage,
         errorSummary: summarizeTerraformFailure("Terraform destroy plan inspection", terraform.showJson)
       });
     }
@@ -415,6 +420,7 @@ export async function runDeploymentDestroyPlan(
       const failedDeployment = await failDeploymentDestroyPlan(
         deployment.id,
         error,
+        failureStage,
         repository
       );
       failureRecorded = true;
@@ -428,7 +434,7 @@ export async function runDeploymentDestroyPlan(
     if (deploymentId && !failureRecorded) {
       await repository
         .failDeployment(deploymentId, {
-          failureStage: "plan",
+          failureStage,
           errorSummary: summarizeUnexpectedDestroyPlanFailure(error)
         })
         .catch(() => undefined);
@@ -581,10 +587,11 @@ async function failDeploymentDestroyPlanRun(input: {
   deployment: DeploymentRecord;
   repository: DeploymentRepository;
   terraform: RunDeploymentDestroyPlanResult["terraform"];
+  failureStage: DeploymentFailureStage;
   errorSummary: string;
 }): Promise<RunDeploymentDestroyPlanResult> {
   const failedDeployment = await input.repository.failDeployment(input.deployment.id, {
-    failureStage: "plan",
+    failureStage: input.failureStage,
     errorSummary: input.errorSummary
   });
 
@@ -601,10 +608,11 @@ async function failDeploymentDestroyPlanRun(input: {
 async function failDeploymentDestroyPlan(
   deploymentId: string,
   error: unknown,
+  failureStage: DeploymentFailureStage,
   repository: DeploymentRepository
 ): Promise<DeploymentRecord> {
   const failedDeployment = await repository.failDeployment(deploymentId, {
-    failureStage: "plan",
+    failureStage,
     errorSummary: summarizeUnexpectedDestroyPlanFailure(error)
   });
 
@@ -613,6 +621,16 @@ async function failDeploymentDestroyPlan(
   }
 
   return failedDeployment;
+}
+
+function resolveDestroyPlanFailureStage(
+  sourceStatus: DeploymentStatus,
+  sourceFailureStage: DeploymentFailureStage | null
+): DeploymentFailureStage {
+  return sourceStatus === "FAILED" &&
+    (sourceFailureStage === "apply" || sourceFailureStage === "destroy")
+    ? sourceFailureStage
+    : "plan";
 }
 
 async function appendTerraformOutput(input: {

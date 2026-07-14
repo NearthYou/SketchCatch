@@ -5,28 +5,30 @@ Use this file only for compact continuation context. Write it in English.
 ## Currently Verified
 
 - Branch: `test/sw/378-deployment-sandbox-e2e`; issues #370-#377 are merged.
-- The #378 preflight verifies local STS and the sandbox API's live AWS Connection account/region, while denying known production targets.
-- The evidence verifier requires Direct 3 scopes, GitOps 4 runtimes, correlated release/Output evidence, per-runtime rollback, live observation/notifications, and zero remaining temporary artifacts.
+- Non-production preflight passed for AWS account `614935468487`, region `ap-northeast-2`, the verified local API connection, and `NearthYou/sketchcatch-deployment-sandbox`.
+- Three Direct Terraform runs labeled `infrastructure`, `application`, and `full_stack` reached Apply success, healthy Output probes, and Destroyed.
+- Full-stack observation evidence matched: 12 accepted traffic requests, 12 CloudWatch log events, and metric sum 12.
+- AWS cleanup returned zero demo ASGs, ALBs, active EC2 instances, demo S3 buckets, and demo CloudWatch log groups.
 
 ## Verification
 
-- `pnpm test:sandbox-e2e` passes 18/18.
-- `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` pass.
-- Baseline workspace tests pass except the three unchanged Windows symlink fixture setup errors (`EPERM`): API 1,529/1,532.
+- Sandbox E2E focused tests pass 20/20.
+- Destroy-plan retry regression passes 3/3; demo artifact and Terraform safety focused tests pass.
+- Final workspace harness, lint, typecheck, and build still need to be rerun after the live fixes.
 
 ## Changes This Session
 
-- Added `scripts/smoke/deployment-sandbox-e2e.mjs` plus focused tests and package commands.
-- Documented the approved non-production execution matrix and cleanup gate in `docs/deployment.md`.
-- Added the active #378 workstream to `feature_list.json`.
+- Fixed the StepScaling policy rejected by AWS, cleanup retry stage preservation, root API URL normalization, smoke token expiry recovery, explicit scope reporting, and sandbox deregistration delay.
+- Executed and cleaned a failed partial apply plus three successful labeled Direct runs.
 
 ## Broken Or Unverified
 
-- The current preflight has no authenticated non-production AWS profile, non-production API/token, verified AWS Connection, or sandbox GitHub repository.
-- The configured AWS profiles identify only production account `555980271919` and are not eligible for mutation.
-- No live Direct/GitOps run, browser Push delivery, rollback injection, or provider cleanup evidence exists yet.
+- Direct `application` and `full_stack` currently execute Terraform but do not build an application artifact or create an `ApplicationRelease`; the successful sandbox runs left `application_releases` at zero.
+- The local API has no `GIT_APP_ID`, `GIT_APP_SLUG`, `GIT_APP_PRIVATE_KEY_BASE64`, callback configuration, or installed sandbox-repository GitHub App, so service-owned GitOps handoff/monitoring cannot run.
+- GitOps four-runtime deployment/rollback, QR public session, Inbox/Web Push provider delivery, and the complete verifier report remain unverified.
 
 ## Best Next Action
 
-- Configure the documented `SKETCHCATCH_SANDBOX_*` environment variables and rerun `pnpm sandbox:e2e preflight`.
-- After it reports `ready: true`, execute the seven-run matrix, rollback drills, observation/notification checks, and cleanup; then verify the final report.
+- Implement the Direct application build/release adapter and persist a release only from immutable commit/artifact/provider evidence.
+- Install a least-privilege GitHub App on the sandbox repository and provide its runtime configuration through secret environment variables.
+- Rerun the GitOps four-runtime matrix, rollback drills, QR/notification checks, final cleanup, and strict report verification.

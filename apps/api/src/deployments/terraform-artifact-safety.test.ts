@@ -869,7 +869,6 @@ function createLiveObservationScalingTerraform(): string {
       autoscaling_group_name    = aws_autoscaling_group.api.name
       policy_type               = "StepScaling"
       adjustment_type           = "ChangeInCapacity"
-      cooldown                  = 180
       estimated_instance_warmup = 60
 
       step_adjustment {

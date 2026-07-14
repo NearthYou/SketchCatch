@@ -6,10 +6,20 @@ Short English-only working log for the current agent context. Older records are 
 
 - Branch: `test/sw/378-deployment-sandbox-e2e` based on merged issue #377 (`f3ae778a`).
 - Issues #370-#377 are merged after CI and review feedback resolution.
-- Issue #378 has a strict non-production preflight and complete evidence verifier; live acceptance remains blocked by missing sandbox credentials and API.
-- No Web Push provider call, Terraform Apply/Destroy, AWS/GitHub deployment mutation, or production database migration was performed.
+- The sandbox preflight passed against AWS account `614935468487`, `ap-northeast-2`, a verified local API connection, and a private non-production GitHub repository.
+- Direct Terraform runs labeled `infrastructure`, `application`, and `full_stack` each reached Apply success, healthy Output probes, and Destroyed; provider cleanup returned zero demo ASGs, ALBs, active EC2 instances, S3 buckets, and CloudWatch log groups.
+- Full-stack traffic produced 12 accepted API requests, 12 CloudWatch log events, and a `traffic_requests` metric sum of 12.
+- Full issue #378 acceptance is not verified: Direct application/full-stack runs create no ApplicationRelease, and GitOps cannot start without a GitHub App installation and credentials. The feature remains `in_progress`.
 
 ## Session Record
+
+### 2026-07-14 - Live sandbox Direct execution and recovery hardening
+
+- Fixed invalid StepScaling `cooldown`, preserved cleanup-capable apply/destroy failure stages after destroy-plan errors, and added one bounded re-login retry for long-running smoke requests.
+- Added explicit scope evidence and a 10-second sandbox target-group deregistration delay; focused tests and Terraform safety validation pass.
+- Recovered and destroyed a partial failed apply, then completed all three labeled Direct runs and verified provider cleanup.
+- Did not claim application release acceptance: `application_releases` remained empty after successful application/full-stack Terraform runs.
+- GitOps four-runtime, rollback, QR session, Web Push provider delivery, and final combined report remain blocked on an installed GitHub App and on the missing Direct application release execution path.
 
 ### 2026-07-14 - Project deployment sandbox E2E gate
 

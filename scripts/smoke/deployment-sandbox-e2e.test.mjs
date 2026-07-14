@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   evaluateSandboxPreflight,
@@ -25,6 +27,16 @@ const STARTED_AT = "2026-07-14T01:00:00.000Z";
 const FINISHED_AT = "2026-07-14T01:30:00.000Z";
 const RUNTIMES = ["ecs_fargate", "lambda", "ec2_asg", "static_site"];
 const SCOPES = ["infrastructure", "application", "full_stack"];
+
+test("live deployment smoke retries once after an access token expires", () => {
+  const scriptPath = fileURLToPath(new URL("./live-demo-web-service.ps1", import.meta.url));
+  const script = readFileSync(scriptPath, "utf8");
+
+  assert.match(script, /\$statusCode -eq 401/);
+  assert.match(script, /Get-SmokeAccessToken -Force/);
+  assert.match(script, /\$attempt -lt 2/);
+  assert.match(script, /deploymentScope = \$DeploymentScope/);
+});
 
 function buildValidPreflight(overrides = {}) {
   return {
@@ -425,6 +437,55 @@ test("runtime preflight resolves STS identity without exposing the API token", a
   assert.equal(report.target.awsAccountId, "111122223333");
   assert.equal(report.target.region, "ap-northeast-2");
   assert.doesNotMatch(JSON.stringify(report), /must-not-appear/);
+});
+
+test("runtime preflight appends api to a root base URL without a duplicate slash", async () => {
+  const env = buildSandboxEnvironment();
+  env.SKETCHCATCH_SANDBOX_API_BASE_URL = "https://sandbox.example.com/";
+  const requestedUrls = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    requestedUrls.push(String(url));
+    if (String(url) === "https://sandbox.example.com/api/aws/connections") {
+      return new Response(
+        JSON.stringify({
+          awsConnections: [
+            {
+              id: env.SKETCHCATCH_SANDBOX_AWS_CONNECTION_ID,
+              roleArn: "arn:aws:iam::111122223333:role/SketchCatchTerraformExecutionRole",
+              status: "verified"
+            }
+          ]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (
+      String(url) ===
+      `https://sandbox.example.com/api/aws/connections/${env.SKETCHCATCH_SANDBOX_AWS_CONNECTION_ID}/test`
+    ) {
+      return new Response(
+        JSON.stringify({ ok: true, accountId: "111122223333", region: "ap-northeast-2" }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(null, { status: 404 });
+  };
+
+  try {
+    const report = await runSandboxPreflight(env, {
+      resolveAwsIdentity: async () => ({ accountId: "111122223333" })
+    });
+
+    assert.equal(report.ready, true);
+    assert.deepEqual(requestedUrls, [
+      "https://sandbox.example.com/api/aws/connections",
+      `https://sandbox.example.com/api/aws/connections/${env.SKETCHCATCH_SANDBOX_AWS_CONNECTION_ID}/test`
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("runtime preflight never echoes credentials embedded in an invalid API URL", async () => {

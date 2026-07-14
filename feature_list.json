@@ -486,7 +486,7 @@
           "pnpm test:sandbox-e2e",
           "pnpm sandbox:e2e preflight"
         ],
-        "notes": "The strict preflight and evidence verifier pass 18 automated tests, including exact deployment matrices, live STS/service-connection agreement, production deny gates, HTTPS-only outputs, credential-safe reporting, no token transmission to denied hosts, GitOps destroy, and provider observation evidence. The current environment has no authenticated non-production AWS identity or non-production SketchCatch API, so the real matrix and cleanup report are not yet accepted."
+        "notes": "The strict preflight and evidence verifier pass 20 automated tests. Non-production AWS preflight passed, and three Direct Terraform runs labeled infrastructure, application, and full_stack reached Apply success, healthy Output probes, and Destroyed with zero provider leftovers. Full acceptance remains open because application/full_stack create no ApplicationRelease and the sandbox repository has no installed/configured GitHub App for the four GitOps runtimes."
       },
       "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
     },

@@ -392,6 +392,33 @@ test("runDeploymentDestroyPlan only allows success or cleanup-capable failed dep
   }
 });
 
+test("failed cleanup planning preserves the original apply failure stage for retry", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    status: "FAILED",
+    failureStage: "apply",
+    errorSummary: "Original apply failure",
+    stateObjectKey
+  });
+
+  const result = await runDeploymentDestroyPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      ...createDestroyPlanOptions([]),
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      writeTerraformStateFile: async () => undefined,
+      runTerraformDestroyPlan: async () =>
+        createRunnerResult("plan", { exitCode: 1, stderr: "Invalid destroy plan" })
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "apply");
+  assert.match(result.deployment.errorSummary ?? "", /Invalid destroy plan/);
+});
+
 function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyPlanOptions {
   return {
     readTerraformArtifactFile: async () => terraformArtifactContent,
