@@ -16,6 +16,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-15 - Rebuild the Terraform agent review action
+
+- Removed the Sparkles-based `Preview 설명` JSX, local component, and `.terraformPreviewButton` rules from the Terraform code toolbar.
+- Added a dedicated black `에이전트 리뷰` action with a compact AI mark, 8px radius, focus ring, disabled state, and reduced-motion handling.
+- Chrome QA confirmed the 112x32 control opens AI Chat directly on the independent `에이전트 리뷰` conversation with no console errors.
+- Verification: AI Chat focused tests passed 14/14; lint, typecheck, production build, and diff checks passed. Root tests remain non-green only on the three existing three-tier Template contract failures.
+
 ### 2026-07-15 - Merge latest dev into Compiler integration
 
 - Fetched and merged `origin/dev` at `cb3ead40` into `feat/gg/409-architecture-board-compiler-chat` after the Compiler commits were pushed.

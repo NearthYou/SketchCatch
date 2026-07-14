@@ -27,7 +27,6 @@
 }
 
 .terraformFileButton,
-.terraformPreviewButton,
 .resourceCodeBackButton,
 .resourceCodeCloseButton {
   align-items: center;
@@ -60,8 +59,6 @@
 
 .terraformFileButton:hover,
 .terraformFileButton:focus-visible,
-.terraformPreviewButton:not(:disabled):hover,
-.terraformPreviewButton:not(:disabled):focus-visible,
 .resourceCodeBackButton:hover,
 .resourceCodeBackButton:focus-visible,
 .resourceCodeCloseButton:hover,
@@ -144,19 +141,6 @@
   color: #60646c;
   font-size: 12px;
   padding: 10px;
-}
-
-.terraformPreviewButton {
-  font-size: 12px;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 10px;
-  white-space: nowrap;
-}
-
-.terraformPreviewButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .terraformShortcut {

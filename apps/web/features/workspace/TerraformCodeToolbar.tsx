@@ -1,4 +1,5 @@
-import { ArrowLeft, ChevronDown, FileCode2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, FileCode2, X } from "lucide-react";
+import { TerraformAgentReviewButton } from "./TerraformAgentReviewButton";
 import styles from "./TerraformCodeToolbar.module.css";
 
 export type TerraformCodeToolbarState = {
@@ -53,7 +54,11 @@ export function TerraformCodeToolbar({
           </button>
         </header>
         <div className={styles.resourceActionBar}>
-          <TerraformExplanationButton actions={actions} state={state} />
+          <TerraformAgentReviewButton
+            disabled={!state.canRequestExplanation}
+            onRequest={actions.requestExplanation}
+            title={state.explanationLabel}
+          />
         </div>
       </>
     );
@@ -107,31 +112,13 @@ export function TerraformCodeToolbar({
         ) : null}
       </div>
       <div className={styles.terraformTopActions}>
-        <TerraformExplanationButton actions={actions} state={state} />
+        <TerraformAgentReviewButton
+          disabled={!state.canRequestExplanation}
+          onRequest={actions.requestExplanation}
+          title={state.explanationLabel}
+        />
         <span className={styles.terraformShortcut}>Ctrl/⌘ + S</span>
       </div>
     </header>
-  );
-}
-
-// 현재 보이는 Terraform 범위만 AI 설명 요청으로 보냅니다.
-function TerraformExplanationButton({
-  actions,
-  state
-}: {
-  readonly actions: TerraformCodeToolbarActions;
-  readonly state: TerraformCodeToolbarState;
-}) {
-  return (
-    <button
-      className={styles.terraformPreviewButton}
-      disabled={!state.canRequestExplanation}
-      onClick={actions.requestExplanation}
-      title={state.explanationLabel}
-      type="button"
-    >
-      <Sparkles aria-hidden="true" size={14} />
-      <span>Preview 설명</span>
-    </button>
   );
 }
