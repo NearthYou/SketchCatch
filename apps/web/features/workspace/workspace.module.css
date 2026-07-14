@@ -62,7 +62,7 @@
 
 .cicdViewNavigation button:disabled {
   cursor: progress;
-  opacity: .55;
+  opacity: 0.55;
 }
 
 .cicdState,
@@ -1308,7 +1308,11 @@
 .resourceCodeCloseButton:hover,
 .resourceCodeCloseButton:focus-visible {
   background: var(--workspace-accent-soft, #f0f0f3);
-  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 34%, var(--workspace-line, #f0f0f3));
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-accent, #000000) 34%,
+    var(--workspace-line, #f0f0f3)
+  );
   color: var(--workspace-accent, #000000);
   outline: none;
 }
@@ -1848,28 +1852,6 @@
   outline: none;
 }
 
-.saveAndDeployErrorToast {
-  animation: saveAndDeployErrorToastIn 180ms ease-out;
-  background: #ecfdf5;
-  border: 1px solid #bbf7d0;
-  border-left: 8px solid #22c55e;
-  border-radius: 10px;
-  box-sizing: border-box;
-  box-shadow: 0 24px 64px rgba(21, 128, 61, 0.26);
-  color: #166534;
-  font-size: 25px;
-  font-weight: 900;
-  line-height: 1.3;
-  max-width: min(520px, calc(100vw - 32px));
-  min-width: 380px;
-  padding: 22px 30px;
-  pointer-events: none;
-  position: fixed;
-  right: 24px;
-  top: 56px;
-  z-index: 80;
-}
-
 .terraformDiagnostics {
   background: #ffffff;
   border-top: 1px solid #dce3ee;
@@ -2177,7 +2159,11 @@
 
 .terraformDialogSecondaryButton:hover,
 .terraformDialogSecondaryButton:focus-visible {
-  background: color-mix(in srgb, var(--workspace-accent-soft, #f0f0f3) 74%, var(--workspace-accent, #000000));
+  background: color-mix(
+    in srgb,
+    var(--workspace-accent-soft, #f0f0f3) 74%,
+    var(--workspace-accent, #000000)
+  );
   outline: none;
 }
 
@@ -2186,18 +2172,6 @@
   background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
   border-color: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
   outline: none;
-}
-
-@keyframes saveAndDeployErrorToastIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .aiPanel {
@@ -3104,7 +3078,11 @@
 .aiChatCloseButton:hover,
 .aiChatCloseButton:focus-visible {
   background: var(--workspace-accent-soft, #f0f0f3);
-  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 35%, var(--workspace-line, #f0f0f3));
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-accent, #000000) 35%,
+    var(--workspace-line, #f0f0f3)
+  );
   color: var(--workspace-accent, #000000);
   outline: none;
 }
@@ -3250,7 +3228,11 @@
 
 .aiChatAssistantMessage[data-kind="question"] p {
   background: color-mix(in srgb, var(--workspace-accent-soft, #f0f0f3) 46%, #ffffff);
-  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 36%, var(--workspace-line, #f0f0f3));
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-accent, #000000) 36%,
+    var(--workspace-line, #f0f0f3)
+  );
   box-shadow: inset 4px 0 0 var(--workspace-accent, #000000);
 }
 
@@ -3293,7 +3275,11 @@
 .aiChatSuggestionButton:hover,
 .aiChatSuggestionButton:focus-visible {
   background: var(--workspace-accent-soft, #f0f0f3);
-  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 44%, var(--workspace-line, #f0f0f3));
+  border-color: color-mix(
+    in srgb,
+    var(--workspace-accent, #000000) 44%,
+    var(--workspace-line, #f0f0f3)
+  );
   outline: none;
 }
 
@@ -3785,7 +3771,7 @@
 .deploymentStageSettings {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
 }
 
@@ -5777,6 +5763,634 @@
   color: #ffffff;
 }
 
+/* Deployment modal operational layout */
+.deploymentExpandedOverlay {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  padding: 24px 0;
+}
+
+.deploymentExpandedShell {
+  height: calc(100dvh - 48px);
+  max-height: 920px;
+  max-width: 1280px;
+  width: calc(100% - 64px);
+}
+
+.deploymentExpandedBody {
+  background: var(--workspace-surface-muted, #fafafa);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.deploymentConsoleHeader {
+  align-items: center;
+  background: var(--workspace-surface, #ffffff);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
+  min-height: 64px;
+  padding: 0 24px;
+}
+
+.deploymentConsoleHeader .deploymentConsoleScreenNavigation {
+  align-items: stretch;
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 8px;
+  grid-column: 2;
+  margin: 0;
+  min-height: 64px;
+  padding: 0;
+  width: auto;
+}
+
+.deploymentConsoleHeader .deploymentConsoleScreenNavigation button {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--workspace-muted, #60646c);
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 44px;
+  min-width: 88px;
+  padding: 10px 18px 8px;
+}
+
+.deploymentConsoleHeader .deploymentConsoleScreenNavigation button[aria-pressed="true"] {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-bottom-color: var(--workspace-accent, #000000);
+  color: var(--workspace-text, #171717);
+  font-weight: 850;
+}
+
+.deploymentConsoleHeader .deploymentConsoleScreenNavigation button:hover,
+.deploymentConsoleHeader .deploymentConsoleScreenNavigation button:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.deploymentConsoleHeader .deploymentConsoleScreenNavigation button:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--workspace-accent, #000000);
+}
+
+.deploymentConsoleHeader .deploymentExpandedCloseButton {
+  grid-column: 3;
+  height: 44px;
+  justify-self: end;
+  position: static;
+  width: 44px;
+}
+
+.deploymentConsoleHeader .deploymentExpandedCloseButton:focus-visible {
+  border-color: var(--workspace-accent, #000000);
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.12);
+}
+
+.deploymentConsoleScreenBody {
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.deploymentConsoleScreenBody > div {
+  min-width: 0;
+}
+
+.deploymentConsoleScreenBody .cicdConsole {
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 32px;
+}
+
+.deploymentConsoleContent {
+  background: var(--workspace-surface-muted, #fafafa);
+  gap: 32px;
+  grid-template-rows: auto;
+  min-height: 100%;
+  padding-bottom: 48px;
+}
+
+.deploymentConsoleGrid {
+  background: transparent;
+  column-gap: 32px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: auto auto;
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 0 32px;
+  row-gap: 32px;
+  width: 100%;
+}
+
+.deploymentStepNavigation {
+  background: transparent;
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  grid-column: 1 / -1;
+  min-height: 80px;
+  padding: 12px 0 10px;
+}
+
+.deploymentStepNavigation ol {
+  max-width: 760px;
+}
+
+.deploymentStepNavigation li + li::before {
+  left: calc(-50% + 21px);
+  top: 15px;
+  width: calc(100% - 42px);
+}
+
+.deploymentStepButton {
+  align-items: start;
+  gap: 5px;
+  grid-template-rows: 32px auto;
+  min-height: 56px;
+  padding: 0 8px 2px;
+}
+
+.deploymentStepButton[data-selected="true"] strong {
+  text-decoration: none;
+}
+
+.deploymentStepButton strong {
+  font-size: 13px;
+}
+
+.deploymentStepButton small {
+  font-size: 12px;
+}
+
+.deploymentStepButton:not([data-selected="true"]) small {
+  color: var(--workspace-muted, #60646c);
+  font-weight: 600;
+}
+
+.deploymentStepIndex {
+  font-size: 12px;
+  height: 32px;
+  width: 32px;
+}
+
+.deploymentStepWorkspace {
+  align-self: start;
+  background: transparent;
+  gap: 32px;
+  padding: 0;
+}
+
+.deploymentStepHeading {
+  gap: 8px;
+}
+
+.deploymentStepHeading > span {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.deploymentStepHeading h3 {
+  font-size: 32px;
+  letter-spacing: -0.025em;
+  line-height: 40px;
+}
+
+.deploymentStepHeading p {
+  font-size: 15px;
+  line-height: 22px;
+  max-width: 70ch;
+}
+
+.deploymentSettingsCard,
+.deploymentValidationSummary,
+.deploymentRecentResultCard,
+.deploymentHistorySection {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: var(--radius-card, 12px);
+  box-shadow: none;
+  min-width: 0;
+  padding: 24px;
+}
+
+.deploymentSettingsCard,
+.deploymentValidationSummary {
+  display: grid;
+  gap: 24px;
+}
+
+.deploymentSettingsCard h3,
+.deploymentValidationSummary h3,
+.deploymentRecentResultCard h3,
+.deploymentHistorySection h3 {
+  color: var(--workspace-text, #171717);
+  font-size: 19px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.deploymentStageSettings {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.deploymentLabeledField {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.deploymentLabeledField label,
+.deploymentField label {
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.deploymentLabeledField > div > button {
+  min-height: 46px;
+}
+
+.deploymentLabeledField > p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 13px;
+  line-height: 20px;
+  margin: 0;
+  max-width: 72ch;
+}
+
+.deploymentValidationSummaryGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.deploymentValidationSummaryItem {
+  align-content: start;
+  border-right: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-right: 16px;
+}
+
+.deploymentValidationSummaryItem:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.deploymentValidationSummaryItem > span:first-child {
+  color: var(--workspace-muted, #60646c);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.deploymentStatusBadge {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 999px;
+  color: var(--workspace-text, #171717);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 750;
+  gap: 6px;
+  justify-self: start;
+  line-height: 20px;
+  max-width: 100%;
+  padding: 3px 9px;
+}
+
+.deploymentStatusBadge[data-tone="success"] {
+  background: var(--color-success-surface, #ecfdf3);
+  border-color: #a6dfbd;
+  color: var(--color-success, #067647);
+}
+
+.deploymentStatusBadge[data-tone="error"] {
+  background: var(--color-error-surface, #fff3f2);
+  border-color: #f3b4ae;
+  color: var(--color-error, #b42318);
+}
+
+.deploymentStatusBadge[data-tone="running"] {
+  background: #eef6ff;
+  border-color: #b9d6f2;
+  color: var(--color-text-link, #0d74ce);
+}
+
+.deploymentStatusBadge[data-tone="warning"] {
+  background: var(--color-warning-surface, #fff8eb);
+  border-color: #efd58c;
+  color: var(--color-warning, #8a4b08);
+}
+
+.deploymentScopeCode,
+.deploymentRecentResultFacts code {
+  background: var(--workspace-surface-muted, #fafafa);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 6px;
+  color: var(--workspace-text, #171717);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 4px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deploymentStepActionBar {
+  align-items: center;
+  background: transparent;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: -8px;
+  padding-top: 24px;
+}
+
+.deploymentStepActionBar > p {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.deploymentValidationActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.deploymentValidationActions .deploymentPrimaryButton {
+  min-height: 48px;
+  min-width: 182px;
+}
+
+.deploymentValidationActions .deploymentSecondaryButton {
+  min-height: 48px;
+  min-width: 88px;
+}
+
+.deploymentRecentResultCard {
+  align-self: start;
+  display: grid;
+  gap: 20px;
+  position: sticky;
+  top: 24px;
+}
+
+.deploymentRecentResultFacts {
+  display: grid;
+  margin: 0;
+}
+
+.deploymentRecentResultFacts > div {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+}
+
+.deploymentRecentResultFacts > div:first-child {
+  padding-top: 0;
+}
+
+.deploymentRecentResultFacts > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.deploymentRecentResultFacts dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.deploymentRecentResultFacts dd {
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.deploymentRecentResultError {
+  align-items: start;
+  background: var(--color-error-surface, #fff3f2);
+  border: 1px solid #f3c7c2;
+  border-radius: 8px;
+  color: var(--color-error, #b42318);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+  line-height: 20px;
+  margin: 0;
+  padding: 12px;
+}
+
+.deploymentRecentResultError svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.deploymentRecentResultEmpty,
+.deploymentHistoryEmpty p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 14px;
+  line-height: 22px;
+  margin: 0;
+}
+
+.deploymentHistoryGrid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 0 32px;
+  width: 100%;
+}
+
+.deploymentHistorySection {
+  position: static;
+}
+
+.deploymentHistoryEmpty {
+  align-items: start;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  margin-top: 20px;
+  padding: 24px;
+}
+
+.deploymentHistoryEmpty strong {
+  color: var(--workspace-text, #171717);
+  font-size: 15px;
+}
+
+.deploymentHistorySecondary {
+  gap: 16px;
+}
+
+.deploymentHistoryGrid > .deploymentSection {
+  padding: 24px;
+}
+
+.deploymentField {
+  gap: 8px;
+}
+
+@media (max-width: 1199px) {
+  .deploymentConsoleGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentRecentResultCard {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .deploymentExpandedOverlay {
+    padding: 0;
+  }
+
+  .deploymentExpandedShell {
+    border: 0;
+    border-radius: 0;
+    height: 100dvh;
+    max-height: none;
+    width: 100%;
+  }
+
+  .deploymentConsoleHeader {
+    padding: 0 12px;
+  }
+
+  .deploymentConsoleHeader .deploymentConsoleScreenNavigation button {
+    min-width: 72px;
+    padding-inline: 12px;
+  }
+
+  .deploymentConsoleHeader .deploymentExpandedCloseButton {
+    height: 40px;
+    width: 40px;
+  }
+
+  .deploymentConsoleScreenBody .cicdConsole,
+  .deploymentConsoleGrid,
+  .deploymentHistoryGrid {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .deploymentConsoleContent {
+    gap: 24px;
+    padding-bottom: 32px;
+  }
+
+  .deploymentConsoleGrid {
+    row-gap: 24px;
+  }
+
+  .deploymentStepNavigation {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .deploymentStepNavigation li + li::before {
+    left: calc(-50% + 19px);
+    width: calc(100% - 38px);
+  }
+
+  .deploymentStepButton {
+    padding-inline: 2px;
+  }
+
+  .deploymentStepButton small {
+    display: none;
+  }
+
+  .deploymentStepHeading h3 {
+    font-size: 28px;
+    line-height: 36px;
+  }
+
+  .deploymentStepHeading p {
+    font-size: 14px;
+  }
+
+  .deploymentSettingsCard,
+  .deploymentValidationSummary,
+  .deploymentRecentResultCard,
+  .deploymentHistorySection,
+  .deploymentHistoryGrid > .deploymentSection {
+    padding: 20px;
+  }
+
+  .deploymentValidationSummaryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentValidationSummaryItem {
+    border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+    border-right: 0;
+    padding-bottom: 16px;
+    padding-right: 0;
+  }
+
+  .deploymentValidationSummaryItem:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .deploymentStepActionBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .deploymentValidationActions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .deploymentValidationActions .deploymentPrimaryButton,
+  .deploymentValidationActions .deploymentSecondaryButton {
+    width: 100%;
+  }
+
+  .deploymentResultRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentResultMeta,
+  .deploymentResultValue {
+    grid-column: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deploymentConsoleHeader .deploymentConsoleScreenNavigation button {
+    transition: none;
+  }
+}
+
 .workspaceNotificationHost {
   align-items: end;
   bottom: 18px;
@@ -6094,12 +6708,6 @@
 
 .deploymentExpandedBody {
   background: var(--workspace-surface-muted, #fafafa);
-}
-
-.saveAndDeployErrorToast {
-  border-left-width: 1px;
-  border-radius: 8px;
-  font-size: 16px;
 }
 
 .liveObservationOverlay {
@@ -6739,7 +7347,14 @@
 }
 
 .liveObservationPresentationConnector::after {
-  background: linear-gradient(90deg, transparent 0 18%, #3974e8 18% 44%, transparent 44% 64%, #80c8ef 64% 82%, transparent 82%);
+  background: linear-gradient(
+    90deg,
+    transparent 0 18%,
+    #3974e8 18% 44%,
+    transparent 44% 64%,
+    #80c8ef 64% 82%,
+    transparent 82%
+  );
   background-size: 72px 100%;
   content: "";
   inset: -1px 0;
@@ -6767,12 +7382,30 @@
   z-index: 4;
 }
 
-.liveObservationDiagramMap[data-pressure-level="high"] .liveObservationPresentationStage[data-pressure-zone="true"] .liveObservationPresentationConnector::after {
-  background-image: linear-gradient(90deg, transparent 0 18%, #d97706 18% 44%, transparent 44% 64%, #f2b45f 64% 82%, transparent 82%);
+.liveObservationDiagramMap[data-pressure-level="high"]
+  .liveObservationPresentationStage[data-pressure-zone="true"]
+  .liveObservationPresentationConnector::after {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0 18%,
+    #d97706 18% 44%,
+    transparent 44% 64%,
+    #f2b45f 64% 82%,
+    transparent 82%
+  );
 }
 
-.liveObservationDiagramMap[data-pressure-level="critical"] .liveObservationPresentationStage[data-pressure-zone="true"] .liveObservationPresentationConnector::after {
-  background-image: linear-gradient(90deg, transparent 0 18%, #e5484d 18% 44%, transparent 44% 64%, #ff8b8f 64% 82%, transparent 82%);
+.liveObservationDiagramMap[data-pressure-level="critical"]
+  .liveObservationPresentationStage[data-pressure-zone="true"]
+  .liveObservationPresentationConnector::after {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0 18%,
+    #e5484d 18% 44%,
+    transparent 44% 64%,
+    #ff8b8f 64% 82%,
+    transparent 82%
+  );
 }
 
 .liveObservationPresentationNodePulse {
@@ -6901,31 +7534,67 @@
 }
 
 @keyframes liveObservationConnectorFlow {
-  to { background-position: 72px 0; }
+  to {
+    background-position: 72px 0;
+  }
 }
 
 @keyframes liveObservationPresentationSegmentParticle {
-  from { left: -28px; opacity: 0; }
-  8% { opacity: 1; }
-  90% { opacity: 1; }
-  to { left: calc(100% - 14px); opacity: 0; }
+  from {
+    left: -28px;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  to {
+    left: calc(100% - 14px);
+    opacity: 0;
+  }
 }
 
 @keyframes liveObservationPresentationRing {
-  from { opacity: 0.8; transform: scale(0.72); }
-  to { opacity: 0; transform: scale(1.28); }
+  from {
+    opacity: 0.8;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.28);
+  }
 }
 
 @keyframes liveObservationCapacityLaunch {
-  0% { opacity: 0.12; transform: translateY(14px) scale(0.42); }
-  64% { opacity: 1; transform: translateY(-3px) scale(1.08); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+  0% {
+    opacity: 0.12;
+    transform: translateY(14px) scale(0.42);
+  }
+  64% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes liveObservationCapacityActivated {
-  0% { filter: saturate(1.8); transform: scale(0.82); }
-  48% { filter: saturate(1.35); transform: scale(1.12); }
-  100% { filter: saturate(1); transform: scale(1); }
+  0% {
+    filter: saturate(1.8);
+    transform: scale(0.82);
+  }
+  48% {
+    filter: saturate(1.35);
+    transform: scale(1.12);
+  }
+  100% {
+    filter: saturate(1);
+    transform: scale(1);
+  }
 }
 
 .liveObservationSignalMap {
@@ -6937,7 +7606,10 @@
     linear-gradient(rgba(125, 211, 252, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(125, 211, 252, 0.06) 1px, transparent 1px),
     radial-gradient(circle at 51% 48%, rgba(14, 116, 144, 0.13), transparent 48%);
-  background-size: 48px 48px, 48px 48px, auto;
+  background-size:
+    48px 48px,
+    48px 48px,
+    auto;
   border: 0;
   border-radius: 0;
   box-shadow: inset 0 1px rgba(226, 232, 240, 0.07);
@@ -6952,8 +7624,20 @@
 
 .liveObservationSignalMap::before {
   background:
-    linear-gradient(90deg, rgba(2, 12, 24, 0.34), transparent 12%, transparent 88%, rgba(2, 12, 24, 0.34)),
-    linear-gradient(180deg, rgba(56, 189, 248, 0.04), transparent 30%, transparent 72%, rgba(2, 12, 24, 0.24));
+    linear-gradient(
+      90deg,
+      rgba(2, 12, 24, 0.34),
+      transparent 12%,
+      transparent 88%,
+      rgba(2, 12, 24, 0.34)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(56, 189, 248, 0.04),
+      transparent 30%,
+      transparent 72%,
+      rgba(2, 12, 24, 0.24)
+    );
   content: "";
   inset: 0;
   pointer-events: none;
@@ -7531,13 +8215,6 @@
     top: 74px;
   }
 
-  .saveAndDeployErrorToast {
-    max-width: calc(100vw - 24px);
-    min-width: 0;
-    padding: 16px 18px;
-    right: 12px;
-    width: calc(100vw - 24px);
-  }
 }
 
 @media (max-width: 640px) {
@@ -7601,7 +8278,7 @@
 .deploymentConsoleGrid {
   background: var(--workspace-surface, #ffffff);
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 294px;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 100%;
   min-width: 0;
@@ -7770,8 +8447,7 @@
 }
 
 .deploymentStepHeading > span,
-.deploymentProjectGate > span,
-.deploymentContextPanel > div > span {
+.deploymentProjectGate > span {
   color: var(--workspace-muted, #60646c);
   font-size: 12px;
   font-weight: 900;
@@ -7860,60 +8536,6 @@
   flex: 0 0 auto;
   min-height: 42px;
   min-width: 150px;
-}
-
-.deploymentContextPanel {
-  align-content: start;
-  background: var(--workspace-surface-muted, #fafafa);
-  border-left: 1px solid var(--workspace-line, #f0f0f3);
-  display: grid;
-  gap: 22px;
-  min-width: 0;
-  padding: 34px 24px;
-}
-
-.deploymentContextPanel h3 {
-  color: var(--workspace-text, #171717);
-  font-size: 17px;
-  margin: 6px 0 0;
-}
-
-.deploymentContextPanel dl {
-  display: grid;
-  gap: 0;
-  margin: 0;
-}
-
-.deploymentContextPanel dl > div {
-  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
-  display: grid;
-  gap: 5px;
-  padding: 12px 0;
-}
-
-.deploymentContextPanel dt {
-  color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.deploymentContextPanel dd {
-  color: var(--workspace-text, #171717);
-  font-size: 12px;
-  font-weight: 850;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.deploymentContextPanel > p {
-  background: var(--workspace-surface, #ffffff);
-  border: 1px solid var(--workspace-line, #f0f0f3);
-  border-radius: 10px;
-  color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 0;
-  padding: 12px;
 }
 
 .deploymentHistoryGrid {
@@ -8005,20 +8627,6 @@
 }
 
 @media (max-width: 1100px) {
-  .deploymentConsoleGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .deploymentContextPanel {
-    border-left: 0;
-    border-top: 1px solid var(--workspace-line, #f0f0f3);
-  }
-
-  .deploymentContextPanel dl {
-    gap: 0 20px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .deploymentHistoryGrid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -8108,14 +8716,6 @@
     width: 100%;
   }
 
-  .deploymentContextPanel {
-    padding: 24px 18px;
-  }
-
-  .deploymentContextPanel dl {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .deploymentHistoryGrid,
   .deploymentConsoleView > .deploymentSection {
     padding: 20px 18px;
@@ -8141,4 +8741,255 @@
   background: var(--workspace-accent, #000000);
   border-color: var(--workspace-accent, #000000);
   color: #ffffff;
+}
+
+/* Deployment modal operational layout cascade */
+.deploymentExpandedOverlay {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  padding: 24px 0;
+}
+
+.deploymentExpandedShell {
+  height: calc(100dvh - 48px);
+  max-height: 920px;
+  max-width: 1280px;
+  width: calc(100% - 64px);
+}
+
+.deploymentExpandedBody {
+  background: var(--workspace-surface-muted, #fafafa);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.deploymentExpandedBody .deploymentConsoleHeader .deploymentConsoleScreenNavigation {
+  align-items: stretch;
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 8px;
+  grid-column: 2;
+  margin: 0;
+  min-height: 64px;
+  padding: 0;
+  width: auto;
+}
+
+.deploymentConsoleContent {
+  background: var(--workspace-surface-muted, #fafafa);
+  gap: 32px;
+  grid-template-rows: auto;
+  min-height: 100%;
+  padding-bottom: 48px;
+}
+
+.deploymentConsoleGrid {
+  background: transparent;
+  column-gap: 32px;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: auto auto;
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 0 32px;
+  row-gap: 32px;
+  width: 100%;
+}
+
+.deploymentStepNavigation {
+  background: transparent;
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  grid-column: 1 / -1;
+  min-height: 80px;
+  padding: 12px 0 10px;
+}
+
+.deploymentStepNavigation ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  list-style: none;
+  margin: 0 auto;
+  max-width: 760px;
+  padding: 0;
+}
+
+.deploymentStepNavigation li + li::before {
+  left: calc(-50% + 21px);
+  top: 15px;
+  width: calc(100% - 42px);
+}
+
+.deploymentStepButton {
+  align-items: start;
+  gap: 5px;
+  grid-template-rows: 32px auto;
+  min-height: 56px;
+  padding: 0 8px 2px;
+}
+
+.deploymentStepButton[data-selected="true"] strong {
+  text-decoration: none;
+}
+
+.deploymentStepButton strong {
+  font-size: 13px;
+}
+
+.deploymentStepButton small {
+  font-size: 12px;
+}
+
+.deploymentStepIndex {
+  font-size: 12px;
+  height: 32px;
+  width: 32px;
+}
+
+.deploymentStepWorkspace {
+  align-self: start;
+  background: transparent;
+  gap: 32px;
+  padding: 0;
+}
+
+.deploymentStepHeading {
+  gap: 8px;
+}
+
+.deploymentStepHeading > span {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.deploymentStepHeading h3 {
+  font-size: 32px;
+  letter-spacing: -0.025em;
+  line-height: 40px;
+}
+
+.deploymentStepHeading p {
+  font-size: 15px;
+  line-height: 22px;
+}
+
+.deploymentStepActionBar {
+  align-items: center;
+  background: transparent;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: -8px;
+  padding-top: 24px;
+}
+
+.deploymentHistoryGrid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 1280px;
+  padding: 0 32px;
+  width: 100%;
+}
+
+.deploymentHistorySection {
+  position: static;
+}
+
+@media (max-width: 1199px) {
+  .deploymentConsoleGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentRecentResultCard {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .deploymentExpandedOverlay {
+    padding: 0;
+  }
+
+  .deploymentExpandedShell {
+    border: 0;
+    border-radius: 0;
+    height: 100dvh;
+    max-height: none;
+    width: 100%;
+  }
+
+  .deploymentConsoleScreenBody .cicdConsole,
+  .deploymentConsoleGrid,
+  .deploymentHistoryGrid {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .deploymentConsoleContent {
+    gap: 24px;
+    padding-bottom: 32px;
+  }
+
+  .deploymentConsoleGrid {
+    row-gap: 24px;
+  }
+
+  .deploymentStepNavigation li + li::before {
+    left: calc(-50% + 19px);
+    width: calc(100% - 38px);
+  }
+
+  .deploymentStepButton {
+    padding-inline: 2px;
+  }
+
+  .deploymentStepButton small {
+    display: none;
+  }
+
+  .deploymentStepIndex {
+    height: 32px;
+    width: 32px;
+  }
+
+  .deploymentStepWorkspace {
+    gap: 24px;
+    padding: 0;
+  }
+
+  .deploymentStepHeading h3 {
+    font-size: 28px;
+    line-height: 36px;
+  }
+
+  .deploymentValidationSummaryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .deploymentStepActionBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .deploymentValidationActions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .deploymentValidationActions .deploymentPrimaryButton,
+  .deploymentValidationActions .deploymentSecondaryButton {
+    width: 100%;
+  }
+
+  .deploymentHistoryGrid {
+    padding-bottom: 0;
+    padding-top: 0;
+  }
 }

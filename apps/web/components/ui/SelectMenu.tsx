@@ -156,6 +156,7 @@ export function SelectMenu({
         id={id}
         onClick={() => (isOpen ? closeMenu() : openMenu())}
         ref={triggerButtonRef}
+        title={triggerLabel}
         type="button"
       >
         <span className={styles.selectMenuValue}>{triggerLabel}</span>
@@ -204,7 +205,7 @@ export function SelectMenu({
 }
 
 function getSelectMenuTriggerLabel(option: SelectMenuOption): string {
-  return option.detail ? `${option.label} | ${option.detail}` : option.label;
+  return option.label;
 }
 
 function getInitialSelectMenuOptionIndex(

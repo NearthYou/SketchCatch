@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Settings } from "lucide-react";
+import { ArrowLeft, ExternalLink, GitBranch, Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Deployment, Project, SourceRepository } from "@sketchcatch/types";
 import { getWorkspaceHref } from "../../components/dashboard/api-project-card";
@@ -115,10 +115,17 @@ export function ProjectDetailClient({ projectId }: { readonly projectId: string 
         <div className="dashboardHeaderActions">
           <Link
             className="dashboardSecondaryAction"
+            href={`/dashboard/projects/${encodeURIComponent(projectId)}/repository`}
+          >
+            <GitBranch aria-hidden="true" size={17} />
+            소스 저장소
+          </Link>
+          <Link
+            className="dashboardSecondaryAction"
             href={`/dashboard/projects/${encodeURIComponent(projectId)}/settings`}
           >
             <Settings aria-hidden="true" size={17} />
-            Repository 설정
+            프로젝트 설정
           </Link>
           <Link className="dashboardPrimaryAction" href={getWorkspaceHref(state.project)}>
             <ExternalLink aria-hidden="true" size={17} />

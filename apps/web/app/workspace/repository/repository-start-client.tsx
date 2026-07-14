@@ -39,7 +39,7 @@ import {
 import {
   applyRepositoryAnalysis,
   findActiveGitHubRepository
-} from "../../projects/[projectId]/settings/project-github-settings-state";
+} from "../../projects/[projectId]/repository/project-source-repository-state";
 import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
 import {
   createPublicRepositoryArchitectureDraftRequest,
@@ -102,7 +102,7 @@ export function RepositoryStartClient({
   const questions = activeHandoff?.questions?.slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
-  const githubSettingsHref = createProjectGitHubSettingsHref(projectId);
+  const githubSettingsHref = "/dashboard/settings";
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(projectId && !activeRepository);
 
@@ -202,7 +202,7 @@ export function RepositoryStartClient({
       setErrorMessage(
         getApiErrorMessage(
           error,
-          "저장소 URL을 분석하지 못했습니다. 비공개 저장소는 프로젝트 환경설정에서 GitHub 권한 연결이 필요합니다."
+          "저장소 URL을 분석하지 못했습니다. 비공개 저장소는 전역 설정에서 GitHub 권한 연결이 필요합니다."
         )
       );
     }
@@ -399,7 +399,7 @@ export function RepositoryStartClient({
                   </button>
                 </form>
                 <p className={styles.inlineHint}>
-                  공개 저장소는 GitHub 계정 연결 없이 분석합니다. 비공개 저장소, PR 생성, CI/CD 인계는 프로젝트 환경설정의 GitHub 권한 연결이 필요합니다.
+                  공개 저장소는 GitHub 계정 연결 없이 분석합니다. 비공개 저장소, PR 생성, CI/CD 인계는 전역 설정의 GitHub 권한 연결이 필요합니다.
                 </p>
               </>
             ) : null}
@@ -871,8 +871,4 @@ function createRepositoryBoardHref(
     sourceRepositoryId: repository.id,
     templateId
   }).toString()}`;
-}
-
-function createProjectGitHubSettingsHref(projectId: string): string {
-  return `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 }

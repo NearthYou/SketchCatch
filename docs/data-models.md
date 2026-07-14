@@ -2560,6 +2560,27 @@ GitHub App installation repository 목록은 DB에 저장하지 않습니다. ca
 
 Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. repository owner/name/provider/default branch는 DB의 active source repository에서 읽습니다. 이 원칙은 클라이언트가 임의 GitHub repository identity를 body로 보내는 위험을 막기 위한 서비스 계약입니다.
 
+### GitHub 계정 연결과 프로젝트 repository 선택 경계
+
+GitHub App installation과 repository 접근 권한은 사용자 계정 단위 외부 연결입니다. Dashboard 전역 설정은 GitHub API에서 현재 사용자가 소유한 installation을 조회하며, 이 목록을 `source_repositories`에 저장하지 않습니다.
+
+```ts
+type GitHubInstallationConnection = {
+  installationId: string;
+  accountLogin: string;
+  accountType: string | null;
+  repositorySelection: "all" | "selected" | null;
+  repositoryCount: number;
+  htmlUrl: string | null;
+};
+```
+
+- `GitHubInstallationConnection`은 installation ID, 계정 표시 정보, repository 권한 범위와 개수, GitHub 관리 URL만 반환합니다. installation access token과 GitHub App private key는 반환하거나 저장하지 않습니다.
+- account scope callback은 로그인 사용자와 installation 소유권만 검증하고 `SourceRepository`를 생성하거나 변경하지 않습니다.
+- project scope callback과 사용자가 repository를 선택한 요청만 프로젝트별 `SourceRepository`를 생성하거나 기존 active 연결을 교체합니다.
+- account scope와 project scope의 서명 state는 구분되며 서로 바꿔 사용할 수 없습니다.
+- 전역 GitHub 연결 추가에 별도 RDS row나 DB migration은 필요하지 않습니다.
+
 ### Repository Analysis와 AI Handoff
 
 Repository Analysis는 active GitHub Source Repository의 최신 default branch를 요청 시점에 정적으로 읽는다. repository tree, `package.json`, lockfile, `Dockerfile`, framework config, `README`만 evidence로 사용하며 Repository 코드를 실행하지 않는다. 새로고침 뒤에도 사용자가 마지막 결과를 확인할 수 있도록 구조화된 `AI Handoff`, 분석 revision, 분석 시각만 `source_repositories`에 저장한다. 원본 파일 내용과 GitHub App installation repository 목록은 RDS/S3에 저장하지 않는다.
