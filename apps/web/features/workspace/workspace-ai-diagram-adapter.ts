@@ -135,10 +135,20 @@ const READABLE_LAYOUT_COLUMN_GAP = 192;
 const READABLE_LAYOUT_ROW_GAP = 140;
 const READABLE_LAYOUT_STACK_GAP = 104;
 const REPOSITORY_MANAGED_SERVICES_AREA_ID = "repository-managed-services";
-const REPOSITORY_SUPPORT_ORIGIN = { x: 256, y: 72 };
-const REPOSITORY_SUPPORT_COLUMN_GAP = 176;
-const REPOSITORY_SUPPORT_ROW_GAP = 150;
-const REPOSITORY_SUPPORT_STACK_GAP = 78;
+const REPOSITORY_SUPPORT_ORIGIN = { x: 200, y: 128 };
+const REPOSITORY_SUPPORT_COLUMN_GAP = 132;
+const REPOSITORY_SUPPORT_ROW_GAP = 360;
+const REPOSITORY_SUPPORT_STACK_GAP = 84;
+const REPOSITORY_BROWSER_POSITION = { x: -48, y: 132 };
+const REPOSITORY_GITHUB_ACTIONS_POSITION = { x: -48, y: 500 };
+const REPOSITORY_VPC_ORIGIN = { x: 820, y: 96 };
+const REPOSITORY_SUBNET_SIZE = { width: 220, height: 56 };
+const REPOSITORY_ACTIVE_PUBLIC_SUBNET_SIZE = { width: 364, height: 220 };
+const REPOSITORY_ACTIVE_PRIVATE_SUBNET_SIZE = { width: 548, height: 228 };
+const REPOSITORY_SUBNET_COLUMN_GAP = 392;
+const REPOSITORY_SUBNET_ROW_GAP = 292;
+const REPOSITORY_ALB_SCOPE_SIZE = { width: 264, height: 132 };
+const REPOSITORY_TASK_SCOPE_SIZE = { width: 448, height: 136 };
 const DENSE_DIAGRAM_SUPPORT_ROLES = new Set<AutomaticDiagramSemanticRole>([
   "delivery",
   "observability",
@@ -328,10 +338,10 @@ export function createPlannedDiagramJson({
   const fittedLaidOutNodes = fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes));
   const repositorySupportLaidOutNodes = preserveAuthoredTemplatePositions
     ? fittedLaidOutNodes
-    : applyRepositoryGeneratedSupportLayout(fittedLaidOutNodes);
+    : applyRepositoryGeneratedReferenceLayout(fittedLaidOutNodes);
   const collisionResolvedNodes = preserveAuthoredTemplatePositions
     ? repositorySupportLaidOutNodes
-    : resolveSiblingNodeCollisions(repositorySupportLaidOutNodes);
+    : repositorySupportLaidOutNodes;
   const nodes = applyDiagramLayerOrder(
     applyTemplateNodeLayoutRules(
       fitAreaNodesToChildren(collisionResolvedNodes),
@@ -339,7 +349,8 @@ export function createPlannedDiagramJson({
     )
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const architectureEdges = reduceDenseDiagramEdgeLabels(
+  const architectureEdges = removeRepositoryGeneratedSupportEdges(
+    reduceDenseDiagramEdgeLabels(
     createReadablePresentationEdges(
       convertArchitectureEdgesToDiagramEdges(
         architectureJson.edges.filter((edge) =>
@@ -354,6 +365,9 @@ export function createPlannedDiagramJson({
       new Set(templateLayoutRules.edgeRulesById.keys())
     ),
     nodeById
+    ),
+    nodeById,
+    preserveAuthoredTemplatePositions
   );
   const edgeIds = new Set(architectureEdges.map((edge) => edge.id));
 
@@ -1491,12 +1505,62 @@ export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): Diagr
 
   return {
     ...diagramJson,
-    edges: normalizeDiagramEdges(
-      diagramJson.edges.filter((edge) => shouldRenderDiagramEdge(edge, nodeById)),
-      nodeById
+    edges: removeRepositoryGeneratedSupportEdges(
+      normalizeDiagramEdges(
+        diagramJson.edges.filter(
+          (edge) =>
+            shouldRenderDiagramEdge(edge, nodeById) &&
+            !isRepositoryGeneratedSupportDependencyEdge(edge, nodeById)
+        ),
+        nodeById
+      ),
+      nodeById,
+      false
     ),
     nodes
   };
+}
+
+export function normalizeRepositoryGeneratedDiagramLayout(diagramJson: DiagramJson): DiagramJson {
+  if (!isRepositoryGeneratedDiagramLayout(diagramJson)) {
+    return diagramJson;
+  }
+
+  const nodes = applyDiagramLayerOrder(
+    fitAreaNodesToChildren(
+      applyRepositoryGeneratedReferenceLayout(fitSecurityGroupScopesToTargets(diagramJson.nodes))
+    )
+  );
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  return {
+    ...diagramJson,
+    edges: removeRepositoryGeneratedSupportEdges(
+      normalizeDiagramEdges(
+        diagramJson.edges.filter(
+          (edge) =>
+            shouldRenderDiagramEdge(edge, nodeById) &&
+            !isRepositoryGeneratedSupportDependencyEdge(edge, nodeById)
+        ),
+        nodeById
+      ),
+      nodeById,
+      false
+    ),
+    nodes
+  };
+}
+
+function isRepositoryGeneratedDiagramLayout(diagramJson: DiagramJson): boolean {
+  const nodeIds = new Set(diagramJson.nodes.map((node) => node.id));
+
+  return (
+    nodeIds.has("repository-browser") &&
+    nodeIds.has("repository-cloudfront") &&
+    nodeIds.has("repository-web-assets") &&
+    nodeIds.has("repository-fargate-runtime") &&
+    [...nodeIds].some((id) => /^fixed-template-ecs-fargate-container-app-vpc$/u.test(id))
+  );
 }
 
 function normalizeDiagramEdges(
@@ -2571,20 +2635,103 @@ type ReadableLayoutSlot = {
   readonly row: number;
 };
 
-function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
-  const managedServicesArea = nodes.find((node) => node.id === REPOSITORY_MANAGED_SERVICES_AREA_ID);
+function applyRepositoryGeneratedReferenceLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
+  return applyRepositoryGeneratedVpcLayout(
+    applyRepositoryGeneratedSupportLayout(flattenRepositoryManagedServicesArea(nodes))
+  );
+}
 
-  if (!managedServicesArea || !isAreaDiagramNode(managedServicesArea)) {
-    return [...nodes];
+function flattenRepositoryManagedServicesArea(nodes: readonly DiagramNode[]): DiagramNode[] {
+  return nodes.flatMap((node) => {
+    if (node.id === REPOSITORY_MANAGED_SERVICES_AREA_ID) {
+      return [];
+    }
+
+    if (node.metadata?.parentAreaNodeId !== REPOSITORY_MANAGED_SERVICES_AREA_ID) {
+      return [node];
+    }
+
+    const { parentAreaNodeId: _parentAreaNodeId, ...metadata } = node.metadata;
+
+    return [
+      {
+        ...node,
+        metadata
+      }
+    ];
+  });
+}
+
+function removeRepositoryGeneratedSupportEdges(
+  edges: readonly DiagramEdge[],
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  preserveAuthoredTemplatePositions: boolean
+): DiagramEdge[] {
+  if (preserveAuthoredTemplatePositions || !hasRepositoryGeneratedFrontendNodes(nodeById)) {
+    return [...edges];
   }
 
+  return edges.filter((edge) => !isRepositoryGeneratedSupportDependencyEdge(edge, nodeById));
+}
+
+function hasRepositoryGeneratedFrontendNodes(nodeById: ReadonlyMap<string, DiagramNode>): boolean {
+  return (
+    nodeById.has("repository-browser") &&
+    nodeById.has("repository-cloudfront") &&
+    nodeById.has("repository-web-assets") &&
+    nodeById.has("repository-fargate-runtime") &&
+    nodeById.has("fixed-template-ecs-fargate-container-app-vpc")
+  );
+}
+
+function isRepositoryGeneratedSupportDependencyEdge(
+  edge: DiagramEdge,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  const edgeIdentity = `${edge.id} ${edge.sourceNodeId} ${edge.targetNodeId}`.toLowerCase();
+
+  if (
+    /repository-ecr|repository-ecs-logs|execution-role|execution-policy|task-role|container-app-task/u.test(
+      edgeIdentity
+    )
+  ) {
+    return true;
+  }
+
+  const source = nodeById.get(edge.sourceNodeId);
+  const target = nodeById.get(edge.targetNodeId);
+
+  if (!source || !target) {
+    return false;
+  }
+
+  const sourceDescriptor = getRepositoryEdgeEndpointDescriptor(source);
+  const targetDescriptor = getRepositoryEdgeEndpointDescriptor(target);
+  const edgeDescriptor = `${edge.id} ${edge.label ?? ""} ${sourceDescriptor} ${targetDescriptor}`;
+
+  if (/browser|cloudfront|load[-_\s]*balancer|\balb\b|fargate[-_\s]*service/u.test(edgeDescriptor)) {
+    return false;
+  }
+
+  return /ecr|cloudwatch|logs?|task[-_\s]*definition|execution[-_\s]*role|task[-_\s]*role|policy|github[-_\s]*actions/u.test(
+    edgeDescriptor
+  );
+}
+
+function getRepositoryEdgeEndpointDescriptor(node: DiagramNode): string {
+  return `${node.id} ${node.label} ${node.type} ${node.parameters?.resourceType ?? ""} ${node.parameters?.resourceName ?? ""}`.toLowerCase();
+}
+
+function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const supportNodes = nodes
     .filter(
       (node) =>
         node.kind === "resource" &&
         !isAreaDiagramNode(node) &&
-        node.metadata?.parentAreaNodeId === REPOSITORY_MANAGED_SERVICES_AREA_ID
+        node.metadata?.parentAreaNodeId == null &&
+        !isRepositoryBrowserNode(node) &&
+        !isRepositoryGithubActionsNode(node)
     )
     .sort(compareRepositorySupportNodes);
   const slotCounts = new Map<string, number>();
@@ -2599,11 +2746,17 @@ function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): D
     const slot = getRepositorySupportLayoutSlot(currentNode);
     const slotKey = `${slot.column}:${slot.row}`;
     const stackIndex = slotCounts.get(slotKey) ?? 0;
+    const rowBaseX =
+      slot.row === 1 ? REPOSITORY_SUPPORT_ORIGIN.x + 220 : REPOSITORY_SUPPORT_ORIGIN.x;
+    const rowColumnGap = slot.row === 1 ? 132 : REPOSITORY_SUPPORT_COLUMN_GAP;
+    const visualColumn = slot.row === 1 ? slot.column % 3 : slot.column;
+    const visualRowOffset = slot.row === 1 ? Math.floor(slot.column / 3) * REPOSITORY_SUPPORT_STACK_GAP : 0;
     const nextPosition = {
-      x: REPOSITORY_SUPPORT_ORIGIN.x + slot.column * REPOSITORY_SUPPORT_COLUMN_GAP,
+      x: rowBaseX + visualColumn * rowColumnGap,
       y:
         REPOSITORY_SUPPORT_ORIGIN.y +
         slot.row * REPOSITORY_SUPPORT_ROW_GAP +
+        visualRowOffset +
         stackIndex * REPOSITORY_SUPPORT_STACK_GAP
     };
 
@@ -2618,22 +2771,43 @@ function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): D
     );
   }
 
-  const githubActionsNode = [...nodeById.values()].find((node) =>
-    /github[-_\s]*actions/u.test(`${node.id} ${node.label}`.toLowerCase())
-  );
+  const githubActionsNode = [...nodeById.values()].find(isRepositoryGithubActionsNode);
 
   if (githubActionsNode && githubActionsNode.metadata?.parentAreaNodeId == null) {
     moveNodeSubtree(
       githubActionsNode.id,
       {
-        x: 64 - githubActionsNode.position.x,
-        y: REPOSITORY_SUPPORT_ORIGIN.y + REPOSITORY_SUPPORT_ROW_GAP - githubActionsNode.position.y
+        x: REPOSITORY_GITHUB_ACTIONS_POSITION.x - githubActionsNode.position.x,
+        y: REPOSITORY_GITHUB_ACTIONS_POSITION.y - githubActionsNode.position.y
+      },
+      nodeById
+    );
+  }
+
+  const browserNode = [...nodeById.values()].find(
+    (node) => node.metadata?.parentAreaNodeId == null && isRepositoryBrowserNode(node)
+  );
+
+  if (browserNode) {
+    moveNodeSubtree(
+      browserNode.id,
+      {
+        x: REPOSITORY_BROWSER_POSITION.x - browserNode.position.x,
+        y: REPOSITORY_BROWSER_POSITION.y - browserNode.position.y
       },
       nodeById
     );
   }
 
   return nodes.map((node) => nodeById.get(node.id) ?? node);
+}
+
+function isRepositoryBrowserNode(node: DiagramNode): boolean {
+  return /(^|[-_\s])browser($|[-_\s])|client/u.test(`${node.id} ${node.label}`.toLowerCase());
+}
+
+function isRepositoryGithubActionsNode(node: DiagramNode): boolean {
+  return /github[-_\s]*actions/u.test(`${node.id} ${node.label}`.toLowerCase());
 }
 
 function compareRepositorySupportNodes(left: DiagramNode, right: DiagramNode): number {
@@ -2686,6 +2860,337 @@ function getRepositorySupportLayoutSlot(node: DiagramNode): ReadableLayoutSlot {
   }
 
   return { column: 3, row: 0 };
+}
+
+function applyRepositoryGeneratedVpcLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const vpcNode = [...nodeById.values()].find(
+    (node) => isAreaDiagramNode(node) && getDiagramNodeResourceType(node) === "aws_vpc"
+  );
+
+  if (!vpcNode) {
+    return [...nodes];
+  }
+
+  const subnetNodes = [...nodeById.values()].filter(
+    (node) =>
+      isAreaDiagramNode(node) &&
+      getDiagramNodeResourceType(node) === "aws_subnet" &&
+      node.metadata?.parentAreaNodeId === vpcNode.id
+  );
+
+  if (subnetNodes.length < 2) {
+    return nodes.map((node) => nodeById.get(node.id) ?? node);
+  }
+
+  const publicSubnets = subnetNodes
+    .filter(isRepositoryPublicSubnet)
+    .sort(compareRepositoryAvailabilityZoneNodes);
+  const privateSubnets = subnetNodes
+    .filter((node) => !isRepositoryPublicSubnet(node))
+    .sort(compareRepositoryAvailabilityZoneNodes);
+
+  placeRepositorySubnet(publicSubnets[0], 0, 0, nodeById);
+  placeRepositorySubnet(publicSubnets[1], 1, 0, nodeById);
+  placeRepositorySubnet(privateSubnets[0], 0, 1, nodeById);
+  placeRepositorySubnet(privateSubnets[1], 1, 1, nodeById);
+  const securityGroupParents: RepositorySecurityGroupParents = { vpcNodeId: vpcNode.id };
+
+  if (publicSubnets[0]) {
+    securityGroupParents.publicWorkloadSubnetId = publicSubnets[0].id;
+  }
+
+  if (privateSubnets[0]) {
+    securityGroupParents.privateWorkloadSubnetId = privateSubnets[0].id;
+  }
+
+  placeRepositorySharedSecurityGroupScopes(securityGroupParents, nodeById);
+  placeRepositoryVpcSupportNodes(vpcNode.id, nodeById);
+
+  return nodes.map((node) => nodeById.get(node.id) ?? node);
+}
+
+function placeRepositorySubnet(
+  subnetNode: DiagramNode | undefined,
+  column: number,
+  row: number,
+  nodeById: Map<string, DiagramNode>
+): void {
+  if (!subnetNode) {
+    return;
+  }
+
+  const nextPosition = {
+    x: REPOSITORY_VPC_ORIGIN.x + getRepositorySubnetXOffset(column, row),
+    y: REPOSITORY_VPC_ORIGIN.y + 56 + row * REPOSITORY_SUBNET_ROW_GAP
+  };
+  const nextSize =
+    column === 0 && row === 0
+      ? REPOSITORY_ACTIVE_PUBLIC_SUBNET_SIZE
+      : column === 0 && row === 1
+        ? REPOSITORY_ACTIVE_PRIVATE_SUBNET_SIZE
+        : REPOSITORY_SUBNET_SIZE;
+
+  moveNodeSubtree(
+    subnetNode.id,
+    {
+      x: nextPosition.x - subnetNode.position.x,
+      y: nextPosition.y - subnetNode.position.y
+    },
+    nodeById
+  );
+  nodeById.set(subnetNode.id, {
+    ...(nodeById.get(subnetNode.id) ?? subnetNode),
+    size: { ...nextSize }
+  });
+}
+
+function getRepositorySubnetXOffset(column: number, row: number): number {
+  if (column === 0) {
+    return 80;
+  }
+
+  return row === 1 ? 676 : 80 + REPOSITORY_SUBNET_COLUMN_GAP;
+}
+
+type RepositorySecurityGroupParents = {
+  vpcNodeId: string;
+  publicWorkloadSubnetId?: string;
+  privateWorkloadSubnetId?: string;
+};
+
+function placeRepositorySharedSecurityGroupScopes(
+  parents: RepositorySecurityGroupParents,
+  nodeById: Map<string, DiagramNode>
+): void {
+  const securityGroups = [...nodeById.values()].filter(
+    (node) => isRepositorySecurityGroupScope(node)
+  );
+
+  for (const securityGroup of securityGroups) {
+    const securityGroupDescriptor =
+      `${securityGroup.label} ${securityGroup.parameters?.resourceName ?? ""} ${securityGroup.parameters?.values["templateResourceId"] ?? ""}`.toLowerCase();
+    const isTaskSecurityGroup = /task/u.test(securityGroupDescriptor);
+    const parentAreaNodeId = isTaskSecurityGroup
+      ? parents.privateWorkloadSubnetId ?? parents.vpcNodeId
+      : parents.publicWorkloadSubnetId ?? parents.vpcNodeId;
+    const parentArea = nodeById.get(parentAreaNodeId);
+    const parentOrigin = parentArea?.position ?? REPOSITORY_VPC_ORIGIN;
+    const nextPosition = isTaskSecurityGroup
+      ? { x: parentOrigin.x + 48, y: parentOrigin.y + 60 }
+      : { x: parentOrigin.x + 50, y: parentOrigin.y + 58 };
+
+    moveNodeSubtree(
+      securityGroup.id,
+      {
+        x: nextPosition.x - securityGroup.position.x,
+        y: nextPosition.y - securityGroup.position.y
+      },
+      nodeById
+    );
+    nodeById.set(securityGroup.id, {
+      ...(nodeById.get(securityGroup.id) ?? securityGroup),
+      metadata: {
+        ...(nodeById.get(securityGroup.id) ?? securityGroup).metadata,
+        parentAreaNodeId
+      },
+      size: isTaskSecurityGroup
+        ? { ...REPOSITORY_TASK_SCOPE_SIZE }
+        : { ...REPOSITORY_ALB_SCOPE_SIZE }
+    });
+    placeRepositorySecurityGroupResources(securityGroup.id, isTaskSecurityGroup, nodeById);
+  }
+}
+
+function isRepositorySecurityGroupScope(node: DiagramNode): boolean {
+  const descriptor =
+    `${node.id} ${node.label} ${node.type} ${node.parameters?.resourceType ?? ""} ${node.parameters?.resourceName ?? ""}`.toLowerCase();
+
+  return getDiagramNodeResourceType(node) === "aws_security_group" || /security[-_\s]*group/u.test(descriptor);
+}
+
+function placeRepositorySecurityGroupResources(
+  securityGroupId: string,
+  isTaskSecurityGroup: boolean,
+  nodeById: Map<string, DiagramNode>
+): void {
+  const securityGroup = nodeById.get(securityGroupId);
+
+  if (!securityGroup) {
+    return;
+  }
+
+  const childResources = [
+    ...new Map(
+      [...nodeById.values()]
+        .filter((node) => isRepositorySecurityGroupChild(node, securityGroupId, isTaskSecurityGroup))
+        .map((node) => [node.id, node])
+    ).values()
+  ]
+    .map((node) => ({
+      ...node,
+      metadata: {
+        ...node.metadata,
+        parentAreaNodeId: securityGroupId
+      }
+    }))
+    .sort(compareRepositorySupportNodes);
+
+  for (const childResource of childResources) {
+    nodeById.set(childResource.id, childResource);
+  }
+
+  childResources.forEach((resourceNode, index) => {
+    const nextPosition = {
+      x: securityGroup.position.x + (isTaskSecurityGroup ? 64 : 96) + index * 132,
+      y: securityGroup.position.y + (isTaskSecurityGroup ? 58 : 44)
+    };
+    moveNodeSubtree(
+      resourceNode.id,
+      {
+        x: nextPosition.x - resourceNode.position.x,
+        y: nextPosition.y - resourceNode.position.y
+      },
+      nodeById
+    );
+  });
+}
+
+function isRepositorySecurityGroupChild(
+  node: DiagramNode,
+  securityGroupId: string,
+  isTaskSecurityGroup: boolean
+): boolean {
+  if (isAreaDiagramNode(node) || node.id === securityGroupId) {
+    return false;
+  }
+
+  if (node.metadata?.parentAreaNodeId === securityGroupId) {
+    return true;
+  }
+
+  const resourceType = getDiagramNodeResourceType(node);
+  const descriptor = `${node.id} ${node.label} ${node.type} ${node.parameters?.resourceType ?? ""} ${node.parameters?.resourceName ?? ""}`.toLowerCase();
+
+  if (isTaskSecurityGroup) {
+    return (
+      resourceType === "aws_ecs_service" ||
+      /(^|[-_\s])service($|[-_\s])|fargate[-_\s]*runtime/u.test(descriptor)
+    );
+  }
+
+  return resourceType === "aws_lb" || /load[-_\s]*balancer|\balb\b/u.test(descriptor);
+}
+
+function placeRepositoryVpcSupportNodes(
+  vpcNodeId: string,
+  nodeById: Map<string, DiagramNode>
+): void {
+  const supportNodes = [...nodeById.values()]
+    .filter(
+      (node) =>
+        !isAreaDiagramNode(node) &&
+        node.metadata?.parentAreaNodeId === vpcNodeId
+    )
+    .sort(compareRepositoryVpcSupportNodes);
+
+  supportNodes.forEach((supportNode, index) => {
+    const nextPosition = getRepositoryVpcSupportPosition(supportNode, index);
+
+    moveNodeSubtree(
+      supportNode.id,
+      {
+        x: nextPosition.x - supportNode.position.x,
+        y: nextPosition.y - supportNode.position.y
+      },
+      nodeById
+    );
+  });
+}
+
+function getRepositoryVpcSupportPosition(
+  node: DiagramNode,
+  fallbackIndex: number
+): DiagramNode["position"] {
+  const resourceType = getDiagramNodeResourceType(node);
+  const descriptor = `${node.id} ${node.label} ${node.parameters?.resourceName ?? ""}`.toLowerCase();
+
+  if (resourceType === "aws_lb_listener" || /listener/u.test(descriptor)) {
+    return { x: REPOSITORY_VPC_ORIGIN.x + 840, y: REPOSITORY_VPC_ORIGIN.y + 184 };
+  }
+
+  if (resourceType === "aws_lb_target_group" || /target[-_\s]*group/u.test(descriptor)) {
+    return { x: REPOSITORY_VPC_ORIGIN.x + 840, y: REPOSITORY_VPC_ORIGIN.y + 296 };
+  }
+
+  if (resourceType === "aws_ecs_cluster" || /cluster/u.test(descriptor)) {
+    return { x: REPOSITORY_VPC_ORIGIN.x + 840, y: REPOSITORY_VPC_ORIGIN.y + 408 };
+  }
+
+  const compactIndex = Math.max(0, fallbackIndex - 3);
+
+  return {
+    x: REPOSITORY_VPC_ORIGIN.x + 916 + (compactIndex % 3) * 76,
+    y: REPOSITORY_VPC_ORIGIN.y + 184 + Math.floor(compactIndex / 3) * 76
+  };
+}
+
+function compareRepositoryVpcSupportNodes(left: DiagramNode, right: DiagramNode): number {
+  const leftSlot = getRepositoryVpcSupportSlot(left, 0);
+  const rightSlot = getRepositoryVpcSupportSlot(right, 0);
+
+  return (
+    leftSlot.row - rightSlot.row ||
+    leftSlot.column - rightSlot.column ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function getRepositoryVpcSupportSlot(
+  node: DiagramNode,
+  fallbackIndex: number
+): ReadableLayoutSlot {
+  const resourceType = getDiagramNodeResourceType(node);
+  const descriptor = `${node.id} ${node.label} ${node.parameters?.resourceName ?? ""}`.toLowerCase();
+
+  if (resourceType === "aws_lb_listener" || /listener/u.test(descriptor)) {
+    return { column: 0, row: 0 };
+  }
+
+  if (resourceType === "aws_lb_target_group" || /target[-_\s]*group/u.test(descriptor)) {
+    return { column: 0, row: 1 };
+  }
+
+  if (resourceType === "aws_ecs_cluster" || /cluster/u.test(descriptor)) {
+    return { column: 0, row: 2 };
+  }
+
+  return {
+    column: 2 + (fallbackIndex % 4),
+    row: Math.floor(fallbackIndex / 4)
+  };
+}
+
+function isRepositoryPublicSubnet(node: DiagramNode): boolean {
+  const descriptor = `${node.id} ${node.label}`.toLowerCase();
+  const mapPublicIpOnLaunch = node.parameters?.values["mapPublicIpOnLaunch"];
+
+  return descriptor.includes("public") || mapPublicIpOnLaunch === true;
+}
+
+function compareRepositoryAvailabilityZoneNodes(left: DiagramNode, right: DiagramNode): number {
+  return getRepositoryAvailabilityZoneRank(left) - getRepositoryAvailabilityZoneRank(right) ||
+    left.position.x - right.position.x ||
+    left.id.localeCompare(right.id);
+}
+
+function getRepositoryAvailabilityZoneRank(node: DiagramNode): number {
+  const descriptor = `${node.id} ${node.label}`.toLowerCase();
+
+  if (/(^|[-_\s])a($|[-_\s])|az[-_\s]*a|subnet[-_\s]*a/u.test(descriptor)) return 0;
+  if (/(^|[-_\s])b($|[-_\s])|az[-_\s]*b|subnet[-_\s]*b/u.test(descriptor)) return 1;
+
+  return 2;
 }
 
 function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
@@ -3328,13 +3833,28 @@ function getRequiredAreaLayout(
 }
 
 function shouldCompactAreaToChildren(node: DiagramNode): boolean {
-  return getCompactAreaMinimumSize(node) !== DEFAULT_AREA_MIN_SIZE;
+  return (
+    node.id === REPOSITORY_MANAGED_SERVICES_AREA_ID ||
+    getCompactAreaMinimumSize(node) !== DEFAULT_AREA_MIN_SIZE
+  );
 }
 
 const DEFAULT_AREA_MIN_SIZE: DiagramNode["size"] = { width: 0, height: 0 };
 
 function getCompactAreaMinimumSize(node: DiagramNode): DiagramNode["size"] {
+  if (isRepositoryGeneratedSubnetArea(node)) {
+    return REPOSITORY_SUBNET_SIZE;
+  }
+
   return COMPACT_AREA_MIN_SIZES[getDiagramNodeResourceType(node)] ?? DEFAULT_AREA_MIN_SIZE;
+}
+
+function isRepositoryGeneratedSubnetArea(node: DiagramNode): boolean {
+  return (
+    isAreaDiagramNode(node) &&
+    getDiagramNodeResourceType(node) === "aws_subnet" &&
+    (/^repository-/u.test(node.id) || /^fixed-template-ecs-fargate-container-app-subnet-/u.test(node.id))
+  );
 }
 
 function getAreaChildPadding(child: DiagramNode): number {

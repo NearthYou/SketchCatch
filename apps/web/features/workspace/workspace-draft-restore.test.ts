@@ -77,3 +77,162 @@ test("workspace restore removes legacy automatic parameter-reference edges but k
 
   assert.deepEqual(restoreSavedDiagram(savedDiagram, fallbackDiagram).edges, [savedDiagram.edges[0]]);
 });
+
+test("workspace restore reflows saved repository-generated ECS frontend diagrams", () => {
+  const savedDiagram: DiagramJson = {
+    edges: [
+      {
+        id: "repository-evidence-repository-ecr-repository-fargate-runtime",
+        sourceNodeId: "repository-ecr",
+        targetNodeId: "repository-fargate-runtime"
+      }
+    ],
+    nodes: [
+      diagramNode("repository-browser", "client", "Browser", "design", 40, 680),
+      diagramNode("repository-managed-services", "design_group", "AWS Managed Services", "design", 260, 40, {
+        width: 1800,
+        height: 400
+      }),
+      diagramNode(
+        "fixed-template-ecs-fargate-container-app-vpc",
+        "aws_vpc",
+        "VPC",
+        "resource",
+        260,
+        500,
+        { width: 1800, height: 900 }
+      ),
+      diagramNode(
+        "fixed-template-ecs-fargate-container-app-subnet-a",
+        "aws_subnet",
+        "Public Subnet A",
+        "resource",
+        360,
+        620,
+        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 280 }
+      ),
+      diagramNode(
+        "fixed-template-ecs-fargate-container-app-subnet-b",
+        "aws_subnet",
+        "Public Subnet B",
+        "resource",
+        840,
+        620,
+        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 280 }
+      ),
+      diagramNode(
+        "repository-private-app-subnet-a",
+        "aws_subnet",
+        "Private App Subnet A",
+        "resource",
+        360,
+        1010,
+        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 300 }
+      ),
+      diagramNode(
+        "repository-private-app-subnet-b",
+        "aws_subnet",
+        "Private App Subnet B",
+        "resource",
+        840,
+        1010,
+        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 300 }
+      ),
+      diagramNode(
+        "fixed-template-ecs-fargate-container-app-alb-security-group",
+        "SECURITY_GROUP",
+        "ALB Security Group",
+        "resource",
+        420,
+        680,
+        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-subnet-a", width: 300, height: 160 }
+      ),
+      diagramNode(
+        "fixed-template-ecs-fargate-container-app-task-security-group",
+        "SECURITY_GROUP",
+        "Task Security Group",
+        "resource",
+        420,
+        1070,
+        { parentAreaNodeId: "repository-private-app-subnet-a", width: 340, height: 180 }
+      ),
+      diagramNode("repository-cloudfront", "aws_cloudfront_distribution", "CloudFront", "resource", 340, 140, {
+        parentAreaNodeId: "repository-managed-services"
+      }),
+      diagramNode("repository-web-assets", "aws_s3_bucket", "Static Web Assets", "resource", 580, 140, {
+        parentAreaNodeId: "repository-managed-services"
+      }),
+      diagramNode("repository-ecr", "aws_ecr_repository", "ECR API Image Repository", "resource", 820, 140, {
+        parentAreaNodeId: "repository-managed-services"
+      }),
+      diagramNode(
+        "repository-fargate-runtime",
+        "aws_ecs_task_definition",
+        "Fargate Task",
+        "design",
+        460,
+        1140
+      )
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const restoredDiagram = restoreSavedDiagram(savedDiagram, fallbackDiagram);
+  const nodeById = new Map(restoredDiagram.nodes.map((node) => [node.id, node]));
+
+  assert.equal(nodeById.has("repository-managed-services"), false);
+  assert.equal(nodeById.get("repository-cloudfront")?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(
+    restoredDiagram.edges.some(
+      (edge) => edge.id === "repository-evidence-repository-ecr-repository-fargate-runtime"
+    ),
+    false
+  );
+  assert.equal(
+    nodeById.get("fixed-template-ecs-fargate-container-app-alb-security-group")?.metadata
+      ?.parentAreaNodeId,
+    "fixed-template-ecs-fargate-container-app-subnet-a"
+  );
+  assert.equal(
+    nodeById.get("fixed-template-ecs-fargate-container-app-task-security-group")?.metadata
+      ?.parentAreaNodeId,
+    "repository-private-app-subnet-a"
+  );
+  assert.ok(
+    (nodeById.get("fixed-template-ecs-fargate-container-app-vpc")?.position.x ?? 0) >
+      (nodeById.get("repository-web-assets")?.position.x ?? Number.POSITIVE_INFINITY)
+  );
+});
+
+function diagramNode(
+  id: string,
+  type: string,
+  label: string,
+  kind: "design" | "resource",
+  x: number,
+  y: number,
+  options: {
+    readonly height?: number;
+    readonly parentAreaNodeId?: string;
+    readonly width?: number;
+  } = {}
+): DiagramJson["nodes"][number] {
+  return {
+    id,
+    kind,
+    label,
+    locked: false,
+    metadata: options.parentAreaNodeId ? { parentAreaNodeId: options.parentAreaNodeId } : undefined,
+    parameters: {
+      fileName: "main.tf",
+      resourceName: id.replaceAll("-", "_"),
+      resourceType: type,
+      terraformBlockType: kind === "resource" ? "resource" : undefined,
+      values: {}
+    },
+    position: { x, y },
+    size: { width: options.width ?? 48, height: options.height ?? 48 },
+    type,
+    zIndex: kind === "design" ? 1 : 4
+  };
+}

@@ -2898,33 +2898,70 @@ test("createPlannedDiagramJson reflows repository-generated ECS frontend diagram
   const diagramJson = createPlannedDiagramJson({ architectureJson });
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
   const quality = evaluateDiagramLayout(diagramJson);
+  const visibleQuality = evaluateVisibleDiagramLayout(diagramJson);
   const service = nodeById.get(`fixed-template-${templateId}-service`);
   const runtime = nodeById.get("repository-fargate-runtime");
   const browser = nodeById.get("repository-browser");
-  const managedServices = nodeById.get("repository-managed-services");
   const cloudFront = nodeById.get("repository-cloudfront");
   const webAssets = nodeById.get("repository-web-assets");
   const vpc = nodeById.get(`fixed-template-${templateId}-vpc`);
+  const publicSubnetA = nodeById.get(`fixed-template-${templateId}-subnet-a`);
+  const publicSubnetB = nodeById.get(`fixed-template-${templateId}-subnet-b`);
+  const privateSubnetA = nodeById.get("repository-private-app-subnet-a");
+  const privateSubnetB = nodeById.get("repository-private-app-subnet-b");
+  const albSecurityGroup = nodeById.get(`fixed-template-${templateId}-alb-security-group`);
+  const taskSecurityGroup = nodeById.get(`fixed-template-${templateId}-task-security-group`);
   const bounds = getDiagramBounds(diagramJson.nodes);
 
   assert.equal(diagramJson.nodes.some((node) => node.id.includes("-presentation-")), false);
+  assert.equal(nodeById.has("repository-managed-services"), false);
   assert.equal(quality.nodeOverlapCount, 0);
   assert.equal(quality.parentBoundaryViolationCount, 0);
   assert.equal(quality.siblingAreaOverlapCount, 0);
   assert.ok(quality.backwardEdgeCount <= 1);
-  assert.ok(quality.edgeCrossingCount <= 6);
-  assert.ok(browser && managedServices && cloudFront && webAssets && vpc);
+  assert.ok(visibleQuality.edgeCrossingCount <= 2);
+  assert.ok(
+    browser &&
+      cloudFront &&
+      webAssets &&
+      vpc &&
+      publicSubnetA &&
+      publicSubnetB &&
+      privateSubnetA &&
+      privateSubnetB &&
+      albSecurityGroup &&
+      taskSecurityGroup
+  );
   assert.ok(cloudFront.position.x > browser.position.x);
   assert.ok(webAssets.position.x > cloudFront.position.x);
-  assert.ok(managedServices.position.y < vpc.position.y);
-  assert.ok(managedServices.size.width <= 1800);
-  assert.ok(bounds.height <= 1900);
+  assert.ok(vpc.position.x - webAssets.position.x <= 520);
+  assert.ok(vpc.size.width <= 1120);
+  assert.ok(vpc.size.height <= 760);
+  assert.ok(publicSubnetA.size.width <= 420);
+  assert.ok(publicSubnetA.size.height <= 320);
+  assert.ok(publicSubnetB.size.width <= 240);
+  assert.ok(publicSubnetB.size.height <= 72);
+  assert.ok(privateSubnetA.size.width <= 620);
+  assert.ok(privateSubnetA.size.height <= 340);
+  assert.ok(privateSubnetB.size.width <= 240);
+  assert.ok(privateSubnetB.size.height <= 72);
+  assert.ok(Math.abs(publicSubnetA.position.y - publicSubnetB.position.y) <= 32);
+  assert.ok(Math.abs(privateSubnetA.position.y - privateSubnetB.position.y) <= 32);
+  assert.ok(privateSubnetA.position.y > publicSubnetA.position.y);
+  assert.equal(albSecurityGroup.metadata?.parentAreaNodeId, publicSubnetA.id);
+  assert.equal(taskSecurityGroup.metadata?.parentAreaNodeId, privateSubnetA.id);
+  assert.ok(albSecurityGroup.position.y > publicSubnetA.position.y);
+  assert.ok(taskSecurityGroup.position.y > privateSubnetA.position.y);
+  assert.ok(Math.abs(albSecurityGroup.position.x - taskSecurityGroup.position.x) <= 80);
+  assert.ok(taskSecurityGroup.position.y - albSecurityGroup.position.y <= 320);
+  assert.ok(bounds.width <= 1850);
+  assert.ok(bounds.height <= 900);
   assert.ok(service && runtime);
   assert.equal(service.metadata?.parentAreaNodeId, runtime.metadata?.parentAreaNodeId);
   assert.ok(Math.abs(service.position.y - runtime.position.y) <= 96);
   assertNoSiblingNodeOverlap(diagramJson);
   assertNoNonAncestorAreaResourceOverlap(diagramJson);
-  assertNoEdgeRouteOverlap(diagramJson);
+  assertNoEdgeRouteOverlap(getVisibleDiagramJson(diagramJson));
 });
 
 test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside cloud container areas", () => {
@@ -3531,6 +3568,25 @@ function evaluateDiagramLayout(diagramJson: DiagramJson) {
     })),
     nodes: diagramJson.nodes
   });
+}
+
+function evaluateVisibleDiagramLayout(diagramJson: DiagramJson) {
+  return evaluateAutomaticDiagramLayout({
+    edges: getVisibleDiagramJson(diagramJson).edges.map((edge) => ({
+        id: edge.id,
+        label: edge.label,
+        sourceId: edge.sourceNodeId,
+        targetId: edge.targetNodeId
+      })),
+    nodes: diagramJson.nodes
+  });
+}
+
+function getVisibleDiagramJson(diagramJson: DiagramJson): DiagramJson {
+  return {
+    ...diagramJson,
+    edges: diagramJson.edges.filter((edge) => edge.metadata?.presentationRole !== "detail")
+  };
 }
 
 function assertNoSiblingNodeOverlap(diagramJson: DiagramJson): void {
