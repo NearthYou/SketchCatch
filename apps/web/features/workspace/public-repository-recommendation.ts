@@ -39,6 +39,56 @@ const TEMPLATE_LABELS: Partial<Record<PublicRepositoryTemplateId, string>> = {
   "three-tier-web-app": "Three-tier web app"
 };
 
+const KOREAN_QUESTION_COPY: Readonly<Record<
+  string,
+  { readonly prompt: string; readonly options?: readonly { readonly value: string; readonly label: string }[] }
+>> = {
+  "application-scope": {
+    prompt: "아키텍처에 먼저 포함할 애플리케이션 범위를 선택해주세요.",
+    options: [
+      { value: "web", label: "공개 웹 프론트엔드" },
+      { value: "api", label: "API 백엔드" },
+      { value: "web_and_api", label: "웹 프론트엔드와 API 백엔드" }
+    ]
+  },
+  authentication: {
+    prompt: "초기 아키텍처에 관리형 사용자 인증을 포함할까요?"
+  },
+  "data-persistence": {
+    prompt: "이 애플리케이션에 영구 데이터 저장소가 필요한가요?",
+    options: [
+      { value: "none", label: "영구 데이터 없음" },
+      { value: "relational", label: "관계형 데이터베이스" },
+      { value: "key_value", label: "키-값 또는 문서형 저장소" }
+    ]
+  },
+  include_database: {
+    prompt: "감지된 데이터베이스 계층을 이 아키텍처에 포함할까요?"
+  },
+  include_frontend: {
+    prompt: "감지된 React 웹 프론트엔드를 이 아키텍처에 포함할까요?"
+  },
+  "operations-preference": {
+    prompt: "첫 배포에서 선호하는 운영 방식을 선택해주세요.",
+    options: [
+      { value: "managed", label: "관리형 서비스 우선" },
+      { value: "container", label: "컨테이너 런타임" },
+      { value: "self_managed_vm", label: "EC2/VM 직접 운영" },
+      { value: "ec2", label: "EC2/VM 직접 운영" },
+      { value: "ecs", label: "ECS Fargate" },
+      { value: "eks", label: "EKS" }
+    ]
+  },
+  primary_runtime: {
+    prompt: "아키텍처에서 우선할 API 런타임을 선택해주세요.",
+    options: [
+      { value: "node", label: "Node API 우선" },
+      { value: "python", label: "Python API 우선" },
+      { value: "both", label: "두 API 모두 포함" }
+    ]
+  }
+};
+
 export function createPublicRepositoryRecommendation(input: {
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly answers: Record<string, string | boolean>;
@@ -371,12 +421,7 @@ function createPublicRepositoryTemplateCandidates(input: {
       .map((candidate) => ({
         ...candidate,
         displayTitle: formatPublicRepositoryTemplate(candidate.templateId),
-        questions: candidate.questions?.map((question) => ({
-          id: question.id,
-          prompt: question.prompt,
-          answerType: question.answerType,
-          ...(question.options ? { options: question.options } : {})
-        }))
+        questions: candidate.questions?.map(localizePublicRepositoryQuestion)
       }))
       .slice(0, 3);
   }
@@ -430,13 +475,25 @@ function createPublicRepositoryHandoffQuestions(
   analysis: SourceRepositoryAnalysisResult
 ): readonly PublicRepositoryQuestion[] {
   return (analysis.aiHandoff?.questions ?? [])
-    .map((question) => ({
-      id: question.id,
-      prompt: question.prompt,
-      answerType: question.answerType,
-      ...(question.options ? { options: question.options } : {})
-    }))
+    .map(localizePublicRepositoryQuestion)
     .slice(0, 5);
+}
+
+export function localizePublicRepositoryQuestion(question: PublicRepositoryQuestion): PublicRepositoryQuestion {
+  const localized = KOREAN_QUESTION_COPY[question.id];
+
+  if (!localized) return question;
+
+  const allowedOptionValues = new Set(question.options?.map((option) => option.value) ?? []);
+  const localizedOptions = localized.options?.filter(
+    (option) => allowedOptionValues.size === 0 || allowedOptionValues.has(option.value)
+  );
+
+  return {
+    ...question,
+    prompt: localized.prompt,
+    ...(localizedOptions && localizedOptions.length > 0 ? { options: localizedOptions } : {})
+  };
 }
 
 function createPublicRepositoryQuestions(
@@ -461,11 +518,11 @@ function createPublicRepositoryQuestions(
       answerType: "single_select",
       id: "primary_runtime",
       options: [
-        { label: "Node API 以묒떖", value: "node" },
-        { label: "Python API 以묒떖", value: "python" },
-        { label: "?????ы븿", value: "both" }
+        { label: "Node API 우선", value: "node" },
+        { label: "Python API 우선", value: "python" },
+        { label: "두 API 모두 포함", value: "both" }
       ],
-      prompt: "?대뼡 API ?고??꾩쓣 ?꾪궎?띿쿂???ы븿?좉퉴??"
+      prompt: "아키텍처에서 우선할 API 런타임을 선택해주세요."
     });
   }
 
@@ -473,7 +530,7 @@ function createPublicRepositoryQuestions(
     questions.push({
       answerType: "boolean",
       id: "include_frontend",
-      prompt: "媛먯???React ?꾨줎?몄뿏?쒕? ???쒗뵆由우뿉 ?ы븿?좉퉴??"
+      prompt: "감지된 React 웹 프론트엔드를 이 아키텍처에 포함할까요?"
     });
   }
 
@@ -481,7 +538,7 @@ function createPublicRepositoryQuestions(
     questions.push({
       answerType: "boolean",
       id: "include_database",
-      prompt: "媛먯????곗씠?곕쿋?댁뒪 怨꾩링?????쒗뵆由우뿉 ?ы븿?좉퉴??"
+      prompt: "감지된 데이터베이스 계층을 이 아키텍처에 포함할까요?"
     });
   }
 
@@ -523,58 +580,62 @@ function createCandidate(
   if (templateId === "three-tier-web-app") {
     confidence += deploymentType === "ec2_vm" ? 0.18 : 0.03;
     if (signals.has("Database")) confidence += 0.08;
-    if (signals.has("React")) reasons.push("?꾨줎?몄뿏?쒖? API瑜?遺꾨━??諛곗튂?섍린 醫뗭뒿?덈떎.");
-    if (signals.has("Database")) reasons.push("DB 怨꾩링??private tier濡?遺꾨━?????덉뒿?덈떎.");
-    tradeoffs.push("而⑦뀒?대꼫 ?댁쁺 ?좏샇??ECS/EKS ?꾨낫蹂대떎 ??吏곸젒?곸쑝濡?諛섏쁺?⑸땲??");
+    reasons.push("웹, 애플리케이션, 데이터 계층을 분리해 각각의 네트워크와 확장 경계를 명확히 할 수 있습니다.");
+    if (signals.has("React")) reasons.push("프론트엔드와 API를 웹·애플리케이션 계층으로 분리해 배치할 수 있습니다.");
+    if (signals.has("Database")) reasons.push("감지된 데이터베이스를 private data tier로 분리할 수 있습니다.");
+    tradeoffs.push("컨테이너 배포 근거는 ECS/EKS 후보보다 직접적으로 반영되지 않습니다.");
+    tradeoffs.push("EC2 패치, Auto Scaling, ALB와 RDS의 상시 비용을 함께 운영해야 합니다.");
   }
 
   if (templateId === "ecs-fargate-container-app") {
     confidence += signals.has("Container") ? 0.2 : 0.02;
     confidence += deploymentType === "container" ? 0.1 : 0;
-    reasons.push("Docker/Compose ?좏샇瑜?而⑦뀒?대꼫 ?쒕퉬?ㅻ줈 ?먯뿰?ㅻ읇寃???만 ???덉뒿?덈떎.");
-    if (signals.has("Database")) reasons.push("API? DB瑜?蹂꾨룄 愿由?由ъ냼?ㅻ줈 遺꾨━?????덉뒿?덈떎.");
-    tradeoffs.push("Kubernetes ?몃? ?ㅼ젙???꾩슂?섎㈃ EKS ?꾨낫媛 ???곹빀?⑸땲??");
+    reasons.push("Docker와 Compose 근거를 ECS Task와 Service 경계로 직접 옮길 수 있습니다.");
+    if (signals.has("Database")) reasons.push("API와 데이터베이스를 별도 관리형 리소스로 분리할 수 있습니다.");
+    tradeoffs.push("Kubernetes 이식성과 세밀한 오케스트레이션이 필요하면 EKS가 더 적합할 수 있습니다.");
+    tradeoffs.push("ALB와 Fargate의 기본 비용, Task 네트워크와 상태 확인 설정을 검증해야 합니다.");
   }
 
   if (templateId === "eks-container-app") {
     confidence += answers.container_runtime === "eks" ? 0.24 : 0.02;
-    reasons.push("Kubernetes ?댁쁺???꾩젣濡??????뺤옣?깆씠 醫뗭뒿?덈떎.");
-    tradeoffs.push("珥덇린 ?댁쁺 蹂듭옟?꾧? ECS Fargate蹂대떎 ?믪뒿?덈떎.");
+    reasons.push("여러 컨테이너를 Kubernetes 워크로드로 분리하고 독립적으로 확장할 수 있습니다.");
+    tradeoffs.push("초기 클러스터와 Kubernetes 오브젝트 운영 복잡도가 ECS Fargate보다 높습니다.");
+    tradeoffs.push("EKS 제어 영역과 애드온의 고정 비용, 업그레이드 책임을 검토해야 합니다.");
   }
 
   if (templateId === "full-serverless-web-app") {
     confidence += deploymentType === "serverless" ? 0.14 : 0;
     if (signals.has("React")) confidence += 0.06;
-    reasons.push("?꾨줎?몄뿏?? API, ?곗씠????μ냼瑜?愿由ы삎 ?쒕퉬??以묒떖?쇰줈 援ъ꽦?⑸땲??");
-    tradeoffs.push("而⑦뀒?대꼫 ?대?吏 湲곕컲 諛고룷 ?먮쫫? 吏곸젒 諛섏쁺?섏? ?딆뒿?덈떎.");
+    reasons.push("프론트엔드, API, 인증과 데이터 저장소를 관리형 서버리스 서비스로 연결할 수 있습니다.");
+    tradeoffs.push("컨테이너 이미지 기반 배포 흐름은 직접 반영되지 않습니다.");
+    tradeoffs.push("Lambda 콜드 스타트와 실행 제한, 분산 로그 추적 방식을 확인해야 합니다.");
   }
 
   if (templateId === "minimal-serverless-api") {
     confidence += deploymentType === "serverless" ? 0.08 : 0;
-    reasons.push("API 以묒떖?쇰줈 ?묎쾶 ?쒖옉?????곹빀?⑸땲??");
-    tradeoffs.push("?꾨줎?몄뿏?쒖? DB 怨꾩링???쒖쇅?섎㈃ repository ?꾩껜 援ъ“瑜???諛섏쁺?⑸땲??");
+    reasons.push("API 중심 Application Unit을 API Gateway와 Lambda의 작은 범위로 시작하기 적합합니다.");
+    tradeoffs.push("프론트엔드와 데이터베이스 계층을 제외하면 저장소 전체 구조를 모두 반영하지 못합니다.");
+    tradeoffs.push("지속 부하나 장시간 작업에서는 Lambda 실행 제한과 요청당 비용을 비교해야 합니다.");
   }
 
   if (templateId === "static-web-hosting") {
     confidence += signals.has("React") && !signals.has("Database") ? 0.16 : 0;
-    reasons.push("?뺤쟻 ?꾨줎?몄뿏??諛고룷???곹빀?⑸땲??");
-    tradeoffs.push("諛깆뿏??API? DB ?좏샇媛 ?덉쑝硫?蹂꾨룄 由ъ냼??蹂닿컯???꾩슂?⑸땲??");
+    reasons.push("정적 프론트엔드 산출물을 S3와 CloudFront로 배포하는 흐름에 적합합니다.");
+    tradeoffs.push("백엔드 API나 데이터베이스 근거가 있으면 별도 런타임을 보강해야 합니다.");
+    tradeoffs.push("CloudFront 캐시 무효화와 정적 빌드 산출물의 CI/CD 배포 절차를 정의해야 합니다.");
   }
 
-  if (reasons.length === 0) {
-    reasons.push("??μ냼 洹쇨굅媛 遺議깊빐 ?좏깮??諛고룷 諛⑹떇??留욌뒗 鍮꾧탳 ?꾨낫濡??쒖떆?⑸땲??");
-  }
-
-  if (tradeoffs.length === 0) {
-    tradeoffs.push("異붽? Repository evidence??follow-up ?듬????곕씪 援ъ꽦???ㅼ떆 議곗젙?댁빞 ?⑸땲??");
-  }
+  reasons.push(
+    `감지된 ${[...signals].join(", ") || "제한된 저장소"} 근거를 ${formatPublicRepositoryTemplate(templateId)}의 리소스 범위와 비교했습니다.`
+  );
+  tradeoffs.push("실제 트래픽, 가용성 목표와 비용 한도는 저장소만으로 확정할 수 없어 배포 전 검증이 필요합니다.");
 
   return {
     confidence: Math.min(confidence, 0.96),
     displayTitle: formatPublicRepositoryTemplate(templateId),
-    reasons,
+    reasons: [...new Set(reasons)].slice(0, 4),
     templateId,
-    tradeoffs
+    tradeoffs: [...new Set(tradeoffs)].slice(0, 4)
   };
 }
 

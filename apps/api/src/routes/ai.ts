@@ -446,7 +446,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
             evidence: aiHandoff.evidence,
             missingEvidence: aiHandoff.missingEvidence,
             deploymentType: aiHandoff.deploymentTypeDefault,
-            usesCiCd: aiHandoff.usesCiCdDefault ?? false,
+            usesCiCd: true,
             answers: []
           })
         : aiHandoff.recommendation;
@@ -454,6 +454,10 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const result: SourceRepositoryAnalysisResult = {
         ...legacyAnalysis,
         availableBranches,
+        recommendedTemplateId: recommendation?.candidates[0]?.templateId
+          ?? legacyAnalysis.recommendedTemplateId,
+        recommendationReason: recommendation?.candidates[0]?.reasons.join(" ")
+          ?? legacyAnalysis.recommendationReason,
         aiHandoff: recommendation ? { ...aiHandoff, recommendation } : aiHandoff
       };
 
@@ -925,7 +929,7 @@ const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
 const MAX_PUBLIC_REPOSITORY_BRANCH_PAGES = 50;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
-const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v12";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v14";
 const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.

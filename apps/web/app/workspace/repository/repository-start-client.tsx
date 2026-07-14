@@ -9,10 +9,9 @@ import {
   GitBranch,
   LoaderCircle,
   Search,
-  Settings2,
   Sparkles
 } from "lucide-react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateArchitectureDraftRequest,
@@ -33,6 +32,7 @@ import {
   analyzeSourceRepository,
   connectGitHubSourceRepository,
   createAiArchitectureDraft,
+  createGitHubSourceRepositoryInstallUrl,
   listGitHubInstalledRepositories,
   listSourceRepositories,
   recommendRepositoryTemplate,
@@ -49,12 +49,14 @@ import {
   getPublicRepositoryDeploymentDefault,
   getPublicRepositoryTemplateDeploymentType,
   isBuiltInTemplateId,
+  localizePublicRepositoryQuestion,
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
 import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
+import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
@@ -79,8 +81,10 @@ export function RepositoryStartClient({
 }: RepositoryStartClientProps) {
   const router = useRouter();
   const hasAutoAnalyzedPublicUrl = useRef(false);
+  const connectionSectionRef = useRef<HTMLElement | null>(null);
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
+  const [candidatesLoaded, setCandidatesLoaded] = useState(false);
   const [installationState, setInstallationState] = useState("");
   const [loadState, setLoadState] = useState<RequestState>("loading");
   const [actionState, setActionState] = useState<RequestState>("idle");
@@ -88,10 +92,10 @@ export function RepositoryStartClient({
   const [repositoryUrl, setRepositoryUrl] = useState(initialRepositoryUrl);
   const [defaultBranch, setDefaultBranch] = useState(initialDefaultBranch);
   const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
+  const [connectionWarning, setConnectionWarning] = useState("");
   const [repositoryConnectionError, setRepositoryConnectionError] = useState("");
   const [recommendationState, setRecommendationState] = useState<RequestState>("idle");
   const [deploymentType, setDeploymentType] = useState<RepositoryDeploymentType>("serverless");
-  const [usesCiCd, setUsesCiCd] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
   const [selectedPublicTemplateId, setSelectedPublicTemplateId] = useState<PublicRepositoryTemplateId | null>(null);
   const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
@@ -102,12 +106,13 @@ export function RepositoryStartClient({
     [repositories]
   );
   const activeHandoff = activeRepository?.analysis?.aiHandoff;
-  const questions = activeHandoff?.questions?.slice(0, 5) ?? [];
+  const questions = activeHandoff?.questions
+    ?.map(localizePublicRepositoryQuestion)
+    .slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
-  const githubSettingsHref = "/dashboard/settings";
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
-  const showUrlAnalysis = Boolean(projectId && !activeRepository);
+  const showUrlAnalysis = Boolean(projectId && (!activeRepository || publicAnalysis));
 
   useEffect(() => {
     if (!projectId) {
@@ -140,7 +145,6 @@ export function RepositoryStartClient({
       setRepositories(loadedRepositories);
       setRecommendation(handoff?.recommendation ?? null);
       setDeploymentType(handoff?.deploymentTypeDefault ?? "serverless");
-      setUsesCiCd(handoff?.usesCiCdDefault ?? false);
       setLoadState("idle");
     } catch (error) {
       setLoadState("error");
@@ -150,16 +154,31 @@ export function RepositoryStartClient({
 
   async function loadCandidates(): Promise<void> {
     setActionState("loading");
-    setErrorMessage("");
+    setRepositoryConnectionError("");
 
     try {
       const result = await listGitHubInstalledRepositories(projectId);
       setCandidates(result.repositories);
+      setCandidatesLoaded(true);
       setInstallationState(result.state);
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "연결 가능한 저장소를 불러오지 못했습니다."));
+      setRepositoryConnectionError(getApiErrorMessage(error, "연결 가능한 저장소를 불러오지 못했습니다."));
+    }
+  }
+
+  async function openGitHubConnection(): Promise<void> {
+    if (actionState === "loading") return;
+    setActionState("loading");
+    setRepositoryConnectionError("");
+
+    try {
+      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
+      window.location.assign(installUrl);
+    } catch (error) {
+      setActionState("error");
+      setRepositoryConnectionError(getApiErrorMessage(error, "GitHub 연결 화면을 열지 못했습니다."));
     }
   }
 
@@ -179,7 +198,7 @@ export function RepositoryStartClient({
     setAnswers({});
     setSelectedPublicTemplateId(null);
     setPublicRecommendationStage("configuration");
-    setUsesCiCd(false);
+    setConnectionWarning("");
     setErrorMessage("");
 
     try {
@@ -191,7 +210,6 @@ export function RepositoryStartClient({
       setDefaultBranch(result.defaultBranch);
       const nextDeploymentType = getPublicRepositoryDeploymentDefault(result);
       setDeploymentType(nextDeploymentType);
-      setUsesCiCd(result.aiHandoff?.usesCiCdDefault ?? false);
       setSelectedPublicTemplateId(
         createPublicRepositoryRecommendation({
           analysis: result,
@@ -200,12 +218,13 @@ export function RepositoryStartClient({
         }).candidates[0]?.templateId ?? null
       );
       setPublicAnalysisState("idle");
+      void loadCandidates();
     } catch (error) {
       setPublicAnalysisState("error");
       setErrorMessage(
         getApiErrorMessage(
           error,
-          "저장소 URL을 분석하지 못했습니다. 비공개 저장소는 전역 설정에서 GitHub 권한 연결이 필요합니다."
+          "저장소 URL을 분석하지 못했습니다. 비공개 저장소는 이 화면에서 GitHub 연결을 완료해주세요."
         )
       );
     }
@@ -220,8 +239,20 @@ export function RepositoryStartClient({
       deploymentType,
       selectedTemplateId: selectedPublicTemplateId
     });
-    if (!recommendation.questions.every((question) => hasRepositoryQuestionAnswer(answers[question.id]))) {
-      setErrorMessage("모든 추가 질문에 답한 뒤 보드를 생성해주세요.");
+    const blockingIssue = getRepositoryDraftBlockingIssue({
+      answers,
+      hasConnectedRepository: Boolean(activeRepository),
+      questions: recommendation.questions
+    });
+
+    if (blockingIssue?.field === "ci_cd_connection") {
+      setPublicRecommendationStage("configuration");
+      focusConnectionRequirement(blockingIssue.message);
+      return;
+    }
+
+    if (blockingIssue) {
+      setErrorMessage(blockingIssue.message);
       return;
     }
     const templateId = selectedPublicTemplateId ?? recommendation.candidates[0]?.templateId;
@@ -250,7 +281,7 @@ export function RepositoryStartClient({
           answers,
           deploymentType: effectiveDeploymentType,
           templateId,
-          usesCiCd
+          usesCiCd: true
         })
       );
 
@@ -304,7 +335,7 @@ export function RepositoryStartClient({
 
       if ("status" in draft) {
         setActionState("error");
-        setErrorMessage(`Amazon Q媛 異붽? ?뺤씤???붿껌?덉뒿?덈떎: ${draft.question}`);
+        setErrorMessage(`Amazon Q가 추가 확인을 요청했습니다: ${draft.question}`);
         return;
       }
 
@@ -319,7 +350,7 @@ export function RepositoryStartClient({
       );
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Amazon Q濡???μ냼 ?ㅼ씠?닿렇?⑥쓣 ?앹꽦?섏? 紐삵뻽?듬땲??"));
+      setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
     }
   }
 
@@ -356,10 +387,12 @@ export function RepositoryStartClient({
       });
       setRepositories([connected]);
       setRecommendation(null);
+      setConnectionWarning("");
+      setRepositoryConnectionError("");
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "저장소를 연결하지 못했습니다."));
+      setRepositoryConnectionError(getApiErrorMessage(error, "저장소를 연결하지 못했습니다."));
     }
   }
 
@@ -373,7 +406,6 @@ export function RepositoryStartClient({
       setRepositories((current) => applyRepositoryAnalysis(current, result));
       setRecommendation(result.aiHandoff.recommendation ?? null);
       setDeploymentType(result.aiHandoff.deploymentTypeDefault ?? "serverless");
-      setUsesCiCd(result.aiHandoff.usesCiCdDefault ?? false);
       setAnswers({});
       setActionState("idle");
     } catch (error) {
@@ -392,7 +424,7 @@ export function RepositoryStartClient({
         projectId,
         sourceRepositoryId: activeRepository.id,
         deploymentType,
-        usesCiCd,
+        usesCiCd: true,
         answers: Object.entries(answers).map(([questionId, value]) => ({ questionId, value }))
       });
       setRecommendation(result.recommendation);
@@ -401,6 +433,28 @@ export function RepositoryStartClient({
       setRecommendationState("error");
       setErrorMessage(getApiErrorMessage(error, "템플릿 후보를 추천하지 못했습니다."));
     }
+  }
+
+  function focusConnectionRequirement(message: string): void {
+    setConnectionWarning(message);
+    setErrorMessage("");
+    window.requestAnimationFrame(() => connectionSectionRef.current?.focus());
+  }
+
+  function confirmPublicRecommendationConfiguration(): void {
+    const blockingIssue = getRepositoryDraftBlockingIssue({
+      answers: {},
+      hasConnectedRepository: Boolean(activeRepository),
+      questions: []
+    });
+
+    if (blockingIssue) {
+      focusConnectionRequirement(blockingIssue.message);
+      return;
+    }
+
+    setConnectionWarning("");
+    setPublicRecommendationStage("questions");
   }
 
   return (
@@ -469,7 +523,7 @@ export function RepositoryStartClient({
                   </button>
                 </form>
                 <p className={styles.inlineHint}>
-                  공개 저장소는 GitHub 계정 연결 없이 분석합니다. 비공개 저장소, PR 생성, CI/CD 인계는 전역 설정의 GitHub 권한 연결이 필요합니다.
+                  공개 저장소 분석은 바로 시작할 수 있으며, 초안 생성 전에는 아래에서 CI/CD 연결을 완료해야 합니다.
                 </p>
               </>
             ) : null}
@@ -478,6 +532,22 @@ export function RepositoryStartClient({
                 aiDesignHref={createWorkspaceAiStartHref({ projectId, projectName })}
                 answers={answers}
                 analysis={publicAnalysis}
+                configurationWarning={connectionWarning}
+                connectionControl={(
+                  <RepositoryCiCdConnection
+                    actionState={actionState}
+                    activeRepository={activeRepository}
+                    candidates={candidates}
+                    candidatesLoaded={candidatesLoaded}
+                    connectionError={repositoryConnectionError}
+                    loadState={loadState}
+                    onConnect={(candidate) => void connectRepository(candidate)}
+                    onInstall={() => void openGitHubConnection()}
+                    onLoadCandidates={() => void loadCandidates()}
+                    onRetryRepositories={() => void loadRepositories()}
+                    sectionRef={connectionSectionRef}
+                  />
+                )}
                 deploymentType={deploymentType}
                 isBusy={isPublicAnalysisBusy}
                 onAnswer={(questionId, value) => {
@@ -485,7 +555,7 @@ export function RepositoryStartClient({
                   setErrorMessage("");
                 }}
                 onCreateBoard={() => void createPublicRepositoryBoard()}
-                onConfirmConfiguration={() => setPublicRecommendationStage("questions")}
+                onConfirmConfiguration={confirmPublicRecommendationConfiguration}
                 onDeploymentTypeChange={(nextDeploymentType) => {
                   setDeploymentType(nextDeploymentType);
                   setSelectedPublicTemplateId(null);
@@ -496,55 +566,14 @@ export function RepositoryStartClient({
                   setSelectedPublicTemplateId(templateId);
                   setAnswers({});
                 }}
-                onUsesCiCdChange={setUsesCiCd}
                 selectedTemplateId={selectedPublicTemplateId}
                 stage={publicRecommendationStage}
-                usesCiCd={usesCiCd}
               />
             ) : null}
           </section>
         ) : null}
 
-        {showUrlAnalysis
-        && publicAnalysis
-        && publicRecommendationStage === "questions"
-        && usesCiCd
-        && !activeRepository ? (
-          <section className={styles.connectionPanel}>
-            <GitBranch aria-hidden="true" size={24} />
-            <h2>CI/CD 연결</h2>
-            <p className={styles.inlineHint}>
-              GitHub App 권한이 있는 저장소를 선택해 PR과 자동 배포 흐름에 연결합니다.
-            </p>
-            {loadState === "loading" ? (
-              <p className={styles.inlineHint} role="status">연결된 저장소를 확인하는 중입니다.</p>
-            ) : null}
-            {loadState === "error" ? (
-              <ProductState
-                action={<button onClick={() => void loadRepositories()} type="button">다시 시도</button>}
-                compact
-                description={repositoryConnectionError}
-                kind="error"
-                title="연결된 저장소 상태를 확인할 수 없습니다"
-              />
-            ) : null}
-            <div className={styles.actions}>
-              <button disabled={actionState === "loading" || loadState !== "idle"} onClick={() => void loadCandidates()} type="button">
-                연결 가능한 저장소 보기
-              </button>
-              <Link className={styles.secondaryAction} href={githubSettingsHref}>
-                <Settings2 aria-hidden="true" size={16} /> 환경설정에서 권한 관리
-              </Link>
-            </div>
-            <RepositoryCandidates
-              actionState={actionState}
-              candidates={candidates}
-              onConnect={(candidate) => void connectRepository(candidate)}
-            />
-          </section>
-        ) : null}
-
-        {activeRepository ? (
+        {activeRepository && !publicAnalysis ? (
           <section className={styles.analysisPanel}>
             <div>
               <span>연결된 저장소</span>
@@ -566,7 +595,7 @@ export function RepositoryStartClient({
                     <option value="serverless">서버리스 기반</option>
                   </select>
                 </label>
-                <CiCdHandoffOption checked={usesCiCd} onChange={setUsesCiCd} />
+                <RepositoryCiCdConnectedState repository={activeRepository} />
                 <RepositoryQuestions
                   answers={answers}
                   onAnswer={(questionId, value) =>
@@ -628,7 +657,6 @@ function RepositoryQuestions({
     <section className={styles.questionSection} aria-label="추가 질문">
       <div className={styles.questionSectionHeader}>
         <strong>추가 질문</strong>
-        <span>추천 결과를 아키텍처에 맞게 조정합니다.</span>
       </div>
       <div className={styles.questionList}>
         {questions.map((question) => (
@@ -679,26 +707,120 @@ function RepositoryQuestions({
   );
 }
 
-function hasRepositoryQuestionAnswer(value: string | boolean | undefined): value is string | boolean {
-  return typeof value === "boolean" || (typeof value === "string" && value.trim().length > 0);
+function RepositoryCiCdConnection({
+  actionState,
+  activeRepository,
+  candidates,
+  candidatesLoaded,
+  connectionError,
+  loadState,
+  onConnect,
+  onInstall,
+  onLoadCandidates,
+  onRetryRepositories,
+  sectionRef
+}: {
+  readonly actionState: RequestState;
+  readonly activeRepository: SourceRepository | null;
+  readonly candidates: readonly GitHubInstalledRepositoryCandidate[];
+  readonly candidatesLoaded: boolean;
+  readonly connectionError: string;
+  readonly loadState: RequestState;
+  readonly onConnect: (candidate: GitHubInstalledRepositoryCandidate) => void;
+  readonly onInstall: () => void;
+  readonly onLoadCandidates: () => void;
+  readonly onRetryRepositories: () => void;
+  readonly sectionRef: RefObject<HTMLElement | null>;
+}) {
+  if (activeRepository) {
+    return (
+      <section
+        aria-label="CI/CD 연결"
+        className={styles.ciCdSection}
+        ref={sectionRef}
+        tabIndex={-1}
+      >
+        <ProductState
+          compact
+          description={`${activeRepository.owner}/${activeRepository.name} · ${activeRepository.defaultBranch}`}
+          kind="success"
+          title="CI/CD 연결 완료"
+        />
+      </section>
+    );
+  }
+
+  const isBusy = actionState === "loading" || loadState === "loading";
+
+  return (
+    <section
+      aria-label="CI/CD 연결"
+      className={styles.ciCdSection}
+      ref={sectionRef}
+      tabIndex={-1}
+    >
+      <div className={styles.ciCdCopy}>
+        <strong>CI/CD 연결</strong>
+        <small>초안을 만들 저장소를 GitHub PR과 자동 배포 흐름에 연결합니다.</small>
+      </div>
+      {loadState === "loading" ? (
+        <ProductState compact description="프로젝트 연결 상태를 확인하고 있습니다." kind="loading" title="CI/CD 연결 확인 중" />
+      ) : null}
+      {loadState === "error" ? (
+        <ProductState
+          action={<button onClick={onRetryRepositories} type="button">다시 시도</button>}
+          compact
+          description={connectionError}
+          kind="error"
+          title="CI/CD 연결 상태를 확인할 수 없습니다"
+        />
+      ) : null}
+      {actionState === "error" && loadState !== "error" ? (
+        <ProductState
+          action={<button onClick={onLoadCandidates} type="button">다시 시도</button>}
+          compact
+          description={connectionError}
+          kind="error"
+          title="GitHub 저장소를 불러오지 못했습니다"
+        />
+      ) : null}
+      {loadState === "idle" ? (
+        <div className={styles.actions}>
+          <button disabled={isBusy} onClick={onInstall} type="button">
+            GitHub 연결
+          </button>
+          <button
+            className={styles.secondaryAction}
+            disabled={isBusy}
+            onClick={onLoadCandidates}
+            type="button"
+          >
+            연결 가능한 저장소 불러오기
+          </button>
+        </div>
+      ) : null}
+      {candidatesLoaded && candidates.length === 0 && actionState !== "loading" ? (
+        <ProductState
+          compact
+          description="GitHub 연결에서 이 프로젝트에 사용할 저장소 접근 권한을 추가해주세요."
+          kind="empty"
+          title="연결 가능한 저장소가 없습니다"
+        />
+      ) : null}
+      <RepositoryCandidates actionState={actionState} candidates={candidates} onConnect={onConnect} />
+    </section>
+  );
 }
 
-function CiCdHandoffOption({
-  checked,
-  onChange
-}: {
-  readonly checked: boolean;
-  readonly onChange: (checked: boolean) => void;
-}) {
+function RepositoryCiCdConnectedState({ repository }: { readonly repository: SourceRepository }) {
   return (
-    <section className={styles.ciCdSection} aria-label="CI/CD 인계 설정">
-      <label className={styles.ciCdLabel}>
-        <input checked={checked} onChange={(event) => onChange(event.target.checked)} type="checkbox" />
-        <span className={styles.ciCdCopy}>
-          <strong>CI/CD 인계 사용</strong>
-          <small>GitHub PR과 자동 배포 흐름에 연결합니다.</small>
-        </span>
-      </label>
+    <section className={styles.ciCdSection} aria-label="CI/CD 연결">
+      <ProductState
+        compact
+        description={`${repository.owner}/${repository.name} · ${repository.defaultBranch}`}
+        kind="success"
+        title="CI/CD 연결 완료"
+      />
     </section>
   );
 }
@@ -743,6 +865,8 @@ function PublicRepositoryRecommendationStep({
   aiDesignHref,
   answers,
   analysis,
+  configurationWarning,
+  connectionControl,
   deploymentType,
   isBusy,
   onAnswer,
@@ -751,14 +875,14 @@ function PublicRepositoryRecommendationStep({
   onDeploymentTypeChange,
   onEditConfiguration,
   onSelectTemplate,
-  onUsesCiCdChange,
   selectedTemplateId,
-  stage,
-  usesCiCd
+  stage
 }: {
   readonly aiDesignHref: string;
   readonly answers: Record<string, string | boolean>;
   readonly analysis: SourceRepositoryAnalysisResult;
+  readonly configurationWarning: string;
+  readonly connectionControl: ReactNode;
   readonly deploymentType: RepositoryDeploymentType;
   readonly isBusy: boolean;
   readonly onAnswer: (questionId: string, value: string | boolean) => void;
@@ -767,10 +891,8 @@ function PublicRepositoryRecommendationStep({
   readonly onDeploymentTypeChange: (deploymentType: RepositoryDeploymentType) => void;
   readonly onEditConfiguration: () => void;
   readonly onSelectTemplate: (templateId: PublicRepositoryTemplateId) => void;
-  readonly onUsesCiCdChange: (usesCiCd: boolean) => void;
   readonly selectedTemplateId: PublicRepositoryTemplateId | null;
   readonly stage: PublicRecommendationStage;
-  readonly usesCiCd: boolean;
 }) {
   const recommendation = createPublicRepositoryRecommendation({
     analysis,
@@ -876,7 +998,12 @@ function PublicRepositoryRecommendationStep({
           </select>
         </label>
       ) : null}
-      <CiCdHandoffOption checked={usesCiCd} onChange={onUsesCiCdChange} />
+      {connectionControl}
+      {configurationWarning ? (
+        <small aria-live="polite" className={styles.configurationWarning}>
+          {configurationWarning}
+        </small>
+      ) : null}
       <button
         className={styles.publicBoardAction}
         disabled={!selectedCandidate}

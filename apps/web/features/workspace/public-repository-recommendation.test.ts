@@ -36,9 +36,9 @@ test("public repository AI draft keeps the selected Template and includes follow
 
   assert.equal(relationalRequest.templateId, "ecs-fargate-container-app");
   assert.match(relationalRequest.prompt, /selected Template is the highest-priority constraint/i);
-  assert.match(relationalRequest.prompt, /Which data store should be included\?/);
-  assert.match(relationalRequest.prompt, /Relational database/);
-  assert.match(relationalRequest.prompt, /API backend/);
+  assert.match(relationalRequest.prompt, /영구 데이터 저장소/);
+  assert.match(relationalRequest.prompt, /관계형 데이터베이스/);
+  assert.match(relationalRequest.prompt, /API 백엔드/);
   assert.match(relationalRequest.prompt, /direct host operations/i);
   assert.match(relationalRequest.prompt, /Application type: API server/i);
   assert.match(relationalRequest.prompt, /Required Components:/);
@@ -47,17 +47,17 @@ test("public repository AI draft keeps the selected Template and includes follow
     [
       {
         questionId: "application-scope",
-        question: "Which application scope should be deployed?",
+        question: "아키텍처에 먼저 포함할 애플리케이션 범위를 선택해주세요.",
         answer: "api"
       },
       {
         questionId: "data-persistence",
-        question: "Which data store should be included?",
+        question: "이 애플리케이션에 영구 데이터 저장소가 필요한가요?",
         answer: "relational"
       },
       {
         questionId: "operations-preference",
-        question: "Which operating model do you prefer?",
+        question: "첫 배포에서 선호하는 운영 방식을 선택해주세요.",
         answer: "ec2"
       }
     ]
@@ -124,7 +124,7 @@ test("public repository recommendation returns multiple candidates and follow-up
     recommendation.questions.map((question) => question.id),
     ["include_frontend", "include_database"]
   );
-  assert.equal(recommendation.questions[0]?.prompt, "AI가 생성한 프론트엔드 확인 질문");
+  assert.equal(recommendation.questions[0]?.prompt, "감지된 React 웹 프론트엔드를 이 아키텍처에 포함할까요?");
 });
 
 test("follow-up questions change with the selected template", () => {
@@ -259,7 +259,11 @@ test("legacy public analysis fallback shows at most three relevant template cand
     );
     assert.equal(
       recommendation.candidates.every(
-        (candidate) => candidate.reasons.length > 0 && candidate.tradeoffs.length > 0
+        (candidate) =>
+          candidate.reasons.length >= 2
+          && candidate.tradeoffs.length >= 2
+          && candidate.reasons.every(containsKorean)
+          && candidate.tradeoffs.every(containsKorean)
       ),
       true,
       deploymentType
@@ -336,6 +340,10 @@ function createAnalysis(): SourceRepositoryAnalysisResult {
       }
     }
   };
+}
+
+function containsKorean(value: string): boolean {
+  return /[\u3131-\u318e\uac00-\ud7a3]/u.test(value);
 }
 
 function createAnalysisWithChoiceQuestions(): SourceRepositoryAnalysisResult {

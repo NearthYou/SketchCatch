@@ -50,7 +50,6 @@
 .heading h1,
 .heading p,
 .publicUrlPanel h2,
-.connectionPanel h2,
 .analysisPanel h2,
 .analysisPanel p {
   margin: 0;
@@ -67,7 +66,6 @@
   font-size: 13px;
 }
 
-.connectionPanel,
 .publicUrlPanel,
 .analysisPanel {
   display: grid;
@@ -90,8 +88,7 @@
 .analysisPanel > button,
 .recommendationForm button,
 .candidateList button,
-.boardAction,
-.connectionPanel button {
+.boardAction {
   display: inline-flex;
   min-height: 40px;
   align-items: center;
@@ -571,26 +568,18 @@
 }
 
 .ciCdSection {
+  display: grid;
   margin: 2px 0;
   border-top: 1px solid var(--color-hairline-strong);
   border-bottom: 1px solid var(--color-hairline-strong);
   padding: 16px;
   background: var(--color-surface-soft);
-}
-
-.ciCdLabel {
-  display: grid;
-  align-items: center;
-  cursor: pointer;
-  grid-template-columns: 22px minmax(0, 1fr);
   gap: 12px;
 }
 
-.ciCdLabel input {
-  width: 22px;
-  height: 22px;
-  margin: 0;
-  accent-color: var(--color-primary);
+.ciCdSection:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .ciCdCopy {
@@ -609,6 +598,14 @@
   color: var(--color-body);
   font-size: 12px;
   font-weight: 400;
+  line-height: 1.45;
+}
+
+.configurationWarning {
+  margin: -4px 0 0;
+  color: var(--color-error);
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.45;
 }
 

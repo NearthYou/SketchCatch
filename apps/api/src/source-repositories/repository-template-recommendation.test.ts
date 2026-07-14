@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RepositoryTemplateRecommendationInput } from "./repository-template-recommendation.js";
 import {
+  createRepositoryTemplateRecommendationProfile,
   isRepositoryTemplateAiRankingConfigured,
   recommendRepositoryTemplates,
   recommendRepositoryTemplatesWithAi
@@ -38,6 +39,35 @@ test("every deployment type returns at most three ranked templates with non-dupl
   }
 });
 
+test("Repository Draft recommendations always use the required CI/CD path", () => {
+  const { answers: _answers, deploymentType: _deploymentType, usesCiCd: _usesCiCd, ...selectionInput } = createInput();
+  const profile = createRepositoryTemplateRecommendationProfile(selectionInput);
+
+  assert.equal(profile.usesCiCdDefault, true);
+  assert.equal(profile.recommendation?.usesCiCd, true);
+});
+
+test("deterministic recommendations provide detailed Korean explanations and questions", () => {
+  const recommendation = recommendRepositoryTemplates(createInput());
+
+  for (const candidate of recommendation.candidates) {
+    assert.ok(candidate.reasons.length >= 2, `${candidate.templateId} 추천 이유`);
+    assert.ok(candidate.tradeoffs.length >= 2, `${candidate.templateId} 고려할 점`);
+    assert.ok(candidate.reasons.every(containsKorean), `${candidate.templateId} 추천 이유 한국어`);
+    assert.ok(candidate.tradeoffs.every(containsKorean), `${candidate.templateId} 고려할 점 한국어`);
+
+    for (const question of candidate.questions ?? []) {
+      assert.equal(containsKorean(question.prompt), true, `${question.id} 질문`);
+      assert.equal(containsKorean(question.reason), true, `${question.id} 질문 이유`);
+      assert.equal(
+        question.options?.every((option) => containsKorean(option.label)) ?? true,
+        true,
+        `${question.id} 선택지`
+      );
+    }
+  }
+});
+
 test("container recommendations reflect repository topology instead of returning fixed ECS and EKS scores", () => {
   const singleService = recommendRepositoryTemplates(createSingleServiceContainerInput());
   const multiService = recommendRepositoryTemplates(createInput());
@@ -66,22 +96,77 @@ test("audience-live-check style repository ranks Fargate before 3-tier", () => {
   assert.notEqual(recommendation.candidates[0]?.templateId, "three-tier-web-app");
 });
 
+test("AI cannot rank 3-tier before Fargate for the audience-live-check repository", async () => {
+  const recommendation = await recommendRepositoryTemplatesWithAi(
+    createAudienceLiveCheckContainerInput(),
+    {
+      client: {
+        responses: {
+          parse: async () => ({
+            output_parsed: {
+              candidates: [
+                {
+                  templateId: "three-tier-web-app",
+                  confidence: 0.94,
+                  reasons: [
+                    "React와 Express를 웹 계층과 애플리케이션 계층으로 나눌 수 있습니다.",
+                    "일반적인 웹 애플리케이션 확장 구조를 적용할 수 있습니다."
+                  ],
+                  tradeoffs: [
+                    "단일 컨테이너라는 저장소 배포 근거를 직접 반영하지 못합니다.",
+                    "EC2 패치와 Auto Scaling Group 운영이 추가됩니다."
+                  ],
+                  questions: []
+                },
+                {
+                  templateId: "ecs-fargate-container-app",
+                  confidence: 0.88,
+                  reasons: [
+                    "단일 Dockerfile이 ECS Fargate Task 경계와 직접 맞습니다.",
+                    "React와 Express를 하나의 컨테이너 서비스로 배포할 수 있습니다."
+                  ],
+                  tradeoffs: [
+                    "ALB와 Fargate의 기본 비용을 확인해야 합니다.",
+                    "Task 네트워크와 상태 확인 경로를 정해야 합니다."
+                  ],
+                  questions: []
+                }
+              ]
+            }
+          })
+        }
+      }
+    }
+  );
+
+  assert.equal(recommendation.candidates[0]?.templateId, "ecs-fargate-container-app");
+  assert.notEqual(recommendation.candidates[0]?.templateId, "three-tier-web-app");
+});
+
 test("AI ranks only supported repository templates and generates template-specific questions", async () => {
   let capturedInput = "";
+  let capturedInstructions = "";
   const input = createInput();
   const recommendation = await recommendRepositoryTemplatesWithAi(input, {
     client: {
       responses: {
         parse: async (request) => {
           capturedInput = request.input;
+          capturedInstructions = request.instructions;
           return {
             output_parsed: {
               candidates: [
                 {
                   templateId: "eks-container-app",
                   confidence: 0.88,
-                  reasons: ["Kubernetes 운영 확장성을 우선할 수 있습니다."],
-                  tradeoffs: ["클러스터 운영 복잡도가 증가합니다."],
+                  reasons: [
+                    "Kubernetes 운영 확장성을 우선할 수 있습니다.",
+                    "저장소의 여러 Application Unit을 독립 워크로드로 나눌 수 있습니다."
+                  ],
+                  tradeoffs: [
+                    "클러스터 운영 복잡도가 증가합니다.",
+                    "EKS 제어 영역과 애드온의 고정 비용을 검토해야 합니다."
+                  ],
                   questions: [
                     {
                       id: "include_database",
@@ -93,8 +178,14 @@ test("AI ranks only supported repository templates and generates template-specif
                 {
                   templateId: "ecs-fargate-container-app",
                   confidence: 0.82,
-                  reasons: ["Docker 기반 서비스를 가장 단순하게 운영할 수 있습니다."],
-                  tradeoffs: ["Kubernetes 이식성은 제공하지 않습니다."],
+                  reasons: [
+                    "Docker 기반 서비스를 가장 단순하게 운영할 수 있습니다.",
+                    "프론트엔드와 API를 Fargate Service 경계로 분리할 수 있습니다."
+                  ],
+                  tradeoffs: [
+                    "Kubernetes 이식성은 제공하지 않습니다.",
+                    "ALB와 Fargate의 기본 비용을 트래픽 규모와 비교해야 합니다."
+                  ],
                   questions: [
                     {
                       id: "include_frontend",
@@ -122,6 +213,9 @@ test("AI ranks only supported repository templates and generates template-specif
   assert.match(capturedInput, /allowedQuestionIds/);
   assert.match(capturedInput, /repositoryProfile/);
   assert.doesNotMatch(capturedInput, /currentConfidence/);
+  assert.match(capturedInstructions, /한국어/);
+  assert.match(capturedInstructions, /2개 이상/);
+  assert.match(capturedInstructions, /실제 저장소 근거/);
   assert.deepEqual(
     recommendation.candidates.map((candidate) => candidate.templateId).slice(0, 3),
     ["eks-container-app", "ecs-fargate-container-app", "three-tier-web-app"]
@@ -151,8 +245,14 @@ test("AI ranking keeps a valid partial ranking and fills omitted candidates dete
               {
                 templateId: firstCandidate.templateId,
                 confidence: 0.91,
-                reasons: ["AI가 Docker와 컨테이너 실행 근거를 다시 평가했습니다."],
-                tradeoffs: ["대체 운영 방식과 이식성을 함께 검토해야 합니다."],
+                reasons: [
+                  "AI가 Docker와 컨테이너 실행 근거를 다시 평가했습니다.",
+                  "Application Unit 경계를 후보 템플릿의 런타임과 비교했습니다."
+                ],
+                tradeoffs: [
+                  "대체 운영 방식과 이식성을 함께 검토해야 합니다.",
+                  "상시 비용과 운영 복잡도를 배포 전에 확인해야 합니다."
+                ],
                 questions: (firstCandidate.questions ?? []).map((question) => ({
                   id: question.id,
                   prompt: question.prompt,
@@ -234,8 +334,8 @@ test("AI ranking keeps AI scores but replaces non-Korean explanations", async ()
             candidates: fallback.candidates.slice(0, 3).map((candidate) => ({
               templateId: candidate.templateId,
               confidence: Math.min(candidate.confidence + 0.01, 1),
-              reasons: ["English reason"],
-              tradeoffs: ["English tradeoff"],
+              reasons: ["English reason", "Another English reason"],
+              tradeoffs: ["English tradeoff", "Another English tradeoff"],
               questions: (candidate.questions ?? []).map((question) => ({
                 id: question.id,
                 prompt: "English question",
@@ -266,8 +366,14 @@ test("AI ranking keeps valid AI explanations when its question set needs determi
             candidates: fallback.candidates.slice(0, 3).map((candidate) => ({
               templateId: candidate.templateId,
               confidence: candidate.confidence + 0.01,
-              reasons: ["저장소의 컨테이너 근거를 AI가 다시 평가했습니다."],
-              tradeoffs: ["운영 복잡도를 함께 검토해야 합니다."],
+              reasons: [
+                "저장소의 컨테이너 근거를 AI가 다시 평가했습니다.",
+                "Application Unit과 런타임 경계를 후보 템플릿에 대조했습니다."
+              ],
+              tradeoffs: [
+                "운영 복잡도를 함께 검토해야 합니다.",
+                "상시 비용과 확장 방식을 배포 전에 확인해야 합니다."
+              ],
               questions: (candidate.questions ?? []).map((question) => ({
                 id: question.id,
                 prompt: question.id === "include_database"
@@ -375,43 +481,54 @@ function createSingleServiceContainerInput(): RepositoryTemplateRecommendationIn
   };
 }
 
+function containsKorean(value: string): boolean {
+  return /[\u3131-\u318e\uac00-\ud7a3]/u.test(value);
+}
+
 function createAudienceLiveCheckContainerInput(): RepositoryTemplateRecommendationInput {
   return {
     snapshot: {
       revision: "commit-sha",
       treePaths: [
-        "package.json",
-        "Dockerfile",
-        ".github/workflows/deploy.yml",
-        "src/App.tsx",
-        "server/index.ts"
+        "apps/api/Dockerfile",
+        "apps/api/package.json",
+        "apps/web/package.json",
+        "apps/web/vite.config.ts",
+        "README.md"
       ],
       files: [
         {
-          path: "package.json",
-          content: '{"scripts":{"start":"node server/index.js","build":"vite build"},"dependencies":{"@vitejs/plugin-react":"latest","express":"latest","react":"latest","vite":"latest"}}'
+          path: "apps/api/package.json",
+          content: '{"scripts":{"start":"node dist/main.js"},"dependencies":{"express":"latest"}}'
         },
         {
-          path: "Dockerfile",
-          content: "FROM node:24\nCOPY package.json .\nRUN npm install\nCOPY . .\nCMD [\"npm\", \"start\"]"
+          path: "apps/web/package.json",
+          content: '{"scripts":{"build":"vite build"},"dependencies":{"react":"latest","vite":"latest"}}'
         },
         {
-          path: ".github/workflows/deploy.yml",
-          content: "name: deploy\non: [push]\njobs:\n  deploy:\n    runs-on: ubuntu-latest"
+          path: "apps/api/Dockerfile",
+          content: "FROM node:24\nEXPOSE 8080\nHEALTHCHECK CMD curl -f http://localhost:8080/health"
         },
         {
           path: "README.md",
-          content: "Audience live check is a single container Node and React app. No database is required."
+          content: "apps/web은 S3와 CloudFront로 정적 배포합니다. apps/api는 Docker image를 ECR에 push한 뒤 ECS/Fargate Service로 실행합니다. 데이터베이스는 사용하지 않습니다."
         }
       ]
     },
     applicationUnits: [
       {
-        id: "app",
-        rootPath: ".",
-        kind: "fullstack",
-        frameworks: ["React", "Express"],
-        evidencePaths: ["package.json", "Dockerfile"]
+        id: "apps/api",
+        rootPath: "apps/api",
+        kind: "backend",
+        frameworks: ["Express"],
+        evidencePaths: ["apps/api/package.json", "apps/api/Dockerfile"]
+      },
+      {
+        id: "apps/web",
+        rootPath: "apps/web",
+        kind: "frontend",
+        frameworks: ["React", "Vite"],
+        evidencePaths: ["apps/web/package.json", "apps/web/vite.config.ts"]
       }
     ],
     evidence: [],

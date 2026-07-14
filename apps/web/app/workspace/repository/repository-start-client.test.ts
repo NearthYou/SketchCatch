@@ -50,3 +50,20 @@ test("Repository start screen selects a fetched branch before reanalysis", () =>
   assert.match(source, /analyzePublicRepositoryUrl\(repositoryUrl, defaultBranch\)/);
   assert.doesNotMatch(source, /placeholder="main"/);
 });
+
+test("Repository draft requires an inline CI/CD connection before continuing", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /createGitHubSourceRepositoryInstallUrl/);
+  assert.match(source, /getRepositoryDraftBlockingIssue/);
+  assert.match(source, /\.map\(localizePublicRepositoryQuestion\)/);
+  assert.match(source, /RepositoryCiCdConnection/);
+  assert.match(source, /className=\{styles\.configurationWarning\}/);
+  assert.match(source, /configurationWarning \? \(/);
+  assert.doesNotMatch(source, /title="CI\/CD 연결이 필요합니다"/);
+  assert.match(source, /onConfirmConfiguration=\{confirmPublicRecommendationConfiguration\}/);
+  assert.doesNotMatch(source, /CiCdHandoffOption/);
+  assert.doesNotMatch(source, /CI\/CD 인계 사용/);
+  assert.doesNotMatch(source, /환경설정에서 권한 관리/);
+  assert.doesNotMatch(source, /추천 결과를 아키텍처에 맞게 조정합니다\./);
+});

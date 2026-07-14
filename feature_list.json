@@ -658,6 +658,36 @@
         "notes": "Chrome에서 기준 Board 배치와 Global IAM/Definition / Ops의 Area / Group 표현을 확인했다. 독립 standards/spec review는 최종 finding 없이 종료됐다."
       },
       "notes": "No cloud, GitHub, or deployment mutation is authorized by this layout-only workstream."
+    },
+    {
+      "id": "REPOSITORY-ANALYSIS-DRAFT-FLOW-001",
+      "priority": 1,
+      "area": "repository-analysis-draft",
+      "title": "Korean repository recommendations with required inline CI/CD connection",
+      "user_visible_behavior": "Repository Analysis 추천은 저장소 근거를 연결한 상세 한국어 이유와 고려할 점을 제공하고, 같은 화면에서 CI/CD 연결을 완료해야 한국어 추가 질문과 Architecture Draft 생성으로 이동한다.",
+      "status": "passing",
+      "verification": [
+        "AI와 deterministic 추천 후보가 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공한다.",
+        "추가 질문, 선택지, 이유가 한국어로 표시되고 알려진 구형 영문 질문도 한국어로 정규화된다.",
+        "CI/CD 인계 checkbox와 전역 설정 이동을 제거하고 같은 화면에서 GitHub App 설치와 repository 선택을 시작한다.",
+        "CI/CD 연결 없이 확인하면 이동을 중단하고 확인 버튼 위에 작은 빨간 안내 문구를 표시한다.",
+        "whiskend/audience-live-check의 명확한 컨테이너 근거는 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/repository-template-recommendation.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/repository/repository-start-client.test.ts app/workspace/repository/repository-draft-readiness.test.ts features/workspace/public-repository-recommendation.test.ts",
+          "live POST /api/ai/source-repository-analysis for https://github.com/whiskend/audience-live-check",
+          "authenticated in-app Browser verification of Repository Analysis recommendation and required inline CI/CD gate",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Focused API tests passed 13/13 and focused Web tests passed 14/14. The live public analysis returned ECS Fargate 0.91, 3-tier 0.78, EKS 0.63 with ECS Fargate as recommendedTemplateId. Full pnpm test remains non-green on the pre-existing three-tier Template position/parent contract failures in packages/types."
+      },
+      "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
     }
   ]
 }
