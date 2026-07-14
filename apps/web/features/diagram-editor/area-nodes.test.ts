@@ -8,11 +8,12 @@ import {
   getAreaNodeLabel,
   getAreaNodeMetaLabel,
   isAreaNode,
+  isContainmentAreaNode,
   isDesignAreaNode,
   isResourceAreaNode
 } from "./area-nodes";
 
-test("findInnermostAreaDropTarget selects the innermost Area without Terraform reference rules", () => {
+test("findInnermostAreaDropTarget ignores visual-only scopes and selects the real containment Area", () => {
   const region = makeDesignNode({
     id: "region-1",
     type: "design_region",
@@ -27,9 +28,9 @@ test("findInnermostAreaDropTarget selects the innermost Area without Terraform r
     size: { width: 460, height: 320 },
     zIndex: 2
   });
-  const autoscalingGroup = makeResourceNode({
-    id: "asg-1",
-    resourceType: "aws_autoscaling_group",
+  const securityGroup = makeResourceNode({
+    id: "sg-1",
+    resourceType: "aws_security_group",
     position: { x: 140, y: 120 },
     size: { width: 240, height: 180 },
     zIndex: 3
@@ -43,12 +44,12 @@ test("findInnermostAreaDropTarget selects the innermost Area without Terraform r
   });
 
   assert.equal(
-    findInnermostAreaDropTarget(bucket, [region, vpc, autoscalingGroup, bucket])?.id,
-    "asg-1"
+    findInnermostAreaDropTarget(bucket, [region, vpc, securityGroup, bucket])?.id,
+    "vpc-1"
   );
 });
 
-test("findInnermostAreaDropTarget excludes Area nodes from Resource placement feedback", () => {
+test("findInnermostAreaDropTarget lets a visual scope itself enter a containment Area", () => {
   const region = makeDesignNode({
     id: "region-1",
     type: "design_region",
@@ -62,7 +63,7 @@ test("findInnermostAreaDropTarget excludes Area nodes from Resource placement fe
     size: { width: 240, height: 180 }
   });
 
-  assert.equal(findInnermostAreaDropTarget(autoscalingGroup, [region, autoscalingGroup]), null);
+  assert.equal(findInnermostAreaDropTarget(autoscalingGroup, [region, autoscalingGroup])?.id, region.id);
 });
 
 test("isAreaNode matches Region, Availability Zone, Group, and resource area nodes", () => {
@@ -74,10 +75,17 @@ test("isAreaNode matches Region, Availability Zone, Group, and resource area nod
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_region" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_availability_zone" })), true);
-  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), false);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
+});
+
+test("visual Security Group scopes cannot become persisted containment parents", () => {
+  assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
+  assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
+  assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), false);
+  assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), false);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
@@ -109,6 +117,16 @@ test("an authored presentation flag turns a catalog resource into a template-onl
   }
 });
 
+test("an authored presentation flag cannot turn an Auto Scaling Group into an Area", () => {
+  const autoscalingGroup = makeResourceNode({ resourceType: "aws_autoscaling_group" });
+
+  autoscalingGroup.metadata = { presentationArea: true };
+
+  assert.equal(isResourceAreaNode(autoscalingGroup), false);
+  assert.equal(isAreaNode(autoscalingGroup), false);
+  assert.equal(isContainmentAreaNode(autoscalingGroup), false);
+});
+
 test("area node helpers distinguish design containers from resource containers", () => {
   const region = makeDesignNode({ type: "design_region" });
   const regionResource = makeResourceNode({ resourceType: "aws_region" });
@@ -123,7 +141,7 @@ test("area node helpers distinguish design containers from resource containers",
   assert.equal(isDesignAreaNode(availabilityZoneResource), false);
   assert.equal(isResourceAreaNode(availabilityZoneResource), true);
   assert.equal(isDesignAreaNode(autoscalingGroupResource), false);
-  assert.equal(isResourceAreaNode(autoscalingGroupResource), true);
+  assert.equal(isResourceAreaNode(autoscalingGroupResource), false);
   assert.equal(isDesignAreaNode(vpc), false);
   assert.equal(isResourceAreaNode(vpc), true);
 });
@@ -155,7 +173,7 @@ test("getAreaNodeLabel uses the friendly uppercase board label instead of Terraf
         resourceType: "aws_autoscaling_group"
       })
     ),
-    "AUTO SCALING GROUP"
+    "Auto Scaling Group"
   );
   assert.equal(
     getAreaNodeLabel(

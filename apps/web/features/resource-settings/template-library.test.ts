@@ -270,8 +270,8 @@ test("Live Observation template carries the same ASG pressure resources as the d
     Buffer.from(String(launchTemplate.parameters?.values.userData), "base64").toString("utf8"),
     /sketchcatch-demo-managed-user-data-sha256:[a-f0-9]{64}/
   );
-  assert.match(String(audienceObject.parameters?.values.content), /\/api\/traffic/);
-  assert.match(
+  assert.doesNotMatch(String(audienceObject.parameters?.values.content), /URLSearchParams|fetch\(/);
+  assert.doesNotMatch(
     String(audienceObject.parameters?.values.content),
     /\/api\/live-observations\/public\//
   );

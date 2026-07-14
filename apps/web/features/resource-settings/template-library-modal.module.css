@@ -1,0 +1,80 @@
+.overlay {
+  align-items: center;
+  background: rgba(23, 23, 23, 0.42);
+  box-sizing: border-box;
+  display: flex;
+  font-family: "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif;
+  inset: 64px 0 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 120;
+}
+
+.dialog {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 12px;
+  box-shadow: 0 32px 80px -32px rgba(23, 23, 23, 0.34);
+  box-sizing: border-box;
+  color: var(--workspace-text, #171717);
+  max-height: calc(100dvh - 112px);
+  max-width: 960px;
+  overflow: auto;
+  padding: 24px;
+  width: 100%;
+}
+
+.header {
+  align-items: start;
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+}
+
+.header h2,
+.header p {
+  margin: 4px 0 0;
+}
+
+.header p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 13px;
+}
+
+.closeButton {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.closeButton:hover {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.closeButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  outline: 2px solid var(--workspace-accent, #000000);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .overlay {
+    padding: 12px;
+  }
+
+  .dialog {
+    max-height: calc(100dvh - 88px);
+    padding: 16px;
+  }
+}

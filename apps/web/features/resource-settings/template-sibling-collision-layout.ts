@@ -1,5 +1,5 @@
 import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
-import { isAreaNode } from "../diagram-editor/area-nodes";
+import { isAreaNode, isSecurityGroupScopeNode } from "../diagram-editor/area-nodes";
 import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
 import {
   getResourceNodeVisualBounds,
@@ -10,6 +10,7 @@ const ROOT_PARENT_ID = "__template_collision_root__";
 const AREA_VISUAL_PADDING = 56;
 const MAX_PLACEMENT_STEPS_PER_NODE = 1_000;
 
+/** Template node를 40px grid에 정렬하되 명시된 scope와 network boundary는 보존합니다. */
 export function resolveTemplateSiblingVisualCollisions(
   diagram: DiagramJson,
   gridSize = 40
@@ -29,6 +30,7 @@ export function resolveTemplateSiblingVisualCollisions(
       }
     ])
   );
+  const intentionalArchitectureOverlaps = createIntentionalArchitectureOverlapKeys(diagram, nodeById);
   centerCollapsedHelpersInsideParents(nodeById);
   const childrenByParentId = createRenderableChildrenByParentId(nodeById);
   const parentIds = [...childrenByParentId.keys()].sort(
@@ -36,7 +38,13 @@ export function resolveTemplateSiblingVisualCollisions(
   );
 
   for (const parentId of parentIds) {
-    separateSiblingVisualBounds(parentId, childrenByParentId, nodeById, gridSize);
+    separateSiblingVisualBounds(
+      parentId,
+      childrenByParentId,
+      nodeById,
+      gridSize,
+      intentionalArchitectureOverlaps
+    );
     fitParentArea(parentId, childrenByParentId, nodeById, gridSize);
   }
 
@@ -119,11 +127,13 @@ function getParentDepth(parentId: string, nodeById: ReadonlyMap<string, DiagramN
   return depth;
 }
 
+// 명시적 architecture overlap만 유지하고 나머지 sibling 충돌은 grid 아래로 밀어냅니다.
 function separateSiblingVisualBounds(
   parentId: string,
   childrenByParentId: ReadonlyMap<string, readonly string[]>,
   nodeById: Map<string, DiagramNode>,
-  gridSize: number
+  gridSize: number,
+  intentionalArchitectureOverlaps: ReadonlySet<string>
 ): void {
   const siblingIds = [...(childrenByParentId.get(parentId) ?? [])].sort((leftId, rightId) => {
     const left = requireNode(nodeById, leftId);
@@ -140,7 +150,9 @@ function separateSiblingVisualBounds(
   for (const siblingId of siblingIds) {
     let placementSteps = 0;
 
-    while (placedIds.some((placedId) => nodesIntersect(nodeById, siblingId, placedId))) {
+    while (placedIds.some((placedId) =>
+      nodesIntersect(nodeById, siblingId, placedId, intentionalArchitectureOverlaps)
+    )) {
       if (placementSteps >= MAX_PLACEMENT_STEPS_PER_NODE) {
         console.error(`Unable to place Template node without overlap: ${siblingId}`);
         break;
@@ -233,14 +245,116 @@ function hasAreaAncestor(
   return false;
 }
 
+// 두 노드가 명시적 scope 또는 boundary 쌍이면 의도한 overlap으로 취급합니다.
 function nodesIntersect(
   nodeById: ReadonlyMap<string, DiagramNode>,
   leftId: string,
-  rightId: string
+  rightId: string,
+  intentionalArchitectureOverlaps: ReadonlySet<string>
 ): boolean {
+  if (intentionalArchitectureOverlaps.has(createNodePairKey(leftId, rightId))) {
+    return false;
+  }
+
   return boundsIntersect(
     getResourceNodeVisualBounds(requireNode(nodeById, leftId)),
     getResourceNodeVisualBounds(requireNode(nodeById, rightId))
+  );
+}
+
+// SG target과 IGW/Route Association 경계 marker처럼 의도된 architecture overlap만 수집합니다.
+function createIntentionalArchitectureOverlapKeys(
+  diagram: DiagramJson,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): ReadonlySet<string> {
+  const overlapKeys = new Set<string>();
+
+  for (const edge of diagram.edges) {
+    const scope = nodeById.get(edge.sourceNodeId);
+    const target = nodeById.get(edge.targetNodeId);
+
+    if (!scope || !target || !isSecurityGroupScopeNode(scope)) {
+      continue;
+    }
+
+    if (containsBounds(getResourceNodeVisualBounds(scope), getResourceNodeVisualBounds(target))) {
+      overlapKeys.add(createNodePairKey(scope.id, target.id));
+    }
+  }
+
+  for (const marker of nodeById.values()) {
+    const markerType = getResourceType(marker);
+    const boundaryContract = markerType === "aws_internet_gateway"
+      ? { referenceKey: "vpcId", targetType: "aws_vpc" }
+      : markerType === "aws_route_table_association"
+        ? { referenceKey: "subnetId", targetType: "aws_subnet" }
+        : undefined;
+
+    if (!boundaryContract) {
+      continue;
+    }
+
+    const boundary = [...nodeById.values()].find(
+      (candidate) =>
+        getResourceType(candidate) === boundaryContract.targetType &&
+        referencesResourceNode(marker, boundaryContract.referenceKey, candidate)
+    );
+
+    if (boundary && straddlesStoredBoundary(boundary, marker)) {
+      overlapKeys.add(createNodePairKey(boundary.id, marker.id));
+    }
+  }
+
+  return overlapKeys;
+}
+
+// materialized Terraform address가 boundary Area의 identity를 정확히 참조하는지 확인합니다.
+function referencesResourceNode(source: DiagramNode, valueKey: string, target: DiagramNode): boolean {
+  const targetType = target.parameters?.resourceType;
+  const targetName = target.parameters?.resourceName;
+
+  return Boolean(
+    targetType &&
+    targetName &&
+    source.parameters?.values[valueKey] === `${targetType}.${targetName}.id`
+  );
+}
+
+// icon stored rect가 Area 안팎에 걸쳐 있을 때만 boundary marker로 인정합니다.
+function straddlesStoredBoundary(area: DiagramNode, marker: DiagramNode): boolean {
+  const areaBounds = getStoredBounds(area);
+  const markerBounds = getStoredBounds(marker);
+
+  return boundsIntersect(areaBounds, markerBounds) && !containsBounds(areaBounds, markerBounds);
+}
+
+// Caption 확장 전 persisted node rectangle을 반환해 실제 경계 교차를 판정합니다.
+function getStoredBounds(node: DiagramNode): BoardVisualBounds {
+  return {
+    x: node.position.x,
+    y: node.position.y,
+    width: node.size.width,
+    height: node.size.height
+  };
+}
+
+// Terraform parameters가 있으면 resourceType을, 없으면 visual type을 사용합니다.
+function getResourceType(node: DiagramNode): string {
+  return node.parameters?.resourceType ?? node.type;
+}
+
+// 노드 순서와 무관한 pair key를 만들어 collision loop에서 상수 시간으로 조회합니다.
+function createNodePairKey(leftId: string, rightId: string): string {
+  return leftId < rightId ? `${leftId}\u0000${rightId}` : `${rightId}\u0000${leftId}`;
+}
+
+// target visual footprint 전체가 scope frame 내부인지 검사합니다.
+function containsBounds(container: BoardVisualBounds, target: BoardVisualBounds): boolean {
+  return (
+    target.x >= container.x &&
+    target.y >= container.y &&
+    target.x + target.width <= container.x + container.width &&
+    target.y + target.height <= container.y + container.height
   );
 }
 

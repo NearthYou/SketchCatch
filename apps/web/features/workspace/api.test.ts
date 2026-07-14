@@ -12,6 +12,7 @@ import {
   createArchitectureSnapshot,
   createAwsConnectionSetup,
   createDeployment,
+  executeDeployment,
   createLiveObservation,
   createGitCicdGitHubOAuthStartUrl,
   createProjectAssetUpload,
@@ -28,6 +29,7 @@ import {
   getGitCicdHandoffPipelineStatus,
   getAiPreDeploymentDeepScan,
   getProjectDeletePreview,
+  fetchProjectThumbnail,
   listDeploymentResources,
   listAwsConnections,
   listDeployments,
@@ -42,6 +44,7 @@ import {
   listReverseEngineeringScanLogs,
   listReverseEngineeringScans,
   pollLiveObservationSnapshots,
+  prepareDeployment,
   refreshGitCicdPipelineRun,
   refreshProjectGitCicdPipelineRuns,
   runDeploymentDestroy,
@@ -1223,6 +1226,37 @@ test("uploadProjectAsset sends auth headers for same-origin API uploads", async 
   assert.equal(requests[0]?.init?.body, "resource {}");
 });
 
+test("fetchProjectThumbnail reads the authenticated raster capture path as a Blob", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+
+    return new Response(new Blob(["captured-board"], { type: "image/webp" }), {
+      headers: { "Content-Type": "image/webp" },
+      status: 200
+    });
+  };
+
+  const thumbnail = await fetchProjectThumbnail(project.id);
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/thumbnail`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("authorization"), "Bearer access-token");
+  assert.equal(requests[0]?.init?.credentials, "include");
+  assert.equal(requests[0]?.init?.cache, "no-store");
+  assert.equal(thumbnail?.type, "image/webp");
+  assert.equal(await thumbnail?.text(), "captured-board");
+});
+
 test("confirmProjectAssetUpload marks the uploaded asset through the API", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -2143,6 +2177,54 @@ test("createDeployment posts selected artifact and verified AWS connection", asy
   assert.equal(deployment.status, "PENDING");
 });
 
+test("prepare and execute deployment use the revision-locked endpoints", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit | undefined }> = [];
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+  globalThis.fetch = async (input, init) => {
+    requests.push({ input, init });
+    return new Response(
+      JSON.stringify({
+        deployment: createDeploymentPayload({
+          id: "44444444-4444-4444-8444-444444444444",
+          projectId: project.id
+        })
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 200 }
+    );
+  };
+
+  await prepareDeployment({
+    projectId: project.id,
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    draftRevision: 7,
+    scope: "auto"
+  });
+  await executeDeployment("44444444-4444-4444-8444-444444444444");
+
+  assert.equal(String(requests[0]?.input), `/api/projects/${project.id}/deployments/prepare`);
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    architectureId: "55555555-5555-4555-8555-555555555555",
+    terraformArtifactId: "66666666-6666-4666-8666-666666666666",
+    awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    draftRevision: 7,
+    scope: "auto"
+  });
+  assert.equal(
+    String(requests[1]?.input),
+    "/api/deployments/44444444-4444-4444-8444-444444444444/execute"
+  );
+});
+
 test("deployment helpers list records, start plan, approve plan, apply, destroy, and read results", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
@@ -2866,39 +2948,17 @@ function createGitCicdPipelineLogPayload(pipelineRunId: string) {
 function createLiveObservationSessionPayload() {
   return {
     audienceUrl:
-      "https://audience.example.com/?observation=public-token&collector=https%3A%2F%2Fapp.example.com",
+      "https://audience.example.com/observe/22222222-2222-4222-8222-222222222222",
     createdAt: "2026-07-10T00:00:00.000Z",
     deploymentId: "11111111-1111-4111-8111-111111111111",
     expiresAt: "2026-07-10T00:15:00.000Z",
     id: "22222222-2222-4222-8222-222222222222",
-    status: "active",
-    trafficApiUrl: "https://traffic.example.com/api/traffic"
+    status: "active"
   };
 }
 
 function createLiveObservationSnapshotPayload(status: "active" | "stopped") {
   return {
-    capacity: {
-      currentInstanceCount: 1,
-      desiredCapacity: 1,
-      errorCode: null,
-      inServiceInstanceCount: 1,
-      instances: [
-        { healthStatus: "Healthy", instanceId: "i-demo", lifecycleState: "InService" }
-      ],
-      latestActivity: null,
-      maxCapacity: 2,
-      observedAt: "2026-07-10T00:00:01.000Z",
-      state: "available"
-    },
-    cloudWatch: {
-      delayedBySeconds: 1,
-      errorCode: null,
-      observedAt: "2026-07-10T00:00:00.000Z",
-      periodSeconds: 60,
-      requestCountPerTarget: 12,
-      state: "available"
-    },
     live: {
       acceptedEventCount: 12,
       observedAt: "2026-07-10T00:00:01.000Z",
@@ -2907,8 +2967,10 @@ function createLiveObservationSnapshotPayload(status: "active" | "stopped") {
       projectedRequestsPerMinute: 12,
       rollingRequestsPerSecond: 0.2
     },
+    latestObservation: null,
     observationId: "22222222-2222-4222-8222-222222222222",
-    status
+    status,
+    terminalAt: status === "stopped" ? "2026-07-10T00:01:00.000Z" : null
   };
 }
 

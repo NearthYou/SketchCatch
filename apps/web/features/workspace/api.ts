@@ -4,6 +4,8 @@ import type {
   AiPreDeploymentCheckRequest,
   AiPreDeploymentDeepScanResponse,
   AiSafetyExplanation,
+  ApplicationRelease,
+  ApplicationReleaseListResponse,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   AiTerraformStage,
@@ -30,7 +32,7 @@ import type {
   CreateDeploymentRequest,
   CreateGitCicdHandoffRequest,
   ConfirmProjectAssetUploadResponse,
-  CreateLiveObservationResponse,
+  CreateLiveObservationV2Response,
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   CreateProjectAssetUploadRequest,
@@ -70,8 +72,8 @@ import type {
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationRepositoriesRequest,
   ListGitHubInstallationRepositoriesResponse,
-  LiveObservationSnapshot,
-  LiveObservationSnapshotResponse,
+  LiveObservationV2Snapshot,
+  LiveObservationV2SnapshotResponse,
   Project,
   ProjectAssetUploadResponse,
   ProjectDetailsResponse,
@@ -79,6 +81,10 @@ import type {
   ProjectDeletePreviewResponse,
   ProjectListResponse,
   ProjectResponse,
+  ProjectDeploymentTarget,
+  ProjectDeploymentTargetResponse,
+  PrepareDeploymentRequest,
+  PutProjectDeploymentTargetRequest,
   RecommendRepositoryTemplateRequest,
   RecommendRepositoryTemplateResponse,
   RecentSuccessfulDeploymentProject,
@@ -88,7 +94,6 @@ import type {
   SourceRepositoryAnalysisResult,
   SourceRepositoryListResponse,
   SourceRepositoryResponse,
-  StopLiveObservationResponse,
   ConnectGitHubSourceRepositoryRequest,
   ReverseEngineeringScan,
   ReverseEngineeringScanListResponse,
@@ -151,6 +156,36 @@ export async function getProject(projectId: string): Promise<Project> {
   return response.project;
 }
 
+export async function getProjectDeploymentTarget(
+  projectId: string
+): Promise<ProjectDeploymentTarget | null> {
+  const response = await apiFetch<ProjectDeploymentTargetResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployment-target`,
+    { auth: true }
+  );
+  return response.target;
+}
+
+export async function putProjectDeploymentTarget(
+  projectId: string,
+  target: PutProjectDeploymentTargetRequest
+): Promise<ProjectDeploymentTarget> {
+  const response = await apiFetch<ProjectDeploymentTargetResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployment-target`,
+    { auth: true, method: "PUT", body: target }
+  );
+  if (!response.target) throw new Error("Deployment target response is empty.");
+  return response.target;
+}
+
+export async function listApplicationReleases(projectId: string): Promise<ApplicationRelease[]> {
+  const response = await apiFetch<ApplicationReleaseListResponse>(
+    `/projects/${encodeURIComponent(projectId)}/releases`,
+    { auth: true }
+  );
+  return response.releases;
+}
+
 export async function getProjectDeletePreview(
   projectId: string
 ): Promise<ProjectDeletePreviewResponse["preview"]> {
@@ -187,6 +222,35 @@ export async function getProjectDraft(projectId: string): Promise<ProjectDraftRe
   return apiFetch<ProjectDraftResponse>(`/projects/${encodeURIComponent(projectId)}/draft`, {
     auth: true
   });
+}
+
+// 인증된 Project의 최신 실제 Board 캡처를 raster Blob으로 읽습니다.
+export async function fetchProjectThumbnail(projectId: string): Promise<Blob | null> {
+  const headers = new Headers({ Accept: "image/webp,image/png" });
+  const session = readStoredAuthSession();
+
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  const response = await fetch(
+    buildApiUrl(`/projects/${encodeURIComponent(projectId)}/thumbnail`),
+    {
+      cache: "no-store",
+      credentials: "include",
+      headers
+    }
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error("Project Board 캡처를 불러오지 못했습니다.");
+  }
+
+  return response.blob();
 }
 
 export async function saveProjectDraft({
@@ -298,7 +362,13 @@ export async function uploadProjectAsset(
   });
 
   if (!response.ok) {
-    throw new Error("Terraform artifact 업로드에 실패했습니다.");
+    const contentType = headers.get("Content-Type")?.toLowerCase();
+
+    throw new Error(
+      contentType?.startsWith("text/")
+        ? "Terraform artifact 업로드에 실패했습니다."
+        : "Project asset 업로드에 실패했습니다."
+    );
   }
 }
 
@@ -727,7 +797,10 @@ export async function createDeployment({
   architectureId,
   terraformArtifactId,
   awsConnectionId,
-  liveProfile
+  liveProfile,
+  scope,
+  targetKind,
+  source
 }: {
   projectId: string;
 } & CreateDeploymentRequest): Promise<Deployment> {
@@ -740,7 +813,10 @@ export async function createDeployment({
         architectureId,
         terraformArtifactId,
         awsConnectionId,
-        ...(liveProfile !== undefined ? { liveProfile } : {})
+        ...(liveProfile !== undefined ? { liveProfile } : {}),
+        ...(scope !== undefined ? { scope } : {}),
+        ...(targetKind !== undefined ? { targetKind } : {}),
+        ...(source !== undefined ? { source } : {})
       }
     }
   );
@@ -748,11 +824,43 @@ export async function createDeployment({
   return response.deployment;
 }
 
-export async function listDeployments(projectId: string): Promise<Deployment[]> {
+export async function prepareDeployment({
+  projectId,
+  architectureId,
+  terraformArtifactId,
+  awsConnectionId,
+  draftRevision,
+  scope
+}: {
+  projectId: string;
+} & PrepareDeploymentRequest): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/deployments/prepare`,
+    {
+      auth: true,
+      method: "POST",
+      body: {
+        architectureId,
+        terraformArtifactId,
+        awsConnectionId,
+        draftRevision,
+        scope
+      }
+    }
+  );
+
+  return response.deployment;
+}
+
+export async function listDeployments(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<Deployment[]> {
   const response = await apiFetch<DeploymentListResponse>(
     `/projects/${encodeURIComponent(projectId)}/deployments`,
     {
-      auth: true
+      auth: true,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 
@@ -760,11 +868,12 @@ export async function listDeployments(projectId: string): Promise<Deployment[]> 
 }
 
 export async function createLiveObservation(
-  deploymentId: string
-): Promise<CreateLiveObservationResponse> {
-  return apiFetch<CreateLiveObservationResponse>(
+  deploymentId: string,
+  signal?: AbortSignal
+): Promise<CreateLiveObservationV2Response> {
+  return apiFetch<CreateLiveObservationV2Response>(
     `/deployments/${encodeURIComponent(deploymentId)}/live-observations`,
-    { auth: true, method: "POST" }
+    { auth: true, method: "POST", ...(signal ? { signal } : {}) }
   );
 }
 
@@ -772,8 +881,8 @@ export async function getLiveObservationSnapshot(
   deploymentId: string,
   observationId: string,
   signal?: AbortSignal
-): Promise<LiveObservationSnapshot> {
-  const response = await apiFetch<LiveObservationSnapshotResponse>(
+): Promise<LiveObservationV2Snapshot> {
+  const response = await apiFetch<LiveObservationV2SnapshotResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/live-observations/${encodeURIComponent(observationId)}`,
     { auth: true, ...(signal ? { signal } : {}) }
   );
@@ -783,11 +892,12 @@ export async function getLiveObservationSnapshot(
 
 export async function stopLiveObservation(
   deploymentId: string,
-  observationId: string
-): Promise<LiveObservationSnapshot> {
-  const response = await apiFetch<StopLiveObservationResponse>(
+  observationId: string,
+  signal?: AbortSignal
+): Promise<LiveObservationV2Snapshot> {
+  const response = await apiFetch<LiveObservationV2SnapshotResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/live-observations/${encodeURIComponent(observationId)}/stop`,
-    { auth: true, method: "POST" }
+    { auth: true, method: "POST", ...(signal ? { signal } : {}) }
   );
 
   return response.snapshot;
@@ -805,7 +915,7 @@ export async function pollLiveObservationSnapshots(input: {
   readonly observationId: string;
   readonly signal: AbortSignal;
   readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
-  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+  readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
 }): Promise<void> {
   let retryCount = 0;
 
@@ -838,7 +948,7 @@ export async function streamLiveObservationSnapshots(input: {
   readonly observationId: string;
   readonly signal: AbortSignal;
   readonly onError?: ((failure: LiveObservationStreamFailure) => void) | undefined;
-  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
+  readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
   readonly retryBaseDelayMs?: number | undefined;
 }): Promise<void> {
   let retryCount = 0;
@@ -884,8 +994,8 @@ async function readLiveObservationSnapshotStream(input: {
   readonly deploymentId: string;
   readonly observationId: string;
   readonly signal: AbortSignal;
-  readonly onSnapshot: (snapshot: LiveObservationSnapshot) => void;
-}): Promise<LiveObservationSnapshot["status"] | null> {
+  readonly onSnapshot: (snapshot: LiveObservationV2Snapshot) => void;
+}): Promise<LiveObservationV2Snapshot["status"] | null> {
   const session = readStoredAuthSession();
   const headers = new Headers({ Accept: "text/event-stream" });
   if (session) {
@@ -907,7 +1017,7 @@ async function readLiveObservationSnapshotStream(input: {
     throw new Error("Live Observation stream request failed");
   }
 
-  let finalStatus: LiveObservationSnapshot["status"] | null = null;
+  let finalStatus: LiveObservationV2Snapshot["status"] | null = null;
   await readSseStream(response.body, (rawEvent) => {
     const snapshot = parseLiveObservationSnapshotEvent(rawEvent);
     if (snapshot) {
@@ -1344,6 +1454,19 @@ export async function runDeploymentApply(deploymentId: string): Promise<Deployme
   return response.deployment;
 }
 
+export async function executeDeployment(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/execute`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
 export async function runDeploymentDestroyPlan(deploymentId: string): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/destroy/plan`,
@@ -1523,7 +1646,7 @@ function drainRawSseEvents(buffer: string, onEvent: (rawEvent: string) => void):
   return nextBuffer;
 }
 
-function parseLiveObservationSnapshotEvent(rawEvent: string): LiveObservationSnapshot | null {
+function parseLiveObservationSnapshotEvent(rawEvent: string): LiveObservationV2Snapshot | null {
   let eventName = "message";
   const dataLines: string[] = [];
 
@@ -1539,7 +1662,7 @@ function parseLiveObservationSnapshotEvent(rawEvent: string): LiveObservationSna
     return null;
   }
 
-  return JSON.parse(dataLines.join("\n")) as LiveObservationSnapshot;
+  return JSON.parse(dataLines.join("\n")) as LiveObservationV2Snapshot;
 }
 
 async function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {

@@ -13,6 +13,7 @@ import {
   Database,
   Grid2X2,
   Archive,
+  Maximize2,
   Monitor,
   Network,
   PanelLeftClose,
@@ -22,7 +23,8 @@ import {
   ShieldCheck
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
 import { TemplateGallery } from "../../components/templates/TemplateGallery";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "../diagram-editor/diagram-utils";
@@ -39,6 +41,8 @@ import {
   listBoardTemplates,
   type BoardTemplate
 } from "./template-library";
+import { setupTemplateLibraryModalAccessibility } from "./template-library-modal-accessibility";
+import modalStyles from "./template-library-modal.module.css";
 
 const areaLabels: Record<ResourceArea, string> = {
   containers: "Containers",
@@ -342,6 +346,7 @@ export function ResourceSettingsPanel({
   );
 }
 
+// 왼쪽 목록의 즉시 적용과 템플릿 전체보기를 서로 다른 동작으로 제공합니다.
 function TemplatesPanel({
   onTemplateApply
 }: {
@@ -353,12 +358,25 @@ function TemplatesPanel({
   return (
     <>
       <div className="templateCatalogPanel">
-        <button className="templateCatalogCard templateCatalogCardWide" onClick={() => setModalOpen(true)} type="button">
-          <span>Template library</span>
-          <strong>큰 모달로 열기</strong>
+        <button
+          aria-label="템플릿 전체보기"
+          className="templateCatalogCard templateLibraryOpenCard"
+          onClick={() => setModalOpen(true)}
+          type="button"
+        >
+          <strong className="templateLibraryOpenLabel">
+            <Maximize2 aria-hidden="true" size={14} />
+            템플릿 전체보기
+          </strong>
         </button>
         {templates.map((template) => (
-          <button className="templateCatalogCard" key={template.id} onClick={() => onTemplateApply?.(template)} type="button">
+          <button
+            aria-label={`${template.title} Template 적용`}
+            className="templateCatalogCard templateApplyCard"
+            key={template.id}
+            onClick={() => onTemplateApply?.(template)}
+            type="button"
+          >
             <span>{template.tags.slice(0, 2).join(" · ")}</span>
             <strong>{template.title}</strong>
           </button>
@@ -389,16 +407,52 @@ function TemplateLibraryModal({
   readonly onTemplateApply: (template: BoardTemplate) => void;
   readonly templates: readonly BoardTemplate[];
 }) {
-  return (
-    <div className="templateModalOverlay" role="presentation">
-      <section className="templateModal" aria-label="Template 큰 모달" role="dialog">
-        <div className="templateModalHeader">
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+
+    if (!overlay || !dialog || !closeButton) return;
+
+    return setupTemplateLibraryModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: document,
+      onClose: () => onCloseRef.current(),
+      overlay
+    });
+  }, []);
+
+  return createPortal(
+    <div className={modalStyles.overlay} ref={overlayRef} role="presentation">
+      <section
+        aria-label="템플릿 전체보기"
+        aria-modal="true"
+        className={modalStyles.dialog}
+        ref={dialogRef}
+        role="dialog"
+      >
+        <div className={modalStyles.header}>
           <div>
             <span>Template library</span>
-            <h2>템플릿 보관함</h2>
+            <h2>템플릿 전체보기</h2>
             <p>선택하면 현재 보드를 백업하고 템플릿 구조로 덮어씁니다.</p>
           </div>
-          <button className="templateModalCloseButton" onClick={onClose} type="button">
+          <button
+            className={modalStyles.closeButton}
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
             닫기
           </button>
         </div>
@@ -412,7 +466,8 @@ function TemplateLibraryModal({
           templates={templates}
         />
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 

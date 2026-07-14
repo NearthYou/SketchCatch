@@ -75,6 +75,16 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
   }).questions;
   const questionById = new Map(questions.map((question) => [question.id, question]));
   const answerEntries = Object.entries(input.answers).sort(([left], [right]) => left.localeCompare(right));
+  const dynamicQuestionAnswers = answerEntries.flatMap(([questionId, value]) => {
+    const question = questionById.get(questionId);
+    if (!question) return [];
+
+    return [{
+      questionId,
+      question: question.prompt,
+      answer: String(value)
+    }];
+  });
   const answerLines = answerEntries.map(([questionId, value]) => {
     const question = questionById.get(questionId);
     const optionLabel = question?.options?.find((option) => option.value === String(value))?.label;
@@ -116,6 +126,7 @@ export function createPublicRepositoryArchitectureDraftRequest(input: {
 
   return {
     templateId: input.templateId,
+    ...(dynamicQuestionAnswers.length > 0 ? { dynamicQuestionAnswers } : {}),
     ...(architectureFacts.length > 0
       ? {
           repositoryEvidence: {

@@ -2,6 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { analyzeRepositoryEvidence } from "./repository-analysis.js";
 
+test("captures CodeDeploy AppSpec as repository framework evidence", () => {
+  const result = analyzeRepositoryEvidence({
+    revision: "appspec-revision",
+    treePaths: ["apps/api/appspec.yml", "apps/api/package.json"],
+    files: [
+      {
+        path: "apps/api/package.json",
+        content: JSON.stringify({ name: "api", scripts: { start: "node server.js" } })
+      },
+      {
+        path: "apps/api/appspec.yml",
+        content: "version: 0.0\nos: linux\nfiles:\n  - source: /\n    destination: /srv/api"
+      }
+    ]
+  });
+
+  assert.equal(
+    result.evidence.find((evidence) => evidence.path === "apps/api/appspec.yml")?.kind,
+    "framework_config"
+  );
+});
+
 test("selects static web hosting for a Vite frontend in a monorepo", () => {
   // Given
   const snapshot = {
@@ -40,6 +62,15 @@ test("selects static web hosting for a Vite frontend in a monorepo", () => {
   // Then
   assert.equal(result.status, "template_selected");
   assert.equal(result.templateId, "static-web-hosting");
+  assert.deepEqual(
+    result.evidence.find((evidence) => evidence.kind === "static_output"),
+    {
+      kind: "static_output",
+      path: "apps/web/dist",
+      applicationUnitId: "apps/web",
+      signals: ["Vite static build output"]
+    }
+  );
   assert.deepEqual(result.applicationUnits, [
     {
       id: "apps/web",

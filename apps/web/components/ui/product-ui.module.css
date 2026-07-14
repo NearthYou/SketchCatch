@@ -4,7 +4,7 @@
   display: inline-flex;
   font-size: 18px;
   font-weight: 700;
-  gap: 6px;
+  gap: 7px;
   line-height: 1;
   min-width: 0;
   text-decoration: none;
@@ -15,7 +15,7 @@
   flex: 0 0 auto;
   height: 24px;
   object-fit: contain;
-  transform: translateY(-4px);
+  transform: translateY(-2px);
   width: 16px;
 }
 

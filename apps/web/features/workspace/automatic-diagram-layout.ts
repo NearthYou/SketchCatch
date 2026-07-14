@@ -77,9 +77,9 @@ const AREA_PADDING = 36;
 const ROOT_PARENT_ID = "__root__";
 const SUPPORT_LANE_GAP = 80;
 const LAYOUT_CANDIDATES: readonly LayoutCandidateConfig[] = [
-  { columnGap: 96, id: "split-support", rowGap: 56, supportPlacement: "split" },
-  { columnGap: 80, id: "support-above", rowGap: 48, supportPlacement: "above" },
-  { columnGap: 80, id: "support-below", rowGap: 48, supportPlacement: "below" }
+  { columnGap: 64, id: "split-support", rowGap: 56, supportPlacement: "split" },
+  { columnGap: 64, id: "support-above", rowGap: 48, supportPlacement: "above" },
+  { columnGap: 64, id: "support-below", rowGap: 48, supportPlacement: "below" }
 ];
 
 export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): AutomaticDiagramLayoutResult {
@@ -124,6 +124,12 @@ function createLayoutCandidate(
   const roleByNodeId = new Map(layoutNodes.map((node) => [node.id, classifySemanticRole(node)]));
   const rankByNodeId = createFlowRanks(layoutNodes, input.edges, roleByNodeId);
   const primaryDistanceByNodeId = createPrimaryDistanceMap(layoutNodes, input.edges, roleByNodeId);
+  const primaryFlowPathByNodeId = createPrimaryFlowPathMap(
+    layoutNodes,
+    input.edges,
+    roleByNodeId,
+    rankByNodeId
+  );
   const nextNodeById = new Map(
     input.nodes.map((node) => [node.id, compactEmptyAreaNode(node, input.nodes, protectedNodeIds)])
   );
@@ -138,6 +144,7 @@ function createLayoutCandidate(
       rankByNodeId,
       roleByNodeId,
       primaryDistanceByNodeId,
+      primaryFlowPathByNodeId,
       protectedNodeIds,
       config
     );
@@ -705,6 +712,7 @@ function layoutSiblingGroup(
   rankByNodeId: ReadonlyMap<string, number>,
   roleByNodeId: ReadonlyMap<string, SemanticRole>,
   primaryDistanceByNodeId: ReadonlyMap<string, number>,
+  primaryFlowPathByNodeId: ReadonlyMap<string, string>,
   protectedNodeIds: ReadonlySet<string>,
   config: LayoutCandidateConfig
 ): void {
@@ -761,7 +769,13 @@ function layoutSiblingGroup(
       const rankedNodes = [...(nodesByRank.get(rank) ?? [])]
         .filter((node) => laneByNodeId.get(node.id) === lane)
         .sort((left, right) =>
-          compareLaneNodes(left, right, lane, primaryDistanceByNodeId)
+          compareLaneNodes(
+            left,
+            right,
+            lane,
+            primaryDistanceByNodeId,
+            primaryFlowPathByNodeId
+          )
         );
 
       for (const node of rankedNodes) {
@@ -792,8 +806,19 @@ function compareLaneNodes(
   left: DiagramNode,
   right: DiagramNode,
   lane: LayoutLane,
-  primaryDistanceByNodeId: ReadonlyMap<string, number>
+  primaryDistanceByNodeId: ReadonlyMap<string, number>,
+  primaryFlowPathByNodeId: ReadonlyMap<string, string>
 ): number {
+  if (lane === "primary") {
+    const flowOrder = (primaryFlowPathByNodeId.get(left.id) ?? left.id).localeCompare(
+      primaryFlowPathByNodeId.get(right.id) ?? right.id
+    );
+
+    if (flowOrder !== 0) {
+      return flowOrder;
+    }
+  }
+
   if (lane !== "primary") {
     const leftDistance = primaryDistanceByNodeId.get(left.id) ?? Number.MAX_SAFE_INTEGER;
     const rightDistance = primaryDistanceByNodeId.get(right.id) ?? Number.MAX_SAFE_INTEGER;
@@ -1130,6 +1155,62 @@ function createFlowRanks(
   }
 
   return rankByNodeId;
+}
+
+function createPrimaryFlowPathMap(
+  nodes: readonly DiagramNode[],
+  edges: readonly AutomaticDiagramLayoutEdge[],
+  roleByNodeId: ReadonlyMap<string, SemanticRole>,
+  rankByNodeId: ReadonlyMap<string, number>
+): Map<string, string> {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const incomingSourceIdsByTargetId = new Map<string, string[]>();
+
+  for (const edge of edges) {
+    if (
+      !nodeIds.has(edge.sourceId) ||
+      !nodeIds.has(edge.targetId) ||
+      !isPrimaryFlowRole(roleByNodeId.get(edge.sourceId)) ||
+      !isPrimaryFlowRole(roleByNodeId.get(edge.targetId)) ||
+      (rankByNodeId.get(edge.sourceId) ?? 0) >= (rankByNodeId.get(edge.targetId) ?? 0)
+    ) {
+      continue;
+    }
+
+    const sourceIds = incomingSourceIdsByTargetId.get(edge.targetId) ?? [];
+    sourceIds.push(edge.sourceId);
+    incomingSourceIdsByTargetId.set(edge.targetId, sourceIds);
+  }
+
+  const pathByNodeId = new Map<string, string>();
+  const resolvePath = (nodeId: string, visitingNodeIds: ReadonlySet<string>): string => {
+    const cachedPath = pathByNodeId.get(nodeId);
+
+    if (cachedPath) {
+      return cachedPath;
+    }
+    if (visitingNodeIds.has(nodeId)) {
+      return nodeId;
+    }
+
+    const nextVisitingNodeIds = new Set(visitingNodeIds).add(nodeId);
+    const sourceIds = [...(incomingSourceIdsByTargetId.get(nodeId) ?? [])].sort();
+    const path = sourceIds.length === 0
+      ? nodeId
+      : sourceIds
+          .map((sourceId) => `${resolvePath(sourceId, nextVisitingNodeIds)}/${nodeId}`)
+          .sort()[0] ?? nodeId;
+    pathByNodeId.set(nodeId, path);
+    return path;
+  };
+
+  for (const node of nodes) {
+    if (isPrimaryFlowRole(roleByNodeId.get(node.id))) {
+      resolvePath(node.id, new Set());
+    }
+  }
+
+  return pathByNodeId;
 }
 
 function isPrimaryFlowRole(role: SemanticRole | undefined): boolean {

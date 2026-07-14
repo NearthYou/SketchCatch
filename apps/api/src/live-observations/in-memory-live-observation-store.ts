@@ -1,9 +1,9 @@
 import type {
   DeploymentLiveObservationManifestV2,
-  IsoDateTimeString,
-  JsonValue
+  IsoDateTimeString
 } from "@sketchcatch/types";
 import { parseDeploymentLiveObservationManifestV2 } from "./live-observation-manifest.js";
+import { parseLiveObservationProviderSnapshot } from "./live-observation-provider-snapshot.js";
 import {
   LIVE_OBSERVATION_STORE_POLICY,
   LiveObservationStoreClockError,
@@ -14,7 +14,6 @@ import {
   type LiveObservationStoreLiveView,
   type LiveObservationStoreObservation,
   type LiveObservationStoreObserverLease,
-  type LiveObservationStorePresenterBoostLease,
   type LiveObservationStoreTerminalSession
 } from "./live-observation-store.js";
 
@@ -48,15 +47,10 @@ type ActiveSessionRecord = {
   expiryFinalObservation: LiveObservationStoreObservation | null;
   observerFencingToken: number;
   observerLease: ObserverLeaseRecord | null;
-  presenterBoostLease: PresenterBoostLeaseRecord | null;
 };
 
 type ObserverLeaseRecord = LiveObservationStoreObserverLease & {
   observerId: string;
-  expiresAtMs: number;
-};
-
-type PresenterBoostLeaseRecord = LiveObservationStorePresenterBoostLease & {
   expiresAtMs: number;
 };
 
@@ -226,8 +220,7 @@ export function createInMemoryLiveObservationStore(options: {
         latestObservation: null,
         expiryFinalObservation: null,
         observerFencingToken: 0,
-        observerLease: null,
-        presenterBoostLease: null
+        observerLease: null
       };
 
       activeSessions.set(record.observationId, record);
@@ -554,171 +547,6 @@ export function createInMemoryLiveObservationStore(options: {
         kind: "committed",
         evaluatedAt: evaluatedAt.iso
       };
-    },
-
-    async acquirePresenterBoostLease(input) {
-      const { observationId, leaseId } = parsePresenterBoostLeaseInput(input);
-      const evaluatedAt = readOperationTime(now);
-      const reconciled = reconcileObservation(
-        observationId,
-        evaluatedAt.epochMs
-      );
-
-      if (reconciled.kind === "terminal") {
-        return {
-          kind: "gone",
-          evaluatedAt: evaluatedAt.iso,
-          session: cloneTerminalSession(reconciled.record)
-        };
-      }
-
-      if (reconciled.kind === "not_found") {
-        return {
-          kind: "not_found",
-          evaluatedAt: evaluatedAt.iso
-        };
-      }
-
-      const record = reconciled.record;
-      const existing = record.presenterBoostLease;
-
-      if (existing && evaluatedAt.epochMs < existing.expiresAtMs) {
-        if (existing.leaseId === leaseId) {
-          return {
-            kind: "already_acquired",
-            evaluatedAt: evaluatedAt.iso,
-            lease: clonePresenterBoostLease(existing)
-          };
-        }
-
-        return {
-          kind: "busy",
-          evaluatedAt: evaluatedAt.iso
-        };
-      }
-
-      const expiry = createCappedLeaseExpiry(
-        evaluatedAt.epochMs,
-        LIVE_OBSERVATION_STORE_POLICY.presenterBoostLeaseDurationMs,
-        record
-      );
-      const lease: PresenterBoostLeaseRecord = {
-        leaseId,
-        expiresAt: expiry.iso,
-        expiresAtMs: expiry.epochMs
-      };
-      record.presenterBoostLease = lease;
-
-      return {
-        kind: "acquired",
-        evaluatedAt: evaluatedAt.iso,
-        lease: clonePresenterBoostLease(lease)
-      };
-    },
-
-    async renewPresenterBoostLease(input) {
-      const { observationId, leaseId } = parsePresenterBoostLeaseInput(input);
-      const evaluatedAt = readOperationTime(now);
-      const reconciled = reconcileObservation(
-        observationId,
-        evaluatedAt.epochMs
-      );
-
-      if (reconciled.kind === "terminal") {
-        return {
-          kind: "gone",
-          evaluatedAt: evaluatedAt.iso,
-          session: cloneTerminalSession(reconciled.record)
-        };
-      }
-
-      if (reconciled.kind === "not_found") {
-        return {
-          kind: "not_found",
-          evaluatedAt: evaluatedAt.iso
-        };
-      }
-
-      const record = reconciled.record;
-      const existing = record.presenterBoostLease;
-
-      if (
-        !existing ||
-        evaluatedAt.epochMs >= existing.expiresAtMs ||
-        existing.leaseId !== leaseId
-      ) {
-        if (existing && evaluatedAt.epochMs >= existing.expiresAtMs) {
-          record.presenterBoostLease = null;
-        }
-
-        return {
-          kind: "lease_lost",
-          evaluatedAt: evaluatedAt.iso
-        };
-      }
-
-      const expiry = createCappedLeaseExpiry(
-        evaluatedAt.epochMs,
-        LIVE_OBSERVATION_STORE_POLICY.presenterBoostLeaseDurationMs,
-        record
-      );
-      existing.expiresAt = expiry.iso;
-      existing.expiresAtMs = expiry.epochMs;
-
-      return {
-        kind: "renewed",
-        evaluatedAt: evaluatedAt.iso,
-        lease: clonePresenterBoostLease(existing)
-      };
-    },
-
-    async releasePresenterBoostLease(input) {
-      const { observationId, leaseId } = parsePresenterBoostLeaseInput(input);
-      const evaluatedAt = readOperationTime(now);
-      const reconciled = reconcileObservation(
-        observationId,
-        evaluatedAt.epochMs
-      );
-
-      if (reconciled.kind === "terminal") {
-        return {
-          kind: "gone",
-          evaluatedAt: evaluatedAt.iso,
-          session: cloneTerminalSession(reconciled.record)
-        };
-      }
-
-      if (reconciled.kind === "not_found") {
-        return {
-          kind: "not_found",
-          evaluatedAt: evaluatedAt.iso
-        };
-      }
-
-      const record = reconciled.record;
-      const existing = record.presenterBoostLease;
-
-      if (
-        !existing ||
-        evaluatedAt.epochMs >= existing.expiresAtMs ||
-        existing.leaseId !== leaseId
-      ) {
-        if (existing && evaluatedAt.epochMs >= existing.expiresAtMs) {
-          record.presenterBoostLease = null;
-        }
-
-        return {
-          kind: "lease_lost",
-          evaluatedAt: evaluatedAt.iso
-        };
-      }
-
-      record.presenterBoostLease = null;
-
-      return {
-        kind: "released",
-        evaluatedAt: evaluatedAt.iso
-      };
     }
   });
 }
@@ -842,24 +670,9 @@ function parseObservationCommitInput(input: unknown): {
       fencingToken: input.fencingToken as number,
       observation: {
         observedAt,
-        payload: cloneJsonValue(input.observation.payload)
+        payload: parseLiveObservationProviderSnapshot(input.observation.payload)
       },
       observedAtMs: Date.parse(observedAt)
-    };
-  } catch {
-    throw new LiveObservationStoreInputError();
-  }
-}
-
-function parsePresenterBoostLeaseInput(input: unknown): {
-  observationId: string;
-  leaseId: string;
-} {
-  try {
-    assertExactObject(input, ["observationId", "leaseId"]);
-    return {
-      observationId: parseCanonicalUuid(input.observationId),
-      leaseId: parseCanonicalUuid(input.leaseId)
     };
   } catch {
     throw new LiveObservationStoreInputError();
@@ -906,75 +719,6 @@ function parseCanonicalIso(value: unknown): IsoDateTimeString {
   }
 
   return value;
-}
-
-function cloneJsonValue(
-  value: unknown,
-  ancestors: Set<object> = new Set()
-): JsonValue {
-  if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      throw new LiveObservationStoreInputError();
-    }
-    return value;
-  }
-
-  if (typeof value !== "object" || ancestors.has(value)) {
-    throw new LiveObservationStoreInputError();
-  }
-
-  ancestors.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const keys = Reflect.ownKeys(value);
-      if (
-        keys.length !== value.length + 1 ||
-        keys.some(
-          (key) =>
-            key !== "length" &&
-            (typeof key !== "string" || !/^(0|[1-9][0-9]*)$/.test(key))
-        )
-      ) {
-        throw new LiveObservationStoreInputError();
-      }
-
-      return value.map((_, index) => {
-        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-          throw new LiveObservationStoreInputError();
-        }
-        return cloneJsonValue(descriptor.value, ancestors);
-      });
-    }
-
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new LiveObservationStoreInputError();
-    }
-
-    const entries: Array<[string, JsonValue]> = [];
-    for (const key of Reflect.ownKeys(value)) {
-      if (typeof key !== "string") {
-        throw new LiveObservationStoreInputError();
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-        throw new LiveObservationStoreInputError();
-      }
-      entries.push([key, cloneJsonValue(descriptor.value, ancestors)]);
-    }
-    return Object.fromEntries(entries);
-  } finally {
-    ancestors.delete(value);
-  }
 }
 
 function readOperationTime(now: () => number): OperationTime {
@@ -1044,15 +788,6 @@ function cloneObserverLease(
 ): LiveObservationStoreObserverLease {
   return {
     fencingToken: lease.fencingToken,
-    expiresAt: lease.expiresAt
-  };
-}
-
-function clonePresenterBoostLease(
-  lease: PresenterBoostLeaseRecord
-): LiveObservationStorePresenterBoostLease {
-  return {
-    leaseId: lease.leaseId,
     expiresAt: lease.expiresAt
   };
 }

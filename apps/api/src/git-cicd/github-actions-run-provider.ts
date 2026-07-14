@@ -1,7 +1,12 @@
 import type {
+  Ec2AsgGitOpsReleaseEvidence,
+  EcsGitOpsReleaseEvidence,
+  GitOpsReleaseEvidence,
   GitCicdPipelineRunStatus,
   GitCicdPipelineStageKind,
-  GitCicdPipelineStageStatus
+  GitCicdPipelineStageStatus,
+  LambdaGitOpsReleaseEvidence,
+  StaticSiteGitOpsReleaseEvidence
 } from "@sketchcatch/types";
 import { maskDeploymentMessage } from "../deployments/log-masking.js";
 import type {
@@ -37,6 +42,7 @@ export type GitCicdRunProviderSnapshot = {
   logRevision: string;
   jobs: GitCicdRunProviderJob[];
   logs: GitCicdRunProviderLog[];
+  releaseEvidence?: GitOpsReleaseEvidence | null;
 };
 
 export type GitCicdRunProvider = {
@@ -70,6 +76,7 @@ export function createGitHubActionsRunProvider(
       for (const [commitSha, commitRuns] of [...groups].slice(0, maxHydratedPipelineCommitGroups)) {
         const jobs: GitCicdRunProviderJob[] = [];
         const logs: GitCicdRunProviderLog[] = [];
+        const releaseEvidenceCandidates: GitOpsReleaseEvidence[] = [];
         for (const run of [...commitRuns].sort(compareWorkflowHydrationOrder)) {
           for (const job of await client.listWorkflowJobs({ ...input, runId: run.id })) {
             const jobStageKind = mapJobStageKind(run.workflowName, job.name);
@@ -98,14 +105,26 @@ export function createGitHubActionsRunProvider(
               });
             }
             if (job.status !== "completed") continue;
-            const text = maskDeploymentMessage(
-              await client.readWorkflowJobLog({ ...input, jobId: job.id })
-            );
+            const rawText = await client.readWorkflowJobLog({ ...input, jobId: job.id });
+            releaseEvidenceCandidates.push(...parseReleaseEvidence(rawText));
+            const text = maskDeploymentMessage(rawText);
+            let activeStageKind = jobStageKind;
             for (const line of text.split(/\r?\n/).filter(Boolean)) {
+              const lineStageKind = mapLogLineStageKind(run.workflowName, job.name, line);
+              if (lineStageKind) activeStageKind = lineStageKind;
+              const evidenceLabel = line.includes("SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=")
+                ? "ECS release evidence captured."
+                : line.includes("SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=")
+                  ? "Lambda release evidence captured."
+                  : line.includes("SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64=")
+                    ? "EC2 ASG release evidence captured."
+                    : line.includes("SKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64=")
+                      ? "Static release evidence captured."
+                      : null;
               logs.push({
-                stageKind: mappedSteps.length === 1 ? mappedSteps[0]!.stageKind : jobStageKind,
+                stageKind: evidenceLabel ? "verify" : activeStageKind,
                 level: job.conclusion === "failure" ? "error" : "info",
-                message: line
+                message: evidenceLabel ?? line
               });
             }
           }
@@ -126,7 +145,8 @@ export function createGitHubActionsRunProvider(
           upstreamOrderingToken: `${getMaxWorkflowUpdatedAt(commitRuns).toISOString()}|${createSelectedWorkflowOrderingRevision(commitRuns)}`,
           logRevision,
           jobs,
-          logs
+          logs,
+          releaseEvidence: selectReleaseEvidence(releaseEvidenceCandidates, commitSha)
         });
       }
       return snapshots;
@@ -231,10 +251,347 @@ function mapStepStageKind(
   stepName: string
 ): GitCicdPipelineStageKind | null {
   if (workflowName !== "SketchCatch App" || jobName !== "release") return null;
-  if (stepName === "Upload release artifact") return "app_build";
-  if (stepName === "Refresh Auto Scaling Group") return "app_deploy";
-  if (stepName === "Verify URLs") return "verify";
+  if (stepName === "Run CodeBuild" || stepName === "Upload release artifact") return "app_build";
+  if (stepName === "Build confirmed SAM application") return "app_build";
+  if (stepName === "Publish immutable ECR digest") return "artifact_publish";
+  if (stepName === "Publish immutable Lambda version") return "artifact_publish";
+  if (stepName === "Build confirmed CodeDeploy bundle") return "app_build";
+  if (stepName === "Build confirmed static output") return "app_build";
+  if (stepName === "Publish versioned S3 bundle") return "artifact_publish";
+  if (stepName === "Publish versioned static release") return "artifact_publish";
+  if (stepName === "Deploy ECS Fargate revision" || stepName === "Refresh Auto Scaling Group") return "app_deploy";
+  if (stepName === "Deploy Lambda alias AllAtOnce") return "app_deploy";
+  if (stepName === "Deploy EC2 ASG bundle AllAtOnce") return "app_deploy";
+  if (stepName === "Switch CloudFront release pointer") return "app_deploy";
+  if (stepName === "Verify ECS release" || stepName === "Verify URLs") return "verify";
+  if (stepName === "Verify Lambda release") return "verify";
+  if (stepName === "Verify EC2 ASG release and rollback") return "verify";
+  if (stepName === "Verify static release and rollback") return "verify";
   return null;
+}
+
+function mapLogLineStageKind(
+  workflowName: string,
+  jobName: string,
+  line: string
+): GitCicdPipelineStageKind | null {
+  for (const stepName of [
+    "Run CodeBuild",
+    "Publish immutable ECR digest",
+    "Deploy ECS Fargate revision",
+    "Verify ECS release",
+    "Build confirmed SAM application",
+    "Publish immutable Lambda version",
+    "Deploy Lambda alias AllAtOnce",
+    "Verify Lambda release",
+    "Build confirmed CodeDeploy bundle",
+    "Publish versioned S3 bundle",
+    "Deploy EC2 ASG bundle AllAtOnce",
+    "Verify EC2 ASG release and rollback",
+    "Build confirmed static output",
+    "Publish versioned static release",
+    "Switch CloudFront release pointer",
+    "Verify static release and rollback",
+    "Upload release artifact",
+    "Refresh Auto Scaling Group",
+    "Verify URLs"
+  ]) {
+    if (line.includes(stepName)) return mapStepStageKind(workflowName, jobName, stepName);
+  }
+  return null;
+}
+
+function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
+  const results: GitOpsReleaseEvidence[] = [];
+  for (const marker of [
+    /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
+    /SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
+    /SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
+    /SKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g
+  ]) {
+    let match: RegExpExecArray | null;
+    while ((match = marker.exec(text)) !== null) {
+      if (!match[1]) continue;
+      try {
+        const decoded = Buffer.from(match[1], "base64");
+        if (decoded.byteLength > 8_192) continue;
+        const value: unknown = JSON.parse(decoded.toString("utf8"));
+        const evidence =
+          validateEcsReleaseEvidence(value) ??
+          validateLambdaReleaseEvidence(value) ??
+          validateEc2AsgReleaseEvidence(value) ??
+          validateStaticSiteReleaseEvidence(value);
+        if (evidence) results.push(evidence);
+      } catch {
+        continue;
+      }
+    }
+  }
+  return results;
+}
+
+function selectReleaseEvidence(
+  candidates: readonly GitOpsReleaseEvidence[],
+  commitSha: string
+): GitOpsReleaseEvidence | null {
+  const matching = candidates.filter(
+    (candidate) => candidate.commitSha.toLowerCase() === commitSha.toLowerCase()
+  );
+  const distinct = new Map(matching.map((candidate) => [JSON.stringify(candidate), candidate]));
+  return distinct.size === 1 ? [...distinct.values()][0]! : null;
+}
+
+function validateLambdaReleaseEvidence(value: unknown): LambdaGitOpsReleaseEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "artifactDigest",
+    "artifactUri", "functionName", "aliasName", "publishedVersion", "previousVersion",
+    "activeVersion", "deploymentId", "deploymentConfigName", "outputUrl"
+  ]);
+  if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
+  const stringKeys = [
+    "commitSha", "artifactDigest", "artifactUri", "functionName", "aliasName",
+    "publishedVersion", "previousVersion", "activeVersion", "deploymentId",
+    "deploymentConfigName", "outputUrl"
+  ] as const;
+  if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
+  const outcome = String(item.outcome);
+  const publishedVersion = String(item.publishedVersion);
+  const previousVersion = String(item.previousVersion);
+  const activeVersion = String(item.activeVersion);
+  const artifactDigest = String(item.artifactDigest);
+  const artifactUri = String(item.artifactUri);
+  if (
+    item.schemaVersion !== 1 ||
+    item.runtimeTargetKind !== "lambda" ||
+    !["succeeded", "rolled_back", "failed"].includes(outcome) ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
+    !/^sha256:[a-f\d]{64}$/.test(artifactDigest) ||
+    !/^[A-Za-z0-9_-]{1,64}$/.test(String(item.functionName)) ||
+    !/^(?!\$LATEST$)(?!\d+$)[A-Za-z0-9_-]{1,128}$/.test(String(item.aliasName)) ||
+    !/^[1-9]\d*$/.test(publishedVersion) ||
+    !/^[1-9]\d*$/.test(previousVersion) ||
+    !/^[1-9]\d*$/.test(activeVersion) ||
+    !/^d-[A-Za-z0-9]+$/.test(String(item.deploymentId)) ||
+    item.deploymentConfigName !== "CodeDeployDefault.LambdaAllAtOnce" ||
+    (outcome === "succeeded" && activeVersion !== publishedVersion) ||
+    (outcome === "rolled_back" && activeVersion !== previousVersion) ||
+    (outcome === "failed" && activeVersion !== previousVersion) ||
+    !isSafeS3ArtifactUri(artifactUri, artifactDigest) ||
+    !isSafeHttpsUrl(String(item.outputUrl))
+  ) return null;
+  return item as LambdaGitOpsReleaseEvidence;
+}
+
+function isSafeS3ArtifactUri(value: string, digest: string): boolean {
+  if (value.length > 2_048 || /[\s\0]/.test(value)) return false;
+  if (!/^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\/.+/.test(value)) return false;
+  return value.endsWith(`/${digest.slice("sha256:".length)}.zip`);
+}
+
+function validateEc2AsgReleaseEvidence(value: unknown): Ec2AsgGitOpsReleaseEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "schemaVersion", "runtimeTargetKind", "outcome", "failureReason", "commitSha", "artifactDigest",
+    "artifactUri", "artifactVersionId", "previousArtifactUri", "previousArtifactVersionId",
+    "codeDeployApplicationName", "codeDeployDeploymentGroupName", "autoScalingGroupName",
+    "deploymentId", "activeDeploymentId", "deploymentConfigName", "targetInstanceCount",
+    "succeededInstanceCount", "outputUrl"
+  ]);
+  if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
+  const stringKeys = [
+    "commitSha", "artifactDigest", "artifactUri", "artifactVersionId", "previousArtifactUri",
+    "previousArtifactVersionId", "codeDeployApplicationName", "codeDeployDeploymentGroupName",
+    "autoScalingGroupName", "deploymentId", "activeDeploymentId", "deploymentConfigName",
+    "outputUrl"
+  ] as const;
+  if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
+  const outcome = String(item.outcome);
+  const digest = String(item.artifactDigest);
+  const deploymentId = String(item.deploymentId);
+  const activeDeploymentId = String(item.activeDeploymentId);
+  const targetCount = item.targetInstanceCount;
+  const succeededCount = item.succeededInstanceCount;
+  const codeDeployNamePattern = /^[A-Za-z0-9._+=,@-]{1,100}$/;
+  const asgNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,254}$/;
+  const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
+  if (
+    item.schemaVersion !== 1 ||
+    item.runtimeTargetKind !== "ec2_asg" ||
+    !["succeeded", "rolled_back", "failed"].includes(outcome) ||
+    (outcome === "succeeded" && item.failureReason !== null) ||
+    (outcome === "rolled_back" && item.failureReason !== "codedeploy_failure") ||
+    (outcome === "failed" &&
+      !["instance_failure", "health_check_failure"].includes(String(item.failureReason))) ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
+    !/^sha256:[a-f\d]{64}$/.test(digest) ||
+    !isSafeS3ArtifactUri(String(item.artifactUri), digest) ||
+    !isSafeS3Uri(String(item.previousArtifactUri)) ||
+    !versionIdPattern.test(String(item.artifactVersionId)) ||
+    !versionIdPattern.test(String(item.previousArtifactVersionId)) ||
+    !codeDeployNamePattern.test(String(item.codeDeployApplicationName)) ||
+    !codeDeployNamePattern.test(String(item.codeDeployDeploymentGroupName)) ||
+    !asgNamePattern.test(String(item.autoScalingGroupName)) ||
+    !/^d-[A-Za-z0-9]+$/.test(deploymentId) ||
+    !/^d-[A-Za-z0-9]+$/.test(activeDeploymentId) ||
+    item.deploymentConfigName !== "CodeDeployDefault.AllAtOnce" ||
+    !Number.isInteger(targetCount) ||
+    !Number.isInteger(succeededCount) ||
+    Number(targetCount) < 1 ||
+    Number(targetCount) > 10_000 ||
+    targetCount !== succeededCount ||
+    (outcome === "succeeded" && activeDeploymentId !== deploymentId) ||
+    (outcome !== "succeeded" && activeDeploymentId === deploymentId) ||
+    !isSafeHttpsUrl(String(item.outputUrl))
+  ) return null;
+  return item as Ec2AsgGitOpsReleaseEvidence;
+}
+
+function isSafeS3Uri(value: string): boolean {
+  return (
+    value.length <= 2_048 &&
+    !/[\s\0?#]/.test(value) &&
+    /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\/.+/.test(value)
+  );
+}
+
+function validateStaticSiteReleaseEvidence(
+  value: unknown
+): StaticSiteGitOpsReleaseEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "schemaVersion", "runtimeTargetKind", "outcome", "failureReason", "commitSha",
+    "artifactDigest", "manifestUri", "manifestVersionId", "releasePrefix",
+    "previousReleasePrefix", "activeReleasePrefix", "hostingBucketName",
+    "cloudFrontDistributionId", "cloudFrontOriginId", "distributionEtag",
+    "invalidationId", "fileCount", "outputUrl"
+  ]);
+  if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
+  const stringKeys = [
+    "commitSha", "artifactDigest", "manifestUri", "manifestVersionId", "releasePrefix",
+    "previousReleasePrefix", "activeReleasePrefix", "hostingBucketName",
+    "cloudFrontDistributionId", "cloudFrontOriginId", "distributionEtag", "outputUrl"
+  ] as const;
+  if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
+  const commitSha = String(item.commitSha);
+  const digest = String(item.artifactDigest);
+  const digestValue = digest.slice("sha256:".length);
+  const releasePrefix = String(item.releasePrefix);
+  const previousPrefix = String(item.previousReleasePrefix);
+  const activePrefix = String(item.activeReleasePrefix);
+  const bucket = String(item.hostingBucketName);
+  const outcome = String(item.outcome);
+  const expectedPrefix = `releases/${commitSha}/${digestValue}`;
+  const expectedManifestUri =
+    `s3://${bucket}/${releasePrefix}/.sketchcatch-release-manifest.json`;
+  const bucketPattern = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+  const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
+  const invalidationId = item.invalidationId;
+  if (
+    item.schemaVersion !== 1 ||
+    item.runtimeTargetKind !== "static_site" ||
+    !["succeeded", "failed"].includes(outcome) ||
+    (outcome === "succeeded" && item.failureReason !== null) ||
+    (outcome === "failed" &&
+      !["distribution_update_failure", "invalidation_failure", "health_check_failure"].includes(
+        String(item.failureReason)
+      )) ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(commitSha) ||
+    !/^sha256:[a-f\d]{64}$/.test(digest) ||
+    releasePrefix !== expectedPrefix ||
+    !isSafeStaticPrefix(releasePrefix, false) ||
+    !isSafeStaticPrefix(previousPrefix, true) ||
+    !isSafeStaticPrefix(activePrefix, true) ||
+    (outcome === "succeeded" && activePrefix !== releasePrefix) ||
+    (outcome === "failed" && activePrefix !== previousPrefix) ||
+    !bucketPattern.test(bucket) ||
+    String(item.manifestUri) !== expectedManifestUri ||
+    !versionIdPattern.test(String(item.manifestVersionId)) ||
+    item.manifestVersionId === "null" ||
+    !/^[A-Z0-9]{3,32}$/.test(String(item.cloudFrontDistributionId)) ||
+    !/^[A-Za-z0-9._-]{1,128}$/.test(String(item.cloudFrontOriginId)) ||
+    !/^[A-Za-z0-9_=-]{1,128}$/.test(String(item.distributionEtag)) ||
+    (invalidationId !== null &&
+      (typeof invalidationId !== "string" || !/^I[A-Z0-9]{3,63}$/.test(invalidationId))) ||
+    (outcome === "succeeded" && invalidationId === null) ||
+    (["invalidation_failure", "health_check_failure"].includes(String(item.failureReason)) &&
+      invalidationId === null) ||
+    !Number.isInteger(item.fileCount) ||
+    Number(item.fileCount) < 1 ||
+    Number(item.fileCount) > 10_000 ||
+    !isSafeHttpsUrl(String(item.outputUrl))
+  ) return null;
+  return item as StaticSiteGitOpsReleaseEvidence;
+}
+
+function isSafeStaticPrefix(value: string, allowEmpty: boolean): boolean {
+  if (value === "") return allowEmpty;
+  if (value.length > 512 || value.startsWith("/") || value.endsWith("/")) return false;
+  const safeSegment = /^[A-Za-z0-9._~!$&'()*+,;=:@%-]+$/;
+  return value.split("/").every(
+    (segment) => segment !== "." && segment !== ".." && safeSegment.test(segment)
+  );
+}
+
+function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const item = value as Record<string, unknown>;
+  const allowedKeys = new Set([
+    "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "imageDigest", "imageUri",
+    "clusterName", "serviceName", "containerName", "taskDefinitionArn",
+    "previousTaskDefinitionArn", "restoredTaskDefinitionArn", "outputUrl"
+  ]);
+  if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
+  const stringKeys = [
+    "commitSha", "imageDigest", "imageUri", "clusterName", "serviceName", "containerName",
+    "taskDefinitionArn", "previousTaskDefinitionArn", "outputUrl"
+  ] as const;
+  if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
+  if (
+    item.schemaVersion !== 1 ||
+    item.runtimeTargetKind !== "ecs_fargate" ||
+    !["succeeded", "rolled_back", "failed"].includes(String(item.outcome)) ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
+    !/^sha256:[a-f\d]{64}$/.test(String(item.imageDigest)) ||
+    !isEcsResourceName(String(item.clusterName)) ||
+    !isEcsResourceName(String(item.serviceName)) ||
+    !isEcsResourceName(String(item.containerName)) ||
+    !isTaskDefinitionArn(String(item.taskDefinitionArn)) ||
+    !isTaskDefinitionArn(String(item.previousTaskDefinitionArn)) ||
+    (item.restoredTaskDefinitionArn !== undefined &&
+      (typeof item.restoredTaskDefinitionArn !== "string" ||
+        !isTaskDefinitionArn(item.restoredTaskDefinitionArn)))
+  ) return null;
+
+  const imageUri = String(item.imageUri);
+  if (
+    imageUri.length > 2_048 ||
+    /[\s\0]/.test(imageUri) ||
+    !imageUri.endsWith(`@${String(item.imageDigest)}`)
+  ) return null;
+  if (!isSafeHttpsUrl(String(item.outputUrl))) return null;
+  return item as EcsGitOpsReleaseEvidence;
+}
+
+function isEcsResourceName(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/.test(value);
+}
+
+function isTaskDefinitionArn(value: string): boolean {
+  return /^arn:aws(?:-[a-z]+)?:ecs:[a-z0-9-]+:\d{12}:task-definition\/[A-Za-z0-9_-]+:\d+$/.test(value);
+}
+
+function isSafeHttpsUrl(value: string): boolean {
+  if (value.length > 2_048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
 }
 
 function mapJobStageKind(workflowName: string, jobName: string): GitCicdPipelineStageKind | null {

@@ -1,8 +1,9 @@
 import type { DiagramNode } from "../../../../packages/types/src";
-import { isAreaNode } from "./area-nodes";
+import { isContainmentAreaNode } from "./area-nodes";
 
 const PARENT_AREA_EXPANSION_MULTIPLIER = 1.5;
 
+/** 자식 진입 시 실제 parent chain만 확장하고 visual scope 크기는 보존합니다. */
 export function expandParentAreaNodesForEnteredChild(
   nodes: readonly DiagramNode[],
   childNodeId: string
@@ -22,7 +23,7 @@ export function expandParentAreaNodesForEnteredChild(
   while (parentId && !visited.has(parentId)) {
     const parent = nodeById.get(parentId);
 
-    if (!parent || !isAreaNode(parent)) {
+    if (!parent || !isContainmentAreaNode(parent)) {
       break;
     }
 

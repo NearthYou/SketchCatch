@@ -4,6 +4,7 @@ import { once } from "node:events";
 import { Writable } from "node:stream";
 import Fastify from "fastify";
 import type { ApiErrorResponse } from "@sketchcatch/types";
+import type { RuntimeEnv } from "./config/env.js";
 import { buildApp, createApiLoggerOptions } from "./app.js";
 
 process.env.NODE_ENV = "test";
@@ -23,7 +24,7 @@ test("GET /health returns ok", async () => {
   await app.close();
 });
 
-test("trusts ALB forwarded protocol and client IP headers", async () => {
+test("trusts exactly one ALB hop and ignores spoofed leading client IP headers", async () => {
   const app = buildApp();
 
   app.get("/forwarded-context", async (request) => ({
@@ -33,7 +34,7 @@ test("trusts ALB forwarded protocol and client IP headers", async () => {
 
   const response = await app.inject({
     headers: {
-      "x-forwarded-for": "203.0.113.10, 10.0.0.5",
+      "x-forwarded-for": "192.0.2.99, 203.0.113.10",
       "x-forwarded-proto": "https"
     },
     method: "GET",
@@ -55,6 +56,20 @@ test("GET /api/projects requires authentication", async () => {
   const response = await app.inject({
     method: "GET",
     url: "/api/projects"
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+
+  await app.close();
+});
+
+test("GET /api/notifications requires authentication", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/notifications"
   });
 
   assert.equal(response.statusCode, 401);
@@ -105,6 +120,122 @@ test("unknown routes return the standard 404 error response", async () => {
   await app.close();
 });
 
+test("Live Observation v2 registers no routes while disabled and does not require a keyring", async () => {
+  const app = buildApp({
+    runtimeEnv: createLiveObservationRuntimeEnv({ liveObservationEnabled: "false" })
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/deployments/123e4567-e89b-42d3-a456-426614174000/live-observations"
+  });
+
+  assert.equal(response.statusCode, 404);
+  await app.close();
+});
+
+test("Live Observation v2 requires a valid capability keyring when enabled", () => {
+  assert.throws(
+    () =>
+      buildApp({
+        runtimeEnv: createLiveObservationRuntimeEnv({ liveObservationEnabled: "true" })
+      }),
+    /Invalid Live Observation capability configuration/
+  );
+});
+
+test("Live Observation v2 app composition exposes Store routes and removes legacy token behavior", async () => {
+  const observationId = "11111111-1111-4111-8111-111111111111";
+  const deploymentId = "123e4567-e89b-42d3-a456-426614174000";
+  const snapshot = {
+    observationId,
+    status: "active" as const,
+    live: {
+      acceptedEventCount: 0,
+      rollingRequestsPerSecond: 0,
+      projectedRequestsPerMinute: 0,
+      pressurePercent: 0,
+      pressureLevel: "normal" as const,
+      observedAt: "2026-07-11T00:00:00.000Z"
+    },
+    latestObservation: null,
+    terminalAt: null
+  };
+  const app = buildApp({
+    runtimeEnv: createLiveObservationRuntimeEnv({
+      liveObservationEnabled: "true",
+      liveObservationCapabilityCurrentKid: "current-key",
+      liveObservationCapabilityCurrentSecret: Buffer.alloc(32, 0x41).toString("base64url")
+    }),
+    liveObservationV2Runtime: {
+      collector: {
+        async authorize() {
+          return {
+            audienceOrigin: "https://sketchcatch.example.com",
+            request: async () => ({ accepted: true, acceptedEventCount: 1 })
+          };
+        },
+        async bootstrap() {
+          return {
+            audienceOrigin: "https://sketchcatch.example.com",
+            credential: `current-key.${"a".repeat(43)}`
+          };
+        },
+        async preflight() {
+          return { audienceOrigin: "https://sketchcatch.example.com" };
+        }
+      },
+      liveObservationService: {
+        async createSession() {
+          return {
+            session: {
+              id: observationId,
+              deploymentId,
+              status: "active" as const,
+              audienceUrl: `https://sketchcatch.example.com/observe/${observationId}`,
+              createdAt: "2026-07-11T00:00:00.000Z",
+              expiresAt: "2026-07-11T00:15:00.000Z"
+            },
+            snapshot
+          };
+        },
+        async readSession() {
+          return { snapshot };
+        },
+        async stopSession() {
+          return { snapshot: { ...snapshot, status: "stopped" as const } };
+        }
+      },
+      async prepareDeploymentManifest() {},
+      async requireDeploymentAccess() {},
+      async refreshObservation() {}
+    }
+  });
+
+  const created = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/live-observations`
+  });
+  assert.equal(created.statusCode, 201);
+  assert.equal(created.json().session.audienceUrl, `https://sketchcatch.example.com/observe/${observationId}`);
+
+  const bootstrap = await app.inject({
+    method: "POST",
+    url: `/api/live-observations/public/${observationId}/bootstrap`,
+    headers: { origin: "https://sketchcatch.example.com" }
+  });
+  assert.equal(bootstrap.statusCode, 200);
+
+  const legacyToken = await app.inject({
+    method: "POST",
+    url: `/api/live-observations/public/${"a".repeat(43)}/events`,
+    headers: { origin: "https://sketchcatch.example.com" }
+  });
+  assert.equal(legacyToken.statusCode, 404);
+
+  await app.close();
+});
+
 test("OPTIONS preflight allows project draft PUT requests", async () => {
   const app = buildApp();
 
@@ -122,6 +253,25 @@ test("OPTIONS preflight allows project draft PUT requests", async () => {
   assert.equal(response.headers["access-control-allow-origin"], "http://localhost:3000");
   assert.match(String(response.headers["access-control-allow-methods"]), /PUT/);
   assert.match(String(response.headers["access-control-allow-headers"]), /authorization/);
+
+  await app.close();
+});
+
+test("OPTIONS preflight allows notification read PATCH requests", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    headers: {
+      "access-control-request-headers": "content-type,authorization",
+      "access-control-request-method": "PATCH",
+      origin: "http://localhost:3000"
+    },
+    method: "OPTIONS",
+    url: "/api/notifications/ntf_11111111111111111111111111111111/read"
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.match(String(response.headers["access-control-allow-methods"]), /PATCH/);
 
   await app.close();
 });
@@ -157,7 +307,9 @@ test("OPTIONS preflight allows the configured public web origin", async () => {
 
 test("production 500 responses do not expose internal error messages", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
+  const previousS3BucketName = process.env.S3_BUCKET_NAME;
   process.env.NODE_ENV = "production";
+  process.env.S3_BUCKET_NAME = "test-project-assets";
   const app = buildApp();
 
   app.get("/boom", async () => {
@@ -177,6 +329,11 @@ test("production 500 responses do not expose internal error messages", async () 
     });
   } finally {
     process.env.NODE_ENV = previousNodeEnv;
+    if (previousS3BucketName === undefined) {
+      delete process.env.S3_BUCKET_NAME;
+    } else {
+      process.env.S3_BUCKET_NAME = previousS3BucketName;
+    }
     await app.close();
   }
 });
@@ -273,4 +430,28 @@ function assertErrorResponse(
   assert.deepEqual(Object.keys(body).sort(), ["error", "message"]);
   assert.equal(body.error, expectedError);
   assert.equal(typeof body.message, "string");
+}
+
+function createLiveObservationRuntimeEnv(
+  overrides: Partial<RuntimeEnv> = {}
+): RuntimeEnv {
+  return {
+    awsRegion: "ap-northeast-2",
+    authTokenSecret: process.env.AUTH_TOKEN_SECRET,
+    cloudFormationTemplateTokenSecret: undefined,
+    databaseUrl: undefined,
+    databaseSsl: false,
+    githubOauthClientId: undefined,
+    githubOauthClientSecret: undefined,
+    kakaoOauthClientId: undefined,
+    kakaoOauthClientSecret: undefined,
+    naverOauthClientId: undefined,
+    naverOauthClientSecret: undefined,
+    nodeEnv: "test",
+    oauthRedirectBaseUrl: undefined,
+    s3BucketName: undefined,
+    sketchcatchAwsCallerPrincipalArn: undefined,
+    sketchcatchPublicBaseUrl: "https://sketchcatch.example.com",
+    ...overrides
+  };
 }

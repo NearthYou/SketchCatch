@@ -42,6 +42,26 @@ test("public repository AI draft keeps the selected Template and includes follow
   assert.match(relationalRequest.prompt, /direct host operations/i);
   assert.match(relationalRequest.prompt, /Application type: API server/i);
   assert.match(relationalRequest.prompt, /Required Components:/);
+  assert.deepEqual(
+    relationalRequest.dynamicQuestionAnswers,
+    [
+      {
+        questionId: "application-scope",
+        question: "Which application scope should be deployed?",
+        answer: "api"
+      },
+      {
+        questionId: "data-persistence",
+        question: "Which data store should be included?",
+        answer: "relational"
+      },
+      {
+        questionId: "operations-preference",
+        question: "Which operating model do you prefer?",
+        answer: "ec2"
+      }
+    ]
+  );
   assert.notEqual(relationalRequest.prompt, noPersistenceRequest.prompt);
 });
 

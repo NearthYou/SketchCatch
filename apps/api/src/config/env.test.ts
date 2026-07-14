@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assertNoStaticAwsCredentialsForApiServer,
   getDeploymentWorkerMode,
+  getWebPushRuntimeConfig,
   isLiveObservationEnabled,
   getRuntimeEnv,
   requireEcsWorkerDispatcherConfig,
@@ -14,6 +15,31 @@ import {
 import type { RuntimeEnv } from "./env.js";
 
 process.env.NODE_ENV = "test";
+
+test("getWebPushRuntimeConfig disables Push when no secret is configured", () => {
+  assert.equal(getWebPushRuntimeConfig(createRuntimeEnv()), null);
+});
+
+test("getWebPushRuntimeConfig requires the complete secret set", () => {
+  assert.throws(
+    () =>
+      getWebPushRuntimeConfig(
+        createRuntimeEnv({ webPushVapidPublicKey: "public-only" })
+      ),
+    /must be complete/
+  );
+  const config = getWebPushRuntimeConfig(
+    createRuntimeEnv({
+      webPushSubscriptionEncryptionKey: Buffer.alloc(32, 0x44).toString("base64url"),
+      webPushSubscriptionKeyId: "rotation-2",
+      webPushVapidPrivateKey: "private-key",
+      webPushVapidPublicKey: "public-key",
+      webPushVapidSubject: "mailto:ops@example.com"
+    })
+  );
+  assert.equal(config?.subscriptionKeyId, "rotation-2");
+  assert.equal(config?.vapidPrivateKey, "private-key");
+});
 
 test("requireSketchCatchAwsCallerPrincipalArn returns a trimmed IAM Role ARN", () => {
   const originalValue = process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN;
@@ -64,6 +90,25 @@ test("assertNoStaticAwsCredentialsForApiServer rejects static AWS credential env
       }),
     /Remove AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN/
   );
+});
+
+test("getRuntimeEnv reads provider-neutral Project asset storage settings", () => {
+  const originalValues = saveEnvValues([
+    "PROJECT_ASSET_STORAGE_BACKEND",
+    "PROJECT_ASSET_STORAGE_ROOT"
+  ]);
+
+  try {
+    process.env.PROJECT_ASSET_STORAGE_BACKEND = "filesystem";
+    process.env.PROJECT_ASSET_STORAGE_ROOT = ".local-data/custom-project-assets";
+
+    const env = getRuntimeEnv();
+
+    assert.equal(env.projectAssetStorageBackend, "filesystem");
+    assert.equal(env.projectAssetStorageRoot, ".local-data/custom-project-assets");
+  } finally {
+    restoreEnvValues(originalValues);
+  }
 });
 
 test("requireGitHubAppConfig reads GIT_APP configuration", () => {
@@ -367,6 +412,18 @@ function capabilityEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
     liveObservationCapabilityPreviousKid: undefined,
     liveObservationCapabilityPreviousSecret: undefined,
     liveObservationCapabilityPreviousStoppedIssuingAt: undefined,
+    ...overrides
+  };
+}
+
+function createRuntimeEnv(overrides: Partial<RuntimeEnv> = {}): RuntimeEnv {
+  return {
+    ...getRuntimeEnv(),
+    webPushSubscriptionEncryptionKey: undefined,
+    webPushSubscriptionKeyId: undefined,
+    webPushVapidPrivateKey: undefined,
+    webPushVapidPublicKey: undefined,
+    webPushVapidSubject: undefined,
     ...overrides
   };
 }

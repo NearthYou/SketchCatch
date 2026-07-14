@@ -61,6 +61,32 @@ import {
 } from "../git-cicd/github-oauth-repository-settings.js";
 import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
 import {
+  createAwsEcsGitOpsCloudGateway,
+  createEcsGitOpsReleaseReconciler,
+  createPostgresEcsGitOpsReleaseRepository,
+  type EcsGitOpsReleaseReconciler
+} from "../git-cicd/ecs-gitops-release-reconciler.js";
+import {
+  createAwsLambdaGitOpsCloudGateway,
+  createLambdaGitOpsReleaseReconciler,
+  createPostgresLambdaGitOpsReleaseRepository,
+  LambdaGitOpsReleaseVerificationError
+} from "../git-cicd/lambda-gitops-release-reconciler.js";
+import {
+  createAwsEc2AsgGitOpsCloudGateway,
+  createEc2AsgGitOpsReleaseReconciler,
+  createPostgresEc2AsgGitOpsReleaseRepository
+} from "../git-cicd/ec2-asg-gitops-release-reconciler.js";
+import {
+  createAwsStaticSiteGitOpsCloudGateway,
+  createPostgresStaticSiteGitOpsReleaseRepository,
+  createStaticSiteGitOpsReleaseReconciler
+} from "../git-cicd/static-site-gitops-release-reconciler.js";
+import {
+  createGitOpsReleaseReconciler,
+  type GitOpsReleaseReconciler
+} from "../git-cicd/gitops-release-reconciler.js";
+import {
   createGitCicdPipelineRunService,
   createPostgresGitCicdPipelinePersistenceRepository,
   GitCicdPipelineRunInvalidCursorError,
@@ -228,6 +254,8 @@ type GitCicdHandoffRouteOptions = {
   ) => GitCicdRepositorySettingsApplier;
   githubOAuthFetch?: typeof fetch;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
+  gitOpsReleaseReconciler?: GitOpsReleaseReconciler;
+  ecsGitOpsReleaseReconciler?: EcsGitOpsReleaseReconciler;
   runtimeCache?: RuntimeCache;
 };
 
@@ -919,6 +947,43 @@ async function getGitCicdPipelineRunRequestContext(
   const pipelineRepository =
     options?.createGitCicdPipelinePersistenceRepository?.(client.db) ??
     createPostgresGitCicdPipelinePersistenceRepository(client.db);
+  const releaseReconciler =
+    options?.gitOpsReleaseReconciler ??
+    (options?.ecsGitOpsReleaseReconciler
+      ? {
+          reconcile(input) {
+            if (input.evidence.runtimeTargetKind !== "ecs_fargate") {
+              throw new LambdaGitOpsReleaseVerificationError(
+                "Lambda release reconciler is not configured"
+              );
+            }
+            return options.ecsGitOpsReleaseReconciler!.reconcile({
+              ...input,
+              evidence: input.evidence
+            });
+          }
+        } satisfies GitOpsReleaseReconciler
+      : undefined) ??
+    (options?.createGitCicdPipelinePersistenceRepository
+      ? undefined
+      : createGitOpsReleaseReconciler({
+          ecs: createEcsGitOpsReleaseReconciler({
+            repository: createPostgresEcsGitOpsReleaseRepository(client.db),
+            gateway: createAwsEcsGitOpsCloudGateway()
+          }),
+          lambda: createLambdaGitOpsReleaseReconciler({
+            repository: createPostgresLambdaGitOpsReleaseRepository(client.db),
+            gateway: createAwsLambdaGitOpsCloudGateway()
+          }),
+          ec2Asg: createEc2AsgGitOpsReleaseReconciler({
+            repository: createPostgresEc2AsgGitOpsReleaseRepository(client.db),
+            gateway: createAwsEc2AsgGitOpsCloudGateway()
+          }),
+          staticSite: createStaticSiteGitOpsReleaseReconciler({
+            repository: createPostgresStaticSiteGitOpsReleaseRepository(client.db),
+            gateway: createAwsStaticSiteGitOpsCloudGateway()
+          })
+        }));
   return {
     accessContext,
     handoffRepository:
@@ -926,7 +991,8 @@ async function getGitCicdPipelineRunRequestContext(
       createPostgresGitCicdHandoffRepository(client.db),
     service: createGitCicdPipelineRunService({
       repository: pipelineRepository,
-      provider: options?.gitCicdRunProvider ?? unconfiguredGitCicdRunProvider
+      provider: options?.gitCicdRunProvider ?? unconfiguredGitCicdRunProvider,
+      releaseReconciler
     })
   };
 }
@@ -959,6 +1025,15 @@ function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
     finishedAt: row.finishedAt?.toISOString() ?? null,
     lastRefreshedAt: row.lastRefreshedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
+    release: row.release
+      ? {
+          ...row.release,
+          startedAt: row.release.startedAt?.toISOString() ?? null,
+          completedAt: row.release.completedAt?.toISOString() ?? null,
+          createdAt: row.release.createdAt.toISOString(),
+          updatedAt: row.release.updatedAt.toISOString()
+        }
+      : null,
     stages: row.stages.map((stage) => ({
       ...stage,
       startedAt: stage.startedAt?.toISOString() ?? null,

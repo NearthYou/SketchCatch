@@ -12,6 +12,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Address PR #390 review feedback
+
+- Added Repository fallback draft payload preservation for dynamic follow-up question answers, including question IDs, prompts, and confirmed answers.
+- Added API schema support for the optional template fallback contract and rejected template fallback requests that omit Repository Analysis context.
+- Finished the existing latest-`dev` merge resolution in this worktree so the review fix can be committed and pushed.
+- Verification: focused public Repository recommendation test, focused API template fallback route test, `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed after clearing stale generated `.next/types`.
+- No Terraform apply, deployment, cloud mutation, GitHub review reply, or thread resolution was performed.
+
 ### 2026-07-14 - Structural AI diagram auto-layout
 
 - Replaced fixed draft slots with a deterministic graph, containment, repeated-structure, support-lane, candidate-scoring layout engine; isolated AWS role and Area-size knowledge behind the first provider mapping.

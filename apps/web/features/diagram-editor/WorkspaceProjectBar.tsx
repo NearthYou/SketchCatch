@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { useRef } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import {
   AlertCircle,
   Check,
@@ -9,15 +11,18 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Rocket,
   Save
 } from "lucide-react";
 
 import styles from "./diagram-editor.module.css";
+import { createDashboardNavigationHandler } from "./workspace-project-bar-navigation";
 import { getSaveStatusTone, isSaveInProgress } from "./workspace-project-save-status";
 
 type WorkspaceProjectBarProps = {
   readonly actions: {
     readonly onSave?: (() => Promise<unknown>) | undefined;
+    readonly onSaveAndDeploy?: (() => Promise<unknown>) | undefined;
     readonly onToggleLeftPanel: () => void;
     readonly onToggleRightPanel: () => void;
   };
@@ -43,10 +48,40 @@ export function WorkspaceProjectBar({
 }: WorkspaceProjectBarProps) {
   const saveStatusTone = getSaveStatusTone(workspace.saveStatus);
   const isSaving = isSaveInProgress(workspace.saveStatus);
+  const dashboardNavigationRef = useRef<
+    ReturnType<typeof createDashboardNavigationHandler> | null
+  >(null);
+
+  if (!dashboardNavigationRef.current) {
+    dashboardNavigationRef.current = createDashboardNavigationHandler({
+      navigate: (href) => window.location.assign(href)
+    });
+  }
 
   /** 현재 DiagramJson을 기존 저장 경로로 넘깁니다. */
   function handleSave(): void {
     void actions.onSave?.();
+  }
+
+  function handleSaveAndDeploy(): void {
+    void actions.onSaveAndDeploy?.();
+  }
+
+  function handleDashboardNavigation(event: ReactMouseEvent<HTMLAnchorElement>): void {
+    void dashboardNavigationRef.current?.({
+      click: {
+        altKey: event.altKey,
+        button: event.button,
+        ctrlKey: event.ctrlKey,
+        defaultPrevented: event.defaultPrevented,
+        metaKey: event.metaKey,
+        preventDefault: () => event.preventDefault(),
+        shiftKey: event.shiftKey,
+        target: event.currentTarget.target
+      },
+      dashboardHref: workspace.dashboardHref,
+      onSave: actions.onSave
+    });
   }
 
   return (
@@ -55,6 +90,7 @@ export function WorkspaceProjectBar({
         aria-label="대시보드로 이동"
         className={styles.projectBarBrand}
         href={workspace.dashboardHref}
+        onClick={handleDashboardNavigation}
         title="대시보드"
       >
         <Image
@@ -98,6 +134,18 @@ export function WorkspaceProjectBar({
             type="button"
           >
             <Save aria-hidden="true" size={17} />
+          </button>
+        ) : null}
+
+        {actions.onSaveAndDeploy ? (
+          <button
+            className={styles.projectBarPrimaryAction}
+            disabled={isSaving}
+            onClick={handleSaveAndDeploy}
+            type="button"
+          >
+            <Rocket aria-hidden="true" size={16} />
+            저장하고 배포
           </button>
         ) : null}
 

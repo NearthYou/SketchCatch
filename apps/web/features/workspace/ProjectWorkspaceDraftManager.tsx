@@ -7,7 +7,6 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
-import { WorkspaceNotificationHost } from "./WorkspaceNotificationHost";
 import { listSourceRepositories } from "./api";
 import { buildBoardTemplateDiagram } from "../resource-settings/template-library";
 import {
@@ -29,6 +28,10 @@ import {
   type ProjectDraftRepository
 } from "./project-draft-repository";
 import { runProjectDraftServerSaveFlight } from "./project-draft-save-flight";
+import {
+  createProjectBoardThumbnailLifecycle,
+  type ProjectBoardThumbnailLifecycleState
+} from "./project-board-thumbnail-lifecycle";
 import {
   getProjectSaveStatus,
   type ProjectLocalSaveState,
@@ -95,7 +98,11 @@ export function ProjectWorkspaceDraftManager({
   const [repositoryTemplateId, setRepositoryTemplateId] = useState<TemplateId | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
+  const [thumbnailLifecycleState, setThumbnailLifecycleState] =
+    useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [serverSaveToastVisible, setServerSaveToastVisible] = useState(false);
+  const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
+  const [saveAndDeployError, setSaveAndDeployError] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
     useState<TerraformIssueAiRequest | null>(null);
@@ -117,10 +124,35 @@ export function ProjectWorkspaceDraftManager({
   const serverSavingRef = useRef(false);
   const serverSavePromiseRef = useRef<Promise<FlushDraftToServerResult> | null>(null);
   const serverSaveToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boardElementRef = useRef<HTMLElement | null>(null);
+  const thumbnailLifecycleRef = useRef<
+    ReturnType<typeof createProjectBoardThumbnailLifecycle> | null
+  >(null);
   const onDraftPersistenceReadyRef =
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+
+  useEffect(() => {
+    const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
+      projectId,
+      onStateChange: setThumbnailLifecycleState
+    });
+    thumbnailLifecycleRef.current = thumbnailLifecycle;
+    setThumbnailLifecycleState("idle");
+
+    if (boardElementRef.current) {
+      thumbnailLifecycle.setBoardElement(boardElementRef.current);
+    }
+
+    return () => {
+      if (thumbnailLifecycleRef.current === thumbnailLifecycle) {
+        thumbnailLifecycleRef.current = null;
+      }
+
+      thumbnailLifecycle.dispose();
+    };
+  }, [projectId]);
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -248,6 +280,16 @@ export function ProjectWorkspaceDraftManager({
                 serverDirtyRef.current = false;
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
+                const thumbnailLifecycle = thumbnailLifecycleRef.current;
+
+                if (thumbnailLifecycle) {
+                  try {
+                    await thumbnailLifecycle.requestSavedRevision(result.serverDraft.revision);
+                  } catch {
+                    // The server draft remains saved; the compact failure control owns retry.
+                  }
+                }
+
                 showServerSaveToast();
                 return result;
               }
@@ -316,6 +358,27 @@ export function ProjectWorkspaceDraftManager({
     void flushDraftToServer("external");
   }, [flushDraftToServer]);
 
+  const saveAndOpenDeployment = useCallback(async (): Promise<void> => {
+    setSaveAndDeployError("");
+    const result = await flushDraftToServer("manual");
+
+    if (!result.ok) {
+      setSaveAndDeployError("프로젝트 저장에 실패해 배포를 시작하지 않았습니다.");
+      return;
+    }
+
+    setDeploymentOpenRequestId((requestId) => requestId + 1);
+  }, [flushDraftToServer]);
+
+  useEffect(() => {
+    if (!saveAndDeployError) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setSaveAndDeployError(""), 3_000);
+    return () => window.clearTimeout(timer);
+  }, [saveAndDeployError]);
+
   useEffect(() => {
     let cancelled = false;
     draftReadyRef.current = false;
@@ -367,6 +430,13 @@ export function ProjectWorkspaceDraftManager({
         setCurrentLocalDraft(loadedDraft.localDraft);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
+
+        if (loadedDraft.source === "server" && loadedDraft.serverDraft) {
+          void thumbnailLifecycleRef.current
+            ?.requestInitialServerRevision(loadedDraft.serverDraft.revision)
+            .catch(() => undefined);
+        }
+
         draftReadyRef.current = true;
         setLoadState("ready");
       } catch (error) {
@@ -458,6 +528,15 @@ export function ProjectWorkspaceDraftManager({
     [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]
   );
 
+  const handleBoardReady = useCallback((element: HTMLElement): void => {
+    boardElementRef.current = element;
+    thumbnailLifecycleRef.current?.setBoardElement(element);
+  }, []);
+
+  const retryThumbnailCapture = useCallback((): void => {
+    void thumbnailLifecycleRef.current?.retry().catch(() => undefined);
+  }, []);
+
   const requestTerraformIssueAi = useCallback((request: TerraformIssueAiRequest): void => {
     setTerraformIssueAiRequest(request);
   }, []);
@@ -495,8 +574,22 @@ export function ProjectWorkspaceDraftManager({
   }
 
   return (
-    <WorkspaceNotificationHost projectId={projectId}>
+    <>
       <DiagramEditor
+        draftStatusPanel={
+          thumbnailLifecycleState === "failed" ? (
+            <div className={styles.draftStatusPanel} role="status">
+              <span className={styles.thumbnailFailureText}>미리보기 저장 실패</span>
+              <button
+                className={styles.thumbnailRetryButton}
+                onClick={retryThumbnailCapture}
+                type="button"
+              >
+                다시 시도
+              </button>
+            </div>
+          ) : undefined
+        }
         floatingPanel={(context) => (
           <WorkspaceAiChatDock
             context={context}
@@ -510,13 +603,16 @@ export function ProjectWorkspaceDraftManager({
           />
         )}
         initialDiagram={initialDiagram}
+        onBoardReady={handleBoardReady}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
+        onSaveAndDeployRequest={saveAndOpenDeployment}
         projectName={projectName}
         workspaceUserName={workspaceUserName}
         rightPanel={(context) => (
           <WorkspaceRightPanel
             context={context}
+            deploymentOpenRequestId={deploymentOpenRequestId}
             deploymentAvailability="enabled"
             initialView={initialRightPanelView}
             initialTerraformFiles={initialTerraformFiles}
@@ -536,7 +632,12 @@ export function ProjectWorkspaceDraftManager({
           저장되었습니다.
         </div>
       ) : null}
-    </WorkspaceNotificationHost>
+      {saveAndDeployError ? (
+        <div className={styles.serverSaveToast} role="alert">
+          {saveAndDeployError}
+        </div>
+      ) : null}
+    </>
   );
 }
 

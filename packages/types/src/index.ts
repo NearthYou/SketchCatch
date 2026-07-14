@@ -597,6 +597,7 @@ export const REPOSITORY_EVIDENCE_KINDS = [
   "lockfile",
   "dockerfile",
   "framework_config",
+  "static_output",
   "readme"
 ] as const;
 
@@ -765,6 +766,7 @@ export type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
 export type GitCicdPipelineStageKind =
   | "detect"
   | "app_build"
+  | "artifact_publish"
   | "infra_plan"
   | "infra_apply"
   | "app_deploy"
@@ -810,6 +812,7 @@ export type GitCicdPipelineRun = {
   lastRefreshedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
   stages: GitCicdPipelineStage[];
+  release?: ApplicationRelease | null;
 };
 
 export type GitCicdPipelineLog = {
@@ -1014,6 +1017,303 @@ export type GitCicdHandoffPipelineStatusResponse = {
   pipelineStatus: GitCicdHandoffPipelineStatus;
 };
 
+export type DeploymentTargetProvider = "aws";
+export type RuntimeTargetKind = "ecs_fargate" | "lambda" | "ec2_asg" | "static_site";
+export type DeploymentRolloutStrategy = "all_at_once";
+export type DeploymentScope = "infrastructure" | "application" | "full_stack";
+export type DeploymentSource = "direct" | "gitops";
+export type DeploymentConsolePhase = "validation" | "approval" | "deployment";
+
+export type BuildEvidenceKind =
+  | "dockerfile"
+  | "package_manifest"
+  | "sam_template"
+  | "appspec"
+  | "static_output";
+
+export type BuildEvidence = {
+  kind: BuildEvidenceKind;
+  path: string;
+};
+
+export type BuildInstallPreset =
+  | "none"
+  | "pnpm_frozen_lockfile"
+  | "npm_ci"
+  | "yarn_frozen_lockfile";
+
+export type BuildExecutionPreset =
+  | "docker_build"
+  | "pnpm_build"
+  | "npm_build"
+  | "yarn_build"
+  | "sam_build"
+  | "codedeploy_bundle"
+  | "static_export";
+
+export type ConfirmedBuildConfig = {
+  sourceRoot: string;
+  evidence: BuildEvidence[];
+  installPreset: BuildInstallPreset;
+  buildPreset: BuildExecutionPreset;
+  artifactOutputPath: string | null;
+  runtimeEntrypoint: string | null;
+  healthCheckPath: string | null;
+  dockerfilePath: string | null;
+  packageManifestPath: string | null;
+  samTemplatePath: string | null;
+  appSpecPath: string | null;
+  staticOutputPath: string | null;
+  exactSemVerTag: string | null;
+  manifestVersion: string | null;
+  confirmedCommitSha: string;
+  confirmedAt: IsoDateTimeString;
+};
+
+export type EcsGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "ecs_fargate";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  commitSha: string;
+  imageDigest: string;
+  imageUri: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  taskDefinitionArn: string;
+  previousTaskDefinitionArn: string;
+  restoredTaskDefinitionArn?: string | undefined;
+  outputUrl: string;
+};
+
+export type LambdaGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "lambda";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  commitSha: string;
+  artifactDigest: string;
+  artifactUri: string;
+  functionName: string;
+  aliasName: string;
+  publishedVersion: string;
+  previousVersion: string;
+  activeVersion: string;
+  deploymentId: string;
+  deploymentConfigName: "CodeDeployDefault.LambdaAllAtOnce";
+  outputUrl: string;
+};
+
+export type Ec2AsgGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "ec2_asg";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  failureReason:
+    | "codedeploy_failure"
+    | "instance_failure"
+    | "health_check_failure"
+    | null;
+  commitSha: string;
+  artifactDigest: string;
+  artifactUri: string;
+  artifactVersionId: string;
+  previousArtifactUri: string;
+  previousArtifactVersionId: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  deploymentId: string;
+  activeDeploymentId: string;
+  deploymentConfigName: "CodeDeployDefault.AllAtOnce";
+  targetInstanceCount: number;
+  succeededInstanceCount: number;
+  outputUrl: string;
+};
+
+export type StaticSiteGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "static_site";
+  outcome: "succeeded" | "failed";
+  failureReason:
+    | "distribution_update_failure"
+    | "invalidation_failure"
+    | "health_check_failure"
+    | null;
+  commitSha: string;
+  artifactDigest: string;
+  manifestUri: string;
+  manifestVersionId: string;
+  releasePrefix: string;
+  previousReleasePrefix: string;
+  activeReleasePrefix: string;
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
+  distributionEtag: string;
+  invalidationId: string | null;
+  fileCount: number;
+  outputUrl: string;
+};
+
+export type GitOpsReleaseEvidence =
+  | EcsGitOpsReleaseEvidence
+  | LambdaGitOpsReleaseEvidence
+  | Ec2AsgGitOpsReleaseEvidence
+  | StaticSiteGitOpsReleaseEvidence;
+
+export type EcsFargateRuntimeConfig = {
+  runtimeTargetKind: "ecs_fargate";
+  codeBuildProjectName: string;
+  ecrRepositoryName: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  outputUrl: string;
+};
+
+export type LambdaRuntimeConfig = {
+  runtimeTargetKind: "lambda";
+  functionLogicalId: string;
+  functionName: string;
+  aliasName: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  outputUrl: string;
+};
+
+export type Ec2AsgRuntimeConfig = {
+  runtimeTargetKind: "ec2_asg";
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  outputUrl: string;
+};
+
+export type StaticSiteRuntimeConfig = {
+  runtimeTargetKind: "static_site";
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
+  outputUrl: string;
+};
+
+export type ProjectDeploymentRuntimeConfig =
+  | EcsFargateRuntimeConfig
+  | LambdaRuntimeConfig
+  | Ec2AsgRuntimeConfig
+  | StaticSiteRuntimeConfig;
+
+export type ProjectDeploymentTarget = {
+  projectId: string;
+  provider: DeploymentTargetProvider;
+  connectionId: string;
+  region: string;
+  runtimeTargetKind: RuntimeTargetKind;
+  confirmedBuildConfig: ConfirmedBuildConfig | null;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  rolloutStrategy: DeploymentRolloutStrategy;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type PutProjectDeploymentTargetRequest = Omit<
+  ProjectDeploymentTarget,
+  "projectId" | "confirmedBuildConfig" | "runtimeConfig" | "createdAt" | "updatedAt"
+> & {
+  confirmedBuildConfig: ConfirmedBuildConfig;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+};
+
+export type ProjectDeploymentTargetResponse = {
+  target: ProjectDeploymentTarget | null;
+};
+
+export type ApplicationReleaseStatus =
+  | "pending"
+  | "building"
+  | "deploying"
+  | "succeeded"
+  | "failed"
+  | "rolled_back"
+  | "cancelled";
+
+export type ApplicationReleaseProviderRevision = {
+  provider: DeploymentTargetProvider;
+  resourceType: string;
+  revisionId: string;
+  artifactReference: string | null;
+  metadata: Record<string, string | number | boolean | null>;
+};
+
+export type ApplicationRelease = {
+  id: string;
+  projectId: string;
+  deploymentId: string | null;
+  pipelineRunId: string | null;
+  source: DeploymentSource;
+  runtimeTargetKind: RuntimeTargetKind;
+  version: string;
+  commitSha: string;
+  artifactDigestAlgorithm: "sha256";
+  artifactDigest: string;
+  providerRevision: ApplicationReleaseProviderRevision | null;
+  outputUrl: string | null;
+  status: ApplicationReleaseStatus;
+  healthEvidence: JsonValue | null;
+  rollbackEvidence: JsonValue | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ApplicationReleaseResponse = {
+  release: ApplicationRelease;
+};
+
+export type ApplicationReleaseListResponse = {
+  releases: ApplicationRelease[];
+};
+
+export type DeploymentNotificationSource = "direct_deployment" | "gitops_pipeline";
+export type DeploymentNotificationStatus = "succeeded" | "failed" | "cancelled";
+
+export type DeploymentNotification = {
+  id: string;
+  projectId: string;
+  source: DeploymentNotificationSource;
+  sourceId: string;
+  status: DeploymentNotificationStatus;
+  title: string;
+  body: string;
+  actionUrl: string;
+  readAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+};
+
+export type DeploymentNotificationListResponse = {
+  notifications: DeploymentNotification[];
+  unreadCount: number;
+};
+
+export type WebPushPublicConfigResponse = {
+  enabled: boolean;
+  vapidPublicKey: string | null;
+};
+
+export type WebPushSubscriptionInput = {
+  endpoint: string;
+  expirationTime: number | null;
+  keys: {
+    auth: string;
+    p256dh: string;
+  };
+};
+
+export type WebPushSubscriptionResponse = {
+  subscriptionId: string;
+  expiresAt: IsoDateTimeString | null;
+};
+
 export type GitCicdGitHubOAuthStartResponse = {
   authorizationUrl: string;
   expiresAt: IsoDateTimeString;
@@ -1052,6 +1352,14 @@ export type Deployment = DeploymentBlock & {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   liveProfile: DeploymentLiveProfile;
+  scope: DeploymentScope;
+  targetKind: RuntimeTargetKind | null;
+  source: DeploymentSource;
+  releaseId: string | null;
+  consolePhase?: DeploymentConsolePhase | undefined;
+  preparedDraftRevision?: number | null | undefined;
+  preparedSnapshotHash?: string | null | undefined;
+  approvedPreparedSnapshotHash?: string | null | undefined;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -1360,9 +1668,54 @@ export type CreateDeploymentRequest = {
   terraformArtifactId: string;
   awsConnectionId: string;
   liveProfile?: DeploymentLiveProfile | undefined;
+  scope?: DeploymentScope | undefined;
+  targetKind?: RuntimeTargetKind | null | undefined;
+  source?: DeploymentSource | undefined;
+};
+
+export type PrepareDeploymentRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  awsConnectionId: string;
+  draftRevision: number;
+  scope: DeploymentScope | "auto";
 };
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
+
+export type DeploymentLiveObservationAwsAdapterV1 = {
+  kind: "aws-live-observation";
+  version: 1;
+  payload: {
+    cloudFrontDistributionId: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    autoScalingGroupName: string;
+  };
+};
+
+export type DeploymentLiveObservationAwsAdapterV2 = {
+  kind: "aws-live-observation";
+  version: 2;
+  payload: {
+    trafficHostname: string;
+    loadBalancerDnsName: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    logGroupNames?: string[] | undefined;
+    capacityTarget:
+      | {
+          kind: "asg";
+          autoScalingGroupName: string;
+        }
+      | {
+          kind: "ecs_fargate";
+          clusterName: string;
+          serviceName: string;
+          maxCapacity: number;
+        };
+  };
+};
 
 export type DeploymentLiveObservationManifestV2 = {
   schemaVersion: 2;
@@ -1385,9 +1738,7 @@ export type DeploymentLiveObservationManifestV2 = {
   };
   adapter: {
     kind: "aws-live-observation";
-    version: 1;
-    payload: JsonValue;
-  };
+  } & (DeploymentLiveObservationAwsAdapterV1 | DeploymentLiveObservationAwsAdapterV2);
 };
 
 export type DeploymentLiveObservationManifestStatus =
@@ -1412,7 +1763,29 @@ export type LiveObservationPressureLevel =
   | "high"
   | "critical";
 
-export type LiveObservationAwsState = "available" | "delayed" | "unavailable";
+export type LiveObservationProviderState = "available" | "delayed" | "unavailable";
+
+/** @deprecated Use LiveObservationProviderState. */
+export type LiveObservationAwsState = LiveObservationProviderState;
+
+export type LiveObservationProviderSnapshot = {
+  requests: number | null;
+  errorRate: number | null;
+  p95LatencyMs: number | null;
+  availability: number | null;
+  capacity: {
+    desired: number | null;
+    running: number | null;
+    healthy: number | null;
+    max: number | null;
+  };
+  logs: Array<{
+    timestamp: IsoDateTimeString;
+    message: string;
+  }>;
+  observedAt: IsoDateTimeString | null;
+  state: LiveObservationProviderState;
+};
 
 export type LiveObservationSession = {
   id: string;
@@ -1436,7 +1809,7 @@ export type LiveObservationSnapshot = {
     observedAt: IsoDateTimeString;
   };
   cloudWatch: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     requestCountPerTarget: number | null;
     periodSeconds: 60;
     observedAt: IsoDateTimeString | null;
@@ -1444,7 +1817,7 @@ export type LiveObservationSnapshot = {
     errorCode: string | null;
   };
   capacity: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     desiredCapacity: number | null;
     currentInstanceCount: number | null;
     inServiceInstanceCount: number | null;
@@ -1485,6 +1858,42 @@ export type CollectLiveObservationEventRequest = {
 export type CollectLiveObservationEventResponse = {
   accepted: boolean;
   acceptedEventCount: number;
+};
+
+export type LiveObservationV2Session = {
+  id: string;
+  deploymentId: string;
+  status: LiveObservationStatus;
+  audienceUrl: string;
+  createdAt: IsoDateTimeString;
+  expiresAt: IsoDateTimeString;
+};
+
+export type LiveObservationV2Snapshot = {
+  observationId: string;
+  status: LiveObservationStatus;
+  live: {
+    acceptedEventCount: number;
+    rollingRequestsPerSecond: number;
+    projectedRequestsPerMinute: number;
+    pressurePercent: number;
+    pressureLevel: LiveObservationPressureLevel;
+    observedAt: IsoDateTimeString;
+  };
+  latestObservation: {
+    observedAt: IsoDateTimeString;
+    payload: LiveObservationProviderSnapshot;
+  } | null;
+  terminalAt: IsoDateTimeString | null;
+};
+
+export type CreateLiveObservationV2Response = {
+  session: LiveObservationV2Session;
+  snapshot: LiveObservationV2Snapshot;
+};
+
+export type LiveObservationV2SnapshotResponse = {
+  snapshot: LiveObservationV2Snapshot;
 };
 
 export type DeploymentResponse = {
@@ -2105,6 +2514,12 @@ export type CreateArchitecturePatchPreviewRequest = {
 export type CreateArchitectureDraftRequest = {
   prompt: string;
   templateId?: TemplateId | undefined;
+  dynamicQuestionAnswers?: readonly {
+    questionId: string;
+    question: string;
+    answer: string;
+  }[] | undefined;
+  templateFallback?: Record<string, unknown> | undefined;
   repositoryEvidence?: {
     mode: "strict";
     facts: readonly RepositoryArchitectureFact[];

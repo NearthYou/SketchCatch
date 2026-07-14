@@ -759,6 +759,138 @@ connection ID로 이 ARN을 계산해 저장합니다. 기존에 저장됐거나
 
 `Deployment`는 이 연결을 `awsConnectionId`로 참조한다.
 
+## ProjectDeploymentTarget
+
+`ProjectDeploymentTarget`은 프로젝트가 실제 application을 배포할 단일 타깃이다. 프로젝트 ID가
+`project_deployment_targets`의 PK이므로 프로젝트마다 row는 하나만 존재한다. MVP는 AWS Provider Adapter를
+먼저 사용하지만, UI와 application release 계약은 provider-neutral 용어를 유지한다. 새 설정은 소유자가 가진
+`verified` connection과 그 connection의 region만 선택할 수 있다.
+
+```ts
+type RuntimeTargetKind = "ecs_fargate" | "lambda" | "ec2_asg" | "static_site";
+
+type ProjectDeploymentTarget = {
+  projectId: string;
+  provider: "aws";
+  connectionId: string;
+  region: string;
+  runtimeTargetKind: RuntimeTargetKind;
+  confirmedBuildConfig: ConfirmedBuildConfig | null;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  rolloutStrategy: "all_at_once";
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+type EcsFargateRuntimeConfig = {
+  runtimeTargetKind: "ecs_fargate";
+  codeBuildProjectName: string;
+  ecrRepositoryName: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  outputUrl: string;
+};
+
+type LambdaRuntimeConfig = {
+  runtimeTargetKind: "lambda";
+  functionLogicalId: string;
+  functionName: string;
+  aliasName: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  outputUrl: string;
+};
+
+type Ec2AsgRuntimeConfig = {
+  runtimeTargetKind: "ec2_asg";
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  outputUrl: string;
+};
+
+type StaticSiteRuntimeConfig = {
+  runtimeTargetKind: "static_site";
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
+  outputUrl: string;
+};
+```
+
+Static target은 저장소 분석에서 정확히 하나로 확인한 Vite `dist`, Create React App `build`, 또는
+Next.js static export `out` 경로를 `static_output` evidence로 확정한다. lockfile에서 선택한 허용 install
+preset, versioning이 활성화된 S3 hosting bucket, CloudFront distribution/origin, HTTPS Output URL을
+비민감 `runtimeConfig`로 저장한다. `0040_static_gitops_runtime.sql`은 기존 세 runtime discriminator를
+보존하면서 `static_site`를 추가한다.
+
+EC2/ASG target은 저장소 분석에서 정확히 하나로 확인한 `appspec.yml|yaml`을 `appspec` build evidence로
+확정하고 CodeDeploy application/deployment group, Auto Scaling group, HTTPS Output URL을 비밀이 아닌
+`runtimeConfig` 좌표로 저장한다. `0039_ec2_asg_gitops_runtime.sql`은 기존 ECS와 Lambda discriminator를
+보존하면서 `ec2_asg`를 확장한다. 새 PUT은 안전한 resource name, runtime discriminator 일치, credential·query·
+fragment가 없는 HTTPS URL을 요구한다.
+
+EC2/ASG GitOps release evidence는 현재 bundle의 SHA-256, S3 URI와 VersionId, 이전 검증 bundle URI와
+VersionId, 원본·활성 CodeDeploy deployment ID, 전체/성공 instance 수와 `codedeploy_failure | instance_failure |
+health_check_failure | null` 실패 원인을 가진다. API는 verified connection으로
+CodeDeploy deployment/group, S3 checksum, ASG healthy InService instance, CodeDeploy instance status를 다시
+조회한 뒤 모두 일치할 때만 공통 `ApplicationRelease` 원장에 기록한다.
+
+Lambda target은 저장소 분석에서 단 하나로 확인된 `template.yaml|yml`을 `sam_template` build evidence로
+확정하고, SAM logical ID, Lambda function/alias, CodeDeploy application/deployment group, HTTPS Output
+URL을 비민감 `runtimeConfig`로 저장한다. `0038_lambda_gitops_runtime.sql`은 기존 ECS JSON 계약을
+유지하면서 Lambda discriminator를 추가한다. API는 runtime kind와 JSON discriminator가 다르거나
+`$LATEST`, 숫자 전용 alias, unsafe resource name, credential/query/fragment가 포함된 URL을 거부한다.
+
+`ConfirmedBuildConfig`는 임의 shell command를 저장하지 않는다. repository-relative `sourceRoot`, evidence 종류와
+경로, 허용된 install/build preset, runtime별 artifact/entrypoint/health path, exact SemVer tag 또는 manifest
+version, 확인한 commit SHA와 시각만 저장한다. `null`은 migration으로 복원한 legacy target에만 허용하며,
+사용자가 PUT으로 저장하는 새 target은 확인된 build config가 필수다.
+
+`runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate,
+Lambda, EC2/ASG, Static target은 각 adapter의 완전한 좌표가 필수다. `0037_ecs_gitops_runtime.sql`은 기존
+row를 유지하기 위해 nullable JSONB로 추가했고, `0038_lambda_gitops_runtime.sql`,
+`0039_ec2_asg_gitops_runtime.sql`, `0040_static_gitops_runtime.sql`이 discriminator를 순차 확장한다.
+새 PUT은 service validation에서 선택한 runtime과 일치하는 완전한 값을 요구한다.
+
+API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를
+읽으며 환경별 복제, EKS, 임의 rollout 전략은 이 계약에 포함하지 않는다.
+
+## ApplicationRelease
+
+`ApplicationRelease`는 application 배포 결과의 공통 원장이다. Direct release는 `deploymentId`, GitOps
+release는 `pipelineRunId`를 하나만 가지며 둘 다 `GET /api/projects/:projectId/releases`에서 조회한다.
+
+```ts
+type ApplicationRelease = {
+  id: string;
+  projectId: string;
+  deploymentId: string | null;
+  pipelineRunId: string | null;
+  source: "direct" | "gitops";
+  runtimeTargetKind: RuntimeTargetKind;
+  version: string;
+  commitSha: string;
+  artifactDigestAlgorithm: "sha256";
+  artifactDigest: string;
+  providerRevision: ApplicationReleaseProviderRevision | null;
+  outputUrl: string | null;
+  status: "pending" | "building" | "deploying" | "succeeded" | "failed" | "rolled_back" | "cancelled";
+  healthEvidence: JsonValue | null;
+  rollbackEvidence: JsonValue | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+release version은 exact SemVer tag, manifest version, `sha-<commit 앞 12자리>` 순으로 결정한다. artifact는
+SHA-256 digest로 식별한다. `providerRevision`은 provider, resource type, revision ID, artifact reference,
+비민감 metadata를 담고 canonical fingerprint 비교로 실제 provider revision drift를 판정한다. 실제 artifact와
+release evidence는 S3에 두며 RDS에는 식별자, 상태, 검증 결과만 저장한다.
+
 ## Deployment
 
 `Deployment`는 사용자가 승인한 IaC Preview를 실제 클라우드 리소스에 반영하는 실행 단위다.
@@ -770,6 +902,15 @@ type Deployment = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  liveProfile: "practice" | "demo_web_service" | "demo_web_service_with_rds";
+  scope: "infrastructure" | "application" | "full_stack";
+  targetKind: RuntimeTargetKind | null;
+  source: "direct" | "gitops";
+  releaseId: string | null;
+  consolePhase: "validation" | "approval" | "deployment";
+  preparedDraftRevision: number | null;
+  preparedSnapshotHash: string | null;
+  approvedPreparedSnapshotHash: string | null;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -808,6 +949,17 @@ type Deployment = {
   updatedAt: IsoDateTimeString;
 };
 ```
+
+Direct Deployment의 외부 상태는 `validation`, `approval`, `deployment` 세 단계만 사용한다. 저장,
+Pre-Deployment Check, `terraform init`, `terraform plan`은 `validation` 내부 작업이며 실제 실행과
+정리는 `deployment`에서 처리한다. 내부 Terraform stage와 로그는 기존 실행 증거로 그대로 보존한다.
+
+`POST /api/projects/:projectId/deployments/prepare`는 사용자가 저장한 `ProjectDraft.revision`을 정확히
+받아야 한다. 서버는 같은 revision의 `diagramJson`과 `terraformFiles`를 canonical SHA-256으로 묶어
+`preparedSnapshotHash`에 저장하고, 생성 transaction에서 revision을 다시 잠금 검증한다. 저장 실패나
+stale revision이면 Deployment를 만들지 않는다. 승인 시 `approvedPreparedSnapshotHash`를 고정하며
+Apply/Destroy 직전 승인 snapshot과 준비 snapshot이 다르면 실행하지 않는다. 기존 Deployment는 세 필드가
+모두 `null`인 legacy record로 호환한다.
 
 `Deployment`는 제품/문서/화면/코드에서 실제 실행 단위로 통일한다.
 
@@ -1066,6 +1218,48 @@ type DeploymentFailureExplanation = {
 응답은 `DeploymentFailureExplanationResponse = { explanation: DeploymentFailureExplanation }`이다.
 이 endpoint는 `FAILED` deployment에만 허용된다. `firstErrorLog`와 `summary`에 포함되는 로그 원문은 `maskDeploymentMessage`를 다시 통과해야 하며, OpenAI API key가 없거나 provider 호출이 실패하면 `llmExplanation.fallbackUsed: true`와 fallback reason을 내려준다. Rule 기반 fallback 요약은 실패 stage, 첫 오류 로그, cleanup 필요 여부를 포함해야 한다.
 
+## DeploymentNotification
+
+`DeploymentNotification`은 Direct Deployment와 GitOps Pipeline Run의 terminal 상태를 사용자별 Inbox로
+보존하는 공통 완료 알림이다. Direct는 `source: "direct_deployment"`, GitOps는
+`source: "gitops_pipeline"`을 사용하며, `source + sourceId + status` idempotency key마다 알림과 outbox가
+각각 하나만 존재한다. `gitops` source의 `Deployment`는 Pipeline Run 알림과 중복되지 않도록 직접 알림을
+만들지 않는다.
+
+```ts
+type DeploymentNotification = {
+  id: string;
+  projectId: string;
+  source: "direct_deployment" | "gitops_pipeline";
+  sourceId: string;
+  status: "succeeded" | "failed" | "cancelled";
+  title: string;
+  body: string;
+  actionUrl: string;
+  readAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+};
+```
+
+DB 기준은 `notifications`, `notification_outbox`, `web_push_subscriptions`다. terminal 상태와 Inbox/outbox
+생성은 같은 PostgreSQL transaction에서 처리한다. Inbox 읽음 상태는 RDS가 source of truth이며 알림은
+생성 시각부터 90일 보관한다. Web Push subscription endpoint와 `auth`/`p256dh` key는 AES-256-GCM으로
+암호화하고 endpoint SHA-256 hash만 별도 검색 키로 저장한다. 원문 subscription과 VAPID private key는
+API 응답, 로그, 브라우저 저장소에 남기지 않는다.
+
+조회와 전달 API:
+
+- `GET /api/notifications`
+- `PATCH /api/notifications/:notificationId/read`
+- `POST /api/notifications/read-all`
+- `GET /api/notifications/stream`
+- `GET /api/notifications/push-config`
+- `PUT|DELETE /api/notifications/push-subscription`
+
+SSE는 인증된 사용자의 Inbox event만 보내며, Service Worker Web Push도 같은 `notificationId`와 프로젝트
+상대 경로를 사용한다. Web Push 권한은 사용자가 명시적으로 요청한 경우에만 얻는다. 영구 실패 또는 만료된
+subscription은 비활성화하고, 일시 실패는 30초, 2분, 10분, 30분 간격으로 최대 5회까지만 시도한다.
+
 ## Git/CI/CD Handoff
 
 `GitCicdHandoff`는 `IaC Preview`를 Source Repository와 외부 pipeline으로 넘기는 팀 운영 배포 경로의 metadata다. Direct Deployment Path를 대체하는 것이 아니라 운영 배포용 별도 경로다.
@@ -1181,6 +1375,7 @@ type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
 type GitCicdPipelineStageKind =
   | "detect"
   | "app_build"
+  | "artifact_publish"
   | "infra_plan"
   | "infra_apply"
   | "app_deploy"
@@ -1226,6 +1421,7 @@ type GitCicdPipelineRun = {
   lastRefreshedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
   stages: GitCicdPipelineStage[];
+  release?: ApplicationRelease | null;
 };
 
 type GitCicdPipelineLog = {
@@ -1414,11 +1610,17 @@ type DeploymentLiveObservationManifestV2 = {
     target: 60;
     windowSeconds: 60;
   };
-  adapter: {
-    kind: "aws-live-observation";
-    version: 1;
-    payload: JsonValue;
-  };
+  adapter:
+    | {
+        kind: "aws-live-observation";
+        version: 1;
+        payload: AwsLiveObservationAdapterPayloadV1;
+      }
+    | {
+        kind: "aws-live-observation";
+        version: 2;
+        payload: AwsLiveObservationAdapterPayloadV2;
+      };
 };
 
 type AwsLiveObservationAdapterPayloadV1 = {
@@ -1427,15 +1629,33 @@ type AwsLiveObservationAdapterPayloadV1 = {
   targetGroupArn: string;
   autoScalingGroupName: string;
 };
+
+type AwsLiveObservationAdapterPayloadV2 = {
+  trafficHostname: string;
+  loadBalancerDnsName: string;
+  loadBalancerArn: string;
+  targetGroupArn: string;
+  logGroupNames?: string[];
+  capacityTarget:
+    | { kind: "asg"; autoScalingGroupName: string }
+    | {
+        kind: "ecs_fargate";
+        clusterName: string;
+        serviceName: string;
+        maxCapacity: number;
+      };
+};
 ```
 
-`provenance`는 Deployment, Terraform artifact SHA-256, 연결, region, 서버 검증 시점을 증명한다. `deploymentId`는 UUID여야 하고, `awsConnectionId`는 AWS connection repository가 `randomUUID()`로 생성하는 canonical lowercase UUIDv4만 허용한다. Role ARN, External ID, credential 값은 이 provenance identifier에 저장하지 않으며 AWS connection record의 보호된 필드에서만 다룬다. `endpoints`는 credential, query, fragment가 없는 absolute HTTPS URL만 허용하고, `pressure`는 분당 target당 60 requests를 60초 window로 해석하는 고정 계약이다. core envelope는 provider-neutral하게 유지하며, MVP의 의도적인 `provider: "aws"` 값과 `adapter`만 Provider Adapter 경계를 나타낸다. core consumer가 AWS-specific 세부 구조에 결합되지 않도록 shared envelope의 `payload` 타입은 opaque `JsonValue`를 유지한다.
+`provenance`는 Deployment, Terraform artifact SHA-256, 연결, region, 서버 검증 시점을 증명한다. `deploymentId`는 UUID여야 하고, `awsConnectionId`는 AWS connection repository가 `randomUUID()`로 생성하는 canonical lowercase UUIDv4만 허용한다. Role ARN, External ID, credential 값은 이 provenance identifier에 저장하지 않으며 AWS connection record의 보호된 필드에서만 다룬다. `endpoints`는 credential, query, fragment가 없는 absolute HTTPS URL만 허용하고, `pressure`는 분당 target당 60 requests를 60초 window로 해석하는 고정 계약이다. core envelope는 provider-neutral하게 유지하며, MVP의 의도적인 `provider: "aws"` 값과 `adapter`만 Provider Adapter 경계를 나타낸다. core consumer는 adapter의 `kind`와 `version`만 분기하고 AWS payload 해석은 AWS Provider Adapter 경계에 둔다. shared contract는 v1/v2 discriminated union으로 안전한 payload shape만 제한한다.
 
 `kind: "aws-live-observation"`, `version: 1`의 runtime validator는 `payload`를 위 `AwsLiveObservationAdapterPayloadV1`의 정확한 네 string key만 가진 strict object로 제한한다. `resourceSuffix`는 `deploymentId`에서 hyphen을 제거한 뒤 앞 12개 hex 문자를 lowercase로 변환한 서버 소유 결정값이다. `loadBalancerArn`의 resource name은 정확히 `loadbalancer/app/sc-lo-alb-${resourceSuffix}`, `targetGroupArn`은 정확히 `targetgroup/sc-lo-api-${resourceSuffix}`, `autoScalingGroupName`은 정확히 `sc-lo-asg-${resourceSuffix}`여야 한다. ALB/TG ARN은 같은 AWS partition, region, 12자리 account ID를 사용해야 하고 그 region은 `provenance.region`과 같아야 한다. `cloudFrontDistributionId`는 `E`로 시작하는 bounded uppercase distribution ID이며 Stage 2 materializer가 AWS relationship read로 실제 연관성을 검증한다. array, nested object, extra key, number, boolean, 임의 string leaf는 허용하지 않는다.
 
+`version: 2`는 기존 v1 row를 계속 읽으면서 운영 Deployment의 ASG 또는 ECS/Fargate capacity target을 명시한다. `trafficHostname`은 ACM certificate의 `domainName`과 정확히 같은 public custom hostname이며 `trafficUrl` host와 일치해야 한다. `loadBalancerDnsName`은 approved region/partition의 public AWS ALB DNS만 허용하고 ALB ARN name에 결합한다. IP literal, localhost, `internal-*`, AWS ALB 기본 도메인을 custom hostname으로 사용하는 값, credential, query, fragment, custom HTTPS port는 거부한다. ALB/TG ARN의 partition, account, region 일치와 bounded AWS name을 검증하고, ECS/Fargate는 `clusterName`, `serviceName`, positive integer `maxCapacity`를 모두 요구한다. `logGroupNames`는 비민감 Terraform output에서 검증한 최대 10개의 CloudWatch Logs group 이름만 담는다. manifest materializer는 `SUCCESS` Deployment의 승인된 Terraform artifact SHA-256/account/region, 현재 verified AWS connection, 비민감 Terraform output, `SKETCHCATCH_PUBLIC_BASE_URL`만 사용하며 불완전한 증거는 generic `manifest_invalid` row로 저장한다.
+
 `status: "valid"`이면 검증을 통과한 `manifest`가 반드시 존재하고 `invalidReason`은 `null`이다. `status: "manifest_invalid"`이면 `manifest`는 `null`이고 서버가 정한 non-empty generic `invalidReason`이 반드시 존재한다. 호출자가 제공한 실패 사유나 raw diagnostic은 보존하지 않는다. raw Terraform, credential, Role ARN, External ID, private token, password, access key, secret key, private key 등 secret material은 manifest record 어디에도 저장하지 않는다.
 
-manifest materialization 실패는 이미 성공한 Deployment의 `SUCCESS`를 변경하지 않는다. 대신 같은 one-to-one row에 `manifest_invalid`를 기록한다. 기존 v1 Deployment는 v2 manifest를 backfill하지 않으며, 재배포하기 전까지 v2 candidate/readiness 대상이 아니다. 이 구현 slice는 contract와 persistence만 추가하며 feature flag를 활성화하거나 manifest를 materialize하거나 v1 runtime 동작을 바꾸지 않는다. Stage 2 Terraform/materializer는 feature enablement 전에 현재 demo template의 `name_prefix` 기반 ALB/TG/ASG를 위 Deployment-derived exact name으로 교체해야 한다.
+manifest materialization 실패는 이미 성공한 Deployment의 `SUCCESS`를 변경하지 않는다. 대신 같은 one-to-one row에 `manifest_invalid`를 기록한다. 기존 adapter v1 row는 repository/parser 호환을 위해 그대로 읽지만 새 v2 session 생성과 immutable reuse에는 사용할 수 없다. row가 없는 Deployment는 인증된 session 생성 요청에서 verified evidence를 한 번 materialize한다. repository는 insert-once이고 conflict에서 동일한 row만 재사용한다. 이후 row는 immutable source of truth로 사용하고, session 생성 때마다 Deployment 접근권한과 approved artifact/account/region, verified AWS connection, adapter v2, adapter ARN identity, 현재 `SKETCHCATCH_PUBLIC_BASE_URL`과 manifest `audienceBaseUrl` 일치를 다시 확인한다.
 
 ### Live Observation capability v2
 
@@ -1455,13 +1675,13 @@ HMAC-SHA256(
 
 capability는 non-secret `currentKid`만 먼저 노출한다. v2 Store는 이 값을 session의 `kid`로 원자 저장하면서 Store/Redis clock으로 `createdAt`과 `expiresAt`을 결정한다. Store create/read 결과는 trusted claims, stored `kid`와 함께 같은 operation의 canonical UTC ISO `evaluatedAt`을 반드시 포함한다. production Redis adapter는 이 값들을 동일한 `Redis TIME`에서 만들고 in-memory Store는 동일한 injected Store clock 값을 사용한다. `issue(claims, evaluatedAt)`, `regenerate(expected, evaluatedAt)`, `verify(credential, expected, evaluatedAt)`는 lifetime과 rotation 판단에 이 명시적 Store time만 사용하며 API process clock, client 입력, 별도 시점에 다시 읽은 clock으로 대체하지 않는다. `regenerate`는 해당 current 또는 아직 유효한 previous key로 같은 credential을 결정론적으로 다시 만든다. claims가 invalid/expired이거나 stored `kid`에 해당하는 key가 없거나 rotation window 밖이면 `null`을 반환하며, 성공시키기 위해 stored `kid`를 current 값으로 바꾸지 않는다.
 
-v2 Store에는 non-secret인 `kid`, `tokenVersion`, `createdAt`, `expiresAt`만 저장한다. capability credential/token, token의 SHA-256, 둘 중 하나를 key로 한 index, token-bearing URL은 RDS, S3, Runtime Cache, 로그, `localStorage`, `sessionStorage`에 저장하지 않는다. future audience page는 credential을 transient URL fragment로 한 번 받을 수 있지만, 즉시 fragment를 URL/history에서 제거한 뒤 page lifetime 동안 메모리에만 보유한다. fragment가 포함된 URL 자체도 bookmark, history entry, analytics, error/log message, server request로 보존하거나 전송하지 않는다.
+v2 Store에는 non-secret인 `kid`, `tokenVersion`, `createdAt`, `expiresAt`만 저장한다. capability credential/token, token의 SHA-256, 둘 중 하나를 key로 한 index, token-bearing URL은 RDS, S3, Runtime Cache, 로그, `localStorage`, `sessionStorage`에 저장하지 않는다. audience URL은 `${SKETCHCATCH_PUBLIC_BASE_URL}/observe/:observationId`이고 capability를 포함하지 않는다. audience page는 exact Origin 검증을 통과한 `bootstrap` 응답에서 session-bound transient credential을 받아 page lifetime 동안 메모리에만 보유하며 응답은 `Cache-Control: no-store`를 사용한다. 여러 audience client의 반복 bootstrap은 허용한다.
 
 rotation 중 previous key는 absolute `stoppedIssuingAt`을 기준으로 `createdAt <= stoppedIssuingAt`이고 `evaluatedAt < stoppedIssuingAt + 15분`일 때만 검증하거나 재생성한다. stop 이후 생성된 session은 overlap 안이어도 previous key를 사용할 수 없다. 정확한 경계 시각부터 거부하며 credential 자체의 `expiresAt`이 더 이르면 그 시각에 먼저 끝난다. `stoppedIssuingAt`은 모든 old process가 실제 issuance를 멈춘 뒤 기록하며, process restart가 overlap을 다시 시작하거나 연장해서는 안 된다.
 
 ### Live Observation Store v2
 
-v2 Store는 lifecycle과 receipt 집계를 위한 전용 provider-neutral seam이다. 외부 Interface는 createSession, readSession, collectEvent, stopSession 네 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사·초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고, 이후 production Redis Adapter는 같은 계약을 Redis TIME과 원자 command/Lua로 구현한다.
+v2 Store는 lifecycle, receipt 집계, fenced provider observation을 위한 전용 provider-neutral seam이다. 외부 Interface는 session 네 연산과 observer lease/commit, presenter lease 연산만 노출한다. caller가 TTL, rate policy, clock을 변경하거나 내부 Map/Redis key를 검사·초기화하는 메서드는 제공하지 않는다. in-memory Adapter의 주입 now 함수는 테스트와 로컬 실행을 위한 내부 구성이고 production Redis Adapter는 같은 계약을 Redis TIME과 원자 Lua로 구현한다.
 
 ~~~ts
 type LiveObservationStore = {
@@ -1475,6 +1695,16 @@ type LiveObservationStore = {
     observationId: string;
     deploymentId: string;
   }): Promise<LiveObservationStoreStopResult>;
+  claimObserverLease(input: {
+    observationId: string;
+    observerId: string;
+  }): Promise<LiveObservationStoreObserverLeaseClaimResult>;
+  commitObservation(input: {
+    observationId: string;
+    observerId: string;
+    fencingToken: number;
+    observation: LiveObservationStoreObservation;
+  }): Promise<LiveObservationStoreObservationCommitResult>;
 };
 ~~~
 
@@ -1482,9 +1712,31 @@ create input은 canonical lowercase observation UUID, 검증된 DeploymentLiveOb
 
 모든 non-throwing result는 kind discriminant와 evaluatedAt을 가진다. evaluatedAt, createdAt, expiresAt, bucket, expiry/stop 경계는 한 operation에서 정확히 한 번 읽은 Store clock 값으로 계산한다. create는 created, active_exists, observation_id_conflict를 반환하고 read는 active, terminal, not_found를 반환한다. collect는 accepted, duplicate, rate_limited, event_limit_reached, gone, not_found를 반환하며 accepted 계열에는 live, gone에는 terminal session을 사용한다. stop은 stopped, already_terminal, not_found를 반환한다. malformed caller input은 LiveObservationStoreInputError, 잘못된 in-memory clock은 LiveObservationStoreClockError이고, future Redis 장애를 위한 LiveObservationStoreUnavailableError는 고정된 generic message만 사용한다.
 
-active read shape는 observationId, deploymentId, status, 안전하게 재파싱한 manifest, kid/tokenVersion, createdAt/expiresAt, live, latestObservation을 포함한다. Task 3A의 latestObservation은 null이며 Task 3B의 fenced observation commit이 같은 read shape를 채운다. live는 acceptedEventCount, 10초 rollingRequestsPerSecond, projectedRequestsPerMinute, manifest pressure target 기준 pressurePercent, pressureLevel, observedAt을 반환하고 계산값은 소수 셋째 자리까지 반올림한다. pressureLevel 경계는 normal 40 미만, warning 40 이상 70 미만, high 70 이상 100 미만, critical 100 이상이다.
+active read shape는 observationId, deploymentId, status, 안전하게 재파싱한 manifest, kid/tokenVersion, createdAt/expiresAt, live, latestObservation을 포함한다. `latestObservation.payload`는 아래 provider-neutral 공통 snapshot schema로 다시 파싱한 값만 허용하고 임의 JSON이나 provider credential을 받지 않는다. observer lease와 fencing token을 얻은 service만 새 snapshot을 commit한다. live는 acceptedEventCount, 10초 rollingRequestsPerSecond, projectedRequestsPerMinute, manifest pressure target 기준 pressurePercent, pressureLevel, observedAt을 반환하고 계산값은 소수 셋째 자리까지 반올림한다. pressureLevel 경계는 normal 40 미만, warning 40 이상 70 미만, high 70 이상 100 미만, critical 100 이상이다.
 
-Store 고정 policy는 session lifetime 15분, terminal tombstone retention 60초, rolling/rate window 10초, weighted burst 초당 20, rolling window accepted event 100, session accepted event 5,000이다. duplicate는 burst/rate/cap을 소비하지 않으며 cap 검사는 dedupe 뒤, rate 계산 앞에서 수행한다. weighted burst는 candidateCurrentSecond + previousSecond * (1 - currentSecondProgress)이고, rejected eventId는 dedupe set에 넣지 않아 이후 재시도할 수 있다.
+```ts
+type LiveObservationProviderState = "available" | "delayed" | "unavailable";
+
+type LiveObservationProviderSnapshot = {
+  requests: number | null;
+  errorRate: number | null;
+  p95LatencyMs: number | null;
+  availability: number | null;
+  capacity: {
+    desired: number | null;
+    running: number | null;
+    healthy: number | null;
+    max: number | null;
+  };
+  logs: Array<{ timestamp: IsoDateTimeString; message: string }>;
+  observedAt: IsoDateTimeString | null;
+  state: LiveObservationProviderState;
+};
+```
+
+`available`만 완전한 정량값을 가진다. `requests`는 immutable manifest가 가리키는 동일 Target Group, 동일 완료 period의 2xx/3xx/4xx/5xx response class 합계이고 `errorRate`의 분자는 그중 5xx다. p95가 선택한 period는 각 response class의 전체 finite point에서 정확히 찾고, 모든 query result가 유일한 `StatusCode=Complete`일 때만 사용한다. 같은 period에 하나 이상의 response class가 있을 때만 누락 class를 sparse zero로 보며, latency만 있거나 status가 누락·non-Complete이거나 stale·다른 period의 class만 있으면 request evidence는 unavailable이다. `delayed`와 `unavailable`은 requests, errorRate, p95LatencyMs, availability, capacity 수치를 모두 `null`로 저장하고 이전 수치를 보존하거나 sample 값으로 대체하지 않는다. ASG `running`은 `InService` instance만 세고 ECS `running`은 service task count를 사용하며, 두 target의 `healthy`는 immutable manifest의 정확한 target group ARN으로 조회한 ELB target health를 사용하고 항상 `running` 이하다. Manifest materializer는 ASG와 ECS capacity evidence가 동시에 존재하는 output을 모호한 target으로 거부한다. 로그는 최근 5분, 최대 50건, 메시지당 4,096자이며 Authorization/JWT/GitHub token/PEM을 포함한 credential-shaped 값이 중앙 masker로 제거된 fresh evidence만 허용한다.
+
+Store 고정 policy는 session lifetime 15분, terminal tombstone retention 60초, rolling/rate window 10초, weighted burst 초당 20, rolling window accepted event 120, session accepted event 10,000이다. duplicate는 burst/rate/cap을 소비하지 않으며 cap 검사는 dedupe 뒤, rate 계산 앞에서 수행한다. weighted burst는 candidateCurrentSecond + previousSecond * (1 - currentSecondProgress)이고, rejected eventId는 dedupe set에 넣지 않아 이후 재시도할 수 있다.
 
 create와 Deployment active claim 설정은 await 없는 하나의 원자 구간이다. 같은 Deployment의 concurrent create는 하나만 created이고 나머지는 모두 같은 session의 active_exists다. expiry와 stop은 claim이 여전히 같은 observationId를 가리킬 때만 compare-delete한다. active claim이 있으면 새 observationId 충돌보다 active_exists를 우선한다.
 
@@ -1573,9 +1825,10 @@ API 계약:
 - `GET /api/deployments/:deploymentId/live-observations/:observationId`: 최신 snapshot
 - `GET /api/deployments/:deploymentId/live-observations/:observationId/stream`: snapshot SSE
 - `POST /api/deployments/:deploymentId/live-observations/:observationId/stop`: 관측 세션만 종료
-- `POST /api/live-observations/public/:token/events`: 성공 Traffic receipt 수집
+- `POST /api/live-observations/public/:observationId/bootstrap`: active session-bound transient credential 재생성
+- `POST /api/live-observations/public/:observationId/requests`: 서버가 검증된 ALB target의 2xx를 확인한 뒤 receipt 수집
 
-public collector body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료·중지는 `410`, rate limit은 `429`를 사용한다.
+public request body는 `{ eventId: string }`만 받는다. count나 target URL을 받지 않는다. direct `/events` endpoint는 제공하지 않는다. 서버가 global per-IP limiter와 public ALB target 검증을 통과한 요청에서 2xx를 받은 뒤에만 receipt를 기록한다. 최초 수락은 `202`, 중복은 `200`과 `accepted: false`, 만료·중지는 `410`, rate limit은 `429`를 사용한다.
 
 SSE는 연결 직후 전체 snapshot을 보내고 live count는 최대 1초, AWS 상태는 최대 10초 간격으로 갱신한다. 15초 heartbeat를 보내며 재연결 시 최신 전체 snapshot을 다시 보낸다. 인증된 GET snapshot은 SSE fallback이다.
 

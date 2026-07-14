@@ -197,6 +197,10 @@ function createDeploymentWithWarnings(
     id: "deployment-1",
     isBlocked: true,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
     planSummary: {
       blocked: false,
       createCount: 0,

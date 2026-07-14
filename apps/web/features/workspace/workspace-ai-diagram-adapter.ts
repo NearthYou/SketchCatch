@@ -16,18 +16,22 @@ import {
   getDefaultResourceDefinitionByResourceType,
   getResourceDefinitionByTerraform
 } from "@sketchcatch/types/resource-definitions";
-import { isAreaNode } from "../diagram-editor/area-nodes";
+import { isAreaNode, isContainmentAreaNode } from "../diagram-editor/area-nodes";
 import { BOARD_DEFAULT_EDGE_COLOR } from "../diagram-editor/constants";
 import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
 import {
   doesOrthogonalRouteCrossResource,
   getObstacleSafeEdgeHandles
 } from "../diagram-editor/obstacle-safe-edge-routing";
-import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
+import {
+  normalizeDiagramResourceNodeGeometry,
+  RESOURCE_NODE_DEFAULT_SIZE
+} from "../diagram-editor/resource-node-geometry";
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
+import { fitSecurityGroupScopesToTargets } from "../diagram-editor/security-group-scope";
 import { resourceCatalog } from "../resource-settings/catalog";
-import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 import { layoutAutomaticDiagram } from "./automatic-diagram-layout";
+import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
 const DEFAULT_NODE_SIZE: DiagramNode["size"] = RESOURCE_NODE_DEFAULT_SIZE;
@@ -81,6 +85,15 @@ const EDGE_HANDLE_IDS = {
   right: "handle-right",
   top: "handle-top"
 } as const;
+const AREA_CHILD_PADDING = 36;
+const RESOURCE_COLLISION_GAP = 16;
+const RESOURCE_COLLISION_ROW_WIDTH = 720;
+const MAX_AREA_FIT_PASSES = 8;
+const ROOT_PARENT_AREA_ID = "__root__";
+const READABLE_LAYOUT_MIN_GROUP_SIZE = 4;
+const READABLE_LAYOUT_COLUMN_GAP = 192;
+const READABLE_LAYOUT_ROW_GAP = 140;
+const READABLE_LAYOUT_STACK_GAP = 104;
 const EDGE_HANDLE_STUB_LENGTH = 20;
 const EDGE_ROUTE_NODE_OVERLAP_PENALTY = 1_000_000;
 const EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY = 200_000;
@@ -91,9 +104,16 @@ const EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY = 60_000_000;
 const EDGE_ROUTE_CROWDING_DISTANCE = 28;
 const EDGE_ROUTE_WRONG_DIRECTION_PENALTY = 10_000_000;
 const EDGE_ROUTE_OBSERVABILITY_BRANCH_PENALTY = 30_000_000;
+const RESOURCE_AREA_INSET_PADDING = 56;
+const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
+  aws_availability_zone: { width: 320, height: 220 },
+  aws_region: { width: 560, height: 360 },
+  aws_security_group: { width: 180, height: 120 },
+  aws_subnet: { width: 180, height: 120 },
+  aws_vpc: { width: 420, height: 280 }
+};
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
-const SECURITY_GROUP_REFERENCE_KEYS = ["securityGroupIds", "vpcSecurityGroupIds", "securityGroupId"] as const;
 const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem]));
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
@@ -198,13 +218,12 @@ export function convertArchitectureJsonToDiagramJson(
       .map((node) => node.id) ?? []),
     ...architectureJson.nodes.filter(hasAuthoredTemplatePosition).map((node) => node.id)
   ]);
-  const nodes = applyDiagramLayerOrder(
-    layoutAutomaticDiagram({
-      edges: architectureJson.edges,
-      nodes: preservedNodes,
-      protectedNodeIds
-    }).nodes
-  );
+  const laidOutNodes = layoutAutomaticDiagram({
+    edges: architectureJson.edges,
+    nodes: preservedNodes,
+    protectedNodeIds
+  }).nodes;
+  const nodes = applyDiagramLayerOrder(fitSecurityGroupScopesToTargets(laidOutNodes));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
@@ -407,14 +426,10 @@ function createResourceCatalogDiagramNode(
   position: DiagramNode["position"],
   zIndex: number
 ): DiagramNode {
-  const defaultDefinition = getDefaultResourceDefinitionByResourceType(resourceType);
-  const defaultResourceItem = defaultDefinition
-    ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(defaultDefinition.id)
-    : undefined;
-  const authoredResourceItem = RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
-  const resourceItem = defaultDefinition?.terraform.resourceType === terraformResourceType
-    ? defaultResourceItem ?? authoredResourceItem
-    : authoredResourceItem ?? defaultResourceItem;
+  const definitionId = getDefaultResourceDefinitionByResourceType(resourceType)?.id;
+  const resourceItem =
+    (definitionId ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(definitionId) : undefined) ??
+    RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
 
   if (!resourceItem) {
     return createFallbackDiagramNode(terraformResourceType, position, zIndex);
@@ -653,16 +668,12 @@ function isConfigurationDependencyRoutingType(resourceType: string): boolean {
 }
 
 export function normalizeDiagramJsonConventions(diagramJson: DiagramJson): DiagramJson {
+  const preparedNodes = normalizeDiagramResourceNodeGeometry(diagramJson).nodes;
+  const laidOutNodes = resolveSiblingNodeCollisions(
+    fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes))
+  );
   const nodes = applyDiagramLayerOrder(
-    layoutAutomaticDiagram({
-      edges: diagramJson.edges.map((edge) => ({
-        id: edge.id,
-        label: edge.label,
-        sourceId: edge.sourceNodeId,
-        targetId: edge.targetNodeId
-      })),
-      nodes: diagramJson.nodes
-    }).nodes
+    fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes))
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -756,7 +767,7 @@ function shouldRenderDiagramEdge(
     targetId: edge.targetNodeId
   };
 
-  return !isAreaContainmentEdgeLabel(edge.label) && !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById);
+  return !isAreaContainmentRenderEdge(architectureEdge, sourceNode, targetNode, nodeById);
 }
 
 function getDiagramEdgeStyleForExistingEdge(
@@ -836,19 +847,20 @@ function shouldRenderArchitectureEdge(
   return !isAreaContainmentRenderEdge(edge, sourceNode, targetNode, nodeById);
 }
 
+// contains/hosts는 실제 containment Area가 source일 때만 화면 edge 대신 parent 관계로 숨깁니다.
 function isAreaContainmentRenderEdge(
   edge: ArchitectureJson["edges"][number],
   sourceNode: DiagramNode,
   targetNode: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): boolean {
-  if (isAreaParentEdge(edge)) {
+  if (isAreaParentEdge(edge) && isContainmentAreaNode(sourceNode)) {
     return true;
   }
 
   return (
-    (isAreaDiagramNode(sourceNode) && hasAreaAncestor(targetNode, sourceNode.id, nodeById)) ||
-    (isAreaDiagramNode(targetNode) && hasAreaAncestor(sourceNode, targetNode.id, nodeById))
+    (isContainmentAreaNode(sourceNode) && hasAreaAncestor(targetNode, sourceNode.id, nodeById)) ||
+    (isContainmentAreaNode(targetNode) && hasAreaAncestor(sourceNode, targetNode.id, nodeById))
   );
 }
 
@@ -1430,7 +1442,6 @@ function applyAreaParentMetadata(
 
   return nodes.map((node) => {
     const parentAreaNodeId =
-      findSecurityBoundaryParentAreaNodeId(node, nodeById) ??
       node.metadata?.parentAreaNodeId ??
       findConfigParentAreaNodeId(node, nodeById) ??
       findEdgeParentAreaNodeId(node, nodeById, edges) ??
@@ -1451,6 +1462,22 @@ function applyAreaParentMetadata(
 }
 
 // 자식이 밖으로 튀어나오지 않도록 VPC/Subnet 박스 크기를 필요한 만큼 키웁니다.
+function fitAreaNodesToChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
+  let currentNodes = [...nodes];
+
+  for (let pass = 0; pass < MAX_AREA_FIT_PASSES; pass += 1) {
+    const nextNodes = fitAreaNodesToDirectChildren(currentNodes);
+
+    if (areNodeLayoutsEqual(currentNodes, nextNodes)) {
+      return nextNodes;
+    }
+
+    currentNodes = nextNodes;
+  }
+
+  return currentNodes;
+}
+
 function applyDiagramLayerOrder(nodes: readonly DiagramNode[]): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
@@ -1614,6 +1641,247 @@ function rewriteTerraformReferenceString(
   return rewrittenValue;
 }
 
+type ReadableLayoutSlot = {
+  readonly column: number;
+  readonly row: number;
+};
+
+function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const hasAreaNodes = nodes.some(isAreaDiagramNode);
+  const nodesByParentId = createReadableLayoutNodesByParentId(nodes);
+  const parentIds = [...nodesByParentId.keys()].sort(
+    (leftParentId, rightParentId) =>
+      getParentAreaDepth(leftParentId, nodeById) - getParentAreaDepth(rightParentId, nodeById)
+  );
+
+  for (const parentId of parentIds) {
+    const groupNodes = nodesByParentId.get(parentId) ?? [];
+
+    if (hasAreaNodes && parentId === ROOT_PARENT_AREA_ID) {
+      continue;
+    }
+
+    if (groupNodes.length < READABLE_LAYOUT_MIN_GROUP_SIZE) {
+      continue;
+    }
+
+    const parentNode = parentId === ROOT_PARENT_AREA_ID ? undefined : nodeById.get(parentId);
+    const origin = getReadableLayoutOrigin(groupNodes, parentNode);
+    const slotCounts = new Map<string, number>();
+
+    for (const originalNode of [...groupNodes].sort(compareReadableLayoutNodes)) {
+      const node = nodeById.get(originalNode.id);
+
+      if (!node) {
+        continue;
+      }
+
+      const slot = getReadableLayoutSlot(node, parentNode);
+      const slotKey = `${slot.column}:${slot.row}`;
+      const stackIndex = slotCounts.get(slotKey) ?? 0;
+      const nextPosition = {
+        x: origin.x + slot.column * READABLE_LAYOUT_COLUMN_GAP,
+        y: origin.y + slot.row * READABLE_LAYOUT_ROW_GAP + stackIndex * READABLE_LAYOUT_STACK_GAP
+      };
+      const delta = {
+        x: nextPosition.x - node.position.x,
+        y: nextPosition.y - node.position.y
+      };
+
+      slotCounts.set(slotKey, stackIndex + 1);
+
+      if (delta.x !== 0 || delta.y !== 0) {
+        moveNodeSubtree(node.id, delta, nodeById);
+      }
+    }
+  }
+
+  return nodes.map((node) => nodeById.get(node.id) ?? node);
+}
+
+function createReadableLayoutNodesByParentId(nodes: readonly DiagramNode[]): Map<string, DiagramNode[]> {
+  const nodesByParentId = new Map<string, DiagramNode[]>();
+
+  for (const node of nodes) {
+    if (!isReadableLayoutCandidate(node)) {
+      continue;
+    }
+
+    const parentId = node.metadata?.parentAreaNodeId ?? ROOT_PARENT_AREA_ID;
+    const siblings = nodesByParentId.get(parentId) ?? [];
+    siblings.push(node);
+    nodesByParentId.set(parentId, siblings);
+  }
+
+  return nodesByParentId;
+}
+
+function isReadableLayoutCandidate(node: DiagramNode): boolean {
+  return node.kind === "resource" && !isAreaDiagramNode(node);
+}
+
+function getReadableLayoutOrigin(nodes: readonly DiagramNode[], parentNode?: DiagramNode): DiagramNode["position"] {
+  const slots = nodes.map((node) => getReadableLayoutSlot(node, parentNode));
+  const minColumn = Math.min(...slots.map((slot) => slot.column));
+  const minRow = Math.min(...slots.map((slot) => slot.row));
+  const minX = Math.min(...nodes.map((node) => node.position.x));
+  const minY = Math.min(...nodes.map((node) => node.position.y));
+
+  return {
+    x: minX - minColumn * READABLE_LAYOUT_COLUMN_GAP,
+    y: minY - minRow * READABLE_LAYOUT_ROW_GAP
+  };
+}
+
+function compareReadableLayoutNodes(leftNode: DiagramNode, rightNode: DiagramNode): number {
+  const leftSlot = getReadableLayoutSlot(leftNode);
+  const rightSlot = getReadableLayoutSlot(rightNode);
+
+  return (
+    leftSlot.row - rightSlot.row ||
+    leftSlot.column - rightSlot.column ||
+    leftNode.position.y - rightNode.position.y ||
+    leftNode.position.x - rightNode.position.x ||
+    leftNode.id.localeCompare(rightNode.id)
+  );
+}
+
+function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): ReadableLayoutSlot {
+  const resourceType = getDiagramNodeResourceType(node);
+  const resourceName = `${node.parameters?.resourceName ?? ""} ${node.label} ${node.id}`.toLowerCase();
+
+  if (parentNode && getDiagramNodeResourceType(parentNode) === "aws_region") {
+    return getRegionReadableLayoutSlot(resourceType, resourceName);
+  }
+
+  if (resourceType === "aws_iam_role" || resourceType === "aws_iam_instance_profile") {
+    return { column: 2, row: 0 };
+  }
+
+  if (resourceType === "aws_iam_policy") {
+    return { column: 1, row: 0 };
+  }
+
+  if (resourceType === "aws_kms_key" || resourceType === "aws_acm_certificate") {
+    return { column: 3, row: 0 };
+  }
+
+  if (
+    resourceType === "aws_cloudfront_distribution" ||
+    resourceType === "aws_route53_record" ||
+    resourceType === "aws_wafv2_web_acl"
+  ) {
+    return { column: 0, row: 1 };
+  }
+
+  if (resourceType === "aws_s3_bucket" && /(^|[_\s-])(asset|assets|static|site|website|web)([_\s-]|$)/u.test(resourceName)) {
+    return { column: 1, row: 1 };
+  }
+
+  if (
+    resourceType === "aws_api_gateway_rest_api" ||
+    resourceType === "aws_api_gateway_websocket_api" ||
+    resourceType === "aws_api_gateway_resource" ||
+    resourceType === "aws_api_gateway_method" ||
+    resourceType === "aws_api_gateway_integration" ||
+    resourceType === "aws_api_gateway_stage" ||
+    resourceType === "aws_lb" ||
+    resourceType === "aws_lb_listener"
+  ) {
+    return { column: 0, row: 2 };
+  }
+
+  if (
+    resourceType === "aws_lambda_permission" ||
+    resourceType === "aws_sqs_queue" ||
+    resourceType === "aws_sns_topic" ||
+    resourceType === "aws_lambda_event_source_mapping"
+  ) {
+    return { column: 1, row: 2 };
+  }
+
+  if (
+    resourceType === "aws_lambda_function" ||
+    resourceType === "aws_instance" ||
+    resourceType === "aws_autoscaling_group" ||
+    resourceType === "aws_lb_target_group"
+  ) {
+    return { column: 2, row: 2 };
+  }
+
+  if (
+    resourceType === "aws_s3_bucket" ||
+    resourceType === "aws_db_instance" ||
+    resourceType === "aws_db_subnet_group" ||
+    resourceType === "aws_ebs_volume"
+  ) {
+    return { column: 3, row: 2 };
+  }
+
+  if (resourceType === "aws_cloudwatch_log_group" || resourceType === "aws_cloudwatch_dashboard") {
+    return { column: 3, row: 1 };
+  }
+
+  if (resourceType === "aws_cloudwatch_metric_alarm") {
+    return { column: 3, row: 3 };
+  }
+
+  if (resourceType === "aws_security_group_rule") {
+    return { column: 1, row: 3 };
+  }
+
+  return { column: 3, row: 2 };
+}
+
+function getRegionReadableLayoutSlot(resourceType: string, resourceName: string): ReadableLayoutSlot {
+  if (resourceType === "aws_iam_policy") {
+    return { column: 0, row: 0 };
+  }
+
+  if (resourceType === "aws_iam_role" || resourceType === "aws_iam_instance_profile") {
+    return { column: 1, row: 0 };
+  }
+
+  if (resourceType === "aws_kms_key" || resourceType === "aws_acm_certificate") {
+    return { column: 2, row: 0 };
+  }
+
+  if (
+    resourceType === "aws_cloudfront_distribution" ||
+    resourceType === "aws_route53_record" ||
+    resourceType === "aws_wafv2_web_acl"
+  ) {
+    return { column: 0, row: 1 };
+  }
+
+  if (resourceType === "aws_s3_bucket" && /(^|[_\s-])(asset|assets|static|site|website|web)([_\s-]|$)/u.test(resourceName)) {
+    return { column: 1, row: 1 };
+  }
+
+  if (resourceType === "aws_cloudwatch_log_group" || resourceType === "aws_cloudwatch_dashboard") {
+    return { column: 3, row: 1 };
+  }
+
+  if (resourceType === "aws_ami") {
+    return { column: 0, row: 2 };
+  }
+
+  if (resourceType === "aws_s3_bucket") {
+    return { column: 1, row: 2 };
+  }
+
+  if (resourceType === "aws_cloudwatch_metric_alarm") {
+    return { column: 3, row: 2 };
+  }
+
+  if (resourceType === "aws_vpc") {
+    return { column: 0, row: 3 };
+  }
+
+  return { column: 2, row: 2 };
+}
+
 function createConventionResourceName(
   resourceType: string,
   currentResourceName: string,
@@ -1653,6 +1921,209 @@ function createConventionResourceNameBody(value: string, aliasSet: ReadonlySet<s
     .join("_");
 }
 
+function resolveSiblingNodeCollisions(nodes: readonly DiagramNode[]): DiagramNode[] {
+  let currentNodes = [...nodes];
+
+  for (let pass = 0; pass < MAX_AREA_FIT_PASSES; pass += 1) {
+    const nextNodes = resolveSiblingNodeCollisionsOnce(currentNodes);
+
+    if (areNodeLayoutsEqual(currentNodes, nextNodes)) {
+      return nextNodes;
+    }
+
+    currentNodes = nextNodes;
+  }
+
+  return currentNodes;
+}
+
+function resolveSiblingNodeCollisionsOnce(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const nodesByParentId = createResourceNodesByParentId(nodes);
+  const parentIds = [...nodesByParentId.keys()].sort(
+    (leftParentId, rightParentId) =>
+      getParentAreaDepth(leftParentId, nodeById) - getParentAreaDepth(rightParentId, nodeById)
+  );
+
+  for (const parentId of parentIds) {
+    const siblingNodes = nodesByParentId.get(parentId) ?? [];
+    const placedNodes: DiagramNode[] = [];
+
+    for (const originalNode of siblingNodes) {
+      const node = nodeById.get(originalNode.id);
+
+      if (!node) {
+        continue;
+      }
+
+      const nextNode = moveNodeUntilClear(node, placedNodes, nodeById);
+      const delta = {
+        x: nextNode.position.x - node.position.x,
+        y: nextNode.position.y - node.position.y
+      };
+
+      if (delta.x !== 0 || delta.y !== 0) {
+        moveNodeSubtree(node.id, delta, nodeById);
+      }
+
+      const placedNode = nodeById.get(node.id);
+
+      if (placedNode) {
+        placedNodes.push(placedNode);
+      }
+    }
+  }
+
+  return nodes.map((node) => nodeById.get(node.id) ?? node);
+}
+
+function createResourceNodesByParentId(nodes: readonly DiagramNode[]): Map<string, DiagramNode[]> {
+  const nodesByParentId = new Map<string, DiagramNode[]>();
+
+  for (const node of nodes) {
+    if (node.kind !== "resource") {
+      continue;
+    }
+
+    const parentId = node.metadata?.parentAreaNodeId ?? ROOT_PARENT_AREA_ID;
+    const siblings = nodesByParentId.get(parentId) ?? [];
+    siblings.push(node);
+    nodesByParentId.set(parentId, siblings);
+  }
+
+  return nodesByParentId;
+}
+
+function getParentAreaDepth(parentId: string, nodeById: ReadonlyMap<string, DiagramNode>): number {
+  if (parentId === ROOT_PARENT_AREA_ID) {
+    return -1;
+  }
+
+  const parentNode = nodeById.get(parentId);
+
+  return parentNode ? getAreaDepth(parentNode, nodeById) : 0;
+}
+
+function moveNodeSubtree(
+  nodeId: string,
+  delta: DiagramNode["position"],
+  nodeById: Map<string, DiagramNode>
+): void {
+  for (const node of [...nodeById.values()]) {
+    if (node.id !== nodeId && !hasAreaAncestor(node, nodeId, nodeById)) {
+      continue;
+    }
+
+    nodeById.set(node.id, {
+      ...node,
+      position: {
+        x: node.position.x + delta.x,
+        y: node.position.y + delta.y
+      }
+    });
+  }
+}
+
+function moveNodeUntilClear(
+  node: DiagramNode,
+  placedNodes: readonly DiagramNode[],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode {
+  let nextPosition = { ...node.position };
+
+  for (let attempts = 0; attempts < 120; attempts += 1) {
+    const candidate = {
+      ...node,
+      position: nextPosition
+    };
+
+    if (!placedNodes.some((placedNode) => doNodeFootprintsOverlap(candidate, placedNode, nodeById))) {
+      return candidate;
+    }
+
+    const collisionStepSize = getNodeCollisionStepSize(node);
+    const nextX = nextPosition.x + collisionStepSize.width + RESOURCE_COLLISION_GAP;
+    nextPosition =
+      nextX - node.position.x > RESOURCE_COLLISION_ROW_WIDTH
+        ? {
+            x: node.position.x,
+            y: nextPosition.y + collisionStepSize.height + RESOURCE_COLLISION_GAP
+          }
+        : {
+            x: nextX,
+            y: nextPosition.y
+          };
+  }
+
+  return {
+    ...node,
+    position: nextPosition
+  };
+}
+
+function getNodeCollisionStepSize(node: DiagramNode): DiagramNode["size"] {
+  const visualBounds = getResourceNodeVisualBounds(node);
+
+  return {
+    width: visualBounds.width,
+    height: visualBounds.height
+  };
+}
+
+function doNodeFootprintsOverlap(
+  leftNode: DiagramNode,
+  rightNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  if (isAreaDiagramNode(leftNode) !== isAreaDiagramNode(rightNode)) {
+    return doAreaAndResourceFootprintsConflict(leftNode, rightNode, nodeById);
+  }
+
+  const left = getNodeCollisionFootprint(leftNode);
+  const right = getNodeCollisionFootprint(rightNode);
+
+  return (
+    left.x < right.x + right.width &&
+    left.x + left.width > right.x &&
+    left.y < right.y + right.height &&
+    left.y + left.height > right.y
+  );
+}
+
+function doAreaAndResourceFootprintsConflict(
+  leftNode: DiagramNode,
+  rightNode: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  const areaNode = isAreaDiagramNode(leftNode) ? leftNode : rightNode;
+  const resourceNode = isAreaDiagramNode(leftNode) ? rightNode : leftNode;
+
+  if (hasAreaAncestor(resourceNode, areaNode.id, nodeById)) {
+    return false;
+  }
+
+  const area = getNodeCollisionFootprint(areaNode);
+  const resource = getNodeCollisionFootprint(resourceNode);
+
+  return (
+    area.x < resource.x + resource.width &&
+    area.x + area.width > resource.x &&
+    area.y < resource.y + resource.height &&
+    area.y + area.height > resource.y
+  );
+}
+
+function getNodeCollisionFootprint(node: DiagramNode): { x: number; y: number; width: number; height: number } {
+  const visualBounds = getResourceNodeVisualBounds(node);
+
+  return {
+    x: visualBounds.x - RESOURCE_COLLISION_GAP / 2,
+    y: visualBounds.y - RESOURCE_COLLISION_GAP / 2,
+    width: visualBounds.width + RESOURCE_COLLISION_GAP,
+    height: visualBounds.height + RESOURCE_COLLISION_GAP
+  };
+}
+
 function getAreaDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
   let depth = 0;
   let parentAreaNodeId = node.metadata?.parentAreaNodeId;
@@ -1672,59 +2143,110 @@ function getAreaDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNo
 }
 
 // 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.
-function findSecurityBoundaryParentAreaNodeId(
-  node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  if (isSecurityGroupAreaNode(node)) {
-    return findProtectedSubnetAreaNodeId(node, nodeById);
-  }
+function areNodeLayoutsEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
+  return leftNodes.every((leftNode, index) => {
+    const rightNode = rightNodes[index];
 
-  const securityGroupNode = findReferencedSecurityGroupAreaNodes(node, nodeById)[0];
-
-  return securityGroupNode?.id;
-}
-
-function findProtectedSubnetAreaNodeId(
-  securityGroupNode: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): string | undefined {
-  for (const node of nodeById.values()) {
-    if (node.id === securityGroupNode.id || !referencesSecurityGroup(node, securityGroupNode, nodeById)) {
-      continue;
-    }
-
-    const subnetNode = findConfigAreaNodeByParameter(node, "subnetId", nodeById);
-
-    if (subnetNode && subnetNode.id !== securityGroupNode.id) {
-      return subnetNode.id;
-    }
-  }
-
-  return undefined;
-}
-
-function referencesSecurityGroup(
-  node: DiagramNode,
-  securityGroupNode: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): boolean {
-  return getSecurityGroupReferenceValues(node).some((referenceValue) => {
-    const referencedNode = findReferencedNode(referenceValue, nodeById);
-
-    return referencedNode?.id === securityGroupNode.id;
+    return (
+      rightNode?.position.x === leftNode.position.x &&
+      rightNode.position.y === leftNode.position.y &&
+      rightNode.size.width === leftNode.size.width &&
+      rightNode.size.height === leftNode.size.height
+    );
   });
 }
 
-function findReferencedSecurityGroupAreaNodes(
+function fitAreaNodesToDirectChildren(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const childrenByParentId = new Map<string, DiagramNode[]>();
+
+  for (const node of nodes) {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (!parentAreaNodeId) {
+      continue;
+    }
+
+    const children = childrenByParentId.get(parentAreaNodeId) ?? [];
+    children.push(node);
+    childrenByParentId.set(parentAreaNodeId, children);
+  }
+
+  return nodes.map((node) => {
+    if (!isAreaDiagramNode(node)) {
+      return node;
+    }
+
+    const children = childrenByParentId.get(node.id) ?? [];
+
+    if (children.length === 0) {
+      return node;
+    }
+
+    const requiredLayout = getRequiredAreaLayout(node, children);
+
+    if (
+      requiredLayout.position.x === node.position.x &&
+      requiredLayout.position.y === node.position.y &&
+      requiredLayout.size.width === node.size.width &&
+      requiredLayout.size.height === node.size.height
+    ) {
+      return node;
+    }
+
+    return {
+      ...node,
+      position: requiredLayout.position,
+      size: requiredLayout.size
+    };
+  });
+}
+
+function getRequiredAreaLayout(
   node: DiagramNode,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): DiagramNode[] {
-  return getSecurityGroupReferenceValues(node)
-    .map((referenceValue) => findReferencedNode(referenceValue, nodeById))
-    .filter((referencedNode): referencedNode is DiagramNode => {
-      return referencedNode !== undefined && isSecurityGroupAreaNode(referencedNode);
-    });
+  children: readonly DiagramNode[]
+): Pick<DiagramNode, "position" | "size"> {
+  const shouldCompactArea = shouldCompactAreaToChildren(node);
+  let left = shouldCompactArea ? Number.POSITIVE_INFINITY : node.position.x;
+  let top = shouldCompactArea ? Number.POSITIVE_INFINITY : node.position.y;
+  let right = shouldCompactArea ? Number.NEGATIVE_INFINITY : node.position.x + node.size.width;
+  let bottom = shouldCompactArea ? Number.NEGATIVE_INFINITY : node.position.y + node.size.height;
+
+  for (const child of children) {
+    const childBounds = getResourceNodeVisualBounds(child);
+    const childPadding = getAreaChildPadding(child);
+    left = Math.min(left, childBounds.x - childPadding);
+    top = Math.min(top, childBounds.y - childPadding);
+    right = Math.max(right, childBounds.x + childBounds.width + childPadding);
+    bottom = Math.max(bottom, childBounds.y + childBounds.height + childPadding);
+  }
+  const minimumSize = getCompactAreaMinimumSize(node);
+  const width = Math.max(right - left, minimumSize.width);
+  const height = Math.max(bottom - top, minimumSize.height);
+
+  return {
+    position: {
+      x: left,
+      y: top
+    },
+    size: {
+      width,
+      height
+    }
+  };
+}
+
+function shouldCompactAreaToChildren(node: DiagramNode): boolean {
+  return getCompactAreaMinimumSize(node) !== DEFAULT_AREA_MIN_SIZE;
+}
+
+const DEFAULT_AREA_MIN_SIZE: DiagramNode["size"] = { width: 0, height: 0 };
+
+function getCompactAreaMinimumSize(node: DiagramNode): DiagramNode["size"] {
+  return COMPACT_AREA_MIN_SIZES[getDiagramNodeResourceType(node)] ?? DEFAULT_AREA_MIN_SIZE;
+}
+
+function getAreaChildPadding(child: DiagramNode): number {
+  return isAreaDiagramNode(child) ? AREA_CHILD_PADDING : RESOURCE_AREA_INSET_PADDING;
 }
 
 function findConfigParentAreaNodeId(
@@ -1848,6 +2370,7 @@ function normalizeReferenceValue(value: string): string {
   return value.trim().replace(/^\$\{(.+)\}$/u, "$1");
 }
 
+// SG visual scope는 contains edge가 있어도 persisted parent 후보로 사용하지 않습니다.
 function findEdgeParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>,
@@ -1860,7 +2383,7 @@ function findEdgeParentAreaNodeId(
 
     const sourceNode = nodeById.get(edge.sourceId);
 
-    if (sourceNode && sourceNode.id !== node.id && isAreaDiagramNode(sourceNode)) {
+    if (sourceNode && sourceNode.id !== node.id && isContainmentAreaNode(sourceNode)) {
       return sourceNode.id;
     }
   }
@@ -1878,10 +2401,6 @@ function isAreaContainmentEdgeLabel(label: string | undefined): boolean {
 
 function isAreaDiagramNode(node: DiagramNode): boolean {
   return isAreaNode(node);
-}
-
-function isSecurityGroupAreaNode(node: DiagramNode): boolean {
-  return node.kind === "resource" && (node.parameters?.resourceType ?? node.type) === "aws_security_group";
 }
 
 function getDiagramNodeResourceType(node: DiagramNode | undefined): string {
@@ -1904,28 +2423,10 @@ function getStringParameterValue(node: DiagramNode, key: string): string | undef
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
-function getSecurityGroupReferenceValues(node: DiagramNode): string[] {
-  return SECURITY_GROUP_REFERENCE_KEYS.flatMap((key) => getStringParameterValues(node, key));
-}
-
 function getStringConfigValue(config: ResourceConfig, key: string): string | undefined {
   const value = config[key];
 
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function getStringParameterValues(node: DiagramNode, key: string): string[] {
-  const value = node.parameters?.values[key];
-
-  if (typeof value === "string" && value.trim().length > 0) {
-    return [value];
-  }
-
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.filter(isString).filter((item) => item.trim().length > 0);
 }
 
 function getConvertibleResourceNodeParameters(node: DiagramNode): DiagramNodeParameters | null {
@@ -2099,6 +2600,7 @@ function isRecord(value: unknown): value is ResourceConfig {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// SG rule 입력 배열에서 문자열 항목만 AWS ingress 값 후보로 남깁니다.
 function isString(value: unknown): value is string {
   return typeof value === "string";
 }

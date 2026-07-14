@@ -42,11 +42,11 @@ test("canChangeNodeBorderColor allows border color changes only for area nodes",
 test("getNodeDisplayBorderStyle follows AWS group defaults for area nodes", () => {
   assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_region")), "dashed");
   assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_availability_zone")), "dashed");
-  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_autoscaling_group")), "dashed");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_autoscaling_group")), "solid");
   assert.equal(getNodeDisplayBorderStyle(makeDesignNode("design_group")), "dashed");
   assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_vpc")), "solid");
   assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_subnet")), "solid");
-  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_security_group")), "solid");
+  assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_security_group")), "dashed");
   assert.equal(getNodeDisplayBorderStyle(makeResourceNode("aws_instance")), "solid");
 });
 

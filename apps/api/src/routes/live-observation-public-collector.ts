@@ -31,7 +31,22 @@ export async function registerLiveObservationPublicCollectorRoutes(
     throw error;
   });
 
-  app.options("/live-observations/public/:observationId/events", async (request, reply) => {
+  app.post("/live-observations/public/:observationId/bootstrap", async (request, reply) => {
+    try {
+      const params = paramsSchema.parse(request.params);
+      const result = await options.collector.bootstrap({
+        observationId: params.observationId,
+        origin: firstHeaderValue(request.headers.origin)
+      });
+      applyCors(reply, result.audienceOrigin);
+      reply.header("Cache-Control", "no-store");
+      return reply.status(200).send({ credential: result.credential });
+    } catch (error) {
+      return handlePublicError(error, reply);
+    }
+  });
+
+  app.options("/live-observations/public/:observationId/requests", async (request, reply) => {
     try {
       const params = paramsSchema.parse(request.params);
       const result = await options.collector.preflight({
@@ -46,7 +61,7 @@ export async function registerLiveObservationPublicCollectorRoutes(
   });
 
   app.post(
-    "/live-observations/public/:observationId/events",
+    "/live-observations/public/:observationId/requests",
     {
       bodyLimit: BODY_LIMIT_BYTES,
       async onRequest(request, reply) {
@@ -67,17 +82,19 @@ export async function registerLiveObservationPublicCollectorRoutes(
     async (request, reply) => {
       try {
         const authorized = authorizedRequests.get(request);
-        if (!authorized) {
-          throw new LiveObservationPublicCollectorError("unavailable");
-        }
+        if (!authorized) throw new LiveObservationPublicCollectorError("unavailable");
         const body = bodySchema.parse(request.body);
-        const response = await authorized.collectEvent(body.eventId);
+        const response = await authorized.request({
+          eventId: body.eventId,
+          ipAddress: request.ip
+        });
         return reply.status(response.accepted ? 202 : 200).send(response);
       } catch (error) {
         return handlePublicError(error, reply);
       }
     }
   );
+
 }
 
 function applyCors(reply: FastifyReply, audienceOrigin: string): void {

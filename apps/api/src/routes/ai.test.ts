@@ -308,6 +308,26 @@ test("POST /api/ai/architecture-draft rejects an unknown Repository Analysis Tem
   await app.close();
 });
 
+test("POST /api/ai/architecture-draft requires Repository Analysis for template fallback", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/architecture-draft",
+    payload: {
+      prompt: "Repository 분석 기반으로 Template fallback 아키텍처를 만들어줘",
+      templateFallback: {
+        reason: "no_matching_template"
+      }
+    }
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /Repository Analysis is required for template fallback/);
+
+  await app.close();
+});
+
 test("POST /api/ai/architecture-draft selects API server and database backend templates", async () => {
   const app = buildApp();
 

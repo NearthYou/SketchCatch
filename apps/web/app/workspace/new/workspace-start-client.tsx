@@ -22,6 +22,10 @@ import {
   saveProjectDraft
 } from "../../../features/workspace/api";
 import {
+  createWorkspaceStartSingleFlight,
+  type WorkspaceStartSingleFlight
+} from "../../../features/workspace/workspace-start-single-flight";
+import {
   type BoardTemplate,
   listBoardTemplates
 } from "../../../features/resource-settings/template-library";
@@ -72,6 +76,10 @@ export function WorkspaceStartClient({
   const router = useRouter();
   const [title, setTitle] = useState("");
   const projectNameInputRef = useRef<HTMLInputElement>(null);
+  const [startSingleFlight] = useState<WorkspaceStartSingleFlight>(() =>
+    createWorkspaceStartSingleFlight()
+  );
+
   const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
   const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
@@ -81,13 +89,15 @@ export function WorkspaceStartClient({
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [projectNameError, setProjectNameError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittingKind, setSubmittingKind] = useState<WorkspaceStartKind | null>(null);
   const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(initialStartKind === "repository");
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const selectedTemplate = useMemo(
     () => boardTemplates.find((template) => template.id === selectedTemplateId) ?? null,
     [selectedTemplateId]
   );
+  const isSubmitting = submittingKind !== null;
+  const isPrimarySubmitting = isSubmitting && submittingKind !== "blank";
   const canContinue =
     !isSubmitting &&
     (selectedKind !== "template" || selectedTemplate !== null) &&
@@ -125,91 +135,94 @@ export function WorkspaceStartClient({
     writeWorkspaceStartForm({ projectName: title, selectedKind, selectedTemplateId });
   }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
 
-  // 시작 요청 전에 프로젝트 이름을 필드 단위로 검증합니다.
-  async function handleContinue(): Promise<void> {
-    const projectName = title.trim();
+  // 명시된 시작 방식을 즉시 실행하고 같은 순간의 다른 시작 요청은 한 번만 처리합니다.
+  async function handleContinue(startKind: WorkspaceStartKind = selectedKind): Promise<void> {
+    await startSingleFlight.run(async () => {
+      const projectName = title.trim();
 
-    if (!projectName) {
-      setProjectNameError("프로젝트 이름을 입력해주세요.");
+      if (!projectName) {
+        setProjectNameError("프로젝트 이름을 입력해주세요.");
+        setErrorMessage("");
+        // 오류를 확인한 뒤 바로 이름을 입력할 수 있도록 입력창으로 이동합니다.
+        projectNameInputRef.current?.focus();
+        projectNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+
+      setProjectNameError("");
+
+      if (startKind === "template" && !selectedTemplate) {
+        setErrorMessage("사용할 Template을 선택해주세요.");
+        return;
+      }
+
       setErrorMessage("");
-      // 오류를 확인한 뒤 바로 이름을 입력할 수 있도록 입력창으로 이동합니다.
-      projectNameInputRef.current?.focus();
-      projectNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
 
-    setProjectNameError("");
-
-    if (selectedKind === "template" && !selectedTemplate) {
-      setErrorMessage("사용할 Template을 선택해주세요.");
-      return;
-    }
-
-    setErrorMessage("");
-
-    if (selectedKind === "repository" && repositoryUrlFormVisible) {
-      await startFromRepositoryUrl(projectName);
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const action = await resolveStartAction({ projectName, selectedKind });
-
-      if (action.kind === "openAiDraft") {
-        writeAiStartDraft({
-          projectName,
-          startMode: "ai",
-          updatedAt: new Date().toISOString()
-        });
-        router.push(action.href);
+      if (startKind === "repository" && repositoryUrlFormVisible) {
+        await startFromRepositoryUrl(projectName);
         return;
       }
 
-      if (action.kind === "redirect" || action.kind === "openReversePreview") {
-        router.push(action.href);
-        return;
-      }
-
-      if (action.kind === "showRepositoryUrlForm") {
-        setRepositoryUrlFormVisible(true);
-        setIsSubmitting(false);
-        return;
-      }
-
-      let createdProjectId: string | null = null;
+      setSubmittingKind(startKind);
 
       try {
-        const project = await createProject({ name: projectName });
-        createdProjectId = project.id;
+        const action = await resolveStartAction({ projectName, selectedKind: startKind });
 
-        if (action.openMode === "template" && selectedTemplate) {
-          await saveProjectDraft({
-            diagramJson: selectedTemplate.diagramJson,
-            projectId: project.id
+        if (action.kind === "openAiDraft") {
+          writeAiStartDraft({
+            projectName,
+            startMode: "ai",
+            updatedAt: new Date().toISOString()
           });
+          router.push(action.href);
+          return;
         }
 
-        clearWorkspaceStartForm();
-        const params = new URLSearchParams({
-          projectId: project.id,
-          projectName: project.name
-        });
-        router.push(`/workspace?${params.toString()}`);
-      } catch (error) {
-        // 시작용으로 방금 만든 빈 프로젝트만 정리해 실패한 시작 흔적을 남기지 않습니다.
-        if (createdProjectId) {
-          await deleteProject(createdProjectId).catch(() => undefined);
+        if (action.kind === "redirect" || action.kind === "openReversePreview") {
+          router.push(action.href);
+          return;
         }
-        throw error;
+
+        if (action.kind === "showRepositoryUrlForm") {
+          setRepositoryUrlFormVisible(true);
+          setSubmittingKind(null);
+          return;
+        }
+
+        let createdProjectId: string | null = null;
+
+        try {
+          const project = await createProject({ name: projectName });
+          createdProjectId = project.id;
+
+          if (action.openMode === "template" && selectedTemplate) {
+            await saveProjectDraft({
+              diagramJson: selectedTemplate.diagramJson,
+              projectId: project.id
+            });
+          }
+
+          clearWorkspaceStartForm();
+          const params = new URLSearchParams({
+            projectId: project.id,
+            projectName: project.name
+          });
+          router.push(`/workspace?${params.toString()}`);
+        } catch (error) {
+          // 시작용으로 방금 만든 빈 프로젝트만 정리해 실패한 시작 흔적을 남기지 않습니다.
+          if (createdProjectId) {
+            await deleteProject(createdProjectId).catch(() => undefined);
+          }
+          throw error;
+        }
+      } catch {
+        setSubmittingKind(null);
+        setErrorMessage("선택한 방식으로 프로젝트를 시작하지 못했습니다.");
       }
-    } catch {
-      setIsSubmitting(false);
-      setErrorMessage("선택한 방식으로 프로젝트를 시작하지 못했습니다.");
-    }
+    });
   }
 
+  // 화면에서 선택한 시작 방식과 그 방식에 필요한 보조 입력 영역을 함께 맞춥니다.
   function selectStartKind(kind: WorkspaceStartKind): void {
     setSelectedKind(kind);
     setErrorMessage("");
@@ -222,6 +235,7 @@ export function WorkspaceStartClient({
     setRepositoryUrlFormVisible(false);
   }
 
+  // Repository URL 시작도 공용 제출 상태를 사용해 다른 시작 버튼을 함께 잠급니다.
   async function startFromRepositoryUrl(projectName: string): Promise<void> {
     const trimmedRepositoryUrl = repositoryUrl.trim();
 
@@ -230,7 +244,7 @@ export function WorkspaceStartClient({
       return;
     }
 
-    setIsSubmitting(true);
+    setSubmittingKind("repository");
 
     let createdProjectId: string | null = null;
 
@@ -250,7 +264,7 @@ export function WorkspaceStartClient({
         await deleteProject(createdProjectId).catch(() => undefined);
       }
 
-      setIsSubmitting(false);
+      setSubmittingKind(null);
       setErrorMessage("Repository 분석 페이지를 준비하지 못했습니다.");
     }
   }
@@ -352,27 +366,35 @@ export function WorkspaceStartClient({
 
           <div className={styles.actions}>
             <button
+              aria-busy={isPrimarySubmitting}
               className={styles.primaryAction}
               disabled={!canContinue}
               onClick={() => void handleContinue()}
               type="button"
             >
-              {isSubmitting ? (
+              {isPrimarySubmitting ? (
                 <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} />
               ) : null}
-              {isSubmitting ? "처리 중" : getContinueLabel(selectedKind, repositoryUrlFormVisible)}
+              {isPrimarySubmitting
+                ? "처리 중"
+                : getContinueLabel(selectedKind, repositoryUrlFormVisible)}
             </button>
             {blankStartOption ? (
               <button
+                aria-busy={submittingKind === "blank"}
                 className={
-                  selectedKind === "blank"
+                  selectedKind === "blank" || submittingKind === "blank"
                     ? `${styles.blankAction} ${styles.blankActionSelected}`
                     : styles.blankAction
                 }
-                onClick={() => selectStartKind("blank")}
+                disabled={isSubmitting}
+                onClick={() => void handleContinue("blank")}
                 type="button"
               >
-                {blankStartOption.title}
+                {submittingKind === "blank" ? (
+                  <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} />
+                ) : null}
+                {submittingKind === "blank" ? "처리 중" : blankStartOption.title}
               </button>
             ) : null}
           </div>

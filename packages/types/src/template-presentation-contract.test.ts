@@ -26,40 +26,42 @@ const EXPECTED_PRESENTATION_NODES = {
     region: node("aws-region", 480, 240, undefined, { width: 480, height: 480 })
   },
   "minimal-serverless-api": {
-    user: node("design-user-client", 120, 600),
-    region: node("aws-region", 280, 160, undefined, { width: 1000, height: 920 })
+    user: node("design-user-client", 80, 520),
+    region: node("aws-region", 200, 80, undefined, { width: 1160, height: 880 }),
+    "global-iam-group": node("design-group", 1400, 280, undefined, { width: 400, height: 400 })
   },
   "full-serverless-web-app": {
-    "source-repository": node("design-source-repository", 160, 480, "source-user-group"),
-    user: node("design-user-client", 160, 680, "source-user-group"),
-    region: node("aws-region", 360, 80, undefined, { width: 1560, height: 1240 }),
-    "source-user-group": node("design-group", 80, 360, undefined, { width: 240, height: 480 }),
-    "frontend-group": node("design-group", 440, 560, "region", { width: 240, height: 360 }),
-    "identity-group": node("design-group", 680, 280, "region", { width: 240, height: 560 }),
-    "api-group": node("design-group", 920, 120, "region", { width: 440, height: 1120 }),
-    "compute-group": node("design-group", 1360, 400, "region", { width: 240, height: 600 }),
-    "data-ops-group": node("design-group", 1600, 560, "region", { width: 240, height: 480 }),
-    "global-iam-group": node("design-group", 1360, 1360, undefined, { width: 480, height: 320 })
+    "source-repository": node("design-source-repository", 160, 440, "source-user-group"),
+    user: node("design-user-client", 160, 640, "source-user-group"),
+    region: node("aws-region", 360, 80, undefined, { width: 1320, height: 960 }),
+    "source-user-group": node("design-group", 80, 320, undefined, { width: 240, height: 480 }),
+    "frontend-group": node("design-group", 440, 400, "region", { width: 240, height: 320 }),
+    "identity-group": node("design-group", 680, 240, "region", { width: 240, height: 560 }),
+    "api-group": node("design-group", 920, 160, "region", { width: 520, height: 720 }),
+    "compute-group": node("design-group", 1440, 240, "region", { width: 200, height: 400 }),
+    "data-ops-group": node("design-group", 1440, 680, "region", { width: 200, height: 320 }),
+    "global-iam-group": node("design-group", 1720, 320, undefined, { width: 400, height: 400 })
   },
   "three-tier-web-app": {
-    internet: node("design-internet", 120, 280),
-    region: node("aws-region", 240, 80, undefined, { width: 2160, height: 1840 }),
-    "az-a": node("aws-availability-zone", 760, 400, "vpc", { width: 720, height: 1400 }),
-    "az-b": node("aws-availability-zone", 1520, 400, "vpc", { width: 720, height: 1400 })
+    internet: node("design-internet", 80, 240),
+    region: node("aws-region", 200, 40, undefined, { width: 1960, height: 1560 }),
+    "az-a": node("aws-availability-zone", 440, 280, "vpc", { width: 560, height: 1120 }),
+    "az-b": node("aws-availability-zone", 1400, 280, "vpc", { width: 560, height: 1120 })
   },
   "ecs-fargate-container-app": {
-    user: node("design-user-client", 120, 1000),
-    region: node("aws-region", 280, 520, undefined, { width: 2360, height: 1440 }),
-    "az-a": node("aws-availability-zone", 480, 840, "vpc", { width: 600, height: 480 }),
-    "az-b": node("aws-availability-zone", 1160, 840, "vpc", { width: 600, height: 480 }),
-    "definition-ops-group": node("design-group", 2040, 720, "region", { width: 520, height: 800 }),
-    "global-iam-group": node("design-group", 2040, 80, undefined, { width: 520, height: 360 })
+    user: node("design-user-client", 80, 520),
+    region: node("aws-region", 200, 40, undefined, { width: 2120, height: 1240 }),
+    "az-a": node("aws-availability-zone", 440, 400, "vpc", { width: 520, height: 280 }),
+    "az-b": node("aws-availability-zone", 1200, 400, "vpc", { width: 520, height: 280 }),
+    "definition-ops-group": node("design-group", 1880, 600, "region", { width: 360, height: 600 }),
+    "global-iam-group": node("design-group", 1880, 120, "region", { width: 360, height: 360 })
   },
   "eks-container-app": {
-    region: node("aws-region", 280, 80, undefined, { width: 1760, height: 1440 }),
-    "az-a": node("aws-availability-zone", 480, 400, "vpc", { width: 600, height: 360 }),
-    "az-b": node("aws-availability-zone", 1160, 400, "vpc", { width: 600, height: 360 }),
-    "global-iam-group": node("design-group", 2120, 320, undefined, { width: 520, height: 800 })
+    region: node("aws-region", 200, 40, undefined, { width: 2120, height: 1320 }),
+    "az-a": node("aws-availability-zone", 440, 400, "vpc", { width: 520, height: 280 }),
+    "az-b": node("aws-availability-zone", 1200, 400, "vpc", { width: 520, height: 280 }),
+    "workloads-group": node("design-group", 520, 800, "vpc", { width: 1120, height: 360 }),
+    "global-iam-group": node("design-group", 1880, 200, "region", { width: 360, height: 800 })
   }
 } as const satisfies Record<TemplateId, Readonly<Record<string, PresentationNodeExpectation>>>;
 
@@ -96,7 +98,9 @@ const EXPECTED_RESOURCE_PARENTS = {
     handler: "region",
     permission: "region",
     table: "region",
-    "log-group": "region"
+    "log-group": "region",
+    role: "global-iam-group",
+    "role-policy": "global-iam-group"
   },
   "full-serverless-web-app": {
     frontend: "frontend-group",
@@ -117,12 +121,46 @@ const EXPECTED_RESOURCE_PARENTS = {
     "app-subnet-a": "az-a",
     "app-subnet-b": "az-b",
     "db-subnet-a": "az-a",
-    "db-subnet-b": "az-b"
+    "db-subnet-b": "az-b",
+    "internet-gateway": "region",
+    "public-route-table": "vpc",
+    "public-route-a": "az-a",
+    "public-route-b": "az-b",
+    "nat-gateway": "public-subnet-a",
+    "nat-eip": "region",
+    "app-route-table": "vpc",
+    "app-route-a": "az-a",
+    "app-route-b": "az-b",
+    "db-route-table": "vpc",
+    "db-route-a": "az-a",
+    "db-route-b": "az-b",
+    "alb-security-group": "vpc",
+    "app-security-group": "vpc",
+    "db-security-group": "vpc",
+    "latest-ami": "region",
+    "launch-template": "vpc",
+    "load-balancer": "vpc",
+    "target-group": "vpc",
+    listener: "vpc",
+    "application-group": "vpc",
+    "db-subnet-group": "vpc",
+    database: "vpc"
   },
   "ecs-fargate-container-app": {
     vpc: "region",
     "subnet-a": "az-a",
     "subnet-b": "az-b",
+    "internet-gateway": "region",
+    "route-table": "vpc",
+    "route-a": "az-a",
+    "route-b": "az-b",
+    cluster: "vpc",
+    "alb-security-group": "vpc",
+    "task-security-group": "cluster",
+    "load-balancer": "vpc",
+    "target-group": "vpc",
+    listener: "vpc",
+    service: "cluster",
     repository: "definition-ops-group",
     task: "definition-ops-group",
     "log-group": "definition-ops-group",
@@ -134,7 +172,16 @@ const EXPECTED_RESOURCE_PARENTS = {
     vpc: "region",
     "subnet-a": "az-a",
     "subnet-b": "az-b",
+    "internet-gateway": "region",
+    "route-table": "vpc",
+    "route-a": "az-a",
+    "route-b": "az-b",
     "cluster-security-group": "vpc",
+    cluster: "vpc",
+    "node-group": "workloads-group",
+    namespace: "workloads-group",
+    deployment: "namespace",
+    service: "namespace",
     "cluster-role": "global-iam-group",
     "cluster-policy": "global-iam-group",
     "node-role": "global-iam-group",

@@ -11,12 +11,12 @@ import {
   type BoardTemplate,
   type BoardTemplateSort
 } from "../../features/resource-settings/template-library";
+import { BoardThumbnailImage } from "../architecture-board/BoardThumbnailImage";
 import {
   SelectMenu,
   type SelectMenuOption
 } from "../ui/SelectMenu";
 import styles from "./TemplateGallery.module.css";
-import { createTemplatePreviewModel } from "./template-preview-model";
 
 const TEMPLATE_SORT_OPTIONS: readonly SelectMenuOption[] = [
   { label: "추천순", value: "recommended" },
@@ -107,7 +107,11 @@ export function TemplateGallery({
 
             return (
               <article className={selected ? styles.cardSelected : styles.card} key={template.id}>
-                <TemplateDiagramPreview template={template} />
+                <BoardThumbnailImage
+                  className={styles.preview}
+                  alt={`${template.title} Architecture 미리보기`}
+                  src={template.thumbnailSrc ?? null}
+                />
                 <div className={styles.cardBody}>
                   <div className={styles.cardHeading}>
                     <div>
@@ -152,76 +156,5 @@ export function TemplateGallery({
         </div>
       )}
     </section>
-  );
-}
-
-// Template의 실제 node 배치를 아이콘 중심 SVG 미리보기로 축소해 보여줍니다.
-function TemplateDiagramPreview({ template }: { readonly template: BoardTemplate }) {
-  const model = createTemplatePreviewModel(template.diagramJson);
-  const nodesById = new Map(model.nodes.map((node) => [node.id, node]));
-
-  return (
-    <div className={styles.preview} aria-label={`${template.title} Architecture 미리보기`}>
-      <svg aria-hidden="true" viewBox="0 0 100 60">
-        {model.edges.map((edge) => {
-          const source = nodesById.get(edge.sourceNodeId);
-          const target = nodesById.get(edge.targetNodeId);
-
-          if (!source || !target) return null;
-
-          return (
-            <line
-              className={styles.previewEdge}
-              key={edge.id}
-              x1={source.x + source.width / 2}
-              x2={target.x + target.width / 2}
-              y1={source.y + source.height / 2}
-              y2={target.y + target.height / 2}
-            />
-          );
-        })}
-        {model.nodes.filter((node) => node.isArea).map((node) => (
-          <rect
-            className={styles.previewAreaFrame}
-            height={node.height}
-            key={node.id}
-            width={node.width}
-            x={node.x}
-            y={node.y}
-          />
-        ))}
-        {model.nodes.filter((node) => !node.isArea).map((node) => (
-          <g className={styles.previewResource} key={node.id}>
-            <rect
-              className={styles.previewResourceTile}
-              height={node.height}
-              rx="1.5"
-              width={node.width}
-              x={node.x}
-              y={node.y}
-            />
-            {node.iconUrl ? (
-              <image
-                className={styles.previewResourceIcon}
-                height={node.height - 2}
-                href={node.iconUrl}
-                preserveAspectRatio="xMidYMid meet"
-                width={node.width - 2}
-                x={node.x + 1}
-                y={node.y + 1}
-              />
-            ) : null}
-          </g>
-        ))}
-      </svg>
-      {model.omittedNodeCount > 0 ? (
-        <span
-          aria-label={`${model.omittedNodeCount}개 노드 생략됨`}
-          className={styles.previewOmittedBadge}
-        >
-          +{model.omittedNodeCount}
-        </span>
-      ) : null}
-    </div>
   );
 }

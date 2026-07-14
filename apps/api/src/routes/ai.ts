@@ -129,6 +129,15 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
   templateId: z.enum(TEMPLATE_IDS).optional(),
+  dynamicQuestionAnswers: z
+    .array(z.object({
+      questionId: z.string().trim().min(1).max(160),
+      question: z.string().trim().min(1).max(500),
+      answer: z.string().trim().min(1).max(500)
+    }))
+    .max(32)
+    .optional(),
+  templateFallback: z.record(z.string(), z.unknown()).optional(),
   repositoryEvidence: z
     .object({
       mode: z.literal("strict"),
@@ -146,6 +155,14 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
       sourceRepositoryId: z.uuid()
     })
     .optional()
+}).superRefine((body, context) => {
+  if (body.templateFallback !== undefined && body.repositoryAnalysis === undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "Repository Analysis is required for template fallback",
+      path: ["repositoryAnalysis"]
+    });
+  }
 });
 
 const repositoryTemplateIdSchema = z.enum(TEMPLATE_IDS);

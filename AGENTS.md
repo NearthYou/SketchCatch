@@ -81,6 +81,16 @@ Before making changes, read this file and the nearest `AGENTS.md`. Read addition
 4. Do not add runtime dependencies when a small local helper or existing package is enough.
 5. Prefer the package manager version declared by the repository.
 
+## DB Migration Coordination
+
+Five contributors can work on separate branches at the same time, so Drizzle migration numbers can collide before the branches meet. Migration reporting is a coordination signal to the other contributors, not a generic notice that migration files exist in the worktree.
+
+1. Apply this rule only when the current Codex itself decides that its work requires a migration or directly creates, edits, deletes, renames, renumbers, or resolves a numbering conflict in `apps/api/drizzle/**`, including `apps/api/drizzle/meta/**`.
+2. Before choosing a migration number or making that migration change, immediately notify the user with a visible `🚨 DB MIGRATION` warning. Include the intended change, the latest migration number checked, and the collision risk so the other active branches can coordinate before using the same number.
+3. Repeat the migration warning at the very top of the final response, before the normal summary. List the files and whether `_journal.json` changed.
+4. Do not emit the warning merely because migration files already exist, belong to the user or another worker, or arrived only by merging or rebasing `dev` into the current branch.
+5. If the current Codex changes an imported migration to resolve a conflict, it has taken ownership of that migration change and must emit both the immediate and final warnings.
+
 ## Feature Work Flow
 
 When adding or changing behavior, proceed in this order:

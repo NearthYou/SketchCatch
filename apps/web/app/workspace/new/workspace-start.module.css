@@ -46,7 +46,7 @@
 }
 
 .brand {
-  gap: 6px;
+  gap: 7px;
 }
 
 .brand img {
@@ -54,7 +54,7 @@
   width: 16px;
   height: 24px;
   object-fit: contain;
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 }
 
 .backLink {
@@ -362,6 +362,10 @@
 }
 
 .blankAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: 0;
   padding: 0 4px;
   background: transparent;
@@ -370,8 +374,16 @@
 
 .blankAction::after {
   display: inline-block;
-  margin-left: 6px;
   content: "→";
+}
+
+.blankAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.blankAction[aria-busy="true"]::after {
+  display: none;
 }
 
 .blankActionSelected {
@@ -392,7 +404,7 @@
   .page { padding: 8px; }
   .topbar { top: 8px; min-height: 64px; padding: 0 14px; }
   .topbar > strong { display: none; }
-  .brand { gap: 6px; font-size: 16px; }
+  .brand { gap: 7px; font-size: 16px; }
   .brand img { width: 14px; height: 21px; }
   .backLink { font-size: 0; }
   .backLink svg { width: 20px; height: 20px; }

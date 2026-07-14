@@ -7,6 +7,7 @@ import {
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { materializeTemplateDiagram } from "./template-resource-materializer";
+import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
@@ -16,6 +17,7 @@ export type BoardTemplate = {
   readonly description: string;
   readonly tags: readonly string[];
   readonly diagramJson: DiagramJson;
+  readonly thumbnailSrc?: string | undefined;
 };
 
 export type TemplateOverwriteBackup = {
@@ -49,12 +51,9 @@ const LIVE_OBSERVATION_MANAGED_USER_DATA_BASE64 =
 
 const LIVE_OBSERVATION_AUDIENCE_HTML = [
   '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
-  "<title>SketchCatch Live Observation</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:16px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}",
-  "main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}button{width:100%;padding:18px;border:0;border-radius:8px;color:#fff;background:#000;font-size:18px;font-weight:700}</style></head>",
-  '<body><main><h1>실시간 트래픽 보내기</h1><p>성공한 Traffic API 요청만 Live Observation에 집계합니다.</p><button id="send-traffic">트래픽 1건 보내기</button><p id="status"></p><p id="count">이 브라우저의 Traffic 성공 0건</p></main>',
-  '<script>const q=new URLSearchParams(location.search),token=q.get("observation"),collector=(q.get("collector")||"").replace(/\\/$/,""),button=document.getElementById("send-traffic"),status=document.getElementById("status"),count=document.getElementById("count");let successes=0;',
-  'button.onclick=async()=>{button.disabled=true;try{const response=await fetch("http://${aws_lb.demo.dns_name}/api/traffic",{method:"POST"});if(!response.ok)throw new Error("Traffic API 요청에 실패했습니다.");successes+=1;count.textContent="이 브라우저의 Traffic 성공 "+successes+"건";',
-  'const receipt=await fetch(collector+"/api/live-observations/public/"+encodeURIComponent(token)+"/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({eventId:crypto.randomUUID()})});if(!receipt.ok)throw new Error("Traffic 요청은 성공했지만 실시간 집계에 실패했습니다.");status.textContent="요청이 Live Observation에 반영되었습니다."}catch(error){status.textContent=error instanceof Error?error.message:"요청에 실패했습니다."}finally{button.disabled=false}};</script></body></html>'
+  "<title>SketchCatch Service</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:16px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}",
+  "main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}</style></head>",
+  "<body><main><h1>서비스가 준비되었습니다.</h1><p>공개 요청은 SketchCatch에서 발급한 QR 페이지를 사용해주세요.</p></main></body></html>",
 ].join("");
 
 const LIVE_OBSERVATION_BUCKET_POLICY = JSON.stringify({
@@ -681,13 +680,14 @@ const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((defini
   title: definition.title,
   description: definition.description,
   tags: definition.tags,
+  thumbnailSrc: getTemplateThumbnailAsset(definition.id).src,
   diagramJson: buildTemplateDiagramJson(definition.id, {
     projectSlug: "sketchcatch",
     shortId: definition.id
   })
 }));
 
-// 페이지와 보드 모달은 PNG 검토를 마친 authored geometry를 같은 목록에서 사용한다.
+// 페이지와 보드 모달은 실제 Board 캡처로 검토한 authored geometry를 같은 목록에서 사용한다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
   return boardTemplates.map((template) => ({
     ...template,

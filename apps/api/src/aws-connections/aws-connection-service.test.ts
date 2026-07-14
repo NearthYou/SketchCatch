@@ -330,8 +330,11 @@ test("createAwsConnection creates a pending connection with server-generated ext
           "ec2:DescribeInstances",
           "elasticloadbalancing:DescribeLoadBalancers",
           "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth",
           "cloudwatch:GetMetricData",
-          "cloudwatch:GetMetricStatistics"
+          "cloudwatch:GetMetricStatistics",
+          "ecs:DescribeServices",
+          "logs:FilterLogEvents"
         ],
         Resource: "*"
       }

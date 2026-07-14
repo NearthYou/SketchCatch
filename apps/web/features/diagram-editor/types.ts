@@ -63,8 +63,10 @@ export type DiagramEditorProps = {
   initialSelectedEdgeIds?: readonly string[] | undefined;
   initialSelectedNodeIds?: readonly string[] | undefined;
   leftPanel?: ReactNode;
+  onBoardReady?: ((element: HTMLElement) => void) | undefined;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
+  onSaveAndDeployRequest?: (() => Promise<unknown>) | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | null | undefined;
   dashboardHref?: string | undefined;
   projectName?: string | undefined;

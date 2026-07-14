@@ -41,7 +41,7 @@ test("classifyPipelineChangeScope fails closed for incomplete legacy monitored p
   assert.equal(classifyPipelineChangeScope(["apps/web/page.tsx"], incompleteConfig), null);
 });
 
-test("refresh is idempotent and persists six deterministic stages and log sequences", async () => {
+test("refresh is idempotent and persists deterministic stages and log sequences", async () => {
   const repository = createMemoryRepository();
   const provider = createProvider();
   const service = createGitCicdPipelineRunService({
@@ -63,12 +63,12 @@ test("refresh is idempotent and persists six deterministic stages and log sequen
   assert.equal(repository.runs.length, 1);
   assert.deepEqual(
     repository.stages.map((stage) => stage.kind),
-    ["detect", "app_build", "infra_plan", "infra_apply", "app_deploy", "verify"]
+    ["detect", "app_build", "artifact_publish", "infra_plan", "infra_apply", "app_deploy", "verify"]
   );
-  assert.equal(new Set(repository.stages.map((stage) => stage.kind)).size, 6);
+  assert.equal(new Set(repository.stages.map((stage) => stage.kind)).size, 7);
   assert.deepEqual(
     repository.stages.map((stage) => stage.status),
-    ["succeeded", "running", "skipped", "skipped", "not_started", "not_started"]
+    ["succeeded", "running", "not_started", "skipped", "skipped", "not_started", "not_started"]
   );
   assert.deepEqual(
     repository.logs.map((log) => log.sequence),
@@ -101,6 +101,75 @@ test("refresh populates only trusted HTTP(S) URLs from an accepted handoff", asy
   assert.equal(result.runs[0]?.handoffId, "handoff-1");
   assert.equal(result.runs[0]?.appUrl, "http://app.example.com:8080/dashboard/");
   assert.equal(result.runs[0]?.apiUrl, null);
+});
+
+test("terminal ECS evidence is reconciled against AWS and attached as the Pipeline Run release", async () => {
+  const repository = createMemoryRepository();
+  const baseProvider = createProvider();
+  const provider: GitCicdRunProvider = {
+    ...baseProvider,
+    async listSnapshots(input) {
+      return (await baseProvider.listSnapshots(input)).map((snapshot) => ({
+        ...snapshot,
+        status: "succeeded" as const,
+        finishedAt: new Date("2026-07-13T00:03:00Z"),
+        releaseEvidence: {
+          schemaVersion: 1,
+          runtimeTargetKind: "ecs_fargate",
+          outcome: "succeeded",
+          commitSha: "abc",
+          imageDigest: `sha256:${"b".repeat(64)}`,
+          imageUri: `registry.example/api@sha256:${"b".repeat(64)}`,
+          clusterName: "api",
+          serviceName: "api",
+          containerName: "api",
+          taskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/api:2",
+          previousTaskDefinitionArn: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/api:1",
+          outputUrl: "https://api.example.com"
+        }
+      }));
+    }
+  };
+  const reconciledPipelineRunIds: string[] = [];
+  const service = createGitCicdPipelineRunService({
+    repository,
+    provider,
+    createId: sequentialIds(),
+    releaseReconciler: {
+      async reconcile(input) {
+        reconciledPipelineRunIds.push(input.pipelineRunId);
+        return {
+          id: "release-1",
+          projectId: input.projectId,
+          deploymentId: null,
+          pipelineRunId: input.pipelineRunId,
+          source: "gitops",
+          runtimeTargetKind: "ecs_fargate",
+          version: "sha-abc",
+          commitSha: input.commitSha,
+          artifactDigestAlgorithm: "sha256",
+          artifactDigest: "b".repeat(64),
+          providerRevision: null,
+          outputUrl: "https://api.example.com",
+          status: "succeeded",
+          healthEvidence: { state: "healthy" },
+          rollbackEvidence: null,
+          startedAt: input.startedAt,
+          completedAt: input.finishedAt,
+          createdAt: new Date("2026-07-13T00:03:00Z"),
+          updatedAt: new Date("2026-07-13T00:03:00Z")
+        };
+      }
+    }
+  });
+
+  const result = await service.refreshProjectPipelineRuns({
+    projectId: "project-1",
+    sourceRepositoryId: "repo-1"
+  });
+
+  assert.deepEqual(reconciledPipelineRunIds, [result.runs[0]?.id]);
+  assert.equal(result.runs[0]?.release?.version, "sha-abc");
 });
 
 test("refresh rejects malformed and non-HTTP accepted handoff URLs", async () => {
