@@ -615,14 +615,14 @@ function waitForPoll(milliseconds: number, abortSignal?: AbortSignal): Promise<v
       reject(abortSignal.reason ?? new Error("Direct application release was cancelled"));
       return;
     }
-    const timeout = setTimeout(resolve, milliseconds);
-    abortSignal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timeout);
-        reject(abortSignal.reason ?? new Error("Direct application release was cancelled"));
-      },
-      { once: true }
-    );
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(abortSignal?.reason ?? new Error("Direct application release was cancelled"));
+    };
+    const timeout = setTimeout(() => {
+      abortSignal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
   });
 }

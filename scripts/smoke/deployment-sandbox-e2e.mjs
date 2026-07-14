@@ -22,7 +22,8 @@ function hasText(value) {
 }
 
 function isSensitiveKey(key) {
-  return SENSITIVE_KEY.test(key) && !/^secretsMasked$/i.test(key);
+  const normalizedKey = String(key ?? "").replace(/[^a-z0-9]/giu, "");
+  return SENSITIVE_KEY.test(normalizedKey) && !/^secretsMasked$/i.test(String(key ?? ""));
 }
 
 function isTimestamp(value) {

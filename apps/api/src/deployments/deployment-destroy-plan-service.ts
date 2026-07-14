@@ -636,7 +636,7 @@ async function defaultPrepareApplicationCleanupPlan(input: {
       "A successful application release is required before application cleanup"
     );
   }
-  const metadata = release.providerRevision.metadata;
+  const metadata = readMetadataRecord(release.providerRevision.metadata);
   const previousRevision =
     release.runtimeTargetKind === "ecs_fargate"
       ? metadata["previousTaskDefinitionArn"]
@@ -656,6 +656,12 @@ async function defaultPrepareApplicationCleanupPlan(input: {
     currentRevision: release.providerRevision.revisionId,
     previousRevision
   };
+}
+
+function readMetadataRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function assertDeploymentCanStartDestroyPlan(

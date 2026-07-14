@@ -175,6 +175,35 @@ test("replan resets a failed release from retained immutable build evidence", as
   assert.equal(gateway.prepareCalls.length, 1);
 });
 
+test("replan rejects missing provider metadata without a runtime type error", async () => {
+  const repository = new InMemoryRepository(createContext("application"));
+  const gateway = new FakeGateway();
+  await prepareDirectApplicationRelease(
+    { deploymentId, userId }, repository, gateway, () => releaseId, () => now
+  );
+  gateway.deployError = new Error("runtime failed");
+  await assert.rejects(
+    executeDirectApplicationRelease({ deploymentId, userId }, repository, gateway, () => now)
+  );
+  repository.release = repository.release?.providerRevision
+    ? {
+        ...repository.release,
+        providerRevision: {
+          ...repository.release.providerRevision,
+          resourceType: "ecs_service",
+          metadata: null as unknown as ApplicationReleaseProviderRevision["metadata"]
+        }
+      }
+    : repository.release;
+
+  await assert.rejects(
+    prepareDirectApplicationRelease(
+      { deploymentId, userId }, repository, gateway, () => "unused", () => now
+    ),
+    /does not retain immutable build evidence/i
+  );
+});
+
 test("application cleanup restores the verified previous runtime revision", async () => {
   const repository = new InMemoryRepository(createContext("application"));
   const gateway = new FakeGateway();
@@ -191,6 +220,29 @@ test("application cleanup restores the verified previous runtime revision", asyn
   assert.equal(release?.status, "rolled_back");
   assert.equal(release?.providerRevision?.revisionId, "task-definition/api:41");
   assert.deepEqual(release?.healthEvidence, { state: "restored", runningCount: 1 });
+});
+
+test("application cleanup rejects missing provider metadata without a runtime type error", async () => {
+  const repository = new InMemoryRepository(createContext("application"));
+  const gateway = new FakeGateway();
+  await prepareDirectApplicationRelease(
+    { deploymentId, userId }, repository, gateway, () => releaseId, () => now
+  );
+  await executeDirectApplicationRelease({ deploymentId, userId }, repository, gateway, () => now);
+  repository.release = repository.release?.providerRevision
+    ? {
+        ...repository.release,
+        providerRevision: {
+          ...repository.release.providerRevision,
+          metadata: null as unknown as ApplicationReleaseProviderRevision["metadata"]
+        }
+      }
+    : repository.release;
+
+  await assert.rejects(
+    rollbackDirectApplicationRelease({ deploymentId, userId }, repository, gateway, () => now),
+    /does not retain its prepared build revision/i
+  );
 });
 
 class FakeGateway implements DirectApplicationReleaseGateway {

@@ -363,12 +363,14 @@ export async function prepareDirectApplicationRelease(
   if (existing) {
     if (existing.status === "pending") return existing;
     if (["failed", "rolled_back", "cancelled"].includes(existing.status)) {
+      const preparedBuildRevisionId = readMetadataString(
+        existing.providerRevision?.metadata,
+        "preparedBuildRevisionId"
+      );
       const buildRevisionId =
         existing.providerRevision?.resourceType === "codebuild_artifact"
           ? existing.providerRevision.revisionId
-          : typeof existing.providerRevision?.metadata["preparedBuildRevisionId"] === "string"
-            ? existing.providerRevision.metadata["preparedBuildRevisionId"]
-            : null;
+          : preparedBuildRevisionId;
       if (!buildRevisionId || !existing.providerRevision?.artifactReference) {
         throw new DirectApplicationReleaseError(
           "Failed application release does not retain immutable build evidence"
@@ -522,8 +524,11 @@ export async function rollbackDirectApplicationRelease(
       `Application cleanup cannot start from release status ${release.status}`
     );
   }
-  const preparedBuildRevisionId = release.providerRevision.metadata["preparedBuildRevisionId"];
-  if (typeof preparedBuildRevisionId !== "string" || !preparedBuildRevisionId.trim()) {
+  const preparedBuildRevisionId = readMetadataString(
+    release.providerRevision.metadata,
+    "preparedBuildRevisionId"
+  );
+  if (!preparedBuildRevisionId) {
     throw new DirectApplicationReleaseError(
       "Application release does not retain its prepared build revision"
     );
@@ -560,6 +565,12 @@ export async function rollbackDirectApplicationRelease(
     completedAt: timestamp,
     updatedAt: timestamp
   });
+}
+
+function readMetadataString(metadata: JsonValue | undefined, key: string): string | null {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) return null;
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 async function requireContext(

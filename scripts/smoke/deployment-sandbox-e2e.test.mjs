@@ -378,6 +378,17 @@ test("sandbox evidence rejects opaque values stored under sensitive keys", () =>
   assert.ok(result.errors.includes("report: credential-bearing value detected"));
 });
 
+test("sandbox evidence normalizes repeated delimiters in sensitive keys", () => {
+  const report = buildValidReport();
+  report.access__token = "opaque-value";
+  report.nested = { "private--key": "opaque-value" };
+
+  const result = validateSandboxEvidence(report);
+
+  assert.equal(result.valid, false);
+  assert.ok(result.errors.includes("report: credential-bearing value detected"));
+});
+
 test("sensitive evidence redaction masks secret keys and strips URL credentials", () => {
   const redacted = redactSensitiveEvidence({
     accessToken: "secret-token",
