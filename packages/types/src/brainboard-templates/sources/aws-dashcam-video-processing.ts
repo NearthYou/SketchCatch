@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsDashcamVideoProcessingSource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-dashcam-video-pipeline",

@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsNetworkLandingZoneSource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-network-landing-zone",

@@ -60,15 +60,15 @@
 - Modify: `apps/web/features/workspace/project-board-thumbnail-save-trigger.test.ts`
 - Modify: `apps/web/features/workspace/workspace.module.css`
 
-- [ ] Write failing tests for exact Board element delivery, initial server+missing backfill, existing thumbnail skip, local/empty deferral, awaited stable save capture, failure state/retry, same-project serialization, and Dashboard navigation waiting.
-- [ ] Run focused tests and confirm RED.
-- [ ] Add `onBoardReady` without changing DiagramJson or `onDiagramChange` semantics.
-- [ ] Allow the capture service to receive the exact connected element and retain latest-element serialization.
-- [ ] Add a small lifecycle coordinator that checks/backfills only server drafts, exposes failure/retry, and disposes safely.
-- [ ] Await capture after stable server save while preserving draft success independently.
-- [ ] Await the save/capture path for normal Dashboard link navigation.
-- [ ] Show only a compact failure/retry control; keep normal UI unchanged.
-- [ ] Run focused Web tests, typecheck, lint, and `git diff --check`.
+- [x] Write failing tests for exact Board element delivery, initial server+missing backfill, existing thumbnail skip, local/empty deferral, awaited stable save capture, failure state/retry, same-project serialization, and Dashboard navigation waiting.
+- [x] Run focused tests and confirm RED.
+- [x] Add `onBoardReady` without changing DiagramJson or `onDiagramChange` semantics.
+- [x] Allow the capture service to receive the exact connected element and retain latest-element serialization.
+- [x] Add a small lifecycle coordinator that checks/backfills only server drafts, exposes failure/retry, and disposes safely.
+- [x] Await capture after stable server save while preserving draft success independently.
+- [x] Await the save/capture path for normal Dashboard link navigation.
+- [x] Show only a compact failure/retry control; keep normal UI unchanged.
+- [x] Run focused Web tests, typecheck, lint, and `git diff --check`.
 
 ### Task 3: Dashboard bounded thumbnail refresh
 
@@ -76,13 +76,17 @@
 - Modify: `apps/web/components/dashboard/project-architecture-thumbnail.tsx`
 - Create: `apps/web/features/dashboard/project-thumbnail-loader.ts`
 - Create: `apps/web/features/dashboard/project-thumbnail-loader.test.ts`
+- Create: `apps/web/features/dashboard/project-thumbnail-image-lifecycle.ts`
+- Create: `apps/web/features/dashboard/project-thumbnail-image-lifecycle.test.ts`
 - Modify: `apps/web/features/dashboard/project-architecture-thumbnail.test.ts`
+- Modify: `apps/web/features/workspace/api.ts`
+- Modify: `apps/web/features/workspace/api.test.ts`
 
-- [ ] Write failing tests for bounded 404/error retry, eventual success, final empty/error state, cancellation, and object URL cleanup.
-- [ ] Run focused tests and confirm RED.
-- [ ] Implement a dependency-injected bounded loader with short fixed retry delays and no interval polling.
-- [ ] Connect the Dashboard card component and keep the existing captured raster image component.
-- [ ] Run focused and full Web tests, typecheck, lint, and `git diff --check`.
+- [x] Write failing tests for bounded missing/transient retry, permanent-error stop, eventual success, final empty/error state, cancellation, stale completion, and object URL cleanup.
+- [x] Run focused tests and confirm RED.
+- [x] Implement a dependency-injected bounded loader with short fixed retry delays, no interval polling, and no retry for permanent HTTP failures.
+- [x] Connect the Dashboard card component through an object-URL lifecycle while keeping the existing captured raster image component.
+- [x] Run focused and full Web tests, typecheck, lint, and `git diff --check`.
 
 ### Task 4: Integrated verification and branch handoff
 
@@ -90,8 +94,8 @@
 - Modify: `docs/superpowers/plans/2026-07-14-project-board-thumbnail-persistence.md`
 - Modify: `agent-progress.md`
 
-- [ ] Run all API/Web tests affected by Project assets and Workspace persistence.
-- [ ] Run repository test, typecheck, lint, harness, migration compatibility check, and `git diff --check`.
-- [ ] Exercise one real local thumbnail PUT→GET flow without AWS credentials when the local app is available.
-- [ ] Review the complete branch diff for security, concurrency, cleanup, and scope.
+- [x] Run all API/Web tests affected by Project assets and Workspace persistence.
+- [x] Run repository test, typecheck, lint, harness, migration compatibility check, and `git diff --check`.
+- [x] Exercise one real local thumbnail PUT→GET flow without AWS credentials when the local app is available.
+- [x] Review the complete branch diff for security, concurrency, cleanup, and scope.
 - [ ] Commit and push the implementation to the existing feature branch/PR.

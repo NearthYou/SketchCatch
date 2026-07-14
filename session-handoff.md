@@ -4,30 +4,32 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `fix/gg/355-review-followup-v2`; PR #366 targets `dev`.
-- Six AWS Templates retain 103 Terraform-deployable Resources and 28 parameterless Catalog-backed Design nodes.
-- Authenticated Template Board QA previously passed 72/72 checks; evidence is in `docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md`.
-- The latest `origin/dev` at `39118a79` is integrated, including the separated Direct Deployment and CI/CD console from merged PR #368.
-- The deployment context passes only the `isTerraformDeployableNode` count into `DirectDeploymentScreen`.
+- Branch: `feature/gg/381-brainboard-aws-templates`.
+- Project Board capture persistence is merged into `dev` at `186ff261`. The current working tree adds the remaining bounded Dashboard thumbnail refresh.
+- The Dashboard retries a missing thumbnail (`404` mapped to `null`) and transient network, 408, 429, or 5xx failures at most three times with a fixed 250ms delay. Permanent HTTP failures stop immediately.
+- Cards continue to render only authenticated raster Board captures. A lifecycle helper ignores post-dispose results and revokes created object URLs.
+- No database schema, migration, storage adapter, backend route, cloud, deployment, or dependency change was made.
 
 ## Verification
 
-- Pre-integration PR #366 CI, focused Template/Terraform tests, lint, typecheck, and harness passed.
-- Post-integration verification passed: 110 focused conflict tests, harness, lint, typecheck, build, and whitespace checks. Lint retains one pre-existing warning.
-- Root tests passed 1,325/1,328; three unchanged Windows-only path expectations fail on macOS and are identical in the pre-merge branch and `origin/dev`.
+- TDD RED/GREEN: focused Dashboard loader/lifecycle/card plus Workspace API tests passed 60/60.
+- Full Web suite passed 1,161/1,161.
+- Real local filesystem thumbnail upload and read API flow passed without AWS credentials.
+- Root lint and typecheck passed; lint retains one existing unused `setNow` argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
+- Migration compatibility check and harness check passed.
+- Root `pnpm test` has exactly three pre-existing macOS failures in Windows-path Terraform lock-file fixtures; Web is green. Root `pnpm build` is blocked before Web compilation by the missing `apps/web/.codegraph` path.
+- A second read-only review found no Critical or Important issue.
 
 ## Changes This Session
 
-- Kept the new `DeploymentPanel` compatibility adapter and moved the branch Resource-count contract to `DirectDeploymentScreen`.
-- Combined the Template test contracts with the current 26-node Live Observation layout expectation.
-- Archived completed PR #368 and Template work records while keeping only PR #366 as the active harness context.
+- Intended uncommitted files are the Dashboard thumbnail loader/lifecycle, their tests, the client fetch status metadata test, the persistence plan, and `agent-progress.md`.
+- Do not stage or remove the unrelated untracked `docs/gg/feat-infrastructure-template/brainboard-captures/aws-vpc-subnets-security-groups-2az.json`.
 
 ## Broken Or Unverified
 
-- Migrations `0032` and `0033` arrived from `dev` but were not applied without an approved non-production `DATABASE_URL`.
-- Credentialed browser acceptance for CI/CD was not run without safe GitHub/AWS test state.
-- No Terraform Apply/Destroy, AWS mutation, deployment API mutation, or migration execution was performed during conflict resolution.
+- Root `pnpm test` is blocked by three unrelated macOS failures in Windows-path Terraform lock-file fixtures.
+- Root `pnpm build` is blocked before Web compilation by the missing `apps/web/.codegraph` path.
 
 ## Best Next Action
 
-- Commit and push the staged merge, then confirm PR #366 is mergeable and review threads remain resolved.
+- Commit or push the intended diff only if the user requests it. Restore `apps/web/.codegraph` separately before expecting a successful production Web build.

@@ -1,4 +1,4 @@
-import type { BrainboardSourceResourceNode, BrainboardTemplateSource } from "./source-types.js";
+import type { BrainboardSourceResourceNode, BrainboardTemplateSource } from "./source-types.ts";
 
 export type BrainboardSourceValidationErrorCode =
   | "brainboard.source.duplicate_node_id"

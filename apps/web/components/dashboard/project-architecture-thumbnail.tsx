@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { createProjectThumbnailImageLifecycle } from "../../features/dashboard/project-thumbnail-image-lifecycle";
+import { loadProjectThumbnail } from "../../features/dashboard/project-thumbnail-loader";
 import { fetchProjectThumbnail } from "../../features/workspace/api";
 import { BoardThumbnailImage, type BoardThumbnailImageState } from "../architecture-board/BoardThumbnailImage";
 
@@ -18,35 +20,29 @@ export function ProjectArchitectureThumbnail({
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl: string | null = null;
+    const thumbnailLifecycle = createProjectThumbnailImageLifecycle({
+      createObjectUrl: URL.createObjectURL,
+      revokeObjectUrl: URL.revokeObjectURL,
+      setState,
+      setThumbnailUrl
+    });
 
     setState("loading");
     setThumbnailUrl(null);
 
-    void fetchProjectThumbnail(projectId).then((blob) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (!blob) {
-        setState("empty");
-        return;
-      }
-
-      objectUrl = URL.createObjectURL(blob);
-      setThumbnailUrl(objectUrl);
-      setState("ready");
-    }).catch(() => {
-      if (!cancelled) {
-        setState("error");
-      }
-    });
+    void loadProjectThumbnail({
+      fetchThumbnail: fetchProjectThumbnail,
+      isCancelled: () => cancelled,
+      projectId
+    })
+      .then(thumbnailLifecycle.apply)
+      .catch(() => {
+        thumbnailLifecycle.apply({ state: "error" });
+      });
 
     return () => {
       cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
+      thumbnailLifecycle.dispose();
     };
   }, [projectId]);
 

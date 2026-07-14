@@ -34,6 +34,66 @@ export function toTerraformRefreshFingerprint(diagramJson: DiagramJson): string 
   return toDiagramContentFingerprint(diagramJson);
 }
 
+export type TerraformDiagramRequestToken = {
+  readonly fingerprint: string;
+  readonly revision: number;
+};
+
+export type TerraformDiagramRequestGuard = {
+  capture: () => TerraformDiagramRequestToken;
+  isCurrent: (token: TerraformDiagramRequestToken) => boolean;
+  update: (fingerprint: string) => void;
+};
+
+// The revision invalidates every committed Diagram snapshot, including geometry-only edits and
+// D1 -> D2 -> Undo(D1), while the fingerprint records which Terraform semantics were requested.
+export function createTerraformDiagramRequestGuard(
+  initialFingerprint: string
+): TerraformDiagramRequestGuard {
+  let fingerprint = initialFingerprint;
+  let revision = 0;
+
+  return {
+    capture: () => ({ fingerprint, revision }),
+    isCurrent: (token) => token.fingerprint === fingerprint && token.revision === revision,
+    update: (nextFingerprint) => {
+      fingerprint = nextFingerprint;
+      revision += 1;
+    }
+  };
+}
+
+export function markTerraformSourceAuthoritative(diagramJson: DiagramJson): DiagramJson {
+  return {
+    ...diagramJson,
+    presentation: {
+      ...(diagramJson.presentation ?? { geometryPolicy: "catalog-normalized" }),
+      terraformSourceFingerprint: toTerraformRefreshFingerprint(diagramJson)
+    }
+  };
+}
+
+export function clearTerraformSourceAuthority(diagramJson: DiagramJson): DiagramJson {
+  if (!diagramJson.presentation?.terraformSourceFingerprint) {
+    return diagramJson;
+  }
+
+  const { terraformSourceFingerprint: _terraformSourceFingerprint, ...presentation } =
+    diagramJson.presentation;
+
+  return {
+    ...diagramJson,
+    presentation
+  };
+}
+
+export function hasAuthoritativeTerraformSource(diagramJson: DiagramJson): boolean {
+  return (
+    diagramJson.presentation?.terraformSourceFingerprint ===
+    toTerraformRefreshFingerprint(diagramJson)
+  );
+}
+
 export function toDeploymentBaselineFingerprint(diagramJson: DiagramJson): string {
   return toDiagramContentFingerprint(diagramJson);
 }
@@ -44,7 +104,7 @@ function toDiagramContentFingerprint(diagramJson: DiagramJson): string {
   const deployableNodeIds = new Set(deployableNodes.map((node) => node.id));
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
 
-  return JSON.stringify({
+  return stableJsonStringify({
     nodes: deployableNodes.map((node) => {
       const inheritedAvailabilityZone = getInheritedAvailabilityZoneFingerprint(node, nodeById);
 
@@ -66,6 +126,26 @@ function toDiagramContentFingerprint(diagramJson: DiagramJson): string {
         ...(edge.label !== undefined ? { label: edge.label } : {})
       }))
   });
+}
+
+function stableJsonStringify(value: unknown): string {
+  return JSON.stringify(sortJsonObjectKeys(value));
+}
+
+function sortJsonObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortJsonObjectKeys);
+  }
+
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([leftKey], [rightKey]) => (leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0))
+      .map(([key, nestedValue]) => [key, sortJsonObjectKeys(nestedValue)])
+  );
 }
 
 // Fingerprints omit diagram-only values that the Terraform graph renderer deliberately drops.

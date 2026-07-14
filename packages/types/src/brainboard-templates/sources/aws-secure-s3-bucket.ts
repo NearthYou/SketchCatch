@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsSecureS3BucketSource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-secure-s3-bucket",

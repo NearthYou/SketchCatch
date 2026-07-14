@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsAsgLoadBalancerVpcSource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-asg-lb-vpc-subnets",

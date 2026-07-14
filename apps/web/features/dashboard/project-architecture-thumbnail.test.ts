@@ -42,6 +42,12 @@ test("Template and Project cards consume captured raster thumbnails through one 
   assert.doesNotMatch(projectCardSource, /projectPreviewNodeVpc|projectPreviewLineOne/);
 });
 
+test("Dashboard cards use the bounded thumbnail loader and release replaced object URLs", () => {
+  assert.match(thumbnailSource, /loadProjectThumbnail/);
+  assert.match(thumbnailSource, /createProjectThumbnailImageLifecycle/);
+  assert.doesNotMatch(thumbnailSource, /setInterval/);
+});
+
 test("shared raster image keeps a fixed 16:9 contain frame and explicit loading, empty, and error states", () => {
   assert.match(imageSource, /<img/);
   assert.doesNotMatch(imageSource, /<svg|DiagramJson|nodes\.map|edges\.map/);

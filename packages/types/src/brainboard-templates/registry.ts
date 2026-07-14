@@ -1,13 +1,13 @@
-import { brainboardTemplateManifest } from "./manifest.js";
+import { brainboardTemplateManifest } from "./manifest.ts";
 import type {
   BrainboardFailedCaptureEvidence,
   BrainboardTemplateEvidence,
   BrainboardTemplateSource
-} from "./source-types.js";
+} from "./source-types.ts";
 import {
   awsInstanceDatabaseMultipleNetworksFailedEvidence,
   brainboardTemplateSources
-} from "./sources/index.js";
+} from "./sources/index.ts";
 
 export type BrainboardTemplateRegistryEntry =
   | {

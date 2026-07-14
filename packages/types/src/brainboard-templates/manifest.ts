@@ -1,4 +1,4 @@
-import { BRAINBOARD_TEMPLATE_IDS, type BrainboardTemplateId } from "./ids.js";
+import { BRAINBOARD_TEMPLATE_IDS, type BrainboardTemplateId } from "./ids.ts";
 
 export const BRAINBOARD_TEMPLATE_AUTHOR = "Chafik Belhaoues" as const;
 export const BRAINBOARD_TEMPLATE_PROVIDER = "aws" as const;

@@ -27,6 +27,7 @@ const terraformLeaveDialogSource = readWorkspaceFile("TerraformLeaveDialog.tsx")
 const terraformEditorSource = readWorkspaceFile("TerraformCodeEditorSurface.tsx");
 const terraformEditorStylesSource = readWorkspaceFile("TerraformCodeEditorSurface.module.css");
 const terraformPanelSource = readWorkspaceFile("TerraformCodePanel.tsx");
+const terraformPanelUtilsSource = readWorkspaceFile("terraform-panel-utils.ts");
 const terraformStatusSource = readWorkspaceFile("TerraformCodeStatus.tsx");
 const terraformStatusStylesSource = readWorkspaceFile("TerraformCodeStatus.module.css");
 const terraformToolbarSource = readWorkspaceFile("TerraformCodeToolbar.tsx");
@@ -39,12 +40,13 @@ const workspaceIssuesStylesSource = readWorkspaceFile("WorkspaceIssuesPanel.modu
 const workspaceRightPanelTypesSource = readWorkspaceFile("workspace-right-panel.types.ts");
 const projectDraftManagerSource = readWorkspaceFile("ProjectWorkspaceDraftManager.tsx");
 const workspaceDraftManagerSource = readWorkspaceFile("WorkspaceDraftManager.tsx");
+const workspaceStartSource = readFeatureFile("../../app/workspace/new/workspace-start-client.tsx");
 const stylesSource = readWorkspaceFile("workspace.module.css");
 const diagramEditorStylesSource = readFeatureFile("../diagram-editor/diagram-editor.module.css");
 
 test("deploy opens a full-screen console instead of rendering deployment inside the right panel", () => {
-  const deploymentConsoleIndex = componentSource.indexOf(
-    "const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? ("
+  const deploymentConsoleIndex = componentSource.search(
+    /const deploymentConsoleContent =\s*isDeploymentConsoleOpen && canRenderDeploymentPortal \? \(/
   );
   const deploymentPanelIndex = componentSource.indexOf("<DeploymentPanel", deploymentConsoleIndex);
   const nextRightPanelViewIndex = componentSource.indexOf(
@@ -1019,6 +1021,285 @@ test("terraform refresh and AI safe-fix reject completions made stale by editor 
   );
 });
 
+test("template application replaces Diagram and Terraform workspace as one source-authoritative seed", () => {
+  const replacementEffectStart = terraformPanelSource.indexOf(
+    "const replacement = externalTerraformFilesReplacement"
+  );
+  const replacementEffectEnd = terraformPanelSource.indexOf(
+    "latestExternalSaveRequestIdRef.current === externalSaveRequestId",
+    replacementEffectStart
+  );
+  const replacementEffect = terraformPanelSource.slice(
+    replacementEffectStart,
+    replacementEffectEnd
+  );
+
+  assert.match(diagramEditorTypesSource, /onTemplateWorkspaceApply/);
+  assert.match(
+    diagramEditorSource,
+    /onTemplateWorkspaceApply\?\.\(\{[\s\S]*diagramJson: cloneDiagram\(authoritativeDiagram\),[\s\S]*terraformFiles: template\.terraformFiles\.map/
+  );
+  assert.match(diagramEditorSource, /shouldApplySourceViewportRef\.current = true;/);
+  assert.match(diagramEditorSource, /markTerraformSourceAuthoritative\(nextDiagram\)/);
+  assert.match(
+    diagramEditorSource,
+    /applyDiagramJson\(authoritativeDiagram\);[\s\S]*setHistory\(\{ past: \[\], future: \[\] \}\);/
+  );
+  assert.match(
+    workspaceStartSource,
+    /markTerraformSourceAuthoritative\(selectedTemplate\.diagramJson\)/
+  );
+  assert.match(projectDraftManagerSource, /handleTemplateWorkspaceApply/);
+  assert.match(workspaceDraftManagerSource, /handleTemplateWorkspaceApply/);
+  assert.match(componentSource, /externalTerraformFilesReplacement=\{terraformFilesReplacement\}/);
+  assert.ok(replacementEffectStart > -1);
+  assert.match(replacementEffect, /currentDiagramFingerprint !== replacement\.diagramFingerprint/);
+  assert.match(replacementEffect, /codeRequestIdRef\.current \+= 1/);
+  assert.match(replacementEffect, /codeVersionRef\.current \+= 1/);
+  assert.match(
+    terraformPanelSource,
+    /useLayoutEffect\(\(\) => \{\s*const replacement = externalTerraformFilesReplacement/
+  );
+  assert.match(replacementEffect, /terraformBaselineFilesRef\.current = nextFiles\.map/);
+  assert.match(
+    replacementEffect,
+    /onTerraformFilesChange\?\.\(toTerraformValidationFiles\(nextFiles\)\)/
+  );
+  assert.match(replacementEffect, /onTerraformFilesReplacementApplied\?\.\(replacement\.id\)/);
+  assert.match(replacementEffect, /initialTerraformSourceClassifiedRef\.current = !hasSourceSeed/);
+  assert.match(
+    replacementEffect,
+    /latestSuccessfulTerraformPreviewFingerprintRef\.current = hasSourceSeed/
+  );
+  assert.match(replacementEffect, /setIsTerraformPreviewStale\(!hasSourceSeed\)/);
+  assert.match(projectDraftManagerSource, /latestDiagramRef\.current = diagramJson/);
+  assert.match(workspaceDraftManagerSource, /latestDiagramRef\.current = diagramJson/);
+  assert.match(
+    projectDraftManagerSource,
+    /setInitialTerraformFiles\(files\.map\(\(file\) => \(\{ \.\.\.file \}\)\)\)/
+  );
+  assert.match(
+    workspaceDraftManagerSource,
+    /setInitialTerraformFiles\(files\.map\(\(file\) => \(\{ \.\.\.file \}\)\)\)/
+  );
+  assert.match(projectDraftManagerSource, /handleTerraformFilesReplacementApplied/);
+  assert.match(workspaceDraftManagerSource, /handleTerraformFilesReplacementApplied/);
+  assert.match(componentSource, /onTerraformFilesReplacementApplied/);
+});
+
+test("source Terraform is current only with a matching persisted Diagram fingerprint", () => {
+  assert.match(
+    terraformPanelUtilsSource,
+    /terraformSourceFingerprint: toTerraformRefreshFingerprint\(diagramJson\)/
+  );
+  assert.match(
+    terraformPanelUtilsSource,
+    /presentation\?\.terraformSourceFingerprint ===\s*toTerraformRefreshFingerprint\(diagramJson\)/
+  );
+  assert.match(
+    terraformPanelSource,
+    /initialTerraformFiles\?\.length && hasAuthoritativeTerraformSource\(context\.diagram\)/
+  );
+  assert.match(diagramEditorTypesSource, /commitTerraformSourceAuthority: \(\) => DiagramJson/);
+  assert.match(
+    diagramEditorSource,
+    /const commitTerraformSourceAuthority = useCallback[\s\S]*markTerraformSourceAuthoritative\(diagramRef\.current\)[\s\S]*replaceDiagram\(authoritativeDiagram\)/
+  );
+
+  const refreshSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const refreshTerraformCode = useCallback"),
+    terraformPanelSource.indexOf("const runTerraformModuleValidation")
+  );
+  assert.match(
+    refreshSource,
+    /onTerraformFilesChange\?\.\(toTerraformValidationFiles\(nextFiles\)\)/
+  );
+  assert.match(refreshSource, /context\.commitTerraformSourceAuthority\(\)/);
+
+  const saveSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const syncTerraformCodeToDiagram"),
+    terraformPanelSource.indexOf("const saveCodeToDiagram = useCallback")
+  );
+  assert.match(saveSource, /markTerraformSourceAuthoritative\(nextDiagramJson\)/);
+  assert.match(saveSource, /context\.applyDiagramJson\(authoritativeDiagramJson\)/);
+  assert.match(
+    saveSource,
+    /onTerraformFilesChange\?\.\(toTerraformValidationFiles\(savedTerraformFiles\)\)/
+  );
+
+  const safeFixSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const applyTerraformSafeFixToCode = useCallback"),
+    terraformPanelSource.indexOf("useImperativeHandle(ref")
+  );
+  assert.match(safeFixSource, /markTerraformSourceAuthoritative\(nextDiagramJson\)/);
+  assert.match(safeFixSource, /context\.applyDiagramJson\(authoritativeDiagramJson\)/);
+  assert.match(
+    safeFixSource,
+    /onTerraformFilesChange\?\.\(toTerraformValidationFiles\(nextFiles\)\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /replaceDiagram\(clearTerraformSourceAuthority\(cloneDiagram\(previous\)\)\)/
+  );
+  assert.match(
+    diagramEditorSource,
+    /replaceDiagram\(clearTerraformSourceAuthority\(cloneDiagram\(next\)\)\)/
+  );
+});
+
+test("a cancelled Terraform validation cannot overwrite a replacement seed state", () => {
+  const validationSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const runTerraformModuleValidation"),
+    terraformPanelSource.indexOf("const syncTerraformCodeToDiagram")
+  );
+  const staleBranchStart = validationSource.indexOf(
+    "if (requestCodeVersion !== codeVersionRef.current)"
+  );
+  const staleBranchEnd = validationSource.indexOf(
+    "setDiagnostics(validationDiagnostics)",
+    staleBranchStart
+  );
+  const staleBranch = validationSource.slice(staleBranchStart, staleBranchEnd);
+
+  assert.ok(staleBranchStart > -1);
+  assert.match(staleBranch, /return \[createStaleTerraformValidationDiagnostic\(\)\];/);
+  assert.doesNotMatch(staleBranch, /setDiagnostics|onDiagnosticsChange|setStatusMessage/);
+});
+
+test("multi-stage Terraform requests publish source classification only after the final guard", () => {
+  const refreshSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const refreshTerraformCode = useCallback"),
+    terraformPanelSource.indexOf("const runTerraformModuleValidation")
+  );
+  const refreshGenerationIndex = refreshSource.indexOf(
+    "const generated = await generateTerraformCode"
+  );
+  const refreshClassificationCommitIndex = refreshSource.search(
+    /classifiedPreservedResourceAddressesRef\.current =\s*nextClassifiedPreservedResourceAddresses/
+  );
+
+  assert.ok(refreshGenerationIndex > -1);
+  assert.ok(refreshClassificationCommitIndex > refreshGenerationIndex);
+
+  const saveSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const syncTerraformCodeToDiagram"),
+    terraformPanelSource.indexOf("const saveCodeToDiagram = useCallback")
+  );
+  const finalDiagramIndex = saveSource.indexOf(
+    "const authoritativeDiagramJson = markTerraformSourceAuthoritative"
+  );
+  const saveClassificationCommitIndex = saveSource.search(
+    /classifiedPreservedResourceAddressesRef\.current =\s*nextClassifiedPreservedResourceAddresses/
+  );
+
+  assert.ok(finalDiagramIndex > -1);
+  assert.ok(saveClassificationCommitIndex > finalDiagramIndex);
+});
+
+test("loaded source Terraform is treated as current and stale sync cannot mutate replacement classification", () => {
+  assert.match(
+    terraformPanelSource,
+    /const initialTerraformFingerprint =\s*initialTerraformFiles\?\.length[\s\S]*toTerraformRefreshFingerprint\(context\.diagram\)/
+  );
+  assert.match(
+    terraformPanelSource,
+    /latestSuccessfulTerraformPreviewFingerprintRef = useRef\(initialTerraformFingerprint\)/
+  );
+  assert.match(terraformPanelSource, /useState\(\s*initialTerraformFingerprint\.length === 0\s*\)/);
+
+  const saveSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const syncTerraformCodeToDiagram"),
+    terraformPanelSource.indexOf("const saveCodeToDiagram = useCallback")
+  );
+  const firstSync = saveSource.indexOf("let syncResult = await syncTerraformToDiagram");
+  const firstGuard = saveSource.indexOf("requestCodeVersion !== codeVersionRef.current", firstSync);
+  const firstClassification = saveSource.indexOf(
+    "let nextClassifiedPreservedResourceAddresses = new Set",
+    firstSync
+  );
+  const secondSync = saveSource.indexOf("syncResult = await syncTerraformToDiagram", firstSync + 1);
+  const secondGuard = saveSource.indexOf(
+    "requestCodeVersion !== codeVersionRef.current",
+    secondSync
+  );
+  const secondClassification = saveSource.indexOf(
+    "nextClassifiedPreservedResourceAddresses = new Set",
+    secondSync
+  );
+
+  assert.ok(firstSync > -1 && firstGuard > firstSync && firstGuard < firstClassification);
+  assert.ok(
+    secondSync > firstSync && secondGuard > secondSync && secondGuard < secondClassification
+  );
+});
+
+test("Terraform async completions compare the editor revision synchronously", () => {
+  assert.match(diagramEditorTypesSource, /getDiagramRevision: \(\) => number/);
+  assert.match(
+    diagramEditorSource,
+    /diagramRevisionRef\.current \+= 1;\s*diagramRef\.current = nextDiagram/
+  );
+  assert.match(
+    diagramEditorSource,
+    /const getDiagramRevision = useCallback[\s\S]*\(\) => diagramRevisionRef\.current/
+  );
+
+  const requestRevisionCaptures =
+    terraformPanelSource.match(/const requestDiagramRevision = context\.getDiagramRevision\(\)/g) ??
+    [];
+  const completionRevisionGuards =
+    terraformPanelSource.match(/requestDiagramRevision !== context\.getDiagramRevision\(\)/g) ?? [];
+
+  assert.equal(requestRevisionCaptures.length, 3);
+  assert.ok(completionRevisionGuards.length >= 10);
+});
+
+test("unmounting a Terraform panel invalidates every in-flight completion", () => {
+  assert.match(
+    terraformPanelSource,
+    /useLayoutEffect\(\s*\(\) => \(\) => \{\s*codeRequestIdRef\.current \+= 1;\s*codeVersionRef\.current \+= 1;\s*\},\s*\[\]\s*\)/
+  );
+});
+
+test("Terraform reference rewrites mutate panel state only after the final save guard", () => {
+  const saveSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const syncTerraformCodeToDiagram"),
+    terraformPanelSource.indexOf("const saveCodeToDiagram = useCallback")
+  );
+  const finalGuardIndex = saveSource.lastIndexOf("requestCodeVersion !== codeVersionRef.current");
+  const rewrittenVersionIndex = saveSource.indexOf("codeVersionRef.current += 1", finalGuardIndex);
+  const rewrittenFilesIndex = saveSource.indexOf(
+    "setTerraformFiles(rewrittenTerraformFiles)",
+    finalGuardIndex
+  );
+  const applyIndex = saveSource.indexOf(
+    "context.applyDiagramJson(authoritativeDiagramJson)",
+    finalGuardIndex
+  );
+
+  assert.ok(finalGuardIndex > -1);
+  assert.ok(rewrittenVersionIndex > finalGuardIndex);
+  assert.ok(rewrittenFilesIndex > rewrittenVersionIndex);
+  assert.ok(applyIndex > rewrittenFilesIndex);
+});
+
+test("AI Terraform sync publishes the final preserved-source classification", () => {
+  const safeFixSource = terraformPanelSource.slice(
+    terraformPanelSource.indexOf("const applyTerraformSafeFixToCode = useCallback"),
+    terraformPanelSource.indexOf("useImperativeHandle(ref")
+  );
+  const syncIndex = safeFixSource.indexOf("const syncResult = await syncTerraformToDiagram");
+  const classificationIndex = safeFixSource.indexOf(
+    "classifiedPreservedResourceAddressesRef.current = new Set"
+  );
+  const applyIndex = safeFixSource.indexOf("context.applyDiagramJson(authoritativeDiagramJson)");
+
+  assert.ok(syncIndex > -1);
+  assert.ok(classificationIndex > syncIndex);
+  assert.ok(applyIndex > classificationIndex);
+  assert.match(safeFixSource, /initialTerraformSourceClassifiedRef\.current = true/);
+});
+
 test("terraform preview refreshes when the last diagram icon is deleted", () => {
   assert.match(terraformPanelSource, /void refreshTerraformCode\(currentDiagramFingerprint\)/);
   assert.doesNotMatch(terraformPanelSource, /context\.nodes\.length === 0/);
@@ -1602,11 +1883,11 @@ test("terraform issue AI fix opens the edited code and locks the apply button", 
   );
   assert.match(
     projectDraftManagerSource,
-    /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/
+    /const requestTerraformSafeFixApply = useCallback\(\s*\(\s*request: TerraformSafeFixApplyRequest/
   );
   assert.match(
     workspaceDraftManagerSource,
-    /const requestTerraformSafeFixApply = useCallback\(\(\s*request: TerraformSafeFixApplyRequest/
+    /const requestTerraformSafeFixApply = useCallback\(\s*\(\s*request: TerraformSafeFixApplyRequest/
   );
   assert.match(projectDraftManagerSource, /setTerraformSafeFixApplyRequest\(request\)/);
   assert.match(workspaceDraftManagerSource, /setTerraformSafeFixApplyRequest\(request\)/);
@@ -1878,7 +2159,10 @@ test("terraform sync proposals are auto-applied on explicit save without asking 
   );
   assert.match(terraformPanelSource, /applyAllTerraformSyncProposals/);
   assert.match(terraformPanelSource, /syncResult\.proposals && syncResult\.proposals\.length > 0/);
-  assert.match(terraformPanelSource, /context\.applyDiagramJson\(nextDiagramJson\)/);
+  assert.match(
+    terraformPanelSource,
+    /const authoritativeDiagramJson = markTerraformSourceAuthoritative\(nextDiagramJson\)[\s\S]*context\.applyDiagramJson\(authoritativeDiagramJson\)/
+  );
   assert.doesNotMatch(terraformPanelSource, /pendingTerraformSync/);
   assert.doesNotMatch(terraformPanelSource, /Terraform 변경 제안/);
   assert.doesNotMatch(terraformPanelSource, /선택 반영/);

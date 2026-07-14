@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsJenkinsEc2Source = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-jenkins-ec2",

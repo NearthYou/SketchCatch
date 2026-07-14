@@ -60,7 +60,8 @@ const sourceExactPresentation = {
     width: 1920,
     height: 1080
   },
-  initialViewportPending: true
+  initialViewportPending: true,
+  terraformSourceFingerprint: '{"nodes":[],"edges":[]}'
 };
 
 const authoredEdgeRoute = {
@@ -110,7 +111,7 @@ test("save project draft body preserves legacy DiagramJson byte-equivalently", (
   assert.equal(JSON.stringify(parsed), JSON.stringify(payload));
 });
 
-test("save project draft body preserves source-exact node rotation, presentation, and authored edge routes", () => {
+test("save project draft body preserves source Terraform authority with source-exact presentation", () => {
   const rotatedSourceNode = {
     ...validDiagram.nodes[0]!,
     rotation: -90
@@ -154,10 +155,7 @@ test("save project draft body preserves empty source labels and workspace-seed a
   });
 
   assert.equal(parsed.diagramJson.nodes[0]?.label, "");
-  assert.equal(
-    parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority,
-    "workspace-seed"
-  );
+  assert.equal(parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority, "workspace-seed");
 });
 
 test("save project draft body rejects non-finite node rotation", () => {
@@ -214,8 +212,8 @@ test("save project draft body rejects non-finite authored route data", () => {
 
 test("save project draft body preserves Terraform virtual files", () => {
   const terraformFiles = [
-    { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"main\" {}" },
-    { fileName: "variables.tf", terraformCode: "variable \"cidr\" { type = string }" }
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' },
+    { fileName: "variables.tf", terraformCode: 'variable "cidr" { type = string }' }
   ];
   const parsed = saveProjectDraftBodySchema.parse({ diagramJson: validDiagram, terraformFiles });
 

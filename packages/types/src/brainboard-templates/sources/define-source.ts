@@ -8,9 +8,9 @@ import type {
   BrainboardTemplateOrigin,
   BrainboardTemplateSource,
   BrainboardTerraformFile
-} from "../source-types.js";
-import { validateBrainboardTemplateSource } from "../validate-source.js";
-import type { BrainboardTemplateId } from "../ids.js";
+} from "../source-types.ts";
+import { validateBrainboardTemplateSource } from "../validate-source.ts";
+import type { BrainboardTemplateId } from "../ids.ts";
 
 export type BrainboardCapturedNode = {
   readonly sourceNodeId: string;
@@ -69,7 +69,11 @@ export function defineCapturedBrainboardTemplate(
 ): BrainboardTemplateSource {
   const nodeIds = new Set(definition.nodes.map(({ sourceNodeId }) => sourceNodeId));
   for (const bindingId of Object.keys(definition.bindings)) {
-    assertBinding(nodeIds.has(bindingId), definition.id, `Binding has no source node: ${bindingId}`);
+    assertBinding(
+      nodeIds.has(bindingId),
+      definition.id,
+      `Binding has no source node: ${bindingId}`
+    );
   }
 
   const nodes = definition.nodes.map((node) => {
@@ -211,7 +215,10 @@ function validateAddressMappingEvidence(
   nodes: readonly BrainboardTemplateSource["nodes"][number][],
   templateId: BrainboardTemplateId
 ): void {
-  const resourcesByType = new Map<string, Extract<(typeof nodes)[number], { kind: "resource" }>[]>();
+  const resourcesByType = new Map<
+    string,
+    Extract<(typeof nodes)[number], { kind: "resource" }>[]
+  >();
   for (const node of nodes) {
     if (node.kind !== "resource") continue;
     if (node.addressMapping === "exact-title") {

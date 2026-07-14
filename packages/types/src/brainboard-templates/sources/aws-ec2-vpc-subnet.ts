@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsEc2VpcSubnetSource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-ec2-vpc-subnet",

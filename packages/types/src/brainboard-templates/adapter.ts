@@ -4,14 +4,14 @@ import type {
   DiagramNode,
   DiagramNodeStyle,
   TerraformSyncFileInput
-} from "../index.js";
+} from "../index.ts";
 import type {
   BrainboardSourceNode,
   BrainboardSourcePresentationNode,
   BrainboardSourceValue,
   BrainboardTemplateSource
-} from "./source-types.js";
-import { validateBrainboardTemplateSource } from "./validate-source.js";
+} from "./source-types.ts";
+import { validateBrainboardTemplateSource } from "./validate-source.ts";
 
 export type AdaptedBrainboardTemplate = {
   readonly diagramJson: DiagramJson;

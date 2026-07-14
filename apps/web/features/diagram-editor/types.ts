@@ -5,7 +5,8 @@ import type {
   DiagramEdgeRoute,
   DiagramJson,
   DiagramNode,
-  DiagramNodeParameters
+  DiagramNodeParameters,
+  TerraformSyncFileInput
 } from "../../../../packages/types/src";
 import type { NodeResizeUpdate } from "./node-resize";
 
@@ -29,7 +30,9 @@ export type DiagramEditorPanelContext = {
   edges: readonly DiagramEdge[];
   applyDiagramJson: (diagram: DiagramJson) => void;
   closeInspectedNode: () => void;
+  commitTerraformSourceAuthority: () => DiagramJson;
   focusResourceNode: (nodeId: string) => void;
+  getDiagramRevision: () => number;
   requestTerraformRefresh: () => void;
   selectResourceNode: (nodeId: string) => void;
   setPreviewDiagram: (
@@ -67,6 +70,12 @@ export type DiagramEditorProps = {
   onBoardReady?: ((element: HTMLElement) => void) | undefined;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
+  onTemplateWorkspaceApply?:
+    | ((seed: {
+        readonly diagramJson: DiagramJson;
+        readonly terraformFiles: readonly TerraformSyncFileInput[];
+      }) => void)
+    | undefined;
   rightPanel?: ((context: DiagramEditorPanelContext) => ReactNode) | null | undefined;
   dashboardHref?: string | undefined;
   projectName?: string | undefined;

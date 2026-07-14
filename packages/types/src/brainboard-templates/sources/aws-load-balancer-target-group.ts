@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsLoadBalancerTargetGroupSource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-load-balancer-target-group",

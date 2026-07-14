@@ -64,12 +64,22 @@ test("GET /api/projects/:id/draft restores the active user's diagramJson", async
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().draft.projectId, ACTIVE_PROJECT_ID);
-  assert.equal(response.json().draft.diagramJson.nodes[0].parameters.values.cidrBlock, "10.0.0.0/16");
+  assert.equal(
+    response.json().draft.diagramJson.nodes[0].parameters.values.cidrBlock,
+    "10.0.0.0/16"
+  );
 
   await app.close();
 });
 
 test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson", async () => {
+  const authoritativeDiagram: DiagramJson = {
+    ...draftDiagram,
+    presentation: {
+      geometryPolicy: "source-exact",
+      terraformSourceFingerprint: '{"nodes":[{"id":"node-vpc"}],"edges":[]}'
+    }
+  };
   const fakeDb = new ProjectDraftRouteFakeDb({
     users: [makeUser()],
     projects: [makeProject()],
@@ -84,10 +94,10 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
     url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
     headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
-      diagramJson: draftDiagram,
+      diagramJson: authoritativeDiagram,
       terraformFiles: [
-        { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"vpc\" {}" },
-        { fileName: "variables.tf", terraformCode: "variable \"cidr\" { type = string }" }
+        { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' },
+        { fileName: "variables.tf", terraformCode: 'variable "cidr" { type = string }' }
       ]
     }
   });
@@ -95,6 +105,14 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().draft.revision, 5);
   assert.equal(fakeDb.draftRows[0]?.revision, 5);
+  assert.equal(
+    fakeDb.draftRows[0]?.diagramJson.presentation?.terraformSourceFingerprint,
+    authoritativeDiagram.presentation?.terraformSourceFingerprint
+  );
+  assert.equal(
+    response.json().draft.diagramJson.presentation.terraformSourceFingerprint,
+    authoritativeDiagram.presentation?.terraformSourceFingerprint
+  );
   assert.equal(fakeDb.draftRows[0]?.terraformFiles?.[1]?.fileName, "variables.tf");
   assert.equal(fakeDb.projectUpdated, true);
 
@@ -189,11 +207,7 @@ class ProjectDraftRouteFakeDb {
   projectUpdated = false;
   client: DatabaseClient;
 
-  constructor(data: {
-    users?: UserRow[];
-    projects?: ProjectRow[];
-    drafts?: ProjectDraftRow[];
-  }) {
+  constructor(data: { users?: UserRow[]; projects?: ProjectRow[]; drafts?: ProjectDraftRow[] }) {
     this.userRows = data.users ?? [];
     this.projectRows = data.projects ?? [];
     this.draftRows = data.drafts ?? [];

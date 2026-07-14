@@ -1,16 +1,10 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
-import type {
-  RepositoryTemplateId,
-  TemplateId
-} from "./template-definitions.ts";
+import type { RepositoryTemplateId, TemplateId } from "./template-definitions.ts";
 
 export type IsoDateTimeString = string;
 
 export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue =
-  | JsonPrimitive
-  | JsonValue[]
-  | { readonly [key: string]: JsonValue };
+export type JsonValue = JsonPrimitive | JsonValue[] | { readonly [key: string]: JsonValue };
 
 export type ApiErrorCode =
   | "bad_request"
@@ -615,11 +609,7 @@ export type RepositoryApplicationUnit = {
   readonly evidencePaths: readonly string[];
 };
 
-export const REPOSITORY_DEPLOYMENT_TYPES = [
-  "ec2_vm",
-  "container",
-  "serverless"
-] as const;
+export const REPOSITORY_DEPLOYMENT_TYPES = ["ec2_vm", "container", "serverless"] as const;
 
 export type RepositoryDeploymentType = (typeof REPOSITORY_DEPLOYMENT_TYPES)[number];
 
@@ -700,10 +690,7 @@ export type AnalyzeSourceRepositoryResponse = {
   readonly aiHandoff: RepositoryAnalysisAiHandoff;
 };
 
-export type SourceRepositoryAnalysis = Omit<
-  AnalyzeSourceRepositoryResponse,
-  "sourceRepositoryId"
->;
+export type SourceRepositoryAnalysis = Omit<AnalyzeSourceRepositoryResponse, "sourceRepositoryId">;
 
 export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
 
@@ -1422,9 +1409,7 @@ export type DeploymentLiveObservationManifestV2 = {
   };
 };
 
-export type DeploymentLiveObservationManifestStatus =
-  | "valid"
-  | "manifest_invalid";
+export type DeploymentLiveObservationManifestStatus = "valid" | "manifest_invalid";
 
 export type DeploymentLiveObservationManifestRecord = {
   deploymentId: string;
@@ -1438,11 +1423,7 @@ export type DeploymentLiveObservationManifestRecord = {
 
 export type LiveObservationStatus = "active" | "stopped" | "expired";
 
-export type LiveObservationPressureLevel =
-  | "normal"
-  | "warning"
-  | "high"
-  | "critical";
+export type LiveObservationPressureLevel = "normal" | "warning" | "high" | "critical";
 
 export type LiveObservationAwsState = "available" | "delayed" | "unavailable";
 
@@ -2057,10 +2038,7 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
-export type ArchitecturePatchPlanAction =
-  | "modify_resource"
-  | "remove_resource"
-  | "add_resource";
+export type ArchitecturePatchPlanAction = "modify_resource" | "remove_resource" | "add_resource";
 
 export type ArchitecturePatchPlanOperationType =
   | "set_value"
@@ -2137,10 +2115,12 @@ export type CreateArchitecturePatchPreviewRequest = {
 export type CreateArchitectureDraftRequest = {
   prompt: string;
   templateId?: TemplateId | undefined;
-  repositoryAnalysis?: {
-    projectId: string;
-    sourceRepositoryId: string;
-  } | undefined;
+  repositoryAnalysis?:
+    | {
+        projectId: string;
+        sourceRepositoryId: string;
+      }
+    | undefined;
 };
 
 export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
@@ -2151,8 +2131,7 @@ export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
   "building_diagram"
 ] as const;
 
-export type ArchitectureDraftProgressStage =
-  (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -2362,11 +2341,13 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
-  deepScan?: {
-    status: "not_required" | "running" | "complete" | "failed";
-    scanId?: string | undefined;
-    message?: string | undefined;
-  } | undefined;
+  deepScan?:
+    | {
+        status: "not_required" | "running" | "complete" | "failed";
+        scanId?: string | undefined;
+        message?: string | undefined;
+      }
+    | undefined;
   llmExplanation?: LlmExplanation | undefined;
 };
 
@@ -2683,6 +2664,7 @@ export type DiagramPresentation = {
   geometryPolicy: DiagramGeometryPolicy;
   sourceViewBox?: DiagramBounds | undefined;
   initialViewportPending?: boolean | undefined;
+  terraformSourceFingerprint?: string | undefined;
 };
 
 export type DiagramJson = {

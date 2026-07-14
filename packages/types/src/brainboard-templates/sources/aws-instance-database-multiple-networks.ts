@@ -1,4 +1,4 @@
-import type { BrainboardFailedCaptureEvidence } from "../source-types.js";
+import type { BrainboardFailedCaptureEvidence } from "../source-types.ts";
 
 export const awsInstanceDatabaseMultipleNetworksFailedEvidence = {
   id: "brainboard-aws-instance-db-multiple-networks",

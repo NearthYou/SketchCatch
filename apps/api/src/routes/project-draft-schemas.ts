@@ -11,10 +11,12 @@ import type {
   DiagramVariableBinding
 } from "@sketchcatch/types";
 
-const diagramPointSchema: z.ZodType<DiagramPoint> = z.object({
-  x: z.number().finite(),
-  y: z.number().finite()
-}).strict();
+const diagramPointSchema: z.ZodType<DiagramPoint> = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite()
+  })
+  .strict();
 
 const diagramPositionSchema = z.object({
   x: z.number().finite(),
@@ -26,32 +28,41 @@ const diagramSizeSchema = z.object({
   height: z.number().finite().positive()
 });
 
-const diagramBoundsSchema: z.ZodType<DiagramBounds> = z.object({
-  x: z.number().finite(),
-  y: z.number().finite(),
-  width: z.number().finite().positive(),
-  height: z.number().finite().positive()
-}).strict();
+const diagramBoundsSchema: z.ZodType<DiagramBounds> = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().finite().positive(),
+    height: z.number().finite().positive()
+  })
+  .strict();
 
-const diagramPresentationSchema: z.ZodType<DiagramPresentation> = z.object({
-  geometryPolicy: z.enum(["catalog-normalized", "source-exact"]),
-  sourceViewBox: diagramBoundsSchema.optional(),
-  initialViewportPending: z.boolean().optional()
-}).strict();
+const diagramPresentationSchema: z.ZodType<DiagramPresentation> = z
+  .object({
+    geometryPolicy: z.enum(["catalog-normalized", "source-exact"]),
+    sourceViewBox: diagramBoundsSchema.optional(),
+    initialViewportPending: z.boolean().optional(),
+    terraformSourceFingerprint: z.string().min(1).optional()
+  })
+  .strict();
 
-const diagramVariableBindingSchema: z.ZodType<DiagramVariableBinding> = z.object({
-  nodeId: z.string().min(1),
-  parameterKey: z.string().min(1)
-}).strict();
+const diagramVariableBindingSchema: z.ZodType<DiagramVariableBinding> = z
+  .object({
+    nodeId: z.string().min(1),
+    parameterKey: z.string().min(1)
+  })
+  .strict();
 
-const diagramVariableSchema: z.ZodType<DiagramVariable> = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  type: z.string().min(1),
-  value: z.unknown(),
-  bindings: z.array(diagramVariableBindingSchema),
-  source: z.enum(["module", "user"])
-}).strict();
+const diagramVariableSchema: z.ZodType<DiagramVariable> = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    type: z.string().min(1),
+    value: z.unknown(),
+    bindings: z.array(diagramVariableBindingSchema),
+    source: z.enum(["module", "user"])
+  })
+  .strict();
 
 const diagramNodeStyleSchema = z.object({
   textColor: z.string().min(1).optional(),
@@ -59,16 +70,20 @@ const diagramNodeStyleSchema = z.object({
   borderStyle: z.enum(["solid", "dashed", "dotted"]).optional()
 });
 
-const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  parentAreaNodeId: z.string().min(1).optional(),
-  presentationArea: z.boolean().optional(),
-  presentationCatalogItemId: z.string().min(1).optional(),
-  reverseEngineering: z.object({
-    source: z.literal("aws_scan"),
-    protectedValueKeys: z.array(z.string().min(1)),
-    editableValueKeys: z.array(z.string().min(1))
-  }).optional()
-}).strict();
+const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
+  .object({
+    parentAreaNodeId: z.string().min(1).optional(),
+    presentationArea: z.boolean().optional(),
+    presentationCatalogItemId: z.string().min(1).optional(),
+    reverseEngineering: z
+      .object({
+        source: z.literal("aws_scan"),
+        protectedValueKeys: z.array(z.string().min(1)),
+        editableValueKeys: z.array(z.string().min(1))
+      })
+      .optional()
+  })
+  .strict();
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: z.enum(["resource", "data"]).optional(),
@@ -103,20 +118,26 @@ const diagramEdgeStyleSchema = z.object({
   animated: z.boolean().optional()
 });
 
-const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
-  managedBy: z.literal("parameter-reference"),
-  parameterPath: z.string().min(1)
-}).strict();
+const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z
+  .object({
+    managedBy: z.literal("parameter-reference"),
+    parameterPath: z.string().min(1)
+  })
+  .strict();
 
-const diagramEdgeRouteSchema: z.ZodType<DiagramEdgeRoute> = z.object({
-  svgPath: z.string().min(1),
-  sourcePoint: diagramPointSchema,
-  targetPoint: diagramPointSchema,
-  waypoints: z.array(diagramPointSchema),
-  labelPosition: diagramPointSchema.optional(),
-  arrowDirection: z.enum(["source-to-target", "target-to-source", "bidirectional", "none"]).optional(),
-  arrowAngle: z.number().finite().optional()
-}).strict();
+const diagramEdgeRouteSchema: z.ZodType<DiagramEdgeRoute> = z
+  .object({
+    svgPath: z.string().min(1),
+    sourcePoint: diagramPointSchema,
+    targetPoint: diagramPointSchema,
+    waypoints: z.array(diagramPointSchema),
+    labelPosition: diagramPointSchema.optional(),
+    arrowDirection: z
+      .enum(["source-to-target", "target-to-source", "bidirectional", "none"])
+      .optional(),
+    arrowAngle: z.number().finite().optional()
+  })
+  .strict();
 
 const diagramEdgeSchema = z.object({
   id: z.string().min(1),
@@ -150,8 +171,14 @@ export const projectDraftQuerySchema = z.object({
 
 export const saveProjectDraftBodySchema = z.object({
   diagramJson: diagramJsonSchema,
-  terraformFiles: z.array(z.object({
-    fileName: z.string().trim().min(1),
-    terraformCode: z.string()
-  }).strict()).optional()
+  terraformFiles: z
+    .array(
+      z
+        .object({
+          fileName: z.string().trim().min(1),
+          terraformCode: z.string()
+        })
+        .strict()
+    )
+    .optional()
 });

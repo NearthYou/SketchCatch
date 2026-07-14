@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsS3ApiGatewaySource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-s3-api-gateway",

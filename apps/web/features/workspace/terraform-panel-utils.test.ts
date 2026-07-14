@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
+  clearTerraformSourceAuthority,
+  createTerraformDiagramRequestGuard,
   createTerraformFilesFromGeneratedCode,
   createTerraformFilesForRefresh,
   mergeGeneratedTerraformFiles,
@@ -11,11 +13,46 @@ import {
   getSourceAuthoritativeTerraformAddresses,
   getTerraformAddressesRemovedFromDiagram,
   getTerraformFileOptions,
+  hasAuthoritativeTerraformSource,
+  markTerraformSourceAuthoritative,
   parseTerraformFiles,
   removeTerraformBlocksByAddress,
   toDeploymentBaselineFingerprint,
   toTerraformRefreshFingerprint
 } from "./terraform-panel-utils";
+
+test("an async Terraform completion is stale after Diagram change and undo", async () => {
+  const guard = createTerraformDiagramRequestGuard("diagram-d1");
+  const request = guard.capture();
+  let resolveGeneration!: () => void;
+  const generation = new Promise<void>((resolve) => {
+    resolveGeneration = resolve;
+  });
+  const completion = generation.then(() => guard.isCurrent(request));
+
+  guard.update("diagram-d2");
+  guard.update("diagram-d1");
+  resolveGeneration();
+
+  assert.equal(await completion, false);
+  assert.equal(guard.capture().fingerprint, "diagram-d1");
+  assert.notEqual(guard.capture().revision, request.revision);
+});
+
+test("an async Diagram sync completion is stale after a geometry-only edit", async () => {
+  const guard = createTerraformDiagramRequestGuard("unchanged-terraform-semantics");
+  const request = guard.capture();
+  let resolveSync!: () => void;
+  const sync = new Promise<void>((resolve) => {
+    resolveSync = resolve;
+  });
+  const completion = sync.then(() => guard.isCurrent(request));
+
+  guard.update("unchanged-terraform-semantics");
+  resolveSync();
+
+  assert.equal(await completion, false);
+});
 
 test("mergeGeneratedTerraformFiles preserves an exact top-level variable block", () => {
   const variableBlock = `variable "traffic_api_bundle_url" {
@@ -488,7 +525,18 @@ test("getTerraformFileOptions includes node and virtual file names in stable ord
 
 test("diagram fingerprints ignore viewport-only changes", () => {
   const diagramJson: DiagramJson = {
-    nodes: [makeNode("resource", "aws_vpc", "main")],
+    nodes: [
+      {
+        ...makeNode("resource", "aws_vpc", "main"),
+        parameters: {
+          ...makeNode("resource", "aws_vpc", "main").parameters!,
+          values: {
+            cidrBlock: "10.0.0.0/16",
+            tags: { Team: "platform", Environment: "demo" }
+          }
+        }
+      }
+    ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   };
@@ -505,6 +553,90 @@ test("diagram fingerprints ignore viewport-only changes", () => {
     toDeploymentBaselineFingerprint(diagramJson),
     toDeploymentBaselineFingerprint(pannedDiagramJson)
   );
+});
+
+test("source Terraform authority follows the Diagram semantic fingerprint", () => {
+  const sourceNode = makeNode("resource", "aws_vpc", "main");
+  sourceNode.parameters = {
+    ...sourceNode.parameters!,
+    values: {
+      cidrBlock: "10.0.0.0/16",
+      tags: { Team: "platform", Environment: "demo" }
+    }
+  };
+  const diagramJson: DiagramJson = {
+    nodes: [sourceNode],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    presentation: {
+      geometryPolicy: "source-exact"
+    }
+  };
+  const markedDiagram = markTerraformSourceAuthoritative(diagramJson);
+  const pannedDiagram = {
+    ...markedDiagram,
+    viewport: { x: 240, y: -80, zoom: 0.75 }
+  };
+  const jsonbReorderedDiagram = {
+    ...markedDiagram,
+    nodes: [
+      {
+        ...markedDiagram.nodes[0]!,
+        parameters: {
+          values: {
+            tags: { Environment: "demo", Team: "platform" },
+            cidrBlock: "10.0.0.0/16"
+          },
+          fileName: markedDiagram.nodes[0]!.parameters!.fileName,
+          resourceName: markedDiagram.nodes[0]!.parameters!.resourceName,
+          resourceType: markedDiagram.nodes[0]!.parameters!.resourceType,
+          terraformBlockType: markedDiagram.nodes[0]!.parameters!.terraformBlockType
+        }
+      }
+    ]
+  };
+  const changedDiagram = {
+    ...markedDiagram,
+    nodes: [
+      {
+        ...markedDiagram.nodes[0]!,
+        parameters: {
+          ...markedDiagram.nodes[0]!.parameters!,
+          values: { cidrBlock: "10.1.0.0/16" }
+        }
+      }
+    ]
+  };
+
+  assert.equal(diagramJson.presentation?.terraformSourceFingerprint, undefined);
+  assert.equal(
+    markedDiagram.presentation?.terraformSourceFingerprint,
+    toTerraformRefreshFingerprint(markedDiagram)
+  );
+  assert.equal(hasAuthoritativeTerraformSource(markedDiagram), true);
+  assert.equal(hasAuthoritativeTerraformSource(pannedDiagram), true);
+  assert.equal(
+    toTerraformRefreshFingerprint(jsonbReorderedDiagram),
+    toTerraformRefreshFingerprint(markedDiagram)
+  );
+  assert.equal(hasAuthoritativeTerraformSource(jsonbReorderedDiagram), true);
+  assert.equal(hasAuthoritativeTerraformSource(changedDiagram), false);
+});
+
+test("Diagram-only history restoration clears persisted Terraform source authority", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [makeNode("resource", "aws_vpc", "main")],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    presentation: { geometryPolicy: "source-exact" }
+  };
+  const markedDiagram = markTerraformSourceAuthoritative(diagramJson);
+  const restoredDiagram = clearTerraformSourceAuthority(markedDiagram);
+
+  assert.equal(hasAuthoritativeTerraformSource(markedDiagram), true);
+  assert.equal(restoredDiagram.presentation?.terraformSourceFingerprint, undefined);
+  assert.equal(restoredDiagram.presentation?.geometryPolicy, "source-exact");
+  assert.equal(hasAuthoritativeTerraformSource(restoredDiagram), false);
 });
 
 test("diagram fingerprints ignore presentation-only node and edge edits", () => {

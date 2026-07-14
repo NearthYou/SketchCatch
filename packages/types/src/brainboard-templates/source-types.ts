@@ -1,4 +1,4 @@
-import type { BrainboardTemplateId } from "./ids.js";
+import type { BrainboardTemplateId } from "./ids.ts";
 
 export type BrainboardTemplateCaptureStatus = "captured" | "materialized" | "verified";
 
@@ -181,6 +181,4 @@ export type BrainboardFailedCaptureEvidence = {
   readonly origin: BrainboardFailedCaptureOrigin;
 };
 
-export type BrainboardTemplateEvidence =
-  | BrainboardTemplateSource
-  | BrainboardFailedCaptureEvidence;
+export type BrainboardTemplateEvidence = BrainboardTemplateSource | BrainboardFailedCaptureEvidence;

@@ -25,7 +25,9 @@ import {
   createWorkspaceStartSingleFlight,
   type WorkspaceStartSingleFlight
 } from "../../../features/workspace/workspace-start-single-flight";
+import { markTerraformSourceAuthoritative } from "../../../features/workspace/terraform-panel-utils";
 import {
+  isBoardTemplateAvailable,
   type BoardTemplate,
   listBoardTemplates
 } from "../../../features/resource-settings/template-library";
@@ -83,28 +85,30 @@ export function WorkspaceStartClient({
   const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
   const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    boardTemplates.some((template) => template.id === initialTemplateId)
+    boardTemplates.some(
+      (template) => template.id === initialTemplateId && isBoardTemplateAvailable(template)
+    )
       ? (initialTemplateId ?? null)
       : null
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [projectNameError, setProjectNameError] = useState("");
   const [submittingKind, setSubmittingKind] = useState<WorkspaceStartKind | null>(null);
-  const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(initialStartKind === "repository");
+  const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(
+    initialStartKind === "repository"
+  );
   const [repositoryUrl, setRepositoryUrl] = useState("");
   const [repositoryDefaultBranch, setRepositoryDefaultBranch] = useState("main");
-  const selectedTemplate = useMemo(
-    () => boardTemplates.find((template) => template.id === selectedTemplateId) ?? null,
-    [selectedTemplateId]
-  );
+  const selectedTemplate = useMemo(() => {
+    const template = boardTemplates.find((candidate) => candidate.id === selectedTemplateId);
+    return template && isBoardTemplateAvailable(template) ? template : null;
+  }, [selectedTemplateId]);
   const isSubmitting = submittingKind !== null;
   const isPrimarySubmitting = isSubmitting && submittingKind !== "blank";
   const canContinue =
     !isSubmitting &&
     (selectedKind !== "template" || selectedTemplate !== null) &&
-    (selectedKind !== "repository" ||
-      !repositoryUrlFormVisible ||
-      repositoryUrl.trim().length > 0);
+    (selectedKind !== "repository" || !repositoryUrlFormVisible || repositoryUrl.trim().length > 0);
 
   useEffect(() => {
     if (initialStartKind) {
@@ -116,7 +120,14 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
-      setSelectedTemplateId(storedForm.selectedTemplateId);
+      setSelectedTemplateId(
+        boardTemplates.some(
+          (template) =>
+            template.id === storedForm.selectedTemplateId && isBoardTemplateAvailable(template)
+        )
+          ? storedForm.selectedTemplateId
+          : null
+      );
       setRepositoryUrlFormVisible(storedForm.selectedKind === "repository");
     } else {
       const aiDraft = readAiStartDraft();
@@ -198,8 +209,12 @@ export function WorkspaceStartClient({
 
           if (action.openMode === "template" && selectedTemplate) {
             await saveProjectDraft({
-              diagramJson: selectedTemplate.diagramJson,
-              projectId: project.id
+              diagramJson:
+                selectedTemplate.terraformFiles.length > 0
+                  ? markTerraformSourceAuthoritative(selectedTemplate.diagramJson)
+                  : selectedTemplate.diagramJson,
+              projectId: project.id,
+              terraformFiles: selectedTemplate.terraformFiles.map((file) => ({ ...file }))
             });
           }
 
@@ -291,9 +306,7 @@ export function WorkspaceStartClient({
 
           <label
             className={
-              projectNameError
-                ? `${styles.nameField} ${styles.nameFieldError}`
-                : styles.nameField
+              projectNameError ? `${styles.nameField} ${styles.nameFieldError}` : styles.nameField
             }
             htmlFor="workspace-title-input"
           >
@@ -488,8 +501,8 @@ function RepositoryUrlStartPanel({
       <div className={styles.repositoryUrlHeader}>
         <h2 id="repository-url-title">Repository URL 분석</h2>
         <p>
-          public GitHub repository는 계정 연결 없이 분석합니다. private repository나 권한이 부족한 경우에는
-          환경설정에서 GitHub 권한을 연결해주세요.
+          public GitHub repository는 계정 연결 없이 분석합니다. private repository나 권한이 부족한
+          경우에는 환경설정에서 GitHub 권한을 연결해주세요.
         </p>
       </div>
 
@@ -517,7 +530,6 @@ function RepositoryUrlStartPanel({
           />
         </label>
       </div>
-
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const awsCostMonitoringSource = defineCapturedBrainboardTemplate({
   id: "brainboard-aws-costs-monitoring",

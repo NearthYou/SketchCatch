@@ -191,7 +191,7 @@ function generateFixture(config) {
   };
 
   return [
-    'import { defineCapturedBrainboardTemplate } from "./define-source.js";',
+    'import { defineCapturedBrainboardTemplate } from "./define-source.ts";',
     "",
     `export const ${config.exportName} = defineCapturedBrainboardTemplate(`,
     `${JSON.stringify(definition, null, 2)}`,

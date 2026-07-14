@@ -4,16 +4,26 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/gg/369-workspace-template-board-ux`.
-- Latest `origin/dev` at `99db7f61` is integrated into PR #380 with conflict regressions passing.
+- Branch: `feature/gg/381-brainboard-aws-templates`.
+- Project Board capture storage and Workspace lifecycle changes are merged into `dev` at `186ff261`; the reviewed bounded Dashboard thumbnail refresh follow-up is uncommitted in this branch's working tree.
 - Six deployable AWS Templates use compact 40px-grid authored layouts and real Resource-panel Catalog items.
 - Security Group is a visual scope with explicit attachment edges, never a persisted containment parent; ASG is a regular 48px Resource.
 - Template cards and large previews use actual 1280x720 ReactFlow Board WebP captures. Project cards use the latest authenticated Board DOM capture.
 - Workspace Template 전체보기 renders through a body Portal below the 64px project navigator, isolates the background, and keeps keyboard focus inside the dialog.
-- The complete Web suite passes 1,141/1,141 with the repository user's Node v24.18.0 runtime.
+- The complete Web suite passes 1,161/1,161 with the repository user's Node v24.18.0 runtime, including the bounded Dashboard thumbnail refresh tests.
+- A real filesystem thumbnail upload/read API flow passes without AWS credentials.
+- Root `pnpm test` retains three unrelated macOS failures in Windows-path lock-file fixtures; root `pnpm build` remains blocked before Web compilation by the existing missing `apps/web/.codegraph` path.
 - No `apps/api/drizzle/**` migration file was created, edited, renamed, or renumbered in this workstream.
 
 ## Session Record
+
+### 2026-07-14 - Stabilize Dashboard Project Board thumbnail refresh
+
+- Added a small dependency-injected loader that retries missing (`404`/`null`) and transient thumbnail reads at most three times with a fixed 250ms delay; it returns explicit ready, empty, error, or cancelled results and never polls.
+- Preserved status on thumbnail response errors so permanent 4xx responses stop immediately while network errors and 408, 429, or 5xx responses retry. Dashboard cards now use a small lifecycle owner that ignores stale post-dispose results and revokes generated object URLs.
+- TDD evidence: missing loader, permanent-error, response-status, and lifecycle tests first failed, then the focused suite passed 60/60. The full Web suite, root lint/typecheck, migration compatibility check, and harness check passed.
+- A second read-only review found no Critical or Important issues. It confirmed no synthetic preview, storage, schema, backend endpoint, or deployment scope was added.
+- The real API filesystem upload/read test passed. Root test has only the three pre-existing Windows-path fixture failures; root build remains blocked by the pre-existing missing `.codegraph` directory. No API contract, schema, migration, cloud, deployment, or dependency change was made.
 
 ### 2026-07-14 - Remove redundant Template card helper copy
 
@@ -56,5 +66,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Monitor PR #380 after the Template Portal review fix is pushed; repeat browser QA when the running local server is reachable from the in-app browser.
-- Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; run Terraform validation only in an environment with the CLI installed.
+- Commit or push the reviewed bounded thumbnail retry diff only when requested. Keep the unrelated untracked `docs/gg/feat-infrastructure-template/brainboard-captures/aws-vpc-subnets-security-groups-2az.json` outside this change.
+- Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; root API test still needs the three Windows-path fixtures made platform-neutral before it can be green on macOS.

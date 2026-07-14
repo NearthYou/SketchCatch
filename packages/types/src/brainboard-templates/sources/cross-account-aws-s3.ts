@@ -1,4 +1,4 @@
-import { defineCapturedBrainboardTemplate } from "./define-source.js";
+import { defineCapturedBrainboardTemplate } from "./define-source.ts";
 
 export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
   id: "brainboard-cross-account-aws-s3",

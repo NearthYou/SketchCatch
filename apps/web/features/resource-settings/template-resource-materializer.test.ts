@@ -13,7 +13,7 @@ import {
   hydrateCatalogResourceNodes,
   materializeTemplateDiagram
 } from "./template-resource-materializer";
-import { buildBoardTemplateDiagram, listBoardTemplates } from "./template-library";
+import { buildBoardTemplateDiagram, listRepositoryBoardTemplates } from "./template-library";
 
 test("materializeTemplateDiagram gives an S3 template node the catalog icon and resource kind", () => {
   const diagram = materializeTemplateDiagram(createDiagram([createTemplateNode("aws_s3_bucket")]));
@@ -371,7 +371,7 @@ test("hydrateCatalogResourceNodes retains unknown legacy nodes and adds a catalo
 });
 
 test("template-library entry points return strict catalog-materialized diagrams", () => {
-  const staticBoardTemplate = listBoardTemplates().find(
+  const staticBoardTemplate = listRepositoryBoardTemplates().find(
     (template) => template.id === "static-web-hosting"
   );
   const repositoryTemplate = buildBoardTemplateDiagram("static-web-hosting", {
@@ -390,7 +390,7 @@ test("template-library entry points return strict catalog-materialized diagrams"
 });
 
 test("deployable Template materialization preserves reviewed geometry while draft hydration preserves coordinates", () => {
-  for (const template of listBoardTemplates()) {
+  for (const template of listRepositoryBoardTemplates()) {
     assertCompactContainedAreas(template.diagramJson);
 
     const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
@@ -414,7 +414,7 @@ test("deployable Template materialization preserves reviewed geometry while draf
 });
 
 test("reviewed API, ECS, and Namespace resources become real visual containers", () => {
-  const templates = listBoardTemplates();
+  const templates = listRepositoryBoardTemplates();
   const requiredContainers = [
     ["minimal-serverless-api", "aws_api_gateway_rest_api"],
     ["full-serverless-web-app", "aws_api_gateway_rest_api"],
@@ -433,7 +433,7 @@ test("reviewed API, ECS, and Namespace resources become real visual containers",
 });
 
 test("ASG and EKS control plane materialize as ordinary 48px Resource tiles", () => {
-  const templates = listBoardTemplates();
+  const templates = listRepositoryBoardTemplates();
   const expectedTiles = [
     ["three-tier-web-app", "aws_autoscaling_group"],
     ["eks-container-app", "aws_eks_cluster"]
@@ -452,7 +452,7 @@ test("ASG and EKS control plane materialize as ordinary 48px Resource tiles", ()
 
 test("Template presentation nodes materialize exact Catalog items without Terraform parameters", () => {
   // Design nodes reuse the real panel payload even when Region and AZ normally create resource parameters on drag.
-  for (const template of listBoardTemplates()) {
+  for (const template of listRepositoryBoardTemplates()) {
     const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
 
     assert.ok(definition, `Missing definition for ${template.id}`);
