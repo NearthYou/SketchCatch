@@ -1,5 +1,5 @@
 import type { DiagramJson } from "@sketchcatch/types";
-import { normalizeRepositoryGeneratedDiagramLayout } from "./workspace-ai-diagram-adapter";
+import { sanitizeSavedRepositoryGeneratedDiagramLayout } from "./workspace-ai-diagram-adapter";
 
 /** 저장된 Board는 사용자 이름, 위치, ID를 고치지 않고 그대로 복원합니다. */
 export function restoreSavedDiagram(
@@ -18,14 +18,14 @@ export function restoreSavedDiagram(
     : fallbackDiagram.edges;
 
   if (hasNodes && hasEdges && hasViewport) {
-    return normalizeRepositoryGeneratedDiagramLayout(
+    return sanitizeSavedRepositoryGeneratedDiagramLayout(
       restoredEdges.length === savedDiagram.edges.length
         ? savedDiagram
         : { ...savedDiagram, edges: restoredEdges }
     );
   }
 
-  return normalizeRepositoryGeneratedDiagramLayout({
+  return sanitizeSavedRepositoryGeneratedDiagramLayout({
     ...savedDiagram,
     edges: restoredEdges,
     nodes: hasNodes ? savedDiagram.nodes : fallbackDiagram.nodes,

@@ -135,12 +135,11 @@ const READABLE_LAYOUT_COLUMN_GAP = 192;
 const READABLE_LAYOUT_ROW_GAP = 140;
 const READABLE_LAYOUT_STACK_GAP = 104;
 const REPOSITORY_MANAGED_SERVICES_AREA_ID = "repository-managed-services";
-const REPOSITORY_SUPPORT_ORIGIN = { x: 200, y: 128 };
-const REPOSITORY_SUPPORT_COLUMN_GAP = 132;
-const REPOSITORY_SUPPORT_ROW_GAP = 360;
+const REPOSITORY_SUPPORT_COLUMN_GAP = 168;
+const REPOSITORY_SUPPORT_ROW_GAP = 260;
 const REPOSITORY_SUPPORT_STACK_GAP = 84;
-const REPOSITORY_BROWSER_POSITION = { x: -48, y: 132 };
-const REPOSITORY_GITHUB_ACTIONS_POSITION = { x: -48, y: 500 };
+const REPOSITORY_TEMPLATE_SUPPORT_GAP = 840;
+const REPOSITORY_EXTERNAL_ACTOR_GAP = 260;
 const REPOSITORY_VPC_ORIGIN = { x: 820, y: 96 };
 const REPOSITORY_SUBNET_SIZE = { width: 220, height: 56 };
 const REPOSITORY_ACTIVE_PUBLIC_SUBNET_SIZE = { width: 364, height: 220 };
@@ -343,7 +342,10 @@ export function createPlannedDiagramJson({
   const fittedLaidOutNodes = fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes));
   const repositorySupportLaidOutNodes = usesRepositoryLayout
     ? preserveAuthoredTemplatePositions
-      ? applyRepositoryGeneratedSupportLayout(flattenRepositoryManagedServicesArea(fittedLaidOutNodes))
+      ? applyRepositoryGeneratedSupportLayout(
+          flattenRepositoryManagedServicesArea(fittedLaidOutNodes),
+          templateLayoutRules.protectedNodeIds
+        )
       : applyRepositoryGeneratedReferenceLayout(fittedLaidOutNodes)
     : fittedLaidOutNodes;
   const templateSafeRepositorySupportNodes = preserveAuthoredTemplatePositions
@@ -1579,6 +1581,32 @@ export function normalizeRepositoryGeneratedDiagramLayout(diagramJson: DiagramJs
   };
 }
 
+export function sanitizeSavedRepositoryGeneratedDiagramLayout(diagramJson: DiagramJson): DiagramJson {
+  if (!isRepositoryGeneratedDiagramLayout(diagramJson)) {
+    return diagramJson;
+  }
+
+  const nodes = applyDiagramLayerOrder(flattenRepositoryManagedServicesArea(diagramJson.nodes));
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+
+  return {
+    ...diagramJson,
+    edges: removeRepositoryGeneratedSupportEdges(
+      normalizeDiagramEdges(
+        diagramJson.edges.filter(
+          (edge) =>
+            shouldRenderDiagramEdge(edge, nodeById) &&
+            !isRepositoryGeneratedSupportDependencyEdge(edge, nodeById)
+        ),
+        nodeById
+      ),
+      nodeById,
+      false
+    ),
+    nodes
+  };
+}
+
 function isRepositoryGeneratedDiagramLayout(diagramJson: DiagramJson): boolean {
   const nodeIds = new Set(diagramJson.nodes.map((node) => node.id));
 
@@ -2750,12 +2778,33 @@ function getRepositoryEdgeEndpointDescriptor(node: DiagramNode): string {
   return `${node.id} ${node.label} ${node.type} ${node.parameters?.resourceType ?? ""} ${node.parameters?.resourceName ?? ""}`.toLowerCase();
 }
 
-function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
+function applyRepositoryGeneratedSupportLayout(
+  nodes: readonly DiagramNode[],
+  protectedTemplateNodeIds: ReadonlySet<string> = new Set()
+): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const templateBounds = getNodeSetBounds(
+    nodes.filter((node) => protectedTemplateNodeIds.has(node.id))
+  );
+  const supportOrigin = templateBounds
+    ? {
+        x: templateBounds.x - REPOSITORY_TEMPLATE_SUPPORT_GAP,
+        y: templateBounds.y
+      }
+    : { x: 200, y: 128 };
+  const browserPosition = {
+    x: supportOrigin.x - REPOSITORY_EXTERNAL_ACTOR_GAP,
+    y: supportOrigin.y + 40
+  };
+  const githubActionsPosition = {
+    x: browserPosition.x,
+    y: browserPosition.y + REPOSITORY_SUPPORT_ROW_GAP
+  };
   const supportNodes = nodes
     .filter(
       (node) =>
-        node.kind === "resource" &&
+        (node.kind === "resource" || node.id.startsWith("repository-")) &&
+        !protectedTemplateNodeIds.has(node.id) &&
         (!isAreaDiagramNode(node) || node.id.startsWith("repository-")) &&
         node.metadata?.parentAreaNodeId == null &&
         !isRepositoryBrowserNode(node) &&
@@ -2775,15 +2824,14 @@ function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): D
     const slotKey = `${slot.column}:${slot.row}`;
     const stackIndex = slotCounts.get(slotKey) ?? 0;
     const isAreaSupportRow = slot.row === 2;
-    const rowBaseX =
-      slot.row === 1 ? REPOSITORY_SUPPORT_ORIGIN.x + 220 : REPOSITORY_SUPPORT_ORIGIN.x;
-    const rowColumnGap = isAreaSupportRow ? 520 : slot.row === 1 ? 132 : REPOSITORY_SUPPORT_COLUMN_GAP;
-    const visualColumn = slot.row === 1 ? slot.column % 3 : slot.column;
-    const visualRowOffset = slot.row === 1 ? Math.floor(slot.column / 3) * REPOSITORY_SUPPORT_STACK_GAP : 0;
+    const rowBaseX = supportOrigin.x;
+    const rowColumnGap = isAreaSupportRow ? 300 : REPOSITORY_SUPPORT_COLUMN_GAP;
+    const visualColumn = slot.column % 3;
+    const visualRowOffset = Math.floor(slot.column / 3) * REPOSITORY_SUPPORT_STACK_GAP;
     const nextPosition = {
       x: rowBaseX + visualColumn * rowColumnGap,
       y:
-        REPOSITORY_SUPPORT_ORIGIN.y +
+        supportOrigin.y +
         slot.row * REPOSITORY_SUPPORT_ROW_GAP +
         visualRowOffset +
         stackIndex * REPOSITORY_SUPPORT_STACK_GAP
@@ -2806,8 +2854,8 @@ function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): D
     moveNodeSubtree(
       githubActionsNode.id,
       {
-        x: REPOSITORY_GITHUB_ACTIONS_POSITION.x - githubActionsNode.position.x,
-        y: REPOSITORY_GITHUB_ACTIONS_POSITION.y - githubActionsNode.position.y
+        x: githubActionsPosition.x - githubActionsNode.position.x,
+        y: githubActionsPosition.y - githubActionsNode.position.y
       },
       nodeById
     );
@@ -2821,8 +2869,8 @@ function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): D
     moveNodeSubtree(
       browserNode.id,
       {
-        x: REPOSITORY_BROWSER_POSITION.x - browserNode.position.x,
-        y: REPOSITORY_BROWSER_POSITION.y - browserNode.position.y
+        x: browserPosition.x - browserNode.position.x,
+        y: browserPosition.y - browserNode.position.y
       },
       nodeById
     );
@@ -2893,6 +2941,36 @@ function getRepositorySupportLayoutSlot(node: DiagramNode): ReadableLayoutSlot {
   }
 
   return { column: 3, row: 0 };
+}
+
+function getNodeSetBounds(nodes: readonly DiagramNode[]): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} | null {
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const node of nodes) {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + node.size.width);
+    maxY = Math.max(maxY, node.position.y + node.size.height);
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY
+  };
 }
 
 function applyRepositoryGeneratedVpcLayout(nodes: readonly DiagramNode[]): DiagramNode[] {

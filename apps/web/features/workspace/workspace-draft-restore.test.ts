@@ -78,7 +78,7 @@ test("workspace restore removes legacy automatic parameter-reference edges but k
   assert.deepEqual(restoreSavedDiagram(savedDiagram, fallbackDiagram).edges, [savedDiagram.edges[0]]);
 });
 
-test("workspace restore reflows saved repository-generated ECS frontend diagrams", () => {
+test("workspace restore sanitizes saved repository-generated ECS frontend diagrams without moving nodes", () => {
   const savedDiagram: DiagramJson = {
     edges: [
       {
@@ -199,9 +199,11 @@ test("workspace restore reflows saved repository-generated ECS frontend diagrams
     "repository-private-app-subnet-a"
   );
   assert.ok(
-    (nodeById.get("fixed-template-ecs-fargate-container-app-vpc")?.position.x ?? 0) >
-      (nodeById.get("repository-web-assets")?.position.x ?? Number.POSITIVE_INFINITY)
+    (nodeById.get("fixed-template-ecs-fargate-container-app-vpc")?.position.x ?? 0) <
+      (nodeById.get("repository-web-assets")?.position.x ?? Number.NEGATIVE_INFINITY)
   );
+  assert.deepEqual(nodeById.get("repository-browser")?.position, { x: 40, y: 680 });
+  assert.deepEqual(nodeById.get("repository-cloudfront")?.position, { x: 340, y: 140 });
 });
 
 function diagramNode(

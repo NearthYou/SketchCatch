@@ -2917,6 +2917,14 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   const albSecurityGroup = nodeById.get(`fixed-template-${templateId}-alb-security-group`);
   const taskSecurityGroup = nodeById.get(`fixed-template-${templateId}-task-security-group`);
   const bounds = getDiagramBounds(diagramJson.nodes);
+  const templateBounds = getNodeGroupBounds(
+    diagramJson.nodes.filter((node) => node.id.startsWith(`fixed-template-${templateId}-`))
+  );
+  const repositorySupportNodes = diagramJson.nodes.filter((node) =>
+    node.id.startsWith("repository-") &&
+    node.id !== "repository-browser" &&
+    node.id !== "repository-github-actions"
+  );
 
   assert.equal(diagramJson.nodes.some((node) => node.id.includes("-presentation-")), true);
   assert.equal(nodeById.has("repository-managed-services"), false);
@@ -2958,7 +2966,18 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   assert.deepEqual(publicSubnetB.position, authoredNodeById.get(`template-${templateId}-subnet-b`)?.position);
   assert.equal(albSecurityGroup.metadata?.parentAreaNodeId, vpc.id);
   assert.equal(taskSecurityGroup.metadata?.parentAreaNodeId, `fixed-template-${templateId}-cluster`);
-  assert.ok(bounds.width <= 2900, `bounds width ${bounds.width}`);
+  assert.ok(repositorySupportNodes.length > 0);
+  assert.ok(templateBounds);
+  for (const supportNode of repositorySupportNodes) {
+    assert.ok(
+      supportNode.position.x + supportNode.size.width <= templateBounds.x - 120,
+      `${supportNode.id} should stay in the support lane left of the selected Template`
+    );
+    assertNoNodeOverlap(supportNode, vpc);
+  }
+  assert.ok(cloudFront.position.y === webAssets.position.y);
+  assert.ok(nodeById.get("repository-ecr")!.position.y > cloudFront.position.y);
+  assert.ok(bounds.width <= 3200, `bounds width ${bounds.width}`);
   assert.ok(bounds.height <= 1200);
   assert.ok(service && runtime);
   assert.equal(runtime.metadata?.parentAreaNodeId, undefined);
@@ -3722,6 +3741,39 @@ function getDiagramBounds(nodes: readonly DiagramNode[]): { width: number; heigh
   return {
     height: bounds.maxY - bounds.minY,
     width: bounds.maxX - bounds.minX
+  };
+}
+
+function getNodeGroupBounds(nodes: readonly DiagramNode[]): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} | null {
+  if (nodes.length === 0) {
+    return null;
+  }
+
+  const bounds = nodes.reduce(
+    (currentBounds, node) => ({
+      maxX: Math.max(currentBounds.maxX, node.position.x + node.size.width),
+      maxY: Math.max(currentBounds.maxY, node.position.y + node.size.height),
+      minX: Math.min(currentBounds.minX, node.position.x),
+      minY: Math.min(currentBounds.minY, node.position.y)
+    }),
+    {
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY
+    }
+  );
+
+  return {
+    height: bounds.maxY - bounds.minY,
+    width: bounds.maxX - bounds.minX,
+    x: bounds.minX,
+    y: bounds.minY
   };
 }
 
