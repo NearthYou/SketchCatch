@@ -183,6 +183,7 @@ export function createGitCicdPipelineRunService(options: {
       );
       const refreshed: PipelineRunWithStages[] = [];
       let latestApplicableCommitSha: string | null = null;
+      let projectRuns: PipelineRunWithStages[] | null = null;
       for (const snapshot of relevantSnapshots) {
         const existingRun = existingRuns.get(snapshot.commitSha);
         const changeScope =
@@ -205,7 +206,8 @@ export function createGitCicdPipelineRunService(options: {
           if (!isReleaseVerificationError(error) || snapshot.commitSha === latestApplicableCommitSha) {
             throw error;
           }
-          const persisted = (await options.repository.listProjectPipelineRuns(target.projectId)).find(
+          projectRuns ??= await options.repository.listProjectPipelineRuns(target.projectId);
+          const persisted = projectRuns.find(
             (run) =>
               run.sourceRepositoryId === target.sourceRepositoryId &&
               run.commitSha === snapshot.commitSha

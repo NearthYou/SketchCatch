@@ -1558,11 +1558,7 @@ jobs:
               exit 1
             }
           else
-            cat > sketchcatch-backend.tf <<'EOF'
-          terraform {
-            backend "s3" {}
-          }
-          EOF
+            echo 'terraform { backend "s3" {} }' > sketchcatch-backend.tf
           fi
       - run: terraform init -backend-config=backend.auto.tfbackend
       - run: terraform validate
@@ -1605,11 +1601,7 @@ jobs:
               exit 1
             }
           else
-            cat > sketchcatch-backend.tf <<'EOF'
-          terraform {
-            backend "s3" {}
-          }
-          EOF
+            echo 'terraform { backend "s3" {} }' > sketchcatch-backend.tf
           fi
       - run: terraform init -backend-config=backend.auto.tfbackend
       - run: terraform apply -auto-approve tfplan
@@ -1826,11 +1818,7 @@ jobs:
               exit 1
             }
           else
-            cat > sketchcatch-backend.tf <<'EOF'
-          terraform {
-            backend "s3" {}
-          }
-          EOF
+            echo 'terraform { backend "s3" {} }' > sketchcatch-backend.tf
           fi
       - run: terraform init -backend-config=backend.auto.tfbackend
       - run: terraform destroy -auto-approve

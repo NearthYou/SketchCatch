@@ -244,7 +244,7 @@ test("an obsolete release verification failure does not make a newer verified re
   const provider: GitCicdRunProvider = {
     listCommitFiles: async () => ["apps/web/page.tsx"],
     listSnapshots: async () =>
-      ["newest", "obsolete"].map((commitSha, index) => ({
+      ["newest", "obsolete", "obsolete-2"].map((commitSha, index) => ({
         commitSha,
         commitMessage: commitSha,
         branch: "main",
@@ -266,7 +266,7 @@ test("an obsolete release verification failure does not make a newer verified re
     createId: sequentialIds(),
     releaseReconciler: {
       async reconcile(input) {
-        if (input.commitSha === "obsolete") {
+        if (input.commitSha.startsWith("obsolete")) {
           throw new EcsGitOpsReleaseVerificationError("obsolete output URL");
         }
         return {
@@ -302,7 +302,11 @@ test("an obsolete release verification failure does not make a newer verified re
   assert.equal(result.stale, false);
   assert.equal(result.errorMessage, null);
   assert.equal(result.runs.find((run) => run.commitSha === "newest")?.release?.id, "release-newest");
-  assert.deepEqual(new Set(repository.runs.map((run) => run.commitSha)), new Set(["newest", "obsolete"]));
+  assert.deepEqual(
+    new Set(repository.runs.map((run) => run.commitSha)),
+    new Set(["newest", "obsolete", "obsolete-2"])
+  );
+  assert.equal(repository.projectRunListCalls.value, 1);
 });
 
 test("refresh rejects malformed and non-HTTP accepted handoff URLs", async () => {
@@ -686,6 +690,7 @@ function createMemoryRepository() {
     stages: [] as PersistedPipelineStage[],
     logs: [] as PersistedPipelineLog[],
     existingLookupCalls: { value: 0 },
+    projectRunListCalls: { value: 0 },
     listRequests: [] as unknown[],
     refreshTargetEnabled: { value: true },
     target: {
@@ -721,6 +726,7 @@ function createMemoryRepository() {
         ? { ...state.target, commitSha: state.runs[0]!.commitSha }
         : undefined,
     listProjectPipelineRuns: async (...args: unknown[]) => {
+      state.projectRunListCalls.value += 1;
       state.listRequests.push(args[0]);
       return state.runs.map((run) => ({
         ...run,
