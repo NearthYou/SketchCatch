@@ -113,6 +113,17 @@ test("signup keeps reserved feedback slots without oversized vertical gaps", () 
   assert.match(authStylesSource, /\.authSignupForm\s*\{[^}]*gap:\s*8px;/s);
 });
 
+test("signup availability controls stay compact on mobile", () => {
+  assert.match(
+    authStylesSource,
+    /\.authInlineControl\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s
+  );
+  assert.doesNotMatch(
+    authStylesSource,
+    /@media \(max-width: 639px\)[\s\S]*\.authInlineControl\s*\{[^}]*grid-template-columns:\s*1fr;/s
+  );
+});
+
 test("signup feedback falls back when a warning helper returns an empty string", () => {
   assert.match(
     signupFormSource,
