@@ -28,7 +28,6 @@ type BoardTemplateMetadata = {
   readonly title: string;
   readonly description: string;
   readonly tags: readonly string[];
-  readonly sourceUrl?: string | undefined;
   readonly thumbnailSrc?: string | undefined;
 };
 
@@ -726,25 +725,19 @@ const repositoryBoardTemplates: readonly AvailableBoardTemplate[] = templateDefi
   })
 );
 
-const brainboardBoardTemplates: readonly BoardTemplate[] = brainboardTemplateRegistry.map(
-  (entry): BoardTemplate => {
-    const evidence = entry.status === "available" ? entry.source : entry.evidence;
+const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTemplateRegistry
+  .filter((entry): entry is Extract<(typeof brainboardTemplateRegistry)[number], { status: "available" }> =>
+    entry.status === "available"
+  )
+  .map((entry) => {
+    const evidence = entry.source;
     const metadata = {
-      description: `Brainboard 원본 · ${evidence.origin.author} · 다운로드 ${evidence.origin.downloads.toLocaleString("en-US")}회`,
+      description: "AWS 인프라 구성 예시입니다.",
       id: entry.id,
-      sourceUrl: evidence.origin.sourceUrl,
-      tags: ["AWS", "Brainboard"],
+      tags: ["AWS"],
       thumbnailSrc: getBrainboardTemplateThumbnailAsset(entry.id).src,
       title: evidence.title
     } as const;
-
-    if (entry.status === "unavailable") {
-      return {
-        ...metadata,
-        availability: "unavailable",
-        unavailableReason: "Brainboard 원본을 안정적으로 가져오지 못해 미리보기만 제공합니다."
-      };
-    }
 
     const adapted = adaptBrainboardTemplateSource(entry.source);
     return {
@@ -753,8 +746,7 @@ const brainboardBoardTemplates: readonly BoardTemplate[] = brainboardTemplateReg
       diagramJson: adapted.diagramJson,
       terraformFiles: adapted.terraformFiles
     };
-  }
-);
+  });
 
 const boardTemplates: readonly BoardTemplate[] = [
   ...repositoryBoardTemplates,
