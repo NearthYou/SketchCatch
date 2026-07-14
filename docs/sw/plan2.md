@@ -242,6 +242,7 @@
 - Issue title: `Test: 프로젝트 배포 운영 샌드박스 E2E와 cleanup 검증`
 - GitHub issue: [#378](https://github.com/NearthYou/SketchCatch/issues/378)
 - Branch: `test/sw/378-deployment-sandbox-e2e`
+- Implementation status: `구현 완료 / 실환경 인수 대기`. The three-stage runner, runtime contracts, logs, release reconciliation, rollback/cleanup safeguards, and UI wiring are implemented; the unchecked criteria below require a separately approved real sandbox run.
 - PR title: `Test: 프로젝트 배포 운영 샌드박스 E2E와 cleanup 검증`
 - Blocked by: #370~#377
 - User story: 운영자는 승인된 non-production sandbox에서 전체 흐름이 실제로 동작하고 비용을 남기지 않도록 cleanup됐다는 증거를 확인한다.
