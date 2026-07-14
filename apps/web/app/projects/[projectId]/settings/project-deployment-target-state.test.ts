@@ -61,3 +61,45 @@ test("ECS defaults are immediately saveable without a fabricated output URL", ()
   assert.equal(request.runtimeConfig?.outputUrl, null);
   assert.equal(request.confirmedBuildConfig.healthCheckPath, "/");
 });
+
+test("callback preference replaces an existing non-ECS target with complete ECS defaults", () => {
+  const draft = createDeploymentTargetDraft(
+    {
+      projectId: "project-1",
+      provider: "aws",
+      connectionId: verifiedConnection.id,
+      region: verifiedConnection.region,
+      runtimeTargetKind: "lambda",
+      confirmedBuildConfig: null,
+      runtimeConfig: {
+        runtimeTargetKind: "lambda",
+        functionLogicalId: "ApiFunction",
+        functionName: "old-function",
+        aliasName: "live",
+        codeDeployApplicationName: "old-app",
+        codeDeployDeploymentGroupName: "old-group",
+        outputUrl: "https://old.example.com"
+      },
+      rolloutStrategy: "all_at_once",
+      createdAt: "2026-07-15T00:00:00.000Z",
+      updatedAt: "2026-07-15T00:00:00.000Z"
+    },
+    [verifiedConnection],
+    null,
+    {
+      projectName: "Audience Live Check",
+      repositoryRevision: "a".repeat(40),
+      sourceRoot: "apps/api",
+      dockerfilePath: "apps/api/Dockerfile"
+    },
+    "prefer_ecs_defaults"
+  );
+
+  assert.equal(draft.runtimeTargetKind, "ecs_fargate");
+  assert.equal(draft.codeBuildProjectName, "audience-live-check-app-build");
+  assert.equal(draft.ecrRepositoryName, "audience-live-check-app");
+  assert.equal(draft.clusterName, "audience-live-check-cluster");
+  assert.equal(draft.serviceName, "audience-live-check-service");
+  assert.equal(draft.containerName, "web");
+  assert.equal(draft.outputUrl, "");
+});

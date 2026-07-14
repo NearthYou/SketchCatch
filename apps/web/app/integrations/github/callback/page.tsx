@@ -13,13 +13,13 @@ import {
 import { getApiErrorMessage } from "../../../../lib/api-client";
 import { ProjectCicdMonitoringSettingsClient } from "../../../projects/[projectId]/settings/project-cicd-monitoring-settings-client";
 import { ProjectDeploymentTargetSettingsClient } from "../../../projects/[projectId]/settings/project-deployment-target-settings-client";
-import type { EcsFargateDeploymentDefaultsInput } from "../../../projects/[projectId]/settings/project-deployment-target-state";
 import {
   readRepositoryAnalysisResume,
   type RepositoryAnalysisResumeState
 } from "../../../workspace/repository/repository-analysis-resume";
 import {
   canResumeRepositoryAnalysis,
+  createCallbackEcsDefaults,
   selectCallbackTarget
 } from "./github-callback-state";
 import styles from "./github-callback.module.css";
@@ -217,6 +217,7 @@ export default function GitHubIntegrationCallbackPage() {
                 ecsDefaults={ecsDefaults}
                 onDirty={() => setDeploymentTargetSaved(false)}
                 onSaved={() => setDeploymentTargetSaved(true)}
+                preferEcsDefaults
                 projectId={callbackState.projectId}
               />
               <ProjectCicdMonitoringSettingsClient
@@ -243,36 +244,6 @@ function getCallbackErrorMessage(error: unknown): string {
   }
 
   return getApiErrorMessage(error, "분석한 Repository를 연결하지 못했습니다.");
-}
-
-function createCallbackEcsDefaults(
-  resume: RepositoryAnalysisResumeState
-): EcsFargateDeploymentDefaultsInput | null {
-  if (resume.selectedTemplateId !== "ecs-fargate-container-app") return null;
-
-  const dockerfileEvidence = resume.publicAnalysis.aiHandoff?.evidence.filter(
-    (evidence) => evidence.kind === "dockerfile"
-  ) ?? [];
-  const dockerfile = dockerfileEvidence.length === 1 ? dockerfileEvidence[0] : null;
-  const fallbackDockerfilePath = resume.publicAnalysis.evidenceFiles.find(
-    (evidence) => evidence.found && /(?:^|\/)Dockerfile$/iu.test(evidence.path)
-  )?.path;
-  const dockerfilePath = dockerfile?.path ?? fallbackDockerfilePath ?? "Dockerfile";
-  const applicationUnit = dockerfile
-    ? resume.publicAnalysis.aiHandoff?.applicationUnits.find(
-        (unit) => unit.id === dockerfile.applicationUnitId
-      )
-    : null;
-  const pathSeparator = dockerfilePath.lastIndexOf("/");
-  const sourceRoot = applicationUnit?.rootPath ||
-    (pathSeparator === -1 ? "." : dockerfilePath.slice(0, pathSeparator));
-
-  return {
-    projectName: resume.projectName,
-    repositoryRevision: resume.publicAnalysis.repositoryRevision,
-    sourceRoot,
-    dockerfilePath
-  };
 }
 
 function createCallbackMonitoringDefaults(

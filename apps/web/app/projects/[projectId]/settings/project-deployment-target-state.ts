@@ -74,13 +74,17 @@ export function createDeploymentTargetDraft(
   target: ProjectDeploymentTarget | null,
   connections: readonly AwsConnection[],
   sourceRepository?: SourceRepository | null,
-  ecsDefaultsInput?: EcsFargateDeploymentDefaultsInput | null
+  ecsDefaultsInput?: EcsFargateDeploymentDefaultsInput | null,
+  mode: "preserve_target" | "prefer_ecs_defaults" = "preserve_target"
 ): ProjectDeploymentTargetDraft {
-  const ecsDefaults = target ? null : ecsDefaultsInput
+  const ecsDefaults = (!target || mode === "prefer_ecs_defaults") && ecsDefaultsInput
     ? createEcsFargateDeploymentDefaults(ecsDefaultsInput)
     : null;
-  const runtimeTargetKind = target?.runtimeTargetKind ?? ecsDefaults?.runtimeTargetKind ?? "ecs_fargate";
-  const config = target?.confirmedBuildConfig;
+  const preferEcsDefaults = mode === "prefer_ecs_defaults" && ecsDefaults !== null;
+  const runtimeTargetKind = preferEcsDefaults
+    ? "ecs_fargate"
+    : target?.runtimeTargetKind ?? ecsDefaults?.runtimeTargetKind ?? "ecs_fargate";
+  const config = preferEcsDefaults ? null : target?.confirmedBuildConfig;
   const ecsConfig = target?.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
     ? target.runtimeConfig
     : null;
@@ -93,7 +97,24 @@ export function createDeploymentTargetDraft(
   const staticConfig = target?.runtimeConfig?.runtimeTargetKind === "static_site"
     ? target.runtimeConfig
     : null;
-  const suggestion = target ? null : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  const suggestion = target || preferEcsDefaults
+    ? null
+    : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  const codeBuildProjectName = preferEcsDefaults
+    ? ecsConfig?.codeBuildProjectName.trim() || ecsDefaults.codeBuildProjectName
+    : target?.runtimeConfig?.codeBuildProjectName ?? ecsDefaults?.codeBuildProjectName ?? "";
+  const ecrRepositoryName = preferEcsDefaults
+    ? ecsConfig?.ecrRepositoryName.trim() || ecsDefaults.ecrRepositoryName
+    : ecsConfig?.ecrRepositoryName ?? ecsDefaults?.ecrRepositoryName ?? "";
+  const clusterName = preferEcsDefaults
+    ? ecsConfig?.clusterName.trim() || ecsDefaults.clusterName
+    : ecsConfig?.clusterName ?? ecsDefaults?.clusterName ?? "";
+  const serviceName = preferEcsDefaults
+    ? ecsConfig?.serviceName.trim() || ecsDefaults.serviceName
+    : ecsConfig?.serviceName ?? ecsDefaults?.serviceName ?? "";
+  const containerName = preferEcsDefaults
+    ? ecsConfig?.containerName.trim() || ecsDefaults.containerName
+    : ecsConfig?.containerName ?? ecsDefaults?.containerName ?? "";
   return {
     connectionId:
       target?.connectionId ?? connections.find((item) => item.status === "verified")?.id ?? "",
@@ -108,11 +129,11 @@ export function createDeploymentTargetDraft(
     version: config?.exactSemVerTag ?? config?.manifestVersion ?? "",
     installPreset: config?.installPreset ?? suggestion?.installPreset ?? "none",
     healthCheckPath: config?.healthCheckPath ?? ecsDefaults?.healthCheckPath ?? "/health",
-    codeBuildProjectName: target?.runtimeConfig?.codeBuildProjectName ?? ecsDefaults?.codeBuildProjectName ?? "",
-    ecrRepositoryName: ecsConfig?.ecrRepositoryName ?? ecsDefaults?.ecrRepositoryName ?? "",
-    clusterName: ecsConfig?.clusterName ?? ecsDefaults?.clusterName ?? "",
-    serviceName: ecsConfig?.serviceName ?? ecsDefaults?.serviceName ?? "",
-    containerName: ecsConfig?.containerName ?? ecsDefaults?.containerName ?? "",
+    codeBuildProjectName,
+    ecrRepositoryName,
+    clusterName,
+    serviceName,
+    containerName,
     functionLogicalId: lambdaConfig?.functionLogicalId ?? "",
     functionName: lambdaConfig?.functionName ?? "",
     aliasName: lambdaConfig?.aliasName ?? "",
@@ -128,9 +149,9 @@ export function createDeploymentTargetDraft(
     cloudFrontOriginId: staticConfig?.cloudFrontOriginId ?? "",
     outputUrl:
       ecsConfig?.outputUrl ??
-      lambdaConfig?.outputUrl ??
-      ec2AsgConfig?.outputUrl ??
-      staticConfig?.outputUrl ??
+      (preferEcsDefaults ? null : lambdaConfig?.outputUrl) ??
+      (preferEcsDefaults ? null : ec2AsgConfig?.outputUrl) ??
+      (preferEcsDefaults ? null : staticConfig?.outputUrl) ??
       ecsDefaults?.outputUrl ?? "",
     evidenceSuggested: Boolean(ecsDefaults || suggestion)
   };

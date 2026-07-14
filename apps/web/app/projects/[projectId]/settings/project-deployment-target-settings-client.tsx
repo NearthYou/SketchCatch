@@ -39,12 +39,14 @@ export function ProjectDeploymentTargetSettingsClient({
   projectId,
   ecsDefaults = null,
   onDirty,
-  onSaved
+  onSaved,
+  preferEcsDefaults = false
 }: {
   readonly projectId: string;
   readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
   readonly onDirty?: (() => void) | undefined;
   readonly onSaved?: (() => void) | undefined;
+  readonly preferEcsDefaults?: boolean | undefined;
 }) {
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
@@ -108,7 +110,8 @@ export function ProjectDeploymentTargetSettingsClient({
             nextTarget,
             nextConnections,
             nextSourceRepository,
-            nextEcsDefaults
+            nextEcsDefaults,
+            preferEcsDefaults ? "prefer_ecs_defaults" : "preserve_target"
           )
         );
         setRequestState("idle");
@@ -129,6 +132,7 @@ export function ProjectDeploymentTargetSettingsClient({
     ecsDefaultsProjectName,
     ecsDefaultsRepositoryRevision,
     ecsDefaultsSourceRoot,
+    preferEcsDefaults,
     projectId
   ]);
 

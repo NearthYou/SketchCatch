@@ -4,8 +4,10 @@ import type { GitHubProjectConnectionTarget, GitHubRepositoryCandidate } from "@
 
 import {
   canResumeRepositoryAnalysis,
+  createCallbackEcsDefaults,
   selectCallbackTarget
 } from "./github-callback-state.js";
+import type { RepositoryAnalysisResumeState } from "../../../workspace/repository/repository-analysis-resume.js";
 
 function candidate(fullName: string): GitHubRepositoryCandidate {
   const [owner = "", name = ""] = fullName.split("/");
@@ -44,4 +46,37 @@ test("callback target selection never falls back to another Repository", () => {
 
   assert.equal(selectCallbackTarget([candidate("owner/other")], target), null);
   assert.equal(selectCallbackTarget([candidate("Owner/Repo")], target)?.fullName, "Owner/Repo");
+});
+
+test("callback creates ECS defaults even when another architecture was selected", () => {
+  const resume: RepositoryAnalysisResumeState = {
+    schemaVersion: 1,
+    resumeKey: "resume-12345678",
+    createdAt: "2026-07-15T00:00:00.000Z",
+    projectId: "project-1",
+    projectName: "Audience Live Check",
+    repositoryUrl: "https://github.com/example/audience-live-check",
+    defaultBranch: "main",
+    publicAnalysis: {
+      repositoryUrl: "https://github.com/example/audience-live-check",
+      repositoryRevision: "a".repeat(40),
+      defaultBranch: "main",
+      availableBranches: ["main"],
+      evidenceFiles: [{ path: "apps/api/Dockerfile", found: true }],
+      detectedSignals: ["Container"],
+      recommendedTemplateId: "ecs-fargate-container-app",
+      recommendationReason: "Dockerfile"
+    },
+    selectedTemplateId: "three-tier-web-app",
+    deploymentType: "container",
+    answers: {},
+    stage: "configuration"
+  };
+
+  assert.deepEqual(createCallbackEcsDefaults(resume), {
+    projectName: "Audience Live Check",
+    repositoryRevision: "a".repeat(40),
+    sourceRoot: "apps/api",
+    dockerfilePath: "apps/api/Dockerfile"
+  });
 });
