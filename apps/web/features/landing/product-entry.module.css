@@ -210,8 +210,7 @@
 
 .hero {
   position: relative;
-  min-height: 850px;
-  padding: 120px 0 32px;
+  padding: 152px 0 104px;
   overflow: hidden;
   isolation: isolate;
 }
@@ -234,30 +233,6 @@
   text-align: center;
 }
 
-.eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 20px;
-  border-radius: 9999px;
-  padding: 4px 12px;
-  background: #f0f0f3;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
-  color: var(--landing-ink);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.eyebrowDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--landing-success);
-  box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
-}
-
 .hero h1 {
   margin: 0;
   font-size: 64px;
@@ -272,34 +247,6 @@
   color: var(--landing-body);
   font-size: 18px;
   line-height: 1.65;
-}
-
-.heroInputs {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px 16px;
-  margin: 16px 0 0;
-  padding: 0;
-  color: var(--landing-body);
-  font-family: var(--font-code);
-  font-size: 12px;
-  font-weight: 600;
-  list-style: none;
-}
-
-.heroInputs li {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.heroInputs li::before {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--landing-link);
-  content: "";
 }
 
 .heroActions {
@@ -1495,7 +1442,7 @@
   .container { width: min(calc(100% - 32px), 1200px); }
   .siteHeader { top: 8px; width: calc(100% - 32px); min-height: 60px; }
   .desktopAction { display: none; }
-  .hero { min-height: 760px; padding-top: 104px; }
+  .hero { padding: 120px 0 72px; }
   .hero h1 { font-size: 42px; }
   .heroDescription { font-size: 15px; }
   .heroActions { align-items: stretch; flex-direction: column; padding-inline: 16px; }
@@ -1548,7 +1495,7 @@
   .brandMark { width: 12px; height: 18px; }
   .headerActions { gap: 6px; }
   .headerActions .buttonPrimary { padding-inline: 14px; }
-  .hero { min-height: 700px; }
+  .hero { padding-bottom: 64px; }
   .hero h1 { font-size: 38px; }
   .workspaceStage { height: 260px; }
   .workspaceBrand { font-size: 12px; }

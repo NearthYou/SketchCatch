@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { LandingProductSections } from "./landing-product-sections";
 import { LandingWorkflowSection } from "./landing-workflow-section";
-import { LandingWorkspacePreview } from "./landing-workspace-preview";
 import styles from "./product-entry.module.css";
 
 const FLOW_STEPS = [
@@ -84,21 +83,11 @@ export function ProductEntry() {
       <main id="landing-main">
         <section className={styles.hero} id="top" aria-labelledby="hero-title">
           <div className={`${styles.container} ${styles.heroCopy}`}>
-            <p className={styles.eyebrow}>
-              <span className={styles.eyebrowDot} aria-hidden="true" />
-              AWS-first · provider-neutral
-            </p>
             <h1 id="hero-title">SketchCatch</h1>
             <p className={styles.heroDescription}>
               원하는 서비스를 설명하면 배포 전 검토 가능한 설계 구조와 Terraform 초안을 만들고,
               비용과 보안 위험을 미리 확인할 수 있습니다.
             </p>
-            <ul className={styles.heroInputs} aria-label="지원하는 시작 방식">
-              <li>Text</li>
-              <li>Voice</li>
-              <li>Source Repository</li>
-              <li>Existing cloud</li>
-            </ul>
             <div className={styles.heroActions}>
               <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
                 설계 시작
@@ -109,8 +98,6 @@ export function ProductEntry() {
               </a>
             </div>
           </div>
-
-          <LandingWorkspacePreview />
         </section>
 
         <section className={styles.flowStrip} id="workflow" aria-label="SketchCatch 작업 흐름">
