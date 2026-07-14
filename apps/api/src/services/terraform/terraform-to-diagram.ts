@@ -14,6 +14,7 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
+import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
   isGenericTerraformNestedBlock,
@@ -737,7 +738,7 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
           continue;
         }
 
-        if (topLevelBlockType !== "output") {
+        if (!isSilentlyPreservedTerraformBlockType(topLevelBlockType)) {
           diagnostics.push({
             severity: "warning",
             code: "terraform.sync.unsupported_block",

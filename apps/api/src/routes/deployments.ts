@@ -103,6 +103,7 @@ import {
   writeDeploymentLogStreamCursor
 } from "../deployments/deployment-runtime-cache.js";
 import type { RuntimeCache } from "../runtime-cache/index.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 
 type DeploymentRow = DeploymentRecord & {
   readonly currentPlanOperation?: Deployment["currentPlanOperation"];
@@ -190,6 +191,7 @@ type DeploymentRouteOptions = {
     repository: DeploymentRepository
   ) => Promise<RunDeploymentDestroyResult>;
   createLlmExplanation?: CreateLlmExplanation;
+  projectAssetStorage?: ProjectAssetStorage;
   runtimeCache?: RuntimeCache;
 };
 
@@ -886,18 +888,21 @@ export async function registerDeploymentRoutes(
       options,
       getDeploymentDatabaseClient
     );
-    const approveDeploymentPlan =
-      options?.approveDeploymentPlan ?? defaultApproveDeploymentPlan;
+    const approveDeploymentPlan = options?.approveDeploymentPlan;
 
     try {
-      const deployment = await approveDeploymentPlan(
-        {
-          deploymentId: params.deploymentId,
-          accessContext,
-          acknowledgedWarningIds: body.acknowledgedWarningIds
-        },
-        repository
-      );
+      const input = {
+        deploymentId: params.deploymentId,
+        accessContext,
+        acknowledgedWarningIds: body.acknowledgedWarningIds
+      };
+      const deployment = approveDeploymentPlan
+        ? await approveDeploymentPlan(input, repository)
+        : await defaultApproveDeploymentPlan(input, repository, {
+            ...(options?.projectAssetStorage
+              ? { projectAssetStorage: options.projectAssetStorage }
+              : {})
+          });
 
       return reply.status(200).send({
         deployment: await toDeployment(deployment, repository)

@@ -13,7 +13,6 @@ The JSON files under `brainboard-captures/` are immutable inputs. Both CLIs are 
 From the repository root:
 
 ```bash
-node --test scripts/brainboard-capture/*.test.mjs
 node scripts/brainboard-capture/validate-capture.mjs
 node scripts/brainboard-capture/validate-capture.mjs --check-status
 node scripts/brainboard-capture/normalize-capture.mjs

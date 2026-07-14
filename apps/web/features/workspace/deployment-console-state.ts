@@ -54,6 +54,12 @@ export type DirectDeploymentFlow = {
   readonly steps: readonly DirectDeploymentStep[];
 };
 
+export type QueuedApplyPlanInput = {
+  readonly deployment: Pick<Deployment, "currentPlanArtifactId" | "id" | "status"> | null;
+  readonly queuedDeploymentId: string;
+  readonly requestState: RequestState;
+};
+
 const STEP_META: Readonly<
   Record<DirectDeploymentStepId, Pick<DirectDeploymentStep, "description" | "label">>
 > = {
@@ -108,6 +114,16 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
         ? null
         : "승인 snapshot과 실행 대상을 확인하세요."
     )
+  );
+}
+
+export function shouldStartQueuedApplyPlan(input: QueuedApplyPlanInput): boolean {
+  return Boolean(
+    input.deployment &&
+      input.queuedDeploymentId === input.deployment.id &&
+      input.deployment.status === "PENDING" &&
+      !input.deployment.currentPlanArtifactId &&
+      input.requestState === "idle"
   );
 }
 

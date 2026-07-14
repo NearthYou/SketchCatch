@@ -2985,6 +2985,18 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  areaAutoSizeBaseline?:
+    | {
+        position: {
+          x: number;
+          y: number;
+        };
+        size: {
+          width: number;
+          height: number;
+        };
+      }
+    | undefined;
   /** Limits a resource's area-frame rendering to an authored presentation, not every catalog use. */
   presentationArea?: boolean | undefined;
   /** Lets Web materialization reuse an exact Resource Panel item for a parameterless Template Design node. */

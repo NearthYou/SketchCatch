@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -28,6 +28,7 @@ import {
   prepareTerraformWorkspace
 } from "./terraform-workspace.js";
 import { TerraformArtifactSafetyError } from "./terraform-artifact-safety.js";
+import { createFilesystemProjectAssetStorage } from "../projects/filesystem-project-asset-storage.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -341,6 +342,40 @@ test("approveDeploymentPlan stores the approved artifact plan and AWS snapshot",
     status: "PENDING",
     preserveFailureDetails: false
   });
+});
+
+test("approveDeploymentPlan reads local Terraform artifacts from project asset storage", async () => {
+  const repository = new FakeDeploymentRepository();
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "sketchcatch-approval-assets-"));
+  const assetRoot = join(await realpath(temporaryRoot), "project-assets");
+  const projectAssetStorage = createFilesystemProjectAssetStorage({ rootDirectory: assetRoot });
+  const terraformArtifact = repository.terraformArtifact;
+  assert.ok(terraformArtifact);
+
+  try {
+    await projectAssetStorage.putObject({
+      objectKey: terraformArtifact.objectKey,
+      contentType: terraformArtifact.contentType,
+      body: artifactContent
+    });
+
+    const deployment = await approveDeploymentPlan(
+      {
+        deploymentId,
+        accessContext: createAccessContext()
+      },
+      repository,
+      {
+        projectAssetStorage,
+        now: () => fixedNow
+      }
+    );
+
+    assert.equal(deployment.approvedPlanArtifactId, planArtifactId);
+    assert.equal(deployment.approvedTerraformArtifactHash, artifactHash);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 });
 
 test("approveDeploymentPlan accepts the same multi-file artifact used by plan", async () => {

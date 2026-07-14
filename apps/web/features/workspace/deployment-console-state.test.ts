@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   getDirectDeploymentFlow,
+  shouldStartQueuedApplyPlan,
   type DirectDeploymentFlowInput
 } from "./deployment-console-state";
 
@@ -158,4 +159,43 @@ test("destroy uses the same approval and deployment phases", () => {
 
   assert.equal(flow.activeStepId, "approval");
   assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("a queued deployment starts its apply plan after init returns to PENDING", () => {
+  assert.equal(
+    shouldStartQueuedApplyPlan({
+      deployment: {
+        id: "deployment-1",
+        currentPlanArtifactId: null,
+        status: "PENDING"
+      },
+      queuedDeploymentId: "deployment-1",
+      requestState: "idle"
+    }),
+    true
+  );
+  assert.equal(
+    shouldStartQueuedApplyPlan({
+      deployment: {
+        id: "deployment-1",
+        currentPlanArtifactId: "plan-1",
+        status: "PENDING"
+      },
+      queuedDeploymentId: "deployment-1",
+      requestState: "idle"
+    }),
+    false
+  );
+  assert.equal(
+    shouldStartQueuedApplyPlan({
+      deployment: {
+        id: "deployment-1",
+        currentPlanArtifactId: null,
+        status: "RUNNING"
+      },
+      queuedDeploymentId: "deployment-1",
+      requestState: "idle"
+    }),
+    false
+  );
 });

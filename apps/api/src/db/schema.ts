@@ -1021,6 +1021,7 @@ export const notificationOutbox = pgTable(
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    providerStatusCode: integer("provider_status_code"),
     lastErrorCode: varchar("last_error_code", { length: 64 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
@@ -1032,7 +1033,11 @@ export const notificationOutbox = pgTable(
       "notification_outbox_status_check",
       sql`${table.status} in ('pending', 'processing', 'retry', 'delivered', 'dead')`
     ),
-    check("notification_outbox_attempt_count_check", sql`${table.attemptCount} >= 0`)
+    check("notification_outbox_attempt_count_check", sql`${table.attemptCount} >= 0`),
+    check(
+      "notification_outbox_provider_status_code_check",
+      sql`${table.providerStatusCode} is null or ${table.providerStatusCode} between 100 and 599`
+    )
   ]
 );
 

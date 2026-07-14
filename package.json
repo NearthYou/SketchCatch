@@ -13,10 +13,12 @@
     "migration:compatibility:check": "node scripts/check-db-migration-compatibility.mjs",
     "lint": "turbo lint",
     "test:live-observation:redis": "node scripts/test-live-observation-redis.mjs",
+    "test:core": "turbo test",
     "test:sandbox-e2e": "node --test scripts/smoke/deployment-sandbox-e2e.test.mjs",
+    "test:terraform": "terraform -chdir=infra/aws/terraform test",
     "sandbox:e2e": "node scripts/smoke/deployment-sandbox-e2e.mjs",
     "typecheck": "turbo typecheck",
-    "test": "turbo test",
+    "test": "pnpm test:core && pnpm test:sandbox-e2e && pnpm test:terraform",
     "format": "prettier --write .",
     "docker:build": "docker build -f docker/api.Dockerfile -t sketchcatch-api:local . && docker build -f docker/web.Dockerfile -t sketchcatch-web:local . && docker build -f docker/nginx.Dockerfile -t sketchcatch-nginx:local ."
   },

@@ -18,6 +18,13 @@ test("the main board saves the project before opening deployment", () => {
   assert.match(projectBarSource, /저장하고 배포/);
 });
 
+test("save and deploy gives immediate progress feedback in the project bar", () => {
+  assert.match(projectBarSource, /isSaveAndDeployPending/);
+  assert.match(projectBarSource, /aria-busy=\{isSaveAndDeployPending\}/);
+  assert.match(projectBarSource, /저장·배포 준비 중/);
+  assert.match(projectBarSource, /styles\.saveStatusSpinner/);
+});
+
 test("deployment preparation flushes the synchronized draft before artifact creation", () => {
   const syncIndex = rightPanelSource.indexOf("prepareTerraformArtifact()");
   const saveIndex = rightPanelSource.indexOf("context.saveDiagramNow?.()", syncIndex);

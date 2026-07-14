@@ -890,16 +890,6 @@ export function WorkspaceRightPanel({
           </div>
           <button
             className={styles.panelModeTextButton}
-            data-deployment-console-trigger
-            onClick={openDeploymentConsole}
-            title="Open deployment console"
-            type="button"
-          >
-            <Rocket size={14} aria-hidden="true" />
-            <span>Deploy</span>
-          </button>
-          <button
-            className={styles.panelModeTextButton}
             onClick={openLiveObservation}
             title="Live Observation"
             type="button"
