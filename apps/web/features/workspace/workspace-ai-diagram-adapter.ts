@@ -1894,7 +1894,6 @@ function restoreSavedRepositoryGeneratedNodeSemantics(
   return nodes.map((node) => {
     if (
       node.id !== "repository-fargate-runtime" ||
-      node.kind !== "design" ||
       node.type !== "aws_ecs_task_definition"
     ) {
       return node;
@@ -1917,7 +1916,14 @@ function restoreSavedRepositoryGeneratedNodeSemantics(
       label: node.label,
       locked: node.locked,
       metadata: node.metadata,
-      position,
+      parameters: {
+        ...(node.parameters ?? baseNode.parameters!),
+        values: {
+          ...(node.parameters?.values ?? baseNode.parameters?.values ?? {}),
+          sketchcatchReferenceTerraform: true
+        }
+      },
+      position: node.kind === "design" ? position : node.position,
       style: mergeDiagramNodeStyle(baseNode.style, node.style),
       zIndex: node.zIndex
     };

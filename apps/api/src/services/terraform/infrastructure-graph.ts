@@ -52,6 +52,8 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "terraform_resource_type",
   "terraformBlockType",
   "terraform_block_type",
+  "templateId",
+  "template_id",
   "templateResourceId",
   "template_resource_id",
   "tier"

@@ -642,6 +642,9 @@ function createPlanJson(resourceChanges: unknown[]): string {
 }
 
 test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and current pointer", async () => {
+  const planTerraformArtifactContent = `resource "aws_db_instance" "database" {}
+`;
+  const planTerraformArtifactSha256 = createSha256(planTerraformArtifactContent);
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
     scope: "full_stack",
@@ -668,7 +671,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     {
       generatePlanArtifactId: () => planArtifactId,
       planArtifactStorage,
-      readTerraformArtifactFile: async () => terraformArtifactContent,
+      readTerraformArtifactFile: async () => planTerraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
       prepareApplicationArtifact: async () => {
         runnerStages.push("application-artifact");
@@ -713,7 +716,8 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
         return createRunnerResult("show", {
           stdout: createPlanJson([
             {
-              address: "aws_s3_bucket.example",
+              address: "aws_db_instance.database",
+              type: "aws_db_instance",
               change: {
                 actions: ["create"]
               }
@@ -735,7 +739,18 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     deleteCount: 0,
     replaceCount: 0,
     blocked: false,
-    warnings: []
+    warnings: [
+      {
+        id: "terraform_plan:UNSUPPORTED_RESOURCE:apply:aws_db_instance",
+        level: "high",
+        category: "configuration",
+        source: "terraform_plan",
+        code: "UNSUPPORTED_RESOURCE",
+        message: "MVP live apply does not support Terraform resource type aws_db_instance",
+        requiresAcknowledgement: false,
+        blocksApproval: false
+      }
+    ]
   });
   assert.equal(result.deployment.isBlocked, false);
   assert.equal(result.deployment.blockedBy, null);
@@ -752,7 +767,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     id: planArtifactId,
     deploymentId,
     terraformArtifactId,
-    terraformArtifactSha256,
+    terraformArtifactSha256: planTerraformArtifactSha256,
     operation: "apply",
     objectKey: `deployments/${deploymentId}/plans/${planArtifactId}.tfplan`,
     sha256: "0".repeat(64),

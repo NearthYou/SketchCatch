@@ -283,6 +283,10 @@ test("workspace restore repairs selected Template semantics without moving saved
     nodeById.get("repository-fargate-runtime")?.parameters?.resourceType,
     "aws_ecs_task_definition"
   );
+  assert.equal(
+    nodeById.get("repository-fargate-runtime")?.parameters?.values.sketchcatchReferenceTerraform,
+    true
+  );
   assert.ok(
     nodeById
       .get("repository-fargate-runtime")
