@@ -32,11 +32,9 @@ export function LandingWorkflowSection() {
       <div className={styles.container}>
         <header className={styles.sectionHeading}>
           <p className={styles.sectionKicker}>One continuous workspace</p>
-          <h2 id="workspace-title">설계와 코드와 배포가<br />따로 놀지 않도록.</h2>
+          <h2 id="workspace-title">설계에서 배포까지,<br />하나의 흐름으로.</h2>
           <p>
-            Architecture Board에서 바꾼 구조는 IaC Preview로 이어지고, Check Finding은 어떤
-            Resource가 문제인지 다시 보드를 가리킵니다. 사용자는 창을 옮겨 다니지 않고 같은
-            프로젝트 안에서 판단할 수 있습니다.
+            아키텍처 설계와 수정, 배포를 한 프로젝트 안에서 이어가세요.
           </p>
         </header>
 
