@@ -48,7 +48,7 @@ test("findInnermostAreaDropTarget selects the innermost Area without Terraform r
   );
 });
 
-test("findInnermostAreaDropTarget excludes Area nodes from Resource placement feedback", () => {
+test("findInnermostAreaDropTarget highlights a fully contained Area parent", () => {
   const region = makeDesignNode({
     id: "region-1",
     type: "design_region",
@@ -62,7 +62,45 @@ test("findInnermostAreaDropTarget excludes Area nodes from Resource placement fe
     size: { width: 240, height: 180 }
   });
 
-  assert.equal(findInnermostAreaDropTarget(autoscalingGroup, [region, autoscalingGroup]), null);
+  assert.equal(
+    findInnermostAreaDropTarget(autoscalingGroup, [region, autoscalingGroup])?.id,
+    region.id
+  );
+});
+
+test("findInnermostAreaDropTarget rejects partially overlapping Area parents", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 300, height: 220 }
+  });
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceType: "aws_vpc",
+    position: { x: 240, y: 160 },
+    size: { width: 120, height: 100 }
+  });
+
+  assert.equal(findInnermostAreaDropTarget(vpc, [region, vpc]), null);
+});
+
+test("findInnermostAreaDropTarget rejects a dragged Area descendant as its parent", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 100, y: 80 },
+    size: { width: 200, height: 140 }
+  });
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    metadata: { parentAreaNodeId: region.id },
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 360 }
+  });
+
+  assert.equal(findInnermostAreaDropTarget(region, [region, vpc]), null);
 });
 
 test("isAreaNode matches Region, Availability Zone, Group, and resource area nodes", () => {
@@ -324,6 +362,7 @@ function makeResourceNode({
   id,
   iconUrl,
   label,
+  metadata,
   position = { x: 0, y: 0 },
   resourceName,
   resourceType,
@@ -334,6 +373,7 @@ function makeResourceNode({
   id?: string;
   iconUrl?: string;
   label?: string;
+  metadata?: DiagramNode["metadata"];
   position?: DiagramNode["position"];
   resourceName?: string;
   resourceType: string;
@@ -348,6 +388,7 @@ function makeResourceNode({
     position,
     size,
     label: label ?? resourceType,
+    metadata,
     ...(iconUrl ? { iconUrl } : {}),
     locked: false,
     zIndex,

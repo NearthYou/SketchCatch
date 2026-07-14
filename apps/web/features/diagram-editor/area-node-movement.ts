@@ -1,5 +1,10 @@
 import type { DiagramNode } from "../../../../packages/types/src";
-import { findInnermostAreaNodeAtPoint, isAreaNode } from "./area-nodes";
+import {
+  findInnermostAreaDropTarget,
+  findInnermostAreaNodeAtPoint,
+  isAreaNode,
+  isNodeContainedByArea
+} from "./area-nodes";
 
 const AREA_CHILD_HORIZONTAL_PADDING = 12;
 const AREA_CHILD_TOP_PADDING = 28;
@@ -109,10 +114,9 @@ export function applyAreaNodeParentAssignments(
       return node;
     }
 
-    const parentArea = findInnermostContainingAreaNode(
+    const parentArea = findInnermostAreaDropTarget(
       node,
       currentNodes,
-      currentNodeById,
       getIgnoredMovedAreaParentIds(node, currentNodeById, directlyMovedAreaNodeIds)
     );
 
@@ -158,7 +162,7 @@ export function clearOutOfBoundsAreaParentAssignments(
 
     const parentAreaNode = currentNodeById.get(parentAreaNodeId);
 
-    if (parentAreaNode && isAreaNode(parentAreaNode) && containsNodeForParentAssignment(parentAreaNode, node)) {
+    if (parentAreaNode && isAreaNode(parentAreaNode) && isNodeContainedByArea(parentAreaNode, node)) {
       return node;
     }
 
@@ -250,33 +254,6 @@ function findClosestMovingParentArea(
   return undefined;
 }
 
-function findInnermostContainingAreaNode(
-  node: DiagramNode,
-  nodes: readonly DiagramNode[],
-  nodeById: ReadonlyMap<string, DiagramNode>,
-  ignoredAreaNodeIds: ReadonlySet<string> = new Set()
-): DiagramNode | undefined {
-  let innermostArea: DiagramNode | undefined;
-
-  for (const areaNode of nodes) {
-    if (
-      areaNode.id === node.id ||
-      ignoredAreaNodeIds.has(areaNode.id) ||
-      !isAreaNode(areaNode) ||
-      isNodeDescendantOf(areaNode, node.id, nodeById) ||
-      !containsNodeForParentAssignment(areaNode, node)
-    ) {
-      continue;
-    }
-
-    if (!innermostArea || compareAreaNodes(areaNode, innermostArea) < 0) {
-      innermostArea = areaNode;
-    }
-  }
-
-  return innermostArea;
-}
-
 function getIgnoredMovedAreaParentIds(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>,
@@ -308,81 +285,6 @@ function getAncestorAreaNodeIds(
   }
 
   return ancestorIds;
-}
-
-function isNodeDescendantOf(
-  node: DiagramNode,
-  ancestorNodeId: string,
-  nodeById: ReadonlyMap<string, DiagramNode>
-): boolean {
-  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
-  const visitedNodeIds = new Set<string>([node.id]);
-
-  while (parentAreaNodeId) {
-    if (parentAreaNodeId === ancestorNodeId) {
-      return true;
-    }
-
-    if (visitedNodeIds.has(parentAreaNodeId)) {
-      return false;
-    }
-
-    visitedNodeIds.add(parentAreaNodeId);
-    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
-  }
-
-  return false;
-}
-
-function compareAreaNodes(left: DiagramNode, right: DiagramNode) {
-  const areaDifference = getNodeArea(left) - getNodeArea(right);
-
-  if (areaDifference !== 0) {
-    return areaDifference;
-  }
-
-  return getNodeZIndex(right) - getNodeZIndex(left);
-}
-
-function containsPoint(node: DiagramNode, point: DiagramNode["position"]) {
-  return (
-    point.x >= node.position.x &&
-    point.x <= node.position.x + node.size.width &&
-    point.y >= node.position.y &&
-    point.y <= node.position.y + node.size.height
-  );
-}
-
-function containsNodeForParentAssignment(parentAreaNode: DiagramNode, childNode: DiagramNode): boolean {
-  if (isAreaNode(childNode)) {
-    return containsNodeBox(parentAreaNode, childNode);
-  }
-
-  return containsPoint(parentAreaNode, getNodeCenter(childNode));
-}
-
-function containsNodeBox(parentAreaNode: DiagramNode, childNode: DiagramNode): boolean {
-  return (
-    childNode.position.x >= parentAreaNode.position.x &&
-    childNode.position.x + childNode.size.width <= parentAreaNode.position.x + parentAreaNode.size.width &&
-    childNode.position.y >= parentAreaNode.position.y &&
-    childNode.position.y + childNode.size.height <= parentAreaNode.position.y + parentAreaNode.size.height
-  );
-}
-
-function getNodeCenter(node: DiagramNode): DiagramNode["position"] {
-  return {
-    x: node.position.x + node.size.width / 2,
-    y: node.position.y + node.size.height / 2
-  };
-}
-
-function getNodeArea(node: DiagramNode) {
-  return Math.max(0, node.size.width) * Math.max(0, node.size.height);
-}
-
-function getNodeZIndex(node: DiagramNode) {
-  return Number.isFinite(node.zIndex) ? node.zIndex : 0;
 }
 
 function isDifferentPosition(

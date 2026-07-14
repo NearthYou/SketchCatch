@@ -41,19 +41,37 @@ export function isAreaNode(node: DiagramNode): boolean {
 
 export function findInnermostAreaDropTarget(
   childNode: DiagramNode,
-  nodes: readonly DiagramNode[]
+  nodes: readonly DiagramNode[],
+  ignoredAreaNodeIds: ReadonlySet<string> = new Set()
 ): DiagramNode | null {
-  if (isAreaNode(childNode)) {
-    return null;
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  let innermostNode: DiagramNode | null = null;
+
+  for (const node of nodes) {
+    if (
+      node.id === childNode.id ||
+      ignoredAreaNodeIds.has(node.id) ||
+      !isAreaNode(node) ||
+      isNodeDescendantOf(node, childNode.id, nodeById) ||
+      !isNodeContainedByArea(node, childNode)
+    ) {
+      continue;
+    }
+
+    if (!innermostNode || compareAreaNodes(node, innermostNode) < 0) {
+      innermostNode = node;
+    }
   }
 
-  return findInnermostAreaNodeAtPoint(
-    nodes.filter((node) => node.id !== childNode.id),
-    {
-      x: childNode.position.x + childNode.size.width / 2,
-      y: childNode.position.y + childNode.size.height / 2
-    }
-  );
+  return innermostNode;
+}
+
+export function isNodeContainedByArea(parentAreaNode: DiagramNode, childNode: DiagramNode): boolean {
+  if (isAreaNode(childNode)) {
+    return containsNodeBox(parentAreaNode, childNode);
+  }
+
+  return containsPoint(parentAreaNode, getNodeCenter(childNode));
 }
 
 export function findInnermostAreaNodeAtPoint(
@@ -146,6 +164,46 @@ function containsPoint(node: DiagramNode, point: DiagramNode["position"]) {
     point.y >= node.position.y &&
     point.y <= node.position.y + node.size.height
   );
+}
+
+function containsNodeBox(parentAreaNode: DiagramNode, childNode: DiagramNode): boolean {
+  return (
+    childNode.position.x >= parentAreaNode.position.x &&
+    childNode.position.x + childNode.size.width <= parentAreaNode.position.x + parentAreaNode.size.width &&
+    childNode.position.y >= parentAreaNode.position.y &&
+    childNode.position.y + childNode.size.height <= parentAreaNode.position.y + parentAreaNode.size.height
+  );
+}
+
+function getNodeCenter(node: DiagramNode): DiagramNode["position"] {
+  return {
+    x: node.position.x + node.size.width / 2,
+    y: node.position.y + node.size.height / 2
+  };
+}
+
+function isNodeDescendantOf(
+  node: DiagramNode,
+  ancestorNodeId: string,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): boolean {
+  let parentAreaNodeId = node.metadata?.parentAreaNodeId;
+  const visitedNodeIds = new Set<string>([node.id]);
+
+  while (parentAreaNodeId) {
+    if (parentAreaNodeId === ancestorNodeId) {
+      return true;
+    }
+
+    if (visitedNodeIds.has(parentAreaNodeId)) {
+      return false;
+    }
+
+    visitedNodeIds.add(parentAreaNodeId);
+    parentAreaNodeId = nodeById.get(parentAreaNodeId)?.metadata?.parentAreaNodeId;
+  }
+
+  return false;
 }
 
 function getNodeArea(node: DiagramNode) {
