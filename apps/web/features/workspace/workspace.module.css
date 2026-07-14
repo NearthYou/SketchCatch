@@ -5840,8 +5840,28 @@
 
 .aiChatStatusBar > div {
   display: grid;
+  flex: 1 1 auto;
   gap: 2px;
   min-width: 0;
+}
+
+.aiChatCancelRequestButton {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.aiChatCancelRequestButton:hover,
+.aiChatCancelRequestButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-text, #171717);
+  outline: none;
 }
 
 .aiChatStatusBar strong {
