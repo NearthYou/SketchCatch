@@ -53,14 +53,17 @@ export type NotificationRepository = {
   listActiveSubscriptions(userId: string): Promise<StoredWebPushSubscription[]>;
   disableSubscription(subscriptionId: string, disabledAt: Date, errorCode: string): Promise<void>;
   claimPending(now: Date, limit: number): Promise<ClaimedNotificationDelivery[]>;
-  markDelivered(outboxId: string, deliveredAt: Date): Promise<void>;
+  markDelivered(outboxId: string, deliveredAt: Date, providerStatusCode: number | null): Promise<void>;
   markRetry(outboxId: string, nextAttemptAt: Date, errorCode: string): Promise<void>;
   markDead(outboxId: string, errorCode: string, failedAt: Date): Promise<void>;
   cleanupExpired(cutoff: Date): Promise<{ notifications: number; subscriptions: number }>;
 };
 
 export type WebPushSender = {
-  send(subscription: WebPushSubscriptionInput, payload: string): Promise<void>;
+  send(
+    subscription: WebPushSubscriptionInput,
+    payload: string
+  ): Promise<{ statusCode: number } | void>;
 };
 
 export class WebPushDeliveryError extends Error {
@@ -189,6 +192,7 @@ export function createDeploymentNotificationService(options: {
           (subscription) => subscription.createdAt.getTime() <= delivery.notification.createdAt.getTime()
         );
         let retryCode: string | null = null;
+        let providerStatusCode: number | null = null;
 
         for (const stored of subscriptions) {
           if (stored.expiresAt && stored.expiresAt.getTime() <= currentTime.getTime()) {
@@ -206,7 +210,7 @@ export function createDeploymentNotificationService(options: {
             continue;
           }
           try {
-            await options.pushSender.send(
+            const pushResult = await options.pushSender.send(
               subscription,
               JSON.stringify({
                 notificationId: delivery.notification.id,
@@ -215,6 +219,15 @@ export function createDeploymentNotificationService(options: {
                 actionUrl: delivery.notification.actionUrl
               })
             );
+            const statusCode = pushResult?.statusCode;
+            if (
+              typeof statusCode === "number" &&
+              Number.isInteger(statusCode) &&
+              statusCode >= 100 &&
+              statusCode <= 599
+            ) {
+              providerStatusCode = statusCode;
+            }
           } catch (error) {
             const statusCode = error instanceof WebPushDeliveryError ? error.statusCode : null;
             const code = statusCode === null ? "push_unknown" : `push_${statusCode}`;
@@ -242,7 +255,11 @@ export function createDeploymentNotificationService(options: {
             result.retried += 1;
           }
         } else {
-          await options.repository.markDelivered(delivery.outboxId, currentTime);
+          await options.repository.markDelivered(
+            delivery.outboxId,
+            currentTime,
+            providerStatusCode
+          );
           result.delivered += 1;
         }
       }

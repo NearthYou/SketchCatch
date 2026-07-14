@@ -105,6 +105,18 @@ const diagramNodeParametersSchema = z.object({
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
   .object({
     parentAreaNodeId: z.string().min(1).optional(),
+    areaAutoSizeBaseline: z
+      .object({
+        position: z.object({
+          x: z.number().finite(),
+          y: z.number().finite()
+        }),
+        size: z.object({
+          width: z.number().finite().positive(),
+          height: z.number().finite().positive()
+        })
+      })
+      .optional(),
     presentationArea: z.boolean().optional(),
     presentationCatalogItemId: z.string().min(1).optional()
   })

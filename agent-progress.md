@@ -4,28 +4,49 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- The automated suite now retains 47 essential protection test files out of the previous 390: API auth/ownership, schema/migration contracts, project persistence/deletion, Terraform generation/sync, Deployment Safety Gate, approval/apply/destroy, Web deployment actions, shared types, sandbox preflight evidence, and the production Terraform route test.
-- The maintained `pnpm test` protection line passes 511 checks: API 409, Web 71, shared types 8, sandbox preflight/evidence 21, and Terraform routing 2. Migration compatibility, lint, typecheck, build, harness, and diff checks pass.
-- Branch: `codex/reduce-test-protection-line`; this focused test-reduction change is verified locally and not yet pushed.
-- The test reduction changed no runtime code, database migration, cloud resource, or deployment state.
-- Issue #378 is recorded as `blocked` and remains a separate workstream for its dedicated branch.
+- Branch: `fix/ys/363-uiux-개선`; the latest `dev` merge is being resolved while preserving the essential test protection line.
+- The automated suite retains 47 essential protection test files and passes 518 checks: API 414, Web 73, shared types 8, sandbox preflight/evidence 21, and Terraform routing 2.
+- Incoming runtime, contract, documentation, migration, and protected-test changes are preserved. Tests outside the protection line remain deleted; migration compatibility, lint, typecheck, build, harness, and diff checks pass.
+- Issue #378 remains `blocked` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are incomplete.
+- No Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during conflict resolution.
 
 ## Session Record
+
+### 2026-07-15 - Resolve latest dev merge after test reduction
+
+- Preserved the incoming `dev` runtime and contract changes while resolving delete/modify conflicts in favor of the 47-file essential protection line.
+- Removed 33 reintroduced non-protection tests and four new non-protection tests; retained incoming updates to the protected deployment, Terraform safety, route, and Web deployment tests.
+- Combined the current test policy with the latest imported sandbox and Issue #360 progress evidence.
+- Verification passed: `pnpm test` (518 checks), `pnpm migration:compatibility:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
 
 ### 2026-07-15 - Reduce tests to the essential protection line
 
 - Removed 343 non-core test files and retained 47 explicitly reviewed safety and core-workflow test files.
 - Added the retained Web component test, shared type contracts, sandbox preflight/evidence test, and Terraform routing test to the normal `pnpm test` path; the lockfile changed only for the existing `tsx` test runner in `packages/types`.
 - Removed stale deleted-test references from active deployment and asset documentation, and recorded the new protection-line policy in `feature_list.json` while preserving older feature evidence as historical audit records.
-- Verification: reduced `pnpm test` passed 511 checks across all 47 retained files, and migration compatibility, lint, typecheck, build, harness, and diff checks passed.
+- Verification before this merge: reduced `pnpm test` passed 511 checks across all 47 retained files, and migration compatibility, lint, typecheck, build, harness, and diff checks passed.
 - Risk: AI Architecture, GitOps runtime reconcilers, Reverse Engineering, Cost, Live Observation, notifications, detailed diagram editing, Templates, and presentation behavior no longer have their previous dedicated regression suites.
 
-### 2026-07-14 - Production ECS deployment speed optimization
+### 2026-07-15 - Resolve Issue #360 branch conflicts with latest dev
 
-- Parallelized API/web image jobs, added ECR registry cache, digest-only releases, pre-deploy stability evidence, and per-phase timing.
-- Reduced Docker build contexts with filtered workspace installs and added the same remote-cache behavior to generated ECS/Fargate CodeBuild workflows.
-- Tuned and verified ALB/ECS health timing without weakening minimum healthy percent or circuit-breaker rollback.
-- Completed one real production release and post-deploy health smoke; the total improved from the 7m51s baseline to 6m09s, while the 5m30s stretch target remains unmet.
+- Merged `origin/dev` at `6f1558bf` while preserving the branch's Area sizing/reconciliation, render-safe history updates, parameter panel layout, and deployment Stepper changes.
+- Preserved dev's Terraform source-authority invalidation, authored-edge route invalidation, Brainboard source geometry, and repository Template contracts.
+- Excluded feature-session plan/spec and archived progress changes from the PR diff; canonical product/deployment documentation remains included where it describes shipped behavior.
+- Verification passed focused API tests (109/109), focused Web conflict tests (214/214), the full Web suite (1,314/1,314), `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. The full API suite was stopped at the user's request after the relevant API coverage passed.
+- No dependency, lockfile, DB migration, Terraform Apply/Destroy, deployment, or cloud mutation was performed.
+
+### 2026-07-14 - ECS GitOps persistence, immediate replacement, and cleanup
+
+- Made automated `push`/`workflow_run` authoritative over manual dispatch, isolated unavailable job logs, and preserved accepted nullable handoff provenance without PostgreSQL unknown-null parameters.
+- Added remote S3 backend enforcement, Environment-gated plans, and a real ECS all-at-once scale-to-zero replacement with active rollback restoration.
+- Fixed project refresh so obsolete release verification failures do not stale a newer verified release and actual chained workflow jobs override changed-file scope in stage history.
+- Proved the final ECS release through GitHub, HTTPS, AWS, API, RDS, CI logs, and release history; then rotated the exposed external ID and removed all cost-bearing sandbox resources.
+
+### 2026-07-14 - Production ECS deployment speed optimization merged from dev
+
+- Preserved dev's parallel ECR-cached Buildx jobs, digest-only releases, stability preflight, rollback evidence, and deployment timing.
+- Production run `29333857003` remains recorded as 6m09s with public health 200; read-only plan `29334381609` reported no infrastructure changes.
+- This sandbox branch does not alter or re-claim the production optimization evidence.
 
 ### 2026-07-14 - Real Direct ECS and bounded GitOps validation
 

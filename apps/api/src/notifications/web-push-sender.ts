@@ -18,9 +18,9 @@ export function createWebPushSender(config: {
   validateVapidConfig(config);
   const agent = createPublicEndpointAgent();
   return {
-    async send(subscription: WebPushSubscriptionInput, payload: string): Promise<void> {
+    async send(subscription: WebPushSubscriptionInput, payload: string) {
       try {
-        await webPush.sendNotification(
+        const response = await webPush.sendNotification(
           {
             endpoint: subscription.endpoint,
             expirationTime: subscription.expirationTime,
@@ -40,6 +40,7 @@ export function createWebPushSender(config: {
             }
           }
         );
+        return { statusCode: response.statusCode };
       } catch (error) {
         throw new WebPushDeliveryError(readStatusCode(error), error);
       }

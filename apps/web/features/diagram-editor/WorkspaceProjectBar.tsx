@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   AlertCircle,
   Check,
@@ -43,6 +45,7 @@ export function WorkspaceProjectBar({
   panels,
   workspace
 }: WorkspaceProjectBarProps) {
+  const [isSaveAndDeployPending, setSaveAndDeployPending] = useState(false);
   const saveStatusTone = getSaveStatusTone(workspace.saveStatus);
   const isSaving = isSaveInProgress(workspace.saveStatus);
 
@@ -52,7 +55,18 @@ export function WorkspaceProjectBar({
   }
 
   function handleSaveAndDeploy(): void {
-    void actions.onSaveAndDeploy?.();
+    const onSaveAndDeploy = actions.onSaveAndDeploy;
+    if (!onSaveAndDeploy || isSaveAndDeployPending) {
+      return;
+    }
+
+    setSaveAndDeployPending(true);
+    void Promise.resolve()
+      .then(() => onSaveAndDeploy())
+      .then(
+        () => setSaveAndDeployPending(false),
+        () => setSaveAndDeployPending(false)
+      );
   }
   return (
     <header className={styles.projectBar}>
@@ -92,13 +106,20 @@ export function WorkspaceProjectBar({
 
         {actions.onSaveAndDeploy ? (
           <button
+            aria-busy={isSaveAndDeployPending}
             className={styles.projectBarPrimaryAction}
-            disabled={isSaving}
+            disabled={isSaving || isSaveAndDeployPending}
             onClick={handleSaveAndDeploy}
             type="button"
           >
-            <Rocket aria-hidden="true" size={16} />
-            저장하고 배포
+            {isSaveAndDeployPending ? (
+              <LoaderCircle aria-hidden="true" className={styles.saveStatusSpinner} size={16} />
+            ) : (
+              <Rocket aria-hidden="true" size={16} />
+            )}
+            <span aria-live="polite">
+              {isSaveAndDeployPending ? "저장·배포 준비 중" : "저장하고 배포"}
+            </span>
           </button>
         ) : null}
 

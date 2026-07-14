@@ -157,12 +157,7 @@ export function DeploymentConsoleShell({
             <button aria-label="Deployment 패널 닫기" className={styles.deploymentExpandedCloseButton} onClick={close} ref={closeButtonRef} type="button">
               <X size={18} aria-hidden="true" />
             </button>
-            <div className={styles.deploymentExpandedBody}>
-              <div className={styles.deploymentExpandedTitleRow}>
-                <div><p className={styles.projectEyebrow}>IaC Operations</p><h2 className={styles.deploymentExpandedTitle}>배포 콘솔</h2><span>{projectName}</span></div>
-              </div>
-              {screenContent}
-            </div>
+            <div className={styles.deploymentExpandedBody}>{screenContent}</div>
           </div>
         </div>
       ) : null}

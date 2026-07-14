@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TerraformArtifactBundle } from "@sketchcatch/types";
 import { requireS3BucketName } from "../config/env.js";
+import { createProjectAssetStorage } from "../projects/project-asset-storage-factory.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 import { getS3Client } from "../s3/client.js";
 
 export const defaultTerraformArtifactMaxBytes = 1024 * 1024;
@@ -18,6 +20,7 @@ export type PrepareTerraformWorkspaceInput = {
 export type PrepareTerraformWorkspaceOptions = {
   rootDir?: string;
   downloadTerraformArtifact?: (objectKey: string) => Promise<Buffer | Uint8Array | string>;
+  projectAssetStorage?: ProjectAssetStorage;
   maxTerraformArtifactBytes?: number;
 };
 
@@ -43,9 +46,7 @@ export async function prepareTerraformWorkspace(
     const downloadTerraformArtifact =
       options.downloadTerraformArtifact ??
       ((objectKey: string) =>
-        downloadTerraformArtifactFromS3(objectKey, {
-          maxBytes: maxTerraformArtifactBytes
-        }));
+        (options.projectAssetStorage ?? createProjectAssetStorage()).getObject({ objectKey }));
 
     const content = await downloadTerraformArtifact(input.objectKey);
     const buffer = toBuffer(content);
@@ -114,8 +115,10 @@ export function createTerraformFilesSafetyContent(
   files: TerraformArtifactBundle["files"],
   fallbackContent: Buffer | Uint8Array | string
 ): string {
-  return files.length > 0
-    ? files.map((file) => file.terraformCode).join("\n")
+  const terraformFiles = files.filter((file) => file.fileName.endsWith(".tf"));
+
+  return terraformFiles.length > 0
+    ? terraformFiles.map((file) => file.terraformCode).join("\n")
     : toBuffer(fallbackContent).toString("utf8");
 }
 
@@ -127,7 +130,7 @@ function isTerraformArtifactBundle(input: PrepareTerraformWorkspaceInput): boole
   );
 }
 
-// 외부 저장소에서 받은 bundle을 안전한 .tf 파일 목록으로 검증합니다.
+// 외부 저장소에서 받은 bundle을 안전한 .tf/.tftpl 파일 목록으로 검증합니다.
 export function parseTerraformArtifactBundle(content: string): TerraformArtifactBundle {
   let parsed: unknown;
   try {
@@ -156,13 +159,17 @@ export function parseTerraformArtifactBundle(content: string): TerraformArtifact
     if (typeof fileCandidate.fileName !== "string" || typeof fileCandidate.terraformCode !== "string") {
       throw new Error("Terraform artifact bundle file fields are invalid");
     }
-    const safeFileName = toSafeTerraformFileName(fileCandidate.fileName);
-    if (safeFileName !== fileCandidate.fileName || fileNames.has(safeFileName)) {
+    const safeFileName = toSafeTerraformBundleFileName(fileCandidate.fileName);
+    if (!safeFileName || safeFileName !== fileCandidate.fileName || fileNames.has(safeFileName)) {
       throw new Error("Terraform artifact bundle contains an unsafe or duplicate file name");
     }
     fileNames.add(safeFileName);
     return { fileName: safeFileName, terraformCode: fileCandidate.terraformCode };
   });
+
+  if (!files.some((file) => file.fileName.endsWith(".tf"))) {
+    throw new Error("Terraform artifact bundle must contain at least one .tf file");
+  }
 
   return { schemaVersion: 1, files };
 }
@@ -201,6 +208,24 @@ function toSafeTerraformFileName(fileName: string | null | undefined): string {
   const safeFileName = candidate.replace(/[^a-zA-Z0-9._-]/g, "_");
 
   return safeFileName || "main.tf";
+}
+
+function toSafeTerraformBundleFileName(fileName: string): string | null {
+  const candidate = fileName.trim();
+
+  if (
+    !candidate ||
+    candidate === "." ||
+    candidate === ".." ||
+    candidate.includes("/") ||
+    candidate.includes("\\") ||
+    (!candidate.endsWith(".tf") && !candidate.endsWith(".tftpl"))
+  ) {
+    return null;
+  }
+
+  const safeFileName = candidate.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return safeFileName === candidate ? safeFileName : null;
 }
 
 function toBuffer(content: Buffer | Uint8Array | string): Buffer {

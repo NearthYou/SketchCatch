@@ -182,6 +182,8 @@ export function createGitCicdPipelineRunService(options: {
         [...new Set(relevantSnapshots.map((snapshot) => snapshot.commitSha))]
       );
       const refreshed: PipelineRunWithStages[] = [];
+      let latestApplicableCommitSha: string | null = null;
+      let projectRuns: PipelineRunWithStages[] | null = null;
       for (const snapshot of relevantSnapshots) {
         const existingRun = existingRuns.get(snapshot.commitSha);
         const changeScope =
@@ -197,7 +199,21 @@ export function createGitCicdPipelineRunService(options: {
             target
           );
         if (!changeScope) continue;
-        refreshed.push(await persistSnapshot(target, snapshot, changeScope));
+        latestApplicableCommitSha ??= snapshot.commitSha;
+        try {
+          refreshed.push(await persistSnapshot(target, snapshot, changeScope));
+        } catch (error) {
+          if (!isReleaseVerificationError(error) || snapshot.commitSha === latestApplicableCommitSha) {
+            throw error;
+          }
+          projectRuns ??= await options.repository.listProjectPipelineRuns(target.projectId);
+          const persisted = projectRuns.find(
+            (run) =>
+              run.sourceRepositoryId === target.sourceRepositoryId &&
+              run.commitSha === snapshot.commitSha
+          );
+          if (persisted) refreshed.push(maskRun(persisted));
+        }
       }
       return { runs: refreshed, stale: false, errorMessage: null };
     } catch (error) {
@@ -209,10 +225,7 @@ export function createGitCicdPipelineRunService(options: {
         runs: maskRuns(runs),
         stale: true,
         errorMessage:
-          error instanceof EcsGitOpsReleaseVerificationError ||
-          error instanceof LambdaGitOpsReleaseVerificationError ||
-          error instanceof Ec2AsgGitOpsReleaseVerificationError ||
-          error instanceof StaticSiteGitOpsReleaseVerificationError
+          isReleaseVerificationError(error)
             ? "Application release verification failed; showing the last persisted state."
             : "GitHub Actions status refresh failed; showing the last persisted state."
       };
@@ -608,15 +621,19 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
           .onConflictDoUpdate({
             target: [gitCicdPipelineRuns.sourceRepositoryId, gitCicdPipelineRuns.commitSha],
             set: {
+              ...(input.run.handoffId === null
+                ? {}
+                : {
+                    handoffId: input.run.handoffId,
+                    appUrl: input.run.appUrl,
+                    apiUrl: input.run.apiUrl
+                  }),
               commitMessage: input.run.commitMessage,
               branch: input.run.branch,
               changeScope: input.run.changeScope,
               status: input.run.status,
               statusMessage: input.run.statusMessage,
               pipelineRunUrl: input.run.pipelineRunUrl,
-              handoffId: sql`case when ${input.run.handoffId} is null then ${gitCicdPipelineRuns.handoffId} else ${input.run.handoffId} end`,
-              appUrl: sql`case when ${input.run.handoffId} is null then ${gitCicdPipelineRuns.appUrl} else ${input.run.appUrl} end`,
-              apiUrl: sql`case when ${input.run.handoffId} is null then ${gitCicdPipelineRuns.apiUrl} else ${input.run.apiUrl} end`,
               startedAt: input.run.startedAt,
               finishedAt: input.run.finishedAt,
               upstreamOrderingToken: input.run.upstreamOrderingToken,
@@ -696,6 +713,15 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
   };
 }
 
+function isReleaseVerificationError(error: unknown): boolean {
+  return (
+    error instanceof EcsGitOpsReleaseVerificationError ||
+    error instanceof LambdaGitOpsReleaseVerificationError ||
+    error instanceof Ec2AsgGitOpsReleaseVerificationError ||
+    error instanceof StaticSiteGitOpsReleaseVerificationError
+  );
+}
+
 function buildStages(
   runId: string,
   snapshot: GitCicdRunProviderSnapshot,
@@ -703,13 +729,14 @@ function buildStages(
   createId: () => string
 ): PersistedPipelineStage[] {
   return stageKinds.map((kind) => {
+    const job = snapshot.jobs.find((candidate) => candidate.stageKind === kind);
     const applicable =
+      Boolean(job) ||
       kind === "detect" ||
       kind === "verify" ||
       (scope !== "infra" &&
         (kind === "app_build" || kind === "artifact_publish" || kind === "app_deploy")) ||
       (scope !== "app" && (kind === "infra_plan" || kind === "infra_apply"));
-    const job = snapshot.jobs.find((candidate) => candidate.stageKind === kind);
     return {
       id: createId(),
       pipelineRunId: runId,

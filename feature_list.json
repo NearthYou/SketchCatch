@@ -51,7 +51,7 @@
           "pnpm harness:check",
           "git diff --check"
         ],
-        "notes": "Retained 47 test files and removed 343. The root test entrypoint passed 511 checks: API 409, Web 71, shared types 8, sandbox evidence 21, and Terraform routing 2."
+        "notes": "Retained 47 test files and removed 343 from the original 390-file suite. After merging the latest dev changes, the root test entrypoint passed 518 checks: API 414, Web 73, shared types 8, sandbox evidence 21, and Terraform routing 2."
       },
       "notes": "Broader feature-specific suites require an explicit future protection-line decision before being restored."
     },
@@ -528,7 +528,7 @@
         "Destroy 후 ECR, S3, CodeBuild, CloudWatch 임시 artifact가 남지 않는다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-14",
+        "lastVerified": "2026-07-15",
         "commands": [
           "pnpm test:sandbox-e2e",
           "pnpm sandbox:e2e preflight",
@@ -538,7 +538,7 @@
           "pnpm typecheck",
           "pnpm build"
         ],
-        "notes": "Direct ECS live deployment passed with exact commit, ECR digest, task revision, persisted release/history/log/notification evidence, CloudWatch metrics, and HTTPS 200. GitHub Actions ECS deployment run 29324643997 attempt 2 also reached HTTPS 200 with matching merge SHA, digest, and task revision, but service-side pipeline refresh returned stale and persisted no run/release because the successful run used a later workflow-fix merge than the handoff. QR correctly failed closed without the custom-domain/ACM/Route53 contract; Static, Lambda, EC2/ASG, Web Push delivery, and rollback remain incomplete. Infrastructure reached DESTROYED and issue-scoped CodeBuild, ECR, S3 versions/buckets, CloudWatch logs, CodeConnection, ALB, target groups, ECS cluster/task definitions, CloudFront, OIDC, and temporary policies all verify at zero. The current maintained protection line covers sandbox preflight, deployment safety/apply/destroy, deployment routes, and Web deployment controls; removed feature-specific commands remain historical evidence only."
+        "notes": "Direct ECS evidence remains verified. ECS GitOps Infra run 29334708442 and App run 29334822683 succeeded for SHA 3a12e55c13e7be1a769cfbe920b112516d8c14ce, digest 20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1, task definition revision 7, HTTPS 200, and desired/running 1/1. Project refresh returned stale=false with all seven stages succeeded, 1,161 masked logs, and a persisted matching ApplicationRelease. External ID rotation accepted the new value and rejected the old value. Destroy run 29337235499 succeeded; direct queries show zero cost-bearing issue resources, buckets, OIDC provider, task definitions, and task roles. Resource Groups retains three eventually consistent deleted-ECS tag entries. QR, Static, Lambda, EC2/ASG, Web Push delivery, and rollback remain incomplete, so the feature remains blocked on its dedicated branch. The current maintained protection line covers sandbox preflight, deployment safety/apply/destroy, deployment routes, and Web deployment controls; removed feature-specific commands remain historical evidence only."
       },
       "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
     },
