@@ -82,7 +82,12 @@ export function ProductEntry() {
           className={isMenuOpen ? `${styles.siteNav} ${styles.siteNavOpen}` : styles.siteNav}
           aria-label="페이지 이동"
         >
-          <a href="#workflow" onClick={() => setIsMenuOpen(false)}>작동 방식</a>
+          <a
+            href="#workflow"
+            onClick={(event) => handleSectionNavigation(event, "workflow", "#workflow", "center")}
+          >
+            작동 방식
+          </a>
           <a
             href="#workspace"
             onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
