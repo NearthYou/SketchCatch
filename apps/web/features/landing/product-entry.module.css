@@ -1,4 +1,38 @@
+@font-face {
+  font-family: "Pretendard Landing";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/pretendard/Pretendard-Regular.subset.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Pretendard Landing";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/pretendard/Pretendard-Medium.subset.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Pretendard Landing";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/pretendard/Pretendard-SemiBold.subset.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Pretendard Landing";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/pretendard/Pretendard-Bold.subset.woff2") format("woff2");
+}
+
 .page {
+  --landing-font: "Pretendard Landing", "Pretendard", sans-serif;
+  --font-code: var(--landing-font);
   --landing-primary: #000000;
   --landing-ink: #171717;
   --landing-body: #60646c;
@@ -24,12 +58,15 @@
   overflow: clip;
   background: var(--landing-canvas);
   color: var(--landing-ink);
+  font-family: var(--landing-font);
+  font-synthesis: none;
 }
 
 .page *,
 .page *::before,
 .page *::after {
   box-sizing: border-box;
+  font-family: var(--landing-font) !important;
 }
 
 .page a {
@@ -235,7 +272,7 @@
 
 .hero h1 {
   margin: 0;
-  font-size: 64px;
+  font-size: 80px;
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: 0;
@@ -1443,7 +1480,7 @@
   .siteHeader { top: 8px; width: calc(100% - 32px); min-height: 60px; }
   .desktopAction { display: none; }
   .hero { padding: 120px 0 72px; }
-  .hero h1 { font-size: 42px; }
+  .hero h1 { font-size: 48px; }
   .heroDescription { font-size: 15px; }
   .heroActions { align-items: stretch; flex-direction: column; padding-inline: 16px; }
   .workspaceStage { width: calc(100% - 32px); height: 340px; margin-top: 32px; }
@@ -1496,7 +1533,7 @@
   .headerActions { gap: 6px; }
   .headerActions .buttonPrimary { padding-inline: 14px; }
   .hero { padding-bottom: 64px; }
-  .hero h1 { font-size: 38px; }
+  .hero h1 { font-size: 44px; }
   .workspaceStage { height: 260px; }
   .workspaceBrand { font-size: 12px; }
   .modeTab { min-height: 30px; padding: 6px 8px; }

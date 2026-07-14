@@ -24,6 +24,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-15 - Simplify and restyle the public landing hero
+
+- Removed the requested provider badge, input-mode list, and large workspace preview from the public landing hero.
+- Self-hosted the provided Pretendard 1.3.9 subset files at weights 400, 500, 600, and 700, forced all landing descendants to that family, and increased the SketchCatch hero title from 64px to 80px with proportional mobile sizes.
+- Browser verification confirmed the checked brand, header action, and hero copy all use the loaded self-hosted Pretendard family; Web lint, Web typecheck, full build, harness, diff checks, and local Web/API/DB health checks pass.
+- Automated test suites were intentionally not run at the user's request; no API, database, deployment, Git handoff, or cloud behavior changed.
+
 ### 2026-07-15 - Restore five reviewed security tests
 
 - Restored exactly five tests from the merged dev source: API auth/error boundaries, Live Observation HTTPS/SSRF transport, filesystem path traversal, Live Observation capability tokens, and Web Push subscription encryption.
