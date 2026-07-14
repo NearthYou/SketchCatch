@@ -7,6 +7,9 @@ import {
   createArchitectureBoardCompilerEvidenceReport,
   renderArchitectureBoardCompilerEvidenceReport
 } from "../apps/web/features/architecture-board-compiler/architecture-board-compiler-evidence-report";
+import {
+  parseArchitectureBoardCompilerEvidenceBaseline
+} from "../apps/web/features/architecture-board-compiler/architecture-board-compiler-evidence-baseline";
 import { collectArchitectureBoardCompilerEvidenceInput } from "../apps/web/features/architecture-board-compiler/architecture-board-compiler-evidence-source";
 
 const mode = parseMode(process.argv.slice(2));
@@ -15,8 +18,41 @@ const reportPath = path.join(
   repoRoot,
   "docs/diagram-layout-reference/compiler-evidence-report.json"
 );
+const baselinePath = path.join(
+  repoRoot,
+  "docs/diagram-layout-reference/compiler-evidence-baseline.json"
+);
+const baseline = parseArchitectureBoardCompilerEvidenceBaseline(
+  JSON.parse(readFileSync(baselinePath, "utf8")) as unknown
+);
+const report = createArchitectureBoardCompilerEvidenceReport(
+  collectArchitectureBoardCompilerEvidenceInput(),
+  { aggregateAfterVisualAnomalyBudget: baseline.aggregateAfterVisualAnomalyBudget }
+);
+
+if (baseline.compilerVersion !== report.compilerVersion) {
+  throw new Error(
+    [
+      `Architecture Board Compiler evidence baseline expects ${baseline.compilerVersion},`,
+      `but the generated report is ${report.compilerVersion}.`,
+      "Review and intentionally update compiler-evidence-baseline.json with the new report diff."
+    ].join("\n")
+  );
+}
+
+if (report.regressionGuard?.violations.length) {
+  throw new Error(
+    [
+      "Architecture Board Compiler aggregate visual anomaly budget regressed.",
+      ...report.regressionGuard.violations.map(
+        ({ actual, maximum, metric }) => `- ${metric}: ${actual} exceeds recorded maximum ${maximum}`
+      ),
+      "Do not rewrite the baseline automatically. Review the report diff and deliberately update compiler-evidence-baseline.json with rationale only when the regression is accepted."
+    ].join("\n")
+  );
+}
 const output = renderArchitectureBoardCompilerEvidenceReport(
-  createArchitectureBoardCompilerEvidenceReport(collectArchitectureBoardCompilerEvidenceInput())
+  report
 );
 
 if (mode === "write") {

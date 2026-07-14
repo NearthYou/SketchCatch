@@ -3,16 +3,16 @@
   "compilerVersion": "architecture-board-compiler/v3",
   "summary": {
     "availableTemplateCount": 29,
-    "totalChangeCount": 2524,
+    "totalChangeCount": 2573,
     "diagnosticCount": 183,
     "changesByKind": {
       "resource": 0,
       "relationship": 0,
       "configuration": 0,
-      "containment": 415,
-      "presentation": 545,
-      "geometry": 1264,
-      "edge-routing": 300
+      "containment": 419,
+      "presentation": 576,
+      "geometry": 1271,
+      "edge-routing": 307
     },
     "diagnosticsByLevel": {
       "error": 0,
@@ -20,8 +20,8 @@
       "info": 50
     },
     "meanBeforeScore": 17871397946.113186,
-    "meanAfterScore": 530393599.906356,
-    "meanScoreDelta": -17341004346.206837,
+    "meanAfterScore": 530393190.985901,
+    "meanScoreDelta": -17341004755.12729,
     "visualAnomalies": {
       "before": {
         "nodeOverlapCount": 443,
@@ -53,13 +53,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
-        "total": 89,
+        "total": 90,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 16,
-          "presentation": 19,
+          "presentation": 20,
           "geometry": 48,
           "edge-routing": 6
         },
@@ -79,8 +79,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 16,
-            "totalCost": 128
+            "count": 17,
+            "totalCost": 136
           },
           {
             "action": "modify",
@@ -141,7 +141,7 @@
           }
         },
         "after": {
-          "score": 212725017.61005,
+          "score": 212725025.61005,
           "visualPenalty": 212724226.22105,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -149,7 +149,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 4238679.81089,
             "canvasAspectRatioPenalty": 0.487598,
-            "compilationDistance": 492,
+            "compilationDistance": 500,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 3,
             "edgeCrossingCount": 0,
@@ -174,8 +174,8 @@
             "totalEdgeLength": 8279.198716
           }
         },
-        "compilationDistance": 492,
-        "scoreDelta": -17717359442.159367
+        "compilationDistance": 500,
+        "scoreDelta": -17717359434.159367
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -190,13 +190,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 75,
+        "total": 76,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 13,
-          "presentation": 17,
+          "presentation": 18,
           "geometry": 38,
           "edge-routing": 7
         },
@@ -216,8 +216,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 13,
-            "totalCost": 104
+            "count": 14,
+            "totalCost": 112
           },
           {
             "action": "modify",
@@ -284,7 +284,7 @@
           }
         },
         "after": {
-          "score": 159128.459345,
+          "score": 159136.459345,
           "visualPenalty": 158589.496345,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -292,7 +292,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 1212640,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 424,
+            "compilationDistance": 432,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -317,8 +317,8 @@
             "totalEdgeLength": 2960
           }
         },
-        "compilationDistance": 424,
-        "scoreDelta": -19959876932.915653
+        "compilationDistance": 432,
+        "scoreDelta": -19959876924.915653
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-bastion",
@@ -333,13 +333,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 21,
+        "total": 22,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 4,
-          "presentation": 5,
+          "presentation": 6,
           "geometry": 12,
           "edge-routing": 0
         },
@@ -359,8 +359,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 4,
-            "totalCost": 32
+            "count": 5,
+            "totalCost": 40
           },
           {
             "action": "modify",
@@ -415,7 +415,7 @@
           }
         },
         "after": {
-          "score": 32547147.953667,
+          "score": 32547155.953667,
           "visualPenalty": 32546753.066667,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -423,7 +423,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 17280,
             "canvasAspectRatioPenalty": 6.5,
-            "compilationDistance": 116,
+            "compilationDistance": 124,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -448,8 +448,8 @@
             "totalEdgeLength": 0
           }
         },
-        "compilationDistance": 116,
-        "scoreDelta": -3967454614.171333
+        "compilationDistance": 124,
+        "scoreDelta": -3967454606.171333
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-costs-monitoring",
@@ -464,13 +464,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 87,
+        "total": 88,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 14,
-          "presentation": 15,
+          "presentation": 16,
           "geometry": 42,
           "edge-routing": 16
         },
@@ -490,8 +490,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 14,
-            "totalCost": 112
+            "count": 15,
+            "totalCost": 120
           },
           {
             "action": "modify",
@@ -558,7 +558,7 @@
           }
         },
         "after": {
-          "score": 250403344.988845,
+          "score": 250403352.988845,
           "visualPenalty": 250402658.852845,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -566,7 +566,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 331840,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 482,
+            "compilationDistance": 490,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 5,
@@ -591,8 +591,8 @@
             "totalEdgeLength": 6176
           }
         },
-        "compilationDistance": 482,
-        "scoreDelta": -15119863984.011156
+        "compilationDistance": 490,
+        "scoreDelta": -15119863976.011156
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
@@ -607,13 +607,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 24,
+        "total": 25,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 4,
-          "presentation": 7,
+          "presentation": 8,
           "geometry": 12,
           "edge-routing": 1
         },
@@ -633,8 +633,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 4,
-            "totalCost": 32
+            "count": 5,
+            "totalCost": 40
           },
           {
             "action": "modify",
@@ -695,7 +695,7 @@
           }
         },
         "after": {
-          "score": 101533.069484,
+          "score": 101541.069484,
           "visualPenalty": 101259.987484,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -703,7 +703,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 301584,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 138,
+            "compilationDistance": 146,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -728,8 +728,8 @@
             "totalEdgeLength": 64
           }
         },
-        "compilationDistance": 138,
-        "scoreDelta": -5159910721.639948
+        "compilationDistance": 146,
+        "scoreDelta": -5159910713.639948
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ec2-vpc-subnet",
@@ -744,13 +744,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 49,
+        "total": 50,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 9,
-          "presentation": 10,
+          "presentation": 11,
           "geometry": 26,
           "edge-routing": 4
         },
@@ -770,8 +770,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 9,
-            "totalCost": 72
+            "count": 10,
+            "totalCost": 80
           },
           {
             "action": "modify",
@@ -832,7 +832,7 @@
           }
         },
         "after": {
-          "score": 3567163.450027,
+          "score": 3567171.450027,
           "visualPenalty": 3566623.583027,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -840,7 +840,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 574420.026763,
             "canvasAspectRatioPenalty": 0.68424,
-            "compilationDistance": 273,
+            "compilationDistance": 281,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -865,8 +865,8 @@
             "totalEdgeLength": 2248
           }
         },
-        "compilationDistance": 273,
-        "scoreDelta": -8456463120.299973
+        "compilationDistance": 281,
+        "scoreDelta": -8456463112.299973
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
@@ -881,13 +881,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 56,
+        "total": 57,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 9,
-          "presentation": 15,
+          "presentation": 16,
           "geometry": 26,
           "edge-routing": 6
         },
@@ -907,8 +907,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 9,
-            "totalCost": 72
+            "count": 10,
+            "totalCost": 80
           },
           {
             "action": "modify",
@@ -975,7 +975,7 @@
           }
         },
         "after": {
-          "score": 4049569.946304,
+          "score": 4049577.946304,
           "visualPenalty": 4048963.805304,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -983,7 +983,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 608528,
             "canvasAspectRatioPenalty": 0.784247,
-            "compilationDistance": 325,
+            "compilationDistance": 333,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1008,8 +1008,8 @@
             "totalEdgeLength": 1348
           }
         },
-        "compilationDistance": 325,
-        "scoreDelta": -25225984366.053696
+        "compilationDistance": 333,
+        "scoreDelta": -25225984358.053696
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
@@ -1024,13 +1024,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 132,
+        "total": 133,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 23,
-          "presentation": 30,
+          "presentation": 31,
           "geometry": 67,
           "edge-routing": 12
         },
@@ -1050,8 +1050,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 23,
-            "totalCost": 184
+            "count": 24,
+            "totalCost": 192
           },
           {
             "action": "modify",
@@ -1118,7 +1118,7 @@
           }
         },
         "after": {
-          "score": 1008124151.162992,
+          "score": 1008124159.162992,
           "visualPenalty": 1008123165.833992,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1126,7 +1126,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 1214400,
             "canvasAspectRatioPenalty": 1.241848,
-            "compilationDistance": 746,
+            "compilationDistance": 754,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1151,8 +1151,8 @@
             "totalEdgeLength": 4754
           }
         },
-        "compilationDistance": 746,
-        "scoreDelta": -43413270647.33835
+        "compilationDistance": 754,
+        "scoreDelta": -43413270639.33835
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
@@ -1167,13 +1167,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 41,
+        "total": 42,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 0,
-          "presentation": 10,
+          "presentation": 11,
           "geometry": 24,
           "edge-routing": 7
         },
@@ -1187,8 +1187,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 8,
-            "totalCost": 64
+            "count": 9,
+            "totalCost": 72
           },
           {
             "action": "modify",
@@ -1249,7 +1249,7 @@
           }
         },
         "after": {
-          "score": 182072938.631084,
+          "score": 182072946.631084,
           "visualPenalty": 182072508.319084,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1257,7 +1257,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 111744,
             "canvasAspectRatioPenalty": 4.388889,
-            "compilationDistance": 178,
+            "compilationDistance": 186,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1282,8 +1282,8 @@
             "totalEdgeLength": 2200
           }
         },
-        "compilationDistance": 178,
-        "scoreDelta": -12887966157.87798
+        "compilationDistance": 186,
+        "scoreDelta": -12887966149.87798
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-iam-users",
@@ -1298,13 +1298,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 215,
+        "total": 216,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 39,
-          "presentation": 44,
+          "presentation": 45,
           "geometry": 114,
           "edge-routing": 18
         },
@@ -1324,8 +1324,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 39,
-            "totalCost": 312
+            "count": 40,
+            "totalCost": 320
           },
           {
             "action": "modify",
@@ -1386,7 +1386,7 @@
           }
         },
         "after": {
-          "score": 2606393011.35422,
+          "score": 2606393019.35422,
           "visualPenalty": 2606391624.58822,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1394,7 +1394,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 5941536,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 1198,
+            "compilationDistance": 1206,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 5,
             "edgeCrossingCount": 5,
@@ -1419,8 +1419,8 @@
             "totalEdgeLength": 14385
           }
         },
-        "compilationDistance": 1198,
-        "scoreDelta": -38125172968.89578
+        "compilationDistance": 1206,
+        "scoreDelta": -38125172960.89578
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-jenkins-ec2",
@@ -1435,13 +1435,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 107,
+        "total": 108,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 18,
-          "presentation": 22,
+          "presentation": 23,
           "geometry": 53,
           "edge-routing": 14
         },
@@ -1461,8 +1461,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 18,
-            "totalCost": 144
+            "count": 19,
+            "totalCost": 152
           },
           {
             "action": "modify",
@@ -1529,7 +1529,7 @@
           }
         },
         "after": {
-          "score": 152703405.891456,
+          "score": 152703413.891456,
           "visualPenalty": 152702508.282456,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1537,7 +1537,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2423088,
             "canvasAspectRatioPenalty": 0.483568,
-            "compilationDistance": 600,
+            "compilationDistance": 608,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 3,
@@ -1562,8 +1562,8 @@
             "totalEdgeLength": 8734
           }
         },
-        "compilationDistance": 600,
-        "scoreDelta": -20690933162.290363
+        "compilationDistance": 608,
+        "scoreDelta": -20690933154.290363
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-kubernetes-native-cnis",
@@ -1578,13 +1578,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
-        "total": 56,
+        "total": 57,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 10,
-          "presentation": 13,
+          "presentation": 14,
           "geometry": 29,
           "edge-routing": 4
         },
@@ -1604,8 +1604,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 10,
-            "totalCost": 80
+            "count": 11,
+            "totalCost": 88
           },
           {
             "action": "modify",
@@ -1666,7 +1666,7 @@
           }
         },
         "after": {
-          "score": 136494.822019,
+          "score": 136502.822019,
           "visualPenalty": 136027.541019,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1674,7 +1674,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 3055980,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 317,
+            "compilationDistance": 325,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1699,8 +1699,8 @@
             "totalEdgeLength": 1060
           }
         },
-        "compilationDistance": 317,
-        "scoreDelta": -15639892288.427982
+        "compilationDistance": 325,
+        "scoreDelta": -15639892280.427982
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
@@ -1715,13 +1715,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
-        "total": 103,
+        "total": 104,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 18,
-          "presentation": 28,
+          "presentation": 29,
           "geometry": 54,
           "edge-routing": 3
         },
@@ -1741,8 +1741,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 18,
-            "totalCost": 144
+            "count": 19,
+            "totalCost": 152
           },
           {
             "action": "modify",
@@ -1803,7 +1803,7 @@
           }
         },
         "after": {
-          "score": 4223508.004991,
+          "score": 4223516.004991,
           "visualPenalty": 4222682.347991,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1811,7 +1811,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2120096,
             "canvasAspectRatioPenalty": 0.318612,
-            "compilationDistance": 584,
+            "compilationDistance": 592,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1836,8 +1836,8 @@
             "totalEdgeLength": 0
           }
         },
-        "compilationDistance": 584,
-        "scoreDelta": -21235826449.72192
+        "compilationDistance": 592,
+        "scoreDelta": -21235826441.72192
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-bastion",
@@ -1852,13 +1852,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 119,
+        "total": 120,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 21,
-          "presentation": 26,
+          "presentation": 27,
           "geometry": 62,
           "edge-routing": 10
         },
@@ -1878,8 +1878,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 21,
-            "totalCost": 168
+            "count": 22,
+            "totalCost": 176
           },
           {
             "action": "modify",
@@ -1946,7 +1946,7 @@
           }
         },
         "after": {
-          "score": 7389046.606618,
+          "score": 7389054.606618,
           "visualPenalty": 7388045.827618,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1954,7 +1954,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2181200,
             "canvasAspectRatioPenalty": 0.926692,
-            "compilationDistance": 665,
+            "compilationDistance": 673,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1979,8 +1979,8 @@
             "totalEdgeLength": 2258
           }
         },
-        "compilationDistance": 665,
-        "scoreDelta": -37142747214.04886
+        "compilationDistance": 673,
+        "scoreDelta": -37142747206.04886
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
@@ -1995,13 +1995,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
-        "total": 47,
+        "total": 48,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 8,
-          "presentation": 11,
+          "presentation": 12,
           "geometry": 22,
           "edge-routing": 6
         },
@@ -2021,8 +2021,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 8,
-            "totalCost": 64
+            "count": 9,
+            "totalCost": 72
           },
           {
             "action": "modify",
@@ -2083,7 +2083,7 @@
           }
         },
         "after": {
-          "score": 1002462447.477494,
+          "score": 1002462455.477494,
           "visualPenalty": 1002461958.314494,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2091,7 +2091,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 569088,
             "canvasAspectRatioPenalty": 0.461538,
-            "compilationDistance": 273,
+            "compilationDistance": 281,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -2116,8 +2116,8 @@
             "totalEdgeLength": 2652
           }
         },
-        "compilationDistance": 273,
-        "scoreDelta": -5677882056.522506
+        "compilationDistance": 281,
+        "scoreDelta": -5677882048.522506
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
@@ -2132,13 +2132,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 42,
+        "total": 43,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 7,
-          "presentation": 10,
+          "presentation": 11,
           "geometry": 20,
           "edge-routing": 5
         },
@@ -2158,8 +2158,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 7,
-            "totalCost": 56
+            "count": 8,
+            "totalCost": 64
           },
           {
             "action": "modify",
@@ -2226,7 +2226,7 @@
           }
         },
         "after": {
-          "score": 199132.724831,
+          "score": 199140.724831,
           "visualPenalty": 198670.591831,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2234,7 +2234,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 485760,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 241,
+            "compilationDistance": 249,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -2259,8 +2259,8 @@
             "totalEdgeLength": 1464
           }
         },
-        "compilationDistance": 241,
-        "scoreDelta": -5469930616.241026
+        "compilationDistance": 249,
+        "scoreDelta": -5469930608.241026
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
@@ -2275,13 +2275,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 107,
+        "total": 108,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 15,
-          "presentation": 16,
+          "presentation": 17,
           "geometry": 45,
           "edge-routing": 31
         },
@@ -2301,8 +2301,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 15,
-            "totalCost": 120
+            "count": 16,
+            "totalCost": 128
           },
           {
             "action": "modify",
@@ -2363,7 +2363,7 @@
           }
         },
         "after": {
-          "score": 505617549.852731,
+          "score": 505617557.852731,
           "visualPenalty": 505616670.901731,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2371,7 +2371,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 272832,
             "canvasAspectRatioPenalty": 0.77551,
-            "compilationDistance": 599,
+            "compilationDistance": 607,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 10,
@@ -2396,8 +2396,8 @@
             "totalEdgeLength": 11664
           }
         },
-        "compilationDistance": 599,
-        "scoreDelta": -17951326089.4687
+        "compilationDistance": 607,
+        "scoreDelta": -17951326081.4687
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
@@ -2412,13 +2412,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 66,
+        "total": 67,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 11,
-          "presentation": 12,
+          "presentation": 13,
           "geometry": 33,
           "edge-routing": 10
         },
@@ -2438,8 +2438,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 11,
-            "totalCost": 88
+            "count": 12,
+            "totalCost": 96
           },
           {
             "action": "modify",
@@ -2500,7 +2500,7 @@
           }
         },
         "after": {
-          "score": 74084783.177328,
+          "score": 74084791.177328,
           "visualPenalty": 74084063.298328,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2508,7 +2508,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 144640,
             "canvasAspectRatioPenalty": 4.65,
-            "compilationDistance": 365,
+            "compilationDistance": 373,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 1,
@@ -2533,8 +2533,8 @@
             "totalEdgeLength": 4032
           }
         },
-        "compilationDistance": 365,
-        "scoreDelta": -11926247204.711561
+        "compilationDistance": 373,
+        "scoreDelta": -11926247196.711561
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
@@ -2549,13 +2549,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 119,
+        "total": 120,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 19,
-          "presentation": 21,
+          "presentation": 22,
           "geometry": 57,
           "edge-routing": 22
         },
@@ -2575,8 +2575,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 19,
-            "totalCost": 152
+            "count": 20,
+            "totalCost": 160
           },
           {
             "action": "modify",
@@ -2643,7 +2643,7 @@
           }
         },
         "after": {
-          "score": 884256805.071421,
+          "score": 884256813.071421,
           "visualPenalty": 884255899.368421,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2651,7 +2651,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 486400,
             "canvasAspectRatioPenalty": 0.315789,
-            "compilationDistance": 661,
+            "compilationDistance": 669,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 16,
@@ -2676,8 +2676,8 @@
             "totalEdgeLength": 8376
           }
         },
-        "compilationDistance": 661,
-        "scoreDelta": -20086064867.57179
+        "compilationDistance": 669,
+        "scoreDelta": -20086064859.57179
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
@@ -2692,13 +2692,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 167,
+        "total": 168,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 27,
-          "presentation": 40,
+          "presentation": 41,
           "geometry": 81,
           "edge-routing": 19
         },
@@ -2718,8 +2718,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 27,
-            "totalCost": 216
+            "count": 28,
+            "totalCost": 224
           },
           {
             "action": "modify",
@@ -2786,7 +2786,7 @@
           }
         },
         "after": {
-          "score": 106820457.264625,
+          "score": 106820465.264625,
           "visualPenalty": 106819244.836625,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2794,7 +2794,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2877744,
             "canvasAspectRatioPenalty": 0.612275,
-            "compilationDistance": 947,
+            "compilationDistance": 955,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 2,
@@ -2819,8 +2819,8 @@
             "totalEdgeLength": 10846
           }
         },
-        "compilationDistance": 947,
-        "scoreDelta": -58448677585.49185
+        "compilationDistance": 955,
+        "scoreDelta": -58448677577.49185
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
@@ -2835,13 +2835,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 92,
+        "total": 93,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 17,
-          "presentation": 21,
+          "presentation": 22,
           "geometry": 48,
           "edge-routing": 6
         },
@@ -2861,8 +2861,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 17,
-            "totalCost": 136
+            "count": 18,
+            "totalCost": 144
           },
           {
             "action": "modify",
@@ -2929,7 +2929,7 @@
           }
         },
         "after": {
-          "score": 516799.210078,
+          "score": 516807.210078,
           "visualPenalty": 516019.471078,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2937,7 +2937,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2233970,
             "canvasAspectRatioPenalty": 0.069896,
-            "compilationDistance": 523,
+            "compilationDistance": 531,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -2962,8 +2962,8 @@
             "totalEdgeLength": 2820
           }
         },
-        "compilationDistance": 523,
-        "scoreDelta": -20799523340.498676
+        "compilationDistance": 531,
+        "scoreDelta": -20799523332.498676
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -2978,13 +2978,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 22,
+        "total": 23,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 3,
-          "presentation": 8,
+          "presentation": 9,
           "geometry": 9,
           "edge-routing": 2
         },
@@ -3004,8 +3004,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 3,
-            "totalCost": 24
+            "count": 4,
+            "totalCost": 32
           },
           {
             "action": "modify",
@@ -3066,7 +3066,7 @@
           }
         },
         "after": {
-          "score": 182300.605368,
+          "score": 182308.605368,
           "visualPenalty": 181940.547368,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -3074,7 +3074,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 24320,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 133,
+            "compilationDistance": 141,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -3099,8 +3099,8 @@
             "totalEdgeLength": 312
           }
         },
-        "compilationDistance": 133,
-        "scoreDelta": -12572868729.644632
+        "compilationDistance": 141,
+        "scoreDelta": -12572868721.644632
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-iam-users",
@@ -3115,13 +3115,13 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 109,
+        "total": 110,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 18,
-          "presentation": 22,
+          "presentation": 23,
           "geometry": 54,
           "edge-routing": 15
         },
@@ -3141,8 +3141,8 @@
           {
             "action": "modify",
             "kind": "presentation",
-            "count": 18,
-            "totalCost": 144
+            "count": 19,
+            "totalCost": 152
           },
           {
             "action": "modify",
@@ -3203,7 +3203,7 @@
           }
         },
         "after": {
-          "score": 152766443.892422,
+          "score": 152766451.892422,
           "visualPenalty": 152765546.975422,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -3211,7 +3211,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2435868,
             "canvasAspectRatioPenalty": 0.491393,
-            "compilationDistance": 608,
+            "compilationDistance": 616,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 3,
@@ -3236,8 +3236,8 @@
             "totalEdgeLength": 9926
           }
         },
-        "compilationDistance": 608,
-        "scoreDelta": -20940872832.120193
+        "compilationDistance": 616,
+        "scoreDelta": -20940872824.120193
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-kubernetes-native-cnis",
@@ -3896,17 +3896,54 @@
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "original",
       "changes": {
-        "total": 0,
+        "total": 26,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
-          "containment": 0,
-          "presentation": 0,
-          "geometry": 0,
-          "edge-routing": 0
+          "containment": 4,
+          "presentation": 8,
+          "geometry": 7,
+          "edge-routing": 7
         },
-        "groups": []
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 4,
+            "totalCost": 48
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 2,
+            "totalCost": 16
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 6,
+            "totalCost": 48
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 7,
+            "totalCost": 13
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 6,
+            "totalCost": 36
+          }
+        ]
       },
       "diagnostics": {
         "total": 4,
@@ -3962,45 +3999,45 @@
           }
         },
         "after": {
-          "score": 160299844.571429,
-          "visualPenalty": 160299284.571429,
+          "score": 160287801.878227,
+          "visualPenalty": 160286907.168227,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 560,
           "metrics": {
             "backwardEdgeCount": 4,
-            "canvasArea": 403200,
+            "canvasArea": 144384,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 0,
+            "compilationDistance": 167,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.817143,
+            "emptySpaceRatio": 0.505319,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 220.539,
-            "knowledgePenalty": 0,
-            "knowledgeReferenceSimilarity": 1,
+            "knowledgePenalty": 167.71,
+            "knowledgeReferenceSimilarity": 0.736,
             "knowledgeSiblingGap": 91.429,
             "knowledgeViewportAspectRatio": 1.75,
-            "mainFlowContinuityError": 94.857143,
+            "mainFlowContinuityError": 106.666667,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 160299284.571429,
+            "score": 160286907.168227,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 1292
+            "totalEdgeLength": 1116
           }
         },
-        "compilationDistance": 0,
-        "scoreDelta": 0
+        "compilationDistance": 167,
+        "scoreDelta": -12042.693202
       },
       "referenceTemplateIds": [
+        "brainboard:brainboard-aws-iam-users",
         "brainboard:brainboard-aws-secure-s3-bucket",
-        "brainboard:brainboard-cross-account-aws-s3",
         "repository:static-web-hosting"
       ]
     },
@@ -4181,6 +4218,224 @@
       "reason": "Brainboard template clone failed: Create architecture returned HTTP 400 and Clone into current architecture left the recovery board unchanged"
     }
   ],
+  "sourceValidation": {
+    "summary": {
+      "sourceEvidenceCount": 30,
+      "availableTemplateCount": 29,
+      "unavailableTemplateCount": 1,
+      "validAvailableTemplateCount": 29,
+      "invalidAvailableTemplateCount": 0,
+      "findingCounts": {
+        "node.missing_geometry": 0,
+        "node.invalid_geometry": 0,
+        "area.missing_geometry": 0,
+        "area.invalid_geometry": 0,
+        "edge.missing_endpoint": 0,
+        "edge.dangling_endpoint": 0,
+        "edge.duplicate_id": 0,
+        "viewport.missing": 0,
+        "viewport.invalid": 0
+      }
+    },
+    "templates": [
+      {
+        "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
+        "title": "AWS ASG and LB with VPC & subnets",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-bastion",
+        "title": "AWS Bastion",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-costs-monitoring",
+        "title": "AWS costs monitoring",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-dashcam-video-pipeline",
+        "title": "AWS Dashcam Video Processing Pipeline",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-ec2-vpc-subnet",
+        "title": "AWS EC2 instance inside VPC & Subnet",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-ecs-fargate",
+        "title": "AWS ECS with Fargate",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-elastic-beanstalk",
+        "title": "AWS Elastic Beanstalk",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-fsx",
+        "title": "AWS FSX architecture",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-iam-users",
+        "title": "AWS IAM users creation",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-jenkins-ec2",
+        "title": "AWS Jenkins architecture on EC2",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "title": "AWS Kubernetes cluster with native CNIs",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-load-balancer-target-group",
+        "title": "AWS load balancer with target group",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-multi-account-management",
+        "title": "AWS multi-account management",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-network-landing-zone",
+        "title": "AWS network landing zone",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-rds",
+        "title": "AWS RDS",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-rest-api-documentdb",
+        "title": "AWS REST API for DocumentDB",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-s3-api-gateway",
+        "title": "AWS S3 API Gateway integration",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-secure-s3-bucket",
+        "title": "AWS secure S3 bucket",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-serverless-cdn",
+        "title": "AWS serverless architecture with CDN",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-three-tier-database",
+        "title": "AWS 3-tier web app with a database",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-aws-vpc-subnets-security-groups-2az",
+        "title": "AWS VPC with subnet and security groups on 2 AZs",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-cross-account-aws-s3",
+        "title": "Cross account AWS S3",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "brainboard:brainboard-training-aws-onboarding",
+        "title": "[Training] AWS onboarding",
+        "source": "brainboard",
+        "findings": []
+      },
+      {
+        "id": "repository:ecs-fargate-container-app",
+        "title": "ECS Fargate Container App",
+        "source": "repository",
+        "findings": []
+      },
+      {
+        "id": "repository:eks-container-app",
+        "title": "EKS Container App",
+        "source": "repository",
+        "findings": []
+      },
+      {
+        "id": "repository:full-serverless-web-app",
+        "title": "Full Serverless Web App",
+        "source": "repository",
+        "findings": []
+      },
+      {
+        "id": "repository:minimal-serverless-api",
+        "title": "Minimal Serverless API",
+        "source": "repository",
+        "findings": []
+      },
+      {
+        "id": "repository:static-web-hosting",
+        "title": "Static Web Hosting",
+        "source": "repository",
+        "findings": []
+      },
+      {
+        "id": "repository:three-tier-web-app",
+        "title": "3-Tier Web App",
+        "source": "repository",
+        "findings": []
+      }
+    ],
+    "unavailableTemplates": [
+      {
+        "id": "brainboard:brainboard-aws-instance-db-multiple-networks",
+        "title": "AWS instance and DB with multiple networks",
+        "source": "brainboard",
+        "reason": "Brainboard template clone failed: Create architecture returned HTTP 400 and Clone into current architecture left the recovery board unchanged"
+      }
+    ]
+  },
+  "regressionGuard": {
+    "status": "within-budget",
+    "aggregateAfterVisualAnomalyBudget": {
+      "nodeOverlapCount": 1,
+      "siblingAreaOverlapCount": 6,
+      "parentBoundaryViolationCount": 1,
+      "edgeCrossingCount": 89,
+      "edgeNodeIntersectionCount": 5,
+      "edgeAreaTitleIntersectionCount": 30,
+      "backwardEdgeCount": 4,
+      "supportLaneIntrusionCount": 4
+    },
+    "violations": []
+  },
   "anomalies": {
     "diagnosticTemplateIds": [
       "repository:ecs-fargate-container-app",
@@ -4191,9 +4446,7 @@
       "repository:three-tier-web-app"
     ],
     "errorDiagnosticTemplateIds": [],
-    "unchangedProposalTemplateIds": [
-      "repository:static-web-hosting"
-    ],
+    "unchangedProposalTemplateIds": [],
     "worsenedQualityTemplateIds": []
   }
 }

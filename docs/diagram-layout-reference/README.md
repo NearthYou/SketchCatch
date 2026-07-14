@@ -168,11 +168,11 @@
 
 ## Compiler Evidence Report
 
-[compiler-evidence-report.json](./compiler-evidence-report.json)은 29개 사용 가능 템플릿을 `template-review` 경로로 컴파일한 결과와, 사용할 수 없는 Brainboard 증거 1개를 함께 기록한다. 각 항목은 원본 fixture를 바꾸지 않고 before/after 점수, 변경·진단 집계, 참조 템플릿, 시각 이상 지표를 남긴다.
+[compiler-evidence-report.json](./compiler-evidence-report.json)은 29개 사용 가능 템플릿을 `template-review` 경로로 컴파일한 결과와, 사용할 수 없는 Brainboard 증거 1개를 함께 기록한다. 각 항목은 원본 fixture를 바꾸지 않고 before/after 점수, 변경·진단 집계, 참조 템플릿, 시각 이상 지표를 남긴다. `sourceValidation`은 원본 29+1 증거의 Node/Area geometry, Edge endpoint, viewport 이상을 정규화하지 않고 그대로 집계한다.
 
 ```bash
 pnpm architecture-board-evidence:check
 pnpm architecture-board-evidence:generate
 ```
 
-`check`은 CI에서 생성 결과와 저장된 report가 같은지 확인하고, `generate`는 fixture 또는 Compiler 규칙 변경 뒤 report를 다시 만든다.
+`check`은 CI에서 생성 결과와 저장된 report가 같은지 확인하고, `generate`는 fixture 또는 Compiler 규칙 변경 뒤 report를 다시 만든다. 두 명령은 [compiler-evidence-baseline.json](./compiler-evidence-baseline.json)의 aggregate 시각 이상치 상한도 검사한다. 따라서 `nodeOverlapCount`, Area 겹침·경계 이탈, edge 교차·노드 교차 등이 기준선보다 늘면 `generate`도 실패한다. 상한 변경은 자동화하지 않으며, 보고서 diff를 검토한 뒤 baseline의 `recordedRationale`과 함께 명시적으로 커밋해야 한다.

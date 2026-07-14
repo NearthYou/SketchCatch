@@ -6,6 +6,17 @@ import type {
   ArchitectureBoardCompilationQuality,
   DiagramJson
 } from "@sketchcatch/types";
+import {
+  ARCHITECTURE_BOARD_COMPILER_VISUAL_ANOMALY_METRIC_KEYS,
+  assertArchitectureBoardCompilerEvidenceRegressionBudget,
+  type ArchitectureBoardCompilerEvidenceRegressionBudget,
+  type ArchitectureBoardCompilerEvidenceRegressionViolation,
+  type ArchitectureBoardCompilerVisualAnomalyMetricKey
+} from "./architecture-board-compiler-evidence-baseline";
+import {
+  validateArchitectureBoardCompilerEvidenceSources,
+  type ArchitectureBoardCompilerEvidenceSourceValidationReport
+} from "./architecture-board-compiler-evidence-validation";
 import { reviewArchitectureBoardTemplate } from "./template-review";
 
 export const ARCHITECTURE_BOARD_COMPILER_EVIDENCE_REPORT_VERSION =
@@ -26,19 +37,8 @@ const DIAGNOSTIC_LEVEL_ORDER: readonly ArchitectureBoardCompilationDiagnosticLev
   "info"
 ];
 const CHANGE_ACTION_ORDER = ["add", "remove", "modify"] as const;
-const VISUAL_ANOMALY_METRIC_KEYS = [
-  "nodeOverlapCount",
-  "siblingAreaOverlapCount",
-  "parentBoundaryViolationCount",
-  "edgeCrossingCount",
-  "edgeNodeIntersectionCount",
-  "edgeAreaTitleIntersectionCount",
-  "backwardEdgeCount",
-  "supportLaneIntrusionCount"
-] as const;
-
 type EvidenceSource = "brainboard" | "repository";
-type VisualAnomalyMetricKey = (typeof VISUAL_ANOMALY_METRIC_KEYS)[number];
+type VisualAnomalyMetricKey = ArchitectureBoardCompilerVisualAnomalyMetricKey;
 
 export type ArchitectureBoardCompilerEvidenceTemplate = {
   readonly id: string;
@@ -57,6 +57,10 @@ export type ArchitectureBoardCompilerUnavailableEvidence = {
 export type ArchitectureBoardCompilerEvidenceInput = {
   readonly availableTemplates: readonly ArchitectureBoardCompilerEvidenceTemplate[];
   readonly unavailableTemplates: readonly ArchitectureBoardCompilerUnavailableEvidence[];
+};
+
+export type ArchitectureBoardCompilerEvidenceReportOptions = {
+  readonly aggregateAfterVisualAnomalyBudget?: ArchitectureBoardCompilerEvidenceRegressionBudget;
 };
 
 type ReportedQuality = {
@@ -94,6 +98,12 @@ export type ArchitectureBoardCompilerEvidenceReport = {
     readonly unchangedProposalTemplateIds: readonly string[];
     readonly worsenedQualityTemplateIds: readonly string[];
   };
+  readonly regressionGuard?: {
+    readonly aggregateAfterVisualAnomalyBudget: ArchitectureBoardCompilerEvidenceRegressionBudget;
+    readonly status: "within-budget" | "violations";
+    readonly violations: readonly ArchitectureBoardCompilerEvidenceRegressionViolation[];
+  };
+  readonly sourceValidation: ArchitectureBoardCompilerEvidenceSourceValidationReport;
 };
 
 export type ArchitectureBoardCompilerEvidenceTemplateResult = {
@@ -139,7 +149,8 @@ export type ArchitectureBoardCompilerEvidenceDiagnostic = {
 
 // 원본 fixture는 읽기 전용 증거다. Review 경로에 복제본만 전달해 Gallery/원본 Board를 바꾸지 않는다.
 export function createArchitectureBoardCompilerEvidenceReport(
-  input: ArchitectureBoardCompilerEvidenceInput
+  input: ArchitectureBoardCompilerEvidenceInput,
+  options: ArchitectureBoardCompilerEvidenceReportOptions = {}
 ): ArchitectureBoardCompilerEvidenceReport {
   const templates = [...input.availableTemplates]
     .sort((left, right) => left.id.localeCompare(right.id))
@@ -147,13 +158,19 @@ export function createArchitectureBoardCompilerEvidenceReport(
   const unavailableTemplates = [...input.unavailableTemplates].sort((left, right) =>
     left.id.localeCompare(right.id)
   );
+  const summary = createSummary(templates);
+  const regressionGuard = options.aggregateAfterVisualAnomalyBudget
+    ? createRegressionGuard(summary.visualAnomalies.after, options.aggregateAfterVisualAnomalyBudget)
+    : undefined;
 
   return {
     reportVersion: ARCHITECTURE_BOARD_COMPILER_EVIDENCE_REPORT_VERSION,
     compilerVersion: getCompilerVersion(templates),
-    summary: createSummary(templates),
+    summary,
     templates,
     unavailableTemplates,
+    sourceValidation: validateArchitectureBoardCompilerEvidenceSources(input),
+    ...(regressionGuard ? { regressionGuard } : {}),
     anomalies: {
       diagnosticTemplateIds: templates
         .filter((template) => template.diagnostics.total > 0)
@@ -168,6 +185,22 @@ export function createArchitectureBoardCompilerEvidenceReport(
         .filter((template) => template.quality.scoreDelta > 0)
         .map((template) => template.id)
     }
+  };
+}
+
+function createRegressionGuard(
+  actual: Readonly<Record<VisualAnomalyMetricKey, number>>,
+  aggregateAfterVisualAnomalyBudget: ArchitectureBoardCompilerEvidenceRegressionBudget
+): NonNullable<ArchitectureBoardCompilerEvidenceReport["regressionGuard"]> {
+  const violations = assertArchitectureBoardCompilerEvidenceRegressionBudget(
+    actual,
+    aggregateAfterVisualAnomalyBudget
+  );
+
+  return {
+    status: violations.length === 0 ? "within-budget" : "violations",
+    aggregateAfterVisualAnomalyBudget,
+    violations
   };
 }
 
@@ -366,19 +399,21 @@ function sumVisualAnomalyMetrics(
   templates: readonly ArchitectureBoardCompilerEvidenceTemplateResult[],
   stage: "before" | "after"
 ): Record<VisualAnomalyMetricKey, number> {
-  const totals = Object.fromEntries(VISUAL_ANOMALY_METRIC_KEYS.map((key) => [key, 0])) as Record<
+  const totals = Object.fromEntries(
+    ARCHITECTURE_BOARD_COMPILER_VISUAL_ANOMALY_METRIC_KEYS.map((key) => [key, 0])
+  ) as Record<
     VisualAnomalyMetricKey,
     number
   >;
 
   for (const template of templates) {
-    for (const key of VISUAL_ANOMALY_METRIC_KEYS) {
+    for (const key of ARCHITECTURE_BOARD_COMPILER_VISUAL_ANOMALY_METRIC_KEYS) {
       totals[key] += template.quality[stage].metrics[key] ?? 0;
     }
   }
 
   return Object.fromEntries(
-    VISUAL_ANOMALY_METRIC_KEYS.map((key) => [key, round(totals[key])])
+    ARCHITECTURE_BOARD_COMPILER_VISUAL_ANOMALY_METRIC_KEYS.map((key) => [key, round(totals[key])])
   ) as Record<VisualAnomalyMetricKey, number>;
 }
 
