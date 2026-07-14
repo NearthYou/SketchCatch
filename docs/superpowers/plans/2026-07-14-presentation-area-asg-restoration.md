@@ -283,23 +283,23 @@ Expected: 출력 없음.
 
 **Interfaces:**
 - Consumes: `TemplatePresentationPlacement.presentationArea`, ASG Area 판정과 geometry
-- Produces: `three-tier-web-app`의 ASG `metadata.presentationArea === true`, `320×360` Area, 내부 app Security Group과 Launch Template
+- Produces: `three-tier-web-app`의 ASG `metadata.presentationArea === true`, `320×320` Area, 내부 app Security Group과 Launch Template
 
 - [ ] **Step 1: 작성된 ASG 템플릿 계약을 먼저 변경**
 
 `template-layout-contract.test.ts`의 `three-tier-web-app` 기대값을 다음처럼 바꾼다.
 
 ```ts
-"app-security-group": at(1080, 800, "application-group", { width: 240, height: 280 }),
-"launch-template": at(1160, 840, "application-group"),
-"application-group": at(1040, 760, "vpc", { width: 320, height: 360 }, true),
+"app-security-group": at(1080, 840, "application-group", { width: 240, height: 280 }),
+"launch-template": at(1160, 880, "application-group"),
+"application-group": at(1040, 800, "vpc", { width: 320, height: 320 }, true),
 ```
 
 `template-resource-materializer.test.ts`에서 ASG를 일반 `48px` 기대 목록에서 제거하고 다음을 검증한다.
 
 ```ts
 assert.equal(isAreaNode(asg), true);
-assert.deepEqual(asg.size, { width: 320, height: 360 });
+assert.deepEqual(asg.size, { width: 320, height: 320 });
 assert.equal(asg.metadata?.presentationArea, true);
 ```
 
@@ -320,9 +320,9 @@ Expected: 현재 ASG에 size와 `presentationArea`가 없고 내부 노드 paren
 `template-definitions.ts`의 `three-tier-web-app` 배치를 다음처럼 바꾼다.
 
 ```ts
-"app-security-group": layoutAt(1080, 800, "application-group", { width: 240, height: 280 }),
-"launch-template": layoutAt(1160, 840, "application-group"),
-"application-group": layoutAt(1040, 760, "vpc", { width: 320, height: 360 }, true),
+"app-security-group": layoutAt(1080, 840, "application-group", { width: 240, height: 280 }),
+"launch-template": layoutAt(1160, 880, "application-group"),
+"application-group": layoutAt(1040, 800, "vpc", { width: 320, height: 320 }, true),
 ```
 
 이 배치는 ASG가 `1040..1360 × 760..1120` 범위에서 app Security Group과 Launch Template을 포함하고, 아래 DB Security Group과 경계를 공유하되 겹치지 않게 한다.
