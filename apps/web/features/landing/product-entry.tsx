@@ -157,7 +157,7 @@ export function ProductEntry() {
             {FLOW_STEPS.map((step, index) => (
               <li key={step}>
                 <span className={styles.flowNumber}>{String(index + 1).padStart(2, "0")}</span>
-                {step}
+                <span className={styles.flowLabel}>{step}</span>
               </li>
             ))}
           </ol>

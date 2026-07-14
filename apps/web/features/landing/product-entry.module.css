@@ -787,12 +787,13 @@
 
 .flowList {
   display: grid;
+  width: min(calc(100% - 64px), 1400px);
   min-height: 88px;
   align-items: center;
   margin-block: 0;
   padding: 0;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
   list-style: none;
 }
 
@@ -801,7 +802,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   color: var(--landing-body);
   font-size: 13px;
   font-weight: 600;
@@ -812,6 +813,10 @@
   right: 0;
   color: var(--landing-muted);
   content: "→";
+}
+
+.flowLabel {
+  white-space: nowrap;
 }
 
 .flowNumber {
