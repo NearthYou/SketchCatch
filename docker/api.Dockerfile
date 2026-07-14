@@ -7,14 +7,15 @@ RUN corepack enable
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/package.json
-COPY apps/web/package.json ./apps/web/package.json
-COPY packages/config/package.json ./packages/config/package.json
 COPY packages/types/package.json ./packages/types/package.json
-COPY packages/ui/package.json ./packages/ui/package.json
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter @sketchcatch/api...
 
 FROM deps AS build
-COPY . .
+COPY tsconfig.base.json ./
+COPY apps/api/src ./apps/api/src
+COPY apps/api/drizzle ./apps/api/drizzle
+COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
+COPY packages/types/src ./packages/types/src
 RUN pnpm --filter @sketchcatch/api build
 
 FROM alpine:3.22 AS terraform

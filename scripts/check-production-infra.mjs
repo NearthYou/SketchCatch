@@ -316,20 +316,68 @@ check(
   "ECS deploy workflow must use Buildx action instead of sequential docker build/push commands"
 );
 
-for (const dockerfilePath of [apiDockerfilePath, webDockerfilePath]) {
+const dockerfiles = [
+  {
+    path: apiDockerfilePath,
+    install: "RUN pnpm install --frozen-lockfile --filter @sketchcatch/api...",
+    manifests: [
+      "COPY apps/api/package.json ./apps/api/package.json",
+      "COPY packages/types/package.json ./packages/types/package.json"
+    ],
+    sourceCopies: [
+      "COPY tsconfig.base.json ./",
+      "COPY apps/api/src ./apps/api/src",
+      "COPY apps/api/drizzle ./apps/api/drizzle",
+      "COPY apps/api/tsconfig.json ./apps/api/tsconfig.json",
+      "COPY packages/types/src ./packages/types/src"
+    ]
+  },
+  {
+    path: webDockerfilePath,
+    install: "RUN pnpm install --frozen-lockfile --filter @sketchcatch/web...",
+    manifests: [
+      "COPY apps/web/package.json ./apps/web/package.json",
+      "COPY packages/types/package.json ./packages/types/package.json",
+      "COPY packages/ui/package.json ./packages/ui/package.json"
+    ],
+    sourceCopies: [
+      "COPY tsconfig.base.json ./",
+      "COPY apps/web/app ./apps/web/app",
+      "COPY apps/web/components ./apps/web/components",
+      "COPY apps/web/features ./apps/web/features",
+      "COPY apps/web/lib ./apps/web/lib",
+      "COPY apps/web/public ./apps/web/public",
+      "COPY apps/web/next-env.d.ts apps/web/next.config.mjs apps/web/tsconfig.json ./apps/web/",
+      "COPY packages/types/src ./packages/types/src",
+      "COPY packages/ui/src ./packages/ui/src"
+    ]
+  }
+];
+
+for (const definition of dockerfiles) {
+  const dockerfilePath = definition.path;
   const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
-  const installIndex = dockerfile.indexOf("RUN pnpm install --frozen-lockfile");
-  const sourceCopyIndex = dockerfile.indexOf("COPY . .");
-  for (const manifest of [
-    "COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./",
-    "COPY apps/api/package.json ./apps/api/package.json",
-    "COPY apps/web/package.json ./apps/web/package.json",
-    "COPY packages/config/package.json ./packages/config/package.json",
-    "COPY packages/types/package.json ./packages/types/package.json",
-    "COPY packages/ui/package.json ./packages/ui/package.json"
-  ]) {
+  const installIndex = dockerfile.indexOf(definition.install);
+  const sourceCopyIndex = dockerfile.indexOf("COPY tsconfig.base.json ./");
+  for (const manifest of ["COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./"]) {
     check(dockerfile.includes(manifest), `${path.basename(dockerfilePath)} is missing ${manifest}`);
   }
+  for (const manifest of definition.manifests) {
+    check(
+      dockerfile.includes(manifest) && dockerfile.indexOf(manifest) < installIndex,
+      `${path.basename(dockerfilePath)} must copy ${manifest} before dependency installation`
+    );
+  }
+  for (const sourceCopy of definition.sourceCopies) {
+    check(
+      dockerfile.includes(sourceCopy),
+      `${path.basename(dockerfilePath)} is missing ${sourceCopy}`
+    );
+  }
+  check(
+    !dockerfile.includes("COPY . ."),
+    `${path.basename(dockerfilePath)} must not invalidate its build with unrelated repository files`
+  );
   check(
     installIndex >= 0 && sourceCopyIndex > installIndex,
     `${path.basename(dockerfilePath)} must install dependencies before copying source files`
@@ -337,7 +385,14 @@ for (const dockerfilePath of [apiDockerfilePath, webDockerfilePath]) {
 }
 
 const dockerIgnore = read(".dockerignore");
-for (const marker of ["**/.terraform", "coverage", ".local-data", "*.tsbuildinfo"]) {
+for (const marker of [
+  "**/.terraform",
+  "coverage",
+  ".local-data",
+  "*.tsbuildinfo",
+  "**/*.test.ts",
+  "**/*.test.tsx"
+]) {
   check(dockerIgnore.includes(marker), `.dockerignore is missing ${marker}`);
 }
 
