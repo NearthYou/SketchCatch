@@ -133,7 +133,6 @@ export default function GitHubIntegrationCallbackPage() {
   useEffect(() => {
     if (
       callbackState.status !== "configuring" ||
-      isReturning ||
       !canResumeRepositoryAnalysis({ deploymentTargetSaved, gitOpsMonitoringSaved })
     ) {
       return;
@@ -150,7 +149,7 @@ export default function GitHubIntegrationCallbackPage() {
     }, 700);
 
     return () => window.clearTimeout(timer);
-  }, [callbackState, deploymentTargetSaved, gitOpsMonitoringSaved, isReturning, router]);
+  }, [callbackState, deploymentTargetSaved, gitOpsMonitoringSaved, router]);
 
   return (
     <main className={styles.page}>

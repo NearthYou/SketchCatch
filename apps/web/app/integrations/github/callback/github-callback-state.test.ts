@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { GitHubProjectConnectionTarget, GitHubRepositoryCandidate } from "@sketchcatch/types";
 
@@ -79,4 +80,18 @@ test("callback creates ECS defaults even when another architecture was selected"
     sourceRoot: "apps/api",
     dockerfilePath: "apps/api/Dockerfile"
   });
+});
+
+test("return indicator state cannot cancel the scheduled Repository redirect", () => {
+  const pageSource = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
+  const redirectEffect = pageSource.match(
+    /useEffect\(\(\) => \{[\s\S]*?setIsReturning\(true\);[\s\S]*?\}, \[([\s\S]*?)\]\);/
+  );
+
+  assert.ok(redirectEffect, "redirect effect must exist");
+  assert.doesNotMatch(
+    redirectEffect[1] ?? "",
+    /\bisReturning\b/,
+    "isReturning rerenders must not clean up the pending redirect timer"
+  );
 });
