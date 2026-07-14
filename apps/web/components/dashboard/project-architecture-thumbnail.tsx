@@ -20,6 +20,7 @@ export function ProjectArchitectureThumbnail({
 
   useEffect(() => {
     let cancelled = false;
+    let latestRequest = 0;
     const thumbnailLifecycle = createProjectThumbnailImageLifecycle({
       createObjectUrl: URL.createObjectURL,
       revokeObjectUrl: URL.revokeObjectURL,
@@ -27,21 +28,48 @@ export function ProjectArchitectureThumbnail({
       setThumbnailUrl
     });
 
-    setState("loading");
-    setThumbnailUrl(null);
+    function refreshThumbnail(): void {
+      const request = latestRequest + 1;
+      latestRequest = request;
 
-    void loadProjectThumbnail({
-      fetchThumbnail: fetchProjectThumbnail,
-      isCancelled: () => cancelled,
-      projectId
-    })
-      .then(thumbnailLifecycle.apply)
-      .catch(() => {
-        thumbnailLifecycle.apply({ state: "error" });
-      });
+      setState("loading");
+      setThumbnailUrl(null);
+
+      void loadProjectThumbnail({
+        fetchThumbnail: fetchProjectThumbnail,
+        isCancelled: () => cancelled || latestRequest !== request,
+        projectId
+      })
+        .then((result) => {
+          if (cancelled || latestRequest !== request) {
+            return;
+          }
+
+          thumbnailLifecycle.apply(result);
+        })
+        .catch(() => {
+          if (cancelled || latestRequest !== request) {
+            return;
+          }
+
+          thumbnailLifecycle.apply({ state: "error" });
+        });
+    }
+
+    function handlePageShow(event: PageTransitionEvent): void {
+      if (!event.persisted) {
+        return;
+      }
+
+      refreshThumbnail();
+    }
+
+    refreshThumbnail();
+    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("pageshow", handlePageShow);
       thumbnailLifecycle.dispose();
     };
   }, [projectId]);

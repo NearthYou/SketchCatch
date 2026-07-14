@@ -17,6 +17,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Refresh a Dashboard Board thumbnail after browser-history restore
+
+- Preserved the same thumbnail endpoint, object URL lifecycle, save control, and capture/upload flow. A Dashboard card now requests its authenticated Board image again when a browser restores the Dashboard from back-forward cache after a Workspace save.
+- A request generation guard prevents an earlier in-flight thumbnail read from replacing the newer restored-page image; teardown removes the page-show listener and still revokes the active object URL.
+- TDD evidence: the Dashboard restore regression first failed, then the complete Web suite passed 1,233/1,233. Harness, lint, and typecheck passed; lint retains the pre-existing unused `setNow` warning in the API project.
+- Root `pnpm build` remains blocked before Web compilation by the pre-existing missing `apps/web/.codegraph` path. No migration, API, storage, cloud, deployment, or dependency change was made.
+
 ### 2026-07-14 - Capture complete Project Boards for Dashboard cards
 
 - Replaced the current-viewport capture with an offscreen 1280x720 React Flow clone. It derives the full logical bounds of rendered Resources from the active viewport transform, applies an 8% contain margin, and removes the clone after WebP encoding.

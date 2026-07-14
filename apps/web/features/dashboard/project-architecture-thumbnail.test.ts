@@ -48,6 +48,13 @@ test("Dashboard cards use the bounded thumbnail loader and release replaced obje
   assert.doesNotMatch(thumbnailSource, /setInterval/);
 });
 
+test("Dashboard cards refresh a saved Board thumbnail when the page is restored from browser history", () => {
+  assert.match(thumbnailSource, /addEventListener\("pageshow", handlePageShow\)/);
+  assert.match(thumbnailSource, /if \(!event\.persisted\)/);
+  assert.match(thumbnailSource, /refreshThumbnail\(\)/);
+  assert.match(thumbnailSource, /removeEventListener\("pageshow", handlePageShow\)/);
+});
+
 test("shared raster image keeps a fixed 16:9 contain frame and explicit loading, empty, and error states", () => {
   assert.match(imageSource, /<img/);
   assert.doesNotMatch(imageSource, /<svg|DiagramJson|nodes\.map|edges\.map/);
