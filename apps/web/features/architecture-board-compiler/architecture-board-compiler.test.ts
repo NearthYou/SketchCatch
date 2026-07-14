@@ -117,6 +117,78 @@ test("Compiler changes는 승인 전 proposal일 뿐 현재 Diagram을 mutation�
   assert.ok(proposal.quality.compilationDistance > 0);
 });
 
+test("Compiler는 승인된 semantic operation과 외부 충돌 신호를 하나의 proposal로 설명한다", () => {
+  const proposal = compileArchitectureBoard({
+    architecture: {
+      nodes: [
+        {
+          id: "api",
+          type: "API_GATEWAY_REST_API",
+          label: "API",
+          positionX: 0,
+          positionY: 0,
+          config: { terraformResourceType: "aws_api_gateway_rest_api" }
+        }
+      ],
+      edges: []
+    },
+    semanticContext: {
+      operations: [
+        {
+          id: "add-vpc",
+          kind: "resource-add",
+          node: {
+            id: "vpc",
+            type: "VPC",
+            label: "VPC",
+            positionX: -120,
+            positionY: -80,
+            config: { terraformResourceType: "aws_vpc" }
+          }
+        },
+        { id: "contain-api", kind: "containment-set", targetId: "api", parentAreaNodeId: "vpc" },
+        {
+          id: "add-platform-group",
+          kind: "presentation-add",
+          node: {
+            id: "platform-group",
+            type: "design_group",
+            kind: "design",
+            label: "Platform",
+            locked: false,
+            position: { x: -160, y: -120 },
+            size: { width: 480, height: 320 },
+            zIndex: 1
+          }
+        }
+      ],
+      signals: [
+        {
+          id: "provider-limit",
+          kind: "provider",
+          level: "warning",
+          summary: "Provider quota 확인 필요",
+          message: "이 후보는 Provider quota와 충돌할 수 있습니다.",
+          relatedResourceIds: ["vpc"],
+          penalty: 321
+        }
+      ]
+    },
+    trigger: "ai-draft"
+  });
+
+  assert.ok(proposal.architecture.nodes.some((node) => node.id === "vpc"));
+  assert.equal(
+    proposal.architecture.nodes.find((node) => node.id === "api")?.config.parentAreaNodeId,
+    "vpc"
+  );
+  assert.ok(proposal.diagram.nodes.some((node) => node.id === "platform-group"));
+  assert.ok(proposal.changes.some(({ action, kind, targetIds }) => action === "add" && kind === "resource" && targetIds.includes("vpc")));
+  assert.ok(proposal.changes.some(({ action, kind, targetIds }) => action === "add" && kind === "presentation" && targetIds.includes("platform-group")));
+  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:provider-limit"));
+  assert.ok(proposal.quality.after.semanticDiagnosticPenalty >= 321);
+});
+
 test("Compiler는 contains/hosts와 Terraform 참조에서 Security Group을 제외한 containment를 제안한다", () => {
   const proposal = compileArchitectureBoard({
     architecture: {
@@ -270,6 +342,9 @@ test("source-exact Board도 명시적 자동 정리 제안을 만들되 원본 f
 
   assert.deepEqual(exact, before);
   assert.ok(proposal.provenance.candidateId.startsWith("compiled:"));
+  assert.ok(
+    (proposal.provenance as { candidateIds?: readonly string[] }).candidateIds?.includes("original")
+  );
   assert.ok(proposal.changes.some(({ kind }) => kind === "geometry"));
 });
 

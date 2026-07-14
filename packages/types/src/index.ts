@@ -3315,6 +3315,8 @@ export type ArchitectureBoardCompilationProposal = {
   provenance: {
     compilerVersion: string;
     candidateId: string;
+    /** Every candidate generated for this proposal, including the retained original baseline. */
+    candidateIds?: string[] | undefined;
     referenceTemplateIds: string[];
   };
 };

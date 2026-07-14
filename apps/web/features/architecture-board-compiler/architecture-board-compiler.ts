@@ -2,6 +2,7 @@ import type {
   ArchitectureBoardCompilationChange,
   ArchitectureBoardCompilationChangeAction,
   ArchitectureBoardCompilationChangeKind,
+  ArchitectureBoardCompilationContextSignal,
   ArchitectureBoardCompilationDiagnostic,
   ArchitectureBoardCompilationInput,
   ArchitectureBoardCompilationProposal,
@@ -30,6 +31,11 @@ import {
   evaluateArchitectureBoardKnowledgeQuality,
   rankArchitectureBoardKnowledgeCases
 } from "./architecture-board-knowledge-policy";
+import {
+  applyArchitectureBoardPresentationOperations,
+  applyArchitectureBoardSemanticOperations,
+  type ArchitectureBoardSemanticOperationIssue
+} from "./architecture-board-semantic-operations";
 
 export const ARCHITECTURE_BOARD_COMPILER_VERSION = "architecture-board-compiler/v3";
 
@@ -109,10 +115,24 @@ type StructuralQuality = {
   readonly penalty: number;
 };
 
+type CompilationDiagnosticContext = {
+  readonly operationIssues: readonly ArchitectureBoardSemanticOperationIssue[];
+  readonly signals: readonly ArchitectureBoardCompilationContextSignal[];
+};
+
 export function compileArchitectureBoard(
   input: ArchitectureBoardCompilationInput
 ): ArchitectureBoardCompilationProposal {
-  const requestedArchitecture = cloneArchitecture(input.architecture);
+  const sourceArchitecture = cloneArchitecture(input.architecture);
+  const semanticOperationResult = applyArchitectureBoardSemanticOperations(
+    sourceArchitecture,
+    input.semanticContext?.operations ?? []
+  );
+  const requestedArchitecture = cloneArchitecture(semanticOperationResult.architecture);
+  const diagnosticContext: CompilationDiagnosticContext = {
+    operationIssues: semanticOperationResult.issues,
+    signals: input.semanticContext?.signals ?? []
+  };
   const currentDiagram = input.currentDiagram ? cloneDiagram(input.currentDiagram) : undefined;
   const currentArchitecture = currentDiagram
     ? convertDiagramJsonToArchitectureJson(currentDiagram)
@@ -120,6 +140,9 @@ export function compileArchitectureBoard(
   const baseDiagram = convertArchitectureJsonToDiagramJson(requestedArchitecture, {
     preserveLayoutFrom: input.trigger === "board-auto-organize" ? undefined : currentDiagram
   });
+  const sourceDiagram = currentDiagram
+    ? undefined
+    : convertArchitectureJsonToDiagramJson(sourceArchitecture);
   // board-auto-organize is deliberately a layout-only operation over the live Board, so
   // its current Diagram remains a valid original candidate. Other triggers can change
   // config or relationship labels without changing the graph shape; using their current
@@ -131,16 +154,24 @@ export function compileArchitectureBoard(
     sameArchitectureShape(currentArchitecture, requestedArchitecture)
       ? currentDiagram
       : baseDiagram;
-  const comparisonArchitecture = currentArchitecture ?? requestedArchitecture;
-  const comparisonDiagram = currentDiagram ?? baseDiagram;
+  const comparisonArchitecture = currentArchitecture ?? sourceArchitecture;
+  const comparisonDiagram = currentDiagram ?? sourceDiagram ?? baseDiagram;
 
+  const originalPresentation = applyArchitectureBoardPresentationOperations(
+    originalDiagram,
+    semanticOperationResult.presentationOperations
+  );
   const originalCandidate = createCandidate(
     "original",
     requestedArchitecture,
-    originalDiagram,
+    originalPresentation.diagram,
     comparisonArchitecture,
     comparisonDiagram,
-    requestedArchitecture
+    sourceArchitecture,
+    {
+      ...diagnosticContext,
+      operationIssues: [...diagnosticContext.operationIssues, ...originalPresentation.issues]
+    }
   );
   const presentationArchitecture = inferPresentationArchitecture(requestedArchitecture);
   const presentationCandidate = createMaterializedCandidate(
@@ -148,7 +179,9 @@ export function compileArchitectureBoard(
     presentationArchitecture,
     comparisonArchitecture,
     comparisonDiagram,
-    requestedArchitecture
+    sourceArchitecture,
+    diagnosticContext,
+    semanticOperationResult.presentationOperations
   );
   const semanticArchitecture = createSemanticArchitecture(presentationArchitecture);
   const semanticCandidate = createMaterializedCandidate(
@@ -156,14 +189,17 @@ export function compileArchitectureBoard(
     semanticArchitecture,
     comparisonArchitecture,
     comparisonDiagram,
-    requestedArchitecture
+    sourceArchitecture,
+    diagnosticContext,
+    semanticOperationResult.presentationOperations
   );
   const sourceExactNeedsCompiledVariant =
     comparisonDiagram.presentation?.geometryPolicy === "source-exact" &&
     (input.trigger === "template-review" || input.trigger === "board-auto-organize");
+  const candidates = [originalCandidate, presentationCandidate, semanticCandidate];
   const selectableCandidates = sourceExactNeedsCompiledVariant
     ? [presentationCandidate, semanticCandidate]
-    : [originalCandidate, presentationCandidate, semanticCandidate];
+    : candidates;
   const selected = selectableCandidates.sort(
     (left, right) => left.quality.score - right.quality.score || left.id.localeCompare(right.id)
   )[0];
@@ -173,10 +209,11 @@ export function compileArchitectureBoard(
   }
 
   const beforeDiagnostics = createDiagnostics(
-    requestedArchitecture,
+    sourceArchitecture,
     comparisonArchitecture,
     comparisonDiagram,
-    []
+    [],
+    diagnosticContext
   );
   const beforeQuality = createCompilationQuality(
     evaluateDiagram(comparisonDiagram),
@@ -199,6 +236,7 @@ export function compileArchitectureBoard(
     provenance: {
       compilerVersion: ARCHITECTURE_BOARD_COMPILER_VERSION,
       candidateId: selected.id,
+      candidateIds: candidates.map((candidate) => candidate.id).sort((left, right) => left.localeCompare(right)),
       referenceTemplateIds: [...findReferenceTemplateIds(selected.diagram)]
     }
   };
@@ -209,7 +247,9 @@ function createMaterializedCandidate(
   architecture: ArchitectureJson,
   beforeArchitecture: ArchitectureJson,
   beforeDiagram: DiagramJson,
-  sourceArchitecture: ArchitectureJson
+  sourceArchitecture: ArchitectureJson,
+  diagnosticContext: CompilationDiagnosticContext,
+  presentationOperations: Parameters<typeof applyArchitectureBoardPresentationOperations>[1]
 ): Candidate {
   const materialized = applyCompilerPresentationMetadata(
     preserveCurrentBoardState(convertArchitectureJsonToDiagramJson(architecture), beforeDiagram),
@@ -227,14 +267,22 @@ function createMaterializedCandidate(
     ...cloneDiagram(materialized),
     nodes: restoreLockedNodeGeometry(layout.nodes, materialized.nodes)
   });
+  const presentationResult = applyArchitectureBoardPresentationOperations(
+    diagram,
+    presentationOperations
+  );
 
   return createCandidate(
     `compiled:${id}:${layout.candidateId}`,
     architecture,
-    diagram,
+    presentationResult.diagram,
     beforeArchitecture,
     beforeDiagram,
-    sourceArchitecture
+    sourceArchitecture,
+    {
+      ...diagnosticContext,
+      operationIssues: [...diagnosticContext.operationIssues, ...presentationResult.issues]
+    }
   );
 }
 
@@ -338,7 +386,8 @@ function createCandidate(
   diagram: DiagramJson,
   beforeArchitecture: ArchitectureJson,
   beforeDiagram: DiagramJson,
-  sourceArchitecture: ArchitectureJson
+  sourceArchitecture: ArchitectureJson,
+  diagnosticContext: CompilationDiagnosticContext
 ): Candidate {
   const changes = compareCompilationChanges(
     beforeArchitecture,
@@ -346,7 +395,13 @@ function createCandidate(
     architecture,
     diagram
   );
-  const diagnostics = createDiagnostics(sourceArchitecture, architecture, diagram, changes);
+  const diagnostics = createDiagnostics(
+    sourceArchitecture,
+    architecture,
+    diagram,
+    changes,
+    diagnosticContext
+  );
   const distance = changes.reduce((total, entry) => total + entry.cost, 0);
   const quality = createCompilationQuality(
     evaluateDiagram(diagram),
@@ -1301,7 +1356,8 @@ function createDiagnostics(
   sourceArchitecture: ArchitectureJson,
   candidateArchitecture: ArchitectureJson,
   candidateDiagram: DiagramJson,
-  changes: readonly ArchitectureBoardCompilationChange[]
+  changes: readonly ArchitectureBoardCompilationChange[],
+  diagnosticContext: CompilationDiagnosticContext
 ): ArchitectureBoardCompilationDiagnostic[] {
   const diagnostics: ArchitectureBoardCompilationDiagnostic[] = [];
   const sourceDuplicateIds = findDuplicateIds(sourceArchitecture.nodes.map((node) => node.id));
@@ -1494,9 +1550,51 @@ function createDiagnostics(
     });
   }
 
+  diagnostics.push(...createContextDiagnostics(diagnosticContext, changes));
+
   return diagnostics.sort(
     (left, right) => left.code.localeCompare(right.code) || left.message.localeCompare(right.message)
   );
+}
+
+function createContextDiagnostics(
+  context: CompilationDiagnosticContext,
+  changes: readonly ArchitectureBoardCompilationChange[]
+): ArchitectureBoardCompilationDiagnostic[] {
+  const operationDiagnostics = context.operationIssues.map((issue) => ({
+    code: issue.code,
+    level: "warning" as const,
+    summary: "의미 변경 연산 검토 필요",
+    message: `의미 변경 연산 ${issue.operationId}을 적용하지 못했습니다. 대상 또는 중복 상태를 확인하세요.`,
+    relatedChangeIds: changes
+      .filter((change) => change.targetIds.some((id) => issue.relatedResourceIds.includes(id)))
+      .map((change) => change.id),
+    relatedResourceIds: [...issue.relatedResourceIds],
+    penalty: 250
+  }));
+  const signalDiagnostics = context.signals.map((signal) => ({
+    code: `compiler.context.${signal.kind}:${signal.id}`,
+    level: signal.level,
+    summary: signal.summary,
+    message: signal.message,
+    relatedChangeIds: changes
+      .filter((change) =>
+        change.targetIds.some((id) => (signal.relatedResourceIds ?? []).includes(id))
+      )
+      .map((change) => change.id),
+    relatedResourceIds: [...(signal.relatedResourceIds ?? [])],
+    penalty: signal.penalty ?? defaultSignalPenalty(signal.level)
+  }));
+
+  return [...operationDiagnostics, ...signalDiagnostics].sort(
+    (left, right) => left.code.localeCompare(right.code) || left.message.localeCompare(right.message)
+  );
+}
+
+function defaultSignalPenalty(level: ArchitectureBoardCompilationDiagnostic["level"]): number {
+  if (level === "error") return 1_000;
+  if (level === "warning") return 300;
+  return 0;
 }
 
 function containsLegacyTerraformInterpolation(value: unknown): boolean {
