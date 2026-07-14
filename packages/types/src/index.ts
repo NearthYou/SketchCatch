@@ -551,10 +551,26 @@ export type ListGitHubInstallationRepositoriesRequest = {
   state: string;
 };
 
-export type ListGitHubInstallationRepositoriesResponse = {
-  projectId: string;
-  repositories: GitHubRepositoryCandidate[];
+export type GitHubInstallationConnection = {
+  installationId: string;
+  accountLogin: string;
+  accountType: string | null;
+  repositorySelection: "all" | "selected" | null;
+  repositoryCount: number;
+  htmlUrl: string | null;
 };
+
+export type ListGitHubInstallationsResponse = {
+  installations: GitHubInstallationConnection[];
+};
+
+export type ListGitHubInstallationRepositoriesResponse =
+  | { scope: "account" }
+  | {
+      scope: "project";
+      projectId: string;
+      repositories: GitHubRepositoryCandidate[];
+    };
 
 export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
   installationId: string;
@@ -2976,6 +2992,18 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  areaAutoSizeBaseline?:
+    | {
+        position: {
+          x: number;
+          y: number;
+        };
+        size: {
+          width: number;
+          height: number;
+        };
+      }
+    | undefined;
   /** Limits a resource's area-frame rendering to an authored presentation, not every catalog use. */
   presentationArea?: boolean | undefined;
   /** Lets Web materialization reuse an exact Resource Panel item for a parameterless Template Design node. */

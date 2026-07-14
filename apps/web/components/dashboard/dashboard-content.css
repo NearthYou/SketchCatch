@@ -19,8 +19,7 @@
 
 .dashboardEyebrow,
 .dashboardPanelKicker,
-.dashboardSectionHeader > div > p,
-.dashboardConnectionBand > div:first-child > p {
+.dashboardSectionHeader > div > p {
   margin: 0;
   color: #60646c;
   font-size: 12px;
@@ -328,50 +327,6 @@ a.dashboardActivityRow:hover {
   line-height: 1.6;
 }
 
-.dashboardConnectionBand {
-  display: grid;
-  align-items: center;
-  border-radius: 12px;
-  padding: 20px;
-  background: #ffffff;
-  box-shadow: var(--shadow-card);
-  grid-template-columns: 180px repeat(2, minmax(0, 1fr));
-}
-
-.dashboardConnectionBand h2 {
-  margin: 4px 0 0;
-  font-size: 17px;
-}
-
-.dashboardConnectionItem {
-  display: grid;
-  min-width: 0;
-  align-items: center;
-  padding: 4px 24px;
-  border-left: 1px solid #f0f0f3;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px;
-}
-
-.dashboardConnectionItem > div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.dashboardConnectionItem strong {
-  font-size: 13px;
-}
-
-.dashboardConnectionItem span {
-  overflow: hidden;
-  color: #60646c;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dashboardConnectionItem > a,
 .dashboardBackLink {
   display: inline-flex;
   align-items: center;
@@ -495,8 +450,7 @@ a.dashboardActivityRow:hover {
 }
 
 .dashboardPageHeaderCompact h1,
-.dashboardSectionHeader > div > h2:only-child,
-.dashboardConnectionBand > div:first-child > h2:only-child {
+.dashboardSectionHeader > div > h2:only-child {
   margin-top: 0;
 }
 
@@ -1026,17 +980,6 @@ a.dashboardActivityRow:hover {
   .templateGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .dashboardConnectionBand {
-    grid-template-columns: 150px minmax(0, 1fr);
-  }
-
-  .dashboardConnectionItem:last-child {
-    grid-column: 2;
-    border-top: 1px solid #f0f0f3;
-    padding-top: 16px;
-    margin-top: 12px;
-  }
 }
 
 @media (max-width: 760px) {
@@ -1054,23 +997,6 @@ a.dashboardActivityRow:hover {
   .dashboardOverviewGrid,
   .dashboardTwoColumn {
     grid-template-columns: 1fr;
-  }
-
-  .dashboardConnectionBand {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboardConnectionBand > div:first-child {
-    padding-bottom: 16px;
-  }
-
-  .dashboardConnectionItem,
-  .dashboardConnectionItem:last-child {
-    grid-column: auto;
-    border-top: 1px solid #f0f0f3;
-    border-left: 0;
-    margin: 0;
-    padding: 16px 0;
   }
 
   .dashboardCardGrid,

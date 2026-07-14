@@ -181,7 +181,11 @@ function isDashboardNavItemActive(pathname: string, href: string): boolean {
 // route 이름을 사용자가 이해할 수 있는 짧은 화면 제목으로 바꿉니다.
 function getDashboardPageTitle(pathname: string): string {
   if (pathname.startsWith("/dashboard/projects/")) {
-    return pathname.endsWith("/settings") ? "프로젝트 설정" : "프로젝트 상세";
+    return pathname.endsWith("/repository")
+      ? "소스 저장소"
+      : pathname.endsWith("/settings")
+        ? "프로젝트 설정"
+        : "프로젝트 상세";
   }
 
   return (

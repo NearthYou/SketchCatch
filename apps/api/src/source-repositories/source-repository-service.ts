@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type {
   AnalyzeSourceRepositoryResponse,
   GitHubInstalledRepositoryCandidate,
+  GitHubInstallationConnection,
   GitHubRepositoryCandidate,
   RecommendRepositoryTemplateResponse,
   RepositoryAnalysisAnswer,
@@ -61,6 +62,21 @@ export type CreateGitHubInstallUrlResult = {
   expiresAt: Date;
 };
 
+export type CreateGitHubAccountInstallUrlInput = {
+  accessContext: ProjectAccessContext;
+  appSlug: string;
+  stateSecret: string;
+  now?: () => Date;
+};
+
+export type ListGitHubAccountInstallationsInput = {
+  accessContext: ProjectAccessContext;
+};
+
+export type ListGitHubAccountInstallationsResult = {
+  installations: GitHubInstallationConnection[];
+};
+
 export type CreateGitHubExistingInstallationCallbackUrlInput = {
   projectId: string;
   sourceRepositoryId?: string | undefined;
@@ -82,10 +98,13 @@ export type ListGitHubInstallationRepositoriesInput = {
   stateSecret: string;
 };
 
-export type ListGitHubInstallationRepositoriesResult = {
-  projectId: string;
-  repositories: GitHubRepositoryCandidate[];
-};
+export type ListGitHubInstallationRepositoriesResult =
+  | { scope: "account" }
+  | {
+      scope: "project";
+      projectId: string;
+      repositories: GitHubRepositoryCandidate[];
+    };
 
 export type ListGitHubInstalledRepositoriesInput = {
   projectId: string;
@@ -287,6 +306,7 @@ export async function createGitHubInstallUrl(
   );
 
   const stateInput = {
+    scope: "project" as const,
     userId: input.accessContext.userId,
     projectId: input.projectId,
     secret: input.stateSecret,
@@ -294,7 +314,28 @@ export async function createGitHubInstallUrl(
   };
   const { state, expiresAt } = await createGitHubAppState(stateInput);
   const installUrl = new URL(
-    `https://github.com/apps/${encodeURIComponent(input.appSlug)}/installations/select_target`
+    `https://github.com/apps/${encodeURIComponent(input.appSlug)}/installations/new`
+  );
+
+  installUrl.searchParams.set("state", state);
+
+  return {
+    installUrl: installUrl.toString(),
+    expiresAt
+  };
+}
+
+export async function createGitHubAccountInstallUrl(
+  input: CreateGitHubAccountInstallUrlInput
+): Promise<CreateGitHubInstallUrlResult> {
+  const { state, expiresAt } = await createGitHubAppState({
+    scope: "account",
+    userId: input.accessContext.userId,
+    secret: input.stateSecret,
+    ...(input.now ? { now: input.now } : {})
+  });
+  const installUrl = new URL(
+    `https://github.com/apps/${encodeURIComponent(input.appSlug)}/installations/new`
   );
 
   installUrl.searchParams.set("state", state);
@@ -329,6 +370,7 @@ export async function createGitHubExistingInstallationCallbackUrl(
   }
 
   const stateInput = {
+    scope: "project" as const,
     userId: input.accessContext.userId,
     projectId: input.projectId,
     secret: input.stateSecret,
@@ -353,11 +395,49 @@ export async function listGitHubInstallationRepositories(
 ): Promise<ListGitHubInstallationRepositoriesResult> {
   const state = await verifyAndAuthorizeState(input, repository);
   await requireOwnedGitHubInstallation(state.userId, input.installationId, repository, githubAppClient);
+
+  if (state.scope === "account") {
+    return { scope: "account" };
+  }
+
   const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
 
   return {
+    scope: "project",
     projectId: state.projectId,
     repositories
+  };
+}
+
+export async function listGitHubAccountInstallations(
+  input: ListGitHubAccountInstallationsInput,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+): Promise<ListGitHubAccountInstallationsResult> {
+  const installations = await listOwnedGitHubInstallations(
+    input.accessContext.userId,
+    repository,
+    githubAppClient
+  );
+  const connections = await Promise.all(
+    installations.map(async (installation): Promise<GitHubInstallationConnection> => ({
+      installationId: installation.installationId,
+      accountLogin: installation.accountLogin,
+      accountType: installation.accountType,
+      repositorySelection: installation.repositorySelection,
+      repositoryCount: (
+        await githubAppClient.listInstallationRepositories(installation.installationId)
+      ).length,
+      htmlUrl: installation.htmlUrl
+    }))
+  );
+
+  return {
+    installations: connections.sort(
+      (left, right) =>
+        left.accountLogin.localeCompare(right.accountLogin) ||
+        left.installationId.localeCompare(right.installationId)
+    )
   };
 }
 
@@ -374,6 +454,7 @@ export async function listGitHubInstalledRepositories(
   );
 
   const stateInput = {
+    scope: "project" as const,
     userId: input.accessContext.userId,
     projectId: input.projectId,
     secret: input.stateSecret,
@@ -651,7 +732,7 @@ async function verifyAndAuthorizeState(
     readonly accessContext: ProjectAccessContext;
   },
   repository: SourceRepositoryRepository
-): Promise<{ userId: string; projectId: string }> {
+): Promise<Awaited<ReturnType<typeof verifyGitHubAppState>>> {
   let state: Awaited<ReturnType<typeof verifyGitHubAppState>>;
 
   try {
@@ -669,6 +750,14 @@ async function verifyAndAuthorizeState(
     throw new SourceRepositoryStateError("GitHub App state user mismatch");
   }
 
+  if (state.scope === "account") {
+    if (input.projectId) {
+      throw new SourceRepositoryStateError("GitHub App state scope mismatch");
+    }
+
+    return state;
+  }
+
   if (input.projectId && state.projectId !== input.projectId) {
     throw new SourceRepositoryStateError("GitHub App state project mismatch");
   }
@@ -680,10 +769,7 @@ async function verifyAndAuthorizeState(
     "Project not found"
   );
 
-  return {
-    userId: state.userId,
-    projectId: state.projectId
-  };
+  return state;
 }
 
 async function listOwnedGitHubInstallations(

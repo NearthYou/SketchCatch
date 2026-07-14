@@ -12,11 +12,17 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Verification
 
-- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused GitHub client/provider/persistence/workflow tests pass, including red-green coverage for historical stale handling and actual-job stage precedence.
-- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
+- After merging `origin/dev` at `f16a4546` and resolving PR feedback, current code verification passes 25 sandbox orchestration tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks.
+- Local API/proxy/Redis/certificate/TLS/log/fixture-clone cleanup is complete. Read-only AWS checks show zero Issue #378 ECR, CodeBuild, and S3 resources.
+- The latest `dev` test policy is preserved: 52 essential protection files remain and removed feature-specific suites were not reintroduced.
 
 ## Changes This Session
 
+- Completed the code-side acceptance runner as a fail-closed three-stage orchestration contract with exact Direct/GitOps matrices, cleanup-on-failure, event hooks, and verification-gated success.
+- Added standalone SAM/CodeDeploy application-unit detection, application-local Static lockfile selection, and source-root npm/yarn installs in generated workflows.
+- Reconnected the private fixture repository after its GitHub App installation changed and confirmed Static/Lambda/EC2 evidence at fixture commit `97c98d2640d7af3af79bfcb10f4bd3780addb02d`.
+- Reopened Issue #378, passed the live sandbox preflight, and restored the execution-role trust to the current encrypted AWS Connection external ID.
+- Added persisted Web Push provider status evidence and runtime-aware GitOps artifact cleanup with migration and focused regression coverage.
 - Hardened GitHub run selection/log hydration and nullable handoff persistence.
 - Added S3 backend enforcement and real ECS immediate replacement/rollback behavior.
 - Fixed stale aggregation and stage mapping, then persisted final ECS GitOps evidence through the normal API.
@@ -28,5 +34,5 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
-- Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.
+- Merge the code-completion PR after focused CI and review.
+- Keep Issue #378 open for a separately approved real-environment acceptance run covering Static, Lambda, EC2/ASG, rollback, QR/CloudWatch, and Web Push.

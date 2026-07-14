@@ -9,6 +9,7 @@ import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
 import {
   getGitCicdMonitoringConfig,
   getGitCicdPipelineRun,
+  listGitHubAccountInstallations,
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
   listSourceRepositories,
@@ -22,6 +23,7 @@ import {
   getCicdPollIntervalMs,
   getSelectedCicdPipelineRunId,
   initialCicdConsoleRequestState,
+  isGitHubIdentityRequiredError,
   mergeCicdPipelineRun,
   reduceCicdLogState,
   reduceCicdConsoleRequestState
@@ -42,6 +44,9 @@ export function CicdConsoleScreen({
 }) {
   const [activeView, setActiveView] = useState<CicdConsoleView>("activity");
   const [repository, setRepository] = useState<SourceRepository | null>(null);
+  const [hasGitHubAccountConnection, setHasGitHubAccountConnection] = useState<boolean | null>(
+    null
+  );
   const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(null);
   const [runs, setRuns] = useState<GitCicdPipelineRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -82,7 +87,9 @@ export function CicdConsoleScreen({
       ? logs
       : [];
   const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
-  const settingsHref = `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
+  const projectSettingsHref = `/dashboard/projects/${encodeURIComponent(projectId)}/settings`;
+  const repositoryHref = `/dashboard/projects/${encodeURIComponent(projectId)}/repository`;
+  const githubAccountSettingsHref = "/dashboard/settings#github-account-settings-title";
 
   const loadRuns = useCallback(async (): Promise<GitCicdPipelineRun[]> => {
     const response = await listGitCicdPipelineRuns(projectId, { limit: 50 });
@@ -118,6 +125,17 @@ export function CicdConsoleScreen({
         const activeRepository = repositories.find(
           (item) => item.provider === "github" && item.status === "active"
         ) ?? null;
+        let githubAccountConnected = true;
+        if (!activeRepository) {
+          try {
+            githubAccountConnected = (await listGitHubAccountInstallations()).length > 0;
+          } catch (error) {
+            if (!isGitHubIdentityRequiredError(error)) {
+              throw error;
+            }
+            githubAccountConnected = false;
+          }
+        }
         const monitoringConfig = activeRepository
           ? await getGitCicdMonitoringConfig(projectId, activeRepository.id)
           : null;
@@ -127,6 +145,7 @@ export function CicdConsoleScreen({
         }
 
         setRepository(activeRepository);
+        setHasGitHubAccountConnection(githubAccountConnected);
         setConfig(monitoringConfig);
         hasExplicitRunSelectionRef.current = false;
         applyRuns(initialRuns.runs);
@@ -315,7 +334,7 @@ export function CicdConsoleScreen({
       <div className={styles.cicdState} role="alert">
         <h3>GitHub 권한을 확인해 주세요.</h3>
         <p>{screenErrorMessage}</p>
-        <a className={styles.deploymentPrimaryButton} href={settingsHref}>프로젝트 GitHub 설정 열기</a>
+        <a className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>GitHub 계정 설정 열기</a>
         <button className={styles.deploymentSecondaryButton} onClick={() => {
           loadedProjectIdRef.current = null;
           setIsInitialLoading(true);
@@ -339,11 +358,26 @@ export function CicdConsoleScreen({
     );
   }
 
+  if (!repository && hasGitHubAccountConnection === false) {
+    return (
+      <div className={styles.cicdState} role="status">
+        <h3>GitHub 계정 연결이 필요합니다.</h3>
+        <p>GitHub App을 먼저 연결한 뒤 이 프로젝트의 저장소를 선택할 수 있습니다.</p>
+        <a
+          className={styles.deploymentPrimaryButton}
+          href={githubAccountSettingsHref}
+        >
+          GitHub 계정 설정 열기
+        </a>
+      </div>
+    );
+  }
+
   if (!repository) {
     return (
       <div className={styles.cicdState} role="status">
         <h3>GitHub 저장소 연결이 필요합니다.</h3>
-        <a className={styles.deploymentPrimaryButton} href={settingsHref}>프로젝트 GitHub 설정 열기</a>
+        <a className={styles.deploymentPrimaryButton} href={repositoryHref}>프로젝트 소스 저장소 열기</a>
       </div>
     );
   }
@@ -367,7 +401,7 @@ export function CicdConsoleScreen({
       </div>
 
       {config?.validationStatus === "required" ? (
-        <a className={styles.cicdRequiredState} href={settingsHref}>
+        <a className={styles.cicdRequiredState} href={projectSettingsHref}>
           프로젝트 설정에서 CI/CD branch와 경로를 확인하세요.
         </a>
       ) : null}
@@ -414,6 +448,9 @@ function mergeLogs(current: readonly GitCicdPipelineLog[], next: readonly GitCic
 }
 
 function isGitHubPermissionFailure(error: unknown): boolean {
+  if (isGitHubIdentityRequiredError(error)) {
+    return false;
+  }
   if (error instanceof ApiClientError && error.status === 403) {
     return true;
   }

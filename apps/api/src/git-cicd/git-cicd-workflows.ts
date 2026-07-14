@@ -1141,14 +1141,14 @@ jobs:
               pnpm --dir "$SKETCHCATCH_SOURCE_ROOT" build
               ;;
             npm_ci)
-              test -f package-lock.json
-              npm ci
+              test -f "$SKETCHCATCH_SOURCE_ROOT/package-lock.json"
+              npm --prefix "$SKETCHCATCH_SOURCE_ROOT" ci
               npm --prefix "$SKETCHCATCH_SOURCE_ROOT" run build
               ;;
             yarn_frozen_lockfile)
-              test -f yarn.lock
+              test -f "$SKETCHCATCH_SOURCE_ROOT/yarn.lock"
               corepack enable
-              yarn install --frozen-lockfile
+              yarn --cwd "$SKETCHCATCH_SOURCE_ROOT" install --frozen-lockfile
               yarn --cwd "$SKETCHCATCH_SOURCE_ROOT" build
               ;;
             *)
@@ -1827,6 +1827,11 @@ jobs:
         shell: bash
         run: |
           aws s3 rm "s3://\${{ vars.SKETCHCATCH_RELEASE_BUCKET }}/releases/" --recursive || true
+          aws s3 rm "s3://\${{ vars.SKETCHCATCH_RELEASE_BUCKET }}/lambda/" --recursive || true
+          aws s3 rm "s3://\${{ vars.SKETCHCATCH_RELEASE_BUCKET }}/${input.projectSlug}/ec2-asg/" --recursive || true
+          if [ -n "\${{ vars.SKETCHCATCH_STATIC_BUCKET }}" ]; then
+            aws s3 rm "s3://\${{ vars.SKETCHCATCH_STATIC_BUCKET }}/releases/" --recursive || true
+          fi
 `;
 }
 

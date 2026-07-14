@@ -7,6 +7,7 @@ import type {
 
 export const ACTIVE_CICD_POLL_INTERVAL_MS = 5_000;
 export const IDLE_CICD_POLL_INTERVAL_MS = 30_000;
+const GITHUB_IDENTITY_REQUIRED_ERROR = "GIT_APP_GITHUB_IDENTITY_REQUIRED";
 
 const CICD_STALE_AFTER_MS = 60_000;
 const TERMINAL_PIPELINE_RUN_STATUSES: ReadonlySet<GitCicdPipelineRunStatus> = new Set([
@@ -60,6 +61,10 @@ export const initialCicdConsoleRequestState: CicdConsoleRequestState = {
   screenErrorMessage: "",
   logsErrorMessage: ""
 };
+
+export function isGitHubIdentityRequiredError(error: unknown): boolean {
+  return error instanceof Error && error.message === GITHUB_IDENTITY_REQUIRED_ERROR;
+}
 
 export function getCicdPollIntervalMs(runs: readonly PipelineRunStatusValue[]): number {
   return runs.some((run) => !isTerminalPipelineStatus(run.status))

@@ -9,7 +9,7 @@
     "start": "next start --port ${PORT:-3000}",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test \"features/**/*.test.ts\""
+    "test": "tsx --test \"features/**/*.test.ts\" \"components/**/*.test.ts\""
   },
   "dependencies": {
     "@sketchcatch/types": "workspace:*",
