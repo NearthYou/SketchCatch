@@ -3200,6 +3200,93 @@ export type ArchitectureBoardCompilationDiagnostic = {
   penalty: number;
 };
 
+/**
+ * External evidence may influence a Compiler proposal without becoming a hard gate.
+ * The caller supplies facts; the Compiler returns them as ranked diagnostics for the
+ * user-accepted change boundary.
+ */
+export type ArchitectureBoardCompilationContextSignal = {
+  id: string;
+  kind: "requirement" | "deployment" | "provider" | "terraform";
+  level: ArchitectureBoardCompilationDiagnosticLevel;
+  summary: string;
+  message: string;
+  relatedResourceIds?: string[] | undefined;
+  penalty?: number | undefined;
+};
+
+/**
+ * Explicit semantic mutations are optional Compiler inputs. They let an upstream
+ * requirement/repository/reverse-engineering adapter authorize resource and graph
+ * repairs while keeping actual Board application user-accepted.
+ */
+export type ArchitectureBoardCompilationSemanticOperation =
+  | {
+      id: string;
+      kind: "resource-add";
+      node: ArchitectureNode;
+    }
+  | {
+      id: string;
+      kind: "resource-remove";
+      targetId: string;
+    }
+  | {
+      id: string;
+      kind: "resource-replace";
+      targetId: string;
+      node: ArchitectureNode;
+    }
+  | {
+      id: string;
+      kind: "relationship-add";
+      edge: ArchitectureEdge;
+    }
+  | {
+      id: string;
+      kind: "relationship-remove";
+      targetId: string;
+    }
+  | {
+      id: string;
+      kind: "relationship-replace";
+      targetId: string;
+      edge: ArchitectureEdge;
+    }
+  | {
+      id: string;
+      kind: "configuration-merge";
+      targetId: string;
+      values: ResourceConfig;
+    }
+  | {
+      id: string;
+      kind: "configuration-replace";
+      targetId: string;
+      values: ResourceConfig;
+    }
+  | {
+      id: string;
+      kind: "containment-set";
+      targetId: string;
+      parentAreaNodeId?: string | undefined;
+    }
+  | {
+      id: string;
+      kind: "presentation-add";
+      node: DiagramNode;
+    }
+  | {
+      id: string;
+      kind: "presentation-remove";
+      targetId: string;
+    };
+
+export type ArchitectureBoardCompilationSemanticContext = {
+  operations?: ArchitectureBoardCompilationSemanticOperation[] | undefined;
+  signals?: ArchitectureBoardCompilationContextSignal[] | undefined;
+};
+
 export type ArchitectureBoardCompilationQuality = {
   score: number;
   visualPenalty: number;
@@ -3211,6 +3298,7 @@ export type ArchitectureBoardCompilationQuality = {
 export type ArchitectureBoardCompilationInput = {
   architecture: ArchitectureJson;
   currentDiagram?: DiagramJson | undefined;
+  semanticContext?: ArchitectureBoardCompilationSemanticContext | undefined;
   trigger: ArchitectureBoardCompilationTrigger;
 };
 
