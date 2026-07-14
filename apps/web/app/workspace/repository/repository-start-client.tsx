@@ -53,7 +53,7 @@ import {
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
-import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
+import { compileArchitectureDraftProposal } from "../../../features/architecture-board-compiler";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
@@ -297,8 +297,8 @@ export function RepositoryStartClient({
         return;
       }
 
-      const diagram = getDiagramJsonForArchitectureDraft(draft);
-      await saveProjectDraft({ diagramJson: diagram, projectId });
+      const proposal = compileArchitectureDraftProposal(draft);
+      await saveProjectDraft({ diagramJson: proposal.diagram, projectId });
       setPublicAnalysisState("idle");
       router.push(
         `/workspace?${new URLSearchParams({
@@ -339,8 +339,8 @@ export function RepositoryStartClient({
         return;
       }
 
-      const diagram = getDiagramJsonForArchitectureDraft(draft);
-      await saveProjectDraft({ diagramJson: diagram, projectId });
+      const proposal = compileArchitectureDraftProposal(draft);
+      await saveProjectDraft({ diagramJson: proposal.diagram, projectId });
       setActionState("idle");
       router.push(
         `/workspace?${new URLSearchParams({

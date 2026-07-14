@@ -26,8 +26,12 @@ import {
   convertDiagramJsonToArchitectureJson
 } from "../workspace/workspace-ai-diagram-adapter";
 import { architectureBoardKnowledge } from "./architecture-board-knowledge";
+import {
+  evaluateArchitectureBoardKnowledgeQuality,
+  rankArchitectureBoardKnowledgeCases
+} from "./architecture-board-knowledge-policy";
 
-export const ARCHITECTURE_BOARD_COMPILER_VERSION = "architecture-board-compiler/v2";
+export const ARCHITECTURE_BOARD_COMPILER_VERSION = "architecture-board-compiler/v3";
 
 export type {
   ArchitectureBoardCompilationChange,
@@ -123,40 +127,6 @@ export function compileArchitectureBoard(
   const comparisonArchitecture = currentArchitecture ?? requestedArchitecture;
   const comparisonDiagram = currentDiagram ?? baseDiagram;
 
-  // Source fixtures are evidence, not a mutable compiler input.  Returning a proposal
-  // remains useful for diagnostics/quality, but this branch never materializes a variant.
-  if (
-    comparisonDiagram.presentation?.geometryPolicy === "source-exact" &&
-    input.trigger !== "template-review"
-  ) {
-    const diagnostics = createDiagnostics(
-      requestedArchitecture,
-      requestedArchitecture,
-      comparisonDiagram,
-      []
-    );
-    const quality = createCompilationQuality(
-      evaluateDiagram(comparisonDiagram),
-      evaluateStructuralQuality(requestedArchitecture),
-      diagnostics,
-      0,
-      comparisonDiagram
-    );
-
-    return {
-      architecture: requestedArchitecture,
-      changes: [],
-      diagnostics,
-      diagram: cloneDiagram(comparisonDiagram),
-      quality: { before: quality, after: quality, compilationDistance: 0 },
-      provenance: {
-        compilerVersion: ARCHITECTURE_BOARD_COMPILER_VERSION,
-        candidateId: "source-exact",
-        referenceTemplateIds: [...findReferenceTemplateIds(comparisonDiagram)]
-      }
-    };
-  }
-
   const originalCandidate = createCandidate(
     "original",
     requestedArchitecture,
@@ -234,7 +204,7 @@ function createMaterializedCandidate(
   sourceArchitecture: ArchitectureJson
 ): Candidate {
   const materialized = applyCompilerPresentationMetadata(
-    convertArchitectureJsonToDiagramJson(architecture),
+    preserveCurrentBoardState(convertArchitectureJsonToDiagramJson(architecture), beforeDiagram),
     architecture
   );
   const layout = layoutAutomaticDiagram({
@@ -254,6 +224,22 @@ function createMaterializedCandidate(
     beforeDiagram,
     sourceArchitecture
   );
+}
+
+// Compiler는 Resource graph를 다시 materialize하지만, variable binding과 사용자가 저장한
+// viewport/presentation은 graph에서 유도할 수 없는 Board 상태다. 자동 정리 proposal이 이를
+// 잃으면 안 되므로 후보에 그대로 carry-forward한다.
+function preserveCurrentBoardState(nextDiagram: DiagramJson, currentDiagram: DiagramJson): DiagramJson {
+  return {
+    ...cloneDiagram(nextDiagram),
+    viewport: structuredClone(currentDiagram.viewport),
+    ...(currentDiagram.variables === undefined
+      ? {}
+      : { variables: structuredClone(currentDiagram.variables) }),
+    ...(currentDiagram.presentation === undefined
+      ? {}
+      : { presentation: structuredClone(currentDiagram.presentation) })
+  };
 }
 
 function createCandidate(
@@ -299,32 +285,26 @@ function createCompilationQuality(
   diagram: DiagramJson
 ): ArchitectureBoardCompilationQuality {
   const semanticDiagnosticPenalty = diagnostics.reduce((total, diagnostic) => total + diagnostic.penalty, 0);
+  const knowledge = evaluateArchitectureBoardKnowledgeQuality(diagram, architectureBoardKnowledge);
 
   return {
     // A candidate is selected by this complete, ordered cost.  Distance is separately
     // exposed to the UI so a user can see why a semantically broader proposal won.
-    score: visual.score + structural.penalty + semanticDiagnosticPenalty + compilationDistance,
+    score:
+      visual.score +
+      structural.penalty +
+      semanticDiagnosticPenalty +
+      knowledge.penalty +
+      compilationDistance,
     visualPenalty: visual.score,
     structuralPenalty: structural.penalty,
     semanticDiagnosticPenalty,
     metrics: {
       ...visual,
       ...structural.metrics,
-      ...getKnowledgeReferenceMetrics(diagram),
+      ...knowledge.metrics,
       compilationDistance
     }
-  };
-}
-
-function getKnowledgeReferenceMetrics(diagram: DiagramJson): Record<string, number> {
-  const referenceId = findReferenceTemplateIds(diagram)[0];
-  const reference = architectureBoardKnowledge.cases.find((entry) => entry.id === referenceId);
-
-  return {
-    knowledgeViewportAspectRatio: reference?.viewportAspectRatio ?? 0,
-    knowledgeContainmentDepth: reference?.maxContainmentDepth ?? 0,
-    knowledgeSiblingGap: reference?.meanSiblingGap ?? 0,
-    knowledgeEdgeLength: reference?.meanEdgeLength ?? 0
   };
 }
 
@@ -333,13 +313,25 @@ function getKnowledgeReferenceMetrics(diagram: DiagramJson): Record<string, numb
  * persisted non-SG parent intent.  The semantic candidate extends it with graph repair
  * and relationship/config changes, so the distance model can prefer the smaller proposal.
  */
-function inferPresentationArchitecture(source: ArchitectureJson): ArchitectureJson {
+type PresentationInferenceOptions = {
+  readonly reconsiderDeclaredParents?: boolean;
+};
+
+function inferPresentationArchitecture(
+  source: ArchitectureJson,
+  options: PresentationInferenceOptions = {}
+): ArchitectureJson {
   const architecture = cloneArchitecture(source);
   const nodesById = new Map(architecture.nodes.map((node) => [node.id, node]));
   const declaredParents = new Map(
     architecture.nodes.map((node) => [node.id, readDeclaredParentId(node)])
   );
-  const inferredParents = inferNonSecurityGroupParents(architecture, nodesById, declaredParents);
+  const inferredParents = inferNonSecurityGroupParents(
+    architecture,
+    nodesById,
+    declaredParents,
+    options.reconsiderDeclaredParents === true
+  );
   const childCountByParentId = new Map<string, number>();
 
   for (const parentId of inferredParents.values()) {
@@ -355,7 +347,8 @@ function inferPresentationArchitecture(source: ArchitectureJson): ArchitectureJs
       const normalizedExistingParent = normalizeParentId(readDeclaredParentId(node));
       const shouldReplaceParent =
         normalizedExistingParent !== inferredParentId &&
-        (isSecurityGroupParent(normalizedExistingParent, nodesById) ||
+        (options.reconsiderDeclaredParents === true ||
+          isSecurityGroupParent(normalizedExistingParent, nodesById) ||
           !normalizedExistingParent ||
           !nodesById.has(normalizedExistingParent));
       const shouldAddPresentationArea =
@@ -384,7 +377,7 @@ function createSemanticArchitecture(source: ArchitectureJson): ArchitectureJson 
 
   // Reference normalization can reveal a parent reference that was hidden by legacy
   // interpolation syntax, so run the cheap presentation inference once more.
-  return inferPresentationArchitecture(withRelationships);
+  return inferPresentationArchitecture(withRelationships, { reconsiderDeclaredParents: true });
 }
 
 function normalizeDuplicateResourceIds(source: ArchitectureJson): ArchitectureJson {
@@ -478,7 +471,8 @@ function inferTerraformReferenceRelationships(source: ArchitectureJson): Archite
 function inferNonSecurityGroupParents(
   architecture: ArchitectureJson,
   nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>,
-  declaredParents: ReadonlyMap<string, string | undefined>
+  declaredParents: ReadonlyMap<string, string | undefined>,
+  reconsiderDeclaredParents: boolean
 ): Map<string, string | undefined> {
   const parentByNodeId = new Map(declaredParents);
   const edgeParentsByChildId = new Map<string, string[]>();
@@ -493,29 +487,26 @@ function inferNonSecurityGroupParents(
 
   for (const node of [...architecture.nodes].sort((left, right) => left.id.localeCompare(right.id))) {
     const existingParentId = normalizeParentId(declaredParents.get(node.id));
-    if (
+    const existingParentIsUsable = Boolean(
       existingParentId &&
       nodesById.has(existingParentId) &&
       !isSecurityGroupParent(existingParentId, nodesById) &&
       !wouldCreateContainmentCycle(node.id, existingParentId, parentByNodeId)
-    ) {
+    );
+    if (existingParentId && existingParentIsUsable && !reconsiderDeclaredParents) {
       parentByNodeId.set(node.id, existingParentId);
       continue;
     }
 
-    const candidates = [
-      ...(edgeParentsByChildId.get(node.id) ?? []),
-      ...getReferencedNodeIds(node, nodesById)
-    ]
-      .filter((candidateId) => candidateId !== node.id)
-      .filter((candidateId) => {
-        const candidate = nodesById.get(candidateId);
-        return Boolean(candidate && isNonSecurityGroupAreaNode(candidate));
-      })
-      .sort((left, right) => compareContainmentParents(left, right, nodesById));
-    const nextParentId = candidates.find(
-      (candidateId) => !wouldCreateContainmentCycle(node.id, candidateId, parentByNodeId)
-    );
+    const candidates = createContainmentParentCandidates({
+      existingParentId: existingParentIsUsable ? existingParentId : undefined,
+      edgeParentIds: edgeParentsByChildId.get(node.id) ?? [],
+      referencedParentIds: [...getReferencedNodeIds(node, nodesById)],
+      nodeId: node.id,
+      nodesById,
+      parentByNodeId
+    });
+    const nextParentId = candidates[0];
 
     parentByNodeId.set(node.id, nextParentId);
   }
@@ -523,17 +514,48 @@ function inferNonSecurityGroupParents(
   return parentByNodeId;
 }
 
-function compareContainmentParents(
-  leftId: string,
-  rightId: string,
-  nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>
-): number {
-  const left = nodesById.get(leftId);
-  const right = nodesById.get(rightId);
-  return (
-    containmentSpecificity(right) - containmentSpecificity(left) ||
-    leftId.localeCompare(rightId)
-  );
+function createContainmentParentCandidates({
+  edgeParentIds,
+  existingParentId,
+  nodeId,
+  nodesById,
+  parentByNodeId,
+  referencedParentIds
+}: {
+  readonly edgeParentIds: readonly string[];
+  readonly existingParentId: string | undefined;
+  readonly nodeId: string;
+  readonly nodesById: ReadonlyMap<string, ArchitectureJson["nodes"][number]>;
+  readonly parentByNodeId: ReadonlyMap<string, string | undefined>;
+  readonly referencedParentIds: readonly string[];
+}): string[] {
+  const sourcePriorityById = new Map<string, number>();
+  const register = (ids: readonly string[], priority: number) => {
+    for (const candidateId of ids) {
+      if (candidateId === nodeId) continue;
+      const candidate = nodesById.get(candidateId);
+      if (!candidate || !isNonSecurityGroupAreaNode(candidate)) continue;
+      if (wouldCreateContainmentCycle(nodeId, candidateId, parentByNodeId)) continue;
+      sourcePriorityById.set(candidateId, Math.max(sourcePriorityById.get(candidateId) ?? 0, priority));
+    }
+  };
+
+  // Specificity wins first: a Subnet reference should refine an old VPC parent.
+  // Within the same layer, explicit contains/hosts beats a Terraform reference,
+  // which beats the stale declared parent.
+  register(existingParentId ? [existingParentId] : [], 1);
+  register(referencedParentIds, 2);
+  register(edgeParentIds, 3);
+
+  return [...sourcePriorityById.keys()].sort((left, right) => {
+    const specificity =
+      containmentSpecificity(nodesById.get(right)) - containmentSpecificity(nodesById.get(left));
+    return (
+      specificity ||
+      (sourcePriorityById.get(right) ?? 0) - (sourcePriorityById.get(left) ?? 0) ||
+      left.localeCompare(right)
+    );
+  });
 }
 
 function containmentSpecificity(node: ArchitectureJson["nodes"][number] | undefined): number {
@@ -1080,6 +1102,36 @@ function compareDiagramRoutes(
   for (const id of sortedUnion(beforeEdges.keys(), afterEdges.keys())) {
     const previous = beforeEdges.get(id);
     const next = afterEdges.get(id);
+    if (!previous && next) {
+      changes.push(
+        change(
+          "edge-routing",
+          "add",
+          [next.sourceNodeId, next.targetNodeId],
+          `관계 ${id} 화면 연결선 추가`,
+          COMPILATION_DISTANCE_COST.edgeRouting,
+          null,
+          routeState(next),
+          id
+        )
+      );
+      continue;
+    }
+    if (previous && !next) {
+      changes.push(
+        change(
+          "edge-routing",
+          "remove",
+          [previous.sourceNodeId, previous.targetNodeId],
+          `관계 ${id} 화면 연결선 제거`,
+          COMPILATION_DISTANCE_COST.edgeRouting,
+          routeState(previous),
+          null,
+          id
+        )
+      );
+      continue;
+    }
     if (!previous || !next) continue;
     const beforeRoute = routeState(previous);
     const afterRoute = routeState(next);
@@ -1325,21 +1377,9 @@ function findDuplicateIds(ids: readonly string[]): Set<string> {
 }
 
 function findReferenceTemplateIds(diagram: DiagramJson): readonly string[] {
-  const types = new Set(diagram.nodes.map((node) => node.type));
-  return architectureBoardKnowledge.cases
-    .map((knowledgeCase) => ({
-      id: knowledgeCase.id,
-      score: jaccard(types, new Set(knowledgeCase.nodeTypes))
-    }))
-    .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+  return rankArchitectureBoardKnowledgeCases(diagram, architectureBoardKnowledge)
     .slice(0, 3)
-    .map(({ id }) => id);
-}
-
-function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
-  const union = new Set([...left, ...right]);
-  if (union.size === 0) return 0;
-  return [...left].filter((value) => right.has(value)).length / union.size;
+    .map(({ knowledgeCase }) => knowledgeCase.id);
 }
 
 function change(
@@ -1401,7 +1441,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return stableSerialize(left) === stableSerialize(right);
+}
+
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableSerialize).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort((left, right) => left.localeCompare(right))
+      .map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`)
+      .join(",")}}`;
+  }
+  if (typeof value === "undefined") return "undefined";
+  if (typeof value === "number" && Number.isNaN(value)) return "NaN";
+  return JSON.stringify(value);
 }
 
 function sameArchitectureShape(left: ArchitectureJson, right: ArchitectureJson): boolean {

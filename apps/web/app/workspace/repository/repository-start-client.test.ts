@@ -12,7 +12,7 @@ test("Repository start screen exposes an explicit AI chat fallback", () => {
   assert.match(source, /createPublicRepositoryRecommendation/);
   assert.match(source, /createPublicRepositoryArchitectureDraftRequest/);
   assert.match(source, /createAiArchitectureDraft/);
-  assert.match(source, /getDiagramJsonForArchitectureDraft/);
+  assert.match(source, /compileArchitectureDraftProposal/);
   assert.match(source, /createWorkspaceAiStartHref/);
   assert.match(source, /원하는 구성이 없나요\? AI로 새 설계 만들기/);
   assert.match(source, /className=\{styles\.publicAiFallbackAction\}/);
@@ -30,7 +30,8 @@ test("connected Repository board generation uses the AI Architecture Draft path"
   assert.match(source, /createConnectedRepositoryBoard/);
   assert.match(source, /createConnectedRepositoryArchitectureDraftRequest/);
   assert.match(source, /createAiArchitectureDraft/);
-  assert.match(source, /getDiagramJsonForArchitectureDraft\(draft\)/);
+  assert.match(source, /compileArchitectureDraftProposal\(draft\)/);
+  assert.match(source, /diagramJson:\s*proposal\.diagram/);
   assert.match(source, /repositoryAnalysis:\s*{/);
   assert.match(source, /sourceRepositoryId:\s*repository\.id/);
   assert.match(source, /repositoryEvidence:\s*{/);

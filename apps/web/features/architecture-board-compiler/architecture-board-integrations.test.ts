@@ -49,6 +49,30 @@ test("AI Draft와 Board 자동 정리는 같은 Compiler version의 proposal을 
     createBoardAutoOrganizeProposal(diagram).provenance.compilerVersion,
     ARCHITECTURE_BOARD_COMPILER_VERSION
   );
+
+  const exactDraft = {
+    ...draft,
+    diagramJson: { ...diagram, presentation: { geometryPolicy: "source-exact" as const } }
+  };
+  assert.equal(
+    compileArchitectureDraftProposal(exactDraft).provenance.compilerVersion,
+    ARCHITECTURE_BOARD_COMPILER_VERSION
+  );
+});
+
+test("source-exact Template도 Workspace 자동 정리에서는 원본을 보존한 compiled proposal을 만든다", () => {
+  const source = brainboardTemplateRegistry.find((entry) => entry.status === "available")?.source;
+
+  assert.ok(source);
+  if (!source) return;
+
+  const diagram = adaptBrainboardTemplateSource(source).diagramJson;
+  const before = structuredClone(diagram);
+  const proposal = createBoardAutoOrganizeProposal(diagram);
+
+  assert.deepEqual(diagram, before);
+  assert.ok(proposal.provenance.candidateId.startsWith("compiled:"));
+  assert.ok(proposal.changes.length > 0);
 });
 
 test("Template review는 29개 usable 사례를 모두 검토하고 source-exact 원본을 보존한다", () => {

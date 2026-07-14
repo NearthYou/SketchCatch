@@ -17,10 +17,9 @@ import {
   saveProjectDraft
 } from "../../../features/workspace/api";
 import { useBrowserVoiceInput } from "../../../features/workspace/use-browser-voice-input";
-import {
-  convertDiagramJsonToArchitectureJson,
-  getDiagramJsonForArchitectureDraft
-} from "../../../features/workspace/workspace-ai-diagram-adapter";
+import { compileArchitectureDraftProposal } from "../../../features/architecture-board-compiler";
+import type { ArchitectureBoardCompilationProposal } from "../../../features/architecture-board-compiler";
+import { convertDiagramJsonToArchitectureJson } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import {
   planArchitectureDraftPreview,
   resolveArchitectureDraftFollowUpAnswer,
@@ -80,6 +79,8 @@ export function useAiStartWorkflow({
   const [messages, setMessages] = useState<AiStartMessage[]>([]);
   const messagesRef = useRef<AiStartMessage[]>([]);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
+  const [compilationProposal, setCompilationProposal] =
+    useState<ArchitectureBoardCompilationProposal | null>(null);
   const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
   const [draftClarification, setDraftClarification] =
     useState<PendingDraftClarification | null>(null);
@@ -239,18 +240,15 @@ export function useAiStartWorkflow({
         return;
       }
 
-      const nextDraft = createDraftFromPatch(response, draft, baseDiagram);
-      setDraft(nextDraft);
-      setPreviewDiagram(getDiagramJsonForArchitectureDraft(nextDraft));
-      finishRequest();
-      appendAssistantMessage("draft", createPatchSummary(response));
+      const nextDraft = createDraftFromPatch(response, draft);
+      showDraft(nextDraft, baseDiagram, createPatchSummary(response));
     } catch (error) {
       failRequest(getApiErrorMessage(error, "수정 PREVIEW를 만들지 못했습니다."));
     }
   }
 
   async function approveDraft(): Promise<void> {
-    if (projectDraft === null || draft === null || previewDiagram === null) {
+    if (projectDraft === null || draft === null || compilationProposal === null) {
       return;
     }
 
@@ -268,7 +266,7 @@ export function useAiStartWorkflow({
       const approvedMessages = appendMessage(
         createAiStartMessage("assistant", "status", `${draft.title}을 Board에 적용했습니다.`)
       );
-      await saveProjectDraft({ diagramJson: previewDiagram, projectId });
+      await saveProjectDraft({ diagramJson: compilationProposal.diagram, projectId });
       storeApprovedAiStartMessages(projectId, approvedMessages);
       if (!existingProjectId) {
         clearAiStartProjectDraft();
@@ -348,11 +346,17 @@ export function useAiStartWorkflow({
     );
   }
 
-  function showDraft(result: AiArchitectureDraftResult): void {
+  function showDraft(
+    result: AiArchitectureDraftResult,
+    currentDiagram?: DiagramJson,
+    message = `${result.title} PREVIEW가 준비됐습니다.`
+  ): void {
+    const proposal = compileArchitectureDraftProposal(result, currentDiagram);
     setDraft(result);
-    setPreviewDiagram(getDiagramJsonForArchitectureDraft(result));
+    setCompilationProposal(proposal);
+    setPreviewDiagram(proposal.diagram);
     finishRequest();
-    appendAssistantMessage("draft", `${result.title} PREVIEW가 준비됐습니다.`);
+    appendAssistantMessage("draft", message);
   }
 
   function beginRequest(clearPreview = true): void {
@@ -363,6 +367,7 @@ export function useAiStartWorkflow({
     setDraftFollowUp(null);
     if (clearPreview) {
       setDraft(null);
+      setCompilationProposal(null);
       setPreviewDiagram(null);
     }
   }
@@ -400,13 +405,15 @@ export function useAiStartWorkflow({
 
   return {
     approveDraft,
-    canApprove: draft !== null && previewDiagram !== null && requestState !== "loading",
+    canApprove:
+      draft !== null && compilationProposal !== null && previewDiagram !== null && requestState !== "loading",
     canSubmit:
       composerValue.trim().length > 0 &&
       requestState !== "loading" &&
       !voiceTranscriptNeedsConfirmation,
     cancelStart,
     composerValue,
+    compilationProposal,
     confirmVoiceTranscript,
     draft,
     errorMessage,

@@ -1,9 +1,9 @@
 {
   "reportVersion": "architecture-board-compiler-evidence-report/v1",
-  "compilerVersion": "architecture-board-compiler/v2",
+  "compilerVersion": "architecture-board-compiler/v3",
   "summary": {
     "availableTemplateCount": 29,
-    "totalChangeCount": 2478,
+    "totalChangeCount": 2524,
     "diagnosticCount": 183,
     "changesByKind": {
       "resource": 0,
@@ -12,7 +12,7 @@
       "containment": 415,
       "presentation": 545,
       "geometry": 1264,
-      "edge-routing": 254
+      "edge-routing": 300
     },
     "diagnosticsByLevel": {
       "error": 0,
@@ -20,8 +20,8 @@
       "info": 50
     },
     "meanBeforeScore": 17871397946.113186,
-    "meanAfterScore": 530393361.25715,
-    "meanScoreDelta": -17341004584.856037,
+    "meanAfterScore": 530393599.906356,
+    "meanScoreDelta": -17341004346.206837,
     "visualAnomalies": {
       "before": {
         "nodeOverlapCount": 443,
@@ -50,7 +50,7 @@
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
       "title": "AWS ASG and LB with VPC & subnets",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
         "total": 89,
@@ -124,6 +124,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 261.009,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 70,
             "knowledgeViewportAspectRatio": 1.241,
             "mainFlowContinuityError": 0,
@@ -139,7 +141,7 @@
           }
         },
         "after": {
-          "score": 212724718.22105,
+          "score": 212725017.61005,
           "visualPenalty": 212724226.22105,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -156,6 +158,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 261.009,
+            "knowledgePenalty": 299.389,
+            "knowledgeReferenceSimilarity": 0.826,
             "knowledgeSiblingGap": 70,
             "knowledgeViewportAspectRatio": 1.241,
             "mainFlowContinuityError": 0,
@@ -171,7 +175,7 @@
           }
         },
         "compilationDistance": 492,
-        "scoreDelta": -17717359741.548367
+        "scoreDelta": -17717359442.159367
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -183,10 +187,10 @@
       "id": "brainboard:brainboard-aws-bastion",
       "title": "AWS Bastion",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 74,
+        "total": 75,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -194,7 +198,7 @@
           "containment": 13,
           "presentation": 17,
           "geometry": 38,
-          "edge-routing": 6
+          "edge-routing": 7
         },
         "groups": [
           {
@@ -220,6 +224,12 @@
             "kind": "geometry",
             "count": 38,
             "totalCost": 90
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
           },
           {
             "action": "modify",
@@ -257,6 +267,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 191.519,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 77.5,
             "knowledgeViewportAspectRatio": 1.877,
             "mainFlowContinuityError": 0,
@@ -272,7 +284,7 @@
           }
         },
         "after": {
-          "score": 159007.496345,
+          "score": 159128.459345,
           "visualPenalty": 158589.496345,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -280,7 +292,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 1212640,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 418,
+            "compilationDistance": 424,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -289,6 +301,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 191.519,
+            "knowledgePenalty": 114.963,
+            "knowledgeReferenceSimilarity": 0.712,
             "knowledgeSiblingGap": 77.5,
             "knowledgeViewportAspectRatio": 1.877,
             "mainFlowContinuityError": 0,
@@ -303,12 +317,12 @@
             "totalEdgeLength": 2960
           }
         },
-        "compilationDistance": 418,
-        "scoreDelta": -19959877053.878654
+        "compilationDistance": 424,
+        "scoreDelta": -19959876932.915653
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-bastion",
-        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "brainboard:brainboard-aws-elastic-beanstalk",
         "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
       ]
     },
@@ -316,7 +330,7 @@
       "id": "brainboard:brainboard-aws-costs-monitoring",
       "title": "AWS costs monitoring",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
         "total": 21,
@@ -384,6 +398,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 0,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 108.75,
             "knowledgeViewportAspectRatio": 1.144,
             "mainFlowContinuityError": 0,
@@ -399,7 +415,7 @@
           }
         },
         "after": {
-          "score": 32546869.066667,
+          "score": 32547147.953667,
           "visualPenalty": 32546753.066667,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -416,6 +432,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 0,
+            "knowledgePenalty": 278.887,
+            "knowledgeReferenceSimilarity": 0.595,
             "knowledgeSiblingGap": 108.75,
             "knowledgeViewportAspectRatio": 1.144,
             "mainFlowContinuityError": 0,
@@ -431,22 +449,22 @@
           }
         },
         "compilationDistance": 116,
-        "scoreDelta": -3967454893.058333
+        "scoreDelta": -3967454614.171333
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
-        "brainboard:brainboard-aws-bastion",
-        "brainboard:brainboard-aws-costs-monitoring"
+        "brainboard:brainboard-aws-costs-monitoring",
+        "brainboard:brainboard-aws-ec2-vpc-subnet",
+        "brainboard:brainboard-aws-iam-users"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-dashcam-video-pipeline",
       "title": "AWS Dashcam Video Processing Pipeline",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 85,
+        "total": 87,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -454,7 +472,7 @@
           "containment": 14,
           "presentation": 15,
           "geometry": 42,
-          "edge-routing": 14
+          "edge-routing": 16
         },
         "groups": [
           {
@@ -480,6 +498,12 @@
             "kind": "geometry",
             "count": 42,
             "totalCost": 98
+          },
+          {
+            "action": "add",
+            "kind": "edge-routing",
+            "count": 2,
+            "totalCost": 12
           },
           {
             "action": "modify",
@@ -517,6 +541,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 254.286,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 79.643,
             "knowledgeViewportAspectRatio": 1.586,
             "mainFlowContinuityError": 95.625,
@@ -532,7 +558,7 @@
           }
         },
         "after": {
-          "score": 250403128.852845,
+          "score": 250403344.988845,
           "visualPenalty": 250402658.852845,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -540,7 +566,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 331840,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 470,
+            "compilationDistance": 482,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 5,
@@ -549,6 +575,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 254.286,
+            "knowledgePenalty": 204.136,
+            "knowledgeReferenceSimilarity": 0.879,
             "knowledgeSiblingGap": 79.643,
             "knowledgeViewportAspectRatio": 1.586,
             "mainFlowContinuityError": 93.6,
@@ -563,20 +591,20 @@
             "totalEdgeLength": 6176
           }
         },
-        "compilationDistance": 470,
-        "scoreDelta": -15119864200.147156
+        "compilationDistance": 482,
+        "scoreDelta": -15119863984.011156
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
-        "brainboard:brainboard-aws-ecs-fargate",
-        "brainboard:brainboard-aws-s3-api-gateway"
+        "brainboard:brainboard-aws-s3-api-gateway",
+        "brainboard:brainboard-aws-serverless-cdn"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-ec2-vpc-subnet",
       "title": "AWS EC2 instance inside VPC & Subnet",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
         "total": 24,
@@ -650,6 +678,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 316.723,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 128.093,
             "knowledgeViewportAspectRatio": 1.196,
             "mainFlowContinuityError": 0,
@@ -665,7 +695,7 @@
           }
         },
         "after": {
-          "score": 101397.987484,
+          "score": 101533.069484,
           "visualPenalty": 101259.987484,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -682,6 +712,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 316.723,
+            "knowledgePenalty": 135.082,
+            "knowledgeReferenceSimilarity": 0.605,
             "knowledgeSiblingGap": 128.093,
             "knowledgeViewportAspectRatio": 1.196,
             "mainFlowContinuityError": 0,
@@ -697,11 +729,11 @@
           }
         },
         "compilationDistance": 138,
-        "scoreDelta": -5159910856.721948
+        "scoreDelta": -5159910721.639948
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ec2-vpc-subnet",
-        "brainboard:brainboard-aws-elastic-beanstalk",
+        "brainboard:brainboard-aws-load-balancer-target-group",
         "brainboard:brainboard-aws-multi-account-management"
       ]
     },
@@ -709,7 +741,7 @@
       "id": "brainboard:brainboard-aws-ecs-fargate",
       "title": "AWS ECS with Fargate",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
         "total": 49,
@@ -783,6 +815,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 271.25,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 155.556,
             "knowledgeViewportAspectRatio": 1.445,
             "mainFlowContinuityError": 0,
@@ -798,7 +832,7 @@
           }
         },
         "after": {
-          "score": 3566896.583027,
+          "score": 3567163.450027,
           "visualPenalty": 3566623.583027,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -815,6 +849,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 271.25,
+            "knowledgePenalty": 266.867,
+            "knowledgeReferenceSimilarity": 0.87,
             "knowledgeSiblingGap": 155.556,
             "knowledgeViewportAspectRatio": 1.445,
             "mainFlowContinuityError": 0,
@@ -830,11 +866,11 @@
           }
         },
         "compilationDistance": 273,
-        "scoreDelta": -8456463387.166973
+        "scoreDelta": -8456463120.299973
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
-        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "brainboard:brainboard-aws-load-balancer-target-group",
         "repository:ecs-fargate-container-app"
       ]
     },
@@ -842,10 +878,10 @@
       "id": "brainboard:brainboard-aws-elastic-beanstalk",
       "title": "AWS Elastic Beanstalk",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 54,
+        "total": 56,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -853,7 +889,7 @@
           "containment": 9,
           "presentation": 15,
           "geometry": 26,
-          "edge-routing": 4
+          "edge-routing": 6
         },
         "groups": [
           {
@@ -879,6 +915,12 @@
             "kind": "geometry",
             "count": 26,
             "totalCost": 61
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 2,
+            "totalCost": 12
           },
           {
             "action": "modify",
@@ -916,6 +958,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 230,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 66.429,
             "knowledgeViewportAspectRatio": 1.375,
             "mainFlowContinuityError": 0,
@@ -931,7 +975,7 @@
           }
         },
         "after": {
-          "score": 4049276.805304,
+          "score": 4049569.946304,
           "visualPenalty": 4048963.805304,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -939,7 +983,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 608528,
             "canvasAspectRatioPenalty": 0.784247,
-            "compilationDistance": 313,
+            "compilationDistance": 325,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -948,6 +992,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 230,
+            "knowledgePenalty": 281.141,
+            "knowledgeReferenceSimilarity": 0.62,
             "knowledgeSiblingGap": 66.429,
             "knowledgeViewportAspectRatio": 1.375,
             "mainFlowContinuityError": 0,
@@ -962,11 +1008,11 @@
             "totalEdgeLength": 1348
           }
         },
-        "compilationDistance": 313,
-        "scoreDelta": -25225984659.194695
+        "compilationDistance": 325,
+        "scoreDelta": -25225984366.053696
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
+        "brainboard:brainboard-aws-ecs-fargate",
         "brainboard:brainboard-aws-elastic-beanstalk",
         "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
       ]
@@ -975,10 +1021,10 @@
       "id": "brainboard:brainboard-aws-fsx",
       "title": "AWS FSX architecture",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 131,
+        "total": 132,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -986,7 +1032,7 @@
           "containment": 23,
           "presentation": 30,
           "geometry": 67,
-          "edge-routing": 11
+          "edge-routing": 12
         },
         "groups": [
           {
@@ -1012,6 +1058,12 @@
             "kind": "geometry",
             "count": 67,
             "totalCost": 158
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
           },
           {
             "action": "modify",
@@ -1049,6 +1101,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 206.667,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 45.172,
             "knowledgeViewportAspectRatio": 0.823,
             "mainFlowContinuityError": 106.666667,
@@ -1064,7 +1118,7 @@
           }
         },
         "after": {
-          "score": 1008123905.833992,
+          "score": 1008124151.162992,
           "visualPenalty": 1008123165.833992,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1072,7 +1126,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 1214400,
             "canvasAspectRatioPenalty": 1.241848,
-            "compilationDistance": 740,
+            "compilationDistance": 746,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1081,6 +1135,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 206.667,
+            "knowledgePenalty": 239.329,
+            "knowledgeReferenceSimilarity": 0.754,
             "knowledgeSiblingGap": 45.172,
             "knowledgeViewportAspectRatio": 0.823,
             "mainFlowContinuityError": 208,
@@ -1095,8 +1151,8 @@
             "totalEdgeLength": 4754
           }
         },
-        "compilationDistance": 740,
-        "scoreDelta": -43413270892.66735
+        "compilationDistance": 746,
+        "scoreDelta": -43413270647.33835
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
@@ -1108,7 +1164,7 @@
       "id": "brainboard:brainboard-aws-iam-users",
       "title": "AWS IAM users creation",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
         "total": 41,
@@ -1176,6 +1232,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 0,
             "knowledgeEdgeLength": 249.227,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 104.806,
             "knowledgeViewportAspectRatio": 1.741,
             "mainFlowContinuityError": 0,
@@ -1191,7 +1249,7 @@
           }
         },
         "after": {
-          "score": 182072686.319084,
+          "score": 182072938.631084,
           "visualPenalty": 182072508.319084,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1208,6 +1266,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 0,
             "knowledgeEdgeLength": 249.227,
+            "knowledgePenalty": 252.312,
+            "knowledgeReferenceSimilarity": 0.877,
             "knowledgeSiblingGap": 104.806,
             "knowledgeViewportAspectRatio": 1.741,
             "mainFlowContinuityError": 0,
@@ -1223,19 +1283,19 @@
           }
         },
         "compilationDistance": 178,
-        "scoreDelta": -12887966410.18998
+        "scoreDelta": -12887966157.87798
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
         "brainboard:brainboard-aws-iam-users",
-        "brainboard:brainboard-aws-s3-api-gateway"
+        "brainboard:brainboard-aws-rds",
+        "repository:static-web-hosting"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-jenkins-ec2",
       "title": "AWS Jenkins architecture on EC2",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
         "total": 215,
@@ -1309,6 +1369,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 406.25,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 73.023,
             "knowledgeViewportAspectRatio": 2.81,
             "mainFlowContinuityError": 0,
@@ -1324,7 +1386,7 @@
           }
         },
         "after": {
-          "score": 2606392822.58822,
+          "score": 2606393011.35422,
           "visualPenalty": 2606391624.58822,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1341,6 +1403,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 406.25,
+            "knowledgePenalty": 188.766,
+            "knowledgeReferenceSimilarity": 0.859,
             "knowledgeSiblingGap": 73.023,
             "knowledgeViewportAspectRatio": 2.81,
             "mainFlowContinuityError": 969.333333,
@@ -1356,22 +1420,22 @@
           }
         },
         "compilationDistance": 1198,
-        "scoreDelta": -38125173157.66178
+        "scoreDelta": -38125172968.89578
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-bastion",
         "brainboard:brainboard-aws-jenkins-ec2",
-        "brainboard:brainboard-aws-load-balancer-target-group"
+        "brainboard:brainboard-aws-three-tier-database",
+        "repository:three-tier-web-app"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-kubernetes-native-cnis",
       "title": "AWS Kubernetes cluster with native CNIs",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 106,
+        "total": 107,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -1379,7 +1443,7 @@
           "containment": 18,
           "presentation": 22,
           "geometry": 53,
-          "edge-routing": 13
+          "edge-routing": 14
         },
         "groups": [
           {
@@ -1405,6 +1469,12 @@
             "kind": "geometry",
             "count": 53,
             "totalCost": 124
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
           },
           {
             "action": "modify",
@@ -1442,6 +1512,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 5,
             "knowledgeEdgeLength": 435,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 88.095,
             "knowledgeViewportAspectRatio": 1.455,
             "mainFlowContinuityError": 0,
@@ -1457,7 +1529,7 @@
           }
         },
         "after": {
-          "score": 152703102.282456,
+          "score": 152703405.891456,
           "visualPenalty": 152702508.282456,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1465,7 +1537,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2423088,
             "canvasAspectRatioPenalty": 0.483568,
-            "compilationDistance": 594,
+            "compilationDistance": 600,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 3,
@@ -1474,6 +1546,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 5,
             "knowledgeEdgeLength": 435,
+            "knowledgePenalty": 297.609,
+            "knowledgeReferenceSimilarity": 0.776,
             "knowledgeSiblingGap": 88.095,
             "knowledgeViewportAspectRatio": 1.455,
             "mainFlowContinuityError": 0,
@@ -1488,8 +1562,8 @@
             "totalEdgeLength": 8734
           }
         },
-        "compilationDistance": 594,
-        "scoreDelta": -20690933465.899364
+        "compilationDistance": 600,
+        "scoreDelta": -20690933162.290363
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-kubernetes-native-cnis",
@@ -1501,7 +1575,7 @@
       "id": "brainboard:brainboard-aws-load-balancer-target-group",
       "title": "AWS load balancer with target group",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
         "total": 56,
@@ -1575,6 +1649,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 5,
             "knowledgeEdgeLength": 250,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 84.167,
             "knowledgeViewportAspectRatio": 1.23,
             "mainFlowContinuityError": 0,
@@ -1590,7 +1666,7 @@
           }
         },
         "after": {
-          "score": 136344.541019,
+          "score": 136494.822019,
           "visualPenalty": 136027.541019,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1607,6 +1683,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 5,
             "knowledgeEdgeLength": 250,
+            "knowledgePenalty": 150.281,
+            "knowledgeReferenceSimilarity": 0.768,
             "knowledgeSiblingGap": 84.167,
             "knowledgeViewportAspectRatio": 1.23,
             "mainFlowContinuityError": 0,
@@ -1622,22 +1700,22 @@
           }
         },
         "compilationDistance": 317,
-        "scoreDelta": -15639892438.70898
+        "scoreDelta": -15639892288.427982
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-jenkins-ec2",
-        "brainboard:brainboard-aws-load-balancer-target-group",
-        "repository:ecs-fargate-container-app"
+        "brainboard:brainboard-aws-ecs-fargate",
+        "brainboard:brainboard-aws-elastic-beanstalk",
+        "brainboard:brainboard-aws-load-balancer-target-group"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-multi-account-management",
       "title": "AWS multi-account management",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
-        "total": 100,
+        "total": 103,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -1645,7 +1723,7 @@
           "containment": 18,
           "presentation": 28,
           "geometry": 54,
-          "edge-routing": 0
+          "edge-routing": 3
         },
         "groups": [
           {
@@ -1671,6 +1749,12 @@
             "kind": "geometry",
             "count": 54,
             "totalCost": 126
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 3,
+            "totalCost": 18
           }
         ]
       },
@@ -1702,6 +1786,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 630,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 84.444,
             "knowledgeViewportAspectRatio": 2.852,
             "mainFlowContinuityError": 0,
@@ -1717,7 +1803,7 @@
           }
         },
         "after": {
-          "score": 4223248.347991,
+          "score": 4223508.004991,
           "visualPenalty": 4222682.347991,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1725,7 +1811,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2120096,
             "canvasAspectRatioPenalty": 0.318612,
-            "compilationDistance": 566,
+            "compilationDistance": 584,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1734,6 +1820,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 630,
+            "knowledgePenalty": 241.657,
+            "knowledgeReferenceSimilarity": 0.484,
             "knowledgeSiblingGap": 84.444,
             "knowledgeViewportAspectRatio": 2.852,
             "mainFlowContinuityError": 0,
@@ -1748,11 +1836,11 @@
             "totalEdgeLength": 0
           }
         },
-        "compilationDistance": 566,
-        "scoreDelta": -21235826709.378918
+        "compilationDistance": 584,
+        "scoreDelta": -21235826449.72192
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-ec2-vpc-subnet",
+        "brainboard:brainboard-aws-bastion",
         "brainboard:brainboard-aws-elastic-beanstalk",
         "brainboard:brainboard-aws-multi-account-management"
       ]
@@ -1761,10 +1849,10 @@
       "id": "brainboard:brainboard-aws-network-landing-zone",
       "title": "AWS network landing zone",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 118,
+        "total": 119,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -1772,7 +1860,7 @@
           "containment": 21,
           "presentation": 26,
           "geometry": 62,
-          "edge-routing": 9
+          "edge-routing": 10
         },
         "groups": [
           {
@@ -1798,6 +1886,12 @@
             "kind": "geometry",
             "count": 62,
             "totalCost": 145
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
           },
           {
             "action": "modify",
@@ -1835,6 +1929,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 345.002,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 76.262,
             "knowledgeViewportAspectRatio": 1.413,
             "mainFlowContinuityError": 0,
@@ -1850,7 +1946,7 @@
           }
         },
         "after": {
-          "score": 7388704.827618,
+          "score": 7389046.606618,
           "visualPenalty": 7388045.827618,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -1858,7 +1954,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2181200,
             "canvasAspectRatioPenalty": 0.926692,
-            "compilationDistance": 659,
+            "compilationDistance": 665,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -1867,6 +1963,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 345.002,
+            "knowledgePenalty": 335.779,
+            "knowledgeReferenceSimilarity": 0.716,
             "knowledgeSiblingGap": 76.262,
             "knowledgeViewportAspectRatio": 1.413,
             "mainFlowContinuityError": 0,
@@ -1881,8 +1979,8 @@
             "totalEdgeLength": 2258
           }
         },
-        "compilationDistance": 659,
-        "scoreDelta": -37142747555.82786
+        "compilationDistance": 665,
+        "scoreDelta": -37142747214.04886
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
@@ -1894,7 +1992,7 @@
       "id": "brainboard:brainboard-aws-rds",
       "title": "AWS RDS",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
         "total": 47,
@@ -1968,6 +2066,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 284.167,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 105.5,
             "knowledgeViewportAspectRatio": 1.125,
             "mainFlowContinuityError": 150,
@@ -1983,7 +2083,7 @@
           }
         },
         "after": {
-          "score": 1002462231.314494,
+          "score": 1002462447.477494,
           "visualPenalty": 1002461958.314494,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2000,6 +2100,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 284.167,
+            "knowledgePenalty": 216.163,
+            "knowledgeReferenceSimilarity": 0.747,
             "knowledgeSiblingGap": 105.5,
             "knowledgeViewportAspectRatio": 1.125,
             "mainFlowContinuityError": 0,
@@ -2015,22 +2117,22 @@
           }
         },
         "compilationDistance": 273,
-        "scoreDelta": -5677882272.685506
+        "scoreDelta": -5677882056.522506
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
         "brainboard:brainboard-aws-rds",
-        "repository:three-tier-web-app"
+        "brainboard:brainboard-aws-rest-api-documentdb"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-rest-api-documentdb",
       "title": "AWS REST API for DocumentDB",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 41,
+        "total": 42,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -2038,7 +2140,7 @@
           "containment": 7,
           "presentation": 10,
           "geometry": 20,
-          "edge-routing": 4
+          "edge-routing": 5
         },
         "groups": [
           {
@@ -2064,6 +2166,12 @@
             "kind": "geometry",
             "count": 20,
             "totalCost": 47
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
           },
           {
             "action": "modify",
@@ -2101,6 +2209,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 226,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 86.667,
             "knowledgeViewportAspectRatio": 1.61,
             "mainFlowContinuityError": 42.5,
@@ -2116,7 +2226,7 @@
           }
         },
         "after": {
-          "score": 198905.591831,
+          "score": 199132.724831,
           "visualPenalty": 198670.591831,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2124,7 +2234,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 485760,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 235,
+            "compilationDistance": 241,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -2133,6 +2243,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 226,
+            "knowledgePenalty": 221.133,
+            "knowledgeReferenceSimilarity": 0.668,
             "knowledgeSiblingGap": 86.667,
             "knowledgeViewportAspectRatio": 1.61,
             "mainFlowContinuityError": 34.666667,
@@ -2147,12 +2259,12 @@
             "totalEdgeLength": 1464
           }
         },
-        "compilationDistance": 235,
-        "scoreDelta": -5469930843.374026
+        "compilationDistance": 241,
+        "scoreDelta": -5469930616.241026
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-ec2-vpc-subnet",
-        "brainboard:brainboard-aws-multi-account-management",
+        "brainboard:brainboard-aws-ecs-fargate",
+        "brainboard:brainboard-aws-rds",
         "brainboard:brainboard-aws-rest-api-documentdb"
       ]
     },
@@ -2160,7 +2272,7 @@
       "id": "brainboard:brainboard-aws-s3-api-gateway",
       "title": "AWS S3 API Gateway integration",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
         "total": 107,
@@ -2234,6 +2346,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 527.818,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 80.667,
             "knowledgeViewportAspectRatio": 1.019,
             "mainFlowContinuityError": 350.714286,
@@ -2249,7 +2363,7 @@
           }
         },
         "after": {
-          "score": 505617269.901731,
+          "score": 505617549.852731,
           "visualPenalty": 505616670.901731,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2266,6 +2380,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 527.818,
+            "knowledgePenalty": 279.951,
+            "knowledgeReferenceSimilarity": 0.882,
             "knowledgeSiblingGap": 80.667,
             "knowledgeViewportAspectRatio": 1.019,
             "mainFlowContinuityError": 148.571429,
@@ -2281,7 +2397,7 @@
           }
         },
         "compilationDistance": 599,
-        "scoreDelta": -17951326369.4197
+        "scoreDelta": -17951326089.4687
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
@@ -2293,7 +2409,7 @@
       "id": "brainboard:brainboard-aws-secure-s3-bucket",
       "title": "AWS secure S3 bucket",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
         "total": 66,
@@ -2367,6 +2483,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 292.5,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 83.636,
             "knowledgeViewportAspectRatio": 1.304,
             "mainFlowContinuityError": 134.444444,
@@ -2382,7 +2500,7 @@
           }
         },
         "after": {
-          "score": 74084428.298328,
+          "score": 74084783.177328,
           "visualPenalty": 74084063.298328,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2399,6 +2517,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 292.5,
+            "knowledgePenalty": 354.879,
+            "knowledgeReferenceSimilarity": 0.883,
             "knowledgeSiblingGap": 83.636,
             "knowledgeViewportAspectRatio": 1.304,
             "mainFlowContinuityError": 335.111111,
@@ -2414,22 +2534,22 @@
           }
         },
         "compilationDistance": 365,
-        "scoreDelta": -11926247559.59056
+        "scoreDelta": -11926247204.711561
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
-        "brainboard:brainboard-aws-secure-s3-bucket",
-        "brainboard:brainboard-aws-serverless-cdn"
+        "brainboard:brainboard-aws-iam-users",
+        "brainboard:brainboard-aws-secure-s3-bucket"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-serverless-cdn",
       "title": "AWS serverless architecture with CDN",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 115,
+        "total": 119,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -2437,7 +2557,7 @@
           "containment": 19,
           "presentation": 21,
           "geometry": 57,
-          "edge-routing": 18
+          "edge-routing": 22
         },
         "groups": [
           {
@@ -2463,6 +2583,12 @@
             "kind": "geometry",
             "count": 57,
             "totalCost": 133
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 4,
+            "totalCost": 24
           },
           {
             "action": "modify",
@@ -2500,6 +2626,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 322.472,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 59.756,
             "knowledgeViewportAspectRatio": 1.137,
             "mainFlowContinuityError": 82.490983,
@@ -2515,7 +2643,7 @@
           }
         },
         "after": {
-          "score": 884256536.368421,
+          "score": 884256805.071421,
           "visualPenalty": 884255899.368421,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2523,7 +2651,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 486400,
             "canvasAspectRatioPenalty": 0.315789,
-            "compilationDistance": 637,
+            "compilationDistance": 661,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 16,
@@ -2532,6 +2660,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 322.472,
+            "knowledgePenalty": 244.703,
+            "knowledgeReferenceSimilarity": 0.841,
             "knowledgeSiblingGap": 59.756,
             "knowledgeViewportAspectRatio": 1.137,
             "mainFlowContinuityError": 168,
@@ -2546,23 +2676,23 @@
             "totalEdgeLength": 8376
           }
         },
-        "compilationDistance": 637,
-        "scoreDelta": -20086065136.27479
+        "compilationDistance": 661,
+        "scoreDelta": -20086064867.57179
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
-        "brainboard:brainboard-aws-secure-s3-bucket",
-        "brainboard:brainboard-aws-serverless-cdn"
+        "brainboard:brainboard-aws-serverless-cdn",
+        "brainboard:brainboard-aws-three-tier-database"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-three-tier-database",
       "title": "AWS 3-tier web app with a database",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 161,
+        "total": 167,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -2570,7 +2700,7 @@
           "containment": 27,
           "presentation": 40,
           "geometry": 81,
-          "edge-routing": 13
+          "edge-routing": 19
         },
         "groups": [
           {
@@ -2596,6 +2726,12 @@
             "kind": "geometry",
             "count": 81,
             "totalCost": 189
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 6,
+            "totalCost": 36
           },
           {
             "action": "modify",
@@ -2633,6 +2769,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 355.019,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 40,
             "knowledgeViewportAspectRatio": 0.833,
             "mainFlowContinuityError": 46.666667,
@@ -2648,7 +2786,7 @@
           }
         },
         "after": {
-          "score": 106820155.836625,
+          "score": 106820457.264625,
           "visualPenalty": 106819244.836625,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2656,7 +2794,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2877744,
             "canvasAspectRatioPenalty": 0.612275,
-            "compilationDistance": 911,
+            "compilationDistance": 947,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 2,
@@ -2665,6 +2803,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 355.019,
+            "knowledgePenalty": 265.428,
+            "knowledgeReferenceSimilarity": 0.722,
             "knowledgeSiblingGap": 40,
             "knowledgeViewportAspectRatio": 0.833,
             "mainFlowContinuityError": 1064,
@@ -2679,23 +2819,23 @@
             "totalEdgeLength": 10846
           }
         },
-        "compilationDistance": 911,
-        "scoreDelta": -58448677886.919846
+        "compilationDistance": 947,
+        "scoreDelta": -58448677585.49185
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
-        "brainboard:brainboard-aws-three-tier-database",
-        "repository:three-tier-web-app"
+        "brainboard:brainboard-aws-network-landing-zone",
+        "brainboard:brainboard-aws-three-tier-database"
       ]
     },
     {
       "id": "brainboard:brainboard-aws-vpc-subnets-security-groups-2az",
       "title": "AWS VPC with subnet and security groups on 2 AZs",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 91,
+        "total": 92,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -2703,7 +2843,7 @@
           "containment": 17,
           "presentation": 21,
           "geometry": 48,
-          "edge-routing": 5
+          "edge-routing": 6
         },
         "groups": [
           {
@@ -2729,6 +2869,12 @@
             "kind": "geometry",
             "count": 48,
             "totalCost": 115
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
           },
           {
             "action": "modify",
@@ -2766,6 +2912,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 247.22,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 60.189,
             "knowledgeViewportAspectRatio": 1.54,
             "mainFlowContinuityError": 0,
@@ -2781,7 +2929,7 @@
           }
         },
         "after": {
-          "score": 516536.471078,
+          "score": 516799.210078,
           "visualPenalty": 516019.471078,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2789,7 +2937,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2233970,
             "canvasAspectRatioPenalty": 0.069896,
-            "compilationDistance": 517,
+            "compilationDistance": 523,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -2798,6 +2946,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 247.22,
+            "knowledgePenalty": 256.739,
+            "knowledgeReferenceSimilarity": 0.742,
             "knowledgeSiblingGap": 60.189,
             "knowledgeViewportAspectRatio": 1.54,
             "mainFlowContinuityError": 0,
@@ -2812,12 +2962,12 @@
             "totalEdgeLength": 2820
           }
         },
-        "compilationDistance": 517,
-        "scoreDelta": -20799523603.23768
+        "compilationDistance": 523,
+        "scoreDelta": -20799523340.498676
       },
       "referenceTemplateIds": [
+        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
         "brainboard:brainboard-aws-bastion",
-        "brainboard:brainboard-aws-network-landing-zone",
         "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
       ]
     },
@@ -2825,7 +2975,7 @@
       "id": "brainboard:brainboard-cross-account-aws-s3",
       "title": "Cross account AWS S3",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
         "total": 22,
@@ -2899,6 +3049,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 195,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 82.143,
             "knowledgeViewportAspectRatio": 1.212,
             "mainFlowContinuityError": 120,
@@ -2914,7 +3066,7 @@
           }
         },
         "after": {
-          "score": 182073.547368,
+          "score": 182300.605368,
           "visualPenalty": 181940.547368,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -2931,6 +3083,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 195,
+            "knowledgePenalty": 227.058,
+            "knowledgeReferenceSimilarity": 0.466,
             "knowledgeSiblingGap": 82.143,
             "knowledgeViewportAspectRatio": 1.212,
             "mainFlowContinuityError": 52,
@@ -2946,10 +3100,10 @@
           }
         },
         "compilationDistance": 133,
-        "scoreDelta": -12572868956.70263
+        "scoreDelta": -12572868729.644632
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-secure-s3-bucket",
+        "brainboard:brainboard-aws-iam-users",
         "brainboard:brainboard-cross-account-aws-s3",
         "repository:static-web-hosting"
       ]
@@ -2958,7 +3112,7 @@
       "id": "brainboard:brainboard-training-aws-onboarding",
       "title": "[Training] AWS onboarding",
       "source": "brainboard",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
         "total": 109,
@@ -3031,9 +3185,11 @@
             "emptySpaceRatio": 0.01911,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 5,
-            "knowledgeEdgeLength": 435,
-            "knowledgeSiblingGap": 88.095,
-            "knowledgeViewportAspectRatio": 1.455,
+            "knowledgeEdgeLength": 409,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
+            "knowledgeSiblingGap": 91.429,
+            "knowledgeViewportAspectRatio": 1.496,
             "mainFlowContinuityError": 0,
             "nodeOverlapCount": 18,
             "parentBoundaryViolationCount": 1,
@@ -3047,7 +3203,7 @@
           }
         },
         "after": {
-          "score": 152766154.975422,
+          "score": 152766443.892422,
           "visualPenalty": 152765546.975422,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
@@ -3063,9 +3219,11 @@
             "emptySpaceRatio": 0.978836,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 5,
-            "knowledgeEdgeLength": 435,
-            "knowledgeSiblingGap": 88.095,
-            "knowledgeViewportAspectRatio": 1.455,
+            "knowledgeEdgeLength": 409,
+            "knowledgePenalty": 288.917,
+            "knowledgeReferenceSimilarity": 0.783,
+            "knowledgeSiblingGap": 91.429,
+            "knowledgeViewportAspectRatio": 1.496,
             "mainFlowContinuityError": 0,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
@@ -3079,7 +3237,7 @@
           }
         },
         "compilationDistance": 608,
-        "scoreDelta": -20940873121.037193
+        "scoreDelta": -20940872832.120193
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-kubernetes-native-cnis",
@@ -3091,10 +3249,10 @@
       "id": "repository:ecs-fargate-container-app",
       "title": "ECS Fargate Container App",
       "source": "repository",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
       "changes": {
-        "total": 115,
+        "total": 120,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -3102,7 +3260,7 @@
           "containment": 18,
           "presentation": 24,
           "geometry": 59,
-          "edge-routing": 14
+          "edge-routing": 19
         },
         "groups": [
           {
@@ -3128,6 +3286,18 @@
             "kind": "geometry",
             "count": 59,
             "totalCost": 138
+          },
+          {
+            "action": "add",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 4,
+            "totalCost": 24
           },
           {
             "action": "modify",
@@ -3182,6 +3352,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 378.829,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 83.478,
             "knowledgeViewportAspectRatio": 2.364,
             "mainFlowContinuityError": 24,
@@ -3197,7 +3369,7 @@
           }
         },
         "after": {
-          "score": 1671630428.049545,
+          "score": 1671630668.530545,
           "visualPenalty": 1671625758.049545,
           "structuralPenalty": 540,
           "semanticDiagnosticPenalty": 3500,
@@ -3205,7 +3377,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 1121664,
             "canvasAspectRatioPenalty": 0.086614,
-            "compilationDistance": 630,
+            "compilationDistance": 660,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 3,
             "edgeCrossingCount": 6,
@@ -3214,6 +3386,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 378.829,
+            "knowledgePenalty": 210.481,
+            "knowledgeReferenceSimilarity": 0.789,
             "knowledgeSiblingGap": 83.478,
             "knowledgeViewportAspectRatio": 2.364,
             "mainFlowContinuityError": 0,
@@ -3228,12 +3402,12 @@
             "totalEdgeLength": 6508
           }
         },
-        "compilationDistance": 630,
-        "scoreDelta": -9678656313.181225
+        "compilationDistance": 660,
+        "scoreDelta": -9678656072.700226
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-ecs-fargate",
         "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "brainboard:brainboard-training-aws-onboarding",
         "repository:ecs-fargate-container-app"
       ]
     },
@@ -3241,10 +3415,10 @@
       "id": "repository:eks-container-app",
       "title": "EKS Container App",
       "source": "repository",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above-reversed",
       "changes": {
-        "total": 108,
+        "total": 113,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -3252,7 +3426,7 @@
           "containment": 18,
           "presentation": 24,
           "geometry": 56,
-          "edge-routing": 10
+          "edge-routing": 15
         },
         "groups": [
           {
@@ -3278,6 +3452,18 @@
             "kind": "geometry",
             "count": 56,
             "totalCost": 131
+          },
+          {
+            "action": "add",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 4,
+            "totalCost": 24
           },
           {
             "action": "modify",
@@ -3340,6 +3526,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 420.85,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 83.478,
             "knowledgeViewportAspectRatio": 1.606,
             "mainFlowContinuityError": 400,
@@ -3355,7 +3543,7 @@
           }
         },
         "after": {
-          "score": 3542597701.924104,
+          "score": 3542597854.578104,
           "visualPenalty": 3542593062.924104,
           "structuralPenalty": 540,
           "semanticDiagnosticPenalty": 3500,
@@ -3363,7 +3551,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 1317600,
             "canvasAspectRatioPenalty": 0.12963,
-            "compilationDistance": 599,
+            "compilationDistance": 629,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 6,
             "edgeCrossingCount": 0,
@@ -3372,6 +3560,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 420.85,
+            "knowledgePenalty": 122.654,
+            "knowledgeReferenceSimilarity": 0.775,
             "knowledgeSiblingGap": 83.478,
             "knowledgeViewportAspectRatio": 1.606,
             "mainFlowContinuityError": 0,
@@ -3386,8 +3576,8 @@
             "totalEdgeLength": 4030
           }
         },
-        "compilationDistance": 599,
-        "scoreDelta": -5288417348.726553
+        "compilationDistance": 629,
+        "scoreDelta": -5288417196.072554
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-kubernetes-native-cnis",
@@ -3399,10 +3589,10 @@
       "id": "repository:full-serverless-web-app",
       "title": "Full Serverless Web App",
       "source": "repository",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 95,
+        "total": 98,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -3410,7 +3600,7 @@
           "containment": 16,
           "presentation": 26,
           "geometry": 48,
-          "edge-routing": 5
+          "edge-routing": 8
         },
         "groups": [
           {
@@ -3436,6 +3626,12 @@
             "kind": "geometry",
             "count": 48,
             "totalCost": 112
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 3,
+            "totalCost": 18
           },
           {
             "action": "modify",
@@ -3482,6 +3678,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 419.135,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 75.2,
             "knowledgeViewportAspectRatio": 2.125,
             "mainFlowContinuityError": 320,
@@ -3497,7 +3695,7 @@
           }
         },
         "after": {
-          "score": 2600954.319603,
+          "score": 2601276.449603,
           "visualPenalty": 2597752.319603,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 2660,
@@ -3505,7 +3703,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 580320,
             "canvasAspectRatioPenalty": 0.490385,
-            "compilationDistance": 542,
+            "compilationDistance": 560,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -3514,6 +3712,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 419.135,
+            "knowledgePenalty": 304.13,
+            "knowledgeReferenceSimilarity": 0.675,
             "knowledgeSiblingGap": 75.2,
             "knowledgeViewportAspectRatio": 2.125,
             "mainFlowContinuityError": 0,
@@ -3528,8 +3728,8 @@
             "totalEdgeLength": 2464
           }
         },
-        "compilationDistance": 542,
-        "scoreDelta": -13118213504.73922
+        "compilationDistance": 560,
+        "scoreDelta": -13118213182.60922
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-s3-api-gateway",
@@ -3541,10 +3741,10 @@
       "id": "repository:minimal-serverless-api",
       "title": "Minimal Serverless API",
       "source": "repository",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
       "changes": {
-        "total": 69,
+        "total": 70,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -3552,7 +3752,7 @@
           "containment": 12,
           "presentation": 15,
           "geometry": 36,
-          "edge-routing": 6
+          "edge-routing": 7
         },
         "groups": [
           {
@@ -3578,6 +3778,12 @@
             "kind": "geometry",
             "count": 36,
             "totalCost": 84
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
           },
           {
             "action": "modify",
@@ -3624,6 +3830,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 2,
             "knowledgeEdgeLength": 323.653,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 111.429,
             "knowledgeViewportAspectRatio": 1.955,
             "mainFlowContinuityError": 60,
@@ -3639,7 +3847,7 @@
           }
         },
         "after": {
-          "score": 119029.254737,
+          "score": 119287.306737,
           "visualPenalty": 116685.254737,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 1960,
@@ -3647,7 +3855,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 233472,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 384,
+            "compilationDistance": 390,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
@@ -3656,6 +3864,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 2,
             "knowledgeEdgeLength": 323.653,
+            "knowledgePenalty": 252.052,
+            "knowledgeReferenceSimilarity": 0.726,
             "knowledgeSiblingGap": 111.429,
             "knowledgeViewportAspectRatio": 1.955,
             "mainFlowContinuityError": 0,
@@ -3670,8 +3880,8 @@
             "totalEdgeLength": 1368
           }
         },
-        "compilationDistance": 384,
-        "scoreDelta": -3110138135.362599
+        "compilationDistance": 390,
+        "scoreDelta": -3110137877.310599
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-s3-api-gateway",
@@ -3683,7 +3893,7 @@
       "id": "repository:static-web-hosting",
       "title": "Static Web Hosting",
       "source": "repository",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "original",
       "changes": {
         "total": 0,
@@ -3735,6 +3945,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 220.539,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 91.429,
             "knowledgeViewportAspectRatio": 1.75,
             "mainFlowContinuityError": 94.857143,
@@ -3767,6 +3979,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 220.539,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 91.429,
             "knowledgeViewportAspectRatio": 1.75,
             "mainFlowContinuityError": 94.857143,
@@ -3786,7 +4000,7 @@
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-secure-s3-bucket",
-        "brainboard:brainboard-aws-serverless-cdn",
+        "brainboard:brainboard-cross-account-aws-s3",
         "repository:static-web-hosting"
       ]
     },
@@ -3794,10 +4008,10 @@
       "id": "repository:three-tier-web-app",
       "title": "3-Tier Web App",
       "source": "repository",
-      "compilerVersion": "architecture-board-compiler/v2",
+      "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
       "changes": {
-        "total": 169,
+        "total": 178,
         "byKind": {
           "resource": 0,
           "relationship": 0,
@@ -3805,7 +4019,7 @@
           "containment": 28,
           "presentation": 34,
           "geometry": 89,
-          "edge-routing": 18
+          "edge-routing": 27
         },
         "groups": [
           {
@@ -3831,6 +4045,12 @@
             "kind": "geometry",
             "count": 89,
             "totalCost": 208
+          },
+          {
+            "action": "remove",
+            "kind": "edge-routing",
+            "count": 9,
+            "totalCost": 54
           },
           {
             "action": "modify",
@@ -3893,6 +4113,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 412.563,
+            "knowledgePenalty": 0,
+            "knowledgeReferenceSimilarity": 1,
             "knowledgeSiblingGap": 58.182,
             "knowledgeViewportAspectRatio": 1.333,
             "mainFlowContinuityError": 0,
@@ -3908,7 +4130,7 @@
           }
         },
         "after": {
-          "score": 2812663116.279522,
+          "score": 2812663284.620522,
           "visualPenalty": 2812655212.279522,
           "structuralPenalty": 540,
           "semanticDiagnosticPenalty": 6440,
@@ -3916,7 +4138,7 @@
             "backwardEdgeCount": 0,
             "canvasArea": 2354704,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 924,
+            "compilationDistance": 978,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 13,
             "edgeCrossingCount": 38,
@@ -3925,6 +4147,8 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 412.563,
+            "knowledgePenalty": 114.341,
+            "knowledgeReferenceSimilarity": 0.834,
             "knowledgeSiblingGap": 58.182,
             "knowledgeViewportAspectRatio": 1.333,
             "mainFlowContinuityError": 0,
@@ -3939,12 +4163,12 @@
             "totalEdgeLength": 18260
           }
         },
-        "compilationDistance": 924,
-        "scoreDelta": -13077586487.52324
+        "compilationDistance": 978,
+        "scoreDelta": -13077586319.18224
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-load-balancer-target-group",
-        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az",
+        "brainboard:brainboard-aws-jenkins-ec2",
+        "repository:ecs-fargate-container-app",
         "repository:three-tier-web-app"
       ]
     }
