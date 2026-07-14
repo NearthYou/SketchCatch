@@ -20,6 +20,9 @@ const workspaceCoreStyles = [
   readWebFile("features/workspace/resource-workspace.module.css"),
   readWebFile("features/workspace/WorkspaceIssuesPanel.module.css")
 ].join("\n");
+const architectureBoardStyles = readWebFile(
+  "features/diagram-editor/diagram-editor.module.css"
+);
 
 test("landing user-facing text keeps the minimum size and muted contrast", () => {
   assert.doesNotMatch(landingStyles, /font-size:\s*(?:8|9|10|11)px/);
@@ -34,6 +37,11 @@ test("workspace entry text keeps the minimum size and muted contrast", () => {
 test("workspace core panel text keeps the minimum size and muted contrast", () => {
   assert.doesNotMatch(workspaceCoreStyles, /font-size:\s*(?:8|9|10|11)px/);
   assert.doesNotMatch(workspaceCoreStyles, /#(?:777b84|999999)/i);
+});
+
+test("architecture board text keeps the minimum size and muted contrast", () => {
+  assert.doesNotMatch(architectureBoardStyles, /font-size:\s*(?:8|9|10|11)px/);
+  assert.doesNotMatch(architectureBoardStyles, /#(?:777b84|999999)/i);
 });
 
 test("dashboard text keeps the minimum size and muted contrast", () => {

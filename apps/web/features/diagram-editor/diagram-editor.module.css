@@ -24,7 +24,7 @@
   --board-border-strong: #9aa8ba;
   --board-ink: #172033;
   --board-body: #4b5870;
-  --board-muted: #7d889d;
+  --board-muted: #60646c;
   --board-primary: #1f6feb;
   --board-primary-soft: rgba(31, 111, 235, 0.12);
   --board-success: #287d3c;
@@ -479,7 +479,7 @@
   align-items: center;
   color: var(--workspace-text);
   display: grid;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   justify-items: center;
   line-height: 1;
@@ -615,7 +615,7 @@
   align-items: center;
   color: var(--workspace-muted);
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   justify-content: space-between;
   margin: 2px 2px 7px;
@@ -681,13 +681,13 @@
   background: var(--workspace-surface-muted);
   border-radius: 6px;
   display: inline-flex;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   justify-content: center;
 }
 
 .leftRail :global(.resourceTileLabel) {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
   min-width: 0;
@@ -745,7 +745,7 @@
 
 .leftRail :global(.sectionCaption) {
   color: var(--workspace-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   margin: 2px 2px 10px;
 }
@@ -797,7 +797,7 @@
 .leftRail :global(.moduleCatalogCard span),
 .leftRail :global(.templateCatalogCard span) {
   color: var(--workspace-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .leftRail :global(.moduleCatalogCard strong),
@@ -1111,7 +1111,7 @@ button.rightRailResizeHandle {
 .edgePatchBadge text {
   fill: currentColor;
   font-family: var(--workspace-font);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1696,7 +1696,7 @@ button.rightRailResizeHandle {
   border-radius: 6px;
   color: var(--board-primary);
   flex: 0 1 auto;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 14px;
   max-width: 120px;
@@ -1874,7 +1874,7 @@ button.rightRailResizeHandle {
   border: 1px solid currentColor;
   border-radius: 5px;
   display: flex;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   justify-content: center;
   line-height: 14px;
@@ -1914,7 +1914,7 @@ button.rightRailResizeHandle {
   .lockBadge,
   .stateBadge {
     border-radius: 3px;
-    font-size: 8px;
+    font-size: 12px;
     height: 12px;
     line-height: 10px;
     min-height: 12px;
@@ -1947,7 +1947,7 @@ button.rightRailResizeHandle {
 
   .stateBadgePreview::after {
     content: "P";
-    font-size: 8px;
+    font-size: 12px;
   }
 }
 
@@ -2192,7 +2192,7 @@ button.rightRailResizeHandle {
 
 .edgeToolbarPanelLabel {
   color: var(--board-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   line-height: 16px;
 }
