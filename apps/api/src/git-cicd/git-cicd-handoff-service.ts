@@ -384,7 +384,7 @@ export class GitCicdHandoffProviderPermissionError extends Error {
 }
 
 export class GitCicdHandoffProviderConflictError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly code: string | null = null) {
     super(message);
     this.name = "GitCicdHandoffProviderConflictError";
   }
@@ -1263,6 +1263,12 @@ function assertGitOpsTarget(
     const dockerfiles = sourceRepository.analysisResult?.evidence.filter(
       (item) => item.kind === "dockerfile"
     ) ?? [];
+    if (!target.runtimeConfig.outputUrl) {
+      throw new GitCicdHandoffProviderConflictError(
+        "DEPLOYMENT_OUTPUT_URL_REQUIRED",
+        "DEPLOYMENT_OUTPUT_URL_REQUIRED"
+      );
+    }
     if (
       target.runtimeConfig.runtimeTargetKind !== "ecs_fargate" ||
       build.buildPreset !== "docker_build" ||

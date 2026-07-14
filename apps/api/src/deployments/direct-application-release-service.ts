@@ -138,7 +138,7 @@ export type DirectApplicationReleaseGateway = {
 };
 
 export class DirectApplicationReleaseError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly code: string | null = null) {
     super(message);
     this.name = "DirectApplicationReleaseError";
   }
@@ -591,6 +591,16 @@ function assertContextMatchesTarget(context: DirectApplicationReleaseContext): v
   ) {
     throw new DirectApplicationReleaseError(
       "Direct deployment runtime does not match the confirmed project target"
+    );
+  }
+
+  if (
+    context.target.runtimeConfig.runtimeTargetKind === "ecs_fargate" &&
+    !context.target.runtimeConfig.outputUrl
+  ) {
+    throw new DirectApplicationReleaseError(
+      "DEPLOYMENT_OUTPUT_URL_REQUIRED",
+      "DEPLOYMENT_OUTPUT_URL_REQUIRED"
     );
   }
 }

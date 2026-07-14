@@ -1184,7 +1184,7 @@ export type EcsFargateRuntimeConfig = {
   clusterName: string;
   serviceName: string;
   containerName: string;
-  outputUrl: string;
+  outputUrl: string | null;
 };
 
 export type LambdaRuntimeConfig = {

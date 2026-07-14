@@ -71,7 +71,7 @@ const ecsFargateRuntimeConfigSchema = z
     clusterName: z.string().trim().min(1).max(255),
     serviceName: z.string().trim().min(1).max(255),
     containerName: z.string().trim().min(1).max(255),
-    outputUrl: z.url().max(2_048)
+    outputUrl: z.url().max(2_048).nullable()
   })
   .strict();
 const lambdaRuntimeConfigSchema = z

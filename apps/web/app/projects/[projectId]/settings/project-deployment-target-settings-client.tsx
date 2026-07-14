@@ -21,6 +21,7 @@ import {
   createDeploymentTargetRequest,
   formatDeploymentTargetUpdatedAt,
   isDeploymentTargetDraftReady,
+  type EcsFargateDeploymentDefaultsInput,
   type ProjectDeploymentTargetDraft
 } from "./project-deployment-target-state";
 import styles from "./project-deployment-target-settings.module.css";
@@ -35,9 +36,11 @@ const runtimeLabels: Record<RuntimeTargetKind, string> = {
 };
 
 export function ProjectDeploymentTargetSettingsClient({
-  projectId
+  projectId,
+  ecsDefaults = null
 }: {
   readonly projectId: string;
+  readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
 }) {
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
@@ -80,7 +83,14 @@ export function ProjectDeploymentTargetSettingsClient({
         setConnections(nextConnections);
         setTarget(nextTarget);
         setSourceRepository(nextSourceRepository ?? null);
-        setDraft(createDeploymentTargetDraft(nextTarget, nextConnections, nextSourceRepository));
+        setDraft(
+          createDeploymentTargetDraft(
+            nextTarget,
+            nextConnections,
+            nextSourceRepository,
+            ecsDefaults
+          )
+        );
         setRequestState("idle");
       } catch (error) {
         if (cancelled) return;
@@ -93,7 +103,7 @@ export function ProjectDeploymentTargetSettingsClient({
     return () => {
       cancelled = true;
     };
-  }, [authStatus, projectId]);
+  }, [authStatus, projectId, ecsDefaults]);
 
   function updateDraft<K extends keyof ProjectDeploymentTargetDraft>(
     key: K,
@@ -227,6 +237,7 @@ export function ProjectDeploymentTargetSettingsClient({
             <label className={styles.field}>
               <span>Output URL</span>
               <input onChange={(event) => updateDraft("outputUrl", event.target.value)} placeholder="https://api.example.com" value={draft.outputUrl} />
+              <small>Board 또는 배포에서 실제 HTTPS URL이 확정되기 전에는 비워둘 수 있습니다.</small>
             </label>
             <label className={styles.field}>
               <span>Health check path</span>
