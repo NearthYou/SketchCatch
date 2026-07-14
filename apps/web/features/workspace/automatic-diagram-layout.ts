@@ -56,6 +56,7 @@ type LayoutLane = "primary" | "upper-support" | "lower-support";
 type LayoutCandidateConfig = {
   readonly columnGap: number;
   readonly id: string;
+  readonly primaryOrder: "ascending" | "descending";
   readonly rowGap: number;
   readonly supportPlacement: "split" | "above" | "below";
 };
@@ -77,9 +78,12 @@ const AREA_PADDING = 36;
 const ROOT_PARENT_ID = "__root__";
 const SUPPORT_LANE_GAP = 80;
 const LAYOUT_CANDIDATES: readonly LayoutCandidateConfig[] = [
-  { columnGap: 64, id: "split-support", rowGap: 56, supportPlacement: "split" },
-  { columnGap: 64, id: "support-above", rowGap: 48, supportPlacement: "above" },
-  { columnGap: 64, id: "support-below", rowGap: 48, supportPlacement: "below" }
+  { columnGap: 64, id: "split-support", primaryOrder: "ascending", rowGap: 56, supportPlacement: "split" },
+  { columnGap: 64, id: "split-support-reversed", primaryOrder: "descending", rowGap: 56, supportPlacement: "split" },
+  { columnGap: 64, id: "support-above", primaryOrder: "ascending", rowGap: 48, supportPlacement: "above" },
+  { columnGap: 64, id: "support-above-reversed", primaryOrder: "descending", rowGap: 48, supportPlacement: "above" },
+  { columnGap: 64, id: "support-below", primaryOrder: "ascending", rowGap: 48, supportPlacement: "below" },
+  { columnGap: 64, id: "support-below-reversed", primaryOrder: "descending", rowGap: 48, supportPlacement: "below" }
 ];
 
 export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): AutomaticDiagramLayoutResult {
@@ -726,6 +730,12 @@ function layoutSiblingGroup(
 
   const nodesByRank = new Map<number, DiagramNode[]>();
   const laneByNodeId = new Map<string, LayoutLane>();
+  const layoutFlowPathByNodeId = new Map(
+    siblings.map((node) => [
+      node.id,
+      getLayoutFlowPath(node, nodeById, primaryFlowPathByNodeId)
+    ])
+  );
 
   for (const node of siblings) {
     const rank = getLayoutRank(node, nodeById, rankByNodeId);
@@ -774,7 +784,8 @@ function layoutSiblingGroup(
             right,
             lane,
             primaryDistanceByNodeId,
-            primaryFlowPathByNodeId
+            layoutFlowPathByNodeId,
+            config.primaryOrder
           )
         );
 
@@ -802,12 +813,35 @@ function layoutSiblingGroup(
   }
 }
 
+function getLayoutFlowPath(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  primaryFlowPathByNodeId: ReadonlyMap<string, string>
+): string {
+  const directPath = primaryFlowPathByNodeId.get(node.id);
+
+  if (directPath || !isAreaNode(node)) {
+    return directPath ?? node.id;
+  }
+
+  const descendantPaths = [...nodeById.values()]
+    .filter((candidate) => hasAreaAncestor(candidate, node.id, nodeById))
+    .flatMap((candidate) => {
+      const path = primaryFlowPathByNodeId.get(candidate.id);
+      return path ? [path] : [];
+    })
+    .sort();
+
+  return descendantPaths[0] ?? node.id;
+}
+
 function compareLaneNodes(
   left: DiagramNode,
   right: DiagramNode,
   lane: LayoutLane,
   primaryDistanceByNodeId: ReadonlyMap<string, number>,
-  primaryFlowPathByNodeId: ReadonlyMap<string, string>
+  primaryFlowPathByNodeId: ReadonlyMap<string, string>,
+  primaryOrder: LayoutCandidateConfig["primaryOrder"]
 ): number {
   if (lane === "primary") {
     const flowOrder = (primaryFlowPathByNodeId.get(left.id) ?? left.id).localeCompare(
@@ -815,7 +849,7 @@ function compareLaneNodes(
     );
 
     if (flowOrder !== 0) {
-      return flowOrder;
+      return primaryOrder === "ascending" ? flowOrder : -flowOrder;
     }
   }
 
