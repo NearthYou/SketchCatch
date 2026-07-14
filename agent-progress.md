@@ -17,6 +17,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Hide the Project Board capture clone from the live Workspace
+
+- Isolated the fitted React Flow capture clone inside a transparent paint-tree host, so `html-to-image` can still render the clone while the live Workspace never paints a duplicate Resource layer.
+- Removed the capture-source marker from the clone and the entire host after encoding, preventing nested fallback selection and leftover capture DOM.
+- TDD evidence: the duplicate-layer regression failed first, then the focused suite passed 5/5. Web typecheck, Web lint, and diff checks passed.
+- Chrome verification observed one transparent capture host and one real capture source during save, zero hosts after save, a single visible Resource layer, and a non-empty 1280x720 Dashboard thumbnail. Browser errors and warnings were empty.
+
 ### 2026-07-14 - Refresh a Dashboard Board thumbnail after browser-history restore
 
 - Preserved the same thumbnail endpoint, object URL lifecycle, save control, and capture/upload flow. A Dashboard card now requests its authenticated Board image again when a browser restores the Dashboard from back-forward cache after a Workspace save.

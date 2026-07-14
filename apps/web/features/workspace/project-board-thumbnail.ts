@@ -22,6 +22,11 @@ type ProjectBoardThumbnailCaptureDependencies = {
   readonly uploadProjectAsset: typeof uploadProjectAsset;
 };
 
+type FullBoardCaptureClone = {
+  readonly element: HTMLElement;
+  readonly remove: () => void;
+};
+
 export type ProjectBoardThumbnailCaptureResult =
   | { readonly status: "skipped" }
   | { readonly assetId: string; readonly status: "uploaded" };
@@ -49,7 +54,7 @@ export async function captureActualBoardElement(element: HTMLElement): Promise<B
   const captureClone = createFullBoardCaptureClone(element);
 
   try {
-    const sourceCanvas = await toCanvas(captureClone ?? element, {
+    const sourceCanvas = await toCanvas(captureClone?.element ?? element, {
       backgroundColor: BOARD_THUMBNAIL_CAPTURE_CONTRACT.backgroundColor,
       cacheBust: true,
       pixelRatio: Math.min(globalThis.devicePixelRatio || 1, 2)
@@ -99,7 +104,7 @@ export async function captureActualBoardElement(element: HTMLElement): Promise<B
   }
 }
 
-function createFullBoardCaptureClone(element: HTMLElement): HTMLElement | null {
+function createFullBoardCaptureClone(element: HTMLElement): FullBoardCaptureClone | null {
   const sourceViewport = element.querySelector<HTMLElement>(".react-flow__viewport");
 
   if (!sourceViewport || typeof document === "undefined") {
@@ -125,6 +130,7 @@ function createFullBoardCaptureClone(element: HTMLElement): HTMLElement | null {
     height: BOARD_THUMBNAIL_CAPTURE_CONTRACT.height,
     width: BOARD_THUMBNAIL_CAPTURE_CONTRACT.width
   });
+  const captureHost = document.createElement("div");
   const clone = element.cloneNode(true) as HTMLElement;
   const cloneViewport = clone.querySelector<HTMLElement>(".react-flow__viewport");
 
@@ -132,9 +138,18 @@ function createFullBoardCaptureClone(element: HTMLElement): HTMLElement | null {
     return null;
   }
 
+  captureHost.dataset.boardThumbnailCaptureHost = "true";
+  captureHost.setAttribute("aria-hidden", "true");
+  captureHost.style.left = "0";
+  // 부모 투명도는 실제 화면만 가리고, 직접 캡처하는 clone의 계산 스타일에는 포함되지 않습니다.
+  captureHost.style.opacity = "0";
+  captureHost.style.pointerEvents = "none";
+  captureHost.style.position = "fixed";
+  captureHost.style.top = "0";
+  captureHost.style.zIndex = "2147483647";
+
+  clone.removeAttribute("data-architecture-board-capture-source");
   clone.style.height = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.height}px`;
-  // html-to-image는 화면 밖에 놓인 복제본을 빈 Canvas로 렌더링할 수 있습니다.
-  // 캡처가 끝나는 즉시 제거하므로, 실제 paint tree 안의 원점에서만 잠깐 렌더링합니다.
   clone.style.left = "0";
   clone.style.maxWidth = "none";
   clone.style.minHeight = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.height}px`;
@@ -142,11 +157,14 @@ function createFullBoardCaptureClone(element: HTMLElement): HTMLElement | null {
   clone.style.position = "fixed";
   clone.style.top = "0";
   clone.style.width = `${BOARD_THUMBNAIL_CAPTURE_CONTRACT.width}px`;
-  clone.style.zIndex = "2147483647";
   cloneViewport.style.transform = `translate(${thumbnailViewport.x}px, ${thumbnailViewport.y}px) scale(${thumbnailViewport.zoom})`;
-  document.body.append(clone);
+  captureHost.append(clone);
+  document.body.append(captureHost);
 
-  return clone;
+  return {
+    element: clone,
+    remove: () => captureHost.remove()
+  };
 }
 
 // Canvas encoder의 callback 결과를 실패 가능한 Promise로 정규화합니다.

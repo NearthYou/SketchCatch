@@ -67,9 +67,14 @@ test("project Board thumbnails capture a fitted full Board instead of the curren
   assert.match(thumbnailSource, /cloneViewport\.style\.transform/);
 });
 
-test("fitted Board clone stays in the paint tree while it is captured", () => {
-  assert.match(thumbnailSource, /clone\.style\.left = "0"/);
-  assert.match(thumbnailSource, /clone\.style\.zIndex = "2147483647"/);
-  assert.doesNotMatch(thumbnailSource, /clone\.style\.left = "-100000px"/);
-  assert.doesNotMatch(thumbnailSource, /clone\.style\.zIndex = "-1"/);
+test("fitted Board clone stays capturable without appearing over the live Board", () => {
+  assert.match(thumbnailSource, /const captureHost = document\.createElement\("div"\)/);
+  assert.match(thumbnailSource, /captureHost\.style\.opacity = "0"/);
+  assert.match(thumbnailSource, /captureHost\.append\(clone\)/);
+  assert.match(thumbnailSource, /document\.body\.append\(captureHost\)/);
+  assert.match(
+    thumbnailSource,
+    /clone\.removeAttribute\("data-architecture-board-capture-source"\)/
+  );
+  assert.doesNotMatch(thumbnailSource, /clone\.style\.zIndex = "2147483647"/);
 });
