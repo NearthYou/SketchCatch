@@ -4,19 +4,34 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `test/sw/378-complete-sandbox-e2e`; the workstream remains `in_progress` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are still unverified.
-- The 2026-07-15 sandbox preflight passed against AWS account `614935468487`, the verified AWS Connection, the private fixture repository, and the approved USD 1 budget.
-- Web Push now persists the successful provider HTTP status without response bodies or subscription material, and generated Destroy workflows remove Lambda, EC2/ASG, and Static versioned artifacts.
-- ECS GitOps Infra run `29334708442` and chained App run `29334822683` succeeded for commit `3a12e55c13e7be1a769cfbe920b112516d8c14ce`.
-- HTTPS `/health` returned 200 with the exact commit. ECR and persisted release digest `20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1` matched ECS task definition revision 7 and desired/running count 1/1.
-- Project refresh now returns `stale=false`; Detect, Build, Artifact Publish, Plan, Apply, Deploy, and Verify are all persisted as succeeded with 1,161 masked CI log rows and no detected credential pattern.
-- Application release `8025a2f3-455a-41bb-abbd-b8149105d004` and Pipeline Run `4defade1-18ca-437b-8cf6-3857b058353e` persist the GitOps SHA, digest, provider revision, Output URL, and healthy ECS evidence.
-- The AWS Connection external ID was rotated in memory and verified with a fresh Operator session: the new value is accepted and the prior value is rejected. No value was printed or written to a file.
-- Destroy run `29337235499` succeeded. Direct queries confirm zero VPC, active ECS cluster, ECR repository, CodeBuild project, log group, release/state bucket, OIDC provider, issue task definition, and issue IAM role. Resource Groups still has three delayed deleted-ECS tag index entries.
-- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused tests, harness, lint, typecheck, build, and diff checks pass.
-- Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
+- Branch: `fix/ys/363-uiux-개선`; the latest `dev` merge is being resolved while preserving the essential test protection line.
+- The automated suite retains 52 essential protection test files. The prior 47-file baseline passed 518 checks; the five restored security files passed 54/57 focused checks, with three Windows symlink setup cases blocked by `EPERM`.
+- Incoming runtime, contract, documentation, migration, and protected-test changes are preserved. Tests outside the protection line remain deleted; migration compatibility, lint, typecheck, build, harness, and diff checks pass.
+- Issue #378 remains `blocked` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are incomplete.
+- No Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during conflict resolution.
 
 ## Session Record
+
+### 2026-07-15 - Restore five reviewed security tests
+
+- Restored exactly five tests from the merged dev source: API auth/error boundaries, Live Observation HTTPS/SSRF transport, filesystem path traversal, Live Observation capability tokens, and Web Push subscription encryption.
+- Focused execution passed 54/57 checks; the three failures occurred before assertions because this Windows environment denied test symlink creation with `EPERM`.
+- API lint and typecheck pass. Full workspace test/build were intentionally not rerun to keep the merge path minimal.
+
+### 2026-07-15 - Resolve latest dev merge after test reduction
+
+- Preserved the incoming `dev` runtime and contract changes while resolving delete/modify conflicts in favor of the 47-file essential protection line.
+- Removed 33 reintroduced non-protection tests and four new non-protection tests; retained incoming updates to the protected deployment, Terraform safety, route, and Web deployment tests.
+- Combined the current test policy with the latest imported sandbox and Issue #360 progress evidence.
+- Verification passed: `pnpm test` (518 checks), `pnpm migration:compatibility:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
+
+### 2026-07-15 - Reduce tests to the essential protection line
+
+- Removed 343 non-core test files and retained 47 explicitly reviewed safety and core-workflow test files.
+- Added the retained Web component test, shared type contracts, sandbox preflight/evidence test, and Terraform routing test to the normal `pnpm test` path; the lockfile changed only for the existing `tsx` test runner in `packages/types`.
+- Removed stale deleted-test references from active deployment and asset documentation, and recorded the new protection-line policy in `feature_list.json` while preserving older feature evidence as historical audit records.
+- Verification before this merge: reduced `pnpm test` passed 511 checks across all 47 retained files, and migration compatibility, lint, typecheck, build, harness, and diff checks passed.
+- Risk: AI Architecture, GitOps runtime reconcilers, Reverse Engineering, Cost, Live Observation, notifications, detailed diagram editing, Templates, and presentation behavior no longer have their previous dedicated regression suites.
 
 ### 2026-07-15 - Resolve Issue #360 branch conflicts with latest dev
 
@@ -104,7 +119,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Open and babysit the `codex/ecs-deployment-speed` PR against `dev`, address CI/review feedback, and merge only after GitHub reports it ready.
-- No production Terraform apply is required for this change set.
-- If pursuing the 5m30s stretch target, profile the 1m28s validation job and 3m13s API service stabilization before changing safety thresholds.
-- Continue issue #378 only on its dedicated branch; do not mix its sandbox matrix work into this release optimization branch.
+- No continuation is required for the completed test reduction after this branch is reviewed.
+- Resume Issue #378 only on its dedicated branch after its recorded blockers can be addressed.
+- Add future automated coverage only through an explicit update to the essential protection-line policy.
