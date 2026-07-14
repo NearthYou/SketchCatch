@@ -7,8 +7,11 @@ import {
 } from "../../../../packages/types/src";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import {
+  findApprovedTemplateReviewDecision,
+  resolveApprovedTemplateReviewVariant,
   reviewArchitectureBoardTemplate,
-  type ArchitectureBoardCompilationProposal
+  type ArchitectureBoardCompilationProposal,
+  type TemplateReviewDecision
 } from "../architecture-board-compiler";
 import {
   buildTemplateDiagramJson,
@@ -798,7 +801,7 @@ export function isBoardTemplateAvailable(
 export function reviewAvailableBoardTemplate(
   template: AvailableBoardTemplate
 ): AvailableBoardTemplateReview {
-  // Gallery와 새 Board 시작은 authored source를 계속 사용하고, Compiler 결과는 검토 전용으로 분리합니다.
+  // Authoring source를 기준으로 proposal을 만들고, 승인된 visual-only variant만 별도 registry에서 소비합니다.
   const sourceDiagram = cloneDiagramJson(template.diagramJson);
 
   return {
@@ -844,7 +847,13 @@ export function buildBoardTemplateDiagram(
   const definitionId = resolveTemplateDefinitionId(templateId);
   const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
   if (definition) {
-    return materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input), "authored");
+    return materializeTemplateDiagram(
+      resolveApprovedBoardTemplateDiagram(
+        definition.id,
+        buildTemplateDiagramJson(definition.id, input)
+      ),
+      "authored"
+    );
   }
 
   const brainboardTemplate = brainboardBoardTemplates.find(
@@ -852,8 +861,29 @@ export function buildBoardTemplateDiagram(
       candidate.id === templateId && candidate.availability === "available"
   );
   return brainboardTemplate
-    ? materializeTemplateDiagram(cloneDiagramJson(brainboardTemplate.diagramJson), "authored")
+    ? materializeTemplateDiagram(
+        resolveApprovedBoardTemplateDiagram(
+          brainboardTemplate.id,
+          cloneDiagramJson(brainboardTemplate.diagramJson)
+        ),
+        "authored"
+      )
     : undefined;
+}
+
+/**
+ * One gallery/start seam for approved compiled variants. No registry entry, stale source, or
+ * semantic approval always falls back to the authored source diagram.
+ */
+export function resolveApprovedBoardTemplateDiagram(
+  templateId: string,
+  sourceDiagram: DiagramJson,
+  decision: TemplateReviewDecision | undefined = findApprovedTemplateReviewDecision(templateId)
+): DiagramJson {
+  return resolveApprovedTemplateReviewVariant(
+    { id: templateId, diagramJson: sourceDiagram },
+    decision
+  ).diagram;
 }
 
 function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId | undefined {
@@ -972,7 +1002,10 @@ function cloneBoardTemplate(template: BoardTemplate): BoardTemplate {
 function cloneAvailableBoardTemplate(template: AvailableBoardTemplate): AvailableBoardTemplate {
   return {
     ...template,
-    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson), "authored"),
+    diagramJson: materializeTemplateDiagram(
+      resolveApprovedBoardTemplateDiagram(template.id, cloneDiagramJson(template.diagramJson)),
+      "authored"
+    ),
     tags: [...template.tags],
     terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
   };
