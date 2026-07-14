@@ -7,9 +7,10 @@ import type {
   GitHubRepositoryCandidate,
   RecommendRepositoryTemplateResponse,
   RepositoryAnalysisAnswer,
-  RepositoryAnalysisAiHandoff
+  RepositoryAnalysisAiHandoff,
+  RepositoryAnalysisTemplateId
 } from "@sketchcatch/types";
-import type { RepositoryDeploymentType, TemplateId } from "@sketchcatch/types";
+import type { RepositoryDeploymentType } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import { oauthAccounts, projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
@@ -562,11 +563,11 @@ export async function requireRepositoryAnalysisTemplateId(
   input: {
     readonly projectId: string;
     readonly sourceRepositoryId: string;
-    readonly requestedTemplateId?: TemplateId | undefined;
+    readonly requestedTemplateId?: RepositoryAnalysisTemplateId | undefined;
     readonly accessContext: ProjectAccessContext;
   },
   repository: SourceRepositoryRepository
-): Promise<TemplateId> {
+): Promise<RepositoryAnalysisTemplateId> {
   await requireAccessibleProject(
     input.projectId,
     input.accessContext,
@@ -595,7 +596,7 @@ export async function requireRepositoryAnalysisTemplateId(
     return analysis.templateId;
   }
 
-  const supportedTemplateIds = new Set<TemplateId>([
+  const supportedTemplateIds = new Set<RepositoryAnalysisTemplateId>([
     analysis.templateId,
     ...(analysis.recommendation?.candidates.map((candidate) => candidate.templateId) ?? [])
   ]);

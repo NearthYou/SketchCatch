@@ -46,11 +46,9 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
         if (!active) return;
         setState(replaceNotificationCenterState(response));
         cursorRef.current = response.notifications[0]?.id;
+        setInboxReady(true);
       })
       .catch(() => undefined)
-      .finally(() => {
-        if (active) setInboxReady(true);
-      });
     return () => { active = false; };
   }, [status]);
 

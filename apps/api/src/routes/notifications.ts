@@ -144,6 +144,7 @@ async function streamNotifications(input: {
   reply: FastifyReply;
   service: NotificationService;
 }): Promise<void> {
+  input.reply.hijack();
   input.reply.raw.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
@@ -151,7 +152,7 @@ async function streamNotifications(input: {
     "X-Accel-Buffering": "no",
     Vary: "Authorization"
   });
-  input.reply.hijack();
+  input.reply.raw.write(": connected\n\n");
   let cursor = input.after;
   let closed = false;
   let reading = false;
@@ -182,7 +183,7 @@ async function streamNotifications(input: {
   }, 15_000);
   pollTimer.unref();
   heartbeatTimer.unref();
-  input.request.raw.on("close", close);
+  input.reply.raw.on("close", close);
   try {
     await writeNotifications();
   } catch {

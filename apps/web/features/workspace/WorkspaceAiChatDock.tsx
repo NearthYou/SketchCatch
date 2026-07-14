@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { templateDefinitions } from "@sketchcatch/types";
-import type { TemplateId } from "@sketchcatch/types";
+import { TEMPLATE_IDS } from "@sketchcatch/types";
 import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
@@ -18,6 +17,7 @@ import type {
   TerraformDiagnostic
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { listBoardTemplates } from "../resource-settings/template-library";
 import { Mic, Send, Sparkles, Trash2, X } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { compileArchitectureDraftProposal } from "../architecture-board-compiler";
@@ -90,7 +90,7 @@ export type WorkspaceAiChatDockProps = {
   readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
   readonly projectId: string;
   readonly repositoryAnalysisSourceRepositoryId?: string | undefined;
-  readonly repositoryTemplateId?: TemplateId | undefined;
+  readonly repositoryTemplateId?: string | undefined;
   readonly terraformIssueRequest: TerraformIssueAiRequest | null;
   readonly terraformPreviewRequest: TerraformPreviewAiRequest | null;
   readonly terraformSafeFixApplyResult: TerraformSafeFixApplyResult | null;
@@ -266,7 +266,7 @@ export function WorkspaceAiChatDock({
   const repositoryTemplate = useMemo(
     () =>
       repositoryTemplateId
-        ? templateDefinitions.find((template) => template.id === repositoryTemplateId) ?? null
+        ? listBoardTemplates().find((template) => template.id === repositoryTemplateId) ?? null
         : null,
     [repositoryTemplateId]
   );
@@ -1109,7 +1109,7 @@ export function WorkspaceAiChatDock({
     const normalizedDraftRequest: CreateArchitectureDraftRequest = {
       ...draftRequest,
       prompt,
-      ...(repositoryTemplate
+      ...(repositoryTemplate && isBuiltInTemplateId(repositoryTemplate.id)
         ? {
             templateId: repositoryTemplate.id,
             ...(repositoryAnalysisSourceRepositoryId
@@ -2374,4 +2374,8 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
       candidate.kind === "status" ||
       candidate.kind === "terraform_issue")
   );
+}
+
+function isBuiltInTemplateId(templateId: string): templateId is (typeof TEMPLATE_IDS)[number] {
+  return (TEMPLATE_IDS as readonly string[]).includes(templateId);
 }

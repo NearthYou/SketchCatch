@@ -69,6 +69,16 @@ const AREA_DEPTH_CLASSES = [
   styles.nodeShellAreaDepth3
 ] as const;
 
+const DESIGN_NODE_ICON_URLS_BY_TYPE: Readonly<Record<string, string>> = {
+  aws_ecs_task_definition:
+    "/Resource-Icons_07312025/Res_Containers/Res_Amazon-Elastic-Container-Service_Task_48.svg",
+  client: "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg",
+  "design-user-client": "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg",
+  github_actions: "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg",
+  sketchcatch_user_client:
+    "/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Client_48_Light.svg"
+};
+
 const RESIZE_HANDLES: readonly {
   className: string;
   isSide?: boolean;
@@ -143,16 +153,17 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           transform: `rotate(${node.rotation}deg)`,
           transformOrigin: "center"
         };
+  const displayIconUrl = node.iconUrl ?? getDesignNodeFallbackIconUrl(node);
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
   const isSecurityGroupScope = isSecurityGroupScopeNode(node);
-  const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(node.iconUrl));
+  const usesIconTileLayout = isResourceNode || (node.kind === "design" && !isArea && Boolean(displayIconUrl));
   const canChangeBorderColor = canChangeNodeBorderColor(node);
   const borderColor = getNodeDisplayBorderColor(node);
   const borderStyle = getNodeDisplayBorderStyle(node);
   const textColor = node.style?.textColor ?? "#172033";
   const resizeBounds = getNodeResizeBounds(node);
-  const resourcePresentation = getResourceNodePresentation(node);
+  const resourcePresentation = getResourceNodePresentation({ ...node, iconUrl: displayIconUrl });
   const nodeShellStyle = getNodeShellStyle(
     isArea,
     usesIconTileLayout,
@@ -344,8 +355,8 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           ) : usesIconTileLayout ? (
             <>
               <div className={styles.resourceNodeIconFrame} data-icon-family={resourcePresentation.icon.family}>
-                {node.iconUrl ? (
-                  <img alt="" className={styles.resourceNodeIcon} draggable={false} src={node.iconUrl} />
+                {displayIconUrl ? (
+                  <img alt="" className={styles.resourceNodeIcon} draggable={false} src={displayIconUrl} />
                 ) : (
                   <div className={styles.resourceNodeIconFallback} aria-hidden="true">
                     <Box size={18} strokeWidth={1.75} />
@@ -359,8 +370,8 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           ) : (
             <>
               <div className={styles.nodeGlyph} aria-hidden="true">
-                {node.iconUrl ? (
-                  <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={node.iconUrl} />
+                {displayIconUrl ? (
+                  <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={displayIconUrl} />
                 ) : (
                   "D"
                 )}
@@ -502,6 +513,26 @@ function handleConnectionHandleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>
   event.preventDefault();
   event.stopPropagation();
   event.currentTarget.click();
+}
+
+function getDesignNodeFallbackIconUrl(
+  node: Pick<DiagramFlowNode["data"]["node"], "kind" | "metadata" | "type">
+): string | undefined {
+  if (node.kind !== "design") {
+    return undefined;
+  }
+
+  const presentationCatalogItemId = node.metadata?.presentationCatalogItemId;
+
+  if (presentationCatalogItemId === "design-user-client") {
+    return DESIGN_NODE_ICON_URLS_BY_TYPE["design-user-client"];
+  }
+
+  if (presentationCatalogItemId === "design-source-repository") {
+    return DESIGN_NODE_ICON_URLS_BY_TYPE.github_actions;
+  }
+
+  return DESIGN_NODE_ICON_URLS_BY_TYPE[node.type];
 }
 
 function getNodeShellStyle(

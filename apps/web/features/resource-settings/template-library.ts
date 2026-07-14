@@ -731,8 +731,34 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
   )
   .map((entry) => {
     const evidence = entry.source;
+    const descriptions: Readonly<Record<string, string>> = {
+      "[Training] AWS onboarding": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
+      "AWS Kubernetes cluster with native CNIs": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
+      "AWS VPC with subnet and security groups on 2 AZs": "여러 서비스와 인스턴스, 데이터베이스를 호스팅할 수 있는 기본 네트워크 구성입니다. 하나의 리전에 있는 두 가용 영역과 VPC, 서브넷, 보안 그룹으로 구성하며 필요에 따라 가용 영역을 추가할 수 있습니다.",
+      "AWS serverless architecture with CDN": "S3와 API Gateway, CloudFront를 사용해 정적 콘텐츠를 제공하는 서버리스 아키텍처입니다.",
+      "AWS EC2 instance inside VPC & Subnet": "VPC와 서브넷 내부에 EC2 인스턴스를 배치하는 기본 구성입니다.",
+      "AWS ASG and LB with VPC & subnets": "VPC와 서브넷 위에 로드 밸런서와 오토 스케일링 그룹을 구성해 애플리케이션 트래픽을 분산하고 인스턴스 수를 자동 조정합니다.",
+      "AWS Jenkins architecture on EC2": "EC2에서 Jenkins를 실행하고 네트워크와 보안 그룹을 함께 구성하는 CI/CD 시작 구조입니다.",
+      "AWS REST API for DocumentDB": "API Gateway와 Lambda를 통해 DocumentDB 데이터에 접근하는 REST API 구조입니다.",
+      "AWS network landing zone": "여러 AWS 계정과 네트워크를 확장하기 위한 기본 랜딩 존 구조입니다.",
+      "AWS 3-tier web app with a database": "DNS 영역, 방화벽, 로드 밸런서와 데이터베이스를 포함한 3계층 웹 애플리케이션 구조입니다. 필요에 따라 라우트와 라우트 테이블 연결을 추가할 수 있습니다.",
+      "AWS Bastion": "프라이빗 네트워크의 인스턴스에 안전하게 접속하기 위한 Bastion 호스트 구성입니다.",
+      "AWS instance and DB with multiple networks": "여러 네트워크에 걸쳐 애플리케이션 인스턴스와 데이터베이스를 배치하는 구조입니다.",
+      "AWS load balancer with target group": "로드 밸런서와 대상 그룹을 연결해 애플리케이션 트래픽을 대상 인스턴스로 전달합니다.",
+      "AWS S3 API Gateway integration": "API Gateway와 S3를 연결해 객체를 API로 제공하는 서버리스 구조입니다.",
+      "AWS costs monitoring": "AWS 비용과 사용량을 추적하기 위한 예산 및 모니터링 구성입니다.",
+      "AWS ECS with Fargate": "서버를 직접 관리하지 않고 ECS Fargate에서 컨테이너 워크로드를 실행합니다.",
+      "AWS multi-account management": "여러 AWS 계정을 중앙에서 관리하기 위한 조직 및 계정 구성입니다.",
+      "AWS Elastic Beanstalk": "Elastic Beanstalk 애플리케이션과 환경을 구성해 애플리케이션 배포를 단순화합니다.",
+      "AWS RDS": "관리형 RDS 데이터베이스 인스턴스와 네트워크 구성을 시작합니다.",
+      "AWS FSX architecture": "FSx for Lustre 파일 시스템을 생성하고 네트워크에 연결합니다.",
+      "Cross account AWS S3": "서로 다른 AWS 계정 간에 S3 버킷을 공유하고 접근하도록 구성합니다.",
+      "AWS IAM users creation": "IAM 사용자와 그룹, 정책 연결 및 로그인 프로필을 구성합니다.",
+      "AWS Dashcam Video Processing Pipeline": "대시캠 영상 수집과 저장, 처리를 위한 AWS 서비스 구성을 시작합니다.",
+      "AWS secure S3 bucket": "퍼블릭 접근을 차단하고 암호화와 버전 관리를 적용한 보안 S3 버킷 구성입니다."
+    };
     const metadata = {
-      description: "AWS 인프라 구성 예시입니다.",
+      description: descriptions[evidence.title] ?? "AWS 리소스를 조합한 인프라 구성 템플릿입니다.",
       id: entry.id,
       tags: ["AWS"],
       thumbnailSrc: getBrainboardTemplateThumbnailAsset(entry.id).src,
