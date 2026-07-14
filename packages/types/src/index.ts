@@ -507,6 +507,16 @@ export type GitHubAppInstallUrlResponse = {
   expiresAt: IsoDateTimeString;
 };
 
+export type GitHubProjectConnectionTarget = {
+  owner: string;
+  name: string;
+};
+
+export type CreateGitHubProjectInstallUrlRequest = {
+  repositoryUrl: string;
+  resumeKey: string;
+};
+
 export type GitHubAppExistingInstallationCallbackUrlResponse = {
   callbackUrl: string;
   expiresAt: IsoDateTimeString;
@@ -580,6 +590,8 @@ export type ListGitHubInstallationRepositoriesResponse =
       scope: "project";
       projectId: string;
       repositories: GitHubRepositoryCandidate[];
+      targetRepository: GitHubProjectConnectionTarget | null;
+      resumeKey: string | null;
     };
 
 export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {

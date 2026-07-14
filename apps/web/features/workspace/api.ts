@@ -27,6 +27,7 @@ import type {
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
   CreateGitHubArchitectureDraftRequest,
+  CreateGitHubProjectInstallUrlRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
@@ -1299,13 +1300,15 @@ export async function recommendRepositoryTemplate({
 }
 
 export async function createGitHubSourceRepositoryInstallUrl(
-  projectId: string
+  projectId: string,
+  input: CreateGitHubProjectInstallUrlRequest
 ): Promise<GitHubAppInstallUrlResponse> {
   return apiFetch<GitHubAppInstallUrlResponse>(
     `/projects/${encodeURIComponent(projectId)}/source-repositories/github/install-url`,
     {
       auth: true,
-      method: "POST"
+      method: "POST",
+      body: input
     }
   );
 }
