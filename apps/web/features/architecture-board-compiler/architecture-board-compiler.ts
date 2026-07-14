@@ -120,8 +120,15 @@ export function compileArchitectureBoard(
   const baseDiagram = convertArchitectureJsonToDiagramJson(requestedArchitecture, {
     preserveLayoutFrom: input.trigger === "board-auto-organize" ? undefined : currentDiagram
   });
+  // board-auto-organize is deliberately a layout-only operation over the live Board, so
+  // its current Diagram remains a valid original candidate. Other triggers can change
+  // config or relationship labels without changing the graph shape; using their current
+  // Diagram there would pair the requested Architecture with stale node/edge values.
   const originalDiagram =
-    currentDiagram && currentArchitecture && sameArchitectureShape(currentArchitecture, requestedArchitecture)
+    input.trigger === "board-auto-organize" &&
+    currentDiagram &&
+    currentArchitecture &&
+    sameArchitectureShape(currentArchitecture, requestedArchitecture)
       ? currentDiagram
       : baseDiagram;
   const comparisonArchitecture = currentArchitecture ?? requestedArchitecture;
@@ -218,7 +225,7 @@ function createMaterializedCandidate(
   });
   const diagram = routeAndLayerDiagram({
     ...cloneDiagram(materialized),
-    nodes: layout.nodes.map((node) => structuredClone(node))
+    nodes: restoreLockedNodeGeometry(layout.nodes, materialized.nodes)
   });
 
   return createCandidate(
@@ -236,6 +243,44 @@ function createMaterializedCandidate(
 // 잃으면 안 되므로 후보에 그대로 carry-forward한다.
 function preserveCurrentBoardState(nextDiagram: DiagramJson, currentDiagram: DiagramJson): DiagramJson {
   const currentNodeById = new Map(currentDiagram.nodes.map((node) => [node.id, node]));
+  const lockedPresentationNodeIds = new Set(
+    currentDiagram.nodes
+      .filter((node) => node.locked && node.kind === "design")
+      .map((node) => node.id)
+  );
+  const nextNodeIds = new Set(nextDiagram.nodes.map((node) => node.id));
+  const nodes = [
+    ...nextDiagram.nodes.map((node) => {
+      const currentNode = currentNodeById.get(node.id);
+      if (!currentNode) {
+        return structuredClone(node);
+      }
+
+      if (!currentNode.locked) {
+        return { ...structuredClone(node), locked: false };
+      }
+
+      return copyLockedNodeGeometry(node, currentNode);
+    }),
+    // ArchitectureJson intentionally contains IaC resources only. A locked design
+    // node is user-owned presentation state, so it must survive a compiler pass even
+    // when it has no Terraform counterpart.
+    ...currentDiagram.nodes
+      .filter((node) => node.locked && node.kind === "design" && !nextNodeIds.has(node.id))
+      .map((node) => structuredClone(node))
+  ];
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const nextEdgeIds = new Set(nextDiagram.edges.map((edge) => edge.id));
+  const presentationEdges = currentDiagram.edges
+    .filter(
+      (edge) =>
+        !nextEdgeIds.has(edge.id) &&
+        nodeIds.has(edge.sourceNodeId) &&
+        nodeIds.has(edge.targetNodeId) &&
+        (lockedPresentationNodeIds.has(edge.sourceNodeId) ||
+          lockedPresentationNodeIds.has(edge.targetNodeId))
+    )
+    .map((edge) => structuredClone(edge));
   const sourceExact = currentDiagram.presentation?.geometryPolicy === "source-exact";
   const currentPresentation = currentDiagram.presentation;
   const compiledPresentation = sourceExact
@@ -249,14 +294,8 @@ function preserveCurrentBoardState(nextDiagram: DiagramJson, currentDiagram: Dia
 
   return {
     ...cloneDiagram(nextDiagram),
-    nodes: nextDiagram.nodes.map((node) => {
-      const currentNode = currentNodeById.get(node.id);
-      if (currentNode?.locked === undefined) {
-        return structuredClone(node);
-      }
-
-      return { ...structuredClone(node), locked: currentNode.locked };
-    }),
+    nodes,
+    edges: [...nextDiagram.edges.map((edge) => structuredClone(edge)), ...presentationEdges],
     // A compiled source-exact variant has different coordinates, so it must not reuse
     // the old source ViewBox. All other user viewport state stays intact.
     viewport: structuredClone(sourceExact ? nextDiagram.viewport : currentDiagram.viewport),
@@ -266,6 +305,30 @@ function preserveCurrentBoardState(nextDiagram: DiagramJson, currentDiagram: Dia
     ...(compiledPresentation === undefined
       ? {}
       : { presentation: structuredClone(compiledPresentation) })
+  };
+}
+
+function restoreLockedNodeGeometry(
+  nodes: readonly DiagramNode[],
+  materializedNodes: readonly DiagramNode[]
+): DiagramNode[] {
+  const lockedNodeById = new Map(
+    materializedNodes.filter((node) => node.locked).map((node) => [node.id, node])
+  );
+
+  return nodes.map((node) => {
+    const lockedNode = lockedNodeById.get(node.id);
+    return lockedNode ? copyLockedNodeGeometry(node, lockedNode) : structuredClone(node);
+  });
+}
+
+function copyLockedNodeGeometry(nextNode: DiagramNode, lockedNode: DiagramNode): DiagramNode {
+  return {
+    ...structuredClone(nextNode),
+    locked: true,
+    position: structuredClone(lockedNode.position),
+    size: structuredClone(lockedNode.size),
+    zIndex: lockedNode.zIndex
   };
 }
 
@@ -825,6 +888,9 @@ function applyCompilerLayerOrder(nodes: readonly DiagramNode[]): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return nodes.map((node) => {
+    if (node.locked) {
+      return structuredClone(node);
+    }
     const depth = getDiagramAreaDepth(node, nodeById);
     const area = isDiagramPresentationArea(node);
     return {
@@ -1099,13 +1165,13 @@ function compareDiagramPresentationAndGeometry(
       changes.push(change("presentation", "modify", [id], `Resource ${id} 표현 Area 변경`, COMPILATION_DISTANCE_COST.presentation, beforePresentation, afterPresentation));
     }
     if (!sameValue(previous.position, next.position)) {
-      changes.push(change("geometry", "modify", [id], `Resource ${id} 위치 변경`, COMPILATION_DISTANCE_COST.position, previous.position, next.position));
+      changes.push(change("geometry", "modify", [id], `Resource ${id} 위치 변경`, COMPILATION_DISTANCE_COST.position, previous.position, next.position, `${id}:position`));
     }
     if (!sameValue(previous.size, next.size)) {
-      changes.push(change("geometry", "modify", [id], `Resource ${id} 크기 변경`, COMPILATION_DISTANCE_COST.size, previous.size, next.size));
+      changes.push(change("geometry", "modify", [id], `Resource ${id} 크기 변경`, COMPILATION_DISTANCE_COST.size, previous.size, next.size, `${id}:size`));
     }
     if (previous.zIndex !== next.zIndex) {
-      changes.push(change("geometry", "modify", [id], `Resource ${id} z-index 변경`, COMPILATION_DISTANCE_COST.zIndex, previous.zIndex, next.zIndex));
+      changes.push(change("geometry", "modify", [id], `Resource ${id} z-index 변경`, COMPILATION_DISTANCE_COST.zIndex, previous.zIndex, next.zIndex, `${id}:z-index`));
     }
   }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ArchitectureJson, DiagramJson } from "@sketchcatch/types";
+import type { ArchitectureJson, DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   ARCHITECTURE_BOARD_COMPILER_VERSION,
   architectureBoardKnowledge,
@@ -363,6 +363,186 @@ test("source-exact 자동 정리는 잠긴 node를 보호하고 새 geometry에 
       ({ kind, targetIds }) => kind === "geometry" && targetIds.includes("board-viewport")
     )
   );
+});
+
+test("source-exact 자동 정리는 잠긴 Resource의 위치·크기·z-index를 정확히 보존한다", () => {
+  const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
+  const lockedGeometry = {
+    position: { x: 731, y: -219 },
+    size: { width: 173, height: 91 },
+    zIndex: 913
+  };
+  const currentDiagram: DiagramJson = {
+    ...structuredClone(source),
+    nodes: source.nodes.map((node) =>
+      node.id === "api"
+        ? { ...node, ...lockedGeometry, locked: true }
+        : structuredClone(node)
+    ),
+    presentation: { geometryPolicy: "source-exact" }
+  };
+
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+  const lockedAfter = proposal.diagram.nodes.find((node) => node.id === "api");
+
+  assert.equal(proposal.provenance.candidateId.startsWith("compiled:"), true);
+  assert.deepEqual(
+    lockedAfter && {
+      position: lockedAfter.position,
+      size: lockedAfter.size,
+      zIndex: lockedAfter.zIndex
+    },
+    lockedGeometry
+  );
+});
+
+test("source-exact 자동 정리는 잠긴 design node와 유효한 presentation edge를 보존한다", () => {
+  const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
+  const lockedDesignNode: DiagramNode = {
+    id: "locked-client-frame",
+    type: "design-client-frame",
+    kind: "design",
+    label: "Client entry",
+    position: { x: -440, y: 248 },
+    size: { width: 236, height: 134 },
+    locked: true,
+    zIndex: 77,
+    metadata: { presentationArea: true },
+    style: { borderColor: "#123456", borderStyle: "dashed" }
+  };
+  const currentDiagram: DiagramJson = {
+    ...structuredClone(source),
+    nodes: [...source.nodes.map((node) => structuredClone(node)), lockedDesignNode],
+    edges: [
+      ...source.edges.map((edge) => structuredClone(edge)),
+      {
+        id: "locked-client-requests-api",
+        sourceNodeId: lockedDesignNode.id,
+        targetNodeId: "api",
+        label: "requests",
+        metadata: { presentationRole: "primary" }
+      }
+    ],
+    presentation: { geometryPolicy: "source-exact" }
+  };
+
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+  const carriedDesignNode = proposal.diagram.nodes.find((node) => node.id === lockedDesignNode.id);
+  const carriedEdge = proposal.diagram.edges.find(
+    (edge) => edge.id === "locked-client-requests-api"
+  );
+
+  assert.equal(proposal.provenance.candidateId.startsWith("compiled:"), true);
+  assert.deepEqual(carriedDesignNode, lockedDesignNode);
+  assert.deepEqual(
+    carriedEdge && {
+      id: carriedEdge.id,
+      sourceNodeId: carriedEdge.sourceNodeId,
+      targetNodeId: carriedEdge.targetNodeId,
+      label: carriedEdge.label,
+      metadata: carriedEdge.metadata
+    },
+    {
+      id: "locked-client-requests-api",
+      sourceNodeId: lockedDesignNode.id,
+      targetNodeId: "api",
+      label: "requests",
+      metadata: { presentationRole: "primary" }
+    }
+  );
+});
+
+test("같은 Resource의 위치·크기·z-index 변경은 각각 고유한 change id를 가진다", () => {
+  const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
+  const currentDiagram: DiagramJson = {
+    ...structuredClone(source),
+    nodes: source.nodes.map((node) =>
+      node.id === "api"
+        ? {
+            ...node,
+            position: { x: -901, y: 543 },
+            size: { width: 277, height: 89 },
+            zIndex: 777
+          }
+        : structuredClone(node)
+    ),
+    presentation: { geometryPolicy: "source-exact" }
+  };
+
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+  const apiGeometryChanges = proposal.changes.filter(
+    (change) => change.kind === "geometry" && change.targetIds.includes("api")
+  );
+
+  assert.equal(apiGeometryChanges.length, 3);
+  assert.equal(
+    new Set(apiGeometryChanges.map((change) => change.id)).size,
+    apiGeometryChanges.length
+  );
+});
+
+test("AI draft는 같은 shape의 현재 Board가 있어도 요청된 config와 관계 label을 materialize한다", () => {
+  const currentArchitecture: ArchitectureJson = {
+    nodes: [
+      {
+        id: "api",
+        type: "API_GATEWAY_REST_API",
+        label: "API",
+        positionX: 0,
+        positionY: 0,
+        config: { endpointType: "EDGE" }
+      },
+      {
+        id: "function",
+        type: "LAMBDA",
+        label: "Function",
+        positionX: 160,
+        positionY: 0,
+        config: { runtime: "nodejs18.x" }
+      }
+    ],
+    edges: [{ id: "api-function", sourceId: "api", targetId: "function", label: "old invokes" }]
+  };
+  const requestedArchitecture: ArchitectureJson = {
+    ...structuredClone(currentArchitecture),
+    nodes: currentArchitecture.nodes.map((node) =>
+      node.id === "function"
+        ? { ...node, config: { runtime: "nodejs20.x" } }
+        : structuredClone(node)
+    ),
+    edges: [
+      {
+        id: "api-function",
+        sourceId: "api",
+        targetId: "function",
+        label: "new invokes"
+      }
+    ]
+  };
+  const currentDiagram = convertArchitectureJsonToDiagramJson(currentArchitecture);
+
+  const proposal = compileArchitectureBoard({
+    architecture: requestedArchitecture,
+    currentDiagram,
+    trigger: "ai-draft"
+  });
+  const functionNode = proposal.diagram.nodes.find((node) => node.id === "function");
+  const apiFunctionEdge = proposal.diagram.edges.find((edge) => edge.id === "api-function");
+
+  assert.equal(functionNode?.parameters?.values["runtime"], "nodejs20.x");
+  assert.equal(apiFunctionEdge?.label, "new invokes");
 });
 
 test("semantic 후보는 Terraform 참조가 가리키는 더 구체적인 Area로 유효한 기존 소속도 재판단한다", () => {
