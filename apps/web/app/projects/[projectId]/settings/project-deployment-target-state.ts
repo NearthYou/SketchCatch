@@ -308,30 +308,44 @@ function getEvidenceSuggestion(
     (unit) => unit.id === evidence.applicationUnitId
   );
   const separator = evidence.path.lastIndexOf("/");
+  const sourceRoot =
+    applicationUnit?.rootPath ?? (separator === -1 ? "." : evidence.path.slice(0, separator));
   return {
-    sourceRoot:
-      applicationUnit?.rootPath ?? (separator === -1 ? "." : evidence.path.slice(0, separator)),
+    sourceRoot,
     evidencePath: evidence.path,
     commitSha: sourceRepository.analysis.repositoryRevision.toLowerCase(),
     installPreset:
       runtimeTargetKind === "static_site"
-        ? inferInstallPreset(handoff.evidence)
+        ? inferInstallPreset(handoff.evidence, sourceRoot)
         : "none"
   };
 }
 
 function inferInstallPreset(
-  evidence: readonly { kind: string; path: string }[]
+  evidence: readonly { kind: string; path: string }[],
+  sourceRoot: string
 ): BuildInstallPreset {
   const lockfiles = evidence
     .filter((item) => item.kind === "lockfile")
     .map((item) => item.path.toLowerCase());
-  if (lockfiles.some((path) => path.endsWith("pnpm-lock.yaml"))) {
-    return "pnpm_frozen_lockfile";
+  const normalizedRoot =
+    sourceRoot.replace(/^\.\//, "").replace(/\/$/, "").toLowerCase() || ".";
+  const scopedLockfiles = normalizedRoot === "."
+    ? lockfiles.filter((path) => !path.includes("/"))
+    : lockfiles.filter((path) => path.startsWith(`${normalizedRoot}/`) &&
+        !path.slice(normalizedRoot.length + 1).includes("/"));
+  const candidates = scopedLockfiles.length > 0
+    ? scopedLockfiles
+    : lockfiles.filter((path) => !path.includes("/"));
+  const presets = new Set<BuildInstallPreset>();
+  if (candidates.some((path) => path.endsWith("pnpm-lock.yaml"))) {
+    presets.add("pnpm_frozen_lockfile");
   }
-  if (lockfiles.some((path) => path.endsWith("package-lock.json"))) return "npm_ci";
-  if (lockfiles.some((path) => path.endsWith("yarn.lock"))) return "yarn_frozen_lockfile";
-  return "none";
+  if (candidates.some((path) => path.endsWith("package-lock.json"))) presets.add("npm_ci");
+  if (candidates.some((path) => path.endsWith("yarn.lock"))) {
+    presets.add("yarn_frozen_lockfile");
+  }
+  return presets.size === 1 ? [...presets][0]! : "none";
 }
 
 function hasCompleteEcsCoordinates(draft: ProjectDeploymentTargetDraft): boolean {

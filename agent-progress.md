@@ -4,11 +4,23 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `fix/ys/363-uiux-개선`; the latest `dev` merge is being resolved while preserving the essential test protection line.
-- The automated suite retains 52 essential protection test files. The prior 47-file baseline passed 518 checks; the five restored security files passed 54/57 focused checks, with three Windows symlink setup cases blocked by `EPERM`.
-- Incoming runtime, contract, documentation, migration, and protected-test changes are preserved. Tests outside the protection line remain deleted; migration compatibility, lint, typecheck, build, harness, and diff checks pass.
-- Issue #378 remains `blocked` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are incomplete.
-- No Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during conflict resolution.
+- Branch: `test/sw/378-runtime-acceptance`; the code implementation is complete while the workstream remains `in_progress` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are still unverified.
+- The sandbox runner now exposes one fail-closed three-stage orchestration contract (`prepare`, `deploy`, `finalize`), executes the exact Direct/GitOps matrix through injected adapters, always cleans up after mutation starts, and cannot report success before evidence verification.
+- Repository analysis now creates standalone AWS SAM and CodeDeploy application units. Static target inference prefers the application-local lockfile, and generated npm/yarn workflows install inside the confirmed source root.
+- The 2026-07-15 sandbox preflight passed against AWS account `614935468487`, the verified AWS Connection, the private fixture repository, and the approved USD 1 budget.
+- Web Push now persists the successful provider HTTP status without response bodies or subscription material, and generated Destroy workflows remove Lambda, EC2/ASG, and Static versioned artifacts.
+- ECS GitOps Infra run `29334708442` and chained App run `29334822683` succeeded for commit `3a12e55c13e7be1a769cfbe920b112516d8c14ce`.
+- HTTPS `/health` returned 200 with the exact commit. ECR and persisted release digest `20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1` matched ECS task definition revision 7 and desired/running count 1/1.
+- Project refresh now returns `stale=false`; Detect, Build, Artifact Publish, Plan, Apply, Deploy, and Verify are all persisted as succeeded with 1,161 masked CI log rows and no detected credential pattern.
+- Application release `8025a2f3-455a-41bb-abbd-b8149105d004` and Pipeline Run `4defade1-18ca-437b-8cf6-3857b058353e` persist the GitOps SHA, digest, provider revision, Output URL, and healthy ECS evidence.
+- The AWS Connection external ID was rotated in memory and verified with a fresh Operator session: the new value is accepted and the prior value is rejected. No value was printed or written to a file.
+- Destroy run `29337235499` succeeded. Direct queries confirm zero VPC, active ECS cluster, ECR repository, CodeBuild project, log group, release/state bucket, OIDC provider, issue task definition, and issue IAM role. Resource Groups still has three delayed deleted-ECS tag index entries.
+- Focused sandbox, runtime contract, three-stage UI, and target-state tests pass. Full Web/API suites remain intentionally omitted; final lint, typecheck, and build are recorded before PR handoff.
+- Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
+- After merging `origin/dev` at `f16a4546` and resolving PR feedback, final checks passed: 25 sandbox runner tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks. Full Web/API suites were intentionally omitted.
+- Cleanup is complete: local API and HTTPS proxy ports are closed, the Redis container, temporary certificate/TLS files/logs/fixture clone are removed, and read-only AWS checks show zero Issue #378 ECR repositories, CodeBuild projects, and S3 buckets.
+- The automated suite retains 52 essential protection test files. Tests outside the reviewed protection line, including three superseded feature-specific tests from this branch, remain deleted after merging the latest `dev`.
+- No Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during the final code-integration pass.
 
 ## Session Record
 
