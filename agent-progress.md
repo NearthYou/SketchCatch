@@ -28,6 +28,7 @@ Short English-only working log for the current agent context. Older records are 
 
 - Removed the requested provider badge, input-mode list, and large workspace preview from the public landing hero.
 - Self-hosted the provided Pretendard 1.3.9 subset files at weights 400, 500, 600, and 700, forced all landing descendants to that family, and increased the SketchCatch hero title from 64px to 80px with proportional mobile sizes.
+- Removed the higher-specificity landing anchor/button `font: inherit` rule that suppressed component font weights; the brand and actions now render at weight 700 and the hero description at weight 500.
 - Browser verification confirmed the checked brand, header action, and hero copy all use the loaded self-hosted Pretendard family; Web lint, Web typecheck, full build, harness, diff checks, and local Web/API/DB health checks pass.
 - Automated test suites were intentionally not run at the user's request; no API, database, deployment, Git handoff, or cloud behavior changed.
 
