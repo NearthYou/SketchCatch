@@ -239,7 +239,7 @@ export function useAiStartWorkflow({
         return;
       }
 
-      const nextDraft = createDraftFromPatch(response, draft);
+      const nextDraft = createDraftFromPatch(response, draft, baseDiagram);
       setDraft(nextDraft);
       setPreviewDiagram(getDiagramJsonForArchitectureDraft(nextDraft));
       finishRequest();

@@ -138,7 +138,8 @@ export function findPatchClarificationSuggestion(
 
 export function createDraftFromPatch(
   preview: ArchitecturePatchPreview,
-  previousDraft: AiArchitectureDraftResult | null
+  previousDraft: AiArchitectureDraftResult | null,
+  baseDiagram?: DiagramJson
 ): AiArchitectureDraftResult {
   const nextDraft: AiArchitectureDraftResult = {
     architectureJson: preview.proposedArchitectureJson,
@@ -155,7 +156,9 @@ export function createDraftFromPatch(
 
   return {
     ...nextDraft,
-    diagramJson: getDiagramJsonForArchitectureDraft(nextDraft)
+    diagramJson: getDiagramJsonForArchitectureDraft(nextDraft, {
+      preserveLayoutFrom: baseDiagram
+    })
   };
 }
 
