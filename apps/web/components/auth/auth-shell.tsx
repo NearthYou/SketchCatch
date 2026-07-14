@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import { ProductBrand } from "../ui/ProductBrand";
 
 type AuthShellProps = {
+  readonly brandPlacement?: "panel" | "topbar";
   readonly children: ReactNode;
   readonly description?: string;
-  readonly eyebrow: string;
+  readonly eyebrow?: string;
   readonly footer?: ReactNode;
   readonly title: string;
   readonly wide?: boolean;
@@ -12,6 +13,7 @@ type AuthShellProps = {
 
 // 로그인과 가입 화면이 같은 제품 frame과 제목 구조를 사용하게 합니다.
 export function AuthShell({
+  brandPlacement = "topbar",
   children,
   description,
   eyebrow,
@@ -23,14 +25,21 @@ export function AuthShell({
 
   return (
     <main className={wide ? "authPage authPageWide" : "authPage"}>
-      <header className="authTopbar">
-        <ProductBrand href="/" />
-      </header>
+      {brandPlacement === "topbar" ? (
+        <header className="authTopbar">
+          <ProductBrand href="/" />
+        </header>
+      ) : null}
 
       <div className="authLayout">
         <section className="authPanel" aria-labelledby={headingId}>
+          {brandPlacement === "panel" ? (
+            <div className="authPanelBrand">
+              <ProductBrand href="/" />
+            </div>
+          ) : null}
           <div className="authIntro">
-            <p className="authEyebrow">{eyebrow}</p>
+            {eyebrow ? <p className="authEyebrow">{eyebrow}</p> : null}
             <h1 id={headingId}>{title}</h1>
             {description ? <p>{description}</p> : null}
           </div>

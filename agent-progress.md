@@ -12,6 +12,18 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Simplify the login page brand entry
+
+- Removed the `/login` top brand bar and optional eyebrow/description copy, then placed the shared SketchCatch brand at the top-left of the login card with a `/` home link.
+- Added a focused login-shell regression contract and verified the live `/login` HTML contains the home brand link while omitting both removed text blocks.
+- Verification passed: focused login tests 4/4, Web full 1,175/1,175, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and harness. The in-app browser runtime could not initialize, and the full API test process stopped producing output after the Web suite completed, so it was terminated without an API-suite result.
+
+### 2026-07-14 - Local development stack restart
+
+- Stopped the Web and API development processes, removed the local PostgreSQL and Redis containers without deleting their data volumes, and started the full stack again in DB-first order.
+- Applied runtime database migrations successfully and verified PostgreSQL and Redis are healthy.
+- Verified `http://localhost:3000`, `http://localhost:4000/health`, and `http://localhost:4000/health/db` all return HTTP 200. The requested development servers remain active; no source behavior, cloud resource, GitHub state, or production database was changed.
+
 ### 2026-07-14 - Integrate latest dev UI
 
 - Merged `origin/dev` at `f3ae778a`, preserving the dev UI decisions while retaining the feature branch's Repository and automatic-layout behavior.
