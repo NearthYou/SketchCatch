@@ -39,7 +39,7 @@ import {
 import {
   applyRepositoryAnalysis,
   findActiveGitHubRepository
-} from "../../projects/[projectId]/settings/project-github-settings-state";
+} from "../../projects/[projectId]/repository/project-source-repository-state";
 import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
 import {
   createPublicRepositoryArchitectureDraftRequest,

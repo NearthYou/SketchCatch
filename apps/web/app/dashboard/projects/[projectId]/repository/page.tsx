@@ -1,4 +1,4 @@
-import { ProjectGitHubSettingsClient } from "../../../../projects/[projectId]/settings/project-github-settings-client";
+import { ProjectSourceRepositoryClient } from "../../../../projects/[projectId]/repository/project-source-repository-client";
 
 type ProjectRepositoryPageProps = {
   readonly params: Promise<{
@@ -9,5 +9,5 @@ type ProjectRepositoryPageProps = {
 export default async function ProjectRepositoryPage({ params }: ProjectRepositoryPageProps) {
   const { projectId } = await params;
 
-  return <ProjectGitHubSettingsClient projectId={projectId} />;
+  return <ProjectSourceRepositoryClient projectId={projectId} />;
 }

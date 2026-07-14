@@ -38,7 +38,7 @@ test("dashboard route entry points keep every rebuilt product surface active", (
   );
   assert.match(
     readAppFile("dashboard/projects/[projectId]/repository/page.tsx"),
-    /ProjectGitHubSettingsClient/
+    /ProjectSourceRepositoryClient/
   );
   assert.match(readAppFile("dashboard/costs/page.tsx"), /CostDashboardClient/);
   assert.match(readAppFile("dashboard/settings/page.tsx"), /SettingsDashboardClient/);
