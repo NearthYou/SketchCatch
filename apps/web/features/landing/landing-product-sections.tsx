@@ -16,7 +16,7 @@ export function LandingProductSections() {
       <DeploymentSection />
       <section className={styles.ctaSection} id="start" aria-labelledby="cta-title">
         <div className={styles.container}>
-          <h2 id="cta-title">인프라를 설계하고,<br />검토한 뒤 배포하세요.</h2>
+          <h2 id="cta-title">인프라를 설계하고<br />검토한 뒤 배포하세요</h2>
           <p>직접 설계하거나 요구사항, 소스 저장소, 기존 클라우드 환경을 불러와 프로젝트를 시작할 수 있습니다.</p>
           <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
             새 프로젝트 시작하기 <span className={styles.buttonIcon} aria-hidden="true">→</span>
@@ -64,7 +64,7 @@ function DeploymentSection() {
       <div className={styles.container} id="deployment-content">
         <header className={styles.sectionHeading}>
           <p className={styles.sectionKicker}>Deployment Options</p>
-          <h2 id="deployment-title">검토가 끝난 변경을,<br />팀의 운영 방식에 맞게.</h2>
+          <h2 id="deployment-title">검토가 끝난 변경을<br />팀의 운영 방식에 맞게 배포합니다.</h2>
           <p>
             승인된 Terraform 변경은 직접 배포하거나 Git 저장소와 CI/CD로 전달할 수 있습니다.<br />
             모든 실행 과정과 결과는 프로젝트 이력에 기록됩니다.
