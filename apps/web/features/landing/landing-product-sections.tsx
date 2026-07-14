@@ -35,9 +35,8 @@ function ReverseEngineeringSection() {
           <p className={styles.sectionKicker}>Reverse Engineering</p>
           <h2 id="reverse-title">기존 AWS 인프라를,<br />편집 가능한 설계로.</h2>
           <p>
-            연결된 AWS 계정의 리소스와 네트워크 관계를 분석해 현재 인프라 구성을 자동으로
-            복원합니다. 가져온 구성은 검토 후 아키텍처 보드에서 편집하고 Terraform 작업으로
-            이어갈 수 있습니다.
+            연결된 AWS 계정의 리소스와 네트워크 관계를 분석해 현재 인프라 구성을 자동으로 복원합니다.<br />
+            가져온 구성은 검토 후 아키텍처 보드에서 편집하고 Terraform 작업으로 이어갈 수 있습니다.
           </p>
           <ul className={styles.reverseList}>
             <li><span className={styles.checkIcon}>✓</span><span>리소스 설정과 네트워크 관계까지 자동 분석</span></li>
@@ -67,8 +66,8 @@ function DeploymentSection() {
           <p className={styles.sectionKicker}>Deployment Options</p>
           <h2 id="deployment-title">검토가 끝난 변경을,<br />팀의 운영 방식에 맞게.</h2>
           <p>
-            검토와 승인이 완료된 Terraform 변경을 직접 배포하거나 Git 저장소와 CI/CD
-            파이프라인으로 전달할 수 있습니다. 모든 실행 과정과 결과는 프로젝트 이력에 기록됩니다.
+            승인된 Terraform 변경은 직접 배포하거나 Git 저장소와 CI/CD로 전달할 수 있습니다.<br />
+            모든 실행 과정과 결과는 프로젝트 이력에 기록됩니다.
           </p>
         </header>
 

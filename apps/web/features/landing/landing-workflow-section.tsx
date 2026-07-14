@@ -34,8 +34,9 @@ export function LandingWorkflowSection() {
           <p className={styles.sectionKicker}>ONE CONTINUOUS WORKSPACE</p>
           <h2 id="workspace-title">설계에서 배포까지,<br />하나의 흐름으로.</h2>
           <p>
-            아키텍처를 수정하면 Terraform 미리보기가 함께 업데이트되고, 비용·보안 검토 결과는
-            해당 리소스와 바로 연결됩니다. 설계와 코드, 배포 판단을 한 프로젝트 안에서 이어가세요.
+            아키텍처를 수정하면 Terraform 미리보기도 함께 업데이트됩니다.<br />
+            비용·보안 검토 결과는 해당 리소스에서 바로 확인할 수 있습니다.<br />
+            설계와 코드, 배포 판단을 한 프로젝트에서 이어가세요.
           </p>
         </header>
 
