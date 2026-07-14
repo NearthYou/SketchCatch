@@ -1,6 +1,6 @@
 import type { DiagramNode } from "../../../../packages/types/src";
 import type { ParameterCatalog } from "../parameter-input/catalog";
-import { expandParentAreaNodesForEnteredChild } from "./area-node-expansion";
+import { reconcileAreaNodeGeometry } from "./area-node-geometry";
 import {
   applyAreaNodeMovement,
   applyAreaNodeParentAssignments,
@@ -101,45 +101,16 @@ export function finalizeDraggedNodes({
   });
   const nodesWithMovedAreaChildren = applyAreaNodeMovement(snapshotNodes, positionedNodes, movedNodeIds);
   const nodesWithAssignedParents = applyAreaNodeParentAssignments(nodesWithMovedAreaChildren, movedNodeIds);
-  const enteredChildNodeIds = getEnteredChildNodeIds(
-    snapshotNodes,
-    nodesWithAssignedParents,
-    movedNodeIds
-  );
-  const nodesWithExpandedParents = autoExpandAreasEnabled
-    ? enteredChildNodeIds.reduce(
-        (nodes, childNodeId) => expandParentAreaNodesForEnteredChild(nodes, childNodeId),
-        nodesWithAssignedParents
-      )
+  const nodesWithReconciledAreas = autoExpandAreasEnabled
+    ? reconcileAreaNodeGeometry(snapshotNodes, nodesWithAssignedParents, movedNodeIds)
     : nodesWithAssignedParents;
-  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithExpandedParents);
+  const allMovedNodeIds = getMovedNodeIdsFromNodes(snapshotNodes, nodesWithReconciledAreas);
 
   return {
     directlyMovedNodeIds: movedNodeIds,
     movedNodeIds: allMovedNodeIds,
-    nodes: applyContainingReferenceDropTargets(nodesWithExpandedParents, allMovedNodeIds, catalog)
+    nodes: applyContainingReferenceDropTargets(nodesWithReconciledAreas, allMovedNodeIds, catalog)
   };
-}
-
-function getEnteredChildNodeIds(
-  previousNodes: readonly DiagramNode[],
-  currentNodes: readonly DiagramNode[],
-  movedNodeIds: ReadonlySet<string>
-): string[] {
-  const previousNodeById = new Map(previousNodes.map((node) => [node.id, node]));
-
-  return currentNodes
-    .filter((node) => {
-      if (!movedNodeIds.has(node.id)) {
-        return false;
-      }
-
-      const parentAreaNodeId = node.metadata?.parentAreaNodeId;
-      const previousParentAreaNodeId = previousNodeById.get(node.id)?.metadata?.parentAreaNodeId;
-
-      return Boolean(parentAreaNodeId && parentAreaNodeId !== previousParentAreaNodeId);
-    })
-    .map((node) => node.id);
 }
 
 export function getMovedNodeIdsFromNodes(

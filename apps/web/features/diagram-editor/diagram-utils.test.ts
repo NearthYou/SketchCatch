@@ -42,12 +42,16 @@ test("active resource drag payload is available when dragover dataTransfer reads
   assert.equal(getActiveResourceDragPayload(dragOverDataTransfer), null);
 });
 
-test("createPastedNodes clears stale parent area metadata from copied nodes", () => {
+test("createPastedNodes clears stale area placement metadata from copied nodes", () => {
   const childNode = makeResourceNode({
     id: "instance-1",
     resourceName: "web",
     resourceType: "aws_instance",
     metadata: {
+      areaAutoSizeBaseline: {
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 180 }
+      },
       moduleSource: {
         moduleId: "network-basic",
         moduleVersion: "1.0.0",
@@ -59,6 +63,7 @@ test("createPastedNodes clears stale parent area metadata from copied nodes", ()
   const pastedNode = createPastedNodes([childNode], [childNode])[0];
 
   assert.equal(pastedNode?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(pastedNode?.metadata?.areaAutoSizeBaseline, undefined);
   assert.equal(pastedNode?.metadata?.moduleSource?.moduleId, "network-basic");
 });
 
