@@ -29,7 +29,10 @@ import type {
   TerraformArtifactRecord,
   TerraformOutputRecord
 } from "./deployment-service.js";
-import type { TerraformRunResult } from "./terraform-runner.js";
+import {
+  terraformMutationTimeoutMs,
+  type TerraformRunResult
+} from "./terraform-runner.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -357,7 +360,7 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });
 
-test("runDeploymentDestroyPlan only allows success or cleanup-capable failed deployments", async () => {
+test("runDeploymentDestroyPlan rejects deployments without cleanup state", async () => {
   const rejectedStatuses: Array<{
     status: DeploymentStatus;
     failureStage: DeploymentRecord["failureStage"];
@@ -365,8 +368,7 @@ test("runDeploymentDestroyPlan only allows success or cleanup-capable failed dep
     { status: "PENDING", failureStage: null },
     { status: "RUNNING", failureStage: null },
     { status: "CANCELLED", failureStage: null },
-    { status: "DESTROYED", failureStage: null },
-    { status: "FAILED", failureStage: "plan" }
+    { status: "DESTROYED", failureStage: null }
   ];
 
   for (const rejected of rejectedStatuses) {
@@ -433,7 +435,8 @@ function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyP
       runnerStages.push("init");
       return createRunnerResult("init");
     },
-    runTerraformDestroyPlan: async () => {
+    runTerraformDestroyPlan: async (_workdir, options) => {
+      assert.equal(options?.timeoutMs, terraformMutationTimeoutMs);
       runnerStages.push("destroy-plan");
       return createRunnerResult("plan");
     },

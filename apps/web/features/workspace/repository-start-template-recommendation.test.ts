@@ -11,6 +11,8 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /recommendRepositoryTemplate/);
   assert.match(source, /analyzePublicSourceRepository/);
   assert.match(source, /saveProjectDraft/);
+  assert.match(source, /<h1 id="repository-start-title">GitHub 저장소<\/h1>/);
+  assert.doesNotMatch(source, /코드 근거로 시작하기/);
   assert.match(source, /GitHub 저장소 URL 분석/);
   assert.match(source, /https:\/\/github\.com\/owner\/repository/);
   assert.match(source, /showUrlAnalysis/);
@@ -29,7 +31,7 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
   assert.match(source, /role="radiogroup"/);
   assert.match(source, /보드 생성/);
   assert.match(source, /createPublicRepositoryRecommendation/);
-  assert.match(source, /createPublicRepositoryDiagram/);
+  assert.match(source, /createPublicRepositoryArchitectureDraftRequest/);
   assert.doesNotMatch(source, /evidenceFiles\.map/);
   assert.match(source, /PR 생성, CI\/CD 인계/);
   assert.match(source, /EC2\/VM 기반/);
@@ -40,12 +42,13 @@ test("Repository start screen exposes deployment, CI/CD, and template recommenda
     source,
     /showUrlAnalysis\s*&& publicAnalysis\s*&& publicRecommendationStage === "questions"\s*&& usesCiCd\s*&& !activeRepository/
   );
-  assert.match(source, /CI\/CD 인계 저장소 연결/);
+  assert.match(source, /<h2>CI\/CD 연결<\/h2>/);
   assert.match(source, /setUsesCiCd\(false\)/);
   assert.match(source, /PublicRecommendationStage/);
   assert.match(source, /publicRecommendationStage === "questions"/);
   assert.match(source, /onConfirmConfiguration/);
   assert.match(source, /선택한 템플릿/);
+  assert.match(source, /aria-label="템플릿 선택으로 돌아가기"/);
   assert.match(source, /확인 <ArrowRight/);
   assert.match(source, /selectedTemplateId/);
   assert.match(source, /setAnswers\(\{\}\)/);

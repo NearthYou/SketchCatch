@@ -27,7 +27,11 @@ import type {
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
-import { RESOURCE_TYPES, TEMPLATE_IDS } from "@sketchcatch/types";
+import {
+  REPOSITORY_ARCHITECTURE_FACT_KINDS,
+  RESOURCE_TYPES,
+  TEMPLATE_IDS
+} from "@sketchcatch/types";
 import {
   ArchitectureDraftGenerationError,
   createConfiguredAmazonQArchitectureDraftResponse,
@@ -125,12 +129,40 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
   templateId: z.enum(TEMPLATE_IDS).optional(),
+  dynamicQuestionAnswers: z
+    .array(z.object({
+      questionId: z.string().trim().min(1).max(160),
+      question: z.string().trim().min(1).max(500),
+      answer: z.string().trim().min(1).max(500)
+    }))
+    .max(32)
+    .optional(),
+  templateFallback: z.record(z.string(), z.unknown()).optional(),
+  repositoryEvidence: z
+    .object({
+      mode: z.literal("strict"),
+      facts: z.array(z.object({
+        kind: z.enum(REPOSITORY_ARCHITECTURE_FACT_KINDS),
+        value: z.string().trim().min(1).max(160),
+        sourcePath: z.string().trim().min(1).max(500)
+      })).max(64),
+      repositoryName: z.string().trim().min(1).max(100).optional()
+    })
+    .optional(),
   repositoryAnalysis: z
     .object({
       projectId: z.uuid(),
       sourceRepositoryId: z.uuid()
     })
     .optional()
+}).superRefine((body, context) => {
+  if (body.templateFallback !== undefined && body.repositoryAnalysis === undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "Repository Analysis is required for template fallback",
+      path: ["repositoryAnalysis"]
+    });
+  }
 });
 
 const repositoryTemplateIdSchema = z.enum(TEMPLATE_IDS);
@@ -369,8 +401,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     async (request): Promise<SourceRepositoryAnalysisResult> => {
       const body = sourceRepositoryAnalysisBodySchema.parse(request.body);
       const repository = parseGitHubRepositoryUrl(body.repositoryUrl);
-      const defaultBranch = body.defaultBranch ?? "main";
-      const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, defaultBranch);
+      const requestedBranch = body.defaultBranch ?? "";
+      const cacheKey = createPublicRepositoryAnalysisCacheKey(body.repositoryUrl, requestedBranch);
       const cachedAnalysis = await options.runtimeCache
         ?.get<SourceRepositoryAnalysisResult>(cacheKey)
         .catch(() => null);
@@ -379,6 +411,13 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         return cachedAnalysis;
       }
 
+      const branchInventory = await fetchPublicRepositoryBranchInventory(repository);
+      const defaultBranch = resolvePublicRepositoryAnalysisBranch(
+        requestedBranch,
+        branchInventory.defaultBranch,
+        branchInventory.branches
+      );
+      const availableBranches = orderPublicRepositoryBranches(defaultBranch, branchInventory.branches);
       const snapshot = await fetchRepositoryEvidence(repository, defaultBranch);
       const legacyAnalysis = analyzeLegacyRepositoryEvidence({
         defaultBranch,
@@ -409,6 +448,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
 
       const result: SourceRepositoryAnalysisResult = {
         ...legacyAnalysis,
+        availableBranches,
         aiHandoff: recommendation ? { ...aiHandoff, recommendation } : aiHandoff
       };
 
@@ -863,16 +903,31 @@ type PublicGitHubRecursiveTreeResponse = {
   }>;
 };
 
+type PublicGitHubRepositoryResponse = {
+  readonly default_branch?: unknown;
+};
+
+type PublicGitHubBranchResponse = Array<{
+  readonly name?: unknown;
+}>;
+
+type PublicRepositoryBranchInventory = {
+  readonly defaultBranch: string | null;
+  readonly branches: readonly string[];
+};
+
 const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
 const MAX_PUBLIC_REPOSITORY_EVIDENCE_FILES = 24;
+const MAX_PUBLIC_REPOSITORY_BRANCH_PAGES = 50;
 const PUBLIC_GITHUB_REQUEST_TIMEOUT_MS = 10_000;
-const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v6";
+const PUBLIC_REPOSITORY_ANALYSIS_CACHE_NAMESPACE = "ai:public-repository-analysis:v12";
 const PUBLIC_REPOSITORY_ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1_000;
 
 // GitHub URL에서 owner/repo만 뽑습니다. public repository 근거 파일을 읽을 때 이 값이 필요합니다.
 function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
   const url = new URL(repositoryUrl);
-  const [owner, repo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const [owner, rawRepo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const repo = rawRepo?.replace(/\.git$/i, "");
 
   return {
     owner: owner ?? "",
@@ -887,6 +942,73 @@ function createPublicRepositoryAnalysisCacheKey(repositoryUrl: string, defaultBr
       .update(`${repositoryUrl.trim().toLowerCase()}\0${defaultBranch.trim()}`)
       .digest("hex")
   };
+}
+
+async function fetchPublicRepositoryBranchInventory(
+  repository: GitHubRepository
+): Promise<PublicRepositoryBranchInventory> {
+  const repositoryPath = `${PUBLIC_GITHUB_API_BASE_URL}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}`;
+  const requestOptions = {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "SketchCatch"
+    },
+    signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
+  };
+  const metadataPromise = fetch(repositoryPath, requestOptions).catch(() => null);
+  const branches: string[] = [];
+
+  for (let page = 1; page <= MAX_PUBLIC_REPOSITORY_BRANCH_PAGES; page += 1) {
+    const response = await fetch(
+      `${repositoryPath}/branches?per_page=100&page=${page}`,
+      requestOptions
+    ).catch(() => null);
+
+    if (!response?.ok) break;
+
+    const pageBranches = (await response.json()) as PublicGitHubBranchResponse;
+    branches.push(
+      ...pageBranches.flatMap((branch) =>
+        typeof branch.name === "string" && branch.name.trim() ? [branch.name.trim()] : []
+      )
+    );
+
+    if (pageBranches.length < 100) break;
+  }
+
+  const metadataResponse = await metadataPromise;
+  const metadata = metadataResponse?.ok
+    ? ((await metadataResponse.json()) as PublicGitHubRepositoryResponse)
+    : null;
+
+  return {
+    defaultBranch:
+      typeof metadata?.default_branch === "string" && metadata.default_branch.trim()
+        ? metadata.default_branch.trim()
+        : null,
+    branches: [...new Set(branches)]
+  };
+}
+
+function resolvePublicRepositoryAnalysisBranch(
+  requestedBranch: string,
+  repositoryDefaultBranch: string | null,
+  branches: readonly string[]
+): string {
+  const requested = requestedBranch.trim();
+
+  if (requested) return requested;
+  if (repositoryDefaultBranch) return repositoryDefaultBranch;
+  if (branches.includes("main")) return "main";
+  if (branches.includes("master")) return "master";
+  return branches[0] ?? "main";
+}
+
+function orderPublicRepositoryBranches(selectedBranch: string, branches: readonly string[]): string[] {
+  return [
+    selectedBranch,
+    ...branches.filter((branch) => branch !== selectedBranch).sort((left, right) => left.localeCompare(right))
+  ];
 }
 
 // GitHub 전체 코드를 분석하지 않고, README/package/Docker 관련 파일만 가볍게 읽습니다.
@@ -999,7 +1121,8 @@ function getRepositoryTemplateContext(templateId: CreateGitHubArchitectureDraftR
 // GitHub repository URL인지 먼저 막아주는 guardrail입니다.
 function isGitHubRepositoryUrl(repositoryUrl: string): boolean {
   const url = new URL(repositoryUrl);
-  const [owner, repo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const [owner, rawRepo] = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const repo = rawRepo?.replace(/\.git$/i, "");
 
   return url.hostname === "github.com" && owner !== undefined && repo !== undefined;
 }

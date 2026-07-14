@@ -16,6 +16,7 @@ import {
 } from "./terraform-identity.js";
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
+  isGenericTerraformNestedBlock,
   isTerraformNestedBlockAttribute,
   isTerraformSingleNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
@@ -31,6 +32,8 @@ const ATTRIBUTE_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const REFERENCE_PATTERN =
   /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$|^module\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+const DEPENDENCY_ADDRESS_PATTERN =
+  /^(?:(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|module\.[A-Za-z0-9_-]+)$/;
 const TERRAFORM_UTILITY_BLOCK_KEYS = new Set(["resource/random_password", "resource/terraform_data"]);
 type ParsedBlock = {
   blockType: TerraformBlockType;
@@ -377,28 +380,21 @@ function createAvailabilityZoneProposalPlan(
   nodeByIdentityKey: ReadonlyMap<string, DiagramNode>
 ): AvailabilityZoneProposalPlan {
   const usedNodeIds = new Set(nodes.map((node) => node.id));
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const azNodeIdByValue = createExistingAvailabilityZoneNodeIdByValue(nodes);
   const azCreateProposalByValue = new Map<string, CreateCandidateProposal>();
   const parentAreaNodeIdByBlockKey = new Map<string, string>();
 
   for (const block of blocks) {
-    const availabilityZone = getBlockAvailabilityZone(block);
+    const blockKey = createTerraformBlockIdentityKey(block.identity);
+    const matchedNode = nodeByIdentityKey.get(blockKey);
 
-    if (!availabilityZone) {
+    if (matchedNode?.metadata?.parentAreaNodeId) {
       continue;
     }
 
-    const blockKey = createTerraformBlockIdentityKey(block.identity);
-    const matchedNode = nodeByIdentityKey.get(blockKey);
-    const matchedParentNode = matchedNode?.metadata?.parentAreaNodeId
-      ? nodeById.get(matchedNode.metadata.parentAreaNodeId)
-      : undefined;
+    const availabilityZone = getBlockAvailabilityZone(block);
 
-    if (
-      matchedParentNode?.kind === "design" &&
-      matchedParentNode.metadata?.presentationCatalogItemId === "aws-availability-zone"
-    ) {
+    if (!availabilityZone) {
       continue;
     }
 
@@ -741,12 +737,14 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
           continue;
         }
 
-        diagnostics.push({
-          severity: "warning",
-          code: "terraform.sync.unsupported_block",
-          line: index + 1,
-          message: `${topLevelBlockType} block은 Diagram으로 동기화하지 않고 Terraform 원문으로 보존합니다.`
-        });
+        if (topLevelBlockType !== "output") {
+          diagnostics.push({
+            severity: "warning",
+            code: "terraform.sync.unsupported_block",
+            line: index + 1,
+            message: `${topLevelBlockType} block은 Diagram으로 동기화하지 않고 Terraform 원문으로 보존합니다.`
+          });
+        }
         ignoredConfigurationBlockCount += 1;
         index = bodyResult.endIndex;
         continue;
@@ -953,7 +951,12 @@ function parseAttributes(
       diagnostics.push(...nestedBlock.diagnostics);
       index = nestedBlock.endIndex;
 
-      if (!resourceType || !isTerraformNestedBlockAttribute(resourceType, nestedBlockName, parentPath)) {
+      const isSupportedNestedBlock = resourceType && (
+        isTerraformNestedBlockAttribute(resourceType, nestedBlockName, parentPath) ||
+        (parentPath.length > 0 && isGenericTerraformNestedBlock(nestedBlockName))
+      );
+
+      if (!isSupportedNestedBlock) {
         diagnostics.push({
           severity: "error",
           code: "terraform.sync.nested_block",
@@ -1030,7 +1033,12 @@ function parseAttributes(
     }
 
     const valueText = valueLines.join("\n");
-    const parsedValue = parseAttributeValue(valueText, bodyLine.line, resourceAddress);
+    const parsedValue = parseAttributeValue(
+      valueText,
+      bodyLine.line,
+      resourceAddress,
+      terraformName === "depends_on"
+    );
 
     if (parsedValue.diagnostic) {
       diagnostics.push(parsedValue.diagnostic);
@@ -1150,7 +1158,8 @@ function isNestedBlockOpening(lineText: string): boolean {
 function parseAttributeValue(
   valueText: string,
   line: number,
-  resourceAddress: string
+  resourceAddress: string,
+  allowDependencyAddress = false
 ): { value?: unknown; diagnostic?: TerraformDiagnostic } {
   const trimmedValueText = valueText.trim();
 
@@ -1158,7 +1167,7 @@ function parseAttributeValue(
     return { value: trimmedValueText };
   }
 
-  const parser = new HclValueParser(valueText);
+  const parser = new HclValueParser(valueText, allowDependencyAddress);
   const value = parser.parseValue();
 
   if (value.status === "unsupported") {
@@ -1210,7 +1219,10 @@ type ValueParseResult =
 class HclValueParser {
   private index = 0;
 
-  constructor(private readonly source: string) {}
+  constructor(
+    private readonly source: string,
+    private readonly allowDependencyAddress = false
+  ) {}
 
   parseValue(): ValueParseResult {
     this.skipWhitespace();
@@ -1400,7 +1412,10 @@ class HclValueParser {
       return { status: "ok", value: Number(literal) };
     }
 
-    if (REFERENCE_PATTERN.test(literal)) {
+    if (
+      REFERENCE_PATTERN.test(literal) ||
+      (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal))
+    ) {
       return { status: "ok", value: literal };
     }
 

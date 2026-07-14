@@ -293,6 +293,8 @@ function isCleanupDestroyCandidate(deployment: Deployment): boolean {
 
   return (
     deployment.status === "FAILED" &&
-    (deployment.failureStage === "apply" || deployment.failureStage === "destroy")
+    (deployment.failureStage === "plan" ||
+      deployment.failureStage === "apply" ||
+      deployment.failureStage === "destroy")
   );
 }

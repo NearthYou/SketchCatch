@@ -287,8 +287,13 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   }
 }
 
-test("runDeploymentDestroy applies the approved destroy plan and clears deployment results", async () => {
+test("runDeploymentDestroy retries an approved cleanup after plan failure and clears results", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    status: "FAILED",
+    failureStage: "plan",
+    errorSummary: "Terraform destroy plan timed out"
+  });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const runnerStages: string[] = [];
   let writtenState: { filePath: string; content: Buffer } | undefined;
@@ -343,7 +348,7 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
   assert.equal(result.deployment.currentPlanArtifactId, null);
   assert.equal(result.deployment.approvedPlanArtifactId, null);
   assert.deepEqual(repository.completedDestroyInput, {
-    resultWarningSummary: null
+    resultWarningSummary: "Deployment was destroyed after a failed deployment cleanup."
   });
   assert.deepEqual(
     repository.logs

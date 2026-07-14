@@ -18,6 +18,12 @@ export type AiStartProjectDraft = {
   readonly updatedAt: string;
 };
 
+export type AiStartExistingProject = {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly returnHref: string;
+};
+
 export type AiStartMessage = {
   readonly content: string;
   readonly createdAt: string;
@@ -132,7 +138,8 @@ export function findPatchClarificationSuggestion(
 
 export function createDraftFromPatch(
   preview: ArchitecturePatchPreview,
-  previousDraft: AiArchitectureDraftResult | null
+  previousDraft: AiArchitectureDraftResult | null,
+  baseDiagram?: DiagramJson
 ): AiArchitectureDraftResult {
   const nextDraft: AiArchitectureDraftResult = {
     architectureJson: preview.proposedArchitectureJson,
@@ -149,7 +156,9 @@ export function createDraftFromPatch(
 
   return {
     ...nextDraft,
-    diagramJson: getDiagramJsonForArchitectureDraft(nextDraft)
+    diagramJson: getDiagramJsonForArchitectureDraft(nextDraft, {
+      preserveLayoutFrom: baseDiagram
+    })
   };
 }
 

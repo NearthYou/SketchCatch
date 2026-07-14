@@ -30,6 +30,7 @@ import {
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
 import { fitSecurityGroupScopesToTargets } from "../diagram-editor/security-group-scope";
 import { resourceCatalog } from "../resource-settings/catalog";
+import { layoutAutomaticDiagram } from "./automatic-diagram-layout";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
@@ -55,8 +56,15 @@ const OPERATION_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
   width: "thick"
 };
 
-export function getDiagramJsonForArchitectureDraft(draft: AiArchitectureDraftResult): DiagramJson {
-  return draft.diagramJson ?? convertArchitectureJsonToDiagramJson(draft.architectureJson);
+export type ArchitectureDiagramConversionOptions = {
+  readonly preserveLayoutFrom?: DiagramJson | undefined;
+};
+
+export function getDiagramJsonForArchitectureDraft(
+  draft: AiArchitectureDraftResult,
+  options: ArchitectureDiagramConversionOptions = {}
+): DiagramJson {
+  return draft.diagramJson ?? convertArchitectureJsonToDiagramJson(draft.architectureJson, options);
 }
 
 const DEPENDENCY_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
@@ -193,19 +201,29 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
 };
 
 // AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
-export function convertArchitectureJsonToDiagramJson(architectureJson: ArchitectureJson): DiagramJson {
+export function convertArchitectureJsonToDiagramJson(
+  architectureJson: ArchitectureJson,
+  options: ArchitectureDiagramConversionOptions = {}
+): DiagramJson {
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
   const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
   const preparedNodes = applyAreaParentMetadata(
     applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
     architectureJson.edges
   );
-  const laidOutNodes = resolveSiblingNodeCollisions(
-    fitAreaNodesToChildren(applyReadableTopologyLayout(preparedNodes))
-  );
-  const nodes = applyDiagramLayerOrder(
-    fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes))
-  );
+  const preservedNodes = preserveExistingNodeLayouts(preparedNodes, options.preserveLayoutFrom);
+  const protectedNodeIds = new Set([
+    ...(options.preserveLayoutFrom?.nodes
+      .filter((baseNode) => preservedNodes.some((node) => node.id === baseNode.id))
+      .map((node) => node.id) ?? []),
+    ...architectureJson.nodes.filter(hasAuthoredTemplatePosition).map((node) => node.id)
+  ]);
+  const laidOutNodes = layoutAutomaticDiagram({
+    edges: architectureJson.edges,
+    nodes: preservedNodes,
+    protectedNodeIds
+  }).nodes;
+  const nodes = applyDiagramLayerOrder(fitSecurityGroupScopesToTargets(laidOutNodes));
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
@@ -216,6 +234,38 @@ export function convertArchitectureJsonToDiagramJson(architectureJson: Architect
     nodes,
     viewport: { ...DEFAULT_VIEWPORT }
   };
+}
+
+function hasAuthoredTemplatePosition(node: ArchitectureJson["nodes"][number]): boolean {
+  const templateResourceId = node.config?.["templateResourceId"];
+
+  return typeof templateResourceId === "string" && templateResourceId.trim().length > 0;
+}
+
+function preserveExistingNodeLayouts(
+  nodes: readonly DiagramNode[],
+  baseDiagram: DiagramJson | undefined
+): DiagramNode[] {
+  if (!baseDiagram) {
+    return [...nodes];
+  }
+
+  const baseNodeById = new Map(baseDiagram.nodes.map((node) => [node.id, node]));
+
+  return nodes.map((node) => {
+    const baseNode = baseNodeById.get(node.id);
+
+    if (!baseNode) {
+      return node;
+    }
+
+    return {
+      ...node,
+      locked: baseNode.locked,
+      position: { ...baseNode.position },
+      size: { ...baseNode.size }
+    };
+  });
 }
 
 // 현재 보드 상태를 gg 분석 API가 이해하는 ArchitectureJson으로 되돌립니다.
@@ -259,7 +309,12 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
   }
 
   const config = node.config ?? {};
-  const terraformResourceType = mapResourceTypeToTerraform(node.type);
+  const authoredTerraformResourceType = config["terraformResourceType"];
+  const terraformResourceType =
+    typeof authoredTerraformResourceType === "string" &&
+    authoredTerraformResourceType.trim().length > 0
+      ? authoredTerraformResourceType
+      : mapResourceTypeToTerraform(node.type);
   const position = {
     x: node.positionX,
     y: node.positionY
@@ -423,17 +478,30 @@ function createDiagramNodeParameters(
   baseParameters: DiagramNodeParameters | undefined
 ): DiagramNodeParameters {
   const config = node.config ?? {};
+  const authoredTerraformBlockType = readTerraformBlockType(config["terraformBlockType"]);
+  const authoredTerraformResourceType = config["terraformResourceType"];
+  const usesCompanionTerraformType =
+    typeof authoredTerraformResourceType === "string" &&
+    authoredTerraformResourceType !== mapResourceTypeToTerraform(node.type);
+  const shouldInheritBaseValues = node.type !== "RDS_READ_REPLICA" && !usesCompanionTerraformType;
 
   return {
     fileName: baseParameters?.fileName ?? "main",
     resourceName: getArchitectureResourceName(node, terraformResourceType),
     resourceType: terraformResourceType,
-    terraformBlockType: baseParameters?.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE,
+    terraformBlockType:
+      authoredTerraformBlockType ??
+      baseParameters?.terraformBlockType ??
+      DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
-      ...(baseParameters?.values ?? {}),
+      ...(shouldInheritBaseValues ? baseParameters?.values ?? {} : {}),
       ...config
     }
   };
+}
+
+function readTerraformBlockType(value: unknown): TerraformBlockType | undefined {
+  return value === "resource" || value === "data" ? value : undefined;
 }
 
 function convertArchitectureEdgesToDiagramEdges(

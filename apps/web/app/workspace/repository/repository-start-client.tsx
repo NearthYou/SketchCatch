@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, GitBranch, LoaderCircle, Search, Settings2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  GitBranch,
+  LoaderCircle,
+  Search,
+  Settings2,
+  Sparkles
+} from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
@@ -15,11 +24,13 @@ import type {
 } from "@sketchcatch/types";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
+import { SelectMenu } from "../../../components/ui/SelectMenu";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
   connectGitHubSourceRepository,
+  createAiArchitectureDraft,
   listGitHubInstalledRepositories,
   listSourceRepositories,
   recommendRepositoryTemplate,
@@ -31,13 +42,15 @@ import {
 } from "../../projects/[projectId]/settings/project-github-settings-state";
 import { buildBoardTemplateDiagram } from "../../../features/resource-settings/template-library";
 import {
-  createPublicRepositoryDiagram,
+  createPublicRepositoryArchitectureDraftRequest,
   createPublicRepositoryRecommendation,
   getPublicRepositoryDeploymentDefault,
   getPublicRepositoryTemplateDeploymentType,
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
+import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
+import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import styles from "./repository-start.module.css";
 
@@ -56,7 +69,7 @@ type RepositoryStartClientProps = {
 };
 
 export function RepositoryStartClient({
-  initialDefaultBranch = "main",
+  initialDefaultBranch = "",
   initialRepositoryUrl = "",
   projectId,
   projectName
@@ -172,8 +185,10 @@ export function RepositoryStartClient({
         ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
       });
       setPublicAnalysis(result);
+      setDefaultBranch(result.defaultBranch);
       const nextDeploymentType = getPublicRepositoryDeploymentDefault(result);
       setDeploymentType(nextDeploymentType);
+      setUsesCiCd(result.aiHandoff?.usesCiCdDefault ?? false);
       setSelectedPublicTemplateId(
         createPublicRepositoryRecommendation({
           analysis: result,
@@ -216,19 +231,33 @@ export function RepositoryStartClient({
     const effectiveDeploymentType = shouldAskPublicRepositoryDeploymentType(publicAnalysis)
       ? deploymentType
       : getPublicRepositoryTemplateDeploymentType(templateId);
-    const diagram = createPublicRepositoryDiagram({
-      analysis: publicAnalysis,
-      answers,
-      deploymentType: effectiveDeploymentType,
-      projectName,
-      templateId,
-      usesCiCd
-    });
-
     setPublicAnalysisState("loading");
     setErrorMessage("");
 
     try {
+      const draft = await createAiArchitectureDraft(
+        createPublicRepositoryArchitectureDraftRequest({
+          analysis: publicAnalysis,
+          answers,
+          deploymentType: effectiveDeploymentType,
+          templateId,
+          usesCiCd
+        })
+      );
+
+      if ("status" in draft) {
+        setPublicAnalysisState("error");
+        setErrorMessage(`Amazon Q가 추가 확인을 요청했습니다: ${draft.question}`);
+        return;
+      }
+
+      if (draft.metadata.source !== "amazon_q") {
+        setPublicAnalysisState("error");
+        setErrorMessage("Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요.");
+        return;
+      }
+
+      const diagram = getDiagramJsonForArchitectureDraft(draft);
       await saveProjectDraft({ diagramJson: diagram, projectId });
       setPublicAnalysisState("idle");
       router.push(
@@ -239,7 +268,7 @@ export function RepositoryStartClient({
       );
     } catch (error) {
       setPublicAnalysisState("error");
-      setErrorMessage(getApiErrorMessage(error, "저장소 보드를 생성하지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
     }
   }
 
@@ -313,8 +342,7 @@ export function RepositoryStartClient({
 
       <section className={styles.content} aria-labelledby="repository-start-title">
         <header className={styles.heading}>
-          <span>GitHub 저장소</span>
-          <h1 id="repository-start-title">코드 근거로 시작하기</h1>
+          <h1 id="repository-start-title">GitHub 저장소</h1>
           <p>{projectName}</p>
         </header>
 
@@ -324,25 +352,47 @@ export function RepositoryStartClient({
               <>
                 <GitBranch aria-hidden="true" size={24} />
                 <h2>GitHub 저장소 URL 분석</h2>
-                <form className={styles.publicUrlForm} onSubmit={(event) => void analyzeRepositoryUrl(event)}>
+                <form
+                  className={styles.publicUrlForm}
+                  data-has-branches={publicAnalysis !== null}
+                  onSubmit={(event) => void analyzeRepositoryUrl(event)}
+                >
                   <label>
                     <span>저장소 URL</span>
                     <input
-                      onChange={(event) => setRepositoryUrl(event.target.value)}
+                      onChange={(event) => {
+                        const nextRepositoryUrl = event.target.value;
+                        setRepositoryUrl(nextRepositoryUrl);
+
+                        if (nextRepositoryUrl !== publicAnalysis?.repositoryUrl) {
+                          setPublicAnalysis(null);
+                          setDefaultBranch("");
+                        }
+                      }}
                       placeholder="https://github.com/owner/repository"
                       type="url"
                       value={repositoryUrl}
                     />
                   </label>
-                  <label>
-                    <span>브랜치</span>
-                    <input
-                      onChange={(event) => setDefaultBranch(event.target.value)}
-                      placeholder="main"
-                      type="text"
-                      value={defaultBranch}
-                    />
-                  </label>
+                  {publicAnalysis ? (
+                    <label>
+                      <span>브랜치</span>
+                      <SelectMenu
+                        ariaLabel="분석할 브랜치"
+                        className={styles.branchSelect}
+                        disabled={isPublicAnalysisBusy}
+                        emptyLabel="브랜치 선택"
+                        onChange={setDefaultBranch}
+                        options={publicAnalysis.availableBranches.map((branch) => ({
+                          label: branch,
+                          value: branch
+                        }))}
+                        size="large"
+                        tone="workspace"
+                        value={defaultBranch}
+                      />
+                    </label>
+                  ) : null}
                   <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
                     {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
                     {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}
@@ -355,6 +405,7 @@ export function RepositoryStartClient({
             ) : null}
             {publicAnalysis ? (
               <PublicRepositoryRecommendationStep
+                aiDesignHref={createWorkspaceAiStartHref({ projectId, projectName })}
                 answers={answers}
                 analysis={publicAnalysis}
                 deploymentType={deploymentType}
@@ -391,7 +442,7 @@ export function RepositoryStartClient({
         && !activeRepository ? (
           <section className={styles.connectionPanel}>
             <GitBranch aria-hidden="true" size={24} />
-            <h2>CI/CD 인계 저장소 연결</h2>
+            <h2>CI/CD 연결</h2>
             <p className={styles.inlineHint}>
               GitHub App 권한이 있는 저장소를 선택해 PR과 자동 배포 흐름에 연결합니다.
             </p>
@@ -559,7 +610,7 @@ function RepositoryQuestions({
   );
 }
 
-function hasRepositoryQuestionAnswer(value: string | boolean | undefined): boolean {
+function hasRepositoryQuestionAnswer(value: string | boolean | undefined): value is string | boolean {
   return typeof value === "boolean" || (typeof value === "string" && value.trim().length > 0);
 }
 
@@ -617,6 +668,7 @@ function RepositoryTemplateCandidates({
 }
 
 function PublicRepositoryRecommendationStep({
+  aiDesignHref,
   answers,
   analysis,
   deploymentType,
@@ -632,6 +684,7 @@ function PublicRepositoryRecommendationStep({
   stage,
   usesCiCd
 }: {
+  readonly aiDesignHref: string;
   readonly answers: Record<string, string | boolean>;
   readonly analysis: SourceRepositoryAnalysisResult;
   readonly deploymentType: RepositoryDeploymentType;
@@ -662,13 +715,19 @@ function PublicRepositoryRecommendationStep({
     return (
       <section className={styles.publicAnalysisResult} aria-label="public 저장소 추가 질문">
         <div className={styles.publicQuestionSummary}>
+          <button
+            aria-label="템플릿 선택으로 돌아가기"
+            className={styles.publicBackAction}
+            onClick={onEditConfiguration}
+            title="템플릿 선택으로 돌아가기"
+            type="button"
+          >
+            <ArrowLeft aria-hidden="true" size={16} />
+          </button>
           <div>
             <span>선택한 템플릿</span>
             <strong>{selectedCandidate?.displayTitle ?? "추천 템플릿"}</strong>
           </div>
-          <button className={styles.publicBackAction} onClick={onEditConfiguration} type="button">
-            <ArrowLeft aria-hidden="true" size={16} /> 이전
-          </button>
         </div>
         <RepositoryQuestions answers={answers} onAnswer={onAnswer} questions={recommendation.questions} />
         <button
@@ -754,9 +813,14 @@ function PublicRepositoryRecommendationStep({
       >
         확인 <ArrowRight aria-hidden="true" size={16} />
       </button>
+      <Link className={styles.publicAiFallbackAction} href={aiDesignHref}>
+        <Sparkles aria-hidden="true" size={16} />
+        원하는 구성이 없나요? AI로 새 설계 만들기
+      </Link>
     </section>
   );
 }
+
 
 function createRepositoryPreviewDiagram(
   projectName: string,
