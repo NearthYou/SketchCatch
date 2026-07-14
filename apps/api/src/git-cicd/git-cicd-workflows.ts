@@ -431,6 +431,8 @@ jobs:
           set -euo pipefail
           aws ecs describe-services --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE" --output json > sketchcatch-service-before.json
           PREVIOUS_TASK_DEFINITION=$(jq -r '.services[0].taskDefinition' sketchcatch-service-before.json)
+          SKETCHCATCH_DESIRED_COUNT=$(jq -r '.services[0].desiredCount' sketchcatch-service-before.json)
+          [[ "$SKETCHCATCH_DESIRED_COUNT" =~ ^[1-9][0-9]*$ ]]
           aws ecs describe-task-definition --task-definition "$PREVIOUS_TASK_DEFINITION" --query 'taskDefinition' --output json > sketchcatch-task-definition.json
           python3 - "$SKETCHCATCH_ECS_CONTAINER" "$SKETCHCATCH_IMAGE_URI" <<'PY'
           import json
@@ -451,13 +453,25 @@ jobs:
           NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://sketchcatch-task-definition-next.json --query 'taskDefinition.taskDefinitionArn' --output text)
           echo "SKETCHCATCH_PREVIOUS_TASK_DEFINITION=$PREVIOUS_TASK_DEFINITION" >> "$GITHUB_ENV"
           echo "SKETCHCATCH_NEW_TASK_DEFINITION=$NEW_TASK_DEFINITION" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_DESIRED_COUNT=$SKETCHCATCH_DESIRED_COUNT" >> "$GITHUB_ENV"
+          aws ecs update-service \\
+            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
+            --service "$SKETCHCATCH_ECS_SERVICE" \\
+            --desired-count 0 \\
+            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' >/dev/null
+          aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE"
           aws ecs update-service \\
             --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
             --service "$SKETCHCATCH_ECS_SERVICE" \\
             --task-definition "$NEW_TASK_DEFINITION" \\
-            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' \\
+            --desired-count "$SKETCHCATCH_DESIRED_COUNT" \\
+            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=200,deploymentCircuitBreaker={enable=true,rollback=true}' \\
             --force-new-deployment >/dev/null
           aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE"
+          aws ecs update-service \\
+            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
+            --service "$SKETCHCATCH_ECS_SERVICE" \\
+            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' >/dev/null
       - name: Verify ECS release
         shell: bash
         run: |
@@ -522,7 +536,18 @@ jobs:
         if: failure() && env.SKETCHCATCH_NEW_TASK_DEFINITION != ''
         shell: bash
         run: |
+          aws ecs update-service \\
+            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
+            --service "$SKETCHCATCH_ECS_SERVICE" \\
+            --task-definition "$SKETCHCATCH_PREVIOUS_TASK_DEFINITION" \\
+            --desired-count "$SKETCHCATCH_DESIRED_COUNT" \\
+            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=200,deploymentCircuitBreaker={enable=true,rollback=true}' \\
+            --force-new-deployment >/dev/null || true
           aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE" || true
+          aws ecs update-service \\
+            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
+            --service "$SKETCHCATCH_ECS_SERVICE" \\
+            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' >/dev/null || true
           CURRENT_TASK_DEFINITION=$(aws ecs describe-services --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE" --query 'services[0].taskDefinition' --output text)
           OUTCOME=failed
           if [ "$CURRENT_TASK_DEFINITION" = "$SKETCHCATCH_PREVIOUS_TASK_DEFINITION" ]; then OUTCOME=rolled_back; fi
@@ -1506,6 +1531,7 @@ env:
 
 jobs:
   plan:
+    environment: ${environmentName}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -1526,6 +1552,14 @@ jobs:
           key    = "$SKETCHCATCH_TF_STATE_KEY"
           region = "$SKETCHCATCH_AWS_REGION"
           EOF
+          if grep -R --include='*.tf' -Eq 'backend[[:space:]]+"[^"]+"' .; then
+            grep -R --include='*.tf' -Eq 'backend[[:space:]]+"s3"' . || {
+              echo "::error::Existing Terraform backend must be s3."
+              exit 1
+            }
+          else
+            echo 'terraform { backend "s3" {} }' > sketchcatch-backend.tf
+          fi
       - run: terraform init -backend-config=backend.auto.tfbackend
       - run: terraform validate
       - run: terraform plan -out=tfplan
@@ -1561,6 +1595,14 @@ jobs:
           key    = "$SKETCHCATCH_TF_STATE_KEY"
           region = "$SKETCHCATCH_AWS_REGION"
           EOF
+          if grep -R --include='*.tf' -Eq 'backend[[:space:]]+"[^"]+"' .; then
+            grep -R --include='*.tf' -Eq 'backend[[:space:]]+"s3"' . || {
+              echo "::error::Existing Terraform backend must be s3."
+              exit 1
+            }
+          else
+            echo 'terraform { backend "s3" {} }' > sketchcatch-backend.tf
+          fi
       - run: terraform init -backend-config=backend.auto.tfbackend
       - run: terraform apply -auto-approve tfplan
       - run: terraform output -json > sketchcatch-outputs.json
@@ -1770,6 +1812,14 @@ jobs:
           key    = "$SKETCHCATCH_TF_STATE_KEY"
           region = "$SKETCHCATCH_AWS_REGION"
           EOF
+          if grep -R --include='*.tf' -Eq 'backend[[:space:]]+"[^"]+"' .; then
+            grep -R --include='*.tf' -Eq 'backend[[:space:]]+"s3"' . || {
+              echo "::error::Existing Terraform backend must be s3."
+              exit 1
+            }
+          else
+            echo 'terraform { backend "s3" {} }' > sketchcatch-backend.tf
+          fi
       - run: terraform init -backend-config=backend.auto.tfbackend
       - run: terraform destroy -auto-approve
       - name: Best-effort release cleanup

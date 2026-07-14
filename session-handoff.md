@@ -4,28 +4,29 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `codex/ecs-deployment-speed` contains the production ECS deployment optimization and latest `origin/dev` at `28c63731`; only harness state files required manual combination.
-- Production run `29333857003` succeeded in 6m09s: API/web build-push 7s/6s, API/web stabilization 3m13s/2m56s, and `/`, `/health`, `/health/db` returned 200.
-- API/web were deployed by immutable digest. Read-only runtime plan `29334381609` reported no infrastructure changes, confirming production already matches the committed ALB/ECS timing values.
+- Direct ECS evidence from the prior run remains valid, including persisted release/history/notifications and CloudWatch metrics.
+- ECS GitOps Infra run `29334708442` and App run `29334822683` succeeded for SHA `3a12e55c13e7be1a769cfbe920b112516d8c14ce`, digest `20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1`, and task definition revision 7.
+- Project refresh returns `stale=false`; all seven CI stages succeeded, 1,161 masked logs persisted, and release/history includes the matching SHA, digest, revision, URL, and healthy 1/1 ECS evidence.
+- The AWS Connection external ID was rotated and the old value was rejected. Destroy run `29337235499` removed the sandbox stack and manual cleanup removed GitOps task definitions and the task role.
+- Direct resource queries are zero. Three deleted ECS ARNs remain only in the eventually consistent Resource Groups tag index.
 
 ## Verification
 
-- Focused tests, generated workflow tests, Terraform tests, infrastructure static checks, smoke preflight, lint, typecheck, build, and harness passed before the latest `dev` merge.
-- The full workspace test command timed out after 15 minutes; no changed-path failure was observed, and its temporary untracked Python fixture directory was removed.
-- Re-run the required checks after the `dev` merge before opening the PR.
+- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused GitHub client/provider/persistence/workflow tests pass, including red-green coverage for historical stale handling and actual-job stage precedence.
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
 
 ## Changes This Session
 
-- Added parallel ECR-cached Buildx jobs, digest-only ECS releases, stability preflight, rollback evidence, and deployment timing to the production workflow.
-- Reduced API/web Docker contexts and added remote ECR cache to generated user ECS/Fargate CodeBuild workflows.
-- Recorded the actual production comparison and health evidence in `docs/deployment.md`.
+- Hardened GitHub run selection/log hydration and nullable handoff persistence.
+- Added S3 backend enforcement and real ECS immediate replacement/rollback behavior.
+- Fixed stale aggregation and stage mapping, then persisted final ECS GitOps evidence through the normal API.
 
 ## Broken Or Unverified
 
-- The 5m30s total stretch target remains unmet by 39 seconds; validation and API stabilization are the measured remaining bottlenecks.
-- No branch-authored DB migration exists.
+- Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
+- Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
 
 ## Best Next Action
 
-- Complete the merge commit, re-run required checks, open the PR against `dev`, and babysit CI/review until merge-ready.
-- Merge only after required checks and review feedback are clear.
+- Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
+- Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.
