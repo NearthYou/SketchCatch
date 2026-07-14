@@ -35,6 +35,7 @@ import {
   MousePointer2,
   Move,
   Redo2,
+  Sparkles,
   Undo2,
   ZoomIn,
   ZoomOut
@@ -50,6 +51,10 @@ import type {
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
 import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../../components/architecture-board/board-thumbnail-capture-contract";
+import {
+  createBoardAutoOrganizeProposal,
+  type ArchitectureBoardCompilationProposal
+} from "../architecture-board-compiler";
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
@@ -264,6 +269,8 @@ function DiagramEditorInner({
   const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(
     () => (initialPreviewDiagram ? (initialPreviewAnnotations ?? null) : null)
   );
+  const [compilerPreview, setCompilerPreview] =
+    useState<ArchitectureBoardCompilationProposal | null>(null);
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
@@ -399,6 +406,7 @@ function DiagramEditorInner({
 
   const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
     (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      setCompilerPreview(null);
       shouldApplySourceViewportRef.current = true;
       setPreviewDiagramState(
         nextPreviewDiagram === null
@@ -908,6 +916,25 @@ function DiagramEditorInner({
     },
     [commitDiagramUpdate]
   );
+
+  const previewAutomaticOrganization = useCallback(() => {
+    const currentDiagram = diagramRef.current;
+    const proposal = createBoardAutoOrganizeProposal(currentDiagram);
+
+    setPreviewDiagram(proposal.diagram);
+    setCompilerPreview(proposal);
+  }, [setPreviewDiagram]);
+
+  const applyAutomaticOrganization = useCallback(() => {
+    if (compilerPreview === null) return;
+    applyDiagramJson(compilerPreview.diagram);
+    setCompilerPreview(null);
+  }, [applyDiagramJson, compilerPreview]);
+
+  const cancelAutomaticOrganization = useCallback(() => {
+    setPreviewDiagram(null);
+    setCompilerPreview(null);
+  }, [setPreviewDiagram]);
 
   const commitTerraformSourceAuthority = useCallback<
     DiagramEditorPanelContext["commitTerraformSourceAuthority"]
@@ -2950,6 +2977,16 @@ function DiagramEditorInner({
 
           <div className={styles.toolbarGroup} aria-label="History">
             <button
+              aria-label="Architecture Board 자동 정리 미리보기"
+              className={styles.iconButton}
+              disabled={isPreviewActive || diagram.nodes.length === 0}
+              onClick={previewAutomaticOrganization}
+              title="자동 정리"
+              type="button"
+            >
+              <Sparkles aria-hidden="true" size={16} />
+            </button>
+            <button
               aria-label="Undo"
               className={styles.iconButton}
               disabled={isPreviewActive || history.past.length === 0}
@@ -3006,7 +3043,20 @@ function DiagramEditorInner({
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        {isPreviewActive ? (
+        {compilerPreview ? (
+          <div className={styles.previewNotice} role="status">
+            <span>
+              자동 정리 미리보기 · 변경 {compilerPreview.changes.length}개 · 진단{" "}
+              {compilerPreview.diagnostics.length}개
+            </span>
+            <button onClick={applyAutomaticOrganization} type="button">
+              적용
+            </button>
+            <button onClick={cancelAutomaticOrganization} type="button">
+              취소
+            </button>
+          </div>
+        ) : isPreviewActive ? (
           <div className={styles.previewNotice} role="status">
             미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
           </div>

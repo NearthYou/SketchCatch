@@ -119,6 +119,10 @@ export function compileArchitectureBoard(
 }
 
 function selectCandidate(original: Candidate, compiled: Candidate, architecture: ArchitectureJson): Candidate {
+  if (original.diagram.presentation?.geometryPolicy === "source-exact") {
+    return original;
+  }
+
   if (architecture.nodes.length > 0 && compiled.diagram.nodes.length === 0) {
     return original;
   }

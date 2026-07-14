@@ -5,7 +5,8 @@ import {
   ARCHITECTURE_BOARD_COMPILER_VERSION,
   architectureBoardKnowledge,
   compileArchitectureBoard,
-  createArchitectureBoardKnowledgeArtifact
+  createArchitectureBoardKnowledgeArtifact,
+  evaluateArchitectureBoardKnowledgeLeaveOneOut
 } from ".";
 
 const architecture: ArchitectureJson = {
@@ -22,6 +23,18 @@ test("knowledge artifact는 30개 gallery 중 29개 사례와 실패 evidence �
   assert.equal(
     createArchitectureBoardKnowledgeArtifact().hash,
     createArchitectureBoardKnowledgeArtifact().hash
+  );
+});
+
+test("29개 사례 leave-one-out report는 매 사례를 나머지 28개와 비교한다", () => {
+  const report = evaluateArchitectureBoardKnowledgeLeaveOneOut();
+
+  assert.equal(report.length, 29);
+  assert.ok(report.every((result) => result.heldOutCaseId !== result.nearestCaseId));
+  assert.ok(
+    report.every((result) =>
+      [result.resourceTypeRecall, result.aspectRatioError, result.siblingGapError].every(Number.isFinite)
+    )
   );
 });
 

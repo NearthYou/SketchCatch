@@ -7,6 +7,10 @@ import {
 } from "../../../../packages/types/src";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import {
+  reviewArchitectureBoardTemplate,
+  type ArchitectureBoardCompilationProposal
+} from "../architecture-board-compiler";
+import {
   buildTemplateDiagramJson,
   templateDefinitions,
   type TemplateId
@@ -765,6 +769,12 @@ export function isBoardTemplateAvailable(
   template: BoardTemplate
 ): template is AvailableBoardTemplate {
   return template.availability === "available";
+}
+
+export function reviewAvailableBoardTemplate(
+  template: AvailableBoardTemplate
+): ArchitectureBoardCompilationProposal {
+  return reviewArchitectureBoardTemplate(template.diagramJson);
 }
 
 // Resource kind와 Terraform parameters가 모두 있는 실제 배포 Resource만 셉니다.

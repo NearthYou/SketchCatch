@@ -25,6 +25,14 @@ export type ArchitectureBoardKnowledgeArtifact = {
   readonly unavailableTemplateIds: readonly string[];
 };
 
+export type ArchitectureBoardLeaveOneOutResult = {
+  readonly heldOutCaseId: string;
+  readonly nearestCaseId: string;
+  readonly resourceTypeRecall: number;
+  readonly aspectRatioError: number;
+  readonly siblingGapError: number;
+};
+
 export function createArchitectureBoardKnowledgeArtifact(): ArchitectureBoardKnowledgeArtifact {
   const repositoryCases = templateDefinitions.map((definition) =>
     extractKnowledgeCase(
@@ -61,6 +69,36 @@ export function createArchitectureBoardKnowledgeArtifact(): ArchitectureBoardKno
 }
 
 export const architectureBoardKnowledge = createArchitectureBoardKnowledgeArtifact();
+
+export function evaluateArchitectureBoardKnowledgeLeaveOneOut(
+  artifact: ArchitectureBoardKnowledgeArtifact = architectureBoardKnowledge
+): readonly ArchitectureBoardLeaveOneOutResult[] {
+  return artifact.cases.map((heldOutCase) => {
+    const candidates = artifact.cases
+      .filter((candidate) => candidate.id !== heldOutCase.id)
+      .map((candidate) => ({
+        candidate,
+        similarity: resourceTypeSimilarity(heldOutCase.nodeTypes, candidate.nodeTypes)
+      }))
+      .sort(
+        (left, right) =>
+          right.similarity - left.similarity || left.candidate.id.localeCompare(right.candidate.id)
+      );
+    const nearest = candidates[0]?.candidate;
+
+    if (!nearest) {
+      throw new Error("Leave-one-out evaluation requires at least two knowledge cases.");
+    }
+
+    return {
+      heldOutCaseId: heldOutCase.id,
+      nearestCaseId: nearest.id,
+      resourceTypeRecall: round(resourceTypeSimilarity(heldOutCase.nodeTypes, nearest.nodeTypes)),
+      aspectRatioError: round(relativeError(heldOutCase.meanAspectRatio, nearest.meanAspectRatio)),
+      siblingGapError: round(relativeError(heldOutCase.meanSiblingGap, nearest.meanSiblingGap))
+    };
+  });
+}
 
 function extractKnowledgeCase(id: string, diagram: DiagramJson): ArchitectureBoardKnowledgeCase {
   const nodes = [...diagram.nodes].sort((left, right) => left.id.localeCompare(right.id));
@@ -108,4 +146,15 @@ function fnv1a(value: string): string {
   }
 
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function resourceTypeSimilarity(left: readonly string[], right: readonly string[]): number {
+  if (left.length === 0) return right.length === 0 ? 1 : 0;
+  const rightTypes = new Set(right);
+  return left.filter((type) => rightTypes.has(type)).length / left.length;
+}
+
+function relativeError(expected: number, actual: number): number {
+  if (expected === 0) return actual === 0 ? 0 : 1;
+  return Math.abs(expected - actual) / Math.abs(expected);
 }
