@@ -12,10 +12,9 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Verification
 
-- Current code verification passes 24 sandbox orchestration tests, 19 focused API runtime/workflow tests, 27 focused Web target/three-stage/CI-console tests, harness, lint, typecheck, build, and diff checks.
+- After merging `origin/dev` at `f16a4546`, current code verification passes 24 sandbox orchestration tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks.
 - Local API/proxy/Redis/certificate/TLS/log/fixture-clone cleanup is complete. Read-only AWS checks show zero Issue #378 ECR, CodeBuild, and S3 resources.
-- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused GitHub client/provider/persistence/workflow tests pass, including red-green coverage for historical stale handling and actual-job stage precedence.
-- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass.
+- The latest `dev` test policy is preserved: 52 essential protection files remain and removed feature-specific suites were not reintroduced.
 
 ## Changes This Session
 
