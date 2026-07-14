@@ -30,7 +30,6 @@ export function TerraformIssuesPanel({
             <GitBranch size={15} aria-hidden="true" />
           )}
           <div>
-            <span>Terraform diagnostics</span>
             <h3>검증 문제</h3>
           </div>
           <span

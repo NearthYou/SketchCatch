@@ -21,7 +21,6 @@ export function ArchitectureIssuesPanel({
           <Network size={15} aria-hidden="true" />
         )}
         <div>
-          <span>Architecture diagnostics</span>
           <h3>설계 문제</h3>
         </div>
         <span
