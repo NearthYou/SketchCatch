@@ -42,6 +42,15 @@ test("login form keeps the authentication contract", () => {
   assert.match(loginFormSource, /router\.replace\(returnPath\)/);
 });
 
+test("login password can be shown and hidden with an accessible toggle", () => {
+  assert.match(loginFormSource, /const \[isPasswordVisible, setIsPasswordVisible\]/);
+  assert.match(loginFormSource, /type=\{isPasswordVisible \? "text" : "password"\}/);
+  assert.match(loginFormSource, /aria-pressed=\{isPasswordVisible\}/);
+  assert.match(loginFormSource, /isPasswordVisible \? "비밀번호 숨기기" : "비밀번호 보기"/);
+  assert.match(loginFormSource, /<label htmlFor="login-password">비밀번호<\/label>/);
+  assert.match(loginFormSource, /id="login-password"/);
+});
+
 test("workspace login redirect preserves the requested route", () => {
   assert.match(workspaceAuthGateSource, /returnTo/);
   assert.match(workspaceAuthGateSource, /window\.location\.pathname/);
