@@ -1,16 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  getWorkspaceAiChatDockStatus,
-  hasCompletedWorkspaceAiChatResponse
-} from "./workspace-ai-chat-status";
+import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
 
 const readyState = {
-  hasCompletedResponse: false,
   hasPendingApproval: false,
   isStale: false,
-  requestState: "idle" as const,
-  scope: "draft" as const
+  requestState: "idle" as const
 };
 
 test("AI Chat 상태는 요청 처리 중을 최우선으로 표시한다", () => {
@@ -53,37 +48,6 @@ test("AI Chat 상태는 오래된 제안을 적용 대기보다 먼저 표시한
   );
 });
 
-test("AI Chat 상태는 응답이 없을 때 입력 가능으로 표시한다", () => {
-  assert.deepEqual(getWorkspaceAiChatDockStatus(readyState), {
-    description: "Architecture와 Terraform에 대해 물어보세요.",
-    label: "입력 가능"
-  });
-});
-
-test("초기 안내 메시지만으로 응답 완료 상태가 되지 않는다", () => {
-  assert.equal(
-    hasCompletedWorkspaceAiChatResponse({
-      hasExplanation: false,
-      messageRoles: ["assistant"]
-    }),
-    false
-  );
-  assert.equal(
-    hasCompletedWorkspaceAiChatResponse({
-      hasExplanation: false,
-      messageRoles: ["assistant", "user"]
-    }),
-    true
-  );
-});
-
-test("사용자가 요청을 중지하면 새 입력이 가능한 상태로 돌아간다", () => {
-  assert.equal(
-    hasCompletedWorkspaceAiChatResponse({
-      hasExplanation: false,
-      messageRoles: ["user", "assistant"],
-      requestWasCancelled: true
-    }),
-    false
-  );
+test("AI Chat 상태는 사용자의 대응이 필요하지 않으면 상태 바를 숨긴다", () => {
+  assert.equal(getWorkspaceAiChatDockStatus(readyState), null);
 });

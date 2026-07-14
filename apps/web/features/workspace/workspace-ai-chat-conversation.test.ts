@@ -7,6 +7,7 @@ import {
   getWorkspaceAiChatScopeDefinition,
   isWorkspaceAiChatScope,
   readStoredActiveChatScope,
+  shouldShowWorkspaceAiChatMessage,
   storeActiveChatScope,
   workspaceAiChatScopes
 } from "./workspace-ai-chat-conversation";
@@ -18,6 +19,14 @@ test("AI Chat은 세 개의 독립 대화 범위를 제공한다", () => {
   assert.equal(getWorkspaceAiChatScopeDefinition("preview").label, "에이전트 리뷰");
   assert.equal(getWorkspaceAiChatScopeDefinition("draft").inputAvailable, true);
   assert.equal(getWorkspaceAiChatScopeDefinition("errors").inputAvailable, false);
+  assert.equal(
+    getWorkspaceAiChatScopeDefinition("errors").emptyDescription,
+    "오른쪽 검증 문제에서 ‘오류 분석’을 누르면 원인과 해결 방법을 보여드려요."
+  );
+  assert.equal(
+    getWorkspaceAiChatScopeDefinition("preview").emptyDescription,
+    "Terraform Preview에서 ‘에이전트 리뷰’를 누르면 구성과 확인할 점을 보여드려요."
+  );
 });
 
 test("AI Chat launcher는 프로젝트별 마지막 대화를 저장하고 잘못된 값은 무시한다", () => {
@@ -53,4 +62,33 @@ test("AI Chat은 저장된 대화 범위 값을 검증한다", () => {
   assert.equal(isWorkspaceAiChatScope("preview"), true);
   assert.equal(isWorkspaceAiChatScope("simulation"), false);
   assert.equal(isWorkspaceAiChatScope(null), false);
+});
+
+test("오류 분석과 에이전트 리뷰는 진행 문구만 숨기고 중요한 결과는 남긴다", () => {
+  assert.equal(
+    shouldShowWorkspaceAiChatMessage({
+      content: "오류 분석을 시작했습니다.",
+      kind: "terraform_issue"
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowWorkspaceAiChatMessage({
+      content: "검토가 끝났습니다. 아래에서 요약과 확인할 점을 확인하세요.",
+      kind: "preview"
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowWorkspaceAiChatMessage({ content: "요청을 중지했습니다.", kind: "status" }),
+    true
+  );
+  assert.equal(
+    shouldShowWorkspaceAiChatMessage({ content: "수정안을 적용했습니다.", kind: "terraform_issue" }),
+    true
+  );
+  assert.equal(
+    shouldShowWorkspaceAiChatMessage({ content: "수정 적용에 실패했습니다.", kind: "error" }),
+    true
+  );
 });

@@ -22,12 +22,12 @@ const scopeDefinitions: Record<WorkspaceAiChatScope, WorkspaceAiChatScopeDefinit
     label: "설계 제안"
   },
   errors: {
-    emptyDescription: "Terraform Issue에서 분석을 요청하면 결과가 여기에 쌓입니다.",
+    emptyDescription: "오른쪽 검증 문제에서 ‘오류 분석’을 누르면 원인과 해결 방법을 보여드려요.",
     inputAvailable: false,
     label: "오류 분석"
   },
   preview: {
-    emptyDescription: "Terraform Preview에서 리뷰를 요청하면 결과가 여기에 쌓입니다.",
+    emptyDescription: "Terraform Preview에서 ‘에이전트 리뷰’를 누르면 구성과 확인할 점을 보여드려요.",
     inputAvailable: false,
     label: "에이전트 리뷰"
   }
@@ -58,6 +58,34 @@ export function getAdjacentWorkspaceAiChatScope(
   const nextIndex = (currentIndex + offset + workspaceAiChatScopes.length) % workspaceAiChatScopes.length;
 
   return workspaceAiChatScopes[nextIndex] ?? "draft";
+}
+
+export function shouldShowWorkspaceAiChatMessage({
+  content,
+  kind
+}: {
+  readonly content: string;
+  readonly kind: string;
+}): boolean {
+  if (kind === "preview") {
+    return !(
+      content.startsWith("에이전트 리뷰를 요청했습니다.") ||
+      content.startsWith("에이전트 리뷰 완료:") ||
+      content.endsWith("검토를 시작했습니다.") ||
+      content === "검토가 끝났습니다. 아래에서 요약과 확인할 점을 확인하세요."
+    );
+  }
+
+  if (kind === "terraform_issue") {
+    return !(
+      content.startsWith("Terraform 이슈를 분석합니다:") ||
+      content.startsWith("Terraform 이슈 원인:") ||
+      content === "오류 분석을 시작했습니다." ||
+      content === "분석이 끝났습니다. 아래에서 문제와 해결 방법을 확인하세요."
+    );
+  }
+
+  return true;
 }
 
 export function isWorkspaceAiChatScope(value: unknown): value is WorkspaceAiChatScope {

@@ -2375,126 +2375,6 @@
   color: #334155;
 }
 
-.aiTerraformPreviewAssessment {
-  gap: 14px;
-}
-
-.aiTerraformPreviewAssessment .aiResultSummary {
-  color: #172033;
-  font-size: 15px;
-  font-weight: 850;
-  line-height: 1.55;
-}
-
-.aiTerraformPreviewConclusion {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  display: grid;
-  gap: 7px;
-  padding: 13px 14px;
-}
-
-.aiTerraformPreviewConclusion strong {
-  color: #1d4ed8;
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.aiTerraformPreviewConclusion p {
-  color: #172033;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.55;
-  margin: 0;
-}
-
-.aiTerraformPreviewAgentGrid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.aiTerraformPreviewAgentCard {
-  background: #ffffff;
-  border: 1px solid #d7e3f3;
-  border-radius: 8px;
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 12px;
-}
-
-.aiTerraformPreviewAgentCard span {
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.aiTerraformPreviewAgentCard strong {
-  color: #172033;
-  font-size: 14px;
-  font-weight: 950;
-}
-
-.aiTerraformPreviewAgentCard p {
-  color: #334155;
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.aiTerraformPreviewAgentCard p:last-child {
-  color: #475569;
-}
-
-.terraformIssueGuidanceList {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-}
-
-.terraformIssueFixPlan {
-  background: #f8fbff;
-  border: 1px solid #cfe0f4;
-  border-radius: 6px;
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-}
-
-.terraformIssueFixPlanHeader {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.terraformIssueFixPlanHeader strong {
-  color: #172033;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.terraformIssueFixPlanHeader span {
-  color: #1f4f82;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.terraformIssueFixPlan p,
-.terraformIssueFixPlan li {
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.terraformIssueFixPlan .terraformIssueFixPlanNotice {
-  color: #9a3412;
-  font-weight: 850;
-}
-
 .terraformIssueCodePreview {
   display: grid;
   gap: 8px;
@@ -2502,13 +2382,13 @@
 }
 
 .terraformIssueCodeFrame {
-  background: #ffffff;
-  border: 1px solid #d7e3f3;
-  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .terraformIssueCodeFrame strong {
@@ -2518,27 +2398,27 @@
 }
 
 .terraformIssueCodeFrame pre {
-  background: #0f172a;
-  border-radius: 4px;
-  color: #e2e8f0;
+  background: var(--workspace-surface-dark, #171717);
+  border-radius: 12px;
+  color: #ffffff;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
   margin: 0;
   min-width: 0;
   overflow-x: auto;
-  padding: 8px;
+  padding: 12px;
   white-space: pre;
 }
 
 .terraformIssueCodePreview section {
-  background: #ffffff;
-  border: 1px solid #d7e3f3;
-  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .terraformIssueCodePreview strong {
@@ -2548,16 +2428,16 @@
 }
 
 .terraformIssueCodePreview pre {
-  background: #0f172a;
-  border-radius: 4px;
-  color: #e2e8f0;
+  background: var(--workspace-surface-dark, #171717);
+  border-radius: 12px;
+  color: #ffffff;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
   margin: 0;
   min-width: 0;
   overflow-x: auto;
-  padding: 8px;
+  padding: 12px;
   white-space: pre;
 }
 
@@ -2565,84 +2445,6 @@
   .terraformIssueCodePreview {
     grid-template-columns: 1fr;
   }
-
-  .aiTerraformPreviewAgentGrid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.terraformIssueFixPlan ol {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding-left: 18px;
-}
-
-.terraformIssueRawMessage {
-  color: rgba(30, 41, 59, 0.78);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.terraformIssueGuidanceList div {
-  display: grid;
-  gap: 2px;
-}
-
-.terraformIssueGuidanceList dt {
-  color: #172033;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.terraformIssueGuidanceList dd {
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.terraformIssuePillars {
-  display: grid;
-  gap: 7px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.terraformIssuePillars section {
-  background: #ffffff;
-  border: 1px solid #dfe7f4;
-  border-radius: 6px;
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-}
-
-.terraformIssuePillars strong {
-  color: #172033;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.terraformIssuePillars p,
-.terraformIssuePillars span,
-.terraformIssueActions li {
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.terraformIssuePillars span {
-  color: #1f4f82;
-  font-weight: 850;
-}
-
-.terraformIssueActions {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding-left: 16px;
 }
 
 .aiHint {
@@ -5467,17 +5269,12 @@
 .terraformDiagnosticList li,
 .terraformPreviewExplanationPanel,
 .terraformPreviewExplanationResult,
-.terraformIssueFixPlan,
-.terraformIssueCodeFrame,
-.terraformIssueCodePreview section,
 .aiField textarea,
 .aiField input,
 .aiField select,
 .aiResultCard,
 .aiExplanation,
 .aiWarning,
-.aiTerraformPreviewConclusion,
-.aiTerraformPreviewAgentCard,
 .aiSafetyFindingCard,
 .aiSimulationCard,
 .aiChatAssistantMessage p,
@@ -5718,13 +5515,19 @@
   border-width: 1px 0 0 1px;
   bottom: 0;
   box-shadow: -20px 0 48px rgb(23 23 23 / 12%);
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: none;
   min-height: 0;
   right: 0;
   top: 64px;
   width: clamp(360px, 31vw, 420px);
   z-index: 1301;
+}
+
+.aiChatChrome {
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  min-width: 0;
 }
 
 .aiChatDock[data-right-panel-open="true"] {
@@ -5882,9 +5685,261 @@
 }
 
 .aiChatDraftCard {
+  border-color: var(--workspace-line, #f0f0f3);
   border-radius: 12px;
+  gap: 14px;
+  overflow: hidden;
+  padding: 18px;
+}
+
+.aiResultContext {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aiStructuredResult {
+  display: grid;
+  min-width: 0;
+}
+
+.aiResultLead {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 0 16px;
+}
+
+.aiResultLead h3 {
+  color: var(--workspace-text, #171717);
+  font-size: 18px;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiResultLead p {
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiResultSection {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
   gap: 12px;
-  padding: 16px;
+  min-width: 0;
+  padding: 16px 0;
+}
+
+.aiResultSectionTitle {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  display: flex;
+  gap: 8px;
+}
+
+.aiResultSectionTitle svg {
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+.aiResultSectionTitle h4 {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aiResultCheckList {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiResultCheckList li {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 8px minmax(0, 1fr);
+  min-width: 0;
+  padding: 11px 0;
+}
+
+.aiResultCheckList li + li {
+  border-top: 1px solid var(--workspace-line-soft, #f5f5f7);
+}
+
+.aiResultCheckMark {
+  background: var(--workspace-text, #171717);
+  border-radius: 999px;
+  height: 7px;
+  margin-top: 6px;
+  width: 7px;
+}
+
+.aiResultCheckList li[data-severity="medium"] .aiResultCheckMark {
+  background: var(--workspace-warning, #ab6400);
+}
+
+.aiResultCheckList li[data-severity="high"] .aiResultCheckMark {
+  background: #b42318;
+}
+
+.aiResultCheckList li > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.aiResultCheckList strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.aiResultCheckHeading {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.aiResultCheckHeading > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.aiResultCheckList li[data-severity="medium"] .aiResultCheckHeading > span {
+  color: var(--workspace-warning, #ab6400);
+}
+
+.aiResultCheckList li[data-severity="high"] .aiResultCheckHeading > span {
+  color: #b42318;
+}
+
+.aiResultCheckList p {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiResultCheckList p + p {
+  color: var(--workspace-muted, #60646c);
+}
+
+.aiResultNextStep > p {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-radius: 12px;
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 12px 14px;
+}
+
+.aiTechnicalDetails {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  min-width: 0;
+}
+
+.aiTechnicalDetails summary {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+  list-style: none;
+  min-height: 44px;
+  padding: 2px 0 0;
+}
+
+.aiTechnicalDetails summary::-webkit-details-marker {
+  display: none;
+}
+
+.aiTechnicalDetails summary::after {
+  color: var(--workspace-muted, #60646c);
+  content: "+";
+  font-size: 18px;
+  font-weight: 400;
+  margin-left: auto;
+}
+
+.aiTechnicalDetails[open] summary::after {
+  content: "−";
+}
+
+.aiTechnicalDetails summary:focus-visible {
+  border-radius: 8px;
+  box-shadow: 0 0 0 3px rgb(23 23 23 / 10%);
+  outline: 1px solid var(--workspace-text, #171717);
+  outline-offset: 2px;
+}
+
+.aiTechnicalDetailsBody {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-radius: 12px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.aiTechnicalMeta {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  min-width: 0;
+}
+
+.aiTechnicalMeta > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.aiTechnicalMeta dt,
+.aiTechnicalList > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.aiTechnicalMeta dd,
+.aiTechnicalList li {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.aiTechnicalList {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.aiTechnicalList ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .aiChatComposer,
@@ -5961,19 +6016,6 @@
   .aiChatSendButton {
     align-self: center;
   }
-}
-
-.aiChatComposerUnavailable {
-  background: var(--workspace-surface, #ffffff);
-  border-top: 1px solid var(--workspace-line, #f0f0f3);
-  color: var(--workspace-muted, #60646c);
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 14px 20px max(16px, env(safe-area-inset-bottom));
-}
-
-.aiChatComposerUnavailable p {
-  margin: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
