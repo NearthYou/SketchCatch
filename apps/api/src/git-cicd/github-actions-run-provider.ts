@@ -487,7 +487,7 @@ function validateStaticSiteReleaseEvidence(
   const expectedPrefix = `releases/${commitSha}/${digestValue}`;
   const expectedManifestUri =
     `s3://${bucket}/${releasePrefix}/.sketchcatch-release-manifest.json`;
-  const bucketPattern = /^(?!\d+\.\d+\.\d+\.\d+$)(?!.*\.\.)(?!.*\.-)(?!.*-\.)[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+  const bucketPattern = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
   const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
   const invalidationId = item.invalidationId;
   if (

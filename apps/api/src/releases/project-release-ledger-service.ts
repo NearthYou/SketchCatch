@@ -439,7 +439,7 @@ export function validateProjectDeploymentRuntimeConfig(
         "Static site runtime configuration is required."
       );
     }
-    const bucketPattern = /^(?!\d+\.\d+\.\d+\.\d+$)(?!.*\.\.)(?!.*\.-)(?!.*-\.)[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+    const bucketPattern = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
     const distributionPattern = /^[A-Z0-9]{3,32}$/;
     const originPattern = /^[A-Za-z0-9._-]{1,128}$/;
     if (

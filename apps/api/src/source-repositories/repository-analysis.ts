@@ -337,8 +337,8 @@ function hasNextStaticExportConfig(
   const prefix = rootPath === "." ? "" : `${rootPath}/`;
   return files.some(
     (file) =>
-      /^next\.config\.(?:js|mjs|ts)$/.test(file.path.slice(prefix.length)) &&
       file.path.startsWith(prefix) &&
+      /^next\.config\.(?:js|mjs|ts)$/.test(file.path.slice(prefix.length)) &&
       /\boutput\s*:\s*["']export["']/.test(file.content)
   );
 }

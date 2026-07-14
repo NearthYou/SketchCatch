@@ -300,6 +300,21 @@ test("provider maps static stages and parses one bounded release evidence record
   assert.deepEqual(snapshot?.releaseEvidence, evidence);
   assert.equal(snapshot?.logs.some((log) => log.message.includes(encoded)), false);
   assert.equal(snapshot?.logs.at(-1)?.message, "Static release evidence captured.");
+
+  const dottedBucketEvidence = {
+    ...evidence,
+    hostingBucketName: "sketchcatch.static.releases",
+    manifestUri:
+      `s3://sketchcatch.static.releases/${releasePrefix}/.sketchcatch-release-manifest.json`
+  };
+  const dottedBucketEncoded = Buffer.from(JSON.stringify(dottedBucketEvidence)).toString("base64");
+  const [rejectedSnapshot] = await createGitHubActionsRunProvider({
+    ...client,
+    readWorkflowJobLog: async () =>
+      `Verify static release and rollback\nSKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64=${dottedBucketEncoded}`
+  }).listSnapshots(repository);
+
+  assert.equal(rejectedSnapshot?.releaseEvidence, null);
 });
 
 test("provider selects the larger attempt only for the same GitHub run id", async () => {

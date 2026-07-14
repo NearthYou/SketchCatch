@@ -272,6 +272,20 @@ test("Static site project target requires safe S3 and CloudFront coordinates", a
     putProjectDeploymentTarget(
       createTargetInput({
         runtimeTargetKind: "static_site",
+        confirmedBuildConfig: build,
+        runtimeConfig: createStaticSiteRuntimeConfig({
+          hostingBucketName: "sketchcatch.static.releases"
+        })
+      }),
+      repository,
+      () => now
+    ),
+    /runtime configuration/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "static_site",
         confirmedBuildConfig: { ...build, installPreset: "none" },
         runtimeConfig: createStaticSiteRuntimeConfig()
       }),

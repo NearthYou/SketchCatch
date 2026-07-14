@@ -1322,7 +1322,7 @@ function assertGitOpsTarget(
       (item) => item.kind === "static_output"
     ) ?? [];
     if (
-      target.runtimeConfig.runtimeTargetKind !== "static_site" ||
+      target.runtimeConfig?.runtimeTargetKind !== "static_site" ||
       build.buildPreset !== "static_export" ||
       build.installPreset === "none" ||
       !build.staticOutputPath ||
