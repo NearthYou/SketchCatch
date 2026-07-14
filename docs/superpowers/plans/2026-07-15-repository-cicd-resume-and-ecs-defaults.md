@@ -667,3 +667,24 @@ Run `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web 
 - [ ] Add callback-only save-button visibility props and replace the mandatory-save effect with the single confirmation action.
 - [ ] Rerun the focused test, Web lint, Web typecheck, build, harness, and diff checks.
 - [ ] Commit the source and test files with `Fix: Callback 임시 확인 흐름 적용`.
+
+### Task 10: Save Both Settings From the Single Confirmation
+
+**Files:**
+- Modify: `apps/web/app/integrations/github/callback/github-callback-state.ts`
+- Modify: `apps/web/app/integrations/github/callback/github-callback-state.test.ts`
+- Modify: `apps/web/app/integrations/github/callback/page.tsx`
+- Modify: `apps/web/app/projects/[projectId]/settings/project-deployment-target-settings-client.tsx`
+- Modify: `apps/web/app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx`
+- Modify: `apps/web/features/workspace/CicdMonitoringSettings.tsx`
+
+**Interfaces:**
+- Each settings client exposes a callback-only `save(): Promise<boolean>` handle while retaining its normal button behavior.
+- `saveCallbackSettings` saves deployment target first, stops on failure, then saves monitoring and returns true only when both succeed.
+- Callback navigates only when `saveCallbackSettings` returns true.
+
+- [ ] Add failing unit tests for successful ordered saves and fail-fast behavior.
+- [ ] Run the focused callback test and verify RED.
+- [ ] Implement boolean save handles and the sequential callback orchestrator.
+- [ ] Rerun the focused test, Web lint, Web typecheck, build, harness, and diff checks.
+- [ ] Commit with `Fix: Callback 확인 시 필수 설정 저장`.
