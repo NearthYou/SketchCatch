@@ -30,6 +30,14 @@ test("signup consent view actions stay beside their agreement labels", () => {
   assert.doesNotMatch(authStylesSource, /\.authConsentRow\s*\{[^}]*space-between;/s);
 });
 
+test("signup offers one required-agreement toggle synchronized with both consents", () => {
+  assert.match(signupFormSource, /const allRequiredAgreementsAccepted = termsAccepted && privacyAccepted/);
+  assert.match(signupFormSource, /name="allRequiredAgreementsAccepted"/);
+  assert.match(signupFormSource, /setTermsAccepted\(isAccepted\)/);
+  assert.match(signupFormSource, /setPrivacyAccepted\(isAccepted\)/);
+  assert.match(signupFormSource, /필수 약관 전체 동의/);
+});
+
 test("signup availability and legal actions state their exact purpose", () => {
   assert.match(signupFormSource, /아이디 중복 확인/);
   assert.match(signupFormSource, /이메일 중복 확인/);

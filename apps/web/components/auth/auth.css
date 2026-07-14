@@ -425,6 +425,13 @@
   gap: 8px;
 }
 
+.authConsentAll {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f0f3;
+  color: #303238 !important;
+  font-weight: 700 !important;
+}
+
 .authSignupReadiness {
   margin: 0;
   color: #60646c;

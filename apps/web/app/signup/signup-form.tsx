@@ -260,6 +260,12 @@ export function SignupForm() {
     usernameAvailable: isCurrentValueAvailable(usernameAvailability, currentNormalizedUsername),
     usernameEntered: currentNormalizedUsername.length > 0
   });
+  const allRequiredAgreementsAccepted = termsAccepted && privacyAccepted;
+
+  function handleAllRequiredAgreementsChange(isAccepted: boolean): void {
+    setTermsAccepted(isAccepted);
+    setPrivacyAccepted(isAccepted);
+  }
 
   function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
     setIsPasswordCapsLockOn(isCapsLockActive(event));
@@ -457,6 +463,16 @@ export function SignupForm() {
           </div>
         </div>
         <div className="authConsentGroup fullField">
+          <label className="authCheckboxLabel authConsentAll">
+            <input
+              checked={allRequiredAgreementsAccepted}
+              disabled={isSubmitting}
+              name="allRequiredAgreementsAccepted"
+              onChange={(event) => handleAllRequiredAgreementsChange(event.target.checked)}
+              type="checkbox"
+            />
+            <span>필수 약관 전체 동의</span>
+          </label>
           <div className="authConsentRow">
             <label className="authCheckboxLabel">
               <input
