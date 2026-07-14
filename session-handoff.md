@@ -4,6 +4,9 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
+- Branch `codex/ecs-deployment-speed` contains and has pushed the production ECS deployment optimization.
+- Production run `29333857003` succeeded in 6m09s: API/web build-push 7s/6s, API/web stabilization 3m13s/2m56s, and `/`, `/health`, `/health/db` returned 200.
+- API/web were deployed by immutable digest. Read-only runtime plan `29334381609` reported no infrastructure changes, confirming production already matches the committed ALB/ECS timing values.
 - Direct infrastructure/app live deployment passed with exact commit, ECR digest, ECS task revision, persisted logs/release/history/notifications, CloudWatch metrics, and HTTPS 200 evidence.
 - GitHub Actions ECS deployment passed on run `29324643997` attempt 2 with merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, and task definition revision 3.
 - GitOps API persistence remains broken: refresh returned stale with no runs and retained the cancelled initial infra run because the successful app run belonged to the later workflow-fix merge.
@@ -12,12 +15,17 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Verification
 
+- Focused tests, generator tests, Terraform tests, infrastructure static checks, smoke preflight, lint, typecheck, build, and harness pass.
+- The full workspace test command timed out after 15 minutes; no changed-path failure was observed, and its temporary untracked Python fixture directory was removed.
 - Focused changed-path tests pass 89/89 and GitOps workflow tests pass 9/9.
 - Workspace lint, typecheck, and build pass after the latest fixes.
 - Run the final harness check after cleanup and documentation updates.
 
 ## Changes This Session
 
+- Added parallel ECR-cached Buildx jobs, digest-only ECS releases, stability preflight, rollback evidence, and deployment timing to the production workflow.
+- Reduced API/web Docker contexts and added remote ECR cache to generated user ECS/Fargate CodeBuild workflows.
+- Recorded the actual production comparison and health evidence in `docs/deployment.md`.
 - Added the practice-profile ECS resource subset and least-privilege Direct CodeBuild permissions.
 - Forced Direct and GitOps CodeBuild buildspecs to Bash and corrected GitHub expression string quoting for all four runtime workflows.
 - Executed real Direct and ECS GitOps paths and recorded exact partial-completion blockers.
@@ -30,6 +38,8 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
+- Review and merge `codex/ecs-deployment-speed`. No Terraform apply is pending.
+- Treat validation and API stabilization as the next measured bottlenecks if the 5m30s stretch target is still required.
 - Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
 - Repair GitOps run correlation and persist the successful ECS run through the normal API before claiming ECS GitOps complete.
 - Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.
