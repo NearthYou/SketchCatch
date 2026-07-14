@@ -207,9 +207,13 @@ function createMaterializedCandidate(
     preserveCurrentBoardState(convertArchitectureJsonToDiagramJson(architecture), beforeDiagram),
     architecture
   );
+  const protectedNodeIds = new Set(
+    materialized.nodes.filter((node) => node.locked).map((node) => node.id)
+  );
   const layout = layoutAutomaticDiagram({
     edges: architecture.edges,
-    nodes: materialized.nodes
+    nodes: materialized.nodes,
+    protectedNodeIds
   });
   const diagram = routeAndLayerDiagram({
     ...cloneDiagram(materialized),
@@ -230,15 +234,37 @@ function createMaterializedCandidate(
 // viewport/presentation은 graph에서 유도할 수 없는 Board 상태다. 자동 정리 proposal이 이를
 // 잃으면 안 되므로 후보에 그대로 carry-forward한다.
 function preserveCurrentBoardState(nextDiagram: DiagramJson, currentDiagram: DiagramJson): DiagramJson {
+  const currentNodeById = new Map(currentDiagram.nodes.map((node) => [node.id, node]));
+  const sourceExact = currentDiagram.presentation?.geometryPolicy === "source-exact";
+  const currentPresentation = currentDiagram.presentation;
+  const compiledPresentation = sourceExact
+    ? {
+        geometryPolicy: "catalog-normalized" as const,
+        ...(currentPresentation?.terraformSourceFingerprint === undefined
+          ? {}
+          : { terraformSourceFingerprint: currentPresentation.terraformSourceFingerprint })
+      }
+    : currentPresentation;
+
   return {
     ...cloneDiagram(nextDiagram),
-    viewport: structuredClone(currentDiagram.viewport),
+    nodes: nextDiagram.nodes.map((node) => {
+      const currentNode = currentNodeById.get(node.id);
+      if (currentNode?.locked === undefined) {
+        return structuredClone(node);
+      }
+
+      return { ...structuredClone(node), locked: currentNode.locked };
+    }),
+    // A compiled source-exact variant has different coordinates, so it must not reuse
+    // the old source ViewBox. All other user viewport state stays intact.
+    viewport: structuredClone(sourceExact ? nextDiagram.viewport : currentDiagram.viewport),
     ...(currentDiagram.variables === undefined
       ? {}
       : { variables: structuredClone(currentDiagram.variables) }),
-    ...(currentDiagram.presentation === undefined
+    ...(compiledPresentation === undefined
       ? {}
-      : { presentation: structuredClone(currentDiagram.presentation) })
+      : { presentation: structuredClone(compiledPresentation) })
   };
 }
 
@@ -1080,6 +1106,20 @@ function compareDiagramPresentationAndGeometry(
     if (previous.zIndex !== next.zIndex) {
       changes.push(change("geometry", "modify", [id], `Resource ${id} z-index 변경`, COMPILATION_DISTANCE_COST.zIndex, previous.zIndex, next.zIndex));
     }
+  }
+
+  if (!sameValue(before.viewport, after.viewport)) {
+    changes.push(
+      change(
+        "geometry",
+        "modify",
+        ["board-viewport"],
+        "Board viewport 변경",
+        COMPILATION_DISTANCE_COST.position,
+        before.viewport,
+        after.viewport
+      )
+    );
   }
 }
 

@@ -279,7 +279,7 @@ test("자동 정리는 기존 Board의 variable, viewport, presentation 상태�
     ...structuredClone(source),
     nodes: source.nodes.map((node) => ({ ...node, position: { x: 0, y: 0 } })),
     presentation: {
-      geometryPolicy: "source-exact",
+      geometryPolicy: "catalog-normalized",
       initialViewportPending: false,
       sourceViewBox: { x: -120, y: -80, width: 640, height: 480 }
     },
@@ -306,6 +306,42 @@ test("자동 정리는 기존 Board의 variable, viewport, presentation 상태�
   assert.deepEqual(proposal.diagram.variables, before.variables);
   assert.deepEqual(proposal.diagram.presentation, before.presentation);
   assert.deepEqual(proposal.diagram.viewport, before.viewport);
+});
+
+test("source-exact 자동 정리는 잠긴 node를 보호하고 새 geometry에 맞는 presentation으로 변환한다", () => {
+  const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
+  const currentDiagram: DiagramJson = {
+    ...structuredClone(source),
+    nodes: source.nodes.map((node, index) => ({
+      ...node,
+      locked: index === 0,
+      position: { x: 0, y: 0 }
+    })),
+    presentation: {
+      geometryPolicy: "source-exact",
+      initialViewportPending: true,
+      sourceViewBox: { x: -900, y: -700, width: 1_800, height: 1_200 }
+    },
+    viewport: { x: 99, y: -88, zoom: 0.42 }
+  };
+  const before = structuredClone(currentDiagram);
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+  const lockedBefore = before.nodes.find((node) => node.locked);
+  const lockedAfter = proposal.diagram.nodes.find((node) => node.id === lockedBefore?.id);
+
+  assert.equal(lockedAfter?.locked, true);
+  assert.deepEqual(lockedAfter?.position, lockedBefore?.position);
+  assert.deepEqual(proposal.diagram.presentation, { geometryPolicy: "catalog-normalized" });
+  assert.deepEqual(proposal.diagram.viewport, source.viewport);
+  assert.ok(
+    proposal.changes.some(
+      ({ kind, targetIds }) => kind === "geometry" && targetIds.includes("board-viewport")
+    )
+  );
 });
 
 test("semantic 후보는 Terraform 참조가 가리키는 더 구체적인 Area로 유효한 기존 소속도 재판단한다", () => {
