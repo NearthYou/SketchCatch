@@ -2,10 +2,12 @@
 
 import { Eye, EyeOff, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useRef,
   useState
 } from "react";
 import {
@@ -18,6 +20,7 @@ import {
   type SignupRequest
 } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { requestSignupAvailability } from "../../lib/auth-api";
@@ -71,21 +74,6 @@ export function SignupForm() {
       router.replace("/dashboard");
     }
   }, [router, status]);
-
-  useEffect(() => {
-    if (!activeLegalDocumentKey) {
-      return;
-    }
-
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") {
-        setActiveLegalDocumentKey(null);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeLegalDocumentKey]);
 
   async function handleUsernameAvailabilityCheck(): Promise<void> {
     const normalizedUsername = normalizeUsername(username);
@@ -537,7 +525,29 @@ function LegalDocumentDialog({
   document: LegalDocument;
   onClose: () => void;
 }) {
-  return (
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+
+    if (!overlay || !dialog || !closeButton) return;
+
+    return setupModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: window.document,
+      onClose: () => onCloseRef.current(),
+      overlay
+    });
+  }, []);
+
+  return createPortal(
     <div
       className="authLegalOverlay"
       onMouseDown={(event) => {
@@ -545,12 +555,14 @@ function LegalDocumentDialog({
           onClose();
         }
       }}
+      ref={overlayRef}
       role="presentation"
     >
       <section
         aria-labelledby="auth-legal-dialog-title"
         aria-modal="true"
         className="authLegalDialog"
+        ref={dialogRef}
         role="dialog"
       >
         <header className="authLegalHeader">
@@ -562,6 +574,7 @@ function LegalDocumentDialog({
             aria-label="닫기"
             className="authLegalCloseButton"
             onClick={onClose}
+            ref={closeButtonRef}
             title="닫기"
             type="button"
           >
@@ -592,7 +605,8 @@ function LegalDocumentDialog({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    window.document.body
   );
 }
 

@@ -41,6 +41,17 @@ test("signup availability and legal actions state their exact purpose", () => {
   );
 });
 
+test("signup legal dialog uses the shared modal accessibility lifecycle", () => {
+  assert.match(signupFormSource, /import \{ setupModalAccessibility \}/);
+  assert.match(signupFormSource, /return setupModalAccessibility\(\{/);
+  assert.match(signupFormSource, /overlayRef/);
+  assert.match(signupFormSource, /dialogRef/);
+  assert.match(signupFormSource, /closeButtonRef/);
+  assert.match(signupFormSource, /createPortal\(/);
+  assert.match(signupFormSource, /window\.document\.body/);
+  assert.doesNotMatch(signupFormSource, /window\.addEventListener\("keydown"/);
+});
+
 test("signup fields stay in one narrow column in the requested order", () => {
   assert.doesNotMatch(signupPageSource, /\bwide\b/);
 
