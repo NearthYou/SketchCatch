@@ -21,8 +21,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Isolated the fitted React Flow capture clone inside a transparent paint-tree host, so `html-to-image` can still render the clone while the live Workspace never paints a duplicate Resource layer.
 - Removed the capture-source marker from the clone and the entire host after encoding, preventing nested fallback selection and leftover capture DOM.
-- TDD evidence: the duplicate-layer regression failed first, then the focused suite passed 5/5. Web typecheck, Web lint, and diff checks passed.
+- TDD evidence: the duplicate-layer regression failed first, the focused capture suite passed 13/13, and the complete Web suite passed 1,237/1,237. Root lint and typecheck passed; lint retains the pre-existing unused `setNow` warning in the API project.
 - Chrome verification observed one transparent capture host and one real capture source during save, zero hosts after save, a single visible Resource layer, and a non-empty 1280x720 Dashboard thumbnail. Browser errors and warnings were empty.
+- Root build remains blocked before Web compilation by the pre-existing missing `apps/web/.codegraph` path. No API, schema, migration, dependency, cloud, or deployment change was made.
 
 ### 2026-07-14 - Refresh a Dashboard Board thumbnail after browser-history restore
 
