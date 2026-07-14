@@ -14,7 +14,7 @@ export function startNotificationOutboxJob(
   const cleanupIntervalMs = options.cleanupIntervalMs ?? 24 * 60 * 60 * 1000;
   let stopped = false;
   let running = false;
-  let lastCleanupAt = 0;
+  let lastCleanupAt = Date.now();
   const tick = async () => {
     if (stopped || running) return;
     running = true;

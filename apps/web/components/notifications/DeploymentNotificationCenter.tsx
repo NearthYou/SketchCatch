@@ -256,6 +256,7 @@ function formatCreatedAt(value: string): string {
     month: "short",
     day: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
+    timeZone: "Asia/Seoul"
   }).format(new Date(value));
 }

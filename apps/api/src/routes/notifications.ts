@@ -183,7 +183,11 @@ async function streamNotifications(input: {
   pollTimer.unref();
   heartbeatTimer.unref();
   input.request.raw.on("close", close);
-  await writeNotifications();
+  try {
+    await writeNotifications();
+  } catch {
+    close();
+  }
   if (input.once) close();
 }
 

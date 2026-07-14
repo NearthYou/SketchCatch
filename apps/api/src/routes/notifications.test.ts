@@ -58,6 +58,24 @@ test("notification SSE sends authenticated events with no-store headers", async 
   assert.match(response.body, /"status":"succeeded"/);
 });
 
+test("notification SSE closes cleanly when its first post-hijack database read fails", async (t) => {
+  const service = createFakeService();
+  const failingService = {
+    ...service.value,
+    async listAfter() { throw new Error("database unavailable"); }
+  } as ReturnType<typeof createDeploymentNotificationService>;
+  const app = await buildApp(failingService);
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/notifications/stream?once=true"
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body, "");
+});
+
 test("Web Push routes expose only the public VAPID key and reject unsafe subscriptions", async (t) => {
   const service = createFakeService();
   const app = await buildApp(service.value);

@@ -55,6 +55,7 @@ function createPublicEndpointAgent(): Agent {
         return;
       }
       if (
+        !Array.isArray(addresses) ||
         addresses.length === 0 ||
         addresses.some(
           ({ address, family }) =>
