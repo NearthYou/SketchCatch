@@ -4,192 +4,49 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/ck/350-ai-diagram-fallback`.
-- Latest `origin/dev` at `f3ae778a` is merged, including the current dashboard UI/UX and Deployment/CI/CD console updates.
-- Strict `audience-live-check` Repository evidence produces a minimal ECS Fargate architecture without unsupported persistence, autoscaling, or AWS-native CI/CD resources.
-- Generated Terraform passes the Direct Deployment safety gate and `terraform validate` with AWS provider v6.54.0.
-- Real Plan and Apply created 33 resources, the current Repository API and web builds worked through CloudFront and ECS, and cleanup finished as `DESTROYED` with direct AWS absence checks.
+- Branch: `test/sw/378-deployment-sandbox-e2e`; issue #378 remains `in_progress` because the complete four-runtime matrix and service-side GitOps persistence did not pass.
+- Direct ECS infrastructure deployment `3f2e03ec-8b5c-46e3-af74-43d4e21c368e` created 19 resources and Direct application deployment `13f0f6c2-1890-46ce-8044-be754c810b5f` persisted release `5fcb826c-4bb4-45c8-8f59-3bae9790a82e`.
+- Direct evidence matched commit `9c4251baf058a8e0a6513236068d819fecfcdfd5`, ECR digest `3152546fc2cd37ce929dd63b20b161cae58124921fc27e7028a514db2f52a81e`, ECS task definition revision 2, and HTTPS health 200.
+- The API returned five project deployments, 808 infrastructure logs, 17 application logs, and five persisted notifications. CloudWatch returned real ECS CPU metrics. Web Push delivery was not claimed because no browser subscription existed.
+- Live Observation QR/session creation correctly returned 409 because the approved Terraform lacked the required custom hostname, ACM certificate, Route53 record, HTTPS ALB listener, and traffic outputs.
+- GitHub handoff `843323c9-c437-4727-b586-5801b1771f6e` created sandbox PR #1. GitHub Actions run `29324643997` attempt 2 succeeded against merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, ECR digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, ECS task definition revision 3, and HTTPS health 200.
+- GitOps service persistence did not pass: project pipeline refresh returned `stale=true` with no persisted runs because the successful manual run used the later workflow-fix merge SHA, while the handoff retained the cancelled initial infra run.
+- Static, Lambda, and EC2/ASG GitOps were not started within the hard deadline; their required project targets and runtime infrastructure were absent.
+- Application cleanup failed closed because the active GitOps revision 3 no longer matched the Direct release cleanup manifest's revision 2. Infrastructure destroy reached `DESTROYED`; CodeBuild, ECR, CloudWatch log groups, test S3 buckets and versions, CodeConnection, ALB/target groups, ECS cluster/task definitions, CloudFront, temporary OIDC, and the temporary operator policy all verify at zero.
+- Focused changed-path tests pass 89/89 plus workflow tests 9/9. Workspace lint, typecheck, and build pass; the full API suite retains known unrelated failures and one now-corrected deployment-plan expectation.
 
 ## Session Record
 
-### 2026-07-14 - Address signup fallback review
+### 2026-07-14 - Real Direct ECS and bounded GitOps validation
 
-- Replaced nullish fallback with falsy fallback for password and confirmation feedback so a future empty-string Caps Lock helper result cannot suppress validation copy.
-- Added a focused regression for both fallback chains. Verification passed: focused signup tests 9/9, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The local environment does not provide the `gh` executable, so the GitHub review conversation must be resolved manually after the pushed commit is visible.
+- Completed a real Direct ECS infrastructure/app release with immutable commit, digest, task revision, persisted API logs/history/notifications, CloudWatch metrics, and repeated HTTPS 200 evidence.
+- Fixed practice-profile ECS resource admission, minimal CodeBuild permissions, Bash buildspec execution, and invalid GitHub expression quoting with focused regression tests.
+- Created and merged real sandbox GitOps PRs, applied repository variables and verified GitHub OIDC trust, and completed one real ECS GitHub Actions deployment.
+- Preserved fail-closed behavior for QR, CI persistence, and cleanup mismatches instead of marking partial evidence as complete.
 
-### 2026-07-14 - Compact stable signup field spacing
+### 2026-07-14 - Integrate latest dev for sandbox continuation
 
-- Reduced only the signup form row gap from 20px to 8px, preserving the reserved validation slots that prevent fields and the centered card from shifting during input.
-- Verification passed: the focused spacing regression failed before the fix and passed 8/8 afterward, Web 1,182/1,182, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The next action is manual pixel confirmation only if another spacing adjustment is requested.
+- Merged `origin/dev` at `847a8206` into the Issue #378 worktree and preserved the sandbox recovery behavior.
+- Resolved only `agent-progress.md` and `session-handoff.md`; current Issue #378 evidence remains the active state and unrelated dev session records remain archived.
+- Focused merged-path verification passed: 30 API deployment/AWS connection tests and 23 Web deployment action tests.
 
-### 2026-07-14 - Stabilize signup validation layout
+### 2026-07-14 - Live sandbox Direct execution and recovery hardening
 
-- Reserved a persistent feedback slot below the username, password, password confirmation, and email controls so validation state changes no longer insert new layout rows.
-- Replaced stacked password-policy errors with one prioritized message in the existing feedback slot while preserving Caps Lock and mismatch feedback and accessible descriptions.
-- Verification passed: the red-capable signup layout regression failed before the fix and passed 7/7 afterward, the full Web test command passed, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, live `/signup` HTTP 200, and API health HTTP 200. In-app browser measurement remained unavailable because browser initialization failed with `Cannot redefine property: process`; the next action is only manual pixel confirmation if additional tuning is requested.
+- Fixed invalid StepScaling `cooldown`, preserved cleanup-capable apply/destroy failure stages after destroy-plan errors, and added one bounded re-login retry for long-running smoke requests.
+- Added explicit scope evidence and a 10-second sandbox target-group deregistration delay; focused tests and Terraform safety validation pass.
+- Recovered and destroyed a partial failed apply, then completed all three labeled Direct runs and verified provider cleanup.
+- Did not claim application release acceptance: `application_releases` remained empty after successful application/full-stack Terraform runs.
+- GitOps four-runtime, rollback, QR session, Web Push provider delivery, and final combined report remain blocked on an installed GitHub App and on the missing Direct application release execution path.
 
-### 2026-07-14 - Compact authentication card chrome
+### 2026-07-14 - Project deployment sandbox E2E gate
 
-- Reduced the shared login, signup, and password-reset card top and bottom spacing: vertical card padding, brand-to-title spacing, title-to-form spacing, and footer switch spacing.
-- Preserved card width, form control spacing, field order, and safe viewport centering while applying a stronger compact adjustment below 640px.
-- Verification passed: focused auth tests 12/12, Web full 1,180/1,180 including password-reset route coverage, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The next action is visual confirmation in the running local Web server if additional pixel tuning is requested.
-
-### 2026-07-14 - Simplify the signup page brand and consent layout
-
-- Removed the signup top brand bar and optional eyebrow/description copy, then reused the centered card brand with its `/` home link.
-- Narrowed the signup card to the single-column auth width, kept the requested name, username, password, password confirmation, and email order, and moved each legal-document view action beside its agreement label.
-- Verification passed: focused signup tests 6/6, Web full 1,179/1,179, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and live `/signup` HTTP 200 with both removed copy strings absent. The in-app browser binding still failed to initialize, so a fresh visual screenshot was not captured; the next action is browser confirmation only if further pixel tuning is requested.
-
-### 2026-07-14 - Center the login card in the viewport
-
-- Applied a login-only centered auth-page variant so the card is vertically and horizontally centered without changing the topbar-based signup and password-reset layouts.
-- Used safe grid alignment with balanced responsive padding so short viewports keep the card reachable instead of clipping its top edge.
-- Verification passed: focused login tests 5/5, Web full 1,176/1,176, `pnpm lint`, `pnpm typecheck`, `pnpm build`, live `/login` HTTP 200, and live API health HTTP 200. The existing in-app browser binding was unavailable for a fresh screenshot; the next action is visual confirmation in the already-running local Web server if further pixel tuning is requested.
-
-### 2026-07-14 - Simplify the login page brand entry
-
-- Removed the `/login` top brand bar and optional eyebrow/description copy, then placed the shared SketchCatch brand at the top-left of the login card with a `/` home link.
-- Added a focused login-shell regression contract and verified the live `/login` HTML contains the home brand link while omitting both removed text blocks.
-- Verification passed: focused login tests 4/4, Web full 1,175/1,175, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and harness. The in-app browser runtime could not initialize, and the full API test process stopped producing output after the Web suite completed, so it was terminated without an API-suite result.
-
-### 2026-07-14 - Local development stack restart
-
-- Stopped the Web and API development processes, removed the local PostgreSQL and Redis containers without deleting their data volumes, and started the full stack again in DB-first order.
-- Applied runtime database migrations successfully and verified PostgreSQL and Redis are healthy.
-- Verified `http://localhost:3000`, `http://localhost:4000/health`, and `http://localhost:4000/health/db` all return HTTP 200. The requested development servers remain active; no source behavior, cloud resource, GitHub state, or production database was changed.
-
-### 2026-07-14 - Integrate latest dev UI
-
-- Merged `origin/dev` at `f3ae778a`, preserving the dev UI decisions while retaining the feature branch's Repository and automatic-layout behavior.
-- Increased automatic support-lane spacing so Security Group scope captions and routed edges do not intersect resources; kept compactness, overlap, containment, and routing assertions active.
-- Restored the AI start transcript scrollbar as a separate UI commit.
-- Verification: focused workspace diagram adapter tests (39/39), `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed. No Terraform, deployment, or cloud mutation was performed.
-
-### 2026-07-14 - Address PR #390 review feedback
-
-- Added Repository fallback draft payload preservation for dynamic follow-up question answers, including question IDs, prompts, and confirmed answers.
-- Added API schema support for the optional template fallback contract and rejected template fallback requests that omit Repository Analysis context.
-- Finished the existing latest-`dev` merge resolution in this worktree so the review fix can be committed and pushed.
-- Verification: focused public Repository recommendation test, focused API template fallback route test, `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed after clearing stale generated `.next/types`.
-- No Terraform apply, deployment, cloud mutation, GitHub review reply, or thread resolution was performed.
-
-### 2026-07-14 - Add AI start chat scrollbar
-
-- Added a dedicated always-visible scrollbar rail to the `/workspace/ai` chat transcript and fixed the conversation grid height constraint so the transcript owns overflow instead of stretching the page.
-- Verification before merge: `pnpm --filter @sketchcatch/web lint` and `pnpm harness:check` passed in the active `feat/ck/350-ai-diagram-fallback` worktree. No API, Terraform, deployment, or cloud mutation was performed for this UI change.
-
-### 2026-07-14 - Structural AI diagram auto-layout
-
-- Replaced fixed draft slots with a deterministic graph, containment, repeated-structure, support-lane, candidate-scoring layout engine; isolated AWS role and Area-size knowledge behind the first provider mapping.
-- Added shared obstacle-safe route segments and quality metrics for resource overlap, sibling Area overlap, parent boundaries, edge crossings, resource and Area-title intersections, backward flow, route length, empty space, portrait canvas shape, repeated alignment, and main-flow continuity.
-- Preserved saved resource positions/sizes/locks and explicit Template positions; a saved Area keeps its position and only grows when an added child would cross its boundary.
-- Verified full resource identity, parameters, containment, and edge semantics are unchanged by layout; added a large failure-like multi-AZ VPC fixture plus Serverless and patch regressions.
-- Chrome verification passed the 11-node Serverless fixture and the 18-resource VPC/ALB/Fargate/Data fixture with separate CI/CD, IAM, and Observability lanes. The live `/workspace/ai` generation request returned 503, so saved patch behavior is integration-tested but not claimed as live-screen verified.
-- Verification: all 60 focused tests, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed; lint retains the existing Live Observation `setNow` warning. The full Web run passed 1,123/1,124 with the unrelated Korean day-period locale baseline producing `AM` instead of `오전`.
-- No Terraform, deployment, cloud, push, or PR mutation was performed. Next action: restore the live AI endpoint and repeat the saved-Board patch screen check when the API is available.
-
-### 2026-07-14 - Catalog diagram layout references
-
-- Reviewed all 23 good and 9 failure images under `docs/diagram-layout-reference`.
-- Added a linked README entry for every image with a reusable layout observation or a concrete readability failure.
-- Omitted source metadata so the catalog focuses only on reusable layout observations and concrete readability failures.
-- Verification: image-to-entry coverage is 32/32 and `pnpm harness:check` passed. Documentation only; no code, Terraform, deployment, or cloud mutation changed.
-
-### 2026-07-14 - Refine Repository analysis controls
-
-- Renamed the Repository start heading to `GitHub Repository` and the handoff connection section to `CI/CD Connection` in Korean UI copy.
-- Prevented branch selection from colliding with URL analysis, replaced the large back action with a 32px icon control above the selected Template, and reduced question choices to compact content-width controls.
-- Aligned question hover and selected visuals while retaining persistent radio state and accessible focus treatment.
-- Chrome verification confirmed 12px gaps between URL, branch, and analysis controls; a 32x32 back control; 88x38 boolean choices; and matching hover/selected colors.
-- Verification: focused Repository start regression, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Lint retains the pre-existing Live Observation `setNow` warning.
-
-### 2026-07-13 - Clarify strict Repository Fargate network placement
-
-- Replaced public task placement with two private app subnets while keeping the internet-facing ALB in the two public subnets.
-- Added one cost-conscious NAT egress path so private tasks can pull ECR images and deliver CloudWatch logs without public IP assignment.
-- Nested the ALB under its public-subnet security group and the visible Fargate runtime under its private-subnet task security group.
-- Replaced ambiguous ECR and CloudWatch edges with explicit image-pull and `awslogs` labels, and labeled the SG-to-SG TCP 8080 rule.
-- Added strict validation and regression assertions for subnet selection, public IP assignment, NAT count, containment, security-group rules, and non-duplicated Browser ingress.
-- Verification: strict Repository regression and all 58 Architecture Draft tests passed; API typecheck passed; direct API-to-Board-to-Terraform conversion produced zero Terraform syntax diagnostics.
-- Risk: Chrome visual verification was blocked by the expired local SketchCatch login. No deployment, Terraform apply/destroy, migration, or cloud mutation was performed.
-
-### 2026-07-13 - Select analyzed public repository branches
-
-- Removed the free-text branch field from the initial Repository URL start form.
-- Resolved the first analysis revision from GitHub `default_branch`, with `main`, `master`, and first-branch fallbacks when metadata is unavailable.
-- Added paginated public branch discovery to the analysis response and exposed it through the designed, keyboard-accessible shared SelectMenu after the first analysis.
-- Reanalysis now sends the selected branch and refreshes evidence, recommendations, and the selected revision for that branch.
-- Chrome verification confirmed a URL-only first form, `master` auto-selection for `octocat/Hello-World`, all three returned branches, and successful reanalysis on `test`.
-- Verification: 3 focused API route tests, 20 focused Web tests, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning in the Live Observation store contract.
-
-### 2026-07-13 - Route Repository fallback into AI diagram chat
-
-- Added the `원하는 구성이 없나요? AI로 새 설계 만들기` action below public Repository recommendations.
-- Preserved the current project identity while routing to the dedicated pre-Board `/workspace/ai` conversation.
-- Reused the Repository project on approval instead of creating a duplicate project; AI output remains a preview until the user accepts `Board에 적용`.
-- Chrome verification confirmed the CTA, project-preserving `/workspace/ai` URL, dedicated conversation, empty PREVIEW, and absence of Board controls.
-- Verification: 3 focused Web regressions, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning in the Live Observation store contract.
-
-### 2026-07-13 - Constrain Repository diagrams to authoritative evidence
-
-- Reproduced the `audience-live-check` Repository flow producing an over-inferred ECS board and a later `422` during strict regeneration.
-- Added structured Repository architecture facts for static S3/CloudFront delivery, ECS Fargate, ECR, ALB, CloudWatch, GitHub Actions, TLS, one task, Docker health checks, exclusions, and missing IaC definitions.
-- Made strict Repository evidence rebuild the Architecture Intent Plan and final ECS diagram deterministically instead of inheriting generic private subnet, NAT, autoscaling, AWS-native CI/CD, persistence, realtime, or authentication assumptions.
-- Configured the evidence-backed API contract as ALB HTTPS -> one ECS Fargate service on port 8080 with `/health`, with GitHub Actions represented as an external actor.
-- Separated AWS managed services from the VPC boundary and removed redundant delivery edges; added adapter coverage for non-overlapping managed-service and VPC areas.
-- Removed candidate-ranking prose and contradictory broad signals from strict AI prompts so unsupported recommendations cannot become architecture requirements.
-- Chrome verification before the final layout adjustment confirmed successful generation with 26 nodes, no `422`, and no forbidden NAT, CodePipeline, CodeBuild, autoscaling, RDS, Redis, WebSocket, or Cognito resources. The Chrome login expired before the final post-layout screenshot; deterministic adapter coverage verifies the managed-service/VPC separation.
-- Verification: 58 Architecture Draft tests, 42 Web recommendation/adapter tests, 8 Repository analysis tests, the `.git` route regression, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed. Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
-
-### 2026-07-13 - Eliminate generated ECS board diagnostics
-
-- Reproduced six diagnostics on the generated `audience-live-check` ECS Fargate board: two Terraform round-trip warnings and four false Subnet/VPC placement warnings.
-- Allowed bare Terraform resource addresses only in `depends_on`, aligned nested-block parsing with the generator's shared generic nested-block contract, and preserved existing Diagram area parents during Availability Zone sync.
-- Updated architecture containment checks to accept matching VPC ancestors or full geometric containment, covering the single-parent VPC/AZ representation without hiding missing references or partial overlaps.
-- Added regressions for ECS dependencies, Application Auto Scaling nested metrics, VPC parent preservation, nested area ancestors, and AZ-grouped Subnets.
-- Chrome verification on the same saved project: Terraform diagnostics `2 -> 0`, Architecture diagnostics `4 -> 0`, total issue badge `6 -> 0`.
-- Verification: 57 focused API Terraform tests, 40 focused Web architecture tests, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
-
-### 2026-07-13 - Merge latest dev into AI diagram fallback branch
-
-- Merged `origin/dev` at `885c1a09`, including Template Design contracts and the separated Direct Deployment/CI/CD console.
-- Combined load-balancer exclusion sizing with Repository CI/CD IAM role sizing and kept strict evidence authoritative over newly expanded Template resources.
-- Preserved path-specific CloudFront/Kubernetes nested blocks and Resource AZ, Design AZ, physical containment, and conflicting-VPC diagnostics.
-- Removed an automatic-merge duplicate in Terraform AZ synchronization while retaining existing Diagram parent hierarchy.
-- Verification: 78 focused merge regressions, `pnpm harness:check`, `pnpm typecheck`, `pnpm lint`, `pnpm build`, and `git diff --check` passed. Lint retains the pre-existing `setNow` warning.
-- Risk: migrations `0032` and `0033` were not applied, and no cloud or deployment mutation was performed.
-
-### 2026-07-13 - Repository-specific AI recommendation profiles
-
-- Reproduced that unrelated Docker repositories received the same ECS/EKS candidates and 87%/67% scores because container candidates and baseline confidence were fixed before the AI call.
-- Added repository topology profiling so single-service containers and frontend/backend/relational-database multi-service repositories receive different supported candidates, deterministic confidence, and evidence-specific reasons.
-- Removed deterministic confidence and canned reasons from the OpenAI input; the model now receives the repository profile plus supported Template descriptions and calculates confidence independently.
-- Added NestJS package detection and FastAPI/uvicorn Docker evidence detection so backend Application Units are preserved.
-- Bumped the public Repository analysis cache namespace to invalidate stale recommendations.
-- Verified real API results: `Jungle_DB_API_W8` receives ECS/EKS recommendations based on local CSV persistence, while `Jungle_AI_Board` detects FastAPI, NestJS, React/Vite and receives three-tier, ECS, and EKS candidates with distinct scores and reasons.
-
-### 2026-07-13 - Template-first Amazon Q Repository diagrams
-
-- Replaced deterministic public Repository board creation with the real `/ai/architecture-draft` Amazon Q path.
-- Kept the selected Template as the fixed core, merged only compatible answer-driven resources, and made conflicting runtime preferences advisory.
-- Added repository-inferred Architecture Draft context without inventing unsupported upload, realtime, or certificate requirements.
-- Reflowed merged root resources into topology lanes while preserving resource identity, Terraform type, parameters, and edges.
-- Flattened Template Terraform values into resource config and resolved all `@ref` and `@address` placeholders to final Terraform addresses.
-- Removed incompatible CodeDeploy Server resources from non-EC2 Templates.
-- Added semantic Template merging for equivalent public network and ECS role resources while preserving distinct private DB, runtime, and CI/CD resources.
-- Added CodeBuild and CodePipeline service roles and stable Terraform names for the CI/CD dependency chain.
-- Live verification for `chaekang/Jungle_DB_API_W8`: relational/API/direct-host answers produced an Amazon Q ECS Fargate draft with 49 Board resources and RDS, no EC2, no upload resources, no CodeDeploy Server resources, no unresolved Template placeholders, and zero dangling references across 83 Terraform references. The no-database/managed variant kept ECS and omitted RDS.
-- Verification: 4 focused API regressions, 41 focused Web regressions, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` passed. Lint retains the pre-existing unused `setNow` warning in the Live Observation store contract.
-
-### 2026-07-13 - Fix `.git` public Repository URL evidence loss
-
-- Reproduced `https://github.com/whiskend/audience-live-check.git` returning empty evidence because public GitHub parsing kept the `.git` suffix and queried a nonexistent repository.
-- Normalized public GitHub repository URLs before tree/raw evidence fetches and bumped the analysis cache namespace to avoid stale empty results.
-- Added fallback UI copy so legacy comparison candidates never render a blank recommendation reason.
-- Chrome verification: re-running URL analysis now selects ECS Fargate first with populated reasons and CI/CD enabled for the sample repository.
-- Verification: `pnpm --dir apps/api exec tsx --test --test-name-pattern "clone URLs ending in .git" src/routes/ai.test.ts`; `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts`; `pnpm harness:check`; `pnpm lint`; `pnpm typecheck`; `pnpm build`.
-- Note: running the full `apps/api/src/routes/ai.test.ts` file still shows two unrelated baseline failures in repository-template and template-selection assertions.
+- Added a fail-closed CLI that compares local AWS STS identity with the approved account and the sandbox API's live verified AWS Connection account/region.
+- Denied production AWS/API/GitHub targets and required explicit mutation approval, cleanup ownership, and a positive budget.
+- Added strict evidence correlation for Direct three-scope and GitOps four-runtime completion, CI/release/Output identity, per-runtime rollback, QR/CloudWatch, Inbox/Web Push, Destroy, and ECR/S3/CodeBuild/CloudWatch cleanup.
+- Verification passed 18 focused tests, lint, typecheck, build, and harness. Live preflight later passed with the approved sandbox configuration.
 
 ## Next Action
 
-- Restore the live AI endpoint and repeat the saved-Board patch screen check when the API is available; no layout implementation continuation is required.
+- Preserve the verified zero-resource cleanup result; recreate sandbox control-plane resources only for a new approved run.
+- Fix GitOps run-to-handoff correlation so a workflow-fix commit can still persist CI logs and release history without accepting unrelated runs.
+- Provision dedicated Static, Lambda, and EC2/ASG project targets before rerunning the remaining matrix; add a real custom domain/ACM/Route53 target before QR verification.

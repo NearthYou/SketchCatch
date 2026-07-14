@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   AiPreDeploymentAnalysisResult,
@@ -59,6 +59,11 @@ import {
   restoreTerraformLockFile,
   uploadTerraformLockFile
 } from "./terraform-lock-file-workspace.js";
+import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./aws-codebuild-direct-application-release-gateway.js";
+import {
+  prepareDirectApplicationRelease as defaultPrepareDirectApplicationRelease,
+  type DirectApplicationReleaseRepository
+} from "./direct-application-release-service.js";
 
 const defaultPlanFileName = "tfplan";
 
@@ -84,6 +89,21 @@ export type RunDeploymentPlanOptions = {
   planArtifactStorage?: DeploymentPlanArtifactStorage;
   generatePlanArtifactId?: () => string;
   readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
+  prepareApplicationArtifact?: (input: {
+    deployment: DeploymentRecord;
+    accessContext: ProjectAccessContext;
+    abortSignal?: AbortSignal;
+    repository: DeploymentRepository;
+  }) => Promise<PreparedApplicationReleaseSummary | null>;
+  writeApplicationPlanFile?: (filePath: string, content: string) => Promise<void>;
+};
+
+export type PreparedApplicationReleaseSummary = {
+  releaseId: string;
+  runtimeTargetKind: NonNullable<DeploymentRecord["targetKind"]>;
+  version: string;
+  commitSha: string;
+  artifactDigest: string;
 };
 
 export type RunDeploymentPlanResult = {
@@ -118,6 +138,9 @@ export async function runDeploymentPlan(
     options.planArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
   const generatePlanArtifactId = options.generatePlanArtifactId ?? randomUUID;
   const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
+  const prepareApplicationArtifact =
+    options.prepareApplicationArtifact ?? defaultPrepareApplicationArtifact;
+  const writeApplicationPlanFile = options.writeApplicationPlanFile ?? writeFile;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -138,6 +161,19 @@ export async function runDeploymentPlan(
       repository
     );
     deploymentId = deployment.id;
+
+    const preparedApplicationRelease =
+      deployment.scope !== "infrastructure"
+        ? await prepareApplicationArtifact({
+        deployment,
+        accessContext: input.accessContext,
+        repository,
+        ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+          })
+        : null;
+    if (deployment.scope !== "infrastructure" && !preparedApplicationRelease) {
+      throw new DeploymentConflictError("Application artifact preparation did not return a release");
+    }
 
     const [artifact, awsConnection] = await Promise.all([
       requireDeploymentTerraformArtifact(deployment, repository),
@@ -195,6 +231,25 @@ export async function runDeploymentPlan(
         : {}),
       terraformFiles: preDeploymentTerraformFiles
     });
+
+    if (deployment.scope === "application") {
+      return await saveApplicationOnlyPlan({
+        deployment,
+        artifact,
+        awsConnection,
+        terraformArtifactSha256,
+        preparedApplicationRelease: preparedApplicationRelease!,
+        findings: preDeploymentAnalysis.findings,
+        ...(input.startedFromStatus ? { startedFromStatus: input.startedFromStatus } : {}),
+        workspace,
+        accessContext: input.accessContext,
+        planArtifactStorage,
+        generatePlanArtifactId,
+        writeApplicationPlanFile,
+        repository,
+        terraform
+      });
+    }
 
     const [awsCredentials] = await Promise.all([
       prepareAwsCredentialsForPlan({
@@ -448,6 +503,173 @@ export async function runDeploymentPlan(
   } finally {
     await workspace?.cleanup();
   }
+}
+
+async function saveApplicationOnlyPlan(input: {
+  deployment: DeploymentRecord;
+  artifact: Awaited<ReturnType<typeof requireDeploymentTerraformArtifact>>;
+  awsConnection: AwsConnection;
+  terraformArtifactSha256: string;
+  preparedApplicationRelease: PreparedApplicationReleaseSummary;
+  findings: AiPreDeploymentAnalysisResult["findings"];
+  startedFromStatus?: DeploymentStatus;
+  workspace: PreparedTerraformWorkspace;
+  accessContext: ProjectAccessContext;
+  planArtifactStorage: DeploymentPlanArtifactStorage;
+  generatePlanArtifactId: () => string;
+  writeApplicationPlanFile: (filePath: string, content: string) => Promise<void>;
+  repository: DeploymentRepository;
+  terraform: RunDeploymentPlanResult["terraform"];
+}): Promise<RunDeploymentPlanResult> {
+  if (!input.awsConnection.accountId) {
+    throw new DeploymentNotFoundError("Verified AWS account is missing for application release");
+  }
+  const wasPreMarkedRunning =
+    input.deployment.status === "RUNNING" && input.startedFromStatus !== undefined;
+  if (!wasPreMarkedRunning) {
+    const runningDeployment = await input.repository.markDeploymentPlanRunning(input.deployment.id);
+    if (!runningDeployment) {
+      throw new DeploymentConflictError("Deployment validation could not be started");
+    }
+  }
+  const planArtifactId = input.generatePlanArtifactId();
+  const planFilePath = join(input.workspace.workdir, "application-release-plan.json");
+  const planSummary = evaluateDeploymentSafetyGate({
+    operation: "apply",
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    liveProfile: input.deployment.liveProfile,
+    findings: input.findings,
+    unsupportedResourceTypes: []
+  });
+  await input.writeApplicationPlanFile(
+    planFilePath,
+    JSON.stringify({
+      schemaVersion: 1,
+      kind: "application_release_plan",
+      deploymentId: input.deployment.id,
+      projectId: input.deployment.projectId,
+      ...input.preparedApplicationRelease
+    })
+  );
+  let uploadedPlanArtifact: Awaited<
+    ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
+  > | null = null;
+  try {
+    let sequence = await input.repository.getNextDeploymentLogSequence(input.deployment.id);
+    const upload = await runLoggedDeploymentOperation({
+      deploymentId: input.deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "plan",
+      label: "application release plan artifact upload",
+      repository: input.repository,
+      operation: () =>
+        input.planArtifactStorage.uploadDeploymentPlanArtifact({
+          deploymentId: input.deployment.id,
+          planArtifactId,
+          planFilePath
+        })
+    });
+    uploadedPlanArtifact = upload.result;
+    sequence = upload.sequence;
+    const save = await runLoggedDeploymentOperation({
+      deploymentId: input.deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "plan",
+      label: "application release plan save",
+      repository: input.repository,
+      operation: () =>
+        input.repository.saveDeploymentPlan({
+          deploymentId: input.deployment.id,
+          planArtifact: {
+            id: planArtifactId,
+            deploymentId: input.deployment.id,
+            terraformArtifactId: input.artifact.id,
+            terraformArtifactSha256: input.terraformArtifactSha256,
+            operation: "apply",
+            objectKey: uploadedPlanArtifact!.objectKey,
+            sha256: uploadedPlanArtifact!.sha256,
+            accountId: input.awsConnection.accountId!,
+            region: input.awsConnection.region
+          },
+          planSummary,
+          isBlocked: false,
+          blockedBy: null,
+          blockedReason: null
+        })
+    });
+    if (!save.result) throw new DeploymentNotFoundError("Deployment not found");
+    return { deployment: save.result, terraform: input.terraform };
+  } catch (error) {
+    if (uploadedPlanArtifact) {
+      await cleanupUploadedPlanArtifact({
+        deploymentId: input.deployment.id,
+        accessContext: input.accessContext,
+        objectKey: uploadedPlanArtifact.objectKey,
+        planArtifactStorage: input.planArtifactStorage,
+        repository: input.repository
+      }).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+async function defaultPrepareApplicationArtifact(input: {
+  deployment: DeploymentRecord;
+  accessContext: ProjectAccessContext;
+  abortSignal?: AbortSignal;
+  repository: DeploymentRepository;
+}): Promise<PreparedApplicationReleaseSummary | null> {
+  const release = await defaultPrepareDirectApplicationRelease(
+    {
+      deploymentId: input.deployment.id,
+      userId: input.accessContext.userId,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+    },
+    requireDirectApplicationReleaseRepository(input.repository),
+    createAwsCodeBuildDirectApplicationReleaseGateway(),
+    randomUUID
+  );
+  return release
+    ? {
+        releaseId: release.id,
+        runtimeTargetKind: release.runtimeTargetKind,
+        version: release.version,
+        commitSha: release.commitSha,
+        artifactDigest: release.artifactDigest
+      }
+    : null;
+}
+
+function requireDirectApplicationReleaseRepository(
+  repository: DeploymentRepository
+): DirectApplicationReleaseRepository {
+  if (
+    !repository.findContext ||
+    !repository.findRelease ||
+    !repository.savePreparedRelease ||
+    !repository.saveCompletedRelease ||
+    !repository.saveFailedRelease ||
+    !repository.resetReleaseForRetry
+  ) {
+    throw new DeploymentConflictError("Direct application release repository is unavailable");
+  }
+  return {
+    findContext: repository.findContext.bind(repository),
+    findRelease: repository.findRelease.bind(repository),
+    savePreparedRelease: repository.savePreparedRelease.bind(repository),
+    saveCompletedRelease: repository.saveCompletedRelease.bind(repository),
+    saveFailedRelease: repository.saveFailedRelease.bind(repository),
+    resetReleaseForRetry: repository.resetReleaseForRetry.bind(repository)
+  };
 }
 
 async function canReuseDeploymentPlanArtifact(input: {

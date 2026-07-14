@@ -559,6 +559,7 @@ function createEcsRuntimeConfig(overrides: Record<string, unknown> = {}) {
 function createLambdaRuntimeConfig(overrides: Record<string, unknown> = {}) {
   return {
     runtimeTargetKind: "lambda",
+    codeBuildProjectName: "sketchcatch-lambda-build",
     functionLogicalId: "ApiFunction",
     functionName: "sketchcatch-api",
     aliasName: "live",
@@ -572,6 +573,7 @@ function createLambdaRuntimeConfig(overrides: Record<string, unknown> = {}) {
 function createEc2AsgRuntimeConfig(overrides: Record<string, unknown> = {}) {
   return {
     runtimeTargetKind: "ec2_asg",
+    codeBuildProjectName: "sketchcatch-ec2-build",
     codeDeployApplicationName: "sketchcatch-api",
     codeDeployDeploymentGroupName: "sketchcatch-api-asg",
     autoScalingGroupName: "sketchcatch-api-asg",
@@ -583,6 +585,7 @@ function createEc2AsgRuntimeConfig(overrides: Record<string, unknown> = {}) {
 function createStaticSiteRuntimeConfig(overrides: Record<string, unknown> = {}) {
   return {
     runtimeTargetKind: "static_site",
+    codeBuildProjectName: "sketchcatch-static-build",
     hostingBucketName: "sketchcatch-static-releases",
     cloudFrontDistributionId: "E1234567890ABC",
     cloudFrontOriginId: "static-origin",

@@ -31,6 +31,10 @@ import {
   touchUpdatedAt
 } from "../db/schema.js";
 import { maskDeploymentMessage } from "./log-masking.js";
+import {
+  createPostgresDirectApplicationReleaseRepository,
+  type DirectApplicationReleaseRepository
+} from "./direct-application-release-service.js";
 
 export type DeploymentRecord = typeof deployments.$inferSelect;
 export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
@@ -298,7 +302,7 @@ export type DeploymentRepository = {
   ): Promise<DeploymentLogRecord[]>;
   listDeployedResources(deploymentId: string): Promise<DeployedResourceRecord[]>;
   listTerraformOutputs(deploymentId: string): Promise<TerraformOutputRecord[]>;
-};
+} & Partial<DirectApplicationReleaseRepository>;
 
 export class DeploymentNotFoundError extends Error {
   constructor(message: string) {
@@ -353,7 +357,9 @@ function createTerminalDeploymentValues(
 }
 
 export function createPostgresDeploymentRepository(db: Database): DeploymentRepository {
+  const directReleaseRepository = createPostgresDirectApplicationReleaseRepository(db);
   return {
+    ...directReleaseRepository,
     async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
         .select()

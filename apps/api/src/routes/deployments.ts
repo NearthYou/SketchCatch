@@ -1594,7 +1594,7 @@ function requireDeploymentCanStartDestroyPlan(deployment: DeploymentRecord): voi
     throw new DeploymentConflictError("Deployment destroy plan is already running");
   }
 
-  if (!deployment.stateObjectKey) {
+  if (deployment.scope !== "application" && !deployment.stateObjectKey) {
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 

@@ -4,35 +4,32 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `feat/ck/350-ai-diagram-fallback` is ready for a final latest-`dev` merge after the feature commit.
-- Repository URL analysis resolves the GitHub default branch, exposes fetched branches through the shared SelectMenu, and reanalyzes the selected revision.
-- Strict `audience-live-check` evidence targets a single ECS Fargate task in private app subnets behind an internet-facing ALB in public subnets, without unsupported persistence or scaling assumptions.
-- One cost-conscious NAT path supports private ECR image pulls and CloudWatch log delivery; the diagram states the single-AZ egress tradeoff.
-- Board containment and edge labels explicitly show ALB SG ingress, Task SG TCP 8080, ECR image pull, and ECS `awslogs` delivery.
-- The latest Template Design contracts and separated Direct Deployment/CI/CD console from `dev` are present.
-- Direct Deployment created 29 AWS resources, served ALB `/health` with HTTP 200, and finished cleanup as `DESTROYED`.
-- AWS Console confirms the deployment-owned CloudFront, ECS, ALB, ECR, S3, CloudWatch, IAM, VPC, and EIP resources are absent; the NAT row is `Deleted` history only.
+- Direct infrastructure/app live deployment passed with exact commit, ECR digest, ECS task revision, persisted logs/release/history/notifications, CloudWatch metrics, and HTTPS 200 evidence.
+- GitHub Actions ECS deployment passed on run `29324643997` attempt 2 with merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, and task definition revision 3.
+- GitOps API persistence remains broken: refresh returned stale with no runs and retained the cancelled initial infra run because the successful app run belonged to the later workflow-fix merge.
+- QR remains correctly blocked by the missing custom-domain/ACM/Route53 traffic contract. Web Push provider delivery was not claimed without a browser subscription.
+- Static, Lambda, and EC2/ASG runtimes were not started. Infrastructure reached `DESTROYED`, and all issue-scoped runtime/control-plane resource queries returned zero, including three deleted ECS task definitions.
 
 ## Verification
 
-- Focused verification passed: 15 deployment Plan/Destroy tests, 23 deployment action tests, 92 Terraform diagnostics/sync tests, and 25 virtual-file/palette pipeline tests.
-- Latest `origin/dev` is merged; focused integration tests plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Focused changed-path tests pass 89/89 and GitOps workflow tests pass 9/9.
+- Workspace lint, typecheck, and build pass after the latest fixes.
+- Run the final harness check after cleanup and documentation updates.
 
 ## Changes This Session
 
-- Merged the latest `origin/dev` and preserved both the branch's Repository/Fargate changes and `dev` deployment/template behavior.
-- Combined load-balancer exclusion sizing with CI/CD IAM role sizing.
-- Preserved ECR/CloudFront nested blocks and Resource AZ, Design AZ, and physical VPC containment regressions.
-- Clarified strict Repository public/private subnet placement, SG boundaries, private egress, and operational edge labels.
-- Prevented visual `tier` metadata from leaking into `aws_subnet` HCL.
-- Gave Plan and Destroy Plan the 15-minute deployment timeout and made cleanup retryable after Plan failure.
-- Preserved generated Terraform outputs through file splitting, validation, and Diagram sync.
+- Added the practice-profile ECS resource subset and least-privilege Direct CodeBuild permissions.
+- Forced Direct and GitOps CodeBuild buildspecs to Bash and corrected GitHub expression string quoting for all four runtime workflows.
+- Executed real Direct and ECS GitOps paths and recorded exact partial-completion blockers.
 
 ## Broken Or Unverified
 
-- The live deployment artifact was generated before output preservation was fixed, so its output table was empty. Focused pipeline tests now prove outputs remain in `main.tf` for future artifacts.
-- No unrelated AWS resources were deleted.
+- Application cleanup failed closed because active GitOps task definition revision 3 did not equal the Direct cleanup manifest's revision 2.
+- GitOps CI log/release persistence, Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
+- Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
 
 ## Best Next Action
 
-- Recreate the strict Repository board before its next deployment so the new Terraform artifact includes preserved outputs.
+- Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
+- Repair GitOps run correlation and persist the successful ECS run through the normal API before claiming ECS GitOps complete.
+- Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.

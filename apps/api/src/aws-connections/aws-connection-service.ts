@@ -31,6 +31,16 @@ const terraformFargateServiceActions = [
   "cloudfront:*",
   "logs:*"
 ] as const;
+const directReleaseCodeBuildActions = [
+  "codebuild:BatchGetProjects",
+  "codebuild:StartBuild",
+  "codebuild:BatchGetBuilds",
+  "codebuild:StopBuild"
+] as const;
+const directReleaseCodeBuildResourcePatterns = [
+  "arn:aws:codebuild:ap-northeast-2:*:project/sketchcatch-*",
+  "arn:aws:codebuild:ap-northeast-2:*:build/sketchcatch-*:*"
+] as const;
 const terraformFargateIamActions = [
   "iam:CreateRole",
   "iam:DeleteRole",
@@ -745,6 +755,11 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
+        Action: directReleaseCodeBuildActions,
+        Resource: directReleaseCodeBuildResourcePatterns
+      },
+      {
+        Effect: "Allow",
         Action: terraformFargateIamActions,
         Resource: "*"
       },
@@ -934,6 +949,12 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "            Action:",
     ...terraformFargateServiceActions.map((action) => `              - ${action}`),
     '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
+    ...directReleaseCodeBuildActions.map((action) => `              - ${action}`),
+    "            Resource:",
+    '              - !Sub "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/sketchcatch-*"',
+    '              - !Sub "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:build/sketchcatch-*:*"',
     "          - Effect: Allow",
     "            Action:",
     ...terraformFargateIamActions.map((action) => `              - ${action}`),
