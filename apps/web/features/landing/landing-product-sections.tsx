@@ -16,10 +16,10 @@ export function LandingProductSections() {
       <DeploymentSection />
       <section className={styles.ctaSection} id="start" aria-labelledby="cta-title">
         <div className={styles.container}>
-          <h2 id="cta-title">구조를 이해한 뒤,<br />확신을 갖고 배포하세요.</h2>
-          <p>빈 Architecture Board, AI Architecture Recommendation, Reverse Engineering 중 원하는 방식으로 시작할 수 있습니다.</p>
+          <h2 id="cta-title">인프라를 설계하고,<br />검토한 뒤 배포하세요.</h2>
+          <p>직접 설계하거나 요구사항, 소스 저장소, 기존 클라우드 환경을 불러와 프로젝트를 시작할 수 있습니다.</p>
           <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
-            SketchCatch 시작하기 <span className={styles.buttonIcon} aria-hidden="true">→</span>
+            새 프로젝트 시작하기 <span className={styles.buttonIcon} aria-hidden="true">→</span>
           </Link>
         </div>
       </section>
