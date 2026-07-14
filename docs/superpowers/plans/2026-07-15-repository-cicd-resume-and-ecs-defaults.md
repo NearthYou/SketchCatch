@@ -647,3 +647,23 @@ Run the Step 2 command again. Expected: all focused tests PASS.
 - [ ] **Step 5: Run scoped static checks and commit**
 
 Run `pnpm --filter @sketchcatch/web typecheck`, `pnpm --filter @sketchcatch/web lint`, `pnpm harness:check`, and `git diff --check`. Commit only Task 8 source and test files with `Fix: Callback ECS 기본값 항상 적용`.
+
+### Task 9: Temporary Single Confirm Bypass
+
+**Files:**
+- Modify: `apps/web/app/integrations/github/callback/page.tsx`
+- Modify: `apps/web/app/integrations/github/callback/github-callback-state.test.ts`
+- Modify: `apps/web/app/projects/[projectId]/settings/project-deployment-target-settings-client.tsx`
+- Modify: `apps/web/app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx`
+- Modify: `apps/web/features/workspace/CicdMonitoringSettings.tsx`
+
+**Interfaces:**
+- Callback passes `showSaveButton={false}` to both settings clients.
+- Callback renders one `확인` button that immediately restores the Repository analysis URL without calling either save API.
+- Settings pages keep `showSaveButton=true` by default.
+
+- [ ] Add a failing callback source-contract test for hidden child save buttons and the single immediate return action.
+- [ ] Run `pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts` and verify RED.
+- [ ] Add callback-only save-button visibility props and replace the mandatory-save effect with the single confirmation action.
+- [ ] Rerun the focused test, Web lint, Web typecheck, build, harness, and diff checks.
+- [ ] Commit the source and test files with `Fix: Callback 임시 확인 흐름 적용`.
