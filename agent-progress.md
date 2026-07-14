@@ -4,24 +4,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `codex/ecs-deployment-speed`; the focused optimization commits are pushed to `origin/codex/ecs-deployment-speed`.
-- Production ECS workflow run `29333857003` succeeded in 6m09s. Warm API/web build-push completed in 7s/6s, ECS stabilization in 3m13s/2m56s, and all public health endpoints returned 200.
-- The measured API/web digests are `sha256:f9726dbead5597539a6501d709bd762890fbd3ba68c8fa551e2eee304800ee4c` and `sha256:383a249b11f9e8d5548a3c3daa82c976a24dd1f6b36a2fc42cb408c7f92d9997`.
-- Read-only production runtime plan `29334381609` passed and reported no infrastructure changes, so the production state already matches the committed ECS/ALB timing values.
-- Focused API tests, generator tests, Terraform tests, infrastructure checks, smoke preflight, lint, typecheck, build, and harness pass. The full workspace test attempt timed out after 15 minutes; no changed-path failure was observed.
-- Issue #378 remains independently `in_progress`; this branch does not change or claim its unfinished four-runtime matrix.
-- Previous verified sandbox evidence remains recorded below for that separate workstream.
-- Direct ECS infrastructure deployment `3f2e03ec-8b5c-46e3-af74-43d4e21c368e` created 19 resources and Direct application deployment `13f0f6c2-1890-46ce-8044-be754c810b5f` persisted release `5fcb826c-4bb4-45c8-8f59-3bae9790a82e`.
-- Direct evidence matched commit `9c4251baf058a8e0a6513236068d819fecfcdfd5`, ECR digest `3152546fc2cd37ce929dd63b20b161cae58124921fc27e7028a514db2f52a81e`, ECS task definition revision 2, and HTTPS health 200.
-- The API returned five project deployments, 808 infrastructure logs, 17 application logs, and five persisted notifications. CloudWatch returned real ECS CPU metrics. Web Push delivery was not claimed because no browser subscription existed.
-- Live Observation QR/session creation correctly returned 409 because the approved Terraform lacked the required custom hostname, ACM certificate, Route53 record, HTTPS ALB listener, and traffic outputs.
-- GitHub handoff `843323c9-c437-4727-b586-5801b1771f6e` created sandbox PR #1. GitHub Actions run `29324643997` attempt 2 succeeded against merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, ECR digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, ECS task definition revision 3, and HTTPS health 200.
-- GitOps service persistence did not pass: project pipeline refresh returned `stale=true` with no persisted runs because the successful manual run used the later workflow-fix merge SHA, while the handoff retained the cancelled initial infra run.
-- Static, Lambda, and EC2/ASG GitOps were not started within the hard deadline; their required project targets and runtime infrastructure were absent.
-- Application cleanup failed closed because the active GitOps revision 3 no longer matched the Direct release cleanup manifest's revision 2. Infrastructure destroy reached `DESTROYED`; CodeBuild, ECR, CloudWatch log groups, test S3 buckets and versions, CodeConnection, ALB/target groups, ECS cluster/task definitions, CloudFront, temporary OIDC, and the temporary operator policy all verify at zero.
-- Focused changed-path tests pass 89/89 plus workflow tests 9/9. Workspace lint, typecheck, and build pass; the full API suite retains known unrelated failures and one now-corrected deployment-plan expectation.
+- The automated suite now retains 47 essential protection test files out of the previous 390: API auth/ownership, schema/migration contracts, project persistence/deletion, Terraform generation/sync, Deployment Safety Gate, approval/apply/destroy, Web deployment actions, shared types, sandbox preflight evidence, and the production Terraform route test.
+- The maintained `pnpm test` protection line passes 511 checks: API 409, Web 71, shared types 8, sandbox preflight/evidence 21, and Terraform routing 2. Migration compatibility, lint, typecheck, build, harness, and diff checks pass.
+- Branch: `codex/reduce-test-protection-line`; this focused test-reduction change is verified locally and not yet pushed.
+- The test reduction changed no runtime code, database migration, cloud resource, or deployment state.
+- Issue #378 is recorded as `blocked` and remains a separate workstream for its dedicated branch.
 
 ## Session Record
+
+### 2026-07-15 - Reduce tests to the essential protection line
+
+- Removed 343 non-core test files and retained 47 explicitly reviewed safety and core-workflow test files.
+- Added the retained Web component test, shared type contracts, sandbox preflight/evidence test, and Terraform routing test to the normal `pnpm test` path; the lockfile changed only for the existing `tsx` test runner in `packages/types`.
+- Removed stale deleted-test references from active deployment and asset documentation, and recorded the new protection-line policy in `feature_list.json` while preserving older feature evidence as historical audit records.
+- Verification: reduced `pnpm test` passed 511 checks across all 47 retained files, and migration compatibility, lint, typecheck, build, harness, and diff checks passed.
+- Risk: AI Architecture, GitOps runtime reconcilers, Reverse Engineering, Cost, Live Observation, notifications, detailed diagram editing, Templates, and presentation behavior no longer have their previous dedicated regression suites.
 
 ### 2026-07-14 - Production ECS deployment speed optimization
 
@@ -95,7 +92,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Open and babysit the `codex/ecs-deployment-speed` PR against `dev`, address CI/review feedback, and merge only after GitHub reports it ready.
-- No production Terraform apply is required for this change set.
-- If pursuing the 5m30s stretch target, profile the 1m28s validation job and 3m13s API service stabilization before changing safety thresholds.
-- Continue issue #378 only on its dedicated branch; do not mix its sandbox matrix work into this release optimization branch.
+- No continuation is required for the completed test reduction after this branch is reviewed.
+- Resume Issue #378 only on its dedicated branch after its recorded blockers can be addressed.
+- Add future automated coverage only through an explicit update to the essential protection-line policy.
