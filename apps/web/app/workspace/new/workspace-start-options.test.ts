@@ -16,6 +16,10 @@ const startStylesSource = readFileSync(
   fileURLToPath(new URL("workspace-start.module.css", import.meta.url)),
   "utf8"
 );
+const dashboardShellSource = readFileSync(
+  fileURLToPath(new URL("../../../components/dashboard/dashboard-shell.tsx", import.meta.url)),
+  "utf8"
+);
 
 test("createWorkspaceStartOptions exposes four guided starts and keeps blank board small", () => {
   const options = createWorkspaceStartOptions();
@@ -72,6 +76,15 @@ test("WorkspaceStartClient hydrates a stored form before persisting changes", ()
   assert.match(startClientSource, /isStartFormHydrated/);
   assert.match(startClientSource, /if \(!isStartFormHydrated\) \{\s+return;/);
   assert.match(startClientSource, /setIsStartFormHydrated\(true\)/);
+});
+
+test("Dashboard new-project starts a fresh flow instead of resuming an abandoned draft", () => {
+  assert.match(dashboardShellSource, /href="\/workspace\/new\?fresh=1"/);
+  assert.match(startPageSource, /initialFreshStart=\{params\.fresh === "1"\}/);
+  assert.match(
+    startClientSource,
+    /if \(initialFreshStart\) \{\s+clearWorkspaceStartForm\(\);\s+clearAiStartDraft\(\);\s+setIsStartFormHydrated\(true\);\s+return;\s+\}/
+  );
 });
 
 test("WorkspaceStartClient shows an inline project-name error after an empty submission", () => {

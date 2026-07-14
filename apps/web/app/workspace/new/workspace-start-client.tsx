@@ -76,9 +76,11 @@ const boardTemplates = listBoardTemplates();
 
 // 프로젝트 이름과 시작 방식을 받아 알맞은 생성 흐름으로 연결합니다.
 export function WorkspaceStartClient({
+  initialFreshStart = false,
   initialStartKind,
   initialTemplateId
 }: {
+  readonly initialFreshStart?: boolean | undefined;
   readonly initialStartKind?: WorkspaceStartKind | undefined;
   readonly initialTemplateId?: string | undefined;
 } = {}) {
@@ -135,6 +137,13 @@ export function WorkspaceStartClient({
       return;
     }
 
+    if (initialFreshStart) {
+      clearWorkspaceStartForm();
+      clearAiStartDraft();
+      setIsStartFormHydrated(true);
+      return;
+    }
+
     const storedForm = readWorkspaceStartForm();
 
     if (storedForm) {
@@ -158,7 +167,7 @@ export function WorkspaceStartClient({
     }
 
     setIsStartFormHydrated(true);
-  }, [initialStartKind]);
+  }, [initialFreshStart, initialStartKind]);
 
   useEffect(() => {
     if (!isStartFormHydrated) {
@@ -834,6 +843,12 @@ function writeAiStartDraft(draft: WorkspaceStartDraft): void {
   } catch {
     return;
   }
+}
+
+function clearAiStartDraft(): void {
+  if (typeof window === "undefined") return;
+
+  window.sessionStorage.removeItem(AI_START_DRAFT_STORAGE_KEY);
 }
 
 // browser 저장값이 AI 시작 입력으로 안전한 모양인지 확인합니다.
