@@ -306,7 +306,9 @@ export function createPlannedDiagramJson({
   previousDiagram
 }: DiagramPlannerInput): DiagramJson {
   const templateLayoutRules = extractTemplateLayoutRules(architectureJson);
-  const preserveAuthoredTemplatePositions = !usesRepositoryGeneratedTemplateLayout(architectureJson);
+  const hasAuthoredTemplateLayout = templateLayoutRules.protectedNodeIds.size > 0;
+  const usesRepositoryLayout = usesRepositoryGeneratedTemplateLayout(architectureJson);
+  const preserveAuthoredTemplatePositions = hasAuthoredTemplateLayout || !usesRepositoryLayout;
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
   const convertedNodes = [
     ...architectureJson.nodes.map(convertArchitectureNodeToDiagramNode),
@@ -330,18 +332,29 @@ export function createPlannedDiagramJson({
       : []),
     ...templateLayoutRules.protectedNodeIds
   ]);
+  const layoutInputNodes = preserveAuthoredTemplatePositions
+    ? detachGeneratedNodesFromProtectedTemplateAreas(preservedNodes, templateLayoutRules.protectedNodeIds)
+    : preservedNodes;
   const laidOutNodes = layoutAutomaticDiagram({
     edges: architectureJson.edges,
-    nodes: preservedNodes,
+    nodes: layoutInputNodes,
     protectedNodeIds
   }).nodes;
   const fittedLaidOutNodes = fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes));
-  const repositorySupportLaidOutNodes = preserveAuthoredTemplatePositions
-    ? fittedLaidOutNodes
-    : applyRepositoryGeneratedReferenceLayout(fittedLaidOutNodes);
-  const collisionResolvedNodes = preserveAuthoredTemplatePositions
-    ? repositorySupportLaidOutNodes
+  const repositorySupportLaidOutNodes = usesRepositoryLayout
+    ? preserveAuthoredTemplatePositions
+      ? applyRepositoryGeneratedSupportLayout(flattenRepositoryManagedServicesArea(fittedLaidOutNodes))
+      : applyRepositoryGeneratedReferenceLayout(fittedLaidOutNodes)
+    : fittedLaidOutNodes;
+  const templateSafeRepositorySupportNodes = preserveAuthoredTemplatePositions
+    ? detachGeneratedNodesFromProtectedTemplateAreas(
+        repositorySupportLaidOutNodes,
+        templateLayoutRules.protectedNodeIds
+      )
     : repositorySupportLaidOutNodes;
+  const collisionResolvedNodes = preserveAuthoredTemplatePositions
+    ? templateSafeRepositorySupportNodes
+    : templateSafeRepositorySupportNodes;
   const nodes = applyDiagramLayerOrder(
     applyTemplateNodeLayoutRules(
       fitAreaNodesToChildren(collisionResolvedNodes),
@@ -407,16 +420,6 @@ function extractTemplateLayoutRules(architectureJson: ArchitectureJson): Templat
   const presentationEdges: DiagramEdge[] = [];
   const presentationNodes: DiagramNode[] = [];
   const protectedNodeIds = new Set<string>();
-
-  if (usesRepositoryGeneratedTemplateLayout(architectureJson)) {
-    return {
-      edgeRulesById,
-      nodeRulesById,
-      presentationEdges,
-      presentationNodes,
-      protectedNodeIds
-    };
-  }
 
   const architectureNodesByTemplateId = new Map<
     TemplateId,
@@ -650,6 +653,31 @@ function applyTemplateNodeLayoutRules(
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       position: { ...rule.position },
       size: { ...rule.size }
+    };
+  });
+}
+
+function detachGeneratedNodesFromProtectedTemplateAreas(
+  nodes: readonly DiagramNode[],
+  protectedTemplateNodeIds: ReadonlySet<string>
+): DiagramNode[] {
+  return nodes.map((node) => {
+    const parentAreaNodeId = node.metadata?.parentAreaNodeId;
+
+    if (
+      !parentAreaNodeId ||
+      !protectedTemplateNodeIds.has(parentAreaNodeId) ||
+      protectedTemplateNodeIds.has(node.id)
+    ) {
+      return node;
+    }
+
+    const metadata = { ...node.metadata };
+    delete metadata.parentAreaNodeId;
+
+    return {
+      ...node,
+      metadata
     };
   });
 }
@@ -2728,7 +2756,7 @@ function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): D
     .filter(
       (node) =>
         node.kind === "resource" &&
-        !isAreaDiagramNode(node) &&
+        (!isAreaDiagramNode(node) || node.id.startsWith("repository-")) &&
         node.metadata?.parentAreaNodeId == null &&
         !isRepositoryBrowserNode(node) &&
         !isRepositoryGithubActionsNode(node)
@@ -2746,9 +2774,10 @@ function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): D
     const slot = getRepositorySupportLayoutSlot(currentNode);
     const slotKey = `${slot.column}:${slot.row}`;
     const stackIndex = slotCounts.get(slotKey) ?? 0;
+    const isAreaSupportRow = slot.row === 2;
     const rowBaseX =
       slot.row === 1 ? REPOSITORY_SUPPORT_ORIGIN.x + 220 : REPOSITORY_SUPPORT_ORIGIN.x;
-    const rowColumnGap = slot.row === 1 ? 132 : REPOSITORY_SUPPORT_COLUMN_GAP;
+    const rowColumnGap = isAreaSupportRow ? 520 : slot.row === 1 ? 132 : REPOSITORY_SUPPORT_COLUMN_GAP;
     const visualColumn = slot.row === 1 ? slot.column % 3 : slot.column;
     const visualRowOffset = slot.row === 1 ? Math.floor(slot.column / 3) * REPOSITORY_SUPPORT_STACK_GAP : 0;
     const nextPosition = {
@@ -2849,6 +2878,10 @@ function getRepositorySupportLayoutSlot(node: DiagramNode): ReadableLayoutSlot {
 
   if (resourceType === "aws_cloudwatch_log_group" || /\blogs?\b|cloudwatch/u.test(descriptor)) {
     return { column: 2, row: 1 };
+  }
+
+  if (resourceType === "aws_subnet" || /\bsubnet\b/u.test(descriptor)) {
+    return { column: /[-_\s]b\b|subnet[-_\s]*b/u.test(descriptor) ? 1 : 0, row: 2 };
   }
 
   if (resourceType === "aws_iam_role" || /\brole\b/u.test(descriptor)) {
