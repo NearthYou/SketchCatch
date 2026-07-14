@@ -11,11 +11,13 @@ import { LandingWorkflowSection } from "./landing-workflow-section";
 import styles from "./product-entry.module.css";
 
 const FLOW_STEPS = [
-  "Requirement Input",
-  "Architecture Board",
-  "IaC Preview",
-  "Pre-Deployment Check",
-  "Deployment Paths"
+  "요구사항 입력",
+  "설계 초안 생성",
+  "아키텍처 확정",
+  "Terraform 미리보기",
+  "비용·보안 검토",
+  "배포 방식 선택",
+  "승인 후 배포"
 ] as const;
 
 // 로그인 전 사용자가 제품을 둘러보고 로그인이나 회원가입으로 들어가는 첫 화면입니다.
