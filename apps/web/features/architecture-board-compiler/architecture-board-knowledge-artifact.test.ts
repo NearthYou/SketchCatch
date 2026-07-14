@@ -31,6 +31,19 @@ test("generator는 실제 6개 authored와 23개 usable Brainboard 사례를 정
   assert.equal(repositoryCases.length, 6);
   assert.equal(brainboardCases.length, 23);
   assert.equal(sourceArtifact.unavailableTemplateIds.length, 1);
+  assert.ok(
+    sourceArtifact.cases.every((entry) =>
+      [
+        entry.maxContainmentDepth,
+        entry.meanAreaPadding,
+        entry.meanCaptionWidth,
+        entry.meanEdgeLength,
+        entry.horizontalFlowRatio,
+        entry.viewportAspectRatio,
+        entry.whitespaceRatio
+      ].every(Number.isFinite)
+    )
+  );
   assert.deepEqual(sourceArtifact, generatedArchitectureBoardKnowledgeArtifact);
   assert.equal(
     renderArchitectureBoardKnowledgeArtifact(sourceArtifact),

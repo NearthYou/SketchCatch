@@ -44,7 +44,14 @@ export function evaluateArchitectureBoardKnowledgeLeaveOneOut(
       nearestCaseId: nearest.id,
       resourceTypeRecall: round(resourceTypeSimilarity(heldOutCase.nodeTypes, nearest.nodeTypes)),
       aspectRatioError: round(relativeError(heldOutCase.meanAspectRatio, nearest.meanAspectRatio)),
-      siblingGapError: round(relativeError(heldOutCase.meanSiblingGap, nearest.meanSiblingGap))
+      siblingGapError: round(relativeError(heldOutCase.meanSiblingGap, nearest.meanSiblingGap)),
+      viewportAspectRatioError: round(
+        relativeError(heldOutCase.viewportAspectRatio, nearest.viewportAspectRatio)
+      ),
+      containmentDepthError: round(
+        relativeError(heldOutCase.maxContainmentDepth, nearest.maxContainmentDepth)
+      ),
+      edgeLengthError: round(relativeError(heldOutCase.meanEdgeLength, nearest.meanEdgeLength))
     };
   });
 }

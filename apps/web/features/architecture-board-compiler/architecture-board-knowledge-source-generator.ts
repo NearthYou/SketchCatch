@@ -2,18 +2,17 @@ import {
   adaptBrainboardTemplateSource,
   brainboardTemplateRegistry,
   buildTemplateDiagramJson,
-  templateDefinitions,
-  type DiagramJson
+  templateDefinitions
 } from "@sketchcatch/types";
 import {
   ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  type ArchitectureBoardKnowledgeArtifact,
-  type ArchitectureBoardKnowledgeCase
+  type ArchitectureBoardKnowledgeArtifact
 } from "./architecture-board-knowledge-contract";
+import { extractArchitectureBoardKnowledgeCase } from "./architecture-board-knowledge-metrics";
 
 export function createArchitectureBoardKnowledgeArtifactFromSource(): ArchitectureBoardKnowledgeArtifact {
   const repositoryCases = templateDefinitions.map((definition) =>
-    extractKnowledgeCase(
+    extractArchitectureBoardKnowledgeCase(
       `repository:${definition.id}`,
       buildTemplateDiagramJson(definition.id, {
         projectSlug: "compiler-knowledge",
@@ -23,7 +22,12 @@ export function createArchitectureBoardKnowledgeArtifactFromSource(): Architectu
   );
   const brainboardCases = brainboardTemplateRegistry.flatMap((entry) =>
     entry.status === "available"
-      ? [extractKnowledgeCase(`brainboard:${entry.id}`, adaptBrainboardTemplateSource(entry.source).diagramJson)]
+      ? [
+          extractArchitectureBoardKnowledgeCase(
+            `brainboard:${entry.id}`,
+            adaptBrainboardTemplateSource(entry.source).diagramJson
+          )
+        ]
       : []
   );
   const unavailableTemplateIds = brainboardTemplateRegistry.flatMap((entry) =>
@@ -68,30 +72,6 @@ export function renderArchitectureBoardKnowledgeArtifact(
 
 function indentJson(value: string, spaces: number): string {
   return value.replaceAll("\n", `\n${" ".repeat(spaces)}`);
-}
-
-function extractKnowledgeCase(id: string, diagram: DiagramJson): ArchitectureBoardKnowledgeCase {
-  const nodes = [...diagram.nodes].sort((left, right) => left.id.localeCompare(right.id));
-  const sortedX = nodes.map((node) => node.position.x).sort((left, right) => left - right);
-  const siblingGaps = sortedX.slice(1).map((value, index) => Math.max(0, value - sortedX[index]!));
-
-  return {
-    id,
-    nodeTypes: [...new Set(nodes.map((node) => node.type))].sort(),
-    nodeCount: nodes.length,
-    edgeCount: diagram.edges.length,
-    areaCount: nodes.filter((node) => node.metadata?.presentationArea === true).length,
-    meanSiblingGap: round(mean(siblingGaps)),
-    meanAspectRatio: round(mean(nodes.map((node) => node.size.width / Math.max(1, node.size.height))))
-  };
-}
-
-function mean(values: readonly number[]): number {
-  return values.length === 0 ? 0 : values.reduce((total, value) => total + value, 0) / values.length;
-}
-
-function round(value: number): number {
-  return Math.round(value * 1_000) / 1_000;
 }
 
 function stableSerialize(value: unknown): string {

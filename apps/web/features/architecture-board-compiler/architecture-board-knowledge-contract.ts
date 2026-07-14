@@ -6,8 +6,24 @@ export type ArchitectureBoardKnowledgeCase = {
   readonly nodeCount: number;
   readonly edgeCount: number;
   readonly areaCount: number;
+  readonly parentedNodeCount: number;
+  readonly maxContainmentDepth: number;
+  readonly meanAreaChildDensity: number;
+  readonly meanAreaPadding: number;
   readonly meanSiblingGap: number;
+  readonly meanVerticalGap: number;
+  readonly meanNodeWidth: number;
+  readonly meanNodeHeight: number;
   readonly meanAspectRatio: number;
+  readonly meanCaptionWidth: number;
+  readonly meanZIndex: number;
+  readonly meanEdgeLength: number;
+  readonly meanEdgeWaypointCount: number;
+  readonly routedEdgeRatio: number;
+  readonly horizontalFlowRatio: number;
+  readonly supportNodeRatio: number;
+  readonly viewportAspectRatio: number;
+  readonly whitespaceRatio: number;
 };
 
 export type ArchitectureBoardKnowledgeArtifact = {
@@ -23,4 +39,7 @@ export type ArchitectureBoardLeaveOneOutResult = {
   readonly resourceTypeRecall: number;
   readonly aspectRatioError: number;
   readonly siblingGapError: number;
+  readonly viewportAspectRatioError: number;
+  readonly containmentDepthError: number;
+  readonly edgeLengthError: number;
 };

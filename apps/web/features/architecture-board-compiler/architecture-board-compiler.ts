@@ -22,6 +22,8 @@ import {
   convertDiagramJsonToArchitectureJson
 } from "../workspace/workspace-ai-diagram-adapter";
 import { architectureBoardKnowledge } from "./architecture-board-knowledge";
+import type { ArchitectureBoardKnowledgeCase } from "./architecture-board-knowledge-contract";
+import { extractArchitectureBoardKnowledgeCase } from "./architecture-board-knowledge-metrics";
 
 export const ARCHITECTURE_BOARD_COMPILER_VERSION = "architecture-board-compiler/v1";
 
@@ -37,7 +39,14 @@ export type {
 type Candidate = {
   readonly id: string;
   readonly diagram: DiagramJson;
-  readonly quality: AutomaticDiagramLayoutQuality;
+  readonly evaluation: CandidateEvaluation;
+};
+
+type CandidateEvaluation = {
+  readonly score: number;
+  readonly structuralPenalty: number;
+  readonly visual: AutomaticDiagramLayoutQuality;
+  readonly knowledge: ArchitectureBoardKnowledgeCase;
 };
 
 export function compileArchitectureBoard(
@@ -52,6 +61,7 @@ export function compileArchitectureBoard(
     ? convertDiagramJsonToArchitectureJson(currentDiagram)
     : undefined;
   const comparisonDiagram = currentDiagram ?? baseDiagram;
+  const referenceCases = findReferenceTemplateCases(baseDiagram);
   const originalDiagram =
     currentDiagram &&
     currentArchitecture &&
@@ -61,7 +71,7 @@ export function compileArchitectureBoard(
   const originalCandidate: Candidate = {
     id: "original",
     diagram: originalDiagram,
-    quality: evaluateDiagram(originalDiagram)
+    evaluation: evaluateCandidate(originalDiagram, referenceCases)
   };
   const compiledLayout = layoutAutomaticDiagram({
     edges: architecture.edges,
@@ -71,7 +81,7 @@ export function compileArchitectureBoard(
   const compiledCandidate: Candidate = {
     id: `compiled:${compiledLayout.candidateId}`,
     diagram: compiledDiagram,
-    quality: evaluateDiagram(compiledDiagram)
+    evaluation: evaluateCandidate(compiledDiagram, referenceCases)
   };
   const candidate = selectCandidate(originalCandidate, compiledCandidate, architecture);
   const changes = compareCompilationChanges(comparisonDiagram, candidate.diagram, architecture);
@@ -87,14 +97,14 @@ export function compileArchitectureBoard(
     changes,
     diagnostics,
     quality: {
-      before: toCompilationQuality(evaluateDiagram(comparisonDiagram), 0),
-      after: toCompilationQuality(candidate.quality, semanticDiagnosticPenalty),
+      before: toCompilationQuality(evaluateCandidate(comparisonDiagram, referenceCases), 0),
+      after: toCompilationQuality(candidate.evaluation, semanticDiagnosticPenalty),
       compilationDistance: changes.reduce((total, change) => total + change.cost, 0)
     },
     provenance: {
       compilerVersion: ARCHITECTURE_BOARD_COMPILER_VERSION,
       candidateId: candidate.id,
-      referenceTemplateIds: [...findReferenceTemplateIds(candidate.diagram)]
+      referenceTemplateIds: referenceCases.map(({ id }) => id)
     }
   };
 }
@@ -114,7 +124,7 @@ function selectCandidate(
 
   const changes = compareCompilationChanges(original.diagram, compiled.diagram, architecture);
   const distance = changes.reduce((total, change) => total + change.cost, 0);
-  return compiled.quality.score + distance < original.quality.score ? compiled : original;
+  return compiled.evaluation.score + distance < original.evaluation.score ? compiled : original;
 }
 
 function evaluateDiagram(diagram: DiagramJson): AutomaticDiagramLayoutQuality {
@@ -124,16 +134,41 @@ function evaluateDiagram(diagram: DiagramJson): AutomaticDiagramLayoutQuality {
   });
 }
 
+function evaluateCandidate(
+  diagram: DiagramJson,
+  referenceCases: readonly ArchitectureBoardKnowledgeCase[]
+): CandidateEvaluation {
+  const visual = evaluateDiagram(diagram);
+  const knowledge = extractArchitectureBoardKnowledgeCase("candidate", diagram);
+  const structuralPenalty = calculateKnowledgeStructuralPenalty(knowledge, referenceCases);
+
+  return {
+    score: visual.score + structuralPenalty,
+    structuralPenalty,
+    visual,
+    knowledge
+  };
+}
+
 function toCompilationQuality(
-  quality: AutomaticDiagramLayoutQuality,
+  evaluation: CandidateEvaluation,
   semanticDiagnosticPenalty: number
 ): ArchitectureBoardCompilationQuality {
   return {
-    score: quality.score + semanticDiagnosticPenalty,
-    visualPenalty: quality.score,
-    structuralPenalty: 0,
+    score: evaluation.score + semanticDiagnosticPenalty,
+    visualPenalty: evaluation.visual.score,
+    structuralPenalty: evaluation.structuralPenalty,
     semanticDiagnosticPenalty,
-    metrics: { ...quality }
+    metrics: {
+      ...evaluation.visual,
+      knowledgeMeanSiblingGap: evaluation.knowledge.meanSiblingGap,
+      knowledgeMeanVerticalGap: evaluation.knowledge.meanVerticalGap,
+      knowledgeMaxContainmentDepth: evaluation.knowledge.maxContainmentDepth,
+      knowledgeHorizontalFlowRatio: evaluation.knowledge.horizontalFlowRatio,
+      knowledgeSupportNodeRatio: evaluation.knowledge.supportNodeRatio,
+      knowledgeViewportAspectRatio: evaluation.knowledge.viewportAspectRatio,
+      knowledgeWhitespaceRatio: evaluation.knowledge.whitespaceRatio
+    }
   };
 }
 
@@ -330,16 +365,63 @@ function createDiagnostics(
   return diagnostics.sort((left, right) => left.code.localeCompare(right.code));
 }
 
-function findReferenceTemplateIds(diagram: DiagramJson): readonly string[] {
+function findReferenceTemplateCases(
+  diagram: DiagramJson
+): readonly ArchitectureBoardKnowledgeCase[] {
   const types = new Set(diagram.nodes.map((node) => node.type));
   return architectureBoardKnowledge.cases
     .map((knowledgeCase) => ({
-      id: knowledgeCase.id,
+      knowledgeCase,
       score: jaccard(types, new Set(knowledgeCase.nodeTypes))
     }))
-    .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+    .sort(
+      (left, right) =>
+        right.score - left.score || left.knowledgeCase.id.localeCompare(right.knowledgeCase.id)
+    )
     .slice(0, 3)
-    .map(({ id }) => id);
+    .map(({ knowledgeCase }) => knowledgeCase);
+}
+
+function calculateKnowledgeStructuralPenalty(
+  candidate: ArchitectureBoardKnowledgeCase,
+  references: readonly ArchitectureBoardKnowledgeCase[]
+): number {
+  if (references.length === 0) return 0;
+
+  const target = {
+    meanSiblingGap: mean(references.map((entry) => entry.meanSiblingGap)),
+    meanVerticalGap: mean(references.map((entry) => entry.meanVerticalGap)),
+    maxContainmentDepth: mean(references.map((entry) => entry.maxContainmentDepth)),
+    horizontalFlowRatio: mean(references.map((entry) => entry.horizontalFlowRatio)),
+    supportNodeRatio: mean(references.map((entry) => entry.supportNodeRatio)),
+    viewportAspectRatio: mean(references.map((entry) => entry.viewportAspectRatio)),
+    whitespaceRatio: mean(references.map((entry) => entry.whitespaceRatio))
+  };
+
+  return round(
+    cappedRelativeError(candidate.meanSiblingGap, target.meanSiblingGap) * 12 +
+      cappedRelativeError(candidate.meanVerticalGap, target.meanVerticalGap) * 8 +
+      cappedRelativeError(candidate.maxContainmentDepth, target.maxContainmentDepth) * 14 +
+      cappedRelativeError(candidate.horizontalFlowRatio, target.horizontalFlowRatio) * 10 +
+      cappedRelativeError(candidate.supportNodeRatio, target.supportNodeRatio) * 6 +
+      cappedRelativeError(candidate.viewportAspectRatio, target.viewportAspectRatio) * 18 +
+      cappedRelativeError(candidate.whitespaceRatio, target.whitespaceRatio) * 12
+  );
+}
+
+function cappedRelativeError(actual: number, expected: number): number {
+  if (expected === 0) return actual === 0 ? 0 : 1;
+  return Math.min(3, Math.abs(actual - expected) / Math.abs(expected));
+}
+
+function mean(values: readonly number[]): number {
+  return values.length === 0
+    ? 0
+    : values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function round(value: number): number {
+  return Math.round(value * 1_000) / 1_000;
 }
 
 function jaccard(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
