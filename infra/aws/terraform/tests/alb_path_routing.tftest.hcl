@@ -292,8 +292,8 @@ run "https_routes_and_enables_worker_dispatch" {
       {
         for item in one(jsondecode(aws_ecs_task_definition.api.container_definitions)).environment :
         item.name => item.value
-      }.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN == aws_iam_role.ecs_worker_task.arn
+      }.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN == aws_iam_role.ecs_task.arn
     )
-    error_message = "Worker-enabled API tasks must dispatch to ECS and publish the worker principal for connection trust."
+    error_message = "Worker-enabled API tasks must dispatch to ECS while publishing the API principal for connection trust."
   }
 }
