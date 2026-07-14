@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DiagramJson, ReverseEngineeringScanResult } from "@sketchcatch/types";
+import { ARCHITECTURE_BOARD_COMPILER_VERSION } from "../architecture-board-compiler";
 import {
   compileReverseEngineeringArchitecture,
   createReverseEngineeringBoardApplication
@@ -74,7 +75,7 @@ test("Reverse Engineering은 Compiler proposal을 생성하고 적용 후보와 
     result: scanResult
   });
 
-  assert.equal(proposal.provenance.compilerVersion, "architecture-board-compiler/v1");
+  assert.equal(proposal.provenance.compilerVersion, ARCHITECTURE_BOARD_COMPILER_VERSION);
   assert.equal(proposal.architecture.nodes.length, 1);
   assert.equal(application.compilation.provenance.compilerVersion, proposal.provenance.compilerVersion);
   assert.deepEqual(application.compilation.diagram, proposal.diagram);
