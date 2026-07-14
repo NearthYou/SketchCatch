@@ -13,6 +13,12 @@ import type {
   TerraformBlockType
 } from "@sketchcatch/types";
 import {
+  buildTemplateDiagramJson,
+  getTemplateDefinitionById,
+  TEMPLATE_IDS,
+  type TemplateId
+} from "@sketchcatch/types";
+import {
   getDefaultResourceDefinitionByResourceType,
   getResourceDefinitionByTerraform
 } from "@sketchcatch/types/resource-definitions";
@@ -31,6 +37,10 @@ import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-vis
 import { fitSecurityGroupScopesToTargets } from "../diagram-editor/security-group-scope";
 import { resourceCatalog } from "../resource-settings/catalog";
 import { layoutAutomaticDiagram } from "./automatic-diagram-layout";
+import {
+  getAutomaticDiagramSemanticRole,
+  type AutomaticDiagramSemanticRole
+} from "./automatic-diagram-layout-provider-mapping";
 import { addServerStorageAreaNodes } from "./server-storage-board-layout";
 
 const DEFAULT_VIEWPORT: DiagramJson["viewport"] = { x: 0, y: 0, zoom: 1 };
@@ -60,11 +70,41 @@ export type ArchitectureDiagramConversionOptions = {
   readonly preserveLayoutFrom?: DiagramJson | undefined;
 };
 
+export type DiagramPlannerInput = {
+  readonly architectureJson: ArchitectureJson;
+  readonly previousDiagram?: DiagramJson | undefined;
+};
+
+type TemplateNodeLayoutRule = {
+  readonly metadata: DiagramNode["metadata"];
+  readonly position: DiagramNode["position"];
+  readonly size: DiagramNode["size"];
+};
+
+type TemplateEdgeLayoutRule = Pick<
+  DiagramEdge,
+  "metadata" | "sourceHandleId" | "targetHandleId" | "type"
+>;
+
+type TemplateLayoutRules = {
+  readonly edgeRulesById: ReadonlyMap<string, TemplateEdgeLayoutRule>;
+  readonly nodeRulesById: ReadonlyMap<string, TemplateNodeLayoutRule>;
+  readonly presentationEdges: readonly DiagramEdge[];
+  readonly presentationNodes: readonly DiagramNode[];
+  readonly protectedNodeIds: ReadonlySet<string>;
+};
+
 export function getDiagramJsonForArchitectureDraft(
   draft: AiArchitectureDraftResult,
   options: ArchitectureDiagramConversionOptions = {}
 ): DiagramJson {
-  return draft.diagramJson ?? convertArchitectureJsonToDiagramJson(draft.architectureJson, options);
+  return (
+    draft.diagramJson ??
+    createPlannedDiagramJson({
+      architectureJson: draft.architectureJson,
+      previousDiagram: options.preserveLayoutFrom
+    })
+  );
 }
 
 const DEPENDENCY_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
@@ -94,6 +134,33 @@ const READABLE_LAYOUT_MIN_GROUP_SIZE = 4;
 const READABLE_LAYOUT_COLUMN_GAP = 192;
 const READABLE_LAYOUT_ROW_GAP = 140;
 const READABLE_LAYOUT_STACK_GAP = 104;
+const REPOSITORY_MANAGED_SERVICES_AREA_ID = "repository-managed-services";
+const REPOSITORY_SUPPORT_ORIGIN = { x: 256, y: 72 };
+const REPOSITORY_SUPPORT_COLUMN_GAP = 176;
+const REPOSITORY_SUPPORT_ROW_GAP = 150;
+const REPOSITORY_SUPPORT_STACK_GAP = 78;
+const DENSE_DIAGRAM_SUPPORT_ROLES = new Set<AutomaticDiagramSemanticRole>([
+  "delivery",
+  "observability",
+  "security",
+  "support"
+]);
+const PRESENTATION_ENDPOINT_ROLES = new Set<AutomaticDiagramSemanticRole>([
+  "actor",
+  "entry",
+  "compute",
+  "data",
+  "async",
+  "delivery"
+]);
+const DENSE_PRESENTATION_EDGE_THRESHOLD = 10;
+const PRESENTATION_PATH_MAX_DEPTH = 6;
+const SUMMARY_PRESENTATION_EDGE_STYLE: NonNullable<DiagramEdge["style"]> = {
+  animated: false,
+  color: "#334155",
+  lineStyle: "solid",
+  width: "medium"
+};
 const EDGE_HANDLE_STUB_LENGTH = 20;
 const EDGE_ROUTE_NODE_OVERLAP_PENALTY = 1_000_000;
 const EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY = 200_000;
@@ -114,7 +181,9 @@ const COMPACT_AREA_MIN_SIZES: Readonly<Record<string, DiagramNode["size"]>> = {
 };
 const AREA_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
-const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem]));
+const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(
+  resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem])
+);
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
   readonly patterns: readonly RegExp[];
@@ -136,27 +205,40 @@ const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
     style: DEPENDENCY_EDGE_STYLE
   },
   {
-    patterns: [/\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u],
+    patterns: [
+      /\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u
+    ],
     style: ASYNC_EDGE_STYLE
   }
 ];
-const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: string; readonly aliases: readonly string[] }>> = {
+const RESOURCE_NAME_CONVENTIONS: Readonly<
+  Record<string, { readonly prefix: string; readonly aliases: readonly string[] }>
+> = {
   aws_acm_certificate: { prefix: "cert", aliases: ["acm", "certificate", "cert"] },
   aws_ami: { prefix: "ami", aliases: ["ami", "image"] },
-  aws_api_gateway_integration: { prefix: "api_integration", aliases: ["api", "gateway", "integration"] },
+  aws_api_gateway_integration: {
+    prefix: "api_integration",
+    aliases: ["api", "gateway", "integration"]
+  },
   aws_api_gateway_method: { prefix: "api_method", aliases: ["api", "gateway", "method"] },
   aws_api_gateway_resource: { prefix: "api_resource", aliases: ["api", "gateway", "resource"] },
   aws_api_gateway_rest_api: { prefix: "api", aliases: ["api", "gateway", "rest"] },
   aws_api_gateway_stage: { prefix: "api_stage", aliases: ["api", "gateway", "stage"] },
   aws_apigatewayv2_api: { prefix: "api", aliases: ["api", "gateway", "websocket"] },
-  aws_autoscaling_group: { prefix: "asg", aliases: ["asg", "autoscaling", "auto", "scaling", "group"] },
+  aws_autoscaling_group: {
+    prefix: "asg",
+    aliases: ["asg", "autoscaling", "auto", "scaling", "group"]
+  },
   aws_availability_zone: { prefix: "az", aliases: ["az", "availability", "zone"] },
   aws_cloudfront_distribution: { prefix: "cdn", aliases: ["cdn", "cloudfront", "distribution"] },
   aws_cloudwatch_dashboard: { prefix: "dashboard", aliases: ["cloudwatch", "dashboard"] },
   aws_cloudwatch_log_group: { prefix: "logs", aliases: ["cloudwatch", "log", "logs", "group"] },
   aws_cloudwatch_metric_alarm: { prefix: "alarm", aliases: ["cloudwatch", "metric", "alarm"] },
   aws_cognito_user_pool: { prefix: "user_pool", aliases: ["cognito", "user", "pool"] },
-  aws_cognito_user_pool_client: { prefix: "user_pool_client", aliases: ["cognito", "user", "pool", "client"] },
+  aws_cognito_user_pool_client: {
+    prefix: "user_pool_client",
+    aliases: ["cognito", "user", "pool", "client"]
+  },
   aws_db_instance: { prefix: "db", aliases: ["rds", "db", "database", "instance"] },
   aws_db_subnet_group: { prefix: "db_subnet_group", aliases: ["db", "subnet", "group"] },
   aws_dynamodb_table: { prefix: "table", aliases: ["dynamodb", "table"] },
@@ -166,7 +248,10 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
   aws_ecs_service: { prefix: "ecs_service", aliases: ["ecs", "service"] },
   aws_ecs_task_definition: { prefix: "task", aliases: ["ecs", "task", "definition"] },
   aws_eks_cluster: { prefix: "eks_cluster", aliases: ["eks", "cluster"] },
-  aws_elasticache_cluster: { prefix: "cache", aliases: ["elasticache", "redis", "cache", "cluster"] },
+  aws_elasticache_cluster: {
+    prefix: "cache",
+    aliases: ["elasticache", "redis", "cache", "cluster"]
+  },
   aws_eip: { prefix: "eip", aliases: ["eip", "elastic", "ip"] },
   aws_iam_instance_profile: { prefix: "profile", aliases: ["iam", "instance", "profile"] },
   aws_iam_policy: { prefix: "policy", aliases: ["iam", "policy"] },
@@ -175,7 +260,10 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
   aws_internet_gateway: { prefix: "igw", aliases: ["internet", "gateway", "igw"] },
   aws_key_pair: { prefix: "key", aliases: ["key", "pair"] },
   aws_kms_key: { prefix: "key", aliases: ["kms", "key"] },
-  aws_lambda_event_source_mapping: { prefix: "event_source", aliases: ["lambda", "event", "source", "mapping"] },
+  aws_lambda_event_source_mapping: {
+    prefix: "event_source",
+    aliases: ["lambda", "event", "source", "mapping"]
+  },
   aws_lambda_function: { prefix: "lambda", aliases: ["lambda", "function"] },
   aws_lambda_permission: { prefix: "lambda_permission", aliases: ["lambda", "permission"] },
   aws_launch_template: { prefix: "lt", aliases: ["launch", "template", "lt"] },
@@ -191,7 +279,10 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
   aws_secretsmanager_secret: { prefix: "secret", aliases: ["secretsmanager", "secret"] },
   aws_security_group: { prefix: "sg", aliases: ["security", "group", "sg"] },
   aws_security_group_rule: { prefix: "sg_rule", aliases: ["security", "group", "rule", "sg"] },
-  aws_sfn_state_machine: { prefix: "state_machine", aliases: ["step", "functions", "state", "machine"] },
+  aws_sfn_state_machine: {
+    prefix: "state_machine",
+    aliases: ["step", "functions", "state", "machine"]
+  },
   aws_sns_topic: { prefix: "topic", aliases: ["sns", "topic"] },
   aws_sqs_queue: { prefix: "queue", aliases: ["sqs", "queue"] },
   aws_subnet: { prefix: "subnet", aliases: ["subnet"] },
@@ -200,40 +291,411 @@ const RESOURCE_NAME_CONVENTIONS: Readonly<Record<string, { readonly prefix: stri
   aws_wafv2_web_acl: { prefix: "waf", aliases: ["waf", "web", "acl"] }
 };
 
-// AI Draft를 실제 Architecture Board가 받을 수 있는 DiagramJson으로 바꾸는 gg 경계입니다.
-export function convertArchitectureJsonToDiagramJson(
-  architectureJson: ArchitectureJson,
-  options: ArchitectureDiagramConversionOptions = {}
-): DiagramJson {
+export function createPlannedDiagramJson({
+  architectureJson,
+  previousDiagram
+}: DiagramPlannerInput): DiagramJson {
+  const templateLayoutRules = extractTemplateLayoutRules(architectureJson);
+  const preserveAuthoredTemplatePositions = !usesRepositoryGeneratedTemplateLayout(architectureJson);
   const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
-  const convertedNodes = architectureJson.nodes.map(convertArchitectureNodeToDiagramNode);
-  const preparedNodes = applyAreaParentMetadata(
-    applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
-    architectureJson.edges
+  const convertedNodes = [
+    ...architectureJson.nodes.map(convertArchitectureNodeToDiagramNode),
+    ...templateLayoutRules.presentationNodes
+  ];
+  const preparedNodes = applyTemplateNodeLayoutRules(
+    applyAreaParentMetadata(
+      applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
+      architectureJson.edges
+    ),
+    templateLayoutRules.nodeRulesById
   );
-  const preservedNodes = preserveExistingNodeLayouts(preparedNodes, options.preserveLayoutFrom);
+  const preservedNodes = preserveExistingNodeLayouts(preparedNodes, previousDiagram);
+  const preservedNodeIds = new Set(preservedNodes.map((node) => node.id));
   const protectedNodeIds = new Set([
-    ...(options.preserveLayoutFrom?.nodes
-      .filter((baseNode) => preservedNodes.some((node) => node.id === baseNode.id))
+    ...(previousDiagram?.nodes
+      .filter((baseNode) => preservedNodeIds.has(baseNode.id))
       .map((node) => node.id) ?? []),
-    ...architectureJson.nodes.filter(hasAuthoredTemplatePosition).map((node) => node.id)
+    ...(preserveAuthoredTemplatePositions
+      ? architectureJson.nodes.filter(hasAuthoredTemplatePosition).map((node) => node.id)
+      : []),
+    ...templateLayoutRules.protectedNodeIds
   ]);
   const laidOutNodes = layoutAutomaticDiagram({
     edges: architectureJson.edges,
     nodes: preservedNodes,
     protectedNodeIds
   }).nodes;
-  const nodes = applyDiagramLayerOrder(fitSecurityGroupScopesToTargets(laidOutNodes));
+  const fittedLaidOutNodes = fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes));
+  const repositorySupportLaidOutNodes = preserveAuthoredTemplatePositions
+    ? fittedLaidOutNodes
+    : applyRepositoryGeneratedSupportLayout(fittedLaidOutNodes);
+  const collisionResolvedNodes = preserveAuthoredTemplatePositions
+    ? repositorySupportLaidOutNodes
+    : resolveSiblingNodeCollisions(repositorySupportLaidOutNodes);
+  const nodes = applyDiagramLayerOrder(
+    applyTemplateNodeLayoutRules(
+      fitAreaNodesToChildren(collisionResolvedNodes),
+      templateLayoutRules.nodeRulesById
+    )
+  );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const architectureEdges = reduceDenseDiagramEdgeLabels(
+    createReadablePresentationEdges(
+      convertArchitectureEdgesToDiagramEdges(
+        architectureJson.edges.filter((edge) =>
+          shouldRenderArchitectureEdge(edge, nodeIds, nodeById)
+        ),
+        nodeById
+      ).map((edge) => ({
+        ...edge,
+        ...templateLayoutRules.edgeRulesById.get(edge.id)
+      })),
+      nodeById,
+      new Set(templateLayoutRules.edgeRulesById.keys())
+    ),
+    nodeById
+  );
+  const edgeIds = new Set(architectureEdges.map((edge) => edge.id));
 
   return {
-    edges: convertArchitectureEdgesToDiagramEdges(
-      architectureJson.edges.filter((edge) => shouldRenderArchitectureEdge(edge, nodeIds, nodeById)),
-      nodeById
-    ),
+    edges: [
+      ...architectureEdges,
+      ...templateLayoutRules.presentationEdges
+        .filter(
+          (edge) =>
+            !edgeIds.has(edge.id) &&
+            nodeById.has(edge.sourceNodeId) &&
+            nodeById.has(edge.targetNodeId)
+        )
+        .map((edge) => ({
+          ...edge,
+          metadata: { ...edge.metadata, presentationRole: "primary" as const }
+        }))
+    ],
     nodes,
     viewport: { ...DEFAULT_VIEWPORT }
   };
+}
+
+export function convertArchitectureJsonToDiagramJson(
+  architectureJson: ArchitectureJson,
+  options: ArchitectureDiagramConversionOptions = {}
+): DiagramJson {
+  return createPlannedDiagramJson({
+    architectureJson,
+    previousDiagram: options.preserveLayoutFrom
+  });
+}
+
+function extractTemplateLayoutRules(architectureJson: ArchitectureJson): TemplateLayoutRules {
+  const edgeRulesById = new Map<string, TemplateEdgeLayoutRule>();
+  const nodeRulesById = new Map<string, TemplateNodeLayoutRule>();
+  const presentationEdges: DiagramEdge[] = [];
+  const presentationNodes: DiagramNode[] = [];
+  const protectedNodeIds = new Set<string>();
+
+  if (usesRepositoryGeneratedTemplateLayout(architectureJson)) {
+    return {
+      edgeRulesById,
+      nodeRulesById,
+      presentationEdges,
+      presentationNodes,
+      protectedNodeIds
+    };
+  }
+
+  const architectureNodesByTemplateId = new Map<
+    TemplateId,
+    Array<ArchitectureJson["nodes"][number]>
+  >();
+  const architectureEdgeByRelationshipKey = new Map<string, ArchitectureJson["edges"][number]>();
+
+  for (const node of architectureJson.nodes) {
+    const templateId = node.config["templateId"];
+    if (!isTemplateId(templateId)) continue;
+
+    const templateNodes = architectureNodesByTemplateId.get(templateId) ?? [];
+    templateNodes.push(node);
+    architectureNodesByTemplateId.set(templateId, templateNodes);
+  }
+
+  for (const edge of architectureJson.edges) {
+    const relationshipKey = getArchitectureRelationshipKey(
+      edge.sourceId,
+      edge.targetId,
+      edge.label
+    );
+    if (!architectureEdgeByRelationshipKey.has(relationshipKey)) {
+      architectureEdgeByRelationshipKey.set(relationshipKey, edge);
+    }
+  }
+
+  for (const [templateId, templateNodes] of architectureNodesByTemplateId) {
+    const definition = getTemplateDefinitionById(templateId);
+    const architectureNodeByResourceId = new Map(
+      templateNodes.flatMap((node) =>
+        typeof node.config["templateResourceId"] === "string"
+          ? [[node.config["templateResourceId"], node] as const]
+          : []
+      )
+    );
+
+    const authoredDiagram = buildTemplateDiagramJson(templateId, {
+      projectSlug: "diagram-planner",
+      shortId: "layout"
+    });
+    const outputNodeIdByAuthoredNodeId = new Map<string, string>();
+
+    for (const resource of definition.resources) {
+      const architectureNode = architectureNodeByResourceId.get(resource.id);
+      if (architectureNode) {
+        outputNodeIdByAuthoredNodeId.set(
+          getAuthoredTemplateEntityId(templateId, resource.id),
+          architectureNode.id
+        );
+      }
+    }
+
+    const relevantPresentationNodeIds = collectRelevantTemplatePresentationNodeIds({
+      architectureNodeByResourceId,
+      authoredDiagram,
+      templateId
+    });
+
+    for (const presentationNode of definition.presentationNodes) {
+      const authoredNodeId = getAuthoredTemplateEntityId(
+        templateId,
+        `presentation-${presentationNode.id}`
+      );
+
+      if (relevantPresentationNodeIds.has(authoredNodeId)) {
+        outputNodeIdByAuthoredNodeId.set(
+          authoredNodeId,
+          getPlannedTemplatePresentationNodeId(templateId, presentationNode.id)
+        );
+      }
+    }
+
+    const authoredNodeById = new Map(authoredDiagram.nodes.map((node) => [node.id, node]));
+
+    for (const [authoredNodeId, outputNodeId] of outputNodeIdByAuthoredNodeId) {
+      const authoredNode = authoredNodeById.get(authoredNodeId);
+      if (!authoredNode) {
+        continue;
+      }
+
+      const rule: TemplateNodeLayoutRule = {
+        metadata: remapTemplateNodeMetadata(authoredNode.metadata, outputNodeIdByAuthoredNodeId),
+        position: { ...authoredNode.position },
+        size: { ...authoredNode.size }
+      };
+      nodeRulesById.set(outputNodeId, rule);
+      protectedNodeIds.add(outputNodeId);
+
+      if (authoredNodeId.includes("-presentation-")) {
+        presentationNodes.push({
+          ...authoredNode,
+          id: outputNodeId,
+          metadata: rule.metadata,
+          position: { ...rule.position },
+          size: { ...rule.size }
+        });
+      }
+    }
+
+    const authoredEdgeById = new Map(authoredDiagram.edges.map((edge) => [edge.id, edge]));
+
+    for (const relationship of definition.relationships) {
+      const sourceNodeId = architectureNodeByResourceId.get(relationship.sourceResourceId)?.id;
+      const targetNodeId = architectureNodeByResourceId.get(relationship.targetResourceId)?.id;
+      const architectureEdge = architectureEdgeByRelationshipKey.get(
+        getArchitectureRelationshipKey(sourceNodeId, targetNodeId, relationship.label)
+      );
+      const authoredEdge = authoredEdgeById.get(
+        getAuthoredTemplateEntityId(templateId, relationship.id)
+      );
+
+      if (!architectureEdge || !authoredEdge) {
+        continue;
+      }
+
+      edgeRulesById.set(architectureEdge.id, {
+        ...(authoredEdge.metadata ? { metadata: { ...authoredEdge.metadata } } : {}),
+        ...(authoredEdge.sourceHandleId ? { sourceHandleId: authoredEdge.sourceHandleId } : {}),
+        ...(authoredEdge.targetHandleId ? { targetHandleId: authoredEdge.targetHandleId } : {}),
+        ...(authoredEdge.type ? { type: authoredEdge.type } : {})
+      });
+    }
+
+    for (const presentationEdge of definition.presentationEdges) {
+      const authoredEdge = authoredEdgeById.get(
+        getAuthoredTemplateEntityId(templateId, `presentation-${presentationEdge.id}`)
+      );
+      const remappedEdge = authoredEdge
+        ? remapTemplatePresentationEdge(authoredEdge, outputNodeIdByAuthoredNodeId)
+        : undefined;
+
+      if (remappedEdge) {
+        presentationEdges.push(remappedEdge);
+      }
+    }
+  }
+
+  return {
+    edgeRulesById,
+    nodeRulesById,
+    presentationEdges,
+    presentationNodes,
+    protectedNodeIds
+  };
+}
+
+function usesRepositoryGeneratedTemplateLayout(architectureJson: ArchitectureJson): boolean {
+  return architectureJson.nodes.some((node) => node.id.startsWith("repository-"));
+}
+
+function collectRelevantTemplatePresentationNodeIds({
+  architectureNodeByResourceId,
+  authoredDiagram,
+  templateId
+}: {
+  readonly architectureNodeByResourceId: ReadonlyMap<string, ArchitectureJson["nodes"][number]>;
+  readonly authoredDiagram: DiagramJson;
+  readonly templateId: TemplateId;
+}): ReadonlySet<string> {
+  const authoredNodeById = new Map(authoredDiagram.nodes.map((node) => [node.id, node]));
+  const presentResourceNodeIds = new Set(
+    [...architectureNodeByResourceId.keys()].map((resourceId) =>
+      getAuthoredTemplateEntityId(templateId, resourceId)
+    )
+  );
+  const presentationNodeIds = new Set(
+    authoredDiagram.nodes.filter((node) => node.kind === "design").map((node) => node.id)
+  );
+  const relevantPresentationNodeIds = new Set<string>();
+
+  for (const resourceNodeId of presentResourceNodeIds) {
+    const parentAreaNodeId = authoredNodeById.get(resourceNodeId)?.metadata?.parentAreaNodeId;
+
+    if (parentAreaNodeId && presentationNodeIds.has(parentAreaNodeId)) {
+      relevantPresentationNodeIds.add(parentAreaNodeId);
+    }
+  }
+
+  for (const edge of authoredDiagram.edges) {
+    if (
+      presentResourceNodeIds.has(edge.sourceNodeId) &&
+      presentationNodeIds.has(edge.targetNodeId)
+    ) {
+      relevantPresentationNodeIds.add(edge.targetNodeId);
+    }
+    if (
+      presentResourceNodeIds.has(edge.targetNodeId) &&
+      presentationNodeIds.has(edge.sourceNodeId)
+    ) {
+      relevantPresentationNodeIds.add(edge.sourceNodeId);
+    }
+  }
+
+  let addedParent = true;
+  while (addedParent) {
+    addedParent = false;
+
+    for (const presentationNodeId of [...relevantPresentationNodeIds]) {
+      const parentAreaNodeId = authoredNodeById.get(presentationNodeId)?.metadata?.parentAreaNodeId;
+
+      if (
+        parentAreaNodeId &&
+        presentationNodeIds.has(parentAreaNodeId) &&
+        !relevantPresentationNodeIds.has(parentAreaNodeId)
+      ) {
+        relevantPresentationNodeIds.add(parentAreaNodeId);
+        addedParent = true;
+      }
+    }
+  }
+
+  return relevantPresentationNodeIds;
+}
+
+function applyTemplateNodeLayoutRules(
+  nodes: readonly DiagramNode[],
+  nodeRulesById: ReadonlyMap<string, TemplateNodeLayoutRule>
+): DiagramNode[] {
+  return nodes.map((node) => {
+    const rule = nodeRulesById.get(node.id);
+    if (!rule) {
+      return node;
+    }
+
+    const { parentAreaNodeId: _parentAreaNodeId, ...baseMetadata } = node.metadata ?? {};
+    const metadata = { ...baseMetadata, ...(rule.metadata ?? {}) };
+
+    return {
+      ...node,
+      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+      position: { ...rule.position },
+      size: { ...rule.size }
+    };
+  });
+}
+
+function remapTemplateNodeMetadata(
+  metadata: DiagramNode["metadata"],
+  outputNodeIdByAuthoredNodeId: ReadonlyMap<string, string>
+): DiagramNode["metadata"] {
+  if (!metadata) {
+    return undefined;
+  }
+
+  const { parentAreaNodeId, ...rest } = metadata;
+  const remappedParentAreaNodeId = parentAreaNodeId
+    ? outputNodeIdByAuthoredNodeId.get(parentAreaNodeId)
+    : undefined;
+  const remappedMetadata = {
+    ...rest,
+    ...(remappedParentAreaNodeId ? { parentAreaNodeId: remappedParentAreaNodeId } : {})
+  };
+
+  return Object.keys(remappedMetadata).length > 0 ? remappedMetadata : undefined;
+}
+
+function remapTemplatePresentationEdge(
+  edge: DiagramEdge,
+  outputNodeIdByAuthoredNodeId: ReadonlyMap<string, string>
+): DiagramEdge | undefined {
+  const sourceNodeId = outputNodeIdByAuthoredNodeId.get(edge.sourceNodeId);
+  const targetNodeId = outputNodeIdByAuthoredNodeId.get(edge.targetNodeId);
+
+  if (!sourceNodeId || !targetNodeId) {
+    return undefined;
+  }
+
+  return {
+    ...edge,
+    sourceNodeId,
+    targetNodeId
+  };
+}
+
+function isTemplateId(value: unknown): value is TemplateId {
+  return typeof value === "string" && (TEMPLATE_IDS as readonly string[]).includes(value);
+}
+
+function getAuthoredTemplateEntityId(templateId: TemplateId, entityId: string): string {
+  return `template-${templateId}-${entityId}`;
+}
+
+function getPlannedTemplatePresentationNodeId(templateId: TemplateId, nodeId: string): string {
+  return `fixed-template-${templateId}-presentation-${nodeId}`;
+}
+
+function getArchitectureRelationshipKey(
+  sourceId: string | undefined,
+  targetId: string | undefined,
+  label: string | undefined
+): string {
+  return `${sourceId ?? ""}\u0000${targetId ?? ""}\u0000${label ?? ""}`;
 }
 
 function hasAuthoredTemplatePosition(node: ArchitectureJson["nodes"][number]): boolean {
@@ -277,20 +739,27 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
       return [];
     }
 
-    return [{
-      config: createArchitectureConfig(parameters),
-      id: node.id,
-      label: node.label,
-      positionX: node.position.x,
-      positionY: node.position.y,
-      type: mapTerraformResourceType(parameters)
-    }];
+    return [
+      {
+        config: createArchitectureConfig(parameters),
+        id: node.id,
+        label: node.label,
+        positionX: node.position.x,
+        positionY: node.position.y,
+        type: mapTerraformResourceType(parameters)
+      }
+    ];
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
 
   return {
     edges: diagramJson.edges
-      .filter((edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId))
+      .filter(
+        (edge) =>
+          edge.metadata?.presentationRole !== "summary" &&
+          nodeIds.has(edge.sourceNodeId) &&
+          nodeIds.has(edge.targetNodeId)
+      )
       .map((edge) => ({
         id: edge.id,
         label: edge.label,
@@ -301,7 +770,10 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
   };
 }
 
-function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][number], index: number): DiagramNode {
+function convertArchitectureNodeToDiagramNode(
+  node: ArchitectureJson["nodes"][number],
+  index: number
+): DiagramNode {
   const presentationNode = createPresentationDiagramNode(node, index);
 
   if (presentationNode) {
@@ -320,7 +792,12 @@ function convertArchitectureNodeToDiagramNode(node: ArchitectureJson["nodes"][nu
     y: node.positionY
   };
   const zIndex = index + 1;
-  const baseNode = createResourceCatalogDiagramNode(node.type, terraformResourceType, position, zIndex);
+  const baseNode = createResourceCatalogDiagramNode(
+    node.type,
+    terraformResourceType,
+    position,
+    zIndex
+  );
 
   return {
     ...baseNode,
@@ -494,7 +971,7 @@ function createDiagramNodeParameters(
       baseParameters?.terraformBlockType ??
       DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
-      ...(shouldInheritBaseValues ? baseParameters?.values ?? {} : {}),
+      ...(shouldInheritBaseValues ? (baseParameters?.values ?? {}) : {}),
       ...config
     }
   };
@@ -525,7 +1002,9 @@ function convertArchitectureEdgesToDiagramEdges(
     routedEdges.set(edge.id, diagramEdge);
   }
 
-  return edges.map((edge) => routedEdges.get(edge.id)).filter((edge): edge is DiagramEdge => Boolean(edge));
+  return edges
+    .map((edge) => routedEdges.get(edge.id))
+    .filter((edge): edge is DiagramEdge => Boolean(edge));
 }
 
 function convertArchitectureEdgeToDiagramEdge(
@@ -547,7 +1026,9 @@ function convertArchitectureEdgeToDiagramEdge(
     label: edge.label,
     sourceNodeId: edge.sourceId,
     sourceHandleId: handles.sourceHandleId,
-    style: readAuthoredArchitectureEdgeStyle(edge) ?? getDiagramEdgeStyleForArchitectureEdge(edge, nodeById),
+    style:
+      readAuthoredArchitectureEdgeStyle(edge) ??
+      getDiagramEdgeStyleForArchitectureEdge(edge, nodeById),
     targetHandleId: handles.targetHandleId,
     targetNodeId: edge.targetId,
     type: readAuthoredArchitectureEdgeType(edge) ?? "smoothstep"
@@ -575,6 +1056,333 @@ function readAuthoredArchitectureEdgeHandles(
     : undefined;
 }
 
+function createReadablePresentationEdges(
+  edges: readonly DiagramEdge[],
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  authoredEdgeIds: ReadonlySet<string>
+): DiagramEdge[] {
+  if (edges.length < DENSE_PRESENTATION_EDGE_THRESHOLD) {
+    return [...edges];
+  }
+
+  const roleByNodeId = new Map(
+    [...nodeById].map(([nodeId, node]) => [nodeId, getAutomaticDiagramSemanticRole(node)])
+  );
+  const classifiedEdges = edges.map((edge) => {
+    const sourceRole = roleByNodeId.get(edge.sourceNodeId) ?? "support";
+    const targetRole = roleByNodeId.get(edge.targetNodeId) ?? "support";
+    const forcedPresentationRole = edge.metadata?.presentationRole;
+    const isPrimary = forcedPresentationRole
+      ? forcedPresentationRole !== "detail"
+      : authoredEdgeIds.has(edge.id) ||
+        isDirectPresentationRelationship(
+          nodeById.get(edge.sourceNodeId),
+          nodeById.get(edge.targetNodeId),
+          sourceRole,
+          targetRole
+        );
+
+    return {
+      ...edge,
+      metadata: {
+        ...edge.metadata,
+        presentationRole: isPrimary ? ("primary" as const) : ("detail" as const)
+      },
+      ...(isPrimary && edge.style?.lineStyle === "solid" && edge.style.width === "thin"
+        ? { style: { ...edge.style, width: "medium" as const } }
+        : {})
+    };
+  });
+  const summaryEdges = createCollapsedPresentationEdges(edges, nodeById, roleByNodeId).filter(
+    (edge) => !hasVisiblePresentationPath(classifiedEdges, edge.sourceNodeId, edge.targetNodeId)
+  );
+  const runtimeDataEdge = createRuntimeDataPresentationEdge(
+    [...classifiedEdges, ...summaryEdges],
+    nodeById,
+    roleByNodeId
+  );
+
+  return runtimeDataEdge
+    ? [...classifiedEdges, ...summaryEdges, runtimeDataEdge]
+    : [...classifiedEdges, ...summaryEdges];
+}
+
+function hasVisiblePresentationPath(
+  edges: readonly DiagramEdge[],
+  sourceNodeId: string,
+  targetNodeId: string
+): boolean {
+  const visibleTargetsBySourceId = new Map<string, string[]>();
+
+  for (const edge of edges) {
+    if (edge.metadata?.presentationRole === "detail") {
+      continue;
+    }
+
+    const targets = visibleTargetsBySourceId.get(edge.sourceNodeId) ?? [];
+    targets.push(edge.targetNodeId);
+    visibleTargetsBySourceId.set(edge.sourceNodeId, targets);
+  }
+
+  const visitedNodeIds = new Set([sourceNodeId]);
+  const pendingNodeIds = [...(visibleTargetsBySourceId.get(sourceNodeId) ?? [])];
+
+  while (pendingNodeIds.length > 0) {
+    const currentNodeId = pendingNodeIds.shift();
+    if (!currentNodeId) {
+      continue;
+    }
+    if (currentNodeId === targetNodeId) {
+      return true;
+    }
+    if (visitedNodeIds.has(currentNodeId)) {
+      continue;
+    }
+
+    visitedNodeIds.add(currentNodeId);
+    pendingNodeIds.push(...(visibleTargetsBySourceId.get(currentNodeId) ?? []));
+  }
+
+  return false;
+}
+
+function createCollapsedPresentationEdges(
+  edges: readonly DiagramEdge[],
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  roleByNodeId: ReadonlyMap<string, AutomaticDiagramSemanticRole>
+): DiagramEdge[] {
+  const outgoingEdgesByNodeId = new Map<string, DiagramEdge[]>();
+  const occupiedPairKeys = new Set<string>();
+
+  for (const edge of edges) {
+    const outgoingEdges = outgoingEdgesByNodeId.get(edge.sourceNodeId) ?? [];
+    outgoingEdges.push(edge);
+    outgoingEdgesByNodeId.set(edge.sourceNodeId, outgoingEdges);
+    occupiedPairKeys.add(getPresentationPairKey(edge.sourceNodeId, edge.targetNodeId));
+  }
+
+  const summaries: DiagramEdge[] = [];
+  const endpointNodes = [...nodeById.values()].filter((node) =>
+    isPresentationEndpoint(node, roleByNodeId.get(node.id) ?? "support")
+  );
+
+  for (const sourceNode of endpointNodes) {
+    const sourceRole = roleByNodeId.get(sourceNode.id) ?? "support";
+    const visitedDetailNodeIds = new Set<string>();
+    const pending = (outgoingEdgesByNodeId.get(sourceNode.id) ?? []).map((edge) => ({
+      depth: 1,
+      nodeId: edge.targetNodeId
+    }));
+
+    while (pending.length > 0) {
+      const current = pending.shift();
+      if (!current || current.depth > PRESENTATION_PATH_MAX_DEPTH) {
+        continue;
+      }
+
+      const currentNode = nodeById.get(current.nodeId);
+      const currentRole = roleByNodeId.get(current.nodeId) ?? "support";
+      if (!currentNode || currentNode.id === sourceNode.id) {
+        continue;
+      }
+
+      if (isPresentationEndpoint(currentNode, currentRole)) {
+        const pairKey = getPresentationPairKey(sourceNode.id, currentNode.id);
+        if (!occupiedPairKeys.has(pairKey) && isPresentationRolePair(sourceRole, currentRole)) {
+          summaries.push(
+            createSummaryPresentationEdge(
+              sourceNode,
+              currentNode,
+              sourceRole,
+              currentRole,
+              nodeById
+            )
+          );
+          occupiedPairKeys.add(pairKey);
+        }
+        continue;
+      }
+
+      if (
+        isAreaNode(currentNode) ||
+        currentRole === "network" ||
+        visitedDetailNodeIds.has(currentNode.id)
+      ) {
+        continue;
+      }
+
+      visitedDetailNodeIds.add(currentNode.id);
+      for (const nextEdge of outgoingEdgesByNodeId.get(currentNode.id) ?? []) {
+        pending.push({ depth: current.depth + 1, nodeId: nextEdge.targetNodeId });
+      }
+    }
+  }
+
+  return summaries;
+}
+
+function createRuntimeDataPresentationEdge(
+  visibleEdges: readonly DiagramEdge[],
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  roleByNodeId: ReadonlyMap<string, AutomaticDiagramSemanticRole>
+): DiagramEdge | undefined {
+  const computeNodes = [...nodeById.values()].filter(
+    (node) =>
+      !isAreaNode(node) &&
+      roleByNodeId.get(node.id) === "compute" &&
+      /(?:ecs_service|lambda_function|instance|autoscaling_group|kubernetes_deployment)\b/u.test(
+        getDiagramNodeResourceType(node)
+      )
+  );
+  const databaseNodes = [...nodeById.values()].filter(
+    (node) =>
+      !isAreaNode(node) &&
+      roleByNodeId.get(node.id) === "data" &&
+      /(?:db_instance|rds|dynamodb|sql_database|database)\b/u.test(getDiagramNodeResourceType(node))
+  );
+
+  if (computeNodes.length !== 1 || databaseNodes.length !== 1) {
+    return undefined;
+  }
+
+  const sourceNode = computeNodes[0];
+  const targetNode = databaseNodes[0];
+  if (!sourceNode || !targetNode) {
+    return undefined;
+  }
+
+  const alreadyVisible = visibleEdges.some(
+    (edge) =>
+      edge.metadata?.presentationRole !== "detail" &&
+      edge.sourceNodeId === sourceNode.id &&
+      edge.targetNodeId === targetNode.id
+  );
+
+  return alreadyVisible
+    ? undefined
+    : createSummaryPresentationEdge(sourceNode, targetNode, "compute", "data", nodeById);
+}
+
+function createSummaryPresentationEdge(
+  sourceNode: DiagramNode,
+  targetNode: DiagramNode,
+  sourceRole: AutomaticDiagramSemanticRole,
+  targetRole: AutomaticDiagramSemanticRole,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramEdge {
+  const handles = getDefaultEdgeHandles(sourceNode, targetNode, [...nodeById.values()], []);
+
+  return {
+    id: `summary-${sourceNode.id}-to-${targetNode.id}`,
+    label: getSummaryPresentationEdgeLabel(sourceRole, targetRole),
+    metadata: { presentationRole: "summary" },
+    sourceHandleId: handles.sourceHandleId,
+    sourceNodeId: sourceNode.id,
+    style: { ...SUMMARY_PRESENTATION_EDGE_STYLE },
+    targetHandleId: handles.targetHandleId,
+    targetNodeId: targetNode.id,
+    type: "smoothstep"
+  };
+}
+
+function isDirectPresentationRelationship(
+  sourceNode: DiagramNode | undefined,
+  targetNode: DiagramNode | undefined,
+  sourceRole: AutomaticDiagramSemanticRole,
+  targetRole: AutomaticDiagramSemanticRole
+): boolean {
+  if (!sourceNode || !targetNode) {
+    return false;
+  }
+
+  return (
+    !isAreaNode(sourceNode) &&
+    !isAreaNode(targetNode) &&
+    isPresentationRolePair(sourceRole, targetRole)
+  );
+}
+
+function isPresentationEndpoint(node: DiagramNode, role: AutomaticDiagramSemanticRole): boolean {
+  return !isAreaNode(node) && PRESENTATION_ENDPOINT_ROLES.has(role);
+}
+
+function isPresentationRolePair(
+  sourceRole: AutomaticDiagramSemanticRole,
+  targetRole: AutomaticDiagramSemanticRole
+): boolean {
+  if (
+    !PRESENTATION_ENDPOINT_ROLES.has(sourceRole) ||
+    !PRESENTATION_ENDPOINT_ROLES.has(targetRole)
+  ) {
+    return false;
+  }
+
+  if (sourceRole === "delivery" || targetRole === "delivery") {
+    return (
+      (sourceRole === "delivery" && (targetRole === "delivery" || targetRole === "compute")) ||
+      (targetRole === "delivery" && sourceRole === "compute")
+    );
+  }
+
+  return true;
+}
+
+function getSummaryPresentationEdgeLabel(
+  sourceRole: AutomaticDiagramSemanticRole,
+  targetRole: AutomaticDiagramSemanticRole
+): string {
+  if (sourceRole === "entry" && targetRole === "compute") return "routes requests";
+  if (sourceRole === "compute" && targetRole === "data") return "reads / writes";
+  if (sourceRole === "delivery" && targetRole === "compute") return "deploys";
+  if (sourceRole === "actor" && targetRole === "entry") return "requests";
+  if (sourceRole === "async" && targetRole === "compute") return "triggers";
+  if (sourceRole === "compute" && targetRole === "async") return "publishes";
+
+  return "connects";
+}
+
+function getPresentationPairKey(sourceNodeId: string, targetNodeId: string): string {
+  return `${sourceNodeId}\u0000${targetNodeId}`;
+}
+
+function reduceDenseDiagramEdgeLabels(
+  edges: readonly DiagramEdge[],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramEdge[] {
+  if (edges.length < 10) {
+    return [...edges];
+  }
+
+  const visibleRelationshipLabels = new Set<string>();
+
+  return edges.map((edge) => {
+    if (!edge.label) {
+      return edge;
+    }
+
+    const sourceNode = nodeById.get(edge.sourceNodeId);
+    const targetNode = nodeById.get(edge.targetNodeId);
+    if (!sourceNode || !targetNode) {
+      return edge;
+    }
+
+    const sourceRole = getAutomaticDiagramSemanticRole(sourceNode);
+    const targetRole = getAutomaticDiagramSemanticRole(targetNode);
+    const relationshipKey = `${edge.sourceNodeId}:${edge.label.trim().toLowerCase()}`;
+    const shouldHideLabel =
+      DENSE_DIAGRAM_SUPPORT_ROLES.has(sourceRole) ||
+      DENSE_DIAGRAM_SUPPORT_ROLES.has(targetRole) ||
+      visibleRelationshipLabels.has(relationshipKey);
+
+    if (shouldHideLabel) {
+      return { ...edge, label: undefined };
+    }
+
+    visibleRelationshipLabels.add(relationshipKey);
+    return edge;
+  });
+}
+
 function readAuthoredArchitectureEdgeStyle(
   edge: ArchitectureJson["edges"][number]
 ): NonNullable<DiagramEdge["style"]> | undefined {
@@ -590,12 +1398,16 @@ function readAuthoredArchitectureEdgeStyle(
   return {
     animated: false,
     ...(typeof color === "string" ? { color } : {}),
-    ...(lineStyle === "solid" || lineStyle === "dashed" || lineStyle === "dotted" ? { lineStyle } : {}),
+    ...(lineStyle === "solid" || lineStyle === "dashed" || lineStyle === "dotted"
+      ? { lineStyle }
+      : {}),
     ...(width === "thin" || width === "medium" || width === "thick" ? { width } : {})
   };
 }
 
-function readAuthoredArchitectureEdgeType(edge: ArchitectureJson["edges"][number]): string | undefined {
+function readAuthoredArchitectureEdgeType(
+  edge: ArchitectureJson["edges"][number]
+): string | undefined {
   const diagramType = (edge as AuthoredArchitectureEdge).diagramType;
 
   return typeof diagramType === "string" && diagramType.trim().length > 0 ? diagramType : undefined;
@@ -698,8 +1510,11 @@ function normalizeDiagramEdges(
     .sort(
       (leftItem, rightItem) =>
         getEdgeRoutingPriority(leftItem.edge.sourceNodeId, leftItem.edge.targetNodeId, nodeById) -
-          getEdgeRoutingPriority(rightItem.edge.sourceNodeId, rightItem.edge.targetNodeId, nodeById) ||
-        leftItem.index - rightItem.index
+          getEdgeRoutingPriority(
+            rightItem.edge.sourceNodeId,
+            rightItem.edge.targetNodeId,
+            nodeById
+          ) || leftItem.index - rightItem.index
     );
 
   for (const { edge } of routingItems) {
@@ -708,7 +1523,9 @@ function normalizeDiagramEdges(
     routedEdges.set(edge.id, diagramEdge);
   }
 
-  return edges.map((edge) => routedEdges.get(edge.id)).filter((edge): edge is DiagramEdge => Boolean(edge));
+  return edges
+    .map((edge) => routedEdges.get(edge.id))
+    .filter((edge): edge is DiagramEdge => Boolean(edge));
 }
 
 function normalizeDiagramEdge(
@@ -732,9 +1549,15 @@ function normalizeDiagramEdge(
     sourceHandleId: handles.sourceHandleId,
     style: {
       animated: edge.style?.animated ?? inferredStyle.animated,
-      color: shouldPreferInferredStyle ? inferredStyle.color : (edge.style?.color ?? inferredStyle.color),
-      lineStyle: shouldPreferInferredStyle ? inferredStyle.lineStyle : (edge.style?.lineStyle ?? inferredStyle.lineStyle),
-      width: shouldPreferInferredStyle ? inferredStyle.width : (edge.style?.width ?? inferredStyle.width)
+      color: shouldPreferInferredStyle
+        ? inferredStyle.color
+        : (edge.style?.color ?? inferredStyle.color),
+      lineStyle: shouldPreferInferredStyle
+        ? inferredStyle.lineStyle
+        : (edge.style?.lineStyle ?? inferredStyle.lineStyle),
+      width: shouldPreferInferredStyle
+        ? inferredStyle.width
+        : (edge.style?.width ?? inferredStyle.width)
     },
     targetHandleId: handles.targetHandleId,
     type: edge.type ?? "smoothstep"
@@ -776,11 +1599,19 @@ function getDiagramEdgeStyleForExistingEdge(
 ): NonNullable<DiagramEdge["style"]> {
   const labelStyle = getDiagramEdgeStyle(edge.label);
 
-  if (labelStyle.lineStyle !== DEFAULT_EDGE_STYLE.lineStyle || labelStyle.width !== DEFAULT_EDGE_STYLE.width) {
+  if (
+    labelStyle.lineStyle !== DEFAULT_EDGE_STYLE.lineStyle ||
+    labelStyle.width !== DEFAULT_EDGE_STYLE.width
+  ) {
     return labelStyle;
   }
 
-  return getDiagramEdgeStyleFromEndpoints(edge.sourceNodeId, edge.targetNodeId, nodeById, labelStyle);
+  return getDiagramEdgeStyleFromEndpoints(
+    edge.sourceNodeId,
+    edge.targetNodeId,
+    nodeById,
+    labelStyle
+  );
 }
 
 function getDiagramEdgeStyleForArchitectureEdge(
@@ -789,7 +1620,10 @@ function getDiagramEdgeStyleForArchitectureEdge(
 ): NonNullable<DiagramEdge["style"]> {
   const labelStyle = getDiagramEdgeStyle(edge.label);
 
-  if (labelStyle.lineStyle !== DEFAULT_EDGE_STYLE.lineStyle || labelStyle.width !== DEFAULT_EDGE_STYLE.width) {
+  if (
+    labelStyle.lineStyle !== DEFAULT_EDGE_STYLE.lineStyle ||
+    labelStyle.width !== DEFAULT_EDGE_STYLE.width
+  ) {
     return labelStyle;
   }
 
@@ -805,7 +1639,10 @@ function getDiagramEdgeStyleFromEndpoints(
   const sourceResourceType = getDiagramNodeResourceType(nodeById.get(sourceNodeId));
   const targetResourceType = getDiagramNodeResourceType(nodeById.get(targetNodeId));
 
-  if (isConfigurationDependencyRoutingType(sourceResourceType) || isConfigurationDependencyRoutingType(targetResourceType)) {
+  if (
+    isConfigurationDependencyRoutingType(sourceResourceType) ||
+    isConfigurationDependencyRoutingType(targetResourceType)
+  ) {
     return { ...DEPENDENCY_EDGE_STYLE };
   }
 
@@ -914,37 +1751,7 @@ function getDefaultEdgeHandles(
     }
   }
 
-  const obstacleSafeHandles = getObstacleSafeEdgeHandles(sourceNode, targetNode, nodes);
-  if (!doesOrthogonalRouteCrossResource(sourceNode, targetNode, obstacleSafeHandles, nodes)) {
-    return obstacleSafeHandles;
-  }
-
-  const sourceCenter = getNodeCenter(sourceNode);
-  const targetCenter = getNodeCenter(targetNode);
-  const deltaX = targetCenter.x - sourceCenter.x;
-  const deltaY = targetCenter.y - sourceCenter.y;
-
-  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-    return deltaX >= 0
-      ? {
-          sourceHandleId: EDGE_HANDLE_IDS.right,
-          targetHandleId: EDGE_HANDLE_IDS.left
-        }
-      : {
-          sourceHandleId: EDGE_HANDLE_IDS.left,
-          targetHandleId: EDGE_HANDLE_IDS.right
-        };
-  }
-
-  return deltaY >= 0
-    ? {
-        sourceHandleId: EDGE_HANDLE_IDS.bottom,
-        targetHandleId: EDGE_HANDLE_IDS.top
-      }
-    : {
-        sourceHandleId: EDGE_HANDLE_IDS.top,
-        targetHandleId: EDGE_HANDLE_IDS.bottom
-      };
+  return getObstacleSafeEdgeHandles(sourceNode, targetNode, nodes);
 }
 
 function getLowestOverlapEdgeHandles(
@@ -960,7 +1767,14 @@ function getLowestOverlapEdgeHandles(
 
   for (const sourceHandleId of sourceHandles) {
     for (const targetHandleId of targetHandles) {
-      const score = scoreEdgeRouteOverlap(sourceNode, targetNode, sourceHandleId, targetHandleId, nodes, occupiedRoutes);
+      const score = scoreEdgeRouteOverlap(
+        sourceNode,
+        targetNode,
+        sourceHandleId,
+        targetHandleId,
+        nodes,
+        occupiedRoutes
+      );
 
       if (score < bestScore) {
         bestScore = score;
@@ -1013,19 +1827,35 @@ function scoreEdgeRouteOverlap(
     }
 
     score +=
-      routeSegments.reduce((total, segment) => total + getSegmentNodeOverlapLength(segment, node), 0) *
-      EDGE_ROUTE_NODE_OVERLAP_PENALTY;
+      routeSegments.reduce(
+        (total, segment) => total + getSegmentNodeOverlapLength(segment, node),
+        0
+      ) * EDGE_ROUTE_NODE_OVERLAP_PENALTY;
   }
 
   for (const occupiedRoute of occupiedRoutes) {
-    if (occupiedRoute.sourceNodeId === sourceNode.id && occupiedRoute.targetNodeId === targetNode.id) {
+    if (
+      occupiedRoute.sourceNodeId === sourceNode.id &&
+      occupiedRoute.targetNodeId === targetNode.id
+    ) {
       continue;
     }
 
-    score += getSharedHandlePenalty(sourceNode, targetNode, sourceHandleId, targetHandleId, occupiedRoute);
-    score += getRouteOverlapLength(routeSegments, occupiedRoute.segments) * EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY;
-    score += getRouteCrowdingLength(routeSegments, occupiedRoute.segments) * EDGE_ROUTE_SEGMENT_CROWDING_PENALTY;
-    score += getRouteCrossingCount(routeSegments, occupiedRoute.segments) * EDGE_ROUTE_CROSSING_PENALTY;
+    score += getSharedHandlePenalty(
+      sourceNode,
+      targetNode,
+      sourceHandleId,
+      targetHandleId,
+      occupiedRoute
+    );
+    score +=
+      getRouteOverlapLength(routeSegments, occupiedRoute.segments) *
+      EDGE_ROUTE_SEGMENT_OVERLAP_PENALTY;
+    score +=
+      getRouteCrowdingLength(routeSegments, occupiedRoute.segments) *
+      EDGE_ROUTE_SEGMENT_CROWDING_PENALTY;
+    score +=
+      getRouteCrossingCount(routeSegments, occupiedRoute.segments) * EDGE_ROUTE_CROSSING_PENALTY;
   }
 
   return score;
@@ -1041,11 +1871,19 @@ function getControlPlaneRuntimeHandlePenalty(
   const targetType = getDiagramNodeResourceType(targetNode);
   let penalty = 0;
 
-  if (isControlPlaneRoutingType(sourceType) && isRuntimeStorageRoutingType(targetType) && !isVerticalEdgeHandle(targetHandleId)) {
+  if (
+    isControlPlaneRoutingType(sourceType) &&
+    isRuntimeStorageRoutingType(targetType) &&
+    !isVerticalEdgeHandle(targetHandleId)
+  ) {
     penalty += 250_000;
   }
 
-  if (isRuntimeStorageRoutingType(sourceType) && isControlPlaneRoutingType(targetType) && !isVerticalEdgeHandle(sourceHandleId)) {
+  if (
+    isRuntimeStorageRoutingType(sourceType) &&
+    isControlPlaneRoutingType(targetType) &&
+    !isVerticalEdgeHandle(sourceHandleId)
+  ) {
     penalty += 250_000;
   }
 
@@ -1098,7 +1936,10 @@ function getEndpointNodeReentryOverlapLength(
 }
 
 function addOccupiedRoute(
-  edge: Pick<DiagramEdge, "id" | "sourceHandleId" | "sourceNodeId" | "targetHandleId" | "targetNodeId">,
+  edge: Pick<
+    DiagramEdge,
+    "id" | "sourceHandleId" | "sourceNodeId" | "targetHandleId" | "targetNodeId"
+  >,
   nodeById: ReadonlyMap<string, DiagramNode>,
   occupiedRoutes: OccupiedRoute[]
 ): void {
@@ -1133,19 +1974,31 @@ function getSharedHandlePenalty(
 ): number {
   let penalty = 0;
 
-  if (sourceNode.id === occupiedRoute.sourceNodeId && sourceHandleId === occupiedRoute.sourceHandleId) {
+  if (
+    sourceNode.id === occupiedRoute.sourceNodeId &&
+    sourceHandleId === occupiedRoute.sourceHandleId
+  ) {
     penalty += EDGE_ROUTE_SHARED_HANDLE_PENALTY;
   }
 
-  if (sourceNode.id === occupiedRoute.targetNodeId && sourceHandleId === occupiedRoute.targetHandleId) {
+  if (
+    sourceNode.id === occupiedRoute.targetNodeId &&
+    sourceHandleId === occupiedRoute.targetHandleId
+  ) {
     penalty += EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY;
   }
 
-  if (targetNode.id === occupiedRoute.sourceNodeId && targetHandleId === occupiedRoute.sourceHandleId) {
+  if (
+    targetNode.id === occupiedRoute.sourceNodeId &&
+    targetHandleId === occupiedRoute.sourceHandleId
+  ) {
     penalty += EDGE_ROUTE_OPPOSING_SHARED_HANDLE_PENALTY;
   }
 
-  if (targetNode.id === occupiedRoute.targetNodeId && targetHandleId === occupiedRoute.targetHandleId) {
+  if (
+    targetNode.id === occupiedRoute.targetNodeId &&
+    targetHandleId === occupiedRoute.targetHandleId
+  ) {
     penalty += EDGE_ROUTE_SHARED_HANDLE_PENALTY;
   }
 
@@ -1165,15 +2018,37 @@ function getHandleDirectionPenalty(
   let penalty = Math.abs(deltaX) + Math.abs(deltaY);
 
   if (Math.abs(deltaX) >= Math.abs(deltaY)) {
-    penalty += deltaX >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.right ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
-    penalty += deltaX < 0 && sourceHandleId !== EDGE_HANDLE_IDS.left ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
-    penalty += deltaX >= 0 && targetHandleId !== EDGE_HANDLE_IDS.left ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
-    penalty += deltaX < 0 && targetHandleId !== EDGE_HANDLE_IDS.right ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty +=
+      deltaX >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.right
+        ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY
+        : 0;
+    penalty +=
+      deltaX < 0 && sourceHandleId !== EDGE_HANDLE_IDS.left
+        ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY
+        : 0;
+    penalty +=
+      deltaX >= 0 && targetHandleId !== EDGE_HANDLE_IDS.left
+        ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY
+        : 0;
+    penalty +=
+      deltaX < 0 && targetHandleId !== EDGE_HANDLE_IDS.right
+        ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY
+        : 0;
   } else {
-    penalty += deltaY >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.bottom ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
-    penalty += deltaY < 0 && sourceHandleId !== EDGE_HANDLE_IDS.top ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
-    penalty += deltaY >= 0 && targetHandleId !== EDGE_HANDLE_IDS.top ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
-    penalty += deltaY < 0 && targetHandleId !== EDGE_HANDLE_IDS.bottom ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty +=
+      deltaY >= 0 && sourceHandleId !== EDGE_HANDLE_IDS.bottom
+        ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY
+        : 0;
+    penalty +=
+      deltaY < 0 && sourceHandleId !== EDGE_HANDLE_IDS.top ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY : 0;
+    penalty +=
+      deltaY >= 0 && targetHandleId !== EDGE_HANDLE_IDS.top
+        ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY
+        : 0;
+    penalty +=
+      deltaY < 0 && targetHandleId !== EDGE_HANDLE_IDS.bottom
+        ? EDGE_ROUTE_WRONG_DIRECTION_PENALTY
+        : 0;
   }
 
   return penalty;
@@ -1187,9 +2062,7 @@ function getOrthogonalRouteSegments(
 ): RouteSegment[] {
   const sourceExitPoint = getHandleStubPoint(sourcePoint, sourceHandleId);
   const targetExitPoint = getHandleStubPoint(targetPoint, targetHandleId);
-  const segments: RouteSegment[] = [
-    { from: sourcePoint, to: sourceExitPoint }
-  ];
+  const segments: RouteSegment[] = [{ from: sourcePoint, to: sourceExitPoint }];
 
   if (sourceExitPoint.x === targetExitPoint.x || sourceExitPoint.y === targetExitPoint.y) {
     segments.push({ from: sourceExitPoint, to: targetExitPoint });
@@ -1224,7 +2097,10 @@ function isVerticalEdgeHandle(handleId: string): boolean {
   return handleId === EDGE_HANDLE_IDS.top || handleId === EDGE_HANDLE_IDS.bottom;
 }
 
-function getHandleStubPoint(point: DiagramNode["position"], handleId: string): DiagramNode["position"] {
+function getHandleStubPoint(
+  point: DiagramNode["position"],
+  handleId: string
+): DiagramNode["position"] {
   if (handleId === EDGE_HANDLE_IDS.left) {
     return { x: point.x - EDGE_HANDLE_STUB_LENGTH, y: point.y };
   }
@@ -1241,7 +2117,9 @@ function getHandleStubPoint(point: DiagramNode["position"], handleId: string): D
 }
 
 function removeZeroLengthRouteSegments(segments: readonly RouteSegment[]): RouteSegment[] {
-  return segments.filter((segment) => segment.from.x !== segment.to.x || segment.from.y !== segment.to.y);
+  return segments.filter(
+    (segment) => segment.from.x !== segment.to.x || segment.from.y !== segment.to.y
+  );
 }
 
 function getNodeHandlePoint(node: DiagramNode, handleId: string): DiagramNode["position"] {
@@ -1304,25 +2182,38 @@ function getSegmentNodeOverlapLength(segment: RouteSegment, node: DiagramNode): 
 
 function getRouteLength(segments: readonly RouteSegment[]): number {
   return segments.reduce(
-    (total, segment) => total + Math.abs(segment.to.x - segment.from.x) + Math.abs(segment.to.y - segment.from.y),
+    (total, segment) =>
+      total + Math.abs(segment.to.x - segment.from.x) + Math.abs(segment.to.y - segment.from.y),
     0
   );
 }
 
-function getRouteOverlapLength(leftSegments: readonly RouteSegment[], rightSegments: readonly RouteSegment[]): number {
-  return leftSegments.reduce(
-    (total, leftSegment) =>
-      total + rightSegments.reduce((segmentTotal, rightSegment) => segmentTotal + getSegmentOverlapLength(leftSegment, rightSegment), 0),
-    0
-  );
-}
-
-function getRouteCrowdingLength(leftSegments: readonly RouteSegment[], rightSegments: readonly RouteSegment[]): number {
+function getRouteOverlapLength(
+  leftSegments: readonly RouteSegment[],
+  rightSegments: readonly RouteSegment[]
+): number {
   return leftSegments.reduce(
     (total, leftSegment) =>
       total +
       rightSegments.reduce(
-        (segmentTotal, rightSegment) => segmentTotal + getSegmentCrowdingLength(leftSegment, rightSegment),
+        (segmentTotal, rightSegment) =>
+          segmentTotal + getSegmentOverlapLength(leftSegment, rightSegment),
+        0
+      ),
+    0
+  );
+}
+
+function getRouteCrowdingLength(
+  leftSegments: readonly RouteSegment[],
+  rightSegments: readonly RouteSegment[]
+): number {
+  return leftSegments.reduce(
+    (total, leftSegment) =>
+      total +
+      rightSegments.reduce(
+        (segmentTotal, rightSegment) =>
+          segmentTotal + getSegmentCrowdingLength(leftSegment, rightSegment),
         0
       ),
     0
@@ -1335,12 +2226,26 @@ function getSegmentOverlapLength(leftSegment: RouteSegment, rightSegment: RouteS
   const leftVertical = leftSegment.from.x === leftSegment.to.x;
   const rightVertical = rightSegment.from.x === rightSegment.to.x;
 
-  if (leftHorizontal && rightHorizontal && Math.abs(leftSegment.from.y - rightSegment.from.y) <= 1) {
-    return getRangeOverlapLength(leftSegment.from.x, leftSegment.to.x, rightSegment.from.x, rightSegment.to.x);
+  if (
+    leftHorizontal &&
+    rightHorizontal &&
+    Math.abs(leftSegment.from.y - rightSegment.from.y) <= 1
+  ) {
+    return getRangeOverlapLength(
+      leftSegment.from.x,
+      leftSegment.to.x,
+      rightSegment.from.x,
+      rightSegment.to.x
+    );
   }
 
   if (leftVertical && rightVertical && Math.abs(leftSegment.from.x - rightSegment.from.x) <= 1) {
-    return getRangeOverlapLength(leftSegment.from.y, leftSegment.to.y, rightSegment.from.y, rightSegment.to.y);
+    return getRangeOverlapLength(
+      leftSegment.from.y,
+      leftSegment.to.y,
+      rightSegment.from.y,
+      rightSegment.to.y
+    );
   }
 
   return 0;
@@ -1359,7 +2264,12 @@ function getSegmentCrowdingLength(leftSegment: RouteSegment, rightSegment: Route
       return 0;
     }
 
-    return getRangeOverlapLength(leftSegment.from.x, leftSegment.to.x, rightSegment.from.x, rightSegment.to.x);
+    return getRangeOverlapLength(
+      leftSegment.from.x,
+      leftSegment.to.x,
+      rightSegment.from.x,
+      rightSegment.to.x
+    );
   }
 
   if (leftVertical && rightVertical) {
@@ -1369,18 +2279,27 @@ function getSegmentCrowdingLength(leftSegment: RouteSegment, rightSegment: Route
       return 0;
     }
 
-    return getRangeOverlapLength(leftSegment.from.y, leftSegment.to.y, rightSegment.from.y, rightSegment.to.y);
+    return getRangeOverlapLength(
+      leftSegment.from.y,
+      leftSegment.to.y,
+      rightSegment.from.y,
+      rightSegment.to.y
+    );
   }
 
   return 0;
 }
 
-function getRouteCrossingCount(leftSegments: readonly RouteSegment[], rightSegments: readonly RouteSegment[]): number {
+function getRouteCrossingCount(
+  leftSegments: readonly RouteSegment[],
+  rightSegments: readonly RouteSegment[]
+): number {
   return leftSegments.reduce(
     (total, leftSegment) =>
       total +
       rightSegments.reduce(
-        (segmentTotal, rightSegment) => segmentTotal + (doSegmentsCross(leftSegment, rightSegment) ? 1 : 0),
+        (segmentTotal, rightSegment) =>
+          segmentTotal + (doSegmentsCross(leftSegment, rightSegment) ? 1 : 0),
         0
       ),
     0
@@ -1522,7 +2441,10 @@ function applyDiagramResourceNameConventions(nodes: readonly DiagramNode[]): Dia
 
     resourceNameByNodeId.set(
       node.id,
-      createConventionResourceName(parameters.resourceType, parameters.resourceName, [node.label, node.id])
+      createConventionResourceName(parameters.resourceType, parameters.resourceName, [
+        node.label,
+        node.id
+      ])
     );
   }
 
@@ -1536,7 +2458,10 @@ function applyDiagramResourceNameConventions(nodes: readonly DiagramNode[]): Dia
     }
 
     const resourceName = resourceNameByNodeId.get(node.id) ?? parameters.resourceName;
-    const values = rewriteTerraformReferencesInValue(parameters.values, referenceRewrites) as ResourceConfig;
+    const values = rewriteTerraformReferencesInValue(
+      parameters.values,
+      referenceRewrites
+    ) as ResourceConfig;
 
     if (resourceName === parameters.resourceName && values === parameters.values) {
       return node;
@@ -1646,6 +2571,123 @@ type ReadableLayoutSlot = {
   readonly row: number;
 };
 
+function applyRepositoryGeneratedSupportLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const managedServicesArea = nodes.find((node) => node.id === REPOSITORY_MANAGED_SERVICES_AREA_ID);
+
+  if (!managedServicesArea || !isAreaDiagramNode(managedServicesArea)) {
+    return [...nodes];
+  }
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const supportNodes = nodes
+    .filter(
+      (node) =>
+        node.kind === "resource" &&
+        !isAreaDiagramNode(node) &&
+        node.metadata?.parentAreaNodeId === REPOSITORY_MANAGED_SERVICES_AREA_ID
+    )
+    .sort(compareRepositorySupportNodes);
+  const slotCounts = new Map<string, number>();
+
+  for (const supportNode of supportNodes) {
+    const currentNode = nodeById.get(supportNode.id);
+
+    if (!currentNode) {
+      continue;
+    }
+
+    const slot = getRepositorySupportLayoutSlot(currentNode);
+    const slotKey = `${slot.column}:${slot.row}`;
+    const stackIndex = slotCounts.get(slotKey) ?? 0;
+    const nextPosition = {
+      x: REPOSITORY_SUPPORT_ORIGIN.x + slot.column * REPOSITORY_SUPPORT_COLUMN_GAP,
+      y:
+        REPOSITORY_SUPPORT_ORIGIN.y +
+        slot.row * REPOSITORY_SUPPORT_ROW_GAP +
+        stackIndex * REPOSITORY_SUPPORT_STACK_GAP
+    };
+
+    slotCounts.set(slotKey, stackIndex + 1);
+    moveNodeSubtree(
+      currentNode.id,
+      {
+        x: nextPosition.x - currentNode.position.x,
+        y: nextPosition.y - currentNode.position.y
+      },
+      nodeById
+    );
+  }
+
+  const githubActionsNode = [...nodeById.values()].find((node) =>
+    /github[-_\s]*actions/u.test(`${node.id} ${node.label}`.toLowerCase())
+  );
+
+  if (githubActionsNode && githubActionsNode.metadata?.parentAreaNodeId == null) {
+    moveNodeSubtree(
+      githubActionsNode.id,
+      {
+        x: 64 - githubActionsNode.position.x,
+        y: REPOSITORY_SUPPORT_ORIGIN.y + REPOSITORY_SUPPORT_ROW_GAP - githubActionsNode.position.y
+      },
+      nodeById
+    );
+  }
+
+  return nodes.map((node) => nodeById.get(node.id) ?? node);
+}
+
+function compareRepositorySupportNodes(left: DiagramNode, right: DiagramNode): number {
+  const leftSlot = getRepositorySupportLayoutSlot(left);
+  const rightSlot = getRepositorySupportLayoutSlot(right);
+
+  return (
+    leftSlot.row - rightSlot.row ||
+    leftSlot.column - rightSlot.column ||
+    left.position.y - right.position.y ||
+    left.position.x - right.position.x ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function getRepositorySupportLayoutSlot(node: DiagramNode): ReadableLayoutSlot {
+  const resourceType = getDiagramNodeResourceType(node);
+  const descriptor = `${node.id} ${node.label} ${node.parameters?.resourceName ?? ""}`.toLowerCase();
+
+  if (resourceType === "aws_cloudfront_distribution" || /cloudfront/u.test(descriptor)) {
+    return { column: 0, row: 0 };
+  }
+
+  if (/public[-_\s]*access|bucket[-_\s]*policy|origin[-_\s]*access|\boac\b/u.test(descriptor)) {
+    return { column: 2, row: 0 };
+  }
+
+  if (resourceType === "aws_s3_bucket" || /\bstatic\b|\bassets?\b|\bweb\b/u.test(descriptor)) {
+    return { column: 1, row: 0 };
+  }
+
+  if (resourceType === "aws_ecr_repository" || /\becr\b|image[-_\s]*repository/u.test(descriptor)) {
+    return { column: 0, row: 1 };
+  }
+
+  if (resourceType === "aws_ecs_task_definition" || /task[-_\s]*definition/u.test(descriptor)) {
+    return { column: 1, row: 1 };
+  }
+
+  if (resourceType === "aws_cloudwatch_log_group" || /\blogs?\b|cloudwatch/u.test(descriptor)) {
+    return { column: 2, row: 1 };
+  }
+
+  if (resourceType === "aws_iam_role" || /\brole\b/u.test(descriptor)) {
+    return { column: 3, row: 1 };
+  }
+
+  if (resourceType === "aws_iam_policy" || /\bpolicy\b/u.test(descriptor)) {
+    return { column: 4, row: 1 };
+  }
+
+  return { column: 3, row: 0 };
+}
+
 function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const hasAreaNodes = nodes.some(isAreaDiagramNode);
@@ -1700,7 +2742,9 @@ function applyReadableTopologyLayout(nodes: readonly DiagramNode[]): DiagramNode
   return nodes.map((node) => nodeById.get(node.id) ?? node);
 }
 
-function createReadableLayoutNodesByParentId(nodes: readonly DiagramNode[]): Map<string, DiagramNode[]> {
+function createReadableLayoutNodesByParentId(
+  nodes: readonly DiagramNode[]
+): Map<string, DiagramNode[]> {
   const nodesByParentId = new Map<string, DiagramNode[]>();
 
   for (const node of nodes) {
@@ -1721,7 +2765,10 @@ function isReadableLayoutCandidate(node: DiagramNode): boolean {
   return node.kind === "resource" && !isAreaDiagramNode(node);
 }
 
-function getReadableLayoutOrigin(nodes: readonly DiagramNode[], parentNode?: DiagramNode): DiagramNode["position"] {
+function getReadableLayoutOrigin(
+  nodes: readonly DiagramNode[],
+  parentNode?: DiagramNode
+): DiagramNode["position"] {
   const slots = nodes.map((node) => getReadableLayoutSlot(node, parentNode));
   const minColumn = Math.min(...slots.map((slot) => slot.column));
   const minRow = Math.min(...slots.map((slot) => slot.row));
@@ -1749,7 +2796,8 @@ function compareReadableLayoutNodes(leftNode: DiagramNode, rightNode: DiagramNod
 
 function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): ReadableLayoutSlot {
   const resourceType = getDiagramNodeResourceType(node);
-  const resourceName = `${node.parameters?.resourceName ?? ""} ${node.label} ${node.id}`.toLowerCase();
+  const resourceName =
+    `${node.parameters?.resourceName ?? ""} ${node.label} ${node.id}`.toLowerCase();
 
   if (parentNode && getDiagramNodeResourceType(parentNode) === "aws_region") {
     return getRegionReadableLayoutSlot(resourceType, resourceName);
@@ -1775,7 +2823,10 @@ function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): Rea
     return { column: 0, row: 1 };
   }
 
-  if (resourceType === "aws_s3_bucket" && /(^|[_\s-])(asset|assets|static|site|website|web)([_\s-]|$)/u.test(resourceName)) {
+  if (
+    resourceType === "aws_s3_bucket" &&
+    /(^|[_\s-])(asset|assets|static|site|website|web)([_\s-]|$)/u.test(resourceName)
+  ) {
     return { column: 1, row: 1 };
   }
 
@@ -1834,7 +2885,10 @@ function getReadableLayoutSlot(node: DiagramNode, parentNode?: DiagramNode): Rea
   return { column: 3, row: 2 };
 }
 
-function getRegionReadableLayoutSlot(resourceType: string, resourceName: string): ReadableLayoutSlot {
+function getRegionReadableLayoutSlot(
+  resourceType: string,
+  resourceName: string
+): ReadableLayoutSlot {
   if (resourceType === "aws_iam_policy") {
     return { column: 0, row: 0 };
   }
@@ -1855,7 +2909,10 @@ function getRegionReadableLayoutSlot(resourceType: string, resourceName: string)
     return { column: 0, row: 1 };
   }
 
-  if (resourceType === "aws_s3_bucket" && /(^|[_\s-])(asset|assets|static|site|website|web)([_\s-]|$)/u.test(resourceName)) {
+  if (
+    resourceType === "aws_s3_bucket" &&
+    /(^|[_\s-])(asset|assets|static|site|website|web)([_\s-]|$)/u.test(resourceName)
+  ) {
     return { column: 1, row: 1 };
   }
 
@@ -1946,7 +3003,9 @@ function resolveSiblingNodeCollisionsOnce(nodes: readonly DiagramNode[]): Diagra
   );
 
   for (const parentId of parentIds) {
-    const siblingNodes = nodesByParentId.get(parentId) ?? [];
+    const siblingNodes = [...(nodesByParentId.get(parentId) ?? [])].sort(
+      compareCollisionResolutionNodes
+    );
     const placedNodes: DiagramNode[] = [];
 
     for (const originalNode of siblingNodes) {
@@ -1977,11 +3036,19 @@ function resolveSiblingNodeCollisionsOnce(nodes: readonly DiagramNode[]): Diagra
   return nodes.map((node) => nodeById.get(node.id) ?? node);
 }
 
+function compareCollisionResolutionNodes(left: DiagramNode, right: DiagramNode): number {
+  return (
+    left.position.y - right.position.y ||
+    left.position.x - right.position.x ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 function createResourceNodesByParentId(nodes: readonly DiagramNode[]): Map<string, DiagramNode[]> {
   const nodesByParentId = new Map<string, DiagramNode[]>();
 
   for (const node of nodes) {
-    if (node.kind !== "resource") {
+    if (node.kind !== "resource" && !isAreaDiagramNode(node)) {
       continue;
     }
 
@@ -2036,9 +3103,26 @@ function moveNodeUntilClear(
       ...node,
       position: nextPosition
     };
+    const overlappingNode = placedNodes.find((placedNode) =>
+      doNodeFootprintsOverlap(candidate, placedNode, nodeById)
+    );
 
-    if (!placedNodes.some((placedNode) => doNodeFootprintsOverlap(candidate, placedNode, nodeById))) {
+    if (!overlappingNode) {
       return candidate;
+    }
+
+    if (isAreaDiagramNode(candidate) && isAreaDiagramNode(overlappingNode)) {
+      const candidateFootprint = getNodeCollisionFootprint(candidate);
+      const overlappingFootprint = getNodeCollisionFootprint(overlappingNode);
+      nextPosition = {
+        x: nextPosition.x,
+        y:
+          overlappingFootprint.y +
+          overlappingFootprint.height +
+          RESOURCE_COLLISION_GAP -
+          (candidateFootprint.y - candidate.position.y)
+      };
+      continue;
     }
 
     const collisionStepSize = getNodeCollisionStepSize(node);
@@ -2113,7 +3197,12 @@ function doAreaAndResourceFootprintsConflict(
   );
 }
 
-function getNodeCollisionFootprint(node: DiagramNode): { x: number; y: number; width: number; height: number } {
+function getNodeCollisionFootprint(node: DiagramNode): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
   const visualBounds = getResourceNodeVisualBounds(node);
 
   return {
@@ -2143,7 +3232,10 @@ function getAreaDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNo
 }
 
 // 깊게 중첩된 Region/VPC/AZ/SG/Subnet 박스가 안정될 때 반복 계산을 멈춥니다.
-function areNodeLayoutsEqual(leftNodes: readonly DiagramNode[], rightNodes: readonly DiagramNode[]): boolean {
+function areNodeLayoutsEqual(
+  leftNodes: readonly DiagramNode[],
+  rightNodes: readonly DiagramNode[]
+): boolean {
   return leftNodes.every((leftNode, index) => {
     const rightNode = rightNodes[index];
 
@@ -2253,7 +3345,10 @@ function findConfigParentAreaNodeId(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): string | undefined {
-  const routeTableAssociationParentAreaNodeId = findRouteTableAssociationParentAreaNodeId(node, nodeById);
+  const routeTableAssociationParentAreaNodeId = findRouteTableAssociationParentAreaNodeId(
+    node,
+    nodeById
+  );
 
   if (routeTableAssociationParentAreaNodeId) {
     return routeTableAssociationParentAreaNodeId;
@@ -2265,9 +3360,109 @@ function findConfigParentAreaNodeId(
     return subnetNode.id;
   }
 
+  const multiSubnetParentAreaNodeId = findMultiSubnetParentAreaNodeId(node, nodeById);
+
+  if (multiSubnetParentAreaNodeId) {
+    return multiSubnetParentAreaNodeId;
+  }
+
+  const dbSubnetGroupParentAreaNodeId = findDbSubnetGroupParentAreaNodeId(node, nodeById);
+
+  if (dbSubnetGroupParentAreaNodeId) {
+    return dbSubnetGroupParentAreaNodeId;
+  }
+
+  const loadBalancerParentAreaNodeId = findLoadBalancerParentAreaNodeId(node, nodeById);
+
+  if (loadBalancerParentAreaNodeId) {
+    return loadBalancerParentAreaNodeId;
+  }
+
   const vpcNode = findConfigAreaNodeByParameter(node, "vpcId", nodeById);
 
   return vpcNode && vpcNode.id !== node.id ? vpcNode.id : undefined;
+}
+
+const MULTI_SUBNET_REFERENCE_PATHS = [
+  ["subnets"],
+  ["subnetIds"],
+  ["vpcZoneIdentifier"],
+  ["networkConfiguration", "subnets"]
+] as const;
+
+function findMultiSubnetParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  const subnetNodes = MULTI_SUBNET_REFERENCE_PATHS.flatMap((path) =>
+    getNestedStringParameterValues(node, path)
+  )
+    .map((referenceValue) => findReferencedNode(referenceValue, nodeById))
+    .filter(
+      (referencedNode): referencedNode is DiagramNode =>
+        referencedNode !== undefined && getDiagramNodeResourceType(referencedNode) === "aws_subnet"
+    );
+
+  if (subnetNodes.length === 0) {
+    return undefined;
+  }
+
+  if (subnetNodes.length === 1) {
+    return subnetNodes[0]?.id;
+  }
+
+  const vpcNodeIds = new Set(
+    subnetNodes.flatMap((subnetNode) => {
+      const vpcNode = findConfigAreaNodeByParameter(subnetNode, "vpcId", nodeById);
+      return vpcNode ? [vpcNode.id] : [];
+    })
+  );
+
+  return vpcNodeIds.size === 1 ? [...vpcNodeIds][0] : undefined;
+}
+
+function findDbSubnetGroupParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  const dbSubnetGroupNode = findConfigNodeByParameter(node, "dbSubnetGroupName", nodeById);
+
+  return dbSubnetGroupNode
+    ? findMultiSubnetParentAreaNodeId(dbSubnetGroupNode, nodeById)
+    : undefined;
+}
+
+function findLoadBalancerParentAreaNodeId(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): string | undefined {
+  if (getDiagramNodeResourceType(node) !== "aws_lb_listener") {
+    return undefined;
+  }
+
+  const loadBalancerNode = findConfigNodeByParameter(node, "loadBalancerArn", nodeById);
+
+  return loadBalancerNode ? findMultiSubnetParentAreaNodeId(loadBalancerNode, nodeById) : undefined;
+}
+
+function getNestedStringParameterValues(node: DiagramNode, path: readonly string[]): string[] {
+  let value: unknown = node.parameters?.values;
+
+  for (const key of path) {
+    if (!isRecord(value)) {
+      return [];
+    }
+
+    value = value[key];
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+
+  return Array.isArray(value)
+    ? value.filter(isString).filter((item) => item.trim().length > 0)
+    : [];
 }
 
 function findRouteTableAssociationParentAreaNodeId(
@@ -2340,7 +3535,10 @@ function matchesTerraformNodeReference(referenceValue: string, node: DiagramNode
     );
 
     return parameters.terraformBlockType === "data"
-      ? [...resourceReferences, ...resourceReferences.map((resourceReference) => `data.${resourceReference}`)]
+      ? [
+          ...resourceReferences,
+          ...resourceReferences.map((resourceReference) => `data.${resourceReference}`)
+        ]
       : resourceReferences;
   });
 
@@ -2360,7 +3558,8 @@ function createTerraformReferenceNameCandidates(
         toTerraformName(node.id),
         toTerraformName(node.label)
       ].filter(
-        (referenceName): referenceName is string => typeof referenceName === "string" && referenceName.length > 0
+        (referenceName): referenceName is string =>
+          typeof referenceName === "string" && referenceName.length > 0
       )
     )
   ];
@@ -2470,7 +3669,10 @@ function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceCo
     : config;
 }
 
-function addSecurityGroupRuleIngress(config: ResourceConfig, values: ResourceConfig): ResourceConfig {
+function addSecurityGroupRuleIngress(
+  config: ResourceConfig,
+  values: ResourceConfig
+): ResourceConfig {
   const ingress = normalizeSecurityGroupRuleIngress(values);
 
   return ingress.length > 0
@@ -2492,9 +3694,13 @@ function normalizeSecurityGroupRuleIngress(values: ResourceConfig): ResourceConf
     return [];
   }
 
-  const port = normalizePort(values["fromPort"] ?? values["from_port"] ?? values["toPort"] ?? values["to_port"]);
+  const port = normalizePort(
+    values["fromPort"] ?? values["from_port"] ?? values["toPort"] ?? values["to_port"]
+  );
 
-  return cidrBlocks.filter(isString).map((cidr) => (port === undefined ? { cidr } : { cidr, port }));
+  return cidrBlocks
+    .filter(isString)
+    .map((cidr) => (port === undefined ? { cidr } : { cidr, port }));
 }
 
 // Security Group Rule 포트는 AWS가 받을 수 있는 숫자 범위만 분석 입력에 남깁니다.
@@ -2554,7 +3760,8 @@ function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceTy
   const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
 
   return (
-    getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ?? "UNKNOWN"
+    getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ??
+    "UNKNOWN"
   );
 }
 

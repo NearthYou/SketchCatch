@@ -24,6 +24,21 @@ test("Repository start screen exposes an explicit AI chat fallback", () => {
   assert.doesNotMatch(source, /Template 없이 AI로 생성/);
 });
 
+test("connected Repository board generation uses the AI Architecture Draft path", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /createConnectedRepositoryBoard/);
+  assert.match(source, /createConnectedRepositoryArchitectureDraftRequest/);
+  assert.match(source, /createAiArchitectureDraft/);
+  assert.match(source, /getDiagramJsonForArchitectureDraft\(draft\)/);
+  assert.match(source, /repositoryAnalysis:\s*{/);
+  assert.match(source, /sourceRepositoryId:\s*repository\.id/);
+  assert.match(source, /repositoryEvidence:\s*{/);
+  assert.match(source, /onCreateBoard=\{\(templateId\) => void createConnectedRepositoryBoard\(templateId\)\}/);
+  assert.doesNotMatch(source, /createRepositoryBoardHref/);
+  assert.doesNotMatch(source, /href=\{createRepositoryBoardHref/);
+});
+
 test("Repository start screen selects a fetched branch before reanalysis", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 

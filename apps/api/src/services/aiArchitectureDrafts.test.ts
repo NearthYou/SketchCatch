@@ -64,6 +64,7 @@ test("fixed Template keeps its core resources and merges compatible answer-drive
     node.id === "fixed-template-ecs-fargate-container-app-subnet-a"
   );
   assert.equal(fixedVpc?.config.cidrBlock, "10.30.0.0/16");
+  assert.equal(fixedVpc?.config.templateId, "ecs-fargate-container-app");
   assert.equal(fixedVpc?.config.values, undefined);
   assert.equal(
     fixedSubnet?.config.vpcId,

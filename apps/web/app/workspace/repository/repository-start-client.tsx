@@ -15,12 +15,14 @@ import {
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  CreateArchitectureDraftRequest,
   GitHubInstalledRepositoryCandidate,
   RepositoryAnalysisQuestion,
   RepositoryDeploymentType,
   RepositoryTemplateRecommendationResult,
   SourceRepositoryAnalysisResult,
-  SourceRepository
+  SourceRepository,
+  TemplateId
 } from "@sketchcatch/types";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
@@ -272,6 +274,42 @@ export function RepositoryStartClient({
     }
   }
 
+  async function createConnectedRepositoryBoard(templateId: TemplateId): Promise<void> {
+    if (!activeRepository?.analysis || actionState === "loading") return;
+
+    setActionState("loading");
+    setErrorMessage("");
+
+    try {
+      const draft = await createAiArchitectureDraft(
+        createConnectedRepositoryArchitectureDraftRequest({
+          projectId,
+          repository: activeRepository,
+          templateId
+        })
+      );
+
+      if ("status" in draft) {
+        setActionState("error");
+        setErrorMessage(`Amazon Q媛 異붽? ?뺤씤???붿껌?덉뒿?덈떎: ${draft.question}`);
+        return;
+      }
+
+      const diagram = getDiagramJsonForArchitectureDraft(draft);
+      await saveProjectDraft({ diagramJson: diagram, projectId });
+      setActionState("idle");
+      router.push(
+        `/workspace?${new URLSearchParams({
+          projectId,
+          projectName
+        }).toString()}`
+      );
+    } catch (error) {
+      setActionState("error");
+      setErrorMessage(getApiErrorMessage(error, "Amazon Q濡???μ냼 ?ㅼ씠?닿렇?⑥쓣 ?앹꽦?섏? 紐삵뻽?듬땲??"));
+    }
+  }
+
   async function connectRepository(candidate: GitHubInstalledRepositoryCandidate): Promise<void> {
     if (!installationState || candidate.archived) return;
     setActionState("loading");
@@ -513,10 +551,9 @@ export function RepositoryStartClient({
 
             {activeRecommendation ? (
               <RepositoryTemplateCandidates
-                projectId={projectId}
-                projectName={projectName}
+                actionState={actionState}
+                onCreateBoard={(templateId) => void createConnectedRepositoryBoard(templateId)}
                 recommendation={activeRecommendation}
-                repository={activeRepository}
               />
             ) : null}
 
@@ -635,16 +672,16 @@ function CiCdHandoffOption({
 }
 
 function RepositoryTemplateCandidates({
-  projectId,
-  projectName,
+  actionState,
+  onCreateBoard,
   recommendation,
-  repository
 }: {
-  readonly projectId: string;
-  readonly projectName: string;
+  readonly actionState: RequestState;
+  readonly onCreateBoard: (templateId: TemplateId) => void;
   readonly recommendation: RepositoryTemplateRecommendationResult;
-  readonly repository: SourceRepository;
 }) {
+  const isBusy = actionState === "loading";
+
   return (
     <section className={styles.recommendationPanel} aria-label="템플릿 후보">
       {recommendation.candidates.map((candidate) => (
@@ -655,12 +692,15 @@ function RepositoryTemplateCandidates({
             <p>{candidate.reasons.join(" ")}</p>
             <small>{candidate.tradeoffs.join(" ")}</small>
           </div>
-          <Link
+          <button
             className={styles.boardAction}
-            href={createRepositoryBoardHref(projectId, projectName, repository, candidate.templateId)}
+            disabled={isBusy}
+            onClick={() => onCreateBoard(candidate.templateId)}
+            type="button"
           >
-            보드 열기
-          </Link>
+            {isBusy ? <LoaderCircle className={styles.spin} size={16} /> : null}
+            AI로 보드 생성
+          </button>
         </article>
       ))}
     </section>
@@ -859,18 +899,70 @@ function RepositoryCandidates({
   );
 }
 
-function createRepositoryBoardHref(
-  projectId: string,
-  projectName: string,
-  repository: SourceRepository,
-  templateId: string
-): string {
-  return `/workspace?${new URLSearchParams({
-    projectId,
-    projectName,
-    sourceRepositoryId: repository.id,
-    templateId
-  }).toString()}`;
+function createConnectedRepositoryArchitectureDraftRequest({
+  projectId,
+  repository,
+  templateId
+}: {
+  readonly projectId: string;
+  readonly repository: SourceRepository;
+  readonly templateId: TemplateId;
+}): CreateArchitectureDraftRequest {
+  const analysis = repository.analysis;
+  const handoff = analysis?.aiHandoff;
+  const architectureFacts = handoff?.architectureFacts ?? [];
+  const architectureFactLines = architectureFacts.map((fact) =>
+    `- ${fact.kind}: ${fact.value} (source: ${fact.sourcePath})`
+  );
+  const applicationUnitLines = (handoff?.applicationUnits ?? []).map((unit) =>
+    `- ${unit.kind} at ${unit.rootPath || "."}; frameworks: ${unit.frameworks.join(", ") || "unknown"}`
+  );
+  const evidenceLines = (handoff?.evidence ?? []).map((evidence) =>
+    `- ${evidence.kind}: ${evidence.path}; signals: ${evidence.signals.join(", ") || "none"}`
+  );
+  const repositoryName = repository.repositoryUrl ?? `${repository.owner}/${repository.name}`;
+
+  return {
+    templateId,
+    ...(architectureFacts.length > 0
+      ? {
+          repositoryEvidence: {
+            mode: "strict" as const,
+            facts: architectureFacts,
+            repositoryName
+          }
+        }
+      : {}),
+    repositoryAnalysis: {
+      projectId,
+      sourceRepositoryId: repository.id
+    },
+    prompt: [
+      "Generate a production-quality Practice Architecture for this connected source repository.",
+      "Priority rules:",
+      "1. The selected Template is the highest-priority constraint. Keep its core service and deployment model.",
+      "2. Use Repository Analysis evidence to refine runtime boundaries and resource connections without replacing the selected Template.",
+      "3. Rebuild the final Board through the Architecture Draft conversion path so AI diagram layout and resource rules apply.",
+      `Selected Template: ${templateId}.`,
+      `Repository: ${repositoryName} at ${repository.defaultBranch}.`,
+      `Repository revision: ${analysis?.repositoryRevision ?? "unknown"}.`,
+      "Detected application units:",
+      ...(applicationUnitLines.length > 0 ? applicationUnitLines : ["- none"]),
+      "Repository evidence:",
+      ...(evidenceLines.length > 0 ? evidenceLines : ["- none"]),
+      "Repository architecture facts (authoritative; do not replace with generic production assumptions):",
+      ...(architectureFactLines.length > 0 ? architectureFactLines : ["- none"]),
+      "Required Components:",
+      `- Preserve every core resource and relationship from ${templateId}.`,
+      "- Add only the supporting resources required by Repository Analysis.",
+      "Architecture Flow:",
+      "- Keep the selected Template traffic and deployment flow, then connect repository-driven resources to the appropriate workload.",
+      "Validation Checklist:",
+      "- The selected Template core remains visible and connected.",
+      "- Every repository architecture fact is reflected or documented as a Template conflict assumption.",
+      "Generate a connected, readable diagram with only supported resource types. Avoid unrelated resources and duplicate nodes."
+    ].join("\n")
+  };
 }
 
 function createProjectGitHubSettingsHref(projectId: string): string {

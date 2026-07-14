@@ -2,14 +2,24 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { AiArchitectureDraftResult, ArchitectureJson, DiagramJson, DiagramNode } from "@sketchcatch/types";
+import type {
+  AiArchitectureDraftResult,
+  ArchitectureJson,
+  DiagramJson,
+  DiagramNode,
+  ResourceType
+} from "@sketchcatch/types";
+import { buildTemplateDiagramJson, getTemplateDefinitionById } from "@sketchcatch/types";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import {
+  createPlannedDiagramJson,
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson,
   getDiagramJsonForArchitectureDraft,
   normalizeDiagramJsonConventions
 } from "./workspace-ai-diagram-adapter";
 import { isAreaNode, isSecurityGroupScopeNode } from "../diagram-editor/area-nodes";
+import { getOrthogonalRouteNodeOverlapLength } from "../diagram-editor/obstacle-safe-edge-routing";
 import { evaluateAutomaticDiagramLayout } from "./automatic-diagram-layout";
 
 function makeConventionResourceNode(
@@ -100,7 +110,10 @@ test("workspace layout collision and Area fitting use the rendered icon-caption 
   );
   assert.match(adapterSource, /const visualBounds = getResourceNodeVisualBounds\(node\);/);
   assert.match(layoutSource, /getResourceNodeVisualBounds\(node\)/);
-  assert.match(layoutSource, /const childBounds = children\.map\(\(child\) => getLayoutNodeBounds\(child\)\);/);
+  assert.match(
+    layoutSource,
+    /const childBounds = children\.map\(\(child\) => getLayoutNodeBounds\(child\)\);/
+  );
   assert.match(
     adapterSource,
     /function getSegmentNodeOverlapLength[\s\S]*?const visualBounds = getResourceNodeVisualBounds\(node\);[\s\S]*?const left = visualBounds\.x - padding;/
@@ -192,10 +205,7 @@ test("explicit companion Terraform resources do not inherit parent resource defa
     edges: []
   });
 
-  assert.equal(
-    diagramJson.nodes[0]?.parameters?.resourceType,
-    "aws_s3_bucket_public_access_block"
-  );
+  assert.equal(diagramJson.nodes[0]?.parameters?.resourceType, "aws_s3_bucket_public_access_block");
   assert.equal(diagramJson.nodes[0]?.parameters?.values.forceDestroy, undefined);
   assert.equal(diagramJson.nodes[0]?.parameters?.values.blockPublicAcls, true);
 });
@@ -228,8 +238,10 @@ test("normalizeDiagramJsonConventions preserves saved names and Terraform refere
   };
 
   const normalized = normalizeDiagramJsonConventions(diagram);
-  const amiName = normalized.nodes.find((node) => node.id === "ami-node-stable-id")?.parameters?.resourceName;
-  const vpcName = normalized.nodes.find((node) => node.id === "vpc-node-stable-id")?.parameters?.resourceName;
+  const amiName = normalized.nodes.find((node) => node.id === "ami-node-stable-id")?.parameters
+    ?.resourceName;
+  const vpcName = normalized.nodes.find((node) => node.id === "vpc-node-stable-id")?.parameters
+    ?.resourceName;
   const renamedAmiAfter = normalized.nodes.find((node) => node.id === "renamed-ami-stable-id");
   const ec2After = normalized.nodes.find((node) => node.id === "ec2-node-stable-id");
 
@@ -256,21 +268,42 @@ test("normalizeDiagramJsonConventions fits SG scopes around ALB, ECS, and EKS at
   const scopeFixtures = [
     {
       scope: makeScopedNode("alb-sg", "aws_security_group", "alb_sg", vpc.id, { x: 120, y: 120 }),
-      target: makeReferencedNode("load-balancer", "aws_lb", "load_balancer", { x: 320, y: 160 }, {
-        securityGroups: ["aws_security_group.alb_sg.id"]
-      })
+      target: makeReferencedNode(
+        "load-balancer",
+        "aws_lb",
+        "load_balancer",
+        { x: 320, y: 160 },
+        {
+          securityGroups: ["aws_security_group.alb_sg.id"]
+        }
+      )
     },
     {
       scope: makeScopedNode("task-sg", "aws_security_group", "task_sg", vpc.id, { x: 680, y: 120 }),
-      target: makeReferencedNode("ecs-service", "aws_ecs_service", "ecs_service", { x: 840, y: 160 }, {
-        networkConfiguration: { securityGroups: ["aws_security_group.task_sg.id"] }
-      })
+      target: makeReferencedNode(
+        "ecs-service",
+        "aws_ecs_service",
+        "ecs_service",
+        { x: 840, y: 160 },
+        {
+          networkConfiguration: { securityGroups: ["aws_security_group.task_sg.id"] }
+        }
+      )
     },
     {
-      scope: makeScopedNode("cluster-sg", "aws_security_group", "cluster_sg", vpc.id, { x: 1_200, y: 120 }),
-      target: makeReferencedNode("eks-cluster", "aws_eks_cluster", "eks_cluster", { x: 1_360, y: 160 }, {
-        vpcConfig: { securityGroupIds: ["aws_security_group.cluster_sg.id"] }
-      })
+      scope: makeScopedNode("cluster-sg", "aws_security_group", "cluster_sg", vpc.id, {
+        x: 1_200,
+        y: 120
+      }),
+      target: makeReferencedNode(
+        "eks-cluster",
+        "aws_eks_cluster",
+        "eks_cluster",
+        { x: 1_360, y: 160 },
+        {
+          vpcConfig: { securityGroupIds: ["aws_security_group.cluster_sg.id"] }
+        }
+      )
     }
   ];
   const normalized = normalizeDiagramJsonConventions({
@@ -304,19 +337,22 @@ test("normalizeDiagramJsonConventions repairs visual-only parents and keeps SG r
     vpc.id,
     { x: 160, y: 160 }
   );
-  const autoscalingGroup = makeScopedNode(
-    "asg",
-    "aws_autoscaling_group",
-    "asg",
-    subnet.id,
-    { x: 240, y: 240 }
-  );
+  const autoscalingGroup = makeScopedNode("asg", "aws_autoscaling_group", "asg", subnet.id, {
+    x: 240,
+    y: 240
+  });
   const instance = {
     ...makeReferencedNode("instance", "aws_instance", "instance", { x: 320, y: 320 }, {}),
     metadata: { parentAreaNodeId: securityGroup.id }
   };
   const launchTemplate = {
-    ...makeReferencedNode("launch-template", "aws_launch_template", "launch_template", { x: 400, y: 320 }, {}),
+    ...makeReferencedNode(
+      "launch-template",
+      "aws_launch_template",
+      "launch_template",
+      { x: 400, y: 320 },
+      {}
+    ),
     metadata: { parentAreaNodeId: autoscalingGroup.id }
   };
   const normalized = normalizeDiagramJsonConventions({
@@ -341,7 +377,10 @@ test("normalizeDiagramJsonConventions repairs visual-only parents and keeps SG r
 
   assert.equal(nodeById.get(instance.id)?.metadata?.parentAreaNodeId, vpc.id);
   assert.equal(nodeById.get(launchTemplate.id)?.metadata?.parentAreaNodeId, subnet.id);
-  assert.deepEqual(normalized.edges.map((edge) => edge.id), ["sg-instance"]);
+  assert.deepEqual(
+    normalized.edges.map((edge) => edge.id),
+    ["sg-instance"]
+  );
 });
 
 test("convertArchitectureJsonToDiagramJson creates board nodes and hides containment arrows from an Architecture Draft", () => {
@@ -683,14 +722,23 @@ test("convertArchitectureJsonToDiagramJson rewrites Terraform references after a
   assert.equal(nodeById.get("role-app-runtime")?.parameters?.resourceName, "role_app_runtime");
   assert.equal(nodeById.get("profile-app")?.parameters?.resourceName, "profile_app");
   assert.equal(nodeById.get("ami-app")?.parameters?.resourceName, "ami_app");
-  assert.equal(nodeById.get("subnet-private-app-a")?.parameters?.resourceName, "subnet_private_app_a");
+  assert.equal(
+    nodeById.get("subnet-private-app-a")?.parameters?.resourceName,
+    "subnet_private_app_a"
+  );
   assert.equal(nodeById.get("app-security-group")?.parameters?.resourceName, "sg_app");
-  assert.equal(nodeById.get("compute-content-board")?.parameters?.resourceName, "compute_content_board");
+  assert.equal(
+    nodeById.get("compute-content-board")?.parameters?.resourceName,
+    "compute_content_board"
+  );
   assert.equal(
     nodeById.get("profile-app")?.parameters?.values["role"],
     "aws_iam_role.role_app_runtime.name"
   );
-  assert.equal(nodeById.get("compute-content-board")?.parameters?.values["ami"], "data.aws_ami.ami_app.id");
+  assert.equal(
+    nodeById.get("compute-content-board")?.parameters?.values["ami"],
+    "data.aws_ami.ami_app.id"
+  );
   assert.equal(
     nodeById.get("compute-content-board")?.parameters?.values["iamInstanceProfile"],
     "aws_iam_instance_profile.profile_app.name"
@@ -699,9 +747,10 @@ test("convertArchitectureJsonToDiagramJson rewrites Terraform references after a
     nodeById.get("compute-content-board")?.parameters?.values["subnetId"],
     "aws_subnet.subnet_private_app_a.id"
   );
-  assert.deepEqual(nodeById.get("compute-content-board")?.parameters?.values["vpcSecurityGroupIds"], [
-    "aws_security_group.sg_app.id"
-  ]);
+  assert.deepEqual(
+    nodeById.get("compute-content-board")?.parameters?.values["vpcSecurityGroupIds"],
+    ["aws_security_group.sg_app.id"]
+  );
   assert.deepEqual(nodeById.get("alarm-app-cpu")?.parameters?.values["dimensions"], {
     InstanceId: "aws_instance.compute_content_board.id"
   });
@@ -1116,15 +1165,16 @@ test("convertArchitectureJsonToDiagramJson keeps managed services outside the VP
           diagramHeight: 360
         }
       },
-      ...(["CLOUDFRONT", "S3", "ECR_REPOSITORY", "CLOUDWATCH_LOG_GROUP", "ACM_CERTIFICATE"] as const)
-        .map((type, index) => ({
-          id: `managed-${type.toLowerCase()}`,
-          type,
-          label: type,
-          positionX: 80 + index * 220,
-          positionY: -600,
-          config: { parentAreaNodeId: managedServicesId }
-        })),
+      ...(
+        ["CLOUDFRONT", "S3", "ECR_REPOSITORY", "CLOUDWATCH_LOG_GROUP", "ACM_CERTIFICATE"] as const
+      ).map((type, index) => ({
+        id: `managed-${type.toLowerCase()}`,
+        type,
+        label: type,
+        positionX: 80 + index * 220,
+        positionY: -600,
+        config: { parentAreaNodeId: managedServicesId }
+      })),
       {
         id: "vpc-main",
         type: "VPC",
@@ -1229,7 +1279,9 @@ test("convertArchitectureJsonToDiagramJson resolves Terraform references to area
   };
 
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-  const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
+  const parentByNodeId = new Map(
+    diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId])
+  );
 
   assert.equal(parentByNodeId.get("server-storage-az"), "network-main");
   assert.equal(parentByNodeId.get("network-main"), "server-storage-region");
@@ -1276,7 +1328,9 @@ test("convertArchitectureJsonToDiagramJson resolves common Terraform reference a
   };
 
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
-  const parentByNodeId = new Map(diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId]));
+  const parentByNodeId = new Map(
+    diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId])
+  );
 
   assert.equal(parentByNodeId.get("server-storage-az"), "network-main");
   assert.equal(parentByNodeId.get("network-main"), "server-storage-region");
@@ -1339,7 +1393,10 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
 
   assert.deepEqual(
-    diagramJson.nodes.map((node) => ({ id: node.id, parentAreaNodeId: node.metadata?.parentAreaNodeId })),
+    diagramJson.nodes.map((node) => ({
+      id: node.id,
+      parentAreaNodeId: node.metadata?.parentAreaNodeId
+    })),
     [
       { id: "server-storage-region", parentAreaNodeId: undefined },
       { id: "server-storage-az", parentAreaNodeId: "vpc-main" },
@@ -1385,7 +1442,9 @@ test("convertArchitectureJsonToDiagramJson maps server and storage draft resourc
         positionX: 220,
         positionY: 80,
         config: {
-          route: [{ cidrBlock: "0.0.0.0/0", gatewayId: "aws_internet_gateway.internet_gateway.id" }],
+          route: [
+            { cidrBlock: "0.0.0.0/0", gatewayId: "aws_internet_gateway.internet_gateway.id" }
+          ],
           vpcId: "aws_vpc.vpc.id"
         }
       },
@@ -1596,14 +1655,38 @@ test("convertArchitectureJsonToDiagramJson maps operations and permission draft 
       terraformBlockType: node.parameters?.terraformBlockType
     })),
     [
-      { id: "api-gateway", resourceType: "aws_api_gateway_rest_api", terraformBlockType: "resource" },
+      {
+        id: "api-gateway",
+        resourceType: "aws_api_gateway_rest_api",
+        terraformBlockType: "resource"
+      },
       { id: "lambda-execution-role", resourceType: "aws_iam_role", terraformBlockType: "resource" },
-      { id: "lambda-execution-policy", resourceType: "aws_iam_policy", terraformBlockType: "resource" },
-      { id: "api-instance-profile", resourceType: "aws_iam_instance_profile", terraformBlockType: "resource" },
+      {
+        id: "lambda-execution-policy",
+        resourceType: "aws_iam_policy",
+        terraformBlockType: "resource"
+      },
+      {
+        id: "api-instance-profile",
+        resourceType: "aws_iam_instance_profile",
+        terraformBlockType: "resource"
+      },
       { id: "db-encryption-key", resourceType: "aws_kms_key", terraformBlockType: "resource" },
-      { id: "lambda-log-group", resourceType: "aws_cloudwatch_log_group", terraformBlockType: "resource" },
-      { id: "lambda-error-alarm", resourceType: "aws_cloudwatch_metric_alarm", terraformBlockType: "resource" },
-      { id: "lambda-invoke-permission", resourceType: "aws_lambda_permission", terraformBlockType: "resource" }
+      {
+        id: "lambda-log-group",
+        resourceType: "aws_cloudwatch_log_group",
+        terraformBlockType: "resource"
+      },
+      {
+        id: "lambda-error-alarm",
+        resourceType: "aws_cloudwatch_metric_alarm",
+        terraformBlockType: "resource"
+      },
+      {
+        id: "lambda-invoke-permission",
+        resourceType: "aws_lambda_permission",
+        terraformBlockType: "resource"
+      }
     ]
   );
 });
@@ -1701,15 +1784,60 @@ test("convertArchitectureJsonToDiagramJson arranges serverless resources into re
       }
     ],
     edges: [
-      { id: "api-to-permission", sourceId: "api-gateway", targetId: "lambda-invoke-permission", label: "allows invoke" },
-      { id: "permission-to-lambda", sourceId: "lambda-invoke-permission", targetId: "lambda-function", label: "invokes" },
-      { id: "role-to-lambda", sourceId: "lambda-execution-role", targetId: "lambda-function", label: "execution role" },
-      { id: "policy-to-role", sourceId: "lambda-execution-policy", targetId: "lambda-execution-role", label: "grants log access" },
-      { id: "lambda-to-upload", sourceId: "lambda-function", targetId: "upload-bucket", label: "stores files" },
-      { id: "kms-to-logs", sourceId: "lambda-log-key", targetId: "lambda-log-group", label: "encrypts logs" },
-      { id: "lambda-to-logs", sourceId: "lambda-function", targetId: "lambda-log-group", label: "writes logs" },
-      { id: "alarm-to-lambda", sourceId: "lambda-error-alarm", targetId: "lambda-function", label: "monitors errors" },
-      { id: "cdn-to-assets", sourceId: "cdn-public-entry", targetId: "web-assets-bucket", label: "HTTPS" }
+      {
+        id: "api-to-permission",
+        sourceId: "api-gateway",
+        targetId: "lambda-invoke-permission",
+        label: "allows invoke"
+      },
+      {
+        id: "permission-to-lambda",
+        sourceId: "lambda-invoke-permission",
+        targetId: "lambda-function",
+        label: "invokes"
+      },
+      {
+        id: "role-to-lambda",
+        sourceId: "lambda-execution-role",
+        targetId: "lambda-function",
+        label: "execution role"
+      },
+      {
+        id: "policy-to-role",
+        sourceId: "lambda-execution-policy",
+        targetId: "lambda-execution-role",
+        label: "grants log access"
+      },
+      {
+        id: "lambda-to-upload",
+        sourceId: "lambda-function",
+        targetId: "upload-bucket",
+        label: "stores files"
+      },
+      {
+        id: "kms-to-logs",
+        sourceId: "lambda-log-key",
+        targetId: "lambda-log-group",
+        label: "encrypts logs"
+      },
+      {
+        id: "lambda-to-logs",
+        sourceId: "lambda-function",
+        targetId: "lambda-log-group",
+        label: "writes logs"
+      },
+      {
+        id: "alarm-to-lambda",
+        sourceId: "lambda-error-alarm",
+        targetId: "lambda-function",
+        label: "monitors errors"
+      },
+      {
+        id: "cdn-to-assets",
+        sourceId: "cdn-public-entry",
+        targetId: "web-assets-bucket",
+        label: "HTTPS"
+      }
     ]
   };
 
@@ -1805,9 +1933,24 @@ test("convertArchitectureJsonToDiagramJson preserves authored Template positions
       }
     ],
     edges: [
-      { id: "cluster-service", sourceId: "template-cluster", targetId: "template-service", label: "runs" },
-      { id: "service-task", sourceId: "template-service", targetId: "template-task", label: "uses" },
-      { id: "service-database", sourceId: "template-service", targetId: "answer-database", label: "reads/writes" }
+      {
+        id: "cluster-service",
+        sourceId: "template-cluster",
+        targetId: "template-service",
+        label: "runs"
+      },
+      {
+        id: "service-task",
+        sourceId: "template-service",
+        targetId: "template-task",
+        label: "uses"
+      },
+      {
+        id: "service-database",
+        sourceId: "template-service",
+        targetId: "answer-database",
+        label: "reads/writes"
+      }
     ]
   };
 
@@ -1841,6 +1984,359 @@ test("convertArchitectureJsonToDiagramJson preserves authored Template positions
   assertNoSiblingNodeOverlap(diagramJson);
 });
 
+test("createPlannedDiagramJson applies Template layout rules as hard constraints", () => {
+  const templateId = "ecs-fargate-container-app" as const;
+  const definition = getTemplateDefinitionById(templateId);
+  const architectureJson: ArchitectureJson = {
+    nodes: definition.resources.map((resource) => {
+      const resourceDefinition = getResourceDefinitionByTerraform(
+        resource.terraformBlockType,
+        resource.terraformResourceType
+      );
+      assert.ok(resourceDefinition);
+
+      return {
+        id: `fixed-template-${templateId}-${resource.id}`,
+        type: resourceDefinition.resourceType,
+        label: resource.label,
+        positionX: 9_000,
+        positionY: 9_000,
+        config: {
+          templateId,
+          templateResourceId: resource.id,
+          terraformBlockType: resource.terraformBlockType,
+          terraformResourceType: resource.terraformResourceType
+        }
+      };
+    }),
+    edges: definition.relationships.map((relationship) => ({
+      id: `fixed-template-${templateId}-${relationship.id}`,
+      sourceId: `fixed-template-${templateId}-${relationship.sourceResourceId}`,
+      targetId: `fixed-template-${templateId}-${relationship.targetResourceId}`,
+      label: relationship.label
+    }))
+  };
+  const authoredDiagram = buildTemplateDiagramJson(templateId, {
+    projectSlug: "planner-test",
+    shortId: "layout"
+  });
+  const firstPlan = createPlannedDiagramJson({ architectureJson });
+  const movedPreviousDiagram: DiagramJson = {
+    ...firstPlan,
+    nodes: firstPlan.nodes.map((node) =>
+      node.id === `fixed-template-${templateId}-vpc`
+        ? { ...node, position: { x: 7_000, y: 7_000 }, size: { width: 200, height: 200 } }
+        : node
+    )
+  };
+  const plannedDiagram = createPlannedDiagramJson({
+    architectureJson,
+    previousDiagram: movedPreviousDiagram
+  });
+  const nodeById = new Map(plannedDiagram.nodes.map((node) => [node.id, node]));
+  const edgeById = new Map(plannedDiagram.edges.map((edge) => [edge.id, edge]));
+  const authoredVpc = authoredDiagram.nodes.find(
+    (node) => node.id === `template-${templateId}-vpc`
+  );
+  const authoredRoute = authoredDiagram.edges.find(
+    (edge) => edge.id === `template-${templateId}-target-group-service`
+  );
+  const plannedVpc = nodeById.get(`fixed-template-${templateId}-vpc`);
+  const plannedSubnet = nodeById.get(`fixed-template-${templateId}-subnet-a`);
+  const plannedRegion = nodeById.get(`fixed-template-${templateId}-presentation-region`);
+  const plannedRoute = edgeById.get(`fixed-template-${templateId}-target-group-service`);
+
+  assert.ok(authoredVpc);
+  assert.ok(authoredRoute);
+  assert.deepEqual(plannedVpc?.position, authoredVpc.position);
+  assert.deepEqual(plannedVpc?.size, authoredVpc.size);
+  assert.equal(plannedSubnet?.metadata?.parentAreaNodeId, `fixed-template-${templateId}-vpc`);
+  assert.equal(plannedRegion?.kind, "design");
+  assert.deepEqual(plannedRegion?.size, { width: 1_920, height: 880 });
+  assert.equal(plannedRoute?.sourceHandleId, authoredRoute.sourceHandleId);
+  assert.equal(plannedRoute?.targetHandleId, authoredRoute.targetHandleId);
+  assert.equal(plannedRoute?.metadata?.presentationRole, "primary");
+  assert.equal(
+    edgeById.get(`fixed-template-${templateId}-task-log-group`)?.metadata?.presentationRole,
+    "detail"
+  );
+  assert.equal(
+    edgeById.has(
+      `summary-fixed-template-${templateId}-load-balancer-to-fixed-template-${templateId}-service`
+    ),
+    false
+  );
+
+  const omittedNodeIds = new Set([
+    `fixed-template-${templateId}-repository`,
+    `fixed-template-${templateId}-log-group`
+  ]);
+  const partialArchitectureJson: ArchitectureJson = {
+    nodes: architectureJson.nodes.filter((node) => !omittedNodeIds.has(node.id)),
+    edges: architectureJson.edges.filter(
+      (edge) => !omittedNodeIds.has(edge.sourceId) && !omittedNodeIds.has(edge.targetId)
+    )
+  };
+  const partialPlan = createPlannedDiagramJson({ architectureJson: partialArchitectureJson });
+  const partialNodeById = new Map(partialPlan.nodes.map((node) => [node.id, node]));
+  const partialEdgeById = new Map(partialPlan.edges.map((edge) => [edge.id, edge]));
+
+  assert.deepEqual(
+    partialNodeById.get(`fixed-template-${templateId}-vpc`)?.position,
+    authoredVpc.position
+  );
+  assert.deepEqual(partialNodeById.get(`fixed-template-${templateId}-vpc`)?.size, authoredVpc.size);
+  assert.equal(
+    partialNodeById.get(`fixed-template-${templateId}-subnet-a`)?.metadata?.parentAreaNodeId,
+    `fixed-template-${templateId}-vpc`
+  );
+  assert.equal(
+    partialNodeById.get(`fixed-template-${templateId}-presentation-region`)?.kind,
+    "design"
+  );
+  assert.equal(
+    partialNodeById.get(`fixed-template-${templateId}-presentation-definition-ops-group`)?.kind,
+    "design"
+  );
+  assert.equal(partialNodeById.has(`fixed-template-${templateId}-repository`), false);
+  assert.equal(partialNodeById.has(`fixed-template-${templateId}-log-group`), false);
+  assert.equal(
+    partialEdgeById.get(`fixed-template-${templateId}-target-group-service`)?.sourceHandleId,
+    authoredRoute.sourceHandleId
+  );
+  assert.equal(
+    partialEdgeById.get(`fixed-template-${templateId}-target-group-service`)?.targetHandleId,
+    authoredRoute.targetHandleId
+  );
+});
+
+test("createPlannedDiagramJson reduces repeated and support labels on dense diagrams", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "gateway",
+        type: "API_GATEWAY_REST_API",
+        label: "Gateway",
+        positionX: 0,
+        positionY: 0,
+        config: {}
+      },
+      {
+        id: "service-a",
+        type: "ECS_SERVICE",
+        label: "Service A",
+        positionX: 300,
+        positionY: 0,
+        config: {}
+      },
+      {
+        id: "service-b",
+        type: "ECS_SERVICE",
+        label: "Service B",
+        positionX: 300,
+        positionY: 180,
+        config: {}
+      },
+      { id: "database", type: "RDS", label: "Database", positionX: 600, positionY: 0, config: {} },
+      {
+        id: "alarm",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "Alarm",
+        positionX: 300,
+        positionY: 360,
+        config: {}
+      }
+    ],
+    edges: [
+      { id: "gateway-a", sourceId: "gateway", targetId: "service-a", label: "routes requests" },
+      { id: "gateway-b", sourceId: "gateway", targetId: "service-b", label: "routes requests" },
+      { id: "gateway-db", sourceId: "gateway", targetId: "database", label: "routes requests" },
+      { id: "a-db", sourceId: "service-a", targetId: "database", label: "reads/writes" },
+      { id: "b-db", sourceId: "service-b", targetId: "database", label: "reads/writes" },
+      { id: "alarm-a", sourceId: "alarm", targetId: "service-a", label: "monitors CPU" },
+      { id: "alarm-b", sourceId: "alarm", targetId: "service-b", label: "monitors CPU" },
+      { id: "alarm-db", sourceId: "alarm", targetId: "database", label: "monitors CPU" },
+      { id: "alarm-gateway", sourceId: "alarm", targetId: "gateway", label: "monitors CPU" },
+      { id: "db-a", sourceId: "database", targetId: "service-a", label: "replicates" }
+    ]
+  };
+
+  const diagramJson = createPlannedDiagramJson({ architectureJson });
+
+  assert.equal(diagramJson.edges.filter((edge) => edge.label === "routes requests").length, 1);
+  assert.equal(
+    diagramJson.edges.some((edge) => edge.label === "monitors CPU"),
+    false
+  );
+});
+
+test("createPlannedDiagramJson preserves dense dependencies but exposes a compact semantic flow", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "alb",
+        type: "LOAD_BALANCER",
+        label: "Application Load Balancer",
+        positionX: 0,
+        positionY: 0,
+        config: {}
+      },
+      {
+        id: "listener",
+        type: "LOAD_BALANCER_LISTENER",
+        label: "HTTPS Listener",
+        positionX: 160,
+        positionY: 0,
+        config: {}
+      },
+      {
+        id: "target",
+        type: "LOAD_BALANCER_TARGET_GROUP",
+        label: "App Target Group",
+        positionX: 320,
+        positionY: 0,
+        config: {}
+      },
+      {
+        id: "service",
+        type: "ECS_SERVICE",
+        label: "Application Service",
+        positionX: 480,
+        positionY: 0,
+        config: {}
+      },
+      {
+        id: "task",
+        type: "ECS_TASK_DEFINITION",
+        label: "Task Definition",
+        positionX: 320,
+        positionY: 180,
+        config: {}
+      },
+      {
+        id: "role",
+        type: "IAM_ROLE",
+        label: "Task Role",
+        positionX: 160,
+        positionY: 180,
+        config: {}
+      },
+      {
+        id: "policy",
+        type: "IAM_POLICY",
+        label: "Task Policy",
+        positionX: 0,
+        positionY: 180,
+        config: {}
+      },
+      {
+        id: "database",
+        type: "RDS",
+        label: "Application Database",
+        positionX: 700,
+        positionY: 0,
+        config: {}
+      },
+      {
+        id: "alarm",
+        type: "CLOUDWATCH_METRIC_ALARM",
+        label: "CPU Alarm",
+        positionX: 480,
+        positionY: 180,
+        config: {}
+      },
+      { id: "bucket", type: "S3", label: "Uploads", positionX: 700, positionY: 180, config: {} }
+    ],
+    edges: [
+      { id: "alb-listener", sourceId: "alb", targetId: "listener" },
+      { id: "listener-target", sourceId: "listener", targetId: "target" },
+      { id: "target-service", sourceId: "target", targetId: "service" },
+      { id: "policy-role", sourceId: "policy", targetId: "role" },
+      { id: "role-task", sourceId: "role", targetId: "task" },
+      { id: "task-service", sourceId: "task", targetId: "service" },
+      { id: "service-alarm", sourceId: "service", targetId: "alarm" },
+      { id: "service-bucket", sourceId: "service", targetId: "bucket" },
+      { id: "alarm-service", sourceId: "alarm", targetId: "service" },
+      { id: "role-service", sourceId: "role", targetId: "service" }
+    ]
+  };
+
+  const diagramJson = createPlannedDiagramJson({ architectureJson });
+  const originalEdges = diagramJson.edges.filter(
+    (edge) => edge.metadata?.presentationRole !== "summary"
+  );
+  const visibleEdges = diagramJson.edges.filter(
+    (edge) => edge.metadata?.presentationRole !== "detail"
+  );
+
+  assert.equal(originalEdges.length, architectureJson.edges.length);
+  assert.ok(visibleEdges.length < originalEdges.length);
+  assert.ok(
+    visibleEdges.some(
+      (edge) =>
+        edge.sourceNodeId === "alb" &&
+        edge.targetNodeId === "service" &&
+        edge.metadata?.presentationRole === "summary"
+    )
+  );
+  assert.ok(
+    visibleEdges.some(
+      (edge) =>
+        edge.sourceNodeId === "service" &&
+        edge.targetNodeId === "database" &&
+        edge.metadata?.presentationRole === "summary"
+    )
+  );
+  assert.equal(
+    diagramJson.edges.find((edge) => edge.id === "role-task")?.metadata?.presentationRole,
+    "detail"
+  );
+});
+
+test("convertDiagramJsonToArchitectureJson excludes summary-only presentation edges", () => {
+  const diagramJson = createPlannedDiagramJson({
+    architectureJson: {
+      nodes: [
+        {
+          id: "service",
+          type: "ECS_SERVICE",
+          label: "Service",
+          positionX: 0,
+          positionY: 0,
+          config: {}
+        },
+        {
+          id: "database",
+          type: "RDS",
+          label: "Database",
+          positionX: 300,
+          positionY: 0,
+          config: {}
+        },
+        ...Array.from({ length: 8 }, (_, index) => ({
+          id: `role-${index}`,
+          type: "IAM_ROLE" as const,
+          label: `Role ${index}`,
+          positionX: index * 80,
+          positionY: 200,
+          config: {}
+        }))
+      ],
+      edges: Array.from({ length: 10 }, (_, index) => ({
+        id: `dependency-${index}`,
+        sourceId: `role-${index % 8}`,
+        targetId: "service"
+      }))
+    }
+  });
+  const architectureJson = convertDiagramJsonToArchitectureJson(diagramJson);
+
+  assert.equal(
+    architectureJson.edges.some((edge) => edge.id.startsWith("summary-")),
+    false
+  );
+});
+
 test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact and routable", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -1858,7 +2354,11 @@ test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact
         label: "Private App Subnet A",
         positionX: 160,
         positionY: 780,
-        config: { cidrBlock: "10.0.1.0/24", terraformResourceName: "private_app_a", vpcId: "aws_vpc.main.id" }
+        config: {
+          cidrBlock: "10.0.1.0/24",
+          terraformResourceName: "private_app_a",
+          vpcId: "aws_vpc.main.id"
+        }
       },
       {
         id: "subnet-db-a",
@@ -1866,7 +2366,11 @@ test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact
         label: "Private DB Subnet A",
         positionX: 160,
         positionY: 980,
-        config: { cidrBlock: "10.0.2.0/24", terraformResourceName: "private_db_a", vpcId: "aws_vpc.main.id" }
+        config: {
+          cidrBlock: "10.0.2.0/24",
+          terraformResourceName: "private_db_a",
+          vpcId: "aws_vpc.main.id"
+        }
       },
       {
         id: "sg-app",
@@ -1998,14 +2502,49 @@ test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact
       }
     ],
     edges: [
-      { id: "cdn-to-assets", sourceId: "cdn-public-entry", targetId: "bucket-web-assets", label: "HTTPS" },
-      { id: "compute-to-upload", sourceId: "compute-app", targetId: "bucket-upload", label: "stores files" },
+      {
+        id: "cdn-to-assets",
+        sourceId: "cdn-public-entry",
+        targetId: "bucket-web-assets",
+        label: "HTTPS"
+      },
+      {
+        id: "compute-to-upload",
+        sourceId: "compute-app",
+        targetId: "bucket-upload",
+        label: "stores files"
+      },
       { id: "compute-to-db", sourceId: "compute-app", targetId: "db-app", label: "reads/writes" },
-      { id: "profile-to-compute", sourceId: "profile-app", targetId: "compute-app", label: "attaches profile" },
-      { id: "policy-to-role", sourceId: "policy-app-runtime", targetId: "role-app-runtime", label: "grants runtime access" },
-      { id: "key-to-logs", sourceId: "key-data-encryption", targetId: "logs-app", label: "encrypts logs" },
-      { id: "compute-to-logs", sourceId: "compute-app", targetId: "logs-app", label: "writes logs" },
-      { id: "alarm-to-compute", sourceId: "alarm-app-cpu", targetId: "compute-app", label: "monitors CPU" },
+      {
+        id: "profile-to-compute",
+        sourceId: "profile-app",
+        targetId: "compute-app",
+        label: "attaches profile"
+      },
+      {
+        id: "policy-to-role",
+        sourceId: "policy-app-runtime",
+        targetId: "role-app-runtime",
+        label: "grants runtime access"
+      },
+      {
+        id: "key-to-logs",
+        sourceId: "key-data-encryption",
+        targetId: "logs-app",
+        label: "encrypts logs"
+      },
+      {
+        id: "compute-to-logs",
+        sourceId: "compute-app",
+        targetId: "logs-app",
+        label: "writes logs"
+      },
+      {
+        id: "alarm-to-compute",
+        sourceId: "alarm-app-cpu",
+        targetId: "compute-app",
+        label: "monitors CPU"
+      },
       { id: "alarm-to-db", sourceId: "alarm-db-cpu", targetId: "db-app", label: "monitors CPU" }
     ]
   };
@@ -2233,6 +2772,161 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertNoSiblingNodeOverlap(diagramJson);
 });
 
+test("createPlannedDiagramJson reflows repository-generated ECS frontend diagrams", () => {
+  const templateId = "ecs-fargate-container-app" as const;
+  const nodes: ArchitectureJson["nodes"] = [
+    repositoryNode("repository-browser", "UNKNOWN", "Browser", 40, 680, {
+      diagramKind: "design",
+      diagramType: "client",
+      diagramWidth: 140,
+      diagramHeight: 80
+    }),
+    repositoryNode("repository-managed-services", "UNKNOWN", "AWS Managed Services", 260, 40, {
+      diagramKind: "design",
+      diagramType: "design_group",
+      diagramWidth: 1800,
+      diagramHeight: 400
+    }),
+    templateNode(templateId, "vpc", "VPC", "VPC", 260, 500, { diagramWidth: 1800, diagramHeight: 900 }),
+    templateNode(templateId, "subnet-a", "SUBNET", "Public Subnet A", 360, 620, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`,
+      diagramWidth: 420,
+      diagramHeight: 280
+    }),
+    templateNode(templateId, "subnet-b", "SUBNET", "Public Subnet B", 840, 620, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`,
+      diagramWidth: 420,
+      diagramHeight: 280
+    }),
+    repositoryNode("repository-private-app-subnet-a", "SUBNET", "Private App Subnet A", 360, 1010, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`,
+      diagramWidth: 420,
+      diagramHeight: 300
+    }),
+    repositoryNode("repository-private-app-subnet-b", "SUBNET", "Private App Subnet B", 840, 1010, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`,
+      diagramWidth: 420,
+      diagramHeight: 300
+    }),
+    templateNode(templateId, "alb-security-group", "SECURITY_GROUP", "ALB Security Group", 420, 680, {
+      parentAreaNodeId: `fixed-template-${templateId}-subnet-a`,
+      diagramWidth: 300,
+      diagramHeight: 160
+    }),
+    templateNode(templateId, "task-security-group", "SECURITY_GROUP", "Task Security Group", 420, 1070, {
+      parentAreaNodeId: "repository-private-app-subnet-a",
+      diagramWidth: 340,
+      diagramHeight: 180
+    }),
+    templateNode(templateId, "load-balancer", "LOAD_BALANCER", "Internet-facing ALB (Public A/B)", 500, 730, {
+      parentAreaNodeId: `fixed-template-${templateId}-alb-security-group`
+    }),
+    templateNode(templateId, "listener", "LOAD_BALANCER_LISTENER", "CloudFront Origin HTTP Listener", 1560, 700, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`
+    }),
+    templateNode(templateId, "target-group", "LOAD_BALANCER_TARGET_GROUP", "API Target Group", 1360, 700, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`
+    }),
+    templateNode(templateId, "cluster", "ECS_CLUSTER", "ECS Cluster", 1540, 140, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`
+    }),
+    templateNode(templateId, "service", "ECS_SERVICE", "API Fargate Service", 1780, 140, {
+      parentAreaNodeId: `fixed-template-${templateId}-task-security-group`
+    }),
+    repositoryNode("repository-fargate-runtime", "UNKNOWN", "Fargate Task (1, Private App A/B)", 460, 1140, {
+      diagramKind: "design",
+      diagramType: "aws_ecs_task_definition",
+      diagramWidth: 260,
+      diagramHeight: 96,
+      parentAreaNodeId: `fixed-template-${templateId}-task-security-group`
+    }),
+    templateNode(templateId, "task", "ECS_TASK_DEFINITION", "API Task Definition (control plane)", 1060, 140, {
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    templateNode(templateId, "execution-role", "IAM_ROLE", "ECS Execution Role", 820, 300, {
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    templateNode(templateId, "execution-policy", "IAM_POLICY", "ECS Execution Policy", 1060, 300, {
+      terraformResourceType: "aws_iam_role_policy_attachment",
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    templateNode(templateId, "task-role", "IAM_ROLE", "ECS Task Role", 1300, 300, {
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    repositoryNode("repository-cloudfront", "CLOUDFRONT", "CloudFront Web Entry", 340, 140, {
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    repositoryNode("repository-web-assets", "S3", "Static Web Assets", 580, 140, {
+      parentAreaNodeId: "repository-managed-services",
+      bucketPurpose: "static_website_origin"
+    }),
+    repositoryNode("repository-web-public-access", "S3", "S3 Public Access Block", 560, 280, {
+      terraformResourceType: "aws_s3_bucket_public_access_block",
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    repositoryNode("repository-ecr", "ECR_REPOSITORY", "ECR API Image Repository", 820, 140, {
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    repositoryNode("repository-ecs-logs", "CLOUDWATCH_LOG_GROUP", "CloudWatch ECS Container Logs", 1300, 140, {
+      parentAreaNodeId: "repository-managed-services"
+    }),
+    repositoryNode("repository-github-actions", "UNKNOWN", "GitHub Actions", 40, 180, {
+      diagramKind: "design",
+      diagramType: "github_actions",
+      diagramWidth: 160,
+      diagramHeight: 80
+    })
+  ];
+  const architectureJson: ArchitectureJson = {
+    nodes,
+    edges: [
+      edge("browser-cloudfront", "repository-browser", "repository-cloudfront", "HTTPS web and /api entry"),
+      edge("cloudfront-alb", "repository-cloudfront", `fixed-template-${templateId}-alb-security-group`, "proxies /api/* to ALB over HTTP"),
+      edge("alb-lb", `fixed-template-${templateId}-alb-security-group`, `fixed-template-${templateId}-load-balancer`, "attached to public ALB"),
+      edge("lb-listener", `fixed-template-${templateId}-load-balancer`, `fixed-template-${templateId}-listener`, "accepts CloudFront origin HTTP"),
+      edge("listener-target", `fixed-template-${templateId}-listener`, `fixed-template-${templateId}-target-group`, "forwards API traffic"),
+      edge("target-service", `fixed-template-${templateId}-target-group`, `fixed-template-${templateId}-service`, "health checks /health"),
+      edge("cluster-service", `fixed-template-${templateId}-cluster`, `fixed-template-${templateId}-service`, "runs the API service"),
+      edge("service-runtime", `fixed-template-${templateId}-service`, "repository-fargate-runtime", "schedules desired task in private app subnets"),
+      edge("ecr-runtime", "repository-ecr", "repository-fargate-runtime", "application revisions pull API image from ECR"),
+      edge("runtime-logs", "repository-fargate-runtime", "repository-ecs-logs", "writes ECS container logs via awslogs"),
+      edge("actions-ecr", "repository-github-actions", "repository-ecr", "builds and pushes API image"),
+      edge("actions-web", "repository-github-actions", "repository-web-assets", "uploads apps/web/dist")
+    ]
+  };
+
+  const diagramJson = createPlannedDiagramJson({ architectureJson });
+  const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
+  const quality = evaluateDiagramLayout(diagramJson);
+  const service = nodeById.get(`fixed-template-${templateId}-service`);
+  const runtime = nodeById.get("repository-fargate-runtime");
+  const browser = nodeById.get("repository-browser");
+  const managedServices = nodeById.get("repository-managed-services");
+  const cloudFront = nodeById.get("repository-cloudfront");
+  const webAssets = nodeById.get("repository-web-assets");
+  const vpc = nodeById.get(`fixed-template-${templateId}-vpc`);
+  const bounds = getDiagramBounds(diagramJson.nodes);
+
+  assert.equal(diagramJson.nodes.some((node) => node.id.includes("-presentation-")), false);
+  assert.equal(quality.nodeOverlapCount, 0);
+  assert.equal(quality.parentBoundaryViolationCount, 0);
+  assert.equal(quality.siblingAreaOverlapCount, 0);
+  assert.ok(quality.backwardEdgeCount <= 1);
+  assert.ok(quality.edgeCrossingCount <= 6);
+  assert.ok(browser && managedServices && cloudFront && webAssets && vpc);
+  assert.ok(cloudFront.position.x > browser.position.x);
+  assert.ok(webAssets.position.x > cloudFront.position.x);
+  assert.ok(managedServices.position.y < vpc.position.y);
+  assert.ok(managedServices.size.width <= 1800);
+  assert.ok(bounds.height <= 1900);
+  assert.ok(service && runtime);
+  assert.equal(service.metadata?.parentAreaNodeId, runtime.metadata?.parentAreaNodeId);
+  assert.ok(Math.abs(service.position.y - runtime.position.y) <= 96);
+  assertNoSiblingNodeOverlap(diagramJson);
+  assertNoNonAncestorAreaResourceOverlap(diagramJson);
+  assertNoEdgeRouteOverlap(diagramJson);
+});
+
 test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside cloud container areas", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -2385,6 +3079,86 @@ test("convertArchitectureJsonToDiagramJson keeps route table associations out of
   assertContainsNode(vpcNode, subnetNode);
   assertContainsNode(vpcNode, associationNode);
   assertNoNodeOverlap(subnetNode, associationNode);
+});
+
+test("convertArchitectureJsonToDiagramJson keeps multi-subnet runtime resources inside their VPC", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 0,
+        positionY: 0,
+        config: { terraformResourceName: "main" }
+      },
+      ...["public-a", "public-b", "app-a", "app-b", "db-a", "db-b"].map((id) => ({
+        id: `subnet-${id}`,
+        type: "SUBNET" as const,
+        label: `Subnet ${id}`,
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceName: id.replaceAll("-", "_"),
+          vpcId: "aws_vpc.main.id"
+        }
+      })),
+      {
+        id: "load-balancer",
+        type: "LOAD_BALANCER",
+        label: "Application Load Balancer",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          subnets: ["aws_subnet.public_a.id", "aws_subnet.public_b.id"]
+        }
+      },
+      {
+        id: "service",
+        type: "ECS_SERVICE",
+        label: "Fargate Service",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          networkConfiguration: {
+            subnets: ["aws_subnet.app_a.id", "aws_subnet.app_b.id"]
+          }
+        }
+      },
+      {
+        id: "db-subnet-group",
+        type: "DB_SUBNET_GROUP",
+        label: "DB Subnet Group",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceName: "database",
+          subnetIds: ["aws_subnet.db_a.id", "aws_subnet.db_b.id"]
+        }
+      },
+      {
+        id: "database",
+        type: "RDS",
+        label: "Application Database",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          dbSubnetGroupName: "aws_db_subnet_group.database.name"
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const diagramJson = convertArchitectureJsonToDiagramJson(architectureJson);
+  const parentByNodeId = new Map(
+    diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId])
+  );
+
+  assert.equal(parentByNodeId.get("load-balancer"), "vpc-main");
+  assert.equal(parentByNodeId.get("service"), "vpc-main");
+  assert.equal(parentByNodeId.get("db-subnet-group"), "vpc-main");
+  assert.equal(parentByNodeId.get("database"), "vpc-main");
 });
 
 test("convertArchitectureJsonToDiagramJson keeps runtime usage arrows visible", () => {
@@ -2605,8 +3379,20 @@ test("convertDiagramJsonToArchitectureJson tolerates missing parameter values fo
 test("convertDiagramJsonToArchitectureJson keeps only AWS port range values in ingress config", () => {
   const diagramJson: DiagramJson = {
     nodes: [
-      makeSecurityGroupRuleNode({ cidrBlock: "0.0.0.0/0", fromPort: "22", id: "ssh-rule", label: "SSH Rule", resourceName: "ssh" }),
-      makeSecurityGroupRuleNode({ cidrBlock: "10.0.0.0/16", fromPort: "70000", id: "invalid-port-rule", label: "Invalid Port Rule", resourceName: "invalid" })
+      makeSecurityGroupRuleNode({
+        cidrBlock: "0.0.0.0/0",
+        fromPort: "22",
+        id: "ssh-rule",
+        label: "SSH Rule",
+        resourceName: "ssh"
+      }),
+      makeSecurityGroupRuleNode({
+        cidrBlock: "10.0.0.0/16",
+        fromPort: "70000",
+        id: "invalid-port-rule",
+        label: "Invalid Port Rule",
+        resourceName: "invalid"
+      })
     ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
@@ -2642,6 +3428,49 @@ function makeSecurityGroupRuleNode(node: {
   });
 }
 
+function repositoryNode(
+  id: string,
+  type: ResourceType,
+  label: string,
+  positionX: number,
+  positionY: number,
+  config: Record<string, unknown>
+): ArchitectureJson["nodes"][number] {
+  return { id, type, label, positionX, positionY, config };
+}
+
+function templateNode(
+  templateId: string,
+  templateResourceId: string,
+  type: ResourceType,
+  label: string,
+  positionX: number,
+  positionY: number,
+  config: Record<string, unknown>
+): ArchitectureJson["nodes"][number] {
+  return repositoryNode(
+    `fixed-template-${templateId}-${templateResourceId}`,
+    type,
+    label,
+    positionX,
+    positionY,
+    {
+      templateId,
+      templateResourceId,
+      ...config
+    }
+  );
+}
+
+function edge(
+  id: string,
+  sourceId: string,
+  targetId: string,
+  label: string
+): ArchitectureJson["edges"][number] {
+  return { id, sourceId, targetId, label };
+}
+
 function makeDiagramNode(
   node: Partial<DiagramJson["nodes"][number]> &
     Pick<DiagramJson["nodes"][number], "id" | "label" | "type">
@@ -2662,8 +3491,14 @@ function makeDiagramNode(
 function assertContainsNode(parent: DiagramNode | undefined, child: DiagramNode | undefined): void {
   assert.ok(parent, "Expected parent node to exist");
   assert.ok(child, "Expected child node to exist");
-  assert.ok(child.position.x >= parent.position.x, `${parent.id} should contain ${child.id} on the left edge`);
-  assert.ok(child.position.y >= parent.position.y, `${parent.id} should contain ${child.id} on the top edge`);
+  assert.ok(
+    child.position.x >= parent.position.x,
+    `${parent.id} should contain ${child.id} on the left edge`
+  );
+  assert.ok(
+    child.position.y >= parent.position.y,
+    `${parent.id} should contain ${child.id} on the top edge`
+  );
   assert.ok(
     child.position.x + child.size.width <= parent.position.x + parent.size.width,
     `${parent.id} should contain ${child.id} on the right edge`
@@ -2747,8 +3582,14 @@ function assertResourceChildrenInsetFromAreaBoundaries(diagramJson: DiagramJson)
       continue;
     }
 
-    assert.ok(node.position.x - parent.position.x >= minimumInset, `${node.id} should stay inside ${parent.id} left boundary`);
-    assert.ok(node.position.y - parent.position.y >= minimumInset, `${node.id} should stay inside ${parent.id} top boundary`);
+    assert.ok(
+      node.position.x - parent.position.x >= minimumInset,
+      `${node.id} should stay inside ${parent.id} left boundary`
+    );
+    assert.ok(
+      node.position.y - parent.position.y >= minimumInset,
+      `${node.id} should stay inside ${parent.id} top boundary`
+    );
     assert.ok(
       parent.position.x + parent.size.width - (node.position.x + node.size.width) >= minimumInset,
       `${node.id} should stay inside ${parent.id} right boundary`
@@ -2838,20 +3679,29 @@ function assertNoEdgeRouteOverlap(diagramJson: DiagramJson): void {
     assert.ok(sourceNode, `Expected source node for ${edge.id}`);
     assert.ok(targetNode, `Expected target node for ${edge.id}`);
 
-    const segments = getTestRouteSegments(
-      getTestNodeHandlePoint(sourceNode, edge.sourceHandleId ?? "handle-right"),
-      getTestNodeHandlePoint(targetNode, edge.targetHandleId ?? "handle-left"),
-      edge.sourceHandleId ?? "handle-right",
-      edge.targetHandleId ?? "handle-left"
-    );
-
     for (const node of diagramJson.nodes) {
-      if (node.id === sourceNode.id || node.id === targetNode.id || node.kind !== "resource" || isAreaNode(node)) {
+      if (
+        node.id === sourceNode.id ||
+        node.id === targetNode.id ||
+        node.kind !== "resource" ||
+        isAreaNode(node)
+      ) {
         continue;
       }
 
-      const overlapLength = segments.reduce((total, segment) => total + getTestSegmentNodeOverlapLength(segment, node), 0);
-      assert.ok(overlapLength <= 6, `${edge.id} should not route through ${node.id} (${overlapLength})`);
+      const overlapLength = getOrthogonalRouteNodeOverlapLength(
+        sourceNode,
+        targetNode,
+        {
+          sourceHandleId: edge.sourceHandleId ?? "handle-right",
+          targetHandleId: edge.targetHandleId ?? "handle-left"
+        },
+        node
+      );
+      assert.ok(
+        overlapLength <= 6,
+        `${edge.id} should not route through ${node.id} (${overlapLength})`
+      );
     }
   }
 }
@@ -2899,7 +3749,8 @@ function assertNoEdgeSharedSegmentOverlap(diagramJson: DiagramJson): void {
         (total, leftSegment) =>
           total +
           rightRoute.segments.reduce(
-            (segmentTotal, rightSegment) => segmentTotal + getTestSegmentOverlapLength(leftSegment, rightSegment),
+            (segmentTotal, rightSegment) =>
+              segmentTotal + getTestSegmentOverlapLength(leftSegment, rightSegment),
             0
           ),
         0
@@ -2929,7 +3780,10 @@ function getTestRouteSegments(
   const segments: TestRouteSegment[] = [{ from: sourcePoint, to: sourceExitPoint }];
 
   if (sourceExitPoint.x === targetExitPoint.x || sourceExitPoint.y === targetExitPoint.y) {
-    segments.push({ from: sourceExitPoint, to: targetExitPoint }, { from: targetExitPoint, to: targetPoint });
+    segments.push(
+      { from: sourceExitPoint, to: targetExitPoint },
+      { from: targetExitPoint, to: targetPoint }
+    );
     return removeZeroLengthTestRouteSegments(segments);
   }
 
@@ -2960,7 +3814,10 @@ function isTestVerticalEdgeHandle(handleId: string): boolean {
   return handleId === "handle-top" || handleId === "handle-bottom";
 }
 
-function getTestHandleStubPoint(point: DiagramNode["position"], handleId: string): DiagramNode["position"] {
+function getTestHandleStubPoint(
+  point: DiagramNode["position"],
+  handleId: string
+): DiagramNode["position"] {
   const stubLength = 20;
 
   if (handleId === "handle-left") {
@@ -2978,8 +3835,12 @@ function getTestHandleStubPoint(point: DiagramNode["position"], handleId: string
   return { x: point.x, y: point.y + stubLength };
 }
 
-function removeZeroLengthTestRouteSegments(segments: readonly TestRouteSegment[]): TestRouteSegment[] {
-  return segments.filter((segment) => segment.from.x !== segment.to.x || segment.from.y !== segment.to.y);
+function removeZeroLengthTestRouteSegments(
+  segments: readonly TestRouteSegment[]
+): TestRouteSegment[] {
+  return segments.filter(
+    (segment) => segment.from.x !== segment.to.x || segment.from.y !== segment.to.y
+  );
 }
 
 function getTestNodeHandlePoint(node: DiagramNode, handleId: string): DiagramNode["position"] {
@@ -3003,57 +3864,35 @@ function getTestNodeHandlePoint(node: DiagramNode, handleId: string): DiagramNod
   return { x: center.x, y: node.position.y + node.size.height };
 }
 
-function getTestSegmentNodeOverlapLength(segment: TestRouteSegment, node: DiagramNode): number {
-  const horizontal = segment.from.y === segment.to.y;
-  const vertical = segment.from.x === segment.to.x;
-
-  if (!horizontal && !vertical) {
-    return 0;
-  }
-
-  const padding = 18;
-  const left = node.position.x - padding;
-  const right = node.position.x + node.size.width + padding;
-  const top = node.position.y - padding;
-  const bottom = node.position.y + node.size.height + padding;
-
-  if (horizontal) {
-    const y = segment.from.y;
-
-    if (y <= top || y >= bottom) {
-      return 0;
-    }
-
-    const segmentLeft = Math.min(segment.from.x, segment.to.x);
-    const segmentRight = Math.max(segment.from.x, segment.to.x);
-
-    return Math.max(0, Math.min(segmentRight, right) - Math.max(segmentLeft, left));
-  }
-
-  const x = segment.from.x;
-
-  if (x <= left || x >= right) {
-    return 0;
-  }
-
-  const segmentTop = Math.min(segment.from.y, segment.to.y);
-  const segmentBottom = Math.max(segment.from.y, segment.to.y);
-
-  return Math.max(0, Math.min(segmentBottom, bottom) - Math.max(segmentTop, top));
-}
-
-function getTestSegmentOverlapLength(leftSegment: TestRouteSegment, rightSegment: TestRouteSegment): number {
+function getTestSegmentOverlapLength(
+  leftSegment: TestRouteSegment,
+  rightSegment: TestRouteSegment
+): number {
   const leftHorizontal = leftSegment.from.y === leftSegment.to.y;
   const rightHorizontal = rightSegment.from.y === rightSegment.to.y;
   const leftVertical = leftSegment.from.x === leftSegment.to.x;
   const rightVertical = rightSegment.from.x === rightSegment.to.x;
 
-  if (leftHorizontal && rightHorizontal && Math.abs(leftSegment.from.y - rightSegment.from.y) <= 1) {
-    return getTestRangeOverlapLength(leftSegment.from.x, leftSegment.to.x, rightSegment.from.x, rightSegment.to.x);
+  if (
+    leftHorizontal &&
+    rightHorizontal &&
+    Math.abs(leftSegment.from.y - rightSegment.from.y) <= 1
+  ) {
+    return getTestRangeOverlapLength(
+      leftSegment.from.x,
+      leftSegment.to.x,
+      rightSegment.from.x,
+      rightSegment.to.x
+    );
   }
 
   if (leftVertical && rightVertical && Math.abs(leftSegment.from.x - rightSegment.from.x) <= 1) {
-    return getTestRangeOverlapLength(leftSegment.from.y, leftSegment.to.y, rightSegment.from.y, rightSegment.to.y);
+    return getTestRangeOverlapLength(
+      leftSegment.from.y,
+      leftSegment.to.y,
+      rightSegment.from.y,
+      rightSegment.to.y
+    );
   }
 
   return 0;
