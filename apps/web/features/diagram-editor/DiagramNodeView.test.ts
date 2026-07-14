@@ -500,23 +500,24 @@ test("diagram node view applies computed area border style through CSS variables
   );
 });
 
-test("Security Group scopes use a distinct translucent dashed presentation", () => {
+test("Security Group scopes use border-only presentation without area fill", () => {
   const scopeBlock = getCssBlock(".nodeShellArea.nodeShellSecurityGroupScope");
 
   assert.match(diagramNodeViewSource, /isSecurityGroupScopeNode/);
   assert.match(diagramNodeViewSource, /styles\.nodeShellSecurityGroupScope/);
-  assert.match(scopeBlock, /--area-body-background:/);
+  assert.doesNotMatch(scopeBlock, /--area-body-background:/);
   assert.match(scopeBlock, /--area-border-width:\s*2px;/);
+  assert.match(getCssBlock(".nodeShellArea"), /--area-body-background:\s*transparent;/);
 });
 
-test("Area placement feedback uses a restrained purple target state without a reference badge", () => {
+test("Area placement feedback uses border-only target state without a reference badge", () => {
   const targetBlock = getCssBlock(".nodeShellArea.nodeShellAreaDropTarget");
 
   assert.match(diagramNodeViewSource, /data\.isAreaDropTarget \? styles\.nodeShellAreaDropTarget/);
   assert.doesNotMatch(diagramNodeViewSource, /styles\.referenceTargetBadge/);
   assert.match(targetBlock, /--area-border-color:\s*#6f4cf6;/);
-  assert.match(targetBlock, /background:\s*rgba\(111, 76, 246, 0\.08\);/);
-  assert.match(targetBlock, /inset 0 0 0 999px rgba\(111, 76, 246, 0\.04\)/);
+  assert.match(targetBlock, /background:\s*transparent;/);
+  assert.doesNotMatch(targetBlock, /inset 0 0 0 999px/);
   assert.match(targetBlock, /0 0 0 4px rgba\(111, 76, 246, 0\.14\)/);
 });
 

@@ -368,6 +368,7 @@ test("left and right resize handles use the bidirectional horizontal resize curs
 test("area node header uses a rounded icon without a bottom divider", () => {
   const areaBlock = getCssBlock(".nodeShellArea");
   const headerBlock = getCssBlock(".areaNodeHeader");
+  const headerContentBlock = getCssBlock(".areaNodeHeaderContent");
   const depth0Block = getCssBlock(".nodeShellAreaDepth0");
   const depth1Block = getCssBlock(".nodeShellAreaDepth1");
   const depth2Block = getCssBlock(".nodeShellAreaDepth2");
@@ -377,7 +378,7 @@ test("area node header uses a rounded icon without a bottom divider", () => {
 
   assert.match(
     areaBlock,
-    /--area-body-background:\s*color-mix\(in srgb, var\(--board-surface\) 24%, transparent\);/
+    /--area-body-background:\s*transparent;/
   );
   assert.match(areaBlock, /--area-border-width:\s*1px;/);
   assert.match(areaBlock, /--area-border-color:\s*var\(--node-border-color, var\(--board-border\)\);/);
@@ -392,13 +393,15 @@ test("area node header uses a rounded icon without a bottom divider", () => {
     headerBlock,
     /background:\s*transparent;/
   );
+  assert.match(headerContentBlock, /background:\s*var\(--board-surface\);/);
+  assert.match(headerContentBlock, /border-radius:\s*6px;/);
   assert.doesNotMatch(headerBlock, /board-surface-subtle/);
   assert.match(headerBlock, /border-bottom:\s*0;/);
   assert.match(iconBlock, /border-radius:\s*4px;/);
-  assert.match(depth0Block, /var\(--board-surface\) 24%/);
-  assert.match(depth1Block, /var\(--board-surface\) 32%/);
-  assert.match(depth2Block, /var\(--board-surface\) 40%/);
-  assert.match(depth3Block, /var\(--board-surface\) 48%/);
+  assert.match(depth0Block, /--area-body-background:\s*transparent;/);
+  assert.match(depth1Block, /--area-body-background:\s*transparent;/);
+  assert.match(depth2Block, /--area-body-background:\s*transparent;/);
+  assert.match(depth3Block, /--area-body-background:\s*transparent;/);
   assert.match(metaBlock, /background:\s*var\(--board-primary-soft\);/);
   assert.match(metaBlock, /color:\s*var\(--board-primary\);/);
   assert.doesNotMatch(headerBlock, /transform:\s*translateY\(-100%\);/);

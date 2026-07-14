@@ -1,6 +1,7 @@
 import type { DiagramNode } from "@sketchcatch/types";
-import { isAreaNode } from "../diagram-editor/area-nodes";
+import { isAreaNode, isSecurityGroupScopeNode } from "../diagram-editor/area-nodes";
 import {
+  createAreaTitleRoutingObstacle,
   getObstacleSafeEdgeHandles,
   getObstacleSafeOrthogonalRouteSegments,
   getOrthogonalRouteNodeOverlapLength,
@@ -77,6 +78,17 @@ const ROLE_RANK: Readonly<Record<SemanticRole, number>> = {
 const AREA_PADDING = 36;
 const ROOT_PARENT_ID = "__root__";
 const SUPPORT_LANE_GAP = 80;
+const SUPPORT_ROUTE_OBSTACLE_PENALTY = 1_000_000;
+const SUPPORT_ROUTE_CANVAS_EXPANSION_PENALTY = 20;
+const SUPPORT_ROUTE_OFFSET_PENALTY = 1_000;
+const SUPPORT_ROUTE_NODE_OVERLAP_PENALTY = 10_000_000;
+const DENSE_SUPPORT_MIN_COUNT = 8;
+const DENSE_SUPPORT_MIN_COLUMNS = 4;
+const DENSE_SUPPORT_MAX_COLUMNS = 8;
+const DENSE_SUPPORT_COLUMN_GAP = 48;
+const REPEATED_AREA_MIN_COUNT = 4;
+const PREFERRED_CANVAS_HEIGHT_TO_WIDTH_RATIO = 1;
+const CANVAS_ASPECT_RATIO_PENALTY = 5_000_000;
 const LAYOUT_CANDIDATES: readonly LayoutCandidateConfig[] = [
   { columnGap: 64, id: "split-support", primaryOrder: "ascending", rowGap: 56, supportPlacement: "split" },
   { columnGap: 64, id: "split-support-reversed", primaryOrder: "descending", rowGap: 56, supportPlacement: "split" },
@@ -152,6 +164,19 @@ function createLayoutCandidate(
       protectedNodeIds,
       config
     );
+    compactRepeatedAreaSiblingLayouts(
+      [parentId],
+      nextNodeById,
+      protectedNodeIds,
+      config
+    );
+    compactDenseNestedSupportLayouts(
+      input.edges,
+      [parentId],
+      nextNodeById,
+      roleByNodeId,
+      protectedNodeIds
+    );
     fitParentAreaToChildren(parentId, nextNodeById, protectedNodeIds);
   }
 
@@ -162,6 +187,7 @@ function createLayoutCandidate(
     protectedNodeIds,
     config
   );
+  compactRootSupportLayout(input.edges, nextNodeById, roleByNodeId, protectedNodeIds);
   avoidSupportEdgeNodeIntersections(
     input.edges,
     nextNodeById,
@@ -173,7 +199,538 @@ function createLayoutCandidate(
     fitParentAreaToChildren(parentId, nextNodeById, protectedNodeIds);
   }
 
+  resolveSiblingAreaOverlaps([ROOT_PARENT_ID, ...parentIds], nextNodeById, protectedNodeIds);
+
+  for (const parentId of parentIds) {
+    fitParentAreaToChildren(parentId, nextNodeById, protectedNodeIds);
+  }
+
+  resolveSiblingAreaOverlaps([ROOT_PARENT_ID, ...parentIds], nextNodeById, protectedNodeIds);
+
   return input.nodes.map((node) => nextNodeById.get(node.id) ?? node);
+}
+
+function resolveSiblingAreaOverlaps(
+  parentIds: readonly string[],
+  nodeById: Map<string, DiagramNode>,
+  protectedNodeIds: ReadonlySet<string>
+): void {
+  for (const parentId of parentIds) {
+    const siblingAreas = [...nodeById.values()]
+      .filter(
+        (node) =>
+          isAreaNode(node) &&
+          !isSecurityGroupScopeNode(node) &&
+          (node.metadata?.parentAreaNodeId ?? ROOT_PARENT_ID) === parentId
+      )
+      .sort(compareAreaOverlapResolutionOrder);
+    const placedAreas: DiagramNode[] = [];
+
+    for (const area of siblingAreas) {
+      let currentArea = nodeById.get(area.id) ?? area;
+
+      if (!canMoveSubtree(currentArea.id, nodeById, protectedNodeIds)) {
+        placedAreas.push(currentArea);
+        continue;
+      }
+
+      for (let pass = 0; pass < 12; pass += 1) {
+        const overlappingArea = placedAreas.find((placedArea) =>
+          doNodesOverlap(currentArea, placedArea)
+        );
+
+        if (!overlappingArea) {
+          break;
+        }
+
+        const currentBounds = getLayoutNodeBounds(currentArea);
+        const placedBounds = getLayoutNodeBounds(overlappingArea);
+        moveSubtree(
+          currentArea.id,
+          {
+            x: 0,
+            y: placedBounds.y + placedBounds.height + SUPPORT_LANE_GAP - currentBounds.y
+          },
+          nodeById
+        );
+        currentArea = nodeById.get(currentArea.id) ?? currentArea;
+      }
+
+      placedAreas.push(currentArea);
+    }
+  }
+}
+
+function compareAreaOverlapResolutionOrder(left: DiagramNode, right: DiagramNode): number {
+  const leftBounds = getLayoutNodeBounds(left);
+  const rightBounds = getLayoutNodeBounds(right);
+
+  return (
+    leftBounds.height - rightBounds.height ||
+    leftBounds.y - rightBounds.y ||
+    leftBounds.x - rightBounds.x ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function compactRootSupportLayout(
+  edges: readonly AutomaticDiagramLayoutEdge[],
+  nodeById: Map<string, DiagramNode>,
+  roleByNodeId: ReadonlyMap<string, SemanticRole>,
+  protectedNodeIds: ReadonlySet<string>
+): void {
+  const rootNodes = [...nodeById.values()].filter(
+    (node) => !node.metadata?.parentAreaNodeId
+  );
+  const supportNodes = rootNodes.filter(
+    (node) =>
+      !isAreaNode(node) &&
+      !isPrimaryFlowRole(roleByNodeId.get(node.id)) &&
+      canMoveSubtree(node.id, nodeById, protectedNodeIds)
+  );
+
+  if (supportNodes.length < 3) {
+    return;
+  }
+
+  let primaryRootNodes = rootNodes.filter(
+    (node) => isAreaNode(node) || isPrimaryFlowRole(roleByNodeId.get(node.id))
+  );
+
+  if (primaryRootNodes.length === 0) {
+    return;
+  }
+
+  const movablePrimaryRootNodes = primaryRootNodes.filter((node) =>
+    canMoveSubtree(node.id, nodeById, protectedNodeIds)
+  );
+  if (movablePrimaryRootNodes.length === primaryRootNodes.length) {
+    const primaryTop = Math.min(
+      ...primaryRootNodes.map((node) => getLayoutNodeBounds(node).y)
+    );
+    const rootOriginY = Math.min(...rootNodes.map((node) => getLayoutNodeBounds(node).y), 0);
+
+    for (const node of primaryRootNodes) {
+      moveSubtree(node.id, { x: 0, y: rootOriginY - primaryTop }, nodeById);
+    }
+
+    primaryRootNodes = primaryRootNodes.map((node) => nodeById.get(node.id) ?? node);
+  }
+
+  const supportRailY = Math.max(
+    ...primaryRootNodes.map((node) => node.position.y + node.size.height)
+  ) + SUPPORT_LANE_GAP;
+
+  const supportNodeIds = new Set(supportNodes.map((node) => node.id));
+  const supportTargetRootNodes = edges
+    .flatMap((edge) => {
+      const targetNodeId = supportNodeIds.has(edge.sourceId) && !supportNodeIds.has(edge.targetId)
+        ? edge.targetId
+        : supportNodeIds.has(edge.targetId) && !supportNodeIds.has(edge.sourceId)
+          ? edge.sourceId
+          : undefined;
+      const targetNode = targetNodeId ? nodeById.get(targetNodeId) : undefined;
+
+      return targetNode ? [getRootLayoutNode(targetNode, nodeById)] : [];
+    })
+    .filter(
+      (node, index, nodes) => nodes.findIndex((candidate) => candidate.id === node.id) === index
+    );
+  const supportTargetRootAreas = supportTargetRootNodes.filter(isAreaNode);
+  const gridAnchorNodes = supportTargetRootAreas.length > 0
+    ? supportTargetRootAreas
+    : primaryRootNodes;
+  const gridAnchorBounds = gridAnchorNodes.map(getLayoutNodeBounds);
+  const primaryLeft = Math.min(...gridAnchorBounds.map((bounds) => bounds.x));
+  const primaryRight = Math.max(...gridAnchorBounds.map((bounds) => bounds.x + bounds.width));
+
+  placeDenseSupportGrid(
+    supportNodes,
+    edges,
+    primaryLeft,
+    primaryRight,
+    supportRailY,
+    nodeById,
+    supportTargetRootAreas.length > 0
+      ? Math.min(DENSE_SUPPORT_MAX_COLUMNS, supportNodes.length)
+      : undefined
+  );
+}
+
+function getRootLayoutNode(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode {
+  let rootNode = node;
+  const visitedNodeIds = new Set<string>();
+
+  while (rootNode.metadata?.parentAreaNodeId && !visitedNodeIds.has(rootNode.id)) {
+    visitedNodeIds.add(rootNode.id);
+    const parentNode = nodeById.get(rootNode.metadata.parentAreaNodeId);
+    if (!parentNode) break;
+    rootNode = parentNode;
+  }
+
+  return rootNode;
+}
+
+function compactDenseNestedSupportLayouts(
+  edges: readonly AutomaticDiagramLayoutEdge[],
+  parentIds: readonly string[],
+  nodeById: Map<string, DiagramNode>,
+  roleByNodeId: ReadonlyMap<string, SemanticRole>,
+  protectedNodeIds: ReadonlySet<string>
+): void {
+  for (const parentId of parentIds) {
+    if (parentId === ROOT_PARENT_ID) {
+      continue;
+    }
+
+    const parent = nodeById.get(parentId);
+    if (!parent || !isAreaNode(parent)) {
+      continue;
+    }
+
+    const children = [...nodeById.values()].filter(
+      (node) =>
+        node.metadata?.parentAreaNodeId === parentId &&
+        !isSecurityGroupScopeNode(node)
+    );
+    const supportNodes = children.filter(
+      (node) =>
+        !isAreaNode(node) &&
+        !isPrimaryFlowRole(roleByNodeId.get(node.id)) &&
+        canMoveSubtree(node.id, nodeById, protectedNodeIds)
+    );
+
+    if (supportNodes.length < DENSE_SUPPORT_MIN_COUNT) {
+      continue;
+    }
+
+    const supportNodeIds = new Set(supportNodes.map((node) => node.id));
+    const anchorNodes = children.filter((node) => !supportNodeIds.has(node.id));
+    const anchorBounds = anchorNodes.map(getLayoutNodeBounds);
+    const parentInnerLeft = parent.position.x + AREA_PADDING;
+    const parentInnerRight = parent.position.x + parent.size.width - AREA_PADDING;
+    const supportGridY = anchorBounds.length > 0
+      ? Math.max(...anchorBounds.map((bounds) => bounds.y + bounds.height)) + SUPPORT_LANE_GAP
+      : parent.position.y + AREA_PADDING;
+    const gridLeft = anchorBounds.length > 0
+      ? Math.min(parentInnerLeft, ...anchorBounds.map((bounds) => bounds.x))
+      : parentInnerLeft;
+    const gridRight = anchorBounds.length > 0
+      ? Math.max(parentInnerRight, ...anchorBounds.map((bounds) => bounds.x + bounds.width))
+      : parentInnerRight;
+
+    placeDenseSupportGrid(supportNodes, edges, gridLeft, gridRight, supportGridY, nodeById);
+  }
+}
+
+function placeDenseSupportGrid(
+  supportNodes: readonly DiagramNode[],
+  edges: readonly AutomaticDiagramLayoutEdge[],
+  gridLeft: number,
+  gridRight: number,
+  supportGridY: number,
+  nodeById: Map<string, DiagramNode>,
+  minimumColumnCount?: number
+): void {
+  const supportBounds = supportNodes.map(getLayoutNodeBounds);
+  const supportCellWidth =
+    Math.max(...supportBounds.map((bounds) => bounds.width)) + DENSE_SUPPORT_COLUMN_GAP;
+  const supportCellHeight =
+    Math.max(...supportBounds.map((bounds) => bounds.height)) + DENSE_SUPPORT_COLUMN_GAP;
+  const preferredColumnCount = Math.max(
+    minimumColumnCount ?? 0,
+    Math.ceil(supportNodes.length / 2)
+  );
+  const columnCount = Math.min(
+    DENSE_SUPPORT_MAX_COLUMNS,
+    Math.max(
+      DENSE_SUPPORT_MIN_COLUMNS,
+      preferredColumnCount,
+      Math.floor((gridRight - gridLeft + DENSE_SUPPORT_COLUMN_GAP) / supportCellWidth)
+    )
+  );
+  const orderedSupportNodes = orderSupportNodesForCompactGrid(supportNodes, edges, nodeById);
+
+  orderedSupportNodes.forEach((node, index) => {
+    const bounds = getLayoutNodeBounds(node);
+    const column = index % columnCount;
+    const row = Math.floor(index / columnCount);
+    const targetVisualLeft =
+      gridLeft + column * supportCellWidth + (supportCellWidth - bounds.width) / 2;
+    const targetVisualTop = supportGridY + row * supportCellHeight;
+
+    moveSubtree(
+      node.id,
+      {
+        x: targetVisualLeft - bounds.x,
+        y: targetVisualTop - bounds.y
+      },
+      nodeById
+    );
+  });
+}
+
+function orderSupportNodesForCompactGrid(
+  supportNodes: readonly DiagramNode[],
+  edges: readonly AutomaticDiagramLayoutEdge[],
+  allNodeById: ReadonlyMap<string, DiagramNode>
+): DiagramNode[] {
+  const nodeById = new Map(supportNodes.map((node) => [node.id, node]));
+  const neighborIdsByNodeId = new Map(
+    supportNodes.map((node) => [node.id, new Set<string>()])
+  );
+
+  for (const edge of edges) {
+    if (!nodeById.has(edge.sourceId) || !nodeById.has(edge.targetId)) {
+      continue;
+    }
+
+    neighborIdsByNodeId.get(edge.sourceId)?.add(edge.targetId);
+    neighborIdsByNodeId.get(edge.targetId)?.add(edge.sourceId);
+  }
+
+  const remainingNodeIds = new Set(nodeById.keys());
+  const components: string[][] = [];
+
+  while (remainingNodeIds.size > 0) {
+    const firstNodeId = [...remainingNodeIds].sort()[0];
+    if (!firstNodeId) break;
+
+    const componentNodeIds: string[] = [];
+    const queue = [firstNodeId];
+    remainingNodeIds.delete(firstNodeId);
+
+    for (let index = 0; index < queue.length; index += 1) {
+      const nodeId = queue[index];
+      if (!nodeId) continue;
+
+      componentNodeIds.push(nodeId);
+      for (const neighborId of [...(neighborIdsByNodeId.get(nodeId) ?? [])].sort()) {
+        if (remainingNodeIds.delete(neighborId)) {
+          queue.push(neighborId);
+        }
+      }
+    }
+
+    components.push(componentNodeIds);
+  }
+
+  return components
+    .sort(
+      (left, right) =>
+        getSupportComponentTargetX(left, edges, allNodeById) -
+          getSupportComponentTargetX(right, edges, allNodeById) ||
+        left.length - right.length ||
+        (left[0] ?? "").localeCompare(right[0] ?? "")
+    )
+    .flatMap((componentNodeIds) =>
+      orderSupportComponent(componentNodeIds, edges)
+        .map((nodeId) => nodeById.get(nodeId))
+        .filter((node): node is DiagramNode => Boolean(node))
+    );
+}
+
+function getSupportComponentTargetX(
+  componentNodeIds: readonly string[],
+  edges: readonly AutomaticDiagramLayoutEdge[],
+  nodeById: ReadonlyMap<string, DiagramNode>
+): number {
+  const componentNodeIdSet = new Set(componentNodeIds);
+  const externalNodes = edges.flatMap((edge) => {
+    const externalNodeId = componentNodeIdSet.has(edge.sourceId) && !componentNodeIdSet.has(edge.targetId)
+      ? edge.targetId
+      : componentNodeIdSet.has(edge.targetId) && !componentNodeIdSet.has(edge.sourceId)
+        ? edge.sourceId
+        : undefined;
+    const externalNode = externalNodeId ? nodeById.get(externalNodeId) : undefined;
+
+    return externalNode ? [externalNode] : [];
+  });
+
+  return externalNodes.length > 0
+    ? externalNodes.reduce((total, node) => total + getNodeCenter(node).x, 0) /
+        externalNodes.length
+    : Number.POSITIVE_INFINITY;
+}
+
+function orderSupportComponent(
+  componentNodeIds: readonly string[],
+  edges: readonly AutomaticDiagramLayoutEdge[]
+): string[] {
+  const componentNodeIdSet = new Set(componentNodeIds);
+  const outgoingNodeIdsByNodeId = new Map(
+    componentNodeIds.map((nodeId) => [nodeId, new Set<string>()])
+  );
+  const incomingCountByNodeId = new Map(componentNodeIds.map((nodeId) => [nodeId, 0]));
+
+  for (const edge of edges) {
+    if (!componentNodeIdSet.has(edge.sourceId) || !componentNodeIdSet.has(edge.targetId)) {
+      continue;
+    }
+
+    const outgoingNodeIds = outgoingNodeIdsByNodeId.get(edge.sourceId);
+    if (!outgoingNodeIds?.has(edge.targetId)) {
+      outgoingNodeIds?.add(edge.targetId);
+      incomingCountByNodeId.set(
+        edge.targetId,
+        (incomingCountByNodeId.get(edge.targetId) ?? 0) + 1
+      );
+    }
+  }
+
+  const readyNodeIds = componentNodeIds
+    .filter((nodeId) => incomingCountByNodeId.get(nodeId) === 0)
+    .sort();
+  const orderedNodeIds: string[] = [];
+
+  while (readyNodeIds.length > 0) {
+    const nodeId = readyNodeIds.shift();
+    if (!nodeId) continue;
+
+    orderedNodeIds.push(nodeId);
+    for (const targetNodeId of [...(outgoingNodeIdsByNodeId.get(nodeId) ?? [])].sort()) {
+      const incomingCount = (incomingCountByNodeId.get(targetNodeId) ?? 0) - 1;
+      incomingCountByNodeId.set(targetNodeId, incomingCount);
+      if (incomingCount === 0) {
+        readyNodeIds.push(targetNodeId);
+        readyNodeIds.sort();
+      }
+    }
+  }
+
+  return [
+    ...orderedNodeIds,
+    ...componentNodeIds.filter((nodeId) => !orderedNodeIds.includes(nodeId)).sort()
+  ];
+}
+
+function compactRepeatedAreaSiblingLayouts(
+  parentIds: readonly string[],
+  nodeById: Map<string, DiagramNode>,
+  protectedNodeIds: ReadonlySet<string>,
+  config: LayoutCandidateConfig
+): void {
+  for (const parentId of parentIds) {
+    const areasByType = new Map<string, DiagramNode[]>();
+
+    for (const node of nodeById.values()) {
+      if (
+        node.metadata?.parentAreaNodeId !== parentId ||
+        !isAreaNode(node) ||
+        isSecurityGroupScopeNode(node) ||
+        !canMoveSubtree(node.id, nodeById, protectedNodeIds)
+      ) {
+        continue;
+      }
+
+      const resourceType = node.parameters?.resourceType ?? node.type;
+      const repeatedAreas = areasByType.get(resourceType) ?? [];
+      repeatedAreas.push(node);
+      areasByType.set(resourceType, repeatedAreas);
+    }
+
+    for (const repeatedAreas of areasByType.values()) {
+      if (repeatedAreas.length < REPEATED_AREA_MIN_COUNT) {
+        continue;
+      }
+
+      placeRepeatedAreaGrid(repeatedAreas, nodeById, config);
+    }
+  }
+}
+
+function placeRepeatedAreaGrid(
+  areas: readonly DiagramNode[],
+  nodeById: Map<string, DiagramNode>,
+  config: LayoutCandidateConfig
+): void {
+  const areaBounds = areas.map(getLayoutNodeBounds);
+  const gridLeft = Math.min(...areaBounds.map((bounds) => bounds.x));
+  const gridTop = Math.min(...areaBounds.map((bounds) => bounds.y));
+  const cellWidth = Math.max(...areaBounds.map((bounds) => bounds.width)) + config.columnGap;
+  const cellHeight = Math.max(...areaBounds.map((bounds) => bounds.height)) + config.rowGap;
+  const { columnCount, orderedAreas } = getRepeatedAreaGridPlan(areas);
+
+  orderedAreas.forEach((node, index) => {
+    const bounds = getLayoutNodeBounds(node);
+    const column = index % columnCount;
+    const row = Math.floor(index / columnCount);
+    const targetLeft = gridLeft + column * cellWidth + (cellWidth - bounds.width) / 2;
+    const targetTop = gridTop + row * cellHeight;
+
+    moveSubtree(
+      node.id,
+      { x: targetLeft - bounds.x, y: targetTop - bounds.y },
+      nodeById
+    );
+  });
+}
+
+function getRepeatedAreaGridPlan(areas: readonly DiagramNode[]): {
+  readonly columnCount: number;
+  readonly orderedAreas: DiagramNode[];
+} {
+  const variantKeys = areas.map(getRepeatedAreaVariantKey);
+  const distinctVariantKeys = [...new Set(
+    variantKeys.filter((key): key is string => Boolean(key))
+  )].sort();
+  const distinctFamilyKeys = [...new Set(areas.map(createRepeatKey))].sort();
+  const familyCounts = new Map<string, number>();
+
+  for (const area of areas) {
+    const familyKey = createRepeatKey(area);
+    familyCounts.set(familyKey, (familyCounts.get(familyKey) ?? 0) + 1);
+  }
+
+  if (
+    distinctVariantKeys.length >= 2 &&
+    distinctVariantKeys.length <= 4 &&
+    variantKeys.every(Boolean) &&
+    [...familyCounts.values()].every((count) => count === distinctVariantKeys.length)
+  ) {
+    const placesFamiliesInColumns = distinctFamilyKeys.length >= distinctVariantKeys.length;
+    const familyOrder = new Map(distinctFamilyKeys.map((key, index) => [key, index]));
+    const variantOrder = new Map(distinctVariantKeys.map((key, index) => [key, index]));
+    const orderedAreas = [...areas].sort((left, right) => {
+      const familyDifference =
+        (familyOrder.get(createRepeatKey(left)) ?? 0) -
+        (familyOrder.get(createRepeatKey(right)) ?? 0);
+      const variantDifference =
+        (variantOrder.get(getRepeatedAreaVariantKey(left) ?? "") ?? 0) -
+        (variantOrder.get(getRepeatedAreaVariantKey(right) ?? "") ?? 0);
+
+      return placesFamiliesInColumns
+        ? variantDifference || familyDifference
+        : familyDifference || variantDifference;
+    });
+
+    return {
+      columnCount: placesFamiliesInColumns
+        ? distinctFamilyKeys.length
+        : distinctVariantKeys.length,
+      orderedAreas
+    };
+  }
+
+  return {
+    columnCount: Math.min(4, Math.max(2, Math.ceil(Math.sqrt(areas.length)))),
+    orderedAreas: [...areas].sort(compareRepeatedNodes)
+  };
+}
+
+function getRepeatedAreaVariantKey(node: DiagramNode): string | undefined {
+  const idMatch = node.id.toLowerCase().match(/(?:^|[-_])(?:az[-_]?)?([a-z])$/u);
+
+  if (idMatch?.[1]) {
+    return idMatch[1];
+  }
+
+  const labelMatch = node.label.toLowerCase().match(/(?:^|\s)(?:az\s*)?([a-z])$/u);
+
+  return labelMatch?.[1];
 }
 
 function alignSupportNodesWithConnectedPrimaryTargets(
@@ -290,6 +847,7 @@ function avoidSupportEdgeNodeIntersections(
 
       const spacing = supportNode.size.width + 48;
       const offsets = [0, -spacing, spacing, -spacing * 2, spacing * 2, -spacing * 3, spacing * 3];
+      const baselineCanvasArea = getCanvasArea([...nodeById.values()]);
       let bestOffset = 0;
       let bestScore = Number.POSITIVE_INFINITY;
 
@@ -312,7 +870,12 @@ function avoidSupportEdgeNodeIntersections(
             !isAreaNode(node) &&
             doNodesOverlap(candidateNode, node)
         ).length;
-        const score = routeObstacleCount * 1_000_000 + nodeOverlapCount * 10_000_000 + Math.abs(offset);
+        const canvasExpansion = Math.max(0, getCanvasArea(candidateNodes) - baselineCanvasArea);
+        const score =
+          routeObstacleCount * SUPPORT_ROUTE_OBSTACLE_PENALTY +
+          nodeOverlapCount * SUPPORT_ROUTE_NODE_OVERLAP_PENALTY +
+          canvasExpansion * SUPPORT_ROUTE_CANVAS_EXPANSION_PENALTY +
+          Math.abs(offset) * SUPPORT_ROUTE_OFFSET_PENALTY;
 
         if (score < bestScore) {
           bestOffset = offset;
@@ -358,7 +921,7 @@ export function evaluateAutomaticDiagramLayout(
     input.nodes.filter((node) => !isAreaNode(node)).map((node) => [node.id, classifySemanticRole(node)])
   );
   const nonAreaNodes = input.nodes.filter((node) => !isAreaNode(node));
-  const areaTitleObstacles = input.nodes.filter(isAreaNode).map(createAreaTitleObstacle);
+  const areaTitleObstacles = input.nodes.filter(isAreaNode).map(createAreaTitleRoutingObstacle);
   let nodeOverlapCount = 0;
   let siblingAreaOverlapCount = 0;
 
@@ -476,7 +1039,9 @@ export function evaluateAutomaticDiagramLayout(
   const bounds = getCanvasBounds(input.nodes);
   const canvasArea = Math.max(0, bounds.width * bounds.height);
   const canvasAspectRatioPenalty =
-    bounds.width === 0 ? 0 : Math.max(0, bounds.height / bounds.width - 1);
+    bounds.width === 0
+      ? 0
+      : Math.max(0, bounds.height / bounds.width - PREFERRED_CANVAS_HEIGHT_TO_WIDTH_RATIO);
   const resourceArea = nonAreaNodes.reduce((area, node) => area + node.size.width * node.size.height, 0);
   const emptySpaceRatio = canvasArea === 0 ? 0 : Math.max(0, Math.min(1, 1 - resourceArea / canvasArea));
   const repeatAlignmentError = getRepeatAlignmentError(input.nodes);
@@ -496,7 +1061,7 @@ export function evaluateAutomaticDiagramLayout(
     totalEdgeLength * 20 +
     canvasArea * 0.005 +
     emptySpaceRatio * 100_000 +
-    canvasAspectRatioPenalty * 5_000_000;
+    canvasAspectRatioPenalty * CANVAS_ASPECT_RATIO_PENALTY;
 
   return {
     backwardEdgeCount,
@@ -514,16 +1079,6 @@ export function evaluateAutomaticDiagramLayout(
     siblingAreaOverlapCount,
     supportLaneIntrusionCount,
     totalEdgeLength
-  };
-}
-
-function createAreaTitleObstacle(node: DiagramNode): DiagramNode {
-  return {
-    ...node,
-    size: {
-      width: node.size.width,
-      height: Math.min(32, node.size.height)
-    }
   };
 }
 
@@ -625,6 +1180,12 @@ function getCanvasBounds(nodes: readonly DiagramNode[]): { readonly width: numbe
   return { width: right - left, height: bottom - top };
 }
 
+function getCanvasArea(nodes: readonly DiagramNode[]): number {
+  const bounds = getCanvasBounds(nodes);
+
+  return Math.max(0, bounds.width * bounds.height);
+}
+
 function getRepeatAlignmentError(nodes: readonly DiagramNode[]): number {
   const groups = new Map<string, DiagramNode[]>();
 
@@ -649,10 +1210,10 @@ function getSupportLaneIntrusionCount(
   nodes: readonly DiagramNode[],
   roleByNodeId: ReadonlyMap<string, SemanticRole>
 ): number {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const nodesByParentId = new Map<string, DiagramNode[]>();
 
   for (const node of nodes) {
-    if (isAreaNode(node)) continue;
     const parentId = node.metadata?.parentAreaNodeId ?? ROOT_PARENT_ID;
     const siblings = nodesByParentId.get(parentId) ?? [];
     siblings.push(node);
@@ -660,18 +1221,35 @@ function getSupportLaneIntrusionCount(
   }
 
   return [...nodesByParentId.values()].reduce((count, siblings) => {
-    const primaryNodes = siblings.filter((node) => isPrimaryFlowRole(roleByNodeId.get(node.id)));
+    const primaryNodes = siblings.filter((node) =>
+      isPrimaryFlowRole(getNodeSemanticRole(node, nodeById, roleByNodeId))
+    );
 
     if (primaryNodes.length === 0) return count;
 
-    const primaryTop = Math.min(...primaryNodes.map((node) => node.position.y));
-    const primaryBottom = Math.max(...primaryNodes.map((node) => node.position.y + node.size.height));
+    const primaryBounds = primaryNodes.map(getLayoutNodeBounds);
+    const primaryLeft = Math.min(...primaryBounds.map((bounds) => bounds.x));
+    const primaryTop = Math.min(...primaryBounds.map((bounds) => bounds.y));
+    const primaryRight = Math.max(...primaryBounds.map((bounds) => bounds.x + bounds.width));
+    const primaryBottom = Math.max(...primaryBounds.map((bounds) => bounds.y + bounds.height));
 
     return (
       count +
       siblings.filter((node) => {
-        if (isPrimaryFlowRole(roleByNodeId.get(node.id))) return false;
-        return node.position.y < primaryBottom && node.position.y + node.size.height > primaryTop;
+        if (
+          isAreaNode(node) ||
+          isPrimaryFlowRole(getNodeSemanticRole(node, nodeById, roleByNodeId))
+        ) {
+          return false;
+        }
+        const bounds = getLayoutNodeBounds(node);
+
+        return (
+          bounds.x < primaryRight &&
+          bounds.x + bounds.width > primaryLeft &&
+          bounds.y < primaryBottom &&
+          bounds.y + bounds.height > primaryTop
+        );
       }).length
     );
   }, 0);
@@ -721,7 +1299,9 @@ function layoutSiblingGroup(
   config: LayoutCandidateConfig
 ): void {
   const siblings = [...nodeById.values()].filter(
-    (node) => (node.metadata?.parentAreaNodeId ?? ROOT_PARENT_ID) === parentId
+    (node) =>
+      (node.metadata?.parentAreaNodeId ?? ROOT_PARENT_ID) === parentId &&
+      !isSecurityGroupScopeNode(node)
   );
 
   if (siblings.length === 0) {
@@ -738,7 +1318,7 @@ function layoutSiblingGroup(
   );
 
   for (const node of siblings) {
-    const rank = getLayoutRank(node, nodeById, rankByNodeId);
+    const rank = getLayoutRank(node, nodeById, rankByNodeId, roleByNodeId);
     const rankedNodes = nodesByRank.get(rank) ?? [];
     rankedNodes.push(node);
     nodesByRank.set(rank, rankedNodes);
@@ -751,14 +1331,19 @@ function layoutSiblingGroup(
   const sortedRanks = [...nodesByRank.keys()].sort((left, right) => left - right);
   const xByRank = new Map<number, number>();
   const parentNode = parentId === ROOT_PARENT_ID ? undefined : nodeById.get(parentId);
-  let nextX = parentNode
+  const originX = parentNode
     ? parentNode.position.x + AREA_PADDING
     : Math.min(...siblings.map((node) => node.position.x), 0);
+  let nextX = originX;
 
   for (const rank of sortedRanks) {
     xByRank.set(rank, nextX);
-    const columnWidth = Math.max(...(nodesByRank.get(rank) ?? []).map((node) => node.size.width), 0);
-    nextX += columnWidth + config.columnGap;
+    const columnNodes = nodesByRank.get(rank) ?? [];
+    const columnWidth = Math.max(...columnNodes.map((node) => node.size.width), 0);
+
+    if (columnWidth > 0) {
+      nextX += columnWidth + config.columnGap;
+    }
   }
 
   const originY = parentNode
@@ -804,6 +1389,7 @@ function layoutSiblingGroup(
         }
 
         const placedNode = nodeById.get(node.id) ?? currentNode;
+
         nextY = Math.max(
           nextY + placedNode.size.height + config.rowGap,
           placedNode.position.y + placedNode.size.height + config.rowGap
@@ -811,6 +1397,7 @@ function layoutSiblingGroup(
       }
     }
   }
+
 }
 
 function getLayoutFlowPath(
@@ -930,7 +1517,11 @@ function fitParentAreaToChildren(
   }
 
   const parent = nodeById.get(parentId);
-  const children = [...nodeById.values()].filter((node) => node.metadata?.parentAreaNodeId === parentId);
+  const children = [...nodeById.values()].filter(
+    (node) =>
+      node.metadata?.parentAreaNodeId === parentId &&
+      !isSecurityGroupScopeNode(node)
+  );
 
   if (!parent || !isAreaNode(parent) || children.length === 0) {
     return;
@@ -967,19 +1558,27 @@ function fitParentAreaToChildren(
 function getLayoutRank(
   node: DiagramNode,
   nodeById: ReadonlyMap<string, DiagramNode>,
-  rankByNodeId: ReadonlyMap<string, number>
+  rankByNodeId: ReadonlyMap<string, number>,
+  roleByNodeId: ReadonlyMap<string, SemanticRole>
 ): number {
   if (!isAreaNode(node)) {
     return rankByNodeId.get(node.id) ?? ROLE_RANK[classifySemanticRole(node)];
   }
 
   const descendantRanks = [...nodeById.values()]
-    .filter((candidate) => hasAreaAncestor(candidate, node.id, nodeById) && !isAreaNode(candidate))
+    .filter(
+      (candidate) =>
+        hasAreaAncestor(candidate, node.id, nodeById) &&
+        !isAreaNode(candidate) &&
+        isPrimaryFlowRole(roleByNodeId.get(candidate.id))
+    )
     .map((candidate) => rankByNodeId.get(candidate.id) ?? ROLE_RANK[classifySemanticRole(candidate)]);
 
+  const ownRoleRank = ROLE_RANK[classifySemanticRole(node)];
+
   return descendantRanks.length > 0
-    ? Math.min(...descendantRanks)
-    : ROLE_RANK[classifySemanticRole(node)];
+    ? Math.max(Math.min(...descendantRanks), ownRoleRank)
+    : ownRoleRank;
 }
 
 function getParentDepth(parentId: string, nodeById: ReadonlyMap<string, DiagramNode>): number {

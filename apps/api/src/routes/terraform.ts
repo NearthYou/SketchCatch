@@ -25,18 +25,20 @@ const terraformValidationMaxCharacters = 1024 * 1024;
 const terraformValidationMaxFileCount = 64;
 const terraformValidationMaxFileNameLength = 120;
 
-const terraformValidateBodySchema = z.object({
-  terraformCode: z.string().max(terraformValidationMaxCharacters),
-  terraformFiles: z
-    .array(
-      z.object({
-        fileName: z.string().min(1).max(terraformValidationMaxFileNameLength),
-        terraformCode: z.string().max(terraformValidationMaxCharacters)
-      })
-    )
-    .max(terraformValidationMaxFileCount)
-    .optional()
-}).strict();
+const terraformValidateBodySchema = z
+  .object({
+    terraformCode: z.string().max(terraformValidationMaxCharacters),
+    terraformFiles: z
+      .array(
+        z.object({
+          fileName: z.string().min(1).max(terraformValidationMaxFileNameLength),
+          terraformCode: z.string().max(terraformValidationMaxCharacters)
+        })
+      )
+      .max(terraformValidationMaxFileCount)
+      .optional()
+  })
+  .strict();
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
 const terraformIdentifierSchema = z.string().min(1).regex(TERRAFORM_IDENTIFIER_PATTERN);
@@ -50,16 +52,21 @@ const diagramNodeParametersSchema = z.object({
   invalid: z.boolean().optional()
 });
 
-const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  parentAreaNodeId: z.string().min(1).optional(),
-  presentationArea: z.boolean().optional(),
-  presentationCatalogItemId: z.string().min(1).optional()
-}).strict();
+const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
+  .object({
+    parentAreaNodeId: z.string().min(1).optional(),
+    presentationArea: z.boolean().optional(),
+    presentationCatalogItemId: z.string().min(1).optional()
+  })
+  .strict();
 
-const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
-  managedBy: z.literal("parameter-reference"),
-  parameterPath: z.string().min(1)
-}).strict();
+const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z
+  .object({
+    managedBy: z.literal("parameter-reference").optional(),
+    parameterPath: z.string().min(1).optional(),
+    presentationRole: z.enum(["primary", "detail", "summary"]).optional()
+  })
+  .strict();
 
 const diagramNodeSchema = z.object({
   id: z.string().min(1),
@@ -153,30 +160,33 @@ export async function registerTerraformRoutes(
   const validateTerraformPreviewCode =
     options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeDefault;
 
-  app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
-    await requireActiveUserId(request, getTerraformDatabaseClient);
+  app.post(
+    "/terraform/generate",
+    async (request, reply): Promise<TerraformGenerateResponse | void> => {
+      await requireActiveUserId(request, getTerraformDatabaseClient);
 
-    const body = terraformGenerateBodySchema.parse(request.body);
+      const body = terraformGenerateBodySchema.parse(request.body);
 
-    try {
-      return {
-        terraformCode: generateTerraformFromDiagramJson(body.diagramJson),
-        architectureDiagnostics: evaluateArchitectureDependencies(body.diagramJson, "preview")
-      };
-    } catch (error) {
-      if (error instanceof TerraformDiagramValidationError) {
-        const response: ApiErrorResponse = {
-          error: "bad_request",
-          message: error.message
+      try {
+        return {
+          terraformCode: generateTerraformFromDiagramJson(body.diagramJson),
+          architectureDiagnostics: evaluateArchitectureDependencies(body.diagramJson, "preview")
         };
+      } catch (error) {
+        if (error instanceof TerraformDiagramValidationError) {
+          const response: ApiErrorResponse = {
+            error: "bad_request",
+            message: error.message
+          };
 
-        reply.status(400).send(response);
-        return;
+          reply.status(400).send(response);
+          return;
+        }
+
+        throw error;
       }
-
-      throw error;
     }
-  });
+  );
 
   app.post("/terraform/validate", async (request): Promise<TerraformValidateResponse> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);

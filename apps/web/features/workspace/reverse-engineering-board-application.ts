@@ -5,7 +5,7 @@ import type {
   DiagramNode,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
-import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
+import { createPlannedDiagramJson } from "./workspace-ai-diagram-adapter";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
 
@@ -88,7 +88,9 @@ export function createReverseEngineeringBoardComparison(
 
 // 오래된 scan 기록에 UNKNOWN 노드가 남아 있어도 보드 중앙에는 올리지 않습니다.
 function createReverseEngineeringPreviewDiagram(result: ReverseEngineeringScanResult): DiagramJson {
-  return markReverseEngineeringDiagram(convertArchitectureJsonToDiagramJson(removeUnsupportedNodes(result.architectureJson)));
+  return markReverseEngineeringDiagram(
+    createPlannedDiagramJson({ architectureJson: removeUnsupportedNodes(result.architectureJson) })
+  );
 }
 
 // 지원하지 않는 리소스는 오른쪽 확인 목록에서 보게 하고 Architecture Board에서는 제외합니다.

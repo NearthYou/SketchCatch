@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import {
+  createAreaTitleRoutingObstacle,
   getObstacleSafeEdgeHandles,
   getOrthogonalRouteNodeOverlapLength
 } from "./obstacle-safe-edge-routing";
@@ -33,7 +34,7 @@ test("keeps the shortest horizontal route when no resource blocks it", () => {
   });
 });
 
-test("does not treat an area node as a routing obstacle", () => {
+test("allows routes through an area body below its title", () => {
   const source = makeResource("source", 0, 100);
   const area = makeArea("area", 200, 40);
   const target = makeResource("target", 480, 100);
@@ -42,6 +43,44 @@ test("does not treat an area node as a routing obstacle", () => {
     sourceHandleId: "handle-right",
     targetHandleId: "handle-left"
   });
+});
+
+test("routes around an area title while allowing lines through the area body", () => {
+  const source = makeResource("source", 0, 40);
+  const area = makeArea("area", 200, 72);
+  const target = makeResource("target", 480, 40);
+
+  const handles = getObstacleSafeEdgeHandles(source, target, [source, area, target]);
+
+  assert.equal(
+    getOrthogonalRouteNodeOverlapLength(
+      source,
+      target,
+      handles,
+      createAreaTitleRoutingObstacle(area)
+    ),
+    0
+  );
+});
+
+test("matches rendered smoothstep routes when avoiding compact resource nodes", () => {
+  const loadBalancer = makeCompactResource("load-balancer", 440, 324);
+  const serviceA = makeCompactResource("service-a", 764, 324);
+  const serviceB = makeCompactResource("service-b", 764, 72);
+  const alarm = makeCompactResource("alarm", 476, 600);
+  const nodes = [loadBalancer, serviceA, serviceB, alarm];
+
+  const upperServiceHandles = getObstacleSafeEdgeHandles(loadBalancer, serviceB, nodes);
+  const alarmHandles = getObstacleSafeEdgeHandles(alarm, serviceA, nodes);
+
+  assert.equal(
+    getOrthogonalRouteNodeOverlapLength(loadBalancer, serviceB, upperServiceHandles, serviceA),
+    0
+  );
+  assert.equal(
+    getOrthogonalRouteNodeOverlapLength(alarm, serviceA, alarmHandles, loadBalancer),
+    0
+  );
 });
 
 function makeResource(id: string, x: number, y: number): DiagramNode {
@@ -64,6 +103,13 @@ function makeResource(id: string, x: number, y: number): DiagramNode {
   };
 }
 
+function makeCompactResource(id: string, x: number, y: number): DiagramNode {
+  return {
+    ...makeResource(id, x, y),
+    size: { height: 48, width: 48 }
+  };
+}
+
 function makeArea(id: string, x: number, y: number): DiagramNode {
   return {
     id,
@@ -72,7 +118,7 @@ function makeArea(id: string, x: number, y: number): DiagramNode {
     locked: false,
     position: { x, y },
     size: { height: 220, width: 220 },
-    type: "group",
+    type: "design_group",
     zIndex: 0
   };
 }

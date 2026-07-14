@@ -322,11 +322,13 @@ export const DiagramNodeView = memo(function DiagramNodeView(
               />
             ))}
             <div className={styles.areaNodeHeader} style={{ color: textColor }}>
-              {areaNodeIconUrl ? (
-                <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
-              ) : null}
-              <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
-              {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
+              <div className={styles.areaNodeHeaderContent}>
+                {areaNodeIconUrl ? (
+                  <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
+                ) : null}
+                <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
+                {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
+              </div>
             </div>
           </>
         ) : usesIconTileLayout ? (

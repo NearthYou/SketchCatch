@@ -125,7 +125,13 @@ test("toFlowNodes replaces cached descendants when an ancestor changes their z-i
     resourceType: "aws_instance"
   });
   const rootBucket = makeNode({ id: "bucket-1", resourceType: "aws_s3_bucket" });
-  const first = toFlowNodes([account, region, availabilityZone, instance, rootBucket], [], null, false, handlers);
+  const first = toFlowNodes(
+    [account, region, availabilityZone, instance, rootBucket],
+    [],
+    null,
+    false,
+    handlers
+  );
   const nestedRegion = { ...region, metadata: { parentAreaNodeId: account.id } };
   const second = toFlowNodes(
     [account, nestedRegion, availabilityZone, instance, rootBucket],
@@ -222,7 +228,10 @@ test("connection affordance marks only valid non-duplicate target nodes", () => 
     }
   );
 
-  assert.equal(flowNodes.find((node) => node.id === source.id)?.data.isValidConnectionTarget, false);
+  assert.equal(
+    flowNodes.find((node) => node.id === source.id)?.data.isValidConnectionTarget,
+    false
+  );
   assert.equal(
     flowNodes.find((node) => node.id === duplicateTarget.id)?.data.isValidConnectionTarget,
     false
@@ -260,13 +269,7 @@ test("toFlowNodes keeps dimmed nodes interactive when another node is selected",
 test("flow node and edge accessible names include visible identity and state", () => {
   const vpc = makeNode({ id: "vpc-1", locked: true, resourceType: "aws_vpc" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
-  const flowNodes = toFlowNodes(
-    [vpc, instance],
-    ["instance-1"],
-    "vpc-1",
-    false,
-    handlers
-  );
+  const flowNodes = toFlowNodes([vpc, instance], ["instance-1"], "vpc-1", false, handlers);
   const selectedInstance = flowNodes.find((node) => node.id === "instance-1");
   const areaTargetVpc = flowNodes.find((node) => node.id === "vpc-1");
 
@@ -309,10 +312,19 @@ test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const autoscalingGroup = makeNode({ id: "asg-1", resourceType: "aws_autoscaling_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
-  const flowNodes = toFlowNodes([vpc, securityGroup, autoscalingGroup, instance], [], null, false, handlers);
+  const flowNodes = toFlowNodes(
+    [vpc, securityGroup, autoscalingGroup, instance],
+    [],
+    null,
+    false,
+    handlers
+  );
 
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
-  assert.equal(flowNodes.find((node) => node.id === "security-group-1")?.className, "diagramAreaFlowNode");
+  assert.equal(
+    flowNodes.find((node) => node.id === "security-group-1")?.className,
+    "diagramAreaFlowNode"
+  );
   assert.equal(flowNodes.find((node) => node.id === "asg-1")?.className, undefined);
   assert.equal(flowNodes.find((node) => node.id === "instance-1")?.className, undefined);
 });
@@ -431,7 +443,11 @@ test("toFlowEdges keeps ASG resource connections above backgrounds and behind re
     resourceType: "aws_autoscaling_group"
   });
   const flowNodes = toFlowNodes([region, instance, autoscalingGroup], [], null, false, handlers);
-  const flowEdges = toFlowEdges([makeEdge("instance-1", "asg-1")], [], [region, instance, autoscalingGroup]);
+  const flowEdges = toFlowEdges(
+    [makeEdge("instance-1", "asg-1")],
+    [],
+    [region, instance, autoscalingGroup]
+  );
 
   const regionZIndex = getFlowNodeZIndex(flowNodes, "region-1");
   const autoscalingGroupZIndex = getFlowNodeZIndex(flowNodes, "asg-1");
@@ -466,7 +482,9 @@ test("toFlowEdges stacks selected area endpoint edges above unselected area endp
     [region, instance, launchTemplate, autoscalingGroup]
   );
 
-  assert.ok(getFlowEdgeZIndex(flowEdges, selectedEdge.id) > getFlowEdgeZIndex(flowEdges, unselectedEdge.id));
+  assert.ok(
+    getFlowEdgeZIndex(flowEdges, selectedEdge.id) > getFlowEdgeZIndex(flowEdges, unselectedEdge.id)
+  );
 });
 
 test("toFlowEdges maps logical handle ids to real source and target handles", () => {
@@ -486,9 +504,21 @@ test("toFlowEdges maps logical handle ids to real source and target handles", ()
 });
 
 test("toFlowEdges replaces stored handles when their rendered route crosses a resource", () => {
-  const source = makeNode({ id: "source", position: { x: 0, y: 100 }, resourceType: "aws_instance" });
-  const blocker = makeNode({ id: "blocker", position: { x: 240, y: 100 }, resourceType: "aws_s3_bucket" });
-  const target = makeNode({ id: "target", position: { x: 480, y: 100 }, resourceType: "aws_lambda_function" });
+  const source = makeNode({
+    id: "source",
+    position: { x: 0, y: 100 },
+    resourceType: "aws_instance"
+  });
+  const blocker = makeNode({
+    id: "blocker",
+    position: { x: 240, y: 100 },
+    resourceType: "aws_s3_bucket"
+  });
+  const target = makeNode({
+    id: "target",
+    position: { x: 480, y: 100 },
+    resourceType: "aws_lambda_function"
+  });
   const edge = {
     ...makeEdge(source.id, target.id),
     sourceHandleId: "handle-right",
@@ -497,8 +527,10 @@ test("toFlowEdges replaces stored handles when their rendered route crosses a re
 
   const [flowEdge] = toFlowEdges([edge], [], [source, blocker, target]);
 
-  assert.notEqual(flowEdge?.sourceHandle, "source-handle-right");
-  assert.notEqual(flowEdge?.targetHandle, "target-handle-left");
+  assert.notDeepEqual(
+    [flowEdge?.sourceHandle, flowEdge?.targetHandle],
+    ["source-handle-right", "target-handle-left"]
+  );
 });
 
 test("toFlowEdges keeps existing React Flow source and target handle ids stable", () => {
@@ -524,35 +556,51 @@ test("toFlowEdges scales compact arrow markers with semantic edge width", () => 
   }));
   const flowEdges = toFlowEdges(edges, []);
 
-  assert.deepEqual(flowEdges.map((edge) => edge.markerEnd), [
-    {
-      type: MarkerType.ArrowClosed,
-      color: "#59687d",
-      width: 12,
-      height: 12,
-      markerUnits: "userSpaceOnUse"
-    },
-    {
-      type: MarkerType.ArrowClosed,
-      color: "#59687d",
-      width: 13,
-      height: 13,
-      markerUnits: "userSpaceOnUse"
-    },
-    {
-      type: MarkerType.ArrowClosed,
-      color: "#59687d",
-      width: 14,
-      height: 14,
-      markerUnits: "userSpaceOnUse"
-    }
-  ]);
+  assert.deepEqual(
+    flowEdges.map((edge) => edge.markerEnd),
+    [
+      {
+        type: MarkerType.ArrowClosed,
+        color: "#59687d",
+        width: 12,
+        height: 12,
+        markerUnits: "userSpaceOnUse"
+      },
+      {
+        type: MarkerType.ArrowClosed,
+        color: "#59687d",
+        width: 13,
+        height: 13,
+        markerUnits: "userSpaceOnUse"
+      },
+      {
+        type: MarkerType.ArrowClosed,
+        color: "#59687d",
+        width: 14,
+        height: 14,
+        markerUnits: "userSpaceOnUse"
+      }
+    ]
+  );
 });
 
 test("toFlowEdges renders plain connection lines as thin by default", () => {
   const flowEdges = toFlowEdges([makeEdge("api-1", "queue-1")], []);
 
   assert.equal(flowEdges[0]?.style?.strokeWidth, 1.25);
+});
+
+test("toFlowEdges omits detail dependencies while keeping primary and summary relationships", () => {
+  const edges: DiagramEdge[] = [
+    { ...makeEdge("alb", "listener"), id: "detail", metadata: { presentationRole: "detail" } },
+    { ...makeEdge("alb", "service"), id: "summary", metadata: { presentationRole: "summary" } },
+    { ...makeEdge("service", "database"), id: "primary", metadata: { presentationRole: "primary" } }
+  ];
+
+  assert.deepEqual(
+    toFlowEdges(edges, []).map((edge) => edge.id),
+    ["summary", "primary"]
+  );
 });
 
 test("selected edges preserve semantic style and do not force animation", () => {
@@ -608,8 +656,14 @@ test("toFlowEdges keeps React Flow animation off and passes explicit motion inte
 
   const mappedEdges = toFlowEdges([staticEdge, animatedEdge], []);
 
-  assert.deepEqual(mappedEdges.map((edge) => edge.animated), [false, false]);
-  assert.deepEqual(mappedEdges.map((edge) => edge.data?.isAnimated), [false, true]);
+  assert.deepEqual(
+    mappedEdges.map((edge) => edge.animated),
+    [false, false]
+  );
+  assert.deepEqual(
+    mappedEdges.map((edge) => edge.data?.isAnimated),
+    [false, true]
+  );
   assert.deepEqual(
     toFlowEdges([animatedEdge], [], [], { isPreview: true }).map((edge) => edge.data?.isAnimated),
     [false]
@@ -689,7 +743,11 @@ test("stored edge semantics win over conflicting label inference", () => {
 test("toFlowEdges renders configuration dependency endpoints as thin solid lines", () => {
   const key = makeNode({ id: "key-1", resourceType: "aws_kms_key" });
   const logs = makeNode({ id: "logs-1", resourceType: "aws_cloudwatch_log_group" });
-  const flowEdges = toFlowEdges([{ ...makeEdge("key-1", "logs-1"), id: "key-to-logs", label: "uses" }], [], [key, logs]);
+  const flowEdges = toFlowEdges(
+    [{ ...makeEdge("key-1", "logs-1"), id: "key-to-logs", label: "uses" }],
+    [],
+    [key, logs]
+  );
 
   assert.equal(flowEdges[0]?.style?.strokeDasharray, undefined);
   assert.equal(flowEdges[0]?.style?.stroke, "#6b7280");
@@ -699,8 +757,16 @@ test("toFlowEdges renders configuration dependency endpoints as thin solid lines
 test("toFlowEdges hides containment labels only when a real containment Area is the source", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
   const subnet = makeNode({ id: "subnet-1", parentAreaNodeId: vpc.id, resourceType: "aws_subnet" });
-  const instance = makeNode({ id: "instance-1", parentAreaNodeId: subnet.id, resourceType: "aws_instance" });
-  const securityGroup = makeNode({ id: "security-group-1", parentAreaNodeId: vpc.id, resourceType: "aws_security_group" });
+  const instance = makeNode({
+    id: "instance-1",
+    parentAreaNodeId: subnet.id,
+    resourceType: "aws_instance"
+  });
+  const securityGroup = makeNode({
+    id: "security-group-1",
+    parentAreaNodeId: vpc.id,
+    resourceType: "aws_security_group"
+  });
   const flowEdges = toFlowEdges(
     [
       { ...makeEdge("vpc-1", "subnet-1"), id: "contains", label: "contains" },
@@ -720,7 +786,9 @@ test("toFlowEdges hides containment labels only when a real containment Area is 
 
 test("flow mappers make AI preview nodes and edges read-only", () => {
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
-  const flowNodes = toFlowNodes([instance], ["instance-1"], "instance-1", false, handlers, { isPreview: true });
+  const flowNodes = toFlowNodes([instance], ["instance-1"], "instance-1", false, handlers, {
+    isPreview: true
+  });
   const flowEdges = toFlowEdges(
     [
       {

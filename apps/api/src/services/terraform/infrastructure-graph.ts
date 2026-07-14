@@ -57,7 +57,9 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "tier"
 ]);
 
-export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {
+export function buildInfrastructureGraphFromDiagramJson(
+  diagramJson: DiagramJson
+): InfrastructureGraph {
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
   const nodes = diagramJson.nodes.flatMap((node) => {
     const graphNode = toInfrastructureGraphNode(node, nodeById);
@@ -69,7 +71,11 @@ export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson
   return {
     nodes,
     edges: diagramJson.edges.flatMap((edge): InfrastructureGraphEdge[] => {
-      if (!nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) {
+      if (
+        edge.metadata?.presentationRole === "summary" ||
+        !nodeIds.has(edge.sourceNodeId) ||
+        !nodeIds.has(edge.targetNodeId)
+      ) {
         return [];
       }
 

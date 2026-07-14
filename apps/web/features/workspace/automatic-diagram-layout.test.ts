@@ -5,6 +5,7 @@ import {
   evaluateAutomaticDiagramLayout,
   layoutAutomaticDiagram
 } from "./automatic-diagram-layout";
+import { getAutomaticDiagramSemanticRole } from "./automatic-diagram-layout-provider-mapping";
 
 test("layoutAutomaticDiagram arranges the primary request flow from left to right", () => {
   const nodes = [
@@ -80,19 +81,248 @@ test("layoutAutomaticDiagram separates support lanes and reports structural qual
   const result = layoutAutomaticDiagram({ edges, nodes });
   const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
   const primaryNodes = ["browser", "entry", "compute", "database"].map((id) => nodeById.get(id)!);
+  const primaryLeft = Math.min(...primaryNodes.map((node) => node.position.x));
   const primaryTop = Math.min(...primaryNodes.map((node) => node.position.y));
+  const primaryRight = Math.max(...primaryNodes.map((node) => node.position.x + node.size.width));
   const primaryBottom = Math.max(...primaryNodes.map((node) => node.position.y + node.size.height));
-  const isOutsidePrimaryLane = (node: DiagramNode): boolean =>
-    node.position.y + node.size.height < primaryTop || node.position.y > primaryBottom;
+  const isOutsidePrimaryBand = (node: DiagramNode): boolean =>
+    node.position.x + node.size.width <= primaryLeft ||
+    node.position.x >= primaryRight ||
+    node.position.y + node.size.height <= primaryTop ||
+    node.position.y >= primaryBottom;
 
-  assert.equal(isOutsidePrimaryLane(nodeById.get("pipeline")!), true);
-  assert.equal(isOutsidePrimaryLane(nodeById.get("runtime-role")!), true);
-  assert.equal(isOutsidePrimaryLane(nodeById.get("logs")!), true);
+  assert.equal(isOutsidePrimaryBand(nodeById.get("pipeline")!), true);
+  assert.equal(isOutsidePrimaryBand(nodeById.get("runtime-role")!), true);
+  assert.equal(isOutsidePrimaryBand(nodeById.get("logs")!), true);
   assert.equal(result.quality.nodeOverlapCount, 0);
   assert.equal(result.quality.parentBoundaryViolationCount, 0);
   assert.equal(result.quality.backwardEdgeCount, 0);
   assert.ok(result.quality.canvasArea > 0);
   assert.ok(result.candidateCount >= 2);
+});
+
+test("provider mapping keeps AWS companion infrastructure out of the primary flow", () => {
+  const supportResourceTypes = [
+    "aws_appautoscaling_target",
+    "aws_db_subnet_group",
+    "aws_ecs_task_definition",
+    "aws_internet_gateway",
+    "aws_nat_gateway",
+    "aws_route_table",
+    "aws_route_table_association"
+  ];
+
+  for (const resourceType of supportResourceTypes) {
+    assert.equal(
+      getAutomaticDiagramSemanticRole(makeNode(resourceType, resourceType, 0, 0)),
+      "support"
+    );
+  }
+  assert.equal(getAutomaticDiagramSemanticRole(makeNode("vpc", "aws_vpc", 0, 0)), "network");
+});
+
+test("layoutAutomaticDiagram keeps support routing adjustments within compact board bounds", () => {
+  const nodes = [
+    makeNode("browser", "actor_browser", 0, 0, "design"),
+    makeNode("entry", "aws_lb", 0, 0),
+    makeNode("compute", "aws_ecs_service", 0, 0),
+    makeNode("database", "aws_db_instance", 0, 0),
+    makeNode("pipeline", "aws_codepipeline", 0, 0),
+    makeNode("registry", "aws_ecr_repository", 0, 0),
+    makeNode("runtime-role", "aws_iam_role", 0, 0),
+    makeNode("logs", "aws_cloudwatch_log_group", 0, 0),
+    makeNode("alarm", "aws_cloudwatch_metric_alarm", 0, 0)
+  ];
+  const edges = [
+    { id: "browser-entry", sourceId: "browser", targetId: "entry", label: "HTTPS" },
+    { id: "entry-compute", sourceId: "entry", targetId: "compute", label: "routes requests" },
+    { id: "compute-database", sourceId: "compute", targetId: "database", label: "reads/writes" },
+    { id: "pipeline-registry", sourceId: "pipeline", targetId: "registry", label: "publishes image" },
+    { id: "registry-compute", sourceId: "registry", targetId: "compute", label: "deploys image" },
+    { id: "role-compute", sourceId: "runtime-role", targetId: "compute", label: "grants runtime access" },
+    { id: "compute-logs", sourceId: "compute", targetId: "logs", label: "writes logs" },
+    { id: "alarm-compute", sourceId: "alarm", targetId: "compute", label: "monitors CPU" }
+  ];
+
+  const result = layoutAutomaticDiagram({ edges, nodes });
+  const bounds = getBounds(result.nodes);
+
+  assert.equal(result.quality.nodeOverlapCount, 0);
+  assert.equal(result.quality.edgeNodeIntersectionCount, 0);
+  assert.ok(
+    bounds.width <= 900,
+    `Expected compact support bounds, received ${bounds.width}x${bounds.height}`
+  );
+  assert.ok(bounds.height <= 820, `Expected compact support height, received ${bounds.height}`);
+});
+
+test("layoutAutomaticDiagram keeps root support resources in a compact rail around a tall workload", () => {
+  const nodes = [
+    makeNode("browser", "actor_browser", 0, 0, "design"),
+    makeNode("entry", "aws_cloudfront_distribution", 0, 0),
+    makeNode("vpc", "aws_vpc", 0, 0, "resource", { size: { width: 400, height: 280 } }),
+    makeNode("public-a", "aws_subnet", 0, 0, "resource", { parentAreaNodeId: "vpc" }),
+    makeNode("public-b", "aws_subnet", 0, 0, "resource", { parentAreaNodeId: "vpc" }),
+    makeNode("private-a", "aws_subnet", 0, 0, "resource", { parentAreaNodeId: "vpc" }),
+    makeNode("private-b", "aws_subnet", 0, 0, "resource", { parentAreaNodeId: "vpc" }),
+    makeNode("database-a", "aws_subnet", 0, 0, "resource", { parentAreaNodeId: "vpc" }),
+    makeNode("database-b", "aws_subnet", 0, 0, "resource", { parentAreaNodeId: "vpc" }),
+    makeNode("load-balancer", "aws_lb", 0, 0, "resource", { parentAreaNodeId: "public-a" }),
+    makeNode("compute-a", "aws_ecs_service", 0, 0, "resource", { parentAreaNodeId: "private-a" }),
+    makeNode("compute-b", "aws_ecs_service", 0, 0, "resource", { parentAreaNodeId: "private-b" }),
+    makeNode("database-a-instance", "aws_db_instance", 0, 0, "resource", {
+      parentAreaNodeId: "database-a"
+    }),
+    makeNode("database-b-instance", "aws_db_instance", 0, 0, "resource", {
+      parentAreaNodeId: "database-b"
+    }),
+    makeNode("pipeline", "aws_codepipeline", 0, 0),
+    makeNode("registry", "aws_ecr_repository", 0, 0),
+    makeNode("runtime-role", "aws_iam_role", 0, 0),
+    makeNode("logs", "aws_cloudwatch_log_group", 0, 0),
+    makeNode("alarm", "aws_cloudwatch_metric_alarm", 0, 0)
+  ];
+  const edges = [
+    { id: "browser-entry", sourceId: "browser", targetId: "entry", label: "HTTPS" },
+    { id: "entry-load-balancer", sourceId: "entry", targetId: "load-balancer", label: "API traffic" },
+    { id: "load-balancer-compute-a", sourceId: "load-balancer", targetId: "compute-a", label: "routes requests" },
+    { id: "load-balancer-compute-b", sourceId: "load-balancer", targetId: "compute-b", label: "routes requests" },
+    { id: "compute-a-database", sourceId: "compute-a", targetId: "database-a-instance", label: "reads/writes" },
+    { id: "compute-b-database", sourceId: "compute-b", targetId: "database-b-instance", label: "reads" },
+    { id: "pipeline-registry", sourceId: "pipeline", targetId: "registry", label: "publishes image" },
+    { id: "registry-compute", sourceId: "registry", targetId: "compute-a", label: "deploys image" },
+    { id: "role-compute", sourceId: "runtime-role", targetId: "compute-a", label: "grants runtime access" },
+    { id: "compute-logs", sourceId: "compute-a", targetId: "logs", label: "writes logs" },
+    { id: "alarm-compute", sourceId: "alarm", targetId: "compute-a", label: "monitors CPU" }
+  ];
+
+  const result = layoutAutomaticDiagram({ edges, nodes });
+  const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
+  const supportNodes = ["pipeline", "registry", "runtime-role", "logs", "alarm"].map(
+    (id) => nodeById.get(id)!
+  );
+  const bounds = getBounds(result.nodes);
+  const supportRows = new Set(supportNodes.map((node) => node.position.y));
+
+  assert.ok(supportRows.size <= 2, `Expected at most two support rows, received ${supportRows.size}`);
+  assert.ok(
+    bounds.height <= 720,
+    `Expected a compact support rail, received ${bounds.height}: ${JSON.stringify(
+      supportNodes.map((node) => ({ id: node.id, x: node.position.x, y: node.position.y }))
+    )}`
+  );
+  assert.equal(result.quality.supportLaneIntrusionCount, 0);
+});
+
+test("layoutAutomaticDiagram wraps dense root support resources into a compact grid", () => {
+  const supportNodes = Array.from({ length: 16 }, (_, index) =>
+    makeNode(`support-${index}`, index % 2 === 0 ? "aws_iam_role" : "aws_cloudwatch_log_group", 0, 0)
+  );
+  const nodes = [
+    makeNode("vpc", "aws_vpc", 200, 0, "resource", { size: { width: 1000, height: 400 } }),
+    makeNode("entry", "aws_lb", 0, 0),
+    ...supportNodes
+  ];
+  const edges = supportNodes.map((node, index) => ({
+    id: `support-edge-${index}`,
+    sourceId: node.id,
+    targetId: "entry",
+    label: "supports"
+  }));
+  const result = layoutAutomaticDiagram({
+    edges,
+    nodes,
+    protectedNodeIds: new Set(["vpc"])
+  });
+  const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
+  const laidOutSupportNodes = supportNodes.map((node) => nodeById.get(node.id)!);
+  const supportRows = new Set(laidOutSupportNodes.map((node) => node.position.y));
+  const bounds = getBounds(result.nodes);
+
+  assert.equal(supportRows.size, 2);
+  assert.ok(bounds.height <= 760, `Expected a compact dense support grid, received ${bounds.height}`);
+  for (let leftIndex = 0; leftIndex < laidOutSupportNodes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < laidOutSupportNodes.length; rightIndex += 1) {
+      assert.equal(overlaps(laidOutSupportNodes[leftIndex]!, laidOutSupportNodes[rightIndex]!), false);
+    }
+  }
+});
+
+test("layoutAutomaticDiagram wraps dense support resources inside an Area", () => {
+  const supportNodes = Array.from({ length: 16 }, (_, index) =>
+    makeNode(
+      `nested-support-${index}`,
+      index % 2 === 0 ? "aws_iam_role" : "aws_cloudwatch_log_group",
+      0,
+      0,
+      "resource",
+      { parentAreaNodeId: "vpc" }
+    )
+  );
+  const nodes = [
+    makeNode("vpc", "aws_vpc", 0, 0, "resource", { size: { width: 1000, height: 400 } }),
+    makeNode("entry", "aws_lb", 0, 0, "resource", { parentAreaNodeId: "vpc" }),
+    ...supportNodes
+  ];
+  const edges = supportNodes.map((node, index) => ({
+    id: `nested-support-edge-${index}`,
+    sourceId: node.id,
+    targetId: "entry",
+    label: "supports"
+  }));
+  const result = layoutAutomaticDiagram({ edges, nodes });
+  const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
+  const laidOutSupportNodes = supportNodes.map((node) => nodeById.get(node.id)!);
+  const supportRows = new Set(laidOutSupportNodes.map((node) => node.position.y));
+  const laidOutVpc = nodeById.get("vpc")!;
+
+  assert.equal(supportRows.size, 2);
+  assert.ok(
+    laidOutVpc.size.height <= 760,
+    `Expected a compact nested support grid, received ${laidOutVpc.size.height}`
+  );
+  for (let leftIndex = 0; leftIndex < laidOutSupportNodes.length; leftIndex += 1) {
+    assertContains(laidOutVpc, laidOutSupportNodes[leftIndex]!);
+    for (let rightIndex = leftIndex + 1; rightIndex < laidOutSupportNodes.length; rightIndex += 1) {
+      assert.equal(overlaps(laidOutSupportNodes[leftIndex]!, laidOutSupportNodes[rightIndex]!), false);
+    }
+  }
+});
+
+test("layoutAutomaticDiagram aligns repeated subnet Areas by tier and availability zone", () => {
+  const subnetIds = [
+    "public-subnet-a",
+    "public-subnet-b",
+    "private-app-subnet-a",
+    "private-app-subnet-b",
+    "private-db-subnet-a",
+    "private-db-subnet-b"
+  ];
+  const nodes = [
+    makeNode("vpc", "aws_vpc", 0, 0, "resource", { size: { width: 1000, height: 400 } }),
+    ...subnetIds.map((id) =>
+      makeNode(id, "aws_subnet", 0, 0, "resource", { parentAreaNodeId: "vpc" })
+    )
+  ];
+  const result = layoutAutomaticDiagram({ edges: [], nodes });
+  const nodeById = new Map(result.nodes.map((node) => [node.id, node]));
+  const subnets = subnetIds.map((id) => nodeById.get(id)!);
+  const subnetColumns = new Set(subnets.map((node) => node.position.x));
+  const subnetRows = new Set(subnets.map((node) => node.position.y));
+  const laidOutVpc = nodeById.get("vpc")!;
+
+  assert.equal(subnetColumns.size, 3);
+  assert.equal(subnetRows.size, 2);
+  assert.ok(
+    laidOutVpc.size.height <= 850,
+    `Expected a compact repeated subnet grid, received ${laidOutVpc.size.height}`
+  );
+  for (let leftIndex = 0; leftIndex < subnets.length; leftIndex += 1) {
+    assertContains(laidOutVpc, subnets[leftIndex]!);
+    for (let rightIndex = leftIndex + 1; rightIndex < subnets.length; rightIndex += 1) {
+      assert.equal(overlaps(subnets[leftIndex]!, subnets[rightIndex]!), false);
+    }
+  }
 });
 
 test("layoutAutomaticDiagram preserves protected manual layout while placing new nodes", () => {
@@ -186,7 +416,7 @@ test("layoutAutomaticDiagram keeps provider-neutral roles on the main flow", () 
   assert.ok(nodeById.get("runtime")!.position.x < nodeById.get("database")!.position.x);
 });
 
-test("evaluateAutomaticDiagramLayout counts routes through Area title bands", () => {
+test("evaluateAutomaticDiagramLayout routes around Area title bands", () => {
   const nodes = [
     makeNode("source", "generic_entry", 0, 0),
     makeNode("area", "aws_vpc", 200, 40, "resource", { size: { width: 200, height: 200 } }),
@@ -197,7 +427,7 @@ test("evaluateAutomaticDiagramLayout counts routes through Area title bands", ()
     nodes
   });
 
-  assert.ok(quality.edgeAreaTitleIntersectionCount > 0);
+  assert.equal(quality.edgeAreaTitleIntersectionCount, 0);
 });
 
 test("layoutAutomaticDiagram improves a failure-like multi-AZ VPC without changing resource semantics", () => {
@@ -218,10 +448,8 @@ test("layoutAutomaticDiagram improves a failure-like multi-AZ VPC without changi
     after.edgeCrossingCount < before.edgeCrossingCount,
     `crossings ${before.edgeCrossingCount} -> ${after.edgeCrossingCount}`
   );
-  assert.ok(
-    after.edgeNodeIntersectionCount < before.edgeNodeIntersectionCount,
-    `node intersections ${before.edgeNodeIntersectionCount} -> ${after.edgeNodeIntersectionCount}`
-  );
+  assert.equal(after.edgeNodeIntersectionCount, 0);
+  assert.ok(after.edgeNodeIntersectionCount <= before.edgeNodeIntersectionCount);
   assert.equal(after.repeatAlignmentError, 0);
 
   assert.deepEqual(result.nodes.map(withoutLayout), nodes.map(withoutLayout));
@@ -283,6 +511,18 @@ function overlaps(left: DiagramNode, right: DiagramNode): boolean {
     left.position.y < right.position.y + right.size.height &&
     left.position.y + left.size.height > right.position.y
   );
+}
+
+function getBounds(nodes: readonly DiagramNode[]): { readonly width: number; readonly height: number } {
+  const left = Math.min(...nodes.map((node) => node.position.x));
+  const top = Math.min(...nodes.map((node) => node.position.y));
+  const right = Math.max(...nodes.map((node) => node.position.x + node.size.width));
+  const bottom = Math.max(...nodes.map((node) => node.position.y + node.size.height));
+
+  return {
+    height: bottom - top,
+    width: right - left
+  };
 }
 
 function createFailureLikeNodes(): DiagramNode[] {
