@@ -9,6 +9,7 @@ import {
   compileArchitectureBoard,
   type ArchitectureBoardCompilationProposal
 } from "../architecture-board-compiler";
+import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
 
@@ -78,11 +79,18 @@ export function createReverseEngineeringBoardApplication(
     };
   }
 
+  const appendDiagram = appendAdditionsToCurrentDiagram(input.currentDiagram, previewDiagram, comparison);
+  const compilation = compileReverseEngineeringAppendArchitecture(
+    input.currentDiagram,
+    appendDiagram,
+    new Set(comparison.additions.map((item) => item.nodeId))
+  );
+
   return {
-    compilation: preview.compilation,
+    compilation,
     comparison,
-    diagram: appendAdditionsToCurrentDiagram(input.currentDiagram, previewDiagram, comparison),
-    previewDiagram
+    diagram: compilation.diagram,
+    previewDiagram: compilation.diagram
   };
 }
 
@@ -103,10 +111,30 @@ function createReverseEngineeringPreview(result: ReverseEngineeringScanResult): 
   readonly diagram: DiagramJson;
 } {
   const compilation = compileReverseEngineeringArchitecture(result);
+  const diagram = markReverseEngineeringDiagram(compilation.diagram);
 
   return {
-    compilation,
-    diagram: markReverseEngineeringDiagram(compilation.diagram)
+    compilation: { ...compilation, diagram },
+    diagram
+  };
+}
+
+// append는 원본 보드와 안전한 scan 추가분을 합친 뒤에만 Compiler에 넘깁니다.
+// 그래야 proposal의 quality/diff와 실제 승인·저장할 Board가 같은 상태를 가리킵니다.
+function compileReverseEngineeringAppendArchitecture(
+  currentDiagram: DiagramJson,
+  appendDiagram: DiagramJson,
+  reverseEngineeringNodeIds: ReadonlySet<string>
+): ArchitectureBoardCompilationProposal {
+  const compilation = compileArchitectureBoard({
+    architecture: convertDiagramJsonToArchitectureJson(appendDiagram),
+    currentDiagram,
+    trigger: "reverse-engineering"
+  });
+
+  return {
+    ...compilation,
+    diagram: markReverseEngineeringDiagram(compilation.diagram, reverseEngineeringNodeIds)
   };
 }
 
@@ -136,10 +164,15 @@ function removeUnsupportedNodes(architectureJson: ArchitectureJson): Architectur
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.
-function markReverseEngineeringDiagram(diagram: DiagramJson): DiagramJson {
+function markReverseEngineeringDiagram(
+  diagram: DiagramJson,
+  nodeIds?: ReadonlySet<string>
+): DiagramJson {
   return {
     ...diagram,
-    nodes: diagram.nodes.map(markReverseEngineeringNode)
+    nodes: diagram.nodes.map((node) =>
+      nodeIds === undefined || nodeIds.has(node.id) ? markReverseEngineeringNode(node) : node
+    )
   };
 }
 

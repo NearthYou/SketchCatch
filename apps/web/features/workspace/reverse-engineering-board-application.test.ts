@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { DiagramJson, ReverseEngineeringScanResult } from "@sketchcatch/types";
 import { ARCHITECTURE_BOARD_COMPILER_VERSION } from "../architecture-board-compiler";
+import { evaluateAutomaticDiagramLayout } from "./automatic-diagram-layout";
 import {
   compileReverseEngineeringArchitecture,
   createReverseEngineeringBoardApplication
@@ -78,8 +79,81 @@ test("Reverse Engineering은 Compiler proposal을 생성하고 적용 후보와 
   assert.equal(proposal.provenance.compilerVersion, ARCHITECTURE_BOARD_COMPILER_VERSION);
   assert.equal(proposal.architecture.nodes.length, 1);
   assert.equal(application.compilation.provenance.compilerVersion, proposal.provenance.compilerVersion);
-  assert.deepEqual(application.compilation.diagram, proposal.diagram);
+  assert.deepEqual(application.compilation.diagram, application.previewDiagram);
+  assert.deepEqual(application.compilation.diagram, application.diagram);
   assert.equal(application.previewDiagram.nodes.length, 1);
   assert.equal(application.diagram.nodes[0]?.metadata?.reverseEngineering?.source, "aws_scan");
   assert.deepEqual(scanResult, inputBefore);
 });
+
+test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하나의 Compiler proposal로 검토하고 적용한다", () => {
+  const currentBoard: DiagramJson = {
+    nodes: [
+      makeResourceNode("current-bucket", "aws_s3_bucket", "current_bucket", "bucket-current", 0),
+      makeResourceNode("current-log", "aws_cloudwatch_log_group", "current_log", "log-current", 600)
+    ],
+    edges: [],
+    viewport: { x: 12, y: 24, zoom: 1.2 }
+  };
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram: currentBoard,
+    mode: "append",
+    result: scanResult
+  });
+  const currentQuality = evaluateAutomaticDiagramLayout({
+    edges: currentBoard.edges.map((edge) => ({
+      id: edge.id,
+      sourceId: edge.sourceNodeId,
+      targetId: edge.targetNodeId
+    })),
+    nodes: currentBoard.nodes
+  });
+
+  assert.deepEqual(application.compilation.diagram, application.previewDiagram);
+  assert.deepEqual(application.compilation.diagram, application.diagram);
+  assert.deepEqual(
+    new Set(application.compilation.diagram.nodes.map((node) => node.id)),
+    new Set(["current-bucket", "current-log", "vpc-1"])
+  );
+  assert.equal(
+    application.compilation.quality.before.metrics.canvasArea,
+    currentQuality.canvasArea
+  );
+  assert.ok(
+    application.compilation.changes.some((change) => change.targetIds.includes("vpc-1"))
+  );
+  assert.equal(
+    application.diagram.nodes.find((node) => node.id === "vpc-1")?.metadata?.reverseEngineering?.source,
+    "aws_scan"
+  );
+  assert.equal(
+    application.diagram.nodes.find((node) => node.id === "current-bucket")?.metadata?.reverseEngineering,
+    undefined
+  );
+});
+
+function makeResourceNode(
+  id: string,
+  resourceType: string,
+  resourceName: string,
+  providerResourceId: string,
+  x: number
+): DiagramJson["nodes"][number] {
+  return {
+    id,
+    kind: "resource",
+    label: resourceName,
+    locked: false,
+    parameters: {
+      fileName: "main",
+      resourceName,
+      resourceType,
+      terraformBlockType: "resource",
+      values: { providerResourceId }
+    },
+    position: { x, y: 0 },
+    size: { width: 48, height: 48 },
+    type: resourceType,
+    zIndex: 1
+  };
+}
