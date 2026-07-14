@@ -2931,6 +2931,13 @@ function remapMergedArchitectureReferences(
 }
 
 function isCompatibleTemplateAddition(templateId: TemplateId, resourceType: ResourceType): boolean {
+  // 정적 호스팅 Template은 S3·CloudFront 경계 자체가 완결된 배포 단위입니다.
+  // 상충하는 자연어 요구로 VPC/DB 보조 리소스가 붙으면 선택한 Template이
+  // 다른 아키텍처로 변질되므로, 추가 Resource를 허용하지 않습니다.
+  if (templateId === "static-web-hosting") {
+    return false;
+  }
+
   const incompatibleComputeTypes = new Set<ResourceType>([
     "AMPLIFY_APP",
     "AMI",
@@ -2964,10 +2971,6 @@ function isCompatibleTemplateAddition(templateId: TemplateId, resourceType: Reso
     "static-web-hosting": new Set(),
     "three-tier-web-app": new Set(["AMI", "AUTO_SCALING_GROUP", "EC2", "IAM_INSTANCE_PROFILE"])
   };
-
-  if (templateId === "static-web-hosting" && ["DB_SUBNET_GROUP", "DYNAMODB_TABLE", "RDS"].includes(resourceType)) {
-    return false;
-  }
 
   if (
     templateId !== "three-tier-web-app"

@@ -202,12 +202,12 @@ export function ProjectDeploymentTargetSettingsClient({
             value={draft.version}
           />
         </label>
+        <label className={styles.field}>
+          <span>CodeBuild project</span>
+          <input onChange={(event) => updateDraft("codeBuildProjectName", event.target.value)} value={draft.codeBuildProjectName} />
+        </label>
         {draft.runtimeTargetKind === "ecs_fargate" ? (
           <>
-            <label className={styles.field}>
-              <span>CodeBuild project</span>
-              <input onChange={(event) => updateDraft("codeBuildProjectName", event.target.value)} value={draft.codeBuildProjectName} />
-            </label>
             <label className={styles.field}>
               <span>ECR repository</span>
               <input onChange={(event) => updateDraft("ecrRepositoryName", event.target.value)} value={draft.ecrRepositoryName} />

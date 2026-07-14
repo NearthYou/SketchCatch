@@ -85,6 +85,18 @@ export type RunDeploymentDestroyPlanOptions = {
   generatePlanArtifactId?: () => string;
   readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
   writeTerraformStateFile?: (filePath: string, content: Buffer) => Promise<void>;
+  prepareApplicationCleanupPlan?: (input: {
+    deployment: DeploymentRecord;
+    repository: DeploymentRepository;
+  }) => Promise<ApplicationCleanupPlanSummary>;
+  writeApplicationCleanupPlanFile?: (filePath: string, content: string) => Promise<void>;
+};
+
+export type ApplicationCleanupPlanSummary = {
+  releaseId: string;
+  runtimeTargetKind: NonNullable<DeploymentRecord["targetKind"]>;
+  currentRevision: string;
+  previousRevision: string;
 };
 
 export type RunDeploymentDestroyPlanResult = {
@@ -123,10 +135,15 @@ export async function runDeploymentDestroyPlan(
   const generatePlanArtifactId = options.generatePlanArtifactId ?? randomUUID;
   const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
+  const prepareApplicationCleanupPlan =
+    options.prepareApplicationCleanupPlan ?? defaultPrepareApplicationCleanupPlan;
+  const writeApplicationCleanupPlanFile =
+    options.writeApplicationCleanupPlanFile ?? writeFile;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
   let failureRecorded = false;
+  let failureStage: DeploymentFailureStage = "plan";
   const terraform: RunDeploymentDestroyPlanResult["terraform"] = {
     init: null,
     plan: null,
@@ -145,8 +162,27 @@ export async function runDeploymentDestroyPlan(
     const sourceStatus = input.startedFromStatus ?? deployment.status;
     const sourceFailureStage = input.startedFromFailureStage ?? deployment.failureStage;
     const sourceErrorSummary = input.startedFromErrorSummary ?? deployment.errorSummary;
+    failureStage = resolveDestroyPlanFailureStage(sourceStatus, sourceFailureStage);
 
     assertDeploymentCanStartDestroyPlan(deployment, sourceStatus, sourceFailureStage);
+
+    if (deployment.scope === "application") {
+      return await saveApplicationCleanupPlan({
+        deployment,
+        sourceStatus,
+        sourceFailureStage,
+        sourceErrorSummary,
+        accessContext: input.accessContext,
+        repository,
+        prepareTerraformWorkspace,
+        readTerraformArtifactFile,
+        planArtifactStorage: getPlanArtifactStorage(),
+        generatePlanArtifactId,
+        prepareApplicationCleanupPlan,
+        writeApplicationCleanupPlanFile,
+        terraform
+      });
+    }
 
     const [artifact, currentPlanArtifact, awsConnection] = await Promise.all([
       requireDeploymentTerraformArtifact(deployment, repository),
@@ -241,6 +277,7 @@ export async function runDeploymentDestroyPlan(
         deployment,
         repository,
         terraform,
+        failureStage,
         errorSummary: summarizeTerraformFailure("Terraform init before destroy plan", terraform.init)
       });
     }
@@ -291,6 +328,7 @@ export async function runDeploymentDestroyPlan(
         deployment,
         repository,
         terraform,
+        failureStage,
         errorSummary: summarizeTerraformFailure("Terraform destroy plan", terraform.plan)
       });
     }
@@ -322,6 +360,7 @@ export async function runDeploymentDestroyPlan(
         deployment,
         repository,
         terraform,
+        failureStage,
         errorSummary: summarizeTerraformFailure("Terraform destroy plan inspection", terraform.showJson)
       });
     }
@@ -417,6 +456,7 @@ export async function runDeploymentDestroyPlan(
       const failedDeployment = await failDeploymentDestroyPlan(
         deployment.id,
         error,
+        failureStage,
         repository
       );
       failureRecorded = true;
@@ -430,7 +470,7 @@ export async function runDeploymentDestroyPlan(
     if (deploymentId && !failureRecorded) {
       await repository
         .failDeployment(deploymentId, {
-          failureStage: "plan",
+          failureStage,
           errorSummary: summarizeUnexpectedDestroyPlanFailure(error)
         })
         .catch(() => undefined);
@@ -442,12 +482,194 @@ export async function runDeploymentDestroyPlan(
   }
 }
 
+async function saveApplicationCleanupPlan(input: {
+  deployment: DeploymentRecord;
+  sourceStatus: DeploymentStatus;
+  sourceFailureStage: DeploymentFailureStage | null;
+  sourceErrorSummary: string | null;
+  accessContext: ProjectAccessContext;
+  repository: DeploymentRepository;
+  prepareTerraformWorkspace: typeof defaultPrepareTerraformWorkspace;
+  readTerraformArtifactFile: (filePath: string) => Promise<Buffer | Uint8Array | string>;
+  planArtifactStorage: DeploymentPlanArtifactStorage;
+  generatePlanArtifactId: () => string;
+  prepareApplicationCleanupPlan: NonNullable<
+    RunDeploymentDestroyPlanOptions["prepareApplicationCleanupPlan"]
+  >;
+  writeApplicationCleanupPlanFile: NonNullable<
+    RunDeploymentDestroyPlanOptions["writeApplicationCleanupPlanFile"]
+  >;
+  terraform: RunDeploymentDestroyPlanResult["terraform"];
+}): Promise<RunDeploymentDestroyPlanResult> {
+  const [artifact, awsConnection, cleanupPlan] = await Promise.all([
+    requireDeploymentTerraformArtifact(input.deployment, input.repository),
+    requireDeploymentAwsConnection(input.deployment, input.accessContext, input.repository),
+    input.prepareApplicationCleanupPlan({
+      deployment: input.deployment,
+      repository: input.repository
+    })
+  ]);
+  if (!awsConnection.accountId) {
+    throw new DeploymentNotFoundError("Verified AWS account is missing for application cleanup");
+  }
+  const workspace = await input.prepareTerraformWorkspace({
+    objectKey: artifact.objectKey,
+    fileName: artifact.fileName,
+    contentType: artifact.contentType
+  });
+  let uploadedPlan: Awaited<
+    ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
+  > | null = null;
+  try {
+    const terraformArtifactContent = await input.readTerraformArtifactFile(workspace.mainFilePath);
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      { liveProfile: input.deployment.liveProfile }
+    );
+    const terraformArtifactSha256 = createSha256(terraformArtifactContent);
+    const wasPreMarkedRunning =
+      input.deployment.status === "RUNNING" && input.sourceStatus !== input.deployment.status;
+    if (!wasPreMarkedRunning) {
+      const running = await input.repository.markDeploymentPlanRunning(input.deployment.id);
+      if (!running) {
+        throw new DeploymentConflictError("Application cleanup plan could not be started");
+      }
+    }
+    const planArtifactId = input.generatePlanArtifactId();
+    const planFilePath = join(workspace.workdir, "application-release-cleanup-plan.json");
+    await input.writeApplicationCleanupPlanFile(
+      planFilePath,
+      JSON.stringify({
+        schemaVersion: 1,
+        kind: "application_release_cleanup_plan",
+        deploymentId: input.deployment.id,
+        projectId: input.deployment.projectId,
+        ...cleanupPlan
+      })
+    );
+    let sequence = await input.repository.getNextDeploymentLogSequence(input.deployment.id);
+    const upload = await runLoggedDeploymentOperation({
+      deploymentId: input.deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "plan",
+      label: "application cleanup plan artifact upload",
+      repository: input.repository,
+      operation: () =>
+        input.planArtifactStorage.uploadDeploymentPlanArtifact({
+          deploymentId: input.deployment.id,
+          planArtifactId,
+          planFilePath
+        })
+    });
+    uploadedPlan = upload.result;
+    sequence = upload.sequence;
+    const planSummary = evaluateDeploymentSafetyGate({
+      operation: "destroy",
+      planSummary: {
+        createCount: 0,
+        updateCount: 1,
+        deleteCount: 0,
+        replaceCount: 0,
+        blocked: false,
+        warnings: []
+      },
+      liveProfile: input.deployment.liveProfile,
+      unsupportedResourceTypes: []
+    });
+    const saved = await runLoggedDeploymentOperation({
+      deploymentId: input.deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "plan",
+      label: "application cleanup plan save",
+      repository: input.repository,
+      operation: () =>
+        input.repository.saveDeploymentPlan({
+          deploymentId: input.deployment.id,
+          planArtifact: {
+            id: planArtifactId,
+            deploymentId: input.deployment.id,
+            terraformArtifactId: artifact.id,
+            terraformArtifactSha256,
+            operation: "destroy",
+            objectKey: uploadedPlan!.objectKey,
+            sha256: uploadedPlan!.sha256,
+            accountId: awsConnection.accountId!,
+            region: awsConnection.region
+          },
+          planSummary,
+          isBlocked: false,
+          blockedBy: null,
+          blockedReason: null,
+          terminalStatus: input.sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
+          failureStage: input.sourceStatus === "FAILED" ? input.sourceFailureStage : null,
+          errorSummary: input.sourceStatus === "FAILED" ? input.sourceErrorSummary : null
+        })
+    });
+    if (!saved.result) throw new DeploymentNotFoundError("Deployment not found");
+    return { deployment: saved.result, terraform: input.terraform };
+  } catch (error) {
+    if (uploadedPlan) {
+      await input.planArtifactStorage
+        .deleteDeploymentPlanArtifact(uploadedPlan.objectKey)
+        .catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    await workspace.cleanup();
+  }
+}
+
+async function defaultPrepareApplicationCleanupPlan(input: {
+  deployment: DeploymentRecord;
+  repository: DeploymentRepository;
+}): Promise<ApplicationCleanupPlanSummary> {
+  const release = await input.repository.findRelease?.(input.deployment.id);
+  if (
+    !release ||
+    release.status !== "succeeded" ||
+    !release.providerRevision ||
+    release.runtimeTargetKind !== input.deployment.targetKind
+  ) {
+    throw new DeploymentConflictError(
+      "A successful application release is required before application cleanup"
+    );
+  }
+  const metadata = readMetadataRecord(release.providerRevision.metadata);
+  const previousRevision =
+    release.runtimeTargetKind === "ecs_fargate"
+      ? metadata["previousTaskDefinitionArn"]
+      : release.runtimeTargetKind === "lambda"
+        ? metadata["previousVersion"]
+        : release.runtimeTargetKind === "ec2_asg"
+          ? metadata["previousArtifactUri"]
+          : metadata["previousReleasePrefix"];
+  if (typeof previousRevision !== "string" || !previousRevision.trim()) {
+    throw new DeploymentConflictError(
+      "Application release does not retain a verified rollback baseline"
+    );
+  }
+  return {
+    releaseId: release.id,
+    runtimeTargetKind: release.runtimeTargetKind,
+    currentRevision: release.providerRevision.revisionId,
+    previousRevision
+  };
+}
+
+function readMetadataRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function assertDeploymentCanStartDestroyPlan(
   deployment: DeploymentRecord,
   sourceStatus: DeploymentStatus,
   sourceFailureStage: DeploymentFailureStage | null
-): asserts deployment is DeploymentRecord & { stateObjectKey: string } {
-  if (!deployment.stateObjectKey) {
+): void {
+  if (deployment.scope !== "application" && !deployment.stateObjectKey) {
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
@@ -587,10 +809,11 @@ async function failDeploymentDestroyPlanRun(input: {
   deployment: DeploymentRecord;
   repository: DeploymentRepository;
   terraform: RunDeploymentDestroyPlanResult["terraform"];
+  failureStage: DeploymentFailureStage;
   errorSummary: string;
 }): Promise<RunDeploymentDestroyPlanResult> {
   const failedDeployment = await input.repository.failDeployment(input.deployment.id, {
-    failureStage: "plan",
+    failureStage: input.failureStage,
     errorSummary: input.errorSummary
   });
 
@@ -607,10 +830,11 @@ async function failDeploymentDestroyPlanRun(input: {
 async function failDeploymentDestroyPlan(
   deploymentId: string,
   error: unknown,
+  failureStage: DeploymentFailureStage,
   repository: DeploymentRepository
 ): Promise<DeploymentRecord> {
   const failedDeployment = await repository.failDeployment(deploymentId, {
-    failureStage: "plan",
+    failureStage,
     errorSummary: summarizeUnexpectedDestroyPlanFailure(error)
   });
 
@@ -619,6 +843,16 @@ async function failDeploymentDestroyPlan(
   }
 
   return failedDeployment;
+}
+
+function resolveDestroyPlanFailureStage(
+  sourceStatus: DeploymentStatus,
+  sourceFailureStage: DeploymentFailureStage | null
+): DeploymentFailureStage {
+  return sourceStatus === "FAILED" &&
+    (sourceFailureStage === "apply" || sourceFailureStage === "destroy")
+    ? sourceFailureStage
+    : "plan";
 }
 
 async function appendTerraformOutput(input: {

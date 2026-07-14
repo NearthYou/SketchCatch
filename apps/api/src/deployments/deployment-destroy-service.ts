@@ -11,6 +11,12 @@ import {
   type AwsConnectionStsGateway
 } from "../aws-connections/aws-connection-test-service.js";
 import { assertDeploymentDestroyPreconditions } from "./deployment-approval-service.js";
+import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./aws-codebuild-direct-application-release-gateway.js";
+import {
+  rollbackDirectApplicationRelease,
+  type DirectApplicationReleaseRepository
+} from "./direct-application-release-service.js";
+import type { ApplicationCleanupPlanSummary } from "./deployment-destroy-plan-service.js";
 import {
   createS3DeploymentApplyArtifactStorage,
   type DeploymentApplyArtifactStorage
@@ -68,6 +74,13 @@ export type RunDeploymentDestroyOptions = {
   readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
   writeTerraformStateFile?: (filePath: string, content: Buffer) => Promise<void>;
   writePlanFile?: (filePath: string, content: Buffer) => Promise<void>;
+  executeApplicationCleanup?: (input: {
+    deployment: DeploymentRecord;
+    accessContext: ProjectAccessContext;
+    cleanupPlan: ApplicationCleanupPlanSummary;
+    abortSignal?: AbortSignal;
+    repository: DeploymentRepository;
+  }) => Promise<void>;
 };
 
 export type RunDeploymentDestroyResult = {
@@ -99,6 +112,8 @@ export async function runDeploymentDestroy(
   const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
   const writePlanFile = options.writePlanFile ?? writeFile;
+  const executeApplicationCleanup =
+    options.executeApplicationCleanup ?? defaultExecuteApplicationCleanup;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -123,6 +138,21 @@ export async function runDeploymentDestroy(
 
     if (!isDestroyRunnableStatus(sourceStatus, sourceFailureStage)) {
       throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
+    }
+
+    if (deployment.scope === "application") {
+      return await runApplicationOnlyDestroy({
+        deployment,
+        sourceStatus,
+        sourceFailureStage,
+        input,
+        repository,
+        prepareTerraformWorkspace,
+        applyArtifactStorage,
+        readTerraformArtifactFile,
+        executeApplicationCleanup,
+        terraform
+      });
     }
 
     const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
@@ -320,6 +350,218 @@ export async function runDeploymentDestroy(
   } finally {
     await workspace?.cleanup();
   }
+}
+
+async function runApplicationOnlyDestroy(input: {
+  deployment: DeploymentRecord;
+  sourceStatus: DeploymentStatus;
+  sourceFailureStage: DeploymentFailureStage | null;
+  input: RunDeploymentDestroyInput;
+  repository: DeploymentRepository;
+  prepareTerraformWorkspace: typeof defaultPrepareTerraformWorkspace;
+  applyArtifactStorage: DeploymentApplyArtifactStorage;
+  readTerraformArtifactFile: (filePath: string) => Promise<Buffer | Uint8Array | string>;
+  executeApplicationCleanup: NonNullable<
+    RunDeploymentDestroyOptions["executeApplicationCleanup"]
+  >;
+  terraform: RunDeploymentDestroyResult["terraform"];
+}): Promise<RunDeploymentDestroyResult> {
+  const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
+    requireDeploymentTerraformArtifact(input.deployment, input.repository),
+    requireCurrentDestroyPlanArtifact(input.deployment, input.repository),
+    requireDeploymentAwsConnection(
+      input.deployment,
+      input.input.accessContext,
+      input.repository
+    )
+  ]);
+  const [planBuffer, workspace] = await Promise.all([
+    input.applyArtifactStorage.downloadDeploymentArtifact({
+      deploymentId: input.deployment.id,
+      planArtifactId: currentPlanArtifact.id,
+      objectKey: currentPlanArtifact.objectKey
+    }),
+    input.prepareTerraformWorkspace({
+      objectKey: terraformArtifact.objectKey,
+      fileName: terraformArtifact.fileName,
+      contentType: terraformArtifact.contentType
+    })
+  ]);
+  try {
+    const cleanupPlan = parseApplicationCleanupPlan(planBuffer, input.deployment);
+    const terraformArtifactContent = await input.readTerraformArtifactFile(workspace.mainFilePath);
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      { liveProfile: input.deployment.liveProfile }
+    );
+    assertDeploymentDestroyPreconditions({
+      deployment: input.deployment,
+      currentPlanArtifact,
+      currentTerraformArtifactHash: createSha256(terraformArtifactContent),
+      currentTfplanHash: createSha256(planBuffer),
+      currentAwsConnection: awsConnection,
+      sourceStatus: input.sourceStatus,
+      sourceFailureStage: input.sourceFailureStage
+    });
+    const wasPreMarkedRunning =
+      input.deployment.status === "RUNNING" && input.input.startedFromStatus !== undefined;
+    if (!wasPreMarkedRunning) {
+      const running = await input.repository.markDeploymentDestroyRunning(input.deployment.id);
+      if (!running) {
+        throw new DeploymentConflictError("Application cleanup could not be started");
+      }
+    }
+    const sequence = await input.repository.getNextDeploymentLogSequence(input.deployment.id);
+    try {
+      await runLoggedDeploymentOperation({
+        deploymentId: input.deployment.id,
+        accessContext: input.input.accessContext,
+        sequence,
+        stage: "destroy",
+        label: "application runtime rollback",
+        repository: input.repository,
+        operation: () =>
+          input.executeApplicationCleanup({
+            deployment: input.deployment,
+            accessContext: input.input.accessContext,
+            cleanupPlan,
+            repository: input.repository,
+            ...(input.input.abortSignal ? { abortSignal: input.input.abortSignal } : {})
+          })
+      });
+    } catch (error) {
+      return failDeploymentDestroyRun({
+        deployment: input.deployment,
+        repository: input.repository,
+        terraform: input.terraform,
+        errorSummary: maskDeploymentMessage(
+          `Application runtime rollback failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+      });
+    }
+    const completed = await input.repository.completeDeploymentDestroy(input.deployment.id, {
+      resultWarningSummary:
+        input.sourceStatus === "FAILED"
+          ? "Application release was restored after a failed cleanup attempt."
+          : null
+    });
+    if (!completed) throw new DeploymentNotFoundError("Deployment not found");
+    return { deployment: completed, terraform: input.terraform };
+  } finally {
+    await workspace.cleanup();
+  }
+}
+
+async function defaultExecuteApplicationCleanup(input: {
+  deployment: DeploymentRecord;
+  accessContext: ProjectAccessContext;
+  cleanupPlan: ApplicationCleanupPlanSummary;
+  abortSignal?: AbortSignal;
+  repository: DeploymentRepository;
+}): Promise<void> {
+  const currentRelease = await input.repository.findRelease?.(input.deployment.id);
+  if (
+    !currentRelease?.providerRevision ||
+    currentRelease.id !== input.cleanupPlan.releaseId ||
+    currentRelease.runtimeTargetKind !== input.cleanupPlan.runtimeTargetKind ||
+    currentRelease.providerRevision.revisionId !== input.cleanupPlan.currentRevision ||
+    resolvePreviousRevision(currentRelease) !== input.cleanupPlan.previousRevision
+  ) {
+    throw new DeploymentConflictError(
+      "Application release changed after cleanup approval"
+    );
+  }
+  const release = await rollbackDirectApplicationRelease(
+    {
+      deploymentId: input.deployment.id,
+      userId: input.accessContext.userId,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+    },
+    requireDirectApplicationReleaseRepository(input.repository),
+    createAwsCodeBuildDirectApplicationReleaseGateway()
+  );
+  if (!release || release.status !== "rolled_back") {
+    throw new DeploymentConflictError(
+      "Application cleanup did not restore the previous runtime revision"
+    );
+  }
+}
+
+function parseApplicationCleanupPlan(
+  content: Buffer,
+  deployment: DeploymentRecord
+): ApplicationCleanupPlanSummary {
+  let value: unknown;
+  try {
+    value = JSON.parse(content.toString("utf8"));
+  } catch {
+    throw new DeploymentConflictError("Application cleanup plan artifact is invalid");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new DeploymentConflictError("Application cleanup plan artifact is invalid");
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    record["schemaVersion"] !== 1 ||
+    record["kind"] !== "application_release_cleanup_plan" ||
+    record["deploymentId"] !== deployment.id ||
+    record["projectId"] !== deployment.projectId ||
+    record["runtimeTargetKind"] !== deployment.targetKind ||
+    typeof record["releaseId"] !== "string" ||
+    typeof record["currentRevision"] !== "string" ||
+    typeof record["previousRevision"] !== "string" ||
+    !record["currentRevision"].trim() ||
+    !record["previousRevision"].trim()
+  ) {
+    throw new DeploymentConflictError("Application cleanup plan artifact is invalid");
+  }
+  return {
+    releaseId: record["releaseId"],
+    runtimeTargetKind: deployment.targetKind!,
+    currentRevision: record["currentRevision"],
+    previousRevision: record["previousRevision"]
+  };
+}
+
+function resolvePreviousRevision(
+  release: NonNullable<Awaited<ReturnType<DirectApplicationReleaseRepository["findRelease"]>>>
+): string | undefined {
+  const metadata = release.providerRevision?.metadata;
+  if (!metadata) return undefined;
+  const value =
+    release.runtimeTargetKind === "ecs_fargate"
+      ? metadata["previousTaskDefinitionArn"]
+      : release.runtimeTargetKind === "lambda"
+        ? metadata["previousVersion"]
+        : release.runtimeTargetKind === "ec2_asg"
+          ? metadata["previousArtifactUri"]
+          : metadata["previousReleasePrefix"];
+  return typeof value === "string" ? value : undefined;
+}
+
+function requireDirectApplicationReleaseRepository(
+  repository: DeploymentRepository
+): DirectApplicationReleaseRepository {
+  if (
+    !repository.findContext ||
+    !repository.findRelease ||
+    !repository.savePreparedRelease ||
+    !repository.saveCompletedRelease ||
+    !repository.saveFailedRelease ||
+    !repository.resetReleaseForRetry
+  ) {
+    throw new DeploymentConflictError("Direct application release repository is unavailable");
+  }
+  return {
+    findContext: repository.findContext.bind(repository),
+    findRelease: repository.findRelease.bind(repository),
+    savePreparedRelease: repository.savePreparedRelease.bind(repository),
+    saveCompletedRelease: repository.saveCompletedRelease.bind(repository),
+    saveFailedRelease: repository.saveFailedRelease.bind(repository),
+    resetReleaseForRetry: repository.resetReleaseForRetry.bind(repository)
+  };
 }
 
 function isDestroyRunnableStatus(

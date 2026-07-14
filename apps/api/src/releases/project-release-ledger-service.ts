@@ -433,6 +433,7 @@ export function validateProjectDeploymentRuntimeConfig(
   runtimeTargetKind: RuntimeTargetKind,
   config: ProjectDeploymentRuntimeConfig | null
 ): void {
+  const codeBuildNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{1,254}$/;
   if (runtimeTargetKind === "static_site") {
     if (!config || config.runtimeTargetKind !== "static_site") {
       throw new ReleaseLedgerValidationError(
@@ -443,6 +444,7 @@ export function validateProjectDeploymentRuntimeConfig(
     const distributionPattern = /^[A-Z0-9]{3,32}$/;
     const originPattern = /^[A-Za-z0-9._-]{1,128}$/;
     if (
+      !codeBuildNamePattern.test(config.codeBuildProjectName ?? "") ||
       !bucketPattern.test(config.hostingBucketName) ||
       !distributionPattern.test(config.cloudFrontDistributionId) ||
       !originPattern.test(config.cloudFrontOriginId)
@@ -463,6 +465,7 @@ export function validateProjectDeploymentRuntimeConfig(
     const codeDeployNamePattern = /^[A-Za-z0-9._+=,@-]{1,100}$/;
     const autoScalingGroupNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,254}$/;
     if (
+      !codeBuildNamePattern.test(config.codeBuildProjectName ?? "") ||
       !codeDeployNamePattern.test(config.codeDeployApplicationName) ||
       !codeDeployNamePattern.test(config.codeDeployDeploymentGroupName) ||
       !autoScalingGroupNamePattern.test(config.autoScalingGroupName)
@@ -485,6 +488,7 @@ export function validateProjectDeploymentRuntimeConfig(
     const aliasPattern = /^(?!\$LATEST$)(?!\d+$)[A-Za-z0-9_-]{1,128}$/;
     const codeDeployNamePattern = /^[A-Za-z0-9._+=,@-]{1,100}$/;
     if (
+      !codeBuildNamePattern.test(config.codeBuildProjectName ?? "") ||
       !logicalIdPattern.test(config.functionLogicalId) ||
       !functionNamePattern.test(config.functionName) ||
       !aliasPattern.test(config.aliasName) ||
@@ -512,7 +516,6 @@ export function validateProjectDeploymentRuntimeConfig(
     );
   }
 
-  const codeBuildNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{1,254}$/;
   const ecsNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/;
   const ecrRepositoryPattern = /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*)(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/;
   if (

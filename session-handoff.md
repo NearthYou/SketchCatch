@@ -4,35 +4,23 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `feat/ck/350-ai-diagram-fallback` is ready for a final latest-`dev` merge after the feature commit.
-- Repository URL analysis resolves the GitHub default branch, exposes fetched branches through the shared SelectMenu, and reanalyzes the selected revision.
-- Strict `audience-live-check` evidence targets a single ECS Fargate task in private app subnets behind an internet-facing ALB in public subnets, without unsupported persistence or scaling assumptions.
-- One cost-conscious NAT path supports private ECR image pulls and CloudWatch log delivery; the diagram states the single-AZ egress tradeoff.
-- Board containment and edge labels explicitly show ALB SG ingress, Task SG TCP 8080, ECR image pull, and ECS `awslogs` delivery.
-- The latest Template Design contracts and separated Direct Deployment/CI/CD console from `dev` are present.
-- Direct Deployment created 29 AWS resources, served ALB `/health` with HTTP 200, and finished cleanup as `DESTROYED`.
-- AWS Console confirms the deployment-owned CloudFront, ECS, ALB, ECR, S3, CloudWatch, IAM, VPC, and EIP resources are absent; the NAT row is `Deleted` history only.
-
-## Verification
-
-- Focused verification passed: 15 deployment Plan/Destroy tests, 23 deployment action tests, 92 Terraform diagnostics/sync tests, and 25 virtual-file/palette pipeline tests.
-- Latest `origin/dev` is merged; focused integration tests plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Branch: `feature/gg/381-brainboard-aws-templates`.
+- Latest `origin/dev` at `e322afd2` is merged; only harness state-file conflicts required manual combination.
+- The branch contains 24 non-empty Brainboard AWS Templates plus the existing six deployable Templates.
 
 ## Changes This Session
 
-- Merged the latest `origin/dev` and preserved both the branch's Repository/Fargate changes and `dev` deployment/template behavior.
-- Combined load-balancer exclusion sizing with CI/CD IAM role sizing.
-- Preserved ECR/CloudFront nested blocks and Resource AZ, Design AZ, and physical VPC containment regressions.
-- Clarified strict Repository public/private subnet placement, SG boundaries, private egress, and operational edge labels.
-- Prevented visual `tier` metadata from leaking into `aws_subnet` HCL.
-- Gave Plan and Destroy Plan the 15-minute deployment timeout and made cleanup retryable after Plan failure.
-- Preserved generated Terraform outputs through file splitting, validation, and Diagram sync.
+- Preserved Brainboard source fixtures, Template catalog/detail creation, source-authoritative Terraform replacement, Board thumbnail capture/reload, fresh-project reset, and native Workspace brand navigation.
+- Preserved latest dev Repository AI, deployment/release, Live Observation, notifications, authentication, and sandbox E2E behavior.
+- Kept RDS read replicas separate from normal RDS defaults and prevented a fixed static-hosting Template from acquiring incompatible VPC or database additions after the dev merge.
+- Applied both PR #393 Workspace Template CSS color-token reviews; harness, lint, typecheck, 14 focused Web tests, and diff checks pass.
 
 ## Broken Or Unverified
 
-- The live deployment artifact was generated before output preservation was fixed, so its output table was empty. Focused pipeline tests now prove outputs remain in `main.tf` for future artifacts.
-- No unrelated AWS resources were deleted.
+- No branch-authored DB migration exists. Migrations `0034` through `0041` arrived only from merged `dev`.
+- `pnpm catalog:check` and template Terraform CLI validation require a local Terraform executable; none is installed or configured through `TF_CLI_PATH` or `TERRAFORM_BIN`.
+- `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path; it is a pre-existing local environment blocker.
 
 ## Best Next Action
 
-- Recreate the strict Repository board before its next deployment so the new Terraform artifact includes preserved outputs.
+- Commit and push, resolve both review threads, then merge PR #393 after CI passes.

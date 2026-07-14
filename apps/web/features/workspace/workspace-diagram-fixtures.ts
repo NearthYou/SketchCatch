@@ -270,7 +270,7 @@ function createResourceStressMatrixFixture(): DiagramJson {
     })),
     ...[
       ["aws-api-gateway-rest-api", "GLOBAL CUSTOMER API AUTHORIZATION GATEWAY"],
-      ["aws-rds-read-replica", "CROSS REGION DATABASE READ REPLICA"],
+      ["aws-rds-instance", "CROSS REGION DATABASE READ REPLICA"],
       ["aws-sqs-queue", "EVENT DRIVEN ORDER PROCESSING QUEUE"],
       ["aws-sns-topic", "MULTI ACCOUNT AUDIT NOTIFICATION TOPIC"],
       ["aws-ecs-cluster", "PRIVATE CONTAINER ORCHESTRATION CLUSTER"],

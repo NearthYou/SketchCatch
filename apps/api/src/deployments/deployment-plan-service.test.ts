@@ -644,6 +644,8 @@ function createPlanJson(resourceChanges: unknown[]): string {
 test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and current pointer", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
     approvedAt: fixedNow,
     approvedByUserId: userId,
     approvedTerraformArtifactId: terraformArtifactId,
@@ -668,6 +670,16 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
       planArtifactStorage,
       readTerraformArtifactFile: async () => terraformArtifactContent,
       analyzePreDeployment: () => createAnalysis(),
+      prepareApplicationArtifact: async () => {
+        runnerStages.push("application-artifact");
+        return {
+          releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          runtimeTargetKind: "ecs_fargate",
+          version: "1.0.0",
+          commitSha: "c".repeat(40),
+          artifactDigest: "d".repeat(64)
+        };
+      },
       prepareTerraformWorkspace: async (input) => {
         assert.deepEqual(input, {
           objectKey: "projects/project-id/assets/terraform_file/artifact-main.tf",
@@ -713,7 +725,7 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     }
   );
 
-  assert.deepEqual(runnerStages, ["init", "plan", "show-json"]);
+  assert.deepEqual(runnerStages, ["application-artifact", "init", "plan", "show-json"]);
   assert.equal(cleanupCalled, true);
   assert.equal(result.deployment.status, "PENDING");
   assert.equal(result.deployment.currentPlanArtifactId, planArtifactId);
@@ -782,6 +794,80 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
     )
   );
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
+});
+
+test("application scope writes an immutable release approval plan without running Terraform", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let writtenPlan: { filePath: string; content: string } | undefined;
+
+  const result = await runDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareApplicationArtifact: async () => ({
+        releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        runtimeTargetKind: "ecs_fargate",
+        version: "1.0.0",
+        commitSha: "c".repeat(40),
+        artifactDigest: "d".repeat(64)
+      }),
+      writeApplicationPlanFile: async (filePath, content) => {
+        writtenPlan = { filePath, content };
+      },
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-application-plan",
+        mainFilePath: "C:/tmp/sketchcatch-application-plan/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => {
+        throw new Error("application scope must not prepare Terraform credentials");
+      },
+      runTerraformInit: async () => {
+        throw new Error("application scope must not run Terraform init");
+      },
+      runTerraformPlan: async () => {
+        throw new Error("application scope must not run Terraform plan");
+      },
+      runTerraformShowJson: async () => {
+        throw new Error("application scope must not inspect a Terraform plan");
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "PENDING");
+  assert.deepEqual(result.deployment.planSummary, {
+    createCount: 0,
+    updateCount: 0,
+    deleteCount: 0,
+    replaceCount: 0,
+    blocked: false,
+    warnings: []
+  });
+  assert.equal(result.terraform.init, null);
+  assert.equal(result.terraform.plan, null);
+  assert.match(writtenPlan?.filePath ?? "", /application-release-plan\.json$/);
+  assert.deepEqual(JSON.parse(writtenPlan?.content ?? "{}"), {
+    schemaVersion: 1,
+    kind: "application_release_plan",
+    deploymentId,
+    projectId,
+    releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    runtimeTargetKind: "ecs_fargate",
+    version: "1.0.0",
+    commitSha: "c".repeat(40),
+    artifactDigest: "d".repeat(64)
+  });
+  assert.match(planArtifactStorage.uploads[0]?.planFilePath ?? "", /application-release-plan\.json$/);
 });
 
 test("runDeploymentPlan rejects unsafe Terraform before preparing AWS credentials", async () => {

@@ -198,7 +198,7 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson returns changed
   assert.deepEqual(unsupportedTypes, ["aws_lambda_function", "aws_s3_bucket_versioning"]);
 });
 
-test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web service resources only for the demo profile", () => {
+test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows project runtime resources for practice and demo profiles", () => {
   const terraformShowJson = JSON.stringify({
     resource_changes: [
       {
@@ -272,12 +272,9 @@ test("findUnsupportedLiveApplyResourceTypesFromTerraformShowJson allows demo web
     [
       "aws_autoscaling_group",
       "aws_autoscaling_policy",
-      "aws_cloudwatch_log_group",
       "aws_cloudwatch_metric_alarm",
       "aws_db_instance",
-      "aws_iam_instance_profile",
-      "aws_iam_role_policy_attachment",
-      "aws_lb"
+      "aws_iam_instance_profile"
     ]
   );
   assert.deepEqual(

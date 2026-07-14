@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildTemplateDiagramJson,
-  templateDefinitions,
-  type TemplateId
+  getTemplateDefinitionById,
+  REPOSITORY_TEMPLATE_IDS,
+  type RepositoryTemplateId
 } from "./template-definitions.js";
 
 type PresentationNodeExpectation = {
@@ -61,7 +62,7 @@ const EXPECTED_PRESENTATION_NODES = {
     "workloads-group": node("design-group", 520, 800, "vpc", { width: 1120, height: 360 }),
     "global-iam-group": node("design-group", 1880, 200, "region", { width: 360, height: 800 })
   }
-} as const satisfies Record<TemplateId, Readonly<Record<string, PresentationNodeExpectation>>>;
+} as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, PresentationNodeExpectation>>>;
 
 const EXPECTED_PRESENTATION_EDGES = {
   "static-web-hosting": {
@@ -82,7 +83,7 @@ const EXPECTED_PRESENTATION_EDGES = {
     "user-load-balancer": edge("user", "load-balancer", "handle-right", "handle-left")
   },
   "eks-container-app": {}
-} as const satisfies Record<TemplateId, Readonly<Record<string, PresentationEdgeExpectation>>>;
+} as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, PresentationEdgeExpectation>>>;
 
 const EXPECTED_RESOURCE_PARENTS = {
   "static-web-hosting": {
@@ -187,16 +188,15 @@ const EXPECTED_RESOURCE_PARENTS = {
     "node-cni-policy": "global-iam-group",
     "node-ecr-policy": "global-iam-group"
   }
-} as const satisfies Record<TemplateId, Readonly<Record<string, string>>>;
+} as const satisfies Record<RepositoryTemplateId, Readonly<Record<string, string>>>;
 
 test("six deployable templates keep Design nodes and edges outside their semantic graph", () => {
   // Presentation definitions must stay explicit so Terraform resources cannot be created by accident.
-  for (const definition of templateDefinitions) {
-    const expectedNodes = EXPECTED_PRESENTATION_NODES[definition.id];
-    const expectedEdges = EXPECTED_PRESENTATION_EDGES[definition.id];
-    const presentationNodeIds = new Set(
-      definition.presentationNodes.map((nodeDefinition) => nodeDefinition.id)
-    );
+  for (const templateId of REPOSITORY_TEMPLATE_IDS) {
+    const definition = getTemplateDefinitionById(templateId);
+    const expectedNodes = EXPECTED_PRESENTATION_NODES[templateId];
+    const expectedEdges = EXPECTED_PRESENTATION_EDGES[templateId];
+    const presentationNodeIds = new Set(definition.presentationNodes.map((nodeDefinition) => nodeDefinition.id));
 
     assert.deepEqual(
       Object.fromEntries(
@@ -247,8 +247,9 @@ test("six deployable templates keep Design nodes and edges outside their semanti
 
 test("built Template diagrams keep presentation nodes parameterless and parents visual-only", () => {
   // Raw shared diagrams must already be safe when the API uses them without the Web Catalog materializer.
-  for (const definition of templateDefinitions) {
-    const diagram = buildTemplateDiagramJson(definition.id, {
+  for (const templateId of REPOSITORY_TEMPLATE_IDS) {
+    const definition = getTemplateDefinitionById(templateId);
+    const diagram = buildTemplateDiagramJson(templateId, {
       projectSlug: "presentation",
       shortId: "contract"
     });
@@ -296,9 +297,7 @@ test("built Template diagrams keep presentation nodes parameterless and parents 
       );
     }
 
-    for (const [resourceId, parentNodeId] of Object.entries(
-      EXPECTED_RESOURCE_PARENTS[definition.id]
-    )) {
+    for (const [resourceId, parentNodeId] of Object.entries(EXPECTED_RESOURCE_PARENTS[templateId])) {
       const resourceNode = nodeById.get(`template-${definition.id}-${resourceId}`);
       const expectedParentId = presentationNodeIds.has(
         `template-${definition.id}-presentation-${parentNodeId}`

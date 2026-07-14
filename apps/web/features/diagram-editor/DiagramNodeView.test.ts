@@ -298,7 +298,7 @@ test("manual resize handles expose corners and the full four sides", () => {
   assert.match(diagramNodeViewSource, /onKeyDown=\{\(event\) => handleResizeKeyDown\(event, handle\.position\)\}/);
   assert.match(
     diagramNodeViewSource,
-    /const canResize = !node\.locked && !data\.isPreview && !data\.isConnectionActive;/
+    /const canResize =\s*!node\.locked &&\s*!data\.isPreview &&\s*!data\.isConnectionActive &&\s*\(node\.rotation \?\? 0\) === 0;/
   );
   assert.match(
     diagramNodeViewSource,
@@ -339,6 +339,34 @@ test("manual resize handles expose corners and the full four sides", () => {
   assert.match(
     diagramEditorCssSource,
     /\.nodeShellSelected ~ \.connectionHandleSource:global\(\.react-flow__handle-left\)\s*\{[^}]*left:\s*calc\(-18px \* var\(--board-control-scale\)\);/s
+  );
+});
+
+test("node rotation stays on a centered inner frame while the toolbar remains unrotated", () => {
+  const toolbarIndex = diagramNodeViewSource.indexOf("<NodeToolbar");
+  const rotationFrameIndex = diagramNodeViewSource.indexOf(
+    "className={styles.nodeRotationFrame}"
+  );
+  const rotationFrameBlock = getCssBlock(".nodeRotationFrame");
+
+  assert.notEqual(toolbarIndex, -1);
+  assert.notEqual(rotationFrameIndex, -1);
+  assert.ok(toolbarIndex < rotationFrameIndex);
+  assert.match(
+    diagramNodeViewSource,
+    /const nodeRotationStyle =\s*node\.rotation === undefined \|\| node\.rotation === 0\s*\? undefined\s*:\s*\{\s*transform: `rotate\(\$\{node\.rotation\}deg\)`,\s*transformOrigin: "center"\s*\};/s
+  );
+  assert.match(
+    diagramNodeViewSource,
+    /<div className=\{styles\.nodeRotationFrame\} style=\{nodeRotationStyle\}>[\s\S]*?<div\s+className=\{\[/
+  );
+  assert.match(rotationFrameBlock, /height:\s*100%;/);
+  assert.match(rotationFrameBlock, /position:\s*relative;/);
+  assert.match(rotationFrameBlock, /width:\s*100%;/);
+  assert.doesNotMatch(rotationFrameBlock, /translate/);
+  assert.match(
+    diagramNodeViewSource,
+    /\[id, node\.rotation, node\.size\.height, node\.size\.width, updateNodeInternals\]/
   );
 });
 

@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
+import { REPOSITORY_TEMPLATE_IDS } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildApp } from "../app.js";
 import { createInMemoryRuntimeCache } from "../runtime-cache/index.js";
 import { ArchitectureDraftGenerationError } from "../services/aiArchitectureDrafts.js";
+import { repositoryTemplateIdSchema } from "./ai.js";
 
 process.env.NODE_ENV = "test";
+
+test("repository AI draft validation stays limited to the six repository template IDs", () => {
+  assert.deepEqual(repositoryTemplateIdSchema.options, [...REPOSITORY_TEMPLATE_IDS]);
+});
 
 const architectureDraftResponseSchema = z.object({
   architectureJson: z.object({

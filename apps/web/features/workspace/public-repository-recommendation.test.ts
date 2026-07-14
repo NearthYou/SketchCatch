@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
+import {
+  REPOSITORY_TEMPLATE_IDS,
+  type RepositoryTemplateId,
+  type SourceRepositoryAnalysisResult
+} from "@sketchcatch/types";
 import {
   createPublicRepositoryArchitectureDraftRequest,
   createPublicRepositoryRecommendation,
@@ -241,6 +245,8 @@ test("repository recommendation falls back to handoff questions when ranked cand
 });
 
 test("legacy public analysis fallback still returns at least two comparison candidates", () => {
+  const repositoryTemplateIds = new Set<RepositoryTemplateId>(REPOSITORY_TEMPLATE_IDS);
+
   for (const deploymentType of ["ec2_vm", "container", "serverless"] as const) {
     const recommendation = createPublicRepositoryRecommendation({
       analysis: {
@@ -257,6 +263,10 @@ test("legacy public analysis fallback still returns at least two comparison cand
     assert.equal(
       new Set(recommendation.candidates.map((candidate) => candidate.templateId)).size,
       recommendation.candidates.length,
+      deploymentType
+    );
+    assert.ok(
+      recommendation.candidates.every((candidate) => repositoryTemplateIds.has(candidate.templateId)),
       deploymentType
     );
     assert.equal(

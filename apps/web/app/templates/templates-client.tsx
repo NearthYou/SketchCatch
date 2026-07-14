@@ -10,6 +10,7 @@ import {
 import { DashboardIcon } from "../../components/dashboard/dashboard-icons";
 import {
   getBoardTemplateResourceCount,
+  isBoardTemplateAvailable,
   listBoardTemplates
 } from "../../features/resource-settings/template-library";
 
@@ -146,9 +147,16 @@ export function TemplatesClient() {
                   <span>{template.tags.join(" · ")}</span>
                   <h3>{template.title}</h3>
                 </div>
-                <strong>{getBoardTemplateResourceCount(template)}개 리소스</strong>
+                <strong>
+                  {isBoardTemplateAvailable(template)
+                    ? `${getBoardTemplateResourceCount(template)}개 리소스`
+                    : "리소스 미확인"}
+                </strong>
               </div>
               <p>{template.description}</p>
+              {!isBoardTemplateAvailable(template) ? (
+                <p role="status">{template.unavailableReason}</p>
+              ) : null}
               <div className="dashboardChipRow">
                 {template.tags.map((tag) => (
                   <span className="dashboardChip" key={tag}>
@@ -157,13 +165,20 @@ export function TemplatesClient() {
                 ))}
               </div>
               <div className="templateCardActions">
-                <a
-                  className="dashboardSecondaryButton"
-                  href={`/workspace?templateId=${encodeURIComponent(template.id)}&projectName=${encodeURIComponent(template.title)}`}
-                >
-                  <DashboardIcon name="layers" />
-                  <span>보드에서 사용</span>
-                </a>
+                {isBoardTemplateAvailable(template) ? (
+                  <a
+                    className="dashboardSecondaryButton"
+                    href={`/workspace/new?mode=template&templateId=${encodeURIComponent(template.id)}`}
+                  >
+                    <DashboardIcon name="layers" />
+                    <span>보드에서 사용</span>
+                  </a>
+                ) : (
+                  <button className="dashboardSecondaryButton" disabled type="button">
+                    <DashboardIcon name="layers" />
+                    <span>미리보기만 제공</span>
+                  </button>
+                )}
               </div>
             </article>
           ))}

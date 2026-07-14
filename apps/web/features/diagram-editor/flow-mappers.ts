@@ -1,6 +1,10 @@
 import { MarkerType, Position } from "@xyflow/react";
 import type { CSSProperties } from "react";
-import type { DiagramEdge, DiagramNode } from "../../../../packages/types/src";
+import type {
+  DiagramEdge,
+  DiagramGeometryPolicy,
+  DiagramNode
+} from "../../../../packages/types/src";
 
 import { getEdgeStrokeWidth, normalizeEdgeKind } from "./diagram-utils";
 import { BOARD_DEFAULT_EDGE_COLOR } from "./constants";
@@ -24,8 +28,10 @@ type FlowMapperOptions = {
   readonly cachedNodesById?: ReadonlyMap<string, DiagramFlowNode> | undefined;
   readonly activeConnectionSourceNodeId?: string | null | undefined;
   readonly edges?: readonly DiagramEdge[] | undefined;
+  readonly geometryPolicy?: DiagramGeometryPolicy | undefined;
   readonly isPreview?: boolean;
   readonly previewAnnotations?: DiagramPreviewAnnotations | undefined;
+  readonly staleAuthoredRouteNodeIds?: ReadonlySet<string> | undefined;
 };
 
 type FlowNodeRenderState = {
@@ -114,7 +120,7 @@ export function toFlowNodes(
       previewState,
       selected,
       selectedNodeCount: isPreview ? 0 : selectedNodeIds.length,
-      zIndex: getFlowNodeZIndex(node, nodeById)
+      zIndex: getFlowNodeZIndex(node, nodeById, options.geometryPolicy)
     };
     const cached = options.cachedNodesById?.get(node.id);
 
@@ -226,7 +232,7 @@ export function toFlowEdges(
     .filter(
       (edge) => edge.metadata?.presentationRole !== "detail" && !isContainmentEdge(edge, nodeById)
     )
-    .map((edge) => {
+    .map((edge, edgeIndex) => {
       const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
       const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
       const color = edgeStyle.color ?? BOARD_DEFAULT_EDGE_COLOR;
@@ -234,14 +240,30 @@ export function toFlowEdges(
       const visibleLabel = getVisibleEdgeLabel(fullLabel);
       const previewState = previewAnnotations?.edgeStates[edge.id];
       const markerColor = getFlowEdgeMarkerColor(color, isPreview);
+      const marker = {
+        type: MarkerType.ArrowClosed,
+        color: markerColor,
+        ...getEdgeMarkerGeometry(edgeStyle.width),
+        markerUnits: "userSpaceOnUse" as const
+      };
+      const arrowDirection = edge.route?.arrowDirection ?? "source-to-target";
+      const hasStartMarker = Boolean(
+        edge.route &&
+          (arrowDirection === "target-to-source" || arrowDirection === "bidirectional")
+      );
+      const hasEndMarker =
+        !edge.route ||
+        arrowDirection === "source-to-target" ||
+        arrowDirection === "bidirectional";
       const sourceNode = nodeById.get(edge.sourceNodeId);
       const targetNode = nodeById.get(edge.targetNodeId);
       const storedHandles = getStoredLogicalHandles(edge);
-      const renderedHandles =
-        sourceNode &&
-        targetNode &&
-        (!storedHandles ||
-          doesOrthogonalRouteCrossResource(sourceNode, targetNode, storedHandles, nodes))
+      const renderedHandles = edge.route
+        ? storedHandles
+        : sourceNode &&
+            targetNode &&
+            (!storedHandles ||
+              doesOrthogonalRouteCrossResource(sourceNode, targetNode, storedHandles, nodes))
           ? getObstacleSafeEdgeHandles(sourceNode, targetNode, nodes)
           : storedHandles;
       const flowEdge: DiagramFlowEdge = {
@@ -257,8 +279,14 @@ export function toFlowEdges(
           : {}),
         type: "diagramEdge",
         data: {
+          ...(edge.route ? { authoredRoute: edge.route } : {}),
           edge,
           isAnimated: !isPreview && edgeStyle.animated === true,
+          isAuthoredRouteStale: Boolean(
+            edge.route &&
+              (options.staleAuthoredRouteNodeIds?.has(edge.sourceNodeId) ||
+                options.staleAuthoredRouteNodeIds?.has(edge.targetNodeId))
+          ),
           pathKind: normalizeEdgeKind(edge.type),
           previewState
         },
@@ -281,13 +309,9 @@ export function toFlowEdges(
         selectable: !isPreview,
         deletable: !isPreview,
         interactionWidth: 18,
-        zIndex: getFlowEdgeZIndex(edge, nodeById, selected),
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: markerColor,
-          ...getEdgeMarkerGeometry(edgeStyle.width),
-          markerUnits: "userSpaceOnUse"
-        },
+        zIndex: getFlowEdgeZIndex(edge, nodeById, selected, options.geometryPolicy, edgeIndex),
+        ...(hasStartMarker ? { markerStart: marker } : {}),
+        ...(hasEndMarker ? { markerEnd: marker } : {}),
         style: getFlowEdgeStyle(edge, isPreview, nodeById)
       };
 
@@ -585,7 +609,15 @@ const AREA_Z_BASE = 0;
 const RESOURCE_Z_BASE = 100_000;
 const AUTHORED_Z_INDEX_MAX = 20;
 
-function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
+function getFlowNodeZIndex(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  geometryPolicy?: DiagramGeometryPolicy
+): number {
+  if (geometryPolicy === "source-exact") {
+    return Number.isFinite(node.zIndex) ? node.zIndex : 0;
+  }
+
   const depth = getAreaAncestorDepth(node, nodeById);
   const authoredZIndex = Number.isFinite(node.zIndex)
     ? Math.max(0, Math.min(AUTHORED_Z_INDEX_MAX, node.zIndex))
@@ -598,8 +630,16 @@ function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, Diag
 function getFlowEdgeZIndex(
   edge: DiagramEdge,
   nodeById: ReadonlyMap<string, DiagramNode>,
-  selected: boolean
+  selected: boolean,
+  geometryPolicy?: DiagramGeometryPolicy,
+  edgeIndex = 0
 ): number {
+  if (geometryPolicy === "source-exact") {
+    return typeof edge.zIndex === "number" && Number.isFinite(edge.zIndex)
+      ? edge.zIndex
+      : edgeIndex;
+  }
+
   const sourceNode = nodeById.get(edge.sourceNodeId);
   const targetNode = nodeById.get(edge.targetNodeId);
 

@@ -371,6 +371,10 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
 
 test("runDeploymentApply applies the approved tfplan and stores state resources and outputs", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const runnerStages: string[] = [];
   let cleanupCalled = false;
@@ -473,11 +477,15 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
           })
         });
       },
+      executeApplicationRelease: async () => {
+        assert.equal(repository.completedInput, undefined);
+        runnerStages.push("application-release");
+      },
       generateResultId: createSequentialIdGenerator()
     }
   );
 
-  assert.deepEqual(runnerStages, ["init", "apply", "output", "show-state"]);
+  assert.deepEqual(runnerStages, ["init", "apply", "output", "show-state", "application-release"]);
   assert.equal(cleanupCalled, true);
   assert.match(writtenPlanFile?.filePath ?? "", /[\\/]tfplan$/);
   assert.deepEqual(writtenPlanFile?.content, planBuffer);
@@ -541,6 +549,67 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
       log.message.startsWith("[duration] deployment apply result save completed in ")
     )
   );
+});
+
+test("application scope releases the approved artifact without Terraform init or apply", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  const stages: string[] = [];
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-application-release",
+        mainFilePath: "C:/tmp/sketchcatch-application-release/main.tf",
+        terraformFiles: [],
+        cleanup: async () => {
+          stages.push("cleanup");
+        }
+      }),
+      prepareTerraformAwsCredentialEnv: async () => {
+        throw new Error("application scope must not prepare Terraform credentials");
+      },
+      runTerraformInit: async () => {
+        throw new Error("application scope must not run Terraform init");
+      },
+      runTerraformApply: async () => {
+        throw new Error("application scope must not run Terraform apply");
+      },
+      runTerraformOutputJson: async () => {
+        throw new Error("application scope must not read Terraform outputs");
+      },
+      runTerraformShowStateJson: async () => {
+        throw new Error("application scope must not inspect Terraform state");
+      },
+      executeApplicationRelease: async () => {
+        stages.push("application-release");
+      }
+    }
+  );
+
+  assert.deepEqual(stages, ["application-release", "cleanup"]);
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.deepEqual(result.terraform, {
+    init: null,
+    apply: null,
+    outputJson: null,
+    showStateJson: null
+  });
+  assert.deepEqual(repository.completedInput, {
+    stateObjectKey: null,
+    resultWarningSummary: null,
+    resources: [],
+    outputs: []
+  });
+  assert.equal(applyArtifactStorage.uploadedStates.length, 0);
 });
 
 test("runDeploymentApply materializes archive data files before applying an approved plan", async () => {
