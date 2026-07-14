@@ -80,7 +80,7 @@ test("workspace fixtures pass deterministic board interaction and preview states
   assert.match(diagramEditorSource, /normalizeSelectedNodeIds\(diagram\.nodes, initialSelectedNodeIds \?\? \[\]\)/);
   assert.match(
     diagramEditorSource,
-    /!isFlowReady \|\|\s*normalizedInitialBoardZoom !== undefined \|\|\s*previewDiagram === null/
+    /!isFlowReady \|\|\s*normalizedInitialBoardZoom !== undefined \|\|\s*previewDiagram === null \|\|\s*hasSourceViewBoxViewport/
   );
   assert.match(
     diagramEditorSource,

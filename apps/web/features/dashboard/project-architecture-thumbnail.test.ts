@@ -42,6 +42,19 @@ test("Template and Project cards consume captured raster thumbnails through one 
   assert.doesNotMatch(projectCardSource, /projectPreviewNodeVpc|projectPreviewLineOne/);
 });
 
+test("Dashboard cards use the bounded thumbnail loader and release replaced object URLs", () => {
+  assert.match(thumbnailSource, /loadProjectThumbnail/);
+  assert.match(thumbnailSource, /createProjectThumbnailImageLifecycle/);
+  assert.doesNotMatch(thumbnailSource, /setInterval/);
+});
+
+test("Dashboard cards refresh a saved Board thumbnail when the page is restored from browser history", () => {
+  assert.match(thumbnailSource, /addEventListener\("pageshow", handlePageShow\)/);
+  assert.match(thumbnailSource, /if \(!event\.persisted\)/);
+  assert.match(thumbnailSource, /refreshThumbnail\(\)/);
+  assert.match(thumbnailSource, /removeEventListener\("pageshow", handlePageShow\)/);
+});
+
 test("shared raster image keeps a fixed 16:9 contain frame and explicit loading, empty, and error states", () => {
   assert.match(imageSource, /<img/);
   assert.doesNotMatch(imageSource, /<svg|DiagramJson|nodes\.map|edges\.map/);
@@ -62,7 +75,22 @@ test("compact project cards keep the captured Board above the merged dev card de
   );
   assert.match(
     dashboardStyles,
-    /\.projectPreview\s*\{[^}]*height:\s*150px[^}]*background-image:/s
+    /\.projectPreview\s*\{[^}]*height:\s*auto[^}]*background-image:/s
+  );
+});
+
+test("project gallery gives full Board captures a two-column 16:9 frame above card details", () => {
+  assert.match(
+    dashboardStyles,
+    /\.dashboardCardGrid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/s
+  );
+  assert.match(
+    dashboardStyles,
+    /\.projectPreview\s*\{[^}]*height:\s*auto[^}]*overflow:\s*hidden/s
+  );
+  assert.doesNotMatch(
+    dashboardStyles,
+    /\.projectPreview\s*\{[^}]*height:\s*150px/s
   );
 });
 

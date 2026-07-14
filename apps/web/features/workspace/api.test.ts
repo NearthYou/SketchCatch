@@ -1257,6 +1257,26 @@ test("fetchProjectThumbnail reads the authenticated raster capture path as a Blo
   assert.equal(await thumbnail?.text(), "captured-board");
 });
 
+test("fetchProjectThumbnail preserves a permanent response status for retry decisions", async (context) => {
+  const originalFetch = globalThis.fetch;
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    restoreWindow(originalWindowDescriptor);
+  });
+
+  installAuthSession();
+
+  globalThis.fetch = async () => new Response(null, { status: 403 });
+
+  await assert.rejects(fetchProjectThumbnail(project.id), (error: unknown) => {
+    assert.equal(error instanceof Error, true);
+    assert.equal((error as { readonly status?: unknown }).status, 403);
+    return true;
+  });
+});
+
 test("confirmProjectAssetUpload marks the uploaded asset through the API", async (context) => {
   const originalFetch = globalThis.fetch;
   const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");

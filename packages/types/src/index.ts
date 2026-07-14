@@ -1,13 +1,10 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
-import type { TemplateId } from "./template-definitions.ts";
+import type { RepositoryTemplateId, TemplateId } from "./template-definitions.ts";
 
 export type IsoDateTimeString = string;
 
 export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue =
-  | JsonPrimitive
-  | JsonValue[]
-  | { readonly [key: string]: JsonValue };
+export type JsonValue = JsonPrimitive | JsonValue[] | { readonly [key: string]: JsonValue };
 
 export type ApiErrorCode =
   | "bad_request"
@@ -522,13 +519,7 @@ export type GitHubRepositoryCandidate = {
   archived: boolean;
 };
 
-export type RepositoryAnalysisTemplateId =
-  | "static-web-hosting"
-  | "minimal-serverless-api"
-  | "full-serverless-web-app"
-  | "three-tier-web-app"
-  | "ecs-fargate-container-app"
-  | "eks-container-app";
+export type RepositoryAnalysisTemplateId = RepositoryTemplateId;
 
 export type RepositoryAnalysisEvidenceFile = {
   path: string;
@@ -643,11 +634,7 @@ export type RepositoryApplicationUnit = {
   readonly evidencePaths: readonly string[];
 };
 
-export const REPOSITORY_DEPLOYMENT_TYPES = [
-  "ec2_vm",
-  "container",
-  "serverless"
-] as const;
+export const REPOSITORY_DEPLOYMENT_TYPES = ["ec2_vm", "container", "serverless"] as const;
 
 export type RepositoryDeploymentType = (typeof REPOSITORY_DEPLOYMENT_TYPES)[number];
 
@@ -671,7 +658,7 @@ export type RepositoryAnalysisAnswer = {
 };
 
 export type RepositoryTemplateRecommendationCandidate = {
-  readonly templateId: TemplateId;
+  readonly templateId: RepositoryTemplateId;
   readonly displayTitle: string;
   readonly confidence: number;
   readonly reasons: readonly string[];
@@ -713,7 +700,7 @@ type RepositoryAnalysisAiHandoffBase = {
 export type RepositoryAnalysisAiHandoff =
   | (RepositoryAnalysisAiHandoffBase & {
       readonly status: "template_selected";
-      readonly templateId: TemplateId;
+      readonly templateId: RepositoryTemplateId;
       readonly selectionReasons: readonly string[];
     })
   | (RepositoryAnalysisAiHandoffBase & {
@@ -729,10 +716,7 @@ export type AnalyzeSourceRepositoryResponse = {
   readonly aiHandoff: RepositoryAnalysisAiHandoff;
 };
 
-export type SourceRepositoryAnalysis = Omit<
-  AnalyzeSourceRepositoryResponse,
-  "sourceRepositoryId"
->;
+export type SourceRepositoryAnalysis = Omit<AnalyzeSourceRepositoryResponse, "sourceRepositoryId">;
 
 export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
 
@@ -1495,14 +1479,74 @@ export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
 
+export { BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
+export type { BrainboardTemplateId } from "./brainboard-templates/ids.ts";
+export {
+  BRAINBOARD_TEMPLATE_AUTHOR,
+  BRAINBOARD_TEMPLATE_PROVIDER,
+  brainboardTemplateManifest
+} from "./brainboard-templates/manifest.ts";
+export type { BrainboardTemplateManifestEntry } from "./brainboard-templates/manifest.ts";
+export { adaptBrainboardTemplateSource } from "./brainboard-templates/adapter.ts";
+export type { AdaptedBrainboardTemplate } from "./brainboard-templates/adapter.ts";
+export type {
+  BrainboardFailedCaptureAttempt,
+  BrainboardFailedCaptureEvidence,
+  BrainboardFailedCaptureOrigin,
+  BrainboardSourceArrowDirection,
+  BrainboardSourceEdge,
+  BrainboardSourceNode,
+  BrainboardSourcePoint,
+  BrainboardSourcePresentationNode,
+  BrainboardSourceResourceAddressMapping,
+  BrainboardSourceResourceNode,
+  BrainboardSourceSize,
+  BrainboardSourceValue,
+  BrainboardSourceViewport,
+  BrainboardTemplateCaptureStatus,
+  BrainboardTemplateEvidence,
+  BrainboardTemplateOrigin,
+  BrainboardTemplateSource,
+  BrainboardTerraformFile,
+  BrainboardTerraformWorkspaceOmission,
+  BrainboardTerraformWorkspaceSeed
+} from "./brainboard-templates/source-types.ts";
+export { validateBrainboardTemplateSource } from "./brainboard-templates/validate-source.ts";
+export type {
+  BrainboardSourceValidationError,
+  BrainboardSourceValidationErrorCode,
+  BrainboardSourceValidationResult
+} from "./brainboard-templates/validate-source.ts";
+export {
+  brainboardFailedCaptureEvidence,
+  brainboardTemplateEvidence,
+  brainboardTemplateRegistry
+} from "./brainboard-templates/registry.ts";
+export type { BrainboardTemplateRegistryEntry } from "./brainboard-templates/registry.ts";
+export {
+  awsKubernetesNativeCnisSource,
+  brainboardTemplateSources,
+  trainingAwsOnboardingSource
+} from "./brainboard-templates/sources/index.ts";
+export { defineCapturedBrainboardTemplate } from "./brainboard-templates/sources/define-source.ts";
+export type {
+  BrainboardCapturedNode,
+  BrainboardPresentationNodeBinding,
+  BrainboardResourceNodeBinding,
+  BrainboardSourceNodeBinding,
+  CapturedBrainboardTemplateDefinition
+} from "./brainboard-templates/sources/define-source.ts";
+
 export {
   buildTemplateDiagramJson,
   getTemplateDefinitionById,
+  REPOSITORY_TEMPLATE_IDS,
   TEMPLATE_IDS,
   templateDefinitions
 } from "./template-definitions.ts";
 export type {
   BuildTemplateDiagramInput,
+  RepositoryTemplateId,
   TemplateDefinition,
   TemplateId,
   TemplateParameterDefinition,
@@ -1744,9 +1788,7 @@ export type DeploymentLiveObservationManifestV2 = {
   } & (DeploymentLiveObservationAwsAdapterV1 | DeploymentLiveObservationAwsAdapterV2);
 };
 
-export type DeploymentLiveObservationManifestStatus =
-  | "valid"
-  | "manifest_invalid";
+export type DeploymentLiveObservationManifestStatus = "valid" | "manifest_invalid";
 
 export type DeploymentLiveObservationManifestRecord = {
   deploymentId: string;
@@ -1760,11 +1802,7 @@ export type DeploymentLiveObservationManifestRecord = {
 
 export type LiveObservationStatus = "active" | "stopped" | "expired";
 
-export type LiveObservationPressureLevel =
-  | "normal"
-  | "warning"
-  | "high"
-  | "critical";
+export type LiveObservationPressureLevel = "normal" | "warning" | "high" | "critical";
 
 export type LiveObservationProviderState = "available" | "delayed" | "unavailable";
 
@@ -2437,10 +2475,7 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
-export type ArchitecturePatchPlanAction =
-  | "modify_resource"
-  | "remove_resource"
-  | "add_resource";
+export type ArchitecturePatchPlanAction = "modify_resource" | "remove_resource" | "add_resource";
 
 export type ArchitecturePatchPlanOperationType =
   | "set_value"
@@ -2542,8 +2577,7 @@ export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
   "building_diagram"
 ] as const;
 
-export type ArchitectureDraftProgressStage =
-  (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -2753,11 +2787,13 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
-  deepScan?: {
-    status: "not_required" | "running" | "complete" | "failed";
-    scanId?: string | undefined;
-    message?: string | undefined;
-  } | undefined;
+  deepScan?:
+    | {
+        status: "not_required" | "running" | "complete" | "failed";
+        scanId?: string | undefined;
+        message?: string | undefined;
+      }
+    | undefined;
   llmExplanation?: LlmExplanation | undefined;
 };
 
@@ -2969,6 +3005,8 @@ export type DiagramNodeMetadata = {
 
 export type DiagramNodeParameters = {
   terraformBlockType?: TerraformBlockType | undefined;
+  /** Exact Terraform files, rather than palette defaults, are authoritative for this node. */
+  terraformSourceAuthority?: "workspace-seed" | undefined;
   resourceType: string;
   resourceName: string;
   fileName: string;
@@ -2986,6 +3024,7 @@ export type DiagramNode = {
   iconUrl?: string | undefined;
   locked: boolean;
   zIndex: number;
+  rotation?: number | undefined;
   style?: DiagramNodeStyle | undefined;
   metadata?: DiagramNodeMetadata | undefined;
   parameters?: DiagramNodeParameters | undefined;
@@ -3003,6 +3042,32 @@ export type DiagramEdgeMetadata = {
   parameterPath: string;
 };
 
+export type DiagramPoint = {
+  x: number;
+  y: number;
+};
+
+export type DiagramBounds = DiagramPoint & {
+  width: number;
+  height: number;
+};
+
+export type DiagramEdgeArrowDirection =
+  | "source-to-target"
+  | "target-to-source"
+  | "bidirectional"
+  | "none";
+
+export type DiagramEdgeRoute = {
+  svgPath: string;
+  sourcePoint: DiagramPoint;
+  targetPoint: DiagramPoint;
+  waypoints: DiagramPoint[];
+  labelPosition?: DiagramPoint | undefined;
+  arrowDirection?: DiagramEdgeArrowDirection | undefined;
+  arrowAngle?: number | undefined;
+};
+
 export type DiagramEdge = {
   id: string;
   sourceNodeId: string;
@@ -3013,6 +3078,8 @@ export type DiagramEdge = {
   type?: string | undefined;
   style?: DiagramEdgeStyle | undefined;
   metadata?: DiagramEdgeMetadata | undefined;
+  route?: DiagramEdgeRoute | undefined;
+  zIndex?: number | undefined;
 };
 
 export type DiagramViewport = {
@@ -3037,11 +3104,21 @@ export type DiagramVariable = {
   source: DiagramVariableSource;
 };
 
+export type DiagramGeometryPolicy = "catalog-normalized" | "source-exact";
+
+export type DiagramPresentation = {
+  geometryPolicy: DiagramGeometryPolicy;
+  sourceViewBox?: DiagramBounds | undefined;
+  initialViewportPending?: boolean | undefined;
+  terraformSourceFingerprint?: string | undefined;
+};
+
 export type DiagramJson = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   viewport: DiagramViewport;
   variables?: DiagramVariable[] | undefined;
+  presentation?: DiagramPresentation | undefined;
 };
 
 export type ProjectDraft = {

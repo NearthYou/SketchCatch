@@ -38,15 +38,91 @@ const areaResourceParameterDefaults: Readonly<
 };
 
 export function cloneDiagram(diagram: DiagramJson): DiagramJson {
+  const variables = diagram.variables?.map((variable) => ({
+    ...variable,
+    value: cloneParameterValue(variable.value),
+    bindings: variable.bindings.map((binding) => ({ ...binding }))
+  }));
+  const presentation = diagram.presentation
+    ? {
+        ...diagram.presentation,
+        ...(diagram.presentation.sourceViewBox
+          ? { sourceViewBox: { ...diagram.presentation.sourceViewBox } }
+          : {})
+      }
+    : undefined;
+
   return {
     nodes: diagram.nodes.map((node) => cloneNode(node)),
     edges: diagram.edges.map((edge) => cloneEdge(edge)),
-    viewport: { ...diagram.viewport }
+    viewport: { ...diagram.viewport },
+    ...(variables ? { variables } : {}),
+    ...(presentation ? { presentation } : {})
   };
 }
 
 export function areDiagramsEqual(first: DiagramJson, second: DiagramJson): boolean {
   return JSON.stringify(first) === JSON.stringify(second);
+}
+
+export function clearAuthoredRoutesForNodeIds(
+  diagram: DiagramJson,
+  nodeIds: ReadonlySet<string>
+): DiagramJson {
+  if (nodeIds.size === 0) {
+    return diagram;
+  }
+
+  let didClearRoute = false;
+  const edges = diagram.edges.map((edge) => {
+    if (
+      !edge.route ||
+      (!nodeIds.has(edge.sourceNodeId) && !nodeIds.has(edge.targetNodeId))
+    ) {
+      return edge;
+    }
+
+    const { route: _route, ...edgeWithoutRoute } = edge;
+    didClearRoute = true;
+    return edgeWithoutRoute;
+  });
+
+  return didClearRoute ? { ...diagram, edges } : diagram;
+}
+
+export function getNodeGeometryChangedIds(
+  previousNodes: readonly DiagramNode[],
+  currentNodes: readonly DiagramNode[]
+): Set<string> {
+  const previousNodeById = new Map(previousNodes.map((node) => [node.id, node]));
+  const currentNodeById = new Map(currentNodes.map((node) => [node.id, node]));
+  const changedNodeIds = new Set<string>();
+
+  for (const [nodeId, currentNode] of currentNodeById) {
+    const previousNode = previousNodeById.get(nodeId);
+
+    if (!previousNode || hasNodeGeometryChanged(previousNode, currentNode)) {
+      changedNodeIds.add(nodeId);
+    }
+  }
+
+  for (const nodeId of previousNodeById.keys()) {
+    if (!currentNodeById.has(nodeId)) {
+      changedNodeIds.add(nodeId);
+    }
+  }
+
+  return changedNodeIds;
+}
+
+function hasNodeGeometryChanged(previousNode: DiagramNode, currentNode: DiagramNode): boolean {
+  return (
+    previousNode.position.x !== currentNode.position.x ||
+    previousNode.position.y !== currentNode.position.y ||
+    previousNode.size.width !== currentNode.size.width ||
+    previousNode.size.height !== currentNode.size.height ||
+    (previousNode.rotation ?? 0) !== (currentNode.rotation ?? 0)
+  );
 }
 
 export function parseResourceDragPayload(dataTransfer: DataTransfer): ResourceDragPayload | null {
@@ -374,9 +450,22 @@ function clearParentAreaNodeId(node: DiagramNode): DiagramNode {
 }
 
 function cloneEdge(edge: DiagramEdge): DiagramEdge {
+  const route = edge.route
+    ? {
+        ...edge.route,
+        sourcePoint: { ...edge.route.sourcePoint },
+        targetPoint: { ...edge.route.targetPoint },
+        waypoints: edge.route.waypoints.map((waypoint) => ({ ...waypoint })),
+        ...(edge.route.labelPosition
+          ? { labelPosition: { ...edge.route.labelPosition } }
+          : {})
+      }
+    : undefined;
+
   return {
     ...edge,
-    ...(edge.style ? { style: { ...edge.style } } : {})
+    ...(edge.style ? { style: { ...edge.style } } : {}),
+    ...(route ? { route } : {})
   };
 }
 

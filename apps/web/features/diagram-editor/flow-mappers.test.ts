@@ -375,6 +375,33 @@ test("toFlowNodes keeps every area below resources even when the area is nested"
   assert.ok(availabilityZoneZIndex < instanceZIndex);
 });
 
+test("toFlowNodes preserves literal source-exact z-index values without kind or depth layers", () => {
+  const region = {
+    ...makeDesignAreaNode({ id: "region-source", type: "sketchcatch_region" }),
+    zIndex: 420_000
+  };
+  const instance = {
+    ...makeNode({
+      id: "instance-source",
+      parentAreaNodeId: region.id,
+      resourceType: "aws_instance"
+    }),
+    zIndex: -35
+  };
+
+  const flowNodes = toFlowNodes(
+    [region, instance],
+    [instance.id],
+    null,
+    false,
+    handlers,
+    { geometryPolicy: "source-exact" }
+  );
+
+  assert.equal(getFlowNodeZIndex(flowNodes, region.id), 420_000);
+  assert.equal(getFlowNodeZIndex(flowNodes, instance.id), -35);
+});
+
 test("toFlowNodes stacks resources above the nested area they belong to", () => {
   const region = makeDesignAreaNode({ id: "region-1", type: "sketchcatch_region" });
   const availabilityZone = makeDesignAreaNode({
@@ -499,6 +526,151 @@ test("toFlowEdges replaces stored handles when their rendered route crosses a re
 
   assert.notEqual(flowEdge?.sourceHandle, "source-handle-right");
   assert.notEqual(flowEdge?.targetHandle, "target-handle-left");
+});
+
+test("toFlowEdges keeps authored-route handles and raw route metadata across obstacles", () => {
+  const source = makeNode({ id: "authored-source", position: { x: 0, y: 100 }, resourceType: "aws_instance" });
+  const blocker = makeNode({ id: "authored-blocker", position: { x: 240, y: 100 }, resourceType: "aws_s3_bucket" });
+  const target = makeNode({ id: "authored-target", position: { x: 480, y: 100 }, resourceType: "aws_lambda_function" });
+  const route: NonNullable<DiagramEdge["route"]> = {
+    svgPath: "M 168 148 L 240 148 L 240 52 L 480 52",
+    sourcePoint: { x: 168, y: 148 },
+    targetPoint: { x: 480, y: 52 },
+    waypoints: [{ x: 240, y: 148 }, { x: 240, y: 52 }],
+    labelPosition: { x: 240, y: 92 },
+    arrowDirection: "target-to-source",
+    arrowAngle: -90
+  };
+  const edge: DiagramEdge = {
+    ...makeEdge(source.id, target.id),
+    sourceHandleId: "handle-right",
+    targetHandleId: "handle-left",
+    route
+  };
+
+  const [flowEdge] = toFlowEdges([edge], [], [source, blocker, target]);
+
+  assert.equal(flowEdge?.sourceHandle, "source-handle-right");
+  assert.equal(flowEdge?.targetHandle, "target-handle-left");
+  assert.equal(flowEdge?.data?.authoredRoute, route);
+  assert.equal(flowEdge?.data?.authoredRoute?.arrowDirection, "target-to-source");
+  assert.equal(flowEdge?.data?.authoredRoute?.arrowAngle, -90);
+  assert.notEqual(flowEdge?.markerStart, undefined);
+  assert.equal(flowEdge?.markerEnd, undefined);
+});
+
+test("toFlowEdges maps authored arrow direction without fabricating arrow geometry", () => {
+  const route = {
+    svgPath: "M 0 0 L 100 100",
+    sourcePoint: { x: 0, y: 0 },
+    targetPoint: { x: 100, y: 100 },
+    waypoints: []
+  };
+  const edges: DiagramEdge[] = [
+    {
+      ...makeEdge("source-default", "target-default"),
+      id: "default-direction",
+      route
+    },
+    {
+      ...makeEdge("source-forward", "target-forward"),
+      id: "forward-direction",
+      route: { ...route, arrowDirection: "source-to-target" }
+    },
+    {
+      ...makeEdge("source-reverse", "target-reverse"),
+      id: "reverse-direction",
+      route: { ...route, arrowDirection: "target-to-source" }
+    },
+    {
+      ...makeEdge("source-both", "target-both"),
+      id: "both-directions",
+      route: { ...route, arrowDirection: "bidirectional" }
+    },
+    {
+      ...makeEdge("source-none", "target-none"),
+      id: "no-direction",
+      route: { ...route, arrowDirection: "none", arrowAngle: 127 }
+    }
+  ];
+
+  const mapped = new Map(toFlowEdges(edges, []).map((edge) => [edge.id, edge]));
+
+  assert.equal(mapped.get("default-direction")?.markerStart, undefined);
+  assert.notEqual(mapped.get("default-direction")?.markerEnd, undefined);
+  assert.equal(mapped.get("forward-direction")?.markerStart, undefined);
+  assert.notEqual(mapped.get("forward-direction")?.markerEnd, undefined);
+  assert.notEqual(mapped.get("reverse-direction")?.markerStart, undefined);
+  assert.equal(mapped.get("reverse-direction")?.markerEnd, undefined);
+  assert.notEqual(mapped.get("both-directions")?.markerStart, undefined);
+  assert.notEqual(mapped.get("both-directions")?.markerEnd, undefined);
+  assert.equal(mapped.get("no-direction")?.markerStart, undefined);
+  assert.equal(mapped.get("no-direction")?.markerEnd, undefined);
+  assert.equal(mapped.get("no-direction")?.data?.authoredRoute?.arrowAngle, 127);
+});
+
+test("toFlowEdges marks an authored route stale only for explicitly moving endpoints", () => {
+  const edge: DiagramEdge = {
+    ...makeEdge("moving-source", "static-target"),
+    route: {
+      svgPath: "M 0 0 L 100 100",
+      sourcePoint: { x: 0, y: 0 },
+      targetPoint: { x: 100, y: 100 },
+      waypoints: []
+    }
+  };
+
+  const [stable] = toFlowEdges([edge], []);
+  const [stale] = toFlowEdges([edge], [], [], {
+    staleAuthoredRouteNodeIds: new Set(["moving-source"])
+  });
+
+  assert.equal(stable?.data?.isAuthoredRouteStale, false);
+  assert.equal(stale?.data?.isAuthoredRouteStale, true);
+});
+
+test("toFlowEdges preserves literal source-exact z-index and DOM fallback without selection elevation", () => {
+  const selectedEdge: DiagramEdge = {
+    ...makeEdge("source-a", "target-a"),
+    id: "selected-authored-edge",
+    zIndex: -240
+  };
+  const firstDomEdge: DiagramEdge = {
+    ...makeEdge("source-b", "target-b"),
+    id: "first-dom-edge"
+  };
+  const secondDomEdge: DiagramEdge = {
+    ...makeEdge("source-c", "target-c"),
+    id: "second-dom-edge"
+  };
+  const highAuthoredEdge: DiagramEdge = {
+    ...makeEdge("source-d", "target-d"),
+    id: "high-authored-edge",
+    zIndex: 900_000
+  };
+
+  const containmentEdge: DiagramEdge = {
+    ...makeEdge("hidden-source", "hidden-target"),
+    id: "filtered-containment-edge",
+    label: "contains"
+  };
+  const flowEdges = toFlowEdges(
+    [containmentEdge, firstDomEdge, selectedEdge, highAuthoredEdge, secondDomEdge],
+    [selectedEdge.id],
+    [],
+    { geometryPolicy: "source-exact" }
+  );
+
+  assert.deepEqual(flowEdges.map((edge) => edge.id), [
+    firstDomEdge.id,
+    selectedEdge.id,
+    highAuthoredEdge.id,
+    secondDomEdge.id
+  ]);
+  assert.equal(getFlowEdgeZIndex(flowEdges, selectedEdge.id), -240);
+  assert.equal(getFlowEdgeZIndex(flowEdges, firstDomEdge.id), 0);
+  assert.equal(getFlowEdgeZIndex(flowEdges, highAuthoredEdge.id), 900_000);
+  assert.equal(getFlowEdgeZIndex(flowEdges, secondDomEdge.id), 3);
 });
 
 test("toFlowEdges keeps existing React Flow source and target handle ids stable", () => {
