@@ -9,11 +9,9 @@ export function BuiltInTemplateLibrary() {
 
   return (
     <div className="dashboardRouteStack">
-      <header className="dashboardPageHeader">
+      <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div>
-          <p className="dashboardEyebrow">Template library</p>
-          <h1>Templates</h1>
-          <p>Architecture Board에서 사용할 수 있는 내장 Practice Architecture입니다.</p>
+          <h1>탬플릿</h1>
         </div>
       </header>
 
