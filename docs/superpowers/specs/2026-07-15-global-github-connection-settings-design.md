@@ -33,6 +33,15 @@ GitHub 연결을 전역으로 바꾼다는 것은 모든 프로젝트가 같은 
 - 현재 프로젝트의 활성 repository, 분석 결과, 분석 실행 동작은 유지한다.
 - `ProjectDeploymentTargetSettingsClient`와 `ProjectCicdMonitoringSettingsClient`의 프로젝트 계약은 변경하지 않는다.
 
+### Workspace CI/CD 빈 상태
+
+- Workspace 배포 모달의 CI/CD 화면은 GitHub 계정 연결과 프로젝트 repository 연결을 별도 상태로 판단한다.
+- 사용자 계정에 GitHub App installation이 없으면 `GitHub 계정 연결이 필요합니다.` 안내와 `GitHub 계정 설정 열기` 버튼을 표시한다. 버튼은 `/dashboard/settings#github-account-settings-title`로 이동해 전역 GitHub 연결 섹션을 바로 보여준다.
+- GitHub App installation은 있지만 현재 프로젝트에 활성 GitHub `SourceRepository`가 없으면 기존 `GitHub 저장소 연결이 필요합니다.` 안내와 `프로젝트 GitHub 설정 열기` 버튼을 유지한다.
+- 현재 프로젝트에 활성 GitHub `SourceRepository`가 있으면 기존 Pipeline Run, Output 링크, Activity, Logs 화면을 그대로 표시한다.
+- 계정 installation 조회는 활성 프로젝트 repository가 없을 때만 실행해 연결 완료 상태의 CI/CD 조회 경로에 불필요한 GitHub API 호출을 추가하지 않는다.
+- installation 조회가 실패하면 계정 미연결로 단정하지 않고 기존 CI/CD 오류와 다시 시도 흐름을 사용한다.
+
 ## 데이터와 API 경계
 
 - GitHub App 설치는 사용자 GitHub identity와 GitHub가 반환하는 installation 목록으로 확인한다. 전역 설정을 위해 `SourceRepository` row를 만들지 않는다.
@@ -72,6 +81,7 @@ GitHub 연결을 전역으로 바꾼다는 것은 모든 프로젝트가 같은 
 - API route 테스트에서 인증, 설치 소유권 필터링, 설치 없음, GitHub identity 없음, callback 만료·변조를 확인한다.
 - Web 테스트에서 전역 GitHub 섹션이 `연결된 AWS 계정` 다음에 렌더링되고 프로젝트별 정보가 노출되지 않는지 확인한다.
 - 프로젝트 설정 테스트에서 설치 버튼이 제거되고 전역 설정 링크, repository 선택, 분석 동작이 유지되는지 확인한다.
+- Workspace CI/CD 테스트에서 installation 0개는 전역 설정 버튼을, installation 1개 이상과 활성 repository 0개는 프로젝트 설정 버튼을 표시하는지 확인한다.
 - GitHub callback과 Workspace의 권한 관리 링크가 전역 설정으로 이동하는지 확인한다.
 - 관련 focused test와 전체 `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `git diff --check`를 실행한다.
 - 실제 GitHub App 설치나 권한 변경은 테스트 중 자동 실행하지 않는다.
