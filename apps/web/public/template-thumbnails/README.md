@@ -17,6 +17,5 @@
 6. 카드와 큰 미리보기에서 여섯 장을 확인한 다음 manifest의 해당 `diagramHash`를 현재
    materialized `DiagramJson` SHA-256으로 갱신한다.
 
-`template-thumbnail-manifest.test.ts`가 모든 Template의 파일 존재, WebP 형식, 실제 해상도,
-capture contract version, 현재 materialized layout hash를 함께 검사한다. Template layout을
-바꾸고 캡처를 다시 만들지 않으면 이 테스트는 실패해야 한다.
+Template 전용 자동 회귀 테스트는 유지하지 않는다. 갱신 시 위 계약을 수동으로 확인하고
+`pnpm build`로 정적 asset 참조와 빌드 유효성을 확인한다.

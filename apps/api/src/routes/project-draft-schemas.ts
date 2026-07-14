@@ -73,6 +73,12 @@ const diagramNodeStyleSchema = z.object({
 const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
   .object({
     parentAreaNodeId: z.string().min(1).optional(),
+    areaAutoSizeBaseline: z
+      .object({
+        position: diagramPositionSchema,
+        size: diagramSizeSchema
+      })
+      .optional(),
     presentationArea: z.boolean().optional(),
     presentationCatalogItemId: z.string().min(1).optional(),
     reverseEngineering: z

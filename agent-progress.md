@@ -19,8 +19,39 @@ Short English-only working log for the current agent context. Older records are 
 - Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
 - Final code checks passed: 24 sandbox runner tests, 19 API runtime/workflow tests, 27 Web target/three-stage/CI-console tests, harness, lint, typecheck, build, and diff checks. Full Web/API suites were intentionally omitted.
 - Cleanup is complete: local API and HTTPS proxy ports are closed, the Redis container, temporary certificate/TLS files/logs/fixture clone are removed, and read-only AWS checks show zero Issue #378 ECR repositories, CodeBuild projects, and S3 buckets.
+- The automated suite retains 52 essential protection test files. Tests outside the reviewed protection line, including three superseded feature-specific tests from this branch, remain deleted after merging the latest `dev`.
+- No Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during the final code-integration pass.
 
 ## Session Record
+
+### 2026-07-15 - Restore five reviewed security tests
+
+- Restored exactly five tests from the merged dev source: API auth/error boundaries, Live Observation HTTPS/SSRF transport, filesystem path traversal, Live Observation capability tokens, and Web Push subscription encryption.
+- Focused execution passed 54/57 checks; the three failures occurred before assertions because this Windows environment denied test symlink creation with `EPERM`.
+- API lint and typecheck pass. Full workspace test/build were intentionally not rerun to keep the merge path minimal.
+
+### 2026-07-15 - Resolve latest dev merge after test reduction
+
+- Preserved the incoming `dev` runtime and contract changes while resolving delete/modify conflicts in favor of the 47-file essential protection line.
+- Removed 33 reintroduced non-protection tests and four new non-protection tests; retained incoming updates to the protected deployment, Terraform safety, route, and Web deployment tests.
+- Combined the current test policy with the latest imported sandbox and Issue #360 progress evidence.
+- Verification passed: `pnpm test` (518 checks), `pnpm migration:compatibility:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check`.
+
+### 2026-07-15 - Reduce tests to the essential protection line
+
+- Removed 343 non-core test files and retained 47 explicitly reviewed safety and core-workflow test files.
+- Added the retained Web component test, shared type contracts, sandbox preflight/evidence test, and Terraform routing test to the normal `pnpm test` path; the lockfile changed only for the existing `tsx` test runner in `packages/types`.
+- Removed stale deleted-test references from active deployment and asset documentation, and recorded the new protection-line policy in `feature_list.json` while preserving older feature evidence as historical audit records.
+- Verification before this merge: reduced `pnpm test` passed 511 checks across all 47 retained files, and migration compatibility, lint, typecheck, build, harness, and diff checks passed.
+- Risk: AI Architecture, GitOps runtime reconcilers, Reverse Engineering, Cost, Live Observation, notifications, detailed diagram editing, Templates, and presentation behavior no longer have their previous dedicated regression suites.
+
+### 2026-07-15 - Resolve Issue #360 branch conflicts with latest dev
+
+- Merged `origin/dev` at `6f1558bf` while preserving the branch's Area sizing/reconciliation, render-safe history updates, parameter panel layout, and deployment Stepper changes.
+- Preserved dev's Terraform source-authority invalidation, authored-edge route invalidation, Brainboard source geometry, and repository Template contracts.
+- Excluded feature-session plan/spec and archived progress changes from the PR diff; canonical product/deployment documentation remains included where it describes shipped behavior.
+- Verification passed focused API tests (109/109), focused Web conflict tests (214/214), the full Web suite (1,314/1,314), `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. The full API suite was stopped at the user's request after the relevant API coverage passed.
+- No dependency, lockfile, DB migration, Terraform Apply/Destroy, deployment, or cloud mutation was performed.
 
 ### 2026-07-14 - ECS GitOps persistence, immediate replacement, and cleanup
 
@@ -100,7 +131,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Open and babysit the `codex/ecs-deployment-speed` PR against `dev`, address CI/review feedback, and merge only after GitHub reports it ready.
-- No production Terraform apply is required for this change set.
-- If pursuing the 5m30s stretch target, profile the 1m28s validation job and 3m13s API service stabilization before changing safety thresholds.
-- Continue issue #378 only on its dedicated branch; do not mix its sandbox matrix work into this release optimization branch.
+- No continuation is required for the completed test reduction after this branch is reviewed.
+- Resume Issue #378 only on its dedicated branch after its recorded blockers can be addressed.
+- Add future automated coverage only through an explicit update to the essential protection-line policy.

@@ -380,7 +380,7 @@ export function createPastedNodes(
   const resourceNamesByType = getResourceNamesByType(currentNodes);
 
   return sourceNodes.map((node, index) => {
-    const pastedNode = clearParentAreaNodeId({
+    const pastedNode = clearAreaPlacementMetadata({
       ...cloneNode(node),
       id: createDiagramId("node"),
       position: {
@@ -436,12 +436,16 @@ function cloneNode(node: DiagramNode): DiagramNode {
   };
 }
 
-function clearParentAreaNodeId(node: DiagramNode): DiagramNode {
-  if (!node.metadata?.parentAreaNodeId) {
+function clearAreaPlacementMetadata(node: DiagramNode): DiagramNode {
+  if (!node.metadata?.parentAreaNodeId && !node.metadata?.areaAutoSizeBaseline) {
     return node;
   }
 
-  const { parentAreaNodeId: _parentAreaNodeId, ...nextMetadata } = node.metadata;
+  const {
+    areaAutoSizeBaseline: _areaAutoSizeBaseline,
+    parentAreaNodeId: _parentAreaNodeId,
+    ...nextMetadata
+  } = node.metadata;
 
   return {
     ...node,
