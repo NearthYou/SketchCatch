@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { createProjectThumbnailImageLifecycle } from "../../features/dashboard/project-thumbnail-image-lifecycle";
+import { loadProjectThumbnail } from "../../features/dashboard/project-thumbnail-loader";
 import { fetchProjectThumbnail } from "../../features/workspace/api";
 import { BoardThumbnailImage, type BoardThumbnailImageState } from "../architecture-board/BoardThumbnailImage";
 
@@ -18,35 +20,57 @@ export function ProjectArchitectureThumbnail({
 
   useEffect(() => {
     let cancelled = false;
-    let objectUrl: string | null = null;
-
-    setState("loading");
-    setThumbnailUrl(null);
-
-    void fetchProjectThumbnail(projectId).then((blob) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (!blob) {
-        setState("empty");
-        return;
-      }
-
-      objectUrl = URL.createObjectURL(blob);
-      setThumbnailUrl(objectUrl);
-      setState("ready");
-    }).catch(() => {
-      if (!cancelled) {
-        setState("error");
-      }
+    let latestRequest = 0;
+    const thumbnailLifecycle = createProjectThumbnailImageLifecycle({
+      createObjectUrl: URL.createObjectURL,
+      revokeObjectUrl: URL.revokeObjectURL,
+      setState,
+      setThumbnailUrl
     });
+
+    function refreshThumbnail(): void {
+      const request = latestRequest + 1;
+      latestRequest = request;
+
+      setState("loading");
+      setThumbnailUrl(null);
+
+      void loadProjectThumbnail({
+        fetchThumbnail: fetchProjectThumbnail,
+        isCancelled: () => cancelled || latestRequest !== request,
+        projectId
+      })
+        .then((result) => {
+          if (cancelled || latestRequest !== request) {
+            return;
+          }
+
+          thumbnailLifecycle.apply(result);
+        })
+        .catch(() => {
+          if (cancelled || latestRequest !== request) {
+            return;
+          }
+
+          thumbnailLifecycle.apply({ state: "error" });
+        });
+    }
+
+    function handlePageShow(event: PageTransitionEvent): void {
+      if (!event.persisted) {
+        return;
+      }
+
+      refreshThumbnail();
+    }
+
+    refreshThumbnail();
+    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
       cancelled = true;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
+      window.removeEventListener("pageshow", handlePageShow);
+      thumbnailLifecycle.dispose();
     };
   }, [projectId]);
 

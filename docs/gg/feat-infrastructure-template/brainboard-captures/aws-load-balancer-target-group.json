@@ -1,0 +1,440 @@
+{
+  "id": "brainboard-aws-load-balancer-target-group",
+  "sourceTemplateId": "85dda071-ea16-4cbc-9d77-7cebe6ebaadd",
+  "title": "AWS load balancer with target group",
+  "downloads": 300,
+  "status": "captured",
+  "error": null,
+  "origin": {
+    "platform": "brainboard",
+    "author": "Chafik Belhaoues",
+    "sourceTemplateId": "85dda071-ea16-4cbc-9d77-7cebe6ebaadd",
+    "sourceUrl": "https://app.brainboard.co/templates/85dda071-ea16-4cbc-9d77-7cebe6ebaadd",
+    "cloneBoardUrl": "https://app.brainboard.co/a/b7c82e16-49c5-4ed8-bc5f-bd54a4ea8e27/design",
+    "downloads": 300,
+    "capturedAt": "2026-07-14"
+  },
+  "provider": "aws",
+  "viewport": {
+    "viewBox": "-2485.61 -1314.56 4009.5483870967737 2194.1139784946236"
+  },
+  "nodes": [
+    {
+      "height": 1195,
+      "onboarding": "design-area-region",
+      "order": 0,
+      "position": {
+        "x": -1330,
+        "y": -825
+      },
+      "resourceType": "region",
+      "sourceNodeId": "c52a1a71-178d-4ae7-90bf-28a69b7d20a9",
+      "title": "US East (Ohio)",
+      "transform": "translate(-1330, -825), rotate(0 735 597.5)",
+      "width": 1470,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 1075,
+      "onboarding": "design-area-aws_vpc",
+      "order": 1,
+      "position": {
+        "x": -1265,
+        "y": -750
+      },
+      "resourceType": "aws_vpc",
+      "sourceNodeId": "595f9ca1-9786-4270-a86e-f584fd0dd78b",
+      "title": "default",
+      "transform": "translate(-1265, -750), rotate(0 670 537.5)",
+      "width": 1340,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 890,
+      "onboarding": "design-area-aws_security_group",
+      "order": 2,
+      "position": {
+        "x": -1210,
+        "y": -610
+      },
+      "resourceType": "aws_security_group",
+      "sourceNodeId": "c62807d5-e1bf-450d-a78e-bd44c7911496",
+      "title": "sg",
+      "transform": "translate(-1210, -610), rotate(0 620 445)",
+      "width": 1240,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 765,
+      "onboarding": "design-area-availability_zone",
+      "order": 3,
+      "position": {
+        "x": -1140,
+        "y": -550
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "cb5d901c-6f13-45b6-8c28-708389c20c56",
+      "title": "us-east-2a",
+      "transform": "translate(-1140, -550), rotate(0 332.5 382.5)",
+      "width": 665,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 765,
+      "onboarding": "design-area-availability_zone",
+      "order": 4,
+      "position": {
+        "x": -390,
+        "y": -550
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "d5d05b1a-2611-4237-b99e-7e67ad204bcb",
+      "title": "us-east-2b",
+      "transform": "translate(-390, -550), rotate(0 175 382.5)",
+      "width": 350,
+      "parentSourceNodeId": "71f7a4a8-0f10-4c27-ab01-6feb1e6279b4"
+    },
+    {
+      "height": 625,
+      "onboarding": "design-area-aws_subnet",
+      "order": 5,
+      "position": {
+        "x": -1070,
+        "y": -460
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5",
+      "title": "default",
+      "transform": "translate(-1070, -460), rotate(0 270 312.5)",
+      "width": 540,
+      "parentSourceNodeId": "cb5d901c-6f13-45b6-8c28-708389c20c56"
+    },
+    {
+      "height": 600,
+      "onboarding": "design-area-aws_subnet",
+      "order": 6,
+      "position": {
+        "x": -320,
+        "y": -460
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "71f7a4a8-0f10-4c27-ab01-6feb1e6279b4",
+      "title": "subnet2",
+      "transform": "translate(-320, -460), rotate(0 110 300)",
+      "width": 220,
+      "parentSourceNodeId": "d5d05b1a-2611-4237-b99e-7e67ad204bcb"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb_listener",
+      "order": 7,
+      "position": {
+        "x": -850,
+        "y": -230
+      },
+      "resourceType": "aws_lb_listener",
+      "sourceNodeId": "9976bc88-df75-470c-8d22-b9d110e98a1c",
+      "title": "LB listener",
+      "transform": "translate(-850, -230), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb_target_group",
+      "order": 8,
+      "position": {
+        "x": -850,
+        "y": -50
+      },
+      "resourceType": "aws_lb_target_group",
+      "sourceNodeId": "b06847a7-437a-4d11-b271-28a83e9ff1c0",
+      "title": "LB target group",
+      "transform": "translate(-850, -50), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_instance",
+      "order": 9,
+      "position": {
+        "x": -640,
+        "y": 70
+      },
+      "resourceType": "aws_instance",
+      "sourceNodeId": "048a3f38-9205-4ca7-b6fa-5f37ce90c75f",
+      "title": "t3a_9",
+      "transform": "translate(-640, 70), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb_target_group_attachment",
+      "order": 10,
+      "position": {
+        "x": -850,
+        "y": 70
+      },
+      "resourceType": "aws_lb_target_group_attachment",
+      "sourceNodeId": "f18c57e0-c9a1-45c1-83f4-03b84924b7c8",
+      "title": "LB target group attachment",
+      "transform": "translate(-850, 70), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "e275ea03-fd95-411d-bf68-9beda7afa0a5"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_lb",
+      "order": 11,
+      "position": {
+        "x": -460,
+        "y": -570
+      },
+      "resourceType": "aws_lb",
+      "sourceNodeId": "3548540e-5692-4cc2-914b-11b77e43085d",
+      "title": "alb",
+      "transform": "translate(-460, -570), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "595f9ca1-9786-4270-a86e-f584fd0dd78b"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_internet_gateway",
+      "order": 12,
+      "position": {
+        "x": -460,
+        "y": -780
+      },
+      "resourceType": "aws_internet_gateway",
+      "sourceNodeId": "4882367c-117c-4af0-9957-4d6d466d7658",
+      "title": "aws_internet_gateway_12",
+      "transform": "translate(-460, -780), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "595f9ca1-9786-4270-a86e-f584fd0dd78b"
+    }
+  ],
+  "edges": [
+    {
+      "arrow": {
+        "points": "\n            -825,65\n            -820,70\n            -825,75\n          ",
+        "transform": "rotate(90, -820, 70)"
+      },
+      "id": "2ad159bc-2eb3-456b-9fd0-cd9097d152e5",
+      "order": 0,
+      "svgPath": "M-820,70 L-820,10",
+      "sourceNodeId": "f18c57e0-c9a1-45c1-83f4-03b84924b7c8",
+      "targetNodeId": "b06847a7-437a-4d11-b271-28a83e9ff1c0",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": -820,
+        "y": 70
+      },
+      "targetPoint": {
+        "x": -820,
+        "y": 10
+      },
+      "waypoints": [
+        {
+          "x": -820,
+          "y": 70
+        },
+        {
+          "x": -820,
+          "y": 10
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            -795,95\n            -790,100\n            -795,105\n          ",
+        "transform": "rotate(180, -790, 100)"
+      },
+      "id": "41390d4c-557f-408b-88ee-2e17bf180491",
+      "order": 1,
+      "svgPath": "M-790,100 L-640,100",
+      "sourceNodeId": "f18c57e0-c9a1-45c1-83f4-03b84924b7c8",
+      "targetNodeId": "048a3f38-9205-4ca7-b6fa-5f37ce90c75f",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": -790,
+        "y": 100
+      },
+      "targetPoint": {
+        "x": -640,
+        "y": 100
+      },
+      "waypoints": [
+        {
+          "x": -790,
+          "y": 100
+        },
+        {
+          "x": -640,
+          "y": 100
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            -825,-175\n            -820,-170\n            -825,-165\n          ",
+        "transform": "rotate(-90, -820, -170)"
+      },
+      "id": "679bf958-4efb-40ee-8857-3f3dfae97c2a",
+      "order": 2,
+      "svgPath": "M-820,-170 L-820,-50",
+      "sourceNodeId": "9976bc88-df75-470c-8d22-b9d110e98a1c",
+      "targetNodeId": "b06847a7-437a-4d11-b271-28a83e9ff1c0",
+      "sourcePort": "bottom",
+      "targetPort": "top",
+      "sourcePoint": {
+        "x": -820,
+        "y": -170
+      },
+      "targetPoint": {
+        "x": -820,
+        "y": -50
+      },
+      "waypoints": [
+        {
+          "x": -820,
+          "y": -170
+        },
+        {
+          "x": -820,
+          "y": -50
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            -795,-205\n            -790,-200\n            -795,-195\n          ",
+        "transform": "rotate(180, -790, -200)"
+      },
+      "id": "afd07606-c5a2-4fa1-9764-a1a579c41c58",
+      "order": 3,
+      "svgPath": "M-790,-200 L-633,-200 Q-625,-200 -625,-208 L-625,-532 Q-625,-540 -617,-540 L-460,-540",
+      "sourceNodeId": "9976bc88-df75-470c-8d22-b9d110e98a1c",
+      "targetNodeId": "3548540e-5692-4cc2-914b-11b77e43085d",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": -790,
+        "y": -200
+      },
+      "targetPoint": {
+        "x": -460,
+        "y": -540
+      },
+      "waypoints": [
+        {
+          "x": -790,
+          "y": -200
+        },
+        {
+          "x": -633,
+          "y": -200
+        },
+        {
+          "x": -625,
+          "y": -200
+        },
+        {
+          "x": -625,
+          "y": -208
+        },
+        {
+          "x": -625,
+          "y": -532
+        },
+        {
+          "x": -625,
+          "y": -540
+        },
+        {
+          "x": -617,
+          "y": -540
+        },
+        {
+          "x": -460,
+          "y": -540
+        }
+      ]
+    }
+  ],
+  "terraform": {
+    "files": [
+      {
+        "fileName": "main.tf",
+        "code": "resource \"aws_vpc\" \"default\" {\n  cidr_block = \"10.0.0.0/16\"\n}\n\nresource \"aws_subnet\" \"default\" {\n  vpc_id            = aws_vpc.default.id\n  cidr_block        = var.subnet_cidr\n  availability_zone = \"us-east-2a\"\n}\n\nresource \"aws_subnet\" \"subnet2\" {\n  vpc_id            = aws_vpc.default.id\n  cidr_block        = var.subnet2_cidr\n  availability_zone = \"us-east-2b\"\n}\n\nresource \"aws_security_group\" \"sg\" {\n  vpc_id = aws_vpc.default.id\n}\n\nresource \"aws_lb_listener\" \"lb_listner\" {\n  port              = 8080\n  load_balancer_arn = aws_lb.alb.arn\n\n  default_action {\n    type             = \"forward\"\n    target_group_arn = aws_lb_target_group.aws_lb_target_group_8.arn\n  }\n}\n\nresource \"aws_lb_target_group\" \"aws_lb_target_group_8\" {\n  vpc_id   = aws_vpc.default.id\n  protocol = \"HTTP\"\n  port     = 8080\n  name     = \"target-group\"\n}\n\nresource \"aws_instance\" \"t3a_9\" {\n  subnet_id     = aws_subnet.default.id\n  instance_type = \"t3a.micro\"\n  ami           = \"ami-0c2a979b1dbc84003\"\n\n  security_groups = [\n    aws_security_group.sg.id,\n    aws_security_group.sg.id,\n    aws_security_group.sg.id,\n  ]\n}\n\nresource \"aws_lb_target_group_attachment\" \"aws_lb_target_group_attachment_10\" {\n  target_id        = aws_instance.t3a_9.id\n  target_group_arn = aws_lb_target_group.aws_lb_target_group_8.arn\n}\n\nresource \"aws_lb\" \"alb\" {\n  security_groups = [\n    aws_security_group.sg.id,\n  ]\n\n  subnets = [\n    aws_subnet.default.id,\n    aws_subnet.subnet2.id,\n  ]\n}\n\nresource \"aws_internet_gateway\" \"aws_internet_gateway_12\" {\n  vpc_id = aws_vpc.default.id\n}\n\n",
+        "lineCount": 70,
+        "sha256": "660e9ebd4139435182d60c6dc5ba4c03b185bb3c68483ad091e741bb88eabb18",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "backend.tf",
+        "code": "# This architecture uses Brainboard managed storage\n",
+        "lineCount": 2,
+        "sha256": "9bd86a80fa787dddd0ec09ee56ad995ddc8e504826d124a2fa09717444751c31",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "locals.tf",
+        "code": "locals {\n}\n",
+        "lineCount": 3,
+        "sha256": "0b88e8de9a5058ee4a8129450c5c0561b6a0d9306f454517271927ccdcc347f5",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "outputs.tf",
+        "code": "",
+        "lineCount": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "providers.tf",
+        "code": "terraform {\n  required_providers {\n    aws = {\n      version = \"= 5.52.0\"\n    }\n  }\n}\n\nprovider \"aws\" {\n  region = \"us-east-2\"\n}\n",
+        "lineCount": 12,
+        "sha256": "bdc9400ce8e5ed6d2fdd0b086a4810346048dab71515e6f2af62d9df8984b72f",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "terraform.tfvars",
+        "code": "# All variables as it would be defined in the .tfvars file.\n\ntags = {\n  archuuid = \"b7c82e16-49c5-4ed8-bc5f-bd54a4ea8e27\"\n  env      = \"Production\"\n}\n",
+        "lineCount": 7,
+        "sha256": "a8f243d464a32ff5410f3f42facf3c29173e16e246fbf0a379607bc56b3ebb30",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "undefined.tf",
+        "code": "",
+        "lineCount": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "variables.tf",
+        "code": "variable \"subnet2_cidr\" {\n  type    = string\n  default = \"10.0.2.0/24\"\n}\n\nvariable \"subnet_cidr\" {\n  description = \"The default subnet CIDR.\"\n  type        = string\n  default     = \"10.0.1.0/24\"\n}\n\nvariable \"tags\" {\n  description = \"Default tags to apply to all resources.\"\n  type        = map(any)\n  default = {\n    archuuid = \"85dda071-ea16-4cbc-9d77-7cebe6ebaadd\"\n    env      = \"Dev\"\n  }\n}\n\nvariable \"vpc_cidr\" {\n  description = \"The default VPC CIDR block.\"\n  type        = string\n  default     = \"10.0.0.0/16\"\n}\n\n",
+        "lineCount": 27,
+        "sha256": "1248d8f191281aa4ee03b512d9ee81d8eeb98f715040ad98d60d8cbbe5b316e0",
+        "includeInWorkspace": true
+      }
+    ],
+    "resourceAddresses": [
+      "aws_vpc.default",
+      "aws_subnet.default",
+      "aws_subnet.subnet2",
+      "aws_security_group.sg",
+      "aws_lb_listener.lb_listner",
+      "aws_lb_target_group.aws_lb_target_group_8",
+      "aws_instance.t3a_9",
+      "aws_lb_target_group_attachment.aws_lb_target_group_attachment_10",
+      "aws_lb.alb",
+      "aws_internet_gateway.aws_internet_gateway_12"
+    ]
+  }
+}

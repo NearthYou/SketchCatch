@@ -15,17 +15,22 @@ const editorTypesSource = readFileSync(
   fileURLToPath(new URL("../diagram-editor/types.ts", import.meta.url)),
   "utf8"
 );
+const thumbnailSource = readFileSync(
+  fileURLToPath(new URL("./project-board-thumbnail.ts", import.meta.url)),
+  "utf8"
+);
 
-test("successful stable server draft saves await the lifecycle before showing success", () => {
+test("successful stable server draft saves await the thumbnail lifecycle before returning", () => {
   const successBranch = managerSource.slice(
     managerSource.indexOf("if (result.ok)"),
     managerSource.indexOf("serverDirtyRef.current = true", managerSource.indexOf("if (result.ok)"))
   );
 
   assert.doesNotMatch(managerSource, /void captureAndUploadProjectBoardThumbnail/);
+  assert.doesNotMatch(managerSource, /showServerSaveToast/);
   assert.match(
     successBranch,
-    /setServerSaveState\("server-saved"\)[\s\S]*await thumbnailLifecycle\.requestSavedRevision\(result\.serverDraft\.revision\)[\s\S]*showServerSaveToast\(\)[\s\S]*return result/
+    /setServerSaveState\("server-saved"\)[\s\S]*await thumbnailLifecycle\.requestSavedRevision\(result\.serverDraft\.revision\)[\s\S]*return result/
   );
 });
 
@@ -54,4 +59,23 @@ test("DiagramEditor delivers the exact marked ReactFlow element from its current
   assert.match(initBranch, /onBoardReady\?\.\(captureElement\)/);
   assert.match(editorSource, /data-architecture-board-capture-source="true"/);
   assert.match(managerSource, /onBoardReady=\{handleBoardReady\}/);
+});
+
+test("project Board thumbnails capture a fitted full Board instead of the current viewport crop", () => {
+  assert.match(thumbnailSource, /createFullBoardCaptureClone/);
+  assert.match(thumbnailSource, /getLogicalBoardBoundsFromRenderedNodes/);
+  assert.match(thumbnailSource, /getFullBoardThumbnailViewport/);
+  assert.match(thumbnailSource, /cloneViewport\.style\.transform/);
+});
+
+test("fitted Board clone stays capturable without appearing over the live Board", () => {
+  assert.match(thumbnailSource, /const captureHost = document\.createElement\("div"\)/);
+  assert.match(thumbnailSource, /captureHost\.style\.opacity = "0"/);
+  assert.match(thumbnailSource, /captureHost\.append\(clone\)/);
+  assert.match(thumbnailSource, /document\.body\.append\(captureHost\)/);
+  assert.match(
+    thumbnailSource,
+    /clone\.removeAttribute\("data-architecture-board-capture-source"\)/
+  );
+  assert.doesNotMatch(thumbnailSource, /clone\.style\.zIndex = "2147483647"/);
 });

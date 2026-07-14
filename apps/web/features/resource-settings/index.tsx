@@ -37,10 +37,12 @@ import {
   type CuratedModuleDefinition
 } from "./module-catalog";
 import {
+  isBoardTemplateAvailable,
   listBoardTemplates,
+  type AvailableBoardTemplate,
   type BoardTemplate
 } from "./template-library";
-import { setupTemplateLibraryModalAccessibility } from "./template-library-modal-accessibility";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import modalStyles from "./template-library-modal.module.css";
 
 const areaLabels: Record<ResourceArea, string> = {
@@ -139,7 +141,7 @@ const resourceCategoryOrderByArea: Partial<Record<ResourcePanelSectionId, readon
 export type ResourceSettingsPanelProps = {
   catalogProvider?: ResourceCatalogProvider | undefined;
   onModuleAdd?: ((moduleId: string) => void) | undefined;
-  onTemplateApply?: ((template: BoardTemplate) => void) | undefined;
+  onTemplateApply?: ((template: AvailableBoardTemplate) => void) | undefined;
   onCollapse?: (() => void) | undefined;
 };
 
@@ -344,7 +346,7 @@ export function ResourceSettingsPanel({
 function TemplatesPanel({
   onTemplateApply
 }: {
-  readonly onTemplateApply?: ((template: BoardTemplate) => void) | undefined;
+  readonly onTemplateApply?: ((template: AvailableBoardTemplate) => void) | undefined;
 }) {
   const [isModalOpen, setModalOpen] = useState(false);
   const templates = listBoardTemplates();
@@ -367,11 +369,19 @@ function TemplatesPanel({
           <button
             aria-label={`${template.title} Template 적용`}
             className="templateCatalogCard templateApplyCard"
+            disabled={!isBoardTemplateAvailable(template)}
             key={template.id}
-            onClick={() => onTemplateApply?.(template)}
+            onClick={() => {
+              if (isBoardTemplateAvailable(template)) onTemplateApply?.(template);
+            }}
+            title={isBoardTemplateAvailable(template) ? template.title : template.unavailableReason}
             type="button"
           >
-            <span>{template.tags.slice(0, 2).join(" · ")}</span>
+            <span>
+              {isBoardTemplateAvailable(template)
+                ? template.tags.slice(0, 2).join(" · ")
+                : "미리보기 전용"}
+            </span>
             <strong>{template.title}</strong>
           </button>
         ))}
@@ -398,7 +408,7 @@ function TemplateLibraryModal({
   templates
 }: {
   readonly onClose: () => void;
-  readonly onTemplateApply: (template: BoardTemplate) => void;
+  readonly onTemplateApply: (template: AvailableBoardTemplate) => void;
   readonly templates: readonly BoardTemplate[];
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -417,7 +427,7 @@ function TemplateLibraryModal({
 
     if (!overlay || !dialog || !closeButton) return;
 
-    return setupTemplateLibraryModalAccessibility({
+    return setupModalAccessibility({
       closeButton,
       dialog,
       documentRoot: document,
@@ -455,7 +465,7 @@ function TemplateLibraryModal({
           actionLabel="현재 Board에 적용"
           onSelect={(templateId) => {
             const template = templates.find((candidate) => candidate.id === templateId);
-            if (template) onTemplateApply(template);
+            if (template && isBoardTemplateAvailable(template)) onTemplateApply(template);
           }}
           templates={templates}
         />

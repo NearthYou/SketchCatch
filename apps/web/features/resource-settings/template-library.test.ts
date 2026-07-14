@@ -9,6 +9,7 @@ import {
   filterBoardTemplates,
   getBoardTemplateRelationshipCount,
   getBoardTemplateResourceCount,
+  listRepositoryBoardTemplates,
   listBoardTemplateTags,
   listBoardTemplates,
   listLegacyBoardTemplates,
@@ -61,14 +62,27 @@ test("buildBoardTemplateDiagram maps public Repository Analysis template IDs to 
   );
 });
 
-test("filterBoardTemplates searches title, description, and tags", () => {
+test("filterBoardTemplates searches title, description, tags, and deployable resource identities", () => {
   const templates = listBoardTemplates();
 
-  assert.deepEqual(
-    filterBoardTemplates(templates, { query: "CloudFront", sort: "recommended", tag: "all" }).map(
-      (template) => template.id
-    ),
-    ["static-web-hosting"]
+  assert.ok(
+    filterBoardTemplates(templates, { query: "CloudFront", sort: "recommended", tag: "all" }).some(
+      (template) => template.id === "static-web-hosting"
+    )
+  );
+
+  assert.ok(
+    filterBoardTemplates(templates, {
+      query: "aws_instance",
+      sort: "recommended",
+      tag: "all"
+    }).some((template) => template.id === "brainboard-aws-ec2-vpc-subnet")
+  );
+
+  assert.ok(
+    filterBoardTemplates(templates, { query: "EC2", sort: "recommended", tag: "all" }).some(
+      (template) => template.id === "brainboard-aws-ec2-vpc-subnet"
+    )
   );
 });
 
@@ -96,8 +110,8 @@ test("listBoardTemplateTags returns unique sorted tags", () => {
   );
 });
 
-test("listBoardTemplates exposes exactly the six deployable TemplateDefinitions", () => {
-  const templates = listBoardTemplates();
+test("listRepositoryBoardTemplates exposes exactly the six deployable TemplateDefinitions", () => {
+  const templates = listRepositoryBoardTemplates();
 
   assert.deepEqual(
     templates.map((template) => template.id),
@@ -115,6 +129,7 @@ test("Template counts use deployable Terraform identity instead of visual node k
   const parameterlessResource = createCountNode("parameterless-resource", "resource", false);
   const parameterizedDesign = createCountNode("design-region", "design", true);
   const template = {
+    availability: "available" as const,
     id: "count-contract",
     title: "Count contract",
     description: "Count contract fixture",
@@ -134,7 +149,8 @@ test("Template counts use deployable Terraform identity instead of visual node k
         }
       ],
       viewport: { x: 0, y: 0, zoom: 1 }
-    }
+    },
+    terraformFiles: []
   };
 
   assert.equal(getBoardTemplateResourceCount(template), 1);
@@ -142,7 +158,7 @@ test("Template counts use deployable Terraform identity instead of visual node k
 });
 
 test("board templates use 48px geometry and compact Area bounds around direct children", () => {
-  const templates = listBoardTemplates();
+  const templates = listRepositoryBoardTemplates();
   const ordinaryNodes = templates.flatMap((template) =>
     template.diagramJson.nodes.filter((node) => node.kind === "resource" && !isAreaNode(node))
   );
@@ -354,7 +370,7 @@ test("Live Observation template carries the same ASG pressure resources as the d
 test("applyTemplateToDiagramWithBackup backs up the current board and returns the template board", () => {
   const storage = new FakeStorage();
   const currentDiagram = createDiagram("current-node");
-  const template = listBoardTemplates()[0];
+  const template = listRepositoryBoardTemplates()[0];
   assert.ok(template);
 
   const result = applyTemplateToDiagramWithBackup({

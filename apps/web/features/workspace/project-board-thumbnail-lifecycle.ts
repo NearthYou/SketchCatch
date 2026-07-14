@@ -13,6 +13,7 @@ export type ProjectBoardThumbnailLifecycleState =
 
 type ThumbnailWork = {
   readonly checkExisting: boolean;
+  readonly forceCapture: boolean;
   readonly revision: number;
 };
 
@@ -31,19 +32,28 @@ type ProjectBoardThumbnailLifecycleOptions = {
   readonly fetchProjectThumbnail?: ((projectId: string) => Promise<Blob | null>) | undefined;
   readonly onStateChange?: ((state: ProjectBoardThumbnailLifecycleState) => void) | undefined;
   readonly projectId: string;
+  readonly waitForInitialCaptureStability?: (() => Promise<void>) | undefined;
 };
 
 const CAPTURE_UNAVAILABLE_ERROR = new Error(
   "Board capture unavailable for canonical server revision."
 );
 const DISPOSED_ERROR = new Error("Project Board thumbnail lifecycle is disposed.");
+const INITIAL_CAPTURE_SETTLE_DELAY_MS = 600;
+
+function waitForInitialCaptureStability(): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, INITIAL_CAPTURE_SETTLE_DELAY_MS);
+  });
+}
 
 export function createProjectBoardThumbnailLifecycle({
   captureAndUpload = ({ element, projectId }) =>
     captureAndUploadProjectBoardThumbnail({ element, projectId }),
   fetchProjectThumbnail = defaultFetchProjectThumbnail,
   onStateChange,
-  projectId
+  projectId,
+  waitForInitialCaptureStability: waitForInitialCaptureStabilityFn = waitForInitialCaptureStability
 }: ProjectBoardThumbnailLifecycleOptions) {
   let state: ProjectBoardThumbnailLifecycleState = "idle";
   let boardElement: HTMLElement | null = null;
@@ -100,6 +110,9 @@ export function createProjectBoardThumbnailLifecycle({
       if (existingThumbnail) {
         return;
       }
+
+      // 기존 Project를 열 때는 React Flow의 초기 자동 맞춤과 정렬이 끝난 뒤에만 보정 캡처합니다.
+      await waitForInitialCaptureStabilityFn();
     }
 
     publish("capturing");
@@ -167,7 +180,7 @@ export function createProjectBoardThumbnailLifecycle({
       return Promise.reject(DISPOSED_ERROR);
     }
 
-    if (completedRevision >= work.revision) {
+    if (!work.forceCapture && completedRevision >= work.revision) {
       return Promise.resolve();
     }
 
@@ -182,8 +195,15 @@ export function createProjectBoardThumbnailLifecycle({
       failedError = null;
     }
 
-    if (!activeWork || work.revision > activeWork.revision) {
-      if (!pendingWork || work.revision > pendingWork.revision) {
+    const needsCaptureAfterActiveWork =
+      work.forceCapture && activeWork?.forceCapture !== true;
+
+    if (!activeWork || work.revision > activeWork.revision || needsCaptureAfterActiveWork) {
+      if (
+        !pendingWork ||
+        work.revision > pendingWork.revision ||
+        (work.forceCapture && pendingWork.forceCapture !== true)
+      ) {
         pendingWork = work;
       } else if (work.revision === pendingWork.revision && !work.checkExisting) {
         pendingWork = work;
@@ -215,10 +235,10 @@ export function createProjectBoardThumbnailLifecycle({
       return state;
     },
     requestInitialServerRevision(revision: number): Promise<void> {
-      return requestRevision({ checkExisting: true, revision });
+      return requestRevision({ checkExisting: true, forceCapture: false, revision });
     },
     requestSavedRevision(revision: number): Promise<void> {
-      return requestRevision({ checkExisting: false, revision });
+      return requestRevision({ checkExisting: false, forceCapture: true, revision });
     },
     retry(): Promise<void> {
       if (disposed) {

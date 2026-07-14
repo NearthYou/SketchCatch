@@ -30,6 +30,55 @@ test("signup consent view actions stay beside their agreement labels", () => {
   assert.doesNotMatch(authStylesSource, /\.authConsentRow\s*\{[^}]*space-between;/s);
 });
 
+test("signup offers one required-agreement toggle synchronized with both consents", () => {
+  assert.match(signupFormSource, /const allRequiredAgreementsAccepted = termsAccepted && privacyAccepted/);
+  assert.match(signupFormSource, /name="allRequiredAgreementsAccepted"/);
+  assert.match(signupFormSource, /setTermsAccepted\(isAccepted\)/);
+  assert.match(signupFormSource, /setPrivacyAccepted\(isAccepted\)/);
+  assert.match(signupFormSource, /필수 약관 전체 동의/);
+});
+
+test("signup availability and legal actions state their exact purpose", () => {
+  assert.match(signupFormSource, /아이디 중복 확인/);
+  assert.match(signupFormSource, /이메일 중복 확인/);
+  assert.match(signupFormSource, /서비스 이용약관 보기/);
+  assert.match(signupFormSource, /개인정보 수집 및 이용 내용 보기/);
+  assert.match(
+    authStylesSource,
+    /@media \(max-width: 639px\)[\s\S]*\.authConsentRow\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1fr;/s
+  );
+});
+
+test("signup checks valid username and email on blur without repeating the same value", () => {
+  assert.match(signupFormSource, /onBlur=\{handleUsernameAvailabilityBlur\}/);
+  assert.match(signupFormSource, /onBlur=\{handleEmailAvailabilityBlur\}/);
+  assert.match(signupFormSource, /state\.value === value && state\.status !== "error"/);
+});
+
+test("signup input changes cancel stale availability requests before resetting feedback", () => {
+  assert.match(
+    signupFormSource,
+    /function handleUsernameChange\([^)]*\)[\s\S]*?usernameAvailabilityRequest\.cancel\(\)[\s\S]*?setUsernameAvailability\(INITIAL_AVAILABILITY_STATE\)/
+  );
+  assert.match(
+    signupFormSource,
+    /function handleEmailChange\([^)]*\)[\s\S]*?emailAvailabilityRequest\.cancel\(\)[\s\S]*?setEmailAvailability\(INITIAL_AVAILABILITY_STATE\)/
+  );
+  assert.match(signupFormSource, /onChange=\{\(event\) => handleUsernameChange\(event\.target\.value\)\}/);
+  assert.match(signupFormSource, /onChange=\{\(event\) => handleEmailChange\(event\.target\.value\)\}/);
+});
+
+test("signup legal dialog uses the shared modal accessibility lifecycle", () => {
+  assert.match(signupFormSource, /import \{ setupModalAccessibility \}/);
+  assert.match(signupFormSource, /return setupModalAccessibility\(\{/);
+  assert.match(signupFormSource, /overlayRef/);
+  assert.match(signupFormSource, /dialogRef/);
+  assert.match(signupFormSource, /closeButtonRef/);
+  assert.match(signupFormSource, /createPortal\(/);
+  assert.match(signupFormSource, /window\.document\.body/);
+  assert.doesNotMatch(signupFormSource, /window\.addEventListener\("keydown"/);
+});
+
 test("signup fields stay in one narrow column in the requested order", () => {
   assert.doesNotMatch(signupPageSource, /\bwide\b/);
 
@@ -77,6 +126,17 @@ test("signup keeps reserved feedback slots without oversized vertical gaps", () 
   assert.match(authStylesSource, /\.authSignupForm\s*\{[^}]*gap:\s*8px;/s);
 });
 
+test("signup availability controls stay compact on mobile", () => {
+  assert.match(
+    authStylesSource,
+    /\.authInlineControl\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;/s
+  );
+  assert.doesNotMatch(
+    authStylesSource,
+    /@media \(max-width: 639px\)[\s\S]*\.authInlineControl\s*\{[^}]*grid-template-columns:\s*1fr;/s
+  );
+});
+
 test("signup feedback falls back when a warning helper returns an empty string", () => {
   assert.match(
     signupFormSource,
@@ -86,6 +146,13 @@ test("signup feedback falls back when a warning helper returns an empty string",
     signupFormSource,
     /passwordConfirmCapsLockWarning \|\| passwordConfirmMismatchMessage/
   );
+});
+
+test("signup explains the next unmet condition without reserving an empty message row", () => {
+  assert.match(signupFormSource, /signupReadiness\.unmetRequirements\[0\]/);
+  assert.match(signupFormSource, /getSignupRequirementMessage/);
+  assert.match(signupFormSource, /className="authSignupReadiness fullField"/);
+  assert.doesNotMatch(authStylesSource, /\.authSignupReadiness\s*\{[^}]*min-height:/s);
 });
 
 function readAppFile(path: string): string {

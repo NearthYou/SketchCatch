@@ -1,0 +1,1115 @@
+{
+  "id": "brainboard-training-aws-onboarding",
+  "sourceTemplateId": "d71155af-5339-44f1-ae11-2bcd29411c2d",
+  "title": "[Training] AWS onboarding",
+  "downloads": 19855,
+  "status": "captured",
+  "error": null,
+  "origin": {
+    "platform": "brainboard",
+    "author": "Chafik Belhaoues",
+    "sourceTemplateId": "d71155af-5339-44f1-ae11-2bcd29411c2d",
+    "sourceUrl": "https://app.brainboard.co/templates/d71155af-5339-44f1-ae11-2bcd29411c2d",
+    "cloneBoardUrl": "https://app.brainboard.co/a/b6c225e0-102b-4b88-b046-fb7d88c56f2f/design",
+    "downloads": 19855,
+    "capturedAt": "2026-07-14"
+  },
+  "provider": "aws",
+  "viewport": {
+    "viewBox": "-1313.64 -798.37 5622.451612903225 3076.730465949821"
+  },
+  "nodes": [
+    {
+      "height": 700,
+      "onboarding": "design-area-aws_security_group",
+      "order": 0,
+      "position": {
+        "x": 795,
+        "y": 605
+      },
+      "resourceType": "aws_security_group",
+      "sourceNodeId": "c7cf2dc9-4cc9-481f-b53f-9904151e2630",
+      "title": "cluster-sg",
+      "transform": "translate(795, 605), rotate(0 590 350)",
+      "width": 1180,
+      "parentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33"
+    },
+    {
+      "height": 1210,
+      "onboarding": "design-area-region",
+      "order": 1,
+      "position": {
+        "x": 290,
+        "y": 220
+      },
+      "resourceType": "region",
+      "sourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2",
+      "title": "US East (N. Virginia)",
+      "transform": "translate(290, 220), rotate(0 1047.5 605)",
+      "width": 2095,
+      "parentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33"
+    },
+    {
+      "height": 1035,
+      "onboarding": "design-area-aws_vpc",
+      "order": 2,
+      "position": {
+        "x": 760,
+        "y": 315
+      },
+      "resourceType": "aws_vpc",
+      "sourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33",
+      "title": "default",
+      "transform": "translate(760, 315), rotate(0 622.5 517.5)",
+      "width": 1245,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 480,
+      "onboarding": "design-area-availability_zone",
+      "order": 3,
+      "position": {
+        "x": 1610,
+        "y": 745
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "2c258322-661f-471b-b0e6-85d49fd8e46b",
+      "title": "us-east-1b",
+      "transform": "translate(1610, 745), rotate(0 150 240)",
+      "width": 300,
+      "parentSourceNodeId": "9647ef8e-ba33-4608-be6b-79271f103fe3"
+    },
+    {
+      "height": 480,
+      "onboarding": "design-area-availability_zone",
+      "order": 4,
+      "position": {
+        "x": 870,
+        "y": 745
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "dc0a5b25-308f-4bc2-871b-d5083cf2d0e2",
+      "title": "us-east-1a",
+      "transform": "translate(870, 745), rotate(0 150 240)",
+      "width": 300,
+      "parentSourceNodeId": "7fc5471e-298b-4fe8-b8dd-61c9e12374a6"
+    },
+    {
+      "height": 260,
+      "onboarding": "design-area-aws_subnet",
+      "order": 5,
+      "position": {
+        "x": 890,
+        "y": 870
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "7fc5471e-298b-4fe8-b8dd-61c9e12374a6",
+      "title": "snet1",
+      "transform": "translate(890, 870), rotate(0 125 130)",
+      "width": 250,
+      "parentSourceNodeId": "dc0a5b25-308f-4bc2-871b-d5083cf2d0e2"
+    },
+    {
+      "height": 260,
+      "onboarding": "design-area-aws_subnet",
+      "order": 6,
+      "position": {
+        "x": 1630,
+        "y": 870
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "9647ef8e-ba33-4608-be6b-79271f103fe3",
+      "title": "snet2",
+      "transform": "translate(1630, 870), rotate(0 127.5 130)",
+      "width": 255,
+      "parentSourceNodeId": "2c258322-661f-471b-b0e6-85d49fd8e46b"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_iam_role_policy_attachment",
+      "order": 7,
+      "position": {
+        "x": 470,
+        "y": 485
+      },
+      "resourceType": "aws_iam_role_policy_attachment",
+      "sourceNodeId": "1deba4c9-a88f-4b0e-995a-2e5dc304d167",
+      "title": "IAM role policy attachment Registry",
+      "transform": "translate(470, 485), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_iam_role",
+      "order": 8,
+      "position": {
+        "x": 2120,
+        "y": 485
+      },
+      "resourceType": "aws_iam_role",
+      "sourceNodeId": "548abc5b-922e-4cf6-95ea-4c34c2fe5459",
+      "title": "iam-cluster",
+      "transform": "translate(2120, 485), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_iam_role_policy_attachment",
+      "order": 9,
+      "position": {
+        "x": 470,
+        "y": 315
+      },
+      "resourceType": "aws_iam_role_policy_attachment",
+      "sourceNodeId": "57b6aa35-9b3d-46bd-967d-07493b8aaa5e",
+      "title": "IAM role policy attachment CNI policy",
+      "transform": "translate(470, 315), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_iam_role",
+      "order": 10,
+      "position": {
+        "x": 670,
+        "y": 485
+      },
+      "resourceType": "aws_iam_role",
+      "sourceNodeId": "85d344cc-b877-4e92-a4fc-6ac1a7224135",
+      "title": "default-iam",
+      "transform": "translate(670, 485), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_iam_role_policy_attachment",
+      "order": 11,
+      "position": {
+        "x": 470,
+        "y": 665
+      },
+      "resourceType": "aws_iam_role_policy_attachment",
+      "sourceNodeId": "8a4bb82f-8ca2-4314-aa88-a7895bbe985d",
+      "title": "IAM role policy attachment WN",
+      "transform": "translate(470, 665), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_iam_role_policy_attachment",
+      "order": 12,
+      "position": {
+        "x": 2210,
+        "y": 315
+      },
+      "resourceType": "aws_iam_role_policy_attachment",
+      "sourceNodeId": "b1dff648-3242-4a8f-bde8-5a30459b5d09",
+      "title": "IAM role policy attachment RC",
+      "transform": "translate(2210, 315), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_iam_role_policy_attachment",
+      "order": 13,
+      "position": {
+        "x": 2210,
+        "y": 645
+      },
+      "resourceType": "aws_iam_role_policy_attachment",
+      "sourceNodeId": "bb5eb85d-fe0a-4239-affd-f34192d53c79",
+      "title": "IAM role policy attachment CP",
+      "transform": "translate(2210, 645), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "a9e7e1c4-6179-45d2-b7bc-885e61755ac2"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_internet_gateway",
+      "order": 14,
+      "position": {
+        "x": 1380,
+        "y": 285
+      },
+      "resourceType": "aws_internet_gateway",
+      "sourceNodeId": "6c68b992-6afd-4fc8-b37c-45da1f674b4c",
+      "title": "Internet gateway",
+      "transform": "translate(1380, 285), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table",
+      "order": 15,
+      "position": {
+        "x": 1380,
+        "y": 485
+      },
+      "resourceType": "aws_route_table",
+      "sourceNodeId": "f76286ac-796e-463a-b5a7-1fd6bfdc6a7a",
+      "title": "Route table",
+      "transform": "translate(1380, 485), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_eks_cluster",
+      "order": 16,
+      "position": {
+        "x": 1475,
+        "y": 875
+      },
+      "resourceType": "aws_eks_cluster",
+      "sourceNodeId": "0c5bbe79-b35c-46f0-8281-f9e02e95225a",
+      "title": "EKS cluster",
+      "transform": "translate(1475, 875), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_eks_node_group",
+      "order": 17,
+      "position": {
+        "x": 1235,
+        "y": 875
+      },
+      "resourceType": "aws_eks_node_group",
+      "sourceNodeId": "22a6d153-9c4c-49d4-a5b8-3c2fbb29162b",
+      "title": "EKS node group",
+      "transform": "translate(1235, 875), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_security_group_rule",
+      "order": 18,
+      "position": {
+        "x": 1370,
+        "y": 1210
+      },
+      "resourceType": "aws_security_group_rule",
+      "sourceNodeId": "78653b46-a7fb-490f-a677-70663c22cc5c",
+      "title": "SG rule",
+      "transform": "translate(1370, 1210), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "3a7c40fe-8ca2-429b-a762-605aed1a0a33"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table_association",
+      "order": 19,
+      "position": {
+        "x": 980,
+        "y": 945
+      },
+      "resourceType": "aws_route_table_association",
+      "sourceNodeId": "ea26b075-2ec2-4686-9450-92cebdeeee7b",
+      "title": "Route table association",
+      "transform": "translate(980, 945), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "7fc5471e-298b-4fe8-b8dd-61c9e12374a6"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_route_table_association",
+      "order": 20,
+      "position": {
+        "x": 1730,
+        "y": 940
+      },
+      "resourceType": "aws_route_table_association",
+      "sourceNodeId": "ee8367ce-4b1b-4b45-9fca-eeec80c852dd",
+      "title": "Route table association",
+      "transform": "translate(1730, 940), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "9647ef8e-ba33-4608-be6b-79271f103fe3"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-brainboard_icon",
+      "order": 21,
+      "position": {
+        "x": 1380,
+        "y": 30
+      },
+      "resourceType": "brainboard_icon",
+      "sourceNodeId": "e663734e-34c4-4211-825d-f7844e11c3e6",
+      "title": "Internet",
+      "transform": "translate(1380, 30), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": null
+    }
+  ],
+  "edges": [
+    {
+      "arrow": {
+        "points": "\n            2145,480\n            2150,485\n            2145,490\n          ",
+        "transform": "rotate(90, 2150, 485)"
+      },
+      "id": "053bafd1-9b59-4329-adb9-6943b1cb2af1",
+      "order": 0,
+      "svgPath": "M2240,375 L2240,422 Q2240,430 2232,430 L2158,430 Q2150,430 2150,438 L2150,485",
+      "sourceNodeId": "b1dff648-3242-4a8f-bde8-5a30459b5d09",
+      "targetNodeId": "548abc5b-922e-4cf6-95ea-4c34c2fe5459",
+      "sourcePort": "bottom",
+      "targetPort": "top",
+      "sourcePoint": {
+        "x": 2240,
+        "y": 375
+      },
+      "targetPoint": {
+        "x": 2150,
+        "y": 485
+      },
+      "waypoints": [
+        {
+          "x": 2240,
+          "y": 375
+        },
+        {
+          "x": 2240,
+          "y": 422
+        },
+        {
+          "x": 2240,
+          "y": 430
+        },
+        {
+          "x": 2232,
+          "y": 430
+        },
+        {
+          "x": 2158,
+          "y": 430
+        },
+        {
+          "x": 2150,
+          "y": 430
+        },
+        {
+          "x": 2150,
+          "y": 438
+        },
+        {
+          "x": 2150,
+          "y": 485
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            665,510\n            670,515\n            665,520\n          ",
+        "transform": "rotate(0, 670, 515)"
+      },
+      "id": "07f76fd2-c669-48a0-a1f2-cf18a16d08e2",
+      "order": 1,
+      "svgPath": "M530,695 L592,695 Q600,695 600,687 L600,523 Q600,515 608,515 L670,515",
+      "sourceNodeId": "8a4bb82f-8ca2-4314-aa88-a7895bbe985d",
+      "targetNodeId": "85d344cc-b877-4e92-a4fc-6ac1a7224135",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 530,
+        "y": 695
+      },
+      "targetPoint": {
+        "x": 670,
+        "y": 515
+      },
+      "waypoints": [
+        {
+          "x": 530,
+          "y": 695
+        },
+        {
+          "x": 592,
+          "y": 695
+        },
+        {
+          "x": 600,
+          "y": 695
+        },
+        {
+          "x": 600,
+          "y": 687
+        },
+        {
+          "x": 600,
+          "y": 523
+        },
+        {
+          "x": 600,
+          "y": 515
+        },
+        {
+          "x": 608,
+          "y": 515
+        },
+        {
+          "x": 670,
+          "y": 515
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1470,900\n            1475,905\n            1470,910\n          ",
+        "transform": "rotate(0, 1475, 905)"
+      },
+      "id": "2359b3b0-ea92-40cf-b1e2-9f0625a65c01",
+      "order": 2,
+      "svgPath": "M1295,905 L1475,905",
+      "sourceNodeId": "22a6d153-9c4c-49d4-a5b8-3c2fbb29162b",
+      "targetNodeId": "0c5bbe79-b35c-46f0-8281-f9e02e95225a",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 1295,
+        "y": 905
+      },
+      "targetPoint": {
+        "x": 1475,
+        "y": 905
+      },
+      "waypoints": [
+        {
+          "x": 1295,
+          "y": 905
+        },
+        {
+          "x": 1475,
+          "y": 905
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            2115,510\n            2120,515\n            2115,520\n          ",
+        "transform": "rotate(0, 2120, 515)"
+      },
+      "id": "366eae70-2f83-4424-abe8-3edf632ab5e1",
+      "order": 3,
+      "svgPath": "M1505,875 L1505,523 Q1505,515 1513,515 L2120,515",
+      "sourceNodeId": "0c5bbe79-b35c-46f0-8281-f9e02e95225a",
+      "targetNodeId": "548abc5b-922e-4cf6-95ea-4c34c2fe5459",
+      "sourcePort": "top",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 1505,
+        "y": 875
+      },
+      "targetPoint": {
+        "x": 2120,
+        "y": 515
+      },
+      "waypoints": [
+        {
+          "x": 1505,
+          "y": 875
+        },
+        {
+          "x": 1505,
+          "y": 523
+        },
+        {
+          "x": 1505,
+          "y": 515
+        },
+        {
+          "x": 1513,
+          "y": 515
+        },
+        {
+          "x": 2120,
+          "y": 515
+        }
+      ]
+    },
+    {
+      "arrow": null,
+      "id": "3d8d3fac-1a75-4de9-8755-2739a6b1a669",
+      "order": 4,
+      "svgPath": "M2240,645 L2240,603 Q2240,595 2232,595 L2158,595 Q2150,595 2150,587 L2150,545",
+      "sourceNodeId": "bb5eb85d-fe0a-4239-affd-f34192d53c79",
+      "targetNodeId": "548abc5b-922e-4cf6-95ea-4c34c2fe5459",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 2240,
+        "y": 645
+      },
+      "targetPoint": {
+        "x": 2150,
+        "y": 545
+      },
+      "waypoints": [
+        {
+          "x": 2240,
+          "y": 645
+        },
+        {
+          "x": 2240,
+          "y": 603
+        },
+        {
+          "x": 2240,
+          "y": 595
+        },
+        {
+          "x": 2232,
+          "y": 595
+        },
+        {
+          "x": 2158,
+          "y": 595
+        },
+        {
+          "x": 2150,
+          "y": 595
+        },
+        {
+          "x": 2150,
+          "y": 587
+        },
+        {
+          "x": 2150,
+          "y": 545
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1405,540\n            1410,545\n            1405,550\n          ",
+        "transform": "rotate(-90, 1410, 545)"
+      },
+      "id": "3e8f2d11-90ff-46ed-948a-0c3b6342f24a",
+      "order": 5,
+      "svgPath": "M1760,940 L1760,671.501301035246 Q1760,663.501301035246 1752,663.501301035246 L1418,663.501301035246 Q1410,663.501301035246 1410,655.501301035246 L1410,545",
+      "sourceNodeId": "ee8367ce-4b1b-4b45-9fca-eeec80c852dd",
+      "targetNodeId": "f76286ac-796e-463a-b5a7-1fd6bfdc6a7a",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 1760,
+        "y": 940
+      },
+      "targetPoint": {
+        "x": 1410,
+        "y": 545
+      },
+      "waypoints": [
+        {
+          "x": 1760,
+          "y": 940
+        },
+        {
+          "x": 1760,
+          "y": 671.501301035246
+        },
+        {
+          "x": 1760,
+          "y": 663.501301035246
+        },
+        {
+          "x": 1752,
+          "y": 663.501301035246
+        },
+        {
+          "x": 1418,
+          "y": 663.501301035246
+        },
+        {
+          "x": 1410,
+          "y": 663.501301035246
+        },
+        {
+          "x": 1410,
+          "y": 655.501301035246
+        },
+        {
+          "x": 1410,
+          "y": 545
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            725,510\n            730,515\n            725,520\n          ",
+        "transform": "rotate(180, 730, 515)"
+      },
+      "id": "423e0456-611e-430f-b92d-740a0668e776",
+      "order": 6,
+      "svgPath": "M1265,875 L1265,523 Q1265,515 1257,515 L730,515",
+      "sourceNodeId": "22a6d153-9c4c-49d4-a5b8-3c2fbb29162b",
+      "targetNodeId": "85d344cc-b877-4e92-a4fc-6ac1a7224135",
+      "sourcePort": "top",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 1265,
+        "y": 875
+      },
+      "targetPoint": {
+        "x": 730,
+        "y": 515
+      },
+      "waypoints": [
+        {
+          "x": 1265,
+          "y": 875
+        },
+        {
+          "x": 1265,
+          "y": 523
+        },
+        {
+          "x": 1265,
+          "y": 515
+        },
+        {
+          "x": 1257,
+          "y": 515
+        },
+        {
+          "x": 730,
+          "y": 515
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1135,995\n            1140,1000\n            1135,1005\n          ",
+        "transform": "rotate(180, 1140, 1000)"
+      },
+      "id": "4872d155-ca08-4c0f-aabd-c1c7cf992543",
+      "order": 7,
+      "svgPath": "M1265,935 L1265,992 Q1265,1000 1257,1000 L1140,1000",
+      "sourceNodeId": "22a6d153-9c4c-49d4-a5b8-3c2fbb29162b",
+      "targetNodeId": "7fc5471e-298b-4fe8-b8dd-61c9e12374a6",
+      "sourcePort": "bottom",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 1265,
+        "y": 935
+      },
+      "targetPoint": {
+        "x": 1140,
+        "y": 1000
+      },
+      "waypoints": [
+        {
+          "x": 1265,
+          "y": 935
+        },
+        {
+          "x": 1265,
+          "y": 992
+        },
+        {
+          "x": 1265,
+          "y": 1000
+        },
+        {
+          "x": 1257,
+          "y": 1000
+        },
+        {
+          "x": 1140,
+          "y": 1000
+        }
+      ]
+    },
+    {
+      "arrow": null,
+      "id": "4f5bb7e8-8336-4701-81ef-197171a464d1",
+      "order": 8,
+      "svgPath": "M1505,935 L1505,992 Q1505,1000 1513,1000 L1630,1000",
+      "sourceNodeId": "0c5bbe79-b35c-46f0-8281-f9e02e95225a",
+      "targetNodeId": "9647ef8e-ba33-4608-be6b-79271f103fe3",
+      "sourcePort": "bottom",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 1505,
+        "y": 935
+      },
+      "targetPoint": {
+        "x": 1630,
+        "y": 1000
+      },
+      "waypoints": [
+        {
+          "x": 1505,
+          "y": 935
+        },
+        {
+          "x": 1505,
+          "y": 992
+        },
+        {
+          "x": 1505,
+          "y": 1000
+        },
+        {
+          "x": 1513,
+          "y": 1000
+        },
+        {
+          "x": 1630,
+          "y": 1000
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            665,510\n            670,515\n            665,520\n          ",
+        "transform": "rotate(0, 670, 515)"
+      },
+      "id": "4fa5775f-4e74-4e20-be4c-75825e161125",
+      "order": 9,
+      "svgPath": "M530,515 L670,515",
+      "sourceNodeId": "1deba4c9-a88f-4b0e-995a-2e5dc304d167",
+      "targetNodeId": "85d344cc-b877-4e92-a4fc-6ac1a7224135",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 530,
+        "y": 515
+      },
+      "targetPoint": {
+        "x": 670,
+        "y": 515
+      },
+      "waypoints": [
+        {
+          "x": 530,
+          "y": 515
+        },
+        {
+          "x": 670,
+          "y": 515
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1405,540\n            1410,545\n            1405,550\n          ",
+        "transform": "rotate(-90, 1410, 545)"
+      },
+      "id": "73b04e33-2ceb-4b96-a2cf-21f1b6645506",
+      "order": 10,
+      "svgPath": "M1010,945 L1010,672.5243386243386 Q1010,664.5243386243386 1018,664.5243386243386 L1402,664.5243386243386 Q1410,664.5243386243386 1410,656.5243386243386 L1410,545",
+      "sourceNodeId": "ea26b075-2ec2-4686-9450-92cebdeeee7b",
+      "targetNodeId": "f76286ac-796e-463a-b5a7-1fd6bfdc6a7a",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 1010,
+        "y": 945
+      },
+      "targetPoint": {
+        "x": 1410,
+        "y": 545
+      },
+      "waypoints": [
+        {
+          "x": 1010,
+          "y": 945
+        },
+        {
+          "x": 1010,
+          "y": 672.5243386243386
+        },
+        {
+          "x": 1010,
+          "y": 664.5243386243386
+        },
+        {
+          "x": 1018,
+          "y": 664.5243386243386
+        },
+        {
+          "x": 1402,
+          "y": 664.5243386243386
+        },
+        {
+          "x": 1410,
+          "y": 664.5243386243386
+        },
+        {
+          "x": 1410,
+          "y": 656.5243386243386
+        },
+        {
+          "x": 1410,
+          "y": 545
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1405,340\n            1410,345\n            1405,350\n          ",
+        "transform": "rotate(-90, 1410, 345)"
+      },
+      "id": "8df9f4d0-cc37-4301-85e1-4e56dc69ffc1",
+      "order": 11,
+      "svgPath": "M1410,485 L1410,345",
+      "sourceNodeId": "f76286ac-796e-463a-b5a7-1fd6bfdc6a7a",
+      "targetNodeId": "6c68b992-6afd-4fc8-b37c-45da1f674b4c",
+      "sourcePort": "top",
+      "targetPort": "bottom",
+      "sourcePoint": {
+        "x": 1410,
+        "y": 485
+      },
+      "targetPoint": {
+        "x": 1410,
+        "y": 345
+      },
+      "waypoints": [
+        {
+          "x": 1410,
+          "y": 485
+        },
+        {
+          "x": 1410,
+          "y": 345
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1135,995\n            1140,1000\n            1135,1005\n          ",
+        "transform": "rotate(180, 1140, 1000)"
+      },
+      "id": "91cc4f47-f71c-44cc-b7f0-9c350631ce23",
+      "order": 12,
+      "svgPath": "M1475,905 L1315.5,905 Q1307.5,905 1307.5,913 L1307.5,992 Q1307.5,1000 1299.5,1000 L1140,1000",
+      "sourceNodeId": "0c5bbe79-b35c-46f0-8281-f9e02e95225a",
+      "targetNodeId": "7fc5471e-298b-4fe8-b8dd-61c9e12374a6",
+      "sourcePort": "left",
+      "targetPort": "right",
+      "sourcePoint": {
+        "x": 1475,
+        "y": 905
+      },
+      "targetPoint": {
+        "x": 1140,
+        "y": 1000
+      },
+      "waypoints": [
+        {
+          "x": 1475,
+          "y": 905
+        },
+        {
+          "x": 1315.5,
+          "y": 905
+        },
+        {
+          "x": 1307.5,
+          "y": 905
+        },
+        {
+          "x": 1307.5,
+          "y": 913
+        },
+        {
+          "x": 1307.5,
+          "y": 992
+        },
+        {
+          "x": 1307.5,
+          "y": 1000
+        },
+        {
+          "x": 1299.5,
+          "y": 1000
+        },
+        {
+          "x": 1140,
+          "y": 1000
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            1625,995\n            1630,1000\n            1625,1005\n          ",
+        "transform": "rotate(0, 1630, 1000)"
+      },
+      "id": "a966941f-459d-46ed-a12f-058d98207486",
+      "order": 13,
+      "svgPath": "M1265,935 L1265,992 Q1265,1000 1273,1000 L1630,1000",
+      "sourceNodeId": "22a6d153-9c4c-49d4-a5b8-3c2fbb29162b",
+      "targetNodeId": "9647ef8e-ba33-4608-be6b-79271f103fe3",
+      "sourcePort": "bottom",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 1265,
+        "y": 935
+      },
+      "targetPoint": {
+        "x": 1630,
+        "y": 1000
+      },
+      "waypoints": [
+        {
+          "x": 1265,
+          "y": 935
+        },
+        {
+          "x": 1265,
+          "y": 992
+        },
+        {
+          "x": 1265,
+          "y": 1000
+        },
+        {
+          "x": 1273,
+          "y": 1000
+        },
+        {
+          "x": 1630,
+          "y": 1000
+        }
+      ]
+    },
+    {
+      "arrow": {
+        "points": "\n            665,510\n            670,515\n            665,520\n          ",
+        "transform": "rotate(0, 670, 515)"
+      },
+      "id": "fc69d821-929a-4a03-95f9-6f456d914568",
+      "order": 14,
+      "svgPath": "M530,345 L592,345 Q600,345 600,353 L600,507 Q600,515 608,515 L670,515",
+      "sourceNodeId": "57b6aa35-9b3d-46bd-967d-07493b8aaa5e",
+      "targetNodeId": "85d344cc-b877-4e92-a4fc-6ac1a7224135",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 530,
+        "y": 345
+      },
+      "targetPoint": {
+        "x": 670,
+        "y": 515
+      },
+      "waypoints": [
+        {
+          "x": 530,
+          "y": 345
+        },
+        {
+          "x": 592,
+          "y": 345
+        },
+        {
+          "x": 600,
+          "y": 345
+        },
+        {
+          "x": 600,
+          "y": 353
+        },
+        {
+          "x": 600,
+          "y": 507
+        },
+        {
+          "x": 600,
+          "y": 515
+        },
+        {
+          "x": 608,
+          "y": 515
+        },
+        {
+          "x": 670,
+          "y": 515
+        }
+      ]
+    }
+  ],
+  "terraform": {
+    "files": [
+      {
+        "fileName": "main.tf",
+        "code": "resource \"aws_vpc\" \"default\" {\n  tags       = merge(var.tags, {})\n  cidr_block = var.vpc_cidr\n}\n\nresource \"aws_subnet\" \"snet1\" {\n  vpc_id                  = aws_vpc.default.id\n  tags                    = merge(var.tags, {})\n  map_public_ip_on_launch = true\n  cidr_block              = var.subnets[0]\n  availability_zone       = \"us-east-1a\"\n}\n\nresource \"aws_subnet\" \"snet2\" {\n  vpc_id                  = aws_vpc.default.id\n  tags                    = merge(var.tags, {})\n  map_public_ip_on_launch = true\n  cidr_block              = var.subnets[1]\n  availability_zone       = \"us-east-1b\"\n}\n\nresource \"aws_internet_gateway\" \"gtw\" {\n  vpc_id = aws_vpc.default.id\n\n  tags = {\n    Name = \"Brainboard k8s\"\n    Env  = \"Development\"\n  }\n}\n\nresource \"aws_route_table\" \"default\" {\n  vpc_id = aws_vpc.default.id\n  tags   = merge(var.tags, {})\n\n  route {\n    gateway_id = aws_internet_gateway.gtw.id\n    cidr_block = \"0.0.0.0/0\"\n  }\n}\n\nresource \"aws_route_table_association\" \"route-association-2\" {\n  subnet_id      = aws_subnet.snet2.id\n  route_table_id = aws_route_table.default.id\n}\n\nresource \"aws_iam_role\" \"default-iam\" {\n  tags               = merge(var.tags, {})\n  assume_role_policy = jsonencode({ \"Statement\" : [{ \"Action\" : \"sts:AssumeRole\", \"Effect\" : \"Allow\", \"Principal\" : { \"Service\" : \"ec2.amazonaws.com\" } }], \"Version\" : \"2012-10-17\" })\n}\n\nresource \"aws_iam_role_policy_attachment\" \"node-AmazonEC2ContainerRegistryReadOnly\" {\n  role       = aws_iam_role.default-iam.name\n  policy_arn = \"arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly\"\n}\n\nresource \"aws_iam_role_policy_attachment\" \"node-AmazonEKSWorkerNodePolicy\" {\n  role       = aws_iam_role.default-iam.name\n  policy_arn = \"arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy\"\n}\n\nresource \"aws_iam_role_policy_attachment\" \"node-AmazonEKS_CNI_Policy\" {\n  role       = aws_iam_role.default-iam.name\n  policy_arn = \"arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy\"\n}\n\nresource \"aws_eks_node_group\" \"default\" {\n  tags            = merge(var.tags, {})\n  node_role_arn   = aws_iam_role.default-iam.arn\n  node_group_name = \"brainboard_k8s\"\n  cluster_name    = aws_eks_cluster.default.name\n\n  depends_on = [\n    aws_iam_role_policy_attachment.node-AmazonEKSWorkerNodePolicy,\n    aws_iam_role_policy_attachment.node-AmazonEKS_CNI_Policy,\n    aws_iam_role_policy_attachment.node-AmazonEC2ContainerRegistryReadOnly,\n  ]\n\n  scaling_config {\n    min_size     = var.scaling.min\n    max_size     = var.scaling.max\n    desired_size = var.scaling.desired\n  }\n\n  subnet_ids = [\n    aws_subnet.snet1.id,\n    aws_subnet.snet2.id,\n  ]\n}\n\nresource \"aws_iam_role\" \"iam-cluster\" {\n  tags               = merge(var.tags, {})\n  name               = \"brainboard-k8s-cluster\"\n  assume_role_policy = jsonencode({ \"Statement\" : [{ \"Action\" : \"sts:AssumeRole\", \"Effect\" : \"Allow\", \"Principal\" : { \"Service\" : \"eks.amazonaws.com\" } }], \"Version\" : \"2012-10-17\" })\n}\n\nresource \"aws_iam_role_policy_attachment\" \"cluster-AmazonEKSClusterPolicy\" {\n  role       = aws_iam_role.iam-cluster.name\n  policy_arn = \"arn:aws:iam::aws:policy/AmazonEKSClusterPolicy\"\n}\n\nresource \"aws_iam_role_policy_attachment\" \"cluster-AmazonEKSVPCResourceController\" {\n  role       = aws_iam_role.iam-cluster.name\n  policy_arn = \"arn:aws:iam::aws:policy/AmazonEKSVPCResourceController\"\n}\n\nresource \"aws_security_group\" \"cluster-sg\" {\n  vpc_id      = aws_vpc.default.id\n  tags        = merge(var.tags, {})\n  name        = var.sg_name\n  description = \"Cluster communication with worker nodes\"\n\n  egress {\n    to_port   = 0\n    protocol  = \"-1\"\n    from_port = 0\n\n    cidr_blocks = [\n      \"0.0.0.0/0\",\n    ]\n  }\n}\n\nresource \"aws_security_group_rule\" \"cluster-ingress-workstation-https\" {\n  type              = \"ingress\"\n  to_port           = 443\n  security_group_id = aws_security_group.cluster-sg.id\n  protocol          = \"tcp\"\n  from_port         = 443\n  description       = \"Allow workstation to communicate with the cluster API Server\"\n\n  cidr_blocks = [\n    var.workstation-external-cidr,\n  ]\n}\n\nresource \"aws_eks_cluster\" \"default\" {\n  role_arn = aws_iam_role.iam-cluster.arn\n  name     = var.cluster-name\n\n  depends_on = [\n    aws_iam_role_policy_attachment.cluster-AmazonEKSClusterPolicy,\n    aws_iam_role_policy_attachment.cluster-AmazonEKSVPCResourceController,\n  ]\n\n  tags = {\n    env      = \"Staging\"\n    archUUID = \"db83bcc0-696a-4f64-a6d5-fcc143caf3e2\"\n  }\n\n  vpc_config {\n    security_group_ids = [\n      aws_security_group.cluster-sg.id,\n    ]\n\n    subnet_ids = [\n      aws_subnet.snet1.id,\n      aws_subnet.snet2.id,\n    ]\n  }\n}\n\nresource \"aws_route_table_association\" \"route-association-3\" {\n  subnet_id      = aws_subnet.snet1.id\n  route_table_id = aws_route_table.default.id\n}\n\n",
+        "lineCount": 167,
+        "sha256": "ec488152058a76ece64b7d435531e22e2044af181310b82f1894f8ea977ccbe0",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "backend.tf",
+        "code": "# This architecture uses Brainboard managed storage\n",
+        "lineCount": 2,
+        "sha256": "9bd86a80fa787dddd0ec09ee56ad995ddc8e504826d124a2fa09717444751c31",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "locals.tf",
+        "code": "locals {\n}\n",
+        "lineCount": 3,
+        "sha256": "0b88e8de9a5058ee4a8129450c5c0561b6a0d9306f454517271927ccdcc347f5",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "outputs.tf",
+        "code": "",
+        "lineCount": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "providers.tf",
+        "code": "terraform {\n  required_providers {\n    aws = {\n      version = \"= 5.52.0\"\n    }\n  }\n}\n\nprovider \"aws\" {\n  region = \"us-east-1\"\n}\n",
+        "lineCount": 12,
+        "sha256": "48a1ad8474f71e7904ac0639c3460b7a75ce71df8f5720658e9f012904229dfd",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "terraform.tfvars",
+        "code": "# All variables as it would be defined in the .tfvars file.\n\ntags = {\n  archuuid = \"b6c225e0-102b-4b88-b046-fb7d88c56f2f\"\n  env      = \"Production\"\n}\n",
+        "lineCount": 7,
+        "sha256": "399196eb1b7d0ba4474d68009f46082e4abbf2ca4d836db496c36612c06653a2",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "variables.tf",
+        "code": "variable \"cluster-name\" {\n  type    = string\n  default = \"brainboard-eks-demo\"\n}\n\nvariable \"scaling\" {\n  description = \"The scaling capacity of the cluster.\"\n  type        = map(any)\n  default = {\n    desired = 1\n    max     = 1\n    min     = 1\n  }\n}\n\nvariable \"sg_name\" {\n  description = \"Default security group for the cluster.\"\n  type        = string\n  default     = \"kube_sg\"\n}\n\nvariable \"subnets\" {\n  description = \"Subnets where cluster resources are deployed.\"\n  type        = list(string)\n  default     = [\"10.0.0.0/24\", \"10.0.1.0/24\"]\n}\n\nvariable \"tags\" {\n  description = \"Default tags to apply to all resources.\"\n  type        = map(any)\n  default = {\n    archuuid = \"d71155af-5339-44f1-ae11-2bcd29411c2d\"\n    env      = \"Training templates\"\n  }\n}\n\nvariable \"vpc_cidr\" {\n  description = \"CIDR block used by the main VPC.\"\n  type        = string\n  default     = \"10.0.0.0/16\"\n}\n\nvariable \"workstation-external-cidr\" {\n  type    = string\n  default = \"0.0.0.0/0\"\n}\n\n",
+        "lineCount": 48,
+        "sha256": "b523a2ba4ae3cbf5e02cf82f42d9035c99ec5617a4e016c3b316e4ab9d4532a3",
+        "includeInWorkspace": true
+      }
+    ],
+    "resourceAddresses": [
+      "aws_vpc.default",
+      "aws_subnet.snet1",
+      "aws_subnet.snet2",
+      "aws_internet_gateway.gtw",
+      "aws_route_table.default",
+      "aws_route_table_association.route-association-2",
+      "aws_iam_role.default-iam",
+      "aws_iam_role_policy_attachment.node-AmazonEC2ContainerRegistryReadOnly",
+      "aws_iam_role_policy_attachment.node-AmazonEKSWorkerNodePolicy",
+      "aws_iam_role_policy_attachment.node-AmazonEKS_CNI_Policy",
+      "aws_eks_node_group.default",
+      "aws_iam_role.iam-cluster",
+      "aws_iam_role_policy_attachment.cluster-AmazonEKSClusterPolicy",
+      "aws_iam_role_policy_attachment.cluster-AmazonEKSVPCResourceController",
+      "aws_security_group.cluster-sg",
+      "aws_security_group_rule.cluster-ingress-workstation-https",
+      "aws_eks_cluster.default",
+      "aws_route_table_association.route-association-3"
+    ]
+  }
+}

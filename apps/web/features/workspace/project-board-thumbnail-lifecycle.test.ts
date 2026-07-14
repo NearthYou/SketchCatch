@@ -41,6 +41,56 @@ test("initial server revision waits for Board readiness and backfills a missing 
   assert.equal(lifecycle.getState(), "ready");
 });
 
+test("initial missing-thumbnail backfill waits for the Board to settle before capturing", async () => {
+  const settleGate = createDeferred<void>();
+  const calls: string[] = [];
+  const lifecycle = createProjectBoardThumbnailLifecycle({
+    projectId,
+    fetchProjectThumbnail: async () => {
+      calls.push("check");
+      return null;
+    },
+    waitForInitialCaptureStability: async () => {
+      calls.push("wait");
+      await settleGate.promise;
+    },
+    captureAndUpload: async () => {
+      calls.push("capture");
+      return { status: "uploaded", assetId: "asset-after-settle" };
+    }
+  });
+  lifecycle.setBoardElement({} as HTMLElement);
+
+  const initialCapture = lifecycle.requestInitialServerRevision(7);
+  await flushMicrotasks();
+  assert.deepEqual(calls, ["check", "wait"]);
+
+  settleGate.resolve();
+  await initialCapture;
+  assert.deepEqual(calls, ["check", "wait", "capture"]);
+});
+
+test("manual save skips the initial Board settling delay", async () => {
+  let settleWaits = 0;
+  let captureCount = 0;
+  const lifecycle = createProjectBoardThumbnailLifecycle({
+    projectId,
+    fetchProjectThumbnail: async () => assert.fail("manual save must not check"),
+    waitForInitialCaptureStability: async () => {
+      settleWaits += 1;
+    },
+    captureAndUpload: async () => {
+      captureCount += 1;
+      return { status: "uploaded", assetId: "asset-manual" };
+    }
+  });
+  lifecycle.setBoardElement({} as HTMLElement);
+
+  await lifecycle.requestSavedRevision(8);
+  assert.equal(settleWaits, 0);
+  assert.equal(captureCount, 1);
+});
+
 test("initial server revision keeps an existing thumbnail without capturing", async () => {
   const states: ProjectBoardThumbnailLifecycleState[] = [];
   const lifecycle = createProjectBoardThumbnailLifecycle({
@@ -54,6 +104,24 @@ test("initial server revision keeps an existing thumbnail without capturing", as
   await lifecycle.requestInitialServerRevision(4);
 
   assert.deepEqual(states, ["checking", "ready"]);
+});
+
+test("manual save recaptures an existing thumbnail even when the server revision is unchanged", async () => {
+  const captures: number[] = [];
+  const lifecycle = createProjectBoardThumbnailLifecycle({
+    projectId,
+    fetchProjectThumbnail: async () => new Blob(["existing"], { type: "image/webp" }),
+    captureAndUpload: async ({ revision }) => {
+      captures.push(revision);
+      return { status: "uploaded", assetId: "asset-manual-refresh" };
+    }
+  });
+  lifecycle.setBoardElement({} as HTMLElement);
+
+  await lifecycle.requestInitialServerRevision(4);
+  await lifecycle.requestSavedRevision(4);
+
+  assert.deepEqual(captures, [4]);
 });
 
 test("freshly saved revision skips the existence check and remains awaited through capture", async () => {

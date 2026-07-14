@@ -159,6 +159,46 @@ test("raises undersized custom resources only to the 28px resize minimum", () =>
   assert.deepEqual(result.nodes[0]?.position, { x: 96, y: 80 });
 });
 
+test("source-exact diagrams bypass legacy size and parent normalization", () => {
+  const authoredContainer: DiagramNode = {
+    id: "captured-container",
+    kind: "design",
+    label: "Captured container",
+    locked: false,
+    position: { x: -237.5, y: 41.25 },
+    size: { width: 1180, height: 700 },
+    type: "captured_container",
+    zIndex: -3
+  };
+  const authoredResource: DiagramNode = {
+    ...makeResourceNode({
+      id: "captured-resource",
+      parentAreaNodeId: authoredContainer.id,
+      position: { x: -81.75, y: 192.5 },
+      size: { width: 60, height: 60 }
+    }),
+    rotation: -90,
+    zIndex: 27
+  };
+  const diagram: DiagramJson = {
+    ...makeDiagram(authoredContainer, authoredResource),
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -500, y: -40, width: 1500, height: 900 }
+    }
+  };
+
+  const result = normalizeDiagramResourceNodeGeometry(diagram);
+
+  assert.equal(result, diagram);
+  assert.deepEqual(result.nodes, [authoredContainer, authoredResource]);
+  assert.equal(result.nodes[1]?.metadata?.parentAreaNodeId, authoredContainer.id);
+  assert.deepEqual(result.nodes[1]?.position, { x: -81.75, y: 192.5 });
+  assert.deepEqual(result.nodes[1]?.size, { width: 60, height: 60 });
+  assert.equal(result.nodes[1]?.rotation, -90);
+  assert.equal(result.nodes[1]?.zIndex, 27);
+});
+
 function makeDiagram(...nodes: DiagramNode[]): DiagramJson {
   return {
     nodes,

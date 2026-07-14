@@ -23,11 +23,13 @@ import type {
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   DesignSimulationResult,
+  RepositoryAnalysisTemplateId,
   SourceRepositoryAnalysisResult,
   TranscribeConfirmation,
   VoiceRequirementInput
 } from "@sketchcatch/types";
 import {
+  REPOSITORY_TEMPLATE_IDS,
   REPOSITORY_ARCHITECTURE_FACT_KINDS,
   RESOURCE_TYPES,
   TEMPLATE_IDS
@@ -165,7 +167,8 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
   }
 });
 
-const repositoryTemplateIdSchema = z.enum(TEMPLATE_IDS);
+export const repositoryTemplateIdSchema = z.enum(REPOSITORY_TEMPLATE_IDS) satisfies
+  z.ZodType<RepositoryAnalysisTemplateId>;
 
 const sourceRepositoryAnalysisBodySchema = z.object({
   repositoryUrl: z

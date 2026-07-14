@@ -485,13 +485,14 @@
         "commands": [
           "pnpm test:sandbox-e2e",
           "pnpm sandbox:e2e preflight",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-pipeline-run-service.test.ts src/git-cicd/github-actions-run-provider.test.ts src/source-repositories/github-app-client.test.ts src/git-cicd/git-cicd-pipeline-run-repository.test.ts src/git-cicd/git-cicd-workflows.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-destroy-service.test.ts src/deployments/direct-application-release-service.test.ts src/deployments/aws-codebuild-direct-application-release-gateway.test.ts src/deployments/direct-application-release-evidence-verifier.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/routes/deployments.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test app/projects/[[]projectId[]]/settings/project-deployment-target-state.test.ts",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build"
         ],
-        "notes": "Direct ECS live deployment passed with exact commit, ECR digest, task revision, persisted release/history/log/notification evidence, CloudWatch metrics, and HTTPS 200. GitHub Actions ECS deployment run 29324643997 attempt 2 also reached HTTPS 200 with matching merge SHA, digest, and task revision, but service-side pipeline refresh returned stale and persisted no run/release because the successful run used a later workflow-fix merge than the handoff. QR correctly failed closed without the custom-domain/ACM/Route53 contract; Static, Lambda, EC2/ASG, Web Push delivery, and rollback remain incomplete. Infrastructure reached DESTROYED and issue-scoped CodeBuild, ECR, S3 versions/buckets, CloudWatch logs, CodeConnection, ALB, target groups, ECS cluster/task definitions, CloudFront, OIDC, and temporary policies all verify at zero. Focused changed-path tests, lint, typecheck, and build pass."
+        "notes": "Direct ECS evidence remains verified. ECS GitOps Infra run 29334708442 and App run 29334822683 succeeded for SHA 3a12e55c13e7be1a769cfbe920b112516d8c14ce, digest 20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1, task definition revision 7, HTTPS 200, and desired/running 1/1. Project refresh returned stale=false with all seven stages succeeded, 1,161 masked logs, and a persisted matching ApplicationRelease. External ID rotation accepted the new value and rejected the old value. Destroy run 29337235499 succeeded; direct queries show zero cost-bearing issue resources, buckets, OIDC provider, task definitions, and task roles. Resource Groups retains three eventually consistent deleted-ECS tag entries. QR, Static, Lambda, EC2/ASG, Web Push delivery, and rollback remain incomplete, so the feature stays in_progress."
       },
       "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
     },
@@ -549,6 +550,39 @@
         "notes": "All 60 focused tests passed. The full Web suite passed 1,123/1,124 and retains one unrelated Windows Korean day-period locale failure. Workspace visual QA covered 11-node Serverless and 18-resource VPC/ALB/Fargate/Data/CI-CD/Observability fixtures. The live AI generation endpoint returned 503, so manual patch UI behavior is supported by integration tests rather than claimed as live-screen verified."
       },
       "notes": "No runtime dependency, Terraform execution, cloud mutation, commit, push, or PR was created."
+    },
+    {
+      "id": "PRODUCTION-ECS-DEPLOYMENT-SPEED-001",
+      "priority": 1,
+      "area": "production-deployment",
+      "title": "Measured production ECS deployment acceleration",
+      "user_visible_behavior": "운영자는 API와 web image를 ECR remote cache로 병렬 빌드하고 immutable digest로 배포하며, 실제 production 실행에서 단계별 소요 시간과 rollback 기준을 확인한다.",
+      "status": "passing",
+      "verification": [
+        "API와 web image가 분리된 job에서 ECR registry cache를 사용해 병렬 build/push된다.",
+        "cache tag는 ECS에 배포되지 않고 검증된 release digest만 task definition에 반영된다.",
+        "생성된 사용자 ECS/Fargate CodeBuild workflow도 ECR remote cache와 release digest 검증을 유지한다.",
+        "production preflight, 실제 ECS 배포, post-deploy health smoke, read-only Terraform plan이 성공한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts",
+          "terraform -chdir=infra/aws/terraform fmt -check -recursive",
+          "terraform -chdir=infra/aws/terraform test",
+          "node scripts/check-production-infra.mjs",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke/ecs-ops-preflight.ps1 -PreflightOnly",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "GitHub Actions Deploy Production ECS run 29333857003",
+          "GitHub Actions Production Infrastructure Plan run 29334381609",
+          "HTTPS GET https://sketchcatch.net/, /health, /health/db"
+        ],
+        "notes": "Production completed in 6m09s versus the 7m51s median baseline. Warm image build-push critical path was 7s versus 81s. API/web stabilization was 3m13s/2m56s, all health endpoints returned 200, and the read-only runtime plan reported no infrastructure changes. The full workspace test attempt timed out after 15 minutes; focused changed-path tests and all required build checks passed."
+      },
+      "notes": "The 5m30s total stretch target remains unmet; validation and API stabilization are the next measured bottlenecks."
     }
   ]
 }

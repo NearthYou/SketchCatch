@@ -27,11 +27,13 @@ export function requestSignup(payload: SignupRequest): Promise<AuthResponse> {
 }
 
 export function requestSignupAvailability(
-  payload: SignupAvailabilityRequest
+  payload: SignupAvailabilityRequest,
+  options: { readonly signal?: AbortSignal } = {}
 ): Promise<SignupAvailabilityResponse> {
   return apiFetch<SignupAvailabilityResponse>("/auth/signup/availability", {
     body: payload,
-    method: "POST"
+    method: "POST",
+    ...(options.signal ? { signal: options.signal } : {})
   });
 }
 

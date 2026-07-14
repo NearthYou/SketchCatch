@@ -193,7 +193,7 @@
   gap: 6px;
   min-width: 220px;
   color: var(--color-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -277,7 +277,7 @@
 
 .monthlyComparisonHeader h2 { margin: 0; color: var(--color-ink); font-size: 16px; }
 .monthlyComparisonHeader p { margin: 5px 0 0; color: var(--color-body); font-size: 13px; line-height: 1.5; }
-.monthlyComparisonHeader > span { flex: none; border-radius: var(--radius-pill); padding: 5px 9px; background: var(--color-surface-strong); color: var(--color-body); font-size: 11px; font-weight: 700; }
+.monthlyComparisonHeader > span { flex: none; border-radius: var(--radius-pill); padding: 5px 9px; background: var(--color-surface-strong); color: var(--color-body); font-size: 12px; font-weight: 700; }
 
 .monthlyComparisonGrid {
   display: grid;
@@ -287,7 +287,7 @@
 
 .monthlySummaryCard { display: grid; gap: 8px; border: 1px solid var(--color-hairline); border-radius: var(--radius-control); padding: 14px; background: var(--color-surface); }
 .monthlySummaryCard > span { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; color: var(--color-body); font-size: 12px; font-weight: 600; }
-.monthlySummaryCard small { border-radius: var(--radius-pill); padding: 3px 6px; background: var(--color-surface-strong); color: var(--color-body); font-size: 10px; white-space: nowrap; }
+.monthlySummaryCard small { border-radius: var(--radius-pill); padding: 3px 6px; background: var(--color-surface-strong); color: var(--color-body); font-size: 12px; white-space: nowrap; }
 .monthlySummaryCard strong { color: var(--color-ink); font-size: 20px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; white-space: nowrap; }
 .monthlySummaryCard[data-direction="up"] strong { color: var(--color-error); }
 .monthlySummaryCard[data-direction="down"] strong { color: var(--color-success); }
@@ -295,13 +295,13 @@
 .monthlyChartViewport { overflow-x: auto; padding: 4px 0 2px; }
 .monthlyChart { display: grid; min-width: 520px; height: 190px; grid-template-columns: repeat(6, minmax(64px, 1fr)); gap: 12px; }
 .monthlyBar { display: grid; min-width: 0; grid-template-rows: 26px minmax(0, 1fr) 32px; gap: 5px; text-align: center; }
-.monthlyBar > strong { overflow: hidden; color: var(--color-body); font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.monthlyBar > strong { overflow: hidden; color: var(--color-body); font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .monthlyBarTrack { display: flex; min-height: 0; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--color-hairline-strong); background: linear-gradient(to top, transparent 49%, var(--color-hairline) 50%, transparent 51%); }
 .monthlyBarTrack i { display: block; width: min(46px, 68%); border-radius: 7px 7px 2px 2px; background: var(--color-ink); transition: height 180ms ease; }
 .monthlyBarTrack i[data-partial="true"] { background: repeating-linear-gradient(135deg, var(--color-ink) 0 6px, var(--color-body) 6px 10px); }
 .monthlyBar > span { display: grid; justify-items: center; color: var(--color-ink); font-size: 12px; font-weight: 700; }
-.monthlyBar > span small { color: var(--color-body); font-size: 9px; font-weight: 600; }
-.monthlyEstimateNote { margin: -4px 0 0; color: var(--color-body); font-size: 11px; line-height: 1.5; }
+.monthlyBar > span small { color: var(--color-body); font-size: 12px; font-weight: 600; }
+.monthlyEstimateNote { margin: -4px 0 0; color: var(--color-body); font-size: 12px; line-height: 1.5; }
 
 .chartSection,
 .listSection,
@@ -378,16 +378,16 @@
 .costBar strong { color: var(--color-ink); }
 .costBar i { position: absolute; bottom: 0; left: 0; height: 3px; border-radius: var(--radius-pill); background: var(--color-ink); }
 .recommendation { display: grid; gap: 5px; border-top: 1px solid var(--color-hairline); padding-top: 10px; }
-.recommendation span { color: var(--color-warning); font-size: 11px; font-weight: 700; }
+.recommendation span { color: var(--color-warning); font-size: 12px; font-weight: 700; }
 .recommendation strong { font-size: 13px; }
 .recommendation p { margin: 0; color: var(--color-body); font-size: 12px; line-height: 1.45; }
-.recommendation small { color: var(--color-success); font-size: 11px; }
+.recommendation small { color: var(--color-success); font-size: 12px; }
 
 .settingsSection > header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
 .settingsSection p { margin: 3px 0 0; color: var(--color-body); font-size: 13px; }
 .setupSection { display: grid; gap: 14px; }
 .setupSection > div { display: flex; align-items: center; gap: 10px; }
-.setupSection > div > span { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-on-primary); font-size: 11px; font-weight: 700; }
+.setupSection > div > span { display: grid; width: 24px; height: 24px; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--color-ink); color: var(--color-on-primary); font-size: 12px; font-weight: 700; }
 .setupSection p { margin: 3px 0 0; color: var(--color-body); font-size: 12px; }
 .setupSection a { display: inline-flex; width: fit-content; align-items: center; gap: 6px; color: var(--color-text-link); font-size: 13px; font-weight: 700; text-decoration: none; }
 .setupSection label { display: grid; gap: 6px; }
@@ -397,7 +397,7 @@
 .connectionList > article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; border-top: 1px solid var(--color-hairline); padding: 14px 0; }
 .connectionList article strong { font-size: 14px; }
 .connectionList article p { margin: 3px 0 0; overflow-wrap: anywhere; color: var(--color-body); font-size: 12px; }
-.connectionStatus { display: flex; align-items: center; gap: 5px; border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-surface-strong); color: var(--color-body); font-size: 11px; font-weight: 700; }
+.connectionStatus { display: flex; align-items: center; gap: 5px; border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-surface-strong); color: var(--color-body); font-size: 12px; font-weight: 700; }
 .connectionStatus[data-status="verified"] { background: var(--color-success-surface); color: var(--color-success); }
 .rowActions { display: flex; gap: 7px; }
 .rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: 12px; font-weight: 700; }

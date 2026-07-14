@@ -224,6 +224,13 @@ export async function getProjectDraft(projectId: string): Promise<ProjectDraftRe
   });
 }
 
+class ProjectThumbnailFetchError extends Error {
+  constructor(readonly status: number) {
+    super("Project Board 캡처를 불러오지 못했습니다.");
+    this.name = "ProjectThumbnailFetchError";
+  }
+}
+
 // 인증된 Project의 최신 실제 Board 캡처를 raster Blob으로 읽습니다.
 export async function fetchProjectThumbnail(projectId: string): Promise<Blob | null> {
   const headers = new Headers({ Accept: "image/webp,image/png" });
@@ -247,7 +254,7 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
   }
 
   if (!response.ok) {
-    throw new Error("Project Board 캡처를 불러오지 못했습니다.");
+    throw new ProjectThumbnailFetchError(response.status);
   }
 
   return response.blob();

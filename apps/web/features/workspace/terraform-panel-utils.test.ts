@@ -2,17 +2,57 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
+  clearTerraformSourceAuthority,
+  createTerraformDiagramRequestGuard,
   createTerraformFilesFromGeneratedCode,
+  createTerraformFilesForRefresh,
   mergeGeneratedTerraformFiles,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
+  getEffectivePreservedTerraformAddresses,
+  getSourceAuthoritativeTerraformAddresses,
   getTerraformAddressesRemovedFromDiagram,
   getTerraformFileOptions,
+  hasAuthoritativeTerraformSource,
+  markTerraformSourceAuthoritative,
   parseTerraformFiles,
   removeTerraformBlocksByAddress,
   toDeploymentBaselineFingerprint,
   toTerraformRefreshFingerprint
 } from "./terraform-panel-utils";
+
+test("an async Terraform completion is stale after Diagram change and undo", async () => {
+  const guard = createTerraformDiagramRequestGuard("diagram-d1");
+  const request = guard.capture();
+  let resolveGeneration!: () => void;
+  const generation = new Promise<void>((resolve) => {
+    resolveGeneration = resolve;
+  });
+  const completion = generation.then(() => guard.isCurrent(request));
+
+  guard.update("diagram-d2");
+  guard.update("diagram-d1");
+  resolveGeneration();
+
+  assert.equal(await completion, false);
+  assert.equal(guard.capture().fingerprint, "diagram-d1");
+  assert.notEqual(guard.capture().revision, request.revision);
+});
+
+test("an async Diagram sync completion is stale after a geometry-only edit", async () => {
+  const guard = createTerraformDiagramRequestGuard("unchanged-terraform-semantics");
+  const request = guard.capture();
+  let resolveSync!: () => void;
+  const sync = new Promise<void>((resolve) => {
+    resolveSync = resolve;
+  });
+  const completion = sync.then(() => guard.isCurrent(request));
+
+  guard.update("unchanged-terraform-semantics");
+  resolveSync();
+
+  assert.equal(await completion, false);
+});
 
 test("mergeGeneratedTerraformFiles preserves an exact top-level variable block", () => {
   const variableBlock = `variable "traffic_api_bundle_url" {
@@ -31,10 +71,12 @@ test("mergeGeneratedTerraformFiles preserves an exact top-level variable block",
 
 test("mergeGeneratedTerraformFiles removes a managed Subnet absent from generated Diagram code", () => {
   const result = mergeGeneratedTerraformFiles(
-    [{
-      fileName: "main.tf",
-      code: `resource "aws_subnet" "subnet_A" {\n  cidr_block = "10.0.1.0/24"\n}`
-    }],
+    [
+      {
+        fileName: "main.tf",
+        code: `resource "aws_subnet" "subnet_A" {\n  cidr_block = "10.0.1.0/24"\n}`
+      }
+    ],
     [{ fileName: "main.tf", code: "" }],
     new Set()
   );
@@ -53,12 +95,168 @@ test("mergeGeneratedTerraformFiles keeps an opaque resource absent from generate
   assert.equal(result.find((file) => file.fileName === "custom.tf")?.code, opaqueCode);
 });
 
+test("workspace-seed source addresses preserve exact resource and data blocks from generated defaults", () => {
+  const resourceNode = makeNode("resource", "aws_s3_bucket", "captured_bucket", "storage.tf");
+  const dataNode = makeNode("data", "aws_iam_policy", "change_password", "iam.tf");
+  resourceNode.parameters = {
+    ...resourceNode.parameters!,
+    terraformSourceAuthority: "workspace-seed"
+  } as typeof resourceNode.parameters;
+  dataNode.parameters = {
+    ...dataNode.parameters!,
+    terraformSourceAuthority: "workspace-seed"
+  } as typeof dataNode.parameters;
+  const diagram: DiagramJson = {
+    nodes: [resourceNode, dataNode, makeNode("resource", "aws_vpc", "managed")],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const preservedAddresses = getSourceAuthoritativeTerraformAddresses(diagram);
+  const sourceBucket = `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = var.source_bucket\n}`;
+  const sourcePolicy = `data "aws_iam_policy" "change_password" {\n  arn = var.policy_arn\n}`;
+  const result = mergeGeneratedTerraformFiles(
+    [
+      { fileName: "storage.tf", code: sourceBucket },
+      { fileName: "iam.tf", code: sourcePolicy }
+    ],
+    [
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}`
+      }
+    ],
+    preservedAddresses
+  );
+
+  assert.deepEqual([...preservedAddresses].sort(), [
+    "aws_s3_bucket.captured_bucket",
+    "data.aws_iam_policy.change_password"
+  ]);
+  assert.equal(result.find(({ fileName }) => fileName === "storage.tf")?.code, sourceBucket);
+  assert.equal(result.find(({ fileName }) => fileName === "iam.tf")?.code, sourcePolicy);
+});
+
+test("discard restores edited workspace-seed resource and data blocks from the saved baseline", () => {
+  const baselineFiles = [
+    {
+      fileName: "storage.tf",
+      code: `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = var.source_bucket\n}`
+    },
+    {
+      fileName: "iam.tf",
+      code: `data "aws_iam_policy" "change_password" {\n  arn = var.policy_arn\n}`
+    }
+  ];
+  const result = createTerraformFilesForRefresh({
+    baselineFiles,
+    currentFiles: [
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = "unsaved-edit"\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "unsaved-edit"\n}`
+      }
+    ],
+    generatedFiles: [
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}`
+      }
+    ],
+    preserveExistingSource: false,
+    preservedResourceAddresses: new Set([
+      "aws_s3_bucket.captured_bucket",
+      "data.aws_iam_policy.change_password"
+    ])
+  });
+
+  assert.equal(
+    result.find(({ fileName }) => fileName === "storage.tf")?.code,
+    baselineFiles[0]?.code
+  );
+  assert.equal(result.find(({ fileName }) => fileName === "iam.tf")?.code, baselineFiles[1]?.code);
+});
+
+test("discard restores deleted workspace-seed resource and data blocks from the saved baseline", () => {
+  const baselineFiles = [
+    {
+      fileName: "storage.tf",
+      code: `resource "aws_s3_bucket" "captured_bucket" {\n  bucket = var.source_bucket\n}`
+    },
+    {
+      fileName: "iam.tf",
+      code: `data "aws_iam_policy" "change_password" {\n  arn = var.policy_arn\n}`
+    }
+  ];
+  const result = createTerraformFilesForRefresh({
+    baselineFiles,
+    currentFiles: [
+      { fileName: "storage.tf", code: "" },
+      { fileName: "iam.tf", code: "" }
+    ],
+    generatedFiles: [
+      {
+        fileName: "storage.tf",
+        code: `resource "aws_s3_bucket" "captured_bucket" {\n  force_destroy = false\n}`
+      },
+      {
+        fileName: "iam.tf",
+        code: `data "aws_iam_policy" "change_password" {\n  arn = "generated"\n}`
+      }
+    ],
+    preserveExistingSource: false,
+    preservedResourceAddresses: new Set([
+      "aws_s3_bucket.captured_bucket",
+      "data.aws_iam_policy.change_password"
+    ])
+  });
+
+  assert.equal(
+    result.find(({ fileName }) => fileName === "storage.tf")?.code,
+    baselineFiles[0]?.code
+  );
+  assert.equal(result.find(({ fileName }) => fileName === "iam.tf")?.code, baselineFiles[1]?.code);
+});
+
+test("effective preserved addresses union parser evidence with current workspace-seed nodes", () => {
+  const sourceNode = makeNode("resource", "aws_s3_bucket", "captured_bucket");
+  sourceNode.parameters = {
+    ...sourceNode.parameters!,
+    terraformSourceAuthority: "workspace-seed"
+  } as typeof sourceNode.parameters;
+  const diagram: DiagramJson = {
+    nodes: [sourceNode],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  assert.deepEqual(
+    [
+      ...getEffectivePreservedTerraformAddresses(diagram, new Set(["aws_custom_service.opaque"]))
+    ].sort(),
+    ["aws_custom_service.opaque", "aws_s3_bucket.captured_bucket"]
+  );
+});
+
 test("getTerraformAddressesRemovedFromDiagram excludes opaque preserved addresses", () => {
-  assert.deepEqual(getTerraformAddressesRemovedFromDiagram(
-    new Set(["aws_subnet.subnet_A", "aws_custom_service.opaque"]),
-    new Set(),
-    new Set(["aws_custom_service.opaque"])
-  ), ["aws_subnet.subnet_A"]);
+  assert.deepEqual(
+    getTerraformAddressesRemovedFromDiagram(
+      new Set(["aws_subnet.subnet_A", "aws_custom_service.opaque"]),
+      new Set(),
+      new Set(["aws_custom_service.opaque"])
+    ),
+    ["aws_subnet.subnet_A"]
+  );
 });
 
 test("parseTerraformFiles keeps CRLF offsets aligned with original source slices", () => {
@@ -118,8 +316,14 @@ data "aws_ami" "ubuntu" {
 
   assert.equal(blocks[0]?.address, "aws_instance.web");
   assert.equal(blocks[1]?.address, "data.aws_ami.ubuntu");
-  assert.equal(findTerraformBlockForNode(blocks, makeNode("resource", "aws_instance", "web"))?.blockType, "resource");
-  assert.equal(findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType, "data");
+  assert.equal(
+    findTerraformBlockForNode(blocks, makeNode("resource", "aws_instance", "web"))?.blockType,
+    "resource"
+  );
+  assert.equal(
+    findTerraformBlockForNode(blocks, makeNode("data", "aws_ami", "ubuntu"))?.blockType,
+    "data"
+  );
 });
 
 test("findTerraformBlockForNode prefers the visible node identity over stale parameters", () => {
@@ -139,7 +343,10 @@ resource "aws_instance" "ec2_instance" {
     label: "EC2 Instance"
   };
 
-  assert.equal(findTerraformBlockForNode(blocks, ec2NodeWithStaleParameters)?.address, "aws_instance.ec2_instance");
+  assert.equal(
+    findTerraformBlockForNode(blocks, ec2NodeWithStaleParameters)?.address,
+    "aws_instance.ec2_instance"
+  );
 });
 
 test("findTerraformBlockForNode uses the resource name when same-type nodes share a label", () => {
@@ -215,8 +422,14 @@ resource "aws_subnet" "public" {
     files.find((file) => file.fileName === "providers.tf")?.code ?? "",
     /source\s*= "hashicorp\/aws"/
   );
-  assert.equal(files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"), true);
-  assert.equal(files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"), true);
+  assert.equal(
+    files.find((file) => file.fileName === "network.tf")?.code.includes("aws_vpc"),
+    true
+  );
+  assert.equal(
+    files.find((file) => file.fileName === "subnets.tf")?.code.includes("aws_subnet"),
+    true
+  );
 });
 
 test("createTerraformFilesFromGeneratedCode keeps generated outputs in main.tf", () => {
@@ -263,10 +476,13 @@ test("createTerraformFilesFromGeneratedCode configures Kubernetes from the EKS c
     viewport: { x: 0, y: 0, zoom: 1 }
   };
 
-  const files = createTerraformFilesFromGeneratedCode(diagram, [
-    'resource "aws_eks_cluster" "practice_cluster" {}',
-    'resource "kubernetes_namespace" "practice" {}'
-  ].join("\n\n"));
+  const files = createTerraformFilesFromGeneratedCode(
+    diagram,
+    [
+      'resource "aws_eks_cluster" "practice_cluster" {}',
+      'resource "kubernetes_namespace" "practice" {}'
+    ].join("\n\n")
+  );
   const providerCode = files.find((file) => file.fileName === "providers.tf")?.code ?? "";
 
   assert.match(providerCode, /source\s*= "hashicorp\/kubernetes"/);
@@ -290,10 +506,7 @@ test("createTerraformFilesFromGeneratedCode clears terraform code when the diagr
 
 test("getDiagramTerraformAddresses returns resource and data addresses from diagram nodes", () => {
   const addresses = getDiagramTerraformAddresses({
-    nodes: [
-      makeNode("resource", "aws_instance", "web"),
-      makeNode("data", "aws_ami", "ubuntu")
-    ],
+    nodes: [makeNode("resource", "aws_instance", "web"), makeNode("data", "aws_ami", "ubuntu")],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   });
@@ -346,7 +559,18 @@ test("getTerraformFileOptions includes node and virtual file names in stable ord
 
 test("diagram fingerprints ignore viewport-only changes", () => {
   const diagramJson: DiagramJson = {
-    nodes: [makeNode("resource", "aws_vpc", "main")],
+    nodes: [
+      {
+        ...makeNode("resource", "aws_vpc", "main"),
+        parameters: {
+          ...makeNode("resource", "aws_vpc", "main").parameters!,
+          values: {
+            cidrBlock: "10.0.0.0/16",
+            tags: { Team: "platform", Environment: "demo" }
+          }
+        }
+      }
+    ],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 }
   };
@@ -355,8 +579,98 @@ test("diagram fingerprints ignore viewport-only changes", () => {
     viewport: { x: 240, y: -80, zoom: 0.75 }
   };
 
-  assert.equal(toTerraformRefreshFingerprint(diagramJson), toTerraformRefreshFingerprint(pannedDiagramJson));
-  assert.equal(toDeploymentBaselineFingerprint(diagramJson), toDeploymentBaselineFingerprint(pannedDiagramJson));
+  assert.equal(
+    toTerraformRefreshFingerprint(diagramJson),
+    toTerraformRefreshFingerprint(pannedDiagramJson)
+  );
+  assert.equal(
+    toDeploymentBaselineFingerprint(diagramJson),
+    toDeploymentBaselineFingerprint(pannedDiagramJson)
+  );
+});
+
+test("source Terraform authority follows the Diagram semantic fingerprint", () => {
+  const sourceNode = makeNode("resource", "aws_vpc", "main");
+  sourceNode.parameters = {
+    ...sourceNode.parameters!,
+    values: {
+      cidrBlock: "10.0.0.0/16",
+      tags: { Team: "platform", Environment: "demo" }
+    }
+  };
+  const diagramJson: DiagramJson = {
+    nodes: [sourceNode],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    presentation: {
+      geometryPolicy: "source-exact"
+    }
+  };
+  const markedDiagram = markTerraformSourceAuthoritative(diagramJson);
+  const pannedDiagram = {
+    ...markedDiagram,
+    viewport: { x: 240, y: -80, zoom: 0.75 }
+  };
+  const jsonbReorderedDiagram = {
+    ...markedDiagram,
+    nodes: [
+      {
+        ...markedDiagram.nodes[0]!,
+        parameters: {
+          values: {
+            tags: { Environment: "demo", Team: "platform" },
+            cidrBlock: "10.0.0.0/16"
+          },
+          fileName: markedDiagram.nodes[0]!.parameters!.fileName,
+          resourceName: markedDiagram.nodes[0]!.parameters!.resourceName,
+          resourceType: markedDiagram.nodes[0]!.parameters!.resourceType,
+          terraformBlockType: markedDiagram.nodes[0]!.parameters!.terraformBlockType
+        }
+      }
+    ]
+  };
+  const changedDiagram = {
+    ...markedDiagram,
+    nodes: [
+      {
+        ...markedDiagram.nodes[0]!,
+        parameters: {
+          ...markedDiagram.nodes[0]!.parameters!,
+          values: { cidrBlock: "10.1.0.0/16" }
+        }
+      }
+    ]
+  };
+
+  assert.equal(diagramJson.presentation?.terraformSourceFingerprint, undefined);
+  assert.equal(
+    markedDiagram.presentation?.terraformSourceFingerprint,
+    toTerraformRefreshFingerprint(markedDiagram)
+  );
+  assert.equal(hasAuthoritativeTerraformSource(markedDiagram), true);
+  assert.equal(hasAuthoritativeTerraformSource(pannedDiagram), true);
+  assert.equal(
+    toTerraformRefreshFingerprint(jsonbReorderedDiagram),
+    toTerraformRefreshFingerprint(markedDiagram)
+  );
+  assert.equal(hasAuthoritativeTerraformSource(jsonbReorderedDiagram), true);
+  assert.equal(hasAuthoritativeTerraformSource(changedDiagram), false);
+});
+
+test("Diagram-only history restoration clears persisted Terraform source authority", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [makeNode("resource", "aws_vpc", "main")],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    presentation: { geometryPolicy: "source-exact" }
+  };
+  const markedDiagram = markTerraformSourceAuthoritative(diagramJson);
+  const restoredDiagram = clearTerraformSourceAuthority(markedDiagram);
+
+  assert.equal(hasAuthoritativeTerraformSource(markedDiagram), true);
+  assert.equal(restoredDiagram.presentation?.terraformSourceFingerprint, undefined);
+  assert.equal(restoredDiagram.presentation?.geometryPolicy, "source-exact");
+  assert.equal(hasAuthoritativeTerraformSource(restoredDiagram), false);
 });
 
 test("diagram fingerprints ignore presentation-only node and edge edits", () => {
@@ -471,11 +785,7 @@ test("diagram fingerprints change when a deployable child moves between Design A
   };
   const movedDiagramJson: DiagramJson = {
     ...diagramJson,
-    nodes: [
-      designAzA,
-      designAzB,
-      { ...subnet, metadata: { parentAreaNodeId: designAzB.id } }
-    ]
+    nodes: [designAzA, designAzB, { ...subnet, metadata: { parentAreaNodeId: designAzB.id } }]
   };
 
   assert.notEqual(
@@ -496,23 +806,27 @@ test("diagram fingerprints change when Terraform identity or values change", () 
   };
   const renamedDiagramJson: DiagramJson = {
     ...diagramJson,
-    nodes: [{
-      ...diagramJson.nodes[0]!,
-      parameters: {
-        ...diagramJson.nodes[0]!.parameters!,
-        resourceName: "production"
+    nodes: [
+      {
+        ...diagramJson.nodes[0]!,
+        parameters: {
+          ...diagramJson.nodes[0]!.parameters!,
+          resourceName: "production"
+        }
       }
-    }]
+    ]
   };
   const valueChangedDiagramJson: DiagramJson = {
     ...diagramJson,
-    nodes: [{
-      ...diagramJson.nodes[0]!,
-      parameters: {
-        ...diagramJson.nodes[0]!.parameters!,
-        values: { cidrBlock: "10.42.0.0/16" }
+    nodes: [
+      {
+        ...diagramJson.nodes[0]!,
+        parameters: {
+          ...diagramJson.nodes[0]!.parameters!,
+          values: { cidrBlock: "10.42.0.0/16" }
+        }
       }
-    }]
+    ]
   };
 
   assert.notEqual(

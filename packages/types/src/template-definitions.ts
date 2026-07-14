@@ -6,7 +6,7 @@ import type {
   TerraformBlockType
 } from "./index.js";
 
-export const TEMPLATE_IDS = [
+export const REPOSITORY_TEMPLATE_IDS = [
   "static-web-hosting",
   "minimal-serverless-api",
   "full-serverless-web-app",
@@ -14,6 +14,10 @@ export const TEMPLATE_IDS = [
   "ecs-fargate-container-app",
   "eks-container-app"
 ] as const;
+
+export type RepositoryTemplateId = (typeof REPOSITORY_TEMPLATE_IDS)[number];
+
+export const TEMPLATE_IDS = [...REPOSITORY_TEMPLATE_IDS] as const;
 
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
 export type TemplateProvider = "aws" | "kubernetes";
@@ -24,12 +28,16 @@ export type TemplateResourceDefinition = {
   readonly provider: TemplateProvider;
   readonly terraformBlockType: TerraformBlockType;
   readonly terraformResourceType: string;
+  readonly terraformResourceName?: string;
+  readonly fileName?: string;
   readonly values: Record<string, unknown>;
   readonly position: { readonly x: number; readonly y: number };
   readonly size?: DiagramNode["size"];
   readonly parentResourceId?: string;
   readonly presentationArea?: boolean;
   readonly kind?: DiagramNodeKind;
+  readonly zIndex?: DiagramNode["zIndex"];
+  readonly rotation?: DiagramNode["rotation"];
 };
 
 export type TemplateRelationship = {
@@ -56,6 +64,8 @@ export type TemplatePresentationNodeDefinition = {
   readonly position: { readonly x: number; readonly y: number };
   readonly size: DiagramNode["size"];
   readonly parentNodeId?: string;
+  readonly zIndex?: DiagramNode["zIndex"];
+  readonly rotation?: DiagramNode["rotation"];
 };
 
 export type TemplatePresentationEdgeDefinition = {
@@ -80,6 +90,7 @@ export type TemplateDefinition = {
   readonly presentationEdges: readonly TemplatePresentationEdgeDefinition[];
   readonly parameters: readonly TemplateParameterDefinition[];
   readonly viewport?: DiagramJson["viewport"];
+  readonly presentation?: DiagramJson["presentation"];
 };
 
 export type BuildTemplateDiagramInput = {
@@ -172,7 +183,7 @@ type TemplatePresentationLayout = {
 
 // The presentation layer is deliberately separate from deployable resource values.
 // It lets a template follow the AWS pattern diagram without changing Terraform identity or behavior.
-const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<TemplateId, TemplatePresentationLayout>> = {
+const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<RepositoryTemplateId, TemplatePresentationLayout>> = {
   "static-web-hosting": {
     viewport: { x: 0, y: 0, zoom: 0.8 },
     resources: {
@@ -775,7 +786,17 @@ export function buildTemplateDiagramJson(
         ...(edge.targetHandleId ? { targetHandleId: edge.targetHandleId } : {})
       }))
     ],
-    viewport: definition.viewport ? { ...definition.viewport } : { x: 0, y: 0, zoom: 0.8 }
+    viewport: definition.viewport ? { ...definition.viewport } : { x: 0, y: 0, zoom: 0.8 },
+    ...(definition.presentation
+      ? {
+          presentation: {
+            ...definition.presentation,
+            ...(definition.presentation.sourceViewBox
+              ? { sourceViewBox: { ...definition.presentation.sourceViewBox } }
+              : {})
+          }
+        }
+      : {})
   };
 }
 
@@ -804,8 +825,8 @@ function createDiagramNode(
       : undefined,
     parameters: {
       resourceType: resource.terraformResourceType,
-      resourceName: resourceNames.get(resource.id) ?? resource.id,
-      fileName: "main.tf",
+      resourceName: resourceNames.get(resource.id) ?? resource.terraformResourceName ?? resource.id,
+      fileName: resource.fileName ?? "main.tf",
       terraformBlockType: resource.terraformBlockType,
       values
     },
@@ -816,7 +837,8 @@ function createDiagramNode(
         ? { width: 260, height: 180 }
         : { width: 124, height: 96 },
     type: resource.terraformResourceType,
-    zIndex: resource.kind === "design" ? 0 : 1
+    zIndex: resource.zIndex ?? (resource.kind === "design" ? 0 : 1),
+    ...(resource.rotation === undefined ? {} : { rotation: resource.rotation })
   };
 }
 
@@ -840,23 +862,26 @@ function createPresentationDiagramNode(
     position: { ...node.position },
     size: { ...node.size },
     type: node.catalogItemId,
-    zIndex: 0
+    zIndex: node.zIndex ?? 0,
+    ...(node.rotation === undefined ? {} : { rotation: node.rotation })
   };
 }
 
 export function createTemplateTerraformResourceNames(
   resources: readonly Pick<
     TemplateResourceDefinition,
-    "id" | "terraformBlockType" | "terraformResourceType"
+    "id" | "terraformBlockType" | "terraformResourceName" | "terraformResourceType"
   >[]
 ): ReadonlyMap<string, string> {
   // Resolve the full identity set first so references never observe a partially assigned collision suffix.
   const normalizedResources = resources.map((resource) => ({
     ...resource,
-    normalizedName: toTerraformIdentifier(resource.id)
+    hasExplicitName: resource.terraformResourceName !== undefined,
+    normalizedName: resource.terraformResourceName ?? toTerraformIdentifier(resource.id)
   }));
   const resourcesById = new Map<string, (typeof normalizedResources)[number]>();
   const collisionGroups = new Map<string, (typeof normalizedResources)[number][]>();
+  const explicitNameGroups = new Map<string, (typeof normalizedResources)[number][]>();
   const reservedNamesByNamespace = new Map<string, Set<string>>();
 
   for (const resource of normalizedResources) {
@@ -871,16 +896,39 @@ export function createTemplateTerraformResourceNames(
       ...(reservedNamesByNamespace.get(namespaceKey) ?? []),
       resource.normalizedName
     ]));
-    collisionGroups.set(collisionKey, [
-      ...(collisionGroups.get(collisionKey) ?? []),
-      resource
-    ]);
+    const targetGroups = resource.hasExplicitName ? explicitNameGroups : collisionGroups;
+    targetGroups.set(collisionKey, [...(targetGroups.get(collisionKey) ?? []), resource]);
+  }
+
+  const duplicateExplicitNameGroup = [...explicitNameGroups.entries()]
+    .filter(([, group]) => group.length > 1)
+    .sort(([leftKey], [rightKey]) =>
+      leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0
+    )[0]?.[1];
+
+  if (duplicateExplicitNameGroup) {
+    const firstResource = duplicateExplicitNameGroup[0];
+    const resourceIds = duplicateExplicitNameGroup
+      .map(({ id }) => id)
+      .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+
+    throw new Error(
+      `Duplicate explicit TemplateDefinition Terraform resource name "${firstResource?.normalizedName}" in ${firstResource?.terraformBlockType}:${firstResource?.terraformResourceType}: ${resourceIds.join(", ")}`
+    );
   }
 
   const resourceNames = new Map<string, string>();
 
-  for (const group of collisionGroups.values()) {
-    if (group.length === 1) {
+  for (const group of explicitNameGroups.values()) {
+    const resource = group[0];
+
+    if (resource) {
+      resourceNames.set(resource.id, resource.normalizedName);
+    }
+  }
+
+  for (const [collisionKey, group] of collisionGroups) {
+    if (group.length === 1 && !explicitNameGroups.has(collisionKey)) {
       const resource = group[0];
 
       if (resource) {
@@ -1081,7 +1129,10 @@ function createDynamoDbPolicy(tableResourceId: string): string {
 
 // Apply visual-only PNG placement after the resource list is declared, keeping Terraform values immutable here.
 function createTemplate(
-  input: Omit<TemplateDefinition, "providers" | "viewport" | "presentationNodes" | "presentationEdges">
+  input: Omit<
+    TemplateDefinition,
+    "id" | "providers" | "viewport" | "presentationNodes" | "presentationEdges"
+  > & { readonly id: RepositoryTemplateId }
 ): TemplateDefinition {
   const presentation = TEMPLATE_PRESENTATION_LAYOUTS[input.id];
 

@@ -479,6 +479,123 @@ test("provider maps exact generated plan job stage statuses", async () => {
   }
 });
 
+test("provider prefers the automated app run over a newer manual run for the same commit", async () => {
+  const hydratedRunIds: number[] = [];
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({
+        id: 30,
+        event: "workflow_run",
+        updatedAt: "2026-07-14T10:17:16Z",
+        conclusion: "skipped"
+      }),
+      run({
+        id: 40,
+        event: "workflow_dispatch",
+        updatedAt: "2026-07-14T10:25:47Z",
+        conclusion: "success"
+      })
+    ],
+    listWorkflowJobs: async ({ runId }: { runId: number }) => {
+      hydratedRunIds.push(runId);
+      return [];
+    },
+    readWorkflowJobLog: async () => ""
+  } as GitHubActionsReadClient;
+
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+
+  assert.deepEqual(hydratedRunIds, [30]);
+  assert.equal(snapshot?.runUrl, "run");
+  assert.equal(snapshot?.status, "succeeded");
+});
+
+test("provider records skipped jobs without requesting unavailable GitHub logs", async () => {
+  const requestedJobLogs: number[] = [];
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({ workflowName: "SketchCatch Infra", status: "completed", conclusion: "failure" })
+    ],
+    listWorkflowJobs: async () => [
+      {
+        id: 11,
+        name: "plan",
+        runUrl: "plan",
+        status: "completed",
+        conclusion: "failure",
+        startedAt: null,
+        finishedAt: null,
+        steps: []
+      },
+      {
+        id: 22,
+        name: "apply",
+        runUrl: "apply",
+        status: "completed",
+        conclusion: "skipped",
+        startedAt: null,
+        finishedAt: null,
+        steps: []
+      }
+    ],
+    readWorkflowJobLog: async ({ jobId }: { jobId: number }) => {
+      requestedJobLogs.push(jobId);
+      if (jobId === 22) throw new Error("GitHub returned 404 for skipped job log");
+      return "terraform plan failed";
+    }
+  } as GitHubActionsReadClient;
+
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+
+  assert.equal(snapshot?.status, "failed");
+  assert.deepEqual(requestedJobLogs, [11]);
+  assert.deepEqual(
+    snapshot?.jobs.map((job) => [job.stageKind, job.status]),
+    [
+      ["infra_plan", "failed"],
+      ["infra_apply", "skipped"]
+    ]
+  );
+});
+
+test("provider isolates an unavailable completed job log without losing run status", async () => {
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({ workflowName: "SketchCatch Infra", status: "completed", conclusion: "failure" })
+    ],
+    listWorkflowJobs: async () => [
+      {
+        id: 11,
+        name: "plan",
+        runUrl: "plan",
+        status: "completed",
+        conclusion: "failure",
+        startedAt: null,
+        finishedAt: null,
+        steps: []
+      }
+    ],
+    readWorkflowJobLog: async () => {
+      throw new Error("provider response must not be exposed");
+    }
+  } as GitHubActionsReadClient;
+
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+
+  assert.equal(snapshot?.status, "failed");
+  assert.equal(snapshot?.releaseEvidence, null);
+  assert.deepEqual(snapshot?.logs, [
+    {
+      stageKind: "infra_plan",
+      level: "warning",
+      message: "GitHub Actions job log is unavailable."
+    }
+  ]);
+});
+
 test("provider bounds hydration to recent commit groups independently of repository history", async () => {
   const hydratedRunIds: number[] = [];
   const client = {
@@ -600,6 +717,7 @@ function baseRun() {
   return {
     id: 1,
     runAttempt: 1,
+    event: "workflow_run",
     updatedAt: "2026-07-13T00:00:00Z",
     createdAt: "2026-07-13T00:00:00Z",
     commitSha: "abc",

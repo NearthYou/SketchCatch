@@ -52,6 +52,31 @@ const validDiagram: DiagramJson = {
   }
 };
 
+const sourceExactPresentation = {
+  geometryPolicy: "source-exact" as const,
+  sourceViewBox: {
+    x: -120.5,
+    y: 48.25,
+    width: 1920,
+    height: 1080
+  },
+  initialViewportPending: true,
+  terraformSourceFingerprint: '{"nodes":[],"edges":[]}'
+};
+
+const authoredEdgeRoute = {
+  svgPath: "M 60 60 C 160 60 160 240 300 240",
+  sourcePoint: { x: 60, y: 60 },
+  targetPoint: { x: 300, y: 240 },
+  waypoints: [
+    { x: 160, y: 60 },
+    { x: 160, y: 240 }
+  ],
+  labelPosition: { x: 170, y: 142 },
+  arrowDirection: "source-to-target" as const,
+  arrowAngle: 37.5
+};
+
 test("project draft query accepts no required parameters", () => {
   assert.equal(projectDraftQuerySchema.safeParse({}).success, true);
 });
@@ -65,10 +90,130 @@ test("save project draft body accepts full DiagramJson", () => {
   assert.equal(parsed.diagramJson.viewport.zoom, 1);
 });
 
+test("save project draft body preserves legacy DiagramJson byte-equivalently", () => {
+  const payload = {
+    diagramJson: {
+      ...validDiagram,
+      variables: [
+        {
+          id: "variable-1",
+          name: "environment",
+          type: "string",
+          value: "production",
+          bindings: [{ nodeId: "node-1", parameterKey: "tags.Environment" }],
+          source: "user" as const
+        }
+      ]
+    }
+  };
+  const parsed = saveProjectDraftBodySchema.parse(payload);
+
+  assert.equal(JSON.stringify(parsed), JSON.stringify(payload));
+});
+
+test("save project draft body preserves source Terraform authority with source-exact presentation", () => {
+  const rotatedSourceNode = {
+    ...validDiagram.nodes[0]!,
+    rotation: -90
+  };
+  const sourceExactEdge = {
+    ...validDiagram.edges[0]!,
+    sourceHandleId: "handle-right",
+    targetHandleId: "handle-left",
+    zIndex: 12,
+    route: authoredEdgeRoute
+  };
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [rotatedSourceNode],
+      presentation: sourceExactPresentation,
+      edges: [sourceExactEdge]
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.presentation, sourceExactPresentation);
+  assert.deepEqual(parsed.diagramJson.nodes[0], rotatedSourceNode);
+  assert.deepEqual(parsed.diagramJson.edges[0], sourceExactEdge);
+});
+
+test("save project draft body preserves empty source labels and workspace-seed authority", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          label: "",
+          parameters: {
+            ...validDiagram.nodes[0]!.parameters!,
+            terraformSourceAuthority: "workspace-seed"
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(parsed.diagramJson.nodes[0]?.label, "");
+  assert.equal(parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority, "workspace-seed");
+});
+
+test("save project draft body rejects non-finite node rotation", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          rotation: Number.POSITIVE_INFINITY
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
+});
+
+test("save project draft body rejects non-finite source viewBox coordinates", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    diagramJson: {
+      ...validDiagram,
+      presentation: {
+        ...sourceExactPresentation,
+        sourceViewBox: {
+          ...sourceExactPresentation.sourceViewBox,
+          x: Number.POSITIVE_INFINITY
+        }
+      }
+    }
+  });
+
+  assert.equal(result.success, false);
+});
+
+test("save project draft body rejects non-finite authored route data", () => {
+  const result = saveProjectDraftBodySchema.safeParse({
+    diagramJson: {
+      ...validDiagram,
+      edges: [
+        {
+          ...validDiagram.edges[0]!,
+          route: {
+            ...authoredEdgeRoute,
+            waypoints: [{ x: Number.NaN, y: 60 }]
+          }
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.success, false);
+});
+
 test("save project draft body preserves Terraform virtual files", () => {
   const terraformFiles = [
-    { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"main\" {}" },
-    { fileName: "variables.tf", terraformCode: "variable \"cidr\" { type = string }" }
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' },
+    { fileName: "variables.tf", terraformCode: 'variable "cidr" { type = string }' }
   ];
   const parsed = saveProjectDraftBodySchema.parse({ diagramJson: validDiagram, terraformFiles });
 

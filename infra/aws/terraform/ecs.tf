@@ -376,7 +376,7 @@ resource "aws_ecs_service" "web" {
   launch_type                        = "FARGATE"
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
-  health_check_grace_period_seconds  = 60
+  health_check_grace_period_seconds  = 30
   wait_for_steady_state              = true
 
   deployment_circuit_breaker {

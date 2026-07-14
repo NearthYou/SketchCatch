@@ -51,6 +51,25 @@ test("custom edge renderer keeps all stored path kinds renderable", () => {
   }
 });
 
+test("custom edge renderer resolves authored geometry once for every path and label layer", () => {
+  assert.match(
+    diagramEdgeViewSource,
+    /import \{ resolveAuthoredEdgePath \} from "\.\/authored-edge-path";/
+  );
+  assert.match(
+    diagramEdgeViewSource,
+    /data\?\.authoredRoute\s*\? resolveAuthoredEdgePath\(data\.authoredRoute, \{[\s\S]*?sourceX,[\s\S]*?sourceY,[\s\S]*?targetX,[\s\S]*?targetY[\s\S]*?\}\)/
+  );
+  assert.equal(diagramEdgeViewSource.match(/d=\{resolvedPath\.path\}/g)?.length, 4);
+  assert.match(diagramEdgeViewSource, /markerStart=\{markerStart\}/);
+  assert.match(diagramEdgeViewSource, /x=\{resolvedPath\.labelX\}/);
+  assert.match(diagramEdgeViewSource, /y=\{resolvedPath\.labelY\}/);
+  assert.match(
+    diagramEdgeViewSource,
+    /getDiagramEdgePatchBadgePosition\(\{[\s\S]*?sourceX: resolvedPath\.sourceX,[\s\S]*?sourceY: resolvedPath\.sourceY,[\s\S]*?targetX: resolvedPath\.targetX,[\s\S]*?targetY: resolvedPath\.targetY/
+  );
+});
+
 test("smooth paths keep shared endpoint stubs below the eight-pixel visual limit", () => {
   const [path] = getDiagramEdgePath("smoothstep", {
     sourcePosition: Position.Bottom,

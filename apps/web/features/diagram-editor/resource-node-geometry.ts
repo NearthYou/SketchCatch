@@ -9,6 +9,10 @@ const LEGACY_RESOURCE_NODE_SIDES = new Set([48, 56]);
 
 /** 저장된 icon geometry와 더는 유효하지 않은 Area parent를 현재 Board 규칙으로 올립니다. */
 export function normalizeDiagramResourceNodeGeometry(diagram: DiagramJson): DiagramJson {
+  if (diagram.presentation?.geometryPolicy === "source-exact") {
+    return diagram;
+  }
+
   let didChange = false;
   const geometryNodes = diagram.nodes.map((node) => {
     const normalizedNode = normalizeResourceNodeGeometry(node);

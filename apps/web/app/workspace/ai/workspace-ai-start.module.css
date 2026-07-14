@@ -3,7 +3,7 @@
   --ai-canvas-soft: #fafafa;
   --ai-ink: #171717;
   --ai-body: #60646c;
-  --ai-muted: #999999;
+  --ai-muted: #60646c;
   --ai-line: #e7e8eb;
   --ai-line-strong: #d5d7dc;
   background: var(--ai-canvas);
@@ -64,7 +64,7 @@
 .emptyPreview > span,
 .message > span {
   color: var(--ai-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.4;
@@ -235,7 +235,7 @@
 
 .voiceConfirmation span {
   color: var(--ai-body);
-  font-size: 11px;
+  font-size: 12px;
   word-break: keep-all;
 }
 
@@ -352,7 +352,7 @@
 
 .previewHeader dt {
   color: var(--ai-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -389,7 +389,7 @@
 .previewCanvas :global(.react-flow__edge-text) {
   fill: #60646c;
   font-family: "Pretendard", "Noto Sans KR", sans-serif;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -422,7 +422,7 @@
 }
 
 .previewAreaHeader strong {
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -430,7 +430,7 @@
 
 .previewAreaHeader span {
   color: var(--ai-muted);
-  font-size: 9px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -454,7 +454,7 @@
 }
 
 .previewResourceNode strong {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.25;
   max-width: 100%;
   overflow: hidden;
@@ -465,7 +465,7 @@
 
 .previewResourceNode small {
   color: var(--ai-muted);
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.2;
   max-width: 100%;
   overflow: hidden;
@@ -553,7 +553,7 @@
 .draftSource em {
   border: 1px solid var(--ai-line-strong);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   line-height: 24px;
   padding: 0 8px;

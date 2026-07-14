@@ -57,8 +57,12 @@ import { defaultResourceCatalogProvider } from "../resource-settings/catalog-pro
 import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
 import {
   applyTemplateToDiagramWithBackup,
-  type BoardTemplate
+  type AvailableBoardTemplate
 } from "../resource-settings/template-library";
+import {
+  clearTerraformSourceAuthority,
+  markTerraformSourceAuthoritative
+} from "../workspace/terraform-panel-utils";
 import { DEFAULT_DIAGRAM_VIEWPORT, EDGE_LABEL_MIN_ZOOM, EMPTY_DIAGRAM } from "./constants";
 import {
   applyAreaNodeParentAssignments,
@@ -83,12 +87,14 @@ import {
 } from "./canvas-pointer-hit-test";
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
 import {
+  applyInitialSourceViewBoxViewport,
   getBoardZoomPresentationScale,
   getCenteredBoardViewport,
+  getSourceViewBoxMinimumZoom,
   getUnobscuredBoardViewportFrame,
   offsetBoardViewportToFrame,
-  rebaseBoardViewport,
-  parseBoardZoom
+  parseBoardZoom,
+  rebaseBoardViewport
 } from "./board-viewport";
 import type { BoardViewportFrame } from "./board-viewport";
 import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
@@ -107,6 +113,7 @@ import {
   applyNodeParametersUpdateWithAutoTagSync,
   areDiagramsEqual,
   clearActiveResourceDragPayload,
+  clearAuthoredRoutesForNodeIds,
   cloneDiagram,
   createDiagramEdge,
   createDiagramNodeFromPayload,
@@ -114,15 +121,14 @@ import {
   getDefaultViewport,
   getActiveResourceDragPayload,
   getNextZIndex,
+  getNodeGeometryChangedIds,
   removeEdgesFromDiagram,
   removeNodesFromDiagram,
   updateDiagramViewport,
   updateNodeById
 } from "./diagram-utils";
 import { toFlowEdges, toFlowNodes } from "./flow-mappers";
-import {
-  applyContainingReferenceDropTargets
-} from "./reference-drop-targets";
+import { applyContainingReferenceDropTargets } from "./reference-drop-targets";
 import type { NodeResizeUpdate } from "./node-resize";
 import { scalePaletteAreaNodeSize } from "./palette-area-node-size";
 import { normalizeDiagramResourceNodeGeometry } from "./resource-node-geometry";
@@ -171,10 +177,7 @@ const BOARD_VIEWPORT_BOTTOM_INSET = 72;
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
-function areBoardViewportFramesEqual(
-  left: BoardViewportFrame,
-  right: BoardViewportFrame
-): boolean {
+function areBoardViewportFramesEqual(left: BoardViewportFrame, right: BoardViewportFrame): boolean {
   return (
     left.x === right.x &&
     left.y === right.y &&
@@ -185,6 +188,16 @@ function areBoardViewportFramesEqual(
 
 function getBoardMotionDuration(durationMs: number): number {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : durationMs;
+}
+
+function clearAuthoredRoutesForNodeGeometryChanges(
+  previousNodes: readonly DiagramNode[],
+  diagram: DiagramJson
+): DiagramJson {
+  return clearAuthoredRoutesForNodeIds(
+    diagram,
+    getNodeGeometryChangedIds(previousNodes, diagram.nodes)
+  );
 }
 
 type AreaBlankDragState = {
@@ -223,6 +236,7 @@ function DiagramEditorInner({
   onBoardReady,
   onDiagramChange,
   onDiagramSaveRequest,
+  onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
   projectName = "Project workspace",
   rightPanel,
@@ -241,13 +255,14 @@ function DiagramEditorInner({
     normalizeDiagramResourceNodeGeometry(cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM))
   );
   const diagramRef = useRef(diagram);
+  const diagramRevisionRef = useRef(0);
   const [previewDiagram, setPreviewDiagramState] = useState<DiagramJson | null>(() =>
     initialPreviewDiagram
       ? normalizeDiagramResourceNodeGeometry(cloneDiagram(initialPreviewDiagram))
       : null
   );
   const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(
-    () => (initialPreviewDiagram ? initialPreviewAnnotations ?? null : null)
+    () => (initialPreviewDiagram ? (initialPreviewAnnotations ?? null) : null)
   );
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
@@ -268,12 +283,13 @@ function DiagramEditorInner({
       : getValidInitialSelectedEdgeIds(diagram.edges, initialSelectedEdgeIds)
   );
   const [dragPreviewNodes, setDragPreviewNodes] = useState<DiagramNode[] | null>(null);
-  const [activeAreaDropTargetNodeId, setActiveAreaDropTargetNodeId] = useState<string | null>(
-    () => getValidInitialAreaDropTargetNodeId(diagram.nodes, initialReferenceDropTargetNodeId)
+  const [activeAreaDropTargetNodeId, setActiveAreaDropTargetNodeId] = useState<string | null>(() =>
+    getValidInitialAreaDropTargetNodeId(diagram.nodes, initialReferenceDropTargetNodeId)
   );
   const [isConnectionActive, setConnectionActive] = useState(false);
   const [interactionMode, setInteractionMode] = useState<"select" | "pan">("select");
   const [isFlowReady, setFlowReady] = useState(false);
+  const [boardMinimumZoom, setBoardMinimumZoom] = useState(0.25);
   const temporaryPanPreviousModeRef = useRef<"select" | "pan" | null>(null);
   const clipboardRef = useRef<DiagramNode[]>([]);
   const canvasPanelRef = useRef<HTMLDivElement | null>(null);
@@ -300,6 +316,9 @@ function DiagramEditorInner({
   const shouldApplyInitialBoardZoomRef = useRef(
     normalizedInitialBoardZoom !== undefined && (initialDiagram?.nodes.length ?? 0) > 0
   );
+  const shouldApplySourceViewportRef = useRef(true);
+  const wasSourceViewBoxViewportRef = useRef(false);
+  const initialSourceViewportFrameRef = useRef<number | null>(null);
   const initialAutoFitFrameRef = useRef<number | null>(null);
   const automaticViewportMoveRequestIdRef = useRef(0);
   const automaticViewportReleaseFrameRef = useRef<number | null>(null);
@@ -326,15 +345,23 @@ function DiagramEditorInner({
     setRightPanelOpen((isOpen) => !isOpen);
   }, []);
 
-  const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] ?? null : null;
+  const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
   const hasRightRail = rightPanel !== null;
   const isPreviewActive = previewDiagram !== null;
   const visibleDiagram = previewDiagram ?? diagram;
-  const selectedEdge = isPreviewActive ? null : getSingleSelectedEdgeForToolbar(diagram.edges, selectedNodeIds, selectedEdgeIds);
-  const hoveredSelectedAreaNode = hoveredAreaBlankNodeId && selectedNodeId === hoveredAreaBlankNodeId
-    ? diagram.nodes.find((node) => node.id === hoveredAreaBlankNodeId) ?? null
-    : null;
-  const shouldShowAreaBlankMoveCursor = Boolean(hoveredSelectedAreaNode && !hoveredSelectedAreaNode.locked);
+  const hasSourceViewBoxViewport =
+    visibleDiagram.presentation?.geometryPolicy === "source-exact" &&
+    visibleDiagram.presentation.sourceViewBox !== undefined;
+  const selectedEdge = isPreviewActive
+    ? null
+    : getSingleSelectedEdgeForToolbar(diagram.edges, selectedNodeIds, selectedEdgeIds);
+  const hoveredSelectedAreaNode =
+    hoveredAreaBlankNodeId && selectedNodeId === hoveredAreaBlankNodeId
+      ? (diagram.nodes.find((node) => node.id === hoveredAreaBlankNodeId) ?? null)
+      : null;
+  const shouldShowAreaBlankMoveCursor = Boolean(
+    hoveredSelectedAreaNode && !hoveredSelectedAreaNode.locked
+  );
   const shouldShowAreaBlankBlockedCursor = Boolean(hoveredSelectedAreaNode?.locked);
 
   const getCurrentBoardViewportFrame = useCallback((): BoardViewportFrame | null => {
@@ -354,6 +381,7 @@ function DiagramEditorInner({
 
   const replaceDiagram = useCallback(
     (nextDiagram: DiagramJson, notifyChange = true) => {
+      diagramRevisionRef.current += 1;
       diagramRef.current = nextDiagram;
       setDiagram(nextDiagram);
 
@@ -364,8 +392,14 @@ function DiagramEditorInner({
     [onDiagramChange]
   );
 
+  const getDiagramRevision = useCallback<DiagramEditorPanelContext["getDiagramRevision"]>(
+    () => diagramRevisionRef.current,
+    []
+  );
+
   const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
     (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      shouldApplySourceViewportRef.current = true;
       setPreviewDiagramState(
         nextPreviewDiagram === null
           ? null
@@ -442,6 +476,7 @@ function DiagramEditorInner({
   useEffect(() => {
     cancelSnapAnimation();
     const nextDiagram = normalizeDiagramResourceNodeGeometry(cloneDiagram(initialDiagram ?? EMPTY_DIAGRAM));
+    shouldApplySourceViewportRef.current = true;
     replaceDiagram(nextDiagram, false);
     shouldAutoFitInitialDiagramRef.current =
       normalizedInitialBoardZoom === undefined && nextDiagram.nodes.length > 0;
@@ -459,17 +494,12 @@ function DiagramEditorInner({
       initialSelectedEdgeIds
     );
 
-    setSelectedNodeIds((currentIds) =>
-      stabilizeSelectedIds(currentIds, nextSelectedNodeIds)
-    );
+    setSelectedNodeIds((currentIds) => stabilizeSelectedIds(currentIds, nextSelectedNodeIds));
     setSelectedEdgeIds((currentIds) =>
       stabilizeSelectedIds(currentIds, nextSelectedNodeIds.length > 0 ? [] : nextSelectedEdgeIds)
     );
     setActiveAreaDropTargetNodeId(
-      getValidInitialAreaDropTargetNodeId(
-        nextDiagram.nodes,
-        initialReferenceDropTargetNodeId
-      )
+      getValidInitialAreaDropTargetNodeId(nextDiagram.nodes, initialReferenceDropTargetNodeId)
     );
 
     if (initialAutoFitFrameRef.current !== null) {
@@ -543,20 +573,26 @@ function DiagramEditorInner({
     });
   }, []);
 
-  const handleLeftPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    isLeftPanelResizingRef.current = true;
-    updateLeftPanelWidth(getLeftPanelWidthFromPointer(event.clientX, leftRailRef.current));
-  }, [updateLeftPanelWidth]);
+  const handleLeftPanelResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      isLeftPanelResizingRef.current = true;
+      updateLeftPanelWidth(getLeftPanelWidthFromPointer(event.clientX, leftRailRef.current));
+    },
+    [updateLeftPanelWidth]
+  );
 
-  const handleLeftPanelResizeMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!isLeftPanelResizingRef.current) {
-      return;
-    }
+  const handleLeftPanelResizeMove = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (!isLeftPanelResizingRef.current) {
+        return;
+      }
 
-    updateLeftPanelWidth(getLeftPanelWidthFromPointer(event.clientX, leftRailRef.current));
-  }, [updateLeftPanelWidth]);
+      updateLeftPanelWidth(getLeftPanelWidthFromPointer(event.clientX, leftRailRef.current));
+    },
+    [updateLeftPanelWidth]
+  );
 
   const handleLeftPanelResizeEnd = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!isLeftPanelResizingRef.current) {
@@ -571,7 +607,12 @@ function DiagramEditorInner({
 
   const handleLeftPanelResizeKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") {
+      if (
+        event.key !== "ArrowLeft" &&
+        event.key !== "ArrowRight" &&
+        event.key !== "Home" &&
+        event.key !== "End"
+      ) {
         return;
       }
 
@@ -592,20 +633,26 @@ function DiagramEditorInner({
     [leftPanelWidth, updateLeftPanelWidth]
   );
 
-  const handleRightPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    isRightPanelResizingRef.current = true;
-    updateRightPanelWidth(window.innerWidth - event.clientX);
-  }, [updateRightPanelWidth]);
+  const handleRightPanelResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      isRightPanelResizingRef.current = true;
+      updateRightPanelWidth(window.innerWidth - event.clientX);
+    },
+    [updateRightPanelWidth]
+  );
 
-  const handleRightPanelResizeMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!isRightPanelResizingRef.current) {
-      return;
-    }
+  const handleRightPanelResizeMove = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (!isRightPanelResizingRef.current) {
+        return;
+      }
 
-    updateRightPanelWidth(window.innerWidth - event.clientX);
-  }, [updateRightPanelWidth]);
+      updateRightPanelWidth(window.innerWidth - event.clientX);
+    },
+    [updateRightPanelWidth]
+  );
 
   const handleRightPanelResizeEnd = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!isRightPanelResizingRef.current) {
@@ -620,7 +667,12 @@ function DiagramEditorInner({
 
   const handleRightPanelResizeKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLButtonElement>) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") {
+      if (
+        event.key !== "ArrowLeft" &&
+        event.key !== "ArrowRight" &&
+        event.key !== "Home" &&
+        event.key !== "End"
+      ) {
         return;
       }
 
@@ -642,7 +694,9 @@ function DiagramEditorInner({
   );
 
   const updateActiveAreaDropTargetNodeId = useCallback((nodeId: string | null) => {
-    setActiveAreaDropTargetNodeId((currentNodeId) => (currentNodeId === nodeId ? currentNodeId : nodeId));
+    setActiveAreaDropTargetNodeId((currentNodeId) =>
+      currentNodeId === nodeId ? currentNodeId : nodeId
+    );
   }, []);
 
   const toggleAutoExpandAreas = useCallback(() => {
@@ -657,9 +711,12 @@ function DiagramEditorInner({
     });
   }, []);
 
-  const getAreaDropTargetNodeId = useCallback((childNode: DiagramNode, nodes: readonly DiagramNode[]) => {
-    return findInnermostAreaDropTarget(childNode, nodes)?.id ?? null;
-  }, []);
+  const getAreaDropTargetNodeId = useCallback(
+    (childNode: DiagramNode, nodes: readonly DiagramNode[]) => {
+      return findInnermostAreaDropTarget(childNode, nodes)?.id ?? null;
+    },
+    []
+  );
 
   const cancelQueuedNodeDragPreview = useCallback(() => {
     if (nodeDragPreviewFrameRef.current !== null) {
@@ -739,7 +796,10 @@ function DiagramEditorInner({
       return null;
     }
 
-    return commitNodeDragPreview(pendingNodeDragPreview.draggedNodeId, pendingNodeDragPreview.nodes);
+    return commitNodeDragPreview(
+      pendingNodeDragPreview.draggedNodeId,
+      pendingNodeDragPreview.nodes
+    );
   }, [cancelQueuedNodeDragPreview, commitNodeDragPreview]);
 
   useEffect(() => () => cancelQueuedNodeDragPreview(), [cancelQueuedNodeDragPreview]);
@@ -757,7 +817,7 @@ function DiagramEditorInner({
       past: history.past.slice(0, -1),
       future: [cloneDiagram(currentDiagram), ...history.future]
     });
-    replaceDiagram(cloneDiagram(previous));
+    replaceDiagram(clearTerraformSourceAuthority(cloneDiagram(previous)));
     setInspectedNodeId(null);
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
@@ -776,30 +836,40 @@ function DiagramEditorInner({
       past: [...history.past, cloneDiagram(currentDiagram)].slice(-MAX_HISTORY_ITEMS),
       future: history.future.slice(1)
     });
-    replaceDiagram(cloneDiagram(next));
+    replaceDiagram(clearTerraformSourceAuthority(cloneDiagram(next)));
     setInspectedNodeId(null);
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
   }, [cancelSnapAnimation, history, replaceDiagram]);
 
-  const addCuratedModule = useCallback((moduleId: string) => {
-    commitDiagramUpdate((currentDiagram) =>
-      expandCuratedModuleIntoDiagram({
-        diagram: currentDiagram,
-        moduleId,
-        resources: defaultResourceCatalogProvider.listResources()
-      })
-    );
-  }, [commitDiagramUpdate]);
+  const addCuratedModule = useCallback(
+    (moduleId: string) => {
+      commitDiagramUpdate((currentDiagram) =>
+        expandCuratedModuleIntoDiagram({
+          diagram: currentDiagram,
+          moduleId,
+          resources: defaultResourceCatalogProvider.listResources()
+        })
+      );
+    },
+    [commitDiagramUpdate]
+  );
 
   const updateNodeMetadata = useCallback(
-    (nodeId: string, update: DiagramNodeMetadataUpdate | ((node: DiagramNode) => DiagramNodeMetadataUpdate)) => {
-      commitDiagramUpdate((currentDiagram) => ({
-        ...currentDiagram,
-        nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
-          applyNodeMetadataUpdate(node, typeof update === "function" ? update(node) : update)
-        )
-      }));
+    (
+      nodeId: string,
+      update: DiagramNodeMetadataUpdate | ((node: DiagramNode) => DiagramNodeMetadataUpdate)
+    ) => {
+      commitDiagramUpdate((currentDiagram) => {
+        const nextDiagram = {
+          ...currentDiagram,
+          nodes: updateNodeById(currentDiagram.nodes, nodeId, (node) =>
+            applyNodeMetadataUpdate(node, typeof update === "function" ? update(node) : update)
+          )
+        };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
+      });
     },
     [commitDiagramUpdate]
   );
@@ -812,7 +882,7 @@ function DiagramEditorInner({
           applyNodeParametersUpdateWithAutoTagSync(node, update)
         );
 
-        return {
+        const nextDiagram = {
           ...currentDiagram,
           nodes: refitSecurityGroupScopesForTargetChanges({
             changedNodeIds: new Set([nodeId]),
@@ -820,6 +890,8 @@ function DiagramEditorInner({
             previousNodes: currentDiagram.nodes
           })
         };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
       });
     },
     [commitDiagramUpdate]
@@ -827,6 +899,7 @@ function DiagramEditorInner({
 
   const applyDiagramJson = useCallback<DiagramEditorPanelContext["applyDiagramJson"]>(
     (nextDiagram) => {
+      shouldApplySourceViewportRef.current = true;
       commitDiagramUpdate(() => normalizeDiagramResourceNodeGeometry(cloneDiagram(nextDiagram)));
       setPreviewDiagram(null);
       setInspectedNodeId(null);
@@ -836,21 +909,48 @@ function DiagramEditorInner({
     [commitDiagramUpdate]
   );
 
-  // 템플릿 적용은 현재 보드를 백업한 뒤 전체 보드를 템플릿 구조로 교체합니다.
-  const applyBoardTemplate = useCallback((template: BoardTemplate): void => {
-    if (typeof window === "undefined") {
-      return;
+  const commitTerraformSourceAuthority = useCallback<
+    DiagramEditorPanelContext["commitTerraformSourceAuthority"]
+  >(() => {
+    const authoritativeDiagram = markTerraformSourceAuthoritative(diagramRef.current);
+
+    if (
+      authoritativeDiagram.presentation?.terraformSourceFingerprint ===
+      diagramRef.current.presentation?.terraformSourceFingerprint
+    ) {
+      return diagramRef.current;
     }
 
-    const nextDiagram = applyTemplateToDiagramWithBackup({
-      currentDiagram: diagramRef.current,
-      nowIso: new Date().toISOString(),
-      storage: window.localStorage,
-      template
-    });
+    replaceDiagram(authoritativeDiagram);
+    return authoritativeDiagram;
+  }, [replaceDiagram]);
 
-    applyDiagramJson(nextDiagram);
-  }, [applyDiagramJson]);
+  // 템플릿 적용은 현재 보드를 백업한 뒤 전체 보드를 템플릿 구조로 교체합니다.
+  const applyBoardTemplate = useCallback(
+    (template: AvailableBoardTemplate): void => {
+      if (typeof window === "undefined") return;
+
+      const nextDiagram = applyTemplateToDiagramWithBackup({
+        currentDiagram: diagramRef.current,
+        nowIso: new Date().toISOString(),
+        storage: window.localStorage,
+        template
+      });
+      const authoritativeDiagram =
+        template.terraformFiles.length > 0
+          ? markTerraformSourceAuthoritative(nextDiagram)
+          : nextDiagram;
+
+      onTemplateWorkspaceApply?.({
+        diagramJson: cloneDiagram(authoritativeDiagram),
+        terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
+      });
+      applyDiagramJson(authoritativeDiagram);
+      // Workspace seed 교체는 Diagram과 Terraform을 함께 바꾸므로 이전 Diagram-only undo를 끊습니다.
+      setHistory({ past: [], future: [] });
+    },
+    [applyDiagramJson, onTemplateWorkspaceApply]
+  );
 
   const requestTerraformRefresh = useCallback(() => {
     setTerraformRefreshRequestId((requestId) => requestId + 1);
@@ -904,18 +1004,21 @@ function DiagramEditorInner({
     [applyLiveDiagramUpdate, focusEditorShell, getCurrentBoardViewportFrame, getFlowInstance]
   );
 
-  const selectResourceNode = useCallback<DiagramEditorPanelContext["selectResourceNode"]>((nodeId) => {
-    const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
+  const selectResourceNode = useCallback<DiagramEditorPanelContext["selectResourceNode"]>(
+    (nodeId) => {
+      const targetNode = diagramRef.current.nodes.find((node) => node.id === nodeId);
 
-    if (!targetNode) {
-      return;
-    }
+      if (!targetNode) {
+        return;
+      }
 
-    setSelectedNodeIds([nodeId]);
-    setSelectedEdgeIds([]);
-    setInspectedNodeId(nodeId);
-    setRightPanelOpen(true);
-  }, []);
+      setSelectedNodeIds([nodeId]);
+      setSelectedEdgeIds([]);
+      setInspectedNodeId(nodeId);
+      setRightPanelOpen(true);
+    },
+    []
+  );
 
   const panelContext = useMemo<DiagramEditorPanelContext>(
     () => ({
@@ -931,7 +1034,9 @@ function DiagramEditorInner({
       edges: diagram.edges,
       applyDiagramJson,
       closeInspectedNode: () => setInspectedNodeId(null),
+      commitTerraformSourceAuthority,
       focusResourceNode,
+      getDiagramRevision,
       requestTerraformRefresh,
       selectResourceNode,
       saveDiagramNow: onDiagramSaveRequest,
@@ -942,8 +1047,10 @@ function DiagramEditorInner({
     }),
     [
       applyDiagramJson,
+      commitTerraformSourceAuthority,
       diagram,
       focusResourceNode,
+      getDiagramRevision,
       hasRightRail,
       inspectedNodeId,
       isPreviewActive,
@@ -1053,7 +1160,7 @@ function DiagramEditorInner({
             new Set([nodeId])
           )
         : clearOutOfBoundsAreaParentAssignments(resizedDiagram.nodes, new Set([nodeId]));
-      const after = {
+      const resizedAndRefittedDiagram = {
         ...resizedDiagram,
         nodes: refitSecurityGroupScopesForTargetChanges({
           changedNodeIds: new Set([nodeId]),
@@ -1061,6 +1168,15 @@ function DiagramEditorInner({
           previousNodes: before?.nodes ?? resizedDiagram.nodes
         })
       };
+      const after = before
+        ? clearAuthoredRoutesForNodeGeometryChanges(before.nodes, resizedAndRefittedDiagram)
+        : clearAuthoredRoutesForNodeIds(
+            resizedAndRefittedDiagram,
+            new Set([
+              nodeId,
+              ...getNodeGeometryChangedIds(resizedDiagram.nodes, resizedAndRefittedDiagram.nodes)
+            ])
+          );
 
       replaceDiagram(after);
 
@@ -1096,47 +1212,58 @@ function DiagramEditorInner({
     ]
   );
 
-  const displayNodes = isPreviewActive ? visibleDiagram.nodes : dragPreviewNodes ?? diagram.nodes;
-  const flowNodes = useMemo(
-    () => {
-      const nextFlowNodes = toFlowNodes(
-        displayNodes,
-        isPreviewActive ? [] : selectedNodeIds,
-        isPreviewActive ? null : activeAreaDropTargetNodeId,
-        isConnectionActive,
-        flowNodeHandlers,
-        {
-          activeConnectionSourceNodeId: isPreviewActive ? null : connectStartNodeIdRef.current,
-          cachedNodesById: flowNodeCacheRef.current,
-          edges: visibleDiagram.edges,
-          isPreview: isPreviewActive,
-          previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
-        }
-      );
+  const displayNodes = isPreviewActive ? visibleDiagram.nodes : (dragPreviewNodes ?? diagram.nodes);
+  const staleAuthoredRouteNodeIds = useMemo(() => {
+    if (isPreviewActive) {
+      return new Set<string>();
+    }
 
-      if (interactionMode === "select" && !isPreviewActive) {
-        return nextFlowNodes;
-      }
+    const previousNodes = dragPreviewNodes ? diagram.nodes : resizeSnapshotRef.current?.nodes;
+    const currentNodes = dragPreviewNodes ?? diagram.nodes;
 
-      // React Flow는 노드별 draggable 값이 있으면 전체 nodesDraggable 설정보다 그 값을 우선한다.
-      return nextFlowNodes.map((node) => ({
-        ...node,
-        connectable: false,
-        draggable: false
-      }));
-    },
-    [
-      activeAreaDropTargetNodeId,
+    return previousNodes
+      ? getNodeGeometryChangedIds(previousNodes, currentNodes)
+      : new Set<string>();
+  }, [diagram.nodes, dragPreviewNodes, isPreviewActive]);
+  const flowNodes = useMemo(() => {
+    const nextFlowNodes = toFlowNodes(
       displayNodes,
-      flowNodeHandlers,
+      isPreviewActive ? [] : selectedNodeIds,
+      isPreviewActive ? null : activeAreaDropTargetNodeId,
       isConnectionActive,
-      interactionMode,
-      isPreviewActive,
-      previewAnnotations,
-      selectedNodeIds,
-      visibleDiagram.edges
-    ]
-  );
+      flowNodeHandlers,
+      {
+        activeConnectionSourceNodeId: isPreviewActive ? null : connectStartNodeIdRef.current,
+        cachedNodesById: flowNodeCacheRef.current,
+        edges: visibleDiagram.edges,
+        geometryPolicy: visibleDiagram.presentation?.geometryPolicy,
+        isPreview: isPreviewActive,
+        previewAnnotations: isPreviewActive ? (previewAnnotations ?? undefined) : undefined
+      }
+    );
+
+    if (interactionMode === "select" && !isPreviewActive) {
+      return nextFlowNodes;
+    }
+
+    // React Flow는 노드별 draggable 값이 있으면 전체 nodesDraggable 설정보다 그 값을 우선한다.
+    return nextFlowNodes.map((node) => ({
+      ...node,
+      connectable: false,
+      draggable: false
+    }));
+  }, [
+    activeAreaDropTargetNodeId,
+    displayNodes,
+    flowNodeHandlers,
+    isConnectionActive,
+    interactionMode,
+    isPreviewActive,
+    previewAnnotations,
+    selectedNodeIds,
+    visibleDiagram.edges,
+    visibleDiagram.presentation?.geometryPolicy
+  ]);
 
   useEffect(() => {
     flowNodeCacheRef.current = new Map(flowNodes.map((node) => [node.id, node]));
@@ -1145,23 +1272,36 @@ function DiagramEditorInner({
   const flowEdges = useMemo(
     () =>
       toFlowEdges(visibleDiagram.edges, isPreviewActive ? [] : selectedEdgeIds, displayNodes, {
+        geometryPolicy: visibleDiagram.presentation?.geometryPolicy,
         isPreview: isPreviewActive,
-        previewAnnotations: isPreviewActive ? previewAnnotations ?? undefined : undefined
+        previewAnnotations: isPreviewActive ? (previewAnnotations ?? undefined) : undefined,
+        staleAuthoredRouteNodeIds
       }),
-    [displayNodes, isPreviewActive, previewAnnotations, selectedEdgeIds, visibleDiagram.edges]
+    [
+      displayNodes,
+      isPreviewActive,
+      previewAnnotations,
+      selectedEdgeIds,
+      staleAuthoredRouteNodeIds,
+      visibleDiagram.edges,
+      visibleDiagram.presentation?.geometryPolicy
+    ]
   );
 
-  const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>((instance) => {
-    flowInstanceRef.current = instance;
-    setFlowReady(true);
-    const captureElement = canvasPanelRef.current?.querySelector<HTMLElement>(
-      BOARD_THUMBNAIL_CAPTURE_CONTRACT.sourceSelector
-    );
+  const handleInit = useCallback<OnInit<DiagramFlowNode, DiagramFlowEdge>>(
+    (instance) => {
+      flowInstanceRef.current = instance;
+      setFlowReady(true);
+      const captureElement = canvasPanelRef.current?.querySelector<HTMLElement>(
+        BOARD_THUMBNAIL_CAPTURE_CONTRACT.sourceSelector
+      );
 
-    if (captureElement) {
-      onBoardReady?.(captureElement);
-    }
-  }, [onBoardReady]);
+      if (captureElement) {
+        onBoardReady?.(captureElement);
+      }
+    },
+    [onBoardReady]
+  );
 
   const handleNodesChange = useCallback<OnNodesChange<DiagramFlowNode>>(
     (changes) => {
@@ -1183,7 +1323,9 @@ function DiagramEditorInner({
         return;
       }
 
-      const positionByNodeId = new Map(positionChanges.map((change) => [change.id, change.position]));
+      const positionByNodeId = new Map(
+        positionChanges.map((change) => [change.id, change.position])
+      );
       const dragSnapshot = dragSnapshotRef.current;
       const directNodeDragIds = directNodeDragIdsRef.current;
 
@@ -1193,8 +1335,7 @@ function DiagramEditorInner({
 
       applyLiveDiagramUpdate((currentDiagram) => {
         const directlyMovedNodeIds = new Set(positionByNodeId.keys());
-
-        return {
+        const nextDiagram = {
           ...currentDiagram,
           nodes: getDraggedPreviewNodes({
             currentNodes: currentDiagram.nodes,
@@ -1203,6 +1344,8 @@ function DiagramEditorInner({
             snapshotNodes: currentDiagram.nodes
           })
         };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
       });
     },
     [applyLiveDiagramUpdate, interactionMode, selectedNodeIds, setDragPreviewNodesForState]
@@ -1213,15 +1356,15 @@ function DiagramEditorInner({
       const nextSelectedEdgeIds = applySelectionChanges(selectedEdgeIds, changes);
 
       if (nextSelectedEdgeIds) {
-        setSelectedEdgeIds((currentIds) =>
-          stabilizeSelectedIds(currentIds, nextSelectedEdgeIds)
-        );
+        setSelectedEdgeIds((currentIds) => stabilizeSelectedIds(currentIds, nextSelectedEdgeIds));
       }
     },
     [selectedEdgeIds]
   );
 
-  const handleSelectionChange = useCallback<OnSelectionChangeFunc<DiagramFlowNode, DiagramFlowEdge>>(
+  const handleSelectionChange = useCallback<
+    OnSelectionChangeFunc<DiagramFlowNode, DiagramFlowEdge>
+  >(
     ({ edges, nodes }) => {
       const nextSelectedNodeIds = normalizeSelectedNodeIds(
         diagramRef.current.nodes,
@@ -1230,12 +1373,8 @@ function DiagramEditorInner({
       const nextSelectedEdgeIds =
         nextSelectedNodeIds.length > 0 ? [] : edges.map((edge) => edge.id);
 
-      setSelectedNodeIds((currentIds) =>
-        stabilizeSelectedIds(currentIds, nextSelectedNodeIds)
-      );
-      setSelectedEdgeIds((currentIds) =>
-        stabilizeSelectedIds(currentIds, nextSelectedEdgeIds)
-      );
+      setSelectedNodeIds((currentIds) => stabilizeSelectedIds(currentIds, nextSelectedNodeIds));
+      setSelectedEdgeIds((currentIds) => stabilizeSelectedIds(currentIds, nextSelectedEdgeIds));
 
       if (nodes.length > 0 || edges.length > 0) {
         focusEditorShell();
@@ -1367,12 +1506,14 @@ function DiagramEditorInner({
       if (dragState.hasMoved) {
         const directlyMovedNodeIds = new Set([dragState.nodeId]);
         const positionByNodeId = new Map([[dragState.nodeId, dragState.latestNodePosition]]);
-        const previewNodes = dragPreviewNodesRef.current ?? getDraggedPreviewNodes({
-          currentNodes: diagramRef.current.nodes,
-          directlyMovedNodeIds,
-          positionByNodeId,
-          snapshotNodes: dragState.snapshotNodes
-        });
+        const previewNodes =
+          dragPreviewNodesRef.current ??
+          getDraggedPreviewNodes({
+            currentNodes: diagramRef.current.nodes,
+            directlyMovedNodeIds,
+            positionByNodeId,
+            snapshotNodes: dragState.snapshotNodes
+          });
         const finalizedNodes = finalizeDraggedNodes({
           anchorNodeId: dragState.nodeId,
           autoExpandAreasEnabled,
@@ -1383,10 +1524,14 @@ function DiagramEditorInner({
           snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
           snapshotNodes: dragState.snapshotNodes
         });
-        const after = {
+        const finalizedDiagram = {
           ...diagramRef.current,
           nodes: finalizedNodes.nodes
         };
+        const after = clearAuthoredRoutesForNodeGeometryChanges(
+          dragState.before.nodes,
+          finalizedDiagram
+        );
 
         if (!areDiagramsEqual(dragState.before, after)) {
           replaceDiagram(after);
@@ -1555,27 +1700,34 @@ function DiagramEditorInner({
     [getAreaNodeFromPointerEvent, inspectAreaBlankNode, interactionMode]
   );
 
-  const handleNodeDragStart = useCallback((_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode) => {
-    if (interactionMode !== "select") {
-      return;
-    }
+  const handleNodeDragStart = useCallback(
+    (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode) => {
+      if (interactionMode !== "select") {
+        return;
+      }
 
-    cancelSnapAnimation();
-    cancelQueuedNodeDragPreview();
-    dragSnapshotRef.current = cloneDiagram(diagramRef.current);
-    dragAnchorNodeIdRef.current = draggedFlowNode.id;
-    directNodeDragIdsRef.current = createDirectNodeDragIdSet(draggedFlowNode.id, selectedNodeIds);
-    updateActiveAreaDropTargetNodeId(null);
-  }, [
-    cancelQueuedNodeDragPreview,
-    cancelSnapAnimation,
-    interactionMode,
-    selectedNodeIds,
-    updateActiveAreaDropTargetNodeId
-  ]);
+      cancelSnapAnimation();
+      cancelQueuedNodeDragPreview();
+      dragSnapshotRef.current = cloneDiagram(diagramRef.current);
+      dragAnchorNodeIdRef.current = draggedFlowNode.id;
+      directNodeDragIdsRef.current = createDirectNodeDragIdSet(draggedFlowNode.id, selectedNodeIds);
+      updateActiveAreaDropTargetNodeId(null);
+    },
+    [
+      cancelQueuedNodeDragPreview,
+      cancelSnapAnimation,
+      interactionMode,
+      selectedNodeIds,
+      updateActiveAreaDropTargetNodeId
+    ]
+  );
 
   const handleNodeDrag = useCallback(
-    (_event: MouseEvent | TouchEvent, draggedFlowNode: DiagramFlowNode, nodes: DiagramFlowNode[]) => {
+    (
+      _event: MouseEvent | TouchEvent,
+      draggedFlowNode: DiagramFlowNode,
+      nodes: DiagramFlowNode[]
+    ) => {
       if (interactionMode !== "select") {
         return;
       }
@@ -1611,10 +1763,13 @@ function DiagramEditorInner({
         snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
         snapshotNodes
       });
-      const after = {
+      const finalizedDiagram = {
         ...diagramRef.current,
         nodes: finalizedNodes.nodes
       };
+      const after = before
+        ? clearAuthoredRoutesForNodeGeometryChanges(before.nodes, finalizedDiagram)
+        : finalizedDiagram;
 
       if (before && !areDiagramsEqual(before, after)) {
         replaceDiagram(after);
@@ -1651,13 +1806,10 @@ function DiagramEditorInner({
     setConnectionActive(false);
   }, []);
 
-  const handleConnectStart = useCallback<OnConnectStart>(
-    (_event, params) => {
-      connectStartNodeIdRef.current = params.nodeId;
-      setConnectionActive(true);
-    },
-    []
-  );
+  const handleConnectStart = useCallback<OnConnectStart>((_event, params) => {
+    connectStartNodeIdRef.current = params.nodeId;
+    setConnectionActive(true);
+  }, []);
 
   const handleConnectEnd = useCallback<OnConnectEnd>(() => {
     resetConnectionStateOnCancel();
@@ -1750,10 +1902,14 @@ function DiagramEditorInner({
       snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
       snapshotNodes: dragState.snapshotNodes
     });
-    const after = {
+    const finalizedDiagram = {
       ...diagramRef.current,
       nodes: finalizedNodes.nodes
     };
+    const after = clearAuthoredRoutesForNodeGeometryChanges(
+      dragState.before.nodes,
+      finalizedDiagram
+    );
 
     if (!areDiagramsEqual(dragState.before, after)) {
       replaceDiagram(after);
@@ -1790,14 +1946,17 @@ function DiagramEditorInner({
       catalog: terraformParameterCatalog,
       currentNodes: diagramRef.current.nodes,
       directlyMovedNodeIds,
-      positionByNodeId: new Map(previewNodes.map((previewNode) => [previewNode.id, previewNode.position])),
+      positionByNodeId: new Map(
+        previewNodes.map((previewNode) => [previewNode.id, previewNode.position])
+      ),
       snapGridSize: DIAGRAM_SNAP_GRID_SIZE,
       snapshotNodes: before.nodes
     });
-    const after = {
+    const finalizedDiagram = {
       ...diagramRef.current,
       nodes: finalizedNodes.nodes
     };
+    const after = clearAuthoredRoutesForNodeGeometryChanges(before.nodes, finalizedDiagram);
 
     if (!areDiagramsEqual(before, after)) {
       replaceDiagram(after);
@@ -1875,7 +2034,7 @@ function DiagramEditorInner({
             )
           : nodesWithAssignedParents;
 
-        return {
+        const nextDiagram = {
           ...currentDiagram,
           nodes: applyContainingReferenceDropTargets(
             nodesWithReconciledAreas,
@@ -1883,6 +2042,8 @@ function DiagramEditorInner({
             terraformParameterCatalog
           )
         };
+
+        return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
       });
       setSelectedNodeIds([nextNode.id]);
       setSelectedEdgeIds([]);
@@ -1999,7 +2160,7 @@ function DiagramEditorInner({
           )
         : nodesWithoutDeletedParents;
 
-      return {
+      const nextDiagram = {
         ...diagramWithoutSelection,
         nodes: refitSecurityGroupScopesForTargetChanges({
           changedNodeIds: deletedNodeIds,
@@ -2007,6 +2168,8 @@ function DiagramEditorInner({
           previousNodes: currentDiagram.nodes
         })
       };
+
+      return clearAuthoredRoutesForNodeGeometryChanges(currentDiagram.nodes, nextDiagram);
     });
     setSelectedNodeIds([]);
     setSelectedEdgeIds([]);
@@ -2026,7 +2189,10 @@ function DiagramEditorInner({
     const selectedNodeIdSet = new Set(selectedNodeIds);
     clipboardRef.current = diagramRef.current.nodes
       .filter((node) => selectedNodeIdSet.has(node.id))
-      .map((node) => cloneDiagram({ nodes: [node], edges: [], viewport: getDefaultViewport() }).nodes[0])
+      .map(
+        (node) =>
+          cloneDiagram({ nodes: [node], edges: [], viewport: getDefaultViewport() }).nodes[0]
+      )
       .filter((node): node is DiagramNode => Boolean(node));
   }, [selectedNodeIds]);
 
@@ -2075,7 +2241,14 @@ function DiagramEditorInner({
     (edgeId: string, type: NonNullable<DiagramEdge["type"]>) => {
       commitDiagramUpdate((currentDiagram) => ({
         ...currentDiagram,
-        edges: currentDiagram.edges.map((edge) => (edge.id === edgeId ? { ...edge, type } : edge))
+        edges: currentDiagram.edges.map((edge) => {
+          if (edge.id !== edgeId) {
+            return edge;
+          }
+
+          const { route: _route, ...edgeWithoutRoute } = edge;
+          return { ...edgeWithoutRoute, type };
+        })
       }));
     },
     [commitDiagramUpdate]
@@ -2126,6 +2299,81 @@ function DiagramEditorInner({
     []
   );
 
+  const applyRequestedInitialViewport = useCallback(() => {
+    if (!isFlowReady || !shouldApplySourceViewportRef.current) {
+      return;
+    }
+
+    const presentation = visibleDiagram.presentation;
+    shouldApplySourceViewportRef.current = false;
+
+    if (
+      presentation?.geometryPolicy !== "source-exact" ||
+      presentation.sourceViewBox === undefined
+    ) {
+      const shouldRestoreLegacyViewport = wasSourceViewBoxViewportRef.current;
+      wasSourceViewBoxViewportRef.current = false;
+      setBoardMinimumZoom(0.25);
+
+      if (shouldRestoreLegacyViewport) {
+        runViewportMoveWithoutPersistence(() =>
+          getFlowInstance().setViewport(visibleDiagram.viewport, { duration: 0 })
+        );
+      }
+
+      return;
+    }
+
+    wasSourceViewBoxViewportRef.current = true;
+    const frame = getCurrentBoardViewportFrame() ?? { x: 0, y: 0, width: 1, height: 1 };
+    const nextDiagram = applyInitialSourceViewBoxViewport(visibleDiagram, frame);
+    const viewport = nextDiagram.viewport;
+
+    setBoardMinimumZoom(getSourceViewBoxMinimumZoom(presentation.sourceViewBox, frame));
+
+    if (nextDiagram !== visibleDiagram) {
+      if (previewDiagram !== null) {
+        setPreviewDiagramState(nextDiagram);
+      } else {
+        replaceDiagram(nextDiagram);
+      }
+    }
+
+    runViewportMoveWithoutPersistence(() =>
+      getFlowInstance().setViewport(viewport, { duration: 0 })
+    );
+  }, [
+    getCurrentBoardViewportFrame,
+    getFlowInstance,
+    isFlowReady,
+    previewDiagram,
+    replaceDiagram,
+    runViewportMoveWithoutPersistence,
+    visibleDiagram
+  ]);
+
+  useEffect(() => {
+    if (
+      !isFlowReady ||
+      !shouldApplySourceViewportRef.current ||
+      initialSourceViewportFrameRef.current !== null
+    ) {
+      return;
+    }
+
+    initialSourceViewportFrameRef.current = window.requestAnimationFrame(() => {
+      initialSourceViewportFrameRef.current = null;
+      applyRequestedInitialViewport();
+    });
+
+    return () => {
+      if (initialSourceViewportFrameRef.current !== null) {
+        window.cancelAnimationFrame(initialSourceViewportFrameRef.current);
+        initialSourceViewportFrameRef.current = null;
+      }
+    };
+  }, [applyRequestedInitialViewport, isFlowReady]);
+
   const handleMoveEnd = useCallback<OnMoveEnd>(
     (_event, viewport) => {
       persistViewportAfterMove(
@@ -2150,76 +2398,81 @@ function DiagramEditorInner({
   }, [getFlowInstance]);
 
   /** 현재 보드를 화면 크기에 맞추고, 사용자 요청일 때만 시점 변경을 저장합니다. */
-  const fitVisibleDiagram = useCallback((shouldPersistViewport: boolean) => {
-    const flowInstance = getFlowInstance();
-    const currentNodes = previewDiagram?.nodes ?? diagramRef.current.nodes;
+  const fitVisibleDiagram = useCallback(
+    (shouldPersistViewport: boolean) => {
+      const flowInstance = getFlowInstance();
+      const currentNodes = previewDiagram?.nodes ?? diagramRef.current.nodes;
 
-    if (currentNodes.length === 0) {
-      const moveToDefaultViewport = () =>
-        flowInstance.setViewport(DEFAULT_DIAGRAM_VIEWPORT, {
-          duration: getBoardMotionDuration(180)
-        });
+      if (currentNodes.length === 0) {
+        const moveToDefaultViewport = () =>
+          flowInstance.setViewport(DEFAULT_DIAGRAM_VIEWPORT, {
+            duration: getBoardMotionDuration(180)
+          });
+
+        if (shouldPersistViewport) {
+          void moveToDefaultViewport();
+        } else {
+          runViewportMoveWithoutPersistence(moveToDefaultViewport);
+        }
+        if (shouldPersistViewport) {
+          applyLiveDiagramUpdate((currentDiagram) =>
+            updateDiagramViewport(currentDiagram, DEFAULT_DIAGRAM_VIEWPORT)
+          );
+        }
+        return;
+      }
+
+      const frame = getCurrentBoardViewportFrame();
+
+      if (!frame) {
+        const fitOptions = {
+          duration: getBoardMotionDuration(180),
+          maxZoom: 1.35,
+          minZoom: 0.25,
+          nodes: currentNodes.map((node) => ({ id: node.id })),
+          padding: 0.24
+        };
+
+        if (shouldPersistViewport) {
+          void flowInstance.fitView(fitOptions);
+        } else {
+          runViewportMoveWithoutPersistence(() => flowInstance.fitView(fitOptions));
+        }
+        return;
+      }
+
+      const viewport = offsetBoardViewportToFrame(
+        getViewportForBounds(
+          getDiagramVisualBounds(currentNodes),
+          frame.width,
+          frame.height,
+          0.25,
+          1.35,
+          0.24
+        ),
+        frame
+      );
+
+      const moveToViewport = () =>
+        flowInstance.setViewport(viewport, { duration: getBoardMotionDuration(180) });
 
       if (shouldPersistViewport) {
-        void moveToDefaultViewport();
+        void moveToViewport();
       } else {
-        runViewportMoveWithoutPersistence(moveToDefaultViewport);
+        runViewportMoveWithoutPersistence(moveToViewport);
       }
       if (shouldPersistViewport) {
-        applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, DEFAULT_DIAGRAM_VIEWPORT));
+        applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, viewport));
       }
-      return;
-    }
-
-    const frame = getCurrentBoardViewportFrame();
-
-    if (!frame) {
-      const fitOptions = {
-        duration: getBoardMotionDuration(180),
-        maxZoom: 1.35,
-        minZoom: 0.25,
-        nodes: currentNodes.map((node) => ({ id: node.id })),
-        padding: 0.24
-      };
-
-      if (shouldPersistViewport) {
-        void flowInstance.fitView(fitOptions);
-      } else {
-        runViewportMoveWithoutPersistence(() => flowInstance.fitView(fitOptions));
-      }
-      return;
-    }
-
-    const viewport = offsetBoardViewportToFrame(
-      getViewportForBounds(
-        getDiagramVisualBounds(currentNodes),
-        frame.width,
-        frame.height,
-        0.25,
-        1.35,
-        0.24
-      ),
-      frame
-    );
-
-    const moveToViewport = () =>
-      flowInstance.setViewport(viewport, { duration: getBoardMotionDuration(180) });
-
-    if (shouldPersistViewport) {
-      void moveToViewport();
-    } else {
-      runViewportMoveWithoutPersistence(moveToViewport);
-    }
-    if (shouldPersistViewport) {
-      applyLiveDiagramUpdate((currentDiagram) => updateDiagramViewport(currentDiagram, viewport));
-    }
-  }, [
-    applyLiveDiagramUpdate,
-    getCurrentBoardViewportFrame,
-    getFlowInstance,
-    previewDiagram,
-    runViewportMoveWithoutPersistence
-  ]);
+    },
+    [
+      applyLiveDiagramUpdate,
+      getCurrentBoardViewportFrame,
+      getFlowInstance,
+      previewDiagram,
+      runViewportMoveWithoutPersistence
+    ]
+  );
 
   const handleFitView = useCallback(() => {
     fitVisibleDiagram(previewDiagram === null);
@@ -2229,6 +2482,7 @@ function DiagramEditorInner({
     if (
       !isFlowReady ||
       !shouldApplyInitialBoardZoomRef.current ||
+      hasSourceViewBoxViewport ||
       normalizedInitialBoardZoom === undefined ||
       diagram.nodes.length === 0
     ) {
@@ -2264,6 +2518,7 @@ function DiagramEditorInner({
   }, [
     diagram.nodes.length,
     getCurrentBoardViewportFrame,
+    hasSourceViewBoxViewport,
     isFlowReady,
     normalizedInitialBoardZoom,
     previewDiagram,
@@ -2300,7 +2555,12 @@ function DiagramEditorInner({
   ]);
 
   useEffect(() => {
-    if (!isFlowReady || !shouldAutoFitInitialDiagramRef.current || diagram.nodes.length === 0) {
+    if (
+      !isFlowReady ||
+      !shouldAutoFitInitialDiagramRef.current ||
+      hasSourceViewBoxViewport ||
+      diagram.nodes.length === 0
+    ) {
       return;
     }
 
@@ -2322,13 +2582,14 @@ function DiagramEditorInner({
         initialAutoFitFrameRef.current = null;
       }
     };
-  }, [diagram.nodes.length, fitVisibleDiagram, isFlowReady]);
+  }, [diagram.nodes.length, fitVisibleDiagram, hasSourceViewBoxViewport, isFlowReady]);
 
   useEffect(() => {
     if (
       !isFlowReady ||
       normalizedInitialBoardZoom !== undefined ||
       previewDiagram === null ||
+      hasSourceViewBoxViewport ||
       previewDiagram.nodes.length === 0
     ) {
       return;
@@ -2339,7 +2600,13 @@ function DiagramEditorInner({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [fitVisibleDiagram, isFlowReady, normalizedInitialBoardZoom, previewDiagram]);
+  }, [
+    fitVisibleDiagram,
+    hasSourceViewBoxViewport,
+    isFlowReady,
+    normalizedInitialBoardZoom,
+    previewDiagram
+  ]);
 
   useEffect(() => {
     function handleVisibilityChange(): void {
@@ -2474,7 +2741,7 @@ function DiagramEditorInner({
 
     /** 패널이 접힌 뒤 확정된 Board 크기를 기준으로 노드가 모두 보이게 맞춥니다. */
     function refitCompactBoard(): void {
-      if (window.innerWidth > 1120) {
+      if (hasSourceViewBoxViewport || window.innerWidth > 1120) {
         return;
       }
 
@@ -2497,7 +2764,7 @@ function DiagramEditorInner({
         window.cancelAnimationFrame(fitFrame);
       }
     };
-  }, [fitVisibleDiagram, isFlowReady]);
+  }, [fitVisibleDiagram, hasSourceViewBoxViewport, isFlowReady]);
 
   useEffect(() => {
     let resizeFrame: number | null = null;
@@ -2508,7 +2775,7 @@ function DiagramEditorInner({
       updateLeftPanelWidth(leftPanelWidth);
       updateRightPanelWidth(rightPanelWidth);
 
-      if (!isFlowReady || window.innerWidth > 1120) {
+      if (!isFlowReady || hasSourceViewBoxViewport || window.innerWidth > 1120) {
         return;
       }
 
@@ -2539,7 +2806,15 @@ function DiagramEditorInner({
         window.cancelAnimationFrame(settledLayoutFrame);
       }
     };
-  }, [fitVisibleDiagram, isFlowReady, leftPanelWidth, rightPanelWidth, updateLeftPanelWidth, updateRightPanelWidth]);
+  }, [
+    fitVisibleDiagram,
+    hasSourceViewBoxViewport,
+    isFlowReady,
+    leftPanelWidth,
+    rightPanelWidth,
+    updateLeftPanelWidth,
+    updateRightPanelWidth
+  ]);
 
   function handleShellKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
@@ -2642,7 +2917,9 @@ function DiagramEditorInner({
             <button
               aria-label="선택 모드"
               aria-pressed={interactionMode === "select"}
-              className={interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton}
+              className={
+                interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton
+              }
               onClick={() => setInteractionMode("select")}
               title="선택 모드"
               type="button"
@@ -2695,10 +2972,22 @@ function DiagramEditorInner({
           </div>
 
           <div className={styles.toolbarGroup} aria-label="Viewport">
-            <button aria-label="Zoom in" className={styles.iconButton} onClick={handleZoomIn} title="Zoom in" type="button">
+            <button
+              aria-label="Zoom in"
+              className={styles.iconButton}
+              onClick={handleZoomIn}
+              title="Zoom in"
+              type="button"
+            >
               <ZoomIn aria-hidden="true" size={16} />
             </button>
-            <button aria-label="Zoom out" className={styles.iconButton} onClick={handleZoomOut} title="Zoom out" type="button">
+            <button
+              aria-label="Zoom out"
+              className={styles.iconButton}
+              onClick={handleZoomOut}
+              title="Zoom out"
+              type="button"
+            >
               <ZoomOut aria-hidden="true" size={16} />
             </button>
             <button
@@ -2711,7 +3000,6 @@ function DiagramEditorInner({
               <Maximize2 aria-hidden="true" size={16} />
             </button>
           </div>
-
         </header>
 
         {draftStatusPanel ? (
@@ -2764,8 +3052,9 @@ function DiagramEditorInner({
             edgeTypes={EDGE_TYPES}
             edges={flowEdges}
             elementsSelectable={!isPreviewActive || allowPreviewInspection}
+            elevateNodesOnSelect={visibleDiagram.presentation?.geometryPolicy !== "source-exact"}
             maxZoom={2}
-            minZoom={0.25}
+            minZoom={boardMinimumZoom}
             multiSelectionKeyCode={["Shift", "Meta", "Control"]}
             nodeTypes={NODE_TYPES}
             nodes={flowNodes}
@@ -2845,7 +3134,10 @@ function DiagramEditorInner({
             type="button"
           />
           {rightPanel === undefined ? (
-            <ParameterInputPanel key={panelContext.selectedNodeId ?? "no-selection"} {...panelContext} />
+            <ParameterInputPanel
+              key={panelContext.selectedNodeId ?? "no-selection"}
+              {...panelContext}
+            />
           ) : (
             rightPanel(panelContext)
           )}
@@ -2906,7 +3198,9 @@ function readStoredRightPanelWidth(): number {
 
   const storedWidth = Number(window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY));
 
-  return Number.isFinite(storedWidth) ? clampRightPanelWidth(storedWidth) : DEFAULT_RIGHT_PANEL_WIDTH;
+  return Number.isFinite(storedWidth)
+    ? clampRightPanelWidth(storedWidth)
+    : DEFAULT_RIGHT_PANEL_WIDTH;
 }
 
 function storeLeftPanelWidth(width: number): void {
@@ -2922,8 +3216,15 @@ function clampLeftPanelWidth(width: number): number {
     return clamp(width, MIN_LEFT_PANEL_WIDTH, MAX_LEFT_PANEL_WIDTH);
   }
 
-  const viewportLimitedMaxWidth = Math.max(MIN_LEFT_PANEL_WIDTH, window.innerWidth - MIN_WORKSPACE_WIDTH);
-  return clamp(width, MIN_LEFT_PANEL_WIDTH, Math.min(MAX_LEFT_PANEL_WIDTH, viewportLimitedMaxWidth));
+  const viewportLimitedMaxWidth = Math.max(
+    MIN_LEFT_PANEL_WIDTH,
+    window.innerWidth - MIN_WORKSPACE_WIDTH
+  );
+  return clamp(
+    width,
+    MIN_LEFT_PANEL_WIDTH,
+    Math.min(MAX_LEFT_PANEL_WIDTH, viewportLimitedMaxWidth)
+  );
 }
 
 function clampRightPanelWidth(width: number): number {
@@ -2931,8 +3232,15 @@ function clampRightPanelWidth(width: number): number {
     return clamp(width, MIN_RIGHT_PANEL_WIDTH, MAX_RIGHT_PANEL_WIDTH);
   }
 
-  const viewportLimitedMaxWidth = Math.max(MIN_RIGHT_PANEL_WIDTH, window.innerWidth - MIN_WORKSPACE_WIDTH);
-  return clamp(width, MIN_RIGHT_PANEL_WIDTH, Math.min(MAX_RIGHT_PANEL_WIDTH, viewportLimitedMaxWidth));
+  const viewportLimitedMaxWidth = Math.max(
+    MIN_RIGHT_PANEL_WIDTH,
+    window.innerWidth - MIN_WORKSPACE_WIDTH
+  );
+  return clamp(
+    width,
+    MIN_RIGHT_PANEL_WIDTH,
+    Math.min(MAX_RIGHT_PANEL_WIDTH, viewportLimitedMaxWidth)
+  );
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -3040,7 +3348,12 @@ function isEditableEventTarget(target: EventTarget | null): boolean {
 
   const tagName = target.tagName.toLocaleLowerCase();
 
-  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
+  return (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    target.isContentEditable
+  );
 }
 
 function toDiagramViewport(viewport: Viewport): DiagramJson["viewport"] {
