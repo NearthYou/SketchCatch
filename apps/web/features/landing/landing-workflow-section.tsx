@@ -6,18 +6,18 @@ import styles from "./product-entry.module.css";
 
 const WORKFLOW_STEPS = [
   {
-    description: "Requirement Input을 편집 가능한 Architecture Draft로 만듭니다.",
-    label: "AI Architecture Recommendation",
+    description: "요구사항을 바탕으로 편집 가능한 아키텍처 초안을 생성합니다.",
+    label: "AI Architecture Draft",
     value: "draft"
   },
   {
-    description: "Practice Architecture가 어떤 코드가 되는지 Resource별로 확인합니다.",
-    label: "IaC Preview 확인하기",
+    description: "설계가 어떤 Terraform 코드로 변환되는지 리소스별로 확인합니다.",
+    label: "Terraform Preview",
     value: "terraform"
   },
   {
-    description: "Cost Risk, Security Risk와 Plan 변경 내용을 보고 Deployment를 승인합니다.",
-    label: "Pre-Deployment Check",
+    description: "비용·보안 위험과 변경 내역을 검토한 뒤 배포를 승인합니다.",
+    label: "Pre-Deployment Review",
     value: "deploy"
   }
 ] as const;
@@ -31,10 +31,11 @@ export function LandingWorkflowSection() {
     <section className={`${styles.section} ${styles.sectionSoft}`} id="workspace" aria-labelledby="workspace-title">
       <div className={styles.container}>
         <header className={styles.sectionHeading}>
-          <p className={styles.sectionKicker}>One continuous workspace</p>
+          <p className={styles.sectionKicker}>ONE CONTINUOUS WORKSPACE</p>
           <h2 id="workspace-title">설계에서 배포까지,<br />하나의 흐름으로.</h2>
           <p>
-            아키텍처 설계와 수정, 배포를 한 프로젝트 안에서 이어가세요.
+            아키텍처를 수정하면 Terraform 미리보기가 함께 업데이트되고, 비용·보안 검토 결과는
+            해당 리소스와 바로 연결됩니다. 설계와 코드, 배포 판단을 한 프로젝트 안에서 이어가세요.
           </p>
         </header>
 
