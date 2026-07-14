@@ -76,6 +76,25 @@ test("dispatcher sends one safe payload and marks the outbox delivered", async (
   ]);
 });
 
+test("dispatcher ignores provider status codes outside the persisted HTTP range", async () => {
+  for (const statusCode of [99, 600, 200.5]) {
+    const repository = new FakeNotificationRepository();
+    const service = createService(repository, {
+      async send() {
+        return { statusCode };
+      }
+    });
+    await service.saveSubscription("user-1", subscriptionInput);
+    repository.claimed.push(createDelivery());
+
+    await service.dispatchPending();
+
+    assert.deepEqual(repository.outboxUpdates, [
+      { kind: "delivered", id: "outbox-1", providerStatusCode: null }
+    ]);
+  }
+});
+
 test("a new subscription does not receive terminal events created before it existed", async () => {
   const repository = new FakeNotificationRepository();
   let sendCount = 0;

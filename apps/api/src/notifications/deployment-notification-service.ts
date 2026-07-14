@@ -219,7 +219,15 @@ export function createDeploymentNotificationService(options: {
                 actionUrl: delivery.notification.actionUrl
               })
             );
-            providerStatusCode = pushResult?.statusCode ?? providerStatusCode;
+            const statusCode = pushResult?.statusCode;
+            if (
+              typeof statusCode === "number" &&
+              Number.isInteger(statusCode) &&
+              statusCode >= 100 &&
+              statusCode <= 599
+            ) {
+              providerStatusCode = statusCode;
+            }
           } catch (error) {
             const statusCode = error instanceof WebPushDeliveryError ? error.statusCode : null;
             const code = statusCode === null ? "push_unknown" : `push_${statusCode}`;
