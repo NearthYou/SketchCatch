@@ -4,6 +4,7 @@ import type { DiagramNode } from "@sketchcatch/types";
 
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
+import { getOrthogonalRouteNodeOverlapLength } from "../diagram-editor/obstacle-safe-edge-routing";
 import { resourceCatalog } from "../resource-settings/catalog";
 import {
   getWorkspaceDiagramFixture,
@@ -53,6 +54,7 @@ test("automatic-layout-vpc exposes the large deterministic visual regression fix
   assert.equal(quality.nodeOverlapCount, 0);
   assert.equal(quality.siblingAreaOverlapCount, 0);
   assert.equal(quality.parentBoundaryViolationCount, 0);
+  assertNoRenderedResourceIntersections(fixture);
   assert.deepEqual(getWorkspaceDiagramFixture("automatic-layout-vpc"), fixture);
 });
 
@@ -405,6 +407,44 @@ test("visual fixtures stay unavailable for unknown names and production", () => 
     }
   }
 });
+
+function assertNoRenderedResourceIntersections(fixture: {
+  readonly edges: readonly {
+    readonly id: string;
+    readonly sourceHandleId?: string | undefined;
+    readonly sourceNodeId: string;
+    readonly targetHandleId?: string | undefined;
+    readonly targetNodeId: string;
+  }[];
+  readonly nodes: readonly DiagramNode[];
+}): void {
+  const nodeById = new Map(fixture.nodes.map((node) => [node.id, node]));
+
+  for (const edge of fixture.edges) {
+    const source = nodeById.get(edge.sourceNodeId);
+    const target = nodeById.get(edge.targetNodeId);
+    assert.ok(source);
+    assert.ok(target);
+
+    for (const node of fixture.nodes) {
+      if (node.id === source.id || node.id === target.id || isAreaNode(node)) continue;
+
+      assert.equal(
+        getOrthogonalRouteNodeOverlapLength(
+          source,
+          target,
+          {
+            sourceHandleId: edge.sourceHandleId ?? "handle-right",
+            targetHandleId: edge.targetHandleId ?? "handle-left"
+          },
+          node
+        ),
+        0,
+        `${edge.id} should not cross ${node.id}`
+      );
+    }
+  }
+}
 
 function doBoundsOverlap(
   left: ReturnType<typeof getResourceNodeVisualBounds>,

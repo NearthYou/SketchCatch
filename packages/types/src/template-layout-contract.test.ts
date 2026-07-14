@@ -25,9 +25,12 @@ const EXPECTED_VIEWPORTS = {
   "minimal-serverless-api": { x: 0, y: 0, zoom: 0.62 },
   "full-serverless-web-app": { x: 0, y: 0, zoom: 0.52 },
   "three-tier-web-app": { x: 0, y: 0, zoom: 0.46 },
-  "ecs-fargate-container-app": { x: 0, y: 0, zoom: 0.46 },
+  "ecs-fargate-container-app": { x: 0, y: 0, zoom: 0.6 },
   "eks-container-app": { x: 0, y: 0, zoom: 0.46 }
-} as const satisfies Record<TemplateId, { readonly x: number; readonly y: number; readonly zoom: number }>;
+} as const satisfies Record<
+  TemplateId,
+  { readonly x: number; readonly y: number; readonly zoom: number }
+>;
 
 const EXPECTED_LAYOUTS = {
   "static-web-hosting": {
@@ -103,26 +106,26 @@ const EXPECTED_LAYOUTS = {
     database: at(1160, 1200, "vpc")
   },
   "ecs-fargate-container-app": {
-    vpc: at(320, 240, "region", { width: 1480, height: 960 }),
-    "subnet-a": at(520, 480, "az-a", { width: 360, height: 160 }),
-    "subnet-b": at(1280, 480, "az-b", { width: 360, height: 160 }),
-    "internet-gateway": at(280, 320, "region"),
-    "route-table": at(360, 440, "vpc"),
-    "route-a": at(480, 440, "az-a"),
-    "route-b": at(1240, 440, "az-b"),
-    cluster: at(520, 800, "vpc", { width: 1120, height: 320 }, true),
-    "alb-security-group": at(960, 440, "vpc", { width: 240, height: 200 }),
-    "task-security-group": at(680, 840, "cluster", { width: 240, height: 240 }),
-    "execution-role": at(1960, 200, "global-iam-group"),
-    "execution-policy": at(2120, 200, "global-iam-group"),
-    "task-role": at(1960, 360, "global-iam-group"),
-    repository: at(1960, 720, "definition-ops-group"),
-    "log-group": at(2120, 960, "definition-ops-group"),
-    "load-balancer": at(1040, 520, "vpc"),
-    "target-group": at(1120, 680, "vpc"),
-    listener: at(960, 680, "vpc"),
-    task: at(2120, 720, "definition-ops-group"),
-    service: at(760, 920, "cluster")
+    vpc: at(400, 200, "region", { width: 1360, height: 560 }),
+    "subnet-a": at(520, 560, "vpc", { width: 480, height: 160 }),
+    "subnet-b": at(1080, 560, "vpc", { width: 480, height: 160 }),
+    "internet-gateway": at(360, 240, "region"),
+    "route-table": at(440, 640, "vpc"),
+    "route-a": at(920, 520, "vpc"),
+    "route-b": at(1480, 520, "vpc"),
+    cluster: at(1280, 280, "vpc", { width: 320, height: 240 }, true),
+    "alb-security-group": at(560, 280, "vpc", { width: 200, height: 200 }),
+    "task-security-group": at(1360, 320, "cluster", { width: 160, height: 160 }),
+    "execution-role": at(1880, 200, "global-iam-group"),
+    "execution-policy": at(2000, 200, "global-iam-group"),
+    "task-role": at(1880, 320, "global-iam-group"),
+    repository: at(1880, 560, "definition-ops-group"),
+    "log-group": at(1880, 680, "definition-ops-group"),
+    "load-balancer": at(640, 360, "vpc"),
+    "target-group": at(1080, 360, "vpc"),
+    listener: at(880, 360, "vpc"),
+    task: at(2000, 560, "definition-ops-group"),
+    service: at(1400, 360, "cluster")
   },
   "eks-container-app": {
     vpc: at(320, 240, "region", { width: 1480, height: 1040 }),
@@ -201,9 +204,9 @@ const EXPECTED_ROUTING = {
     "alb-sg-load-balancer": route("handle-bottom", "handle-top"),
     "alb-sg-task-sg": route("handle-bottom", "handle-top"),
     "task-sg-service": route("handle-bottom", "handle-top"),
-    "load-balancer-listener": route("handle-bottom", "handle-top"),
+    "load-balancer-listener": route("handle-right", "handle-left"),
     "listener-target-group": route("handle-right", "handle-left"),
-    "target-group-service": route("handle-bottom", "handle-top"),
+    "target-group-service": route("handle-right", "handle-left"),
     "cluster-service": route("handle-right", "handle-left"),
     "service-task": route("handle-right", "handle-left"),
     "repository-task": route("handle-bottom", "handle-top"),
@@ -238,21 +241,45 @@ test("six deployable templates keep their semantic graph while adopting the PNG 
     const expectedLayout = EXPECTED_LAYOUTS[definition.id];
     const expectedRouting = EXPECTED_ROUTING[definition.id];
 
-    assert.equal(createSemanticHash(definition), EXPECTED_SEMANTIC_HASHES[definition.id], definition.id);
-    assert.deepEqual(Object.keys(expectedLayout).sort(), definition.resources.map((resource) => resource.id).sort(), definition.id);
-    assert.deepEqual(Object.keys(expectedRouting).sort(), definition.relationships
-      .filter((relationship) => relationship.id in expectedRouting)
-      .map((relationship) => relationship.id)
-      .sort(), definition.id);
+    assert.equal(
+      createSemanticHash(definition),
+      EXPECTED_SEMANTIC_HASHES[definition.id],
+      definition.id
+    );
+    assert.deepEqual(
+      Object.keys(expectedLayout).sort(),
+      definition.resources.map((resource) => resource.id).sort(),
+      definition.id
+    );
+    assert.deepEqual(
+      Object.keys(expectedRouting).sort(),
+      definition.relationships
+        .filter((relationship) => relationship.id in expectedRouting)
+        .map((relationship) => relationship.id)
+        .sort(),
+      definition.id
+    );
 
     for (const resource of definition.resources) {
       const expected = expectedLayout[resource.id];
 
       assert.ok(expected, `${definition.id}/${resource.id} must have an authored layout`);
-      assert.deepEqual(resource.position, expected.position, `${definition.id}/${resource.id} position`);
-      assert.equal(resource.parentResourceId, expected.parentResourceId, `${definition.id}/${resource.id} parent`);
+      assert.deepEqual(
+        resource.position,
+        expected.position,
+        `${definition.id}/${resource.id} position`
+      );
+      assert.equal(
+        resource.parentResourceId,
+        expected.parentResourceId,
+        `${definition.id}/${resource.id} parent`
+      );
       assert.deepEqual(resource.size, expected.size, `${definition.id}/${resource.id} size`);
-      assert.equal(resource.presentationArea, expected.presentationArea, `${definition.id}/${resource.id} presentation area`);
+      assert.equal(
+        resource.presentationArea,
+        expected.presentationArea,
+        `${definition.id}/${resource.id} presentation area`
+      );
     }
 
     for (const relationship of definition.relationships) {
@@ -262,13 +289,32 @@ test("six deployable templates keep their semantic graph while adopting the PNG 
         continue;
       }
 
-      assert.equal(relationship.type, "smoothstep", `${definition.id}/${relationship.id} edge type`);
-      assert.equal(relationship.sourceHandleId, expected.sourceHandleId, `${definition.id}/${relationship.id} source handle`);
-      assert.equal(relationship.targetHandleId, expected.targetHandleId, `${definition.id}/${relationship.id} target handle`);
+      assert.equal(
+        relationship.type,
+        "smoothstep",
+        `${definition.id}/${relationship.id} edge type`
+      );
+      assert.equal(
+        relationship.sourceHandleId,
+        expected.sourceHandleId,
+        `${definition.id}/${relationship.id} source handle`
+      );
+      assert.equal(
+        relationship.targetHandleId,
+        expected.targetHandleId,
+        `${definition.id}/${relationship.id} target handle`
+      );
     }
 
-    const diagram = buildTemplateDiagramJson(definition.id, { projectSlug: "layout", shortId: "contract" });
-    assert.deepEqual(diagram.viewport, EXPECTED_VIEWPORTS[definition.id], `${definition.id} viewport`);
+    const diagram = buildTemplateDiagramJson(definition.id, {
+      projectSlug: "layout",
+      shortId: "contract"
+    });
+    assert.deepEqual(
+      diagram.viewport,
+      EXPECTED_VIEWPORTS[definition.id],
+      `${definition.id} viewport`
+    );
   }
 });
 
@@ -286,12 +332,27 @@ test("all authored template placements stay on the compact 40px grid", () => {
     }
 
     for (const presentationNode of definition.presentationNodes) {
-      assertGridValue(presentationNode.position.x, `${definition.id}/${presentationNode.id} presentation x`);
-      assertGridValue(presentationNode.position.y, `${definition.id}/${presentationNode.id} presentation y`);
+      assertGridValue(
+        presentationNode.position.x,
+        `${definition.id}/${presentationNode.id} presentation x`
+      );
+      assertGridValue(
+        presentationNode.position.y,
+        `${definition.id}/${presentationNode.id} presentation y`
+      );
 
-      if (presentationNode.size && (presentationNode.size.width > 48 || presentationNode.size.height > 48)) {
-        assertGridValue(presentationNode.size.width, `${definition.id}/${presentationNode.id} presentation width`);
-        assertGridValue(presentationNode.size.height, `${definition.id}/${presentationNode.id} presentation height`);
+      if (
+        presentationNode.size &&
+        (presentationNode.size.width > 48 || presentationNode.size.height > 48)
+      ) {
+        assertGridValue(
+          presentationNode.size.width,
+          `${definition.id}/${presentationNode.id} presentation width`
+        );
+        assertGridValue(
+          presentationNode.size.height,
+          `${definition.id}/${presentationNode.id} presentation height`
+        );
       }
     }
   }
@@ -329,14 +390,23 @@ function createSemanticHash(definition: TemplateDefinition): string {
     tags: definition.tags,
     providers: definition.providers,
     parameters: definition.parameters,
-    resources: definition.resources.map(({
-      position: _position,
-      parentResourceId: _parentResourceId,
-      presentationArea: _presentationArea,
-      size: _size,
-      ...resource
-    }) => resource),
-    relationships: definition.relationships.map(({ sourceHandleId: _sourceHandleId, targetHandleId: _targetHandleId, type: _type, ...relationship }) => relationship)
+    resources: definition.resources.map(
+      ({
+        position: _position,
+        parentResourceId: _parentResourceId,
+        presentationArea: _presentationArea,
+        size: _size,
+        ...resource
+      }) => resource
+    ),
+    relationships: definition.relationships.map(
+      ({
+        sourceHandleId: _sourceHandleId,
+        targetHandleId: _targetHandleId,
+        type: _type,
+        ...relationship
+      }) => relationship
+    )
   };
 
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");

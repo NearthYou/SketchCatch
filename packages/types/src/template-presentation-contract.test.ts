@@ -49,12 +49,10 @@ const EXPECTED_PRESENTATION_NODES = {
     "az-b": node("aws-availability-zone", 1400, 280, "vpc", { width: 560, height: 1120 })
   },
   "ecs-fargate-container-app": {
-    user: node("design-user-client", 80, 520),
-    region: node("aws-region", 200, 40, undefined, { width: 2120, height: 1240 }),
-    "az-a": node("aws-availability-zone", 440, 400, "vpc", { width: 520, height: 280 }),
-    "az-b": node("aws-availability-zone", 1200, 400, "vpc", { width: 520, height: 280 }),
-    "definition-ops-group": node("design-group", 1880, 600, "region", { width: 360, height: 600 }),
-    "global-iam-group": node("design-group", 1880, 120, "region", { width: 360, height: 360 })
+    user: node("design-user-client", 80, 360),
+    region: node("aws-region", 240, 40, undefined, { width: 1920, height: 880 }),
+    "definition-ops-group": node("design-group", 1840, 480, "region", { width: 280, height: 280 }),
+    "global-iam-group": node("design-group", 1840, 120, "region", { width: 280, height: 280 })
   },
   "eks-container-app": {
     region: node("aws-region", 200, 40, undefined, { width: 2120, height: 1320 }),
@@ -148,12 +146,12 @@ const EXPECTED_RESOURCE_PARENTS = {
   },
   "ecs-fargate-container-app": {
     vpc: "region",
-    "subnet-a": "az-a",
-    "subnet-b": "az-b",
+    "subnet-a": "vpc",
+    "subnet-b": "vpc",
     "internet-gateway": "region",
     "route-table": "vpc",
-    "route-a": "az-a",
-    "route-b": "az-b",
+    "route-a": "vpc",
+    "route-b": "vpc",
     cluster: "vpc",
     "alb-security-group": "vpc",
     "task-security-group": "cluster",
@@ -196,31 +194,37 @@ test("six deployable templates keep Design nodes and edges outside their semanti
   for (const definition of templateDefinitions) {
     const expectedNodes = EXPECTED_PRESENTATION_NODES[definition.id];
     const expectedEdges = EXPECTED_PRESENTATION_EDGES[definition.id];
-    const presentationNodeIds = new Set(definition.presentationNodes.map((nodeDefinition) => nodeDefinition.id));
+    const presentationNodeIds = new Set(
+      definition.presentationNodes.map((nodeDefinition) => nodeDefinition.id)
+    );
 
     assert.deepEqual(
-      Object.fromEntries(definition.presentationNodes.map((nodeDefinition) => [
-        nodeDefinition.id,
-        {
-          catalogItemId: nodeDefinition.catalogItemId,
-          ...(nodeDefinition.parentNodeId ? { parentNodeId: nodeDefinition.parentNodeId } : {}),
-          position: nodeDefinition.position,
-          ...(nodeDefinition.size ? { size: nodeDefinition.size } : {})
-        }
-      ])),
+      Object.fromEntries(
+        definition.presentationNodes.map((nodeDefinition) => [
+          nodeDefinition.id,
+          {
+            catalogItemId: nodeDefinition.catalogItemId,
+            ...(nodeDefinition.parentNodeId ? { parentNodeId: nodeDefinition.parentNodeId } : {}),
+            position: nodeDefinition.position,
+            ...(nodeDefinition.size ? { size: nodeDefinition.size } : {})
+          }
+        ])
+      ),
       expectedNodes,
       `${definition.id} presentation nodes`
     );
     assert.deepEqual(
-      Object.fromEntries(definition.presentationEdges.map((edgeDefinition) => [
-        edgeDefinition.id,
-        {
-          sourceNodeId: edgeDefinition.sourceNodeId,
-          targetNodeId: edgeDefinition.targetNodeId,
-          sourceHandleId: edgeDefinition.sourceHandleId,
-          targetHandleId: edgeDefinition.targetHandleId
-        }
-      ])),
+      Object.fromEntries(
+        definition.presentationEdges.map((edgeDefinition) => [
+          edgeDefinition.id,
+          {
+            sourceNodeId: edgeDefinition.sourceNodeId,
+            targetNodeId: edgeDefinition.targetNodeId,
+            sourceHandleId: edgeDefinition.sourceHandleId,
+            targetHandleId: edgeDefinition.targetHandleId
+          }
+        ])
+      ),
       expectedEdges,
       `${definition.id} presentation edges`
     );
@@ -232,7 +236,8 @@ test("six deployable templates keep Design nodes and edges outside their semanti
 
     for (const edgeDefinition of definition.presentationEdges) {
       assert.equal(
-        presentationNodeIds.has(edgeDefinition.sourceNodeId) || presentationNodeIds.has(edgeDefinition.targetNodeId),
+        presentationNodeIds.has(edgeDefinition.sourceNodeId) ||
+          presentationNodeIds.has(edgeDefinition.targetNodeId),
         true,
         `${definition.id}/${edgeDefinition.id} must touch a Design node`
       );
@@ -249,12 +254,23 @@ test("built Template diagrams keep presentation nodes parameterless and parents 
     });
     const nodeById = new Map(diagram.nodes.map((diagramNode) => [diagramNode.id, diagramNode]));
     const presentationNodeIds = new Set(
-      definition.presentationNodes.map((nodeDefinition) => `template-${definition.id}-presentation-${nodeDefinition.id}`)
+      definition.presentationNodes.map(
+        (nodeDefinition) => `template-${definition.id}-presentation-${nodeDefinition.id}`
+      )
     );
 
-    assert.equal(diagram.nodes.filter((diagramNode) => diagramNode.kind === "resource").length, definition.resources.length);
-    assert.equal(diagram.nodes.filter((diagramNode) => diagramNode.kind === "design").length, definition.presentationNodes.length);
-    assert.equal(diagram.edges.length, definition.relationships.length + definition.presentationEdges.length);
+    assert.equal(
+      diagram.nodes.filter((diagramNode) => diagramNode.kind === "resource").length,
+      definition.resources.length
+    );
+    assert.equal(
+      diagram.nodes.filter((diagramNode) => diagramNode.kind === "design").length,
+      definition.presentationNodes.length
+    );
+    assert.equal(
+      diagram.edges.length,
+      definition.relationships.length + definition.presentationEdges.length
+    );
 
     for (const presentationNodeId of presentationNodeIds) {
       const diagramNode = nodeById.get(presentationNodeId);
@@ -267,24 +283,34 @@ test("built Template diagrams keep presentation nodes parameterless and parents 
 
     for (const presentationEdge of definition.presentationEdges) {
       const diagramEdge = diagram.edges.find(
-        (candidate) => candidate.id === `template-${definition.id}-presentation-${presentationEdge.id}`
+        (candidate) =>
+          candidate.id === `template-${definition.id}-presentation-${presentationEdge.id}`
       );
 
       assert.ok(diagramEdge, `${definition.id}/${presentationEdge.id}`);
       assert.equal(
-        presentationNodeIds.has(diagramEdge.sourceNodeId) || presentationNodeIds.has(diagramEdge.targetNodeId),
+        presentationNodeIds.has(diagramEdge.sourceNodeId) ||
+          presentationNodeIds.has(diagramEdge.targetNodeId),
         true,
         `${definition.id}/${presentationEdge.id} diagram edge must touch a Design node`
       );
     }
 
-    for (const [resourceId, parentNodeId] of Object.entries(EXPECTED_RESOURCE_PARENTS[definition.id])) {
+    for (const [resourceId, parentNodeId] of Object.entries(
+      EXPECTED_RESOURCE_PARENTS[definition.id]
+    )) {
       const resourceNode = nodeById.get(`template-${definition.id}-${resourceId}`);
-      const expectedParentId = presentationNodeIds.has(`template-${definition.id}-presentation-${parentNodeId}`)
+      const expectedParentId = presentationNodeIds.has(
+        `template-${definition.id}-presentation-${parentNodeId}`
+      )
         ? `template-${definition.id}-presentation-${parentNodeId}`
         : `template-${definition.id}-${parentNodeId}`;
 
-      assert.equal(resourceNode?.metadata?.parentAreaNodeId, expectedParentId, `${definition.id}/${resourceId} parent`);
+      assert.equal(
+        resourceNode?.metadata?.parentAreaNodeId,
+        expectedParentId,
+        `${definition.id}/${resourceId} parent`
+      );
     }
   }
 });

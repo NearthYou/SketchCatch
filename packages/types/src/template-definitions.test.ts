@@ -9,7 +9,10 @@ import {
 } from "./template-definitions.js";
 
 test("the template registry contains the six deployable AWS patterns", () => {
-  assert.deepEqual(templateDefinitions.map((definition) => definition.id), [...TEMPLATE_IDS]);
+  assert.deepEqual(
+    templateDefinitions.map((definition) => definition.id),
+    [...TEMPLATE_IDS]
+  );
   assert.equal(templateDefinitions.length, 6);
   assert.ok(templateDefinitions.every((definition) => definition.resources.length > 0));
   assert.ok(templateDefinitions.every((definition) => definition.relationships.length > 0));
@@ -28,8 +31,14 @@ test("each template builds a deterministic, connected DiagramJson with short Ter
 
     assert.deepEqual(first, second, templateId);
     assert.ok(first.nodes.length > 0, templateId);
-    assert.ok(first.nodes.filter((node) => node.kind === "resource").every((node) => node.parameters), templateId);
-    assert.ok(first.nodes.filter((node) => node.kind === "design").every((node) => !node.parameters), templateId);
+    assert.ok(
+      first.nodes.filter((node) => node.kind === "resource").every((node) => node.parameters),
+      templateId
+    );
+    assert.ok(
+      first.nodes.filter((node) => node.kind === "design").every((node) => !node.parameters),
+      templateId
+    );
 
     const nodeIds = new Set(first.nodes.map((node) => node.id));
     assert.ok(
@@ -45,7 +54,11 @@ test("each template builds a deterministic, connected DiagramJson with short Ter
     assert.ok(
       first.nodes
         .filter((node) => node.kind === "resource")
-        .every((node) => !node.parameters?.resourceName.includes("sketchcatch") && !node.parameters?.resourceName.includes("test01")),
+        .every(
+          (node) =>
+            !node.parameters?.resourceName.includes("sketchcatch") &&
+            !node.parameters?.resourceName.includes("test01")
+        ),
       templateId
     );
 
@@ -63,12 +76,32 @@ test("each template builds a deterministic, connected DiagramJson with short Ter
 
 test("Terraform local names add a deterministic suffix only for normalization collisions in the same block", () => {
   const resources = [
-    { id: "edge-name", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" },
-    { id: "edge_name", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" },
-    { id: "edge_name_1", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" },
+    {
+      id: "edge-name",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_example"
+    },
+    {
+      id: "edge_name",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_example"
+    },
+    {
+      id: "edge_name_1",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_example"
+    },
     { id: "edge name", terraformBlockType: "data" as const, terraformResourceType: "aws_example" },
-    { id: "edge.name", terraformBlockType: "resource" as const, terraformResourceType: "aws_other" },
-    { id: "123-start", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" }
+    {
+      id: "edge.name",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_other"
+    },
+    {
+      id: "123-start",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_example"
+    }
   ];
 
   const first = createTemplateTerraformResourceNames(resources);
@@ -86,7 +119,11 @@ test("Terraform local names add a deterministic suffix only for normalization co
 
   const extended = createTemplateTerraformResourceNames([
     ...resources,
-    { id: "EDGE NAME", terraformBlockType: "resource" as const, terraformResourceType: "aws_example" }
+    {
+      id: "EDGE NAME",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_example"
+    }
   ]);
   assert.equal(first.get("edge-name"), extended.get("edge-name"));
   assert.equal(first.get("edge_name"), extended.get("edge_name"));
@@ -133,7 +170,10 @@ test("all built-in template references resolve through the final Terraform local
 
 test("template IDs are a closed union for registry lookup", () => {
   const templateId: TemplateId = "static-web-hosting";
-  assert.equal(templateDefinitions.find((definition) => definition.id === templateId)?.id, templateId);
+  assert.equal(
+    templateDefinitions.find((definition) => definition.id === templateId)?.id,
+    templateId
+  );
 });
 
 test("each template contains the resources required by its deployable default", () => {
@@ -143,12 +183,12 @@ test("each template contains the resources required by its deployable default", 
 
   const staticTypes = resourceTypes("static-web-hosting");
   for (const requiredType of [
-      "aws_s3_bucket",
-      "aws_s3_bucket_public_access_block",
-      "aws_s3_bucket_policy",
-      "aws_cloudfront_origin_access_control",
-      "aws_cloudfront_distribution",
-      "aws_s3_object"
+    "aws_s3_bucket",
+    "aws_s3_bucket_public_access_block",
+    "aws_s3_bucket_policy",
+    "aws_cloudfront_origin_access_control",
+    "aws_cloudfront_distribution",
+    "aws_s3_object"
   ]) {
     assert.ok(staticTypes.includes(requiredType), `static-web-hosting: ${requiredType}`);
   }
@@ -229,6 +269,15 @@ test("each template contains the resources required by its deployable default", 
     builtContainer.logConfiguration?.options?.["awslogs-group"],
     "${aws_cloudwatch_log_group.log_group.name}"
   );
+  assert.equal(
+    builtEcs.edges.find((edge) => edge.id.endsWith("-target-group-service"))?.metadata
+      ?.presentationRole,
+    "primary"
+  );
+  assert.equal(
+    builtEcs.edges.find((edge) => edge.id.endsWith("-task-log-group"))?.metadata?.presentationRole,
+    "detail"
+  );
 
   const eksTypes = resourceTypes("eks-container-app");
   assert.equal(eksTypes.filter((resourceType) => resourceType === "aws_subnet").length, 2);
@@ -252,8 +301,15 @@ test("network templates keep gateways and route associations on their related bo
 
     assert.ok(vpc, `${templateId}/vpc`);
     assert.ok(internetGateway, `${templateId}/internet-gateway`);
-    assert.notEqual(internetGateway.parentResourceId, "vpc", `${templateId}/internet-gateway parent`);
-    assert.ok(internetGateway.position.x < vpc.position.x, `${templateId}/internet-gateway left edge`);
+    assert.notEqual(
+      internetGateway.parentResourceId,
+      "vpc",
+      `${templateId}/internet-gateway parent`
+    );
+    assert.ok(
+      internetGateway.position.x < vpc.position.x,
+      `${templateId}/internet-gateway left edge`
+    );
     assert.ok(
       internetGateway.position.x + 48 > vpc.position.x,
       `${templateId}/internet-gateway must straddle the VPC boundary`
@@ -268,7 +324,8 @@ test("network templates keep gateways and route associations on their related bo
 
       assert.ok(subnet, `${templateId}/${association.id} subnet`);
       assert.ok(
-        association.position.y < subnet.position.y && association.position.y + 48 > subnet.position.y,
+        association.position.y < subnet.position.y &&
+          association.position.y + 48 > subnet.position.y,
         `${templateId}/${association.id} must straddle ${subnet.id}'s top boundary`
       );
     }
@@ -304,8 +361,14 @@ test("security-group scopes enclose only their explicit targets without becoming
 
         assert.ok(target, `${templateId}/${targetId}`);
         assert.notEqual(target.parentResourceId, scopeId, `${templateId}/${targetId} parent`);
-        assert.ok(target.position.x >= scope.position.x, `${templateId}/${scopeId}/${targetId} left`);
-        assert.ok(target.position.y >= scope.position.y, `${templateId}/${scopeId}/${targetId} top`);
+        assert.ok(
+          target.position.x >= scope.position.x,
+          `${templateId}/${scopeId}/${targetId} left`
+        );
+        assert.ok(
+          target.position.y >= scope.position.y,
+          `${templateId}/${scopeId}/${targetId} top`
+        );
         assert.ok(
           target.position.x + 48 <= scope.position.x + scope.size.width,
           `${templateId}/${scopeId}/${targetId} right`
@@ -317,7 +380,8 @@ test("security-group scopes enclose only their explicit targets without becoming
         assert.ok(
           definition.relationships.some(
             (relationship) =>
-              relationship.sourceResourceId === scopeId && relationship.targetResourceId === targetId
+              relationship.sourceResourceId === scopeId &&
+              relationship.targetResourceId === targetId
           ),
           `${templateId}/${scopeId} must connect to ${targetId}`
         );
@@ -359,8 +423,12 @@ test("serverless templates keep their authored composition close to a 16:9 card"
       right: node.position.x + (node.size?.width ?? 48),
       bottom: node.position.y + (node.size?.height ?? 48)
     }));
-    const width = Math.max(...bounds.map((bound) => bound.right)) - Math.min(...bounds.map((bound) => bound.left));
-    const height = Math.max(...bounds.map((bound) => bound.bottom)) - Math.min(...bounds.map((bound) => bound.top));
+    const width =
+      Math.max(...bounds.map((bound) => bound.right)) -
+      Math.min(...bounds.map((bound) => bound.left));
+    const height =
+      Math.max(...bounds.map((bound) => bound.bottom)) -
+      Math.min(...bounds.map((bound) => bound.top));
     const aspectRatio = width / height;
 
     assert.ok(aspectRatio >= 1.75, `${templateId} is too tall: ${aspectRatio}`);

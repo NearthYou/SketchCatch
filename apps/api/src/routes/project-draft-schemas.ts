@@ -17,16 +17,20 @@ const diagramNodeStyleSchema = z.object({
   borderStyle: z.enum(["solid", "dashed", "dotted"]).optional()
 });
 
-const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  parentAreaNodeId: z.string().min(1).optional(),
-  presentationArea: z.boolean().optional(),
-  presentationCatalogItemId: z.string().min(1).optional(),
-  reverseEngineering: z.object({
-    source: z.literal("aws_scan"),
-    protectedValueKeys: z.array(z.string().min(1)),
-    editableValueKeys: z.array(z.string().min(1))
-  }).optional()
-}).strict();
+const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
+  .object({
+    parentAreaNodeId: z.string().min(1).optional(),
+    presentationArea: z.boolean().optional(),
+    presentationCatalogItemId: z.string().min(1).optional(),
+    reverseEngineering: z
+      .object({
+        source: z.literal("aws_scan"),
+        protectedValueKeys: z.array(z.string().min(1)),
+        editableValueKeys: z.array(z.string().min(1))
+      })
+      .optional()
+  })
+  .strict();
 
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: z.enum(["resource", "data"]).optional(),
@@ -59,10 +63,13 @@ const diagramEdgeStyleSchema = z.object({
   animated: z.boolean().optional()
 });
 
-const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
-  managedBy: z.literal("parameter-reference"),
-  parameterPath: z.string().min(1)
-}).strict();
+const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z
+  .object({
+    managedBy: z.literal("parameter-reference").optional(),
+    parameterPath: z.string().min(1).optional(),
+    presentationRole: z.enum(["primary", "detail", "summary"]).optional()
+  })
+  .strict();
 
 const diagramEdgeSchema = z.object({
   id: z.string().min(1),
@@ -92,8 +99,14 @@ export const projectDraftQuerySchema = z.object({
 
 export const saveProjectDraftBodySchema = z.object({
   diagramJson: diagramJsonSchema,
-  terraformFiles: z.array(z.object({
-    fileName: z.string().trim().min(1),
-    terraformCode: z.string()
-  }).strict()).optional()
+  terraformFiles: z
+    .array(
+      z
+        .object({
+          fileName: z.string().trim().min(1),
+          terraformCode: z.string()
+        })
+        .strict()
+    )
+    .optional()
 });

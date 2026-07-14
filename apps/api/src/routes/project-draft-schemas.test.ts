@@ -67,8 +67,8 @@ test("save project draft body accepts full DiagramJson", () => {
 
 test("save project draft body preserves Terraform virtual files", () => {
   const terraformFiles = [
-    { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"main\" {}" },
-    { fileName: "variables.tf", terraformCode: "variable \"cidr\" { type = string }" }
+    { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' },
+    { fileName: "variables.tf", terraformCode: 'variable "cidr" { type = string }' }
   ];
   const parsed = saveProjectDraftBodySchema.parse({ diagramJson: validDiagram, terraformFiles });
 
@@ -115,6 +115,22 @@ test("save project draft body preserves parameter-reference edge metadata", () =
     managedBy: "parameter-reference",
     parameterPath: "loadBalancerArn"
   });
+});
+
+test("save project draft body preserves edge presentation roles", () => {
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      edges: [
+        {
+          ...validDiagram.edges[0]!,
+          metadata: { presentationRole: "summary" }
+        }
+      ]
+    }
+  });
+
+  assert.equal(parsed.diagramJson.edges[0]?.metadata?.presentationRole, "summary");
 });
 
 test("save project draft body rejects unsupported parameter-reference edge metadata", () => {
