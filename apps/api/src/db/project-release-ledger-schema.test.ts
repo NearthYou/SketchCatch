@@ -56,6 +56,18 @@ test("EC2 ASG runtime coordinates extend the JSON contract without destructive d
   assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
 });
 
+test("Static runtime coordinates extend the JSON contract without destructive data changes", () => {
+  const migrationUrl = new URL("../../drizzle/0040_static_gitops_runtime.sql", import.meta.url);
+
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /runtime_target_kind" = 'static_site'/);
+  assert.match(migration, /'runtimeTargetKind' = 'static_site'/);
+  assert.match(migration, /VALIDATE CONSTRAINT/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE/i);
+});
+
 test("Direct and GitOps application releases share one project ledger", () => {
   const config = getTableConfig(applicationReleases);
 

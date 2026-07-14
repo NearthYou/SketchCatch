@@ -1317,6 +1317,26 @@ function assertGitOpsTarget(
     }
     return;
   }
+  if (target.runtimeTargetKind === "static_site") {
+    const staticOutputs = sourceRepository.analysisResult?.evidence.filter(
+      (item) => item.kind === "static_output"
+    ) ?? [];
+    if (
+      target.runtimeConfig?.runtimeTargetKind !== "static_site" ||
+      build.buildPreset !== "static_export" ||
+      build.installPreset === "none" ||
+      !build.staticOutputPath ||
+      build.artifactOutputPath !== build.staticOutputPath ||
+      !hasCurrentRevision ||
+      staticOutputs.length !== 1 ||
+      staticOutputs[0]?.path !== build.staticOutputPath
+    ) {
+      throw new GitCicdHandoffProviderConflictError(
+        "GitOps application handoff requires current, unambiguous static output evidence"
+      );
+    }
+    return;
+  }
   throw new GitCicdHandoffProviderConflictError(
     "GitOps application handoff does not yet support the selected runtime"
   );

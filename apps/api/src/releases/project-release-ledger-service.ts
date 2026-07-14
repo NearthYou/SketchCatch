@@ -401,6 +401,7 @@ export function validateConfirmedBuildConfig(
   }
 
   const evidenceKinds = new Set(config.evidence.map((item) => item.kind));
+  const staticOutputs = config.evidence.filter((item) => item.kind === "static_output");
   const validForRuntime =
     (runtimeTargetKind === "ecs_fargate" &&
       config.buildPreset === "docker_build" &&
@@ -416,8 +417,11 @@ export function validateConfirmedBuildConfig(
       Boolean(config.appSpecPath)) ||
     (runtimeTargetKind === "static_site" &&
       config.buildPreset === "static_export" &&
-      evidenceKinds.has("static_output") &&
-      Boolean(config.staticOutputPath));
+      config.installPreset !== "none" &&
+      Boolean(config.staticOutputPath) &&
+      config.artifactOutputPath === config.staticOutputPath &&
+      staticOutputs.length === 1 &&
+      staticOutputs[0]?.path === config.staticOutputPath);
   if (!validForRuntime) {
     throw new ReleaseLedgerValidationError(
       "Build evidence and preset do not match the selected runtime."
@@ -429,6 +433,27 @@ export function validateProjectDeploymentRuntimeConfig(
   runtimeTargetKind: RuntimeTargetKind,
   config: ProjectDeploymentRuntimeConfig | null
 ): void {
+  if (runtimeTargetKind === "static_site") {
+    if (!config || config.runtimeTargetKind !== "static_site") {
+      throw new ReleaseLedgerValidationError(
+        "Static site runtime configuration is required."
+      );
+    }
+    const bucketPattern = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
+    const distributionPattern = /^[A-Z0-9]{3,32}$/;
+    const originPattern = /^[A-Za-z0-9._-]{1,128}$/;
+    if (
+      !bucketPattern.test(config.hostingBucketName) ||
+      !distributionPattern.test(config.cloudFrontDistributionId) ||
+      !originPattern.test(config.cloudFrontOriginId)
+    ) {
+      throw new ReleaseLedgerValidationError(
+        "Static site runtime configuration contains an invalid resource name."
+      );
+    }
+    validateRuntimeOutputUrl(config.outputUrl);
+    return;
+  }
   if (runtimeTargetKind === "ec2_asg") {
     if (!config || config.runtimeTargetKind !== "ec2_asg") {
       throw new ReleaseLedgerValidationError(

@@ -238,6 +238,85 @@ test("provider maps EC2 ASG stages and parses one bounded release evidence recor
   assert.equal(snapshot?.logs.at(-1)?.message, "EC2 ASG release evidence captured.");
 });
 
+test("provider maps static stages and parses one bounded release evidence record", async () => {
+  const commitSha = "a".repeat(40);
+  const digest = "b".repeat(64);
+  const releasePrefix = `releases/${commitSha}/${digest}`;
+  const evidence = {
+    schemaVersion: 1,
+    runtimeTargetKind: "static_site",
+    outcome: "succeeded",
+    failureReason: null,
+    commitSha,
+    artifactDigest: `sha256:${digest}`,
+    manifestUri: `s3://sketchcatch-static-releases/${releasePrefix}/.sketchcatch-release-manifest.json`,
+    manifestVersionId: "version-current",
+    releasePrefix,
+    previousReleasePrefix: "releases/previous/old",
+    activeReleasePrefix: releasePrefix,
+    hostingBucketName: "sketchcatch-static-releases",
+    cloudFrontDistributionId: "E1234567890ABC",
+    cloudFrontOriginId: "static-origin",
+    distributionEtag: "E2ABCDEF123456",
+    invalidationId: "I1234567890ABC",
+    fileCount: 42,
+    outputUrl: "https://static.example.com"
+  } as const;
+  const encoded = Buffer.from(JSON.stringify(evidence)).toString("base64");
+  const client = {
+    listCommitFiles: async () => [],
+    listBranchWorkflowRuns: async () => [
+      run({ id: 8, workflowName: "SketchCatch App", commitSha })
+    ],
+    listWorkflowJobs: async () => [
+      {
+        id: 88,
+        name: "release",
+        runUrl: "release",
+        status: "completed",
+        conclusion: "success",
+        startedAt: null,
+        finishedAt: null,
+        steps: [
+          step("Build confirmed static output", "completed", "success"),
+          step("Publish versioned static release", "completed", "success"),
+          step("Switch CloudFront release pointer", "completed", "success"),
+          step("Verify static release and rollback", "completed", "success")
+        ]
+      }
+    ],
+    readWorkflowJobLog: async () =>
+      `Verify static release and rollback\nSKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64=${encoded}`
+  } as GitHubActionsReadClient;
+
+  const [snapshot] = await createGitHubActionsRunProvider(client).listSnapshots(repository);
+
+  assert.deepEqual(snapshot?.jobs.map((job) => job.stageKind), [
+    "app_build",
+    "artifact_publish",
+    "app_deploy",
+    "verify"
+  ]);
+  assert.deepEqual(snapshot?.releaseEvidence, evidence);
+  assert.equal(snapshot?.logs.some((log) => log.message.includes(encoded)), false);
+  assert.equal(snapshot?.logs.at(-1)?.message, "Static release evidence captured.");
+
+  const dottedBucketEvidence = {
+    ...evidence,
+    hostingBucketName: "sketchcatch.static.releases",
+    manifestUri:
+      `s3://sketchcatch.static.releases/${releasePrefix}/.sketchcatch-release-manifest.json`
+  };
+  const dottedBucketEncoded = Buffer.from(JSON.stringify(dottedBucketEvidence)).toString("base64");
+  const [rejectedSnapshot] = await createGitHubActionsRunProvider({
+    ...client,
+    readWorkflowJobLog: async () =>
+      `Verify static release and rollback\nSKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64=${dottedBucketEncoded}`
+  }).listSnapshots(repository);
+
+  assert.equal(rejectedSnapshot?.releaseEvidence, null);
+});
+
 test("provider selects the larger attempt only for the same GitHub run id", async () => {
   const requestedRunIds: number[] = [];
   const client = {

@@ -231,6 +231,83 @@ test("EC2 ASG project target requires safe Auto Scaling and CodeDeploy coordinat
   assert.equal(target.runtimeConfig?.autoScalingGroupName, "sketchcatch-api-asg");
 });
 
+test("Static site project target requires safe S3 and CloudFront coordinates", async () => {
+  const repository = new InMemoryProjectReleaseLedgerRepository();
+  const build = createBuildConfig({
+    evidence: [{ kind: "static_output", path: "apps/web/dist" }],
+    buildPreset: "static_export",
+    installPreset: "pnpm_frozen_lockfile",
+    sourceRoot: "apps/web",
+    artifactOutputPath: "apps/web/dist",
+    healthCheckPath: null,
+    dockerfilePath: null,
+    staticOutputPath: "apps/web/dist"
+  });
+
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "static_site",
+        confirmedBuildConfig: build,
+        runtimeConfig: null
+      }),
+      repository,
+      () => now
+    ),
+    /Static site runtime configuration/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "static_site",
+        confirmedBuildConfig: build,
+        runtimeConfig: createStaticSiteRuntimeConfig({ hostingBucketName: "../bucket" })
+      }),
+      repository,
+      () => now
+    ),
+    /runtime configuration/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "static_site",
+        confirmedBuildConfig: build,
+        runtimeConfig: createStaticSiteRuntimeConfig({
+          hostingBucketName: "sketchcatch.static.releases"
+        })
+      }),
+      repository,
+      () => now
+    ),
+    /runtime configuration/i
+  );
+  await assert.rejects(
+    putProjectDeploymentTarget(
+      createTargetInput({
+        runtimeTargetKind: "static_site",
+        confirmedBuildConfig: { ...build, installPreset: "none" },
+        runtimeConfig: createStaticSiteRuntimeConfig()
+      }),
+      repository,
+      () => now
+    ),
+    /Build evidence and preset/i
+  );
+  const target = await putProjectDeploymentTarget(
+    createTargetInput({
+      runtimeTargetKind: "static_site",
+      confirmedBuildConfig: build,
+      runtimeConfig: createStaticSiteRuntimeConfig()
+    }),
+    repository,
+    () => now
+  );
+
+  assert.equal(target.runtimeConfig?.runtimeTargetKind, "static_site");
+  assert.equal(target.runtimeConfig?.cloudFrontDistributionId, "E1234567890ABC");
+});
+
 test("Direct and GitOps releases are recorded in the same project history", async () => {
   const repository = new InMemoryProjectReleaseLedgerRepository();
   await putProjectDeploymentTarget(createTargetInput(), repository, () => now);
@@ -499,6 +576,17 @@ function createEc2AsgRuntimeConfig(overrides: Record<string, unknown> = {}) {
     codeDeployDeploymentGroupName: "sketchcatch-api-asg",
     autoScalingGroupName: "sketchcatch-api-asg",
     outputUrl: "https://ec2.example.com",
+    ...overrides
+  } as PutProjectDeploymentTargetRequest["runtimeConfig"];
+}
+
+function createStaticSiteRuntimeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    runtimeTargetKind: "static_site",
+    hostingBucketName: "sketchcatch-static-releases",
+    cloudFrontDistributionId: "E1234567890ABC",
+    cloudFrontOriginId: "static-origin",
+    outputUrl: "https://static.example.com",
     ...overrides
   } as PutProjectDeploymentTargetRequest["runtimeConfig"];
 }

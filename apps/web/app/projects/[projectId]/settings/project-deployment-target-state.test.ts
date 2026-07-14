@@ -44,7 +44,8 @@ test("deployment target draft maps each runtime to a structured build preset", (
         commitSha: "a".repeat(40),
         ...(runtimeTargetKind === "ecs_fargate" ? createEcsCoordinates() : {}),
         ...(runtimeTargetKind === "lambda" ? createLambdaCoordinates() : {}),
-        ...(runtimeTargetKind === "ec2_asg" ? createEc2AsgCoordinates() : {})
+        ...(runtimeTargetKind === "ec2_asg" ? createEc2AsgCoordinates() : {}),
+        ...(runtimeTargetKind === "static_site" ? createStaticSiteCoordinates() : {})
       },
       [connection],
       new Date("2026-07-14T00:00:00.000Z")
@@ -153,6 +154,60 @@ test("EC2 ASG runtime selection suggests one current AppSpec and requires runtim
   assert.equal(request.runtimeConfig?.runtimeTargetKind, "ec2_asg");
   assert.equal(request.runtimeConfig?.autoScalingGroupName, "sketchcatch-api-asg");
   assert.equal(request.confirmedBuildConfig.healthCheckPath, "/health");
+});
+
+test("Static runtime selection suggests one current output and requires CloudFront coordinates", () => {
+  const repository = createSourceRepository({
+    analysis: {
+      repositoryRevision: "f".repeat(40),
+      analyzedAt: "2026-07-14T00:00:00.000Z",
+      aiHandoff: {
+        status: "template_selected",
+        templateId: "static-web-hosting",
+        applicationUnits: [{
+          id: "web",
+          rootPath: "apps/web",
+          kind: "frontend",
+          frameworks: ["Vite"],
+          evidencePaths: ["apps/web/package.json", "apps/web/vite.config.ts"]
+        }],
+        evidence: [
+          {
+            kind: "static_output",
+            path: "apps/web/dist",
+            applicationUnitId: "web",
+            signals: ["Vite static build output"]
+          },
+          {
+            kind: "lockfile",
+            path: "pnpm-lock.yaml",
+            applicationUnitId: null,
+            signals: ["pnpm-lock.yaml"]
+          }
+        ],
+        missingEvidence: [],
+        selectionReasons: ["Static output detected"]
+      }
+    }
+  });
+  const draft = changeDeploymentTargetRuntime(
+    createDeploymentTargetDraft(null, [connection]),
+    "static_site",
+    repository
+  );
+
+  assert.equal(draft.sourceRoot, "apps/web");
+  assert.equal(draft.evidencePath, "apps/web/dist");
+  assert.equal(draft.installPreset, "pnpm_frozen_lockfile");
+  assert.equal(draft.commitSha, "f".repeat(40));
+  assert.equal(isDeploymentTargetDraftReady(draft, [connection]), false);
+
+  const ready = { ...draft, ...createStaticSiteCoordinates() };
+  assert.equal(isDeploymentTargetDraftReady(ready, [connection]), true);
+  const request = createDeploymentTargetRequest(ready, [connection]);
+  assert.equal(request.runtimeConfig?.runtimeTargetKind, "static_site");
+  assert.equal(request.confirmedBuildConfig.installPreset, "pnpm_frozen_lockfile");
+  assert.equal(request.confirmedBuildConfig.staticOutputPath, "apps/web/dist");
 });
 
 test("deployment target draft restores the persisted project target", () => {
@@ -334,6 +389,16 @@ function createEc2AsgCoordinates() {
     autoScalingGroupName: "sketchcatch-api-asg",
     outputUrl: "https://ec2.example.com",
     healthCheckPath: "/health"
+  };
+}
+
+function createStaticSiteCoordinates() {
+  return {
+    installPreset: "pnpm_frozen_lockfile" as const,
+    hostingBucketName: "sketchcatch-static-site",
+    cloudFrontDistributionId: "E1234567890ABC",
+    cloudFrontOriginId: "static-origin",
+    outputUrl: "https://static.example.com"
   };
 }
 

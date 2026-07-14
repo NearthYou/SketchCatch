@@ -46,6 +46,7 @@ export function createGitCicdAutomationFiles(
   const ecsFargate = getEcsFargateWorkflowInput(input);
   const lambda = getLambdaWorkflowInput(input);
   const ec2Asg = getEc2AsgWorkflowInput(input);
+  const staticSite = getStaticSiteWorkflowInput(input);
 
   return [
     {
@@ -61,7 +62,9 @@ export function createGitCicdAutomationFiles(
           ? renderLambdaAppWorkflow(input, lambda)
           : ec2Asg
             ? renderEc2AsgAppWorkflow(input, ec2Asg)
-            : renderAppWorkflow(input),
+            : staticSite
+              ? renderStaticSiteAppWorkflow(input, staticSite)
+              : renderAppWorkflow(input),
       contentType: "text/yaml"
     },
     {
@@ -128,6 +131,18 @@ export function createRepositorySettingsPreview(
         input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
           ? input.runtimeConfig.autoScalingGroupName
           : "",
+      SKETCHCATCH_STATIC_BUCKET:
+        input.runtimeConfig?.runtimeTargetKind === "static_site"
+          ? input.runtimeConfig.hostingBucketName
+          : "",
+      SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID:
+        input.runtimeConfig?.runtimeTargetKind === "static_site"
+          ? input.runtimeConfig.cloudFrontDistributionId
+          : "",
+      SKETCHCATCH_CLOUDFRONT_ORIGIN_ID:
+        input.runtimeConfig?.runtimeTargetKind === "static_site"
+          ? input.runtimeConfig.cloudFrontOriginId
+          : "",
       SKETCHCATCH_CODEBUILD_PROJECT:
         input.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
           ? input.runtimeConfig.codeBuildProjectName
@@ -173,7 +188,9 @@ export function createRepositorySettingsPreview(
             ? input.runtimeConfig.outputUrl
             : input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
               ? input.runtimeConfig.outputUrl
-              : ""
+              : input.runtimeConfig?.runtimeTargetKind === "static_site"
+                ? input.runtimeConfig.outputUrl
+                : ""
     },
     secrets: [],
     workflowFiles: [
@@ -206,6 +223,16 @@ type Ec2AsgWorkflowInput = {
     appSpecPath: string;
   };
   runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ec2_asg" }>;
+};
+
+type StaticSiteWorkflowInput = {
+  confirmedBuildConfig: ConfirmedBuildConfig & {
+    buildPreset: "static_export";
+    staticOutputPath: string;
+    artifactOutputPath: string;
+    installPreset: Exclude<ConfirmedBuildConfig["installPreset"], "none">;
+  };
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "static_site" }>;
 };
 
 function getEcsFargateWorkflowInput(
@@ -271,6 +298,34 @@ function getEc2AsgWorkflowInput(input: GitCicdWorkflowRenderInput): Ec2AsgWorkfl
       ...build,
       buildPreset: "codedeploy_bundle",
       appSpecPath: build.appSpecPath
+    },
+    runtimeConfig: runtime
+  };
+}
+
+function getStaticSiteWorkflowInput(
+  input: GitCicdWorkflowRenderInput
+): StaticSiteWorkflowInput | null {
+  const build = input.confirmedBuildConfig;
+  const runtime = input.runtimeConfig;
+  if (
+    input.runtimeTargetKind !== "static_site" ||
+    !build ||
+    build.buildPreset !== "static_export" ||
+    build.installPreset === "none" ||
+    !build.staticOutputPath ||
+    build.artifactOutputPath !== build.staticOutputPath ||
+    runtime?.runtimeTargetKind !== "static_site"
+  ) {
+    return null;
+  }
+  return {
+    confirmedBuildConfig: {
+      ...build,
+      buildPreset: "static_export",
+      installPreset: build.installPreset,
+      staticOutputPath: build.staticOutputPath,
+      artifactOutputPath: build.staticOutputPath
     },
     runtimeConfig: runtime
   };
@@ -1000,6 +1055,355 @@ jobs:
 `;
 }
 
+function renderStaticSiteAppWorkflow(
+  input: GitCicdWorkflowRenderInput,
+  staticSite: StaticSiteWorkflowInput
+): string {
+  const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
+  const build = staticSite.confirmedBuildConfig;
+  return `name: SketchCatch App
+
+on:
+  workflow_run:
+    workflows: ["SketchCatch Infra"]
+    types: [completed]
+    branches: [${JSON.stringify(input.targetBranch)}]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: sketchcatch-static-${input.projectSlug}-${environmentName}
+  cancel-in-progress: false
+
+env:
+  SKETCHCATCH_RELEASE_SHA: \${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  SKETCHCATCH_STATIC_BUCKET: \${{ vars.SKETCHCATCH_STATIC_BUCKET }}
+  SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID: \${{ vars.SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID }}
+  SKETCHCATCH_CLOUDFRONT_ORIGIN_ID: \${{ vars.SKETCHCATCH_CLOUDFRONT_ORIGIN_ID }}
+  SKETCHCATCH_OUTPUT_URL: \${{ vars.SKETCHCATCH_OUTPUT_URL }}
+  SKETCHCATCH_SOURCE_ROOT: ${JSON.stringify(build.sourceRoot)}
+  SKETCHCATCH_STATIC_OUTPUT_PATH: ${JSON.stringify(build.staticOutputPath)}
+  SKETCHCATCH_INSTALL_PRESET: ${JSON.stringify(build.installPreset)}
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == ${JSON.stringify(input.targetBranch)})
+    runs-on: ubuntu-latest
+    environment: ${environmentName}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: \${{ env.SKETCHCATCH_RELEASE_SHA }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: \${{ vars.SKETCHCATCH_AWS_ROLE_ARN }}
+          aws-region: \${{ vars.SKETCHCATCH_AWS_REGION }}
+      - name: Build confirmed static output
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SKETCHCATCH_RELEASE_SHA"
+          test -f "$SKETCHCATCH_SOURCE_ROOT/package.json"
+          case "$SKETCHCATCH_INSTALL_PRESET" in
+            pnpm_frozen_lockfile)
+              test -f pnpm-lock.yaml
+              corepack enable
+              pnpm install --frozen-lockfile
+              pnpm --dir "$SKETCHCATCH_SOURCE_ROOT" build
+              ;;
+            npm_ci)
+              test -f package-lock.json
+              npm ci
+              npm --prefix "$SKETCHCATCH_SOURCE_ROOT" run build
+              ;;
+            yarn_frozen_lockfile)
+              test -f yarn.lock
+              corepack enable
+              yarn install --frozen-lockfile
+              yarn --cwd "$SKETCHCATCH_SOURCE_ROOT" build
+              ;;
+            *)
+              echo "A confirmed lockfile install preset is required." >&2
+              exit 1
+              ;;
+          esac
+          REPOSITORY_ROOT=$(pwd -P)
+          SOURCE_ROOT=$(realpath -e "$SKETCHCATCH_SOURCE_ROOT")
+          OUTPUT_ROOT=$(realpath -e "$SKETCHCATCH_STATIC_OUTPUT_PATH")
+          case "$SOURCE_ROOT/" in "$REPOSITORY_ROOT/"*) ;; *) exit 1 ;; esac
+          case "$OUTPUT_ROOT/" in "$SOURCE_ROOT/"*) ;; *) exit 1 ;; esac
+          test -f "$OUTPUT_ROOT/index.html"
+          FILE_COUNT=$(python3 - "$OUTPUT_ROOT" <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          root = Path(sys.argv[1]).resolve(strict=True)
+          entries = []
+          for candidate in sorted(root.rglob("*")):
+              if candidate.is_symlink():
+                  raise SystemExit("Static output must not contain symbolic links")
+              if not candidate.is_file():
+                  continue
+              relative = candidate.relative_to(root).as_posix()
+              if len(relative) > 1024:
+                  raise SystemExit("Static output contains a path longer than 1024 characters")
+              digest_builder = hashlib.sha256()
+              with candidate.open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest_builder.update(chunk)
+              digest = digest_builder.hexdigest()
+              entries.append({"path": relative, "size": candidate.stat().st_size, "sha256": digest})
+          if not 1 <= len(entries) <= 10000:
+              raise SystemExit("Static output must contain between 1 and 10000 files")
+          manifest = {
+              "schemaVersion": 1,
+              "commitSha": os.environ["SKETCHCATCH_RELEASE_SHA"],
+              "files": entries,
+          }
+          with open("sketchcatch-static-manifest.json", "w", encoding="utf-8") as handle:
+              json.dump(manifest, handle, sort_keys=True, separators=(",", ":"))
+              handle.write("\\n")
+          print(len(entries))
+          PY
+          )
+          ARTIFACT_HASH=$(sha256sum sketchcatch-static-manifest.json | cut -d' ' -f1)
+          RELEASE_PREFIX="releases/$SKETCHCATCH_RELEASE_SHA/$ARTIFACT_HASH"
+          echo "SKETCHCATCH_OUTPUT_ROOT=$OUTPUT_ROOT" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_FILE_COUNT=$FILE_COUNT" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_ARTIFACT_DIGEST=sha256:$ARTIFACT_HASH" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_RELEASE_PREFIX=$RELEASE_PREFIX" >> "$GITHUB_ENV"
+      - name: Publish versioned static release
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws s3api get-bucket-versioning --bucket "$SKETCHCATCH_STATIC_BUCKET" --query Status --output text)" = Enabled
+          EXISTING_COUNT=$(aws s3api list-objects-v2 --bucket "$SKETCHCATCH_STATIC_BUCKET" --prefix "$SKETCHCATCH_RELEASE_PREFIX/" --max-keys 1 --query KeyCount --output text)
+          test "$EXISTING_COUNT" = 0
+          aws s3 sync "$SKETCHCATCH_OUTPUT_ROOT" "s3://$SKETCHCATCH_STATIC_BUCKET/$SKETCHCATCH_RELEASE_PREFIX/" --checksum-algorithm SHA256 --only-show-errors
+          MANIFEST_CHECKSUM=$(openssl dgst -sha256 -binary sketchcatch-static-manifest.json | openssl base64 -A)
+          aws s3api put-object \
+            --bucket "$SKETCHCATCH_STATIC_BUCKET" \
+            --key "$SKETCHCATCH_RELEASE_PREFIX/.sketchcatch-release-manifest.json" \
+            --body sketchcatch-static-manifest.json \
+            --content-type application/json \
+            --checksum-algorithm SHA256 \
+            --checksum-sha256 "$MANIFEST_CHECKSUM" \
+            --output json > sketchcatch-manifest-put.json
+          MANIFEST_VERSION_ID=$(jq -r '.VersionId // empty' sketchcatch-manifest-put.json)
+          test -n "$MANIFEST_VERSION_ID"
+          test "$(jq -r '.ChecksumSHA256 // empty' sketchcatch-manifest-put.json)" = "$MANIFEST_CHECKSUM"
+          echo "SKETCHCATCH_MANIFEST_URI=s3://$SKETCHCATCH_STATIC_BUCKET/$SKETCHCATCH_RELEASE_PREFIX/.sketchcatch-release-manifest.json" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_MANIFEST_VERSION_ID=$MANIFEST_VERSION_ID" >> "$GITHUB_ENV"
+      - name: Switch CloudFront release pointer
+        id: switch
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SKETCHCATCH_SWITCH_FAILURE_REASON=distribution_update_failure" >> "$GITHUB_ENV"
+          aws cloudfront get-distribution-config --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" --output json > sketchcatch-distribution-before.json
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+
+          with open("sketchcatch-distribution-before.json", encoding="utf-8") as handle:
+              response = json.load(handle)
+          config = response.get("DistributionConfig") or {}
+          if not config.get("Enabled"):
+              raise SystemExit("CloudFront distribution must be enabled")
+          origins = (config.get("Origins") or {}).get("Items") or []
+          matches = [item for item in origins if item.get("Id") == os.environ["SKETCHCATCH_CLOUDFRONT_ORIGIN_ID"]]
+          if len(matches) != 1:
+              raise SystemExit("Configured CloudFront origin was not found exactly once")
+          origin = matches[0]
+          bucket = os.environ["SKETCHCATCH_STATIC_BUCKET"]
+          domain = str(origin.get("DomainName") or "").lower().rstrip(".")
+          allowed_suffix = domain.endswith(".amazonaws.com") or domain.endswith(".amazonaws.com.cn")
+          allowed = domain in {f"{bucket}.s3.amazonaws.com", f"{bucket}.s3.amazonaws.com.cn"} or (
+              domain.startswith(f"{bucket}.s3.") and allowed_suffix
+          )
+          if not allowed or "S3OriginConfig" not in origin:
+              raise SystemExit("CloudFront origin must be the configured S3 bucket")
+          previous = str(origin.get("OriginPath") or "")
+          if previous:
+              segments = previous[1:].split("/") if previous.startswith("/") else []
+              safe_segment = re.compile(r"^[A-Za-z0-9._~!$&'()*+,;=:@%-]+$")
+              if (
+                  len(previous) > 512
+                  or not segments
+                  or any(segment in {"", ".", ".."} or not safe_segment.fullmatch(segment) for segment in segments)
+              ):
+                  raise SystemExit("CloudFront origin path is not a safe rollback baseline")
+          origin["OriginPath"] = "/" + os.environ["SKETCHCATCH_RELEASE_PREFIX"]
+          with open("sketchcatch-distribution-update.json", "w", encoding="utf-8") as handle:
+              json.dump(config, handle, separators=(",", ":"))
+          with open("sketchcatch-previous-origin-path.txt", "w", encoding="utf-8") as handle:
+              handle.write(previous)
+          PY
+          PREVIOUS_ORIGIN_PATH=$(cat sketchcatch-previous-origin-path.txt)
+          ETAG=$(jq -r '.ETag // empty' sketchcatch-distribution-before.json)
+          test -n "$ETAG"
+          echo "SKETCHCATCH_PREVIOUS_ORIGIN_PATH=$PREVIOUS_ORIGIN_PATH" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_PREVIOUS_RELEASE_PREFIX=\${PREVIOUS_ORIGIN_PATH#/}" >> "$GITHUB_ENV"
+          echo "SKETCHCATCH_BASELINE_CAPTURED=1" >> "$GITHUB_ENV"
+          aws cloudfront update-distribution \
+            --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" \
+            --if-match "$ETAG" \
+            --distribution-config file://sketchcatch-distribution-update.json \
+            --output json > sketchcatch-distribution-update-result.json
+          aws cloudfront wait distribution-deployed --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID"
+          echo "SKETCHCATCH_SWITCH_FAILURE_REASON=invalidation_failure" >> "$GITHUB_ENV"
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths '/*' --query 'Invalidation.Id' --output text)
+          echo "SKETCHCATCH_INVALIDATION_ID=$INVALIDATION_ID" >> "$GITHUB_ENV"
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" \
+            --id "$INVALIDATION_ID"
+          echo "SKETCHCATCH_SWITCH_FAILURE_REASON=" >> "$GITHUB_ENV"
+      - name: Verify static release and rollback
+        if: always() && steps.publish.outcome == 'success'
+        shell: bash
+        env:
+          SKETCHCATCH_SWITCH_OUTCOME: \${{ steps.switch.outcome }}
+        run: |
+          set -euo pipefail
+          OUTCOME=succeeded
+          FAILURE_REASON=""
+          ACTIVE_INVALIDATION_ID="\${SKETCHCATCH_INVALIDATION_ID:-}"
+          if [ "$SKETCHCATCH_SWITCH_OUTCOME" != success ]; then
+            OUTCOME=failed
+            FAILURE_REASON="\${SKETCHCATCH_SWITCH_FAILURE_REASON:-distribution_update_failure}"
+          elif ! curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$SKETCHCATCH_OUTPUT_URL" >/dev/null; then
+            OUTCOME=failed
+            FAILURE_REASON=health_check_failure
+          fi
+          if [ "$OUTCOME" != succeeded ]; then
+            if [ "\${SKETCHCATCH_BASELINE_CAPTURED:-0}" != 1 ]; then
+              echo "CloudFront rollback baseline was not captured; refusing to mutate the distribution." >&2
+              exit 1
+            fi
+            set +e
+            aws cloudfront wait distribution-deployed --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID"
+            set -e
+            aws cloudfront get-distribution-config --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" --output json > sketchcatch-distribution-rollback.json
+            python3 - <<'PY'
+          import json
+          import os
+
+          with open("sketchcatch-distribution-rollback.json", encoding="utf-8") as handle:
+              response = json.load(handle)
+          config = response.get("DistributionConfig") or {}
+          origins = (config.get("Origins") or {}).get("Items") or []
+          matches = [item for item in origins if item.get("Id") == os.environ["SKETCHCATCH_CLOUDFRONT_ORIGIN_ID"]]
+          if len(matches) != 1:
+              raise SystemExit("Configured CloudFront origin was not found during rollback")
+          origin = matches[0]
+          previous = os.environ.get("SKETCHCATCH_PREVIOUS_ORIGIN_PATH", "")
+          current = str(origin.get("OriginPath") or "")
+          attempted = "/" + os.environ["SKETCHCATCH_RELEASE_PREFIX"]
+          if current not in {previous, attempted}:
+              raise SystemExit("CloudFront origin changed outside this release; refusing rollback")
+          needed = current == attempted
+          origin["OriginPath"] = previous
+          with open("sketchcatch-distribution-rollback-update.json", "w", encoding="utf-8") as handle:
+              json.dump(config, handle, separators=(",", ":"))
+          with open("sketchcatch-rollback-needed.txt", "w", encoding="utf-8") as handle:
+              handle.write("1" if needed else "0")
+          PY
+            if [ "$(cat sketchcatch-rollback-needed.txt)" = 1 ]; then
+              ROLLBACK_ETAG=$(jq -r '.ETag // empty' sketchcatch-distribution-rollback.json)
+              aws cloudfront update-distribution \
+                --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" \
+                --if-match "$ROLLBACK_ETAG" \
+                --distribution-config file://sketchcatch-distribution-rollback-update.json >/dev/null
+              aws cloudfront wait distribution-deployed --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID"
+              ACTIVE_INVALIDATION_ID=$(aws cloudfront create-invalidation \
+                --distribution-id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" \
+                --paths '/*' --query 'Invalidation.Id' --output text)
+              aws cloudfront wait invalidation-completed \
+                --distribution-id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" \
+                --id "$ACTIVE_INVALIDATION_ID"
+            fi
+          fi
+          aws s3api head-object \
+            --bucket "$SKETCHCATCH_STATIC_BUCKET" \
+            --key "$SKETCHCATCH_RELEASE_PREFIX/.sketchcatch-release-manifest.json" \
+            --version-id "$SKETCHCATCH_MANIFEST_VERSION_ID" \
+            --checksum-mode ENABLED --output json > sketchcatch-manifest-head.json
+          aws cloudfront get-distribution-config --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" --output json > sketchcatch-distribution-active.json
+          DISTRIBUTION_STATUS=$(aws cloudfront get-distribution --id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" --query 'Distribution.Status' --output text)
+          INVALIDATION_STATUS=""
+          if [ -n "$ACTIVE_INVALIDATION_ID" ]; then
+            INVALIDATION_STATUS=$(aws cloudfront get-invalidation \
+              --distribution-id "$SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID" \
+              --id "$ACTIVE_INVALIDATION_ID" --query 'Invalidation.Status' --output text)
+          fi
+          ACTIVE_ORIGIN_PATH=$(python3 - <<'PY'
+          import json
+          import os
+
+          with open("sketchcatch-distribution-active.json", encoding="utf-8") as handle:
+              config = (json.load(handle).get("DistributionConfig") or {})
+          origins = (config.get("Origins") or {}).get("Items") or []
+          matches = [item for item in origins if item.get("Id") == os.environ["SKETCHCATCH_CLOUDFRONT_ORIGIN_ID"]]
+          if len(matches) != 1:
+              raise SystemExit("Configured CloudFront origin was not found after release")
+          print(str(matches[0].get("OriginPath") or ""))
+          PY
+          )
+          ACTIVE_RELEASE_PREFIX="\${ACTIVE_ORIGIN_PATH#/}"
+          EXPECTED_PREFIX="$SKETCHCATCH_RELEASE_PREFIX"
+          if [ "$OUTCOME" != succeeded ]; then EXPECTED_PREFIX="\${SKETCHCATCH_PREVIOUS_ORIGIN_PATH#/}"; fi
+          HEALTHY=0
+          if curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$SKETCHCATCH_OUTPUT_URL" >/dev/null; then HEALTHY=1; fi
+          DISTRIBUTION_ETAG=$(jq -r '.ETag // empty' sketchcatch-distribution-active.json)
+          export OUTCOME FAILURE_REASON ACTIVE_INVALIDATION_ID ACTIVE_RELEASE_PREFIX DISTRIBUTION_ETAG
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+
+          evidence = {
+              "schemaVersion": 1,
+              "runtimeTargetKind": "static_site",
+              "outcome": os.environ["OUTCOME"],
+              "failureReason": os.environ["FAILURE_REASON"] or None,
+              "commitSha": os.environ["SKETCHCATCH_RELEASE_SHA"],
+              "artifactDigest": os.environ["SKETCHCATCH_ARTIFACT_DIGEST"],
+              "manifestUri": os.environ["SKETCHCATCH_MANIFEST_URI"],
+              "manifestVersionId": os.environ["SKETCHCATCH_MANIFEST_VERSION_ID"],
+              "releasePrefix": os.environ["SKETCHCATCH_RELEASE_PREFIX"],
+              "previousReleasePrefix": os.environ.get("SKETCHCATCH_PREVIOUS_RELEASE_PREFIX", ""),
+              "activeReleasePrefix": os.environ["ACTIVE_RELEASE_PREFIX"],
+              "hostingBucketName": os.environ["SKETCHCATCH_STATIC_BUCKET"],
+              "cloudFrontDistributionId": os.environ["SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID"],
+              "cloudFrontOriginId": os.environ["SKETCHCATCH_CLOUDFRONT_ORIGIN_ID"],
+              "distributionEtag": os.environ["DISTRIBUTION_ETAG"],
+              "invalidationId": os.environ["ACTIVE_INVALIDATION_ID"] or None,
+              "fileCount": int(os.environ["SKETCHCATCH_FILE_COUNT"]),
+              "outputUrl": os.environ["SKETCHCATCH_OUTPUT_URL"],
+          }
+          encoded = base64.b64encode(json.dumps(evidence, separators=(",", ":")).encode()).decode()
+          print(f"SKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64={encoded}")
+          PY
+          test "$DISTRIBUTION_STATUS" = Deployed
+          if [ -n "$ACTIVE_INVALIDATION_ID" ]; then test "$INVALIDATION_STATUS" = Completed; fi
+          test "$ACTIVE_RELEASE_PREFIX" = "$EXPECTED_PREFIX"
+          test "$HEALTHY" = 1
+          test "$OUTCOME" = succeeded
+`;
+}
+
 function renderEcsFargateBuildspec(): string {
   return `version: 0.2
 
@@ -1056,10 +1460,12 @@ function renderInfraWorkflow(input: GitCicdWorkflowRenderInput): string {
   const ecsFargate = getEcsFargateWorkflowInput(input);
   const lambda = getLambdaWorkflowInput(input);
   const ec2Asg = getEc2AsgWorkflowInput(input);
+  const staticSite = getStaticSiteWorkflowInput(input);
   const applicationSourceRoot =
     ecsFargate?.confirmedBuildConfig.sourceRoot ??
     lambda?.confirmedBuildConfig.sourceRoot ??
-    ec2Asg?.confirmedBuildConfig.sourceRoot;
+    ec2Asg?.confirmedBuildConfig.sourceRoot ??
+    staticSite?.confirmedBuildConfig.sourceRoot;
   const applicationTriggerPaths = applicationSourceRoot
     ? `\n      - ${JSON.stringify(createMonitoredPathGlob(input.appPath ?? applicationSourceRoot))}${
         ecsFargate ? `\n      - 'sketchcatch/${input.projectSlug}/ci-cd/buildspec-ecs.yml'` : ""

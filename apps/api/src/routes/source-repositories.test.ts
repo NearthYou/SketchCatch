@@ -61,7 +61,10 @@ test("source repository routes store and return the latest active repository ana
           },
           {
             path: "apps/web/package.json",
-            content: JSON.stringify({ dependencies: { react: "19.0.0", vite: "7.0.0" } })
+            content: JSON.stringify({
+              scripts: { build: "vite build" },
+              dependencies: { react: "19.0.0", vite: "7.0.0" }
+            })
           },
           { path: "apps/web/vite.config.ts", content: "export default {}" }
         ]

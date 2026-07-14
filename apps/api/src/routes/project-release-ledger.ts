@@ -94,10 +94,20 @@ const ec2AsgRuntimeConfigSchema = z
     outputUrl: z.url().max(2_048)
   })
   .strict();
+const staticSiteRuntimeConfigSchema = z
+  .object({
+    runtimeTargetKind: z.literal("static_site"),
+    hostingBucketName: z.string().trim().min(3).max(63),
+    cloudFrontDistributionId: z.string().trim().min(3).max(32),
+    cloudFrontOriginId: z.string().trim().min(1).max(128),
+    outputUrl: z.url().max(2_048)
+  })
+  .strict();
 const deploymentRuntimeConfigSchema = z.discriminatedUnion("runtimeTargetKind", [
   ecsFargateRuntimeConfigSchema,
   lambdaRuntimeConfigSchema,
-  ec2AsgRuntimeConfigSchema
+  ec2AsgRuntimeConfigSchema,
+  staticSiteRuntimeConfigSchema
 ]);
 const putTargetBodySchema = z
   .object({

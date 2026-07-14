@@ -4,12 +4,22 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/375-ec2-codedeploy-release` based on merged issue #374 (`f5c9e476`).
-- Issues #371-#374 are merged after CI and review feedback resolution.
-- Issue #375 EC2/ASG CodeDeploy AllAtOnce GitOps release is locally complete and ready for PR review.
+- Branch: `feature/sw/376-static-gitops-release` based on merged issue #375 (`6ae29952`).
+- Issues #371-#375 are merged after CI and review feedback resolution.
+- Issue #376 Static S3/CloudFront GitOps release and common CI logs is implemented and locally verified.
 - No cloud mutation or production database migration was performed.
 
 ## Session Record
+
+### 2026-07-14 - Repository-confirmed Static S3/CloudFront GitOps release
+
+- Added Vite, Create React App, and Next.js export output detection with current-revision handoff gating, structured lockfile install presets, and complete S3/CloudFront target coordinates.
+- Added deterministic static manifests, immutable versioned S3 prefixes, checksum and VersionId evidence, CloudFront OriginPath switching, invalidation tracking, HTTPS verification, and previous-pointer rollback.
+- Added bounded masked evidence parsing and verified AWS S3/CloudFront re-query before shared release-ledger persistence.
+- Moved branch and monitored paths to project settings; the CI/CD console now contains only Activity, Logs, Output, and refresh execution controls with runtime-neutral stage labels.
+- Verification passed: focused API 107/107, source route 17/17, target state 10/10, CI/CD layout 103/103, workflow bash syntax, PostgreSQL migrations 0000-0040, migration compatibility, lint, typecheck, build, and harness.
+- Full Web and other workspace tests passed. The API suite has only the three unchanged Windows symlink fixture setup errors (`EPERM`).
+- Sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378; no AWS mutation was attempted.
 
 ### 2026-07-14 - Repository-confirmed EC2/ASG CodeDeploy AllAtOnce GitOps release
 
@@ -71,5 +81,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Open the Korean issue #375 PR, complete the five-minute review/CI wait, resolve feedback, and merge to `dev`.
-- Continue issue #376 from refreshed `dev` after #375 merges.
+- Commit and push issue #376, open the Korean PR, wait five minutes, resolve review and CI feedback, then merge to `dev`.

@@ -290,6 +290,43 @@ export function ProjectDeploymentTargetSettingsClient({
             </label>
           </>
         ) : null}
+        {draft.runtimeTargetKind === "static_site" ? (
+          <>
+            <label className={styles.field}>
+              <span>Package install</span>
+              <select
+                onChange={(event) =>
+                  updateDraft(
+                    "installPreset",
+                    event.target.value as ProjectDeploymentTargetDraft["installPreset"]
+                  )
+                }
+                value={draft.installPreset}
+              >
+                <option value="none">Select a verified lockfile</option>
+                <option value="pnpm_frozen_lockfile">pnpm frozen lockfile</option>
+                <option value="npm_ci">npm ci</option>
+                <option value="yarn_frozen_lockfile">Yarn frozen lockfile</option>
+              </select>
+            </label>
+            <label className={styles.field}>
+              <span>Versioned hosting bucket</span>
+              <input onChange={(event) => updateDraft("hostingBucketName", event.target.value)} value={draft.hostingBucketName} />
+            </label>
+            <label className={styles.field}>
+              <span>CloudFront distribution ID</span>
+              <input onChange={(event) => updateDraft("cloudFrontDistributionId", event.target.value)} value={draft.cloudFrontDistributionId} />
+            </label>
+            <label className={styles.field}>
+              <span>CloudFront origin ID</span>
+              <input onChange={(event) => updateDraft("cloudFrontOriginId", event.target.value)} value={draft.cloudFrontOriginId} />
+            </label>
+            <label className={styles.field}>
+              <span>Output URL</span>
+              <input onChange={(event) => updateDraft("outputUrl", event.target.value)} placeholder="https://static.example.com" value={draft.outputUrl} />
+            </label>
+          </>
+        ) : null}
       </div>
 
       {verifiedConnections.length === 0 && requestState !== "loading" ? (

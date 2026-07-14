@@ -1,5 +1,6 @@
 import { ProjectGitHubSettingsClient } from "../../../../projects/[projectId]/settings/project-github-settings-client";
 import { ProjectDeploymentTargetSettingsClient } from "../../../../projects/[projectId]/settings/project-deployment-target-settings-client";
+import { ProjectCicdMonitoringSettingsClient } from "../../../../projects/[projectId]/settings/project-cicd-monitoring-settings-client";
 
 type ProjectSettingsPageProps = {
   readonly params: Promise<{
@@ -20,6 +21,7 @@ export default async function ProjectSettingsPage({ params }: ProjectSettingsPag
         </div>
       </header>
       <ProjectDeploymentTargetSettingsClient projectId={projectId} />
+      <ProjectCicdMonitoringSettingsClient projectId={projectId} />
       <ProjectGitHubSettingsClient projectId={projectId} />
     </div>
   );

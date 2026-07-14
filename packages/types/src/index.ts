@@ -596,6 +596,7 @@ export const REPOSITORY_EVIDENCE_KINDS = [
   "lockfile",
   "dockerfile",
   "framework_config",
+  "static_output",
   "readme"
 ] as const;
 
@@ -1103,10 +1104,36 @@ export type Ec2AsgGitOpsReleaseEvidence = {
   outputUrl: string;
 };
 
+export type StaticSiteGitOpsReleaseEvidence = {
+  schemaVersion: 1;
+  runtimeTargetKind: "static_site";
+  outcome: "succeeded" | "failed";
+  failureReason:
+    | "distribution_update_failure"
+    | "invalidation_failure"
+    | "health_check_failure"
+    | null;
+  commitSha: string;
+  artifactDigest: string;
+  manifestUri: string;
+  manifestVersionId: string;
+  releasePrefix: string;
+  previousReleasePrefix: string;
+  activeReleasePrefix: string;
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
+  distributionEtag: string;
+  invalidationId: string | null;
+  fileCount: number;
+  outputUrl: string;
+};
+
 export type GitOpsReleaseEvidence =
   | EcsGitOpsReleaseEvidence
   | LambdaGitOpsReleaseEvidence
-  | Ec2AsgGitOpsReleaseEvidence;
+  | Ec2AsgGitOpsReleaseEvidence
+  | StaticSiteGitOpsReleaseEvidence;
 
 export type EcsFargateRuntimeConfig = {
   runtimeTargetKind: "ecs_fargate";
@@ -1136,10 +1163,19 @@ export type Ec2AsgRuntimeConfig = {
   outputUrl: string;
 };
 
+export type StaticSiteRuntimeConfig = {
+  runtimeTargetKind: "static_site";
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
+  outputUrl: string;
+};
+
 export type ProjectDeploymentRuntimeConfig =
   | EcsFargateRuntimeConfig
   | LambdaRuntimeConfig
-  | Ec2AsgRuntimeConfig;
+  | Ec2AsgRuntimeConfig
+  | StaticSiteRuntimeConfig;
 
 export type ProjectDeploymentTarget = {
   projectId: string;

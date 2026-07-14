@@ -58,10 +58,12 @@ test("the CI/CD screen wires sorted refreshes and request-scoped recovery state"
   assert.match(cicdSource, /refreshProjectGitCicdPipelineRuns\(projectId\)/);
   assert.match(cicdSource, /mergeCicdPipelineRun\(currentRuns, detail\)/);
   assert.match(cicdSource, /hasExplicitRunSelectionRef\.current = true/);
-  for (const scope of ["list", "detail", "refresh", "settings"] as const) {
+  for (const scope of ["list", "detail", "refresh"] as const) {
     assert.match(cicdSource, new RegExp(`type: "success", scope: "${scope}"`));
   }
   assert.match(cicdSource, /errorMessage=\{logsErrorMessage\}/);
+  assert.match(cicdSource, /type CicdConsoleView = "activity" \| "logs"/);
+  assert.doesNotMatch(cicdSource, /CicdOverviewView|CicdMonitoringSettings|updateGitCicdMonitoringConfig/);
 });
 
 test("monitoring settings save only normalized repository-relative paths", () => {
@@ -70,6 +72,24 @@ test("monitoring settings save only normalized repository-relative paths", () =>
   assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.appPath\)/);
   assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.infraPath\)/);
   assert.doesNotMatch(settingsSource, /normalizePathForSave/);
+});
+
+test("branch and monitored paths are edited from project settings", () => {
+  const clientSource = readFileSync(
+    new URL(
+      "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx",
+      workspaceDirectory
+    ),
+    "utf8"
+  );
+  const pageSource = readFileSync(
+    new URL("../../app/dashboard/projects/[projectId]/settings/page.tsx", workspaceDirectory),
+    "utf8"
+  );
+
+  assert.match(clientSource, /updateGitCicdMonitoringConfig/);
+  assert.match(clientSource, /<CicdMonitoringSettings/);
+  assert.match(pageSource, /<ProjectCicdMonitoringSettingsClient projectId=\{projectId\}/);
 });
 
 test("Direct and CI/CD screens share accessible Deployment Output links", () => {

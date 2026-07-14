@@ -312,6 +312,68 @@ test("EC2 ASG automation publishes a versioned bundle and verifies AllAtOnce rol
   assert.equal(settings.variables.SKETCHCATCH_OUTPUT_URL, "https://ec2.example.com");
 });
 
+test("Static automation publishes an immutable manifest and rolls back the CloudFront origin", () => {
+  const input = {
+    projectSlug: "web-project",
+    repositoryOwner: "owner",
+    repositoryName: "repo",
+    targetBranch: "main",
+    appPath: "apps/web",
+    runtimeTargetKind: "static_site" as const,
+    confirmedBuildConfig: {
+      sourceRoot: "apps/web",
+      evidence: [{ kind: "static_output" as const, path: "apps/web/dist" }],
+      installPreset: "pnpm_frozen_lockfile" as const,
+      buildPreset: "static_export" as const,
+      artifactOutputPath: "apps/web/dist",
+      runtimeEntrypoint: null,
+      healthCheckPath: null,
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: null,
+      staticOutputPath: "apps/web/dist",
+      exactSemVerTag: null,
+      manifestVersion: "4.0.0",
+      confirmedCommitSha: "a".repeat(40),
+      confirmedAt: "2026-07-14T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "static_site" as const,
+      hostingBucketName: "sketchcatch-static-releases",
+      cloudFrontDistributionId: "E1234567890ABC",
+      cloudFrontOriginId: "static-origin",
+      outputUrl: "https://static.example.com"
+    }
+  };
+  const files = createGitCicdAutomationFiles(input);
+  const appWorkflow = files.find(
+    (file) => file.path === ".github/workflows/sketchcatch-app.yml"
+  )?.content ?? "";
+  const settings = createRepositorySettingsPreview(input);
+
+  assert.match(appWorkflow, /name: Build confirmed static output/);
+  assert.match(appWorkflow, /pnpm install --frozen-lockfile/);
+  assert.match(appWorkflow, /name: Publish versioned static release/);
+  assert.match(appWorkflow, /get-bucket-versioning/);
+  assert.match(appWorkflow, /--checksum-algorithm SHA256/);
+  assert.match(appWorkflow, /SKETCHCATCH_MANIFEST_VERSION_ID/);
+  assert.match(appWorkflow, /name: Switch CloudFront release pointer/);
+  assert.match(appWorkflow, /update-distribution/);
+  assert.match(appWorkflow, /create-invalidation/);
+  assert.match(appWorkflow, /name: Verify static release and rollback/);
+  assert.match(appWorkflow, /SKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64/);
+  assert.match(appWorkflow, /SKETCHCATCH_PREVIOUS_ORIGIN_PATH/);
+  assert.match(appWorkflow, /SKETCHCATCH_BASELINE_CAPTURED/);
+  assert.match(appWorkflow, /changed outside this release; refusing rollback/);
+  assert.match(appWorkflow, /health_check_failure/);
+  assert.match(files[0]?.content ?? "", /"apps\/web\/\*\*"/);
+  assert.equal(settings.variables.SKETCHCATCH_STATIC_BUCKET, "sketchcatch-static-releases");
+  assert.equal(settings.variables.SKETCHCATCH_CLOUDFRONT_DISTRIBUTION_ID, "E1234567890ABC");
+  assert.equal(settings.variables.SKETCHCATCH_CLOUDFRONT_ORIGIN_ID, "static-origin");
+  assert.equal(settings.variables.SKETCHCATCH_OUTPUT_URL, "https://static.example.com");
+});
+
 test("default S3 bucket names trim separators left at the 63-character boundary", () => {
   const preview = createRepositorySettingsPreview({
     projectSlug: "demo-project",

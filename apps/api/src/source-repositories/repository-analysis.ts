@@ -20,6 +20,7 @@ import { createRepositoryTemplateRecommendationProfile } from "./repository-temp
 
 const dependencyRecordSchema = z.record(z.string(), z.string());
 const packageJsonSchema = z.object({
+  scripts: dependencyRecordSchema.optional(),
   dependencies: dependencyRecordSchema.optional(),
   devDependencies: dependencyRecordSchema.optional(),
   workspaces: z
@@ -40,6 +41,7 @@ type ParsedPackageJson = {
   readonly path: string;
   readonly rootPath: string;
   readonly dependencies: Readonly<Record<string, string>>;
+  readonly scripts: Readonly<Record<string, string>>;
   readonly workspacePatterns: readonly string[] | null;
 };
 
@@ -106,6 +108,7 @@ function parsePackageJsonEvidence(file: GitHubRepositoryEvidenceFile): readonly 
           ...parsed.data.dependencies,
           ...parsed.data.devDependencies
         },
+        scripts: parsed.data.scripts ?? {},
         workspacePatterns: getWorkspacePatterns(parsed.data.workspaces)
       }
     ];
@@ -285,7 +288,59 @@ function collectRepositoryEvidence(
     }
   }
 
+  for (const packageFile of packageFiles) {
+    const unit = applicationUnits.find((candidate) => candidate.rootPath === packageFile.rootPath);
+    if (!unit) continue;
+    const staticOutput = detectStaticOutput(packageFile, unit, snapshot.files);
+    if (staticOutput) {
+      evidence.push({
+        kind: "static_output",
+        path: staticOutput.path,
+        applicationUnitId: unit.id,
+        signals: [staticOutput.signal]
+      });
+    }
+  }
+
   return evidence.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function detectStaticOutput(
+  packageFile: ParsedPackageJson,
+  unit: RepositoryApplicationUnit,
+  files: readonly GitHubRepositoryEvidenceFile[]
+): { path: string; signal: string } | null {
+  if (!packageFile.scripts.build?.trim()) return null;
+  let directory: string | null = null;
+  let signal: string | null = null;
+  if ("vite" in packageFile.dependencies) {
+    directory = "dist";
+    signal = "Vite static build output";
+  } else if ("react-scripts" in packageFile.dependencies) {
+    directory = "build";
+    signal = "Create React App static build output";
+  } else if ("next" in packageFile.dependencies && hasNextStaticExportConfig(unit.rootPath, files)) {
+    directory = "out";
+    signal = "Next.js static export output";
+  }
+  if (!directory || !signal) return null;
+  return {
+    path: unit.rootPath === "." ? directory : `${unit.rootPath}/${directory}`,
+    signal
+  };
+}
+
+function hasNextStaticExportConfig(
+  rootPath: string,
+  files: readonly GitHubRepositoryEvidenceFile[]
+): boolean {
+  const prefix = rootPath === "." ? "" : `${rootPath}/`;
+  return files.some(
+    (file) =>
+      file.path.startsWith(prefix) &&
+      /^next\.config\.(?:js|mjs|ts)$/.test(file.path.slice(prefix.length)) &&
+      /\boutput\s*:\s*["']export["']/.test(file.content)
+  );
 }
 
 // 가장 구체적인 Application Unit에 evidence 경로를 연결한다.
