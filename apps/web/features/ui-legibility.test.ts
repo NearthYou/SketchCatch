@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
+const webRoot = fileURLToPath(new URL("../", import.meta.url));
 
 const landingStyles = readWebFile("features/landing/product-entry.module.css");
 const authStyles = readWebFile("components/auth/auth.css");
@@ -65,6 +68,55 @@ test("authentication text keeps the minimum size and muted contrast", () => {
   assert.doesNotMatch(authStyles, /#(?:777b84|999999)/i);
 });
 
+test("web user-facing text prevents undersized and low-contrast regressions", () => {
+  const violations: string[] = [];
+
+  for (const filePath of collectCssFiles()) {
+    const lines = readFileSync(filePath, "utf8").split(/\r?\n/);
+
+    lines.forEach((line, index) => {
+      if (/font-size:\s*(?:8|9|10|11)px/.test(line)) {
+        const exceptionContext = `${lines[index - 1] ?? ""} ${line}`;
+        const hasDocumentedShapeException =
+          exceptionContext.includes("ui-legibility-exception: shape") &&
+          exceptionContext.includes("a11y:");
+
+        if (!hasDocumentedShapeException) {
+          violations.push(`${relative(webRoot, filePath)}:${index + 1} uses text below 12px`);
+        }
+      }
+
+      if (
+        /(?:^|\s)(?:color|--[\w-]*(?:muted|subtle)[\w-]*)\s*:\s*#(?:777b84|999999|7a7d82)\b/i.test(
+          line
+        )
+      ) {
+        violations.push(`${relative(webRoot, filePath)}:${index + 1} uses a low-contrast text color`);
+      }
+    });
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 function readWebFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), "utf8");
+}
+
+function collectCssFiles(): string[] {
+  return ["app", "components", "features"].flatMap((directory) =>
+    walkCssDirectory(join(webRoot, directory))
+  );
+}
+
+function walkCssDirectory(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      return walkCssDirectory(path);
+    }
+
+    return entry.isFile() && entry.name.endsWith(".css") ? [path] : [];
+  });
 }

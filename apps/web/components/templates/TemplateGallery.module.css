@@ -54,7 +54,7 @@
 
 .selectField > span {
   color: var(--color-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -65,7 +65,7 @@
 }
 
 .searchField input::placeholder {
-  color: #777b84;
+  color: #60646c;
   opacity: 1;
 }
 
@@ -135,8 +135,8 @@
 }
 
 .cardHeading dt {
-  color: #7a7d82;
-  font-size: 9px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .cardHeading dd {
@@ -155,7 +155,7 @@
   border: 1px solid #dcdee0;
   border-radius: 6px;
   color: #60646c;
-  font-size: 10px;
+  font-size: 12px;
   padding: 4px 6px;
 }
 

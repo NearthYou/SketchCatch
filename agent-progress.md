@@ -190,6 +190,14 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: `pnpm --dir apps/api exec tsx --test --test-name-pattern "clone URLs ending in .git" src/routes/ai.test.ts`; `pnpm --dir apps/web exec tsx --test features/workspace/public-repository-recommendation.test.ts`; `pnpm harness:check`; `pnpm lint`; `pnpm typecheck`; `pnpm build`.
 - Note: running the full `apps/api/src/routes/ai.test.ts` file still shows two unrelated baseline failures in repository-template and template-selection assertions.
 
+### 2026-07-14 - Complete Web UI clarity and accessibility improvements
+
+- Clarified landing and authentication actions, added accessible password and legal-dialog interactions, and unified signup readiness and availability behavior.
+- Raised user-facing Web text to at least 12px, strengthened muted text contrast, and added a recursive CSS regression test with documented shape-exception rules.
+- Verified public, dashboard, workspace entry, Architecture Board, Terraform, Reverse Engineering, and Template surfaces at 1440x900 and 390x844 with a local QA account that has no AWS, GitHub, or deployment privileges.
+- Verification: Web tests passed 1,202/1,202 outside the restricted runner after its `spawn EPERM`; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
+- Risk: authenticated visual QA used fixture and disconnected states only; no cloud, deployment, Git handoff, or database mutation was performed.
+
 ## Next Action
 
 - Restore the live AI endpoint and repeat the saved-Board patch screen check when the API is available; no layout implementation continuation is required.
