@@ -1047,7 +1047,7 @@ test("template application replaces Diagram and Terraform workspace as one sourc
   );
   assert.match(
     workspaceStartSource,
-    /markTerraformSourceAuthoritative\(selectedTemplate\.diagramJson\)/
+    /markTerraformSourceAuthoritative\(template\.diagramJson\)/
   );
   assert.match(projectDraftManagerSource, /handleTemplateWorkspaceApply/);
   assert.match(workspaceDraftManagerSource, /handleTemplateWorkspaceApply/);

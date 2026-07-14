@@ -35,7 +35,7 @@ test("new-project template selection rejects unavailable IDs and saves exact Ter
   );
   assert.match(
     startSource,
-    /saveProjectDraft\(\{[\s\S]*markTerraformSourceAuthoritative\(selectedTemplate\.diagramJson\)[\s\S]*terraformFiles: selectedTemplate\.terraformFiles\.map/
+    /saveProjectDraft\(\{[\s\S]*markTerraformSourceAuthoritative\(template\.diagramJson\)[\s\S]*terraformFiles: template\.terraformFiles\.map/
   );
 });
 

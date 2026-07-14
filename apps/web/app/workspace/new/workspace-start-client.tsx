@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowRight,
   Bot,
   Boxes,
   CloudDownload,
@@ -12,7 +13,8 @@ import {
   LoaderCircle,
   type LucideIcon
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { BoardThumbnailImage } from "../../../components/architecture-board/BoardThumbnailImage";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import {
@@ -27,9 +29,12 @@ import {
 } from "../../../features/workspace/workspace-start-single-flight";
 import { markTerraformSourceAuthoritative } from "../../../features/workspace/terraform-panel-utils";
 import {
+  getBoardTemplateRelationshipCount,
+  getBoardTemplateResourceCount,
   isBoardTemplateAvailable,
-  type BoardTemplate,
-  listBoardTemplates
+  listBoardTemplates,
+  type AvailableBoardTemplate,
+  type BoardTemplate
 } from "../../../features/resource-settings/template-library";
 import {
   createWorkspaceStartOptions,
@@ -62,6 +67,8 @@ type WorkspaceStartForm = {
   readonly selectedTemplateId: string | null;
 };
 
+type TemplateStartView = "catalog" | "detail" | null;
+
 const startModeOptions = createWorkspaceStartOptions();
 const mainStartOptions = startModeOptions.filter((option) => option.kind !== "blank");
 const blankStartOption = startModeOptions.find((option) => option.kind === "blank");
@@ -91,6 +98,16 @@ export function WorkspaceStartClient({
       ? (initialTemplateId ?? null)
       : null
   );
+  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(
+    boardTemplates.some(
+      (template) => template.id === initialTemplateId && isBoardTemplateAvailable(template)
+    )
+      ? (initialTemplateId ?? null)
+      : null
+  );
+  const [templateStartView, setTemplateStartView] = useState<TemplateStartView>(() =>
+    initialStartKind === "template" ? "catalog" : null
+  );
   const [errorMessage, setErrorMessage] = useState("");
   const [projectNameError, setProjectNameError] = useState("");
   const [submittingKind, setSubmittingKind] = useState<WorkspaceStartKind | null>(null);
@@ -103,11 +120,14 @@ export function WorkspaceStartClient({
     const template = boardTemplates.find((candidate) => candidate.id === selectedTemplateId);
     return template && isBoardTemplateAvailable(template) ? template : null;
   }, [selectedTemplateId]);
+  const previewTemplate = useMemo(() => {
+    const template = boardTemplates.find((candidate) => candidate.id === previewTemplateId);
+    return template && isBoardTemplateAvailable(template) ? template : null;
+  }, [previewTemplateId]);
   const isSubmitting = submittingKind !== null;
   const isPrimarySubmitting = isSubmitting && submittingKind !== "blank";
   const canContinue =
     !isSubmitting &&
-    (selectedKind !== "template" || selectedTemplate !== null) &&
     (selectedKind !== "repository" || !repositoryUrlFormVisible || repositoryUrl.trim().length > 0);
 
   useEffect(() => {
@@ -120,14 +140,15 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
-      setSelectedTemplateId(
+      const restoredTemplateId =
         boardTemplates.some(
           (template) =>
             template.id === storedForm.selectedTemplateId && isBoardTemplateAvailable(template)
         )
           ? storedForm.selectedTemplateId
-          : null
-      );
+          : null;
+      setSelectedTemplateId(restoredTemplateId);
+      setPreviewTemplateId(restoredTemplateId);
       setRepositoryUrlFormVisible(storedForm.selectedKind === "repository");
     } else {
       const aiDraft = readAiStartDraft();
@@ -148,22 +169,18 @@ export function WorkspaceStartClient({
   }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
 
   // 명시된 시작 방식을 즉시 실행하고 같은 순간의 다른 시작 요청은 한 번만 처리합니다.
-  async function handleContinue(startKind: WorkspaceStartKind = selectedKind): Promise<void> {
+  async function handleContinue(
+    startKind: WorkspaceStartKind = selectedKind,
+    template: AvailableBoardTemplate | null = selectedTemplate
+  ): Promise<void> {
     await startSingleFlight.run(async () => {
-      const projectName = title.trim();
-
-      if (!projectName) {
-        setProjectNameError("프로젝트 이름을 입력해주세요.");
-        setErrorMessage("");
-        // 오류를 확인한 뒤 바로 이름을 입력할 수 있도록 입력창으로 이동합니다.
-        projectNameInputRef.current?.focus();
-        projectNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (!validateProjectName()) {
         return;
       }
 
-      setProjectNameError("");
+      const projectName = title.trim();
 
-      if (startKind === "template" && !selectedTemplate) {
+      if (startKind === "template" && !template) {
         setErrorMessage("사용할 Template을 선택해주세요.");
         return;
       }
@@ -207,14 +224,14 @@ export function WorkspaceStartClient({
           const project = await createProject({ name: projectName });
           createdProjectId = project.id;
 
-          if (action.openMode === "template" && selectedTemplate) {
+          if (action.openMode === "template" && template) {
             await saveProjectDraft({
               diagramJson:
-                selectedTemplate.terraformFiles.length > 0
-                  ? markTerraformSourceAuthoritative(selectedTemplate.diagramJson)
-                  : selectedTemplate.diagramJson,
+                template.terraformFiles.length > 0
+                  ? markTerraformSourceAuthoritative(template.diagramJson)
+                  : template.diagramJson,
               projectId: project.id,
-              terraformFiles: selectedTemplate.terraformFiles.map((file) => ({ ...file }))
+              terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
             });
           }
 
@@ -240,8 +257,20 @@ export function WorkspaceStartClient({
 
   // 화면에서 선택한 시작 방식과 그 방식에 필요한 보조 입력 영역을 함께 맞춥니다.
   function selectStartKind(kind: WorkspaceStartKind): void {
+    if (kind === "template") {
+      if (!validateProjectName()) {
+        return;
+      }
+
+      setSelectedKind(kind);
+      setTemplateStartView("catalog");
+      setRepositoryUrlFormVisible(false);
+      return;
+    }
+
     setSelectedKind(kind);
     setErrorMessage("");
+    setTemplateStartView(null);
 
     if (kind === "repository") {
       setRepositoryUrlFormVisible(true);
@@ -249,6 +278,19 @@ export function WorkspaceStartClient({
     }
 
     setRepositoryUrlFormVisible(false);
+  }
+
+  function validateProjectName(): boolean {
+    if (title.trim()) {
+      setProjectNameError("");
+      return true;
+    }
+
+    setProjectNameError("프로젝트 이름을 입력해주세요.");
+    setErrorMessage("");
+    projectNameInputRef.current?.focus();
+    projectNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return false;
   }
 
   // Repository URL 시작도 공용 제출 상태를 사용해 다른 시작 버튼을 함께 잠급니다.
@@ -287,52 +329,70 @@ export function WorkspaceStartClient({
     }
   }
 
-  return (
-    <main className={styles.page}>
-      <header className={styles.topbar}>
-        <ProductBrand />
-        <strong>새 프로젝트</strong>
-        <Link className={styles.backLink} href="/dashboard">
-          <ArrowLeft aria-hidden="true" size={17} />
-          Dashboard
-        </Link>
-      </header>
+  function selectTemplate(templateId: string): void {
+    if (!validateProjectName()) {
+      return;
+    }
 
+    setSelectedTemplateId(templateId);
+    setPreviewTemplateId(templateId);
+    setTemplateStartView("detail");
+    setErrorMessage("");
+  }
+
+  if (templateStartView === "catalog") {
+    return (
+      <WorkspaceStartFrame title="템플릿 선택">
+        <TemplateCatalog
+          onBack={() => setTemplateStartView(null)}
+          onSelect={selectTemplate}
+          onTitleChange={(value) => {
+            setTitle(value);
+            setProjectNameError("");
+            setErrorMessage("");
+          }}
+          projectNameError={projectNameError}
+          projectNameInputRef={projectNameInputRef}
+          selectedTemplateId={previewTemplateId}
+          templates={boardTemplates}
+          title={title}
+        />
+      </WorkspaceStartFrame>
+    );
+  }
+
+  if (templateStartView === "detail" && previewTemplate) {
+    return (
+      <WorkspaceStartFrame title="템플릿 살펴보기">
+        <TemplateDetail
+          onBack={() => setTemplateStartView("catalog")}
+          onStart={() => void handleContinue("template", previewTemplate)}
+          errorMessage={errorMessage}
+          isSubmitting={isSubmitting}
+          template={previewTemplate}
+        />
+      </WorkspaceStartFrame>
+    );
+  }
+
+  return (
+    <WorkspaceStartFrame title="새 프로젝트">
       <div className={styles.layout}>
         <section className={styles.startPanel} aria-labelledby="workspace-start-title">
           <header className={styles.heading}>
             <h1 id="workspace-start-title">어떻게 시작할까요?</h1>
           </header>
 
-          <label
-            className={
-              projectNameError ? `${styles.nameField} ${styles.nameFieldError}` : styles.nameField
-            }
-            htmlFor="workspace-title-input"
-          >
-            <span>프로젝트 이름</span>
-            <input
-              aria-describedby={projectNameError ? "workspace-title-error" : undefined}
-              aria-invalid={Boolean(projectNameError)}
-              autoFocus
-              id="workspace-title-input"
-              maxLength={80}
-              onChange={(event) => {
-                setTitle(event.target.value);
-                setProjectNameError("");
-                setErrorMessage("");
-              }}
-              placeholder="예: 예약 서비스 API"
-              ref={projectNameInputRef}
-              type="text"
-              value={title}
-            />
-            {projectNameError ? (
-              <span className={styles.fieldError} id="workspace-title-error" role="alert">
-                {projectNameError}
-              </span>
-            ) : null}
-          </label>
+          <ProjectNameField
+            error={projectNameError}
+            inputRef={projectNameInputRef}
+            onChange={(value) => {
+              setTitle(value);
+              setProjectNameError("");
+              setErrorMessage("");
+            }}
+            title={title}
+          />
 
           <div className={styles.optionList} role="radiogroup" aria-label="프로젝트 시작 방식">
             {mainStartOptions.map((option) => {
@@ -361,14 +421,6 @@ export function WorkspaceStartClient({
             })}
           </div>
 
-          {selectedKind === "template" ? (
-            <TemplatePicker
-              onSelect={setSelectedTemplateId}
-              selectedTemplateId={selectedTemplateId}
-              templates={boardTemplates}
-            />
-          ) : null}
-
           {selectedKind === "repository" && repositoryUrlFormVisible ? (
             <RepositoryUrlStartPanel
               branch={repositoryDefaultBranch}
@@ -390,7 +442,14 @@ export function WorkspaceStartClient({
               aria-busy={isPrimarySubmitting}
               className={styles.primaryAction}
               disabled={!canContinue}
-              onClick={() => void handleContinue()}
+              onClick={() => {
+                if (selectedKind === "template") {
+                  setTemplateStartView(previewTemplate ? "detail" : "catalog");
+                  return;
+                }
+
+                void handleContinue();
+              }}
               type="button"
             >
               {isPrimarySubmitting ? (
@@ -398,7 +457,11 @@ export function WorkspaceStartClient({
               ) : null}
               {isPrimarySubmitting
                 ? "처리 중"
-                : getContinueLabel(selectedKind, repositoryUrlFormVisible)}
+                : selectedKind === "template"
+                  ? previewTemplate
+                    ? "선택한 Template 보기"
+                    : "Template 고르기"
+                  : getContinueLabel(selectedKind, repositoryUrlFormVisible)}
             </button>
             {blankStartOption ? (
               <button
@@ -427,7 +490,67 @@ export function WorkspaceStartClient({
           ) : null}
         </section>
       </div>
+    </WorkspaceStartFrame>
+  );
+}
+
+function WorkspaceStartFrame({
+  children,
+  title
+}: {
+  readonly children: ReactNode;
+  readonly title: string;
+}) {
+  return (
+    <main className={styles.page}>
+      <header className={styles.topbar}>
+        <ProductBrand />
+        <strong>{title}</strong>
+        <Link className={styles.backLink} href="/dashboard">
+          <ArrowLeft aria-hidden="true" size={17} />
+          Dashboard
+        </Link>
+      </header>
+      {children}
     </main>
+  );
+}
+
+function ProjectNameField({
+  error,
+  inputRef,
+  onChange,
+  title
+}: {
+  readonly error: string;
+  readonly inputRef: RefObject<HTMLInputElement | null>;
+  readonly onChange: (value: string) => void;
+  readonly title: string;
+}) {
+  return (
+    <label
+      className={error ? `${styles.nameField} ${styles.nameFieldError}` : styles.nameField}
+      htmlFor="workspace-title-input"
+    >
+      <span>프로젝트 이름</span>
+      <input
+        aria-describedby={error ? "workspace-title-error" : undefined}
+        aria-invalid={Boolean(error)}
+        autoFocus
+        id="workspace-title-input"
+        maxLength={80}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="예: 예약 서비스 API"
+        ref={inputRef}
+        type="text"
+        value={title}
+      />
+      {error ? (
+        <span className={styles.fieldError} id="workspace-title-error" role="alert">
+          {error}
+        </span>
+      ) : null}
+    </label>
   );
 }
 
@@ -457,29 +580,130 @@ async function resolveStartAction({
   });
 }
 
-// 공통 Template Gallery를 새 프로젝트의 선택 단계로 보여줍니다.
-function TemplatePicker({
+function TemplateCatalog({
+  onBack,
   onSelect,
+  onTitleChange,
+  projectNameError,
+  projectNameInputRef,
   selectedTemplateId,
-  templates
+  templates,
+  title
 }: {
+  readonly onBack: () => void;
   readonly onSelect: (templateId: string) => void;
+  readonly onTitleChange: (value: string) => void;
+  readonly projectNameError: string;
+  readonly projectNameInputRef: RefObject<HTMLInputElement | null>;
   readonly selectedTemplateId: string | null;
   readonly templates: readonly BoardTemplate[];
+  readonly title: string;
 }) {
   return (
-    <section className={styles.templatePicker} aria-labelledby="template-picker-title">
-      <div className={styles.templatePickerHeader}>
-        <h2 id="template-picker-title">Template 선택</h2>
-        <span>{templates.length}개</span>
-      </div>
+    <div className={styles.templateFlow}>
+      <header className={styles.templateFlowHeader}>
+        <button className={styles.flowBack} onClick={onBack} type="button">
+          <ArrowLeft aria-hidden="true" size={17} />
+          시작 방식
+        </button>
+        <div>
+          <span className={styles.eyebrow}>Architecture templates</span>
+          <h1>어떤 구조로 시작할까요?</h1>
+          <p>필요한 구성과 가장 가까운 템플릿을 골라보세요.</p>
+        </div>
+        <span className={styles.templateCount}>{templates.length} templates</span>
+      </header>
+
+      <ProjectNameField
+        error={projectNameError}
+        inputRef={projectNameInputRef}
+        onChange={onTitleChange}
+        title={title}
+      />
+
       <TemplateGallery
-        actionLabel="이 Template 선택"
+        actionLabel="템플릿 보기"
         onSelect={onSelect}
         selectedTemplateId={selectedTemplateId}
         templates={templates}
       />
-    </section>
+    </div>
+  );
+}
+
+function TemplateDetail({
+  errorMessage,
+  onBack,
+  onStart,
+  isSubmitting,
+  template
+}: {
+  readonly errorMessage: string;
+  readonly onBack: () => void;
+  readonly onStart: () => void;
+  readonly isSubmitting: boolean;
+  readonly template: AvailableBoardTemplate;
+}) {
+  return (
+    <div className={styles.templateFlow}>
+      <button className={styles.flowBack} onClick={onBack} type="button">
+        <ArrowLeft aria-hidden="true" size={17} />
+        템플릿 목록
+      </button>
+
+      <section className={styles.templateDetail} aria-labelledby="template-detail-title">
+        <div className={styles.detailPreviewFrame}>
+          <BoardThumbnailImage
+            alt={`${template.title} Architecture 미리보기`}
+            className={styles.detailPreview}
+            src={template.thumbnailSrc ?? null}
+          />
+        </div>
+
+        <div className={styles.detailContent}>
+          <div className={styles.detailHeading}>
+            <span className={styles.eyebrow}>Selected template</span>
+            <h1 id="template-detail-title">{template.title}</h1>
+            <p>{template.description}</p>
+          </div>
+
+          <dl className={styles.detailStats}>
+            <div>
+              <dt>Resources</dt>
+              <dd>{getBoardTemplateResourceCount(template)}</dd>
+            </div>
+            <div>
+              <dt>Relationships</dt>
+              <dd>{getBoardTemplateRelationshipCount(template)}</dd>
+            </div>
+          </dl>
+
+          <div className={styles.detailTags} aria-label="Template tags">
+            {template.tags.map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
+          </div>
+
+          <div className={styles.detailActionArea}>
+            {errorMessage ? (
+              <p className={styles.errorMessage} role="alert">
+                {errorMessage}
+              </p>
+            ) : null}
+            <button
+              aria-busy={isSubmitting}
+              className={styles.detailStartAction}
+              disabled={isSubmitting}
+              onClick={onStart}
+              type="button"
+            >
+              {isSubmitting ? "처리 중" : "이 템플릿으로 시작"}
+              {isSubmitting ? null : <ArrowRight aria-hidden="true" size={17} />}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 

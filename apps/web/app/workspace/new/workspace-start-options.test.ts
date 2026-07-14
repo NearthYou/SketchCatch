@@ -37,13 +37,24 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.doesNotMatch(startPageSource, /RoutePlaceholder/);
   assert.doesNotMatch(startPageSource, /designDashboardPage|designDashboardShell/);
   assert.match(startClientSource, /role="radiogroup"/);
-  assert.match(startClientSource, /TemplatePicker/);
+  assert.match(startClientSource, /TemplateCatalog/);
+  assert.match(startClientSource, /TemplateDetail/);
   assert.match(startClientSource, /blankStartOption/);
+});
+
+test("Template start validates a project name before opening the catalog and starts only from detail", () => {
+  assert.match(startClientSource, /function validateProjectName\(\): boolean/);
+  assert.match(
+    startClientSource,
+    /if \(kind === "template"\) \{\s+if \(!validateProjectName\(\)\) \{\s+return;\s+\}/
+  );
+  assert.match(startClientSource, /onStart=\{\(\) => void handleContinue\("template", previewTemplate\)\}/);
+  assert.match(startClientSource, /readonly onStart: \(\) => void;/);
 });
 
 test("WorkspaceStartClient keeps Template and GitHub URL as real start paths", () => {
   assert.match(startClientSource, /saveProjectDraft/);
-  assert.match(startClientSource, /selectedTemplate\.diagramJson/);
+  assert.match(startClientSource, /template\.diagramJson/);
   assert.match(startClientSource, /RepositoryUrlStartPanel/);
   assert.match(startClientSource, /https:\/\/github\.com\/owner\/repository/);
   assert.match(startClientSource, /workspace\/repository/);
@@ -66,8 +77,8 @@ test("WorkspaceStartClient hydrates a stored form before persisting changes", ()
 test("WorkspaceStartClient shows an inline project-name error after an empty submission", () => {
   assert.match(startClientSource, /const \[projectNameError, setProjectNameError\]/);
   assert.match(startClientSource, /setProjectNameError\("프로젝트 이름을 입력해주세요\."\)/);
-  assert.match(startClientSource, /aria-invalid=\{Boolean\(projectNameError\)\}/);
-  assert.match(startClientSource, /aria-describedby=\{projectNameError \? "workspace-title-error" : undefined\}/);
+  assert.match(startClientSource, /aria-invalid=\{Boolean\(error\)\}/);
+  assert.match(startClientSource, /aria-describedby=\{error \? "workspace-title-error" : undefined\}/);
   assert.match(startClientSource, /id="workspace-title-error"/);
   assert.doesNotMatch(startClientSource, /const canContinue =\s+title\.trim\(\)\.length > 0/);
   assert.match(startStylesSource, /\.nameFieldError input/);
@@ -78,7 +89,7 @@ test("WorkspaceStartClient moves focus and the viewport to the project name afte
   assert.match(startClientSource, /const projectNameInputRef = useRef<HTMLInputElement>\(null\)/);
   assert.match(startClientSource, /projectNameInputRef\.current\?\.focus\(\)/);
   assert.match(startClientSource, /projectNameInputRef\.current\?\.scrollIntoView\(/);
-  assert.match(startClientSource, /ref=\{projectNameInputRef\}/);
+  assert.match(startClientSource, /inputRef=\{projectNameInputRef\}/);
 });
 
 test("resolveWorkspaceStartAction sends Reverse users without a verified AWS Role to settings", () => {

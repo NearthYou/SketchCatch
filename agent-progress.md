@@ -17,6 +17,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Connect the Workspace Template start flow
+
+- Split the template path into catalog and detail states while retaining the existing project creation, draft persistence, rollback, and Workspace navigation boundary. Only the detail CTA now creates a project from the selected available template.
+- Project-name validation now runs before entering the template catalog and before choosing a catalog card, using the existing inline error, focus, and scroll behavior. The catalog also keeps the name input available for direct Dashboard template links.
+- TDD evidence: the dedicated Workspace start suite first failed for the missing catalog validation/detail submit contract, then passed 13/13. The complete Web suite passed 1,227/1,227; Web and root lint/typecheck passed; harness and diff checks passed.
+- Root build remains blocked before Web compilation by the pre-existing missing `apps/web/.codegraph` path. No migration, API contract, template definition, dependency, cloud, or deployment change was made.
+
 ### 2026-07-14 - Stabilize Dashboard Project Board thumbnail refresh
 
 - Added a small dependency-injected loader that retries missing (`404`/`null`) and transient thumbnail reads at most three times with a fixed 250ms delay; it returns explicit ready, empty, error, or cancelled results and never polls.
