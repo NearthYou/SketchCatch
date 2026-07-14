@@ -23,6 +23,13 @@ import { useAuth } from "../../components/auth/auth-provider";
 import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
 import {
+  createAvailabilityRequestCoordinator,
+  INITIAL_AVAILABILITY_STATE,
+  runAvailabilityCheck,
+  type AvailabilityState,
+  type AvailabilityStatus
+} from "../../features/auth/signup-availability";
+import {
   getSignupReadiness,
   getSignupRequirementMessage
 } from "../../features/auth/signup-readiness";
@@ -32,20 +39,6 @@ import { LEGAL_DOCUMENTS, type LegalDocument, type LegalDocumentKey } from "./le
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-type AvailabilityStatus = "idle" | "checking" | "available" | "duplicate" | "error";
-
-type AvailabilityState = {
-  status: AvailabilityStatus;
-  value: string | null;
-  message: string | null;
-};
-
-const INITIAL_AVAILABILITY_STATE: AvailabilityState = {
-  status: "idle",
-  value: null,
-  message: null
-};
 
 export function SignupForm() {
   const router = useRouter();
@@ -72,6 +65,8 @@ export function SignupForm() {
   const [usernameAvailability, setUsernameAvailability] = useState<AvailabilityState>(
     INITIAL_AVAILABILITY_STATE
   );
+  const emailAvailabilityRequest = useRef(createAvailabilityRequestCoordinator()).current;
+  const usernameAvailabilityRequest = useRef(createAvailabilityRequestCoordinator()).current;
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -79,94 +74,49 @@ export function SignupForm() {
     }
   }, [router, status]);
 
+  useEffect(
+    () => () => {
+      emailAvailabilityRequest.cancel();
+      usernameAvailabilityRequest.cancel();
+    },
+    [emailAvailabilityRequest, usernameAvailabilityRequest]
+  );
+
   async function handleUsernameAvailabilityCheck(): Promise<void> {
     const normalizedUsername = normalizeUsername(username);
-
-    if (!normalizedUsername) {
-      setUsernameAvailability({
-        status: "error",
-        value: null,
-        message: "아이디를 입력해주세요."
-      });
-      return;
-    }
-
-    if (!isValidUsername(normalizedUsername)) {
-      setUsernameAvailability({
-        status: "error",
-        value: normalizedUsername,
-        message: "아이디는 3~30자 영문, 숫자, -, _만 사용할 수 있습니다."
-      });
-      return;
-    }
-
-    setUsernameAvailability({
-      status: "checking",
-      value: normalizedUsername,
-      message: "아이디 중복을 확인하는 중입니다."
+    await runAvailabilityCheck({
+      availableMessage: "사용 가능한 아이디입니다.",
+      checkingMessage: "아이디 중복을 확인하는 중입니다.",
+      coordinator: usernameAvailabilityRequest,
+      duplicateMessage: "이미 사용 중인 아이디입니다.",
+      emptyMessage: "아이디를 입력해주세요.",
+      errorMessage: (error) => getApiErrorMessage(error, "아이디 중복 확인에 실패했습니다."),
+      invalidMessage: "아이디는 3~30자 영문, 숫자, -, _만 사용할 수 있습니다.",
+      isValid: isValidUsername,
+      normalizedValue: normalizedUsername,
+      onStateChange: setUsernameAvailability,
+      request: async (signal) =>
+        (await requestSignupAvailability({ username: normalizedUsername }, { signal }))
+          .usernameAvailable === true
     });
-
-    try {
-      const response = await requestSignupAvailability({ username: normalizedUsername });
-      const isAvailable = response.usernameAvailable === true;
-
-      setUsernameAvailability({
-        status: isAvailable ? "available" : "duplicate",
-        value: normalizedUsername,
-        message: isAvailable ? "사용 가능한 아이디입니다." : "이미 사용 중인 아이디입니다."
-      });
-    } catch (error) {
-      setUsernameAvailability({
-        status: "error",
-        value: normalizedUsername,
-        message: getApiErrorMessage(error, "아이디 중복 확인에 실패했습니다.")
-      });
-    }
   }
 
   async function handleEmailAvailabilityCheck(): Promise<void> {
     const normalizedEmail = normalizeEmail(email);
-
-    if (!normalizedEmail) {
-      setEmailAvailability({
-        status: "error",
-        value: null,
-        message: "이메일을 입력해주세요."
-      });
-      return;
-    }
-
-    if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      setEmailAvailability({
-        status: "error",
-        value: normalizedEmail,
-        message: "이메일 형식을 확인해주세요."
-      });
-      return;
-    }
-
-    setEmailAvailability({
-      status: "checking",
-      value: normalizedEmail,
-      message: "이메일 중복을 확인하는 중입니다."
+    await runAvailabilityCheck({
+      availableMessage: "사용 가능한 이메일입니다.",
+      checkingMessage: "이메일 중복을 확인하는 중입니다.",
+      coordinator: emailAvailabilityRequest,
+      duplicateMessage: "이미 사용 중인 이메일입니다.",
+      emptyMessage: "이메일을 입력해주세요.",
+      errorMessage: (error) => getApiErrorMessage(error, "이메일 중복 확인에 실패했습니다."),
+      invalidMessage: "이메일 형식을 확인해주세요.",
+      isValid: (value) => EMAIL_PATTERN.test(value),
+      normalizedValue: normalizedEmail,
+      onStateChange: setEmailAvailability,
+      request: async (signal) =>
+        (await requestSignupAvailability({ email: normalizedEmail }, { signal })).emailAvailable === true
     });
-
-    try {
-      const response = await requestSignupAvailability({ email: normalizedEmail });
-      const isAvailable = response.emailAvailable === true;
-
-      setEmailAvailability({
-        status: isAvailable ? "available" : "duplicate",
-        value: normalizedEmail,
-        message: isAvailable ? "사용 가능한 이메일입니다." : "이미 사용 중인 이메일입니다."
-      });
-    } catch (error) {
-      setEmailAvailability({
-        status: "error",
-        value: normalizedEmail,
-        message: getApiErrorMessage(error, "이메일 중복 확인에 실패했습니다.")
-      });
-    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
