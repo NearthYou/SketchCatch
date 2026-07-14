@@ -112,7 +112,7 @@ test("Reverse Engineering은 scan finding·제외·provider error를 Compiler co
       {
         id: "scan-permission",
         resourceType: "UNKNOWN",
-        stage: "inventory",
+        stage: "provider_api",
         reason: "permission_denied",
         message: "권한이 부족합니다.",
         retryable: false

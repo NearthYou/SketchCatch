@@ -156,7 +156,7 @@ export function compileReverseEngineeringArchitecture(
 // diagram, the review summary, and the user-accepted apply boundary on the same proposal.
 function createReverseEngineeringContextSignals(
   result: ReverseEngineeringScanResult
-): readonly ArchitectureBoardCompilationContextSignal[] {
+): ArchitectureBoardCompilationContextSignal[] {
   return [
     ...result.findings.map((finding) => ({
       id: finding.id,
