@@ -124,8 +124,9 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
 
 const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z
   .object({
-    managedBy: z.literal("parameter-reference"),
-    parameterPath: z.string().min(1)
+    managedBy: z.literal("parameter-reference").optional(),
+    parameterPath: z.string().min(1).optional(),
+    presentationRole: z.enum(["primary", "detail", "summary"]).optional()
   })
   .strict();
 

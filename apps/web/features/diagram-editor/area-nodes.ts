@@ -7,6 +7,7 @@ import {
 import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 
 const designAreaNodeTypes = new Set([
+  "aws-region",
   "aws_region",
   "aws_availability_zone",
   "design_region",
@@ -29,6 +30,7 @@ const resourceAreaNodeTypes = new Set([
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 
 const designAreaNodeIconByType: Record<string, string> = {
+  "aws-region": `${groupIconPath}/Region_32.svg`,
   design_az: `${groupIconPath}/AWS-Cloud_32.svg`,
   design_group: `${groupIconPath}/Auto-Scaling-group_32.svg`,
   design_region: `${groupIconPath}/Region_32.svg`,

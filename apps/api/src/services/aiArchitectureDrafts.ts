@@ -1762,6 +1762,7 @@ function applyFixedTemplateSelection(
       positionY: resource.position.y,
       config: {
         ...resolvedValues,
+        templateId: definition.id,
         templateResourceId: resource.id,
         terraformBlockType: resource.terraformBlockType,
         terraformResourceType: resource.terraformResourceType
@@ -2501,7 +2502,7 @@ function applyStrictRepositoryEvidencePolicy(
           config: {
             ...node.config,
             name: `${deploymentName}-cluster`,
-            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {})
+            parentAreaNodeId: vpcId
           }
         };
       case "load-balancer":
@@ -2604,7 +2605,7 @@ function applyStrictRepositoryEvidencePolicy(
           config: {
             ...node.config,
             name: `${deploymentName}-service`,
-            ...(hasManagedServices ? { parentAreaNodeId: managedServicesAreaId } : {}),
+            parentAreaNodeId: coreNodeId("task-security-group"),
             desiredCount: singleTask ? 1 : node.config.desiredCount,
             networkConfiguration: {
               subnets: privateAppSubnetRefs,
