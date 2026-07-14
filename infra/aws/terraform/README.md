@@ -21,6 +21,7 @@ API -> ECS RunTask one-off worker
 - API/web `ip` target group, HTTP redirect, HTTPS listener와 API path rule
 - API/web/worker CloudWatch log group, error/CPU/memory/ALB/RDS availability alarm
 - API/web Application Auto Scaling target과 CPU target-tracking policy
+- `sketchcatch_public_base_url`에서 presigned browser upload를 허용하는 기존 artifact bucket CORS
 - 선택적 Route53 alias. 기존 production state에서는 현재 ECS alias를 보존합니다.
 
 nginx repository와 log group은 마지막 검증 image의 cold rollback 추적을 위해 당분간 보존할 수 있지만 running service나 listener target은 아닙니다.
