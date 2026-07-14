@@ -2907,9 +2907,12 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   const service = nodeById.get(`fixed-template-${templateId}-service`);
   const runtime = nodeById.get("repository-fargate-runtime");
   const browser = nodeById.get("repository-browser");
+  const githubActions = nodeById.get("repository-github-actions");
   const cloudFront = nodeById.get("repository-cloudfront");
   const webAssets = nodeById.get("repository-web-assets");
+  const templateUser = nodeById.get(`fixed-template-${templateId}-presentation-user`);
   const vpc = nodeById.get(`fixed-template-${templateId}-vpc`);
+  const region = nodeById.get(`fixed-template-${templateId}-presentation-region`);
   const publicSubnetA = nodeById.get(`fixed-template-${templateId}-subnet-a`);
   const publicSubnetB = nodeById.get(`fixed-template-${templateId}-subnet-b`);
   const privateSubnetA = nodeById.get("repository-private-app-subnet-a");
@@ -2943,6 +2946,8 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
       albSecurityGroup &&
       taskSecurityGroup
   );
+  assert.ok(githubActions);
+  assert.ok(templateUser);
 
   for (const plannedNode of diagramJson.nodes.filter((node) =>
     node.id.startsWith(`fixed-template-${templateId}-`)
@@ -2956,12 +2961,21 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
     assert.ok(authoredNode, plannedNode.id);
     assert.deepEqual(plannedNode.position, authoredNode.position, `${plannedNode.id} position`);
     assert.deepEqual(plannedNode.size, authoredNode.size, `${plannedNode.id} size`);
+    assert.equal(plannedNode.zIndex, authoredNode.zIndex, `${plannedNode.id} zIndex`);
   }
 
   assert.ok(cloudFront.position.x > browser.position.x);
   assert.ok(webAssets.position.x > cloudFront.position.x);
   assert.deepEqual(vpc.position, authoredNodeById.get(`template-${templateId}-vpc`)?.position);
   assert.deepEqual(vpc.size, authoredNodeById.get(`template-${templateId}-vpc`)?.size);
+  assert.deepEqual(
+    region?.position,
+    authoredNodeById.get(`template-${templateId}-presentation-region`)?.position
+  );
+  assert.deepEqual(
+    region?.size,
+    authoredNodeById.get(`template-${templateId}-presentation-region`)?.size
+  );
   assert.deepEqual(publicSubnetA.position, authoredNodeById.get(`template-${templateId}-subnet-a`)?.position);
   assert.deepEqual(publicSubnetB.position, authoredNodeById.get(`template-${templateId}-subnet-b`)?.position);
   assert.equal(albSecurityGroup.metadata?.parentAreaNodeId, vpc.id);
@@ -2973,6 +2987,10 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
       supportNode.position.x + supportNode.size.width <= templateBounds.x - 120,
       `${supportNode.id} should stay in the support lane left of the selected Template`
     );
+    assert.ok(
+      region && supportNode.position.x + supportNode.size.width <= region.position.x - 120,
+      `${supportNode.id} should stay outside the authored Region area`
+    );
     assertNoNodeOverlap(supportNode, vpc);
   }
   assert.ok(cloudFront.position.y === webAssets.position.y);
@@ -2980,7 +2998,21 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   assert.ok(bounds.width <= 3200, `bounds width ${bounds.width}`);
   assert.ok(bounds.height <= 1200);
   assert.ok(service && runtime);
+  assert.equal(runtime.kind, "resource");
+  assert.equal(runtime.type, "aws_ecs_task_definition");
+  assert.equal(runtime.parameters?.resourceType, "aws_ecs_task_definition");
+  assert.equal(runtime.parameters?.values.diagramKind, undefined);
+  assert.equal(runtime.parameters?.values.diagramType, undefined);
+  assert.equal(runtime.parameters?.values.diagramWidth, undefined);
+  assert.equal(runtime.parameters?.values.diagramHeight, undefined);
+  assert.ok(runtime.iconUrl?.includes("Res_Amazon-Elastic-Container-Service_Task_48.svg"));
   assert.equal(runtime.metadata?.parentAreaNodeId, undefined);
+  assert.equal(browser.kind, "design");
+  assert.ok(browser.iconUrl?.includes("Res_Client_48_Light.svg"));
+  assert.equal(githubActions.kind, "design");
+  assert.ok(githubActions.iconUrl?.includes("Res_Git-Repository_48_Light.svg"));
+  assert.equal(templateUser.kind, "design");
+  assert.ok(templateUser.iconUrl?.includes("Res_Client_48_Light.svg"));
 });
 
 test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside cloud container areas", () => {

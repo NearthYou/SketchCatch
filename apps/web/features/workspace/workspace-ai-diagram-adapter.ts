@@ -79,6 +79,7 @@ type TemplateNodeLayoutRule = {
   readonly metadata: DiagramNode["metadata"];
   readonly position: DiagramNode["position"];
   readonly size: DiagramNode["size"];
+  readonly zIndex: DiagramNode["zIndex"];
 };
 
 type TemplateEdgeLayoutRule = Pick<
@@ -193,6 +194,23 @@ const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_
 const RESOURCE_ITEMS_BY_DEFINITION_ID = new Map(
   resourceCatalog.map((resourceItem) => [resourceItem.id, resourceItem])
 );
+const PRESENTATION_ICON_CATALOG_ITEM_BY_TYPE = new Map<string, string>([
+  ["client", "design-user-client"],
+  ["design-user-client", "design-user-client"],
+  ["github_actions", "design-source-repository"],
+  ["sketchcatch_user_client", "design-user-client"],
+  ["aws_ecs_task_definition", "aws-ecs-task-definition"]
+]);
+const DIAGRAM_ONLY_CONFIG_KEYS = new Set([
+  "diagramBorderColor",
+  "diagramBorderStyle",
+  "diagramHeight",
+  "diagramIconUrl",
+  "diagramKind",
+  "diagramTextColor",
+  "diagramType",
+  "diagramWidth"
+]);
 const RESOURCE_ITEMS_BY_TERRAFORM_TYPE = createResourceItemsByTerraformType(resourceCatalog);
 const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
   readonly patterns: readonly RegExp[];
@@ -315,7 +333,7 @@ export function createPlannedDiagramJson({
   ];
   const preparedNodes = applyTemplateNodeLayoutRules(
     applyAreaParentMetadata(
-      applyDiagramResourceNameConventions(addServerStorageAreaNodes(convertedNodes)),
+      applyDiagramResourceNameConventions(addServerStorageAreaNodes(applyPresentationIconUrls(convertedNodes))),
       architectureJson.edges
     ),
     templateLayoutRules.nodeRulesById
@@ -339,7 +357,12 @@ export function createPlannedDiagramJson({
     nodes: layoutInputNodes,
     protectedNodeIds
   }).nodes;
-  const fittedLaidOutNodes = fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes));
+  const fittedLaidOutNodes = preserveAuthoredTemplatePositions
+    ? applyTemplateNodeLayoutRules(
+        fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes)),
+        templateLayoutRules.nodeRulesById
+      )
+    : fitAreaNodesToChildren(fitSecurityGroupScopesToTargets(laidOutNodes));
   const repositorySupportLaidOutNodes = usesRepositoryLayout
     ? preserveAuthoredTemplatePositions
       ? applyRepositoryGeneratedSupportLayout(
@@ -357,11 +380,14 @@ export function createPlannedDiagramJson({
   const collisionResolvedNodes = preserveAuthoredTemplatePositions
     ? templateSafeRepositorySupportNodes
     : templateSafeRepositorySupportNodes;
-  const nodes = applyDiagramLayerOrder(
-    applyTemplateNodeLayoutRules(
-      fitAreaNodesToChildren(collisionResolvedNodes),
-      templateLayoutRules.nodeRulesById
-    )
+  const nodes = applyTemplateNodeLayoutRules(
+    applyDiagramLayerOrder(
+      applyTemplateNodeLayoutRules(
+        fitAreaNodesToChildren(collisionResolvedNodes),
+        templateLayoutRules.nodeRulesById
+      )
+    ),
+    templateLayoutRules.nodeRulesById
   );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const architectureEdges = removeRepositoryGeneratedSupportEdges(
@@ -404,6 +430,22 @@ export function createPlannedDiagramJson({
     nodes,
     viewport: { ...DEFAULT_VIEWPORT }
   };
+}
+
+function applyPresentationIconUrls(nodes: readonly DiagramNode[]): DiagramNode[] {
+  return nodes.map((node) => {
+    if (node.iconUrl || node.kind !== "design") {
+      return node;
+    }
+
+    const catalogItemId =
+      typeof node.metadata?.presentationCatalogItemId === "string"
+        ? node.metadata.presentationCatalogItemId
+        : PRESENTATION_ICON_CATALOG_ITEM_BY_TYPE.get(node.type);
+    const iconUrl = catalogItemId ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(catalogItemId)?.iconUrl : undefined;
+
+    return iconUrl ? { ...node, iconUrl } : node;
+  });
 }
 
 export function convertArchitectureJsonToDiagramJson(
@@ -506,7 +548,8 @@ function extractTemplateLayoutRules(architectureJson: ArchitectureJson): Templat
       const rule: TemplateNodeLayoutRule = {
         metadata: remapTemplateNodeMetadata(authoredNode.metadata, outputNodeIdByAuthoredNodeId),
         position: { ...authoredNode.position },
-        size: { ...authoredNode.size }
+        size: { ...authoredNode.size },
+        zIndex: authoredNode.zIndex
       };
       nodeRulesById.set(outputNodeId, rule);
       protectedNodeIds.add(outputNodeId);
@@ -654,7 +697,8 @@ function applyTemplateNodeLayoutRules(
       ...node,
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       position: { ...rule.position },
-      size: { ...rule.size }
+      size: { ...rule.size },
+      zIndex: rule.zIndex
     };
   });
 }
@@ -882,9 +926,15 @@ function createPresentationDiagramNode(
     return null;
   }
 
+  const resourceNode = createPresentationResourceDiagramNode(node, nodeType, index);
+
+  if (resourceNode) {
+    return resourceNode;
+  }
+
   return {
     id: node.id,
-    iconUrl: readDiagramNodeIconUrl(config),
+    iconUrl: readDiagramNodeIconUrl(config) ?? getPresentationDiagramNodeIconUrl(nodeType),
     kind: "design",
     label: node.label ?? node.id,
     locked: false,
@@ -921,6 +971,13 @@ function readDiagramNodeIconUrl(config: ResourceConfig): string | undefined {
   const iconUrl = config["diagramIconUrl"];
 
   return typeof iconUrl === "string" && iconUrl.trim().length > 0 ? iconUrl : undefined;
+}
+
+function getPresentationDiagramNodeIconUrl(nodeType: string): string | undefined {
+  const normalizedNodeType = nodeType.trim();
+  const catalogItemId = PRESENTATION_ICON_CATALOG_ITEM_BY_TYPE.get(normalizedNodeType);
+
+  return catalogItemId ? RESOURCE_ITEMS_BY_DEFINITION_ID.get(catalogItemId)?.iconUrl : undefined;
 }
 
 function readDiagramNodeStyle(config: ResourceConfig): DiagramNode["style"] | undefined {
@@ -1016,9 +1073,21 @@ function createDiagramNodeParameters(
       DEFAULT_TERRAFORM_BLOCK_TYPE,
     values: {
       ...(shouldInheritBaseValues ? (baseParameters?.values ?? {}) : {}),
-      ...config
+      ...getTerraformParameterConfigValues(config)
     }
   };
+}
+
+function getTerraformParameterConfigValues(config: ResourceConfig): ResourceConfig {
+  const values: ResourceConfig = {};
+
+  for (const [key, value] of Object.entries(config)) {
+    if (!DIAGRAM_ONLY_CONFIG_KEYS.has(key)) {
+      values[key] = value;
+    }
+  }
+
+  return values;
 }
 
 function readTerraformBlockType(value: unknown): TerraformBlockType | undefined {
@@ -1581,12 +1650,54 @@ export function normalizeRepositoryGeneratedDiagramLayout(diagramJson: DiagramJs
   };
 }
 
+function createPresentationResourceDiagramNode(
+  node: ArchitectureJson["nodes"][number],
+  nodeType: string,
+  index: number
+): DiagramNode | null {
+  const terraformResourceType = nodeType.trim();
+  const resourceItem = RESOURCE_ITEMS_BY_TERRAFORM_TYPE.get(terraformResourceType);
+
+  if (!resourceItem) {
+    return null;
+  }
+
+  const position = {
+    x: node.positionX,
+    y: node.positionY
+  };
+  const baseNode = createResourceCatalogDiagramNode(
+    node.type,
+    terraformResourceType,
+    position,
+    index + 1
+  );
+
+  return {
+    ...baseNode,
+    id: node.id,
+    label: node.label ?? baseNode.label,
+    locked: false,
+    metadata: readDiagramNodeMetadata(node.config ?? {}) ?? baseNode.metadata,
+    parameters: createDiagramNodeParameters(node, terraformResourceType, baseNode.parameters),
+    position,
+    size: readDiagramNodeSize(node.config) ?? baseNode.size,
+    style: mergeDiagramNodeStyle(baseNode.style, readDiagramNodeStyle(node.config ?? {})),
+    type: terraformResourceType,
+    zIndex: index + 1
+  };
+}
+
 export function sanitizeSavedRepositoryGeneratedDiagramLayout(diagramJson: DiagramJson): DiagramJson {
   if (!isRepositoryGeneratedDiagramLayout(diagramJson)) {
     return diagramJson;
   }
 
-  const nodes = applyDiagramLayerOrder(flattenRepositoryManagedServicesArea(diagramJson.nodes));
+  const nodes = applyDiagramLayerOrder(
+    restoreSavedRepositoryGeneratedNodeSemantics(
+      applyPresentationIconUrls(flattenRepositoryManagedServicesArea(diagramJson.nodes))
+    )
+  );
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   return {
@@ -1605,6 +1716,40 @@ export function sanitizeSavedRepositoryGeneratedDiagramLayout(diagramJson: Diagr
     ),
     nodes
   };
+}
+
+function restoreSavedRepositoryGeneratedNodeSemantics(nodes: readonly DiagramNode[]): DiagramNode[] {
+  return nodes.map((node) => {
+    if (
+      node.id !== "repository-fargate-runtime" ||
+      node.kind !== "design" ||
+      node.type !== "aws_ecs_task_definition"
+    ) {
+      return node;
+    }
+
+    const baseNode = createResourceCatalogDiagramNode(
+      "UNKNOWN",
+      "aws_ecs_task_definition",
+      node.position,
+      node.zIndex ?? 0
+    );
+    const position = {
+      x: node.position.x + (node.size.width - baseNode.size.width) / 2,
+      y: node.position.y + (node.size.height - baseNode.size.height) / 2
+    };
+
+    return {
+      ...baseNode,
+      id: node.id,
+      label: node.label,
+      locked: node.locked,
+      metadata: node.metadata,
+      position,
+      style: mergeDiagramNodeStyle(baseNode.style, node.style),
+      zIndex: node.zIndex
+    };
+  });
 }
 
 function isRepositoryGeneratedDiagramLayout(diagramJson: DiagramJson): boolean {

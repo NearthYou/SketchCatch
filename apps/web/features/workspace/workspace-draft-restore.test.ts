@@ -182,6 +182,16 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
 
   assert.equal(nodeById.has("repository-managed-services"), false);
   assert.equal(nodeById.get("repository-cloudfront")?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(nodeById.get("repository-fargate-runtime")?.kind, "resource");
+  assert.equal(
+    nodeById.get("repository-fargate-runtime")?.parameters?.resourceType,
+    "aws_ecs_task_definition"
+  );
+  assert.ok(
+    nodeById
+      .get("repository-fargate-runtime")
+      ?.iconUrl?.includes("Res_Amazon-Elastic-Container-Service_Task_48.svg")
+  );
   assert.equal(
     restoredDiagram.edges.some(
       (edge) => edge.id === "repository-evidence-repository-ecr-repository-fargate-runtime"

@@ -139,8 +139,11 @@ test("selected node toolbar clears the outward connection source hit target", ()
 test("diagram node view renders resource and icon design nodes with icon-only geometry", () => {
   assert.match(
     diagramNodeViewSource,
-    /usesIconTileLayout = isResourceNode \|\| \(node\.kind === "design" && !isArea && Boolean\(node\.iconUrl\)\)/
+    /usesIconTileLayout = isResourceNode \|\| \(node\.kind === "design" && !isArea && Boolean\(displayIconUrl\)\)/
   );
+  assert.match(diagramNodeViewSource, /const displayIconUrl = node\.iconUrl \?\? getDesignNodeFallbackIconUrl\(node\);/);
+  assert.match(diagramNodeViewSource, /aws_ecs_task_definition:[\s\S]*Res_Amazon-Elastic-Container-Service_Task_48\.svg/);
+  assert.match(diagramNodeViewSource, /github_actions:[\s\S]*Res_Git-Repository_48_Light\.svg/);
   assert.match(
     diagramNodeViewSource,
     /usesIconTileLayout \? styles\.nodeShellResource : styles\.nodeShellDesign/
@@ -420,7 +423,7 @@ test("hides Terraform data source implementation labels", () => {
 });
 
 test("uses one presentation seam and keeps resource labels uppercase", () => {
-  assert.match(diagramNodeViewSource, /getResourceNodePresentation\(node\)/);
+  assert.match(diagramNodeViewSource, /getResourceNodePresentation\(\{ \.\.\.node, iconUrl: displayIconUrl \}\)/);
   assert.match(diagramNodeViewSource, /getAreaNodeLabel\(node\)/);
   assert.doesNotMatch(diagramNodeViewSource, /parameters\?\.resourceName\?\.trim/);
 });

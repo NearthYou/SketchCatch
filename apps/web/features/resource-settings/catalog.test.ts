@@ -307,6 +307,19 @@ test("every configurable Terraform definition remains enabled in the manual pale
   }
 });
 
+test("ECS Task Definition is available as a deployable manual palette resource", () => {
+  const definition = getResourceDefinitionById("aws-ecs-task-definition");
+  const resource = resourceCatalog.find((item) => item.id === "aws-ecs-task-definition");
+
+  assert.ok(definition);
+  assert.ok(resource);
+  assert.equal(resource.enabled, true);
+  assert.equal(resource.nodeDefaults.type, "aws_ecs_task_definition");
+  assert.equal(definition.capabilities.parameterPanel, true);
+  assert.equal(definition.capabilities.terraformPreview, true);
+  assert.equal(definition.capabilities.terraformSync, true);
+});
+
 test("Autoscaling Policy is available through the shared definition and resource catalog", () => {
   const definition = getResourceDefinitionById("aws-autoscaling-policy");
   const resource = resourceCatalog.find((item) => item.id === "aws-autoscaling-policy");

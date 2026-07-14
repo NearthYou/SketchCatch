@@ -308,18 +308,26 @@ test("toFlowNodes keeps an unselected regular node clickable while another node 
 
 test("toFlowNodes marks area nodes for click-through body hit testing", () => {
   const vpc = makeNode({ id: "vpc-1", resourceType: "aws_vpc" });
+  const templateRegion = makeDesignAreaNode({ id: "template-region-1", type: "aws-region" });
   const securityGroup = makeNode({ id: "security-group-1", resourceType: "aws_security_group" });
   const autoscalingGroup = makeNode({ id: "asg-1", resourceType: "aws_autoscaling_group" });
   const instance = makeNode({ id: "instance-1", resourceType: "aws_instance" });
 
   const flowNodes = toFlowNodes(
-    [vpc, securityGroup, autoscalingGroup, instance],
+    [templateRegion, vpc, securityGroup, autoscalingGroup, instance],
     [],
     null,
     false,
     handlers
   );
 
+  assert.equal(
+    flowNodes.find((node) => node.id === "template-region-1")?.className,
+    "diagramAreaFlowNode"
+  );
+  assert.ok(
+    getFlowNodeZIndex(flowNodes, "template-region-1") < getFlowNodeZIndex(flowNodes, "instance-1")
+  );
   assert.equal(flowNodes.find((node) => node.id === "vpc-1")?.className, "diagramAreaFlowNode");
   assert.equal(
     flowNodes.find((node) => node.id === "security-group-1")?.className,
