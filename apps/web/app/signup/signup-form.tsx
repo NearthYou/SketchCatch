@@ -101,6 +101,17 @@ export function SignupForm() {
     });
   }
 
+  function handleUsernameAvailabilityBlur(): void {
+    const normalizedUsername = normalizeUsername(username);
+    if (
+      !isValidUsername(normalizedUsername) ||
+      hasCurrentAvailabilityResult(usernameAvailability, normalizedUsername)
+    ) {
+      return;
+    }
+    void handleUsernameAvailabilityCheck();
+  }
+
   async function handleEmailAvailabilityCheck(): Promise<void> {
     const normalizedEmail = normalizeEmail(email);
     await runAvailabilityCheck({
@@ -117,6 +128,17 @@ export function SignupForm() {
       request: async (signal) =>
         (await requestSignupAvailability({ email: normalizedEmail }, { signal })).emailAvailable === true
     });
+  }
+
+  function handleEmailAvailabilityBlur(): void {
+    const normalizedEmail = normalizeEmail(email);
+    if (
+      !EMAIL_PATTERN.test(normalizedEmail) ||
+      hasCurrentAvailabilityResult(emailAvailability, normalizedEmail)
+    ) {
+      return;
+    }
+    void handleEmailAvailabilityCheck();
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -250,6 +272,7 @@ export function SignupForm() {
               maxLength={30}
               minLength={3}
               name="username"
+              onBlur={handleUsernameAvailabilityBlur}
               onChange={(event) => {
                 setUsername(event.target.value);
                 setUsernameAvailability(INITIAL_AVAILABILITY_STATE);
@@ -389,6 +412,7 @@ export function SignupForm() {
               disabled={isSubmitting}
               id="signup-email"
               name="email"
+              onBlur={handleEmailAvailabilityBlur}
               onChange={(event) => {
                 setEmail(event.target.value);
                 setEmailAvailability(INITIAL_AVAILABILITY_STATE);
@@ -641,6 +665,10 @@ function getPasswordConfirmMismatchMessage(
 
 function isCurrentValueAvailable(state: AvailabilityState, value: string): boolean {
   return state.status === "available" && state.value === value;
+}
+
+function hasCurrentAvailabilityResult(state: AvailabilityState, value: string): boolean {
+  return state.value === value && state.status !== "error";
 }
 
 function normalizeUsername(value: string): string {

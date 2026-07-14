@@ -49,6 +49,12 @@ test("signup availability and legal actions state their exact purpose", () => {
   );
 });
 
+test("signup checks valid username and email on blur without repeating the same value", () => {
+  assert.match(signupFormSource, /onBlur=\{handleUsernameAvailabilityBlur\}/);
+  assert.match(signupFormSource, /onBlur=\{handleEmailAvailabilityBlur\}/);
+  assert.match(signupFormSource, /state\.value === value && state\.status !== "error"/);
+});
+
 test("signup legal dialog uses the shared modal accessibility lifecycle", () => {
   assert.match(signupFormSource, /import \{ setupModalAccessibility \}/);
   assert.match(signupFormSource, /return setupModalAccessibility\(\{/);
