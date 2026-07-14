@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { setupTemplateLibraryModalAccessibility } from "./template-library-modal-accessibility";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 
 test("Template 전체보기 modal lifecycle traps focus and restores the surrounding document", () => {
   const originalHTMLElement = Object.getOwnPropertyDescriptor(globalThis, "HTMLElement");
@@ -56,7 +56,7 @@ test("Template 전체보기 modal lifecycle traps focus and restores the surroun
       trailingSelectMenuOption
     ];
 
-    const cleanup = setupTemplateLibraryModalAccessibility({
+    const cleanup = setupModalAccessibility({
       closeButton: closeButton as unknown as HTMLButtonElement,
       dialog: dialog as unknown as HTMLElement,
       documentRoot: documentRoot as unknown as Document,

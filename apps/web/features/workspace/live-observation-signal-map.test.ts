@@ -9,6 +9,7 @@ import {
 } from "./live-observation-signal-geometry";
 import * as signalMapModule from "./live-observation-signal-map";
 import {
+  getLiveObservationSignalMapLabel,
   getLiveObservationSignalMapSlots,
   getLiveObservationSignalPulseIndexes
 } from "./live-observation-signal-map";
@@ -26,6 +27,14 @@ test("signal map places actual InService markers before other visible slots", ()
   assert.deepEqual(
     slots.map((instance) => instance.key),
     ["in-service", "launching"]
+  );
+});
+
+test("signal map announces hidden overflow requests through its accessible label", () => {
+  assert.equal(getLiveObservationSignalMapLabel(), "실시간 트래픽 신호 흐름");
+  assert.equal(
+    getLiveObservationSignalMapLabel(7),
+    "실시간 트래픽 신호 흐름, 추가 요청 7건"
   );
 });
 

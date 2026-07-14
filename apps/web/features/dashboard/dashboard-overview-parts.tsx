@@ -47,7 +47,7 @@ export function DashboardMetric({
   tone = "neutral",
   value
 }: {
-  readonly detail: string;
+  readonly detail?: string | undefined;
   readonly href?: string | undefined;
   readonly label: string;
   readonly tone?: "error" | "neutral" | "progress" | "success";
@@ -57,7 +57,7 @@ export function DashboardMetric({
     <>
       <span>{label}</span>
       <strong className={`dashboardMetricValue dashboardMetricValue${tone}`}>{value}</strong>
-      <p>{detail}</p>
+      {detail ? <p>{detail}</p> : null}
     </>
   );
 
@@ -71,11 +71,13 @@ export function DashboardMetric({
 }
 
 export function ProjectOverviewRow({ project }: { readonly project: Project }) {
+  const description = project.description?.trim();
+
   return (
     <Link className="dashboardProjectRow" href={getWorkspaceHref(project)}>
       <div>
         <strong>{project.name}</strong>
-        <span>{project.description?.trim() || "설명 없음"}</span>
+        {description ? <span>{description}</span> : null}
       </div>
       <time dateTime={project.updatedAt}>{formatDateTime(project.updatedAt)}</time>
     </Link>

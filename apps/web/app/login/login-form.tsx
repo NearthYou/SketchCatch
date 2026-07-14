@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   type FormEvent,
@@ -22,6 +23,7 @@ export function LoginForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordCapsLockOn, setIsPasswordCapsLockOn] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [returnPath, setReturnPath] = useState("/dashboard");
   const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
@@ -135,26 +137,44 @@ export function LoginForm() {
           type="text"
         />
       </label>
-      <label>
-        비밀번호
-        <input
-          aria-describedby={passwordCapsLockWarning ? "login-password-caps-lock" : undefined}
-          autoComplete="current-password"
-          disabled={isSubmitting}
-          name="password"
-          onBlur={() => setIsPasswordCapsLockOn(false)}
-          onKeyDown={handlePasswordKeyEvent}
-          onKeyUp={handlePasswordKeyEvent}
-          placeholder="Password"
-          required
-          type="password"
-        />
+      <div className="authField">
+        <label htmlFor="login-password">비밀번호</label>
+        <div className="authPasswordField">
+          <input
+            aria-describedby={passwordCapsLockWarning ? "login-password-caps-lock" : undefined}
+            autoComplete="current-password"
+            disabled={isSubmitting}
+            id="login-password"
+            name="password"
+            onBlur={() => setIsPasswordCapsLockOn(false)}
+            onKeyDown={handlePasswordKeyEvent}
+            onKeyUp={handlePasswordKeyEvent}
+            placeholder="Password"
+            required
+            type={isPasswordVisible ? "text" : "password"}
+          />
+          <button
+            aria-label={isPasswordVisible ? "비밀번호 숨기기" : "비밀번호 보기"}
+            aria-pressed={isPasswordVisible}
+            className="authPasswordToggle"
+            disabled={isSubmitting}
+            onClick={() => setIsPasswordVisible((current) => !current)}
+            title={isPasswordVisible ? "비밀번호 숨기기" : "비밀번호 보기"}
+            type="button"
+          >
+            {isPasswordVisible ? (
+              <EyeOff aria-hidden="true" size={18} />
+            ) : (
+              <Eye aria-hidden="true" size={18} />
+            )}
+          </button>
+        </div>
         {passwordCapsLockWarning ? (
           <span className="authHelpText authWarningText" id="login-password-caps-lock" role="alert">
             {passwordCapsLockWarning}
           </span>
         ) : null}
-      </label>
+      </div>
       <label className="authCheckboxLabel">
         <input
           checked={rememberMe}

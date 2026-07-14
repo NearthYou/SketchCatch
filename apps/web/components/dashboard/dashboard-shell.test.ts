@@ -9,10 +9,10 @@ const dashboardShellSource = readFileSync(join(currentDir, "dashboard-shell.tsx"
 
 test("dashboard topbar hides global actions on the requested dashboard pages", () => {
   assert.match(dashboardShellSource, /shouldShowCreateAction/);
-  assert.match(dashboardShellSource, /"\/dashboard\/projects"/);
-  assert.match(dashboardShellSource, /"\/dashboard\/templates"/);
-  assert.doesNotMatch(dashboardShellSource, /"\/dashboard\/costs"/);
-  assert.doesNotMatch(dashboardShellSource, /"\/dashboard\/settings"/);
+  assert.match(
+    dashboardShellSource,
+    /const shouldShowCreateAction =\s*pathname === "\/dashboard" \|\| pathname === "\/dashboard\/projects";/
+  );
   assert.match(dashboardShellSource, /shouldShowCreateAction\s*\?\s*\(/);
 });
 
@@ -20,4 +20,9 @@ test("dashboard topbar no longer renders the global notification button", () => 
   assert.doesNotMatch(dashboardShellSource, /DashboardIcon name="bell"/);
   assert.doesNotMatch(dashboardShellSource, /title="알림"/);
   assert.doesNotMatch(dashboardShellSource, /dashboardIconButton/);
+});
+
+test("dashboard topbar only renders the localized page title", () => {
+  assert.doesNotMatch(dashboardShellSource, /<span>Dashboard<\/span>/);
+  assert.match(dashboardShellSource, /<strong>\{pageTitle\}<\/strong>/);
 });

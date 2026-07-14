@@ -19,11 +19,11 @@ import { ProductBrand } from "../ui/ProductBrand";
 import { ProductState } from "../ui/ProductState";
 
 const DASHBOARD_NAV_ITEMS = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
-  { href: "/dashboard/projects", icon: FolderKanban, label: "Projects" },
-  { href: "/dashboard/templates", icon: Shapes, label: "Templates" },
-  { href: "/dashboard/costs", icon: WalletCards, label: "Costs" },
-  { href: "/dashboard/settings", icon: Settings, label: "Settings" }
+  { href: "/dashboard", icon: LayoutDashboard, label: "작업 현황" },
+  { href: "/dashboard/projects", icon: FolderKanban, label: "내 프로젝트" },
+  { href: "/dashboard/templates", icon: Shapes, label: "탬플릿" },
+  { href: "/dashboard/costs", icon: WalletCards, label: "비용 관리" },
+  { href: "/dashboard/settings", icon: Settings, label: "설정" }
 ] as const;
 
 // 인증된 Dashboard 화면의 공통 탐색 영역과 세션 상태를 책임집니다.
@@ -151,7 +151,6 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
               <Menu aria-hidden="true" size={20} />
             </button>
             <div>
-              <span>Dashboard</span>
               <strong>{pageTitle}</strong>
             </div>
           </div>
@@ -182,11 +181,11 @@ function isDashboardNavItemActive(pathname: string, href: string): boolean {
 // route 이름을 사용자가 이해할 수 있는 짧은 화면 제목으로 바꿉니다.
 function getDashboardPageTitle(pathname: string): string {
   if (pathname.startsWith("/dashboard/projects/")) {
-    return pathname.endsWith("/settings") ? "Project Settings" : "Project Detail";
+    return pathname.endsWith("/settings") ? "프로젝트 설정" : "프로젝트 상세";
   }
 
   return (
     DASHBOARD_NAV_ITEMS.find((item) => isDashboardNavItemActive(pathname, item.href))?.label ??
-    "Overview"
+    "작업 현황"
   );
 }

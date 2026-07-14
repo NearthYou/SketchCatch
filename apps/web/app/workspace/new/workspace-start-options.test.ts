@@ -44,6 +44,8 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /TemplateCatalog/);
   assert.match(startClientSource, /TemplateDetail/);
   assert.match(startClientSource, /blankStartOption/);
+  assert.match(startClientSource, /<ArrowLeft aria-hidden="true" size=\{17\} \/>\s+Dashboard/);
+  assert.doesNotMatch(startStylesSource, /\.backLink\s*\{\s*font-size:\s*0/);
 });
 
 test("Template start validates a project name before opening the catalog and starts only from detail", () => {

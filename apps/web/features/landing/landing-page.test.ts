@@ -19,7 +19,13 @@ test("product entry exposes the start action and redirects signed-in users", () 
   assert.match(productEntrySource, /const \{ status \} = useAuth\(\)/);
   assert.match(productEntrySource, /router\.replace\("\/dashboard"\)/);
   assert.match(productEntrySource, /href="\/signup"/);
-  assert.match(productEntrySource, /Practice Architecture를 눈으로 설계하고/);
+  assert.match(productEntrySource, />\s*설계 시작\s*<span[^>]*>→<\/span>/s);
+  assert.doesNotMatch(productEntrySource, />\s*시작하기\s*<span[^>]*>→<\/span>/s);
+  assert.match(
+    productEntrySource,
+    /원하는 서비스를 설명하면 배포 전 검토 가능한 설계 구조와 Terraform 초안을 만들고/
+  );
+  assert.doesNotMatch(productEntrySource, /Practice Architecture를 눈으로 설계하고/);
 });
 
 test("product entry carries the landing preview Board, IaC, and Check interaction", () => {
