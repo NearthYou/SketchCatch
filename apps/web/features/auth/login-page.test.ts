@@ -25,6 +25,16 @@ test("login keeps the home brand inside the card without extra intro copy", () =
   assert.match(authStylesSource, /\.authPanelBrand\s*\{[^}]*margin-bottom:\s*32px;/s);
 });
 
+test("login card stays safely centered in the viewport", () => {
+  assert.match(loginPageSource, /<AuthShell[^>]*centered/s);
+  assert.match(authShellSource, /centered \? "authPageCentered"/);
+  assert.match(
+    authStylesSource,
+    /\.authPageCentered\s*\{[^}]*align-items:\s*safe center;[^}]*justify-items:\s*center;/s
+  );
+  assert.match(authStylesSource, /\.authPageCentered \.authLayout\s*\{[^}]*margin:\s*0;/s);
+});
+
 test("login form keeps the authentication contract", () => {
   assert.match(loginFormSource, /const \{ login, status \} = useAuth\(\)/);
   assert.match(loginFormSource, /await login\(payload\)/);

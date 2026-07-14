@@ -12,6 +12,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Center the login card in the viewport
+
+- Applied a login-only centered auth-page variant so the card is vertically and horizontally centered without changing the topbar-based signup and password-reset layouts.
+- Used safe grid alignment with balanced responsive padding so short viewports keep the card reachable instead of clipping its top edge.
+- Verification passed: focused login tests 5/5, Web full 1,176/1,176, `pnpm lint`, `pnpm typecheck`, `pnpm build`, live `/login` HTTP 200, and live API health HTTP 200. The existing in-app browser binding was unavailable for a fresh screenshot; the next action is visual confirmation in the already-running local Web server if further pixel tuning is requested.
+
 ### 2026-07-14 - Simplify the login page brand entry
 
 - Removed the `/login` top brand bar and optional eyebrow/description copy, then placed the shared SketchCatch brand at the top-left of the login card with a `/` home link.

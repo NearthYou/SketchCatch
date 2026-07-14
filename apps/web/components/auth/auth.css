@@ -5,6 +5,18 @@
   color: #171717;
 }
 
+.authPageCentered {
+  display: grid;
+  min-height: 100svh;
+  align-items: safe center;
+  justify-items: center;
+  padding: 32px 0;
+}
+
+.authPageCentered .authLayout {
+  margin: 0;
+}
+
 .authTopbar {
   position: sticky;
   z-index: 20;
@@ -542,6 +554,10 @@
 @media (max-width: 639px) {
   .authPage {
     padding-top: 8px;
+  }
+
+  .authPageCentered {
+    padding: 16px 0;
   }
 
   .authTopbar {
