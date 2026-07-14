@@ -406,7 +406,17 @@
   .topbar > strong { display: none; }
   .brand { gap: 7px; font-size: 16px; }
   .brand img { width: 14px; height: 21px; }
-  .backLink { font-size: 0; }
+  .backLinkLabel {
+    border: 0;
+    clip: rect(0, 0, 0, 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
   .backLink svg { width: 20px; height: 20px; }
   .layout { padding: 48px 12px 72px; }
   .heading h1 { font-size: 30px; }

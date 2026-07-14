@@ -276,7 +276,7 @@ export function WorkspaceStartClient({
         <strong>새 프로젝트</strong>
         <Link className={styles.backLink} href="/dashboard">
           <ArrowLeft aria-hidden="true" size={17} />
-          Dashboard
+          <span className={styles.backLinkLabel}>Dashboard</span>
         </Link>
       </header>
 

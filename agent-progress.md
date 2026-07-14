@@ -4,11 +4,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/ck/350-ai-diagram-fallback`.
-- Latest `origin/dev` at `f3ae778a` is merged, including the current dashboard UI/UX and Deployment/CI/CD console updates.
-- Strict `audience-live-check` Repository evidence produces a minimal ECS Fargate architecture without unsupported persistence, autoscaling, or AWS-native CI/CD resources.
-- Generated Terraform passes the Direct Deployment safety gate and `terraform validate` with AWS provider v6.54.0.
-- Real Plan and Apply created 33 resources, the current Repository API and web builds worked through CloudFront and ECS, and cleanup finished as `DESTROYED` with direct AWS absence checks.
+- Branch: `fix/ys/363-uiux-개선`.
+- The 20 planned Web UI/UX work items and two review follow-ups are complete as focused commits from fixed point `847a8206`.
+- The latest Web suite passes 1,205/1,205; lint, typecheck, build, harness, and diff checks pass.
+- Public and authenticated fixture/disconnected surfaces were checked at 1440x900 and 390x844 without page-level horizontal overflow or unintended text clipping.
+- No API contract, database migration, deployment action, cloud mutation, push, or PR is included.
 
 ## Session Record
 
@@ -193,11 +193,12 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-14 - Complete Web UI clarity and accessibility improvements
 
 - Clarified landing and authentication actions, added accessible password and legal-dialog interactions, and unified signup readiness and availability behavior.
-- Raised user-facing Web text to at least 12px, strengthened muted text contrast, and added a recursive CSS regression test with documented shape-exception rules.
+- Raised user-facing Web text to at least 12px, strengthened muted text contrast, and added a recursive CSS regression test that covers pixel, decimal, relative, `calc`, and `clamp` values with documented shape-exception rules.
+- Cancelled availability checks as soon as username or email input changes, and announced graphical overflow counts through the Live Observation map label.
 - Verified public, dashboard, workspace entry, Architecture Board, Terraform, Reverse Engineering, and Template surfaces at 1440x900 and 390x844 with a local QA account that has no AWS, GitHub, or deployment privileges.
-- Verification: Web tests passed 1,202/1,202 outside the restricted runner after its `spawn EPERM`; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
+- Verification: Web tests passed 1,205/1,205 outside the restricted runner after its `spawn EPERM`; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
 - Risk: authenticated visual QA used fixture and disconnected states only; no cloud, deployment, Git handoff, or database mutation was performed.
 
 ## Next Action
 
-- Restore the live AI endpoint and repeat the saved-Board patch screen check when the API is available; no layout implementation continuation is required.
+- No implementation continuation is required; hand off the focused commits for review without pushing or opening a PR in this session.

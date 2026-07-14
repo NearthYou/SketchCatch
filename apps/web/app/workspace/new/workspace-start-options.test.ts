@@ -39,6 +39,9 @@ test("WorkspaceStartClient uses the rebuilt start shell without a placeholder", 
   assert.match(startClientSource, /role="radiogroup"/);
   assert.match(startClientSource, /TemplatePicker/);
   assert.match(startClientSource, /blankStartOption/);
+  assert.match(startClientSource, /className=\{styles\.backLinkLabel\}>Dashboard<\/span>/);
+  assert.match(startStylesSource, /\.backLinkLabel/);
+  assert.doesNotMatch(startStylesSource, /\.backLink\s*\{\s*font-size:\s*0/);
 });
 
 test("WorkspaceStartClient keeps Template and GitHub URL as real start paths", () => {

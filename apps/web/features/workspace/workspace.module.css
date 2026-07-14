@@ -897,7 +897,7 @@
 .resourceListAddress {
   color: #64748b;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 10.5px;
+  font-size: 12px;
   overflow-wrap: anywhere;
   white-space: normal;
 }
@@ -1588,7 +1588,7 @@
 
 .terraformPreviewExplanationHeader span {
   color: #64748b;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 850;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1639,7 +1639,7 @@
 .terraformPreviewExplanationNotice,
 .terraformPreviewExplanationError,
 .terraformPreviewExplanationResult p {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1726,7 +1726,7 @@
   background: #eef2ff;
   border-radius: 999px;
   color: #3730a3;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 900;
   padding: 4px 7px;
 }
@@ -1758,7 +1758,7 @@
 .terraformSaveBannerError {
   align-items: center;
   display: flex;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 750;
   gap: 6px;
   justify-content: space-between;
@@ -2015,7 +2015,7 @@
 .terraformDiagnosticStale,
 .terraformDiagnosticMeta span {
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 900;
   padding: 3px 6px;
   white-space: nowrap;
@@ -2377,7 +2377,7 @@
   background: var(--workspace-accent-soft, #f0f0f3);
   border-radius: 999px;
   color: var(--workspace-accent, #000000);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 900;
   padding: 4px 7px;
   white-space: nowrap;
@@ -2403,7 +2403,7 @@
 .aiWarning strong,
 .aiListBlock strong {
   color: #172033;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -2823,7 +2823,7 @@
   border: 1px solid #dce3ee;
   border-radius: 999px;
   color: #526174;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 850;
   padding: 4px 7px;
 }
@@ -2847,7 +2847,7 @@
 
 .aiSafetyFindingDetails dd {
   color: #172033;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -2883,7 +2883,7 @@
 .aiListBlock li {
   border-top: 1px solid #dce3ee;
   color: #475569;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   padding-top: 5px;
 }
@@ -2915,7 +2915,7 @@
 
 .aiSimulationCard > strong {
   color: var(--workspace-accent, #000000);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -3074,7 +3074,7 @@
 .aiChatTemplateContext span,
 .aiChatTemplateContext code {
   color: var(--dashboard-design-body);
-  font-size: 0.72rem;
+  font-size: 12px;
 }
 
 .aiChatTemplateContext strong {
@@ -3156,7 +3156,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 850;
   gap: 6px;
   min-height: 32px;
@@ -3222,7 +3222,7 @@
 .aiChatAssistantMessage span,
 .aiChatUserMessage span {
   color: #64748b;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -3471,7 +3471,7 @@
 
 .aiChatVoiceStatus {
   color: #475569;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 800;
   grid-column: 1 / -1;
   line-height: 1.35;
@@ -4333,7 +4333,7 @@
 
 .deploymentFindingAiExplanation dd {
   color: #172033;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   margin: 0;
   overflow-wrap: anywhere;
@@ -4526,14 +4526,14 @@
 
 .reverseCandidateCard span {
   color: #475569;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
 .reverseCandidateCard small {
   color: #64748b;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 850;
   line-height: 1.35;
 }
@@ -4606,7 +4606,7 @@
   border-radius: 6px;
   color: #e2e8f0;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.5;
   margin: 0;
   max-height: 260px;
@@ -4809,7 +4809,7 @@
 .deploymentFailureMeta span,
 .deploymentFailureBody strong {
   color: #9a3412;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -7044,6 +7044,7 @@
 }
 
 .liveObservationSignalOverflow[data-signal-variant="mobile"] {
+  /* ui-legibility-exception: shape; a11y: the signal-map section announces the hidden overflow count. */
   font-size: 4px;
 }
 
@@ -7084,7 +7085,7 @@
 
 .liveObservationSignalNode span {
   color: #cbd5e1;
-  font-size: clamp(9px, 0.72vw, 12px);
+  font-size: 12px;
   grid-column: 2;
   line-height: 1.3;
   min-width: 0;
@@ -7338,11 +7339,11 @@
   }
 
   .liveObservationSignalNode strong {
-    font-size: clamp(11px, 1.4vw, 15px);
+    font-size: 12px;
   }
 
   .liveObservationSignalNode span {
-    font-size: clamp(8px, 1vw, 10px);
+    font-size: 12px;
   }
 
   .liveObservationControlRail {
@@ -7692,7 +7693,7 @@
 
 .deploymentStepButton small {
   color: var(--workspace-muted, #60646c);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -7877,7 +7878,7 @@
 
 .deploymentContextPanel dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 750;
 }
 
@@ -7894,7 +7895,7 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 10px;
   color: var(--workspace-muted, #60646c);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.5;
   margin: 0;
   padding: 12px;
@@ -7977,7 +7978,7 @@
 
 .deploymentExpandedTitleRow span {
   color: var(--workspace-muted, #60646c);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 

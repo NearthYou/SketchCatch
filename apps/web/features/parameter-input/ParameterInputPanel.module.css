@@ -563,7 +563,7 @@ div.resourceIcon,
   border-radius: 999px;
   color: var(--workspace-muted, #60646c);
   display: inline-flex;
-  font-size: 0.68rem;
+  font-size: 12px;
   font-weight: 800;
   justify-content: center;
   min-height: 20px;
@@ -700,7 +700,7 @@ div.resourceIcon,
 .advancedOptionText span {
   color: var(--workspace-muted, #60646c);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 0.7rem;
+  font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -744,7 +744,7 @@ div.resourceIcon,
 
 .parameterSummaryItem dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 0.68rem;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.25;
 }
@@ -816,7 +816,7 @@ div.resourceIcon,
   align-items: center;
   border-radius: 999px;
   display: inline-flex;
-  font-size: 0.68rem;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
   min-height: 20px;

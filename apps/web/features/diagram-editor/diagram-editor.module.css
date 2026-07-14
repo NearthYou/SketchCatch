@@ -1308,7 +1308,7 @@ button.rightRailResizeHandle {
 
 .panelKicker {
   color: #727d91;
-  font-size: 0.7rem;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   margin: 0 0 3px;
@@ -1403,7 +1403,7 @@ button.rightRailResizeHandle {
 
 .paletteItemType {
   color: #778196;
-  font-size: 0.69rem;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1736,7 +1736,7 @@ button.rightRailResizeHandle {
 
 .nodeType {
   color: var(--board-muted);
-  font-size: 0.65rem;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1748,7 +1748,7 @@ button.rightRailResizeHandle {
 
 .nodeSubtitle {
   color: var(--board-muted);
-  font-size: 0.68rem;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1942,6 +1942,7 @@ button.rightRailResizeHandle {
   }
 
   .stateBadgePreview {
+    /* ui-legibility-exception: shape; a11y: DiagramNodeView exposes the P badge through role, aria-label, and title. */
     font-size: 0;
   }
 
@@ -2016,6 +2017,7 @@ button.rightRailResizeHandle {
   border-color: var(--board-primary);
   color: #ffffff;
   content: "+";
+  /* ui-legibility-exception: shape; a11y: DiagramNodeView gives each connection handle an aria-label. */
   font-size: calc(9px * var(--board-control-scale));
   font-weight: 700;
   line-height: 1;

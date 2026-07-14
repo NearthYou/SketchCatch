@@ -75,7 +75,7 @@ test("web user-facing text prevents undersized and low-contrast regressions", ()
     const lines = readFileSync(filePath, "utf8").split(/\r?\n/);
 
     lines.forEach((line, index) => {
-      if (/font-size:\s*(?:8|9|10|11)px/.test(line)) {
+      if (hasUndersizedFontValue(line)) {
         const exceptionContext = `${lines[index - 1] ?? ""} ${line}`;
         const hasDocumentedShapeException =
           exceptionContext.includes("ui-legibility-exception: shape") &&
@@ -119,4 +119,29 @@ function walkCssDirectory(directory: string): string[] {
 
     return entry.isFile() && entry.name.endsWith(".css") ? [path] : [];
   });
+}
+
+function hasUndersizedFontValue(line: string): boolean {
+  const declaration = line.match(/\bfont(?:-size)?\s*:\s*([^;]+)/i)?.[1];
+
+  if (!declaration) {
+    return false;
+  }
+
+  if (/^0(?:\.0+)?$/.test(declaration.trim())) {
+    return true;
+  }
+
+  return [...declaration.matchAll(/(-?\d*\.?\d+)\s*(px|rem|em|%)(?![\w-])/gi)].some(
+    ([, rawValue, rawUnit]) => {
+      const value = Number(rawValue);
+      const unit = rawUnit?.toLowerCase();
+
+      if (!unit) return false;
+
+      if (unit === "px") return value < 12;
+      if (unit === "%") return value < 75;
+      return value < 0.75;
+    }
+  );
 }
