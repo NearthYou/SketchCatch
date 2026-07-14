@@ -814,7 +814,7 @@ type EcsFargateRuntimeConfig = {
   clusterName: string;
   serviceName: string;
   containerName: string;
-  outputUrl: string;
+  outputUrl: string | null;
 };
 
 type LambdaRuntimeConfig = {
@@ -881,6 +881,8 @@ Lambda, EC2/ASG, Static target은 각 adapter의 완전한 좌표가 필수다. 
 row를 유지하기 위해 nullable JSONB로 추가했고, `0038_lambda_gitops_runtime.sql`,
 `0039_ec2_asg_gitops_runtime.sql`, `0040_static_gitops_runtime.sql`이 discriminator를 순차 확장한다.
 새 PUT은 service validation에서 선택한 runtime과 일치하는 완전한 값을 요구한다.
+
+ECS Fargate target은 Board 생성 전에 실제 entry URL이 아직 없을 수 있으므로 `outputUrl: null`을 저장할 수 있다. 이때도 CodeBuild, ECR, cluster, service, container 좌표와 확정된 Dockerfile/commit SHA는 필수다. Direct application release 준비와 GitOps workflow/settings 생성은 안전한 HTTPS `outputUrl`이 없으면 `DEPLOYMENT_OUTPUT_URL_REQUIRED`로 중단하며 빈 환경 변수를 배포 입력으로 넘기지 않는다.
 
 API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를
 읽으며 환경별 복제, EKS, 임의 rollout 전략은 이 계약에 포함하지 않는다.
@@ -2580,7 +2582,7 @@ Terraform 파일이 있는 `POST /api/ai/pre-deployment-check`는 Public S3, 공
 | `analyzed_at`            | 마지막 분석 완료 시각                   |
 | `disconnected_at`        | soft deactivate 시각                    |
 
-GitHub App installation repository 목록은 DB에 저장하지 않습니다. callback 응답은 임시 선택 화면에만 사용하고, 사용자가 선택한 repository 1개만 active source repository로 저장합니다. 새 GitHub repo를 연결하면 기존 active row는 `inactive`으로 바꾸고 `disconnected_at`을 기록한 뒤 새 active row를 생성합니다.
+GitHub App installation repository 목록은 DB에 저장하지 않습니다. Repository Analysis에서 시작한 project callback은 서명 state에 포함된 target owner/name과 정확히 일치하는 repository만 자동 연결합니다. 같은 project, installation, GitHub repository ID의 active row가 이미 있으면 그 row를 반환해 callback 새로고침으로 연결 이력이 중복되지 않습니다. 다른 repository로 바꾸는 별도 연결 흐름은 기존 active row를 `inactive`으로 바꾸고 `disconnected_at`을 기록한 뒤 새 active row를 생성합니다.
 
 Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. repository owner/name/provider/default branch는 DB의 active source repository에서 읽습니다. 이 원칙은 클라이언트가 임의 GitHub repository identity를 body로 보내는 위험을 막기 위한 서비스 계약입니다.
 
@@ -2588,7 +2590,7 @@ Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. reposit
 
 GitHub App installation과 repository 접근 권한은 사용자 계정 단위 외부 연결입니다. Dashboard 전역 설정은 GitHub API에서 현재 사용자가 소유한 installation을 조회하며, 이 목록을 `source_repositories`에 저장하지 않습니다.
 
-Dashboard 전역 설정은 계정 단위 GitHub App installation을 관리하는 보조 경로입니다. Repository Analysis에서 Architecture Draft를 시작하는 흐름은 전역 설정으로 이동시키지 않고, 추천 Template 선택 화면 안에서 프로젝트 단위 CI/CD 연결을 직접 제공합니다. 사용자가 GitHub App 연결을 시작하거나 접근 가능한 repository를 선택하면 기존 프로젝트 연결 API가 `source_repositories`를 생성하거나 활성화합니다. active Source Repository가 생기기 전에는 다음 단계로 이동할 수 없으며, 이동을 시도하면 같은 화면의 CI/CD 연결 구역에 경고를 표시합니다.
+Dashboard 전역 설정은 계정 단위 GitHub App installation을 관리하는 보조 경로입니다. Repository Analysis에서 Architecture Draft를 시작하는 흐름은 전역 설정으로 이동시키지 않고, 추천 Template 선택 화면 안에서 프로젝트 단위 CI/CD 연결을 직접 제공합니다. Web은 분석 UI 상태를 schema version 1, 30분 TTL의 일회성 `sessionStorage` record로 보존하고, API는 target repository와 resume key를 project scope JWT state에 서명합니다. callback은 target만 자동 연결한 뒤 배포 타깃과 GitOps 감시 설정을 모두 저장해야 resume record를 한 번 소비하고 기존 분석 화면으로 돌아갑니다. browser record에는 token, GitHub state, 원본 파일 내용 또는 credential을 넣지 않습니다.
 
 ```ts
 type GitHubInstallationConnection = {
@@ -2603,7 +2605,7 @@ type GitHubInstallationConnection = {
 
 - `GitHubInstallationConnection`은 installation ID, 계정 표시 정보, repository 권한 범위와 개수, GitHub 관리 URL만 반환합니다. installation access token과 GitHub App private key는 반환하거나 저장하지 않습니다.
 - account scope callback은 로그인 사용자와 installation 소유권만 검증하고 `SourceRepository`를 생성하거나 변경하지 않습니다.
-- project scope callback과 사용자가 repository를 선택한 요청만 프로젝트별 `SourceRepository`를 생성하거나 기존 active 연결을 교체합니다.
+- project scope callback은 서명된 target repository만 프로젝트별 `SourceRepository`로 생성하거나 기존 동일 active 연결을 재사용합니다.
 - account scope와 project scope의 서명 state는 구분되며 서로 바꿔 사용할 수 없습니다.
 - 전역 GitHub 연결 추가에 별도 RDS row나 DB migration은 필요하지 않습니다.
 
@@ -2611,7 +2613,7 @@ type GitHubInstallationConnection = {
 
 Repository Analysis는 active GitHub Source Repository의 최신 default branch를 요청 시점에 정적으로 읽는다. repository tree, `package.json`, lockfile, `Dockerfile`, framework config, `README`만 evidence로 사용하며 Repository 코드를 실행하지 않는다. 새로고침 뒤에도 사용자가 마지막 결과를 확인할 수 있도록 구조화된 `AI Handoff`, 분석 revision, 분석 시각만 `source_repositories`에 저장한다. 원본 파일 내용과 GitHub App installation repository 목록은 RDS/S3에 저장하지 않는다.
 
-Public Repository URL 분석은 첫 요청에서 사용자가 branch를 직접 입력받지 않는다. GitHub repository metadata의 `default_branch`를 분석 revision으로 사용하고, 응답의 `availableBranches`에 조회 가능한 branch 이름을 함께 반환한다. 이후 사용자가 branch dropdown에서 다른 branch를 선택해 재분석하면 해당 branch를 `defaultBranch`로 명시하여 동일한 evidence 수집 과정을 다시 실행한다.
+Public Repository URL 분석은 첫 요청에서 사용자가 branch를 직접 입력받지 않는다. GitHub repository metadata의 `default_branch`를 기본 선택으로 사용하고, 응답의 `availableBranches`에 조회 가능한 branch 이름을 함께 반환한다. `repositoryRevision`에는 선택 branch의 실제 `commit.sha`만 저장하며 branch 이름을 revision으로 대체하지 않는다. 이후 사용자가 branch dropdown에서 다른 branch를 선택해 재분석하면 해당 branch의 head SHA와 evidence를 다시 읽는다.
 
 ```ts
 type RepositoryEvidenceKind =

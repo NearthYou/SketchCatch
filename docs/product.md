@@ -82,6 +82,8 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | 비용 분석 | Practice Architecture, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다. |
 | Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
 | Runtime Cache | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍을 보조한다. |
+
+Repository Analysis에서 Git/CI/CD 연결을 시작하면 GitHub App callback은 이미 분석한 Repository만 자동으로 연결한다. 사용자는 Repository를 다시 고르거나 다시 분석하지 않으며, `프로젝트 배포 타깃`과 `GitOps 감시 설정`을 모두 저장한 뒤 기존 추천·질문 상태로 돌아가 Board 생성을 계속한다. ECS Fargate 추천은 분석 commit SHA와 Dockerfile 근거, 프로젝트 이름을 사용해 안전한 기본값을 채우지만 실제 cloud 배포나 Git 변경은 실행하지 않는다.
 | Deployment 관측 | Live event, CloudWatch measured, Auto Scaling actual을 서로 다른 근거로 표시하고 AWS 조회 실패 시 sample 값을 만들지 않는다. |
 
 ## AWS-first 실행 범위와 Representative Use Journey
