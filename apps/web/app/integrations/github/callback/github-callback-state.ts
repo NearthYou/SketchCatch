@@ -12,6 +12,14 @@ export function canResumeRepositoryAnalysis(input: {
   return input.deploymentTargetSaved && input.gitOpsMonitoringSaved;
 }
 
+export async function saveCallbackSettings(input: {
+  readonly saveDeploymentTarget: () => Promise<boolean>;
+  readonly saveGitOpsMonitoring: () => Promise<boolean>;
+}): Promise<boolean> {
+  if (!await input.saveDeploymentTarget()) return false;
+  return input.saveGitOpsMonitoring();
+}
+
 export function selectCallbackTarget(
   repositories: readonly GitHubRepositoryCandidate[],
   target: GitHubProjectConnectionTarget

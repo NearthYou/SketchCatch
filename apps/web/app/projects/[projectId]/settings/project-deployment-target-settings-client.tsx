@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import type {
   AwsConnection,
   ProjectDeploymentTarget,
@@ -35,21 +35,28 @@ const runtimeLabels: Record<RuntimeTargetKind, string> = {
   static_site: "Static site"
 };
 
-export function ProjectDeploymentTargetSettingsClient({
+export type ProjectDeploymentTargetSettingsHandle = {
+  readonly save: () => Promise<boolean>;
+};
+
+export const ProjectDeploymentTargetSettingsClient = forwardRef<
+  ProjectDeploymentTargetSettingsHandle,
+  {
+    readonly projectId: string;
+    readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
+    readonly onDirty?: (() => void) | undefined;
+    readonly onSaved?: (() => void) | undefined;
+    readonly preferEcsDefaults?: boolean | undefined;
+    readonly showSaveButton?: boolean | undefined;
+  }
+>(function ProjectDeploymentTargetSettingsClient({
   projectId,
   ecsDefaults = null,
   onDirty,
   onSaved,
   preferEcsDefaults = false,
   showSaveButton = true
-}: {
-  readonly projectId: string;
-  readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
-  readonly onDirty?: (() => void) | undefined;
-  readonly onSaved?: (() => void) | undefined;
-  readonly preferEcsDefaults?: boolean | undefined;
-  readonly showSaveButton?: boolean | undefined;
-}) {
+}, ref) {
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(null);
@@ -155,8 +162,11 @@ export function ProjectDeploymentTargetSettingsClient({
     setMessage("");
   }
 
-  async function saveTarget(): Promise<void> {
-    if (!canSave) return;
+  async function saveTarget(): Promise<boolean> {
+    if (!canSave) {
+      setMessage("배포 타깃 필수 값을 확인해주세요.");
+      return false;
+    }
     setRequestState("saving");
     setMessage("");
     try {
@@ -169,11 +179,15 @@ export function ProjectDeploymentTargetSettingsClient({
       setRequestState("idle");
       setMessage("배포 타깃을 저장했습니다.");
       onSaved?.();
+      return true;
     } catch (error) {
       setRequestState("error");
       setMessage(getApiErrorMessage(error, "배포 타깃을 저장하지 못했습니다."));
+      return false;
     }
   }
+
+  useImperativeHandle(ref, () => ({ save: saveTarget }));
 
   return (
     <section className="dashboardPanel integrationPanel" aria-labelledby="deployment-target-title">
@@ -396,4 +410,4 @@ export function ProjectDeploymentTargetSettingsClient({
       ) : null}
     </section>
   );
-}
+});

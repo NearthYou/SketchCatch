@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import type {
   GitCicdMonitoredPath,
   GitCicdMonitoringConfig,
@@ -11,21 +11,28 @@ import {
 } from "./cicd-console-state";
 import styles from "./workspace.module.css";
 
-export function CicdMonitoringSettings({
+export type CicdMonitoringSettingsHandle = {
+  readonly save: () => Promise<boolean>;
+};
+
+export const CicdMonitoringSettings = forwardRef<
+  CicdMonitoringSettingsHandle,
+  {
+    readonly config: GitCicdMonitoringConfig;
+    readonly initialDraft?: Partial<CicdMonitoringDraft> | undefined;
+    readonly isSaving: boolean;
+    readonly onDirty?: (() => void) | undefined;
+    readonly onSave: (request: UpdateGitCicdMonitoringConfigRequest) => Promise<boolean | void>;
+    readonly showSaveButton?: boolean | undefined;
+  }
+>(function CicdMonitoringSettings({
   config,
   initialDraft,
   isSaving,
   onDirty,
   onSave,
   showSaveButton = true
-}: {
-  readonly config: GitCicdMonitoringConfig;
-  readonly initialDraft?: Partial<CicdMonitoringDraft> | undefined;
-  readonly isSaving: boolean;
-  readonly onDirty?: (() => void) | undefined;
-  readonly onSave: (request: UpdateGitCicdMonitoringConfigRequest) => Promise<void>;
-  readonly showSaveButton?: boolean | undefined;
-}) {
+}, ref) {
   const [draft, setDraft] = useState<CicdMonitoringDraft>(() => toDraft(config, initialDraft));
 
   useEffect(() => setDraft(toDraft(config, initialDraft)), [config, initialDraft]);
@@ -37,21 +44,24 @@ export function CicdMonitoringSettings({
     setDraft(updater);
   }
 
-  async function save(): Promise<void> {
+  async function save(): Promise<boolean> {
     const appPath = normalizeCicdMonitoredPath(draft.appPath);
     const infraPath = normalizeCicdMonitoredPath(draft.infraPath);
     if (!canSave || appPath === null || infraPath === null) {
-      return;
+      return false;
     }
 
-    await onSave({
+    const saved = await onSave({
       ...draft,
       monitorBranch: draft.monitorBranch.trim() || config.monitorBranch,
       appPath,
       infraPath,
       userAcceptedChangeId: `cicd-monitoring-${crypto.randomUUID()}`
     });
+    return saved !== false;
   }
+
+  useImperativeHandle(ref, () => ({ save }));
 
   return (
     <section className={styles.cicdSettings} aria-labelledby="cicd-settings-title">
@@ -111,7 +121,7 @@ export function CicdMonitoringSettings({
       ) : null}
     </section>
   );
-}
+});
 
 function MonitoredPathField({
   disabled,

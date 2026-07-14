@@ -3,7 +3,7 @@
 import { ArrowLeft, Check, LoaderCircle, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GitHubRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
 import { ProductBrand } from "../../../../components/ui/ProductBrand";
 import {
@@ -11,14 +11,21 @@ import {
   listGitHubInstallationRepositories
 } from "../../../../features/workspace/api";
 import { getApiErrorMessage } from "../../../../lib/api-client";
-import { ProjectCicdMonitoringSettingsClient } from "../../../projects/[projectId]/settings/project-cicd-monitoring-settings-client";
-import { ProjectDeploymentTargetSettingsClient } from "../../../projects/[projectId]/settings/project-deployment-target-settings-client";
+import {
+  ProjectCicdMonitoringSettingsClient,
+  type ProjectCicdMonitoringSettingsHandle
+} from "../../../projects/[projectId]/settings/project-cicd-monitoring-settings-client";
+import {
+  ProjectDeploymentTargetSettingsClient,
+  type ProjectDeploymentTargetSettingsHandle
+} from "../../../projects/[projectId]/settings/project-deployment-target-settings-client";
 import {
   readRepositoryAnalysisResume,
   type RepositoryAnalysisResumeState
 } from "../../../workspace/repository/repository-analysis-resume";
 import {
   createCallbackEcsDefaults,
+  saveCallbackSettings,
   selectCallbackTarget
 } from "./github-callback-state";
 import styles from "./github-callback.module.css";
@@ -37,7 +44,11 @@ type CallbackState =
 // GitHub App callback은 분석했던 Repository만 연결하고 두 필수 설정을 저장한 뒤 분석 화면으로 돌아갑니다.
 export default function GitHubIntegrationCallbackPage() {
   const router = useRouter();
+  const deploymentTargetRef = useRef<ProjectDeploymentTargetSettingsHandle>(null);
+  const gitOpsMonitoringRef = useRef<ProjectCicdMonitoringSettingsHandle>(null);
   const [callbackState, setCallbackState] = useState<CallbackState>({ status: "loading" });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState("");
   const ecsDefaults = useMemo(
     () => callbackState.status === "configuring"
       ? createCallbackEcsDefaults(callbackState.resume)
@@ -137,6 +148,29 @@ export default function GitHubIntegrationCallbackPage() {
     router.replace(`/workspace/repository?${params.toString()}`);
   }
 
+  async function saveSettingsAndReturn(): Promise<void> {
+    if (callbackState.status !== "configuring" || isSavingSettings) return;
+    if (!deploymentTargetRef.current || !gitOpsMonitoringRef.current) {
+      setConfirmationMessage("설정을 불러온 뒤 다시 확인해주세요.");
+      return;
+    }
+
+    setIsSavingSettings(true);
+    setConfirmationMessage("");
+    const saved = await saveCallbackSettings({
+      saveDeploymentTarget: deploymentTargetRef.current.save,
+      saveGitOpsMonitoring: gitOpsMonitoringRef.current.save
+    });
+    setIsSavingSettings(false);
+
+    if (!saved) {
+      setConfirmationMessage("두 설정을 모두 저장하지 못했습니다. 표시된 항목을 확인해주세요.");
+      return;
+    }
+
+    returnToRepositoryAnalysis();
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
@@ -185,23 +219,29 @@ export default function GitHubIntegrationCallbackPage() {
             <div className={styles.settingsStack}>
               <ProjectDeploymentTargetSettingsClient
                 ecsDefaults={ecsDefaults}
+                onDirty={() => setConfirmationMessage("")}
                 preferEcsDefaults
                 projectId={callbackState.projectId}
+                ref={deploymentTargetRef}
                 showSaveButton={false}
               />
               <ProjectCicdMonitoringSettingsClient
                 initialDraft={monitoringDefaults}
+                onDirty={() => setConfirmationMessage("")}
                 projectId={callbackState.projectId}
+                ref={gitOpsMonitoringRef}
                 showSaveButton={false}
               />
             </div>
 
+            {confirmationMessage ? <p role="alert">{confirmationMessage}</p> : null}
             <div className="settingsActionRow">
               <button
                 className="dashboardTopbarAction"
-                onClick={returnToRepositoryAnalysis}
+                disabled={isSavingSettings}
+                onClick={saveSettingsAndReturn}
                 type="button"
-              >확인</button>
+              >{isSavingSettings ? "저장 중" : "확인"}</button>
             </div>
           </>
         ) : null}

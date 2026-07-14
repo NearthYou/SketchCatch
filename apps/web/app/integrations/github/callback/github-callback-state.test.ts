@@ -6,6 +6,7 @@ import type { GitHubProjectConnectionTarget, GitHubRepositoryCandidate } from "@
 import {
   canResumeRepositoryAnalysis,
   createCallbackEcsDefaults,
+  saveCallbackSettings,
   selectCallbackTarget
 } from "./github-callback-state.js";
 import type { RepositoryAnalysisResumeState } from "../../../workspace/repository/repository-analysis-resume.js";
@@ -87,7 +88,40 @@ test("callback uses one temporary confirmation instead of child save buttons", (
   const hiddenSaveButtons = pageSource.match(/showSaveButton=\{false\}/g) ?? [];
 
   assert.equal(hiddenSaveButtons.length, 2);
-  assert.match(pageSource, /onClick=\{returnToRepositoryAnalysis\}/);
-  assert.match(pageSource, />확인<\/button>/);
+  assert.match(pageSource, /onClick=\{saveSettingsAndReturn\}/);
+  assert.match(pageSource, /isSavingSettings \? "저장 중" : "확인"/);
   assert.doesNotMatch(pageSource, /onSaved=/);
+});
+
+test("single confirmation saves deployment target before GitOps monitoring", async () => {
+  const order: string[] = [];
+
+  const saved = await saveCallbackSettings({
+    saveDeploymentTarget: async () => {
+      order.push("deployment-target");
+      return true;
+    },
+    saveGitOpsMonitoring: async () => {
+      order.push("gitops-monitoring");
+      return true;
+    }
+  });
+
+  assert.equal(saved, true);
+  assert.deepEqual(order, ["deployment-target", "gitops-monitoring"]);
+});
+
+test("single confirmation stops before GitOps monitoring when target save fails", async () => {
+  let monitoringCalled = false;
+
+  const saved = await saveCallbackSettings({
+    saveDeploymentTarget: async () => false,
+    saveGitOpsMonitoring: async () => {
+      monitoringCalled = true;
+      return true;
+    }
+  });
+
+  assert.equal(saved, false);
+  assert.equal(monitoringCalled, false);
 });
