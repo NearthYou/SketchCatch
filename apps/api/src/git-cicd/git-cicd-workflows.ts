@@ -1827,6 +1827,11 @@ jobs:
         shell: bash
         run: |
           aws s3 rm "s3://\${{ vars.SKETCHCATCH_RELEASE_BUCKET }}/releases/" --recursive || true
+          aws s3 rm "s3://\${{ vars.SKETCHCATCH_RELEASE_BUCKET }}/lambda/" --recursive || true
+          aws s3 rm "s3://\${{ vars.SKETCHCATCH_RELEASE_BUCKET }}/${input.projectSlug}/ec2-asg/" --recursive || true
+          if [ -n "\${{ vars.SKETCHCATCH_STATIC_BUCKET }}" ]; then
+            aws s3 rm "s3://\${{ vars.SKETCHCATCH_STATIC_BUCKET }}/releases/" --recursive || true
+          fi
 `;
 }
 

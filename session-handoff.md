@@ -17,6 +17,8 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Changes This Session
 
+- Reopened Issue #378, passed the live sandbox preflight, and restored the execution-role trust to the current encrypted AWS Connection external ID.
+- Added persisted Web Push provider status evidence and runtime-aware GitOps artifact cleanup with migration and focused regression coverage.
 - Hardened GitHub run selection/log hydration and nullable handoff persistence.
 - Added S3 backend enforcement and real ECS immediate replacement/rollback behavior.
 - Fixed stale aggregation and stage mapping, then persisted final ECS GitOps evidence through the normal API.

@@ -230,13 +230,14 @@ export function createPostgresNotificationRepository(db: Database): Notification
       });
     },
 
-    async markDelivered(outboxId, deliveredAt) {
+    async markDelivered(outboxId, deliveredAt, providerStatusCode) {
       await db
         .update(notificationOutbox)
         .set({
           status: "delivered",
           attemptCount: sql`${notificationOutbox.attemptCount} + 1`,
           deliveredAt,
+          providerStatusCode,
           lockedAt: null,
           lastErrorCode: null,
           updatedAt: deliveredAt

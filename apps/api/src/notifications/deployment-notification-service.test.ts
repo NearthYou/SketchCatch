@@ -59,6 +59,7 @@ test("dispatcher sends one safe payload and marks the outbox delivered", async (
   const service = createService(repository, {
     async send(subscription, payload) {
       sent.push({ endpoint: subscription.endpoint, payload });
+      return { statusCode: 201 };
     }
   });
   await service.saveSubscription("user-1", subscriptionInput);
@@ -70,7 +71,28 @@ test("dispatcher sends one safe payload and marks the outbox delivered", async (
   assert.equal(sent[0]?.endpoint, subscriptionInput.endpoint);
   assert.match(sent[0]?.payload ?? "", /"notificationId":"ntf_/);
   assert.doesNotMatch(sent[0]?.payload ?? "", /opaque-value|auth-value|p256dh-value/);
-  assert.deepEqual(repository.outboxUpdates, [{ kind: "delivered", id: "outbox-1" }]);
+  assert.deepEqual(repository.outboxUpdates, [
+    { kind: "delivered", id: "outbox-1", providerStatusCode: 201 }
+  ]);
+});
+
+test("dispatcher ignores provider status codes outside the persisted HTTP range", async () => {
+  for (const statusCode of [99, 600, 200.5]) {
+    const repository = new FakeNotificationRepository();
+    const service = createService(repository, {
+      async send() {
+        return { statusCode };
+      }
+    });
+    await service.saveSubscription("user-1", subscriptionInput);
+    repository.claimed.push(createDelivery());
+
+    await service.dispatchPending();
+
+    assert.deepEqual(repository.outboxUpdates, [
+      { kind: "delivered", id: "outbox-1", providerStatusCode: null }
+    ]);
+  }
 });
 
 test("a new subscription does not receive terminal events created before it existed", async () => {
@@ -88,7 +110,9 @@ test("a new subscription does not receive terminal events created before it exis
   await service.dispatchPending();
 
   assert.equal(sendCount, 0);
-  assert.deepEqual(repository.outboxUpdates, [{ kind: "delivered", id: "outbox-1" }]);
+  assert.deepEqual(repository.outboxUpdates, [
+    { kind: "delivered", id: "outbox-1", providerStatusCode: null }
+  ]);
 });
 
 test("expired and gone subscriptions are disabled without retrying the event", async () => {
@@ -108,7 +132,9 @@ test("expired and gone subscriptions are disabled without retrying the event", a
     await service.dispatchPending();
 
     assert.equal(repository.disabledSubscriptionIds.length, 1);
-    assert.deepEqual(repository.outboxUpdates, [{ kind: "delivered", id: "outbox-1" }]);
+    assert.deepEqual(repository.outboxUpdates, [
+      { kind: "delivered", id: "outbox-1", providerStatusCode: null }
+    ]);
   }
 });
 
@@ -163,7 +189,12 @@ test("read state cannot be changed through another user's notification id", asyn
 
 function createService(
   repository: FakeNotificationRepository,
-  pushSender?: { send(subscription: WebPushSubscriptionInput, payload: string): Promise<void> }
+  pushSender?: {
+    send(
+      subscription: WebPushSubscriptionInput,
+      payload: string
+    ): Promise<{ statusCode: number } | void>
+  }
 ) {
   return createDeploymentNotificationService({
     repository,
@@ -190,7 +221,7 @@ class FakeNotificationRepository implements NotificationRepository {
   readonly subscriptions: StoredWebPushSubscription[] = [];
   readonly disabledSubscriptionIds: string[] = [];
   readonly outboxUpdates: Array<
-    | { kind: "delivered"; id: string }
+    | { kind: "delivered"; id: string; providerStatusCode: number | null }
     | { kind: "retry"; id: string; code: string; nextAttemptAt: Date }
     | { kind: "dead"; id: string; code: string }
   > = [];
@@ -215,7 +246,9 @@ class FakeNotificationRepository implements NotificationRepository {
   }
   async disableSubscription(id: string) { this.disabledSubscriptionIds.push(id); }
   async claimPending() { return this.claimed.splice(0); }
-  async markDelivered(id: string) { this.outboxUpdates.push({ kind: "delivered", id }); }
+  async markDelivered(id: string, _deliveredAt: Date, providerStatusCode: number | null) {
+    this.outboxUpdates.push({ kind: "delivered", id, providerStatusCode });
+  }
   async markRetry(id: string, nextAttemptAt: Date, code: string) {
     this.outboxUpdates.push({ kind: "retry", id, nextAttemptAt, code });
   }
