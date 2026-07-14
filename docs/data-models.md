@@ -187,6 +187,37 @@ node만 자동 배치한다. 단, 저장된 Area에 새 자식이 추가되면 A
 막는 데 필요한 방향으로만 크기를 확장할 수 있다. 자동 배치는 resource type, Terraform parameters, containment
 identity, edge identity를 수정하지 않으며 사용자가 patch를 승인하기 전에는 현재 Board를 변경하지 않는다.
 
+### Architecture Board Compilation 제안 계약
+
+기존 자동 배치와 별도로 Architecture Board Compiler는 Resource, 관계, Terraform parameter, containment,
+presentation node, geometry, z-index, edge routing을 모두 변경한 제안을 만들 수 있다. 명시된 요구사항, 기존
+Deployment 상태, Provider·Terraform 유효성과 충돌해도 후보에서 자동 탈락시키지 않고 diagnostic과 품질 비용으로
+표현한다.
+
+```ts
+type ArchitectureBoardCompilationProposal = {
+  architecture: ArchitectureJson;
+  diagram: DiagramJson;
+  changes: ArchitectureBoardCompilationChange[];
+  diagnostics: ArchitectureBoardCompilationDiagnostic[];
+  quality: {
+    before: ArchitectureBoardCompilationQuality;
+    after: ArchitectureBoardCompilationQuality;
+    compilationDistance: number;
+  };
+  provenance: {
+    compilerVersion: string;
+    candidateId: string;
+    referenceTemplateIds: string[];
+  };
+};
+```
+
+`Compilation Distance`는 입력과 제안 사이의 변경 비용이다. 기본 순서는 위치, 크기, 시각적 소속, 관계, 설정,
+Resource 추가, Resource 삭제 순으로 커진다. 이 비용은 파괴적 변경을 금지하지 않지만 빈 Board처럼 시각 점수만
+좋은 후보가 자동 선택되는 것을 막는다. Compiler는 제안만 반환하며 현재 `ProjectDraft`, `DiagramJson`, IaC Preview를
+직접 변경하지 않는다. 실제 적용은 하나의 `User-Accepted Change`로 처리하고 Deployment 검증 계약은 그대로 유지한다.
+
 파라미터가 다른 Terraform resource를 참조할 때 보드가 만든 자동 연결선은 `DiagramEdge.metadata`로 구분한다.
 
 ```ts

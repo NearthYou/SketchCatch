@@ -116,6 +116,14 @@ _Avoid_: Voice deploy, speech command, direct voice edit
 The normalized graph of Resources and relationships that syncs Architecture Board state and IaC Preview state without treating either surface as the only source of truth. It carries stable resource identity, IaC identity, configuration, and relationships.
 _Avoid_: AI JSON, canvas state, diagram data
 
+**Architecture Board Compiler**:
+The capability that may infer, add, remove, or change Resources, relationships, configuration, containment, and visual presentation to produce a reorganized Architecture Board proposal. Its proposal may conflict with explicit requirements, accepted deployment state, or provider and IaC validity.
+_Avoid_: Auto layout, coordinate cleanup, diagram beautifier
+
+**Compilation Distance**:
+The relative amount of semantic and visual change between an input Practice Architecture and an Architecture Board Compiler proposal. Resource deletion has greater distance than configuration, relationship, containment, size, or position changes.
+_Avoid_: Edit count, visual difference
+
 **Reverse Engineering**:
 The service capability that scans existing cloud Resources through provider adapters, reconstructs them as a Practice Architecture, and prepares an IaC handoff path through IaC Preview and import suggestions.
 _Avoid_: Resource list, AWS scan, diagram import

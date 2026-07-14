@@ -53,6 +53,20 @@ Short English-only working log for the current agent context. Older records are 
 - Verification passed focused API tests (109/109), focused Web conflict tests (214/214), the full Web suite (1,314/1,314), `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. The full API suite was stopped at the user's request after the relevant API coverage passed.
 - No dependency, lockfile, DB migration, Terraform Apply/Destroy, deployment, or cloud mutation was performed.
 
+### 2026-07-15 - Architecture Board Compiler design
+
+- Created `feat/gg/architecture-board-compiler` from the latest `origin/dev` and kept the unrelated Workspace AI chat commits on their original branch.
+- Defined an unconstrained, proposal-only Architecture Board Compiler with one deep in-process interface, full semantic and visual change authority, Compilation Distance, diff/diagnostic provenance, and four integration surfaces.
+- Recorded the domain language, ADR, product/architecture/data-model contracts, and a gg design reference covering the 29 usable Template corpus, scoring, feasibility, risks, and implementation order.
+- Verification passed 29 focused Brainboard registry/source and automatic layout tests, `pnpm harness:check`, and `git diff --check`. No source code, DB schema, migration, cloud, Deployment, or GitHub state was changed.
+
+### 2026-07-15 - Consolidate Workspace AI chat and Architecture Board Compiler
+
+- Created Issue #409 and pushed `feat/gg/409-architecture-board-compiler-chat` as the single integration branch for the Workspace AI chat refactor and Architecture Board Compiler work.
+- Merged the prior AI chat and compiler branches, kept the AI chat and compiler worktree changes, union-merged independent Workspace CSS additions, and accepted the current dev removal of the obsolete right-panel aggregate test.
+- Deleted the two replaced local branches only after both were ancestors of the integration branch; neither replaced branch had a remote counterpart.
+- Verification passed `pnpm harness:check`, staged and unstaged `git diff --check`, and a conflict-marker scan. The retained autostash is a recovery backup for the in-progress worktree changes.
+
 ### 2026-07-14 - ECS GitOps persistence, immediate replacement, and cleanup
 
 - Made automated `push`/`workflow_run` authoritative over manual dispatch, isolated unavailable job logs, and preserved accepted nullable handoff provenance without PostgreSQL unknown-null parameters.
@@ -131,6 +145,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
+- On `feat/gg/409-architecture-board-compiler-chat`, implement the 29-Template knowledge extractor and place the existing automatic layout behavior behind the documented Compiler interface before adding semantic rewrite candidates.
 - No continuation is required for the completed test reduction after this branch is reviewed.
 - Resume Issue #378 only on its dedicated branch after its recorded blockers can be addressed.
 - Add future automated coverage only through an explicit update to the essential protection-line policy.

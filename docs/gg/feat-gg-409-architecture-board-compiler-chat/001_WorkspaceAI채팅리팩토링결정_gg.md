@@ -1,11 +1,13 @@
-# Workspace AI Chat Dock UI 리팩토링 계획
+# Workspace AI Chat Dock 리팩토링 결정
 
 ## 1. 작업 식별
 
-- 이슈: `#406`
-- 브랜치: `feat/gg/workspace-ai-chat-refactor`
+- 이슈: `#409`
+- 브랜치: `feat/gg/409-architecture-board-compiler-chat`
 - 범위: Workspace 진입 이후 `AI Chat Dock`만
 - 기준 문서: `DESIGN.md`, `docs/gg/009_WorkspaceAI채팅재설계_gg.md`, `docs/gg/010_WorkspaceAI채팅완전재구축_gg.md`, `docs/gg/011_WorkspaceAI채팅QA매뉴얼_gg.md`
+
+이 문서는 같은 폴더의 `000_아키텍처보드컴파일러설계_gg.md`와 함께 #409의 AI Chat 영역을 정의한다. Compiler 자체의 권한과 Interface는 000 문서가 기준이며, 이 문서는 Chat Dock이 그 결과를 어떻게 안전하게 보여주고 승인 흐름에 연결할지의 기준이다.
 
 이번 작업은 기존 Workspace 전체를 다시 만들거나 AI 기능을 삭제하는 작업이 아니다. 현재 동작하는 AI Chat을 기준으로 화면 구조와 시각 계층을 리팩토링한다. 기존 AI Chat의 시각 구현을 그대로 따라가지 않으며, 현재 구현 작업자의 판단을 우선해 필요한 부분은 과감하게 재배치한다.
 

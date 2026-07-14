@@ -34,6 +34,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 - 음성 요구사항은 Amazon Transcribe 기반 Voice Requirement Input으로 받고, 사용자가 확인한 뒤 Requirement Prompt로 확정한다.
 - 다이어그램과 Terraform이 같은 설계 데이터를 바라보게 한다.
 - AI, Bedrock, Amazon Q Assistance는 Architecture Draft, 설명, 리뷰, 수정 제안을 보강한다.
+- Architecture Board Compiler는 AI Draft, 현재 Board, Reverse Engineering 결과를 Template 사례에 근거해 Resource 의미와 시각 배치까지 다시 구성하는 제안을 만들며, 틀리거나 IaC 유효성을 위반한 변경도 diff와 진단으로 드러낸 뒤 사용자 승인을 받는다.
 - 배포 전 비용, 보안, 설정 위험을 보여주되 High Security Risk도 사용자 검토 정보로 유지하며 Terraform Plan 승인은 허용한다.
 - 사용자가 승인한 Terraform Plan만 Direct Deployment Path로 실제 클라우드에 반영한다.
 - 팀 운영 배포는 Source Repository와 Git/CI/CD Integration으로 넘긴다.
@@ -58,6 +59,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Requirement Input | 텍스트와 Voice Requirement Input을 Requirement Prompt로 정규화한다. |
 | AI Architecture Recommendation | Requirement Prompt를 Architecture Draft로 변환하고 수락 전 설명을 제공한다. |
 | 다이어그램 편집 | Architecture Board에서 Resource와 관계를 직접 수정한다. |
+| Board 자동 정리 | Architecture Board Compiler가 Resource·관계·설정·소속·배치를 함께 재구성한 제안을 비교·승인·되돌릴 수 있게 한다. |
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |

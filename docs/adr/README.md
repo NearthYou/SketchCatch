@@ -16,6 +16,7 @@
 | [0008-non-persistent-repository-analysis.md](./0008-non-persistent-repository-analysis.md) | Repository Analysis 결과를 저장하지 않고 요청마다 새로 정적 분석한다 | 분석 결과 저장과 재분석 조건을 다룰 때 |
 | [0009-persist-latest-repository-analysis-summary.md](./0009-persist-latest-repository-analysis-summary.md) | 원본 source 없이 마지막 Repository Analysis 요약과 revision을 저장하며 0008을 대체한다 | 분석 결과 조회, 새로고침 복원, 재분석 조건을 다룰 때 |
 | [0010-ai-preserves-gg-template-selection.md](./0010-ai-preserves-gg-template-selection.md) | AI는 gg가 선택한 Template을 교체하지 않고 부족한 요구사항만 보완한다 | AI Handoff와 Architecture Draft 책임 경계를 다룰 때 |
+| [0011-unconstrained-architecture-board-compiler-proposals.md](./0011-unconstrained-architecture-board-compiler-proposals.md) | Architecture Board Compiler는 입력 제약과 유효성에 충돌하는 변경도 제안할 수 있고, Compilation Distance로 파괴적 변경 비용을 관리한다 | 자동 정리, AI Board 생성, Template 기반 배치와 변경 승인 경계를 다룰 때 |
 
 ## 추가 규칙
 
