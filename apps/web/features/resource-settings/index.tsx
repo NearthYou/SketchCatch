@@ -41,7 +41,7 @@ import {
   listBoardTemplates,
   type BoardTemplate
 } from "./template-library";
-import { setupTemplateLibraryModalAccessibility } from "./template-library-modal-accessibility";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import modalStyles from "./template-library-modal.module.css";
 
 const areaLabels: Record<ResourceArea, string> = {
@@ -423,7 +423,7 @@ function TemplateLibraryModal({
 
     if (!overlay || !dialog || !closeButton) return;
 
-    return setupTemplateLibraryModalAccessibility({
+    return setupModalAccessibility({
       closeButton,
       dialog,
       documentRoot: document,
