@@ -12,6 +12,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Simplify the signup page brand and consent layout
+
+- Removed the signup top brand bar and optional eyebrow/description copy, then reused the centered card brand with its `/` home link.
+- Narrowed the signup card to the single-column auth width, kept the requested name, username, password, password confirmation, and email order, and moved each legal-document view action beside its agreement label.
+- Verification passed: focused signup tests 6/6, Web full 1,179/1,179, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and live `/signup` HTTP 200 with both removed copy strings absent. The in-app browser binding still failed to initialize, so a fresh visual screenshot was not captured; the next action is browser confirmation only if further pixel tuning is requested.
+
 ### 2026-07-14 - Center the login card in the viewport
 
 - Applied a login-only centered auth-page variant so the card is vertically and horizontally centered without changing the topbar-based signup and password-reset layouts.
