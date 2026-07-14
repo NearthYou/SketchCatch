@@ -165,3 +165,14 @@
 
 - 분류: 실패 사례
 - 문제: 캔버스가 극단적으로 커져 노드와 라벨을 기본 화면에서 읽을 수 없다. Route Table Association, IAM, Alarm 같은 보조 리소스가 핵심 ALB·Compute·Database 흐름과 동일한 시각적 비중을 차지하고 장거리 간선과 교차를 대량으로 만든다.
+
+## Compiler Evidence Report
+
+[compiler-evidence-report.json](./compiler-evidence-report.json)은 29개 사용 가능 템플릿을 `template-review` 경로로 컴파일한 결과와, 사용할 수 없는 Brainboard 증거 1개를 함께 기록한다. 각 항목은 원본 fixture를 바꾸지 않고 before/after 점수, 변경·진단 집계, 참조 템플릿, 시각 이상 지표를 남긴다.
+
+```bash
+pnpm architecture-board-evidence:check
+pnpm architecture-board-evidence:generate
+```
+
+`check`은 CI에서 생성 결과와 저장된 report가 같은지 확인하고, `generate`는 fixture 또는 Compiler 규칙 변경 뒤 report를 다시 만든다.

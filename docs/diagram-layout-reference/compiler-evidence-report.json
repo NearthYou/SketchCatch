@@ -1,0 +1,3975 @@
+{
+  "reportVersion": "architecture-board-compiler-evidence-report/v1",
+  "compilerVersion": "architecture-board-compiler/v2",
+  "summary": {
+    "availableTemplateCount": 29,
+    "totalChangeCount": 2478,
+    "diagnosticCount": 183,
+    "changesByKind": {
+      "resource": 0,
+      "relationship": 0,
+      "configuration": 0,
+      "containment": 415,
+      "presentation": 545,
+      "geometry": 1264,
+      "edge-routing": 254
+    },
+    "diagnosticsByLevel": {
+      "error": 0,
+      "warning": 133,
+      "info": 50
+    },
+    "meanBeforeScore": 17871397946.113186,
+    "meanAfterScore": 530393361.25715,
+    "meanScoreDelta": -17341004584.856037,
+    "visualAnomalies": {
+      "before": {
+        "nodeOverlapCount": 443,
+        "siblingAreaOverlapCount": 2,
+        "parentBoundaryViolationCount": 39,
+        "edgeCrossingCount": 21,
+        "edgeNodeIntersectionCount": 320,
+        "edgeAreaTitleIntersectionCount": 51,
+        "backwardEdgeCount": 48,
+        "supportLaneIntrusionCount": 70
+      },
+      "after": {
+        "nodeOverlapCount": 1,
+        "siblingAreaOverlapCount": 6,
+        "parentBoundaryViolationCount": 1,
+        "edgeCrossingCount": 89,
+        "edgeNodeIntersectionCount": 5,
+        "edgeAreaTitleIntersectionCount": 30,
+        "backwardEdgeCount": 4,
+        "supportLaneIntrusionCount": 4
+      }
+    }
+  },
+  "templates": [
+    {
+      "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
+      "title": "AWS ASG and LB with VPC & subnets",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:support-above",
+      "changes": {
+        "total": 89,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 16,
+          "presentation": 19,
+          "geometry": 48,
+          "edge-routing": 6
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 16,
+            "totalCost": 192
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 3,
+            "totalCost": 24
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 16,
+            "totalCost": 128
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 48,
+            "totalCost": 112
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 6,
+            "totalCost": 36
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 17930084459.769417,
+          "visualPenalty": 17930084459.769417,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2329000,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 2,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 8,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 261.009,
+            "knowledgeSiblingGap": 70,
+            "knowledgeViewportAspectRatio": 1.241,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 16,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 4.146486,
+            "score": 17930084459.769417,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 1,
+            "supportLaneIntrusionCount": 5,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1567.495476
+          }
+        },
+        "after": {
+          "score": 212724718.22105,
+          "visualPenalty": 212724226.22105,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 4238679.81089,
+            "canvasAspectRatioPenalty": 0.487598,
+            "compilationDistance": 492,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 3,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.994564,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 261.009,
+            "knowledgeSiblingGap": 70,
+            "knowledgeViewportAspectRatio": 1.241,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 212724226.22105,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 8279.198716
+          }
+        },
+        "compilationDistance": 492,
+        "scoreDelta": -17717359741.548367
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
+        "brainboard:brainboard-aws-elastic-beanstalk",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-bastion",
+      "title": "AWS Bastion",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 74,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 13,
+          "presentation": 17,
+          "geometry": 38,
+          "edge-routing": 6
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 13,
+            "totalCost": 156
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 13,
+            "totalCost": 104
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 38,
+            "totalCost": 90
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 6,
+            "totalCost": 36
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 19960036061.375,
+          "visualPenalty": 19960036061.375,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1372275,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 12,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 191.519,
+            "knowledgeSiblingGap": 77.5,
+            "knowledgeViewportAspectRatio": 1.877,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 18,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 0,
+            "score": 19960036061.375,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1460
+          }
+        },
+        "after": {
+          "score": 159007.496345,
+          "visualPenalty": 158589.496345,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1212640,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 418,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.933263,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 191.519,
+            "knowledgeSiblingGap": 77.5,
+            "knowledgeViewportAspectRatio": 1.877,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 158589.496345,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2960
+          }
+        },
+        "compilationDistance": 418,
+        "scoreDelta": -19959877053.878654
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-bastion",
+        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-costs-monitoring",
+      "title": "AWS costs monitoring",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 21,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 4,
+          "presentation": 5,
+          "geometry": 12,
+          "edge-routing": 0
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 4,
+            "totalCost": 48
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 1,
+            "totalCost": 8
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 12,
+            "totalCost": 28
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 4000001762.125,
+          "visualPenalty": 4000001762.125,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 352425,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 0,
+            "knowledgeSiblingGap": 108.75,
+            "knowledgeViewportAspectRatio": 1.144,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 4,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 4000001762.125,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 0
+          }
+        },
+        "after": {
+          "score": 32546869.066667,
+          "visualPenalty": 32546753.066667,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 17280,
+            "canvasAspectRatioPenalty": 6.5,
+            "compilationDistance": 116,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.466667,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 0,
+            "knowledgeSiblingGap": 108.75,
+            "knowledgeViewportAspectRatio": 1.144,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 32546753.066667,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 0
+          }
+        },
+        "compilationDistance": 116,
+        "scoreDelta": -3967454893.058333
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
+        "brainboard:brainboard-aws-bastion",
+        "brainboard:brainboard-aws-costs-monitoring"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-dashcam-video-pipeline",
+      "title": "AWS Dashcam Video Processing Pipeline",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 85,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 14,
+          "presentation": 15,
+          "geometry": 42,
+          "edge-routing": 14
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 14,
+            "totalCost": 168
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 1,
+            "totalCost": 8
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 14,
+            "totalCost": 112
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 42,
+            "totalCost": 98
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 14,
+            "totalCost": 84
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 15370267329,
+          "visualPenalty": 15370267329,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 2,
+            "canvasArea": 915800,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 1,
+            "edgeNodeIntersectionCount": 14,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 254.286,
+            "knowledgeSiblingGap": 79.643,
+            "knowledgeViewportAspectRatio": 1.586,
+            "mainFlowContinuityError": 95.625,
+            "nodeOverlapCount": 14,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 15370267329,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 4,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 3575
+          }
+        },
+        "after": {
+          "score": 250403128.852845,
+          "visualPenalty": 250402658.852845,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 331840,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 470,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 5,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.902797,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 254.286,
+            "knowledgeSiblingGap": 79.643,
+            "knowledgeViewportAspectRatio": 1.586,
+            "mainFlowContinuityError": 93.6,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 250402658.852845,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 6176
+          }
+        },
+        "compilationDistance": 470,
+        "scoreDelta": -15119864200.147156
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-dashcam-video-pipeline",
+        "brainboard:brainboard-aws-ecs-fargate",
+        "brainboard:brainboard-aws-s3-api-gateway"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-ec2-vpc-subnet",
+      "title": "AWS EC2 instance inside VPC & Subnet",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 24,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 4,
+          "presentation": 7,
+          "geometry": 12,
+          "edge-routing": 1
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 4,
+            "totalCost": 48
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 3,
+            "totalCost": 24
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 12,
+            "totalCost": 28
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 1,
+            "totalCost": 6
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 5160012254.709432,
+          "visualPenalty": 5160012254.709432,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1184050,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 2,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 316.723,
+            "knowledgeSiblingGap": 128.093,
+            "knowledgeViewportAspectRatio": 1.196,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 5,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 5160012254.709432,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 316.722972
+          }
+        },
+        "after": {
+          "score": 101397.987484,
+          "visualPenalty": 101259.987484,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 301584,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 138,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.984721,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 316.723,
+            "knowledgeSiblingGap": 128.093,
+            "knowledgeViewportAspectRatio": 1.196,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 101259.987484,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 64
+          }
+        },
+        "compilationDistance": 138,
+        "scoreDelta": -5159910856.721948
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-ec2-vpc-subnet",
+        "brainboard:brainboard-aws-elastic-beanstalk",
+        "brainboard:brainboard-aws-multi-account-management"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-ecs-fargate",
+      "title": "AWS ECS with Fargate",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 49,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 9,
+          "presentation": 10,
+          "geometry": 26,
+          "edge-routing": 4
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 9,
+            "totalCost": 108
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 1,
+            "totalCost": 8
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 9,
+            "totalCost": 72
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 26,
+            "totalCost": 61
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 4,
+            "totalCost": 24
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 8460030283.75,
+          "visualPenalty": 8460030283.75,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1716750,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 2,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 4,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 271.25,
+            "knowledgeSiblingGap": 155.556,
+            "knowledgeViewportAspectRatio": 1.445,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 6,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 0,
+            "score": 8460030283.75,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 1,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1085
+          }
+        },
+        "after": {
+          "score": 3566896.583027,
+          "visualPenalty": 3566623.583027,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 574420.026763,
+            "canvasAspectRatioPenalty": 0.68424,
+            "compilationDistance": 273,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.975934,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 271.25,
+            "knowledgeSiblingGap": 155.556,
+            "knowledgeViewportAspectRatio": 1.445,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 3566623.583027,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2248
+          }
+        },
+        "compilationDistance": 273,
+        "scoreDelta": -8456463387.166973
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-ecs-fargate",
+        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "repository:ecs-fargate-container-app"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-elastic-beanstalk",
+      "title": "AWS Elastic Beanstalk",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 54,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 9,
+          "presentation": 15,
+          "geometry": 26,
+          "edge-routing": 4
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 9,
+            "totalCost": 108
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 6,
+            "totalCost": 48
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 9,
+            "totalCost": 72
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 26,
+            "totalCost": 61
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 4,
+            "totalCost": 24
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 25230033936,
+          "visualPenalty": 25230033936,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1267200,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 1,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 13,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 230,
+            "knowledgeSiblingGap": 66.429,
+            "knowledgeViewportAspectRatio": 1.375,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 23,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 0,
+            "score": 25230033936,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 4,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1380
+          }
+        },
+        "after": {
+          "score": 4049276.805304,
+          "visualPenalty": 4048963.805304,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 608528,
+            "canvasAspectRatioPenalty": 0.784247,
+            "compilationDistance": 313,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.977283,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 230,
+            "knowledgeSiblingGap": 66.429,
+            "knowledgeViewportAspectRatio": 1.375,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 4048963.805304,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1348
+          }
+        },
+        "compilationDistance": 313,
+        "scoreDelta": -25225984659.194695
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
+        "brainboard:brainboard-aws-elastic-beanstalk",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-fsx",
+      "title": "AWS FSX architecture",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 131,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 23,
+          "presentation": 30,
+          "geometry": 67,
+          "edge-routing": 11
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 23,
+            "totalCost": 276
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 7,
+            "totalCost": 56
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 23,
+            "totalCost": 184
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 67,
+            "totalCost": 158
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 11,
+            "totalCost": 66
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 44421394798.50134,
+          "visualPenalty": 44421394798.50134,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 6,
+            "canvasArea": 2938950,
+            "canvasAspectRatioPenalty": 0.215434,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 4,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 23,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 206.667,
+            "knowledgeSiblingGap": 45.172,
+            "knowledgeViewportAspectRatio": 0.823,
+            "mainFlowContinuityError": 106.666667,
+            "nodeOverlapCount": 39,
+            "parentBoundaryViolationCount": 3,
+            "repeatAlignmentError": 4,
+            "score": 44421394798.50134,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 2,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2480
+          }
+        },
+        "after": {
+          "score": 1008123905.833992,
+          "visualPenalty": 1008123165.833992,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1214400,
+            "canvasAspectRatioPenalty": 1.241848,
+            "compilationDistance": 740,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.967747,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 206.667,
+            "knowledgeSiblingGap": 45.172,
+            "knowledgeViewportAspectRatio": 0.823,
+            "mainFlowContinuityError": 208,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 130,
+            "score": 1008123165.833992,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 1,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 4754
+          }
+        },
+        "compilationDistance": 740,
+        "scoreDelta": -43413270892.66735
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-fsx",
+        "brainboard:brainboard-aws-network-landing-zone",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-iam-users",
+      "title": "AWS IAM users creation",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 41,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 0,
+          "presentation": 10,
+          "geometry": 24,
+          "edge-routing": 7
+        },
+        "groups": [
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 2,
+            "totalCost": 16
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 8,
+            "totalCost": 64
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 24,
+            "totalCost": 56
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 7,
+            "totalCost": 42
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 13070039096.509064,
+          "visualPenalty": 13070039096.509064,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 840950,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 10,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 0,
+            "knowledgeEdgeLength": 249.227,
+            "knowledgeSiblingGap": 104.806,
+            "knowledgeViewportAspectRatio": 1.741,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 12,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 13070039096.509064,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 9,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1744.587953
+          }
+        },
+        "after": {
+          "score": 182072686.319084,
+          "visualPenalty": 182072508.319084,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 111744,
+            "canvasAspectRatioPenalty": 4.388889,
+            "compilationDistance": 178,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 2,
+            "emptySpaceRatio": 0.835052,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 0,
+            "knowledgeEdgeLength": 249.227,
+            "knowledgeSiblingGap": 104.806,
+            "knowledgeViewportAspectRatio": 1.741,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 182072508.319084,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2200
+          }
+        },
+        "compilationDistance": 178,
+        "scoreDelta": -12887966410.18998
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-asg-lb-vpc-subnets",
+        "brainboard:brainboard-aws-iam-users",
+        "brainboard:brainboard-aws-s3-api-gateway"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-jenkins-ec2",
+      "title": "AWS Jenkins architecture on EC2",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 215,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 39,
+          "presentation": 44,
+          "geometry": 114,
+          "edge-routing": 18
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 39,
+            "totalCost": 468
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 5,
+            "totalCost": 40
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 39,
+            "totalCost": 312
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 114,
+            "totalCost": 270
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 18,
+            "totalCost": 108
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 40731565980.25,
+          "visualPenalty": 40731565980.25,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 1,
+            "canvasArea": 3946050,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 9,
+            "edgeCrossingCount": 2,
+            "edgeNodeIntersectionCount": 23,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 406.25,
+            "knowledgeSiblingGap": 73.023,
+            "knowledgeViewportAspectRatio": 2.81,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 36,
+            "parentBoundaryViolationCount": 2,
+            "repeatAlignmentError": 140,
+            "score": 40731565980.25,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 4,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 7312.5
+          }
+        },
+        "after": {
+          "score": 2606392822.58822,
+          "visualPenalty": 2606391624.58822,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 5941536,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 1198,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 5,
+            "edgeCrossingCount": 5,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.955502,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 406.25,
+            "knowledgeSiblingGap": 73.023,
+            "knowledgeViewportAspectRatio": 2.81,
+            "mainFlowContinuityError": 969.333333,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 404,
+            "score": 2606391624.58822,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 2,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 14385
+          }
+        },
+        "compilationDistance": 1198,
+        "scoreDelta": -38125173157.66178
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-bastion",
+        "brainboard:brainboard-aws-jenkins-ec2",
+        "brainboard:brainboard-aws-load-balancer-target-group"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-kubernetes-native-cnis",
+      "title": "AWS Kubernetes cluster with native CNIs",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 106,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 18,
+          "presentation": 22,
+          "geometry": 53,
+          "edge-routing": 13
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 18,
+            "totalCost": 216
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 18,
+            "totalCost": 144
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 53,
+            "totalCost": 124
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 13,
+            "totalCost": 78
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 20843636568.18182,
+          "visualPenalty": 20843636568.18182,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2750000,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 5,
+            "edgeCrossingCount": 1,
+            "edgeNodeIntersectionCount": 18,
+            "emptySpaceRatio": 0.010182,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 5,
+            "knowledgeEdgeLength": 435,
+            "knowledgeSiblingGap": 88.095,
+            "knowledgeViewportAspectRatio": 1.455,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 18,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 350,
+            "score": 20843636568.18182,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 6090
+          }
+        },
+        "after": {
+          "score": 152703102.282456,
+          "visualPenalty": 152702508.282456,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2423088,
+            "canvasAspectRatioPenalty": 0.483568,
+            "compilationDistance": 594,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 3,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.978725,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 5,
+            "knowledgeEdgeLength": 435,
+            "knowledgeSiblingGap": 88.095,
+            "knowledgeViewportAspectRatio": 1.455,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 152702508.282456,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 8734
+          }
+        },
+        "compilationDistance": 594,
+        "scoreDelta": -20690933465.899364
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "brainboard:brainboard-training-aws-onboarding",
+        "repository:eks-container-app"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-load-balancer-target-group",
+      "title": "AWS load balancer with target group",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:support-above",
+      "changes": {
+        "total": 56,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 10,
+          "presentation": 13,
+          "geometry": 29,
+          "edge-routing": 4
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 10,
+            "totalCost": 120
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 3,
+            "totalCost": 24
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 10,
+            "totalCost": 80
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 29,
+            "totalCost": 69
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 4,
+            "totalCost": 24
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 15640028783.25,
+          "visualPenalty": 15640028783.25,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1756650,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 8,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 5,
+            "knowledgeEdgeLength": 250,
+            "knowledgeSiblingGap": 84.167,
+            "knowledgeViewportAspectRatio": 1.23,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 14,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 0,
+            "score": 15640028783.25,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1000
+          }
+        },
+        "after": {
+          "score": 136344.541019,
+          "visualPenalty": 136027.541019,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 3055980,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 317,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.995476,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 5,
+            "knowledgeEdgeLength": 250,
+            "knowledgeSiblingGap": 84.167,
+            "knowledgeViewportAspectRatio": 1.23,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 136027.541019,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1060
+          }
+        },
+        "compilationDistance": 317,
+        "scoreDelta": -15639892438.70898
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-jenkins-ec2",
+        "brainboard:brainboard-aws-load-balancer-target-group",
+        "repository:ecs-fargate-container-app"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-multi-account-management",
+      "title": "AWS multi-account management",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:support-above",
+      "changes": {
+        "total": 100,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 18,
+          "presentation": 28,
+          "geometry": 54,
+          "edge-routing": 0
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 18,
+            "totalCost": 216
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 10,
+            "totalCost": 80
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 18,
+            "totalCost": 144
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 54,
+            "totalCost": 126
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 21240049957.72691,
+          "visualPenalty": 21240049957.72691,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2208800,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 3,
+            "emptySpaceRatio": 0.011137,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 630,
+            "knowledgeSiblingGap": 84.444,
+            "knowledgeViewportAspectRatio": 2.852,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 21,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 21240049957.72691,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1890
+          }
+        },
+        "after": {
+          "score": 4223248.347991,
+          "visualPenalty": 4222682.347991,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2120096,
+            "canvasAspectRatioPenalty": 0.318612,
+            "compilationDistance": 566,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.990219,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 630,
+            "knowledgeSiblingGap": 84.444,
+            "knowledgeViewportAspectRatio": 2.852,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 252,
+            "score": 4222682.347991,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 0
+          }
+        },
+        "compilationDistance": 566,
+        "scoreDelta": -21235826709.378918
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-ec2-vpc-subnet",
+        "brainboard:brainboard-aws-elastic-beanstalk",
+        "brainboard:brainboard-aws-multi-account-management"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-network-landing-zone",
+      "title": "AWS network landing zone",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 118,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 21,
+          "presentation": 26,
+          "geometry": 62,
+          "edge-routing": 9
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 21,
+            "totalCost": 252
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 5,
+            "totalCost": 40
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 21,
+            "totalCost": 168
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 62,
+            "totalCost": 145
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 9,
+            "totalCost": 54
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 37150136260.65548,
+          "visualPenalty": 37150136260.65548,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 3439800,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 9,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 19,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 345.002,
+            "knowledgeSiblingGap": 76.262,
+            "knowledgeViewportAspectRatio": 1.413,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 29,
+            "parentBoundaryViolationCount": 6,
+            "repeatAlignmentError": 5,
+            "score": 37150136260.65548,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 3453.082774
+          }
+        },
+        "after": {
+          "score": 7388704.827618,
+          "visualPenalty": 7388045.827618,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2181200,
+            "canvasAspectRatioPenalty": 0.926692,
+            "compilationDistance": 659,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.985212,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 345.002,
+            "knowledgeSiblingGap": 76.262,
+            "knowledgeViewportAspectRatio": 1.413,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 260,
+            "score": 7388045.827618,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2258
+          }
+        },
+        "compilationDistance": 659,
+        "scoreDelta": -37142747555.82786
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-fsx",
+        "brainboard:brainboard-aws-network-landing-zone",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-rds",
+      "title": "AWS RDS",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:support-above",
+      "changes": {
+        "total": 47,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 8,
+          "presentation": 11,
+          "geometry": 22,
+          "edge-routing": 6
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 8,
+            "totalCost": 96
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 3,
+            "totalCost": 24
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 8,
+            "totalCost": 64
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 22,
+            "totalCost": 53
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 6,
+            "totalCost": 36
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 6680344504,
+          "visualPenalty": 6680344504,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 1,
+            "canvasArea": 2080800,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 8,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 284.167,
+            "knowledgeSiblingGap": 105.5,
+            "knowledgeViewportAspectRatio": 1.125,
+            "mainFlowContinuityError": 150,
+            "nodeOverlapCount": 6,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 6680344504,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1705
+          }
+        },
+        "after": {
+          "score": 1002462231.314494,
+          "visualPenalty": 1002461958.314494,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 569088,
+            "canvasAspectRatioPenalty": 0.461538,
+            "compilationDistance": 273,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.983806,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 284.167,
+            "knowledgeSiblingGap": 105.5,
+            "knowledgeViewportAspectRatio": 1.125,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 1002461958.314494,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 1,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2652
+          }
+        },
+        "compilationDistance": 273,
+        "scoreDelta": -5677882272.685506
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-ecs-fargate",
+        "brainboard:brainboard-aws-rds",
+        "repository:three-tier-web-app"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-rest-api-documentdb",
+      "title": "AWS REST API for DocumentDB",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 41,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 7,
+          "presentation": 10,
+          "geometry": 20,
+          "edge-routing": 4
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 7,
+            "totalCost": 84
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 3,
+            "totalCost": 24
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 7,
+            "totalCost": 56
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 20,
+            "totalCost": 47
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 4,
+            "totalCost": 24
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 5470129748.965858,
+          "visualPenalty": 5470129748.965858,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 1,
+            "canvasArea": 608850,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 5,
+            "emptySpaceRatio": 0.191047,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 226,
+            "knowledgeSiblingGap": 86.667,
+            "knowledgeViewportAspectRatio": 1.61,
+            "mainFlowContinuityError": 42.5,
+            "nodeOverlapCount": 5,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 5470129748.965858,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 1,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1130
+          }
+        },
+        "after": {
+          "score": 198905.591831,
+          "visualPenalty": 198670.591831,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 485760,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 235,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.976285,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 226,
+            "knowledgeSiblingGap": 86.667,
+            "knowledgeViewportAspectRatio": 1.61,
+            "mainFlowContinuityError": 34.666667,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 198670.591831,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1464
+          }
+        },
+        "compilationDistance": 235,
+        "scoreDelta": -5469930843.374026
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-ec2-vpc-subnet",
+        "brainboard:brainboard-aws-multi-account-management",
+        "brainboard:brainboard-aws-rest-api-documentdb"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-s3-api-gateway",
+      "title": "AWS S3 API Gateway integration",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 107,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 15,
+          "presentation": 16,
+          "geometry": 45,
+          "edge-routing": 31
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 15,
+            "totalCost": 180
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 1,
+            "totalCost": 8
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 15,
+            "totalCost": 120
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 45,
+            "totalCost": 105
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 31,
+            "totalCost": 186
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 18456943639.32143,
+          "visualPenalty": 18456943639.32143,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 16,
+            "canvasArea": 1802150,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 6,
+            "edgeNodeIntersectionCount": 31,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 527.818,
+            "knowledgeSiblingGap": 80.667,
+            "knowledgeViewportAspectRatio": 1.019,
+            "mainFlowContinuityError": 350.714286,
+            "nodeOverlapCount": 15,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 590,
+            "score": 18456943639.32143,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 1,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 16660
+          }
+        },
+        "after": {
+          "score": 505617269.901731,
+          "visualPenalty": 505616670.901731,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 272832,
+            "canvasAspectRatioPenalty": 0.77551,
+            "compilationDistance": 599,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 10,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.873329,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 527.818,
+            "knowledgeSiblingGap": 80.667,
+            "knowledgeViewportAspectRatio": 1.019,
+            "mainFlowContinuityError": 148.571429,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 112,
+            "score": 505616670.901731,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 11664
+          }
+        },
+        "compilationDistance": 599,
+        "scoreDelta": -17951326369.4197
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-dashcam-video-pipeline",
+        "brainboard:brainboard-aws-s3-api-gateway",
+        "repository:minimal-serverless-api"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-secure-s3-bucket",
+      "title": "AWS secure S3 bucket",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 66,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 11,
+          "presentation": 12,
+          "geometry": 33,
+          "edge-routing": 10
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 11,
+            "totalCost": 132
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 1,
+            "totalCost": 8
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 11,
+            "totalCost": 88
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 33,
+            "totalCost": 77
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 10,
+            "totalCost": 60
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 12000331987.88889,
+          "visualPenalty": 12000331987.88889,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 5,
+            "canvasArea": 919800,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 10,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 292.5,
+            "knowledgeSiblingGap": 83.636,
+            "knowledgeViewportAspectRatio": 1.304,
+            "mainFlowContinuityError": 134.444444,
+            "nodeOverlapCount": 11,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 12000331987.88889,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2925
+          }
+        },
+        "after": {
+          "score": 74084428.298328,
+          "visualPenalty": 74084063.298328,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 144640,
+            "canvasAspectRatioPenalty": 4.65,
+            "compilationDistance": 365,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 1,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.824779,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 292.5,
+            "knowledgeSiblingGap": 83.636,
+            "knowledgeViewportAspectRatio": 1.304,
+            "mainFlowContinuityError": 335.111111,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 74084063.298328,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 4032
+          }
+        },
+        "compilationDistance": 365,
+        "scoreDelta": -11926247559.59056
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-fsx",
+        "brainboard:brainboard-aws-secure-s3-bucket",
+        "brainboard:brainboard-aws-serverless-cdn"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-serverless-cdn",
+      "title": "AWS serverless architecture with CDN",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 115,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 19,
+          "presentation": 21,
+          "geometry": 57,
+          "edge-routing": 18
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 19,
+            "totalCost": 228
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 2,
+            "totalCost": 16
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 19,
+            "totalCost": 152
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 57,
+            "totalCost": 133
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 18,
+            "totalCost": 108
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 20970321672.64321,
+          "visualPenalty": 20970321672.64321,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 3,
+            "canvasArea": 1762033.967595,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 22,
+            "emptySpaceRatio": 0.058262,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 322.472,
+            "knowledgeSiblingGap": 59.756,
+            "knowledgeViewportAspectRatio": 1.137,
+            "mainFlowContinuityError": 82.490983,
+            "nodeOverlapCount": 19,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 20970321672.64321,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 3,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 7102.717227
+          }
+        },
+        "after": {
+          "score": 884256536.368421,
+          "visualPenalty": 884255899.368421,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 486400,
+            "canvasAspectRatioPenalty": 0.315789,
+            "compilationDistance": 637,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 16,
+            "edgeNodeIntersectionCount": 1,
+            "emptySpaceRatio": 0.91,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 322.472,
+            "knowledgeSiblingGap": 59.756,
+            "knowledgeViewportAspectRatio": 1.137,
+            "mainFlowContinuityError": 168,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 208,
+            "score": 884255899.368421,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 8376
+          }
+        },
+        "compilationDistance": 637,
+        "scoreDelta": -20086065136.27479
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-dashcam-video-pipeline",
+        "brainboard:brainboard-aws-secure-s3-bucket",
+        "brainboard:brainboard-aws-serverless-cdn"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-three-tier-database",
+      "title": "AWS 3-tier web app with a database",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 161,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 27,
+          "presentation": 40,
+          "geometry": 81,
+          "edge-routing": 13
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 27,
+            "totalCost": 324
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 13,
+            "totalCost": 104
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 27,
+            "totalCost": 216
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 81,
+            "totalCost": 189
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 13,
+            "totalCost": 78
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 58555498042.75647,
+          "visualPenalty": 58555498042.75647,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 3,
+            "canvasArea": 3655775,
+            "canvasAspectRatioPenalty": 0.200573,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 9,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 32,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 355.019,
+            "knowledgeSiblingGap": 40,
+            "knowledgeViewportAspectRatio": 0.833,
+            "mainFlowContinuityError": 46.666667,
+            "nodeOverlapCount": 50,
+            "parentBoundaryViolationCount": 5,
+            "repeatAlignmentError": 425,
+            "score": 58555498042.75647,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 8,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 6678.260931
+          }
+        },
+        "after": {
+          "score": 106820155.836625,
+          "visualPenalty": 106819244.836625,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2877744,
+            "canvasAspectRatioPenalty": 0.612275,
+            "compilationDistance": 911,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 2,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.985589,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 355.019,
+            "knowledgeSiblingGap": 40,
+            "knowledgeViewportAspectRatio": 0.833,
+            "mainFlowContinuityError": 1064,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 130,
+            "score": 106819244.836625,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 10846
+          }
+        },
+        "compilationDistance": 911,
+        "scoreDelta": -58448677886.919846
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-fsx",
+        "brainboard:brainboard-aws-three-tier-database",
+        "repository:three-tier-web-app"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-aws-vpc-subnets-security-groups-2az",
+      "title": "AWS VPC with subnet and security groups on 2 AZs",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 91,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 17,
+          "presentation": 21,
+          "geometry": 48,
+          "edge-routing": 5
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 17,
+            "totalCost": 204
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 17,
+            "totalCost": 136
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 48,
+            "totalCost": 115
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 5,
+            "totalCost": 30
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 20800040139.708755,
+          "visualPenalty": 20800040139.708755,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2089751.109564,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 10,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 247.22,
+            "knowledgeSiblingGap": 60.189,
+            "knowledgeViewportAspectRatio": 1.54,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 19,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 0,
+            "score": 20800040139.708755,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1484.54766
+          }
+        },
+        "after": {
+          "score": 516536.471078,
+          "visualPenalty": 516019.471078,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2233970,
+            "canvasAspectRatioPenalty": 0.069896,
+            "compilationDistance": 517,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.989687,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 247.22,
+            "knowledgeSiblingGap": 60.189,
+            "knowledgeViewportAspectRatio": 1.54,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 516019.471078,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2820
+          }
+        },
+        "compilationDistance": 517,
+        "scoreDelta": -20799523603.23768
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-bastion",
+        "brainboard:brainboard-aws-network-landing-zone",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-cross-account-aws-s3",
+      "title": "Cross account AWS S3",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 22,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 3,
+          "presentation": 8,
+          "geometry": 9,
+          "edge-routing": 2
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 3,
+            "totalCost": 36
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 5,
+            "totalCost": 40
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 3,
+            "totalCost": 24
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 9,
+            "totalCost": 21
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 2,
+            "totalCost": 12
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 12573051030.25,
+          "visualPenalty": 12573051030.25,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 2,
+            "canvasArea": 646050,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 5,
+            "emptySpaceRatio": 0,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 195,
+            "knowledgeSiblingGap": 82.143,
+            "knowledgeViewportAspectRatio": 1.212,
+            "mainFlowContinuityError": 120,
+            "nodeOverlapCount": 12,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 280,
+            "score": 12573051030.25,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 3,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 390
+          }
+        },
+        "after": {
+          "score": 182073.547368,
+          "visualPenalty": 181940.547368,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 24320,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 133,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.715789,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 195,
+            "knowledgeSiblingGap": 82.143,
+            "knowledgeViewportAspectRatio": 1.212,
+            "mainFlowContinuityError": 52,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 181940.547368,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 312
+          }
+        },
+        "compilationDistance": 133,
+        "scoreDelta": -12572868956.70263
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-secure-s3-bucket",
+        "brainboard:brainboard-cross-account-aws-s3",
+        "repository:static-web-hosting"
+      ]
+    },
+    {
+      "id": "brainboard:brainboard-training-aws-onboarding",
+      "title": "[Training] AWS onboarding",
+      "source": "brainboard",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 109,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 18,
+          "presentation": 22,
+          "geometry": 54,
+          "edge-routing": 15
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 18,
+            "totalCost": 216
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 18,
+            "totalCost": 144
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 54,
+            "totalCost": 126
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 15,
+            "totalCost": 90
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 0,
+        "byLevel": {
+          "error": 0,
+          "warning": 0,
+          "info": 0
+        },
+        "items": []
+      },
+      "quality": {
+        "before": {
+          "score": 21093639276.012615,
+          "visualPenalty": 21093639276.012615,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2933000,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 3,
+            "edgeCrossingCount": 4,
+            "edgeNodeIntersectionCount": 21,
+            "emptySpaceRatio": 0.01911,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 5,
+            "knowledgeEdgeLength": 435,
+            "knowledgeSiblingGap": 88.095,
+            "knowledgeViewportAspectRatio": 1.455,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 18,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 350,
+            "score": 21093639276.012615,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 6135
+          }
+        },
+        "after": {
+          "score": 152766154.975422,
+          "visualPenalty": 152765546.975422,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 0,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2435868,
+            "canvasAspectRatioPenalty": 0.491393,
+            "compilationDistance": 608,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 3,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.978836,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 5,
+            "knowledgeEdgeLength": 435,
+            "knowledgeSiblingGap": 88.095,
+            "knowledgeViewportAspectRatio": 1.455,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 152765546.975422,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 9926
+          }
+        },
+        "compilationDistance": 608,
+        "scoreDelta": -20940873121.037193
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "brainboard:brainboard-training-aws-onboarding",
+        "repository:eks-container-app"
+      ]
+    },
+    {
+      "id": "repository:ecs-fargate-container-app",
+      "title": "ECS Fargate Container App",
+      "source": "repository",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support-reversed",
+      "changes": {
+        "total": 115,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 18,
+          "presentation": 24,
+          "geometry": 59,
+          "edge-routing": 14
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 18,
+            "totalCost": 216
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 20,
+            "totalCost": 160
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 59,
+            "totalCost": 138
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 14,
+            "totalCost": 84
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 36,
+        "byLevel": {
+          "error": 0,
+          "warning": 25,
+          "info": 11
+        },
+        "items": [
+          {
+            "code": "compiler.missing_terraform_relationship",
+            "level": "warning",
+            "summary": "Terraform 참조 관계 미표현",
+            "sampleMessage": "Resource template-ecs-fargate-container-app-alb-security-group의 Terraform 참조 대상 template-ecs-fargate-container-app-vpc 관계를 proposal로 추가할 수 있습니다.",
+            "count": 25,
+            "penalty": 3500
+          },
+          {
+            "code": "compiler.inferred_containment",
+            "level": "info",
+            "summary": "비-Security Group containment 추론",
+            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 template-ecs-fargate-container-app-alb-security-group를 template-ecs-fargate-container-app-vpc에 소속시켰습니다.",
+            "count": 11,
+            "penalty": 0
+          }
+        ]
+      },
+      "quality": {
+        "before": {
+          "score": 11350286741.23077,
+          "visualPenalty": 11350280201.23077,
+          "structuralPenalty": 3040,
+          "semanticDiagnosticPenalty": 3500,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1830400,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 2,
+            "edgeAreaTitleIntersectionCount": 1,
+            "edgeCrossingCount": 2,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.907692,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 378.829,
+            "knowledgeSiblingGap": 83.478,
+            "knowledgeViewportAspectRatio": 2.364,
+            "mainFlowContinuityError": 24,
+            "nodeOverlapCount": 6,
+            "parentBoundaryViolationCount": 5,
+            "repeatAlignmentError": 0,
+            "score": 11350280201.23077,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 6,
+            "terraformReferenceContainmentMismatchCount": 14,
+            "totalEdgeLength": 6614
+          }
+        },
+        "after": {
+          "score": 1671630428.049545,
+          "visualPenalty": 1671625758.049545,
+          "structuralPenalty": 540,
+          "semanticDiagnosticPenalty": 3500,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1121664,
+            "canvasAspectRatioPenalty": 0.086614,
+            "compilationDistance": 630,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 3,
+            "edgeCrossingCount": 6,
+            "edgeNodeIntersectionCount": 2,
+            "emptySpaceRatio": 0.969189,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 378.829,
+            "knowledgeSiblingGap": 83.478,
+            "knowledgeViewportAspectRatio": 2.364,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 96,
+            "score": 1671625758.049545,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 1,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 3,
+            "totalEdgeLength": 6508
+          }
+        },
+        "compilationDistance": 630,
+        "scoreDelta": -9678656313.181225
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-ecs-fargate",
+        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "repository:ecs-fargate-container-app"
+      ]
+    },
+    {
+      "id": "repository:eks-container-app",
+      "title": "EKS Container App",
+      "source": "repository",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:support-above-reversed",
+      "changes": {
+        "total": 108,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 18,
+          "presentation": 24,
+          "geometry": 56,
+          "edge-routing": 10
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 18,
+            "totalCost": 216
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 5,
+            "totalCost": 40
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 19,
+            "totalCost": 152
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 56,
+            "totalCost": 131
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 10,
+            "totalCost": 60
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 38,
+        "byLevel": {
+          "error": 0,
+          "warning": 25,
+          "info": 13
+        },
+        "items": [
+          {
+            "code": "compiler.missing_terraform_relationship",
+            "level": "warning",
+            "summary": "Terraform 참조 관계 미표현",
+            "sampleMessage": "Resource template-eks-container-app-cluster-policy의 Terraform 참조 대상 template-eks-container-app-cluster-role 관계를 proposal로 추가할 수 있습니다.",
+            "count": 25,
+            "penalty": 3500
+          },
+          {
+            "code": "compiler.inferred_containment",
+            "level": "info",
+            "summary": "비-Security Group containment 추론",
+            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 template-eks-container-app-cluster-security-group를 template-eks-container-app-vpc에 소속시켰습니다.",
+            "count": 11,
+            "penalty": 0
+          },
+          {
+            "code": "compiler.presentation_area_inferred",
+            "level": "info",
+            "summary": "시각 Area 표현 제안",
+            "sampleMessage": "Resource template-eks-container-app-cluster를 자식 Resource를 묶는 presentation Area로 표시합니다.",
+            "count": 2,
+            "penalty": 0
+          }
+        ]
+      },
+      "quality": {
+        "before": {
+          "score": 8831015050.650658,
+          "visualPenalty": 8831008350.650658,
+          "structuralPenalty": 3200,
+          "semanticDiagnosticPenalty": 3500,
+          "metrics": {
+            "backwardEdgeCount": 1,
+            "canvasArea": 2798400,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 4,
+            "edgeAreaTitleIntersectionCount": 2,
+            "edgeCrossingCount": 1,
+            "edgeNodeIntersectionCount": 6,
+            "emptySpaceRatio": 0.836387,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 420.85,
+            "knowledgeSiblingGap": 83.478,
+            "knowledgeViewportAspectRatio": 1.606,
+            "mainFlowContinuityError": 400,
+            "nodeOverlapCount": 5,
+            "parentBoundaryViolationCount": 3,
+            "repeatAlignmentError": 0,
+            "score": 8831008350.650658,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 4,
+            "terraformReferenceContainmentMismatchCount": 12,
+            "totalEdgeLength": 5536
+          }
+        },
+        "after": {
+          "score": 3542597701.924104,
+          "visualPenalty": 3542593062.924104,
+          "structuralPenalty": 540,
+          "semanticDiagnosticPenalty": 3500,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 1317600,
+            "canvasAspectRatioPenalty": 0.12963,
+            "compilationDistance": 599,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 6,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.977268,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 420.85,
+            "knowledgeSiblingGap": 83.478,
+            "knowledgeViewportAspectRatio": 1.606,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 1,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 176,
+            "score": 3542593062.924104,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 1,
+            "supportLaneIntrusionCount": 4,
+            "terraformReferenceContainmentMismatchCount": 3,
+            "totalEdgeLength": 4030
+          }
+        },
+        "compilationDistance": 599,
+        "scoreDelta": -5288417348.726553
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "brainboard:brainboard-training-aws-onboarding",
+        "repository:eks-container-app"
+      ]
+    },
+    {
+      "id": "repository:full-serverless-web-app",
+      "title": "Full Serverless Web App",
+      "source": "repository",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 95,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 16,
+          "presentation": 26,
+          "geometry": 48,
+          "edge-routing": 5
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 16,
+            "totalCost": 192
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 10,
+            "totalCost": 80
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 16,
+            "totalCost": 128
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 48,
+            "totalCost": 112
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 5,
+            "totalCost": 30
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 19,
+        "byLevel": {
+          "error": 0,
+          "warning": 19,
+          "info": 0
+        },
+        "items": [
+          {
+            "code": "compiler.missing_terraform_relationship",
+            "level": "warning",
+            "summary": "Terraform 참조 관계 미표현",
+            "sampleMessage": "Resource template-full-serverless-web-app-authorizer의 Terraform 참조 대상 template-full-serverless-web-app-api 관계를 proposal로 추가할 수 있습니다.",
+            "count": 19,
+            "penalty": 2660
+          }
+        ]
+      },
+      "quality": {
+        "before": {
+          "score": 13120814459.058823,
+          "visualPenalty": 13120811799.058823,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 2660,
+          "metrics": {
+            "backwardEdgeCount": 1,
+            "canvasArea": 1958400,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 1,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.906471,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 419.135,
+            "knowledgeSiblingGap": 75.2,
+            "knowledgeViewportAspectRatio": 2.125,
+            "mainFlowContinuityError": 320,
+            "nodeOverlapCount": 6,
+            "parentBoundaryViolationCount": 7,
+            "repeatAlignmentError": 0,
+            "score": 13120811799.058823,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 1,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 3568
+          }
+        },
+        "after": {
+          "score": 2600954.319603,
+          "visualPenalty": 2597752.319603,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 2660,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 580320,
+            "canvasAspectRatioPenalty": 0.490385,
+            "compilationDistance": 542,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.936476,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 3,
+            "knowledgeEdgeLength": 419.135,
+            "knowledgeSiblingGap": 75.2,
+            "knowledgeViewportAspectRatio": 2.125,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 2597752.319603,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 2464
+          }
+        },
+        "compilationDistance": 542,
+        "scoreDelta": -13118213504.73922
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-s3-api-gateway",
+        "repository:full-serverless-web-app",
+        "repository:minimal-serverless-api"
+      ]
+    },
+    {
+      "id": "repository:minimal-serverless-api",
+      "title": "Minimal Serverless API",
+      "source": "repository",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:split-support",
+      "changes": {
+        "total": 69,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 12,
+          "presentation": 15,
+          "geometry": 36,
+          "edge-routing": 6
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 12,
+            "totalCost": 144
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 3,
+            "totalCost": 24
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 12,
+            "totalCost": 96
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 36,
+            "totalCost": 84
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 6,
+            "totalCost": 36
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 14,
+        "byLevel": {
+          "error": 0,
+          "warning": 14,
+          "info": 0
+        },
+        "items": [
+          {
+            "code": "compiler.missing_terraform_relationship",
+            "level": "warning",
+            "summary": "Terraform 참조 관계 미표현",
+            "sampleMessage": "Resource template-minimal-serverless-api-deployment의 Terraform 참조 대상 template-minimal-serverless-api-api 관계를 proposal로 추가할 수 있습니다.",
+            "count": 14,
+            "penalty": 1960
+          }
+        ]
+      },
+      "quality": {
+        "before": {
+          "score": 3110257164.617337,
+          "visualPenalty": 3110255204.617337,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 1960,
+          "metrics": {
+            "backwardEdgeCount": 2,
+            "canvasArea": 1513600,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.911966,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 2,
+            "knowledgeEdgeLength": 323.653,
+            "knowledgeSiblingGap": 111.429,
+            "knowledgeViewportAspectRatio": 1.955,
+            "mainFlowContinuityError": 60,
+            "nodeOverlapCount": 3,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 3110255204.617337,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 1,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1822
+          }
+        },
+        "after": {
+          "score": 119029.254737,
+          "visualPenalty": 116685.254737,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 1960,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 233472,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 384,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.881579,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 2,
+            "knowledgeEdgeLength": 323.653,
+            "knowledgeSiblingGap": 111.429,
+            "knowledgeViewportAspectRatio": 1.955,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 116685.254737,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1368
+          }
+        },
+        "compilationDistance": 384,
+        "scoreDelta": -3110138135.362599
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-s3-api-gateway",
+        "repository:full-serverless-web-app",
+        "repository:minimal-serverless-api"
+      ]
+    },
+    {
+      "id": "repository:static-web-hosting",
+      "title": "Static Web Hosting",
+      "source": "repository",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "original",
+      "changes": {
+        "total": 0,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 0,
+          "presentation": 0,
+          "geometry": 0,
+          "edge-routing": 0
+        },
+        "groups": []
+      },
+      "diagnostics": {
+        "total": 4,
+        "byLevel": {
+          "error": 0,
+          "warning": 4,
+          "info": 0
+        },
+        "items": [
+          {
+            "code": "compiler.missing_terraform_relationship",
+            "level": "warning",
+            "summary": "Terraform 참조 관계 미표현",
+            "sampleMessage": "Resource template-static-web-hosting-bucket-policy의 Terraform 참조 대상 template-static-web-hosting-distribution 관계를 proposal로 추가할 수 있습니다.",
+            "count": 4,
+            "penalty": 560
+          }
+        ]
+      },
+      "quality": {
+        "before": {
+          "score": 160299844.571429,
+          "visualPenalty": 160299284.571429,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 560,
+          "metrics": {
+            "backwardEdgeCount": 4,
+            "canvasArea": 403200,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.817143,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 220.539,
+            "knowledgeSiblingGap": 91.429,
+            "knowledgeViewportAspectRatio": 1.75,
+            "mainFlowContinuityError": 94.857143,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 160299284.571429,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1292
+          }
+        },
+        "after": {
+          "score": 160299844.571429,
+          "visualPenalty": 160299284.571429,
+          "structuralPenalty": 0,
+          "semanticDiagnosticPenalty": 560,
+          "metrics": {
+            "backwardEdgeCount": 4,
+            "canvasArea": 403200,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 0,
+            "edgeCrossingCount": 0,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.817143,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 1,
+            "knowledgeEdgeLength": 220.539,
+            "knowledgeSiblingGap": 91.429,
+            "knowledgeViewportAspectRatio": 1.75,
+            "mainFlowContinuityError": 94.857143,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 0,
+            "score": 160299284.571429,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 0,
+            "totalEdgeLength": 1292
+          }
+        },
+        "compilationDistance": 0,
+        "scoreDelta": 0
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-secure-s3-bucket",
+        "brainboard:brainboard-aws-serverless-cdn",
+        "repository:static-web-hosting"
+      ]
+    },
+    {
+      "id": "repository:three-tier-web-app",
+      "title": "3-Tier Web App",
+      "source": "repository",
+      "compilerVersion": "architecture-board-compiler/v2",
+      "candidateId": "compiled:presentation:support-above",
+      "changes": {
+        "total": 169,
+        "byKind": {
+          "resource": 0,
+          "relationship": 0,
+          "configuration": 0,
+          "containment": 28,
+          "presentation": 34,
+          "geometry": 89,
+          "edge-routing": 18
+        },
+        "groups": [
+          {
+            "action": "modify",
+            "kind": "containment",
+            "count": 28,
+            "totalCost": 336
+          },
+          {
+            "action": "remove",
+            "kind": "presentation",
+            "count": 4,
+            "totalCost": 32
+          },
+          {
+            "action": "modify",
+            "kind": "presentation",
+            "count": 30,
+            "totalCost": 240
+          },
+          {
+            "action": "modify",
+            "kind": "geometry",
+            "count": 89,
+            "totalCost": 208
+          },
+          {
+            "action": "modify",
+            "kind": "edge-routing",
+            "count": 18,
+            "totalCost": 108
+          }
+        ]
+      },
+      "diagnostics": {
+        "total": 72,
+        "byLevel": {
+          "error": 0,
+          "warning": 46,
+          "info": 26
+        },
+        "items": [
+          {
+            "code": "compiler.missing_terraform_relationship",
+            "level": "warning",
+            "summary": "Terraform 참조 관계 미표현",
+            "sampleMessage": "Resource template-three-tier-web-app-alb-security-group의 Terraform 참조 대상 template-three-tier-web-app-vpc 관계를 proposal로 추가할 수 있습니다.",
+            "count": 46,
+            "penalty": 6440
+          },
+          {
+            "code": "compiler.inferred_containment",
+            "level": "info",
+            "summary": "비-Security Group containment 추론",
+            "sampleMessage": "contains/hosts 관계 또는 Terraform 참조로 template-three-tier-web-app-alb-security-group를 template-three-tier-web-app-vpc에 소속시켰습니다.",
+            "count": 25,
+            "penalty": 0
+          },
+          {
+            "code": "compiler.presentation_area_inferred",
+            "level": "info",
+            "summary": "시각 Area 표현 제안",
+            "sampleMessage": "Resource template-three-tier-web-app-db-subnet-group를 자식 Resource를 묶는 presentation Area로 표시합니다.",
+            "count": 1,
+            "penalty": 0
+          }
+        ]
+      },
+      "quality": {
+        "before": {
+          "score": 15890249603.802761,
+          "visualPenalty": 15890236563.802761,
+          "structuralPenalty": 6600,
+          "semanticDiagnosticPenalty": 6440,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 3244800,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 0,
+            "containmentMismatchCount": 6,
+            "edgeAreaTitleIntersectionCount": 4,
+            "edgeCrossingCount": 3,
+            "edgeNodeIntersectionCount": 13,
+            "emptySpaceRatio": 0.542998,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 412.563,
+            "knowledgeSiblingGap": 58.182,
+            "knowledgeViewportAspectRatio": 1.333,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 13,
+            "parentBoundaryViolationCount": 1,
+            "repeatAlignmentError": 0,
+            "score": 15890236563.802761,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 14,
+            "terraformReferenceContainmentMismatchCount": 28,
+            "totalEdgeLength": 8302
+          }
+        },
+        "after": {
+          "score": 2812663116.279522,
+          "visualPenalty": 2812655212.279522,
+          "structuralPenalty": 540,
+          "semanticDiagnosticPenalty": 6440,
+          "metrics": {
+            "backwardEdgeCount": 0,
+            "canvasArea": 2354704,
+            "canvasAspectRatioPenalty": 0,
+            "compilationDistance": 924,
+            "containmentMismatchCount": 0,
+            "edgeAreaTitleIntersectionCount": 13,
+            "edgeCrossingCount": 38,
+            "edgeNodeIntersectionCount": 0,
+            "emptySpaceRatio": 0.982388,
+            "invalidParentCount": 0,
+            "knowledgeContainmentDepth": 4,
+            "knowledgeEdgeLength": 412.563,
+            "knowledgeSiblingGap": 58.182,
+            "knowledgeViewportAspectRatio": 1.333,
+            "mainFlowContinuityError": 0,
+            "nodeOverlapCount": 0,
+            "parentBoundaryViolationCount": 0,
+            "repeatAlignmentError": 218,
+            "score": 2812655212.279522,
+            "securityGroupParentCount": 0,
+            "siblingAreaOverlapCount": 0,
+            "supportLaneIntrusionCount": 0,
+            "terraformReferenceContainmentMismatchCount": 3,
+            "totalEdgeLength": 18260
+          }
+        },
+        "compilationDistance": 924,
+        "scoreDelta": -13077586487.52324
+      },
+      "referenceTemplateIds": [
+        "brainboard:brainboard-aws-load-balancer-target-group",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az",
+        "repository:three-tier-web-app"
+      ]
+    }
+  ],
+  "unavailableTemplates": [
+    {
+      "id": "brainboard:brainboard-aws-instance-db-multiple-networks",
+      "title": "AWS instance and DB with multiple networks",
+      "source": "brainboard",
+      "reason": "Brainboard template clone failed: Create architecture returned HTTP 400 and Clone into current architecture left the recovery board unchanged"
+    }
+  ],
+  "anomalies": {
+    "diagnosticTemplateIds": [
+      "repository:ecs-fargate-container-app",
+      "repository:eks-container-app",
+      "repository:full-serverless-web-app",
+      "repository:minimal-serverless-api",
+      "repository:static-web-hosting",
+      "repository:three-tier-web-app"
+    ],
+    "errorDiagnosticTemplateIds": [],
+    "unchangedProposalTemplateIds": [
+      "repository:static-web-hosting"
+    ],
+    "worsenedQualityTemplateIds": []
+  }
+}

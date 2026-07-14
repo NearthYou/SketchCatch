@@ -27,7 +27,7 @@ import {
 } from "../workspace/workspace-ai-diagram-adapter";
 import { architectureBoardKnowledge } from "./architecture-board-knowledge";
 
-export const ARCHITECTURE_BOARD_COMPILER_VERSION = "architecture-board-compiler/v1";
+export const ARCHITECTURE_BOARD_COMPILER_VERSION = "architecture-board-compiler/v2";
 
 export type {
   ArchitectureBoardCompilationChange,

@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-f34db1a8",
+  hash: "fnv1a-65dc8fd2",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -877,7 +877,6 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
     {
       "id": "repository:ecs-fargate-container-app",
       "nodeTypes": [
-        "aws-availability-zone",
         "aws-region",
         "aws_cloudwatch_log_group",
         "aws_ecr_repository",
@@ -895,29 +894,29 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "aws_security_group",
         "aws_subnet",
         "aws_vpc",
-        "design-group",
-        "design-user-client"
+        "design-user-client",
+        "design_group"
       ],
-      "nodeCount": 26,
+      "nodeCount": 24,
       "edgeCount": 18,
       "areaCount": 1,
-      "parentedNodeCount": 24,
+      "parentedNodeCount": 22,
       "maxContainmentDepth": 3,
       "meanAreaChildDensity": 2,
-      "meanAreaPadding": 102.333,
-      "meanSiblingGap": 81.6,
-      "meanVerticalGap": 36.8,
-      "meanNodeWidth": 364,
-      "meanNodeHeight": 238.154,
-      "meanAspectRatio": 1.456,
-      "meanCaptionWidth": 98.538,
-      "meanZIndex": 0.769,
-      "meanEdgeLength": 426.615,
+      "meanAreaPadding": 71.636,
+      "meanSiblingGap": 83.478,
+      "meanVerticalGap": 27.826,
+      "meanNodeWidth": 302.667,
+      "meanNodeHeight": 179.667,
+      "meanAspectRatio": 1.459,
+      "meanCaptionWidth": 104.417,
+      "meanZIndex": 0.833,
+      "meanEdgeLength": 378.829,
       "meanEdgeWaypointCount": 0,
       "routedEdgeRatio": 0,
-      "horizontalFlowRatio": 0.667,
-      "supportNodeRatio": 0.192,
-      "viewportAspectRatio": 1.806,
+      "horizontalFlowRatio": 0.889,
+      "supportNodeRatio": 0.208,
+      "viewportAspectRatio": 2.364,
       "whitespaceRatio": 0
     },
     {
@@ -935,7 +934,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "aws_security_group",
         "aws_subnet",
         "aws_vpc",
-        "design-group",
+        "design_group",
         "kubernetes_deployment",
         "kubernetes_namespace",
         "kubernetes_service"
@@ -982,9 +981,9 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "aws_iam_role_policy",
         "aws_lambda_function",
         "aws_lambda_permission",
-        "design-group",
         "design-source-repository",
-        "design-user-client"
+        "design-user-client",
+        "design_group"
       ],
       "nodeCount": 26,
       "edgeCount": 8,
@@ -1024,8 +1023,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "aws_iam_role_policy",
         "aws_lambda_function",
         "aws_lambda_permission",
-        "design-group",
-        "design-user-client"
+        "design-user-client",
+        "design_group"
       ],
       "nodeCount": 15,
       "edgeCount": 7,
