@@ -12,6 +12,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Compact authentication card chrome
+
+- Reduced the shared login, signup, and password-reset card top and bottom spacing: vertical card padding, brand-to-title spacing, title-to-form spacing, and footer switch spacing.
+- Preserved card width, form control spacing, field order, and safe viewport centering while applying a stronger compact adjustment below 640px.
+- Verification passed: focused auth tests 12/12, Web full 1,180/1,180 including password-reset route coverage, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The next action is visual confirmation in the running local Web server if additional pixel tuning is requested.
+
 ### 2026-07-14 - Simplify the signup page brand and consent layout
 
 - Removed the signup top brand bar and optional eyebrow/description copy, then reused the centered card brand with its `/` home link.

@@ -22,7 +22,7 @@ test("login keeps the home brand inside the card without extra intro copy", () =
   assert.match(authShellSource, /brandPlacement === "topbar"/);
   assert.match(authShellSource, /brandPlacement === "panel"/);
   assert.match(authShellSource, /<ProductBrand href="\/" \/>/);
-  assert.match(authStylesSource, /\.authPanelBrand\s*\{[^}]*margin-bottom:\s*32px;/s);
+  assert.match(authStylesSource, /\.authPanelBrand\s*\{[^}]*margin-bottom:\s*24px;/s);
 });
 
 test("login card stays safely centered in the viewport", () => {
