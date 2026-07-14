@@ -172,6 +172,15 @@ run "routes_directly_to_cost_scaled_services" {
     )
     error_message = "API and web autoscaling must keep the cost-first min=1, max=2 range."
   }
+
+  assert {
+    condition = (
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_origins, "https://sketchcatch.example") &&
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_origins, "http://localhost:3000") &&
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_methods, "PUT")
+    )
+    error_message = "Artifact bucket CORS must allow browser uploads from the configured public site and approved development origins."
+  }
 }
 
 run "https_routes_and_enables_worker_dispatch" {

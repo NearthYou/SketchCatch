@@ -71,6 +71,7 @@ import {
 } from "./pre-deployment-diagnostics";
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
+import { getDeploymentPreparationErrorMessage } from "./deployment-preparation-error";
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
@@ -681,7 +682,11 @@ export function DirectDeploymentScreen({
       setRequestState("idle");
     } catch (error) {
       setRequestState("error");
-      setErrorMessage(getApiErrorMessage(error, "프로젝트 저장과 배포 준비에 실패했습니다."));
+      const fallbackMessage = getApiErrorMessage(
+        error,
+        "프로젝트 저장과 배포 준비에 실패했습니다."
+      );
+      setErrorMessage(getDeploymentPreparationErrorMessage(error, fallbackMessage));
       return;
     }
 

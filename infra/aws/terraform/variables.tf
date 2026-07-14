@@ -260,6 +260,20 @@ variable "artifact_bucket_name" {
   type        = string
 }
 
+variable "artifact_bucket_additional_cors_origins" {
+  description = "Additional browser origins allowed to use presigned artifact uploads. The production public base URL is always included."
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+
+  validation {
+    condition = alltrue([
+      for origin in var.artifact_bucket_additional_cors_origins :
+      can(regex("^https?://[^/]+$", origin))
+    ])
+    error_message = "Artifact bucket CORS origins must be HTTP(S) origins without paths or trailing slashes."
+  }
+}
+
 variable "rds_endpoint" {
   description = "RDS endpoint value exposed to the API runtime for diagnostics/config parity."
   type        = string
