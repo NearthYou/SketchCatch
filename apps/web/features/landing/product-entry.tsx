@@ -88,13 +88,13 @@ export function ProductEntry() {
             href="#workflow"
             onClick={(event) => handleSectionNavigation(event, "workflow", "#workflow", "center")}
           >
-            작동 방식
+            Workflow
           </a>
           <a
             href="#workspace"
             onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
           >
-            워크스페이스
+            Workspace
           </a>
           <a
             href="#reverse"
@@ -106,7 +106,7 @@ export function ProductEntry() {
             href="#deployment"
             onClick={(event) => handleSectionNavigation(event, "deployment-content", "#deployment", "center")}
           >
-            배포 경로
+            Deployment
           </a>
         </nav>
 
