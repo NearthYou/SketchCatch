@@ -1572,6 +1572,7 @@ export type {
 
 export {
   buildTemplateDiagramJson,
+  createEcsFargateRuntimeNames,
   getTemplateDefinitionById,
   REPOSITORY_TEMPLATE_IDS,
   TEMPLATE_IDS,
@@ -1579,6 +1580,7 @@ export {
 } from "./template-definitions.ts";
 export type {
   BuildTemplateDiagramInput,
+  EcsFargateRuntimeNames,
   RepositoryTemplateId,
   TemplateDefinition,
   TemplateId,

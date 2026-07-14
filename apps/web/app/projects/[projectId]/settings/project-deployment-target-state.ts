@@ -8,6 +8,7 @@ import type {
   RuntimeTargetKind,
   SourceRepository
 } from "@sketchcatch/types";
+import { createEcsFargateRuntimeNames } from "@sketchcatch/types";
 
 export type ProjectDeploymentTargetDraft = {
   connectionId: string;
@@ -151,18 +152,18 @@ export function createEcsFargateDeploymentDefaults(
   | "healthCheckPath"
   | "outputUrl"
 > {
-  const projectSlug = createProjectSlug(input.projectName);
+  const runtimeNames = createEcsFargateRuntimeNames(input.projectName);
 
   return {
     runtimeTargetKind: "ecs_fargate",
     sourceRoot: input.sourceRoot.trim() || ".",
     evidencePath: input.dockerfilePath.trim() || "Dockerfile",
     commitSha: input.repositoryRevision.trim().toLowerCase(),
-    codeBuildProjectName: `${projectSlug}-app-build`,
-    ecrRepositoryName: `${projectSlug}-app`,
-    clusterName: `${projectSlug}-cluster`,
-    serviceName: `${projectSlug}-service`,
-    containerName: "web",
+    codeBuildProjectName: `${runtimeNames.ecrRepositoryName}-build`,
+    ecrRepositoryName: runtimeNames.ecrRepositoryName,
+    clusterName: runtimeNames.clusterName,
+    serviceName: runtimeNames.serviceName,
+    containerName: runtimeNames.containerName,
     healthCheckPath: "/",
     outputUrl: ""
   };
@@ -403,18 +404,6 @@ function hasCompleteEcsCoordinates(draft: ProjectDeploymentTargetDraft): boolean
   ];
   if (values.some((value) => value.trim().length === 0)) return false;
   return !draft.outputUrl.trim() || hasSafeHttpsOutputUrl(draft.outputUrl);
-}
-
-function createProjectSlug(projectName: string): string {
-  const slug = projectName
-    .normalize("NFKD")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "")
-    .slice(0, 48)
-    .replace(/-+$/gu, "");
-
-  return slug || "sketchcatch";
 }
 
 function hasCompleteLambdaCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
