@@ -5,11 +5,12 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/gg/409-architecture-board-compiler-chat`.
-- Latest `origin/dev` is merged at `cb3ead40`; the branch contains the current Workspace AI Chat and Architecture Board Compiler commits.
-- 000 Architecture Board Compiler is implemented as `architecture-board-compiler/v3`: versioned 29+1 Template knowledge, original/presentation/semantic candidates, semantic containment repair, complete visible diff recording, and source-exact compiled variants are in place.
-- AI Draft, Board automatic organization, Reverse Engineering, and Template review use the same Compiler interface. AI and Repository starts show a proposal summary and only save after `Board에 적용`.
-- Latest focused Compiler/AI/Repository suite passed 27/27; knowledge and evidence checks, `pnpm harness:check`, `pnpm lint`, and root `pnpm typecheck` passed.
-- Known unrelated baseline: `pnpm test` stops at three existing `packages/types` three-tier Template contract failures; `pnpm build` stops at the pre-existing missing `apps/web/.codegraph` path.
+- Latest `origin/dev` is merged at `c677ed61`; the branch contains the current Workspace AI Chat and Architecture Board Compiler commits.
+- 000 Architecture Board Compiler is implemented as `architecture-board-compiler/v3`: versioned 29+1 Template knowledge, bounded nearest-case spacing candidates with anomaly regression rejection, true source/requested-original/presentation/semantic candidates, semantic containment repair, complete visible diff recording, and source-exact compiled variants are in place.
+- AI Draft, Board automatic organization, Reverse Engineering, and Template review use the same Compiler interface. Reverse Engineering forwards scan findings, exclusions, and provider errors as Compiler diagnostics. AI and Repository starts show a proposal summary and only save after `Board에 적용`.
+- Template variants are source-fingerprint-bound and visual-only; nonvisual proposals remain on hold. Evidence reports carry source/compiled SHA-256 fingerprints, and a dev-only real Board route plus an eight-entry pending review queue defines manual before/after capture without fabricating screenshots or review decisions.
+- Latest focused Compiler/Reverse suite passed 28/28; knowledge/layout suite passed 46/46; evidence route/report/review suite passed 6/6; evidence and review artifact checks, `pnpm harness:check`, and `pnpm lint` passed.
+- Known unrelated baseline: root `pnpm typecheck` stops at the uncommitted `DirectDeploymentScreen.tsx` missing `canStartDeploymentReview`; `pnpm test` stops at three existing `packages/types` three-tier Template contract failures; `pnpm build` stops at the pre-existing missing `apps/web/.codegraph` path.
 - No migration, DB schema change, Terraform execution, cloud mutation, or Git/CI/CD handoff was performed.
 - The 001 Workspace AI Chat commit is already present independently on this integration branch. Uncommitted clipboard work remains outside the 000 Compiler commit.
 - Incoming dev includes a least-privilege `aws-connections/*` S3 permission repair and Repository ECS live-deployment profile support. Neither Terraform change has been applied by this branch.
@@ -44,6 +45,15 @@ Short English-only working log for the current agent context. Older records are 
 - Updated the 000 design record with implemented behavior and verification commands. `ARCHITECTURE-BOARD-COMPILER-409` remains in progress because the aggregate feature includes separately owned 001 AI Chat completion.
 - Verification passed: `pnpm harness:check`, focused 27-test Compiler/AI/Repository suite, `pnpm architecture-board-knowledge:check`, `pnpm architecture-board-evidence:generate`, `pnpm architecture-board-evidence:check`, `pnpm lint`, and `pnpm typecheck`.
 - Known baselines: root `pnpm test` fails only in three existing three-tier Template contract checks in `packages/types`; root `pnpm build` fails before compilation because `apps/web/.codegraph` is absent. The unauthenticated local browser redirected to login, so visual review was covered by component/source contracts rather than a live authenticated flow.
+
+### 2026-07-15 - Harden Architecture Board Compiler evidence and approval boundaries
+
+- Expanded the 29+1 knowledge artifact from score-only evidence into bounded nearest-case spacing candidates. A profile cannot win if it worsens node/Area overlap, boundary violations, edge obstruction/crossing, backward flow, or support-lane intrusion compared with the ordinary layout baseline.
+- Preserved the real source graph as `original` when semantic operations exist, introduced `requested-original` for the authorized graph, and prevented AI Draft config/relationship changes from being silently paired with a stale same-shape Board.
+- Forwarded Reverse Engineering scan findings, analysis exclusions, and provider scan errors through the Compiler diagnostic context for both replace and append proposals.
+- Added source-fingerprint-bound, visual-only Template review variants; semantic/relationship/configuration/containment proposals cannot become a gallery overlay. Stale approvals fall back to authored source.
+- Added deterministic SHA-256 evidence fingerprints, an eight-entry source-balanced pending human review manifest, and `/dev/compiler-evidence` to render real before/after Boards for manual WebP capture. No screenshot or reviewer decision was fabricated.
+- Verification: focused Compiler/Reverse tests passed 28/28; knowledge/layout tests passed 46/46; evidence route/report/review tests passed 6/6; evidence and review artifact checks, harness, and lint passed. Root typecheck remains blocked only by an unrelated uncommitted `DirectDeploymentScreen` symbol error; full test and build retain the known baseline failures.
 
 ### 2026-07-15 - Rebuild the Workspace AI launcher
 
