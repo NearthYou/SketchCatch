@@ -1,5 +1,6 @@
 import type {
   AnalyzeSourceRepositoryResponse,
+  GitHubInstalledRepositoryCandidate,
   SourceRepository
 } from "@sketchcatch/types";
 
@@ -40,6 +41,16 @@ export function applyRepositoryAnalysis(
   );
 }
 
-export function shouldLoadProjectSettings(authStatus: string): boolean {
+export function shouldLoadProjectSourceRepository(authStatus: string): boolean {
   return authStatus === "authenticated";
+}
+
+export function shouldConfirmRepositoryChange(
+  activeRepository: SourceRepository | null,
+  candidate: GitHubInstalledRepositoryCandidate
+): boolean {
+  return Boolean(
+    activeRepository &&
+      activeRepository.githubRepositoryId !== candidate.githubRepositoryId
+  );
 }

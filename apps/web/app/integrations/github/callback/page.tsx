@@ -57,6 +57,10 @@ export default function GitHubIntegrationCallbackPage() {
       try {
         const result = await listGitHubInstallationRepositories({ installationId, state });
         if (cancelled) return;
+        if (result.scope === "account") {
+          router.replace("/dashboard/settings?github=connected");
+          return;
+        }
         setCallbackState({
           installationId,
           projectId: result.projectId,
@@ -105,11 +109,9 @@ export default function GitHubIntegrationCallbackPage() {
     }
   }
 
-  // Repository access expansion is managed from project settings.
-  async function openProjectGitHubSettings(): Promise<void> {
-    if (callbackState.status !== "ready") return;
-
-    router.push(createProjectGitHubSettingsHref(callbackState.projectId));
+  // GitHub App installation과 repository 권한은 전역 설정에서 관리합니다.
+  function openGitHubSettings(): void {
+    router.push("/dashboard/settings");
   }
 
   return (
@@ -151,7 +153,7 @@ export default function GitHubIntegrationCallbackPage() {
           <>
             <div className={styles.listHeader}>
               <span>선택 가능 {selectableCount}개</span>
-              <button onClick={() => void openProjectGitHubSettings()} type="button">
+              <button onClick={openGitHubSettings} type="button">
                 <Settings2 aria-hidden="true" size={15} />
                 Manage permissions in settings
               </button>
@@ -176,7 +178,7 @@ export default function GitHubIntegrationCallbackPage() {
             {selectableCount === 0 ? (
               <div className={styles.emptyState}>
                 <strong>선택 가능한 Repository가 없습니다.</strong>
-                <span>Manage repository access from project settings.</span>
+                <span>Manage repository access from Dashboard settings.</span>
               </div>
             ) : null}
           </>
@@ -184,8 +186,4 @@ export default function GitHubIntegrationCallbackPage() {
       </section>
     </main>
   );
-}
-
-function createProjectGitHubSettingsHref(projectId: string): string {
-  return `/dashboard/projects/${encodeURIComponent(projectId)}/settings?tab=github`;
 }

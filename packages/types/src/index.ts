@@ -559,10 +559,26 @@ export type ListGitHubInstallationRepositoriesRequest = {
   state: string;
 };
 
-export type ListGitHubInstallationRepositoriesResponse = {
-  projectId: string;
-  repositories: GitHubRepositoryCandidate[];
+export type GitHubInstallationConnection = {
+  installationId: string;
+  accountLogin: string;
+  accountType: string | null;
+  repositorySelection: "all" | "selected" | null;
+  repositoryCount: number;
+  htmlUrl: string | null;
 };
+
+export type ListGitHubInstallationsResponse = {
+  installations: GitHubInstallationConnection[];
+};
+
+export type ListGitHubInstallationRepositoriesResponse =
+  | { scope: "account" }
+  | {
+      scope: "project";
+      projectId: string;
+      repositories: GitHubRepositoryCandidate[];
+    };
 
 export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
   installationId: string;

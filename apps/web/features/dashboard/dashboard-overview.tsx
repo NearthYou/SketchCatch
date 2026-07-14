@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Cloud, GitBranch } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { ProductState } from "../../components/ui/ProductState";
@@ -190,32 +190,6 @@ export function DashboardOverview() {
           )}
         </section>
       </div>
-
-      <section className="dashboardConnectionBand" aria-labelledby="connections-title">
-        <div>
-          <h2 id="connections-title">외부 연결</h2>
-        </div>
-        <div className="dashboardConnectionItem">
-          <Cloud aria-hidden="true" size={20} />
-          <div>
-            <strong>AWS Role</strong>
-            <span>
-              {verifiedAwsConnectionCount === null
-                ? "상태를 확인하지 못했습니다."
-                : `검증된 연결 ${verifiedAwsConnectionCount}개`}
-            </span>
-          </div>
-          <Link href="/dashboard/settings">설정</Link>
-        </div>
-        <div className="dashboardConnectionItem">
-          <GitBranch aria-hidden="true" size={20} />
-          <div>
-            <strong>Source Repository</strong>
-            <span>활성 연결 {data.connectedRepositoryCount ?? 0}개</span>
-          </div>
-          <Link href="/dashboard/projects">프로젝트별 설정</Link>
-        </div>
-      </section>
     </div>
   );
 }

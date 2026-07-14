@@ -21,6 +21,7 @@ import {
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
 import styles from "../dashboard-tools.module.css";
+import { GitHubAccountSettings } from "./github-account-settings";
 
 type SettingsLoadState = "loading" | "ready" | "error";
 
@@ -133,14 +134,6 @@ export function SettingsDashboardClient() {
     void loadConnections();
   }, []);
 
-  if (loadState === "loading") {
-    return <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="환경설정 불러오는 중" />;
-  }
-
-  if (loadState === "error" && connections.length === 0) {
-    return <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="환경설정을 불러오지 못했습니다" />;
-  }
-
   return (
     <div className="dashboardRouteStack">
       <header className="dashboardPageHeader dashboardPageHeaderCompact">
@@ -148,40 +141,50 @@ export function SettingsDashboardClient() {
         <button className={styles.iconAction} aria-label="연결 새로고침" onClick={() => void loadConnections()} title="새로고침" type="button"><RefreshCw size={17} /></button>
       </header>
 
-      {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
+      {loadState === "loading" ? (
+        <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
+      ) : loadState === "error" && connections.length === 0 ? (
+        <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
+      ) : (
+        <>
+          {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
-      <section className={styles.settingsSection}>
-        <header><Cloud size={20} /><div><h2>AWS 계정 연결</h2><p>Access Key 대신 한 번 만든 Role을 사용합니다.</p></div></header>
-        <div className={styles.controlRow}>
-          <div className={styles.controlField}>
-            <span>기본 region</span>
-            <SelectMenu
-              ariaLabel="기본 region 선택"
-              emptyLabel="region 선택"
-              onChange={setRegion}
-              options={AWS_REGION_OPTIONS}
-              size="large"
-              tone="surface"
-              value={region}
-            />
-          </div>
-          <button className={styles.primaryAction} disabled={actionPending} onClick={() => void createConnection()} type="button">새 AWS 연결</button>
-        </div>
-      </section>
+          <section className={styles.settingsSection}>
+            <header><Cloud size={20} /><div><h2>AWS 계정 연결</h2><p>Access Key 대신 한 번 만든 Role을 사용합니다.</p></div></header>
+            <div className={styles.controlRow}>
+              <div className={styles.controlField}>
+                <span>기본 region</span>
+                <SelectMenu
+                  ariaLabel="기본 region 선택"
+                  emptyLabel="region 선택"
+                  onChange={setRegion}
+                  options={AWS_REGION_OPTIONS}
+                  size="large"
+                  tone="surface"
+                  value={region}
+                />
+              </div>
+              <button className={styles.primaryAction} disabled={actionPending} onClick={() => void createConnection()} type="button">새 AWS 연결</button>
+            </div>
+          </section>
 
-      {setup && cloudFormation ? (
-        <section className={styles.setupSection}>
-          <div><span>1</span><div><strong>CloudFormation으로 Role 만들기</strong><p>{cloudFormation.roleName}</p></div></div>
-          {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS Console 열기 <ExternalLink size={15} /></a> : <pre>{cloudFormation.templateBody}</pre>}
-          <div><span>2</span><label><strong>AWS 계정 ID 확인</strong><input inputMode="numeric" maxLength={12} onChange={(event) => setAccountId(event.target.value.replace(/\D/g, ""))} placeholder="12자리 계정 ID" value={accountId} /></label></div>
-          <button className={styles.primaryAction} disabled={actionPending || !/^\d{12}$/.test(accountId)} onClick={() => void verifyCreatedRole()} type="button">Role 연결 확인</button>
-        </section>
-      ) : null}
+          {setup && cloudFormation ? (
+            <section className={styles.setupSection}>
+              <div><span>1</span><div><strong>CloudFormation으로 Role 만들기</strong><p>{cloudFormation.roleName}</p></div></div>
+              {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS Console 열기 <ExternalLink size={15} /></a> : <pre>{cloudFormation.templateBody}</pre>}
+              <div><span>2</span><label><strong>AWS 계정 ID 확인</strong><input inputMode="numeric" maxLength={12} onChange={(event) => setAccountId(event.target.value.replace(/\D/g, ""))} placeholder="12자리 계정 ID" value={accountId} /></label></div>
+              <button className={styles.primaryAction} disabled={actionPending || !/^\d{12}$/.test(accountId)} onClick={() => void verifyCreatedRole()} type="button">Role 연결 확인</button>
+            </section>
+          ) : null}
 
-      <section className={styles.connectionList}>
-        <div className={styles.sectionHeading}><h2>연결된 AWS 계정</h2><span>{connections.length}개</span></div>
-        {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : null}<button data-danger={deleteCandidateId === connection.id} disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />{deleteCandidateId === connection.id ? "한 번 더 눌러 삭제" : "삭제"}</button></div></article>)}
-      </section>
+          <section className={styles.connectionList}>
+            <div className={styles.sectionHeading}><h2>연결된 AWS 계정</h2><span>{connections.length}개</span></div>
+            {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : null}<button data-danger={deleteCandidateId === connection.id} disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />{deleteCandidateId === connection.id ? "한 번 더 눌러 삭제" : "삭제"}</button></div></article>)}
+          </section>
+        </>
+      )}
+
+      <GitHubAccountSettings />
     </div>
   );
 }

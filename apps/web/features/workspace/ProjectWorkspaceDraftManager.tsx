@@ -105,7 +105,6 @@ export function ProjectWorkspaceDraftManager({
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
-  const [saveAndDeployError, setSaveAndDeployError] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
     useState<TerraformIssueAiRequest | null>(null);
@@ -343,26 +342,9 @@ export function ProjectWorkspaceDraftManager({
     void flushDraftToServer("external");
   }, [flushDraftToServer]);
 
-  const saveAndOpenDeployment = useCallback(async (): Promise<void> => {
-    setSaveAndDeployError("");
-    const result = await flushDraftToServer("manual");
-
-    if (!result.ok) {
-      setSaveAndDeployError("프로젝트 저장에 실패해 배포를 시작하지 않았습니다.");
-      return;
-    }
-
+  const saveAndOpenDeployment = useCallback((): void => {
     setDeploymentOpenRequestId((requestId) => requestId + 1);
-  }, [flushDraftToServer]);
-
-  useEffect(() => {
-    if (!saveAndDeployError) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => setSaveAndDeployError(""), 3_000);
-    return () => window.clearTimeout(timer);
-  }, [saveAndDeployError]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -650,11 +632,6 @@ export function ProjectWorkspaceDraftManager({
         )}
         saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
       />
-      {saveAndDeployError ? (
-        <div className={styles.saveAndDeployErrorToast} role="alert">
-          {saveAndDeployError}
-        </div>
-      ) : null}
     </>
   );
 }

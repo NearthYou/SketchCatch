@@ -17,6 +17,103 @@ const COMMIT_SHA = /^[0-9a-f]{40}$/i;
 const SHA256 = /^[0-9a-f]{64}$/i;
 const ARTIFACT_DIGEST = /^sha256:[0-9a-f]{64}$/i;
 
+export const SANDBOX_ORCHESTRATION_STAGES = Object.freeze([
+  Object.freeze({ id: "prepare", label: "준비", units: Object.freeze(["preflight"]) }),
+  Object.freeze({
+    id: "deploy",
+    label: "배포·관측",
+    units: Object.freeze([
+      ...REQUIRED_DIRECT_SCOPES.map((scope) => `direct:${scope}`),
+      ...REQUIRED_GITOPS_RUNTIMES.map((runtime) => `gitops:${runtime}`),
+      "observation",
+      "notifications"
+    ])
+  }),
+  Object.freeze({ id: "finalize", label: "정리·검증", units: Object.freeze(["cleanup", "verify"]) })
+]);
+
+export function createSandboxOrchestrationPlan() {
+  return {
+    kind: "sketchcatch_deployment_sandbox_plan",
+    schemaVersion: 1,
+    implementationStatus: "complete",
+    acceptanceStatus: "pending",
+    stages: SANDBOX_ORCHESTRATION_STAGES.map((stage) => ({
+      id: stage.id,
+      label: stage.label,
+      units: [...stage.units]
+    }))
+  };
+}
+
+export async function runSandboxOrchestration(adapters, options = {}) {
+  const now = options.now ?? (() => new Date());
+  const events = [];
+  const record = (stage, unit, status) => {
+    const event = { stage, unit, status, observedAt: now().toISOString() };
+    events.push(event);
+    options.onEvent?.(event);
+  };
+  const result = (acceptanceStatus, errorCode = null) => ({
+    ...createSandboxOrchestrationPlan(),
+    acceptanceStatus,
+    errorCode,
+    events
+  });
+
+  if (!adapters) return result("blocked", "adapters_missing");
+
+  record("prepare", "preflight", "running");
+  const preflight = await adapters.preflight();
+  record("prepare", "preflight", preflight?.ready === true ? "succeeded" : "failed");
+  if (preflight?.ready !== true) return result("blocked", "preflight_failed");
+
+  let failureCode = null;
+  try {
+    for (const scope of REQUIRED_DIRECT_SCOPES) {
+      const unit = `direct:${scope}`;
+      record("deploy", unit, "running");
+      await adapters.runDirect(scope);
+      record("deploy", unit, "succeeded");
+    }
+    for (const runtime of REQUIRED_GITOPS_RUNTIMES) {
+      const unit = `gitops:${runtime}`;
+      record("deploy", unit, "running");
+      await adapters.runGitOps(runtime);
+      record("deploy", unit, "succeeded");
+    }
+    for (const [unit, operation] of [
+      ["observation", adapters.collectObservation],
+      ["notifications", adapters.collectNotifications]
+    ]) {
+      record("deploy", unit, "running");
+      await operation();
+      record("deploy", unit, "succeeded");
+    }
+  } catch (error) {
+    failureCode = hasText(error?.code) ? error.code : "execution_failed";
+    const running = events.findLast((event) => event.status === "running");
+    if (running) record(running.stage, running.unit, "failed");
+  } finally {
+    record("finalize", "cleanup", "running");
+    try {
+      await adapters.cleanup();
+      record("finalize", "cleanup", "succeeded");
+    } catch {
+      failureCode ??= "cleanup_failed";
+      record("finalize", "cleanup", "failed");
+    }
+  }
+
+  if (failureCode) return result("failed", failureCode);
+  record("finalize", "verify", "running");
+  const verification = await adapters.verify();
+  record("finalize", "verify", verification?.valid === true ? "succeeded" : "failed");
+  return verification?.valid === true
+    ? result("passed")
+    : result("failed", "verification_failed");
+}
+
 function hasText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -684,7 +781,12 @@ export async function runSandboxCli(args = process.argv.slice(2), env = process.
     }
   }
 
-  write("Usage: node scripts/smoke/deployment-sandbox-e2e.mjs <preflight|verify REPORT_PATH>\n");
+  if (command === "plan") {
+    write(`${JSON.stringify(createSandboxOrchestrationPlan(), null, 2)}\n`);
+    return 0;
+  }
+
+  write("Usage: node scripts/smoke/deployment-sandbox-e2e.mjs <plan|preflight|verify REPORT_PATH>\n");
   return 64;
 }
 

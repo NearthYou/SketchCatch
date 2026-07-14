@@ -7,7 +7,6 @@ import type {
   PointerEvent as ReactPointerEvent
 } from "react";
 import {
-  isTerraformDeployableNode,
   type ArchitectureDiagnostic,
   type CheckFinding,
   type TerraformDiagnostic,
@@ -189,10 +188,6 @@ export function WorkspaceRightPanel({
     terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error") ||
     architectureDiagnostics.some((diagnostic) => diagnostic.severity === "error");
   const issueCount = terraformDiagnostics.length + architectureDiagnostics.length;
-  const deployableResourceCount = useMemo(
-    () => context.nodes.filter(isTerraformDeployableNode).length,
-    [context.nodes]
-  );
   const currentDeploymentBaselineFingerprint = useMemo(
     () => toDeploymentBaselineFingerprint(context.diagram),
     [context.diagram]
@@ -745,7 +740,6 @@ export function WorkspaceRightPanel({
   const deploymentConsoleContent =
     isDeploymentConsoleOpen && canRenderDeploymentPortal ? (
       <DeploymentPanel
-        deployableResourceCount={deployableResourceCount}
         deploymentAvailability={deploymentAvailability}
         diagramJson={context.diagram}
         fullScreenOnly
