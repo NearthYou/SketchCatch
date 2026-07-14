@@ -2014,7 +2014,7 @@ test("convertArchitectureJsonToDiagramJson keeps mixed cloud area drafts compact
   const bounds = getDiagramBounds(diagramJson.nodes);
 
   assert.ok(bounds.width <= 1400, `Expected compact width, received ${bounds.width}`);
-  assert.ok(bounds.height <= 1344, `Expected compact height, received ${bounds.height}`);
+  assert.ok(bounds.height <= 1380, `Expected compact height, received ${bounds.height}`);
   assertNoSiblingNodeOverlap(diagramJson);
   assertNoNonAncestorAreaResourceOverlap(diagramJson);
   assertResourceChildrenInsetFromAreaBoundaries(diagramJson);

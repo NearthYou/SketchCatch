@@ -80,10 +80,10 @@ const SUPPORT_LANE_GAP = 80;
 const LAYOUT_CANDIDATES: readonly LayoutCandidateConfig[] = [
   { columnGap: 64, id: "split-support", primaryOrder: "ascending", rowGap: 56, supportPlacement: "split" },
   { columnGap: 64, id: "split-support-reversed", primaryOrder: "descending", rowGap: 56, supportPlacement: "split" },
-  { columnGap: 64, id: "support-above", primaryOrder: "ascending", rowGap: 48, supportPlacement: "above" },
-  { columnGap: 64, id: "support-above-reversed", primaryOrder: "descending", rowGap: 48, supportPlacement: "above" },
-  { columnGap: 64, id: "support-below", primaryOrder: "ascending", rowGap: 48, supportPlacement: "below" },
-  { columnGap: 64, id: "support-below-reversed", primaryOrder: "descending", rowGap: 48, supportPlacement: "below" }
+  { columnGap: 64, id: "support-above", primaryOrder: "ascending", rowGap: 56, supportPlacement: "above" },
+  { columnGap: 64, id: "support-above-reversed", primaryOrder: "descending", rowGap: 56, supportPlacement: "above" },
+  { columnGap: 64, id: "support-below", primaryOrder: "ascending", rowGap: 56, supportPlacement: "below" },
+  { columnGap: 64, id: "support-below-reversed", primaryOrder: "descending", rowGap: 56, supportPlacement: "below" }
 ];
 
 export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): AutomaticDiagramLayoutResult {

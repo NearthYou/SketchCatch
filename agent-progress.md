@@ -5,12 +5,19 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `feat/ck/350-ai-diagram-fallback`.
-- Latest `origin/dev` at `99db7f61` is merged, including the current dashboard UI/UX and Deployment/CI/CD console updates.
+- Latest `origin/dev` at `f3ae778a` is merged, including the current dashboard UI/UX and Deployment/CI/CD console updates.
 - Strict `audience-live-check` Repository evidence produces a minimal ECS Fargate architecture without unsupported persistence, autoscaling, or AWS-native CI/CD resources.
 - Generated Terraform passes the Direct Deployment safety gate and `terraform validate` with AWS provider v6.54.0.
 - Real Plan and Apply created 33 resources, the current Repository API and web builds worked through CloudFront and ECS, and cleanup finished as `DESTROYED` with direct AWS absence checks.
 
 ## Session Record
+
+### 2026-07-14 - Integrate latest dev UI
+
+- Merged `origin/dev` at `f3ae778a`, preserving the dev UI decisions while retaining the feature branch's Repository and automatic-layout behavior.
+- Increased automatic support-lane spacing so Security Group scope captions and routed edges do not intersect resources; kept compactness, overlap, containment, and routing assertions active.
+- Restored the AI start transcript scrollbar as a separate UI commit.
+- Verification: focused workspace diagram adapter tests (39/39), `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed. No Terraform, deployment, or cloud mutation was performed.
 
 ### 2026-07-14 - Address PR #390 review feedback
 
@@ -19,6 +26,11 @@ Short English-only working log for the current agent context. Older records are 
 - Finished the existing latest-`dev` merge resolution in this worktree so the review fix can be committed and pushed.
 - Verification: focused public Repository recommendation test, focused API template fallback route test, `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed after clearing stale generated `.next/types`.
 - No Terraform apply, deployment, cloud mutation, GitHub review reply, or thread resolution was performed.
+
+### 2026-07-14 - Add AI start chat scrollbar
+
+- Added a dedicated always-visible scrollbar rail to the `/workspace/ai` chat transcript and fixed the conversation grid height constraint so the transcript owns overflow instead of stretching the page.
+- Verification before merge: `pnpm --filter @sketchcatch/web lint` and `pnpm harness:check` passed in the active `feat/ck/350-ai-diagram-fallback` worktree. No API, Terraform, deployment, or cloud mutation was performed for this UI change.
 
 ### 2026-07-14 - Structural AI diagram auto-layout
 
