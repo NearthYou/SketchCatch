@@ -201,4 +201,5 @@ Short English-only working log for the current agent context. Older records are 
 - Preserved dev's strict Repository evidence and AI draft flow, saved-draft deployment revision, generated Terraform outputs, Save and Deploy action, Direct Deployment release flow, Live Observation, notification, and authentication updates.
 - Verification passed: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm migration:compatibility:check`, 114 focused API tests, 1,266 Web tests, 60 Brainboard type/source-contract tests, 37 capture tests, and `git diff --check`.
 - Known environment limit: `pnpm catalog:check` and `pnpm templates:validate` cannot run Terraform because this machine has no Terraform executable (`spawn terraform ENOENT`). No Terraform Apply, Destroy, or AWS mutation was performed.
-- Remaining action: run the final post-merge build, commit and push the merge, then open the issue #381 PR against `dev`.
+- Final build result: `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path. Type/API/UI builds started successfully; this is the documented pre-existing local blocker.
+- Remaining action: commit this verification record, push the merge, then open the issue #381 PR against `dev`.

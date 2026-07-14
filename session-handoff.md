@@ -18,8 +18,8 @@ Use this file only for compact continuation context. Write it in English.
 
 - No branch-authored DB migration exists. Migrations `0034` through `0041` arrived only from merged `dev`.
 - `pnpm catalog:check` and template Terraform CLI validation require a local Terraform executable; none is installed or configured through `TF_CLI_PATH` or `TERRAFORM_BIN`.
-- A complete production build still needs its final post-merge run.
+- `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path; it is a pre-existing local environment blocker.
 
 ## Best Next Action
 
-- Complete final checks, commit and push the merge, then open the issue #381 PR against `dev` with the full cross-cutting change list and known Terraform CLI limitation.
+- Commit the final verification record, push the merge, then open the issue #381 PR against `dev` with the known Terraform CLI and local `.codegraph` limitations.
