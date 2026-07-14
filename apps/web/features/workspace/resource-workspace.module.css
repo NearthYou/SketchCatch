@@ -74,7 +74,7 @@
 
 .resourceListTitle span {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
   text-transform: uppercase;
@@ -188,7 +188,7 @@
 .resourceListAddress {
   color: var(--workspace-muted, #60646c);
   font-family: Inter, Geist, sans-serif;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }

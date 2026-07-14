@@ -15,6 +15,11 @@ const workspaceEntryStyles = [
   readWebFile("app/workspace/repository/repository-start.module.css"),
   readWebFile("app/workspace/ai/workspace-ai-start.module.css")
 ].join("\n");
+const workspaceCoreStyles = [
+  readWebFile("features/workspace/workspace.module.css"),
+  readWebFile("features/workspace/resource-workspace.module.css"),
+  readWebFile("features/workspace/WorkspaceIssuesPanel.module.css")
+].join("\n");
 
 test("landing user-facing text keeps the minimum size and muted contrast", () => {
   assert.doesNotMatch(landingStyles, /font-size:\s*(?:8|9|10|11)px/);
@@ -24,6 +29,11 @@ test("landing user-facing text keeps the minimum size and muted contrast", () =>
 test("workspace entry text keeps the minimum size and muted contrast", () => {
   assert.doesNotMatch(workspaceEntryStyles, /font-size:\s*(?:8|9|10|11)px/);
   assert.doesNotMatch(workspaceEntryStyles, /#(?:777b84|999999)/i);
+});
+
+test("workspace core panel text keeps the minimum size and muted contrast", () => {
+  assert.doesNotMatch(workspaceCoreStyles, /font-size:\s*(?:8|9|10|11)px/);
+  assert.doesNotMatch(workspaceCoreStyles, /#(?:777b84|999999)/i);
 });
 
 test("dashboard text keeps the minimum size and muted contrast", () => {

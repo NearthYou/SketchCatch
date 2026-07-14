@@ -412,7 +412,7 @@
 
 .draftStatusLabel {
   color: #60646c;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
   text-transform: uppercase;
@@ -704,7 +704,7 @@
   align-items: center;
   border-radius: 999px;
   display: inline-flex;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   height: 16px;
   justify-content: center;
@@ -1026,7 +1026,7 @@
   background: #f8fafc;
   border-radius: 6px;
   color: #64748b;
-  font-size: 11px;
+  font-size: 12px;
   padding: 9px 10px;
 }
 
@@ -1046,7 +1046,7 @@
 }
 
 .resourceListEmpty span {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .terraformPanel {
@@ -1154,7 +1154,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   gap: 5px;
   height: 30px;
@@ -1255,7 +1255,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 999px;
   color: #64748b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   padding: 5px 8px;
   white-space: nowrap;
@@ -1334,7 +1334,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   gap: 5px;
   min-height: 31px;
@@ -1362,7 +1362,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   gap: 5px;
   justify-content: center;
@@ -1389,7 +1389,7 @@
   border-bottom: 1px solid #dce3ee;
   color: #64748b;
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   gap: 10px;
   justify-content: space-between;
@@ -1611,7 +1611,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   gap: 5px;
   min-height: 28px;
@@ -1703,14 +1703,14 @@
 
 .terraformPreviewExplanationResult li strong {
   color: #243044;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .terraformPreviewExplanationResult li span {
   color: #64748b;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -1812,7 +1812,7 @@
   border-top: 1px solid #fed7aa;
   color: #9a3412;
   display: flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   gap: 8px;
   justify-content: space-between;
@@ -1836,7 +1836,7 @@
   cursor: pointer;
   flex: 0 0 auto;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   min-height: 26px;
   padding: 0 8px;
@@ -1914,7 +1914,7 @@
 .terraformIssueCount,
 .terraformIssueCountError {
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   margin-left: auto;
   min-width: 24px;
@@ -1994,7 +1994,7 @@
 
 .terraformDiagnosticList strong {
   color: #172033;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .terraformDiagnosticList span {
@@ -2052,7 +2052,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   justify-content: center;
   justify-self: start;
@@ -2220,7 +2220,7 @@
 
 .aiPanelHeader span {
   color: var(--workspace-accent, #000000);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -2526,7 +2526,7 @@
 
 .terraformIssueFixPlanHeader span {
   color: #1f4f82;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -2561,7 +2561,7 @@
 
 .terraformIssueCodeFrame strong {
   color: #172033;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -2570,7 +2570,7 @@
   border-radius: 4px;
   color: #e2e8f0;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   margin: 0;
   min-width: 0;
@@ -2591,7 +2591,7 @@
 
 .terraformIssueCodePreview strong {
   color: #172033;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -2600,7 +2600,7 @@
   border-radius: 4px;
   color: #e2e8f0;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   margin: 0;
   min-width: 0;
@@ -2640,7 +2640,7 @@
 
 .terraformIssueGuidanceList dt {
   color: #172033;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -2668,7 +2668,7 @@
 
 .terraformIssuePillars strong {
   color: #172033;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -2676,7 +2676,7 @@
 .terraformIssuePillars span,
 .terraformIssueActions li {
   color: #475569;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   margin: 0;
 }
@@ -2744,7 +2744,7 @@
 
 .aiWarning span {
   color: #9a3412;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -2787,7 +2787,7 @@
 
 .aiSafetyFindingHeader span {
   color: #9a3412;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
   line-height: 1.4;
 }
@@ -2841,7 +2841,7 @@
 
 .aiSafetyFindingDetails dt {
   color: #475569;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -2863,7 +2863,7 @@
 
 .aiSafetyFindingSteps li {
   color: #475569;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -2942,7 +2942,7 @@
 .aiSimulationCard li span {
   color: var(--workspace-text, #171717);
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -2965,7 +2965,7 @@
   border: 1px solid #c9ddf3;
   border-radius: 999px;
   color: var(--workspace-accent, #000000);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   padding: 4px 7px;
 }
@@ -3050,7 +3050,7 @@
 
 .aiChatHeader span {
   color: var(--workspace-accent, #000000);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 950;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -3614,7 +3614,7 @@
 
 .deploymentActionItem p {
   color: #52657f;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   line-height: 1.45;
   margin: 0;
@@ -4126,7 +4126,7 @@
   color: var(--workspace-text, #171717);
   display: inline-flex;
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.4;
@@ -4164,7 +4164,7 @@
   border-radius: var(--radius-control);
   color: var(--workspace-muted, #60646c);
   display: grid;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   gap: 4px;
   min-width: 0;
@@ -4220,7 +4220,7 @@
   border-radius: var(--radius-card);
   color: var(--color-warning);
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.4;
@@ -4291,7 +4291,7 @@
 
 .deploymentPreflightAiList li {
   color: #475569;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -4327,7 +4327,7 @@
 
 .deploymentFindingAiExplanation dt {
   color: #475569;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
 }
 
@@ -4349,7 +4349,7 @@
 
 .deploymentFindingAiExplanation li {
   color: #475569;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -4431,7 +4431,7 @@
   border-radius: 6px;
   color: #243044;
   display: inline-flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   gap: 7px;
   min-height: 34px;
@@ -4479,7 +4479,7 @@
 .reverseResultItem span,
 .reverseLogList span {
   color: #64748b;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -4564,7 +4564,7 @@
   color: #64748b;
   content: "펼치기";
   float: right;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -4642,7 +4642,7 @@
 
 .deploymentSummary span {
   color: #68758b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -4692,7 +4692,7 @@
   border: 1px solid #fecaca;
   border-radius: 5px;
   color: #991b1b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -4722,7 +4722,7 @@
 
 .deploymentWarnings em {
   color: #991b1b;
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -4778,7 +4778,7 @@
   background: #9a3412;
   border-radius: 4px;
   color: #ffffff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 950;
   line-height: 1;
   padding: 4px 5px;
@@ -4840,7 +4840,7 @@
   border-radius: 5px;
   color: #172033;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
   padding: 7px;
@@ -4884,7 +4884,7 @@
 .deploymentApplyConfirm span,
 .deploymentDestroyConfirm span {
   color: #68758b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
 }
 
@@ -4957,7 +4957,7 @@
 .deploymentResultMeta {
   color: #64748b;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .deploymentExpandedOverlay {
@@ -5109,7 +5109,7 @@
 
 .deploymentDisclosure small {
   color: #64748b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
   white-space: nowrap;
 }
@@ -5649,7 +5649,7 @@
 .aiChatHeader span {
   color: var(--workspace-muted, #60646c);
   font-family: var(--workspace-font, "Pretendard", "Noto Sans KR", Inter, Geist, sans-serif);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: none;
@@ -5813,7 +5813,7 @@
   color: var(--workspace-text, #171717);
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   justify-self: end;
   padding: 8px 12px;
@@ -5824,7 +5824,7 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 8px;
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
   margin: 0;
   padding: 8px 10px;
 }
@@ -5854,7 +5854,7 @@
 
 .workspaceNotificationHost li span {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -5877,7 +5877,7 @@
 
 .deploymentOutputLinks article > span:first-child {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5902,7 +5902,7 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   min-height: 32px;
   padding: 6px 10px;
@@ -5911,7 +5911,7 @@
 
 .deploymentOutputLinks article > span:last-child {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   min-height: 15px;
 }
 
@@ -6197,7 +6197,7 @@
 
 .liveObservationHeader p {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.35;
   margin-top: 2px;
   overflow: hidden;
@@ -6208,7 +6208,7 @@
 .liveObservationEyebrow,
 .liveObservationSectionLabel {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.06em;
   line-height: 1.3;
@@ -6259,7 +6259,7 @@
 
 .liveObservationTargetBar label > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -6286,7 +6286,7 @@
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: 8px;
   display: inline-flex;
-  font-size: 11px;
+  font-size: 12px;
   gap: 6px;
   height: 36px;
   padding: 0 10px;
@@ -6294,7 +6294,7 @@
 }
 
 .liveObservationSessionStatus svg {
-  color: #999999;
+  color: #60646c;
 }
 
 .liveObservationSessionStatus[data-status="active"] svg {
@@ -6337,7 +6337,7 @@
 
 .liveObservationAudienceUtility p {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
   margin-top: 3px;
 }
@@ -6384,7 +6384,7 @@
 
 .liveObservationQr span {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .liveObservationBody {
@@ -6459,7 +6459,7 @@
 
 .liveObservationEvidenceRail span {
   color: #334155;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   grid-column: 1;
   grid-row: 1;
@@ -6479,7 +6479,7 @@
 .liveObservationEvidenceRail p,
 .liveObservationEvidenceRail small {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
   margin: 0;
   min-width: 0;
@@ -6527,7 +6527,7 @@
 
 .liveObservationLogs time {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .liveObservationLogs code {
@@ -6595,7 +6595,7 @@
 
 .liveObservationDesignSimulation > header > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .liveObservationSimulationToggle {
@@ -6643,7 +6643,7 @@
 
 .liveObservationPresentationHeader strong,
 .liveObservationPresentationHeader span {
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0;
 }
 
@@ -6670,7 +6670,7 @@
   background: #fcfcfd;
   color: #7657d6;
   content: "LIVE TRAFFIC PATH";
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   left: 14px;
   padding: 0 7px;
@@ -6720,7 +6720,7 @@
 .liveObservationPresentationStage > strong,
 .liveObservationCapacityUnit > strong {
   color: var(--workspace-text, #171717);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
   margin-top: 11px;
   max-width: calc(100% - 12px);
@@ -6741,7 +6741,7 @@
 .liveObservationPresentationStage > span,
 .liveObservationCapacityUnit > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 9px;
+  font-size: 12px;
   margin-top: 4px;
 }
 
@@ -6823,7 +6823,7 @@
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line, #f0f0f3);
   color: var(--workspace-muted, #60646c);
-  font-size: 8px;
+  font-size: 12px;
   left: 28px;
   padding: 3px 5px;
   position: absolute;
@@ -6915,7 +6915,7 @@
 }
 
 .liveObservationPresentationEmpty span {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 @keyframes liveObservationConnectorFlow {
@@ -7185,7 +7185,7 @@
 .liveObservationControlActivity > div p,
 .liveObservationControlActivity > div time,
 .liveObservationMuted {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .liveObservationControlActivity > div p,
@@ -7212,12 +7212,12 @@
 }
 
 .liveObservationBoostSummary strong {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .liveObservationBoostSummary span {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   margin-top: 2px;
 }
 
@@ -7464,7 +7464,7 @@
   }
 
   .liveObservationSignalNode span {
-    font-size: 10px;
+    font-size: 12px;
   }
 
   .liveObservationSignalNode[data-node-kind="ec2"] {
@@ -7632,7 +7632,7 @@
 
 .deploymentStepNavigation > p {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.1em;
   margin: 0 10px 16px;
@@ -7705,7 +7705,7 @@
   border-radius: 999px;
   color: var(--workspace-muted, #60646c);
   display: inline-flex;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
   height: 28px;
   justify-content: center;
@@ -7757,7 +7757,7 @@
 .deploymentProjectGate > span,
 .deploymentContextPanel > div > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -7814,7 +7814,7 @@
 
 .deploymentStepSummary span {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 
