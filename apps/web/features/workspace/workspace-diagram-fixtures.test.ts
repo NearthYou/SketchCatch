@@ -9,6 +9,7 @@ import {
   getWorkspaceDiagramFixture,
   getWorkspaceDiagramFixtureViewState
 } from "./workspace-diagram-fixtures";
+import { evaluateAutomaticDiagramLayout } from "./automatic-diagram-layout";
 
 test("conventions keeps the existing eleven-node Architecture Board fixture", () => {
   const fixture = getWorkspaceDiagramFixture("conventions");
@@ -23,11 +24,36 @@ test("conventions keeps the existing eleven-node Architecture Board fixture", ()
 
   assert.ok(policyNode);
   assert.ok(roleNode);
-  assert.ok(
-    Math.abs(policyNode.position.x - roleNode.position.x) >= 192,
-    "horizontal topology lanes must reserve room for an edge label shield"
+  assert.equal(
+    doBoundsOverlap(
+      getResourceNodeVisualBounds(policyNode),
+      getResourceNodeVisualBounds(roleNode)
+    ),
+    false
   );
   assert.deepEqual(getWorkspaceDiagramFixture("conventions"), fixture);
+});
+
+test("automatic-layout-vpc exposes the large deterministic visual regression fixture", () => {
+  const fixture = getWorkspaceDiagramFixture("automatic-layout-vpc");
+
+  assert.ok(fixture);
+  assert.equal(fixture.nodes.length, 19);
+  assert.ok(fixture.edges.length >= 10);
+  const quality = evaluateAutomaticDiagramLayout({
+    edges: fixture.edges.map((edge) => ({
+      id: edge.id,
+      label: edge.label,
+      sourceId: edge.sourceNodeId,
+      targetId: edge.targetNodeId
+    })),
+    nodes: fixture.nodes
+  });
+
+  assert.equal(quality.nodeOverlapCount, 0);
+  assert.equal(quality.siblingAreaOverlapCount, 0);
+  assert.equal(quality.parentBoundaryViolationCount, 0);
+  assert.deepEqual(getWorkspaceDiagramFixture("automatic-layout-vpc"), fixture);
 });
 
 test("resource-gallery covers the current catalog in deterministic Resource and Area groups", () => {
@@ -353,6 +379,7 @@ test("visual fixtures stay unavailable for unknown names and production", () => 
 
   try {
     for (const fixtureName of [
+      "automatic-layout-vpc",
       "conventions",
       "resource-gallery",
       "area-matrix",

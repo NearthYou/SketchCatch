@@ -33,6 +33,7 @@ export function getWorkspaceDiagramFixtureViewState(
 
 const workspaceDiagramFixtureFactories: Readonly<Record<string, () => DiagramJson>> = {
   "area-matrix": createAreaMatrixFixture,
+  "automatic-layout-vpc": () => convertArchitectureJsonToDiagramJson(automaticLayoutVpcArchitectureJson),
   conventions: () => convertArchitectureJsonToDiagramJson(conventionArchitectureJson),
   "edge-matrix": createEdgeMatrixFixture,
   "edge-state-matrix": createEdgeStateMatrixFixture,
@@ -674,5 +675,49 @@ const conventionArchitectureJson: ArchitectureJson = {
       targetId: "lambda-function",
       label: "monitors errors"
     }
+  ]
+};
+
+const automaticLayoutVpcArchitectureJson: ArchitectureJson = {
+  nodes: [
+    { id: "browser", type: "UNKNOWN", label: "Customer Browser", positionX: 2200, positionY: 80, config: { diagramKind: "design", diagramType: "actor_browser", diagramWidth: 160, diagramHeight: 96 } },
+    { id: "cloudfront", type: "CLOUDFRONT", label: "CloudFront", positionX: 2100, positionY: 120, config: {} },
+    { id: "vpc", type: "VPC", label: "Application VPC", positionX: 80, positionY: 600, config: { cidrBlock: "10.42.0.0/16" } },
+    { id: "public-a", type: "SUBNET", label: "Public Subnet A", positionX: 160, positionY: 700, config: {} },
+    { id: "public-b", type: "SUBNET", label: "Public Subnet B", positionX: 220, positionY: 760, config: {} },
+    { id: "private-a", type: "SUBNET", label: "Private Subnet A", positionX: 280, positionY: 820, config: {} },
+    { id: "private-b", type: "SUBNET", label: "Private Subnet B", positionX: 340, positionY: 880, config: {} },
+    { id: "database-a", type: "SUBNET", label: "Database Subnet A", positionX: 400, positionY: 940, config: {} },
+    { id: "database-b", type: "SUBNET", label: "Database Subnet B", positionX: 460, positionY: 1000, config: {} },
+    { id: "load-balancer", type: "LOAD_BALANCER", label: "Application Load Balancer", positionX: 1880, positionY: 1400, config: {} },
+    { id: "service-a", type: "ECS_SERVICE", label: "Fargate Service A", positionX: 1900, positionY: 1500, config: { desiredCount: 2, launchType: "FARGATE" } },
+    { id: "service-b", type: "ECS_SERVICE", label: "Fargate Service B", positionX: 120, positionY: 1580, config: { desiredCount: 2, launchType: "FARGATE" } },
+    { id: "db-primary", type: "RDS", label: "PostgreSQL Primary", positionX: 1740, positionY: 560, config: { engine: "postgres", multiAz: true, publiclyAccessible: false } },
+    { id: "db-replica", type: "RDS_READ_REPLICA", label: "PostgreSQL Read Replica", positionX: 120, positionY: 1100, config: { replicateSourceDb: "aws_db_instance.postgresql_primary.identifier" } },
+    { id: "pipeline", type: "CODEPIPELINE", label: "Delivery Pipeline", positionX: 2360, positionY: 1700, config: {} },
+    { id: "registry", type: "ECR_REPOSITORY", label: "Container Registry", positionX: 1940, positionY: 1760, config: {} },
+    { id: "runtime-role", type: "IAM_ROLE", label: "Fargate Runtime Role", positionX: 2280, positionY: 1600, config: {} },
+    { id: "logs", type: "CLOUDWATCH_LOG_GROUP", label: "Application Logs", positionX: 80, positionY: 1660, config: {} },
+    { id: "alarm", type: "CLOUDWATCH_METRIC_ALARM", label: "Service CPU Alarm", positionX: 1740, positionY: 560, config: { metricName: "CPUUtilization" } }
+  ],
+  edges: [
+    ...["public-a", "public-b", "private-a", "private-b", "database-a", "database-b"].map((targetId) => ({ id: `vpc-contains-${targetId}`, sourceId: "vpc", targetId, label: "contains" })),
+    { id: "public-a-contains-alb", sourceId: "public-a", targetId: "load-balancer", label: "contains" },
+    { id: "private-a-contains-service", sourceId: "private-a", targetId: "service-a", label: "contains" },
+    { id: "private-b-contains-service", sourceId: "private-b", targetId: "service-b", label: "contains" },
+    { id: "database-a-contains-primary", sourceId: "database-a", targetId: "db-primary", label: "contains" },
+    { id: "database-b-contains-replica", sourceId: "database-b", targetId: "db-replica", label: "contains" },
+    { id: "browser-cloudfront", sourceId: "browser", targetId: "cloudfront", label: "HTTPS" },
+    { id: "cloudfront-alb", sourceId: "cloudfront", targetId: "load-balancer", label: "API traffic" },
+    { id: "alb-service-a", sourceId: "load-balancer", targetId: "service-a", label: "routes requests" },
+    { id: "alb-service-b", sourceId: "load-balancer", targetId: "service-b", label: "routes requests" },
+    { id: "service-a-db", sourceId: "service-a", targetId: "db-primary", label: "reads/writes" },
+    { id: "service-b-db", sourceId: "service-b", targetId: "db-replica", label: "reads" },
+    { id: "pipeline-registry", sourceId: "pipeline", targetId: "registry", label: "publishes image" },
+    { id: "registry-service-a", sourceId: "registry", targetId: "service-a", label: "deploys image" },
+    { id: "registry-service-b", sourceId: "registry", targetId: "service-b", label: "deploys image" },
+    { id: "role-service", sourceId: "runtime-role", targetId: "service-a", label: "grants runtime access" },
+    { id: "service-logs", sourceId: "service-a", targetId: "logs", label: "writes logs" },
+    { id: "alarm-service", sourceId: "alarm", targetId: "service-a", label: "monitors CPU" }
   ]
 };
