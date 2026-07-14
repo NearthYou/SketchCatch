@@ -12,6 +12,52 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-14 - Address signup fallback review
+
+- Replaced nullish fallback with falsy fallback for password and confirmation feedback so a future empty-string Caps Lock helper result cannot suppress validation copy.
+- Added a focused regression for both fallback chains. Verification passed: focused signup tests 9/9, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The local environment does not provide the `gh` executable, so the GitHub review conversation must be resolved manually after the pushed commit is visible.
+
+### 2026-07-14 - Compact stable signup field spacing
+
+- Reduced only the signup form row gap from 20px to 8px, preserving the reserved validation slots that prevent fields and the centered card from shifting during input.
+- Verification passed: the focused spacing regression failed before the fix and passed 8/8 afterward, Web 1,182/1,182, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The next action is manual pixel confirmation only if another spacing adjustment is requested.
+
+### 2026-07-14 - Stabilize signup validation layout
+
+- Reserved a persistent feedback slot below the username, password, password confirmation, and email controls so validation state changes no longer insert new layout rows.
+- Replaced stacked password-policy errors with one prioritized message in the existing feedback slot while preserving Caps Lock and mismatch feedback and accessible descriptions.
+- Verification passed: the red-capable signup layout regression failed before the fix and passed 7/7 afterward, the full Web test command passed, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, live `/signup` HTTP 200, and API health HTTP 200. In-app browser measurement remained unavailable because browser initialization failed with `Cannot redefine property: process`; the next action is only manual pixel confirmation if additional tuning is requested.
+
+### 2026-07-14 - Compact authentication card chrome
+
+- Reduced the shared login, signup, and password-reset card top and bottom spacing: vertical card padding, brand-to-title spacing, title-to-form spacing, and footer switch spacing.
+- Preserved card width, form control spacing, field order, and safe viewport centering while applying a stronger compact adjustment below 640px.
+- Verification passed: focused auth tests 12/12, Web full 1,180/1,180 including password-reset route coverage, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check`. The next action is visual confirmation in the running local Web server if additional pixel tuning is requested.
+
+### 2026-07-14 - Simplify the signup page brand and consent layout
+
+- Removed the signup top brand bar and optional eyebrow/description copy, then reused the centered card brand with its `/` home link.
+- Narrowed the signup card to the single-column auth width, kept the requested name, username, password, password confirmation, and email order, and moved each legal-document view action beside its agreement label.
+- Verification passed: focused signup tests 6/6, Web full 1,179/1,179, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and live `/signup` HTTP 200 with both removed copy strings absent. The in-app browser binding still failed to initialize, so a fresh visual screenshot was not captured; the next action is browser confirmation only if further pixel tuning is requested.
+
+### 2026-07-14 - Center the login card in the viewport
+
+- Applied a login-only centered auth-page variant so the card is vertically and horizontally centered without changing the topbar-based signup and password-reset layouts.
+- Used safe grid alignment with balanced responsive padding so short viewports keep the card reachable instead of clipping its top edge.
+- Verification passed: focused login tests 5/5, Web full 1,176/1,176, `pnpm lint`, `pnpm typecheck`, `pnpm build`, live `/login` HTTP 200, and live API health HTTP 200. The existing in-app browser binding was unavailable for a fresh screenshot; the next action is visual confirmation in the already-running local Web server if further pixel tuning is requested.
+
+### 2026-07-14 - Simplify the login page brand entry
+
+- Removed the `/login` top brand bar and optional eyebrow/description copy, then placed the shared SketchCatch brand at the top-left of the login card with a `/` home link.
+- Added a focused login-shell regression contract and verified the live `/login` HTML contains the home brand link while omitting both removed text blocks.
+- Verification passed: focused login tests 4/4, Web full 1,175/1,175, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and harness. The in-app browser runtime could not initialize, and the full API test process stopped producing output after the Web suite completed, so it was terminated without an API-suite result.
+
+### 2026-07-14 - Local development stack restart
+
+- Stopped the Web and API development processes, removed the local PostgreSQL and Redis containers without deleting their data volumes, and started the full stack again in DB-first order.
+- Applied runtime database migrations successfully and verified PostgreSQL and Redis are healthy.
+- Verified `http://localhost:3000`, `http://localhost:4000/health`, and `http://localhost:4000/health/db` all return HTTP 200. The requested development servers remain active; no source behavior, cloud resource, GitHub state, or production database was changed.
+
 ### 2026-07-14 - Integrate latest dev UI
 
 - Merged `origin/dev` at `f3ae778a`, preserving the dev UI decisions while retaining the feature branch's Repository and automatic-layout behavior.

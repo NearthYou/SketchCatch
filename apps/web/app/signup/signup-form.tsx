@@ -245,11 +245,15 @@ export function SignupForm() {
     : null;
   const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
   const passwordConfirmCapsLockWarning = getCapsLockWarningMessage(isPasswordConfirmCapsLockOn);
-  const passwordValidationMessages = getPasswordValidationMessages(password);
+  const passwordValidationMessage = getPasswordValidationMessage(password);
   const passwordConfirmMismatchMessage = getPasswordConfirmMismatchMessage(
     password,
     passwordConfirm
   );
+  const passwordFeedbackMessage =
+    passwordCapsLockWarning || passwordValidationMessage || PASSWORD_POLICY_HELP_TEXT;
+  const passwordConfirmFeedbackMessage =
+    passwordConfirmCapsLockWarning || passwordConfirmMismatchMessage;
   const currentNormalizedUsername = normalizeUsername(username);
   const currentNormalizedEmail = normalizeEmail(email);
   const currentNormalizedNickname = nickname.trim();
@@ -275,7 +279,7 @@ export function SignupForm() {
 
   return (
     <>
-      <form className="authForm" onSubmit={handleSubmit}>
+      <form className="authForm authSignupForm" onSubmit={handleSubmit}>
         <label>
           이름
           <input
@@ -319,18 +323,16 @@ export function SignupForm() {
               중복 확인
             </button>
           </div>
-          <AvailabilityMessage state={usernameAvailability} />
+          <div className="authFieldFeedback">
+            <AvailabilityMessage state={usernameAvailability} />
+          </div>
         </div>
         <div className="authField">
           <label htmlFor="signup-password">비밀번호</label>
           <div className="authPasswordField">
             <input
-              aria-describedby={
-                passwordCapsLockWarning
-                  ? "signup-password-help signup-password-requirements signup-password-caps-lock"
-                  : "signup-password-help signup-password-requirements"
-              }
-              aria-invalid={passwordValidationMessages.length > 0}
+              aria-describedby="signup-password-help"
+              aria-invalid={Boolean(passwordValidationMessage)}
               autoComplete="new-password"
               disabled={isSubmitting}
               id="signup-password"
@@ -362,35 +364,28 @@ export function SignupForm() {
               )}
             </button>
           </div>
-          <span className="authHelpText" id="signup-password-help">
-            {PASSWORD_POLICY_HELP_TEXT}
-          </span>
-          <PasswordValidationMessages
-            id="signup-password-requirements"
-            messages={passwordValidationMessages}
-          />
-          {passwordCapsLockWarning ? (
+          <div className="authFieldFeedback">
             <span
-              className="authHelpText authWarningText"
-              id="signup-password-caps-lock"
-              role="alert"
+              className={`authHelpText${
+                passwordCapsLockWarning
+                  ? " authWarningText"
+                  : passwordValidationMessage
+                    ? " authErrorText"
+                    : ""
+              }`}
+              id="signup-password-help"
+              role={passwordCapsLockWarning || passwordValidationMessage ? "alert" : undefined}
             >
-              {passwordCapsLockWarning}
+              {passwordFeedbackMessage}
             </span>
-          ) : null}
+          </div>
         </div>
         <div className="authField">
           <label htmlFor="signup-password-confirm">비밀번호 확인</label>
           <div className="authPasswordField">
             <input
               aria-describedby={
-                passwordConfirmCapsLockWarning && passwordConfirmMismatchMessage
-                  ? "signup-password-confirm-mismatch signup-password-confirm-caps-lock"
-                  : passwordConfirmCapsLockWarning
-                    ? "signup-password-confirm-caps-lock"
-                    : passwordConfirmMismatchMessage
-                      ? "signup-password-confirm-mismatch"
-                      : undefined
+                passwordConfirmFeedbackMessage ? "signup-password-confirm-feedback" : undefined
               }
               aria-invalid={Boolean(passwordConfirmMismatchMessage)}
               autoComplete="new-password"
@@ -424,24 +419,19 @@ export function SignupForm() {
               )}
             </button>
           </div>
-          {passwordConfirmMismatchMessage ? (
-            <span
-              className="authHelpText authErrorText"
-              id="signup-password-confirm-mismatch"
-              role="alert"
-            >
-              {passwordConfirmMismatchMessage}
-            </span>
-          ) : null}
-          {passwordConfirmCapsLockWarning ? (
-            <span
-              className="authHelpText authWarningText"
-              id="signup-password-confirm-caps-lock"
-              role="alert"
-            >
-              {passwordConfirmCapsLockWarning}
-            </span>
-          ) : null}
+          <div className="authFieldFeedback">
+            {passwordConfirmFeedbackMessage ? (
+              <span
+                className={`authHelpText${
+                  passwordConfirmCapsLockWarning ? " authWarningText" : " authErrorText"
+                }`}
+                id="signup-password-confirm-feedback"
+                role="alert"
+              >
+                {passwordConfirmFeedbackMessage}
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="authField">
           <label htmlFor="signup-email">이메일</label>
@@ -470,7 +460,9 @@ export function SignupForm() {
               중복 확인
             </button>
           </div>
-          <AvailabilityMessage state={emailAvailability} />
+          <div className="authFieldFeedback">
+            <AvailabilityMessage state={emailAvailability} />
+          </div>
         </div>
         <div className="authConsentGroup fullField">
           <div className="authConsentRow">
@@ -535,22 +527,6 @@ export function SignupForm() {
         />
       ) : null}
     </>
-  );
-}
-
-function PasswordValidationMessages({ id, messages }: { id: string; messages: string[] }) {
-  if (messages.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="authInlineMessageStack" id={id} aria-live="polite">
-      {messages.map((message) => (
-        <span className="authHelpText authErrorText" key={message} role="alert">
-          {message}
-        </span>
-      ))}
-    </div>
   );
 }
 
@@ -647,22 +623,20 @@ function getAvailabilityClassSuffix(status: AvailabilityStatus): "Success" | "Er
   return "Neutral";
 }
 
-function getPasswordValidationMessages(password: string): string[] {
+function getPasswordValidationMessage(password: string): string | null {
   if (password.length === 0) {
-    return [];
+    return null;
   }
 
-  const messages: string[] = [];
-
   if (password.length < PASSWORD_MIN_LENGTH) {
-    messages.push("10자 이상 입력해주세요.");
+    return "10자 이상 입력해주세요.";
   }
 
   if (getPasswordPolicyCategoryCount(password) < PASSWORD_REQUIRED_CATEGORY_COUNT) {
-    messages.push("조건을 충족하지 못했습니다. 다시 입력해주세요.");
+    return "영문 대문자/소문자/숫자/특수문자 중 3가지를 포함해주세요.";
   }
 
-  return messages;
+  return null;
 }
 
 function getPasswordConfirmMismatchMessage(
