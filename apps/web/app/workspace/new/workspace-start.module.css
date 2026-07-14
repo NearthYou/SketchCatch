@@ -203,7 +203,7 @@
   padding: 4px 7px;
   background: #f0f0f3;
   color: #60646c;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   white-space: nowrap;
@@ -229,7 +229,7 @@
 }
 
 .templatePickerHeader span {
-  color: #999999;
+  color: #60646c;
   font-size: 12px;
 }
 
@@ -299,7 +299,7 @@
 
 .repositoryUrlForm input:disabled {
   background: #f7f7f8;
-  color: #999999;
+  color: #60646c;
 }
 
 .boundaryNotice,
