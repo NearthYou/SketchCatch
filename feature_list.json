@@ -12,16 +12,16 @@
     "name": "essential-protection-line",
     "effectiveDate": "2026-07-15",
     "entrypoint": "pnpm test",
-    "retainedTestFiles": 47,
-    "removedTestFiles": 343,
+    "retainedTestFiles": 52,
+    "removedTestFiles": 338,
     "historicalEvidenceNotice": "Feature evidence commands dated before this policy are audit records and may reference removed dedicated tests. Use the current entrypoint for the maintained regression suite.",
     "knownUnprotectedAreas": [
       "AI Architecture",
       "GitOps runtime reconcilers",
       "Reverse Engineering",
       "Cost",
-      "Live Observation",
-      "notifications",
+      "Live Observation outside capability-token and HTTPS transport security",
+      "notifications outside Web Push subscription encryption",
       "detailed diagram editing",
       "Templates",
       "presentation behavior"
@@ -36,7 +36,7 @@
       "user_visible_behavior": "기본 테스트 명령은 인증, 소유권, 프로젝트 저장, Terraform 생성과 안전 게이트, 승인된 배포와 정리 경로만 필수 보호선으로 검증한다.",
       "status": "passing",
       "verification": [
-        "유지 대상 47개 테스트 파일만 저장소에 남는다.",
+        "유지 대상 52개 테스트 파일만 저장소에 남는다.",
         "pnpm test가 API, Web, shared types, sandbox evidence, Terraform routing 보호선을 모두 실행한다.",
         "삭제된 전용 테스트가 담당하던 기능은 자동 검증되지 않는 영역으로 명시된다."
       ],
@@ -51,7 +51,7 @@
           "pnpm harness:check",
           "git diff --check"
         ],
-        "notes": "Retained 47 test files and removed 343 from the original 390-file suite. After merging the latest dev changes, the root test entrypoint passed 518 checks: API 414, Web 73, shared types 8, sandbox evidence 21, and Terraform routing 2."
+        "notes": "Retained 52 test files and removed 338 from the original 390-file suite. The 47-file baseline passed 518 checks after the dev merge. Five reviewed security files were then restored and passed 54/57 focused checks; three filesystem symlink setup cases were blocked by Windows EPERM before assertions. API lint and typecheck pass."
       },
       "notes": "Broader feature-specific suites require an explicit future protection-line decision before being restored."
     },

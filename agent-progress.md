@@ -5,12 +5,18 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch: `fix/ys/363-uiux-개선`; the latest `dev` merge is being resolved while preserving the essential test protection line.
-- The automated suite retains 47 essential protection test files and passes 518 checks: API 414, Web 73, shared types 8, sandbox preflight/evidence 21, and Terraform routing 2.
+- The automated suite retains 52 essential protection test files. The prior 47-file baseline passed 518 checks; the five restored security files passed 54/57 focused checks, with three Windows symlink setup cases blocked by `EPERM`.
 - Incoming runtime, contract, documentation, migration, and protected-test changes are preserved. Tests outside the protection line remain deleted; migration compatibility, lint, typecheck, build, harness, and diff checks pass.
 - Issue #378 remains `blocked` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are incomplete.
 - No Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during conflict resolution.
 
 ## Session Record
+
+### 2026-07-15 - Restore five reviewed security tests
+
+- Restored exactly five tests from the merged dev source: API auth/error boundaries, Live Observation HTTPS/SSRF transport, filesystem path traversal, Live Observation capability tokens, and Web Push subscription encryption.
+- Focused execution passed 54/57 checks; the three failures occurred before assertions because this Windows environment denied test symlink creation with `EPERM`.
+- API lint and typecheck pass. Full workspace test/build were intentionally not rerun to keep the merge path minimal.
 
 ### 2026-07-15 - Resolve latest dev merge after test reduction
 
