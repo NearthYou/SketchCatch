@@ -3,7 +3,21 @@ import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import { reconcileAreaNodeGeometry } from "./area-node-geometry";
 
-test("reconcileAreaNodeGeometry stores the original geometry and expands only as needed", () => {
+test("reconcileAreaNodeGeometry expands by 1.3 times the child size without measuring overflow", () => {
+  const area = makeArea("area", undefined, { x: 0, y: 0 }, { width: 100, height: 100 });
+  const child = makeResource("child", area.id, { x: 20, y: 20 }, { width: 40, height: 20 });
+
+  const result = reconcileAreaNodeGeometry([area], [area, child], new Set([child.id]));
+  const resultArea = getNode(result, area.id);
+
+  assert.deepEqual(resultArea?.metadata?.areaAutoSizeBaseline, geometryOf(area));
+  assert.deepEqual(geometryOf(resultArea), {
+    position: { x: -26, y: -13 },
+    size: { width: 152, height: 126 }
+  });
+});
+
+test("reconcileAreaNodeGeometry stores the original geometry and expands from the baseline center", () => {
   const area = makeArea("area", undefined, { x: 0, y: 0 }, { width: 100, height: 100 });
   const child = makeResource("child", area.id, { x: 80, y: 70 }, { width: 40, height: 40 });
 
@@ -12,31 +26,31 @@ test("reconcileAreaNodeGeometry stores the original geometry and expands only as
 
   assert.deepEqual(resultArea?.metadata?.areaAutoSizeBaseline, geometryOf(area));
   assert.deepEqual(geometryOf(resultArea), {
-    position: { x: 0, y: 0 },
-    size: { width: 132, height: 122 }
+    position: { x: -26, y: -26 },
+    size: { width: 152, height: 152 }
   });
 });
 
-test("reconcileAreaNodeGeometry shrinks to the remaining children without crossing the baseline", () => {
+test("reconcileAreaNodeGeometry sums 1.3 times every remaining direct child size", () => {
   const area = makeAreaWithBaseline(
     "area",
     undefined,
-    { x: 0, y: 0 },
-    { width: 152, height: 162 },
+    { x: -39, y: -26 },
+    { width: 178, height: 152 },
     { position: { x: 0, y: 0 }, size: { width: 100, height: 100 } }
   );
-  const rightChild = makeResource("right", area.id, { x: 120, y: 20 }, { width: 20, height: 20 });
-  const bottomChild = makeResource("bottom", area.id, { x: 20, y: 130 }, { width: 20, height: 20 });
+  const firstChild = makeResource("first", area.id, { x: 20, y: 20 }, { width: 40, height: 20 });
+  const secondChild = makeResource("second", area.id, { x: 60, y: 50 }, { width: 20, height: 20 });
 
   const result = reconcileAreaNodeGeometry(
-    [area, rightChild, bottomChild],
-    [area, bottomChild],
-    new Set([rightChild.id])
+    [area, firstChild, secondChild],
+    [area, secondChild],
+    new Set([firstChild.id])
   );
 
   assert.deepEqual(geometryOf(getNode(result, area.id)), {
-    position: { x: 0, y: 0 },
-    size: { width: 100, height: 162 }
+    position: { x: -13, y: -13 },
+    size: { width: 126, height: 126 }
   });
 });
 
@@ -103,7 +117,7 @@ test("reconcileAreaNodeGeometry restores the old parent and initializes the new 
   });
 });
 
-test("reconcileAreaNodeGeometry recalculates nested areas from the inside out", () => {
+test("reconcileAreaNodeGeometry uses the final nested area size for its parent", () => {
   const outer = makeArea("outer", undefined, { x: 0, y: 0 }, { width: 180, height: 130 });
   const inner = makeArea("inner", outer.id, { x: 100, y: 80 }, { width: 80, height: 60 });
   const child = makeResource("child", inner.id, { x: 160, y: 120 }, { width: 40, height: 40 });
@@ -111,12 +125,12 @@ test("reconcileAreaNodeGeometry recalculates nested areas from the inside out", 
   const result = reconcileAreaNodeGeometry([outer, inner], [outer, inner, child], new Set([child.id]));
 
   assert.deepEqual(geometryOf(getNode(result, inner.id)), {
-    position: { x: 100, y: 80 },
-    size: { width: 112, height: 92 }
+    position: { x: 74, y: 54 },
+    size: { width: 132, height: 112 }
   });
   assert.deepEqual(geometryOf(getNode(result, outer.id)), {
-    position: { x: 0, y: 0 },
-    size: { width: 224, height: 184 }
+    position: { x: -85.80000000000001, y: -72.80000000000001 },
+    size: { width: 351.6, height: 275.6 }
   });
 });
 
@@ -143,8 +157,8 @@ test("reconcileAreaNodeGeometry treats a completed manual resize as the new base
     size: { width: 120, height: 110 }
   });
   assert.deepEqual(geometryOf(resultArea), {
-    position: { x: 0, y: 0 },
-    size: { width: 132, height: 122 }
+    position: { x: -26, y: -26 },
+    size: { width: 172, height: 162 }
   });
 });
 
@@ -172,8 +186,8 @@ test("reconcileAreaNodeGeometry translates the baseline when an area moves", () 
     size: { width: 100, height: 100 }
   });
   assert.deepEqual(geometryOf(resultArea), {
-    position: { x: 50, y: 30 },
-    size: { width: 132, height: 122 }
+    position: { x: 24, y: 4 },
+    size: { width: 152, height: 152 }
   });
 });
 

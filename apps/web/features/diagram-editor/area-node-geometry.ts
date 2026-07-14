@@ -1,9 +1,7 @@
 import type { DiagramNode } from "../../../../packages/types/src";
 import { isAreaNode } from "./area-nodes";
 
-const AREA_CHILD_HORIZONTAL_PADDING = 12;
-const AREA_CHILD_TOP_PADDING = 28;
-const AREA_CHILD_BOTTOM_PADDING = 12;
+const AREA_CHILD_EXPANSION_MULTIPLIER = 1.3;
 
 type AreaGeometry = {
   position: DiagramNode["position"];
@@ -171,48 +169,43 @@ function reconcileArea(area: DiagramNode, directChildren: readonly DiagramNode[]
   }
 
   const baseline = storedBaseline ?? geometryOf(area);
-  const childBounds = getPaddedChildBounds(directChildren);
-  const left = Math.min(baseline.position.x, childBounds.left);
-  const top = Math.min(baseline.position.y, childBounds.top);
-  const right = Math.max(
-    baseline.position.x + baseline.size.width,
-    childBounds.right
-  );
-  const bottom = Math.max(
-    baseline.position.y + baseline.size.height,
-    childBounds.bottom
-  );
+  const expandedGeometry = getExpandedGeometry(baseline, directChildren);
 
   return setAreaAutoSizeBaseline(
     {
       ...area,
-      position: { x: left, y: top },
-      size: { width: right - left, height: bottom - top }
+      position: expandedGeometry.position,
+      size: expandedGeometry.size
     },
     baseline
   );
 }
 
-function getPaddedChildBounds(directChildren: readonly DiagramNode[]) {
-  let left = Number.POSITIVE_INFINITY;
-  let top = Number.POSITIVE_INFINITY;
-  let right = Number.NEGATIVE_INFINITY;
-  let bottom = Number.NEGATIVE_INFINITY;
+function getExpandedGeometry(
+  baseline: AreaGeometry,
+  directChildren: readonly DiagramNode[]
+): AreaGeometry {
+  const size = directChildren.reduce(
+    (expandedSize, child) => ({
+      width:
+        expandedSize.width + child.size.width * AREA_CHILD_EXPANSION_MULTIPLIER,
+      height:
+        expandedSize.height + child.size.height * AREA_CHILD_EXPANSION_MULTIPLIER
+    }),
+    { ...baseline.size }
+  );
+  const center = {
+    x: baseline.position.x + baseline.size.width / 2,
+    y: baseline.position.y + baseline.size.height / 2
+  };
 
-  for (const child of directChildren) {
-    left = Math.min(left, child.position.x - AREA_CHILD_HORIZONTAL_PADDING);
-    top = Math.min(top, child.position.y - AREA_CHILD_TOP_PADDING);
-    right = Math.max(
-      right,
-      child.position.x + child.size.width + AREA_CHILD_HORIZONTAL_PADDING
-    );
-    bottom = Math.max(
-      bottom,
-      child.position.y + child.size.height + AREA_CHILD_BOTTOM_PADDING
-    );
-  }
-
-  return { bottom, left, right, top };
+  return {
+    position: {
+      x: center.x - size.width / 2,
+      y: center.y - size.height / 2
+    },
+    size
+  };
 }
 
 function setAreaAutoSizeBaseline(node: DiagramNode, baseline: AreaGeometry): DiagramNode {
