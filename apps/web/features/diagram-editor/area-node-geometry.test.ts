@@ -60,6 +60,49 @@ test("reconcileAreaNodeGeometry restores the baseline and removes it after the l
   assert.equal(resultArea?.metadata?.areaAutoSizeBaseline, undefined);
 });
 
+test("reconcileAreaNodeGeometry restores the old parent and initializes the new parent together", () => {
+  const oldParent = makeAreaWithBaseline(
+    "old-parent",
+    undefined,
+    { x: 0, y: 0 },
+    { width: 132, height: 122 },
+    { position: { x: 0, y: 0 }, size: { width: 100, height: 100 } }
+  );
+  const newParent = makeArea(
+    "new-parent",
+    undefined,
+    { x: 300, y: 0 },
+    { width: 100, height: 100 }
+  );
+  const beforeChild = makeResource(
+    "child",
+    oldParent.id,
+    { x: 80, y: 70 },
+    { width: 40, height: 40 }
+  );
+  const afterChild = {
+    ...beforeChild,
+    metadata: { parentAreaNodeId: newParent.id },
+    position: { x: 320, y: 30 }
+  };
+
+  const result = reconcileAreaNodeGeometry(
+    [oldParent, newParent, beforeChild],
+    [oldParent, newParent, afterChild],
+    new Set([beforeChild.id])
+  );
+
+  assert.deepEqual(geometryOf(getNode(result, oldParent.id)), {
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 100 }
+  });
+  assert.equal(getNode(result, oldParent.id)?.metadata?.areaAutoSizeBaseline, undefined);
+  assert.deepEqual(getNode(result, newParent.id)?.metadata?.areaAutoSizeBaseline, {
+    position: { x: 300, y: 0 },
+    size: { width: 100, height: 100 }
+  });
+});
+
 test("reconcileAreaNodeGeometry recalculates nested areas from the inside out", () => {
   const outer = makeArea("outer", undefined, { x: 0, y: 0 }, { width: 180, height: 130 });
   const inner = makeArea("inner", outer.id, { x: 100, y: 80 }, { width: 80, height: 60 });
