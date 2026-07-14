@@ -3,8 +3,10 @@ import test from "node:test";
 import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
 import {
   connectGitHubSourceRepository,
+  createGitHubAccountInstallUrl,
   createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
+  listGitHubAccountInstallations,
   listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
   requireRepositoryAnalysisTemplateId,
@@ -16,12 +18,85 @@ import {
   type SourceRepositoryRecord,
   type SourceRepositoryRepository
 } from "./source-repository-service.js";
+import { verifyGitHubAppState } from "./github-app-state.js";
 import type { GitHubAppClient } from "./github-app-client.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
 
 const stateSecret = "github-app-state-secret-for-tests";
 const projectId = "11111111-1111-4111-8111-111111111111";
 const userId = "22222222-2222-4222-8222-222222222222";
+
+test("GitHub account install URL carries account scope without a project", async () => {
+  const install = await createGitHubAccountInstallUrl({
+    accessContext: createAccessContext(userId),
+    appSlug: "sketchcatch-test",
+    stateSecret
+  });
+  const state = new URL(install.installUrl).searchParams.get("state");
+
+  assert.ok(state);
+  const payload = await verifyGitHubAppState({ state, secret: stateSecret });
+  assert.equal(payload.scope, "account");
+  assert.equal(payload.userId, userId);
+  assert.equal("projectId" in payload, false);
+});
+
+test("GitHub account installations expose only owned public management metadata", async () => {
+  const repository = createInMemorySourceRepositoryRepository([], "github-account-1");
+  const github = createFakeGitHubAppClient(
+    [
+      createRepositoryCandidate({ githubRepositoryId: "repo-1" }),
+      createRepositoryCandidate({ githubRepositoryId: "repo-2" })
+    ],
+    [
+      createInstallation("42", "github-account-1"),
+      createInstallation("99", "another-account")
+    ]
+  );
+
+  const result = await listGitHubAccountInstallations(
+    { accessContext: createAccessContext(userId) },
+    repository,
+    github
+  );
+
+  assert.deepEqual(result.installations, [
+    {
+      installationId: "42",
+      accountLogin: "account-github-account-1",
+      accountType: "User",
+      repositorySelection: "selected",
+      repositoryCount: 2,
+      htmlUrl: "https://github.com/settings/installations/42"
+    }
+  ]);
+});
+
+test("GitHub account callback validates ownership without creating a project repository", async () => {
+  const repository = createInMemorySourceRepositoryRepository([], "github-account-1");
+  const github = createFakeGitHubAppClient([], [createInstallation("42", "github-account-1")]);
+  const install = await createGitHubAccountInstallUrl({
+    accessContext: createAccessContext(userId),
+    appSlug: "sketchcatch-test",
+    stateSecret
+  });
+  const state = new URL(install.installUrl).searchParams.get("state");
+
+  assert.ok(state);
+  const result = await listGitHubInstallationRepositories(
+    {
+      installationId: "42",
+      state,
+      accessContext: createAccessContext(userId),
+      stateSecret
+    },
+    repository,
+    github
+  );
+
+  assert.deepEqual(result, { scope: "account" });
+  assert.equal(repository.rows.length, 0);
+});
 
 test("GitHub App callback lists installation repositories without storing the installation repository list", async () => {
   const repository = createInMemorySourceRepositoryRepository();
@@ -53,6 +128,10 @@ test("GitHub App callback lists installation repositories without storing the in
     github
   );
 
+  assert.equal(result.scope, "project");
+  if (result.scope !== "project") {
+    assert.fail("Expected a project-scoped GitHub callback result");
+  }
   assert.equal(result.projectId, projectId);
   assert.deepEqual(
     result.repositories.map((candidate) => candidate.fullName),

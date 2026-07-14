@@ -435,6 +435,71 @@ test("source repository routes issue a GitHub install URL with an API-signed sta
   assert.equal(repository.findAccessibleProjectCalls.length, 1);
 });
 
+test("source repository routes list account GitHub installations and issue a global install URL", async (t) => {
+  const repository = new FakeSourceRepositoryRepository();
+  const githubAppClient = createFakeGitHubAppClient([
+    createRepositoryCandidate({ githubRepositoryId: "repo-1" }),
+    createRepositoryCandidate({ githubRepositoryId: "repo-2" })
+  ]);
+  const app = await buildSourceRepositoryRouteApp({ repository, githubAppClient });
+  t.after(() => app.close());
+
+  const listResponse = await app.inject({
+    method: "GET",
+    url: "/api/source-repositories/github/installations",
+    headers: await authHeaders()
+  });
+  const installResponse = await app.inject({
+    method: "POST",
+    url: "/api/source-repositories/github/install-url",
+    headers: await authHeaders()
+  });
+
+  assert.equal(listResponse.statusCode, 200);
+  assert.deepEqual(listResponse.json(), {
+    installations: [
+      {
+        installationId: "12345",
+        accountLogin: "owner",
+        accountType: "Organization",
+        repositorySelection: "selected",
+        repositoryCount: 2,
+        htmlUrl: "https://github.com/settings/installations/12345"
+      }
+    ]
+  });
+  assert.equal(installResponse.statusCode, 201);
+  const installUrl = new URL(installResponse.json().installUrl);
+  assert.equal(installUrl.pathname, "/apps/sketchcatch-test/installations/new");
+  assert.ok(installUrl.searchParams.get("state"));
+  assert.equal(repository.findAccessibleProjectCalls.length, 0);
+});
+
+test("source repository routes resolve an account installation callback without repository candidates", async (t) => {
+  const repository = new FakeSourceRepositoryRepository();
+  const app = await buildSourceRepositoryRouteApp({ repository });
+  t.after(() => app.close());
+
+  const installResponse = await app.inject({
+    method: "POST",
+    url: "/api/source-repositories/github/install-url",
+    headers: await authHeaders()
+  });
+  const state = new URL(installResponse.json().installUrl).searchParams.get("state");
+  assert.ok(state);
+
+  const callbackResponse = await app.inject({
+    method: "POST",
+    url: "/api/source-repositories/github/installation-repositories",
+    headers: await authHeaders(),
+    payload: { installationId: "12345", state }
+  });
+
+  assert.equal(callbackResponse.statusCode, 200);
+  assert.deepEqual(callbackResponse.json(), { scope: "account" });
+  assert.equal(repository.rows.length, 0);
+});
+
 test("source repository routes issue a callback URL for an existing active GitHub installation", async (t) => {
   const repository = new FakeSourceRepositoryRepository([
     createSourceRepositoryRecord({

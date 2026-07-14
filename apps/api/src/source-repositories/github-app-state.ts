@@ -5,20 +5,25 @@ const githubAppStateAudience = "sketchcatch.github_app.install";
 const githubAppStateIssuer = "sketchcatch.api";
 const githubAppStateTtlMs = 10 * 60 * 1000;
 
-export type GitHubAppStatePayload = {
+type GitHubAppStateBasePayload = {
   userId: string;
-  projectId: string;
   nonce: string;
   expiresAt: Date;
 };
 
-export type CreateGitHubAppStateInput = {
+export type GitHubAppStatePayload =
+  | (GitHubAppStateBasePayload & { scope: "account" })
+  | (GitHubAppStateBasePayload & { scope: "project"; projectId: string });
+
+type CreateGitHubAppStateBaseInput = {
   userId: string;
-  projectId: string;
   secret: string;
   now?: () => Date;
   generateNonce?: () => string;
 };
+
+export type CreateGitHubAppStateInput = CreateGitHubAppStateBaseInput &
+  ({ scope: "account" } | { scope: "project"; projectId: string });
 
 export type VerifyGitHubAppStateInput = {
   state: string;
@@ -28,6 +33,7 @@ export type VerifyGitHubAppStateInput = {
 
 type GitHubAppStateJwtPayload = {
   readonly userId?: unknown;
+  readonly scope?: unknown;
   readonly projectId?: unknown;
   readonly nonce?: unknown;
   readonly expiresAt?: unknown;
@@ -43,7 +49,8 @@ export async function createGitHubAppState(
   const secretKey = createStateSecretKey(input.secret);
   const state = await new SignJWT({
     userId: input.userId,
-    projectId: input.projectId,
+    scope: input.scope,
+    ...(input.scope === "project" ? { projectId: input.projectId } : {}),
     nonce: generateNonce(),
     expiresAt: expiresAt.toISOString()
   })
@@ -73,7 +80,7 @@ export async function verifyGitHubAppState(
 
   if (
     typeof payload.userId !== "string" ||
-    typeof payload.projectId !== "string" ||
+    (payload.scope !== "account" && payload.scope !== "project") ||
     typeof payload.nonce !== "string" ||
     typeof payload.expiresAt !== "string"
   ) {
@@ -86,11 +93,28 @@ export async function verifyGitHubAppState(
     throw new Error("GitHub App state expired");
   }
 
-  return {
+  const basePayload = {
     userId: payload.userId,
-    projectId: payload.projectId,
     nonce: payload.nonce,
     expiresAt
+  };
+
+  if (payload.scope === "account") {
+    if (payload.projectId !== undefined) {
+      throw new Error("Invalid GitHub App state payload");
+    }
+
+    return { ...basePayload, scope: "account" };
+  }
+
+  if (typeof payload.projectId !== "string" || payload.projectId.length === 0) {
+    throw new Error("Invalid GitHub App state payload");
+  }
+
+  return {
+    ...basePayload,
+    scope: "project",
+    projectId: payload.projectId,
   };
 }
 
