@@ -5,6 +5,7 @@ import {
   listBoardTemplates,
   reviewAvailableBoardTemplate
 } from "./template-library";
+import { ARCHITECTURE_BOARD_COMPILER_VERSION } from "../architecture-board-compiler";
 
 test("Template review는 source-exact 원본과 Compiler proposal을 별도로 반환한다", () => {
   const template = listBoardTemplates()
@@ -19,11 +20,10 @@ test("Template review는 source-exact 원본과 Compiler proposal을 별도로 �
 
   assert.equal(review.templateId, template.id);
   assert.deepEqual(review.sourceDiagram, sourceBefore);
-  assert.deepEqual(review.proposal.diagram.nodes, sourceBefore.nodes);
-  assert.deepEqual(review.proposal.diagram.edges, sourceBefore.edges);
-  assert.deepEqual(review.proposal.diagram.viewport, sourceBefore.viewport);
-  assert.deepEqual(review.proposal.diagram.presentation, sourceBefore.presentation);
-  assert.equal(review.proposal.provenance.compilerVersion, "architecture-board-compiler/v1");
+  assert.equal(review.proposal.provenance.compilerVersion, ARCHITECTURE_BOARD_COMPILER_VERSION);
+  assert.ok(review.proposal.provenance.candidateId.startsWith("compiled:"));
+  assert.ok(review.proposal.changes.length > 0);
   assert.notEqual(review.sourceDiagram, review.proposal.diagram);
+  assert.notDeepEqual(review.proposal.diagram, sourceBefore);
   assert.deepEqual(template.diagramJson, sourceBefore);
 });

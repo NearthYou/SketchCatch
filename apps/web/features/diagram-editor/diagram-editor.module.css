@@ -1211,6 +1211,125 @@ button.rightRailResizeHandle {
   gap: 8px;
 }
 
+.compilerPreviewNotice {
+  align-items: stretch;
+  background: color-mix(in srgb, var(--board-surface) 96%, #e7f0ff);
+  border-color: color-mix(in srgb, var(--board-primary) 36%, var(--board-border));
+  bottom: 16px;
+  color: var(--board-ink);
+  flex-direction: column;
+  font-weight: 500;
+  left: auto;
+  max-width: min(500px, calc(100% - 48px));
+  padding: 10px 12px;
+  right: 16px;
+  text-align: left;
+  top: auto;
+  transform: none;
+  width: 460px;
+}
+
+.compilerPreviewHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.compilerPreviewHeader > div:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.compilerPreviewHeader strong {
+  color: var(--board-ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.compilerPreviewHeader span {
+  color: var(--board-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.compilerPreviewActions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.compilerPreviewActions button {
+  background: transparent;
+  border: 1px solid var(--board-border);
+  border-radius: 5px;
+  color: var(--board-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  min-height: 28px;
+  padding: 0 9px;
+}
+
+.compilerPreviewActions button:hover,
+.compilerPreviewActions button:focus-visible {
+  background: var(--board-surface-subtle);
+  border-color: var(--board-primary);
+  outline: none;
+}
+
+.compilerPreviewActions button:last-child {
+  background: var(--board-primary);
+  border-color: var(--board-primary);
+  color: #ffffff;
+}
+
+.compilerPreviewDetails {
+  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.compilerPreviewDetail {
+  align-items: baseline;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.compilerPreviewDetail > span {
+  color: var(--board-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.compilerPreviewDetail strong {
+  color: var(--board-ink);
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compilerPreviewDiagnostic {
+  border-top: 1px solid color-mix(in srgb, var(--board-border) 72%, transparent);
+  color: var(--board-warning);
+  font-size: 11px;
+  font-weight: 700;
+  margin: 8px 0 0;
+  padding-top: 8px;
+}
+
 .emptyState {
   align-items: center;
   background: rgba(255, 255, 255, 0.88);
@@ -2663,6 +2782,23 @@ button.rightRailResizeHandle {
   .canvasToolbar {
     left: 10px;
     max-height: calc(100% - 20px);
+  }
+
+  .compilerPreviewNotice {
+    bottom: 12px;
+    left: 12px;
+    max-width: none;
+    right: 12px;
+    width: auto;
+  }
+
+  .compilerPreviewHeader {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .compilerPreviewActions {
+    margin-left: auto;
   }
 }
 

@@ -107,3 +107,157 @@ test("Compiler changes는 승인 전 proposal일 뿐 현재 Diagram을 mutation�
   assert.ok(proposal.changes.some(({ action, kind }) => kind === "resource" && action === "add"));
   assert.ok(proposal.quality.compilationDistance > 0);
 });
+
+test("Compiler는 contains/hosts와 Terraform 참조에서 Security Group을 제외한 containment를 제안한다", () => {
+  const proposal = compileArchitectureBoard({
+    architecture: {
+      nodes: [
+        {
+          id: "vpc",
+          type: "VPC",
+          label: "VPC",
+          positionX: 0,
+          positionY: 0,
+          config: { terraformResourceType: "aws_vpc", terraformResourceName: "main" }
+        },
+        {
+          id: "subnet",
+          type: "SUBNET",
+          label: "Public subnet",
+          positionX: 0,
+          positionY: 0,
+          config: { terraformResourceType: "aws_subnet", terraformResourceName: "public" }
+        },
+        {
+          id: "group",
+          type: "SECURITY_GROUP",
+          label: "App SG",
+          positionX: 0,
+          positionY: 0,
+          config: { terraformResourceType: "aws_security_group", terraformResourceName: "app" }
+        },
+        {
+          id: "instance",
+          type: "EC2",
+          label: "App",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            terraformResourceType: "aws_instance",
+            subnetId: "${aws_subnet.public.id}",
+            vpcSecurityGroupIds: ["aws_security_group.app.id"]
+          }
+        }
+      ],
+      edges: [
+        { id: "vpc-subnet", sourceId: "vpc", targetId: "subnet", label: "contains" },
+        { id: "sg-instance", sourceId: "group", targetId: "instance", label: "contains" }
+      ]
+    },
+    trigger: "ai-draft"
+  });
+  const nodeById = new Map(proposal.architecture.nodes.map((node) => [node.id, node]));
+
+  assert.equal(nodeById.get("subnet")?.config["parentAreaNodeId"], "vpc");
+  assert.equal(nodeById.get("instance")?.config["parentAreaNodeId"], "subnet");
+  assert.notEqual(nodeById.get("instance")?.config["parentAreaNodeId"], "group");
+  assert.ok(
+    proposal.changes.some(
+      ({ kind, targetIds }) => kind === "containment" && targetIds.includes("instance")
+    )
+  );
+  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.inferred_containment"));
+});
+
+test("Compiler는 hosted EKS Cluster를 presentation Area로 만들고 Terraform 참조 관계를 명시한다", () => {
+  const proposal = compileArchitectureBoard({
+    architecture: {
+      nodes: [
+        {
+          id: "cluster",
+          type: "EKS_CLUSTER",
+          label: "Cluster",
+          positionX: 0,
+          positionY: 0,
+          config: { terraformResourceType: "aws_eks_cluster", terraformResourceName: "app" }
+        },
+        {
+          id: "node-group",
+          type: "EKS_NODE_GROUP",
+          label: "Node group",
+          positionX: 0,
+          positionY: 0,
+          config: {
+            terraformResourceType: "aws_eks_node_group",
+            clusterName: "${aws_eks_cluster.app.name}"
+          }
+        }
+      ],
+      edges: []
+    },
+    trigger: "ai-draft"
+  });
+  const cluster = proposal.architecture.nodes.find((node) => node.id === "cluster");
+  const nodeGroup = proposal.architecture.nodes.find((node) => node.id === "node-group");
+  const referenceChange = proposal.changes.find(
+    ({ kind, action, after }) =>
+      kind === "relationship" && action === "add" &&
+      typeof after === "object" && after !== null && (after as { label?: unknown }).label === "references"
+  );
+
+  assert.equal(cluster?.config["presentationArea"], true);
+  assert.equal(nodeGroup?.config["parentAreaNodeId"], "cluster");
+  assert.ok(referenceChange);
+  assert.ok(proposal.changes.some(({ kind }) => kind === "presentation"));
+  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.inferred_terraform_relationship"));
+});
+
+test("Compiler는 중복 Resource와 dangling 관계를 optional repair proposal 및 diagnostic으로 남긴다", () => {
+  const proposal = compileArchitectureBoard({
+    architecture: {
+      nodes: [
+        { id: "api", type: "API_GATEWAY_REST_API", positionX: 0, positionY: 0, config: {} },
+        { id: "api", type: "API_GATEWAY_REST_API", positionX: 60, positionY: 0, config: {} }
+      ],
+      edges: [{ id: "missing", sourceId: "api", targetId: "not-found", label: "invokes" }]
+    },
+    trigger: "reverse-engineering"
+  });
+
+  assert.deepEqual(
+    proposal.architecture.nodes.map((node) => node.id).sort(),
+    ["api", "api__2"]
+  );
+  assert.equal(proposal.architecture.edges.length, 0);
+  assert.ok(
+    proposal.changes.some(
+      ({ kind, action }) => kind === "resource" && action === "modify"
+    )
+  );
+  assert.ok(
+    proposal.changes.some(
+      ({ kind, action }) => kind === "relationship" && action === "remove"
+    )
+  );
+  assert.ok(
+    proposal.diagnostics.some(({ code }) => code === "compiler.duplicate_resource_id_normalized")
+  );
+  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.dangling_relationship"));
+});
+
+test("source-exact Board는 semantic 후보보다 우선하며 원본을 한 글자도 바꾸지 않는다", () => {
+  const source = compileArchitectureBoard({ architecture, trigger: "ai-draft" }).diagram;
+  const exact: DiagramJson = {
+    ...structuredClone(source),
+    presentation: { geometryPolicy: "source-exact" }
+  };
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram: exact,
+    trigger: "ai-draft"
+  });
+
+  assert.deepEqual(proposal.diagram, exact);
+  assert.deepEqual(proposal.changes, []);
+  assert.equal(proposal.provenance.candidateId, "source-exact");
+});

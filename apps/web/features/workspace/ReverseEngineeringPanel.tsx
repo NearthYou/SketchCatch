@@ -25,7 +25,6 @@ import {
 } from "./api";
 import {
   createReverseEngineeringBoardApplication,
-  createReverseEngineeringBoardComparison,
   type ReverseEngineeringBoardApplicationMode
 } from "./reverse-engineering-board-application";
 import {
@@ -153,16 +152,18 @@ export function ReverseEngineeringPanel({
       : null;
   // 후보 미리보기를 띄워도 원래 보드 기준이 흔들리지 않게 별도로 보관합니다.
   const previewSourceDiagram = previewBaseDiagram ?? context.diagram;
-  const comparison = useMemo(() => {
+  const selectedCandidateApplication = useMemo(() => {
     if (!selectedCandidateResult) {
       return null;
     }
 
-    return createReverseEngineeringBoardComparison({
+    return createReverseEngineeringBoardApplication({
       currentDiagram: previewSourceDiagram,
+      mode: "replace",
       result: selectedCandidateResult
     });
   }, [previewSourceDiagram, selectedCandidateResult]);
+  const comparison = selectedCandidateApplication?.comparison ?? null;
   const hasDeletedSourceScan = useMemo(
     () =>
       hasDeletedReverseEngineeringSourceScan(
@@ -470,11 +471,12 @@ export function ReverseEngineeringPanel({
           />
         )}
 
-        {selectedCandidateResponse?.result && comparison && selectedCandidate ? (
+        {selectedCandidateResponse?.result && comparison && selectedCandidate && selectedCandidateApplication ? (
           <ReverseEngineeringResultPanel
             applyMessage={applyMessage}
             applyState={applyState}
             boardCandidates={boardCandidates}
+            compilation={selectedCandidateApplication.compilation}
             comparison={comparison}
             createProjectOnApply={createProjectOnApply}
             hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}

@@ -544,6 +544,30 @@
       "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
     },
     {
+      "id": "ARCHITECTURE-BOARD-COMPILER-409",
+      "priority": 1,
+      "area": "ai-architecture-board",
+      "title": "Architecture Board Compiler and Workspace AI Chat",
+      "user_visible_behavior": "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 같은 Compiler 제안·diff·승인 경계를 통해 읽기 쉬운 Architecture Board를 만든다.",
+      "status": "in_progress",
+      "verification": [
+        "29개 사용 가능한 Template 사례와 1개 실패 evidence로 versioned knowledge artifact를 검증한다.",
+        "동일한 입력은 동일한 Compiler proposal, diff, diagnostic, quality 결과를 반환한다.",
+        "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 동일한 Compiler Interface를 사용한다.",
+        "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
+        "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm --filter @sketchcatch/web typecheck",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-quality.test.ts features/resource-settings/template-library-review.test.ts features/workspace/reverse-engineering-board-application.test.ts features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-chat-status.test.ts"
+        ],
+        "notes": "Initial Compiler, proposal preview, shared contracts, and AI Chat state separation are implemented. The generated knowledge artifact, broad semantic candidate policy, full-suite verification, and PR review remain in progress."
+      },
+      "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
+    },
+    {
       "id": "AWS-TEMPLATE-LAYOUT-001",
       "priority": 2,
       "area": "template-board",

@@ -58,6 +58,7 @@ test("Template review는 29개 usable 사례를 모두 검토하고 source-exact
   const captured = brainboardTemplateRegistry.flatMap((entry) =>
     entry.status === "available" ? [adaptBrainboardTemplateSource(entry.source).diagramJson] : []
   );
+  const capturedBefore = captured.map((diagram) => structuredClone(diagram));
   const diagrams: DiagramJson[] = [...authored, ...captured];
   const proposals = diagrams.map(reviewArchitectureBoardTemplate);
 
@@ -68,7 +69,12 @@ test("Template review는 29개 usable 사례를 모두 검토하고 source-exact
     )
   );
   captured.forEach((source, index) => {
-    assert.deepEqual(proposals[authored.length + index]?.diagram, source);
+    const proposal = proposals[authored.length + index];
+
+    assert.deepEqual(source, capturedBefore[index]);
+    assert.ok(proposal?.provenance.candidateId.startsWith("compiled:"));
+    assert.ok(proposal?.changes.length);
+    assert.notDeepEqual(proposal?.diagram, source);
   });
 });
 
