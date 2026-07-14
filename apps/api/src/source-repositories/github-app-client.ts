@@ -81,6 +81,7 @@ export type GitHubWorkflowRunReadInput = GitHubRepositoryRefInput & {
 export type GitHubWorkflowRunSummary = {
   id: number;
   runAttempt: number;
+  event: string;
   updatedAt: string | null;
   createdAt: string | null;
   commitSha: string;
@@ -337,6 +338,7 @@ type GitHubWorkflowRunsResponse = {
 type GitHubWorkflowRunApiResponse = {
   readonly id?: unknown;
   readonly run_attempt?: unknown;
+  readonly event?: unknown;
   readonly head_sha?: unknown;
   readonly head_branch?: unknown;
   readonly html_url?: unknown;
@@ -865,6 +867,7 @@ function toWorkflowRunSummary(run: GitHubWorkflowRunApiResponse): GitHubWorkflow
   return {
     id: readRequiredNumber(run.id, "workflow run id"),
     runAttempt: readOptionalNumber(run.run_attempt) ?? 1,
+    event: readRequiredString(run.event, "workflow run event"),
     updatedAt: readDateString(run.updated_at),
     createdAt: readDateString(run.created_at),
     commitSha: readRequiredString(run.head_sha, "workflow run commit sha"),

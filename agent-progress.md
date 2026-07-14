@@ -4,31 +4,30 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `codex/ecs-deployment-speed`; the focused optimization commits are pushed to `origin/codex/ecs-deployment-speed`.
-- Production ECS workflow run `29333857003` succeeded in 6m09s. Warm API/web build-push completed in 7s/6s, ECS stabilization in 3m13s/2m56s, and all public health endpoints returned 200.
-- The measured API/web digests are `sha256:f9726dbead5597539a6501d709bd762890fbd3ba68c8fa551e2eee304800ee4c` and `sha256:383a249b11f9e8d5548a3c3daa82c976a24dd1f6b36a2fc42cb408c7f92d9997`.
-- Read-only production runtime plan `29334381609` passed and reported no infrastructure changes, so the production state already matches the committed ECS/ALB timing values.
-- Focused API tests, generator tests, Terraform tests, infrastructure checks, smoke preflight, lint, typecheck, build, and harness pass. The full workspace test attempt timed out after 15 minutes; no changed-path failure was observed.
-- Issue #378 remains independently `in_progress`; this branch does not change or claim its unfinished four-runtime matrix.
-- Previous verified sandbox evidence remains recorded below for that separate workstream.
-- Direct ECS infrastructure deployment `3f2e03ec-8b5c-46e3-af74-43d4e21c368e` created 19 resources and Direct application deployment `13f0f6c2-1890-46ce-8044-be754c810b5f` persisted release `5fcb826c-4bb4-45c8-8f59-3bae9790a82e`.
-- Direct evidence matched commit `9c4251baf058a8e0a6513236068d819fecfcdfd5`, ECR digest `3152546fc2cd37ce929dd63b20b161cae58124921fc27e7028a514db2f52a81e`, ECS task definition revision 2, and HTTPS health 200.
-- The API returned five project deployments, 808 infrastructure logs, 17 application logs, and five persisted notifications. CloudWatch returned real ECS CPU metrics. Web Push delivery was not claimed because no browser subscription existed.
-- Live Observation QR/session creation correctly returned 409 because the approved Terraform lacked the required custom hostname, ACM certificate, Route53 record, HTTPS ALB listener, and traffic outputs.
-- GitHub handoff `843323c9-c437-4727-b586-5801b1771f6e` created sandbox PR #1. GitHub Actions run `29324643997` attempt 2 succeeded against merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, ECR digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, ECS task definition revision 3, and HTTPS health 200.
-- GitOps service persistence did not pass: project pipeline refresh returned `stale=true` with no persisted runs because the successful manual run used the later workflow-fix merge SHA, while the handoff retained the cancelled initial infra run.
-- Static, Lambda, and EC2/ASG GitOps were not started within the hard deadline; their required project targets and runtime infrastructure were absent.
-- Application cleanup failed closed because the active GitOps revision 3 no longer matched the Direct release cleanup manifest's revision 2. Infrastructure destroy reached `DESTROYED`; CodeBuild, ECR, CloudWatch log groups, test S3 buckets and versions, CodeConnection, ALB/target groups, ECS cluster/task definitions, CloudFront, temporary OIDC, and the temporary operator policy all verify at zero.
-- Focused changed-path tests pass 89/89 plus workflow tests 9/9. Workspace lint, typecheck, and build pass; the full API suite retains known unrelated failures and one now-corrected deployment-plan expectation.
+- Branch: `fix/sw/378-gitops-persistence-e2e`; the workstream remains `in_progress` because Static, Lambda, EC2/ASG, rollback, QR, and Web Push sandbox acceptance are still unverified.
+- ECS GitOps Infra run `29334708442` and chained App run `29334822683` succeeded for commit `3a12e55c13e7be1a769cfbe920b112516d8c14ce`.
+- HTTPS `/health` returned 200 with the exact commit. ECR and persisted release digest `20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1` matched ECS task definition revision 7 and desired/running count 1/1.
+- Project refresh now returns `stale=false`; Detect, Build, Artifact Publish, Plan, Apply, Deploy, and Verify are all persisted as succeeded with 1,161 masked CI log rows and no detected credential pattern.
+- Application release `8025a2f3-455a-41bb-abbd-b8149105d004` and Pipeline Run `4defade1-18ca-437b-8cf6-3857b058353e` persist the GitOps SHA, digest, provider revision, Output URL, and healthy ECS evidence.
+- The AWS Connection external ID was rotated in memory and verified with a fresh Operator session: the new value is accepted and the prior value is rejected. No value was printed or written to a file.
+- Destroy run `29337235499` succeeded. Direct queries confirm zero VPC, active ECS cluster, ECR repository, CodeBuild project, log group, release/state bucket, OIDC provider, issue task definition, and issue IAM role. Resource Groups still has three delayed deleted-ECS tag index entries.
+- After fast-forwarding to `origin/dev` at `2fe0296a`, 76 focused tests, harness, lint, typecheck, build, and diff checks pass.
+- Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
 
 ## Session Record
 
-### 2026-07-14 - Production ECS deployment speed optimization
+### 2026-07-14 - ECS GitOps persistence, immediate replacement, and cleanup
 
-- Parallelized API/web image jobs, added ECR registry cache, digest-only releases, pre-deploy stability evidence, and per-phase timing.
-- Reduced Docker build contexts with filtered workspace installs and added the same remote-cache behavior to generated ECS/Fargate CodeBuild workflows.
-- Tuned and verified ALB/ECS health timing without weakening minimum healthy percent or circuit-breaker rollback.
-- Completed one real production release and post-deploy health smoke; the total improved from the 7m51s baseline to 6m09s, while the 5m30s stretch target remains unmet.
+- Made automated `push`/`workflow_run` authoritative over manual dispatch, isolated unavailable job logs, and preserved accepted nullable handoff provenance without PostgreSQL unknown-null parameters.
+- Added remote S3 backend enforcement, Environment-gated plans, and a real ECS all-at-once scale-to-zero replacement with active rollback restoration.
+- Fixed project refresh so obsolete release verification failures do not stale a newer verified release and actual chained workflow jobs override changed-file scope in stage history.
+- Proved the final ECS release through GitHub, HTTPS, AWS, API, RDS, CI logs, and release history; then rotated the exposed external ID and removed all cost-bearing sandbox resources.
+
+### 2026-07-14 - Production ECS deployment speed optimization merged from dev
+
+- Preserved dev's parallel ECR-cached Buildx jobs, digest-only releases, stability preflight, rollback evidence, and deployment timing.
+- Production run `29333857003` remains recorded as 6m09s with public health 200; read-only plan `29334381609` reported no infrastructure changes.
+- This sandbox branch does not alter or re-claim the production optimization evidence.
 
 ### 2026-07-14 - Real Direct ECS and bounded GitOps validation
 

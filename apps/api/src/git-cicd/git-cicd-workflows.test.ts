@@ -39,7 +39,18 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
   );
   assert.match(files[0]?.content ?? "", /terraform plan/);
   assert.match(files[0]?.content ?? "", /"infra\/terraform\/\*\*"/);
-  assert.match(files[0]?.content ?? "", /environment: sketchcatch-production/);
+  assert.equal(
+    [...(files[0]?.content ?? "").matchAll(/environment: sketchcatch-production/g)].length,
+    2
+  );
+  assert.equal(
+    [...(files[0]?.content ?? "").matchAll(/backend "s3" \{\}/g)].length,
+    2
+  );
+  assert.equal(
+    [...(files[0]?.content ?? "").matchAll(/Existing Terraform backend must be s3\./g)].length,
+    2
+  );
   assert.match(files[1]?.content ?? "", /start-instance-refresh/);
   assert.match(files[1]?.content ?? "", /branches: \["main"\]/);
   assert.match(files[1]?.content ?? "", /"apps\/web\/\*\*"/);
@@ -51,6 +62,8 @@ test("createGitCicdAutomationFiles renders infra app destroy workflows and manif
   assert.match(files[1]?.content ?? "", /LaunchTemplateName/);
   assert.match(files[1]?.content ?? "", /describe-instance-refreshes/);
   assert.match(files[2]?.content ?? "", /terraform destroy/);
+  assert.match(files[2]?.content ?? "", /backend "s3" \{\}/);
+  assert.match(files[2]?.content ?? "", /Existing Terraform backend must be s3\./);
   const manifest = files.find(
     (file) => file.path === "sketchcatch/demo-project/ci-cd/handoff.json"
   );
@@ -148,6 +161,10 @@ test("ECS Fargate automation uses confirmed Docker evidence and immutable releas
   assert.match(files[0]?.content ?? "", /"apps\/api\/\*\*"/);
   assert.match(appWorkflow, /name: Publish immutable ECR digest/);
   assert.match(appWorkflow, /name: Deploy ECS Fargate revision/);
+  assert.match(appWorkflow, /SKETCHCATCH_DESIRED_COUNT=/);
+  assert.match(appWorkflow, /--desired-count 0/);
+  assert.match(appWorkflow, /--desired-count "\$SKETCHCATCH_DESIRED_COUNT"/);
+  assert.match(appWorkflow, /minimumHealthyPercent=0,maximumPercent=200/);
   assert.match(appWorkflow, /minimumHealthyPercent=0,maximumPercent=100/);
   assert.match(appWorkflow, /deploymentCircuitBreaker=\{enable=true,rollback=true\}/);
   assert.match(appWorkflow, /name: Verify ECS release/);

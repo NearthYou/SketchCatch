@@ -122,18 +122,11 @@ test("snapshot upsert replaces or preserves the provenance tuple atomically", as
   ]);
   const upsert = queries.find(({ sql }) => sql.startsWith('insert into "git_cicd_pipeline_runs"'));
   assert.ok(upsert);
-  assert.match(
-    upsert.sql,
-    /"handoff_id" = case when \$\d+ is null then "git_cicd_pipeline_runs"\."handoff_id" else \$\d+ end/
-  );
-  assert.match(
-    upsert.sql,
-    /"app_url" = case when \$\d+ is null then "git_cicd_pipeline_runs"\."app_url" else \$\d+ end/
-  );
-  assert.match(
-    upsert.sql,
-    /"api_url" = case when \$\d+ is null then "git_cicd_pipeline_runs"\."api_url" else \$\d+ end/
-  );
+  const acceptedUpdateClause = upsert.sql.split("do update set")[1] ?? "";
+  assert.match(acceptedUpdateClause, /"handoff_id" = \$\d+/);
+  assert.match(acceptedUpdateClause, /"app_url" = \$\d+/);
+  assert.match(acceptedUpdateClause, /"api_url" = \$\d+/);
+  assert.doesNotMatch(acceptedUpdateClause, /case when \$\d+ is null/);
 
   const noHandoff = createRun({ handoffId: null, appUrl: null, apiUrl: null });
   const preserved = await repository.persistSnapshot({
@@ -146,6 +139,14 @@ test("snapshot upsert replaces or preserves the provenance tuple atomically", as
     "https://a-app.example.com",
     "https://a-api.example.com"
   ]);
+  const noHandoffUpsert = queries.filter(({ sql }) =>
+    sql.startsWith('insert into "git_cicd_pipeline_runs"')
+  )[1];
+  assert.ok(noHandoffUpsert);
+  const preservedUpdateClause = noHandoffUpsert.sql.split("do update set")[1] ?? "";
+  assert.doesNotMatch(preservedUpdateClause, /"handoff_id" =/);
+  assert.doesNotMatch(preservedUpdateClause, /"app_url" =/);
+  assert.doesNotMatch(preservedUpdateClause, /"api_url" =/);
 
   const storedPartialB = await repository.persistSnapshot({
     run: partialB,

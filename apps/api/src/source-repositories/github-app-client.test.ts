@@ -1121,6 +1121,7 @@ test("GitHub Actions read methods return focused models from read-only endpoints
           workflow_runs: [
             {
               id: 11,
+              event: "workflow_run",
               head_sha: "abc",
               head_branch: "main",
               name: "SketchCatch App",
@@ -1165,6 +1166,7 @@ test("GitHub Actions read methods return focused models from read-only endpoints
     {
       id: 11,
       runAttempt: 1,
+      event: "workflow_run",
       updatedAt: "2026-07-13T00:01:00Z",
       createdAt: "2026-07-13T00:00:00Z",
       commitSha: "abc",
@@ -1310,6 +1312,7 @@ function workflowRunPayload(id: number) {
   return {
     id,
     run_attempt: 1,
+    event: "workflow_run",
     head_sha: `sha-${id}`,
     head_branch: "main",
     name: "SketchCatch App",
