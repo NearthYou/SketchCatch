@@ -18,7 +18,7 @@ import type {
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { listBoardTemplates } from "../resource-settings/template-library";
-import { Mic, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Mic, Send, Trash2, X } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { compileArchitectureDraftProposal } from "../architecture-board-compiler";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
@@ -85,6 +85,7 @@ import {
   isWorkspaceAiChatAbortError,
   WorkspaceAiChatRequestRegistry
 } from "./workspace-ai-chat-request";
+import { WorkspaceAiChatLauncher } from "./WorkspaceAiChatLauncher";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiChatDockProps = {
@@ -1547,19 +1548,11 @@ export function WorkspaceAiChatDock({
 
   if (!isOpen) {
     return (
-      <button
-        aria-label="AI 채팅 열기"
-        aria-expanded={false}
-        className={styles.aiChatLauncher}
-        data-right-panel-open={context.isRightPanelOpen}
-        data-terraform-leave-guard-ignore
-        onClick={() => setOpen(true)}
+      <WorkspaceAiChatLauncher
+        isRightPanelOpen={context.isRightPanelOpen}
+        onOpen={() => setOpen(true)}
         ref={launcherButtonRef}
-        title="AI 채팅"
-        type="button"
-      >
-        <Sparkles size={22} aria-hidden="true" />
-      </button>
+      />
     );
   }
 

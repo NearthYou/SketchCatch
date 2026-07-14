@@ -2944,39 +2944,6 @@
   padding: 4px 7px;
 }
 
-.aiChatLauncher {
-  align-items: center;
-  background: var(--workspace-accent, #000000);
-  border: 1px solid var(--workspace-accent, #000000);
-  border-radius: 999px;
-  bottom: 24px;
-  box-shadow: 0 18px 44px color-mix(in srgb, var(--workspace-accent, #000000) 24%, transparent);
-  color: #ffffff;
-  cursor: pointer;
-  display: inline-flex;
-  height: 56px;
-  justify-content: center;
-  position: fixed;
-  right: 24px;
-  transition:
-    background 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.15s ease;
-  width: 56px;
-}
-
-.aiChatLauncher[data-right-panel-open="true"] {
-  right: calc(var(--right-panel-width) + 24px);
-}
-
-.aiChatLauncher:hover,
-.aiChatLauncher:focus-visible {
-  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
-  box-shadow: 0 22px 54px color-mix(in srgb, var(--workspace-accent, #000000) 30%, transparent);
-  outline: none;
-  transform: translateY(-1px);
-}
-
 .aiChatOverlay {
   inset: 0;
   pointer-events: auto;
@@ -5330,12 +5297,6 @@
     padding: 14px;
   }
 
-  .aiChatLauncher,
-  .aiChatLauncher[data-right-panel-open="true"] {
-    bottom: 76px;
-    right: 14px;
-  }
-
   .aiChatDock,
   .aiChatDock[data-right-panel-open="true"] {
     border-radius: 8px 8px 0 0;
@@ -5701,7 +5662,6 @@
 
 .aiPrimaryButton,
 .deploymentPrimaryButton,
-.aiChatLauncher,
 .aiChatSendButton,
 .aiChatSelectionSubmitButton,
 .terraformDiagnosticAiButton {
@@ -5714,8 +5674,6 @@
 .aiPrimaryButton:not(:disabled):focus-visible,
 .deploymentPrimaryButton:not(:disabled):hover,
 .deploymentPrimaryButton:not(:disabled):focus-visible,
-.aiChatLauncher:hover,
-.aiChatLauncher:focus-visible,
 .aiChatSendButton:not(:disabled):hover,
 .aiChatSendButton:not(:disabled):focus-visible,
 .aiChatSelectionSubmitButton:hover,
@@ -5763,22 +5721,6 @@
   color: #ffffff;
 }
 
-/* AI Chat Dock: the only Workspace surface intentionally rebuilt on this branch. */
-.aiChatLauncher {
-  bottom: 20px;
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgb(23 23 23 / 18%);
-  height: 44px;
-  right: 80px;
-  width: 44px;
-  z-index: 1302;
-}
-
-.aiChatLauncher[data-right-panel-open="true"] {
-  right: calc(var(--right-panel-width, 0px) + 20px);
-}
-
-.aiChatLauncher:focus-visible,
 .aiChatCloseButton:focus-visible,
 .aiChatTabButton:focus-visible,
 .aiChatClearButton:focus-visible,
@@ -5999,16 +5941,6 @@
 }
 
 @media (max-width: 768px) {
-  .aiChatLauncher,
-  .aiChatLauncher[data-right-panel-open="true"] {
-    bottom: max(16px, env(safe-area-inset-bottom));
-    right: 76px;
-  }
-
-  .aiChatLauncher[data-right-panel-open="true"] {
-    display: none;
-  }
-
   .aiChatOverlay {
     background: var(--workspace-surface, #ffffff);
   }
@@ -6068,7 +6000,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .aiChatLauncher,
   .aiChatCloseButton,
   .aiChatTabButton,
   .aiChatSuggestionButton,
@@ -6845,13 +6776,6 @@
   border-color: var(--workspace-line-strong, #dcdee0);
   color: var(--workspace-text, #171717);
   outline: none;
-}
-
-.aiChatLauncher {
-  background: var(--workspace-accent, #000000);
-  border-color: var(--workspace-accent, #000000);
-  box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
-  color: #ffffff;
 }
 
 .aiChatDock {
