@@ -3149,6 +3149,77 @@ export type DiagramJson = {
   presentation?: DiagramPresentation | undefined;
 };
 
+export type ArchitectureBoardCompilationTrigger =
+  | "ai-draft"
+  | "board-auto-organize"
+  | "reverse-engineering"
+  | "template-review";
+
+export type ArchitectureBoardCompilationChangeKind =
+  | "resource"
+  | "relationship"
+  | "configuration"
+  | "containment"
+  | "presentation"
+  | "geometry"
+  | "edge-routing";
+
+export type ArchitectureBoardCompilationChangeAction = "add" | "remove" | "modify";
+
+export type ArchitectureBoardCompilationChange = {
+  id: string;
+  kind: ArchitectureBoardCompilationChangeKind;
+  action: ArchitectureBoardCompilationChangeAction;
+  targetIds: string[];
+  before: unknown | null;
+  after: unknown | null;
+  summary: string;
+  cost: number;
+};
+
+export type ArchitectureBoardCompilationDiagnosticLevel = "info" | "warning" | "error";
+
+export type ArchitectureBoardCompilationDiagnostic = {
+  code: string;
+  level: ArchitectureBoardCompilationDiagnosticLevel;
+  summary: string;
+  message: string;
+  relatedChangeIds: string[];
+  relatedResourceIds: string[];
+  penalty: number;
+};
+
+export type ArchitectureBoardCompilationQuality = {
+  score: number;
+  visualPenalty: number;
+  structuralPenalty: number;
+  semanticDiagnosticPenalty: number;
+  metrics: Record<string, number>;
+};
+
+export type ArchitectureBoardCompilationInput = {
+  architecture: ArchitectureJson;
+  currentDiagram?: DiagramJson | undefined;
+  trigger: ArchitectureBoardCompilationTrigger;
+};
+
+export type ArchitectureBoardCompilationProposal = {
+  architecture: ArchitectureJson;
+  diagram: DiagramJson;
+  changes: ArchitectureBoardCompilationChange[];
+  diagnostics: ArchitectureBoardCompilationDiagnostic[];
+  quality: {
+    before: ArchitectureBoardCompilationQuality;
+    after: ArchitectureBoardCompilationQuality;
+    compilationDistance: number;
+  };
+  provenance: {
+    compilerVersion: string;
+    candidateId: string;
+    referenceTemplateIds: string[];
+  };
+};
+
 export type ProjectDraft = {
   id: string;
   projectId: string;

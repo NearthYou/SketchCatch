@@ -5,8 +5,10 @@ import type {
   DiagramNode,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
-import { compileArchitectureBoard } from "../architecture-board-compiler";
-import type { ArchitectureBoardCompilationProposal } from "../architecture-board-compiler";
+import {
+  compileArchitectureBoard,
+  type ArchitectureBoardCompilationProposal
+} from "../architecture-board-compiler";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
 
@@ -42,6 +44,7 @@ const UNKNOWN_RESOURCE_STYLE = {
 const UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX = "확인 필요";
 
 export type ReverseEngineeringBoardApplication = {
+  readonly compilation: ArchitectureBoardCompilationProposal;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly diagram: DiagramJson;
   readonly previewDiagram: DiagramJson;
@@ -62,11 +65,13 @@ export type CreateReverseEngineeringBoardComparisonInput = {
 export function createReverseEngineeringBoardApplication(
   input: CreateReverseEngineeringBoardApplicationInput
 ): ReverseEngineeringBoardApplication {
-  const previewDiagram = createReverseEngineeringPreviewDiagram(input.result);
+  const preview = createReverseEngineeringPreview(input.result);
+  const previewDiagram = preview.diagram;
   const comparison = compareDiagrams(input.currentDiagram, previewDiagram);
 
   if (input.mode === "replace") {
     return {
+      compilation: preview.compilation,
       comparison,
       diagram: previewDiagram,
       previewDiagram
@@ -74,6 +79,7 @@ export function createReverseEngineeringBoardApplication(
   }
 
   return {
+    compilation: preview.compilation,
     comparison,
     diagram: appendAdditionsToCurrentDiagram(input.currentDiagram, previewDiagram, comparison),
     previewDiagram
@@ -89,7 +95,19 @@ export function createReverseEngineeringBoardComparison(
 
 // 오래된 scan 기록에 UNKNOWN 노드가 남아 있어도 보드 중앙에는 올리지 않습니다.
 function createReverseEngineeringPreviewDiagram(result: ReverseEngineeringScanResult): DiagramJson {
-  return markReverseEngineeringDiagram(compileReverseEngineeringArchitecture(result).diagram);
+  return createReverseEngineeringPreview(result).diagram;
+}
+
+function createReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
+  readonly compilation: ArchitectureBoardCompilationProposal;
+  readonly diagram: DiagramJson;
+} {
+  const compilation = compileReverseEngineeringArchitecture(result);
+
+  return {
+    compilation,
+    diagram: markReverseEngineeringDiagram(compilation.diagram)
+  };
 }
 
 export function compileReverseEngineeringArchitecture(

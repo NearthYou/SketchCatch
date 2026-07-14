@@ -45,6 +45,12 @@ export type UnavailableBoardTemplate = BoardTemplateMetadata & {
 
 export type BoardTemplate = AvailableBoardTemplate | UnavailableBoardTemplate;
 
+export type AvailableBoardTemplateReview = {
+  readonly templateId: string;
+  readonly sourceDiagram: DiagramJson;
+  readonly proposal: ArchitectureBoardCompilationProposal;
+};
+
 type RawBoardTemplate = BoardTemplateMetadata & {
   readonly diagramJson: DiagramJson;
 };
@@ -773,8 +779,15 @@ export function isBoardTemplateAvailable(
 
 export function reviewAvailableBoardTemplate(
   template: AvailableBoardTemplate
-): ArchitectureBoardCompilationProposal {
-  return reviewArchitectureBoardTemplate(template.diagramJson);
+): AvailableBoardTemplateReview {
+  // Gallery와 새 Board 시작은 authored source를 계속 사용하고, Compiler 결과는 검토 전용으로 분리합니다.
+  const sourceDiagram = cloneDiagramJson(template.diagramJson);
+
+  return {
+    templateId: template.id,
+    sourceDiagram,
+    proposal: reviewArchitectureBoardTemplate(sourceDiagram)
+  };
 }
 
 // Resource kind와 Terraform parameters가 모두 있는 실제 배포 Resource만 셉니다.
