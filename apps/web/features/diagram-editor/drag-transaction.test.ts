@@ -81,7 +81,14 @@ test("finalizeDraggedNodes moves area descendants from the snapped parent delta"
     snapshotNodes: nodes
   });
 
-  assert.deepEqual(result.nodes.find((node) => node.id === "vpc-1")?.position, { x: 108, y: 60 });
+  assert.deepEqual(result.nodes.find((node) => node.id === "vpc-1")?.position, {
+    x: 30,
+    y: 13.199999999999989
+  });
+  assert.deepEqual(result.nodes.find((node) => node.id === "vpc-1")?.size, {
+    width: 396,
+    height: 273.6
+  });
   assert.deepEqual(result.nodes.find((node) => node.id === "instance-1")?.position, { x: 128, y: 90 });
   assert.deepEqual(result.movedNodeIds, new Set(["vpc-1", "instance-1"]));
 });
@@ -156,7 +163,7 @@ test("finalizeDraggedNodes assigns children dropped inside an ASG area", () => {
   assert.equal(instance?.metadata?.parentAreaNodeId, "asg-1");
 });
 
-test("finalizeDraggedNodes stores a baseline and expands a newly entered parent only as needed", () => {
+test("finalizeDraggedNodes stores a baseline and expands by 1.3 times the entered child size", () => {
   const nodes = [
     makeResourceNode({
       id: "vpc-1",
@@ -195,8 +202,8 @@ test("finalizeDraggedNodes stores a baseline and expands a newly entered parent 
     position: { x: 0, y: 0 },
     size: { width: 80, height: 60 }
   });
-  assert.deepEqual(vpcAfter?.position, { x: -7, y: -23 });
-  assert.deepEqual(vpcAfter?.size, { width: 87, height: 83 });
+  assert.deepEqual(vpcAfter?.position, { x: -13, y: -13 });
+  assert.deepEqual(vpcAfter?.size, { width: 106, height: 86 });
 });
 
 test("finalizeDraggedNodes stores a baseline when the newly entered child is an area", () => {
@@ -240,8 +247,8 @@ test("finalizeDraggedNodes stores a baseline when the newly entered child is an 
     position: { x: 0, y: 0 },
     size: { width: 300, height: 220 }
   });
-  assert.deepEqual(regionAfter?.position, { x: 0, y: 0 });
-  assert.deepEqual(regionAfter?.size, { width: 300, height: 220 });
+  assert.deepEqual(regionAfter?.position, { x: -52, y: -39 });
+  assert.deepEqual(regionAfter?.size, { width: 404, height: 298 });
 });
 
 test("finalizeDraggedNodes assigns the parent without resizing it when auto expansion is OFF", () => {
@@ -285,7 +292,7 @@ test("finalizeDraggedNodes assigns the parent without resizing it when auto expa
   assert.deepEqual(vpcAfter?.size, { width: 80, height: 60 });
 });
 
-test("finalizeDraggedNodes does not repeatedly expand the same parent during an internal move", () => {
+test("finalizeDraggedNodes recomputes the same parent size without cumulative expansion", () => {
   const nodes = [
     makeResourceNode({
       id: "vpc-1",
@@ -318,9 +325,19 @@ test("finalizeDraggedNodes does not repeatedly expand the same parent during an 
     snapshotNodes: nodes
   });
 
-  const vpcAfter = result.nodes.find((node) => node.id === "vpc-1");
-  assert.deepEqual(vpcAfter?.position, { x: 0, y: 0 });
-  assert.deepEqual(vpcAfter?.size, { width: 80, height: 60 });
+  const repeatedResult = finalizeDraggedNodes({
+    anchorNodeId: "instance-1",
+    catalog: terraformParameterCatalog,
+    currentNodes: result.nodes,
+    directlyMovedNodeIds: new Set(["instance-1"]),
+    positionByNodeId: new Map([["instance-1", { x: 22, y: 30 }]]),
+    snapGridSize: 1,
+    snapshotNodes: result.nodes
+  });
+
+  const vpcAfter = repeatedResult.nodes.find((node) => node.id === "vpc-1");
+  assert.deepEqual(vpcAfter?.position, { x: -13, y: -13 });
+  assert.deepEqual(vpcAfter?.size, { width: 106, height: 86 });
   assert.deepEqual(vpcAfter?.metadata?.areaAutoSizeBaseline, {
     position: { x: 0, y: 0 },
     size: { width: 80, height: 60 }
@@ -339,10 +356,10 @@ test("finalizeDraggedNodes restores the previous parent baseline after its last 
       },
       resourceName: "main",
       resourceType: "aws_vpc",
-      width: 132,
-      height: 122,
-      x: 0,
-      y: 0
+      width: 152,
+      height: 152,
+      x: -26,
+      y: -26
     }),
     makeResourceNode({
       id: "instance-1",
