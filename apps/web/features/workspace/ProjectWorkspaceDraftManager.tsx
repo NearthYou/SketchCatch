@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   DiagramJson,
-  TemplateId,
   TerraformSyncFileInput
 } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
@@ -100,7 +99,7 @@ export function ProjectWorkspaceDraftManager({
   const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
-  const [repositoryTemplateId, setRepositoryTemplateId] = useState<TemplateId | null>(null);
+  const [repositoryTemplateId, setRepositoryTemplateId] = useState<string | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
@@ -354,7 +353,7 @@ export function ProjectWorkspaceDraftManager({
     async function loadWorkspace() {
       try {
         let fallbackDiagram = EMPTY_DIAGRAM;
-        let verifiedRepositoryTemplateId: TemplateId | null = null;
+        let verifiedRepositoryTemplateId: string | null = null;
 
         if (repositoryAnalysisHandoff) {
           const sourceRepositories = await listSourceRepositories(projectId);

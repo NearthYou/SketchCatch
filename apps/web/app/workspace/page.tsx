@@ -16,6 +16,7 @@ type WorkspacePageProps = {
     readonly diagramFixture?: string | string[] | undefined;
     readonly projectId?: string | string[] | undefined;
     readonly projectName?: string | string[] | undefined;
+    readonly localCacheWorkspaceId?: string | string[] | undefined;
     readonly startMode?: string | string[] | undefined;
     readonly sourceRepositoryId?: string | string[] | undefined;
     readonly templateId?: string | string[] | undefined;
@@ -34,12 +35,14 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
   if (projectId) {
     const projectName = getSingleSearchParam(params?.projectName)?.trim();
     const cloudPlatform = getSingleSearchParam(params?.cloudPlatform);
+    const localCacheWorkspaceId = getSingleSearchParam(params?.localCacheWorkspaceId)?.trim();
 
     return (
       <WorkspaceAuthGate>
         <ProjectWorkspaceDraftManager
           cloudPlatform={isWorkspaceCloudPlatform(cloudPlatform) ? cloudPlatform : undefined}
           initialRightPanelView={initialRightPanelView}
+          localCacheWorkspaceId={localCacheWorkspaceId || undefined}
           projectId={projectId}
           projectName={projectName || "Project workspace"}
           repositoryAnalysisHandoff={

@@ -12,21 +12,33 @@ export type OrthogonalRouteSegment = Readonly<{
   from: OrthogonalRoutePoint;
   to: OrthogonalRoutePoint;
 }>;
+type HandlePosition = "bottom" | "left" | "right" | "top";
 
 const HANDLE_IDS = ["handle-left", "handle-right", "handle-top", "handle-bottom"] as const;
-const HANDLE_STUB_LENGTH = 16;
-const OBSTACLE_OVERLAP_WEIGHT = 1_000_000;
+const EDGE_ROUTE_OFFSET = 16;
+const AREA_TITLE_HEIGHT = 34;
+const RESOURCE_OVERLAP_WEIGHT = 10_000_000;
+const AREA_TITLE_OVERLAP_WEIGHT = 1_000_000;
 const ENDPOINT_REENTRY_WEIGHT = 100_000;
 const WRONG_DIRECTION_WEIGHT = 10_000;
+const HANDLE_DIRECTIONS: Readonly<Record<HandlePosition, OrthogonalRoutePoint>> = {
+  bottom: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+  right: { x: 1, y: 0 },
+  top: { x: 0, y: -1 }
+};
 
 export function getObstacleSafeEdgeHandles(
   sourceNode: DiagramNode,
   targetNode: DiagramNode,
   nodes: readonly DiagramNode[]
 ): ObstacleSafeEdgeHandles {
-  const obstacles = nodes.filter(
+  const resourceObstacles = nodes.filter(
     (node) => node.id !== sourceNode.id && node.id !== targetNode.id && !isAreaNode(node)
   );
+  const areaTitleObstacles = nodes
+    .filter((node) => node.id !== sourceNode.id && node.id !== targetNode.id && isAreaNode(node))
+    .map(createAreaTitleRoutingObstacle);
   let bestHandles: ObstacleSafeEdgeHandles = {
     sourceHandleId: "handle-right",
     targetHandleId: "handle-left"
@@ -37,7 +49,11 @@ export function getObstacleSafeEdgeHandles(
     for (const targetHandleId of HANDLE_IDS) {
       const handles = { sourceHandleId, targetHandleId };
       const segments = getOrthogonalRouteSegments(sourceNode, targetNode, handles);
-      const obstacleOverlap = obstacles.reduce(
+      const resourceOverlap = resourceObstacles.reduce(
+        (total, obstacle) => total + getRouteNodeOverlapLength(segments, obstacle),
+        0
+      );
+      const areaTitleOverlap = areaTitleObstacles.reduce(
         (total, obstacle) => total + getRouteNodeOverlapLength(segments, obstacle),
         0
       );
@@ -45,7 +61,8 @@ export function getObstacleSafeEdgeHandles(
         getRouteNodeOverlapLength(segments.slice(1), sourceNode) +
         getRouteNodeOverlapLength(segments.slice(0, -1), targetNode);
       const score =
-        obstacleOverlap * OBSTACLE_OVERLAP_WEIGHT +
+        resourceOverlap * RESOURCE_OVERLAP_WEIGHT +
+        areaTitleOverlap * AREA_TITLE_OVERLAP_WEIGHT +
         endpointReentry * ENDPOINT_REENTRY_WEIGHT +
         getDirectionPenalty(sourceNode, targetNode, handles) * WRONG_DIRECTION_WEIGHT +
         getRouteLength(segments);
@@ -86,13 +103,29 @@ export function doesOrthogonalRouteCrossResource(
   handles: ObstacleSafeEdgeHandles,
   nodes: readonly DiagramNode[]
 ): boolean {
-  return nodes.some(
-    (node) =>
-      node.id !== sourceNode.id &&
-      node.id !== targetNode.id &&
-      !isAreaNode(node) &&
-      getOrthogonalRouteNodeOverlapLength(sourceNode, targetNode, handles, node) > 0
+  return getRoutingObstacles(sourceNode, targetNode, nodes).some(
+    (node) => getOrthogonalRouteNodeOverlapLength(sourceNode, targetNode, handles, node) > 0
   );
+}
+
+export function createAreaTitleRoutingObstacle(node: DiagramNode): DiagramNode {
+  return {
+    ...node,
+    size: {
+      width: node.size.width,
+      height: Math.min(AREA_TITLE_HEIGHT, node.size.height)
+    }
+  };
+}
+
+function getRoutingObstacles(
+  sourceNode: DiagramNode,
+  targetNode: DiagramNode,
+  nodes: readonly DiagramNode[]
+): DiagramNode[] {
+  return nodes
+    .filter((node) => node.id !== sourceNode.id && node.id !== targetNode.id)
+    .map((node) => (isAreaNode(node) ? createAreaTitleRoutingObstacle(node) : node));
 }
 
 function getOrthogonalRouteSegments(
@@ -102,37 +135,16 @@ function getOrthogonalRouteSegments(
 ): OrthogonalRouteSegment[] {
   const sourcePoint = getNodeHandlePoint(sourceNode, handles.sourceHandleId);
   const targetPoint = getNodeHandlePoint(targetNode, handles.targetHandleId);
-  const sourceExitPoint = getHandleStubPoint(sourcePoint, handles.sourceHandleId);
-  const targetExitPoint = getHandleStubPoint(targetPoint, handles.targetHandleId);
-  const segments: OrthogonalRouteSegment[] = [{ from: sourcePoint, to: sourceExitPoint }];
-
-  if (sourceExitPoint.x === targetExitPoint.x || sourceExitPoint.y === targetExitPoint.y) {
-    segments.push(
-      { from: sourceExitPoint, to: targetExitPoint },
-      { from: targetExitPoint, to: targetPoint }
-    );
-    return withoutZeroLengthSegments(segments);
-  }
-
-  if (isVerticalHandle(handles.sourceHandleId) && isVerticalHandle(handles.targetHandleId)) {
-    const middleY = sourceExitPoint.y + (targetExitPoint.y - sourceExitPoint.y) / 2;
-    segments.push(
-      { from: sourceExitPoint, to: { x: sourceExitPoint.x, y: middleY } },
-      { from: { x: sourceExitPoint.x, y: middleY }, to: { x: targetExitPoint.x, y: middleY } },
-      { from: { x: targetExitPoint.x, y: middleY }, to: targetExitPoint },
-      { from: targetExitPoint, to: targetPoint }
-    );
-    return withoutZeroLengthSegments(segments);
-  }
-
-  const middleX = sourceExitPoint.x + (targetExitPoint.x - sourceExitPoint.x) / 2;
-  segments.push(
-    { from: sourceExitPoint, to: { x: middleX, y: sourceExitPoint.y } },
-    { from: { x: middleX, y: sourceExitPoint.y }, to: { x: middleX, y: targetExitPoint.y } },
-    { from: { x: middleX, y: targetExitPoint.y }, to: targetExitPoint },
-    { from: targetExitPoint, to: targetPoint }
+  const points = getSmoothStepRoutePoints(
+    sourcePoint,
+    targetPoint,
+    getHandlePosition(handles.sourceHandleId),
+    getHandlePosition(handles.targetHandleId)
   );
-  return withoutZeroLengthSegments(segments);
+
+  return withoutZeroLengthSegments(
+    points.slice(1).map((point, index) => ({ from: points[index]!, to: point }))
+  );
 }
 
 function getNodeHandlePoint(node: DiagramNode, handleId: string): OrthogonalRoutePoint {
@@ -145,11 +157,133 @@ function getNodeHandlePoint(node: DiagramNode, handleId: string): OrthogonalRout
   return { x: centerX, y: node.position.y + node.size.height };
 }
 
-function getHandleStubPoint(point: OrthogonalRoutePoint, handleId: string): OrthogonalRoutePoint {
-  if (handleId === "handle-left") return { x: point.x - HANDLE_STUB_LENGTH, y: point.y };
-  if (handleId === "handle-right") return { x: point.x + HANDLE_STUB_LENGTH, y: point.y };
-  if (handleId === "handle-top") return { x: point.x, y: point.y - HANDLE_STUB_LENGTH };
-  return { x: point.x, y: point.y + HANDLE_STUB_LENGTH };
+function getHandlePosition(handleId: string): HandlePosition {
+  if (handleId === "handle-left") return "left";
+  if (handleId === "handle-right") return "right";
+  if (handleId === "handle-top") return "top";
+  return "bottom";
+}
+
+// Mirrors React Flow's smoothstep waypoint selection so server planning and browser rendering agree.
+function getSmoothStepRoutePoints(
+  source: OrthogonalRoutePoint,
+  target: OrthogonalRoutePoint,
+  sourcePosition: HandlePosition,
+  targetPosition: HandlePosition
+): OrthogonalRoutePoint[] {
+  const sourceDirection = HANDLE_DIRECTIONS[sourcePosition];
+  const targetDirection = HANDLE_DIRECTIONS[targetPosition];
+  const sourceGapped = offsetPoint(source, sourceDirection, EDGE_ROUTE_OFFSET);
+  const targetGapped = offsetPoint(target, targetDirection, EDGE_ROUTE_OFFSET);
+  const direction = getRouteDirection(sourceGapped, targetGapped, sourcePosition);
+  const directionAxis = direction.x !== 0 ? "x" : "y";
+  const currentDirection = direction[directionAxis];
+  const sourceGapOffset = { x: 0, y: 0 };
+  const targetGapOffset = { x: 0, y: 0 };
+  let intermediatePoints: OrthogonalRoutePoint[];
+
+  if (sourceDirection[directionAxis] * targetDirection[directionAxis] === -1) {
+    const centerX = (sourceGapped.x + targetGapped.x) / 2;
+    const centerY = (sourceGapped.y + targetGapped.y) / 2;
+    const verticalSplit = [
+      { x: centerX, y: sourceGapped.y },
+      { x: centerX, y: targetGapped.y }
+    ];
+    const horizontalSplit = [
+      { x: sourceGapped.x, y: centerY },
+      { x: targetGapped.x, y: centerY }
+    ];
+
+    intermediatePoints =
+      sourceDirection[directionAxis] === currentDirection
+        ? directionAxis === "x"
+          ? verticalSplit
+          : horizontalSplit
+        : directionAxis === "x"
+          ? horizontalSplit
+          : verticalSplit;
+  } else {
+    const sourceTarget = [{ x: sourceGapped.x, y: targetGapped.y }];
+    const targetSource = [{ x: targetGapped.x, y: sourceGapped.y }];
+    intermediatePoints =
+      directionAxis === "x"
+        ? sourceDirection.x === currentDirection
+          ? targetSource
+          : sourceTarget
+        : sourceDirection.y === currentDirection
+          ? sourceTarget
+          : targetSource;
+
+    if (sourcePosition === targetPosition) {
+      const difference = Math.abs(source[directionAxis] - target[directionAxis]);
+      if (difference <= EDGE_ROUTE_OFFSET) {
+        const gapOffset = Math.min(EDGE_ROUTE_OFFSET - 1, EDGE_ROUTE_OFFSET - difference);
+        if (sourceDirection[directionAxis] === currentDirection) {
+          sourceGapOffset[directionAxis] =
+            (sourceGapped[directionAxis] > source[directionAxis] ? -1 : 1) * gapOffset;
+        } else {
+          targetGapOffset[directionAxis] =
+            (targetGapped[directionAxis] > target[directionAxis] ? -1 : 1) * gapOffset;
+        }
+      }
+    }
+
+    if (sourcePosition !== targetPosition) {
+      const oppositeAxis = directionAxis === "x" ? "y" : "x";
+      const sameDirection = sourceDirection[directionAxis] === targetDirection[oppositeAxis];
+      const sourceAfterTarget = sourceGapped[oppositeAxis] > targetGapped[oppositeAxis];
+      const sourceBeforeTarget = sourceGapped[oppositeAxis] < targetGapped[oppositeAxis];
+      const flipSourceTarget =
+        (sourceDirection[directionAxis] === 1 &&
+          ((!sameDirection && sourceAfterTarget) || (sameDirection && sourceBeforeTarget))) ||
+        (sourceDirection[directionAxis] !== 1 &&
+          ((!sameDirection && sourceBeforeTarget) || (sameDirection && sourceAfterTarget)));
+
+      if (flipSourceTarget) {
+        intermediatePoints = directionAxis === "x" ? sourceTarget : targetSource;
+      }
+    }
+  }
+
+  const gappedSource = offsetPoint(sourceGapped, sourceGapOffset, 1);
+  const gappedTarget = offsetPoint(targetGapped, targetGapOffset, 1);
+  const firstIntermediatePoint = intermediatePoints[0]!;
+  const lastIntermediatePoint = intermediatePoints[intermediatePoints.length - 1]!;
+
+  return [
+    source,
+    ...(pointsEqual(gappedSource, firstIntermediatePoint) ? [] : [gappedSource]),
+    ...intermediatePoints,
+    ...(pointsEqual(gappedTarget, lastIntermediatePoint) ? [] : [gappedTarget]),
+    target
+  ];
+}
+
+function getRouteDirection(
+  source: OrthogonalRoutePoint,
+  target: OrthogonalRoutePoint,
+  sourcePosition: HandlePosition
+): OrthogonalRoutePoint {
+  if (sourcePosition === "left" || sourcePosition === "right") {
+    return source.x < target.x ? { x: 1, y: 0 } : { x: -1, y: 0 };
+  }
+
+  return source.y < target.y ? { x: 0, y: 1 } : { x: 0, y: -1 };
+}
+
+function offsetPoint(
+  point: OrthogonalRoutePoint,
+  direction: OrthogonalRoutePoint,
+  distance: number
+): OrthogonalRoutePoint {
+  return {
+    x: point.x + direction.x * distance,
+    y: point.y + direction.y * distance
+  };
+}
+
+function pointsEqual(left: OrthogonalRoutePoint, right: OrthogonalRoutePoint): boolean {
+  return left.x === right.x && left.y === right.y;
 }
 
 function getRouteNodeOverlapLength(
@@ -207,10 +341,6 @@ function getRouteLength(segments: readonly OrthogonalRouteSegment[]): number {
 
 function getRangeOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): number {
   return Math.max(0, Math.min(Math.max(aStart, aEnd), bEnd) - Math.max(Math.min(aStart, aEnd), bStart));
-}
-
-function isVerticalHandle(handleId: string): boolean {
-  return handleId === "handle-top" || handleId === "handle-bottom";
 }
 
 function withoutZeroLengthSegments(

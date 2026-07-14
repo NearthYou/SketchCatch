@@ -19,18 +19,25 @@ export function convertDiagramJsonToArchitectureJson(diagramJson: DiagramJson): 
       return [];
     }
 
-    return [{
-      id: node.id,
-      type: mapTerraformResourceType(parameters),
-      label: node.label,
-      positionX: node.position.x,
-      positionY: node.position.y,
-      config: createArchitectureConfig(parameters)
-    }];
+    return [
+      {
+        id: node.id,
+        type: mapTerraformResourceType(parameters),
+        label: node.label,
+        positionX: node.position.x,
+        positionY: node.position.y,
+        config: createArchitectureConfig(parameters)
+      }
+    ];
   });
   const nodeIds = new Set(nodes.map((node) => node.id));
   const edges = diagramJson.edges
-    .filter((edge) => nodeIds.has(edge.sourceNodeId) && nodeIds.has(edge.targetNodeId))
+    .filter(
+      (edge) =>
+        edge.metadata?.presentationRole !== "summary" &&
+        nodeIds.has(edge.sourceNodeId) &&
+        nodeIds.has(edge.targetNodeId)
+    )
     .map((edge) => ({
       id: edge.id,
       sourceId: edge.sourceNodeId,
@@ -80,7 +87,8 @@ function mapTerraformResourceType(parameters: DiagramNodeParameters): ResourceTy
   const terraformBlockType = parameters.terraformBlockType ?? DEFAULT_TERRAFORM_BLOCK_TYPE;
 
   return (
-    getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ?? "UNKNOWN"
+    getResourceDefinitionByTerraform(terraformBlockType, parameters.resourceType)?.resourceType ??
+    "UNKNOWN"
   );
 }
 
@@ -117,12 +125,15 @@ function createArchitectureConfig(parameters: DiagramNodeParameters): ResourceCo
     : baseConfig;
 }
 
-function normalizeSecurityGroupRuleIngress(values: ResourceConfig | null | undefined): ResourceConfig[] {
+function normalizeSecurityGroupRuleIngress(
+  values: ResourceConfig | null | undefined
+): ResourceConfig[] {
   if (values == null || values["type"] !== "ingress") {
     return [];
   }
 
-  const rawPort = values["fromPort"] ?? values["from_port"] ?? values["toPort"] ?? values["to_port"];
+  const rawPort =
+    values["fromPort"] ?? values["from_port"] ?? values["toPort"] ?? values["to_port"];
   const port = normalizePort(rawPort);
   const cidrBlocks = values["cidrBlocks"] ?? values["cidr_blocks"];
 

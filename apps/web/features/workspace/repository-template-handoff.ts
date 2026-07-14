@@ -1,5 +1,8 @@
-import { templateDefinitions } from "@sketchcatch/types";
-import type { RepositoryAnalysisAiHandoff, SourceRepository, TemplateDefinition } from "@sketchcatch/types";
+import type { RepositoryAnalysisAiHandoff, SourceRepository } from "@sketchcatch/types";
+import {
+  isBoardTemplateAvailable,
+  listBoardTemplates
+} from "../resource-settings/template-library";
 
 export type RepositoryAnalysisHandoffLocation = {
   readonly sourceRepositoryId: string;
@@ -9,7 +12,7 @@ export type RepositoryAnalysisHandoffLocation = {
 export function resolveRepositoryAnalysisTemplate(
   repositories: readonly SourceRepository[],
   handoff: RepositoryAnalysisHandoffLocation
-): TemplateDefinition {
+): { readonly id: string; readonly title: string } {
   const repository = repositories.find((candidate) => candidate.id === handoff.sourceRepositoryId);
   const analysis = repository?.analysis;
 
@@ -25,15 +28,15 @@ export function resolveRepositoryAnalysisTemplate(
   }
 
   const templateId = handoff.requestedTemplateId ?? analysis.aiHandoff.templateId;
-  const definition = templateDefinitions.find(
-    (candidate) => candidate.id === templateId
+  const template = listBoardTemplates().find(
+    (candidate) => candidate.id === templateId && isBoardTemplateAvailable(candidate)
   );
 
-  if (!definition) {
+  if (!template) {
     throw new Error("REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE");
   }
 
-  return definition;
+  return { id: template.id, title: template.title };
 }
 
 function getAllowedRepositoryAnalysisTemplateIds(handoff: RepositoryAnalysisAiHandoff): Set<string> {
