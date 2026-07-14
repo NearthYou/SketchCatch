@@ -1,0 +1,56 @@
+.title.title {
+  color: #122033;
+  overflow-wrap: anywhere;
+}
+
+.scope :global(.settingsInfoGrid span) {
+  color: #526174;
+}
+
+.scope :global(.dashboardTopbarAction),
+.scope :global(.dashboardSecondaryButton),
+.scope :global(.designDashboardPrimaryAction) {
+  min-height: 44px;
+}
+
+.dialogOverlay {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.dialog {
+  display: grid;
+  width: min(520px, 100%);
+  gap: 16px;
+  border: 1px solid #dcdee0;
+  border-radius: 12px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
+}
+
+.dialog h3,
+.dialog p {
+  margin: 0;
+}
+
+.dialog p {
+  color: #55585f;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+  .dialogOverlay {
+    padding: 16px;
+  }
+
+  .dialog {
+    padding: 20px;
+  }
+}

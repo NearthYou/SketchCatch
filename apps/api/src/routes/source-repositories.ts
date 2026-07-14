@@ -4,6 +4,7 @@ import type {
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
+  ListGitHubInstallationsResponse,
   ListGitHubInstallationRepositoriesResponse,
   RecommendRepositoryTemplateResponse,
   SourceRepository,
@@ -27,9 +28,11 @@ import {
 import {
   analyzeSourceRepository,
   connectGitHubSourceRepository,
+  createGitHubAccountInstallUrl,
   createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
   createPostgresSourceRepositoryRepository,
+  listGitHubAccountInstallations,
   listGitHubInstalledRepositories,
   listGitHubInstallationRepositories,
   listSourceRepositories,
@@ -224,6 +227,53 @@ export async function registerSourceRepositoryRoutes(
       }
     }
   );
+
+  app.get("/source-repositories/github/installations", async (request, reply) => {
+    const { accessContext, repository } = await getSourceRepositoryRequestContext(
+      request,
+      options,
+      getSourceRepositoryDatabaseClient
+    );
+
+    try {
+      const runtime = getGitHubAppRouteRuntime(options);
+      const result = await listGitHubAccountInstallations(
+        { accessContext },
+        repository,
+        runtime.githubAppClient
+      );
+      const response: ListGitHubInstallationsResponse = result;
+
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleSourceRepositoryError(error, reply);
+    }
+  });
+
+  app.post("/source-repositories/github/install-url", async (request, reply) => {
+    const { accessContext } = await getSourceRepositoryRequestContext(
+      request,
+      options,
+      getSourceRepositoryDatabaseClient
+    );
+
+    try {
+      const runtime = getGitHubAppRouteRuntime(options);
+      const result = await createGitHubAccountInstallUrl({
+        accessContext,
+        appSlug: runtime.appSlug,
+        stateSecret: runtime.stateSecret
+      });
+      const response: GitHubAppInstallUrlResponse = {
+        installUrl: result.installUrl,
+        expiresAt: result.expiresAt.toISOString()
+      };
+
+      return reply.status(201).send(response);
+    } catch (error) {
+      return handleSourceRepositoryError(error, reply);
+    }
+  });
 
   app.post("/projects/:projectId/source-repositories/github/install-url", async (request, reply) => {
     const params = projectParamsSchema.parse(request.params);
