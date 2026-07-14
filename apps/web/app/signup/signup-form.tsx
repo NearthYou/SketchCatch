@@ -22,7 +22,10 @@ import {
 import { useAuth } from "../../components/auth/auth-provider";
 import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
-import { getSignupReadiness } from "../../features/auth/signup-readiness";
+import {
+  getSignupReadiness,
+  getSignupRequirementMessage
+} from "../../features/auth/signup-readiness";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { requestSignupAvailability } from "../../lib/auth-api";
 import { LEGAL_DOCUMENTS, type LegalDocument, type LegalDocumentKey } from "./legal-documents";
@@ -498,6 +501,11 @@ export function SignupForm() {
         {errorMessage ? (
           <p className="authMessage authMessageError fullField" role="alert">
             {errorMessage}
+          </p>
+        ) : null}
+        {!errorMessage && signupReadiness.unmetRequirements[0] ? (
+          <p className="authSignupReadiness fullField" role="status">
+            {getSignupRequirementMessage(signupReadiness.unmetRequirements[0])}
           </p>
         ) : null}
         <button

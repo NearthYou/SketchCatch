@@ -425,6 +425,13 @@
   gap: 8px;
 }
 
+.authSignupReadiness {
+  margin: 0;
+  color: #60646c;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .authConsentViewButton {
   flex: 0 0 auto;
   border: 0;

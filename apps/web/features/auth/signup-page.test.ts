@@ -110,6 +110,13 @@ test("signup feedback falls back when a warning helper returns an empty string",
   );
 });
 
+test("signup explains the next unmet condition without reserving an empty message row", () => {
+  assert.match(signupFormSource, /signupReadiness\.unmetRequirements\[0\]/);
+  assert.match(signupFormSource, /getSignupRequirementMessage/);
+  assert.match(signupFormSource, /className="authSignupReadiness fullField"/);
+  assert.doesNotMatch(authStylesSource, /\.authSignupReadiness\s*\{[^}]*min-height:/s);
+});
+
 function readAppFile(path: string): string {
   return readFileSync(fileURLToPath(new URL(`../../app/${path}`, import.meta.url)), "utf8");
 }
