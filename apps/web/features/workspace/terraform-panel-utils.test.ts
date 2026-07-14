@@ -432,6 +432,40 @@ resource "aws_subnet" "public" {
   );
 });
 
+test("createTerraformFilesFromGeneratedCode keeps generated outputs in main.tf", () => {
+  const files = createTerraformFilesFromGeneratedCode(
+    {
+      nodes: [makeNode("resource", "aws_lb", "api")],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    `resource "aws_lb" "api" {
+  name = "api"
+}
+
+output "api_base_url" {
+  value = "http://\${aws_lb.api.dns_name}"
+}`
+  );
+
+  assert.match(
+    files.find((file) => file.fileName === "main.tf")?.code ?? "",
+    /output "api_base_url"[\s\S]*aws_lb\.api\.dns_name/
+  );
+});
+
+test("mergeGeneratedTerraformFiles updates generated outputs by name", () => {
+  const result = mergeGeneratedTerraformFiles(
+    [{ fileName: "main.tf", code: `output "api_base_url" {\n  value = "old"\n}` }],
+    [{ fileName: "main.tf", code: `output "api_base_url" {\n  value = "new"\n}` }],
+    new Set()
+  );
+  const mainCode = result.find((file) => file.fileName === "main.tf")?.code ?? "";
+
+  assert.match(mainCode, /value = "new"/);
+  assert.doesNotMatch(mainCode, /value = "old"/);
+});
+
 test("createTerraformFilesFromGeneratedCode configures Kubernetes from the EKS cluster", () => {
   const diagram: DiagramJson = {
     nodes: [

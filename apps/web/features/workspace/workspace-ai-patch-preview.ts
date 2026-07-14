@@ -18,7 +18,9 @@ export function createWorkspaceAiPatchPreviewModel(
   baseDiagram: DiagramJson,
   preview: ArchitecturePatchPreview
 ): WorkspaceAiPatchPreviewModel {
-  const proposedDiagram = convertArchitectureJsonToDiagramJson(preview.proposedArchitectureJson);
+  const proposedDiagram = convertArchitectureJsonToDiagramJson(preview.proposedArchitectureJson, {
+    preserveLayoutFrom: baseDiagram
+  });
   const proposedNodeIds = new Set(proposedDiagram.nodes.map((node) => node.id));
   const proposedEdgeIds = new Set(proposedDiagram.edges.map((edge) => edge.id));
   const visualNodes = [...proposedDiagram.nodes];

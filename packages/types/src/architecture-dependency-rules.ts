@@ -309,14 +309,14 @@ function hasContainingAreaReference(
   const parentNode = findContainingResourceNode(node, graph);
   const targetNode = resolveParameterReferenceTarget(getParameterValue(node, check.parameterPath), graph);
 
-  return Boolean(
-    parentNode &&
-      parentNode.parameters?.resourceType === check.areaTerraformType &&
-      targetNode?.id === parentNode.id
-  );
+  if (!targetNode || targetNode.parameters?.resourceType !== check.areaTerraformType) {
+    return false;
+  }
+
+  return parentNode ? parentNode.id === targetNode.id : isNodeFullyInsideArea(node, targetNode);
 }
 
-// Stop at the first deployable ancestor so malformed cross-Resource containment still fails.
+// Design and legacy AZ containers are transparent, but another deployable ancestor is a hard boundary.
 function findContainingResourceNode(
   node: DiagramNode,
   graph: ResolvedArchitectureGraph
@@ -332,7 +332,10 @@ function findContainingResourceNode(
       return null;
     }
 
-    if (parentNode.kind !== "design") {
+    if (
+      parentNode.kind !== "design" &&
+      parentNode.parameters?.resourceType !== "aws_availability_zone"
+    ) {
       return parentNode;
     }
 
@@ -359,10 +362,26 @@ function hasReferencedTargetParentReference(
     graph
   );
 
-  return Boolean(
-    parentNode &&
-      parentNode.parameters?.resourceType === check.parentTerraformType &&
-      configuredParent?.id === parentNode.id
+  if (!configuredParent || configuredParent.parameters?.resourceType !== check.parentTerraformType) {
+    return false;
+  }
+
+  return parentNode
+    ? parentNode.id === configuredParent.id
+    : isNodeFullyInsideArea(targetNode, configuredParent);
+}
+
+function isNodeFullyInsideArea(node: DiagramNode, areaNode: DiagramNode): boolean {
+  const nodeRight = node.position.x + node.size.width;
+  const nodeBottom = node.position.y + node.size.height;
+  const areaRight = areaNode.position.x + areaNode.size.width;
+  const areaBottom = areaNode.position.y + areaNode.size.height;
+
+  return (
+    node.position.x >= areaNode.position.x &&
+    node.position.y >= areaNode.position.y &&
+    nodeRight <= areaRight &&
+    nodeBottom <= areaBottom
   );
 }
 

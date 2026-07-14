@@ -7,8 +7,11 @@ export type ObstacleSafeEdgeHandles = Readonly<{
   targetHandleId: string;
 }>;
 
-type Point = Readonly<{ x: number; y: number }>;
-type RouteSegment = Readonly<{ from: Point; to: Point }>;
+export type OrthogonalRoutePoint = Readonly<{ x: number; y: number }>;
+export type OrthogonalRouteSegment = Readonly<{
+  from: OrthogonalRoutePoint;
+  to: OrthogonalRoutePoint;
+}>;
 
 const HANDLE_IDS = ["handle-left", "handle-right", "handle-top", "handle-bottom"] as const;
 const HANDLE_STUB_LENGTH = 16;
@@ -69,6 +72,14 @@ export function getOrthogonalRouteNodeOverlapLength(
   );
 }
 
+export function getObstacleSafeOrthogonalRouteSegments(
+  sourceNode: DiagramNode,
+  targetNode: DiagramNode,
+  handles: ObstacleSafeEdgeHandles
+): OrthogonalRouteSegment[] {
+  return getOrthogonalRouteSegments(sourceNode, targetNode, handles);
+}
+
 export function doesOrthogonalRouteCrossResource(
   sourceNode: DiagramNode,
   targetNode: DiagramNode,
@@ -88,12 +99,12 @@ function getOrthogonalRouteSegments(
   sourceNode: DiagramNode,
   targetNode: DiagramNode,
   handles: ObstacleSafeEdgeHandles
-): RouteSegment[] {
+): OrthogonalRouteSegment[] {
   const sourcePoint = getNodeHandlePoint(sourceNode, handles.sourceHandleId);
   const targetPoint = getNodeHandlePoint(targetNode, handles.targetHandleId);
   const sourceExitPoint = getHandleStubPoint(sourcePoint, handles.sourceHandleId);
   const targetExitPoint = getHandleStubPoint(targetPoint, handles.targetHandleId);
-  const segments: RouteSegment[] = [{ from: sourcePoint, to: sourceExitPoint }];
+  const segments: OrthogonalRouteSegment[] = [{ from: sourcePoint, to: sourceExitPoint }];
 
   if (sourceExitPoint.x === targetExitPoint.x || sourceExitPoint.y === targetExitPoint.y) {
     segments.push(
@@ -124,7 +135,7 @@ function getOrthogonalRouteSegments(
   return withoutZeroLengthSegments(segments);
 }
 
-function getNodeHandlePoint(node: DiagramNode, handleId: string): Point {
+function getNodeHandlePoint(node: DiagramNode, handleId: string): OrthogonalRoutePoint {
   const centerX = node.position.x + node.size.width / 2;
   const centerY = node.position.y + node.size.height / 2;
 
@@ -134,14 +145,17 @@ function getNodeHandlePoint(node: DiagramNode, handleId: string): Point {
   return { x: centerX, y: node.position.y + node.size.height };
 }
 
-function getHandleStubPoint(point: Point, handleId: string): Point {
+function getHandleStubPoint(point: OrthogonalRoutePoint, handleId: string): OrthogonalRoutePoint {
   if (handleId === "handle-left") return { x: point.x - HANDLE_STUB_LENGTH, y: point.y };
   if (handleId === "handle-right") return { x: point.x + HANDLE_STUB_LENGTH, y: point.y };
   if (handleId === "handle-top") return { x: point.x, y: point.y - HANDLE_STUB_LENGTH };
   return { x: point.x, y: point.y + HANDLE_STUB_LENGTH };
 }
 
-function getRouteNodeOverlapLength(segments: readonly RouteSegment[], node: DiagramNode): number {
+function getRouteNodeOverlapLength(
+  segments: readonly OrthogonalRouteSegment[],
+  node: DiagramNode
+): number {
   const bounds = getResourceNodeVisualBounds(node);
   const left = bounds.x;
   const right = bounds.x + bounds.width;
@@ -183,7 +197,7 @@ function getDirectionPenalty(
   return Number(handles.sourceHandleId !== expectedSource) + Number(handles.targetHandleId !== expectedTarget);
 }
 
-function getRouteLength(segments: readonly RouteSegment[]): number {
+function getRouteLength(segments: readonly OrthogonalRouteSegment[]): number {
   return segments.reduce(
     (total, segment) =>
       total + Math.abs(segment.to.x - segment.from.x) + Math.abs(segment.to.y - segment.from.y),
@@ -199,6 +213,8 @@ function isVerticalHandle(handleId: string): boolean {
   return handleId === "handle-top" || handleId === "handle-bottom";
 }
 
-function withoutZeroLengthSegments(segments: readonly RouteSegment[]): RouteSegment[] {
+function withoutZeroLengthSegments(
+  segments: readonly OrthogonalRouteSegment[]
+): OrthogonalRouteSegment[] {
   return segments.filter((segment) => segment.from.x !== segment.to.x || segment.from.y !== segment.to.y);
 }

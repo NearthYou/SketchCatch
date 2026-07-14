@@ -329,7 +329,9 @@ function isDestroyRunnableStatus(
   return (
     sourceStatus === "SUCCESS" ||
     (sourceStatus === "FAILED" &&
-      (sourceFailureStage === "apply" || sourceFailureStage === "destroy"))
+      (sourceFailureStage === "plan" ||
+        sourceFailureStage === "apply" ||
+        sourceFailureStage === "destroy"))
   );
 }
 

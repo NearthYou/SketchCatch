@@ -5,35 +5,21 @@ Use this file only for compact continuation context. Write it in English.
 ## Currently Verified
 
 - Branch: `feature/gg/381-brainboard-aws-templates`.
-- Project Board capture persistence is merged into `dev` at `186ff261`. The current working tree adds the remaining bounded Dashboard thumbnail refresh.
-- The Dashboard retries a missing thumbnail (`404` mapped to `null`) and transient network, 408, 429, or 5xx failures at most three times with a fixed 250ms delay. Permanent HTTP failures stop immediately.
-- Cards continue to render only authenticated raster Board captures. A lifecycle helper ignores post-dispose results and revokes created object URLs.
-- Project Board capture now clones the React Flow DOM at the browser paint-tree origin at 1280x720, fits every rendered Resource into the frame with an 8% margin, and removes the clone after capture. It does not move or persist the user's Board viewport. A manual save forces capture even if the server revision is unchanged.
-- An existing server Project without a thumbnail waits 600ms after the missing-thumbnail check before its one-time backfill capture, allowing the initial Board fit and layout frames to settle. Manual saves remain immediate.
-- Dashboard thumbnail cards request their image again on a persisted browser `pageshow` event, so returning from a saved Workspace through browser history cannot retain an old object URL. A request-generation guard prevents stale reads from replacing the refreshed image.
-- Dashboard Projects use a two-column desktop gallery. Each Board capture keeps its existing 16:9 image frame instead of a fixed 150px preview height, so the card body begins below the complete visual frame.
-- No database schema, migration, storage adapter, backend route, cloud, deployment, or dependency change was made.
-
-## Verification
-
-- TDD RED/GREEN: full Board bounds, CSS transform parsing, fitted viewport, and capture-path regressions passed alongside the existing thumbnail tests.
-- Full Web suite passed 1,237/1,237 after the Project card layout update.
-- Real local filesystem thumbnail upload and read API flow passed without AWS credentials.
-- Root lint and typecheck passed; lint retains one existing unused `setNow` argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
-- Migration compatibility check and harness check passed.
-- Root `pnpm test` has four unrelated API failures: three macOS path-separator Terraform lock-file fixtures and one EKS route-table-association orphan fixture. Root `pnpm build` is blocked before Web compilation by the missing `apps/web/.codegraph` path.
-- A second read-only review found no Critical or Important issue.
+- Latest `origin/dev` at `847a8206` is merged; all 16 content conflicts were resolved by preserving both branch and dev behavior.
+- The branch contains 24 non-empty Brainboard AWS Templates plus the existing six deployable Templates.
 
 ## Changes This Session
 
-- Current changes include the persisted-history Dashboard thumbnail refresh, together with earlier thumbnail loader/lifecycle and the latest complete-Board paint-tree capture fix, tests, and progress records.
-- Do not stage or remove the unrelated untracked `docs/gg/feat-infrastructure-template/brainboard-captures/aws-vpc-subnets-security-groups-2az.json`.
+- Preserved Brainboard source fixtures, Template catalog/detail creation, source-authoritative Terraform replacement, Board thumbnail capture/reload, fresh-project reset, and native Workspace brand navigation.
+- Preserved latest dev Repository AI evidence, prepared deployment revisions, Terraform output preservation, Save and Deploy, release, Live Observation, notifications, and authentication behavior.
+- Kept RDS read replicas separate from normal RDS defaults and prevented a fixed static-hosting Template from acquiring incompatible VPC or database additions after the dev merge.
 
 ## Broken Or Unverified
 
-- Root `pnpm test` is blocked by three unrelated macOS failures in Windows-path Terraform lock-file fixtures and one EKS route-table-association orphan fixture.
-- Root `pnpm build` is blocked before Web compilation by the missing `apps/web/.codegraph` path.
+- No branch-authored DB migration exists. Migrations `0034` through `0041` arrived only from merged `dev`.
+- `pnpm catalog:check` and template Terraform CLI validation require a local Terraform executable; none is installed or configured through `TF_CLI_PATH` or `TERRAFORM_BIN`.
+- A complete production build still needs its final post-merge run.
 
 ## Best Next Action
 
-- Restore `apps/web/.codegraph` separately before expecting a successful production Web build. Existing Dashboard thumbnails refresh with full-board framing on their next Workspace save, including a same-revision manual save.
+- Complete final checks, commit and push the merge, then open the issue #381 PR against `dev` with the full cross-cutting change list and known Terraform CLI limitation.

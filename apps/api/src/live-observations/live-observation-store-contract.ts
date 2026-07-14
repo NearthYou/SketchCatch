@@ -20,8 +20,6 @@ const AWS_CONNECTION_ID = "abcdef12-3456-4789-8abc-def012345678";
 const ARTIFACT_SHA = "0123456789abcdef".repeat(4);
 const FIRST_OBSERVER_ID = "11111111-1111-4111-8111-111111111111";
 const SECOND_OBSERVER_ID = "22222222-2222-4222-8222-222222222222";
-const FIRST_BOOST_LEASE_ID = "33333333-3333-4333-8333-333333333333";
-const SECOND_BOOST_LEASE_ID = "44444444-4444-4444-8444-444444444444";
 
 export type LiveObservationStoreContractHarness = {
   store: LiveObservationStore;
@@ -56,10 +54,9 @@ export function registerLiveObservationStoreContract(input: {
       terminalTombstoneRetentionMs: 60_000,
       rollingWindowSeconds: 10,
       maxWeightedBurstPerSecond: 20,
-      maxAcceptedEventsPerRateWindow: 100,
-      maxAcceptedEventsPerSession: 5_000,
-      observerLeaseDurationMs: 15_000,
-      presenterBoostLeaseDurationMs: 10_000
+      maxAcceptedEventsPerRateWindow: 120,
+      maxAcceptedEventsPerSession: 10_000,
+      observerLeaseDurationMs: 15_000
     });
 
     const created = await store.createSession(createInput());
@@ -246,10 +243,10 @@ export function registerLiveObservationStoreContract(input: {
 
     createValue.capability.kid = "mutated-key";
     createValue.manifest.provenance.region = "us-east-1";
-    asPayload(createValue.manifest).autoScalingGroupName = "mutated-input";
+    asAsgCapacityTarget(createValue.manifest).autoScalingGroupName = "mutated-input";
     created.session.capability.kid = "mutated-result";
     created.session.manifest.provenance.region = "eu-west-1";
-    asPayload(created.session.manifest).autoScalingGroupName = "mutated-result";
+    asAsgCapacityTarget(created.session.manifest).autoScalingGroupName = "mutated-result";
     created.session.live.acceptedEventCount = 999;
 
     const firstRead = await store.readSession({ observationId: OBSERVATION_ID });
@@ -257,7 +254,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(firstRead.session.capability.kid, "current-key");
     assert.equal(firstRead.session.manifest.provenance.region, "ap-northeast-2");
     assert.equal(
-      asPayload(firstRead.session.manifest).autoScalingGroupName,
+      asAsgCapacityTarget(firstRead.session.manifest).autoScalingGroupName,
       "sc-lo-asg-123e4567e89b"
     );
     assert.equal(firstRead.session.live.acceptedEventCount, 0);
@@ -269,7 +266,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(secondRead.session.live.pressurePercent, 0);
     assert.equal(
       secondRead.session.manifest.endpoints.trafficUrl,
-      "https://traffic.example.com/events"
+      "https://api-123e4567e89b.example.com/traffic"
     );
 
     const stopped = await store.stopSession({
@@ -515,7 +512,7 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(acceptedRetry.live.acceptedEventCount, 21);
   });
 
-  contractTest("enforces the 100-event rolling window and does not dedupe rejection", async ({
+  contractTest("enforces the 120-event rolling window and does not dedupe rejection", async ({
     store,
     setNow,
     advanceBy
@@ -524,11 +521,11 @@ export function registerLiveObservationStoreContract(input: {
     assertKind(await store.createSession(createInput()), "created");
 
     for (let second = 0; second < 10; second += 1) {
-      for (let offset = 0; offset < 10; offset += 1) {
+      for (let offset = 0; offset < 12; offset += 1) {
         assertKind(
           await store.collectEvent({
             observationId: OBSERVATION_ID,
-            eventId: eventId(second * 10 + offset)
+            eventId: eventId(second * 12 + offset)
           }),
           "accepted"
         );
@@ -538,13 +535,13 @@ export function registerLiveObservationStoreContract(input: {
       }
     }
 
-    const retryEventId = eventId(100);
+    const retryEventId = eventId(120);
     const limited = await store.collectEvent({
       observationId: OBSERVATION_ID,
       eventId: retryEventId
     });
     assertKind(limited, "rate_limited");
-    assert.equal(limited.live.acceptedEventCount, 100);
+    assert.equal(limited.live.acceptedEventCount, 120);
 
     advanceBy(1_000);
     const retry = await store.collectEvent({
@@ -552,10 +549,10 @@ export function registerLiveObservationStoreContract(input: {
       eventId: retryEventId
     });
     assertKind(retry, "accepted");
-    assert.equal(retry.live.acceptedEventCount, 101);
+    assert.equal(retry.live.acceptedEventCount, 121);
   });
 
-  contractTest("checks duplicates before the exact 5,000-event session cap", async ({
+  contractTest("accepts exactly 10,000 events before enforcing the session cap", async ({
     store,
     setNow,
     advanceBy
@@ -563,30 +560,26 @@ export function registerLiveObservationStoreContract(input: {
     setNow(START_MS + 500);
     assertKind(await store.createSession(createInput()), "created");
 
-    for (let index = 0; index < 5_000; index += 1) {
+    for (let index = 0; index < 10_000; index += 1) {
       const result = await store.collectEvent({
         observationId: OBSERVATION_ID,
         eventId: eventId(index)
       });
       assertKind(result, "accepted");
-      if ((index + 1) % 10 === 0 && index + 1 < 5_000) {
+      if (index === 9_999) {
+        assert.equal(result.live.acceptedEventCount, 10_000);
+      }
+      if ((index + 1) % 12 === 0 && index + 1 < 10_000) {
         advanceBy(1_000);
       }
     }
 
-    const duplicate = await store.collectEvent({
-      observationId: OBSERVATION_ID,
-      eventId: eventId(0)
-    });
-    assertKind(duplicate, "duplicate");
-    assert.equal(duplicate.live.acceptedEventCount, 5_000);
-
     const capped = await store.collectEvent({
       observationId: OBSERVATION_ID,
-      eventId: eventId(5_000)
+      eventId: eventId(10_000)
     });
     assertKind(capped, "event_limit_reached");
-    assert.equal(capped.live.acceptedEventCount, 5_000);
+    assert.equal(capped.live.acceptedEventCount, 10_000);
   });
 
   contractTest("serializes collect-before-stop into the frozen final view", async ({
@@ -886,7 +879,7 @@ export function registerLiveObservationStoreContract(input: {
 
     const current = await store.readSession({ observationId: OBSERVATION_ID });
     assertKind(current, "active");
-    assert.deepEqual(current.session.latestObservation?.payload, { sequence: 2 });
+    assert.equal(current.session.latestObservation?.payload.requests, 2);
 
     setNow(Date.parse(claim.lease.expiresAt));
     assertKind(
@@ -903,8 +896,7 @@ export function registerLiveObservationStoreContract(input: {
   });
 
   contractTest("freezes detached latest observations on stop and natural expiry", async ({
-    store,
-    setNow
+    store
   }) => {
     assertKind(await store.createSession(createInput()), "created");
     const claim = await store.claimObserverLease({
@@ -912,9 +904,7 @@ export function registerLiveObservationStoreContract(input: {
       observerId: FIRST_OBSERVER_ID
     });
     assertKind(claim, "claimed");
-    const retainedInput = observation(START_MS, {
-      nested: { state: "original" }
-    });
+    const retainedInput = observation(START_MS, { state: "original" });
     assertKind(
       await store.commitObservation({
         observationId: OBSERVATION_ID,
@@ -924,30 +914,19 @@ export function registerLiveObservationStoreContract(input: {
       }),
       "committed"
     );
-    (retainedInput.payload as { nested: { state: string } }).nested.state =
-      "mutated-input";
+    retainedInput.payload.logs[0]!.message = "mutated-input";
 
     const active = await store.readSession({ observationId: OBSERVATION_ID });
     assertKind(active, "active");
-    assert.equal(
-      (active.session.latestObservation?.payload as { nested: { state: string } })
-        .nested.state,
-      "original"
-    );
-    (active.session.latestObservation?.payload as { nested: { state: string } })
-      .nested.state = "mutated-result";
+    assert.equal(active.session.latestObservation?.payload.logs[0]?.message, '{"state":"original"}');
+    active.session.latestObservation!.payload.logs[0]!.message = "mutated-result";
 
     const stopped = await store.stopSession({
       observationId: OBSERVATION_ID,
       deploymentId: DEPLOYMENT_ID
     });
     assertKind(stopped, "stopped");
-    assert.equal(
-      (stopped.session.finalObservation?.payload as {
-        nested: { state: string };
-      }).nested.state,
-      "original"
-    );
+    assert.equal(stopped.session.finalObservation?.payload.logs[0]?.message, '{"state":"original"}');
 
     const secondHarness = input.createHarness();
     const created = await secondHarness.store.createSession(createInput());
@@ -1059,13 +1038,8 @@ export function registerLiveObservationStoreContract(input: {
           fencingToken: claim.lease.fencingToken,
           observation: {
             observedAt: "2026-07-11T09:00:00.000+09:00",
-            payload: null
+            payload: null as never
           }
-        }),
-      () =>
-        store.acquirePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: SECOND_OBSERVATION_ID.toUpperCase()
         })
     ];
 
@@ -1085,134 +1059,6 @@ export function registerLiveObservationStoreContract(input: {
     assertGenericInputError(futureError);
   });
 
-  contractTest("serializes presenter acquire and keeps same-id retries idempotent", async ({
-    store,
-    setNow
-  }) => {
-    assertKind(await store.createSession(createInput()), "created");
-    const acquired = await Promise.all([
-      store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      })
-    ]);
-    const winner = acquired.find((result) => result.kind === "acquired");
-    assert.ok(winner);
-    assert.equal(acquired.filter((result) => result.kind === "busy").length, 1);
-    assertKind(winner, "acquired");
-    assert.equal(winner.lease.expiresAt, iso(START_MS + 10_000));
-    const winningLeaseId =
-      acquired[0] === winner ? FIRST_BOOST_LEASE_ID : SECOND_BOOST_LEASE_ID;
-    const waitingLeaseId =
-      acquired[0] === winner ? SECOND_BOOST_LEASE_ID : FIRST_BOOST_LEASE_ID;
-
-    setNow(START_MS + 1_000);
-    const retry = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: winningLeaseId
-    });
-    assertKind(retry, "already_acquired");
-    assert.equal(retry.lease.expiresAt, winner.lease.expiresAt);
-    const busy = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: waitingLeaseId
-    });
-    assertKind(busy, "busy");
-    assert.deepEqual(Object.keys(busy).sort(), ["evaluatedAt", "kind"]);
-
-    setNow(START_MS + 10_000);
-    const next = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: waitingLeaseId
-    });
-    assertKind(next, "acquired");
-    assert.equal(next.lease.expiresAt, iso(START_MS + 20_000));
-  });
-
-  contractTest("renews, releases, and session-caps presenter leases exactly", async ({
-    store,
-    setNow
-  }) => {
-    const created = await store.createSession(createInput());
-    assertKind(created, "created");
-    const acquired = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(acquired, "acquired");
-
-    assertKind(
-      await store.renewPresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-    assertKind(
-      await store.releasePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-
-    setNow(START_MS + 3_000);
-    const renewed = await store.renewPresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(renewed, "renewed");
-    assert.equal(renewed.lease.expiresAt, iso(START_MS + 13_000));
-
-    const released = await store.releasePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(released, "released");
-    assertKind(
-      await store.renewPresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-    assertKind(
-      await store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "acquired"
-    );
-
-    setNow(START_MS + 13_000);
-    assertKind(
-      await store.renewPresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      }),
-      "lease_lost"
-    );
-
-    const expiresAtMs = Date.parse(created.session.expiresAt);
-    setNow(expiresAtMs - 5_000);
-    const capped = await store.acquirePresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(capped, "acquired");
-    assert.equal(capped.lease.expiresAt, created.session.expiresAt);
-    const cappedRenewal = await store.renewPresenterBoostLease({
-      observationId: OBSERVATION_ID,
-      leaseId: FIRST_BOOST_LEASE_ID
-    });
-    assertKind(cappedRenewal, "renewed");
-    assert.equal(cappedRenewal.lease.expiresAt, created.session.expiresAt);
-  });
-
   contractTest("cleans lease state at terminal and tombstone purge boundaries", async ({
     store,
     setNow
@@ -1223,13 +1069,6 @@ export function registerLiveObservationStoreContract(input: {
       observerId: FIRST_OBSERVER_ID
     });
     assertKind(claim, "claimed");
-    assertKind(
-      await store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      "acquired"
-    );
     assertKind(
       await store.commitObservation({
         observationId: OBSERVATION_ID,
@@ -1246,7 +1085,6 @@ export function registerLiveObservationStoreContract(input: {
     assertKind(stopped, "stopped");
     const terminalJson = JSON.stringify(stopped.session);
     assert.equal(terminalJson.includes(FIRST_OBSERVER_ID), false);
-    assert.equal(terminalJson.includes(FIRST_BOOST_LEASE_ID), false);
     assert.equal(terminalJson.includes("fencingToken"), false);
 
     const terminalOperations = [
@@ -1262,21 +1100,6 @@ export function registerLiveObservationStoreContract(input: {
           fencingToken: claim.lease.fencingToken,
           observation: observation(START_MS, null)
         }),
-      () =>
-        store.acquirePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: SECOND_BOOST_LEASE_ID
-        }),
-      () =>
-        store.renewPresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: FIRST_BOOST_LEASE_ID
-        }),
-      () =>
-        store.releasePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: FIRST_BOOST_LEASE_ID
-        })
     ];
     for (const operation of terminalOperations) {
       assertKind(await operation(), "gone");
@@ -1288,7 +1111,7 @@ export function registerLiveObservationStoreContract(input: {
     }
   });
 
-  contractTest("serializes observation stop and presenter release races", async ({
+  contractTest("serializes observation stop races", async ({
     store
   }) => {
     assertKind(await store.createSession(createInput()), "created");
@@ -1311,48 +1134,15 @@ export function registerLiveObservationStoreContract(input: {
     ]);
     assertKind(stop, "stopped");
     if (commit.kind === "committed") {
-      assert.deepEqual(stop.session.finalObservation?.payload, {
-        serialized: true
-      });
+      assert.deepEqual(
+        stop.session.finalObservation?.payload,
+        observation(START_MS, { serialized: true }).payload
+      );
     } else {
       assertKind(commit, "gone");
       assert.equal(stop.session.finalObservation, null);
     }
 
-    const secondHarness = input.createHarness();
-    assertKind(
-      await secondHarness.store.createSession(createInput()),
-      "created"
-    );
-    assertKind(
-      await secondHarness.store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      "acquired"
-    );
-    const [released, acquired] = await Promise.all([
-      secondHarness.store.releasePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: FIRST_BOOST_LEASE_ID
-      }),
-      secondHarness.store.acquirePresenterBoostLease({
-        observationId: OBSERVATION_ID,
-        leaseId: SECOND_BOOST_LEASE_ID
-      })
-    ]);
-    assertKind(released, "released");
-    if (acquired.kind === "busy") {
-      assertKind(
-        await secondHarness.store.acquirePresenterBoostLease({
-          observationId: OBSERVATION_ID,
-          leaseId: SECOND_BOOST_LEASE_ID
-        }),
-        "acquired"
-      );
-    } else {
-      assertKind(acquired, "acquired");
-    }
   });
 
   contractTest("rejects malformed inputs with the fixed non-reflective error", async ({
@@ -1524,7 +1314,7 @@ function createManifest(
     },
     endpoints: {
       audienceBaseUrl: "https://audience.example.com",
-      trafficUrl: "https://traffic.example.com/events"
+      trafficUrl: `https://api-${resourceSuffix}.example.com/traffic`
     },
     pressure: {
       metric: "requests_per_target_per_minute",
@@ -1533,9 +1323,11 @@ function createManifest(
     },
     adapter: {
       kind: "aws-live-observation",
-      version: 1,
+      version: 2,
       payload: {
-        cloudFrontDistributionId: "E1ABCDEFGHIJKL",
+        trafficHostname: `api-${resourceSuffix}.example.com`,
+        loadBalancerDnsName:
+          `sc-lo-alb-${resourceSuffix}-123456789.ap-northeast-2.elb.amazonaws.com`,
         loadBalancerArn:
           "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:" +
           "loadbalancer/app/sc-lo-alb-" +
@@ -1546,7 +1338,10 @@ function createManifest(
           "targetgroup/sc-lo-api-" +
           resourceSuffix +
           "/6d0ecf831eec9f09",
-        autoScalingGroupName: "sc-lo-asg-" + resourceSuffix
+        capacityTarget: {
+          kind: "asg",
+          autoScalingGroupName: "sc-lo-asg-" + resourceSuffix
+        }
       }
     }
   };
@@ -1565,10 +1360,22 @@ function iso(value: number): string {
 function observation(
   observedAtMs: number,
   payload: unknown
-): { observedAt: string; payload: never } {
+): { observedAt: string; payload: import("@sketchcatch/types").LiveObservationProviderSnapshot } {
+  const marker = payload && typeof payload === "object" && "sequence" in payload
+    ? Number((payload as { sequence: unknown }).sequence)
+    : 1;
   return {
     observedAt: iso(observedAtMs),
-    payload: payload as never
+    payload: {
+      requests: Number.isFinite(marker) && marker >= 0 ? marker : 1,
+      errorRate: 0,
+      p95LatencyMs: 10,
+      availability: 100,
+      capacity: { desired: 1, running: 1, healthy: 1, max: 2 },
+      logs: [{ timestamp: iso(observedAtMs), message: JSON.stringify(payload) ?? "null" }],
+      observedAt: iso(observedAtMs),
+      state: "available"
+    }
   };
 }
 
@@ -1576,6 +1383,18 @@ function asPayload(
   manifest: DeploymentLiveObservationManifestV2
 ): Record<string, string> {
   return manifest.adapter.payload as Record<string, string>;
+}
+
+function asAsgCapacityTarget(
+  manifest: DeploymentLiveObservationManifestV2
+): { kind: "asg"; autoScalingGroupName: string } {
+  if (
+    manifest.adapter.version !== 2 ||
+    manifest.adapter.payload.capacityTarget.kind !== "asg"
+  ) {
+    assert.fail("Expected adapter v2 ASG capacity target");
+  }
+  return manifest.adapter.payload.capacityTarget;
 }
 
 function mutateInput(

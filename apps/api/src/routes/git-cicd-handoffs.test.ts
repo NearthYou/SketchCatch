@@ -22,6 +22,7 @@ import {
   type CreateGitCicdHandoffRecordInput,
   type GitProviderCreatePullRequestInput,
   type GitCicdHandoffArchitectureRecord,
+  type GitCicdHandoffDeploymentTargetRecord,
   type GitCicdHandoffApprovedDeploymentRecord,
   type GitCicdHandoffApprovedPlanArtifactRecord,
   type GitCicdHandoffProvider,
@@ -445,6 +446,8 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
     validatedAt: fixedNow,
     updatedAt: fixedNow
   };
+  deploymentTarget: GitCicdHandoffDeploymentTargetRecord | undefined =
+    createEcsDeploymentTargetRecord();
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
@@ -531,6 +534,12 @@ class FakeGitCicdHandoffRepository implements GitCicdHandoffRepository {
   async findMonitoringConfig(candidateSourceRepositoryId: string) {
     return candidateSourceRepositoryId === sourceRepositoryId
       ? this.monitoringConfig
+      : undefined;
+  }
+
+  async findProjectDeploymentTarget(candidateProjectId: string) {
+    return this.deploymentTarget?.projectId === candidateProjectId
+      ? this.deploymentTarget
       : undefined;
   }
 
@@ -780,8 +789,232 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates an internal metada
   assert.match(providerCall?.pullRequestDraft.body ?? "", /## Review checklist/);
   assert.equal(providerCall?.pullRequestDraft.reviewChecklist.length, 4);
   assert.equal(providerCall?.userAcceptedChangeId, "accepted-change-1");
+  assert.equal(providerCall?.runtimeTargetKind, "ecs_fargate");
+  assert.equal(providerCall?.confirmedBuildConfig.dockerfilePath, "apps/web/Dockerfile");
+  assert.equal(
+    providerCall?.runtimeConfig.runtimeTargetKind === "ecs_fargate"
+      ? providerCall.runtimeConfig.serviceName
+      : null,
+    "sketchcatch-web"
+  );
+  assert.equal(providerCall?.awsRoleArn, "arn:aws:iam::123456789012:role/SketchCatch");
   assertResponseHasNoSecretFields(body.handoff);
 
+  await app.close();
+});
+
+test("POST GitOps handoff rejects a project without a confirmed ECS deployment target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = undefined;
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy([])
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /deployment target/i);
+  await app.close();
+});
+
+test("POST GitOps handoff rejects stale or ambiguous repository Docker evidence", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisRevision: "c".repeat(40)
+  });
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy([])
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /current, unambiguous Docker build evidence/i);
+  await app.close();
+});
+
+test("POST GitOps handoff accepts one current SAM template for a confirmed Lambda target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = createLambdaDeploymentTargetRecord();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    appPath: { mode: "subdirectory", path: "apps/worker" }
+  };
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisResult: {
+      status: "template_selected",
+      templateId: "minimal-serverless-api",
+      applicationUnits: [
+        {
+          id: "worker",
+          rootPath: "apps/worker",
+          kind: "backend",
+          frameworks: ["sam"],
+          evidencePaths: ["apps/worker/template.yaml"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "framework_config",
+          path: "apps/worker/template.yaml",
+          applicationUnitId: "worker",
+          signals: []
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["SAM template detected"]
+    }
+  });
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(providerCalls[0]?.runtimeTargetKind, "lambda");
+  assert.equal(providerCalls[0]?.confirmedBuildConfig.samTemplatePath, "apps/worker/template.yaml");
+  assert.equal(providerCalls[0]?.runtimeConfig.runtimeTargetKind, "lambda");
+  await app.close();
+});
+
+test("POST GitOps handoff accepts one current AppSpec for a confirmed EC2 ASG target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = createEc2AsgDeploymentTargetRecord();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    appPath: { mode: "subdirectory", path: "apps/api" }
+  };
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisResult: {
+      status: "template_selected",
+      templateId: "three-tier-web-app",
+      applicationUnits: [
+        {
+          id: "api",
+          rootPath: "apps/api",
+          kind: "backend",
+          frameworks: [],
+          evidencePaths: ["apps/api/appspec.yml"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "framework_config",
+          path: "apps/api/appspec.yml",
+          applicationUnitId: "api",
+          signals: []
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["AppSpec detected"]
+    }
+  });
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(providerCalls[0]?.runtimeTargetKind, "ec2_asg");
+  assert.equal(providerCalls[0]?.confirmedBuildConfig.appSpecPath, "apps/api/appspec.yml");
+  assert.equal(providerCalls[0]?.runtimeConfig.runtimeTargetKind, "ec2_asg");
+  await app.close();
+});
+
+test("POST GitOps handoff accepts one current output for a confirmed static target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  repository.deploymentTarget = createStaticSiteDeploymentTargetRecord();
+  repository.monitoringConfig = {
+    ...repository.monitoringConfig!,
+    appPath: { mode: "subdirectory", path: "apps/web" }
+  };
+  repository.sourceRepository = createSourceRepositoryRecord({
+    analysisResult: {
+      status: "template_selected",
+      templateId: "static-web-hosting",
+      applicationUnits: [
+        {
+          id: "web",
+          rootPath: "apps/web",
+          kind: "frontend",
+          frameworks: ["vite"],
+          evidencePaths: ["apps/web/dist"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "static_output",
+          path: "apps/web/dist",
+          applicationUnitId: "web",
+          signals: ["Vite static build output"]
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["Static output detected"]
+    }
+  });
+  const providerCalls: GitCicdProviderCreateInput[] = [];
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy(providerCalls)
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: createHandoffBody()
+  });
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(providerCalls[0]?.runtimeTargetKind, "static_site");
+  assert.equal(providerCalls[0]?.confirmedBuildConfig.staticOutputPath, "apps/web/dist");
+  assert.equal(providerCalls[0]?.runtimeConfig.runtimeTargetKind, "static_site");
+  await app.close();
+});
+
+test("POST GitOps handoff rejects AWS coordinates outside the project target", async () => {
+  const repository = new FakeGitCicdHandoffRepository();
+  const app = await buildGitCicdHandoffTestApp(repository, {
+    provider: createProviderSpy([])
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/git-cicd-handoffs`,
+    headers: await authHeaders(),
+    payload: {
+      ...createHandoffBody(),
+      awsRegion: "us-east-1",
+      awsRoleArn: "arn:aws:iam::999999999999:role/Other"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /project deployment target/i);
   await app.close();
 });
 
@@ -839,6 +1072,15 @@ test("POST /api/projects/:projectId/git-cicd-handoffs creates GitHub PR handoff 
     gitProviderCalls[0]?.files[0]?.expectedSha256,
     "a".repeat(64)
   );
+  assert(
+    gitProviderCalls[0]?.files.some(
+      (file) => file.path === "sketchcatch/test-project/ci-cd/buildspec-ecs.yml"
+    )
+  );
+  const appWorkflow = gitProviderCalls[0]?.files.find(
+    (file) => file.path === ".github/workflows/sketchcatch-app.yml"
+  );
+  assert.match(appWorkflow?.content ?? "", /minimumHealthyPercent=0,maximumPercent=100/);
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Create 2, update 1, delete 0, replace 0/);
   assert.match(gitProviderCalls[0]?.pullRequest.body ?? "", /Pre-Deployment Check/);
   assert.equal(gitProviderCalls[0]?.pullRequest.reviewChecklist.length, 4);
@@ -2299,7 +2541,171 @@ function createSourceRepositoryRecord(
     name: "infra-live",
     defaultBranch: "main",
     repositoryUrl: "https://example.invalid/sketchcatch/infra-live",
+    analysisResult: {
+      status: "template_selected",
+      templateId: "ecs-fargate-container-app",
+      applicationUnits: [
+        {
+          id: "web",
+          rootPath: "apps/web",
+          kind: "frontend",
+          frameworks: ["nextjs"],
+          evidencePaths: ["apps/web/Dockerfile"]
+        }
+      ],
+      evidence: [
+        {
+          kind: "dockerfile",
+          path: "apps/web/Dockerfile",
+          applicationUnitId: "web",
+          signals: []
+        }
+      ],
+      missingEvidence: [],
+      selectionReasons: ["Dockerfile detected"]
+    },
+    analysisRevision: "b".repeat(40),
+    analyzedAt: fixedNow,
     ...overrides
+  };
+}
+
+function createEcsDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    projectId,
+    provider: "aws" as const,
+    connectionId: "88888888-8888-4888-8888-888888888888",
+    region: "ap-northeast-2",
+    runtimeTargetKind: "ecs_fargate" as const,
+    confirmedBuildConfig: {
+      sourceRoot: "apps/web",
+      evidence: [{ kind: "dockerfile" as const, path: "apps/web/Dockerfile" }],
+      installPreset: "none" as const,
+      buildPreset: "docker_build" as const,
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: "apps/web/Dockerfile",
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: null,
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "1.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "ecs_fargate" as const,
+      codeBuildProjectName: "sketchcatch-web-build",
+      ecrRepositoryName: "sketchcatch/web",
+      clusterName: "sketchcatch-web",
+      serviceName: "sketchcatch-web",
+      containerName: "web",
+      outputUrl: "https://app.example.com"
+    },
+    awsRoleArn: "arn:aws:iam::123456789012:role/SketchCatch",
+    rolloutStrategy: "all_at_once" as const,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  };
+}
+
+function createLambdaDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    ...createEcsDeploymentTargetRecord(),
+    runtimeTargetKind: "lambda",
+    confirmedBuildConfig: {
+      sourceRoot: "apps/worker",
+      evidence: [{ kind: "sam_template", path: "apps/worker/template.yaml" }],
+      installPreset: "none",
+      buildPreset: "sam_build",
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: "apps/worker/template.yaml",
+      appSpecPath: null,
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "2.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "lambda",
+      functionLogicalId: "ApiFunction",
+      functionName: "sketchcatch-api",
+      aliasName: "live",
+      codeDeployApplicationName: "sketchcatch-api",
+      codeDeployDeploymentGroupName: "sketchcatch-api-live",
+      outputUrl: "https://lambda.example.com"
+    }
+  };
+}
+
+function createEc2AsgDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    ...createEcsDeploymentTargetRecord(),
+    runtimeTargetKind: "ec2_asg",
+    confirmedBuildConfig: {
+      sourceRoot: "apps/api",
+      evidence: [{ kind: "appspec", path: "apps/api/appspec.yml" }],
+      installPreset: "none",
+      buildPreset: "codedeploy_bundle",
+      artifactOutputPath: null,
+      runtimeEntrypoint: null,
+      healthCheckPath: "/health",
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: "apps/api/appspec.yml",
+      staticOutputPath: null,
+      exactSemVerTag: null,
+      manifestVersion: "3.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "ec2_asg",
+      codeDeployApplicationName: "sketchcatch-api",
+      codeDeployDeploymentGroupName: "sketchcatch-api-asg",
+      autoScalingGroupName: "sketchcatch-api-asg",
+      outputUrl: "https://ec2.example.com"
+    }
+  };
+}
+
+function createStaticSiteDeploymentTargetRecord(): GitCicdHandoffDeploymentTargetRecord {
+  return {
+    ...createEcsDeploymentTargetRecord(),
+    runtimeTargetKind: "static_site",
+    confirmedBuildConfig: {
+      sourceRoot: "apps/web",
+      evidence: [{ kind: "static_output", path: "apps/web/dist" }],
+      installPreset: "pnpm_frozen_lockfile",
+      buildPreset: "static_export",
+      artifactOutputPath: "apps/web/dist",
+      runtimeEntrypoint: null,
+      healthCheckPath: null,
+      dockerfilePath: null,
+      packageManifestPath: null,
+      samTemplatePath: null,
+      appSpecPath: null,
+      staticOutputPath: "apps/web/dist",
+      exactSemVerTag: null,
+      manifestVersion: "4.0.0",
+      confirmedCommitSha: "b".repeat(40),
+      confirmedAt: "2026-01-01T00:00:00.000Z"
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "static_site",
+      hostingBucketName: "sketchcatch-static-releases",
+      cloudFrontDistributionId: "E1234567890ABC",
+      cloudFrontOriginId: "static-origin",
+      outputUrl: "https://static.example.com"
+    }
   };
 }
 

@@ -3,6 +3,8 @@ import type { RepositoryEvidenceKind } from "@sketchcatch/types";
 const repositoryFrameworkConfigFileNames = new Set([
   "angular.json",
   "app.yaml",
+  "appspec.yaml",
+  "appspec.yml",
   "cdk.json",
   "compose.yaml",
   "compose.yml",

@@ -47,8 +47,10 @@ import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
   saveWorkspaceTerraformArtifact,
+  type PreparedWorkspaceDeploymentArtifacts,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
+import { requireSavedProjectDraftRevision } from "./project-deployment-preparation";
 import {
   createTerraformLeaveSaveStartFeedback,
   resolveTerraformLeaveSaveCompletion,
@@ -77,6 +79,7 @@ import styles from "./workspace.module.css";
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly deploymentAvailability: DeploymentAvailability;
+  readonly deploymentOpenRequestId?: number | undefined;
   readonly initialView?: WorkspaceRightPanelView | undefined;
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
@@ -107,6 +110,7 @@ const TERRAFORM_SPLIT_KEYBOARD_STEP = 4;
 export function WorkspaceRightPanel({
   context,
   deploymentAvailability,
+  deploymentOpenRequestId = 0,
   initialView,
   initialTerraformFiles,
   terraformFilesReplacement,
@@ -160,6 +164,12 @@ export function WorkspaceRightPanel({
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
     initialView === "deployment"
   );
+
+  useEffect(() => {
+    if (deploymentOpenRequestId > 0) {
+      setIsDeploymentConsoleOpen(true);
+    }
+  }, [deploymentOpenRequestId]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
@@ -614,37 +624,38 @@ export function WorkspaceRightPanel({
     [projectId]
   );
 
-  const prepareDeploymentArtifacts =
-    useCallback(async (): Promise<SavedWorkspaceTerraformArtifact> => {
-      const preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+  const prepareDeploymentArtifacts = useCallback(async (): Promise<
+    PreparedWorkspaceDeploymentArtifacts
+  > => {
+    const preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
 
-      if (!preparedSource) {
-        throw new Error("Terraform 패널을 준비하지 못했습니다.");
-      }
+    if (!preparedSource) {
+      throw new Error("Terraform 패널을 준비하지 못했습니다.");
+    }
 
-      const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
+    const saveResult = await context.saveDiagramNow?.();
+    const preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
+    const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
-      setHasUnsavedTerraformChanges(false);
-      setLastSavedDeploymentBaselineFingerprint(
-        toDeploymentBaselineFingerprint(preparedSource.diagramJson)
-      );
-      setIsDeploymentBaselineDirty(false);
+    setHasUnsavedTerraformChanges(false);
+    setLastSavedDeploymentBaselineFingerprint(
+      toDeploymentBaselineFingerprint(preparedSource.diagramJson)
+    );
+    setIsDeploymentBaselineDirty(false);
 
-      return savedArtifacts;
-    }, [savePreparedTerraformArtifact]);
+    return {
+      ...savedArtifacts,
+      diagramJson: preparedSource.diagramJson,
+      preparedDraftRevision,
+      terraformFiles: preparedSource.terraformFiles
+    };
+  }, [context, savePreparedTerraformArtifact]);
 
   const validateTerraformForPreDeployment = useCallback(async (): Promise<
     TerraformDiagnostic[]
   > => {
     return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
   }, [terraformDiagnostics]);
-
-  const getTerraformFilesForPreDeployment = useCallback((): readonly TerraformSyncFileInput[] => {
-    return (terraformPanelRef.current?.getTerraformFiles() ?? []).map((file) => ({
-      fileName: file.fileName,
-      terraformCode: file.code
-    }));
-  }, []);
 
   const openPreDeploymentFindingTerraformSource = useCallback(
     (finding: CheckFinding): TerraformSourceLocation | null => {
@@ -741,7 +752,6 @@ export function WorkspaceRightPanel({
         hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
         initialExpanded
         onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
-        onGetTerraformFiles={getTerraformFilesForPreDeployment}
         onOpenLiveObservation={openLiveObservation}
         onOpenFindingTerraformSource={(finding) => {
           const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
@@ -765,7 +775,6 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
-      diagramJson={context.diagram}
       onClose={() => setIsLiveObservationOpen(false)}
       projectId={projectId}
     />
@@ -818,7 +827,7 @@ export function WorkspaceRightPanel({
           <button
             className={styles.collapsedPanelButton}
             onClick={openLiveObservation}
-            title="시뮬레이션"
+            title="Live Observation"
             type="button"
           >
             <Activity size={18} aria-hidden="true" />
@@ -892,11 +901,11 @@ export function WorkspaceRightPanel({
           <button
             className={styles.panelModeTextButton}
             onClick={openLiveObservation}
-            title="실시간 트래픽 및 ASG 관측"
+            title="Live Observation"
             type="button"
           >
             <Activity size={14} aria-hidden="true" />
-            <span>시뮬레이션</span>
+            <span>Live Observation</span>
           </button>
         </div>
 

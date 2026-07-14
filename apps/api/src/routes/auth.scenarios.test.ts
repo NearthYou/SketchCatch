@@ -300,7 +300,7 @@ test("POST /api/auth/login records the forwarded client IP behind proxies", asyn
     method: "POST",
     url: "/api/auth/login",
     headers: {
-      "x-forwarded-for": "203.0.113.10, 10.0.0.5"
+      "x-forwarded-for": "203.0.113.10"
     },
     payload: {
       username: "demo",
@@ -386,7 +386,7 @@ test("POST /api/auth/password-reset/request stores a hashed reset token", async 
   const response = await app.inject({
     method: "POST",
     headers: {
-      "x-forwarded-for": "203.0.113.10, 10.0.0.5"
+      "x-forwarded-for": "203.0.113.10"
     },
     url: "/api/auth/password-reset/request",
     payload: {

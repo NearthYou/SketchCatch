@@ -16,12 +16,16 @@ import type {
   LlmExplanationFallbackReason
 } from "@sketchcatch/types";
 import { AiDraftBoardPreview } from "./ai-draft-board-preview";
-import type { AiStartMessage } from "./ai-start-model";
+import type { AiStartExistingProject, AiStartMessage } from "./ai-start-model";
 import { useAiStartWorkflow } from "./use-ai-start-workflow";
 import styles from "./workspace-ai-start.module.css";
 
-export function WorkspaceAiStartClient() {
-  const workflow = useAiStartWorkflow();
+export function WorkspaceAiStartClient({
+  existingProject
+}: {
+  readonly existingProject?: AiStartExistingProject | undefined;
+}) {
+  const workflow = useAiStartWorkflow({ existingProject });
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,7 +52,7 @@ export function WorkspaceAiStartClient() {
     <main className={styles.page}>
       <header className={styles.topbar}>
         <button
-          aria-label="새 프로젝트 화면으로 돌아가기"
+          aria-label={existingProject ? "Repository 추천으로 돌아가기" : "새 프로젝트 화면으로 돌아가기"}
           className={styles.iconButton}
           onClick={workflow.cancelStart}
           type="button"

@@ -16,15 +16,24 @@ import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import {
+  registerProjectReleaseLedgerRoutes,
+  type ProjectReleaseLedgerRouteOptions
+} from "./routes/project-release-ledger.js";
 import type { ProjectAssetStorage } from "./projects/project-asset-storage.js";
 import {
   registerSourceRepositoryRoutes,
   type SourceRepositoryRouteOptions
 } from "./routes/source-repositories.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
-import { registerLiveObservationRoutes } from "./routes/live-observations.js";
+import { registerLiveObservationV2Routes } from "./routes/live-observations-v2.js";
+import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-observation-public-collector.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
 import { registerCostRoutes } from "./routes/costs.js";
+import {
+  registerNotificationRoutes,
+  type NotificationRouteOptions
+} from "./routes/notifications.js";
 import {
   createDelegatingGitCicdHandoffProvider,
   createGitHubGitCicdHandoffProvider
@@ -32,7 +41,13 @@ import {
 import { createGitHubAppGitProvider } from "./git-cicd/github-app-git-provider.js";
 import { createGitHubActionsPipelineStatusProvider } from "./git-cicd/github-actions-pipeline-status-provider.js";
 import { createGitHubActionsRunProvider } from "./git-cicd/github-actions-run-provider.js";
-import { requireGitHubAppConfig } from "./config/env.js";
+import {
+  getRuntimeEnv,
+  isLiveObservationEnabled,
+  requireGitHubAppConfig,
+  requireLiveObservationCapabilityKeyring,
+  type RuntimeEnv
+} from "./config/env.js";
 import { createGitHubAppClient } from "./source-repositories/github-app-client.js";
 import {
   registerTerraformRoutes,
@@ -52,9 +67,15 @@ import {
   createRuntimeCacheFromEnv,
   type RuntimeCache
 } from "./runtime-cache/index.js";
+import {
+  createLiveObservationV2Runtime,
+  type LiveObservationV2Runtime
+} from "./live-observations/live-observation-v2-runtime.js";
+import { createDeploymentNotificationRuntime } from "./notifications/notification-runtime.js";
+import { startNotificationOutboxJob } from "./notifications/notification-outbox-job.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
-const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
+const corsAllowedMethods = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
 const fallbackCorsAllowedHeaders = "content-type,authorization";
 const sensitiveHeaderRedactionPaths = [
   "headers.authorization",
@@ -106,6 +127,7 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
     | "createSourceRepositoryRepository"
@@ -116,6 +138,12 @@ export type BuildAppOptions = {
     | "sourceRepositoryAnalysisRateLimiter"
   >;
   runtimeCache?: RuntimeCache;
+  runtimeEnv?: RuntimeEnv;
+  liveObservationV2Runtime?: LiveObservationV2Runtime;
+  notificationRoutes?: Pick<
+    NotificationRouteOptions,
+    "createService" | "pushConfig" | "requireUserId"
+  >;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
@@ -123,6 +151,11 @@ export type BuildAppOptions = {
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const getAppDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+  const runtimeEnv = options.runtimeEnv ?? getRuntimeEnv();
+  const liveObservationEnabled = isLiveObservationEnabled(runtimeEnv);
+  const liveObservationKeyring = liveObservationEnabled
+    ? requireLiveObservationCapabilityKeyring(runtimeEnv)
+    : undefined;
   const oauthStartRateLimiter =
     options.oauthStartRateLimiter ??
     createInMemoryRateLimiter({
@@ -149,15 +182,32 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     });
   const app = Fastify({
     logger: createApiLoggerOptions(),
-    trustProxy: true
+    trustProxy: 1
   });
   const runtimeCache =
     options.runtimeCache ??
     createRuntimeCacheFromEnv({
+      env: runtimeEnv,
       onDegraded: (error) => {
         app.log.warn({ error }, "Runtime Cache degraded; continuing with fallback state");
       }
     });
+  const liveObservationV2Runtime = liveObservationEnabled
+    ? options.liveObservationV2Runtime ??
+      createLiveObservationV2Runtime({
+        getDatabaseClient: getAppDatabaseClient,
+        keyring: liveObservationKeyring!,
+        runtimeCache,
+        runtimeEnv
+      })
+    : undefined;
+  const notificationRuntime = createDeploymentNotificationRuntime({
+    getDatabaseClient: getAppDatabaseClient,
+    runtimeEnv,
+    onDispatchError: ({ outboxId, code }) => {
+      app.log.warn({ outboxId, code }, "Web Push delivery will be retried");
+    }
+  });
   const githubAppClient = createLazyGitHubAppClient();
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
@@ -167,9 +217,18 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             app.log.error({ error }, "Failed to clean stale refresh tokens");
           }
         });
+  const stopNotificationOutboxJob =
+    process.env.NODE_ENV === "test" || !notificationRuntime.pushEnabled
+      ? undefined
+      : startNotificationOutboxJob(notificationRuntime.createService, {
+          onError: (error) => {
+            app.log.error({ error }, "Notification outbox dispatch failed");
+          }
+        });
 
   app.addHook("onClose", async () => {
     stopRefreshTokenCleanupJob?.();
+    stopNotificationOutboxJob?.();
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -232,6 +291,21 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectAssetStorage: options.projectAssetStorage,
     projectDeletionStorage: options.projectDeletionStorage
   });
+  app.register(registerProjectReleaseLedgerRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectReleaseLedgerRoutes
+  });
+  app.register(registerNotificationRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    createService:
+      options.notificationRoutes?.createService ?? notificationRuntime.createService,
+    pushConfig: options.notificationRoutes?.pushConfig ?? notificationRuntime.pushConfig,
+    ...(options.notificationRoutes?.requireUserId
+      ? { requireUserId: options.notificationRoutes.requireUserId }
+      : {})
+  });
   app.register(registerSourceRepositoryRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -242,11 +316,21 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     getDatabaseClient: getAppDatabaseClient,
     runtimeCache
   });
-  app.register(registerLiveObservationRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    runtimeCache
-  });
+  if (liveObservationV2Runtime) {
+    app.register(registerLiveObservationV2Routes, {
+      prefix: "/api",
+      enabled: true,
+      liveObservationService: liveObservationV2Runtime.liveObservationService,
+      prepareDeploymentManifest: liveObservationV2Runtime.prepareDeploymentManifest,
+      requireDeploymentAccess: liveObservationV2Runtime.requireDeploymentAccess,
+      refreshObservation: liveObservationV2Runtime.refreshObservation
+    });
+    app.register(registerLiveObservationPublicCollectorRoutes, {
+      prefix: "/api",
+      collector: liveObservationV2Runtime.collector,
+      enabled: true
+    });
+  }
   app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,

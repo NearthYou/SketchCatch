@@ -64,7 +64,7 @@ test("manifest v2 requires exact contract literals", () => {
     [["pressure", "target"], 59],
     [["pressure", "windowSeconds"], 30],
     [["adapter", "kind"], "aws"],
-    [["adapter", "version"], 2]
+    [["adapter", "version"], 3]
   ];
 
   for (const [path, value] of invalidLiterals) {
@@ -316,6 +316,112 @@ test("manifest v2 accepts the exact four-field AWS adapter v1 payload", () => {
   assert.deepEqual(parsed.adapter.payload, payload);
 });
 
+test("manifest v2 keeps adapter v1 readable and accepts an ASG adapter v2 target", () => {
+  const candidate = createValidManifest() as unknown as Record<string, unknown>;
+  candidate.endpoints = {
+    audienceBaseUrl: "https://audience.example.com",
+    trafficUrl: "https://api.example.com/traffic"
+  };
+  candidate.adapter = {
+    kind: "aws-live-observation",
+    version: 2,
+    payload: {
+      trafficHostname: "api.example.com",
+      loadBalancerDnsName:
+        "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
+      loadBalancerArn:
+        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer-platform/50dc6c495c0c9188",
+      targetGroupArn:
+        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/customer-api/6d0ecf831eec9f09",
+      capacityTarget: {
+        kind: "asg",
+        autoScalingGroupName: "customer-platform-asg"
+      }
+    }
+  };
+
+  const parsed = parseDeploymentLiveObservationManifestV2(candidate);
+
+  assert.equal(parsed.adapter.version, 2);
+  assert.deepEqual(parsed.adapter.payload, candidate.adapter && (candidate.adapter as { payload: unknown }).payload);
+  assert.equal(parseDeploymentLiveObservationManifestV2(createValidManifest()).adapter.version, 1);
+});
+
+test("manifest v2 accepts an ECS Fargate adapter v2 target and rejects partial target identity", () => {
+  const candidate = createValidManifest() as unknown as Record<string, unknown>;
+  candidate.endpoints = {
+    audienceBaseUrl: "https://audience.example.com",
+    trafficUrl: "https://api.example.com/traffic"
+  };
+  candidate.adapter = {
+    kind: "aws-live-observation",
+    version: 2,
+    payload: {
+      trafficHostname: "api.example.com",
+      loadBalancerDnsName:
+        "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
+      loadBalancerArn:
+        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer-platform/50dc6c495c0c9188",
+      targetGroupArn:
+        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/customer-api/6d0ecf831eec9f09",
+      capacityTarget: {
+        kind: "ecs_fargate",
+        clusterName: "customer-platform",
+        serviceName: "api",
+        maxCapacity: 4
+      }
+    }
+  };
+
+  assert.equal(parseDeploymentLiveObservationManifestV2(candidate).adapter.version, 2);
+
+  const partial = structuredClone(candidate);
+  delete ((partial.adapter as { payload: { capacityTarget: Record<string, unknown> } }).payload.capacityTarget).serviceName;
+  assert.throws(() => parseDeploymentLiveObservationManifestV2(partial));
+});
+
+test("adapter v2 binds a public custom TLS hostname to verified public ALB DNS evidence", () => {
+  assert.doesNotThrow(() => parseDeploymentLiveObservationManifestV2(createValidAdapterV2Manifest()));
+
+  const invalidCandidates = [
+    withV2Path(["adapter", "payload", "trafficHostname"], "169.254.169.254"),
+    withV2Path(["adapter", "payload", "trafficHostname"], "localhost"),
+    withV2Path(["adapter", "payload", "trafficHostname"], "internal-api.example.com"),
+    withV2Path(
+      ["adapter", "payload", "trafficHostname"],
+      "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com"
+    ),
+    withV2Path(
+      ["endpoints", "trafficUrl"],
+      "https://internal-customer-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+    ),
+    withV2Path(
+      ["adapter", "payload", "loadBalancerDnsName"],
+      "internal-customer-platform-123456789.ap-northeast-2.elb.amazonaws.com"
+    ),
+    withV2Path(
+      ["adapter", "payload", "loadBalancerDnsName"],
+      "customer-platform-123456789.us-east-1.elb.amazonaws.com"
+    ),
+    withV2Path(
+      ["endpoints", "trafficUrl"],
+      "https://other-platform-123456789.ap-northeast-2.elb.amazonaws.com/traffic"
+    ),
+    withV2Path(
+      ["endpoints", "trafficUrl"],
+      "https://user@api.example.com/traffic"
+    ),
+    withV2Path(
+      ["endpoints", "trafficUrl"],
+      "https://api.example.com/traffic?target=metadata"
+    )
+  ];
+
+  for (const candidate of invalidCandidates) {
+    assert.throws(() => parseDeploymentLiveObservationManifestV2(candidate));
+  }
+});
+
 function createValidManifest(): DeploymentLiveObservationManifestV2 {
   return {
     schemaVersion: 2,
@@ -361,6 +467,44 @@ function createValidAdapterPayload(
     autoScalingGroupName: `sc-lo-asg-${resourceSuffix}`,
     ...overrides
   };
+}
+
+function createValidAdapterV2Manifest(): Record<string, unknown> {
+  const candidate = structuredClone(createValidManifest()) as unknown as Record<string, unknown>;
+  candidate.endpoints = {
+    audienceBaseUrl: "https://audience.example.com",
+    trafficUrl: "https://api.example.com/traffic"
+  };
+  candidate.adapter = {
+    kind: "aws-live-observation",
+    version: 2,
+    payload: {
+      trafficHostname: "api.example.com",
+      loadBalancerDnsName:
+        "customer-platform-123456789.ap-northeast-2.elb.amazonaws.com",
+      loadBalancerArn:
+        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/customer-platform/50dc6c495c0c9188",
+      targetGroupArn:
+        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/customer-api/6d0ecf831eec9f09",
+      capacityTarget: {
+        kind: "asg",
+        autoScalingGroupName: "customer-platform-asg"
+      }
+    }
+  };
+  return candidate;
+}
+
+function withV2Path(path: string[], value: unknown): Record<string, unknown> {
+  const candidate = createValidAdapterV2Manifest();
+  let cursor = candidate;
+  for (const key of path.slice(0, -1)) {
+    cursor = cursor[key] as Record<string, unknown>;
+  }
+  const lastKey = path.at(-1);
+  assert.ok(lastKey);
+  cursor[lastKey] = value;
+  return candidate;
 }
 
 function withPath(path: string[], value: unknown): Record<string, unknown> {

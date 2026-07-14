@@ -63,6 +63,9 @@ test("WorkspaceStartClient keeps Template and GitHub URL as real start paths", (
   assert.match(startClientSource, /https:\/\/github\.com\/owner\/repository/);
   assert.match(startClientSource, /workspace\/repository/);
   assert.doesNotMatch(startClientSource, /analyzePublicSourceRepository/);
+  assert.doesNotMatch(startClientSource, /repository-branch-input/);
+  assert.doesNotMatch(startClientSource, /repositoryDefaultBranch/);
+  assert.doesNotMatch(startClientSource, /defaultBranch:/);
 });
 
 test("WorkspaceStartClient shows Repository URL analysis before the primary action", () => {

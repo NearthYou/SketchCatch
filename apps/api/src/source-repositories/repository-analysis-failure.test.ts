@@ -172,7 +172,10 @@ test("ignores nested packages outside declared workspace patterns", () => {
       },
       {
         path: "apps/web/package.json",
-        content: JSON.stringify({ dependencies: { react: "19.0.0", vite: "7.0.0" } })
+        content: JSON.stringify({
+          scripts: { build: "vite build" },
+          dependencies: { react: "19.0.0", vite: "7.0.0" }
+        })
       },
       { path: "apps/web/vite.config.ts", content: "export default {}" },
       {

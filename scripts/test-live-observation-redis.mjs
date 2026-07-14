@@ -93,16 +93,20 @@ async function runRedisIntegration() {
 }
 
 async function runIntegrationTests(redisUrl) {
+  const pnpmArgs = [
+    "--filter",
+    "@sketchcatch/api",
+    "exec",
+    "tsx",
+    "--test",
+    "src/live-observations/redis-live-observation-store.integration.ts"
+  ];
+  const command = process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
+  const args = process.platform === "win32" ? ["/d", "/s", "/c", "pnpm", ...pnpmArgs] : pnpmArgs;
+
   await runCommand(
-    "pnpm",
-    [
-      "--filter",
-      "@sketchcatch/api",
-      "exec",
-      "tsx",
-      "--test",
-      "src/live-observations/redis-live-observation-store.integration.ts"
-    ],
+    command,
+    args,
     {
       env: {
         ...process.env,

@@ -446,7 +446,7 @@
 .repositoryUrlForm {
   display: grid;
   align-items: end;
-  grid-template-columns: minmax(0, 1fr) minmax(128px, 168px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 

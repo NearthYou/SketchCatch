@@ -52,6 +52,7 @@ import {
   runTerraformDestroyPlan as defaultRunTerraformDestroyPlan,
   runTerraformInit as defaultRunTerraformInit,
   runTerraformShowJson as defaultRunTerraformShowJson,
+  terraformMutationTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
 import {
@@ -263,7 +264,8 @@ export async function runDeploymentDestroyPlan(
     terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
       env: awsCredentials.env,
       planFileName: defaultPlanFileName,
-      signal: input.abortSignal
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
     });
     sequence = await appendTerraformOutput({
       deploymentId: deployment.id,
@@ -455,7 +457,9 @@ function assertDeploymentCanStartDestroyPlan(
 
   if (
     sourceStatus === "FAILED" &&
-    (sourceFailureStage === "apply" || sourceFailureStage === "destroy")
+    (sourceFailureStage === "plan" ||
+      sourceFailureStage === "apply" ||
+      sourceFailureStage === "destroy")
   ) {
     return;
   }
@@ -474,7 +478,9 @@ function assertDestroyCleanupArtifactHasNotDrifted(input: {
 }): void {
   if (
     input.sourceStatus !== "FAILED" ||
-    (input.sourceFailureStage !== "apply" && input.sourceFailureStage !== "destroy")
+    (input.sourceFailureStage !== "plan" &&
+      input.sourceFailureStage !== "apply" &&
+      input.sourceFailureStage !== "destroy")
   ) {
     return;
   }

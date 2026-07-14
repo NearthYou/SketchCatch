@@ -239,6 +239,62 @@
       "when": 1783987200001,
       "tag": "0033_git_cicd_pipeline_upstream_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783987200002,
+      "tag": "0034_live_observation_manifest_invariants",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784073600000,
+      "tag": "0035_project_release_ledger",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784073600001,
+      "tag": "0036_deployment_prepared_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1784073600002,
+      "tag": "0037_ecs_gitops_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1784073600003,
+      "tag": "0038_lambda_gitops_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1784073600004,
+      "tag": "0039_ec2_asg_gitops_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1784073600005,
+      "tag": "0040_static_gitops_runtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784073600006,
+      "tag": "0041_durable_deployment_notifications",
+      "breakpoints": true
     }
   ]
 }

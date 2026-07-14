@@ -27,6 +27,14 @@ test("focused screens do not cross their execution client boundaries", () => {
   assert.doesNotMatch(cicdSource, /runDeploymentApply/);
 });
 
+test("Direct Deployment has no browser-side production traffic simulator", () => {
+  const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
+
+  assert.doesNotMatch(directSource, /runTrafficSimulator|trafficSimulator|trafficAbortController/);
+  assert.doesNotMatch(directSource, /Array\.from\(\{ length: 20 \}|source=sketchcatch/);
+  assert.doesNotMatch(directSource, /트래픽 시뮬레이션|Traffic simulation/);
+});
+
 test("DeploymentPanel is a compatibility adapter without the former tab state", () => {
   const panelSource = readWorkspaceSource("DeploymentPanel.tsx");
 
@@ -50,10 +58,12 @@ test("the CI/CD screen wires sorted refreshes and request-scoped recovery state"
   assert.match(cicdSource, /refreshProjectGitCicdPipelineRuns\(projectId\)/);
   assert.match(cicdSource, /mergeCicdPipelineRun\(currentRuns, detail\)/);
   assert.match(cicdSource, /hasExplicitRunSelectionRef\.current = true/);
-  for (const scope of ["list", "detail", "refresh", "settings"] as const) {
+  for (const scope of ["list", "detail", "refresh"] as const) {
     assert.match(cicdSource, new RegExp(`type: "success", scope: "${scope}"`));
   }
   assert.match(cicdSource, /errorMessage=\{logsErrorMessage\}/);
+  assert.match(cicdSource, /type CicdConsoleView = "activity" \| "logs"/);
+  assert.doesNotMatch(cicdSource, /CicdOverviewView|CicdMonitoringSettings|updateGitCicdMonitoringConfig/);
 });
 
 test("monitoring settings save only normalized repository-relative paths", () => {
@@ -62,6 +72,24 @@ test("monitoring settings save only normalized repository-relative paths", () =>
   assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.appPath\)/);
   assert.match(settingsSource, /normalizeCicdMonitoredPath\(draft\.infraPath\)/);
   assert.doesNotMatch(settingsSource, /normalizePathForSave/);
+});
+
+test("branch and monitored paths are edited from project settings", () => {
+  const clientSource = readFileSync(
+    new URL(
+      "../../app/projects/[projectId]/settings/project-cicd-monitoring-settings-client.tsx",
+      workspaceDirectory
+    ),
+    "utf8"
+  );
+  const pageSource = readFileSync(
+    new URL("../../app/dashboard/projects/[projectId]/settings/page.tsx", workspaceDirectory),
+    "utf8"
+  );
+
+  assert.match(clientSource, /updateGitCicdMonitoringConfig/);
+  assert.match(clientSource, /<CicdMonitoringSettings/);
+  assert.match(pageSource, /<ProjectCicdMonitoringSettingsClient projectId=\{projectId\}/);
 });
 
 test("Direct and CI/CD screens share accessible Deployment Output links", () => {
@@ -74,24 +102,17 @@ test("Direct and CI/CD screens share accessible Deployment Output links", () => 
   assert.match(cicdSource, /<DeploymentOutputLinks[^>]*scopeKey=\{selectedRun\?\.id \?\? null\}/);
 });
 
-test("one workspace notification host survives console screen changes", () => {
+test("durable notifications are global and workspace polling notifications are retired", () => {
   const managerSource = readWorkspaceSource("ProjectWorkspaceDraftManager.tsx");
-  const hostSource = readWorkspaceSource("WorkspaceNotificationHost.tsx");
+  const rootLayoutSource = readFileSync(
+    new URL("../../app/layout.tsx", import.meta.url),
+    "utf8"
+  );
   const directSource = readWorkspaceSource("DirectDeploymentScreen.tsx");
   const cicdSource = readWorkspaceSource("CicdConsoleScreen.tsx");
 
-  assert.equal(managerSource.match(/<WorkspaceNotificationHost/g)?.length, 1);
-  assert.match(managerSource, /<WorkspaceNotificationHost projectId=\{projectId\}>[\s\S]*<DiagramEditor/);
-  assert.match(hostSource, /listDeployments\(projectId\)/);
-  assert.match(hostSource, /listGitCicdPipelineRuns\(projectId/);
-  assert.match(hostSource, /refreshProjectGitCicdPipelineRuns\(projectId\)/);
-  assert.match(
-    hostSource,
-    /refreshProjectGitCicdPipelineRuns\(projectId\)[\s\S]*listGitCicdPipelineRuns\(projectId/
-  );
-  assert.match(hostSource, /window\.setTimeout/);
-  assert.match(hostSource, /window\.clearTimeout/);
-  assert.match(hostSource, /\}, \[notify, projectId\]\);/);
+  assert.doesNotMatch(managerSource, /WorkspaceNotificationHost|workspace-notifications/);
+  assert.match(rootLayoutSource, /<DeploymentNotificationCenter>\{children\}<\/DeploymentNotificationCenter>/);
   assert.doesNotMatch(directSource, /useWorkspaceNotifications|getNotifiableDirectDeploymentTransitions/);
   assert.doesNotMatch(cicdSource, /useWorkspaceNotifications|getNotifiablePipelineRunTransitions/);
 });

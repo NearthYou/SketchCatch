@@ -253,6 +253,13 @@ test("deployment Live Observation manifests are one-to-one schema v2 records wit
         "deployment_live_observation_manifests_schema_version_check"
     )
   );
+  assert(
+    config.checks.some(
+      (constraint) =>
+        constraint.name ===
+        "deployment_live_observation_manifests_status_payload_check"
+    )
+  );
 
   const deploymentForeignKey = config.foreignKeys.find((foreignKey) => {
     const reference = foreignKey.reference();
@@ -265,6 +272,26 @@ test("deployment Live Observation manifests are one-to-one schema v2 records wit
   });
   assert.ok(deploymentForeignKey);
   assert.equal(deploymentForeignKey.onDelete, "cascade");
+});
+
+test("Live Observation manifest invariant migration rejects inconsistent status payloads", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0034_live_observation_manifest_invariants.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /status_payload_check/);
+  assert.match(migration, /"status" = 'valid'/);
+  assert.match(migration, /"manifest" IS NOT NULL/);
+  assert.match(migration, /"invalid_reason" IS NULL/);
+  assert.match(migration, /"status" = 'manifest_invalid'/);
+  assert.match(migration, /"manifest" IS NULL/);
+  assert.match(migration, /length\(btrim\("invalid_reason"\)\) > 0/);
+  assert.match(migration, /NOT VALID/);
+  assert.match(migration, /VALIDATE CONSTRAINT/);
+  assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM|TRUNCATE/i);
 });
 
 test("deployments and Live Observation manifests expose inverse one-to-one relations", () => {

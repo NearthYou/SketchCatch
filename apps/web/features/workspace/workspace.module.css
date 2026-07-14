@@ -177,6 +177,29 @@
   white-space: nowrap;
 }
 
+.cicdReleaseSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.cicdReleaseSummary > div {
+  min-width: 0;
+}
+
+.cicdReleaseSummary dt {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cicdReleaseSummary dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
 .cicdStageList,
 .cicdLogList {
   display: grid;
@@ -271,6 +294,10 @@
 
   .cicdStageList li {
     grid-template-columns: 1fr auto;
+  }
+
+  .cicdReleaseSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -6470,6 +6497,42 @@
 
 .liveObservationEvidenceRail [data-source="aws"] small {
   color: #475569;
+}
+
+.liveObservationLogs {
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  padding: 10px 18px;
+}
+
+.liveObservationLogs summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.liveObservationLogs ol {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 10px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 0;
+}
+
+.liveObservationLogs li {
+  display: grid;
+  gap: 4px;
+}
+
+.liveObservationLogs time {
+  color: var(--workspace-muted, #60646c);
+  font-size: 10px;
+}
+
+.liveObservationLogs code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .liveObservationPressureTrack {

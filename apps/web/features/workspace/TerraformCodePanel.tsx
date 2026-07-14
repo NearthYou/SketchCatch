@@ -205,6 +205,7 @@ function addTerraformDiagnosticSource(
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
   readonly terraformCode: string;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
 };
 
 export type TerraformCodePanelHandle = {
@@ -821,7 +822,8 @@ export const TerraformCodePanel = forwardRef<
 
       return {
         diagramJson: authoritativeDiagramJson,
-        terraformCode: savedTerraformCode
+        terraformCode: savedTerraformCode,
+        terraformFiles: toTerraformValidationFiles(savedTerraformFiles)
       };
     }, [
       combinedTerraformCode,
@@ -1486,7 +1488,14 @@ export const TerraformCodePanel = forwardRef<
 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      void saveCodeToDiagram();
+      void saveCodeToDiagram().then(async (saved) => {
+        if (saved) {
+          await context.saveDiagramNow?.();
+        }
+      }).catch(() => {
+        setRequestState("error");
+        setStatusMessage("프로젝트 저장 실패");
+      });
     }
   }
 

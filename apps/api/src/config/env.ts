@@ -46,7 +46,6 @@ export type RuntimeEnv = {
   liveObservationCapabilityPreviousSecret?: string | undefined;
   liveObservationCapabilityPreviousStoppedIssuingAt?: string | undefined;
   liveObservationEnabled?: string | undefined;
-  liveObservationSimulatedAgent?: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
   nodeEnv?: string | undefined;
@@ -60,6 +59,11 @@ export type RuntimeEnv = {
   transcribeCreditConfirmed?: string | undefined;
   transcribeLanguageCode?: string | undefined;
   transcribeMediaBucket?: string | undefined;
+  webPushSubscriptionEncryptionKey?: string | undefined;
+  webPushSubscriptionKeyId?: string | undefined;
+  webPushVapidPrivateKey?: string | undefined;
+  webPushVapidPublicKey?: string | undefined;
+  webPushVapidSubject?: string | undefined;
 };
 
 const AUTH_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-local-secret-of-at-least-32-characters";
@@ -117,7 +121,6 @@ export function getRuntimeEnv(): RuntimeEnv {
     liveObservationCapabilityPreviousStoppedIssuingAt:
       process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT,
     liveObservationEnabled: process.env.LIVE_OBSERVATION_ENABLED,
-    liveObservationSimulatedAgent: process.env.LIVE_OBSERVATION_SIMULATED_AGENT,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     nodeEnv: process.env.NODE_ENV,
@@ -130,7 +133,46 @@ export function getRuntimeEnv(): RuntimeEnv {
     sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL,
     transcribeCreditConfirmed: process.env.TRANSCRIBE_CREDIT_CONFIRMED,
     transcribeLanguageCode: process.env.TRANSCRIBE_LANGUAGE_CODE,
-    transcribeMediaBucket: process.env.TRANSCRIBE_MEDIA_BUCKET
+    transcribeMediaBucket: process.env.TRANSCRIBE_MEDIA_BUCKET,
+    webPushSubscriptionEncryptionKey: process.env.WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY,
+    webPushSubscriptionKeyId: process.env.WEB_PUSH_SUBSCRIPTION_KEY_ID,
+    webPushVapidPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY,
+    webPushVapidPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
+    webPushVapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT
+  };
+}
+
+export type WebPushRuntimeConfig = {
+  subscriptionEncryptionKey: string;
+  subscriptionKeyId: string;
+  vapidPrivateKey: string;
+  vapidPublicKey: string;
+  vapidSubject: string;
+};
+
+export function getWebPushRuntimeConfig(
+  env: RuntimeEnv = getRuntimeEnv()
+): WebPushRuntimeConfig | null {
+  const values = [
+    env.webPushSubscriptionEncryptionKey,
+    env.webPushVapidPrivateKey,
+    env.webPushVapidPublicKey,
+    env.webPushVapidSubject
+  ];
+  if (values.every((value) => !value?.trim())) return null;
+  if (values.some((value) => !value?.trim())) {
+    throw new Error("Web Push configuration must be complete");
+  }
+  const subscriptionKeyId = env.webPushSubscriptionKeyId?.trim() || "v1";
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(subscriptionKeyId)) {
+    throw new Error("WEB_PUSH_SUBSCRIPTION_KEY_ID is invalid");
+  }
+  return {
+    subscriptionEncryptionKey: env.webPushSubscriptionEncryptionKey!.trim(),
+    subscriptionKeyId,
+    vapidPrivateKey: env.webPushVapidPrivateKey!.trim(),
+    vapidPublicKey: env.webPushVapidPublicKey!.trim(),
+    vapidSubject: env.webPushVapidSubject!.trim()
   };
 }
 

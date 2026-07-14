@@ -8,6 +8,7 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Rocket,
   Save
 } from "lucide-react";
 
@@ -18,6 +19,7 @@ import { getSaveStatusTone, isSaveInProgress } from "./workspace-project-save-st
 type WorkspaceProjectBarProps = {
   readonly actions: {
     readonly onSave?: (() => Promise<unknown>) | undefined;
+    readonly onSaveAndDeploy?: (() => Promise<unknown>) | undefined;
     readonly onToggleLeftPanel: () => void;
     readonly onToggleRightPanel: () => void;
   };
@@ -49,6 +51,9 @@ export function WorkspaceProjectBar({
     void actions.onSave?.();
   }
 
+  function handleSaveAndDeploy(): void {
+    void actions.onSaveAndDeploy?.();
+  }
   return (
     <header className={styles.projectBar}>
       <ProductBrand href={workspace.dashboardHref} />
@@ -82,6 +87,18 @@ export function WorkspaceProjectBar({
             type="button"
           >
             <Save aria-hidden="true" size={17} />
+          </button>
+        ) : null}
+
+        {actions.onSaveAndDeploy ? (
+          <button
+            className={styles.projectBarPrimaryAction}
+            disabled={isSaving}
+            onClick={handleSaveAndDeploy}
+            type="button"
+          >
+            <Rocket aria-hidden="true" size={16} />
+            저장하고 배포
           </button>
         ) : null}
 

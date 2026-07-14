@@ -10,6 +10,7 @@ import type {
 import { maskDeploymentMessage } from "../deployments/log-masking.js";
 import type { Database } from "../db/client.js";
 import {
+  applicationReleases,
   gitCicdMonitoringConfigs,
   gitCicdHandoffs,
   gitCicdPipelineLogs,
@@ -17,6 +18,14 @@ import {
   gitCicdPipelineStages,
   sourceRepositories
 } from "../db/schema.js";
+import {
+  EcsGitOpsReleaseVerificationError,
+  type EcsGitOpsReleaseRecord
+} from "./ecs-gitops-release-reconciler.js";
+import type { GitOpsReleaseReconciler } from "./gitops-release-reconciler.js";
+import { LambdaGitOpsReleaseVerificationError } from "./lambda-gitops-release-reconciler.js";
+import { Ec2AsgGitOpsReleaseVerificationError } from "./ec2-asg-gitops-release-reconciler.js";
+import { StaticSiteGitOpsReleaseVerificationError } from "./static-site-gitops-release-reconciler.js";
 import type {
   GitCicdRunProvider,
   GitCicdRunProviderSnapshot
@@ -26,6 +35,7 @@ import { normalizeNonSensitiveHttpUrl } from "./non-sensitive-http-url.js";
 const stageKinds: readonly GitCicdPipelineStageKind[] = [
   "detect",
   "app_build",
+  "artifact_publish",
   "infra_plan",
   "infra_apply",
   "app_deploy",
@@ -91,7 +101,10 @@ export type PersistedPipelineLog = {
   message: string;
   createdAt: Date;
 };
-export type PipelineRunWithStages = PersistedPipelineRun & { stages: PersistedPipelineStage[] };
+export type PipelineRunWithStages = PersistedPipelineRun & {
+  stages: PersistedPipelineStage[];
+  release?: EcsGitOpsReleaseRecord | null;
+};
 
 export type GitCicdPipelinePersistenceRepository = {
   listRefreshTargets(projectId: string): Promise<PipelineRefreshTarget[]>;
@@ -144,6 +157,7 @@ export function createGitCicdPipelineRunService(options: {
   provider: GitCicdRunProvider;
   now?: () => Date;
   createId?: () => string;
+  releaseReconciler?: GitOpsReleaseReconciler | undefined;
 }) {
   const now = options.now ?? (() => new Date());
   const createId = options.createId ?? randomUUID;
@@ -186,7 +200,7 @@ export function createGitCicdPipelineRunService(options: {
         refreshed.push(await persistSnapshot(target, snapshot, changeScope));
       }
       return { runs: refreshed, stale: false, errorMessage: null };
-    } catch {
+    } catch (error) {
       const persisted = await options.repository.listProjectPipelineRuns(target.projectId);
       const runs = onlyCommitSha
         ? persisted.filter((run) => run.commitSha === onlyCommitSha)
@@ -194,7 +208,13 @@ export function createGitCicdPipelineRunService(options: {
       return {
         runs: maskRuns(runs),
         stale: true,
-        errorMessage: "GitHub Actions status refresh failed; showing the last persisted state."
+        errorMessage:
+          error instanceof EcsGitOpsReleaseVerificationError ||
+          error instanceof LambdaGitOpsReleaseVerificationError ||
+          error instanceof Ec2AsgGitOpsReleaseVerificationError ||
+          error instanceof StaticSiteGitOpsReleaseVerificationError
+            ? "Application release verification failed; showing the last persisted state."
+            : "GitHub Actions status refresh failed; showing the last persisted state."
       };
     }
   }
@@ -240,7 +260,25 @@ export function createGitCicdPipelineRunService(options: {
         createdAt: refreshedAt
       })
     );
-    return maskRun(await options.repository.persistSnapshot({ run, stages, logs }));
+    const persisted = await options.repository.persistSnapshot({ run, stages, logs });
+    if (
+      options.releaseReconciler &&
+      snapshot.releaseEvidence &&
+      persisted.upstreamOrderingToken === snapshot.upstreamOrderingToken &&
+      terminalPipelineRunStatuses.includes(snapshot.status)
+    ) {
+      const release = await options.releaseReconciler.reconcile({
+        projectId: target.projectId,
+        pipelineRunId: persisted.id,
+        commitSha: snapshot.commitSha,
+        pipelineStatus: snapshot.status,
+        startedAt: snapshot.startedAt,
+        finishedAt: snapshot.finishedAt,
+        evidence: snapshot.releaseEvidence
+      });
+      return maskRun({ ...persisted, release });
+    }
+    return maskRun(persisted);
   }
 
   return {
@@ -398,8 +436,13 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
         )
       )
       .orderBy(asc(gitCicdPipelineStages.kind));
+    const releases = await db
+      .select()
+      .from(applicationReleases)
+      .where(inArray(applicationReleases.pipelineRunId, runs.map((run) => run.id)));
     return runs.map((run) => ({
       ...run,
+      release: releases.find((release) => release.pipelineRunId === run.id) ?? null,
       stages: stages
         .filter((stage) => stage.pipelineRunId === run.id)
         .sort((left, right) => stageKinds.indexOf(left.kind) - stageKinds.indexOf(right.kind))
@@ -448,8 +491,13 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
       .select()
       .from(gitCicdPipelineStages)
       .where(inArray(gitCicdPipelineStages.pipelineRunId, runs.map((run) => run.id)));
+    const releases = await db
+      .select()
+      .from(applicationReleases)
+      .where(inArray(applicationReleases.pipelineRunId, runs.map((run) => run.id)));
     return runs.map((run) => ({
       ...run,
+      release: releases.find((release) => release.pipelineRunId === run.id) ?? null,
       stages: stages
         .filter((stage) => stage.pipelineRunId === run.id)
         .sort((left, right) => stageKinds.indexOf(left.kind) - stageKinds.indexOf(right.kind))
@@ -490,8 +538,13 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
         .select()
         .from(gitCicdPipelineStages)
         .where(eq(gitCicdPipelineStages.pipelineRunId, pipelineRunId));
+      const [release] = await db
+        .select()
+        .from(applicationReleases)
+        .where(eq(applicationReleases.pipelineRunId, pipelineRunId));
       return {
         ...run,
+        release: release ?? null,
         stages: stages.sort(
           (left, right) => stageKinds.indexOf(left.kind) - stageKinds.indexOf(right.kind)
         )
@@ -653,7 +706,8 @@ function buildStages(
     const applicable =
       kind === "detect" ||
       kind === "verify" ||
-      (scope !== "infra" && (kind === "app_build" || kind === "app_deploy")) ||
+      (scope !== "infra" &&
+        (kind === "app_build" || kind === "artifact_publish" || kind === "app_deploy")) ||
       (scope !== "app" && (kind === "infra_plan" || kind === "infra_apply"));
     const job = snapshot.jobs.find((candidate) => candidate.stageKind === kind);
     return {

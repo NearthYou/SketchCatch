@@ -58,6 +58,7 @@ export function selectRepositoryTemplate(
     /\basg\b|auto scaling group/.test(searchableEvidence) &&
     /\brds\b|relational database service/.test(searchableEvidence);
   const hasDockerfile = input.evidence.some((item) => item.kind === "dockerfile");
+  const hasStaticOutput = input.evidence.some((item) => item.kind === "static_output");
   const dockerApplicationUnits = applicationUnitEvidence.filter(({ unit }) =>
     input.evidence.some(
       (item) => item.kind === "dockerfile" && item.applicationUnitId === unit.id
@@ -73,6 +74,7 @@ export function selectRepositoryTemplate(
   );
   const matches: readonly RepositoryTemplateMatch[] = [
     ...(hasFrontend &&
+    hasStaticOutput &&
     !hasBackend &&
     !hasServerlessApi &&
     !hasDockerfile &&
@@ -80,7 +82,7 @@ export function selectRepositoryTemplate(
       ? [
           {
             templateId: "static-web-hosting",
-            selectionReason: "정적 build가 가능한 frontend Application Unit만 감지했습니다."
+            selectionReason: "정적 output 경로가 확인된 frontend Application Unit만 감지했습니다."
           } satisfies RepositoryTemplateMatch
         ]
       : []),

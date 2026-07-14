@@ -224,6 +224,21 @@ test("failed apply with partial state offers cleanup planning", () => {
   assert.equal(state.canRunDestroyPlan, true);
 });
 
+test("failed cleanup plan with state can be regenerated", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      failureStage: "plan",
+      stateObjectKey: "deployments/deployment-id/state/terraform.tfstate",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.shouldShowDestroyPlanButton, true);
+  assert.equal(state.canRunDestroyPlan, true);
+});
+
 test("auto-refreshes while Terraform work is running", () => {
   assert.equal(
     shouldAutoRefreshDeployment(
@@ -328,6 +343,10 @@ function createDeployment(
     terraformArtifactId: "66666666-6666-4666-8666-666666666666",
     awsConnectionId: "33333333-3333-4333-8333-333333333333",
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
     currentPlanArtifactId: overrides.currentPlanArtifactId ?? null,
     currentPlanOperation: overrides.currentPlanOperation ?? null,
     stateObjectKey: overrides.stateObjectKey ?? null,

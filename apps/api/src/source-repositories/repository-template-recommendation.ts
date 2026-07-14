@@ -204,7 +204,9 @@ function createRepositoryTemplateRankingInstructions(): string {
   return [
     "당신은 소스 저장소 근거를 바탕으로 IaC Practice Architecture 템플릿을 추천합니다.",
     "입력에 제공된 후보만 사용하고 모든 후보를 정확히 한 번씩 반환하세요.",
-    "confidence를 조정하고 추천 이유와 고려할 점은 저장소 근거에 맞는 한국어로 작성하세요.",
+    "confidence는 저장소의 애플리케이션 단위, 데이터 계층, 프레임워크, 운영 근거를 비교해 독립적으로 산정하세요.",
+    "서로 다른 저장소에 정형화된 고정 점수를 반복하지 말고 근거 강도에 맞춰 후보 간 차이를 표현하세요.",
+    "추천 이유와 고려할 점은 저장소에서 확인된 구체적인 구성에 맞는 한국어로 작성하세요.",
     "각 후보의 allowedQuestionIds를 빠짐없이 정확히 한 번씩 사용해 한국어 질문을 작성하세요.",
     "근거에 없는 클라우드 구성이나 요구사항을 단정하지 마세요."
   ].join("\n");
@@ -221,6 +223,7 @@ function createRepositoryTemplateRankingInput(
   return JSON.stringify({
     deploymentType: input.deploymentType,
     usesCiCd: input.usesCiCd,
+    repositoryProfile: createRepositoryProfile(input),
     applicationUnits: input.applicationUnits.slice(0, 20).map((unit) => ({
       rootPath: unit.rootPath,
       kind: unit.kind,
@@ -231,9 +234,9 @@ function createRepositoryTemplateRankingInput(
     answers: input.answers,
     candidates: candidates.map((candidate) => ({
       templateId: candidate.templateId,
-      currentConfidence: candidate.confidence,
-      currentReasons: candidate.reasons,
-      currentTradeoffs: candidate.tradeoffs,
+      title: templateById.get(candidate.templateId)?.title,
+      description: templateById.get(candidate.templateId)?.description,
+      tags: templateById.get(candidate.templateId)?.tags,
       allowedQuestionIds: (candidate.questions ?? []).map((question) => question.id)
     }))
   });
@@ -459,6 +462,7 @@ function createSupportedCandidateSet(
   input: RepositoryTemplateRecommendationInput
 ): readonly CandidateSetItem[] {
   const text = createSearchableText(input.snapshot, input.evidence.map((item) => item.path));
+  const repositoryProfile = createRepositoryProfile(input);
   const answers = createAnswerMap(input.answers);
   const applicationScope = answers.get("application-scope");
   const dataPersistence = answers.get("data-persistence");
@@ -469,7 +473,7 @@ function createSupportedCandidateSet(
   const hasBackend = input.applicationUnits.some(
     (unit) => unit.kind === "backend" || unit.kind === "fullstack"
   ) || applicationScope === "api" || applicationScope === "web_and_api";
-  const hasRelationalData = /rds|postgres|mysql|prisma|typeorm|sequelize/.test(text) ||
+  const hasRelationalData = repositoryProfile.hasRelationalDatabase ||
     dataPersistence === "relational";
   const wantsAuth = authentication === true || /cognito|auth|oauth|login|session/.test(text);
   const wantsEks = /\beks\b|kubernetes|helm|kustomization/.test(text);
@@ -498,21 +502,68 @@ function createSupportedCandidateSet(
   }
 
   if (input.deploymentType === "container") {
-    const orderedIds: RepositoryTemplateId[] = wantsEks
-      ? ["eks-container-app", "ecs-fargate-container-app"]
-      : ["ecs-fargate-container-app", "eks-container-app"];
+    if (wantsEks) {
+      return [
+        candidate("eks-container-app", 0.9, [
+          "저장소에서 Kubernetes 또는 EKS 운영 근거가 확인되어 관리형 클러스터 템플릿과 직접 맞습니다."
+        ], [
+          "EKS는 클러스터 운영과 Kubernetes 오브젝트 관리가 추가로 필요합니다."
+        ]),
+        candidate("ecs-fargate-container-app", 0.78, [
+          "컨테이너 워크로드를 클러스터 운영 부담이 적은 ECS Fargate로 단순화할 수 있습니다."
+        ], [
+          "기존 Kubernetes 오브젝트와 운영 도구를 그대로 사용할 수 없습니다."
+        ])
+      ];
+    }
 
-    return orderedIds.map((templateId, index) =>
-      candidate(templateId, index === 0 ? 0.84 : 0.68, [
-        templateId === "eks-container-app"
-          ? "Kubernetes 또는 EKS 근거가 관리형 클러스터 템플릿과 잘 맞습니다."
-          : "Docker와 컨테이너 근거가 ECS Fargate 서비스 템플릿과 잘 맞습니다."
+    if (hasFrontend && hasBackend && hasRelationalData) {
+      return [
+        candidate("ecs-fargate-container-app", 0.86, [
+          "감지된 프론트엔드와 백엔드 컨테이너를 ECS Fargate 서비스로 운영하고 데이터베이스 계층을 분리할 수 있습니다."
+        ], [
+          "현재 템플릿은 여러 애플리케이션 서비스와 관계형 데이터베이스 구성을 추가로 조정해야 합니다."
+        ]),
+        candidate("three-tier-web-app", 0.79, [
+          "프론트엔드, 백엔드, 관계형 데이터베이스가 분리된 저장소 구조를 웹, 애플리케이션, RDS 계층으로 대응할 수 있습니다."
+        ], [
+          "애플리케이션 실행 계층이 컨테이너가 아닌 EC2 Auto Scaling 기반이므로 배포 방식을 조정해야 합니다."
+        ]),
+        candidate("eks-container-app", 0.62, [
+          "여러 애플리케이션 컨테이너를 Kubernetes 워크로드로 분리 운영할 수 있는 확장 대안입니다."
+        ], [
+          "저장소에 Kubernetes 운영 근거가 없어 클러스터 복잡도가 초기 요구보다 클 수 있습니다."
+        ])
+      ];
+    }
+
+    if (repositoryProfile.applicationUnitCount <= 1) {
+      return [
+        candidate("ecs-fargate-container-app", 0.9, [
+          "단일 백엔드 컨테이너를 별도 클러스터 관리 없이 실행하는 구조가 ECS Fargate와 잘 맞습니다."
+        ], [
+          "작은 VM 한 대보다 ALB와 Fargate 운영 비용이 높을 수 있습니다."
+        ]),
+        candidate("eks-container-app", 0.54, [
+          "단일 컨테이너도 Kubernetes 워크로드로 실행할 수 있어 향후 서비스 확장 대안이 됩니다."
+        ], [
+          "현재 단일 서비스 규모에는 EKS 클러스터 운영 복잡도가 과도할 수 있습니다."
+        ])
+      ];
+    }
+
+    return [
+      candidate("ecs-fargate-container-app", 0.88, [
+        "여러 컨테이너 애플리케이션 단위를 관리형 ECS Fargate 서비스로 분리 운영할 수 있습니다."
       ], [
-        templateId === "eks-container-app"
-          ? "EKS는 클러스터 운영과 Kubernetes 오브젝트 관리가 추가로 필요합니다."
-          : "Fargate는 운영이 단순하지만 Kubernetes 중심 구성보다 이식성이 낮습니다."
+        "서비스별 Task Definition, 네트워크, 로드 밸런싱 구성을 추가로 조정해야 합니다."
+      ]),
+      candidate("eks-container-app", 0.64, [
+        "여러 컨테이너를 Kubernetes 워크로드로 분리할 수 있는 확장 대안입니다."
+      ], [
+        "저장소에 Kubernetes 근거가 없다면 초기 클러스터 운영 부담이 큽니다."
       ])
-    );
+    ];
   }
 
   if (hasFrontend && hasBackend && wantsAuth) {
@@ -608,7 +659,7 @@ function createTemplateSpecificQuestions(
   const hasFrontend = input.applicationUnits.some(
     (unit) => unit.kind === "frontend" || unit.kind === "fullstack"
   ) || /react|next\.js|vite/.test(text);
-  const hasDatabase = /rds|dynamodb|postgres|mysql|prisma|typeorm|sequelize/.test(text);
+  const hasDatabase = /rds|dynamodb|postgres|mysql|prisma|typeorm|sequelize|pgvector/.test(text);
   const hasNodeApi = /nestjs|@nestjs|express|fastify|node api/.test(text);
   const hasPythonApi = /fastapi|uvicorn|django|flask|python api/.test(text);
   const questions: RepositoryAnalysisQuestion[] = [];
@@ -696,6 +747,27 @@ function createSearchableText(
   ]
     .join("\n")
     .toLowerCase();
+}
+
+function createRepositoryProfile(input: RepositoryTemplateRecommendationInput) {
+  const text = createSearchableText(input.snapshot, input.evidence.map((item) => item.path));
+  const frontendUnitCount = input.applicationUnits.filter(
+    (unit) => unit.kind === "frontend" || unit.kind === "fullstack"
+  ).length;
+  const backendUnitCount = input.applicationUnits.filter(
+    (unit) => unit.kind === "backend" || unit.kind === "fullstack"
+  ).length;
+
+  return {
+    applicationUnitCount: input.applicationUnits.length,
+    frontendUnitCount,
+    backendUnitCount,
+    frameworks: [...new Set(input.applicationUnits.flatMap((unit) => unit.frameworks))].sort(),
+    hasRelationalDatabase: /rds|postgres|mysql|prisma|typeorm|sequelize|pgvector/.test(text),
+    hasLocalPersistence: /csv|sqlite|docker volume|volume persistence|\/data\b/.test(text),
+    hasKubernetesEvidence: /\beks\b|kubernetes|helm|kustomization/.test(text),
+    hasExplicitVmTarget: /\b(?:ec2|vm|vps)\b|virtual machine/.test(text)
+  };
 }
 
 function roundConfidence(value: number): number {

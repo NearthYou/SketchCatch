@@ -103,6 +103,7 @@ import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramEdgeView } from "./DiagramEdgeView";
 import { DiagramNodeView } from "./DiagramNodeView";
 import { WorkspaceProjectBar } from "./WorkspaceProjectBar";
+import { isProjectDraftSaveShortcut } from "../workspace/project-draft-hotkey";
 import { persistViewportAfterMove } from "./viewport-persistence";
 import {
   finalizeDraggedNodes,
@@ -238,6 +239,7 @@ function DiagramEditorInner({
   onDiagramChange,
   onDiagramSaveRequest,
   onTemplateWorkspaceApply,
+  onSaveAndDeployRequest,
   projectName = "Project workspace",
   rightPanel,
   saveStatus = "편집 중",
@@ -2616,6 +2618,12 @@ function DiagramEditorInner({
         return;
       }
 
+      if (isProjectDraftSaveShortcut(event) && onDiagramSaveRequest) {
+        event.preventDefault();
+        void onDiagramSaveRequest();
+        return;
+      }
+
       const isModifierPressed = event.metaKey || event.ctrlKey;
       const key = event.key.toLocaleLowerCase();
 
@@ -2648,7 +2656,7 @@ function DiagramEditorInner({
         undo();
       }
     },
-    [copySelectedNodes, deleteSelection, isPreviewActive, pasteNodes, redo, undo]
+    [copySelectedNodes, deleteSelection, isPreviewActive, onDiagramSaveRequest, pasteNodes, redo, undo]
   );
 
   useEffect(() => {
@@ -2835,6 +2843,7 @@ function DiagramEditorInner({
       <WorkspaceProjectBar
         actions={{
           onSave: onDiagramSaveRequest,
+          onSaveAndDeploy: onSaveAndDeployRequest,
           onToggleLeftPanel: toggleLeftPanel,
           onToggleRightPanel: toggleRightPanel
         }}
