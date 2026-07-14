@@ -294,6 +294,25 @@ preflight나 최종 검증이 실패하면 issue를 완료하거나 `feature_lis
 
 ## Direct Deployment Path 실행 순서
 
+사용자에게는 scope와 관계없이 `검증 → 승인 → 배포` 세 단계만 노출한다. 내부 실행은 scope별로 분리한다.
+
+| Scope | 검증 | 배포 |
+| --- | --- | --- |
+| `infrastructure` | Terraform init/plan/show와 안전·비용·보안 검사 | 승인된 tfplan apply, output/state 저장 |
+| `application` | 확인된 commit의 immutable artifact 준비와 artifact approval manifest 저장 | CodeBuild runtime release 후 AWS 상태 재조회와 HTTPS health 확인 |
+| `full_stack` | immutable artifact 준비 후 Terraform plan과 공통 검사 | Terraform apply/output/state 완료 후 준비된 artifact release와 AWS 재검증 |
+
+`application`은 Terraform 명령을 실행하지 않는다. `full_stack`은 인프라 적용이 성공해도 runtime release 검증이
+실패하면 전체 Deployment를 성공으로 표시하지 않는다. Direct release는 GitOps와 같은 `ApplicationRelease`에
+version, commit SHA, SHA-256 digest, provider revision, Output URL, health, rollback evidence를 저장한다.
+
+`application` Destroy는 Terraform을 실행하지 않는다. 현재 release와 이전 정상 revision을 담은
+`application-release-cleanup-plan.json`을 생성하고 account/region/hash 승인을 받은 뒤 CodeBuild `cleanup` phase로
+이전 revision을 복구한다. 승인 뒤 release revision이 바뀌면 실행을 거부하며, AWS adapter 재조회가 복구 상태를
+확인한 경우에만 `DESTROYED`로 완료한다. `infrastructure`와 `full_stack`은 Terraform state 기반 Destroy를 유지한다.
+
+아래 순서는 `infrastructure`와 `full_stack`의 Terraform 내부 실행 증거다. UI 단계 수를 뜻하지 않는다.
+
 ```text
 1. AWS 연결 확인
 2. Terraform artifact 복원
@@ -590,6 +609,10 @@ GitHub App repository permissions는 다음으로 고정합니다.
 - Contents: Read and write
 - Pull requests: Read and write
 - Actions: Read-only
+- Workflows: Read and write
+- Administration: Read and write
+- Environments: Read and write
+- Variables: Read and write
 - Metadata: Read-only
 
 GitHub App 설치 callback 흐름:

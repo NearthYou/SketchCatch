@@ -282,7 +282,7 @@ export function assertDeploymentDestroyPreconditions(
     throw new DeploymentConflictError("Blocked deployment cannot be destroyed");
   }
 
-  if (!deployment.stateObjectKey) {
+  if (deployment.scope !== "application" && !deployment.stateObjectKey) {
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
