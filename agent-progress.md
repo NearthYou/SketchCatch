@@ -4,6 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Production AWS connection setup currently falls back to the inline CloudFormation template instead of rendering `AWS Console 열기`. Browser evidence on `https://sketchcatch.net/dashboard/settings` showed one setup wizard, zero launch links, and one inline template.
+- Root cause: the API publishes to `aws-connections/<connectionId>/cloudformation-template.yaml`, while the production ECS API task role only permits S3 object access under `projects/*` and `deployments/*`; the publisher failure is intentionally converted to the inline fallback without logging.
+- A local Terraform fix now grants only the ECS API task role `s3:PutObject` and `s3:GetObject` on `aws-connections/*`; it has not been applied to production.
 - Branch: `feat/ck/391-diagram-positioning`.
 - `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
 - This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
@@ -15,6 +18,28 @@ Short English-only working log for the current agent context. Older records are 
 - Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
 
 ## Session Record
+
+### 2026-07-15 - Restore the production AWS Console launch permission
+
+- Added a least-privilege ECS API task-role statement for the S3 prefix used by generated AWS connection CloudFormation templates.
+- Verification passed: `terraform fmt -check -recursive`, `terraform validate`, `terraform test` (2/2), `pnpm harness:check`, `pnpm lint`, and `pnpm typecheck`.
+- `pnpm build` exceeded the local two-minute command limit without emitting a build error; no Terraform apply, deployment, or cloud mutation was performed.
+- The existing Terraform mock-provider test cannot observe configured IAM document contents at plan time, so no weak source-coupled regression assertion was retained.
+
+### 2026-07-15 - Enable the current Repository ECS diagram for Terraform Plan and live deployment
+
+- Added the six missing `practice` live-apply resource types used by the current Board: EIP, NAT Gateway, ECR Repository, CloudFront Origin Access Control, S3 Bucket Policy, and S3 Object.
+- Separated read-only Terraform Plan resource validation from the narrower live-apply profile while keeping approval, Apply, and Destroy execution fail-closed against the selected live profile.
+- Removed Diagram Template metadata from Terraform rendering and marked the visual Fargate runtime as reference-only so the deployable control-plane Task Definition is emitted exactly once.
+- Browser verification on the local `frsgf` Board found 33 Terraform resources across the expected 24 types, zero `template_id` attributes, zero empty Task Definitions, and one real Task Definition block.
+- Verification: focused API/Web regressions passed 9/9; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `scripts/init-harness.ps1 -Full`, and `git diff --check` passed. No Terraform Apply/Destroy or cloud mutation was performed.
+
+### 2026-07-15 - Diagnose missing production AWS Console launch link
+
+- Reproduced the production-only AWS connection setup regression in the signed-in settings page: the CloudFormation setup rendered an inline YAML template and no `AWS Console 열기` link.
+- Traced the response to the S3 publisher fallback. `S3_BUCKET_NAME` is wired into the ECS API environment, but the API task role lacks `s3:PutObject` and `s3:GetObject` for `aws-connections/*`.
+- Ruled out a Web/API response-contract mismatch because the same response successfully rendered `roleName` and `templateBody`; the launch link is conditional only on `launchStackUrl`.
+- Verification: `pnpm harness:check` passed; the production browser loop reproduced the missing link twice. No cloud mutation, Terraform apply, or source-code fix was performed.
 
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 
@@ -86,5 +111,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
+- Review and apply the approved production Terraform change, then re-run the signed-in production browser loop to confirm the AWS Console launch link is rendered.
 - Continue notification work separately from the completed repository diagram commit.
 - Run local API DB migrations before testing deployment notifications locally.

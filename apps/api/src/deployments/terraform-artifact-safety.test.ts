@@ -77,6 +77,68 @@ test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => 
   );
 });
 
+test("practice safety accepts generated NAT gateway networking resources for planning", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `resource "aws_eip" "nat" {
+        domain = "vpc"
+      }
+
+      resource "aws_nat_gateway" "nat" {
+        allocation_id = aws_eip.nat.id
+        subnet_id     = aws_subnet.public.id
+      }`,
+      { liveProfile: "practice", resourceValidationMode: "plan" }
+    )
+  );
+});
+
+test("practice live apply safety accepts every Terraform resource in the Repository ECS diagram", () => {
+  const resourceTypes = [
+    "aws_cloudfront_distribution",
+    "aws_cloudfront_origin_access_control",
+    "aws_cloudwatch_log_group",
+    "aws_ecr_repository",
+    "aws_ecs_cluster",
+    "aws_ecs_service",
+    "aws_ecs_task_definition",
+    "aws_eip",
+    "aws_iam_role",
+    "aws_iam_role_policy_attachment",
+    "aws_internet_gateway",
+    "aws_lb",
+    "aws_lb_listener",
+    "aws_lb_target_group",
+    "aws_nat_gateway",
+    "aws_route_table",
+    "aws_route_table_association",
+    "aws_s3_bucket",
+    "aws_s3_bucket_policy",
+    "aws_s3_bucket_public_access_block",
+    "aws_s3_object",
+    "aws_security_group",
+    "aws_subnet",
+    "aws_vpc"
+  ];
+  const terraformCode = resourceTypes
+    .map((resourceType, index) => `resource "${resourceType}" "diagram_${index}" {}`)
+    .join("\n");
+
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "practice" })
+  );
+});
+
+test("practice live apply safety still rejects resources outside the approved profile", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`resource "aws_db_instance" "database" {}`, {
+        liveProfile: "practice"
+      }),
+    /Terraform resource "aws_db_instance" is not allowed before live deployment/
+  );
+});
+
 test("practice safety accepts the ECS Fargate runtime resources used by project deployment", () => {
   assert.doesNotThrow(() =>
     assertTerraformArtifactIsSafe(
