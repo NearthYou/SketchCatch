@@ -101,7 +101,7 @@ export function ProductEntry() {
             </ul>
             <div className={styles.heroActions}>
               <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
-                시작하기
+                설계 시작
                 <span className={styles.buttonIcon} aria-hidden="true">→</span>
               </Link>
               <a className={`${styles.button} ${styles.buttonSecondary}`} href="#workflow">
