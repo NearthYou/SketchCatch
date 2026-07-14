@@ -33,16 +33,16 @@ function ReverseEngineeringSection() {
       <div className={`${styles.container} ${styles.reverseLayout}`} id="reverse-content">
         <div className={styles.reverseCopy}>
           <p className={styles.sectionKicker}>Reverse Engineering</p>
-          <h2 id="reverse-title">이미 AWS에 있다면,<br />처음부터 다시 그리지 마세요.</h2>
+          <h2 id="reverse-title">기존 AWS 인프라를,<br />편집 가능한 설계로.</h2>
           <p>
-            검증된 AWS Role과 Provider Adapter로 Resource를 읽고, VPC와 Subnet의 포함 관계와 실제
-            연결 정보를 기준으로 Practice Architecture 후보를 만듭니다. 가져온 결과는 Architecture
-            Board에 적용하기 전에 먼저 확인할 수 있습니다.
+            연결된 AWS 계정의 리소스와 네트워크 관계를 분석해 현재 인프라 구성을 자동으로
+            복원합니다. 가져온 구성은 검토 후 아키텍처 보드에서 편집하고 Terraform 작업으로
+            이어갈 수 있습니다.
           </p>
           <ul className={styles.reverseList}>
-            <li><span className={styles.checkIcon}>✓</span><span>지원하는 리소스는 이름과 주요 파라미터까지 복원</span></li>
-            <li><span className={styles.checkIcon}>✓</span><span>지원하지 못한 리소스와 권한 부족도 숨기지 않고 표시</span></li>
-            <li><span className={styles.checkIcon}>✓</span><span>확인한 Practice Architecture만 프로젝트로 생성</span></li>
+            <li><span className={styles.checkIcon}>✓</span><span>리소스 설정과 네트워크 관계까지 자동 분석</span></li>
+            <li><span className={styles.checkIcon}>✓</span><span>지원 범위와 권한 부족 항목을 구분해 명확하게 표시</span></li>
+            <li><span className={styles.checkIcon}>✓</span><span>검토한 구성을 프로젝트로 가져와 설계와 Terraform 작업에 활용</span></li>
           </ul>
         </div>
 
@@ -64,33 +64,33 @@ function DeploymentSection() {
     <section className={styles.section} id="deployment" aria-labelledby="deployment-title">
       <div className={styles.container} id="deployment-content">
         <header className={styles.sectionHeading}>
-          <p className={styles.sectionKicker}>Two deployment paths</p>
-          <h2 id="deployment-title">승인한 변경은,<br />팀의 방식으로 배포하세요.</h2>
+          <p className={styles.sectionKicker}>Deployment Options</p>
+          <h2 id="deployment-title">검토가 끝난 변경을,<br />팀의 운영 방식에 맞게.</h2>
           <p>
-            빠른 검증은 Direct Deployment Path로, 팀 운영 변경은 Git/CI/CD Deployment Path로
-            이어집니다. 어느 쪽이든 사용자가 승인한 IaC Preview에서 시작합니다.
+            검토와 승인이 완료된 Terraform 변경을 직접 배포하거나 Git 저장소와 CI/CD
+            파이프라인으로 전달할 수 있습니다. 모든 실행 과정과 결과는 프로젝트 이력에 기록됩니다.
           </p>
         </header>
 
         <div className={styles.deploymentPaths}>
           <DeploymentPath
-            description="학습 환경과 빠른 검증에 맞습니다. 실행 로그와 결과를 같은 프로젝트에서 확인합니다."
-            label="Direct Deployment Path"
-            steps={["Plan", "승인", "Apply", "Outputs"]}
-            title="지금 바로 검증하고 싶을 때"
+            description="검토한 Terraform Plan을 승인하고 즉시 적용합니다. 실행 로그와 Outputs를 프로젝트에서 확인할 수 있습니다."
+            label="Direct Deployment"
+            steps={["Plan", "Approve", "Apply", "Outputs"]}
+            title="검증된 변경을 즉시 배포"
           />
           <DeploymentPath
-            description="IaC Preview를 Source Repository로 넘기고, 리뷰와 파이프라인 상태를 연결해 확인합니다."
-            label="Git/CI/CD Deployment Path"
+            description="Terraform 변경을 Git 저장소로 전달하고 Pull Request와 CI/CD 실행 상태를 추적합니다."
+            label="Git/CI/CD Handoff"
             steps={["Repository", "Pull Request", "CI/CD", "Status"]}
-            title="팀과 검토하며 운영에 반영할 때"
+            title="기존 배포 파이프라인으로 연결"
           />
         </div>
 
         <div className={styles.deploymentOutcomes} aria-label="배포 후 확인할 정보">
-          <DeploymentOutcome description="누가 언제 어떤 변경을 실행했는지 남깁니다." label="Deployment History" />
-          <DeploymentOutcome description="접속 주소와 생성된 Resource 정보를 확인합니다." label="Outputs" />
-          <DeploymentOutcome description="학습·검증용 Resource의 정리 상태까지 추적합니다." label="Auto Cleanup" />
+          <DeploymentOutcome description="배포 주체, 변경 내역, 실행 시간을 기록합니다." label="Deployment History" />
+          <DeploymentOutcome description="생성된 리소스와 주요 접속 정보를 한곳에서 확인합니다." label="Outputs" />
+          <DeploymentOutcome description="임시 환경의 만료와 리소스 정리 상태를 추적합니다." label="Auto Cleanup" />
         </div>
       </div>
     </section>
