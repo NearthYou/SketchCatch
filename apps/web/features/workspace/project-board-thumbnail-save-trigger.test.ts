@@ -20,16 +20,17 @@ const thumbnailSource = readFileSync(
   "utf8"
 );
 
-test("successful stable server draft saves await the lifecycle before showing success", () => {
+test("successful stable server draft saves await the thumbnail lifecycle before returning", () => {
   const successBranch = managerSource.slice(
     managerSource.indexOf("if (result.ok)"),
     managerSource.indexOf("serverDirtyRef.current = true", managerSource.indexOf("if (result.ok)"))
   );
 
   assert.doesNotMatch(managerSource, /void captureAndUploadProjectBoardThumbnail/);
+  assert.doesNotMatch(managerSource, /showServerSaveToast/);
   assert.match(
     successBranch,
-    /setServerSaveState\("server-saved"\)[\s\S]*await thumbnailLifecycle\.requestSavedRevision\(result\.serverDraft\.revision\)[\s\S]*showServerSaveToast\(\)[\s\S]*return result/
+    /setServerSaveState\("server-saved"\)[\s\S]*await thumbnailLifecycle\.requestSavedRevision\(result\.serverDraft\.revision\)[\s\S]*return result/
   );
 });
 

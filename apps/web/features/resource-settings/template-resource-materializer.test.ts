@@ -432,22 +432,39 @@ test("reviewed API, ECS, and Namespace resources become real visual containers",
   }
 });
 
-test("ASG and EKS control plane materialize as ordinary 48px Resource tiles", () => {
+test("ASG materializes as an authored Area with its visual children", () => {
   const templates = listRepositoryBoardTemplates();
-  const expectedTiles = [
-    ["three-tier-web-app", "aws_autoscaling_group"],
-    ["eks-container-app", "aws_eks_cluster"]
-  ] as const;
+  const template = templates.find((candidate) => candidate.id === "three-tier-web-app");
+  const autoscalingGroup = template?.diagramJson.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_autoscaling_group"
+  );
+  const appSecurityGroup = template?.diagramJson.nodes.find(
+    (node) => node.parameters?.resourceName === "app_security_group"
+  );
+  const launchTemplate = template?.diagramJson.nodes.find(
+    (node) => node.parameters?.resourceType === "aws_launch_template"
+  );
 
-  for (const [templateId, resourceType] of expectedTiles) {
-    const node = templates
-      .find((template) => template.id === templateId)
-      ?.diagramJson.nodes.find((candidate) => candidate.parameters?.resourceType === resourceType);
+  assert.ok(autoscalingGroup);
+  assert.ok(appSecurityGroup);
+  assert.ok(launchTemplate);
+  assert.equal(isAreaNode(autoscalingGroup), true);
+  assert.deepEqual(autoscalingGroup.size, { width: 320, height: 320 });
+  assert.equal(autoscalingGroup.metadata?.presentationArea, true);
+  assert.equal(appSecurityGroup.metadata?.parentAreaNodeId, autoscalingGroup.id);
+  assert.equal(launchTemplate.metadata?.parentAreaNodeId, autoscalingGroup.id);
+});
 
-    assert.ok(node, `${templateId}/${resourceType}`);
-    assert.equal(isAreaNode(node), false, `${templateId}/${resourceType}`);
-    assert.deepEqual(node.size, { width: 48, height: 48 }, `${templateId}/${resourceType}`);
-  }
+test("EKS control plane materializes as an ordinary 48px Resource tile", () => {
+  const templates = listRepositoryBoardTemplates();
+  const template = templates.find((candidate) => candidate.id === "eks-container-app");
+  const node = template?.diagramJson.nodes.find(
+    (candidate) => candidate.parameters?.resourceType === "aws_eks_cluster"
+  );
+
+  assert.ok(node);
+  assert.equal(isAreaNode(node), false);
+  assert.deepEqual(node.size, { width: 48, height: 48 });
 });
 
 test("Template presentation nodes materialize exact Catalog items without Terraform parameters", () => {

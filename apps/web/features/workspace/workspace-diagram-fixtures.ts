@@ -172,7 +172,7 @@ function createAreaMatrixFixture(): DiagramJson {
     createCatalogFixtureNode(getCatalogItem("aws-autoscaling-group"), "area-autoscaling-group", {
       parentAreaNodeId: "area-subnet",
       position: { x: 920, y: 400 },
-      size: { width: 48, height: 48 },
+      style: { borderColor: "#d97706", borderStyle: "dashed" },
       zIndex: 5
     })
   ];

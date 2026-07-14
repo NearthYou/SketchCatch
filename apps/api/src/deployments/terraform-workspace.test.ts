@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { createFilesystemProjectAssetStorage } from "../projects/filesystem-project-asset-storage.js";
 import {
   createTerraformArtifactCanonicalContent,
+  createTerraformFilesSafetyContent,
+  parseTerraformArtifactBundle,
   prepareTerraformWorkspace
 } from "./terraform-workspace.js";
 
@@ -152,6 +154,49 @@ test("prepareTerraformWorkspace expands a multi-file Terraform bundle", async ()
     await workspace.cleanup();
     await rm(rootDir, { recursive: true, force: true });
   }
+});
+
+test("prepareTerraformWorkspace restores tftpl support files without treating them as HCL", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "sketchcatch-workspace-test-"));
+  const mainCode = `resource "aws_launch_template" "traffic" {
+  user_data = base64encode(templatefile("\${path.module}/user-data.sh.tftpl", {}))
+}\n`;
+  const templateCode = "#!/bin/bash\necho ready\n";
+  const workspace = await prepareTerraformWorkspace(
+    TERRAFORM_BUNDLE_INPUT,
+    {
+      rootDir,
+      downloadTerraformArtifact: async () => JSON.stringify({
+        schemaVersion: 1,
+        files: [
+          { fileName: "main.tf", terraformCode: mainCode },
+          { fileName: "user-data.sh.tftpl", terraformCode: templateCode }
+        ]
+      })
+    }
+  );
+
+  try {
+    assert.equal(await readFile(join(workspace.workdir, "user-data.sh.tftpl"), "utf8"), templateCode);
+    assert.equal(createTerraformFilesSafetyContent(workspace.terraformFiles, ""), mainCode);
+  } finally {
+    await workspace.cleanup();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("parseTerraformArtifactBundle rejects unrelated support file extensions", () => {
+  assert.throws(
+    () =>
+      parseTerraformArtifactBundle(JSON.stringify({
+        schemaVersion: 1,
+        files: [
+          { fileName: "main.tf", terraformCode: "terraform {}" },
+          { fileName: "bootstrap.sh", terraformCode: "#!/bin/bash" }
+        ]
+      })),
+    /unsafe or duplicate file name/
+  );
 });
 
 test("createTerraformArtifactCanonicalContent keeps file boundaries unambiguous", () => {

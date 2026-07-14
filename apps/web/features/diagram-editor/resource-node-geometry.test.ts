@@ -34,28 +34,28 @@ test("normalizes a 56px legacy icon to 48px around its original center", () => {
   assert.deepEqual(result.nodes[0]?.position, { x: 104, y: 84 });
 });
 
-test("normalizes every known legacy ASG Area size to a centered 48px Resource", () => {
+test("preserves every known ASG Area size and position", () => {
   const fixtures = [
-    { size: { width: 200, height: 130 }, position: { x: 176, y: 121 } },
-    { size: { width: 400, height: 260 }, position: { x: 276, y: 186 } },
-    { size: { width: 320, height: 240 }, position: { x: 236, y: 176 } }
+    { width: 200, height: 130 },
+    { width: 400, height: 260 },
+    { width: 320, height: 240 }
   ];
 
-  for (const fixture of fixtures) {
+  for (const size of fixtures) {
     const result = normalizeDiagramResourceNodeGeometry(
       makeDiagram(makeResourceNode({
         position: { x: 100, y: 80 },
         resourceType: "aws_autoscaling_group",
-        size: fixture.size
+        size
       }))
     );
 
-    assert.deepEqual(result.nodes[0]?.size, RESOURCE_NODE_DEFAULT_SIZE);
-    assert.deepEqual(result.nodes[0]?.position, fixture.position);
+    assert.deepEqual(result.nodes[0]?.size, size);
+    assert.deepEqual(result.nodes[0]?.position, { x: 100, y: 80 });
   }
 });
 
-test("reparents legacy ASG and Security Group children to the nearest real containment Area", () => {
+test("preserves ASG children while reparenting Security Group children to the VPC", () => {
   const vpc = makeResourceNode({ id: "vpc", resourceType: "aws_vpc", size: { width: 800, height: 600 } });
   const asg = makeResourceNode({
     id: "asg",
@@ -79,7 +79,7 @@ test("reparents legacy ASG and Security Group children to the nearest real conta
     makeDiagram(vpc, asg, securityGroup, asgChild, securityGroupChild)
   );
 
-  assert.equal(result.nodes.find((node) => node.id === asgChild.id)?.metadata?.parentAreaNodeId, vpc.id);
+  assert.equal(result.nodes.find((node) => node.id === asgChild.id)?.metadata?.parentAreaNodeId, asg.id);
   assert.equal(
     result.nodes.find((node) => node.id === securityGroupChild.id)?.metadata?.parentAreaNodeId,
     vpc.id

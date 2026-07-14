@@ -644,13 +644,13 @@ function getFlowEdgeZIndex(
     getFlowNodeZIndex(sourceNode, nodeById),
     getFlowNodeZIndex(targetNode, nodeById)
   );
-  const hasAreaEndpoint = isAreaNode(sourceNode) || isAreaNode(targetNode);
+  const hasOnlyAreaEndpoints = isAreaNode(sourceNode) && isAreaNode(targetNode);
 
   if (selected) {
     return endpointZIndex + 16;
   }
 
-  return endpointZIndex + (hasAreaEndpoint ? 8 : -8);
+  return endpointZIndex + (hasOnlyAreaEndpoints ? 8 : -8);
 }
 
 function getAreaAncestorDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {

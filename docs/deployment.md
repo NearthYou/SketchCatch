@@ -75,6 +75,12 @@ Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아
 - EC2
 - S3 Bucket
 
+Live Observation demo profile은 CloudFront origin 제한에 필요한
+`aws_ec2_managed_prefix_list` data source를 허용합니다. Launch Template bootstrap은
+Terraform artifact bundle에 포함된 `${path.module}/<basename>.tftpl` 파일만
+`base64encode(templatefile(...))`의 `user_data`로 사용할 수 있습니다. 절대 경로, `..`,
+하위 디렉터리, 동적 template 경로와 그 밖의 로컬 파일 함수는 계속 차단합니다.
+
 RDS는 생성/삭제 시간과 비용 리스크가 크므로 기본 live apply 경로에서 제외합니다.
 현재 cleanup은 사용자가 명시적으로 실행하는 Deployment destroy 흐름으로 처리합니다. 성공한 Deployment 또는 apply 도중 실패했지만 partial state가 저장된 Deployment만 cleanup 대상입니다.
 

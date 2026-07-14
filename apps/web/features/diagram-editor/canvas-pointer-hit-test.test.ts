@@ -23,9 +23,7 @@ test("isCanvasInteractiveElementTarget allows pane and area-node blank-space tar
   assert.equal(isCanvasInteractiveElementTarget(null), false);
 });
 
-test("getAreaBlankInteractionTarget returns the target only for selectable left-click blank space", () => {
-  const target = makeClosestTarget(null);
-
+test("getAreaBlankInteractionTarget claims selectable pane blank space", () => {
   assert.equal(
     getAreaBlankInteractionTarget({
       button: 0,
@@ -33,7 +31,22 @@ test("getAreaBlankInteractionTarget returns the target only for selectable left-
       interactionMode: "select",
       metaKey: false,
       shiftKey: false,
-      target,
+      target: makeClosestTarget(null),
+      temporaryPanPreviousMode: null
+    }),
+    "blank-space"
+  );
+});
+
+test("getAreaBlankInteractionTarget claims selectable Area wrapper blank space", () => {
+  assert.equal(
+    getAreaBlankInteractionTarget({
+      button: 0,
+      ctrlKey: false,
+      interactionMode: "select",
+      metaKey: false,
+      shiftKey: false,
+      target: makeClosestTarget(".react-flow__node.diagramAreaFlowNode", "region-1"),
       temporaryPanPreviousMode: null
     }),
     "blank-space"
@@ -143,8 +156,14 @@ test("getTemporaryPanReleaseMode waits while the middle button is still held", (
   );
 });
 
-function makeClosestTarget(matchedSelector: string | null) {
+function makeClosestTarget(matchedSelector: string | null, nodeId?: string) {
   return {
-    closest: (selector: string) => (matchedSelector && selector.includes(matchedSelector) ? {} : null)
+    closest: (selector: string) =>
+      matchedSelector && selector.includes(matchedSelector)
+        ? {
+            dataset: { id: nodeId },
+            getAttribute: (name: string) => (name === "data-id" ? nodeId ?? null : null)
+          }
+        : null
   };
 }

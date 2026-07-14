@@ -81,7 +81,7 @@ test("applyAreaNodeMovement moves nodes contained in a moved area by the same de
   assert.deepEqual(getNodePosition(result, instance.id), { x: 120, y: 95 });
 });
 
-test("applyAreaNodeMovement keeps ASG-linked instances stationary because ASG is a Resource", () => {
+test("applyAreaNodeMovement moves ASG children with their Area", () => {
   const autoscalingGroup = makeResourceNode({
     id: "asg-1",
     resourceType: "aws_autoscaling_group",
@@ -103,7 +103,7 @@ test("applyAreaNodeMovement keeps ASG-linked instances stationary because ASG is
     new Set([autoscalingGroup.id])
   );
 
-  assert.deepEqual(getNodePosition(result, instance.id), { x: 56, y: 48 });
+  assert.deepEqual(getNodePosition(result, instance.id), { x: 92, y: 72 });
 });
 
 test("applyAreaNodeMovement does not adopt a resource just because an area was moved over it", () => {
@@ -347,7 +347,7 @@ test("applyAreaNodeParentAssignments assigns a parent only to directly moved nod
   assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, region.id);
 });
 
-test("applyAreaNodeParentAssignments does not assign a moved child to an ASG Resource", () => {
+test("applyAreaNodeParentAssignments assigns a moved child to an ASG Area", () => {
   const autoscalingGroup = makeResourceNode({
     id: "asg-1",
     resourceType: "aws_autoscaling_group",
@@ -363,7 +363,7 @@ test("applyAreaNodeParentAssignments does not assign a moved child to an ASG Res
 
   const result = applyAreaNodeParentAssignments([autoscalingGroup, instance], new Set([instance.id]));
 
-  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, undefined);
+  assert.equal(getNodeById(result, instance.id)?.metadata?.parentAreaNodeId, autoscalingGroup.id);
 });
 
 test("applyAreaNodeParentAssignments skips a Security Group scope in favor of its Subnet", () => {

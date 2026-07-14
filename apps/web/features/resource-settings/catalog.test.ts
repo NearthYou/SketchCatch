@@ -166,7 +166,7 @@ test("resourceCatalog sizes area defaults below the Region hierarchy root", () =
   assert.deepEqual(getResourceSize("aws_vpc"), { width: 240, height: 160 });
   assert.deepEqual(getResourceSize("aws_availability_zone"), { width: 220, height: 150 });
   assert.deepEqual(getResourceSize("design_group"), { width: 200, height: 130 });
-  assert.deepEqual(getResourceSize("aws_autoscaling_group"), { width: 48, height: 48 });
+  assert.deepEqual(getResourceSize("aws_autoscaling_group"), { width: 200, height: 130 });
   assert.deepEqual(getResourceSize("aws_subnet"), { width: 180, height: 120 });
   assert.deepEqual(getResourceSize("aws_security_group"), { width: 180, height: 120 });
 });

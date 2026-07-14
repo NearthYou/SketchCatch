@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramNode } from "../../../../packages/types/src";
 import {
+  findAreaBlankInteractionNodeAtPoint,
   findInnermostAreaDropTarget,
   findInnermostAreaNodeAtPoint,
   getAreaNodeIconUrl,
   getAreaNodeLabel,
   getAreaNodeMetaLabel,
+  isAreaDropParentNode,
   isAreaNode,
   isContainmentAreaNode,
   isDesignAreaNode,
+  isPresentationOnlyAreaNode,
   isResourceAreaNode
 } from "./area-nodes";
 
@@ -49,7 +52,7 @@ test("findInnermostAreaDropTarget ignores visual-only scopes and selects the rea
   );
 });
 
-test("findInnermostAreaDropTarget lets a visual scope itself enter a containment Area", () => {
+test("findInnermostAreaDropTarget highlights a fully contained Area parent", () => {
   const region = makeDesignNode({
     id: "region-1",
     type: "design_region",
@@ -63,7 +66,72 @@ test("findInnermostAreaDropTarget lets a visual scope itself enter a containment
     size: { width: 240, height: 180 }
   });
 
-  assert.equal(findInnermostAreaDropTarget(autoscalingGroup, [region, autoscalingGroup])?.id, region.id);
+  assert.equal(
+    findInnermostAreaDropTarget(autoscalingGroup, [region, autoscalingGroup])?.id,
+    region.id
+  );
+});
+
+test("findInnermostAreaDropTarget rejects partially overlapping Area parents", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 0, y: 0 },
+    size: { width: 300, height: 220 }
+  });
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceType: "aws_vpc",
+    position: { x: 240, y: 160 },
+    size: { width: 120, height: 100 }
+  });
+
+  assert.equal(findInnermostAreaDropTarget(vpc, [region, vpc]), null);
+});
+
+test("findInnermostAreaDropTarget rejects a dragged Area descendant as its parent", () => {
+  const region = makeDesignNode({
+    id: "region-1",
+    type: "design_region",
+    position: { x: 100, y: 80 },
+    size: { width: 200, height: 140 }
+  });
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    metadata: { parentAreaNodeId: region.id },
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 500, height: 360 }
+  });
+
+  assert.equal(findInnermostAreaDropTarget(region, [region, vpc]), null);
+});
+
+test("findInnermostAreaDropTarget skips a presentation-only frame and selects its VPC", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 600, height: 500 },
+    zIndex: 1
+  });
+  const ecs = makeResourceNode({
+    id: "ecs-1",
+    metadata: { parentAreaNodeId: vpc.id, presentationArea: true },
+    resourceType: "aws_ecs_cluster",
+    position: { x: 100, y: 100 },
+    size: { width: 360, height: 260 },
+    zIndex: 2
+  });
+  const service = makeResourceNode({
+    id: "service-1",
+    resourceType: "aws_ecs_service",
+    position: { x: 180, y: 180 },
+    size: { width: 48, height: 48 },
+    zIndex: 3
+  });
+
+  assert.equal(findInnermostAreaDropTarget(service, [vpc, ecs, service])?.id, vpc.id);
 });
 
 test("isAreaNode matches Region, Availability Zone, Group, and resource area nodes", () => {
@@ -75,17 +143,17 @@ test("isAreaNode matches Region, Availability Zone, Group, and resource area nod
   assert.equal(isAreaNode(makeDesignNode({ type: "sketchcatch_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_region" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_availability_zone" })), true);
-  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), false);
+  assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), true);
 });
 
-test("visual Security Group scopes cannot become persisted containment parents", () => {
+test("visual Security Group scopes cannot become persisted containment parents while ASG can", () => {
   assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_vpc" })), true);
   assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_subnet" })), true);
   assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_security_group" })), false);
-  assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), false);
+  assert.equal(isContainmentAreaNode(makeResourceNode({ resourceType: "aws_autoscaling_group" })), true);
 });
 
 test("isAreaNode excludes regular design and resource nodes", () => {
@@ -117,14 +185,16 @@ test("an authored presentation flag turns a catalog resource into a template-onl
   }
 });
 
-test("an authored presentation flag cannot turn an Auto Scaling Group into an Area", () => {
+test("an authored presentation flag keeps an Auto Scaling Group as a real Area", () => {
   const autoscalingGroup = makeResourceNode({ resourceType: "aws_autoscaling_group" });
 
   autoscalingGroup.metadata = { presentationArea: true };
 
-  assert.equal(isResourceAreaNode(autoscalingGroup), false);
-  assert.equal(isAreaNode(autoscalingGroup), false);
-  assert.equal(isContainmentAreaNode(autoscalingGroup), false);
+  assert.equal(isResourceAreaNode(autoscalingGroup), true);
+  assert.equal(isAreaNode(autoscalingGroup), true);
+  assert.equal(isContainmentAreaNode(autoscalingGroup), true);
+  assert.equal(isPresentationOnlyAreaNode(autoscalingGroup), false);
+  assert.equal(isAreaDropParentNode(autoscalingGroup), true);
 });
 
 test("area node helpers distinguish design containers from resource containers", () => {
@@ -141,7 +211,7 @@ test("area node helpers distinguish design containers from resource containers",
   assert.equal(isDesignAreaNode(availabilityZoneResource), false);
   assert.equal(isResourceAreaNode(availabilityZoneResource), true);
   assert.equal(isDesignAreaNode(autoscalingGroupResource), false);
-  assert.equal(isResourceAreaNode(autoscalingGroupResource), false);
+  assert.equal(isResourceAreaNode(autoscalingGroupResource), true);
   assert.equal(isDesignAreaNode(vpc), false);
   assert.equal(isResourceAreaNode(vpc), true);
 });
@@ -173,7 +243,7 @@ test("getAreaNodeLabel uses the friendly uppercase board label instead of Terraf
         resourceType: "aws_autoscaling_group"
       })
     ),
-    "Auto Scaling Group"
+    "AUTO SCALING GROUP"
   );
   assert.equal(
     getAreaNodeLabel(
@@ -312,6 +382,42 @@ test("findInnermostAreaNodeAtPoint distinguishes parent and nested area blank sp
   assert.equal(findInnermostAreaNodeAtPoint([vpc, subnet], { x: 220, y: 200 })?.id, "subnet-1");
 });
 
+test("presentation-only frame blocks blank interaction without falling through to its VPC", () => {
+  const vpc = makeResourceNode({
+    id: "vpc-1",
+    resourceType: "aws_vpc",
+    position: { x: 0, y: 0 },
+    size: { width: 600, height: 500 },
+    zIndex: 1
+  });
+  const ecs = makeResourceNode({
+    id: "ecs-1",
+    metadata: { parentAreaNodeId: vpc.id, presentationArea: true },
+    resourceType: "aws_ecs_cluster",
+    position: { x: 100, y: 100 },
+    size: { width: 360, height: 260 },
+    zIndex: 2
+  });
+
+  assert.equal(isAreaNode(ecs), true);
+  assert.equal(isPresentationOnlyAreaNode(ecs), true);
+  assert.equal(findAreaBlankInteractionNodeAtPoint([vpc, ecs], { x: 200, y: 200 }), null);
+  assert.equal(findAreaBlankInteractionNodeAtPoint([vpc, ecs], { x: 40, y: 40 })?.id, vpc.id);
+});
+
+test("ASG stays an interactive Area even with presentation metadata", () => {
+  const autoscalingGroup = makeResourceNode({
+    id: "asg-1",
+    metadata: { presentationArea: true },
+    resourceType: "aws_autoscaling_group",
+    position: { x: 100, y: 100 },
+    size: { width: 320, height: 240 }
+  });
+
+  assert.equal(isPresentationOnlyAreaNode(autoscalingGroup), false);
+  assert.equal(findAreaBlankInteractionNodeAtPoint([autoscalingGroup], { x: 200, y: 200 })?.id, autoscalingGroup.id);
+});
+
 test("findInnermostAreaNodeAtPoint uses zIndex when overlapping areas have the same size", () => {
   const lowerGroup = makeDesignNode({
     id: "group-1",
@@ -365,6 +471,7 @@ function makeResourceNode({
   id,
   iconUrl,
   label,
+  metadata,
   position = { x: 0, y: 0 },
   resourceName,
   resourceType,
@@ -375,6 +482,7 @@ function makeResourceNode({
   id?: string;
   iconUrl?: string;
   label?: string;
+  metadata?: DiagramNode["metadata"];
   position?: DiagramNode["position"];
   resourceName?: string;
   resourceType: string;
@@ -389,6 +497,7 @@ function makeResourceNode({
     position,
     size,
     label: label ?? resourceType,
+    metadata,
     ...(iconUrl ? { iconUrl } : {}),
     locked: false,
     zIndex,
