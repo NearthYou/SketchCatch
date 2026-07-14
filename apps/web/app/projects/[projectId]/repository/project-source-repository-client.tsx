@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
 import { useAuth } from "../../../../components/auth/auth-provider";
 import { DashboardIcon } from "../../../../components/dashboard/dashboard-icons";
@@ -14,15 +14,16 @@ import {
   listGitHubInstalledRepositories,
   listSourceRepositories
 } from "../../../../features/workspace/api";
-import { GitHubRepositoryConnectionPanel } from "../settings/github-repository-connection-panel";
+import { GitHubRepositoryConnectionPanel } from "./github-repository-connection-panel";
 import { RepositoryAnalysisResult } from "../settings/repository-analysis-result";
 import {
   applyRepositoryAnalysis,
   canRunRepositoryAnalysis,
   findActiveGitHubRepository,
+  shouldConfirmRepositoryChange,
   shouldLoadProjectSourceRepository
 } from "./project-source-repository-state";
-import styles from "../settings/project-github-settings.module.css";
+import styles from "./project-source-repository.module.css";
 
 type RequestState = "idle" | "loading" | "error";
 
@@ -43,8 +44,13 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
   const [hasGitHubAccountConnection, setHasGitHubAccountConnection] = useState<boolean | null>(
     null
   );
+  const [showRepositoryCandidates, setShowRepositoryCandidates] = useState(false);
+  const [pendingRepository, setPendingRepository] =
+    useState<GitHubInstalledRepositoryCandidate | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [accountErrorMessage, setAccountErrorMessage] = useState("");
+  const repositoryChangeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const dialogCancelButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const activeRepository = useMemo(
     () => findActiveGitHubRepository(sourceRepositories),
@@ -57,6 +63,21 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
     void loadProjectRepository();
     void loadGitHubAccountConnection();
   }, [authStatus, projectId]);
+
+  useEffect(() => {
+    if (!pendingRepository) return;
+
+    dialogCancelButtonRef.current?.focus();
+
+    function handleKeyDown(event: KeyboardEvent): void {
+      if (event.key !== "Escape" || actionState === "loading") return;
+      setPendingRepository(null);
+      requestAnimationFrame(() => repositoryChangeTriggerRef.current?.focus());
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [actionState, pendingRepository]);
 
   async function loadProjectRepository(): Promise<void> {
     setLoadState("loading");
@@ -127,11 +148,35 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
         connectedRepository,
         ...currentRepositories.filter((item) => item.id !== connectedRepository.id)
       ]);
+      setShowRepositoryCandidates(false);
       setActionState("idle");
     } catch (error) {
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "GitHub repository를 프로젝트에 연결하지 못했습니다."));
     }
+  }
+
+  function requestRepositoryConnection(repository: GitHubInstalledRepositoryCandidate): void {
+    if (shouldConfirmRepositoryChange(activeRepository, repository)) {
+      setPendingRepository(repository);
+      return;
+    }
+
+    void connectRepository(repository);
+  }
+
+  async function confirmRepositoryChange(): Promise<void> {
+    if (!pendingRepository) return;
+
+    await connectRepository(pendingRepository);
+    setPendingRepository(null);
+    requestAnimationFrame(() => repositoryChangeTriggerRef.current?.focus());
+  }
+
+  function closeRepositoryChangeDialog(): void {
+    if (actionState === "loading") return;
+    setPendingRepository(null);
+    requestAnimationFrame(() => repositoryChangeTriggerRef.current?.focus());
   }
 
   async function runRepositoryAnalysis(): Promise<void> {
@@ -208,6 +253,18 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
                 <DashboardIcon name="search" />
                 <span>{analysisState === "loading" ? "Repository 분석 중" : "Repository 분석"}</span>
               </button>
+              {hasGitHubAccountConnection ? (
+                <button
+                  className="dashboardSecondaryButton"
+                  disabled={actionState === "loading"}
+                  onClick={() => setShowRepositoryCandidates(true)}
+                  ref={repositoryChangeTriggerRef}
+                  type="button"
+                >
+                  <DashboardIcon name="link" />
+                  <span>저장소 변경</span>
+                </button>
+              ) : null}
             </div>
             {activeRepository.analysis ? (
               <RepositoryAnalysisResult
@@ -253,19 +310,56 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
           </div>
         ) : null}
 
-        {hasGitHubAccountConnection ? (
+        {hasGitHubAccountConnection && (!activeRepository || showRepositoryCandidates) ? (
           <GitHubRepositoryConnectionPanel
             actionState={actionState}
             installationState={installationState}
             installedRepositories={installedRepositories}
-            onConnectRepository={(repository) => void connectRepository(repository)}
             onLoadInstalledRepositories={() => void loadInstalledRepositories()}
+            onSelectRepository={requestRepositoryConnection}
             repositoryState={repositoryState}
           />
         ) : null}
 
         {errorMessage ? <p className="dashboardMessage" role="alert">{errorMessage}</p> : null}
       </section>
+
+      {pendingRepository ? (
+        <div
+          aria-labelledby="repository-change-dialog-title"
+          aria-modal="true"
+          className={styles.dialogOverlay}
+          role="dialog"
+        >
+          <div className={styles.dialog}>
+            <h3 id="repository-change-dialog-title">소스 저장소를 변경할까요?</h3>
+            <p>
+              {activeRepository?.owner}/{activeRepository?.name}에서 {pendingRepository.fullName}(으)로
+              분석 및 Git/CI/CD에서 사용할 프로젝트 소스가 변경됩니다.
+            </p>
+            <p>GitHub의 파일, branch, 권한 자체는 변경되지 않습니다.</p>
+            <div className="settingsActionRow">
+              <button
+                className="dashboardSecondaryButton"
+                disabled={actionState === "loading"}
+                onClick={closeRepositoryChangeDialog}
+                ref={dialogCancelButtonRef}
+                type="button"
+              >
+                취소
+              </button>
+              <button
+                className="dashboardTopbarAction"
+                disabled={actionState === "loading"}
+                onClick={() => void confirmRepositoryChange()}
+                type="button"
+              >
+                {actionState === "loading" ? "변경 중" : "변경 확인"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

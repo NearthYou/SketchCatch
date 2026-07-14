@@ -6,6 +6,7 @@ import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sket
 
 const clientUrl = new URL("./project-source-repository-client.tsx", import.meta.url);
 const stateUrl = new URL("./project-source-repository-state.ts", import.meta.url);
+const panelUrl = new URL("./github-repository-connection-panel.tsx", import.meta.url);
 
 function readIfPresent(url: URL): string {
   return existsSync(fileURLToPath(url)) ? readFileSync(fileURLToPath(url), "utf8") : "";
@@ -61,6 +62,32 @@ test("an active repository requires confirmation only for a different candidate"
     false
   );
   assert.equal(shouldConfirm(active, createCandidate({ githubRepositoryId: "repository-2" })), true);
+});
+
+test("active repository candidates stay collapsed until the user requests a change", () => {
+  const source = readIfPresent(clientUrl);
+
+  assert.match(source, /showRepositoryCandidates/);
+  assert.match(source, /저장소 변경/);
+  assert.match(source, /setShowRepositoryCandidates\(true\)/);
+});
+
+test("replacing an active repository requires explicit confirmation", () => {
+  const source = readIfPresent(clientUrl);
+
+  assert.match(source, /pendingRepository/);
+  assert.match(source, /shouldConfirmRepositoryChange/);
+  assert.match(source, /role="dialog"/);
+  assert.match(source, /aria-modal="true"/);
+  assert.match(source, /분석 및 Git\/CI\/CD에서 사용할 프로젝트 소스가 변경됩니다/);
+  assert.match(source, /confirmRepositoryChange/);
+});
+
+test("repository candidate panel explains why archived repositories are disabled", () => {
+  const source = readIfPresent(panelUrl);
+
+  assert.match(source, /Archived repository는 연결할 수 없습니다/);
+  assert.match(source, /repository\.archived/);
 });
 
 function createRepository(overrides: Partial<SourceRepository> = {}): SourceRepository {
