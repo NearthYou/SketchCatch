@@ -151,6 +151,20 @@ run "routes_directly_to_cost_scaled_services" {
 
   assert {
     condition = (
+      aws_lb_target_group.api.deregistration_delay == "60" &&
+      aws_lb_target_group.web.deregistration_delay == "30" &&
+      aws_lb_target_group.api.health_check[0].interval == 10 &&
+      aws_lb_target_group.web.health_check[0].interval == 10 &&
+      aws_lb_target_group.api.health_check[0].healthy_threshold == 2 &&
+      aws_lb_target_group.web.health_check[0].healthy_threshold == 2 &&
+      aws_ecs_service.api.health_check_grace_period_seconds == 60 &&
+      aws_ecs_service.web.health_check_grace_period_seconds == 30
+    )
+    error_message = "API and web must keep workload-specific registration, grace, and connection-draining timings."
+  }
+
+  assert {
+    condition = (
       aws_appautoscaling_target.ecs_service["api"].min_capacity == 1 &&
       aws_appautoscaling_target.ecs_service["api"].max_capacity == 2 &&
       aws_appautoscaling_target.ecs_service["web"].min_capacity == 1 &&

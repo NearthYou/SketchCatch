@@ -551,30 +551,37 @@
       "notes": "No runtime dependency, Terraform execution, cloud mutation, commit, push, or PR was created."
     },
     {
-      "id": "WEB-UI-ACCESSIBILITY-001",
+      "id": "PRODUCTION-ECS-DEPLOYMENT-SPEED-001",
       "priority": 1,
-      "area": "web-ui-accessibility",
-      "title": "Web UI clarity, accessibility, and responsive legibility",
-      "user_visible_behavior": "첫 화면과 인증·대시보드·작업 공간에서 목적이 분명한 안내와 조작을 제공하고, 작은 화면에서도 읽기 쉬운 글자와 안정적인 줄바꿈을 유지한다.",
+      "area": "production-deployment",
+      "title": "Measured production ECS deployment acceleration",
+      "user_visible_behavior": "운영자는 API와 web image를 ECR remote cache로 병렬 빌드하고 immutable digest로 배포하며, 실제 production 실행에서 단계별 소요 시간과 rollback 기준을 확인한다.",
       "status": "passing",
       "verification": [
-        "첫 화면과 회원가입·로그인 주요 동작의 문구와 키보드 접근성을 검증한다.",
-        "사용자용 텍스트는 12px 이상, 일반 본문은 14px 이상을 유지하고 낮은 대비 보조 문구를 개선한다.",
-        "공개 화면과 인증 화면을 데스크톱 및 모바일 뷰포트에서 확인한다."
+        "API와 web image가 분리된 job에서 ECR registry cache를 사용해 병렬 build/push된다.",
+        "cache tag는 ECS에 배포되지 않고 검증된 release digest만 task definition에 반영된다.",
+        "생성된 사용자 ECS/Fargate CodeBuild workflow도 ECR remote cache와 release digest 검증을 유지한다.",
+        "production preflight, 실제 ECS 배포, post-deploy health smoke, read-only Terraform plan이 성공한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-14",
         "commands": [
-          "pnpm --filter @sketchcatch/web test",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts",
+          "terraform -chdir=infra/aws/terraform fmt -check -recursive",
+          "terraform -chdir=infra/aws/terraform test",
+          "node scripts/check-production-infra.mjs",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke/ecs-ops-preflight.ps1 -PreflightOnly",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check",
-          "Playwright visual QA at 1440x900 and 390x844"
+          "GitHub Actions Deploy Production ECS run 29333857003",
+          "GitHub Actions Production Infrastructure Plan run 29334381609",
+          "HTTPS GET https://sketchcatch.net/, /health, /health/db"
         ],
-        "notes": "The Web suite passed 1,211/1,211. Templates, Costs, Projects, and Settings now use the requested Korean page titles without redundant English eyebrows or introduction copy. Authenticated visual QA at 1440x900 and 390x844 confirmed no horizontal overflow, clipping, or unintended wrapping across all four routes. The broader accessibility and legibility coverage remains passing."
+        "notes": "Production completed in 6m09s versus the 7m51s median baseline. Warm image build-push critical path was 7s versus 81s. API/web stabilization was 3m13s/2m56s, all health endpoints returned 200, and the read-only runtime plan reported no infrastructure changes. The full workspace test attempt timed out after 15 minutes; focused changed-path tests and all required build checks passed."
       },
-      "notes": "Frontend-only UI work. No API contract, database migration, deployment action, or cloud mutation is included."
+      "notes": "The 5m30s total stretch target remains unmet; validation and API stabilization are the next measured bottlenecks."
     }
   ]
 }

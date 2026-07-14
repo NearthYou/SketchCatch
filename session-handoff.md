@@ -4,23 +4,28 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `feature/gg/381-brainboard-aws-templates`.
-- Latest `origin/dev` at `e322afd2` is merged; only harness state-file conflicts required manual combination.
-- The branch contains 24 non-empty Brainboard AWS Templates plus the existing six deployable Templates.
+- Branch `codex/ecs-deployment-speed` contains the production ECS deployment optimization and latest `origin/dev` at `28c63731`; only harness state files required manual combination.
+- Production run `29333857003` succeeded in 6m09s: API/web build-push 7s/6s, API/web stabilization 3m13s/2m56s, and `/`, `/health`, `/health/db` returned 200.
+- API/web were deployed by immutable digest. Read-only runtime plan `29334381609` reported no infrastructure changes, confirming production already matches the committed ALB/ECS timing values.
+
+## Verification
+
+- Focused tests, generated workflow tests, Terraform tests, infrastructure static checks, smoke preflight, lint, typecheck, build, and harness passed before the latest `dev` merge.
+- The full workspace test command timed out after 15 minutes; no changed-path failure was observed, and its temporary untracked Python fixture directory was removed.
+- Re-run the required checks after the `dev` merge before opening the PR.
 
 ## Changes This Session
 
-- Preserved Brainboard source fixtures, Template catalog/detail creation, source-authoritative Terraform replacement, Board thumbnail capture/reload, fresh-project reset, and native Workspace brand navigation.
-- Preserved latest dev Repository AI, deployment/release, Live Observation, notifications, authentication, and sandbox E2E behavior.
-- Kept RDS read replicas separate from normal RDS defaults and prevented a fixed static-hosting Template from acquiring incompatible VPC or database additions after the dev merge.
-- Applied both PR #393 Workspace Template CSS color-token reviews; harness, lint, typecheck, 14 focused Web tests, and diff checks pass.
+- Added parallel ECR-cached Buildx jobs, digest-only ECS releases, stability preflight, rollback evidence, and deployment timing to the production workflow.
+- Reduced API/web Docker contexts and added remote ECR cache to generated user ECS/Fargate CodeBuild workflows.
+- Recorded the actual production comparison and health evidence in `docs/deployment.md`.
 
 ## Broken Or Unverified
 
-- No branch-authored DB migration exists. Migrations `0034` through `0041` arrived only from merged `dev`.
-- `pnpm catalog:check` and template Terraform CLI validation require a local Terraform executable; none is installed or configured through `TF_CLI_PATH` or `TERRAFORM_BIN`.
-- `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path; it is a pre-existing local environment blocker.
+- The 5m30s total stretch target remains unmet by 39 seconds; validation and API stabilization are the measured remaining bottlenecks.
+- No branch-authored DB migration exists.
 
 ## Best Next Action
 
-- Commit and push, resolve both review threads, then merge PR #393 after CI passes.
+- Complete the merge commit, re-run required checks, open the PR against `dev`, and babysit CI/review until merge-ready.
+- Merge only after required checks and review feedback are clear.
