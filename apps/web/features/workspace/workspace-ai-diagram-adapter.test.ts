@@ -2950,7 +2950,8 @@ test("createPlannedDiagramJson matches the approved Repository ECS reference lay
         diagramType: "aws_ecs_task_definition",
         diagramWidth: 260,
         diagramHeight: 96,
-        parentAreaNodeId: `fixed-template-${templateId}-task-security-group`
+        parentAreaNodeId: `fixed-template-${templateId}-task-security-group`,
+        sketchcatchReferenceTerraform: true
       }
     ),
     templateNode(
@@ -3270,6 +3271,7 @@ test("createPlannedDiagramJson matches the approved Repository ECS reference lay
   assert.equal(runtime.parameters?.values.diagramType, undefined);
   assert.equal(runtime.parameters?.values.diagramWidth, undefined);
   assert.equal(runtime.parameters?.values.diagramHeight, undefined);
+  assert.equal(runtime.parameters?.values.sketchcatchReferenceTerraform, true);
   assert.ok(runtime.iconUrl?.includes("Res_Amazon-Elastic-Container-Service_Task_48.svg"));
   assert.equal(runtime.metadata?.parentAreaNodeId, undefined);
   assert.equal(browser.kind, "design");

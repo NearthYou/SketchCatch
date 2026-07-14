@@ -828,6 +828,8 @@ test("omits AI semantic metadata that is not accepted by the Terraform provider"
             applicationPurpose: "content_board",
             instanceType: "t3.micro",
             servicePurpose: "content_board",
+            templateId: "ecs-fargate-container-app",
+            template_id: "legacy-template-id",
             terraformResourceName: "app_server",
             terraformResourceType: "aws_instance",
             tier: "private_app"
@@ -852,7 +854,7 @@ test("omits AI semantic metadata that is not accepted by the Terraform provider"
   assert.doesNotMatch(terraformCode, /resource "aws_s3_bucket_public_access_block"/);
   assert.doesNotMatch(
     terraformCode,
-    /bucket_purpose|public_access_block\s*=|service_purpose|origin_resource_id|application_purpose|terraform_resource_name|terraform_resource_type|tier\s*=/
+    /bucket_purpose|public_access_block\s*=|service_purpose|origin_resource_id|application_purpose|template_id|terraform_resource_name|terraform_resource_type|tier\s*=/
   );
 });
 

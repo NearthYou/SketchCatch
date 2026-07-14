@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { DeploymentLiveProfile } from "@sketchcatch/types";
-import { getLiveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
+import {
+  getLiveApplySupportedResourceTypes,
+  getTerraformPlanSupportedResourceTypes
+} from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
 const liveApplySupportedDataSourceTypes = new Set([
@@ -63,6 +66,7 @@ type HclBlock = {
 
 export type TerraformArtifactSafetyOptions = {
   liveProfile?: DeploymentLiveProfile | undefined;
+  resourceValidationMode?: "live_apply" | "plan" | undefined;
 };
 
 export class TerraformArtifactSafetyError extends Error {
@@ -111,7 +115,10 @@ export function assertTerraformArtifactIsSafe(
   validateTemplateFileCalls(code);
   validateArchiveDataSourceAttributes(code);
   const liveProfile = options.liveProfile ?? "practice";
-  const supportedResourceTypes = getLiveApplySupportedResourceTypes(liveProfile);
+  const supportedResourceTypes =
+    options.resourceValidationMode === "plan"
+      ? getTerraformPlanSupportedResourceTypes()
+      : getLiveApplySupportedResourceTypes(liveProfile);
 
   validateDeploymentResourceAttributes(code, liveProfile);
 

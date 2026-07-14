@@ -68,12 +68,28 @@ AMAZON_Q_RETRIEVAL_APPLICATION_ID=<anonymous-q-application-id>
 Direct Deployment Path의 실제 live apply 리소스는 안정성을 위해 아래로 제한합니다.
 
 - VPC
-- Public Subnet
+- Public/Private Subnet
 - Internet Gateway
-- Route Table
+- Elastic IP와 NAT Gateway
+- Route Table과 Association
 - Security Group
+- ALB, Listener, Target Group
+- ECS Cluster, Service, Task Definition
+- IAM Role과 Policy Attachment
+- ECR Repository와 CloudWatch Log Group
+- S3 Bucket, Public Access Block, Object, Bucket Policy
+- CloudFront Distribution과 Origin Access Control
 - EC2
-- S3 Bucket
+
+Terraform Plan과 사전 `terraform init`은 안전 검사를 통과한 기본 Template Resource를 더 넓게
+분석할 수 있습니다. `practice` live apply 허용 목록 밖의 Resource는 Plan 결과에
+`UNSUPPORTED_RESOURCE` 경고로 남으며, 승인과 Apply에서는 live apply 안전 검사를 다시 적용해
+fail-closed로 차단합니다. Plan 가능 여부가 실제 배포 허용을 의미하지는 않습니다.
+
+Repository ECS 다이어그램의 `Fargate Task` 표시는 별도 Terraform Resource가 아니라
+`aws_ecs_service`가 `desired_count`에 따라 실행하는 런타임 인스턴스입니다. Terraform에는
+control-plane `aws_ecs_task_definition` 하나만 생성해 중복되거나 비어 있는 Task Definition을
+만들지 않습니다.
 
 Live Observation demo profile은 CloudFront origin 제한에 필요한
 `aws_ec2_managed_prefix_list` data source를 허용합니다. Launch Template bootstrap은

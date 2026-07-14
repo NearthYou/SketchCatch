@@ -110,6 +110,15 @@ data "aws_iam_policy_document" "ecs_task" {
   }
 
   statement {
+    sid = "AllowAwsConnectionCloudFormationTemplates"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject"
+    ]
+    resources = ["arn:aws:s3:::${var.artifact_bucket_name}/aws-connections/*"]
+  }
+
+  statement {
     sid       = "AllowSketchCatchAwsConnectionAssumeRole"
     actions   = ["sts:AssumeRole"]
     resources = var.aws_connection_role_arns
