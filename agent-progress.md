@@ -13,6 +13,16 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-15 - Lock Repository ECS reference layout and real Group containers
+
+- Captured the open Chrome Architecture Board as the deterministic first-generation layout for the full `audience-live-check` ECS Fargate plus frontend evidence signature.
+- Preserved authored Template geometry and placed Browser, GitHub Actions, private subnets, NAT/private routing, CloudFront/S3, ECR, CloudWatch, and the Fargate runtime at the approved coordinates.
+- Materialized `Global IAM` and `Definition / Ops` as the only `design_group` presentation containers in this ECS flow; Region remains a Region area and User/Client remains a Design node.
+- Kept subsequent AI patch and saved-draft restore paths from overwriting user-owned positions, sizes, labels, or styles while repairing Template semantic types and containment metadata.
+- Chrome verification showed the target layout after reload and reported `Area / Group` for both requested groups without saving or deploying.
+- Verification: reference layout test passed 1/1; saved restore tests passed 5/5; `pnpm harness:check`, `pnpm lint`, standalone `pnpm typecheck`, `pnpm build`, and `git diff --check` passed; two independent final reviews reported no findings.
+- Known unrelated baseline: the full `pnpm test` attempt remains non-green on existing three-tier Template contract expectations in `packages/types`; the unchanged adapter convention test also remains non-green outside this feature path.
+
 ### 2026-07-15 - Merge latest dev into diagram positioning branch
 
 - Fetched `origin/dev` and merged it into `feat/ck/391-diagram-positioning`.
@@ -65,5 +75,5 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit the repository diagram layout/restore/node-visual changes separately from unrelated notification work.
+- Continue notification work separately from the completed repository diagram commit.
 - Run local API DB migrations before testing deployment notifications locally.

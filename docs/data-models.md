@@ -189,6 +189,14 @@ node만 자동 배치한다. 단, 저장된 Area에 새 자식이 추가되면 A
 막는 데 필요한 방향으로만 크기를 확장할 수 있다. 자동 배치는 resource type, Terraform parameters, containment
 identity, edge identity를 수정하지 않으며 사용자가 patch를 승인하기 전에는 현재 Board를 변경하지 않는다.
 
+Repository Analysis에서 `ecs-fargate-container-app`을 선택하고 `include_frontend` 질문에 `true`로 답해
+CloudFront/S3 frontend와 Fargate backend가 함께 생성되는 strict evidence 흐름은 승인된 Repository ECS 기준
+배치를 사용한다. 이 배치는 선택 Template의 작성 좌표와 크기를 보존하고, private app subnet, NAT, private route,
+CloudFront/S3, ECR, CloudWatch, GitHub Actions, Fargate runtime을 기준 좌표에 결정론적으로 배치한다. 해당 전체
+Resource 시그니처가 없으면 일반 Repository/Template 자동 배치 정책을 유지한다. 이 흐름의 Presentation
+node 중 `Global IAM`과 `Definition / Ops`만 실제 `design_group` 컨테이너로 만들고, 나머지는 각자의 Design
+표현 타입을 유지한다.
+
 파라미터가 다른 Terraform resource를 참조할 때 보드가 만든 자동 연결선은 `DiagramEdge.metadata`로 구분한다.
 
 ```ts

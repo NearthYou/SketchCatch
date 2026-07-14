@@ -1810,7 +1810,7 @@ function createPresentationDiagramNode(
     },
     position: { ...node.position },
     size: { ...node.size },
-    type: node.catalogItemId,
+    type: node.catalogItemId === "design-group" ? "design_group" : node.catalogItemId,
     zIndex: node.zIndex ?? 0,
     ...(node.rotation === undefined ? {} : { rotation: node.rotation })
   };

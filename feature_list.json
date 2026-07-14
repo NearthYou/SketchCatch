@@ -629,6 +629,34 @@
         "notes": "Production completed in 6m09s versus the 7m51s median baseline. Warm image build-push critical path was 7s versus 81s. API/web stabilization was 3m13s/2m56s, all health endpoints returned 200, and the read-only runtime plan reported no infrastructure changes. The full workspace test attempt timed out after 15 minutes; focused changed-path tests and all required build checks passed."
       },
       "notes": "The 5m30s total stretch target remains unmet; validation and API stabilization are the next measured bottlenecks."
+    },
+    {
+      "id": "REPOSITORY-ECS-REFERENCE-LAYOUT-001",
+      "priority": 1,
+      "area": "repository-analysis-board",
+      "title": "Reference-aligned Repository ECS Architecture Board layout",
+      "user_visible_behavior": "whiskend/audience-live-check Repository Analysis에서 ECS Fargate Container App을 선택하고 frontend 포함 질문에 예라고 답하면, 사용자가 승인한 Architecture Draft가 기준 Architecture Board와 동일한 통합 배치로 생성된다.",
+      "status": "passing",
+      "verification": [
+        "선택한 ECS Fargate Template의 작성 좌표와 크기를 그대로 보존한다.",
+        "CloudFront, S3, NAT, private subnet, ECR, CloudWatch, GitHub Actions와 Fargate runtime을 기준 Board 좌표에 배치한다.",
+        "Global IAM과 Definition / Ops만 실제 Group 컨테이너로 생성한다.",
+        "저장된 사용자의 수동 Board 위치는 복구 과정에서 다시 자동 배치하지 않는다.",
+        "Repository Analysis 공개 인터페이스에서 동일 입력이 동일한 DiagramJson을 만든다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern \"approved Repository ECS reference layout\" features/workspace/workspace-ai-diagram-adapter.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-draft-restore.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Chrome에서 기준 Board 배치와 Global IAM/Definition / Ops의 Area / Group 표현을 확인했다. 독립 standards/spec review는 최종 finding 없이 종료됐다."
+      },
+      "notes": "No cloud, GitHub, or deployment mutation is authorized by this layout-only workstream."
     }
   ]
 }

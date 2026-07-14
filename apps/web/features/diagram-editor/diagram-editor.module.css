@@ -1711,8 +1711,8 @@ button.rightRailResizeHandle {
 .resourceNodeIcon {
   display: block;
   height: 100%;
-  max-height: 100%;
-  max-width: 100%;
+  max-height: 48px;
+  max-width: 48px;
   object-fit: contain;
   width: 100%;
 }
@@ -1761,7 +1761,7 @@ button.rightRailResizeHandle {
   position: absolute;
   text-align: center;
   text-overflow: ellipsis;
-  top: calc(100% + 4px);
+  top: calc(50% + 28px);
   transform: translateX(-50%);
   transition:
     opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),

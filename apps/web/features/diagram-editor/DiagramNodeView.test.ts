@@ -192,7 +192,7 @@ test("diagram node view renders bounded two-line labels on a transparent backgro
   assert.match(labelBlock, /-webkit-line-clamp:\s*2;/);
 });
 
-test("resource nodes have no white tile and resize the icon with the node geometry", () => {
+test("resource and design icon nodes share one 48px visual icon size", () => {
   assert.match(
     diagramEditorCssSource,
     /\.nodeShellResource\s*\{[^}]*background:\s*transparent;[^}]*border-width:\s*0;/s
@@ -203,7 +203,7 @@ test("resource nodes have no white tile and resize the icon with the node geomet
   );
   assert.match(
     diagramEditorCssSource,
-    /\.resourceNodeIcon\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*max-width:\s*100%;[^}]*width:\s*100%;/s
+    /\.resourceNodeIcon\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*48px;[^}]*max-width:\s*48px;[^}]*width:\s*100%;/s
   );
   assert.match(
     diagramEditorCssSource,
@@ -229,7 +229,7 @@ test("resource labels stay four pixels below the icon and metadata is not render
   assert.doesNotMatch(diagramNodeViewSource, /className=\{styles\.resourceNodeMeta\}/);
   assert.match(
     diagramEditorCssSource,
-    /\.resourceNodeLabel\s*\{[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*top:\s*calc\(100% \+ 4px\);[^}]*transform:\s*translateX\(-50%\);/s
+    /\.resourceNodeLabel\s*\{[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*top:\s*calc\(50% \+ 28px\);[^}]*transform:\s*translateX\(-50%\);/s
   );
 });
 

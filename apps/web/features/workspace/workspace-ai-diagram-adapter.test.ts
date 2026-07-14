@@ -2772,7 +2772,7 @@ test("convertArchitectureJsonToDiagramJson lays out server and storage draft as 
   assertNoSiblingNodeOverlap(diagramJson);
 });
 
-test("createPlannedDiagramJson preserves the selected Template layout for repository-generated ECS frontend diagrams", () => {
+test("createPlannedDiagramJson matches the approved Repository ECS reference layout", () => {
   const templateId = "ecs-fargate-container-app" as const;
   const nodes: ArchitectureJson["nodes"] = [
     repositoryNode("repository-browser", "UNKNOWN", "Browser", 40, 680, {
@@ -2787,7 +2787,10 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
       diagramWidth: 1800,
       diagramHeight: 400
     }),
-    templateNode(templateId, "vpc", "VPC", "VPC", 260, 500, { diagramWidth: 1800, diagramHeight: 900 }),
+    templateNode(templateId, "vpc", "VPC", "VPC", 260, 500, {
+      diagramWidth: 1800,
+      diagramHeight: 900
+    }),
     templateNode(templateId, "subnet-a", "SUBNET", "Public Subnet A", 360, 620, {
       parentAreaNodeId: `fixed-template-${templateId}-vpc`,
       diagramWidth: 420,
@@ -2797,6 +2800,26 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
       parentAreaNodeId: `fixed-template-${templateId}-vpc`,
       diagramWidth: 420,
       diagramHeight: 280
+    }),
+    templateNode(
+      templateId,
+      "internet-gateway",
+      "INTERNET_GATEWAY",
+      "Internet Gateway",
+      1800,
+      620,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-vpc`
+      }
+    ),
+    templateNode(templateId, "route-table", "ROUTE_TABLE", "Public Route Table", 1800, 780, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`
+    }),
+    templateNode(templateId, "route-a", "ROUTE_TABLE_ASSOCIATION", "Public Route A", 1580, 920, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`
+    }),
+    templateNode(templateId, "route-b", "ROUTE_TABLE_ASSOCIATION", "Public Route B", 1800, 920, {
+      parentAreaNodeId: `fixed-template-${templateId}-vpc`
     }),
     repositoryNode("repository-private-app-subnet-a", "SUBNET", "Private App Subnet A", 360, 1010, {
       parentAreaNodeId: `fixed-template-${templateId}-vpc`,
@@ -2808,41 +2831,139 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
       diagramWidth: 420,
       diagramHeight: 300
     }),
-    templateNode(templateId, "alb-security-group", "SECURITY_GROUP", "ALB Security Group", 420, 680, {
-      parentAreaNodeId: `fixed-template-${templateId}-subnet-a`,
-      diagramWidth: 300,
-      diagramHeight: 160
+    repositoryNode("repository-nat-eip", "ELASTIC_IP", "NAT Elastic IP", 900, 690, {
+      parentAreaNodeId: `fixed-template-${templateId}-subnet-a`
     }),
-    templateNode(templateId, "task-security-group", "SECURITY_GROUP", "Task Security Group", 420, 1070, {
-      parentAreaNodeId: "repository-private-app-subnet-a",
-      diagramWidth: 340,
-      diagramHeight: 180
-    }),
-    templateNode(templateId, "load-balancer", "LOAD_BALANCER", "Internet-facing ALB (Public A/B)", 500, 730, {
-      parentAreaNodeId: `fixed-template-${templateId}-alb-security-group`
-    }),
-    templateNode(templateId, "listener", "LOAD_BALANCER_LISTENER", "CloudFront Origin HTTP Listener", 1560, 700, {
-      parentAreaNodeId: `fixed-template-${templateId}-vpc`
-    }),
-    templateNode(templateId, "target-group", "LOAD_BALANCER_TARGET_GROUP", "API Target Group", 1360, 700, {
-      parentAreaNodeId: `fixed-template-${templateId}-vpc`
-    }),
+    repositoryNode(
+      "repository-nat-gateway",
+      "NAT_GATEWAY",
+      "NAT Gateway (private egress)",
+      1080,
+      690,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-subnet-a`
+      }
+    ),
+    repositoryNode(
+      "repository-private-route-table",
+      "ROUTE_TABLE",
+      "Private App Route Table",
+      1360,
+      1080,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-vpc`
+      }
+    ),
+    repositoryNode(
+      "repository-private-route-association-a",
+      "ROUTE_TABLE_ASSOCIATION",
+      "Private Route A",
+      1580,
+      1080,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-vpc`
+      }
+    ),
+    repositoryNode(
+      "repository-private-route-association-b",
+      "ROUTE_TABLE_ASSOCIATION",
+      "Private Route B",
+      1800,
+      1080,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-vpc`
+      }
+    ),
+    templateNode(
+      templateId,
+      "alb-security-group",
+      "SECURITY_GROUP",
+      "ALB Security Group",
+      420,
+      680,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-subnet-a`,
+        diagramWidth: 300,
+        diagramHeight: 160
+      }
+    ),
+    templateNode(
+      templateId,
+      "task-security-group",
+      "SECURITY_GROUP",
+      "Task Security Group",
+      420,
+      1070,
+      {
+        parentAreaNodeId: "repository-private-app-subnet-a",
+        diagramWidth: 340,
+        diagramHeight: 180
+      }
+    ),
+    templateNode(
+      templateId,
+      "load-balancer",
+      "LOAD_BALANCER",
+      "Internet-facing ALB (Public A/B)",
+      500,
+      730,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-alb-security-group`
+      }
+    ),
+    templateNode(
+      templateId,
+      "listener",
+      "LOAD_BALANCER_LISTENER",
+      "CloudFront Origin HTTP Listener",
+      1560,
+      700,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-vpc`
+      }
+    ),
+    templateNode(
+      templateId,
+      "target-group",
+      "LOAD_BALANCER_TARGET_GROUP",
+      "API Target Group",
+      1360,
+      700,
+      {
+        parentAreaNodeId: `fixed-template-${templateId}-vpc`
+      }
+    ),
     templateNode(templateId, "cluster", "ECS_CLUSTER", "ECS Cluster", 1540, 140, {
       parentAreaNodeId: `fixed-template-${templateId}-vpc`
     }),
     templateNode(templateId, "service", "ECS_SERVICE", "API Fargate Service", 1780, 140, {
       parentAreaNodeId: `fixed-template-${templateId}-task-security-group`
     }),
-    repositoryNode("repository-fargate-runtime", "UNKNOWN", "Fargate Task (1, Private App A/B)", 460, 1140, {
-      diagramKind: "design",
-      diagramType: "aws_ecs_task_definition",
-      diagramWidth: 260,
-      diagramHeight: 96,
-      parentAreaNodeId: `fixed-template-${templateId}-task-security-group`
-    }),
-    templateNode(templateId, "task", "ECS_TASK_DEFINITION", "API Task Definition (control plane)", 1060, 140, {
-      parentAreaNodeId: "repository-managed-services"
-    }),
+    repositoryNode(
+      "repository-fargate-runtime",
+      "UNKNOWN",
+      "Fargate Task (1, Private App A/B)",
+      460,
+      1140,
+      {
+        diagramKind: "design",
+        diagramType: "aws_ecs_task_definition",
+        diagramWidth: 260,
+        diagramHeight: 96,
+        parentAreaNodeId: `fixed-template-${templateId}-task-security-group`
+      }
+    ),
+    templateNode(
+      templateId,
+      "task",
+      "ECS_TASK_DEFINITION",
+      "API Task Definition (control plane)",
+      1060,
+      140,
+      {
+        parentAreaNodeId: "repository-managed-services"
+      }
+    ),
     templateNode(templateId, "execution-role", "IAM_ROLE", "ECS Execution Role", 820, 300, {
       parentAreaNodeId: "repository-managed-services"
     }),
@@ -2864,12 +2985,52 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
       terraformResourceType: "aws_s3_bucket_public_access_block",
       parentAreaNodeId: "repository-managed-services"
     }),
+    repositoryNode(
+      "repository-web-bootstrap-index",
+      "S3",
+      "Bootstrap Index (CI/CD replaces)",
+      760,
+      280,
+      {
+        terraformResourceType: "aws_s3_object",
+        parentAreaNodeId: "repository-managed-services"
+      }
+    ),
+    repositoryNode(
+      "repository-cloudfront-oac",
+      "CLOUDFRONT",
+      "CloudFront Origin Access Control",
+      300,
+      280,
+      {
+        terraformResourceType: "aws_cloudfront_origin_access_control",
+        parentAreaNodeId: "repository-managed-services"
+      }
+    ),
+    repositoryNode(
+      "repository-web-bucket-policy",
+      "S3",
+      "CloudFront Read-only Bucket Policy",
+      980,
+      280,
+      {
+        terraformResourceType: "aws_s3_bucket_policy",
+        parentAreaNodeId: "repository-managed-services"
+      }
+    ),
     repositoryNode("repository-ecr", "ECR_REPOSITORY", "ECR API Image Repository", 820, 140, {
       parentAreaNodeId: "repository-managed-services"
     }),
-    repositoryNode("repository-ecs-logs", "CLOUDWATCH_LOG_GROUP", "CloudWatch ECS Container Logs", 1300, 140, {
-      parentAreaNodeId: "repository-managed-services"
-    }),
+    repositoryNode(
+      "repository-ecs-logs",
+      "CLOUDWATCH_LOG_GROUP",
+      "CloudWatch ECS Container Logs",
+      1300,
+      140,
+      {
+        parentAreaNodeId: "repository-managed-services"
+      }
+    ),
     repositoryNode("repository-github-actions", "UNKNOWN", "GitHub Actions", 40, 180, {
       diagramKind: "design",
       diagramType: "github_actions",
@@ -2880,18 +3041,78 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   const architectureJson: ArchitectureJson = {
     nodes,
     edges: [
-      edge("browser-cloudfront", "repository-browser", "repository-cloudfront", "HTTPS web and /api entry"),
-      edge("cloudfront-alb", "repository-cloudfront", `fixed-template-${templateId}-alb-security-group`, "proxies /api/* to ALB over HTTP"),
-      edge("alb-lb", `fixed-template-${templateId}-alb-security-group`, `fixed-template-${templateId}-load-balancer`, "attached to public ALB"),
-      edge("lb-listener", `fixed-template-${templateId}-load-balancer`, `fixed-template-${templateId}-listener`, "accepts CloudFront origin HTTP"),
-      edge("listener-target", `fixed-template-${templateId}-listener`, `fixed-template-${templateId}-target-group`, "forwards API traffic"),
-      edge("target-service", `fixed-template-${templateId}-target-group`, `fixed-template-${templateId}-service`, "health checks /health"),
-      edge("cluster-service", `fixed-template-${templateId}-cluster`, `fixed-template-${templateId}-service`, "runs the API service"),
-      edge("service-runtime", `fixed-template-${templateId}-service`, "repository-fargate-runtime", "schedules desired task in private app subnets"),
-      edge("ecr-runtime", "repository-ecr", "repository-fargate-runtime", "application revisions pull API image from ECR"),
-      edge("runtime-logs", "repository-fargate-runtime", "repository-ecs-logs", "writes ECS container logs via awslogs"),
-      edge("actions-ecr", "repository-github-actions", "repository-ecr", "builds and pushes API image"),
-      edge("actions-web", "repository-github-actions", "repository-web-assets", "uploads apps/web/dist")
+      edge(
+        "browser-cloudfront",
+        "repository-browser",
+        "repository-cloudfront",
+        "HTTPS web and /api entry"
+      ),
+      edge(
+        "cloudfront-alb",
+        "repository-cloudfront",
+        `fixed-template-${templateId}-alb-security-group`,
+        "proxies /api/* to ALB over HTTP"
+      ),
+      edge(
+        "alb-lb",
+        `fixed-template-${templateId}-alb-security-group`,
+        `fixed-template-${templateId}-load-balancer`,
+        "attached to public ALB"
+      ),
+      edge(
+        "lb-listener",
+        `fixed-template-${templateId}-load-balancer`,
+        `fixed-template-${templateId}-listener`,
+        "accepts CloudFront origin HTTP"
+      ),
+      edge(
+        "listener-target",
+        `fixed-template-${templateId}-listener`,
+        `fixed-template-${templateId}-target-group`,
+        "forwards API traffic"
+      ),
+      edge(
+        "target-service",
+        `fixed-template-${templateId}-target-group`,
+        `fixed-template-${templateId}-service`,
+        "health checks /health"
+      ),
+      edge(
+        "cluster-service",
+        `fixed-template-${templateId}-cluster`,
+        `fixed-template-${templateId}-service`,
+        "runs the API service"
+      ),
+      edge(
+        "service-runtime",
+        `fixed-template-${templateId}-service`,
+        "repository-fargate-runtime",
+        "schedules desired task in private app subnets"
+      ),
+      edge(
+        "ecr-runtime",
+        "repository-ecr",
+        "repository-fargate-runtime",
+        "application revisions pull API image from ECR"
+      ),
+      edge(
+        "runtime-logs",
+        "repository-fargate-runtime",
+        "repository-ecs-logs",
+        "writes ECS container logs via awslogs"
+      ),
+      edge(
+        "actions-ecr",
+        "repository-github-actions",
+        "repository-ecr",
+        "builds and pushes API image"
+      ),
+      edge(
+        "actions-web",
+        "repository-github-actions",
+        "repository-web-assets",
+        "uploads apps/web/dist"
+      )
     ]
   };
 
@@ -2902,8 +3123,6 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
     shortId: "layout"
   });
   const authoredNodeById = new Map(authoredDiagram.nodes.map((node) => [node.id, node]));
-  const quality = evaluateDiagramLayout(diagramJson);
-  const visibleQuality = evaluateVisibleDiagramLayout(diagramJson);
   const service = nodeById.get(`fixed-template-${templateId}-service`);
   const runtime = nodeById.get("repository-fargate-runtime");
   const browser = nodeById.get("repository-browser");
@@ -2911,6 +3130,10 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   const cloudFront = nodeById.get("repository-cloudfront");
   const webAssets = nodeById.get("repository-web-assets");
   const templateUser = nodeById.get(`fixed-template-${templateId}-presentation-user`);
+  const definitionOpsGroup = nodeById.get(
+    `fixed-template-${templateId}-presentation-definition-ops-group`
+  );
+  const globalIamGroup = nodeById.get(`fixed-template-${templateId}-presentation-global-iam-group`);
   const vpc = nodeById.get(`fixed-template-${templateId}-vpc`);
   const region = nodeById.get(`fixed-template-${templateId}-presentation-region`);
   const publicSubnetA = nodeById.get(`fixed-template-${templateId}-subnet-a`);
@@ -2920,20 +3143,59 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   const albSecurityGroup = nodeById.get(`fixed-template-${templateId}-alb-security-group`);
   const taskSecurityGroup = nodeById.get(`fixed-template-${templateId}-task-security-group`);
   const bounds = getDiagramBounds(diagramJson.nodes);
-  const templateBounds = getNodeGroupBounds(
-    diagramJson.nodes.filter((node) => node.id.startsWith(`fixed-template-${templateId}-`))
-  );
-  const repositorySupportNodes = diagramJson.nodes.filter((node) =>
-    node.id.startsWith("repository-") &&
-    node.id !== "repository-browser" &&
-    node.id !== "repository-github-actions"
-  );
+  const expectedRepositoryLayout = {
+    "repository-browser": { position: { x: 232, y: -224 }, size: { width: 140, height: 80 } },
+    "repository-github-actions": { position: { x: 24, y: 456 }, size: { width: 160, height: 80 } },
+    "repository-private-app-subnet-a": {
+      position: { x: 516, y: 720 },
+      size: { width: 478, height: 118 }
+    },
+    "repository-private-app-subnet-b": {
+      position: { x: 1080, y: 720 },
+      size: { width: 476, height: 118 }
+    },
+    "repository-nat-eip": { position: { x: 708, y: 612 }, size: { width: 48, height: 48 } },
+    "repository-nat-gateway": { position: { x: 828, y: 612 }, size: { width: 48, height: 48 } },
+    "repository-private-route-table": {
+      position: { x: 1008, y: 528 },
+      size: { width: 48, height: 48 }
+    },
+    "repository-private-route-association-a": {
+      position: { x: 972, y: 756 },
+      size: { width: 48, height: 48 }
+    },
+    "repository-private-route-association-b": {
+      position: { x: 1056, y: 756 },
+      size: { width: 48, height: 48 }
+    },
+    "repository-web-assets": { position: { x: 660, y: -264 }, size: { width: 48, height: 48 } },
+    "repository-web-public-access": {
+      position: { x: 828, y: -264 },
+      size: { width: 48, height: 48 }
+    },
+    "repository-web-bootstrap-index": {
+      position: { x: 660, y: -180 },
+      size: { width: 48, height: 48 }
+    },
+    "repository-cloudfront-oac": { position: { x: 496, y: -340 }, size: { width: 48, height: 48 } },
+    "repository-cloudfront": { position: { x: 496, y: -208 }, size: { width: 48, height: 48 } },
+    "repository-web-bucket-policy": {
+      position: { x: 496, y: -52 },
+      size: { width: 48, height: 48 }
+    },
+    "repository-ecr": { position: { x: 1908, y: 552 }, size: { width: 48, height: 48 } },
+    "repository-ecs-logs": { position: { x: 1932, y: 660 }, size: { width: 48, height: 48 } },
+    "repository-fargate-runtime": {
+      position: { x: 1284, y: -144 },
+      size: { width: 260, height: 96 }
+    }
+  } as const;
 
-  assert.equal(diagramJson.nodes.some((node) => node.id.includes("-presentation-")), true);
+  assert.equal(
+    diagramJson.nodes.some((node) => node.id.includes("-presentation-")),
+    true
+  );
   assert.equal(nodeById.has("repository-managed-services"), false);
-  assert.ok(quality.parentBoundaryViolationCount <= 3);
-  assert.ok(quality.backwardEdgeCount <= 2);
-  assert.ok(visibleQuality.edgeCrossingCount <= 4);
   assert.ok(
     browser &&
       cloudFront &&
@@ -2948,14 +3210,15 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   );
   assert.ok(githubActions);
   assert.ok(templateUser);
+  assert.ok(definitionOpsGroup);
+  assert.ok(globalIamGroup);
 
   for (const plannedNode of diagramJson.nodes.filter((node) =>
     node.id.startsWith(`fixed-template-${templateId}-`)
   )) {
-    const authoredNodeId = plannedNode.id.replace(
-      `fixed-template-${templateId}-presentation-`,
-      `template-${templateId}-presentation-`
-    ).replace(`fixed-template-${templateId}-`, `template-${templateId}-`);
+    const authoredNodeId = plannedNode.id
+      .replace(`fixed-template-${templateId}-presentation-`, `template-${templateId}-presentation-`)
+      .replace(`fixed-template-${templateId}-`, `template-${templateId}-`);
     const authoredNode = authoredNodeById.get(authoredNodeId);
 
     assert.ok(authoredNode, plannedNode.id);
@@ -2976,27 +3239,29 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
     region?.size,
     authoredNodeById.get(`template-${templateId}-presentation-region`)?.size
   );
-  assert.deepEqual(publicSubnetA.position, authoredNodeById.get(`template-${templateId}-subnet-a`)?.position);
-  assert.deepEqual(publicSubnetB.position, authoredNodeById.get(`template-${templateId}-subnet-b`)?.position);
+  assert.deepEqual(
+    publicSubnetA.position,
+    authoredNodeById.get(`template-${templateId}-subnet-a`)?.position
+  );
+  assert.deepEqual(
+    publicSubnetB.position,
+    authoredNodeById.get(`template-${templateId}-subnet-b`)?.position
+  );
   assert.equal(albSecurityGroup.metadata?.parentAreaNodeId, vpc.id);
-  assert.equal(taskSecurityGroup.metadata?.parentAreaNodeId, `fixed-template-${templateId}-cluster`);
-  assert.ok(repositorySupportNodes.length > 0);
-  assert.ok(templateBounds);
-  for (const supportNode of repositorySupportNodes) {
-    assert.ok(
-      supportNode.position.x + supportNode.size.width <= templateBounds.x - 120,
-      `${supportNode.id} should stay in the support lane left of the selected Template`
-    );
-    assert.ok(
-      region && supportNode.position.x + supportNode.size.width <= region.position.x - 120,
-      `${supportNode.id} should stay outside the authored Region area`
-    );
-    assertNoNodeOverlap(supportNode, vpc);
+  assert.equal(
+    taskSecurityGroup.metadata?.parentAreaNodeId,
+    `fixed-template-${templateId}-cluster`
+  );
+  for (const [nodeId, expectedLayout] of Object.entries(expectedRepositoryLayout)) {
+    const plannedNode = nodeById.get(nodeId);
+
+    assert.ok(plannedNode, nodeId);
+    assert.deepEqual(plannedNode.position, expectedLayout.position, `${nodeId} position`);
+    assert.deepEqual(plannedNode.size, expectedLayout.size, `${nodeId} size`);
   }
-  assert.ok(cloudFront.position.y === webAssets.position.y);
   assert.ok(nodeById.get("repository-ecr")!.position.y > cloudFront.position.y);
   assert.ok(bounds.width <= 3200, `bounds width ${bounds.width}`);
-  assert.ok(bounds.height <= 1200);
+  assert.ok(bounds.height <= 1300);
   assert.ok(service && runtime);
   assert.equal(runtime.kind, "resource");
   assert.equal(runtime.type, "aws_ecs_task_definition");
@@ -3013,6 +3278,30 @@ test("createPlannedDiagramJson preserves the selected Template layout for reposi
   assert.ok(githubActions.iconUrl?.includes("Res_Git-Repository_48_Light.svg"));
   assert.equal(templateUser.kind, "design");
   assert.ok(templateUser.iconUrl?.includes("Res_Client_48_Light.svg"));
+  assert.deepEqual(
+    diagramJson.nodes
+      .filter((node) => node.type === "design_group")
+      .map((node) => node.label)
+      .sort(),
+    ["Definition / Ops", "Global IAM"]
+  );
+
+  const manuallyMovedDiagram: DiagramJson = {
+    ...diagramJson,
+    nodes: diagramJson.nodes.map((node) =>
+      node.id === "repository-browser"
+        ? { ...node, position: { x: -640, y: 320 }, size: { width: 180, height: 96 } }
+        : node
+    )
+  };
+  const patchedDiagram = createPlannedDiagramJson({
+    architectureJson,
+    previousDiagram: manuallyMovedDiagram
+  });
+  const patchedBrowser = patchedDiagram.nodes.find((node) => node.id === "repository-browser");
+
+  assert.deepEqual(patchedBrowser?.position, { x: -640, y: 320 });
+  assert.deepEqual(patchedBrowser?.size, { width: 180, height: 96 });
 });
 
 test("convertArchitectureJsonToDiagramJson lays out generated EC2 drafts inside cloud container areas", () => {
@@ -3621,25 +3910,6 @@ function evaluateDiagramLayout(diagramJson: DiagramJson) {
   });
 }
 
-function evaluateVisibleDiagramLayout(diagramJson: DiagramJson) {
-  return evaluateAutomaticDiagramLayout({
-    edges: getVisibleDiagramJson(diagramJson).edges.map((edge) => ({
-        id: edge.id,
-        label: edge.label,
-        sourceId: edge.sourceNodeId,
-        targetId: edge.targetNodeId
-      })),
-    nodes: diagramJson.nodes
-  });
-}
-
-function getVisibleDiagramJson(diagramJson: DiagramJson): DiagramJson {
-  return {
-    ...diagramJson,
-    edges: diagramJson.edges.filter((edge) => edge.metadata?.presentationRole !== "detail")
-  };
-}
-
 function assertNoSiblingNodeOverlap(diagramJson: DiagramJson): void {
   for (let leftIndex = 0; leftIndex < diagramJson.nodes.length; leftIndex += 1) {
     const left = diagramJson.nodes[leftIndex];
@@ -3773,39 +4043,6 @@ function getDiagramBounds(nodes: readonly DiagramNode[]): { width: number; heigh
   return {
     height: bounds.maxY - bounds.minY,
     width: bounds.maxX - bounds.minX
-  };
-}
-
-function getNodeGroupBounds(nodes: readonly DiagramNode[]): {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-} | null {
-  if (nodes.length === 0) {
-    return null;
-  }
-
-  const bounds = nodes.reduce(
-    (currentBounds, node) => ({
-      maxX: Math.max(currentBounds.maxX, node.position.x + node.size.width),
-      maxY: Math.max(currentBounds.maxY, node.position.y + node.size.height),
-      minX: Math.min(currentBounds.minX, node.position.x),
-      minY: Math.min(currentBounds.minY, node.position.y)
-    }),
-    {
-      maxX: Number.NEGATIVE_INFINITY,
-      maxY: Number.NEGATIVE_INFINITY,
-      minX: Number.POSITIVE_INFINITY,
-      minY: Number.POSITIVE_INFINITY
-    }
-  );
-
-  return {
-    height: bounds.maxY - bounds.minY,
-    width: bounds.maxX - bounds.minX,
-    x: bounds.minX,
-    y: bounds.minY
   };
 }
 

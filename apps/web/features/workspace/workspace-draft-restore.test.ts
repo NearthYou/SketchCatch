@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DiagramJson } from "@sketchcatch/types";
+import { buildTemplateDiagramJson, type DiagramJson } from "@sketchcatch/types";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 
 const fallbackDiagram: DiagramJson = {
@@ -75,10 +75,12 @@ test("workspace restore removes legacy automatic parameter-reference edges but k
     viewport: { x: 0, y: 0, zoom: 1 }
   };
 
-  assert.deepEqual(restoreSavedDiagram(savedDiagram, fallbackDiagram).edges, [savedDiagram.edges[0]]);
+  assert.deepEqual(restoreSavedDiagram(savedDiagram, fallbackDiagram).edges, [
+    savedDiagram.edges[0]
+  ]);
 });
 
-test("workspace restore sanitizes saved repository-generated ECS frontend diagrams without moving nodes", () => {
+test("workspace restore repairs selected Template semantics without moving saved nodes", () => {
   const savedDiagram: DiagramJson = {
     edges: [
       {
@@ -89,10 +91,18 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
     ],
     nodes: [
       diagramNode("repository-browser", "client", "Browser", "design", 40, 680),
-      diagramNode("repository-managed-services", "design_group", "AWS Managed Services", "design", 260, 40, {
-        width: 1800,
-        height: 400
-      }),
+      diagramNode(
+        "repository-managed-services",
+        "design_group",
+        "AWS Managed Services",
+        "design",
+        260,
+        40,
+        {
+          width: 1800,
+          height: 400
+        }
+      ),
       diagramNode(
         "fixed-template-ecs-fargate-container-app-vpc",
         "aws_vpc",
@@ -109,7 +119,11 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
         "resource",
         360,
         620,
-        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 280 }
+        {
+          parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc",
+          width: 420,
+          height: 280
+        }
       ),
       diagramNode(
         "fixed-template-ecs-fargate-container-app-subnet-b",
@@ -118,7 +132,11 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
         "resource",
         840,
         620,
-        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 280 }
+        {
+          parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc",
+          width: 420,
+          height: 280
+        }
       ),
       diagramNode(
         "repository-private-app-subnet-a",
@@ -127,7 +145,11 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
         "resource",
         360,
         1010,
-        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 300 }
+        {
+          parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc",
+          width: 420,
+          height: 300
+        }
       ),
       diagramNode(
         "repository-private-app-subnet-b",
@@ -136,7 +158,11 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
         "resource",
         840,
         1010,
-        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc", width: 420, height: 300 }
+        {
+          parentAreaNodeId: "fixed-template-ecs-fargate-container-app-vpc",
+          width: 420,
+          height: 300
+        }
       ),
       diagramNode(
         "fixed-template-ecs-fargate-container-app-alb-security-group",
@@ -145,7 +171,11 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
         "resource",
         420,
         680,
-        { parentAreaNodeId: "fixed-template-ecs-fargate-container-app-subnet-a", width: 300, height: 160 }
+        {
+          parentAreaNodeId: "fixed-template-ecs-fargate-container-app-subnet-a",
+          width: 300,
+          height: 160
+        }
       ),
       diagramNode(
         "fixed-template-ecs-fargate-container-app-task-security-group",
@@ -156,15 +186,75 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
         1070,
         { parentAreaNodeId: "repository-private-app-subnet-a", width: 340, height: 180 }
       ),
-      diagramNode("repository-cloudfront", "aws_cloudfront_distribution", "CloudFront", "resource", 340, 140, {
-        parentAreaNodeId: "repository-managed-services"
-      }),
-      diagramNode("repository-web-assets", "aws_s3_bucket", "Static Web Assets", "resource", 580, 140, {
-        parentAreaNodeId: "repository-managed-services"
-      }),
-      diagramNode("repository-ecr", "aws_ecr_repository", "ECR API Image Repository", "resource", 820, 140, {
-        parentAreaNodeId: "repository-managed-services"
-      }),
+      {
+        ...diagramNode(
+          "fixed-template-ecs-fargate-container-app-presentation-region",
+          "design_group",
+          "Wrong Region",
+          "design",
+          20,
+          20,
+          { width: 400, height: 300 }
+        ),
+        style: { borderColor: "#ffffff" }
+      },
+      {
+        ...diagramNode(
+          "fixed-template-ecs-fargate-container-app-presentation-definition-ops-group",
+          "client",
+          "Wrong Definition Group",
+          "design",
+          60,
+          60,
+          { width: 120, height: 80 }
+        ),
+        style: { borderColor: "#ffffff" }
+      },
+      {
+        ...diagramNode(
+          "fixed-template-ecs-fargate-container-app-presentation-global-iam-group",
+          "client",
+          "Wrong IAM Group",
+          "design",
+          80,
+          80,
+          { width: 120, height: 80 }
+        ),
+        style: { borderColor: "#ffffff" }
+      },
+      diagramNode(
+        "repository-cloudfront",
+        "aws_cloudfront_distribution",
+        "CloudFront",
+        "resource",
+        340,
+        140,
+        {
+          parentAreaNodeId: "repository-managed-services"
+        }
+      ),
+      diagramNode(
+        "repository-web-assets",
+        "aws_s3_bucket",
+        "Static Web Assets",
+        "resource",
+        580,
+        140,
+        {
+          parentAreaNodeId: "repository-managed-services"
+        }
+      ),
+      diagramNode(
+        "repository-ecr",
+        "aws_ecr_repository",
+        "ECR API Image Repository",
+        "resource",
+        820,
+        140,
+        {
+          parentAreaNodeId: "repository-managed-services"
+        }
+      ),
       diagramNode(
         "repository-fargate-runtime",
         "aws_ecs_task_definition",
@@ -179,6 +269,12 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
 
   const restoredDiagram = restoreSavedDiagram(savedDiagram, fallbackDiagram);
   const nodeById = new Map(restoredDiagram.nodes.map((node) => [node.id, node]));
+  const savedNodeById = new Map(savedDiagram.nodes.map((node) => [node.id, node]));
+  const authoredDiagram = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "repository-restore",
+    shortId: "layout"
+  });
+  const authoredNodeById = new Map(authoredDiagram.nodes.map((node) => [node.id, node]));
 
   assert.equal(nodeById.has("repository-managed-services"), false);
   assert.equal(nodeById.get("repository-cloudfront")?.metadata?.parentAreaNodeId, undefined);
@@ -198,22 +294,55 @@ test("workspace restore sanitizes saved repository-generated ECS frontend diagra
     ),
     false
   );
+  for (const restoredNode of restoredDiagram.nodes.filter((node) =>
+    node.id.startsWith("fixed-template-ecs-fargate-container-app-")
+  )) {
+    const authoredNodeId = restoredNode.id.replace(
+      "fixed-template-ecs-fargate-container-app-",
+      "template-ecs-fargate-container-app-"
+    );
+    const authoredNode = authoredNodeById.get(authoredNodeId);
+
+    assert.ok(authoredNode, restoredNode.id);
+    const savedNode = savedNodeById.get(restoredNode.id);
+
+    assert.ok(savedNode, restoredNode.id);
+    assert.deepEqual(restoredNode.position, savedNode.position, `${restoredNode.id} position`);
+    assert.deepEqual(restoredNode.size, savedNode.size, `${restoredNode.id} size`);
+  }
   assert.equal(
     nodeById.get("fixed-template-ecs-fargate-container-app-alb-security-group")?.metadata
       ?.parentAreaNodeId,
-    "fixed-template-ecs-fargate-container-app-subnet-a"
+    "fixed-template-ecs-fargate-container-app-vpc"
   );
   assert.equal(
     nodeById.get("fixed-template-ecs-fargate-container-app-task-security-group")?.metadata
       ?.parentAreaNodeId,
-    "repository-private-app-subnet-a"
+    undefined
   );
-  assert.ok(
-    (nodeById.get("fixed-template-ecs-fargate-container-app-vpc")?.position.x ?? 0) <
-      (nodeById.get("repository-web-assets")?.position.x ?? Number.NEGATIVE_INFINITY)
+  const restoredDefinitionOps = nodeById.get(
+    "fixed-template-ecs-fargate-container-app-presentation-definition-ops-group"
   );
+  const restoredGlobalIam = nodeById.get(
+    "fixed-template-ecs-fargate-container-app-presentation-global-iam-group"
+  );
+  const restoredRegion = nodeById.get(
+    "fixed-template-ecs-fargate-container-app-presentation-region"
+  );
+
+  assert.equal(restoredDefinitionOps?.type, "design_group");
+  assert.equal(restoredDefinitionOps?.label, "Wrong Definition Group");
+  assert.deepEqual(restoredDefinitionOps?.style, { borderColor: "#ffffff" });
+  assert.equal(restoredGlobalIam?.type, "design_group");
+  assert.equal(restoredGlobalIam?.label, "Wrong IAM Group");
+  assert.deepEqual(restoredGlobalIam?.style, { borderColor: "#ffffff" });
+  assert.equal(restoredRegion?.type, "aws-region");
+  assert.equal(restoredRegion?.label, "Wrong Region");
+  assert.deepEqual(restoredRegion?.style, { borderColor: "#ffffff" });
   assert.deepEqual(nodeById.get("repository-browser")?.position, { x: 40, y: 680 });
   assert.deepEqual(nodeById.get("repository-cloudfront")?.position, { x: 340, y: 140 });
+  assert.deepEqual(nodeById.get("repository-private-app-subnet-a")?.position, { x: 360, y: 1010 });
+  assert.deepEqual(nodeById.get("repository-private-app-subnet-b")?.position, { x: 840, y: 1010 });
 });
 
 function diagramNode(
