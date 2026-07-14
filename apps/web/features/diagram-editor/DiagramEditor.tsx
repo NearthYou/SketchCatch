@@ -3047,7 +3047,7 @@ function DiagramEditorInner({
           <div className={styles.previewNotice} role="status">
             <span>
               자동 정리 미리보기 · 변경 {compilerPreview.changes.length}개 · 진단{" "}
-              {compilerPreview.diagnostics.length}개
+              {compilerPreview.diagnostics.length}개 · 거리 {compilerPreview.quality.compilationDistance}
             </span>
             <button onClick={applyAutomaticOrganization} type="button">
               적용
