@@ -86,7 +86,7 @@
 
 .authEyebrow {
   margin: 0;
-  color: #777b84;
+  color: #60646c;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.5;
@@ -334,7 +334,7 @@
 
 .authFormActions,
 .authSwitch {
-  color: #777b84;
+  color: #60646c;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -368,7 +368,7 @@
 }
 
 .authHelpText {
-  color: #777b84;
+  color: #60646c;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.55;
@@ -490,8 +490,8 @@
 
 .authLegalEyebrow {
   margin: 0;
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
   font-weight: 700;
 }
 
