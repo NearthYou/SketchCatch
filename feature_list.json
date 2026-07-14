@@ -467,6 +467,30 @@
       "notes": "No Web Push provider call, cloud mutation, GitHub mutation, or production database migration was performed. Sandbox browser delivery evidence remains assigned to issue #378."
     },
     {
+      "id": "PROJECT-DEPLOYMENT-SANDBOX-E2E-001",
+      "priority": 1,
+      "area": "deployment-acceptance",
+      "title": "Project deployment non-production sandbox E2E",
+      "user_visible_behavior": "운영자는 승인된 non-production 환경에서 Direct 3개 scope와 GitOps 4개 runtime, 실제 관측·알림·rollback·cleanup을 하나의 상관관계 검증 report로 확인한다.",
+      "status": "in_progress",
+      "verification": [
+        "preflight가 STS identity를 직접 확인하고 production AWS/API/GitHub target을 거부한다.",
+        "Direct 3개 scope와 GitOps 4개 runtime의 실제 완료 증거가 모두 존재한다.",
+        "commit, CI log hash, release identity, Output URL, QR 요청, CloudWatch, Inbox/Web Push가 서로 연결된다.",
+        "각 GitOps runtime의 의도한 실패가 이전 검증 revision으로 rollback된다.",
+        "Destroy 후 ECR, S3, CodeBuild, CloudWatch 임시 artifact가 남지 않는다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm test:sandbox-e2e",
+          "pnpm sandbox:e2e preflight"
+        ],
+        "notes": "The strict preflight and evidence verifier pass 18 automated tests, including exact deployment matrices, live STS/service-connection agreement, production deny gates, HTTPS-only outputs, credential-safe reporting, no token transmission to denied hosts, GitOps destroy, and provider observation evidence. The current environment has no authenticated non-production AWS identity or non-production SketchCatch API, so the real matrix and cleanup report are not yet accepted."
+      },
+      "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
+    },
+    {
       "id": "AWS-TEMPLATE-LAYOUT-001",
       "priority": 2,
       "area": "template-board",

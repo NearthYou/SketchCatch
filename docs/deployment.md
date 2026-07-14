@@ -224,6 +224,59 @@ sandbox deploy, rollback, artifact cleanup은 공통 승인 게이트가 있는 
 
 Repository settings와 IAM role 변경은 preview JSON으로 PR에 남깁니다. 실제 repository variables/environment 설정과 AWS role trust/policy 변경은 GitHub App 권한 또는 GitHub user OAuth 추가 승인, AWS role diff 승인, secret masking을 통과한 별도 mutation path에서만 수행해야 합니다. OAuth token 원문은 DB/로그/API 응답에 저장하지 않습니다.
 
+## 프로젝트 배포 non-production sandbox E2E
+
+Direct와 GitOps의 실제 인수 검증은 production 계정이나 production SketchCatch/API repository에서 실행하지
+않는다. 실행자는 먼저 아래 환경 변수를 process memory에만 설정하고 preflight를 통과해야 한다.
+
+| 환경 변수 | 의미 |
+| --- | --- |
+| `SKETCHCATCH_SANDBOX_MUTATION_APPROVED=true` | 이번 실행의 cloud/GitHub mutation 승인 |
+| `SKETCHCATCH_SANDBOX_AWS_PROFILE` | STS 조회가 가능한 non-production AWS CLI profile |
+| `SKETCHCATCH_SANDBOX_AWS_ACCOUNT_ID` | 승인 시 확인한 12자리 sandbox account |
+| `SKETCHCATCH_SANDBOX_REGION` | 실행 region |
+| `SKETCHCATCH_SANDBOX_API_BASE_URL` | production이 아닌 HTTPS SketchCatch API |
+| `SKETCHCATCH_SANDBOX_ACCESS_TOKEN` | sandbox 사용자 token. report에 기록하지 않음 |
+| `SKETCHCATCH_SANDBOX_AWS_CONNECTION_ID` | 위 account를 가리키는 verified AWS Connection |
+| `SKETCHCATCH_SANDBOX_GITHUB_REPOSITORY` | production이 아닌 GitOps fixture repository |
+| `SKETCHCATCH_SANDBOX_CLEANUP_OWNER` | destroy와 잔여 artifact를 확인할 사람 |
+| `SKETCHCATCH_SANDBOX_BUDGET_USD` | 실행 전에 승인한 양수 비용 상한 |
+
+`preflight`는 AWS CLI로 STS identity를 직접 읽고 승인 account와 비교한다. 이어 sandbox API의 AWS
+Connection 목록과 `/test`를 호출해 저장된 connection이 현재도 같은 account/region을 AssumeRole할 수 있는지
+재검증한다. production AWS account `555980271919`, `sketchcatch.net`, `NearthYou/SketchCatch`는 기본 deny
+대상이다. token 원문은 출력하지 않는다.
+
+```powershell
+pnpm sandbox:e2e preflight
+```
+
+인수 실행은 같은 `runId` 아래 다음 순서로 진행한다.
+
+1. Direct `infrastructure`, `application`, `full_stack` scope를 각각 `검증 → 승인 → 배포`하고 revision
+   hash, 로그 hash, Output, release identity를 수집한다.
+2. `ecs_fargate`, `lambda`, `ec2_asg`, `static_site` fixture commit을 push하고 감지 SHA, GitHub Actions
+   run/stage/log hash, release version/digest/provider revision, HTTPS Output 응답을 수집한다.
+3. 각 runtime에 의도한 실패 revision을 한 번 배포해 이전 검증 revision 복원과 health 회복을 확인한다.
+4. `full_stack` Output으로 15분 QR 관측을 열고 실제 요청 receipt와 CloudWatch request/error/latency/capacity
+   snapshot을 수집한다. 같은 terminal event가 영속 Inbox와 실제 Web Push provider delivery에 도착했는지
+   확인한다.
+5. Direct 세 deployment를 Destroy하고 GitOps destroy workflow를 완료한 뒤 ECR, S3, CodeBuild,
+   CloudWatch를 provider API로 다시 조회한다. 잔여 임시 리소스가 하나라도 있으면 실패다.
+
+최종 JSON report는 `scripts/smoke/deployment-sandbox-e2e.mjs`의 schema 검증을 통과해야 한다. 검증기는
+Direct 3개 scope와 GitOps 4개 runtime의 정확한 집합, commit/release/Output 정합성, runtime별 rollback,
+실측 관측·알림, Direct Destroy, 네 cleanup 범주의 `remainingCount: 0`, `productionMutation: false`를 모두
+요구한다. credential-bearing URL이나 token 형태가 포함된 report도 실패한다.
+
+```powershell
+pnpm sandbox:e2e verify <sandbox-report.json>
+```
+
+preflight나 최종 검증이 실패하면 issue를 완료하거나 `feature_list.json`을 `passing`으로 바꾸지 않는다.
+실제 실행 후 report에는 비용 범위, cleanup owner, known risk를 남기되 credential, capability, raw log는
+남기지 않는다.
+
 ## Direct Deployment 사용자 단계
 
 사용자에게 노출하는 흐름은 다음 세 단계다.

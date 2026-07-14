@@ -4,12 +4,19 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/377-durable-deployment-notifications` based on merged issue #376 (`0fc9a4ff`).
-- Issues #371-#376 are merged after CI and review feedback resolution.
-- Issue #377 durable deployment Inbox, authenticated SSE, and Web Push is implemented and locally verified.
-- No Web Push provider call, cloud mutation, GitHub mutation, or production database migration was performed.
+- Branch: `test/sw/378-deployment-sandbox-e2e` based on merged issue #377 (`f3ae778a`).
+- Issues #370-#377 are merged after CI and review feedback resolution.
+- Issue #378 has a strict non-production preflight and complete evidence verifier; live acceptance remains blocked by missing sandbox credentials and API.
+- No Web Push provider call, Terraform Apply/Destroy, AWS/GitHub deployment mutation, or production database migration was performed.
 
 ## Session Record
+
+### 2026-07-14 - Project deployment sandbox E2E gate
+
+- Added a fail-closed CLI that compares local AWS STS identity with the approved account and the sandbox API's live verified AWS Connection account/region.
+- Denied production AWS/API/GitHub targets and required explicit mutation approval, cleanup ownership, and a positive budget.
+- Added strict evidence correlation for Direct three-scope and GitOps four-runtime completion, CI/release/Output identity, per-runtime rollback, QR/CloudWatch, Inbox/Web Push, Destroy, and ECR/S3/CodeBuild/CloudWatch cleanup.
+- Verification passed 18 focused tests, lint, typecheck, build, and harness. Current live preflight is blocked because no non-production identity, API token, verified connection, or sandbox repository is configured.
 
 ### 2026-07-14 - Durable deployment Inbox, SSE, and Web Push
 

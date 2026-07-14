@@ -4,30 +4,29 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch: `feature/sw/377-durable-deployment-notifications`; issue #377 is implemented and locally verified.
-- Direct and GitOps terminal events atomically create one persistent Inbox notification and one outbox row per source/status.
-- Authenticated SSE and explicit-permission Service Worker Web Push use the same notification ID and safe project action path.
-- Subscription endpoints and keys are encrypted; outbound Push DNS is pinned only after all resolved addresses pass the public-address guard.
+- Branch: `test/sw/378-deployment-sandbox-e2e`; issues #370-#377 are merged.
+- The #378 preflight verifies local STS and the sandbox API's live AWS Connection account/region, while denying known production targets.
+- The evidence verifier requires Direct 3 scopes, GitOps 4 runtimes, correlated release/Output evidence, per-runtime rollback, live observation/notifications, and zero remaining temporary artifacts.
 
 ## Verification
 
-- Notification-focused API/Web tests passed, including encryption, ownership, permission fallback, expiry, retry, retention, and safe Push routing.
-- PostgreSQL 16 applied migrations 0000-0041 and passed Direct/GitOps trigger idempotency and duplicate-source assertions.
-- Migration compatibility, Terraform tests, harness, lint, typecheck, and build passed on 2026-07-14.
-- Full Web and other workspace tests passed; API passed 1,525/1,528 with only three unchanged Windows symlink fixture setup errors (`EPERM`).
+- `pnpm test:sandbox-e2e` passes 18/18.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `pnpm harness:check` pass.
+- Baseline workspace tests pass except the three unchanged Windows symlink fixture setup errors (`EPERM`): API 1,529/1,532.
 
 ## Changes This Session
 
-- Added durable notification schema/migration, shared contracts, service/repository/outbox job, authenticated routes, Web Push encryption and delivery, global Inbox UI, service worker, and tests.
-- Removed workspace polling/sessionStorage notification state and documented production Web Push secret injection.
+- Added `scripts/smoke/deployment-sandbox-e2e.mjs` plus focused tests and package commands.
+- Documented the approved non-production execution matrix and cleanup gate in `docs/deployment.md`.
+- Added the active #378 workstream to `feature_list.json`.
 
 ## Broken Or Unverified
 
-- Three unrelated filesystem security tests require Windows symlink privileges unavailable on this machine.
-- Browser Push provider delivery and the approved sandbox journey remain unverified until issue #378.
-- No Web Push provider call, Terraform Apply/Destroy, AWS/GitHub mutation, or production database migration was performed.
+- The current preflight has no authenticated non-production AWS profile, non-production API/token, verified AWS Connection, or sandbox GitHub repository.
+- The configured AWS profiles identify only production account `555980271919` and are not eligible for mutation.
+- No live Direct/GitOps run, browser Push delivery, rollback injection, or provider cleanup evidence exists yet.
 
 ## Best Next Action
 
-- Complete issue #377 PR review and merge to `dev`.
-- Continue issue #378 only with explicit approved sandbox credentials, rollback targets, and cleanup evidence.
+- Configure the documented `SKETCHCATCH_SANDBOX_*` environment variables and rerun `pnpm sandbox:e2e preflight`.
+- After it reports `ready: true`, execute the seven-run matrix, rollback drills, observation/notification checks, and cleanup; then verify the final report.
