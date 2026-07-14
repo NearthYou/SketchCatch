@@ -19,6 +19,8 @@ import type {
   ArchitectureJson,
   ConfirmedBuildConfig,
   DeploymentScope,
+  DeploymentNotificationSource,
+  DeploymentNotificationStatus,
   DeploymentSource,
   DeploymentLiveObservationManifestV2,
   DeploymentLiveProfile,
@@ -959,6 +961,105 @@ export const applicationReleases = pgTable(
   ]
 );
 
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    idempotencyKey: varchar("idempotency_key", { length: 160 }).notNull(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    source: varchar("source", { length: 32 })
+      .$type<DeploymentNotificationSource>()
+      .notNull(),
+    sourceId: varchar("source_id", { length: 64 }).notNull(),
+    status: varchar("status", { length: 16 })
+      .$type<DeploymentNotificationStatus>()
+      .notNull(),
+    title: varchar("title", { length: 120 }).notNull(),
+    body: text("body").notNull(),
+    actionUrl: text("action_url").notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull()
+  },
+  (table) => [
+    uniqueIndex("notifications_idempotency_key_unique").on(table.idempotencyKey),
+    index("notifications_user_created_id_idx").on(
+      table.userId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("notifications_expires_at_idx").on(table.expiresAt),
+    check(
+      "notifications_source_check",
+      sql`${table.source} in ('direct_deployment', 'gitops_pipeline')`
+    ),
+    check(
+      "notifications_status_check",
+      sql`${table.status} in ('succeeded', 'failed', 'cancelled')`
+    ),
+    check("notifications_action_url_check", sql`${table.actionUrl} ~ '^/dashboard/projects/[0-9a-f-]{36}$'`)
+  ]
+);
+
+export const notificationOutbox = pgTable(
+  "notification_outbox",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    notificationId: varchar("notification_id", { length: 36 })
+      .notNull()
+      .references(() => notifications.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 16 })
+      .$type<"pending" | "processing" | "retry" | "delivered" | "dead">()
+      .notNull()
+      .default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    lastErrorCode: varchar("last_error_code", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("notification_outbox_notification_unique").on(table.notificationId),
+    index("notification_outbox_dispatch_idx").on(table.status, table.nextAttemptAt),
+    check(
+      "notification_outbox_status_check",
+      sql`${table.status} in ('pending', 'processing', 'retry', 'delivered', 'dead')`
+    ),
+    check("notification_outbox_attempt_count_check", sql`${table.attemptCount} >= 0`)
+  ]
+);
+
+export const webPushSubscriptions = pgTable(
+  "web_push_subscriptions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    userId: varchar("user_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpointHash: varchar("endpoint_hash", { length: 64 }).notNull(),
+    encryptedPayload: text("encrypted_payload").notNull(),
+    keyVersion: varchar("key_version", { length: 32 }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    failureCount: integer("failure_count").notNull().default(0),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("web_push_subscriptions_endpoint_hash_unique").on(table.endpointHash),
+    index("web_push_subscriptions_user_id_idx").on(table.userId),
+    index("web_push_subscriptions_expires_at_idx").on(table.expiresAt),
+    check("web_push_subscriptions_failure_count_check", sql`${table.failureCount} >= 0`)
+  ]
+);
+
 export const deploymentPlanArtifacts = pgTable(
   "deployment_plan_artifacts",
   {
@@ -1053,7 +1154,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   sourceRepositories: many(sourceRepositories),
   reverseEngineeringScans: many(reverseEngineeringScans),
   deploymentJobs: many(deploymentJobs),
-  gitCicdHandoffs: many(gitCicdHandoffs)
+  gitCicdHandoffs: many(gitCicdHandoffs),
+  notifications: many(notifications),
+  webPushSubscriptions: many(webPushSubscriptions)
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -1096,6 +1199,7 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
   applicationReleases: many(applicationReleases),
+  notifications: many(notifications),
   reverseEngineeringScans: many(reverseEngineeringScans),
   gitCicdHandoffs: many(gitCicdHandoffs),
   gitCicdPipelineRuns: many(gitCicdPipelineRuns)
@@ -1276,6 +1380,32 @@ export const applicationReleasesRelations = relations(applicationReleases, ({ on
   pipelineRun: one(gitCicdPipelineRuns, {
     fields: [applicationReleases.pipelineRunId],
     references: [gitCicdPipelineRuns.id]
+  })
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id]
+  }),
+  project: one(projects, {
+    fields: [notifications.projectId],
+    references: [projects.id]
+  }),
+  outbox: one(notificationOutbox)
+}));
+
+export const notificationOutboxRelations = relations(notificationOutbox, ({ one }) => ({
+  notification: one(notifications, {
+    fields: [notificationOutbox.notificationId],
+    references: [notifications.id]
+  })
+}));
+
+export const webPushSubscriptionsRelations = relations(webPushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [webPushSubscriptions.userId],
+    references: [users.id]
   })
 }));
 

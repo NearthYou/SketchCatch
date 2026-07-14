@@ -4,12 +4,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feature/sw/376-static-gitops-release` based on merged issue #375 (`6ae29952`).
-- Issues #371-#375 are merged after CI and review feedback resolution.
-- Issue #376 Static S3/CloudFront GitOps release and common CI logs is implemented and locally verified.
-- No cloud mutation or production database migration was performed.
+- Branch: `feature/sw/377-durable-deployment-notifications` based on merged issue #376 (`0fc9a4ff`).
+- Issues #371-#376 are merged after CI and review feedback resolution.
+- Issue #377 durable deployment Inbox, authenticated SSE, and Web Push is implemented and locally verified.
+- No Web Push provider call, cloud mutation, GitHub mutation, or production database migration was performed.
 
 ## Session Record
+
+### 2026-07-14 - Durable deployment Inbox, SSE, and Web Push
+
+- Added transaction-bound idempotent notifications/outbox for Direct and GitOps terminal events, persistent per-user read state, authenticated SSE, and 90-day retention.
+- Added AES-256-GCM subscription storage, public-address-pinned outbound Push delivery, bounded retries, expired/permanent subscription disabling, and explicit browser permission/service worker registration.
+- Removed browser-session polling notifications and added a global Inbox that remains available when Push is denied, unsupported, or unavailable.
+- Verification passed: focused API/Web tests, PostgreSQL migrations 0000-0041 and terminal trigger integration, migration compatibility, Terraform tests, lint, typecheck, build, and harness.
+- Full Web and other workspace tests passed. API passed 1,525/1,528; the only failures are the three unchanged Windows symlink fixture setup errors (`EPERM`).
+- Sandbox browser Push delivery remains assigned to issue #378; no external mutation was attempted.
 
 ### 2026-07-14 - Repository-confirmed Static S3/CloudFront GitOps release
 
@@ -81,4 +90,4 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Commit and push issue #376, open the Korean PR, wait five minutes, resolve review and CI feedback, then merge to `dev`.
+- Complete issue #377 PR review and merge, then start issue #378 sandbox E2E only with explicit non-production credentials and cleanup approval.

@@ -230,11 +230,11 @@
 
 완료 기준:
 
-- [ ] terminal event가 idempotent outbox를 거쳐 한 번만 알림을 만든다.
-- [ ] Inbox 읽음 상태가 세션을 넘어 유지된다.
-- [ ] 인증된 SSE와 service worker Web Push가 같은 notification을 전달한다.
-- [ ] subscription endpoint/key가 암호화되고 로그에 남지 않는다.
-- [ ] 권한 거부, 만료 subscription, 재시도, 90일 retention이 테스트된다.
+- [x] terminal event가 idempotent outbox를 거쳐 한 번만 알림을 만든다.
+- [x] Inbox 읽음 상태가 세션을 넘어 유지된다.
+- [x] 인증된 SSE와 service worker Web Push가 같은 notification을 전달한다.
+- [x] subscription endpoint/key가 암호화되고 로그에 남지 않는다.
+- [x] 권한 거부, 만료 subscription, 재시도, 90일 retention이 테스트된다.
 
 ### Issue #378. 프로젝트 배포 운영 샌드박스 E2E
 

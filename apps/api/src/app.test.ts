@@ -64,6 +64,20 @@ test("GET /api/projects requires authentication", async () => {
   await app.close();
 });
 
+test("GET /api/notifications requires authentication", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/api/notifications"
+  });
+
+  assert.equal(response.statusCode, 401);
+  assertErrorResponse(response.json() as ApiErrorResponse, "unauthorized");
+
+  await app.close();
+});
+
 test("POST /api/auth/logout-all requires authentication", async () => {
   const app = buildApp();
 
@@ -239,6 +253,25 @@ test("OPTIONS preflight allows project draft PUT requests", async () => {
   assert.equal(response.headers["access-control-allow-origin"], "http://localhost:3000");
   assert.match(String(response.headers["access-control-allow-methods"]), /PUT/);
   assert.match(String(response.headers["access-control-allow-headers"]), /authorization/);
+
+  await app.close();
+});
+
+test("OPTIONS preflight allows notification read PATCH requests", async () => {
+  const app = buildApp();
+
+  const response = await app.inject({
+    headers: {
+      "access-control-request-headers": "content-type,authorization",
+      "access-control-request-method": "PATCH",
+      origin: "http://localhost:3000"
+    },
+    method: "OPTIONS",
+    url: "/api/notifications/ntf_11111111111111111111111111111111/read"
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.match(String(response.headers["access-control-allow-methods"]), /PATCH/);
 
   await app.close();
 });

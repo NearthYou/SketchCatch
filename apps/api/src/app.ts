@@ -31,6 +31,10 @@ import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-obse
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
 import { registerCostRoutes } from "./routes/costs.js";
 import {
+  registerNotificationRoutes,
+  type NotificationRouteOptions
+} from "./routes/notifications.js";
+import {
   createDelegatingGitCicdHandoffProvider,
   createGitHubGitCicdHandoffProvider
 } from "./git-cicd/git-cicd-handoff-service.js";
@@ -67,9 +71,11 @@ import {
   createLiveObservationV2Runtime,
   type LiveObservationV2Runtime
 } from "./live-observations/live-observation-v2-runtime.js";
+import { createDeploymentNotificationRuntime } from "./notifications/notification-runtime.js";
+import { startNotificationOutboxJob } from "./notifications/notification-outbox-job.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
-const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
+const corsAllowedMethods = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
 const fallbackCorsAllowedHeaders = "content-type,authorization";
 const sensitiveHeaderRedactionPaths = [
   "headers.authorization",
@@ -134,6 +140,10 @@ export type BuildAppOptions = {
   runtimeCache?: RuntimeCache;
   runtimeEnv?: RuntimeEnv;
   liveObservationV2Runtime?: LiveObservationV2Runtime;
+  notificationRoutes?: Pick<
+    NotificationRouteOptions,
+    "createService" | "pushConfig" | "requireUserId"
+  >;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
@@ -191,6 +201,13 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
         runtimeEnv
       })
     : undefined;
+  const notificationRuntime = createDeploymentNotificationRuntime({
+    getDatabaseClient: getAppDatabaseClient,
+    runtimeEnv,
+    onDispatchError: ({ outboxId, code }) => {
+      app.log.warn({ outboxId, code }, "Web Push delivery will be retried");
+    }
+  });
   const githubAppClient = createLazyGitHubAppClient();
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
@@ -200,9 +217,18 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             app.log.error({ error }, "Failed to clean stale refresh tokens");
           }
         });
+  const stopNotificationOutboxJob =
+    process.env.NODE_ENV === "test" || !notificationRuntime.pushEnabled
+      ? undefined
+      : startNotificationOutboxJob(notificationRuntime.createService, {
+          onError: (error) => {
+            app.log.error({ error }, "Notification outbox dispatch failed");
+          }
+        });
 
   app.addHook("onClose", async () => {
     stopRefreshTokenCleanupJob?.();
+    stopNotificationOutboxJob?.();
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -269,6 +295,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
     ...options.projectReleaseLedgerRoutes
+  });
+  app.register(registerNotificationRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    createService:
+      options.notificationRoutes?.createService ?? notificationRuntime.createService,
+    pushConfig: options.notificationRoutes?.pushConfig ?? notificationRuntime.pushConfig,
+    ...(options.notificationRoutes?.requireUserId
+      ? { requireUserId: options.notificationRoutes.requireUserId }
+      : {})
   });
   app.register(registerSourceRepositoryRoutes, {
     prefix: "/api",
