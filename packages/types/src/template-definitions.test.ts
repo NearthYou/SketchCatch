@@ -3,20 +3,40 @@ import { test } from "node:test";
 import {
   buildTemplateDiagramJson,
   createTemplateTerraformResourceNames,
+  REPOSITORY_TEMPLATE_IDS,
   TEMPLATE_IDS,
   templateDefinitions,
+  type RepositoryTemplateId,
+  type TemplateDefinition,
   type TemplateId
 } from "./template-definitions.js";
 
-test("the template registry contains the six deployable AWS patterns", () => {
-  assert.deepEqual(templateDefinitions.map((definition) => definition.id), [...TEMPLATE_IDS]);
-  assert.equal(templateDefinitions.length, 6);
-  assert.ok(templateDefinitions.every((definition) => definition.resources.length > 0));
-  assert.ok(templateDefinitions.every((definition) => definition.relationships.length > 0));
+test("repository template IDs stay a separate six-template subset of gallery IDs", () => {
+  const expectedRepositoryTemplateIds = [
+    "static-web-hosting",
+    "minimal-serverless-api",
+    "full-serverless-web-app",
+    "three-tier-web-app",
+    "ecs-fargate-container-app",
+    "eks-container-app"
+  ] as const;
+  const repositoryTemplateId: RepositoryTemplateId = "static-web-hosting";
+  const galleryTemplateId: TemplateId = repositoryTemplateId;
+
+  assert.deepEqual(REPOSITORY_TEMPLATE_IDS, expectedRepositoryTemplateIds);
+  assert.notStrictEqual(REPOSITORY_TEMPLATE_IDS, TEMPLATE_IDS);
+  assert.ok(REPOSITORY_TEMPLATE_IDS.every((templateId) => TEMPLATE_IDS.includes(templateId)));
+  assert.deepEqual(
+    REPOSITORY_TEMPLATE_IDS.map(
+      (templateId) => templateDefinitions.find((definition) => definition.id === templateId)?.id
+    ),
+    expectedRepositoryTemplateIds
+  );
+  assert.equal(galleryTemplateId, repositoryTemplateId);
 });
 
 test("each template builds a deterministic, connected DiagramJson with short Terraform local names", () => {
-  for (const templateId of TEMPLATE_IDS) {
+  for (const templateId of REPOSITORY_TEMPLATE_IDS) {
     const first = buildTemplateDiagramJson(templateId, {
       projectSlug: "sketchcatch",
       shortId: "test01"
@@ -92,6 +112,118 @@ test("Terraform local names add a deterministic suffix only for normalization co
   assert.equal(first.get("edge_name"), extended.get("edge_name"));
 });
 
+test("duplicate explicit Terraform local names fail deterministically in the same block", () => {
+  const resources = [
+    {
+      id: "second",
+      terraformBlockType: "resource" as const,
+      terraformResourceName: "shared_name",
+      terraformResourceType: "aws_example"
+    },
+    {
+      id: "first",
+      terraformBlockType: "resource" as const,
+      terraformResourceName: "shared_name",
+      terraformResourceType: "aws_example"
+    }
+  ];
+  const expectedError = {
+    name: "Error",
+    message:
+      'Duplicate explicit TemplateDefinition Terraform resource name "shared_name" in resource:aws_example: first, second'
+  };
+
+  assert.throws(() => createTemplateTerraformResourceNames(resources), expectedError);
+  assert.throws(
+    () => createTemplateTerraformResourceNames([...resources].reverse()),
+    expectedError
+  );
+});
+
+test("explicit Terraform local names win collisions while generated fallbacks receive suffixes", () => {
+  const resources = [
+    {
+      id: "authored",
+      terraformBlockType: "resource" as const,
+      terraformResourceName: "edge_name",
+      terraformResourceType: "aws_example"
+    },
+    {
+      id: "edge-name",
+      terraformBlockType: "resource" as const,
+      terraformResourceType: "aws_example"
+    }
+  ];
+  const first = createTemplateTerraformResourceNames(resources);
+  const second = createTemplateTerraformResourceNames([...resources].reverse());
+
+  assert.equal(first.get("authored"), "edge_name");
+  assert.match(first.get("edge-name") ?? "", /^edge_name_[a-z0-9]{6}$/u);
+  assert.equal(first.get("authored"), second.get("authored"));
+  assert.equal(first.get("edge-name"), second.get("edge-name"));
+});
+
+test("a unique explicit Terraform local name remains exact in nodes and resolved references", () => {
+  const explicitTemplate = {
+    id: "explicit-name-contract" as TemplateId,
+    title: "Explicit name contract",
+    description: "Explicit Terraform identity fixture",
+    tags: ["fixture"],
+    providers: ["aws"],
+    resources: [
+      {
+        id: "bucket",
+        label: "Bucket",
+        provider: "aws",
+        terraformBlockType: "resource",
+        terraformResourceType: "aws_s3_bucket",
+        terraformResourceName: "captured_bucket",
+        values: { bucket: "captured-bucket" },
+        position: { x: 0, y: 0 }
+      },
+      {
+        id: "consumer",
+        label: "Consumer",
+        provider: "aws",
+        terraformBlockType: "resource",
+        terraformResourceType: "aws_example",
+        values: {
+          bucketAddress: "@address:bucket",
+          bucketId: "@ref:bucket.id"
+        },
+        position: { x: 80, y: 0 }
+      }
+    ],
+    relationships: [],
+    presentationNodes: [],
+    presentationEdges: [],
+    parameters: []
+  } as unknown as TemplateDefinition;
+  const mutableDefinitions = templateDefinitions as unknown as TemplateDefinition[];
+  mutableDefinitions.push(explicitTemplate);
+
+  try {
+    const diagram = buildTemplateDiagramJson(explicitTemplate.id, {
+      projectSlug: "contract",
+      shortId: "explicit-name"
+    });
+    const bucket = diagram.nodes.find((node) => node.type === "aws_s3_bucket");
+    const consumer = diagram.nodes.find((node) => node.type === "aws_example");
+
+    assert.equal(bucket?.parameters?.resourceName, "captured_bucket");
+    assert.equal(
+      consumer?.parameters?.values.bucketAddress,
+      "aws_s3_bucket.captured_bucket"
+    );
+    assert.equal(
+      consumer?.parameters?.values.bucketId,
+      "aws_s3_bucket.captured_bucket.id"
+    );
+  } finally {
+    mutableDefinitions.splice(mutableDefinitions.indexOf(explicitTemplate), 1);
+  }
+});
+
 test("Terraform local names stay compact after normalization and collision suffixing", () => {
   const longPrefix = "very-long-template-resource-name-that-should-never-leak-into-a-board-address";
   const names = createTemplateTerraformResourceNames([
@@ -118,7 +250,7 @@ test("template labels and AWS-facing names stay separate from Terraform local na
 });
 
 test("all built-in template references resolve through the final Terraform local-name map", () => {
-  for (const templateId of TEMPLATE_IDS) {
+  for (const templateId of REPOSITORY_TEMPLATE_IDS) {
     const diagram = buildTemplateDiagramJson(templateId, {
       projectSlug: "sketchcatch",
       shortId: "test01"
@@ -131,14 +263,14 @@ test("all built-in template references resolve through the final Terraform local
   }
 });
 
-test("template IDs are a closed union for registry lookup", () => {
-  const templateId: TemplateId = "static-web-hosting";
+test("repository template IDs are a closed union for registry lookup", () => {
+  const templateId: RepositoryTemplateId = "static-web-hosting";
   assert.equal(templateDefinitions.find((definition) => definition.id === templateId)?.id, templateId);
 });
 
 test("each template contains the resources required by its deployable default", () => {
   const definitions = new Map(templateDefinitions.map((definition) => [definition.id, definition]));
-  const resourceTypes = (templateId: TemplateId) =>
+  const resourceTypes = (templateId: RepositoryTemplateId) =>
     definitions.get(templateId)?.resources.map((resource) => resource.terraformResourceType) ?? [];
 
   const staticTypes = resourceTypes("static-web-hosting");

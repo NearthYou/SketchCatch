@@ -4,42 +4,28 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Branch `codex/ecs-deployment-speed` contains and has pushed the production ECS deployment optimization.
+- Branch `codex/ecs-deployment-speed` contains the production ECS deployment optimization and latest `origin/dev` at `28c63731`; only harness state files required manual combination.
 - Production run `29333857003` succeeded in 6m09s: API/web build-push 7s/6s, API/web stabilization 3m13s/2m56s, and `/`, `/health`, `/health/db` returned 200.
 - API/web were deployed by immutable digest. Read-only runtime plan `29334381609` reported no infrastructure changes, confirming production already matches the committed ALB/ECS timing values.
-- Direct infrastructure/app live deployment passed with exact commit, ECR digest, ECS task revision, persisted logs/release/history/notifications, CloudWatch metrics, and HTTPS 200 evidence.
-- GitHub Actions ECS deployment passed on run `29324643997` attempt 2 with merge SHA `8ac5cf93495942a6e88265b848168c75e0da1740`, digest `0e9fd2191ae781549b72389d89249c0eb3da9e9156632b137c9724448e043a4c`, and task definition revision 3.
-- GitOps API persistence remains broken: refresh returned stale with no runs and retained the cancelled initial infra run because the successful app run belonged to the later workflow-fix merge.
-- QR remains correctly blocked by the missing custom-domain/ACM/Route53 traffic contract. Web Push provider delivery was not claimed without a browser subscription.
-- Static, Lambda, and EC2/ASG runtimes were not started. Infrastructure reached `DESTROYED`, and all issue-scoped runtime/control-plane resource queries returned zero, including three deleted ECS task definitions.
 
 ## Verification
 
-- Focused tests, generator tests, Terraform tests, infrastructure static checks, smoke preflight, lint, typecheck, build, and harness pass.
+- Focused tests, generated workflow tests, Terraform tests, infrastructure static checks, smoke preflight, lint, typecheck, build, and harness passed before the latest `dev` merge.
 - The full workspace test command timed out after 15 minutes; no changed-path failure was observed, and its temporary untracked Python fixture directory was removed.
-- Focused changed-path tests pass 89/89 and GitOps workflow tests pass 9/9.
-- Workspace lint, typecheck, and build pass after the latest fixes.
-- Run the final harness check after cleanup and documentation updates.
+- Re-run the required checks after the `dev` merge before opening the PR.
 
 ## Changes This Session
 
 - Added parallel ECR-cached Buildx jobs, digest-only ECS releases, stability preflight, rollback evidence, and deployment timing to the production workflow.
 - Reduced API/web Docker contexts and added remote ECR cache to generated user ECS/Fargate CodeBuild workflows.
 - Recorded the actual production comparison and health evidence in `docs/deployment.md`.
-- Added the practice-profile ECS resource subset and least-privilege Direct CodeBuild permissions.
-- Forced Direct and GitOps CodeBuild buildspecs to Bash and corrected GitHub expression string quoting for all four runtime workflows.
-- Executed real Direct and ECS GitOps paths and recorded exact partial-completion blockers.
 
 ## Broken Or Unverified
 
-- Application cleanup failed closed because active GitOps task definition revision 3 did not equal the Direct cleanup manifest's revision 2.
-- GitOps CI log/release persistence, Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
-- Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
+- The 5m30s total stretch target remains unmet by 39 seconds; validation and API stabilization are the measured remaining bottlenecks.
+- No branch-authored DB migration exists.
 
 ## Best Next Action
 
-- Review and merge `codex/ecs-deployment-speed`. No Terraform apply is pending.
-- Treat validation and API stabilization as the next measured bottlenecks if the 5m30s stretch target is still required.
-- Keep the completed cleanup intact and recreate only the resources required by a new approved sandbox run.
-- Repair GitOps run correlation and persist the successful ECS run through the normal API before claiming ECS GitOps complete.
-- Provision separate project targets for Static, Lambda, and EC2/ASG, then rerun the remaining matrix and rollback tests.
+- Complete the merge commit, re-run required checks, open the PR against `dev`, and babysit CI/review until merge-ready.
+- Merge only after required checks and review feedback are clear.

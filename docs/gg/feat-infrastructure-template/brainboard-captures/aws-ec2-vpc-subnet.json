@@ -1,0 +1,220 @@
+{
+  "id": "brainboard-aws-ec2-vpc-subnet",
+  "sourceTemplateId": "9009bff8-8177-4022-ad39-6035ad4acd05",
+  "title": "AWS EC2 instance inside VPC & Subnet",
+  "downloads": 684,
+  "status": "captured",
+  "error": null,
+  "origin": {
+    "platform": "brainboard",
+    "author": "Chafik Belhaoues",
+    "sourceTemplateId": "9009bff8-8177-4022-ad39-6035ad4acd05",
+    "sourceUrl": "https://app.brainboard.co/templates/9009bff8-8177-4022-ad39-6035ad4acd05",
+    "cloneBoardUrl": "https://app.brainboard.co/a/b5d56c37-98c6-473a-8b61-deec27895355/design",
+    "downloads": 684,
+    "capturedAt": "2026-07-14"
+  },
+  "provider": "aws",
+  "viewport": {
+    "viewBox": "-564.9 2328.15 3286.967741935484 1798.7017921146953"
+  },
+  "nodes": [
+    {
+      "height": 925,
+      "onboarding": "design-area-region",
+      "order": 0,
+      "position": {
+        "x": 390,
+        "y": 2790
+      },
+      "resourceType": "region",
+      "sourceNodeId": "411a1488-c6f1-4708-be6c-91844746b580",
+      "title": "US East (N. Virginia)",
+      "transform": "translate(390, 2790), rotate(0 595 462.5)",
+      "width": 1190,
+      "parentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129"
+    },
+    {
+      "height": 780,
+      "onboarding": "design-area-aws_vpc",
+      "order": 1,
+      "position": {
+        "x": 467.5,
+        "y": 2872.5
+      },
+      "resourceType": "aws_vpc",
+      "sourceNodeId": "3704567b-d0d1-49f3-9215-bf83a1df977a",
+      "title": "vpc",
+      "transform": "translate(467.5, 2872.5), rotate(0 525 390)",
+      "width": 1050,
+      "parentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129"
+    },
+    {
+      "height": 655,
+      "onboarding": "design-area-availability_zone",
+      "order": 2,
+      "position": {
+        "x": 540,
+        "y": 2947.5
+      },
+      "resourceType": "availability_zone",
+      "sourceNodeId": "818d32cf-1a97-4f1c-8f60-92faf5dc7c0e",
+      "title": "us-east-1a",
+      "transform": "translate(540, 2947.5), rotate(0 457.5 327.5)",
+      "width": 915,
+      "parentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129"
+    },
+    {
+      "height": 430,
+      "onboarding": "design-area-aws_subnet",
+      "order": 3,
+      "position": {
+        "x": 637.5,
+        "y": 3067.5
+      },
+      "resourceType": "aws_subnet",
+      "sourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129",
+      "title": "snet",
+      "transform": "translate(637.5, 3067.5), rotate(0 360 215)",
+      "width": 720,
+      "parentSourceNodeId": "818d32cf-1a97-4f1c-8f60-92faf5dc7c0e"
+    },
+    {
+      "height": 70,
+      "onboarding": "design-area-text",
+      "order": 4,
+      "position": {
+        "x": 845,
+        "y": 2720
+      },
+      "resourceType": "text",
+      "sourceNodeId": "4a830da1-bf0a-4bfe-8cd4-2c0c595869bf",
+      "title": "",
+      "transform": "translate(845, 2720), rotate(0 157.5 35)",
+      "width": 315,
+      "parentSourceNodeId": null
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_instance",
+      "order": 5,
+      "position": {
+        "x": 781.8345757922517,
+        "y": 3252.5
+      },
+      "resourceType": "aws_instance",
+      "sourceNodeId": "8fbaeef4-cb2d-473e-8885-2b1fb5161e59",
+      "title": "t3a instance",
+      "transform": "translate(781.8345757922517, 3252.5), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129"
+    },
+    {
+      "height": 60,
+      "onboarding": "design-area-aws_network_interface",
+      "order": 6,
+      "position": {
+        "x": 1158.5575473905592,
+        "y": 3252.5
+      },
+      "resourceType": "aws_network_interface",
+      "sourceNodeId": "f6a2e88c-0606-4841-8438-05473a0719d3",
+      "title": "network interface",
+      "transform": "translate(1158.5575473905592, 3252.5), rotate(0 30 30)",
+      "width": 60,
+      "parentSourceNodeId": "8c044337-0d96-4095-b3a4-89d844d1c129"
+    }
+  ],
+  "edges": [
+    {
+      "arrow": {
+        "points": "\n            1153.5575473905592,3277.5\n            1158.5575473905592,3282.5\n            1153.5575473905592,3287.5\n          ",
+        "transform": "rotate(0, 1158.5575473905592, 3282.5)"
+      },
+      "id": "8037a2c1-781d-4bc5-a526-c1dc37dc8a6d",
+      "order": 0,
+      "svgPath": "M841.8345757922517,3282.5 L1158.5575473905592,3282.5",
+      "sourceNodeId": "8fbaeef4-cb2d-473e-8885-2b1fb5161e59",
+      "targetNodeId": "f6a2e88c-0606-4841-8438-05473a0719d3",
+      "sourcePort": "right",
+      "targetPort": "left",
+      "sourcePoint": {
+        "x": 841.8345757922517,
+        "y": 3282.5
+      },
+      "targetPoint": {
+        "x": 1158.5575473905592,
+        "y": 3282.5
+      },
+      "waypoints": [
+        {
+          "x": 841.8345757922517,
+          "y": 3282.5
+        },
+        {
+          "x": 1158.5575473905592,
+          "y": 3282.5
+        }
+      ]
+    }
+  ],
+  "terraform": {
+    "files": [
+      {
+        "fileName": "main.tf",
+        "code": "resource \"aws_network_interface\" \"default\" {\n  tags      = merge(var.tags, {})\n  subnet_id = aws_subnet.snet.id\n}\n\nresource \"aws_subnet\" \"snet\" {\n  vpc_id                  = aws_vpc.vpc.id\n  tags                    = merge(var.tags, {})\n  map_public_ip_on_launch = true\n  cidr_block              = \"172.16.10.0/24\"\n  availability_zone       = \"us-east-1a\"\n}\n\nresource \"aws_instance\" \"vm\" {\n  tags              = merge(var.tags, {})\n  subnet_id         = aws_subnet.snet.id\n  instance_type     = \"t3a.medium\"\n  availability_zone = \"us-east-1a\"\n  ami               = var.ami\n}\n\nresource \"aws_vpc\" \"vpc\" {\n  tags       = merge(var.tags, {})\n  cidr_block = \"172.16.0.0/16\"\n}\n\n",
+        "lineCount": 27,
+        "sha256": "616bc99626ad3a3686f8a9a5033ef4003fdaa7a817ab48ce79e708e42efc50cb",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "backend.tf",
+        "code": "# This architecture uses Brainboard managed storage\n",
+        "lineCount": 2,
+        "sha256": "9bd86a80fa787dddd0ec09ee56ad995ddc8e504826d124a2fa09717444751c31",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "locals.tf",
+        "code": "locals {\n}\n",
+        "lineCount": 3,
+        "sha256": "0b88e8de9a5058ee4a8129450c5c0561b6a0d9306f454517271927ccdcc347f5",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "outputs.tf",
+        "code": "",
+        "lineCount": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "providers.tf",
+        "code": "terraform {\n  required_providers {\n    aws = {\n      version = \"= 5.52.0\"\n    }\n  }\n}\n\nprovider \"aws\" {\n  region = \"us-east-1\"\n}\n",
+        "lineCount": 12,
+        "sha256": "48a1ad8474f71e7904ac0639c3460b7a75ce71df8f5720658e9f012904229dfd",
+        "includeInWorkspace": true
+      },
+      {
+        "fileName": "terraform.tfvars",
+        "code": "# All variables as it would be defined in the .tfvars file.\n\ntags = {\n  archuuid = \"b5d56c37-98c6-473a-8b61-deec27895355\"\n  env      = \"Production\"\n}\n",
+        "lineCount": 7,
+        "sha256": "bc3ae5a7cd3f43185a1d6b71447e83f2eb2e93f194b1e5535a096ed10d7a7a90",
+        "includeInWorkspace": false
+      },
+      {
+        "fileName": "variables.tf",
+        "code": "variable \"ami\" {\n  type    = string\n  default = \"ami-06dd4c7a255f8cd49\"\n}\n\nvariable \"tags\" {\n  description = \"Default tags to apply to all resources.\"\n  type        = map(any)\n  default = {\n    archuuid = \"9009bff8-8177-4022-ad39-6035ad4acd05\"\n    env      = \"Security\"\n  }\n}\n\n",
+        "lineCount": 15,
+        "sha256": "464c7bcc57701fe328aeb57f495668ed23eaaec7c2d2918401f6bd7253f6d16a",
+        "includeInWorkspace": true
+      }
+    ],
+    "resourceAddresses": [
+      "aws_network_interface.default",
+      "aws_subnet.snet",
+      "aws_instance.vm",
+      "aws_vpc.vpc"
+    ]
+  }
+}

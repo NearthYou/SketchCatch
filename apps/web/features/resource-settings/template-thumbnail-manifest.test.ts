@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { TEMPLATE_IDS } from "../../../../packages/types/src";
 
 import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../../components/architecture-board/board-thumbnail-capture-contract";
-import { listBoardTemplates } from "./template-library";
+import { listRepositoryBoardTemplates } from "./template-library";
 import {
   getTemplateThumbnailAsset,
   TEMPLATE_THUMBNAIL_ASSETS
@@ -27,9 +27,7 @@ test("Template thumbnail manifest covers all six deployable templates with versi
 
 test("every Template manifest entry points to a 1280x720 real WebP board capture", () => {
   for (const asset of Object.values(TEMPLATE_THUMBNAIL_ASSETS)) {
-    const bytes = readFileSync(
-      fileURLToPath(new URL(`../../public${asset.src}`, import.meta.url))
-    );
+    const bytes = readFileSync(fileURLToPath(new URL(`../../public${asset.src}`, import.meta.url)));
 
     assert.ok(bytes.byteLength > 10_000, `${asset.templateId} capture is unexpectedly small`);
     assert.equal(bytes.subarray(0, 4).toString("ascii"), "RIFF");
@@ -42,7 +40,7 @@ test("every Template manifest entry points to a 1280x720 real WebP board capture
 });
 
 test("every real board capture records the exact materialized Template diagram it represents", () => {
-  const templates = listBoardTemplates();
+  const templates = listRepositoryBoardTemplates();
 
   for (const templateId of TEMPLATE_IDS) {
     const template = templates.find((candidate) => candidate.id === templateId);

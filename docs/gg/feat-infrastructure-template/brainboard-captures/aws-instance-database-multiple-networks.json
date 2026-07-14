@@ -1,0 +1,40 @@
+{
+  "id": "brainboard-aws-instance-db-multiple-networks",
+  "sourceTemplateId": "09fd3420-d8f0-409c-a1cc-694dba97443f",
+  "title": "AWS instance and DB with multiple networks",
+  "downloads": 460,
+  "status": "failed",
+  "error": "Brainboard template clone failed: Create architecture returned HTTP 400 and Clone into current architecture left the recovery board unchanged",
+  "attemptedAt": "2026-07-14",
+  "attempts": [
+    {
+      "architectureName": "AWS instance and DB with multiple networks #381 09fd3420",
+      "result": "HTTP 400 ERR_BAD_REQUEST"
+    },
+    {
+      "architectureName": "#381 multi-network 09fd3420",
+      "result": "HTTP 400 ERR_BAD_REQUEST"
+    },
+    {
+      "architectureName": "#381 09fd3420",
+      "project": "Project 1",
+      "environment": "Development",
+      "result": "HTTP 400 ERR_BAD_REQUEST"
+    },
+    {
+      "architectureName": "#381 recovery 09fd3420",
+      "project": "ai-workout-board-production",
+      "environment": "Production",
+      "action": "Clone into current architecture",
+      "result": "No UI response; after a second verified click and 12-second wait the modal remained open, the canvas stayed empty, undo stayed disabled, and main.tf stayed at one blank line"
+    }
+  ],
+  "origin": {
+    "platform": "brainboard",
+    "author": "Chafik Belhaoues",
+    "sourceUrl": "https://app.brainboard.co/templates/09fd3420-d8f0-409c-a1cc-694dba97443f",
+    "previewUrl": "https://s3.us-east-2.amazonaws.com/brainboard-screenshots-prod/architecture/09fd3420-d8f0-409c-a1cc-694dba97443f.webp",
+    "previewWidth": 3840,
+    "previewHeight": 2160
+  }
+}

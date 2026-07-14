@@ -88,30 +88,6 @@
   z-index: 50;
 }
 
-.projectBarBrand {
-  align-items: center;
-  background: transparent;
-  color: var(--workspace-text);
-  display: inline-flex;
-  font-size: 16px;
-  font-weight: 700;
-  gap: 7px;
-  min-width: 0;
-  text-decoration: none;
-}
-
-.projectBarBrand:focus-visible {
-  border-radius: 6px;
-  outline: 2px solid var(--workspace-accent);
-  outline-offset: 4px;
-}
-
-.projectBarLogo {
-  flex: 0 0 auto;
-  object-fit: contain;
-  transform: translateY(-2px);
-}
-
 .projectBarContext {
   align-items: baseline;
   border-left: 1px solid var(--workspace-line);
@@ -1413,6 +1389,12 @@ button.rightRailResizeHandle {
   color: #98a2b5;
 }
 
+.nodeRotationFrame {
+  height: 100%;
+  position: relative;
+  width: 100%;
+}
+
 .nodeShell {
   align-items: center;
   background: var(--board-surface);
@@ -2694,14 +2676,6 @@ button.rightRailResizeHandle {
     gap: 8px;
     grid-template-columns: auto minmax(60px, 1fr) auto;
     padding: 0 8px;
-  }
-
-  .projectBarBrand {
-    gap: 0;
-  }
-
-  .projectBarBrand > span {
-    display: none;
   }
 
   .projectBarContext {

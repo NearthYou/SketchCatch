@@ -58,8 +58,20 @@ Short English-only working log for the current agent context. Older records are 
 - Added strict evidence correlation for Direct three-scope and GitOps four-runtime completion, CI/release/Output identity, per-runtime rollback, QR/CloudWatch, Inbox/Web Push, Destroy, and ECR/S3/CodeBuild/CloudWatch cleanup.
 - Verification passed 18 focused tests, lint, typecheck, build, and harness. Live preflight later passed with the approved sandbox configuration.
 
+### 2026-07-14 - Merge latest dev into the Brainboard AWS Template branch
+
+- Merged `origin/dev` at `e322afd2` into `feature/gg/381-brainboard-aws-templates` before PR completion without dropping either workstream.
+- Preserved the branch's 24 Brainboard source fixtures, source-exact Board geometry, Terraform authority and refresh rules, repository Template ID boundary, Template start flow, Project Board thumbnails, Dashboard card improvements, and Workspace navigation fixes.
+- Preserved dev's Repository AI, deployment/release, Live Observation, notification, authentication, and sandbox E2E updates.
+- Verification passed: `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm migration:compatibility:check`, 114 focused API tests, 1,266 Web tests, 60 Brainboard type/source-contract tests, 37 capture tests, and `git diff --check`.
+- Known environment limit: `pnpm catalog:check` and `pnpm templates:validate` cannot run Terraform because this machine has no Terraform executable (`spawn terraform ENOENT`). No Terraform Apply, Destroy, or AWS mutation was performed.
+- Final build result: `pnpm build` stops before Web compilation because the ignored `apps/web/.codegraph` symlink targets a missing user-local path. Type/API/UI builds started successfully; this is the documented pre-existing local blocker.
+- Applied both PR #393 Workspace Template color-token reviews after merging `origin/dev` at `e322afd2`; harness, lint, typecheck, 14 focused Web tests, and diff checks pass.
+- Next: commit and push, resolve both review threads, wait for CI, and merge PR #393.
+
 ## Next Action
 
-- Review and merge `codex/ecs-deployment-speed`; no production Terraform apply is required for this change set.
+- Open and babysit the `codex/ecs-deployment-speed` PR against `dev`, address CI/review feedback, and merge only after GitHub reports it ready.
+- No production Terraform apply is required for this change set.
 - If pursuing the 5m30s stretch target, profile the 1m28s validation job and 3m13s API service stabilization before changing safety thresholds.
 - Continue issue #378 only on its dedicated branch; do not mix its sandbox matrix work into this release optimization branch.

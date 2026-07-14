@@ -7,15 +7,14 @@ import {
   filterBoardTemplates,
   getBoardTemplateRelationshipCount,
   getBoardTemplateResourceCount,
+  isBoardTemplateAvailable,
   listBoardTemplateTags,
+  type AvailableBoardTemplate,
   type BoardTemplate,
   type BoardTemplateSort
 } from "../../features/resource-settings/template-library";
 import { BoardThumbnailImage } from "../architecture-board/BoardThumbnailImage";
-import {
-  SelectMenu,
-  type SelectMenuOption
-} from "../ui/SelectMenu";
+import { SelectMenu, type SelectMenuOption } from "../ui/SelectMenu";
 import styles from "./TemplateGallery.module.css";
 
 const TEMPLATE_SORT_OPTIONS: readonly SelectMenuOption[] = [
@@ -25,7 +24,7 @@ const TEMPLATE_SORT_OPTIONS: readonly SelectMenuOption[] = [
 ];
 
 export type TemplateGalleryProps = {
-  readonly actionHref?: ((template: BoardTemplate) => string) | undefined;
+  readonly actionHref?: ((template: AvailableBoardTemplate) => string) | undefined;
   readonly actionLabel: string;
   readonly onSelect?: ((templateId: string) => void) | undefined;
   readonly selectedTemplateId?: string | null | undefined;
@@ -103,10 +102,20 @@ export function TemplateGallery({
       ) : (
         <div className={styles.grid}>
           {visibleTemplates.map((template) => {
-            const selected = template.id === selectedTemplateId;
+            const available = isBoardTemplateAvailable(template);
+            const selected = available && template.id === selectedTemplateId;
 
             return (
-              <article className={selected ? styles.cardSelected : styles.card} key={template.id}>
+              <article
+                className={
+                  available
+                    ? selected
+                      ? styles.cardSelected
+                      : styles.card
+                    : styles.cardUnavailable
+                }
+                key={template.id}
+              >
                 <BoardThumbnailImage
                   className={styles.preview}
                   alt={`${template.title} Architecture 미리보기`}
@@ -121,11 +130,11 @@ export function TemplateGallery({
                     <dl>
                       <div>
                         <dt>Resource</dt>
-                        <dd>{getBoardTemplateResourceCount(template)}</dd>
+                        <dd>{available ? getBoardTemplateResourceCount(template) : "—"}</dd>
                       </div>
                       <div>
                         <dt>관계</dt>
-                        <dd>{getBoardTemplateRelationshipCount(template)}</dd>
+                        <dd>{available ? getBoardTemplateRelationshipCount(template) : "—"}</dd>
                       </div>
                     </dl>
                   </div>
@@ -134,7 +143,14 @@ export function TemplateGallery({
                       <span key={templateTag}>{templateTag}</span>
                     ))}
                   </div>
-                  {actionHref ? (
+                  {!available ? (
+                    <div className={styles.unavailableAction}>
+                      <span>{template.unavailableReason}</span>
+                      <button aria-disabled="true" disabled type="button">
+                        미리보기만 제공
+                      </button>
+                    </div>
+                  ) : actionHref ? (
                     <Link className={styles.action} href={actionHref(template)}>
                       {actionLabel}
                       <ArrowRight aria-hidden="true" size={15} />

@@ -6,13 +6,18 @@ import type { WorkspaceStartKind } from "./workspace-start-options";
 export default async function NewWorkspacePage({
   searchParams
 }: {
-  readonly searchParams: Promise<{ readonly mode?: string; readonly templateId?: string }>;
+  readonly searchParams: Promise<{
+    readonly fresh?: string;
+    readonly mode?: string;
+    readonly templateId?: string;
+  }>;
 }) {
   const params = await searchParams;
 
   return (
     <WorkspaceAuthGate>
       <WorkspaceStartClient
+        initialFreshStart={params.fresh === "1"}
         initialStartKind={parseInitialStartKind(params.mode)}
         initialTemplateId={params.templateId}
       />

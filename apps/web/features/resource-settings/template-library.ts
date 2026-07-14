@@ -1,4 +1,11 @@
-import { isTerraformDeployableNode, type DiagramJson } from "../../../../packages/types/src";
+import {
+  adaptBrainboardTemplateSource,
+  brainboardTemplateRegistry,
+  isTerraformDeployableNode,
+  type DiagramJson,
+  type TerraformSyncFileInput
+} from "../../../../packages/types/src";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import {
   buildTemplateDiagramJson,
   templateDefinitions,
@@ -8,16 +15,34 @@ import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { materializeTemplateDiagram } from "./template-resource-materializer";
 import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
+import { getBrainboardTemplateThumbnailAsset } from "./brainboard-template-thumbnail-manifest";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
-export type BoardTemplate = {
+type BoardTemplateMetadata = {
   readonly id: string;
   readonly title: string;
   readonly description: string;
   readonly tags: readonly string[];
-  readonly diagramJson: DiagramJson;
+  readonly sourceUrl?: string | undefined;
   readonly thumbnailSrc?: string | undefined;
+};
+
+export type AvailableBoardTemplate = BoardTemplateMetadata & {
+  readonly availability: "available";
+  readonly diagramJson: DiagramJson;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
+};
+
+export type UnavailableBoardTemplate = BoardTemplateMetadata & {
+  readonly availability: "unavailable";
+  readonly unavailableReason: string;
+};
+
+export type BoardTemplate = AvailableBoardTemplate | UnavailableBoardTemplate;
+
+type RawBoardTemplate = BoardTemplateMetadata & {
+  readonly diagramJson: DiagramJson;
 };
 
 export type TemplateOverwriteBackup = {
@@ -69,7 +94,7 @@ const LIVE_OBSERVATION_BUCKET_POLICY = JSON.stringify({
   Version: "2012-10-17"
 });
 
-const legacyBoardTemplates: readonly BoardTemplate[] = [
+const legacyBoardTemplates: readonly RawBoardTemplate[] = [
   {
     id: "template-static-website",
     title: "S3 정적 웹사이트",
@@ -675,48 +700,98 @@ const legacyBoardTemplates: readonly BoardTemplate[] = [
   }
 ];
 
-const boardTemplates: readonly BoardTemplate[] = templateDefinitions.map((definition) => ({
-  id: definition.id,
-  title: definition.title,
-  description: definition.description,
-  tags: definition.tags,
-  thumbnailSrc: getTemplateThumbnailAsset(definition.id).src,
-  diagramJson: buildTemplateDiagramJson(definition.id, {
-    projectSlug: "sketchcatch",
-    shortId: definition.id
+const repositoryBoardTemplates: readonly AvailableBoardTemplate[] = templateDefinitions.map(
+  (definition) => ({
+    availability: "available",
+    id: definition.id,
+    title: definition.title,
+    description: definition.description,
+    tags: definition.tags,
+    thumbnailSrc: getTemplateThumbnailAsset(definition.id).src,
+    terraformFiles: [],
+    diagramJson: buildTemplateDiagramJson(definition.id, {
+      projectSlug: "sketchcatch",
+      shortId: definition.id
+    })
   })
-}));
+);
+
+const brainboardBoardTemplates: readonly BoardTemplate[] = brainboardTemplateRegistry.map(
+  (entry): BoardTemplate => {
+    const evidence = entry.status === "available" ? entry.source : entry.evidence;
+    const metadata = {
+      description: `Brainboard 원본 · ${evidence.origin.author} · 다운로드 ${evidence.origin.downloads.toLocaleString("en-US")}회`,
+      id: entry.id,
+      sourceUrl: evidence.origin.sourceUrl,
+      tags: ["AWS", "Brainboard"],
+      thumbnailSrc: getBrainboardTemplateThumbnailAsset(entry.id).src,
+      title: evidence.title
+    } as const;
+
+    if (entry.status === "unavailable") {
+      return {
+        ...metadata,
+        availability: "unavailable",
+        unavailableReason: "Brainboard 원본을 안정적으로 가져오지 못해 미리보기만 제공합니다."
+      };
+    }
+
+    const adapted = adaptBrainboardTemplateSource(entry.source);
+    return {
+      ...metadata,
+      availability: "available",
+      diagramJson: adapted.diagramJson,
+      terraformFiles: adapted.terraformFiles
+    };
+  }
+);
+
+const boardTemplates: readonly BoardTemplate[] = [
+  ...repositoryBoardTemplates,
+  ...brainboardBoardTemplates
+];
 
 // 페이지와 보드 모달은 실제 Board 캡처로 검토한 authored geometry를 같은 목록에서 사용한다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
-  return boardTemplates.map((template) => ({
-    ...template,
-    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson), "authored")
-  }));
+  return boardTemplates.map(cloneBoardTemplate);
+}
+
+// 여섯 개 SketchCatch authored Template만 검증하는 기존 배포·레이아웃 계약용 목록입니다.
+export function listRepositoryBoardTemplates(): readonly AvailableBoardTemplate[] {
+  return repositoryBoardTemplates.map(cloneAvailableBoardTemplate);
+}
+
+export function isBoardTemplateAvailable(
+  template: BoardTemplate
+): template is AvailableBoardTemplate {
+  return template.availability === "available";
 }
 
 // Resource kind와 Terraform parameters가 모두 있는 실제 배포 Resource만 셉니다.
 export function getBoardTemplateResourceCount(template: BoardTemplate): number {
+  if (!isBoardTemplateAvailable(template)) return 0;
   return template.diagramJson.nodes.filter(isTerraformDeployableNode).length;
 }
 
 // 양쪽 끝이 배포 Resource인 semantic relationship만 Gallery 숫자에 포함합니다.
 export function getBoardTemplateRelationshipCount(template: BoardTemplate): number {
+  if (!isBoardTemplateAvailable(template)) return 0;
   const deployableNodeIds = new Set(
     template.diagramJson.nodes.filter(isTerraformDeployableNode).map((node) => node.id)
   );
 
   return template.diagramJson.edges.filter(
-    (edge) =>
-      deployableNodeIds.has(edge.sourceNodeId) && deployableNodeIds.has(edge.targetNodeId)
+    (edge) => deployableNodeIds.has(edge.sourceNodeId) && deployableNodeIds.has(edge.targetNodeId)
   ).length;
 }
 
 // Live Observation과 기존 저장 Draft 검증은 배포 Template 카탈로그와 분리된 레거시 fixture를 사용합니다.
-export function listLegacyBoardTemplates(): readonly BoardTemplate[] {
+export function listLegacyBoardTemplates(): readonly AvailableBoardTemplate[] {
   return legacyBoardTemplates.map((template) => ({
     ...template,
-    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson))
+    availability: "available",
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson)),
+    terraformFiles: []
   }));
 }
 
@@ -727,8 +802,16 @@ export function buildBoardTemplateDiagram(
   // New Boards must retain the reviewed layout instead of re-running the generic topology arranger.
   const definitionId = resolveTemplateDefinitionId(templateId);
   const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
-  return definition
-    ? materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input), "authored")
+  if (definition) {
+    return materializeTemplateDiagram(buildTemplateDiagramJson(definition.id, input), "authored");
+  }
+
+  const brainboardTemplate = brainboardBoardTemplates.find(
+    (candidate): candidate is AvailableBoardTemplate =>
+      candidate.id === templateId && candidate.availability === "available"
+  );
+  return brainboardTemplate
+    ? materializeTemplateDiagram(cloneDiagramJson(brainboardTemplate.diagramJson), "authored")
     : undefined;
 }
 
@@ -743,7 +826,7 @@ function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId
   );
 }
 
-// Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.
+// Template 목록에서 이름·설명·태그와 보드에 포함된 Resource identity를 검색합니다.
 export function filterBoardTemplates(
   templates: readonly BoardTemplate[],
   filter: BoardTemplateFilter
@@ -751,7 +834,12 @@ export function filterBoardTemplates(
   const query = filter.query.trim().toLocaleLowerCase("ko-KR");
   const filteredTemplates = templates.filter((template) => {
     const matchesTag = filter.tag === "all" || template.tags.includes(filter.tag);
-    const searchableText = [template.title, template.description, ...template.tags]
+    const searchableText = [
+      template.title,
+      template.description,
+      ...template.tags,
+      ...getBoardTemplateResourceSearchTerms(template)
+    ]
       .join(" ")
       .toLocaleLowerCase("ko-KR");
 
@@ -773,6 +861,29 @@ export function filterBoardTemplates(
   return filteredTemplates;
 }
 
+function getBoardTemplateResourceSearchTerms(template: BoardTemplate): readonly string[] {
+  if (!isBoardTemplateAvailable(template)) return [];
+
+  return template.diagramJson.nodes.flatMap((node) => {
+    const parameters = node.parameters;
+    const resourceDefinition = parameters
+      ? getResourceDefinitionByTerraform(
+          parameters.terraformBlockType ?? "resource",
+          parameters.resourceType
+        )
+      : undefined;
+
+    return [
+      node.label,
+      node.type,
+      parameters?.resourceType,
+      parameters?.resourceName,
+      resourceDefinition?.id,
+      resourceDefinition?.resourceType
+    ].filter((term): term is string => Boolean(term));
+  });
+}
+
 // Template 필터에 보여줄 tag를 중복 없이 이름순으로 만듭니다.
 export function listBoardTemplateTags(templates: readonly BoardTemplate[]): readonly string[] {
   return [...new Set(templates.flatMap((template) => template.tags))].sort((left, right) =>
@@ -790,7 +901,7 @@ export function applyTemplateToDiagramWithBackup({
   readonly currentDiagram: DiagramJson;
   readonly nowIso: string;
   readonly storage: TemplateStorage;
-  readonly template: BoardTemplate;
+  readonly template: AvailableBoardTemplate;
 }): DiagramJson {
   const backups = readTemplateOverwriteBackups(storage);
   const backup: TemplateOverwriteBackup = {
@@ -807,6 +918,23 @@ export function applyTemplateToDiagramWithBackup({
   );
 
   return cloneDiagramJson(template.diagramJson);
+}
+
+function cloneBoardTemplate(template: BoardTemplate): BoardTemplate {
+  if (!isBoardTemplateAvailable(template)) {
+    return { ...template, tags: [...template.tags] };
+  }
+
+  return cloneAvailableBoardTemplate(template);
+}
+
+function cloneAvailableBoardTemplate(template: AvailableBoardTemplate): AvailableBoardTemplate {
+  return {
+    ...template,
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson), "authored"),
+    tags: [...template.tags],
+    terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
+  };
 }
 
 // localStorage에 저장된 템플릿 덮어쓰기 백업을 읽습니다.

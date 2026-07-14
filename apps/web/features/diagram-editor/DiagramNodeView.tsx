@@ -131,7 +131,18 @@ export const DiagramNodeView = memo(function DiagramNodeView(
   const node = data.node;
   const toolbarVisible = !data.isPreview && selected && data.selectedNodeCount === 1;
   const canConnect = !data.isPreview && Boolean(isConnectable) && !node.locked;
-  const canResize = !node.locked && !data.isPreview && !data.isConnectionActive;
+  const canResize =
+    !node.locked &&
+    !data.isPreview &&
+    !data.isConnectionActive &&
+    (node.rotation ?? 0) === 0;
+  const nodeRotationStyle =
+    node.rotation === undefined || node.rotation === 0
+      ? undefined
+      : {
+          transform: `rotate(${node.rotation}deg)`,
+          transformOrigin: "center"
+        };
   const isResourceNode = node.kind === "resource";
   const isArea = isAreaNode(node);
   const isSecurityGroupScope = isSecurityGroupScopeNode(node);
@@ -159,7 +170,7 @@ export const DiagramNodeView = memo(function DiagramNodeView(
 
   useEffect(() => {
     updateNodeInternals(id);
-  }, [id, node.size.height, node.size.width, updateNodeInternals]);
+  }, [id, node.rotation, node.size.height, node.size.width, updateNodeInternals]);
 
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, handlePosition: NodeResizeHandlePosition) => {
@@ -289,174 +300,176 @@ export const DiagramNodeView = memo(function DiagramNodeView(
         </button>
       </NodeToolbar>
 
-      <div
-        className={[
-          styles.nodeShell,
-          selected ? styles.nodeShellSelected : undefined,
-          data.isDimmed ? styles.nodeShellDimmed : undefined,
-          data.isPreview ? styles.nodeShellAiPreview : undefined,
-          data.previewState === "added" ? styles.nodeShellPatchAdded : undefined,
-          data.previewState === "modified" ? styles.nodeShellPatchModified : undefined,
-          data.previewState === "deleted" ? styles.nodeShellPatchDeleted : undefined,
-          data.isAreaDropTarget ? styles.nodeShellAreaDropTarget : undefined,
-          isArea ? styles.nodeShellArea : undefined,
-          isSecurityGroupScope ? styles.nodeShellSecurityGroupScope : undefined,
-          areaDepthClass,
-          !isArea ? (usesIconTileLayout ? styles.nodeShellResource : styles.nodeShellDesign) : undefined,
-          zoomLevel === "far" ? styles.nodeShellZoomFar : undefined,
-          zoomLevel === "medium" ? styles.nodeShellZoomMedium : undefined,
-          node.locked ? styles.nodeShellLocked : undefined
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        style={nodeShellStyle}
-        title={resourceNodeLabel}
-      >
-        {isArea ? (
+      <div className={styles.nodeRotationFrame} style={nodeRotationStyle}>
+        <div
+          className={[
+            styles.nodeShell,
+            selected ? styles.nodeShellSelected : undefined,
+            data.isDimmed ? styles.nodeShellDimmed : undefined,
+            data.isPreview ? styles.nodeShellAiPreview : undefined,
+            data.previewState === "added" ? styles.nodeShellPatchAdded : undefined,
+            data.previewState === "modified" ? styles.nodeShellPatchModified : undefined,
+            data.previewState === "deleted" ? styles.nodeShellPatchDeleted : undefined,
+            data.isAreaDropTarget ? styles.nodeShellAreaDropTarget : undefined,
+            isArea ? styles.nodeShellArea : undefined,
+            isSecurityGroupScope ? styles.nodeShellSecurityGroupScope : undefined,
+            areaDepthClass,
+            !isArea ? (usesIconTileLayout ? styles.nodeShellResource : styles.nodeShellDesign) : undefined,
+            zoomLevel === "far" ? styles.nodeShellZoomFar : undefined,
+            zoomLevel === "medium" ? styles.nodeShellZoomMedium : undefined,
+            node.locked ? styles.nodeShellLocked : undefined
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          style={nodeShellStyle}
+          title={resourceNodeLabel}
+        >
+          {isArea ? (
+            <>
+              {AREA_NODE_HIT_EDGES.map((edgeClassName) => (
+                <div
+                  aria-hidden="true"
+                  className={`${styles.areaNodeHitEdge} ${edgeClassName}`}
+                  key={edgeClassName}
+                />
+              ))}
+              <div className={styles.areaNodeHeader} style={{ color: textColor }}>
+                {areaNodeIconUrl ? (
+                  <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
+                ) : null}
+                <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
+                {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
+              </div>
+            </>
+          ) : usesIconTileLayout ? (
+            <>
+              <div className={styles.resourceNodeIconFrame} data-icon-family={resourcePresentation.icon.family}>
+                {node.iconUrl ? (
+                  <img alt="" className={styles.resourceNodeIcon} draggable={false} src={node.iconUrl} />
+                ) : (
+                  <div className={styles.resourceNodeIconFallback} aria-hidden="true">
+                    <Box size={18} strokeWidth={1.75} />
+                  </div>
+                )}
+              </div>
+              <div className={styles.resourceNodeLabel} style={{ color: textColor }} title={resourceNodeLabel}>
+                {resourceNodeLabel}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={styles.nodeGlyph} aria-hidden="true">
+                {node.iconUrl ? (
+                  <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={node.iconUrl} />
+                ) : (
+                  "D"
+                )}
+              </div>
+              <div className={styles.nodeContent}>
+                <div className={styles.nodeType}>Design</div>
+                <div className={styles.nodeLabel} style={{ color: textColor }}>
+                  {node.label}
+                </div>
+                <div className={styles.nodeSubtitle}>{node.type}</div>
+              </div>
+            </>
+          )}
+          {node.locked ? (
+            <div
+              aria-label={`잠김: ${resourceNodeLabel}`}
+              className={styles.lockBadge}
+              role="img"
+              title={`잠김: ${resourceNodeLabel}`}
+            >
+              <Lock aria-hidden="true" size={12} />
+            </div>
+          ) : null}
+          {stateBadge ? (
+            <div
+              aria-label={`${stateBadge.label}: ${resourceNodeLabel}`}
+              className={`${styles.stateBadge} ${getStateBadgeToneClass(stateBadge.tone)}`}
+              role="img"
+              title={`${stateBadge.label}: ${resourceNodeLabel}`}
+            >
+              {stateBadge.glyph}
+            </div>
+          ) : null}
+        </div>
+
+        {canResize ? (
           <>
-            {AREA_NODE_HIT_EDGES.map((edgeClassName) => (
-              <div
-                aria-hidden="true"
-                className={`${styles.areaNodeHitEdge} ${edgeClassName}`}
-                key={edgeClassName}
+            {RESIZE_HANDLES.map((handle) => (
+              <button
+                aria-label={handle.label}
+                className={[
+                  styles.manualResizeHandle,
+                  isArea ? styles.manualResizeHandleArea : undefined,
+                  handle.isSide ? styles.manualResizeHandleSide : undefined,
+                  handle.className,
+                  "nodrag"
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                key={handle.position}
+                onKeyDown={(event) => handleResizeKeyDown(event, handle.position)}
+                onPointerDown={(event) => handleResizePointerDown(event, handle.position)}
+                tabIndex={selected ? 0 : -1}
+                title={handle.label}
+                type="button"
               />
             ))}
-            <div className={styles.areaNodeHeader} style={{ color: textColor }}>
-              {areaNodeIconUrl ? (
-                <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
-              ) : null}
-              <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
-              {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
-            </div>
           </>
-        ) : usesIconTileLayout ? (
-          <>
-            <div className={styles.resourceNodeIconFrame} data-icon-family={resourcePresentation.icon.family}>
-              {node.iconUrl ? (
-                <img alt="" className={styles.resourceNodeIcon} draggable={false} src={node.iconUrl} />
-              ) : (
-                <div className={styles.resourceNodeIconFallback} aria-hidden="true">
-                  <Box size={18} strokeWidth={1.75} />
-                </div>
-              )}
-            </div>
-            <div className={styles.resourceNodeLabel} style={{ color: textColor }} title={resourceNodeLabel}>
-              {resourceNodeLabel}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className={styles.nodeGlyph} aria-hidden="true">
-              {node.iconUrl ? (
-                <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={node.iconUrl} />
-              ) : (
-                "D"
-              )}
-            </div>
-            <div className={styles.nodeContent}>
-              <div className={styles.nodeType}>Design</div>
-              <div className={styles.nodeLabel} style={{ color: textColor }}>
-                {node.label}
-              </div>
-              <div className={styles.nodeSubtitle}>{node.type}</div>
-            </div>
-          </>
-        )}
-        {node.locked ? (
-          <div
-            aria-label={`잠김: ${resourceNodeLabel}`}
-            className={styles.lockBadge}
-            role="img"
-            title={`잠김: ${resourceNodeLabel}`}
-          >
-            <Lock aria-hidden="true" size={12} />
-          </div>
         ) : null}
-        {stateBadge ? (
-          <div
-            aria-label={`${stateBadge.label}: ${resourceNodeLabel}`}
-            className={`${styles.stateBadge} ${getStateBadgeToneClass(stateBadge.tone)}`}
-            role="img"
-            title={`${stateBadge.label}: ${resourceNodeLabel}`}
-          >
-            {stateBadge.glyph}
-          </div>
-        ) : null}
+
+        {CONNECTION_HANDLES.map((handle) => {
+          const canStartFromHandle = canConnect && !data.isConnectionActive;
+          const canEndAtHandle = data.isValidConnectionTarget;
+
+          return (
+            <Fragment key={handle.id}>
+              <Handle
+                aria-label={`${resourceNodeLabel} ${handle.label} 연결 시작`}
+                className={[
+                  styles.connectionHandle,
+                  styles.connectionHandleSource,
+                  canStartFromHandle ? undefined : styles.connectionHandleInactive
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                id={`source-${handle.id}`}
+                isConnectable={canStartFromHandle}
+                isConnectableEnd={false}
+                isConnectableStart={canStartFromHandle}
+                onKeyDown={handleConnectionHandleKeyDown}
+                position={handle.position}
+                role="button"
+                tabIndex={selected && canStartFromHandle ? 0 : -1}
+                type="source"
+              />
+              <Handle
+                aria-label={`${resourceNodeLabel} ${handle.label} 연결 대상`}
+                className={[
+                  styles.connectionHandle,
+                  styles.connectionHandleTarget,
+                  canEndAtHandle ? styles.connectionHandleActive : styles.connectionHandleInactive
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                id={`target-${handle.id}`}
+                isConnectable={canEndAtHandle}
+                isConnectableEnd={canEndAtHandle}
+                isConnectableStart={false}
+                isValidConnection={() => canEndAtHandle}
+                onKeyDown={handleConnectionHandleKeyDown}
+                position={handle.position}
+                role="button"
+                tabIndex={canEndAtHandle ? 0 : -1}
+                type="target"
+              />
+            </Fragment>
+          );
+        })}
       </div>
-
-      {canResize ? (
-        <>
-          {RESIZE_HANDLES.map((handle) => (
-            <button
-              aria-label={handle.label}
-              className={[
-                styles.manualResizeHandle,
-                isArea ? styles.manualResizeHandleArea : undefined,
-                handle.isSide ? styles.manualResizeHandleSide : undefined,
-                handle.className,
-                "nodrag"
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              key={handle.position}
-              onKeyDown={(event) => handleResizeKeyDown(event, handle.position)}
-              onPointerDown={(event) => handleResizePointerDown(event, handle.position)}
-              tabIndex={selected ? 0 : -1}
-              title={handle.label}
-              type="button"
-            />
-          ))}
-        </>
-      ) : null}
-
-      {CONNECTION_HANDLES.map((handle) => {
-        const canStartFromHandle = canConnect && !data.isConnectionActive;
-        const canEndAtHandle = data.isValidConnectionTarget;
-
-        return (
-          <Fragment key={handle.id}>
-            <Handle
-              aria-label={`${resourceNodeLabel} ${handle.label} 연결 시작`}
-              className={[
-                styles.connectionHandle,
-                styles.connectionHandleSource,
-                canStartFromHandle ? undefined : styles.connectionHandleInactive
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              id={`source-${handle.id}`}
-              isConnectable={canStartFromHandle}
-              isConnectableEnd={false}
-              isConnectableStart={canStartFromHandle}
-              onKeyDown={handleConnectionHandleKeyDown}
-              position={handle.position}
-              role="button"
-              tabIndex={selected && canStartFromHandle ? 0 : -1}
-              type="source"
-            />
-            <Handle
-              aria-label={`${resourceNodeLabel} ${handle.label} 연결 대상`}
-              className={[
-                styles.connectionHandle,
-                styles.connectionHandleTarget,
-                canEndAtHandle ? styles.connectionHandleActive : styles.connectionHandleInactive
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              id={`target-${handle.id}`}
-              isConnectable={canEndAtHandle}
-              isConnectableEnd={canEndAtHandle}
-              isConnectableStart={false}
-              isValidConnection={() => canEndAtHandle}
-              onKeyDown={handleConnectionHandleKeyDown}
-              position={handle.position}
-              role="button"
-              tabIndex={canEndAtHandle ? 0 : -1}
-              type="target"
-            />
-          </Fragment>
-        );
-      })}
     </>
   );
 });

@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DiagramJson, DiagramNode } from "../../../../packages/types/src";
 import { buildTemplateDiagramJson, templateDefinitions } from "../../../../packages/types/src/template-definitions";
+import type {
+  TemplateDefinition,
+  TemplateId
+} from "../../../../packages/types/src/template-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { isRenderableDiagramNode } from "../diagram-editor/diagram-node-visibility";
 import { resourceCatalog } from "./catalog";
@@ -9,7 +13,7 @@ import {
   hydrateCatalogResourceNodes,
   materializeTemplateDiagram
 } from "./template-resource-materializer";
-import { buildBoardTemplateDiagram, listBoardTemplates } from "./template-library";
+import { buildBoardTemplateDiagram, listRepositoryBoardTemplates } from "./template-library";
 
 test("materializeTemplateDiagram gives an S3 template node the catalog icon and resource kind", () => {
   const diagram = materializeTemplateDiagram(createDiagram([createTemplateNode("aws_s3_bucket")]));
@@ -28,6 +32,86 @@ test("materializeTemplateDiagram gives a CloudFront template node the catalog ic
   const catalogItem = requireCatalogItem("aws_cloudfront_distribution");
 
   assert.equal(cloudFront?.iconUrl, catalogItem.iconUrl);
+});
+
+test("source fixtures can materialize disabled schema-less catalog resources", () => {
+  const sourceFixtureOnlyItems = resourceCatalog.filter((item) => !item.enabled);
+
+  assert.equal(sourceFixtureOnlyItems.length, 31);
+
+  for (const item of sourceFixtureOnlyItems) {
+    const diagram = materializeTemplateDiagram(
+      createDiagram([
+        createTemplateNode(item.nodeDefaults.type, {
+          fileName: "main",
+          resourceName: "captured_resource",
+          resourceType: item.nodeDefaults.type,
+          terraformBlockType: item.nodeDefaults.terraformBlockType ?? "resource",
+          values: {}
+        })
+      ])
+    );
+
+    assert.equal(diagram.nodes[0]?.iconUrl, item.iconUrl, item.id);
+    assert.equal(diagram.nodes[0]?.type, item.nodeDefaults.type, item.id);
+  }
+});
+
+test("source-exact materialization preserves unresolved parameterless presentation nodes", () => {
+  const unresolvedNode: DiagramNode = {
+    id: "captured-empty-text",
+    type: "brainboard_text",
+    kind: "design",
+    label: "",
+    locked: false,
+    position: { x: -120.5, y: 44.25 },
+    size: { width: 240, height: 80 },
+    zIndex: 7
+  };
+  const sourceDiagram: DiagramJson = {
+    ...createDiagram([unresolvedNode]),
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -500, y: -300, width: 1400, height: 900 }
+    }
+  };
+
+  const materialized = materializeTemplateDiagram(sourceDiagram);
+
+  assert.deepEqual(materialized.nodes[0], unresolvedNode);
+});
+
+test("source-exact materialization does not invent palette values for workspace-seed resources", () => {
+  const sourceBucket = {
+    ...createTemplateNode("aws_s3_bucket", {
+      fileName: "storage.tf",
+      resourceName: "captured_bucket",
+      resourceType: "aws_s3_bucket",
+      terraformBlockType: "resource",
+      values: {}
+    }),
+    id: "captured-bucket",
+    parameters: {
+      fileName: "storage.tf",
+      resourceName: "captured_bucket",
+      resourceType: "aws_s3_bucket",
+      terraformBlockType: "resource",
+      terraformSourceAuthority: "workspace-seed",
+      values: {}
+    }
+  } as unknown as DiagramNode;
+  const sourceDiagram: DiagramJson = {
+    ...createDiagram([sourceBucket]),
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: 0, y: 0, width: 800, height: 600 }
+    }
+  };
+
+  const materialized = materializeTemplateDiagram(sourceDiagram);
+
+  assert.deepEqual(materialized.nodes[0]?.parameters, sourceBucket.parameters);
+  assert.equal(materialized.nodes[0]?.iconUrl, requireCatalogItem("aws_s3_bucket").iconUrl);
 });
 
 test("materializeTemplateDiagram retains explicit template identity, Terraform values, and oversized VPC area", () => {
@@ -74,6 +158,189 @@ test("materializeTemplateDiagram retains explicit template identity, Terraform v
   });
 });
 
+test("source-exact materialization preserves authored geometry while reusing Catalog presentation", () => {
+  const sourceVpc: DiagramNode = {
+    ...createTemplateNode("aws_vpc", {
+      fileName: "network.tf",
+      resourceName: "captured_vpc",
+      resourceType: "aws_vpc",
+      terraformBlockType: "resource",
+      values: { cidrBlock: "10.99.0.0/16" }
+    }),
+    id: "captured-vpc",
+    label: "Captured VPC",
+    position: { x: -237.5, y: 41.25 },
+    size: { width: 1180, height: 700 },
+    zIndex: -3
+  };
+  const sourceBucket: DiagramNode = {
+    ...createTemplateNode("aws_s3_bucket", {
+      fileName: "storage.tf",
+      resourceName: "captured_bucket",
+      resourceType: "aws_s3_bucket",
+      terraformBlockType: "resource",
+      values: { bucket: "captured-bucket" }
+    }),
+    id: "captured-bucket",
+    metadata: { parentAreaNodeId: sourceVpc.id },
+    position: { x: -81.75, y: 192.5 },
+    rotation: -90,
+    size: { width: 60, height: 60 },
+    zIndex: 27
+  };
+  const sourceClient: DiagramNode = {
+    id: "captured-client",
+    kind: "design",
+    label: "Client",
+    locked: false,
+    metadata: { presentationCatalogItemId: "design-user-client" },
+    position: { x: -412.25, y: 303.75 },
+    rotation: -90,
+    size: { width: 170, height: 60 },
+    type: "sketchcatch_user_client",
+    zIndex: 31
+  };
+  const sourceDiagram: DiagramJson = {
+    ...createDiagram([sourceVpc, sourceBucket, sourceClient]),
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -500, y: -40, width: 1500, height: 900 }
+    }
+  };
+
+  const materialized = materializeTemplateDiagram(sourceDiagram);
+  const vpc = materialized.nodes.find((node) => node.id === sourceVpc.id);
+  const bucket = materialized.nodes.find((node) => node.id === sourceBucket.id);
+  const client = materialized.nodes.find((node) => node.id === sourceClient.id);
+
+  assert.deepEqual(vpc?.position, sourceVpc.position);
+  assert.deepEqual(vpc?.size, sourceVpc.size);
+  assert.equal(vpc?.zIndex, sourceVpc.zIndex);
+  assert.deepEqual(bucket?.position, sourceBucket.position);
+  assert.deepEqual(bucket?.size, sourceBucket.size);
+  assert.equal(bucket?.metadata?.parentAreaNodeId, sourceVpc.id);
+  assert.equal(bucket?.rotation, sourceBucket.rotation);
+  assert.equal(bucket?.zIndex, sourceBucket.zIndex);
+  assert.equal(bucket?.iconUrl, requireCatalogItem("aws_s3_bucket").iconUrl);
+  assert.deepEqual(bucket?.parameters, {
+    ...sourceBucket.parameters,
+    values: {
+      forceDestroy: false,
+      bucket: "captured-bucket"
+    }
+  });
+  assert.deepEqual(client?.position, sourceClient.position);
+  assert.deepEqual(client?.size, sourceClient.size);
+  assert.equal(client?.rotation, sourceClient.rotation);
+  assert.equal(client?.zIndex, sourceClient.zIndex);
+  assert.equal(client?.iconUrl, requireCatalogItemById("design-user-client").iconUrl);
+  assert.equal(client?.parameters, undefined);
+  assert.deepEqual(materialized.presentation, sourceDiagram.presentation);
+});
+
+test("template build carries source-exact identity and geometry without changing legacy fallbacks", () => {
+  const sourceExactTemplate = {
+    id: "source-exact-contract" as TemplateId,
+    title: "Source exact contract",
+    description: "Task 4 contract fixture",
+    tags: ["fixture"],
+    providers: ["aws"],
+    resources: [
+      {
+        id: "captured-vpc",
+        label: "Captured VPC",
+        provider: "aws",
+        terraformBlockType: "resource",
+        terraformResourceType: "aws_vpc",
+        terraformResourceName: "captured_vpc",
+        fileName: "network.tf",
+        values: { cidrBlock: "10.99.0.0/16" },
+        position: { x: -237.5, y: 41.25 },
+        size: { width: 1180, height: 700 },
+        zIndex: -3
+      },
+      {
+        id: "captured-eip",
+        label: "Captured EIP",
+        provider: "aws",
+        terraformBlockType: "resource",
+        terraformResourceType: "aws_eip",
+        terraformResourceName: "captured_eip",
+        fileName: "network.tf",
+        values: { domain: "vpc" },
+        position: { x: -81.75, y: 192.5 },
+        size: { width: 60, height: 60 },
+        parentResourceId: "captured-vpc",
+        zIndex: 27,
+        rotation: -90
+      }
+    ],
+    relationships: [],
+    presentationNodes: [
+      {
+        id: "client",
+        catalogItemId: "design-user-client",
+        label: "Client",
+        position: { x: -412.25, y: 303.75 },
+        size: { width: 170, height: 60 },
+        zIndex: 31,
+        rotation: -90
+      }
+    ],
+    presentationEdges: [],
+    parameters: [],
+    viewport: { x: 17.5, y: -22.25, zoom: 0.73 },
+    presentation: {
+      geometryPolicy: "source-exact",
+      sourceViewBox: { x: -500, y: -40, width: 1500, height: 900 }
+    }
+  } as unknown as TemplateDefinition;
+  const mutableDefinitions = templateDefinitions as unknown as TemplateDefinition[];
+  mutableDefinitions.push(sourceExactTemplate);
+
+  try {
+    const built = buildTemplateDiagramJson(sourceExactTemplate.id, {
+      projectSlug: "contract",
+      shortId: "source-exact"
+    });
+    const vpc = built.nodes.find((node) => node.type === "aws_vpc");
+    const eip = built.nodes.find((node) => node.type === "aws_eip");
+    const client = built.nodes.find((node) => node.type === "design-user-client");
+
+    assert.deepEqual(built.presentation, sourceExactTemplate.presentation);
+    assert.deepEqual(built.viewport, sourceExactTemplate.viewport);
+    assert.deepEqual(vpc?.position, { x: -237.5, y: 41.25 });
+    assert.deepEqual(vpc?.size, { width: 1180, height: 700 });
+    assert.equal(vpc?.parameters?.resourceName, "captured_vpc");
+    assert.equal(vpc?.parameters?.fileName, "network.tf");
+    assert.equal(vpc?.zIndex, -3);
+    assert.deepEqual(eip?.position, { x: -81.75, y: 192.5 });
+    assert.deepEqual(eip?.size, { width: 60, height: 60 });
+    assert.equal(eip?.metadata?.parentAreaNodeId, vpc?.id);
+    assert.equal(eip?.parameters?.resourceName, "captured_eip");
+    assert.equal(eip?.parameters?.fileName, "network.tf");
+    assert.equal(eip?.zIndex, 27);
+    assert.equal(eip?.rotation, -90);
+    assert.deepEqual(client?.position, { x: -412.25, y: 303.75 });
+    assert.deepEqual(client?.size, { width: 170, height: 60 });
+    assert.equal(client?.zIndex, 31);
+    assert.equal(client?.rotation, -90);
+  } finally {
+    mutableDefinitions.splice(mutableDefinitions.indexOf(sourceExactTemplate), 1);
+  }
+
+  const legacy = buildTemplateDiagramJson("static-web-hosting", {
+    projectSlug: "legacy",
+    shortId: "fallback"
+  });
+  const legacyResource = legacy.nodes.find((node) => node.kind === "resource");
+
+  assert.equal(legacy.presentation, undefined);
+  assert.equal(legacyResource?.parameters?.fileName, "main.tf");
+  assert.equal(legacyResource?.zIndex, 1);
+  assert.equal(legacyResource?.rotation, undefined);
+});
+
 test("materializeTemplateDiagram reports the missing Terraform identity for an unknown resource", () => {
   assert.throws(
     () =>
@@ -104,7 +371,7 @@ test("hydrateCatalogResourceNodes retains unknown legacy nodes and adds a catalo
 });
 
 test("template-library entry points return strict catalog-materialized diagrams", () => {
-  const staticBoardTemplate = listBoardTemplates().find(
+  const staticBoardTemplate = listRepositoryBoardTemplates().find(
     (template) => template.id === "static-web-hosting"
   );
   const repositoryTemplate = buildBoardTemplateDiagram("static-web-hosting", {
@@ -123,7 +390,7 @@ test("template-library entry points return strict catalog-materialized diagrams"
 });
 
 test("deployable Template materialization preserves reviewed geometry while draft hydration preserves coordinates", () => {
-  for (const template of listBoardTemplates()) {
+  for (const template of listRepositoryBoardTemplates()) {
     assertCompactContainedAreas(template.diagramJson);
 
     const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
@@ -147,7 +414,7 @@ test("deployable Template materialization preserves reviewed geometry while draf
 });
 
 test("reviewed API, ECS, and Namespace resources become real visual containers", () => {
-  const templates = listBoardTemplates();
+  const templates = listRepositoryBoardTemplates();
   const requiredContainers = [
     ["minimal-serverless-api", "aws_api_gateway_rest_api"],
     ["full-serverless-web-app", "aws_api_gateway_rest_api"],
@@ -166,7 +433,7 @@ test("reviewed API, ECS, and Namespace resources become real visual containers",
 });
 
 test("ASG and EKS control plane materialize as ordinary 48px Resource tiles", () => {
-  const templates = listBoardTemplates();
+  const templates = listRepositoryBoardTemplates();
   const expectedTiles = [
     ["three-tier-web-app", "aws_autoscaling_group"],
     ["eks-container-app", "aws_eks_cluster"]
@@ -185,7 +452,7 @@ test("ASG and EKS control plane materialize as ordinary 48px Resource tiles", ()
 
 test("Template presentation nodes materialize exact Catalog items without Terraform parameters", () => {
   // Design nodes reuse the real panel payload even when Region and AZ normally create resource parameters on drag.
-  for (const template of listBoardTemplates()) {
+  for (const template of listRepositoryBoardTemplates()) {
     const definition = templateDefinitions.find((candidate) => candidate.id === template.id);
 
     assert.ok(definition, `Missing definition for ${template.id}`);

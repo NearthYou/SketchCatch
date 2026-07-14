@@ -9,7 +9,7 @@ import { hydrateCatalogResourceNodes } from "./template-resource-materializer";
 import * as templateLibrary from "./template-library";
 
 test("every reviewed deployable Template has zero unintended sibling collisions", () => {
-  const templates = templateLibrary.listBoardTemplates();
+  const templates = templateLibrary.listRepositoryBoardTemplates();
 
   assert.equal(templates.length, 6);
   for (const template of templates) {
@@ -271,7 +271,7 @@ function straddlesStoredBoundary(area: DiagramNode, marker: DiagramNode): boolea
 }
 
 function getAllMaterializedTemplates() {
-  return templateLibrary.listBoardTemplates();
+  return templateLibrary.listRepositoryBoardTemplates();
 }
 
 function toLogicalHandleId(handleId: string | null | undefined): string | undefined {
