@@ -150,7 +150,7 @@
   color: var(--workspace-muted, #60646c);
 }
 
-.terraformDiagnosticAiButton {
+.architectureFocusButton {
   align-items: center;
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line-strong, #dcdee0);
@@ -167,8 +167,8 @@
   padding: 0 10px;
 }
 
-.terraformDiagnosticAiButton:hover,
-.terraformDiagnosticAiButton:focus-visible {
+.architectureFocusButton:hover,
+.architectureFocusButton:focus-visible {
   background: var(--workspace-surface-muted, #fafafa);
   border-color: var(--workspace-text, #171717);
   outline: none;

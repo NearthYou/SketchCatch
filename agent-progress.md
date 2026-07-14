@@ -16,6 +16,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-15 - Rebuild the Terraform issue AI action
+
+- Removed the Sparkles-based `AI로 해결` JSX and every `.terraformDiagnosticAiButton` rule, separating the Architecture `보드에서 보기` action into its own secondary style.
+- Added a dedicated black `오류 분석` action with a compact AI mark, 8px radius, focus ring, and reduced-motion handling while preserving the Terraform leave-guard data contract.
+- Chrome QA confirmed the 91x32 control opens AI Chat directly on the independent `오류 분석` conversation with no console errors.
+- Verification in an isolated worktree: AI Chat focused tests passed 14/14; lint, typecheck, production build, harness, and diff checks passed. Root tests remain non-green only on three existing three-tier Template contract failures.
+
 ### 2026-07-15 - Rebuild the Terraform agent review action
 
 - Removed the Sparkles-based `Preview 설명` JSX, local component, and `.terraformPreviewButton` rules from the Terraform code toolbar.

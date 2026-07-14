@@ -1,9 +1,10 @@
 import type { TerraformDiagnostic } from "@sketchcatch/types";
-import { AlertCircle, GitBranch, Sparkles } from "lucide-react";
+import { AlertCircle, GitBranch } from "lucide-react";
 import { formatTerraformDiagnosticSeverity } from "./terraform-diagnostic-presentation";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
 import { getTerraformSafeFix } from "./terraform-safe-fixes";
+import { TerraformIssueAnalysisButton } from "./TerraformIssueAnalysisButton";
 import styles from "./TerraformIssuesPanel.module.css";
 
 // Terraform 검증 결과를 위치, 심각도, 수정 가능 여부와 함께 보여줍니다.
@@ -56,15 +57,7 @@ export function TerraformIssuesPanel({
                   {issue.isStale ? <span className={styles.terraformDiagnosticStale}>재검증 필요</span> : null}
                   <span>{getTerraformSafeFix(issue.diagnostic).applicable ? "자동 적용 가능" : "수동 수정 필요"}</span>
                 </div>
-                <button
-                  className={styles.terraformDiagnosticAiButton}
-                  data-terraform-issue-ai-resolution
-                  onClick={() => onResolveWithAi(issue)}
-                  type="button"
-                >
-                  <Sparkles aria-hidden="true" size={14} />
-                  AI로 해결
-                </button>
+                <TerraformIssueAnalysisButton onAnalyze={() => onResolveWithAi(issue)} />
               </li>
             ))}
           </ol>

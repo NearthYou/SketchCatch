@@ -39,7 +39,7 @@ export function ArchitectureIssuesPanel({
               </div>
               <span>{diagnostic.message}</span>
               <button
-                className={styles.terraformDiagnosticAiButton}
+                className={styles.architectureFocusButton}
                 onClick={() => onFocusResource(diagnostic)}
                 type="button"
               >

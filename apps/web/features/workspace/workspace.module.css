@@ -2025,30 +2025,6 @@
   color: #475569;
 }
 
-.terraformDiagnosticAiButton {
-  align-items: center;
-  background: var(--workspace-accent, #000000);
-  border: 1px solid var(--workspace-accent, #000000);
-  border-radius: 6px;
-  color: #ffffff;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 900;
-  justify-content: center;
-  justify-self: start;
-  min-height: 28px;
-  padding: 0 9px;
-}
-
-.terraformDiagnosticAiButton:hover,
-.terraformDiagnosticAiButton:focus-visible {
-  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
-  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
-  outline: none;
-}
-
 .terraformDialogBackdrop {
   align-items: center;
   backdrop-filter: blur(6px);
@@ -5663,8 +5639,7 @@
 .aiPrimaryButton,
 .deploymentPrimaryButton,
 .aiChatSendButton,
-.aiChatSelectionSubmitButton,
-.terraformDiagnosticAiButton {
+.aiChatSelectionSubmitButton {
   background: var(--workspace-accent, #000000);
   border-color: var(--workspace-accent, #000000);
   color: #ffffff;
@@ -5677,9 +5652,7 @@
 .aiChatSendButton:not(:disabled):hover,
 .aiChatSendButton:not(:disabled):focus-visible,
 .aiChatSelectionSubmitButton:hover,
-.aiChatSelectionSubmitButton:focus-visible,
-.terraformDiagnosticAiButton:hover,
-.terraformDiagnosticAiButton:focus-visible {
+.aiChatSelectionSubmitButton:focus-visible {
   background: var(--workspace-accent-active, #1a1a1a);
   border-color: var(--workspace-accent-active, #1a1a1a);
   box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
