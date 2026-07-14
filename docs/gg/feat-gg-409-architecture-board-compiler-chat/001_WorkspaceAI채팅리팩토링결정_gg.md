@@ -86,3 +86,37 @@
 - 처리 중, 오류, 미리보기, 적용 대기 상태가 실제 상태와 일치한다.
 - `Escape` 닫기, focus 이동·복원, keyboard 입력이 동작한다.
 - 관련 테스트, web lint, web typecheck가 통과한다.
+
+## 7. 구현 결과와 검증
+
+2026-07-15 기준으로 이 문서의 AI Chat 범위를 실제 `/workspace`에 연결했다.
+
+- `설계 제안`, `오류 분석`, `에이전트 리뷰`는 message history, 요청 상태, 오류, 승인 대기 상태를 서로 분리한다.
+- 일반 launcher는 프로젝트별 마지막 대화를 복원한다. Terraform Issue와 Preview 요청은 각각 `오류 분석`, `에이전트 리뷰`를 직접 연다.
+- `오류 분석`과 `에이전트 리뷰`는 별도 후속 대화 API가 없으므로 가짜 composer를 표시하지 않는다. 실제 Terraform 진입점의 요청과 결과만 독립 history에 쌓는다.
+- Architecture Draft와 patch는 Board preview만 만들며, `생성` 또는 `적용` 전에는 현재 Board를 바꾸지 않는다.
+- Board revision이나 fingerprint가 달라진 제안은 계속 보여주되 적용 버튼을 막고 최신 기준 재생성만 허용한다.
+- Draft, Terraform 오류 분석, Terraform Preview 리뷰 요청은 대화별 `AbortController`를 사용한다. 처리 중에는 `요청 중지`가 보이며, 중지한 응답은 늦게 도착해도 화면 상태에 반영하지 않는다.
+- 닫았다 열어도 대화, 대화별 입력 상태, preview와 마지막 선택 대화를 유지한다.
+- desktop dock은 `aria-modal`과 focus trap을 사용하지 않아 Board keyboard 이동을 막지 않는다. 768px 이하 full-screen surface만 `aria-modal=true`와 focus 순환을 사용한다.
+- AI launcher와 배포 알림 launcher를 서로 다른 위치에 두고, 열린 mobile AI surface는 배포 알림보다 높은 stacking context를 사용한다.
+
+실제 브라우저 QA 결과:
+
+- `1280 x 800`: dock `396.8 x 736`, Workspace bar 아래 `y=64`, 가로 overflow 없음, `aria-modal` 없음
+- `768 x 800`: `768 x 800` full-screen, 가로 overflow 없음, `aria-modal=true`
+- `375 x 812`: `375 x 812` full-screen, 가로 overflow 없음, mobile focus 순환 확인
+- launcher를 닫으면 `AI 채팅 열기`로 focus가 복원되고, 다시 열면 마지막 `오류 분석` 대화가 선택됨
+- 요청 직후 `처리 중`과 `요청 중지`가 표시되고, 중지 후 `입력 가능`으로 복귀하며 늦은 preview가 나타나지 않음
+- desktop에서 닫기 버튼 앞쪽으로 `Shift+Tab`하면 Board 요소로 이동하고, mobile에서는 마지막 AI Chat 요소로 순환함
+
+집중 자동 검증:
+
+```text
+workspace-ai-chat-conversation.test.ts: 통과
+workspace-ai-chat-status.test.ts: 통과
+workspace-ai-chat-request.test.ts: 통과
+AI Chat 집중 테스트: 13개 통과
+AI Chat 관련 ESLint: 통과
+Web typecheck: 통과
+```
