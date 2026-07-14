@@ -11,12 +11,13 @@ Use this file only for compact continuation context. Write it in English.
 - Project Board capture now clones the React Flow DOM at the browser paint-tree origin at 1280x720, fits every rendered Resource into the frame with an 8% margin, and removes the clone after capture. It does not move or persist the user's Board viewport. A manual save forces capture even if the server revision is unchanged.
 - An existing server Project without a thumbnail waits 600ms after the missing-thumbnail check before its one-time backfill capture, allowing the initial Board fit and layout frames to settle. Manual saves remain immediate.
 - Dashboard thumbnail cards request their image again on a persisted browser `pageshow` event, so returning from a saved Workspace through browser history cannot retain an old object URL. A request-generation guard prevents stale reads from replacing the refreshed image.
+- Dashboard Projects use a two-column desktop gallery. Each Board capture keeps its existing 16:9 image frame instead of a fixed 150px preview height, so the card body begins below the complete visual frame.
 - No database schema, migration, storage adapter, backend route, cloud, deployment, or dependency change was made.
 
 ## Verification
 
 - TDD RED/GREEN: full Board bounds, CSS transform parsing, fitted viewport, and capture-path regressions passed alongside the existing thumbnail tests.
-- Full Web suite passed 1,236/1,236 after the initial-capture settling delay.
+- Full Web suite passed 1,237/1,237 after the Project card layout update.
 - Real local filesystem thumbnail upload and read API flow passed without AWS credentials.
 - Root lint and typecheck passed; lint retains one existing unused `setNow` argument warning in `apps/api/src/live-observations/live-observation-store-contract.ts`.
 - Migration compatibility check and harness check passed.
@@ -35,4 +36,4 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Commit the paint-tree capture fix. Existing Dashboard thumbnails refresh with full-board framing on their next Workspace save, including a same-revision manual save. Restore `apps/web/.codegraph` separately before expecting a successful production Web build.
+- Restore `apps/web/.codegraph` separately before expecting a successful production Web build. Existing Dashboard thumbnails refresh with full-board framing on their next Workspace save, including a same-revision manual save.

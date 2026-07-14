@@ -103,3 +103,10 @@ Short English-only working log for the current agent context. Older records are 
 - Manual saves remain immediate and do not use the backfill delay. Existing thumbnails still skip capture altogether.
 - TDD evidence: the initial-delay regression was RED because capture began immediately after the existence check, then GREEN after the delay. The lifecycle suite passed 10/10 and the full Web suite passed 1,236/1,236; harness and typecheck passed. Root lint retains the existing API `setNow` warning; build remains blocked by the existing missing `apps/web/.codegraph` path.
 - Re-run `pnpm build` after the repository restores `apps/web/.codegraph`; root API test still needs the three Windows-path fixtures made platform-neutral before it can be green on macOS.
+
+### 2026-07-14 - Make Dashboard Board captures readable in Project cards
+
+- Changed the desktop Project gallery from three equal columns to two, giving Board captures sufficient horizontal space to remain legible.
+- Removed the fixed 150px preview height. The existing thumbnail image's 16:9 frame now determines the full preview height, and the Project title and timestamp remain in the following card row rather than visually truncating the capture.
+- TDD evidence: the new layout contract first failed against the three-column and 150px rules, then the focused suite passed 7/7. Browser verification confirmed the two-column Dashboard layout and full 16:9 preview frame above the card body.
+- Full Web tests passed 1,237/1,237; root lint passed with the existing API `setNow` warning and root typecheck passed. Root build remains blocked before Web compilation by the existing missing `apps/web/.codegraph` path.
