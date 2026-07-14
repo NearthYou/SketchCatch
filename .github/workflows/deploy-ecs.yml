@@ -7,6 +7,11 @@ on:
         description: "Image tag to push and deploy. Defaults to the commit SHA."
         required: false
         type: string
+      deploy:
+        description: "Deploy the built images to ECS. Disable to seed and measure the ECR cache only."
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -36,17 +41,28 @@ env:
   SKETCHCATCH_PUBLIC_BASE_URL: ${{ vars.SKETCHCATCH_PUBLIC_BASE_URL }}
 
 jobs:
-  build-and-push:
+  validate:
     runs-on: ubuntu-latest
     environment: production
     outputs:
-      api-image: ${{ steps.images.outputs.api-image }}
-      image-tag: ${{ steps.images.outputs.image-tag }}
-      web-image: ${{ steps.images.outputs.web-image }}
+      image-tag: ${{ steps.release.outputs.image-tag }}
+      started-at: ${{ steps.release.outputs.started-at }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve release metadata
+        id: release
+        shell: bash
+        env:
+          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          {
+            echo "image-tag=${IMAGE_TAG_INPUT:-${GITHUB_SHA}}"
+            echo "started-at=$(date +%s)"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -106,6 +122,19 @@ jobs:
             fi
           done
 
+  build-api:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      elapsed-seconds: ${{ steps.image.outputs.elapsed-seconds }}
+      image: ${{ steps.image.outputs.image }}
+      image-size-bytes: ${{ steps.image.outputs.image-size-bytes }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -116,33 +145,226 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push ECS images
-        id: images
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Start API image timer
+        id: timing
+        shell: bash
+        run: echo "started-at=$(date +%s)" >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push API image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_API_REPOSITORY }}:${{ needs.validate.outputs.image-tag }}
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_API_REPOSITORY }}:buildcache-v1
+          cache-to: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_API_REPOSITORY }}:buildcache-v1,mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
+
+      - name: Record API image evidence
+        id: image
         shell: bash
         env:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image-tag }}
+          STARTED_AT: ${{ steps.timing.outputs.started-at }}
         run: |
           set -euo pipefail
+          image_size_bytes="$(aws ecr describe-images \
+            --repository-name "${ECR_API_REPOSITORY}" \
+            --image-ids imageDigest="${IMAGE_DIGEST}" \
+            --query 'imageDetails[0].imageSizeInBytes' \
+            --output text)"
+          test -n "${image_size_bytes}" && test "${image_size_bytes}" != "None"
+          elapsed_seconds="$(( $(date +%s) - STARTED_AT ))"
+          image="${ECR_REGISTRY}/${ECR_API_REPOSITORY}@${IMAGE_DIGEST}"
+          {
+            echo "elapsed-seconds=${elapsed_seconds}"
+            echo "image=${image}"
+            echo "image-size-bytes=${image_size_bytes}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "### API image"
+            echo "- Tag: ${IMAGE_TAG}"
+            echo "- Digest: ${IMAGE_DIGEST}"
+            echo "- ECR compressed size: ${image_size_bytes} bytes"
+            echo "- Build and push: ${elapsed_seconds} seconds"
+            echo "- Cache: ${ECR_REGISTRY}/${ECR_API_REPOSITORY}:buildcache-v1"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
-          image_tag="${IMAGE_TAG_INPUT:-${GITHUB_SHA}}"
-          api_image="${ECR_REGISTRY}/${ECR_API_REPOSITORY}:${image_tag}"
-          web_image="${ECR_REGISTRY}/${ECR_WEB_REPOSITORY}:${image_tag}"
+  build-web:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      elapsed-seconds: ${{ steps.image.outputs.elapsed-seconds }}
+      image: ${{ steps.image.outputs.image }}
+      image-size-bytes: ${{ steps.image.outputs.image-size-bytes }}
 
-          docker build -f docker/api.Dockerfile -t "${api_image}" .
-          docker build -f docker/web.Dockerfile -t "${web_image}" .
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-          docker push "${api_image}"
-          docker push "${web_image}"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Start web image timer
+        id: timing
+        shell: bash
+        run: echo "started-at=$(date +%s)" >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push web image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_WEB_REPOSITORY }}:${{ needs.validate.outputs.image-tag }}
+          cache-from: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_WEB_REPOSITORY }}:buildcache-v1
+          cache-to: type=registry,ref=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_WEB_REPOSITORY }}:buildcache-v1,mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
+
+      - name: Record web image evidence
+        id: image
+        shell: bash
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_TAG: ${{ needs.validate.outputs.image-tag }}
+          STARTED_AT: ${{ steps.timing.outputs.started-at }}
+        run: |
+          set -euo pipefail
+          image_size_bytes="$(aws ecr describe-images \
+            --repository-name "${ECR_WEB_REPOSITORY}" \
+            --image-ids imageDigest="${IMAGE_DIGEST}" \
+            --query 'imageDetails[0].imageSizeInBytes' \
+            --output text)"
+          test -n "${image_size_bytes}" && test "${image_size_bytes}" != "None"
+          elapsed_seconds="$(( $(date +%s) - STARTED_AT ))"
+          image="${ECR_REGISTRY}/${ECR_WEB_REPOSITORY}@${IMAGE_DIGEST}"
+          {
+            echo "elapsed-seconds=${elapsed_seconds}"
+            echo "image=${image}"
+            echo "image-size-bytes=${image_size_bytes}"
+          } >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Web image"
+            echo "- Tag: ${IMAGE_TAG}"
+            echo "- Digest: ${IMAGE_DIGEST}"
+            echo "- ECR compressed size: ${image_size_bytes} bytes"
+            echo "- Build and push: ${elapsed_seconds} seconds"
+            echo "- Cache: ${ECR_REGISTRY}/${ECR_WEB_REPOSITORY}:buildcache-v1"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  build-summary:
+    needs:
+      - validate
+      - build-api
+      - build-web
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Record parallel image build result
+        shell: bash
+        env:
+          API_BUILD_SECONDS: ${{ needs.build-api.outputs.elapsed-seconds }}
+          API_IMAGE_SIZE_BYTES: ${{ needs.build-api.outputs.image-size-bytes }}
+          WEB_BUILD_SECONDS: ${{ needs.build-web.outputs.elapsed-seconds }}
+          WEB_IMAGE_SIZE_BYTES: ${{ needs.build-web.outputs.image-size-bytes }}
+          WORKFLOW_STARTED_AT: ${{ needs.validate.outputs.started-at }}
+        run: |
+          set -euo pipefail
+          elapsed_seconds="$(( $(date +%s) - WORKFLOW_STARTED_AT ))"
+          {
+            echo "### Parallel image build result"
+            echo "- Validation plus parallel builds: ${elapsed_seconds} seconds"
+            echo "- API: ${API_BUILD_SECONDS} seconds, ${API_IMAGE_SIZE_BYTES} bytes"
+            echo "- Web: ${WEB_BUILD_SECONDS} seconds, ${WEB_IMAGE_SIZE_BYTES} bytes"
+            echo "- ECS deployment requested: ${{ inputs.deploy }}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  production-preflight:
+    needs:
+      - build-api
+      - build-web
+    if: ${{ inputs.deploy }}
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      previous-api-task-definition: ${{ steps.current.outputs.previous-api-task-definition }}
+      previous-web-task-definition: ${{ steps.current.outputs.previous-web-task-definition }}
+      previous-worker-task-definition: ${{ steps.current.outputs.previous-worker-task-definition }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify current ECS services are stable
+        id: current
+        shell: bash
+        run: |
+          set -euo pipefail
+          services_json="$(aws ecs describe-services \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_API_SERVICE_NAME}" "${ECS_WEB_SERVICE_NAME}" \
+            --output json)"
+
+          jq -e \
+            --arg api "${ECS_API_SERVICE_NAME}" \
+            --arg web "${ECS_WEB_SERVICE_NAME}" \
+            '(.failures | length) == 0 and
+             ([.services[].serviceName] | sort) == ([$api, $web] | sort) and
+             all(.services[];
+               .desiredCount == .runningCount and
+               .pendingCount == 0 and
+               ([.deployments[] | select(.status == "PRIMARY" and .rolloutState == "COMPLETED")] | length) == 1
+             )' <<<"${services_json}" > /dev/null
+
+          api_task_definition="$(jq -r --arg name "${ECS_API_SERVICE_NAME}" '.services[] | select(.serviceName == $name) | .taskDefinition' <<<"${services_json}")"
+          web_task_definition="$(jq -r --arg name "${ECS_WEB_SERVICE_NAME}" '.services[] | select(.serviceName == $name) | .taskDefinition' <<<"${services_json}")"
+          worker_task_definition="$(aws ecs describe-task-definition \
+            --task-definition "${ECS_WORKER_TASK_DEFINITION_FAMILY}" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+
+          for task_definition in "${api_task_definition}" "${web_task_definition}" "${worker_task_definition}"; do
+            test -n "${task_definition}" && test "${task_definition}" != "None" && test "${task_definition}" != "null"
+          done
 
           {
-            echo "image-tag=${image_tag}"
-            echo "api-image=${api_image}"
-            echo "web-image=${web_image}"
+            echo "previous-api-task-definition=${api_task_definition}"
+            echo "previous-web-task-definition=${web_task_definition}"
+            echo "previous-worker-task-definition=${worker_task_definition}"
           } >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Production rollback baseline"
+            echo "- API: ${api_task_definition}"
+            echo "- Web: ${web_task_definition}"
+            echo "- Worker: ${worker_task_definition}"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   register-worker:
-    needs: build-and-push
+    needs:
+      - build-api
+      - production-preflight
+    if: ${{ inputs.deploy }}
     runs-on: ubuntu-latest
     environment: production
     outputs:
@@ -171,7 +393,7 @@ jobs:
         with:
           task-definition: .release/ecs-worker-task-definition.json
           container-name: ${{ env.ECS_WORKER_CONTAINER_NAME }}
-          image: ${{ needs.build-and-push.outputs.api-image }}
+          image: ${{ needs.build-api.outputs.image }}
 
       - name: Register worker task definition
         id: register-worker
@@ -181,10 +403,13 @@ jobs:
 
   deploy-api:
     needs:
-      - build-and-push
+      - build-api
       - register-worker
+    if: ${{ inputs.deploy }}
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      elapsed-seconds: ${{ steps.deployment-timing.outputs.elapsed-seconds }}
 
     steps:
       - name: Configure AWS credentials
@@ -245,7 +470,7 @@ jobs:
         with:
           task-definition: .release/ecs-api-task-definition.json
           container-name: ${{ env.ECS_API_CONTAINER_NAME }}
-          image: ${{ needs.build-and-push.outputs.api-image }}
+          image: ${{ needs.build-api.outputs.image }}
           environment-variables: |
             ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}
             GIT_OAUTH_CLIENT_ID=${{ env.GIT_OAUTH_CLIENT_ID }}
@@ -253,6 +478,11 @@ jobs:
             NAVER_OAUTH_CLIENT_ID=${{ env.NAVER_OAUTH_CLIENT_ID }}
             OAUTH_REDIRECT_BASE_URL=${{ env.OAUTH_REDIRECT_BASE_URL }}
             SKETCHCATCH_PUBLIC_BASE_URL=${{ env.SKETCHCATCH_PUBLIC_BASE_URL }}
+
+      - name: Start API deployment timer
+        id: deployment-start
+        shell: bash
+        run: echo "started-at=$(date +%s)" >> "${GITHUB_OUTPUT}"
 
       - name: Deploy API ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -262,10 +492,26 @@ jobs:
           service: ${{ env.ECS_API_SERVICE_NAME }}
           wait-for-service-stability: true
 
+      - name: Record API deployment duration
+        id: deployment-timing
+        shell: bash
+        env:
+          STARTED_AT: ${{ steps.deployment-start.outputs.started-at }}
+        run: |
+          set -euo pipefail
+          elapsed_seconds="$(( $(date +%s) - STARTED_AT ))"
+          echo "elapsed-seconds=${elapsed_seconds}" >> "${GITHUB_OUTPUT}"
+          echo "- ECS stabilization: ${elapsed_seconds} seconds" >> "${GITHUB_STEP_SUMMARY}"
+
   deploy-web:
-    needs: build-and-push
+    needs:
+      - build-web
+      - production-preflight
+    if: ${{ inputs.deploy }}
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      elapsed-seconds: ${{ steps.deployment-timing.outputs.elapsed-seconds }}
 
     steps:
       - name: Configure AWS credentials
@@ -290,7 +536,12 @@ jobs:
         with:
           task-definition: .release/ecs-web-task-definition.json
           container-name: ${{ env.ECS_WEB_CONTAINER_NAME }}
-          image: ${{ needs.build-and-push.outputs.web-image }}
+          image: ${{ needs.build-web.outputs.image }}
+
+      - name: Start web deployment timer
+        id: deployment-start
+        shell: bash
+        run: echo "started-at=$(date +%s)" >> "${GITHUB_OUTPUT}"
 
       - name: Deploy web ECS service
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -300,14 +551,59 @@ jobs:
           service: ${{ env.ECS_WEB_SERVICE_NAME }}
           wait-for-service-stability: true
 
+      - name: Record web deployment duration
+        id: deployment-timing
+        shell: bash
+        env:
+          STARTED_AT: ${{ steps.deployment-start.outputs.started-at }}
+        run: |
+          set -euo pipefail
+          elapsed_seconds="$(( $(date +%s) - STARTED_AT ))"
+          echo "elapsed-seconds=${elapsed_seconds}" >> "${GITHUB_OUTPUT}"
+          echo "- ECS stabilization: ${elapsed_seconds} seconds" >> "${GITHUB_STEP_SUMMARY}"
+
   deployment-summary:
     needs:
-      - build-and-push
+      - validate
+      - build-api
+      - build-web
+      - production-preflight
       - register-worker
       - deploy-api
       - deploy-web
+    if: ${{ always() && inputs.deploy }}
     runs-on: ubuntu-latest
 
     steps:
-      - name: Confirm parallel deployment
-        run: echo "API, web, and worker use image tag ${{ needs.build-and-push.outputs.image-tag }}; both services are stable."
+      - name: Record production deployment result
+        shell: bash
+        env:
+          API_DEPLOY_RESULT: ${{ needs.deploy-api.result }}
+          API_DEPLOY_SECONDS: ${{ needs.deploy-api.outputs.elapsed-seconds }}
+          PREVIOUS_API_TASK_DEFINITION: ${{ needs.production-preflight.outputs.previous-api-task-definition }}
+          PREVIOUS_WEB_TASK_DEFINITION: ${{ needs.production-preflight.outputs.previous-web-task-definition }}
+          PREVIOUS_WORKER_TASK_DEFINITION: ${{ needs.production-preflight.outputs.previous-worker-task-definition }}
+          WEB_DEPLOY_RESULT: ${{ needs.deploy-web.result }}
+          WEB_DEPLOY_SECONDS: ${{ needs.deploy-web.outputs.elapsed-seconds }}
+          WORKER_RESULT: ${{ needs.register-worker.result }}
+          WORKFLOW_STARTED_AT: ${{ needs.validate.outputs.started-at }}
+        run: |
+          set -euo pipefail
+          elapsed_seconds="$(( $(date +%s) - WORKFLOW_STARTED_AT ))"
+          {
+            echo "### Production ECS deployment"
+            echo "- Image tag: ${{ needs.validate.outputs.image-tag }}"
+            echo "- API: ${API_DEPLOY_RESULT}"
+            echo "- API ECS stabilization: ${API_DEPLOY_SECONDS} seconds"
+            echo "- Web: ${WEB_DEPLOY_RESULT}"
+            echo "- Web ECS stabilization: ${WEB_DEPLOY_SECONDS} seconds"
+            echo "- Worker registration: ${WORKER_RESULT}"
+            echo "- Validation through stable services: ${elapsed_seconds} seconds"
+            echo "- Rollback API task definition: ${PREVIOUS_API_TASK_DEFINITION}"
+            echo "- Rollback Web task definition: ${PREVIOUS_WEB_TASK_DEFINITION}"
+            echo "- Rollback Worker task definition: ${PREVIOUS_WORKER_TASK_DEFINITION}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${API_DEPLOY_RESULT}" != "success" ] || [ "${WEB_DEPLOY_RESULT}" != "success" ] || [ "${WORKER_RESULT}" != "success" ]; then
+            exit 1
+          fi

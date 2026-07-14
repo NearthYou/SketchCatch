@@ -159,8 +159,17 @@ test("ECS Fargate automation uses confirmed Docker evidence and immutable releas
   assert.match(appWorkflow, /desired_count >= 0/);
   assert.match(appWorkflow, /curl .*"\$HEALTH_URL"/);
   assert.match(appWorkflow, /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64/);
-  assert.match(buildspec, /docker build/);
-  assert.match(buildspec, /docker push/);
+  assert.match(buildspec, /docker buildx create --use/);
+  assert.match(buildspec, /docker buildx build/);
+  assert.match(buildspec, /--cache-from type=registry,ref="\$SKETCHCATCH_CACHE_URI"/);
+  assert.match(
+    buildspec,
+    /--cache-to type=registry,ref="\$SKETCHCATCH_CACHE_URI",mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true/
+  );
+  assert.match(buildspec, /SKETCHCATCH_CACHE_URI="\$SKETCHCATCH_ECR_URI:sketchcatch-buildcache-v1"/);
+  assert.match(buildspec, /--push/);
+  assert.doesNotMatch(buildspec, /docker push/);
+  assert.doesNotMatch(appWorkflow, /sketchcatch-buildcache-v1/);
   assert.match(buildspec, /imageDigest/);
   assert.equal(settings.variables.SKETCHCATCH_CODEBUILD_PROJECT, "api-build");
   assert.equal(settings.variables.SKETCHCATCH_ECR_REPOSITORY, "api");

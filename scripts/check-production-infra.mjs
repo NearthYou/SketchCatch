@@ -7,6 +7,8 @@ const manifestPath = path.join(repositoryRoot, "infra/aws/production/import-mani
 const workflowPath = path.join(repositoryRoot, ".github/workflows/production-infra-plan.yml");
 const deployWorkflowPath = path.join(repositoryRoot, ".github/workflows/deploy-ecs.yml");
 const migrationWorkflowPath = path.join(repositoryRoot, ".github/workflows/migrate.yml");
+const apiDockerfilePath = path.join(repositoryRoot, "docker/api.Dockerfile");
+const webDockerfilePath = path.join(repositoryRoot, "docker/web.Dockerfile");
 
 const failures = [];
 const check = (condition, message) => {
@@ -270,7 +272,31 @@ for (const marker of [
 
 const deployWorkflow = fs.readFileSync(deployWorkflowPath, "utf8");
 for (const marker of [
+  "deploy:",
+  "type: boolean",
+  "default: true",
+  "validate:",
+  "build-api:",
+  "build-web:",
+  "production-preflight:",
+  "Verify current ECS services are stable",
+  "previous-api-task-definition",
+  "previous-web-task-definition",
+  "previous-worker-task-definition",
   "register-worker:",
+  "docker/setup-buildx-action@v4",
+  "docker/build-push-action@v7",
+  "cache-from:",
+  "cache-to:",
+  "buildcache-v1",
+  "image: ${{ needs.build-api.outputs.image }}",
+  "image: ${{ needs.build-web.outputs.image }}",
+  "@${IMAGE_DIGEST}",
+  "if: ${{ inputs.deploy }}",
+  "API_DEPLOY_SECONDS",
+  "WEB_DEPLOY_SECONDS",
+  "imageSizeInBytes",
+  "GITHUB_STEP_SUMMARY",
   "ECS_WORKER_TASK_DEFINITION_FAMILY",
   "ECS_WORKER_CONTAINER_NAME",
   "Register worker task definition",
@@ -283,6 +309,35 @@ for (const marker of [
   "SKETCHCATCH_PUBLIC_BASE_URL=${{ env.SKETCHCATCH_PUBLIC_BASE_URL }}"
 ]) {
   check(deployWorkflow.includes(marker), `ECS deploy workflow is missing ${marker}`);
+}
+check(
+  !/\bdocker\s+(?:build|push)\b/.test(deployWorkflow),
+  "ECS deploy workflow must use Buildx action instead of sequential docker build/push commands"
+);
+
+for (const dockerfilePath of [apiDockerfilePath, webDockerfilePath]) {
+  const dockerfile = fs.readFileSync(dockerfilePath, "utf8");
+  const installIndex = dockerfile.indexOf("RUN pnpm install --frozen-lockfile");
+  const sourceCopyIndex = dockerfile.indexOf("COPY . .");
+  for (const manifest of [
+    "COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./",
+    "COPY apps/api/package.json ./apps/api/package.json",
+    "COPY apps/web/package.json ./apps/web/package.json",
+    "COPY packages/config/package.json ./packages/config/package.json",
+    "COPY packages/types/package.json ./packages/types/package.json",
+    "COPY packages/ui/package.json ./packages/ui/package.json"
+  ]) {
+    check(dockerfile.includes(manifest), `${path.basename(dockerfilePath)} is missing ${manifest}`);
+  }
+  check(
+    installIndex >= 0 && sourceCopyIndex > installIndex,
+    `${path.basename(dockerfilePath)} must install dependencies before copying source files`
+  );
+}
+
+const dockerIgnore = read(".dockerignore");
+for (const marker of ["**/.terraform", "coverage", ".local-data", "*.tsbuildinfo"]) {
+  check(dockerIgnore.includes(marker), `.dockerignore is missing ${marker}`);
 }
 
 const runtimeLocals = read("infra/aws/terraform/locals.tf");
