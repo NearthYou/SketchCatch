@@ -3,7 +3,7 @@
   "compilerVersion": "architecture-board-compiler/v3",
   "summary": {
     "availableTemplateCount": 29,
-    "totalChangeCount": 2573,
+    "totalChangeCount": 2584,
     "diagnosticCount": 183,
     "changesByKind": {
       "resource": 0,
@@ -11,7 +11,7 @@
       "configuration": 0,
       "containment": 419,
       "presentation": 576,
-      "geometry": 1271,
+      "geometry": 1282,
       "edge-routing": 307
     },
     "diagnosticsByLevel": {
@@ -20,8 +20,8 @@
       "info": 50
     },
     "meanBeforeScore": 17871397946.113186,
-    "meanAfterScore": 530393190.985901,
-    "meanScoreDelta": -17341004755.12729,
+    "meanAfterScore": 509930999.428734,
+    "meanScoreDelta": -17361466946.684456,
     "visualAnomalies": {
       "before": {
         "nodeOverlapCount": 443,
@@ -37,9 +37,9 @@
         "nodeOverlapCount": 1,
         "siblingAreaOverlapCount": 6,
         "parentBoundaryViolationCount": 1,
-        "edgeCrossingCount": 89,
+        "edgeCrossingCount": 80,
         "edgeNodeIntersectionCount": 5,
-        "edgeAreaTitleIntersectionCount": 30,
+        "edgeAreaTitleIntersectionCount": 28,
         "backwardEdgeCount": 4,
         "supportLaneIntrusionCount": 4
       }
@@ -51,7 +51,11 @@
       "title": "AWS ASG and LB with VPC & subnets",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:support-above",
+      "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-asg-lb-vpc-subnets:support-above",
+      "diagramFingerprints": {
+        "source": "sha256:410215492658a727a9907a3514a2fd8392731c0186b5d6403375a3eb473837ac",
+        "compiled": "sha256:3643532344100446f220847ce7804d7dfe1a8f7c9617d67c166118913ea1d19e"
+      },
       "changes": {
         "total": 90,
         "byKind": {
@@ -141,24 +145,24 @@
           }
         },
         "after": {
-          "score": 212725025.61005,
-          "visualPenalty": 212724226.22105,
+          "score": 212648063.772755,
+          "visualPenalty": 212647264.855755,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 4238679.81089,
-            "canvasAspectRatioPenalty": 0.487598,
+            "canvasArea": 4225393.730322,
+            "canvasAspectRatioPenalty": 0.472449,
             "compilationDistance": 500,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 3,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.994564,
+            "emptySpaceRatio": 0.994547,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 261.009,
-            "knowledgePenalty": 299.389,
+            "knowledgePenalty": 298.917,
             "knowledgeReferenceSimilarity": 0.826,
             "knowledgeSiblingGap": 70,
             "knowledgeViewportAspectRatio": 1.241,
@@ -166,16 +170,16 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 212724226.22105,
+            "score": 212647264.855755,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 8279.198716
+            "totalEdgeLength": 8221.814716
           }
         },
         "compilationDistance": 500,
-        "scoreDelta": -17717359434.159367
+        "scoreDelta": -17717436395.996662
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -188,7 +192,11 @@
       "title": "AWS Bastion",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:split-support",
+      "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-bastion:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:f6b1571128e897c1dc04565fb66cce786eca990dcd2c7e3d9177b1656dbe3f38",
+        "compiled": "sha256:57e1f41d3650a5d4c6e74d5a94991cc99d2500ec11f77bef2f37475c76edb48f"
+      },
       "changes": {
         "total": 76,
         "byKind": {
@@ -284,8 +292,8 @@
           }
         },
         "after": {
-          "score": 159136.459345,
-          "visualPenalty": 158589.496345,
+          "score": 154629.826345,
+          "visualPenalty": 154084.496345,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
@@ -301,24 +309,24 @@
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 191.519,
-            "knowledgePenalty": 114.963,
-            "knowledgeReferenceSimilarity": 0.712,
+            "knowledgePenalty": 113.33,
+            "knowledgeReferenceSimilarity": 0.678,
             "knowledgeSiblingGap": 77.5,
             "knowledgeViewportAspectRatio": 1.877,
             "mainFlowContinuityError": 0,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 158589.496345,
+            "score": 154084.496345,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 2960
+            "totalEdgeLength": 2734.75
           }
         },
         "compilationDistance": 432,
-        "scoreDelta": -19959876924.915653
+        "scoreDelta": -19959881431.548656
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-bastion",
@@ -332,6 +340,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:46eb8d299a7d51bbca67dfc9d4215ee58fd8185f852439022818c6a74176b671",
+        "compiled": "sha256:c57c5f9cdb6c216be685ed8c0a4a1781914ea8e9b0041c820503fe0ee6417773"
+      },
       "changes": {
         "total": 22,
         "byKind": {
@@ -453,8 +465,8 @@
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-costs-monitoring",
-        "brainboard:brainboard-aws-ec2-vpc-subnet",
-        "brainboard:brainboard-aws-iam-users"
+        "brainboard:brainboard-aws-iam-users",
+        "brainboard:brainboard-cross-account-aws-s3"
       ]
     },
     {
@@ -463,6 +475,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:1b0ed9cc405a73d266502335cee73734c3e8071a577a9e7ed6a8c7c1137a6303",
+        "compiled": "sha256:6f6148ec902e57e2449509ab02595254c65651c6f02b48cb0ee08280c7911e6e"
+      },
       "changes": {
         "total": 88,
         "byKind": {
@@ -606,6 +622,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:aa794ff574f10c22311c0e95a81445face754f396ec0accf8f9d52125e979cea",
+        "compiled": "sha256:09b26ddf720f58532410e00e90774633c21201e2d602db92cd3e734cd58bb6c3"
+      },
       "changes": {
         "total": 25,
         "byKind": {
@@ -713,7 +733,7 @@
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 316.723,
             "knowledgePenalty": 135.082,
-            "knowledgeReferenceSimilarity": 0.605,
+            "knowledgeReferenceSimilarity": 0.555,
             "knowledgeSiblingGap": 128.093,
             "knowledgeViewportAspectRatio": 1.196,
             "mainFlowContinuityError": 0,
@@ -743,6 +763,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:f5fc1c94c8d6c4e860a7cc4c5b68fb8b1c2f4bd235d3bbac89dc0a753017beae",
+        "compiled": "sha256:3c3d354807b136d22aed6bce660b225292abc9097c28be278a0f5cea98363afc"
+      },
       "changes": {
         "total": 50,
         "byKind": {
@@ -880,6 +904,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:e4264c6410a79cd594bcb1e2c76c64c4b4aca3ae1deadb0ffdf17579de90c90f",
+        "compiled": "sha256:478122aa8c4267131e5b07b881710f6827d4a2adc37c7e7de5304d3d3ce81c77"
+      },
       "changes": {
         "total": 57,
         "byKind": {
@@ -1012,9 +1040,9 @@
         "scoreDelta": -25225984358.053696
       },
       "referenceTemplateIds": [
+        "brainboard:brainboard-aws-bastion",
         "brainboard:brainboard-aws-ecs-fargate",
-        "brainboard:brainboard-aws-elastic-beanstalk",
-        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
+        "brainboard:brainboard-aws-elastic-beanstalk"
       ]
     },
     {
@@ -1023,6 +1051,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:c7baf291022212b3a42f0129a5f2ae78d58d44bd7f945039bfaf4b09fdef720f",
+        "compiled": "sha256:2f9e85d4c933b96e10229321545e1687ce1103533a5bf4d16330d58140c7a9de"
+      },
       "changes": {
         "total": 133,
         "byKind": {
@@ -1166,6 +1198,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:6dd00a412aa2b06fb31f14abff7141a19b5a129dc2de0ecc4b6047ff497cd64c",
+        "compiled": "sha256:2367981a004eec786ddd1c1856f1b1d95018b410a3327843a765f2c9d8930a98"
+      },
       "changes": {
         "total": 42,
         "byKind": {
@@ -1287,7 +1323,7 @@
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-iam-users",
-        "brainboard:brainboard-aws-rds",
+        "brainboard:brainboard-aws-secure-s3-bucket",
         "repository:static-web-hosting"
       ]
     },
@@ -1297,6 +1333,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:e210e8b72f7dc24da8e5a3e5277df7e9cf86f9c8ba4d9725fa39fc9420832dd5",
+        "compiled": "sha256:07ab67e1f5d6cb3cf82de445aaeae56a02ce829c81604d76aac1fb2b7eaa11c2"
+      },
       "changes": {
         "total": 216,
         "byKind": {
@@ -1404,7 +1444,7 @@
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 406.25,
             "knowledgePenalty": 188.766,
-            "knowledgeReferenceSimilarity": 0.859,
+            "knowledgeReferenceSimilarity": 0.847,
             "knowledgeSiblingGap": 73.023,
             "knowledgeViewportAspectRatio": 2.81,
             "mainFlowContinuityError": 969.333333,
@@ -1434,6 +1474,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:8d7128ec4a266cfc991175749882c1dc8ddf70ca53fc111300013eed8a6c4c33",
+        "compiled": "sha256:baba0d528ea91ecdb2e400a08193b1e5164b75bc786b3e44fca48be93e1f67a2"
+      },
       "changes": {
         "total": 108,
         "byKind": {
@@ -1577,6 +1621,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
+      "diagramFingerprints": {
+        "source": "sha256:d7013daf782ea92f0bdeb20cf5666c85e7f8337faa1492e909780e46924d4b1c",
+        "compiled": "sha256:980334d880d51e6ab809d012f69dd39738c9f636934f8e1a97e39e673494b9b0"
+      },
       "changes": {
         "total": 57,
         "byKind": {
@@ -1684,7 +1732,7 @@
             "knowledgeContainmentDepth": 5,
             "knowledgeEdgeLength": 250,
             "knowledgePenalty": 150.281,
-            "knowledgeReferenceSimilarity": 0.768,
+            "knowledgeReferenceSimilarity": 0.743,
             "knowledgeSiblingGap": 84.167,
             "knowledgeViewportAspectRatio": 1.23,
             "mainFlowContinuityError": 0,
@@ -1704,7 +1752,7 @@
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
-        "brainboard:brainboard-aws-elastic-beanstalk",
+        "brainboard:brainboard-aws-jenkins-ec2",
         "brainboard:brainboard-aws-load-balancer-target-group"
       ]
     },
@@ -1714,6 +1762,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:support-above",
+      "diagramFingerprints": {
+        "source": "sha256:f1bbc885fd21191b4a6b7577a301b6c1d1d5ec8e6d0f1793a9a7f9d8b72a1211",
+        "compiled": "sha256:5e11ebf5c897c4b92bcf5384606b2fb5656033c18d892c464b1b5701d04a1f3a"
+      },
       "changes": {
         "total": 104,
         "byKind": {
@@ -1821,7 +1873,7 @@
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 630,
             "knowledgePenalty": 241.657,
-            "knowledgeReferenceSimilarity": 0.484,
+            "knowledgeReferenceSimilarity": 0.472,
             "knowledgeSiblingGap": 84.444,
             "knowledgeViewportAspectRatio": 2.852,
             "mainFlowContinuityError": 0,
@@ -1840,9 +1892,9 @@
         "scoreDelta": -21235826441.72192
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-bastion",
         "brainboard:brainboard-aws-elastic-beanstalk",
-        "brainboard:brainboard-aws-multi-account-management"
+        "brainboard:brainboard-aws-multi-account-management",
+        "brainboard:brainboard-aws-vpc-subnets-security-groups-2az"
       ]
     },
     {
@@ -1850,7 +1902,11 @@
       "title": "AWS network landing zone",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:split-support",
+      "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-network-landing-zone:support-above-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:d267669e49dedbc50d33c807497238954f1f6844a703d7fc46689abc58fb5248",
+        "compiled": "sha256:8082114c084469249fa93d74c1c4ac88976a5359f2222424548e857cc5e3658d"
+      },
       "changes": {
         "total": 120,
         "byKind": {
@@ -1946,24 +2002,24 @@
           }
         },
         "after": {
-          "score": 7389054.606618,
-          "visualPenalty": 7388045.827618,
+          "score": 6982512.403783,
+          "visualPenalty": 6981506.072783,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 2181200,
-            "canvasAspectRatioPenalty": 0.926692,
+            "canvasArea": 2089270.4,
+            "canvasAspectRatioPenalty": 0.845489,
             "compilationDistance": 673,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.985212,
+            "emptySpaceRatio": 0.984561,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 345.002,
-            "knowledgePenalty": 335.779,
+            "knowledgePenalty": 333.331,
             "knowledgeReferenceSimilarity": 0.716,
             "knowledgeSiblingGap": 76.262,
             "knowledgeViewportAspectRatio": 1.413,
@@ -1971,7 +2027,7 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 260,
-            "score": 7388045.827618,
+            "score": 6981506.072783,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
@@ -1980,7 +2036,7 @@
           }
         },
         "compilationDistance": 673,
-        "scoreDelta": -37142747206.04886
+        "scoreDelta": -37143153748.25169
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-fsx",
@@ -1993,7 +2049,11 @@
       "title": "AWS RDS",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:support-above",
+      "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-rds:support-above",
+      "diagramFingerprints": {
+        "source": "sha256:277a2dbc30abca1fdc2cc64e710c025578522e9d6e4f18a7300928e37a846ef7",
+        "compiled": "sha256:bd981cfa8e80db2151422e83db31ca42d95463a3cc6093a18734021875640310"
+      },
       "changes": {
         "total": 48,
         "byKind": {
@@ -2083,24 +2143,24 @@
           }
         },
         "after": {
-          "score": 1002462455.477494,
-          "visualPenalty": 1002461958.314494,
+          "score": 1002346599.899626,
+          "visualPenalty": 1002346098.509626,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 569088,
-            "canvasAspectRatioPenalty": 0.461538,
+            "canvasArea": 718312,
+            "canvasAspectRatioPenalty": 0.437058,
             "compilationDistance": 281,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.983806,
+            "emptySpaceRatio": 0.98717,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 284.167,
-            "knowledgePenalty": 216.163,
+            "knowledgePenalty": 220.39,
             "knowledgeReferenceSimilarity": 0.747,
             "knowledgeSiblingGap": 105.5,
             "knowledgeViewportAspectRatio": 1.125,
@@ -2108,21 +2168,21 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 1002461958.314494,
+            "score": 1002346098.509626,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 1,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 2652
+            "totalEdgeLength": 2925
           }
         },
         "compilationDistance": 281,
-        "scoreDelta": -5677882048.522506
+        "scoreDelta": -5677997904.100374
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-ecs-fargate",
-        "brainboard:brainboard-aws-rds",
-        "brainboard:brainboard-aws-rest-api-documentdb"
+        "brainboard:brainboard-aws-load-balancer-target-group",
+        "brainboard:brainboard-aws-rds"
       ]
     },
     {
@@ -2131,6 +2191,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:3b94807ca00a3bb8f0e4a5404e87df21356ce5a785b858b3d106d4fc36d87016",
+        "compiled": "sha256:4812b6e05bfc82fd8e2077021119d8b303ddf0c9a1f6fc0d0f5b930db53cf9bf"
+      },
       "changes": {
         "total": 43,
         "byKind": {
@@ -2263,8 +2327,8 @@
         "scoreDelta": -5469930608.241026
       },
       "referenceTemplateIds": [
+        "brainboard:brainboard-aws-ec2-vpc-subnet",
         "brainboard:brainboard-aws-ecs-fargate",
-        "brainboard:brainboard-aws-rds",
         "brainboard:brainboard-aws-rest-api-documentdb"
       ]
     },
@@ -2273,7 +2337,11 @@
       "title": "AWS S3 API Gateway integration",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:split-support-reversed",
+      "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-s3-api-gateway:support-below-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:f99975d46239b5d21920b9e5a2d64a24e4b181fed27a5b8b7f4c3891555c9765",
+        "compiled": "sha256:a57039f628bbab5afedc8b2c405c17d13aec36765f8f02b5f2b1dba246780806"
+      },
       "changes": {
         "total": 108,
         "byKind": {
@@ -2363,41 +2431,41 @@
           }
         },
         "after": {
-          "score": 505617557.852731,
-          "visualPenalty": 505616670.901731,
+          "score": 406454582.23035,
+          "visualPenalty": 406453711.19135,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 272832,
-            "canvasAspectRatioPenalty": 0.77551,
+            "canvasArea": 355592.209335,
+            "canvasAspectRatioPenalty": 0.887864,
             "compilationDistance": 607,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
-            "edgeCrossingCount": 10,
+            "edgeCrossingCount": 8,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.873329,
+            "emptySpaceRatio": 0.90281,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 527.818,
-            "knowledgePenalty": 279.951,
+            "knowledgePenalty": 264.039,
             "knowledgeReferenceSimilarity": 0.882,
             "knowledgeSiblingGap": 80.667,
             "knowledgeViewportAspectRatio": 1.019,
-            "mainFlowContinuityError": 148.571429,
+            "mainFlowContinuityError": 183.81,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
-            "repeatAlignmentError": 112,
-            "score": 505616670.901731,
+            "repeatAlignmentError": 128.667,
+            "score": 406453711.19135,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 11664
+            "totalEdgeLength": 13402.033
           }
         },
         "compilationDistance": 607,
-        "scoreDelta": -17951326081.4687
+        "scoreDelta": -18050489057.09108
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-dashcam-video-pipeline",
@@ -2410,7 +2478,11 @@
       "title": "AWS secure S3 bucket",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:split-support-reversed",
+      "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-secure-s3-bucket:support-below",
+      "diagramFingerprints": {
+        "source": "sha256:a76c1bc613ae3a06fe439de71e109807ebd6340c03f699f56f1b8ccf9207e862",
+        "compiled": "sha256:b961acae04054ff2429ee910e50e116ed4e8e97668995f59108979aadcff0ee9"
+      },
       "changes": {
         "total": 67,
         "byKind": {
@@ -2500,44 +2572,44 @@
           }
         },
         "after": {
-          "score": 74084791.177328,
-          "visualPenalty": 74084063.298328,
+          "score": 70983940.416726,
+          "visualPenalty": 70983213.209726,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 144640,
-            "canvasAspectRatioPenalty": 4.65,
+            "canvasArea": 162276.515868,
+            "canvasAspectRatioPenalty": 4.028853,
             "compilationDistance": 373,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 1,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.824779,
+            "emptySpaceRatio": 0.843822,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 292.5,
-            "knowledgePenalty": 354.879,
+            "knowledgePenalty": 354.207,
             "knowledgeReferenceSimilarity": 0.883,
             "knowledgeSiblingGap": 83.636,
             "knowledgeViewportAspectRatio": 1.304,
-            "mainFlowContinuityError": 335.111111,
+            "mainFlowContinuityError": 334.817889,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 74084063.298328,
+            "score": 70983213.209726,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 4032
+            "totalEdgeLength": 4205.994
           }
         },
         "compilationDistance": 373,
-        "scoreDelta": -11926247196.711561
+        "scoreDelta": -11929348047.472162
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-fsx",
+        "brainboard:brainboard-aws-dashcam-video-pipeline",
         "brainboard:brainboard-aws-iam-users",
         "brainboard:brainboard-aws-secure-s3-bucket"
       ]
@@ -2548,6 +2620,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:207287c197908810993b556d3860a118c208a3f9f8f9da24b30854029b4cffd5",
+        "compiled": "sha256:b37150d6b3adcc431161aaeee3c4c46a4357097f200b75b6f20d743c3590bb88"
+      },
       "changes": {
         "total": 120,
         "byKind": {
@@ -2691,6 +2767,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:dd7ebc8beff3e37700337f4935c012247868e482755584535a4ff06d154cc6d6",
+        "compiled": "sha256:7a21a21dfeb9b7c1badb8a8230b7fef1f01522a49d1dabd5cb85f162cb5bfef3"
+      },
       "changes": {
         "total": 168,
         "byKind": {
@@ -2833,7 +2913,11 @@
       "title": "AWS VPC with subnet and security groups on 2 AZs",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:split-support",
+      "candidateId": "compiled:presentation:knowledge:brainboard:brainboard-aws-vpc-subnets-security-groups-2az:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:752ca9b651e9a9671ef7e3882577347b10f585778ec63ca28f4b28e7d1814114",
+        "compiled": "sha256:8e100fbec023cd55ca0f1f4a3023bc8034557f8020ecfd7215b527add9f9abef"
+      },
       "changes": {
         "total": 93,
         "byKind": {
@@ -2929,24 +3013,24 @@
           }
         },
         "after": {
-          "score": 516807.210078,
-          "visualPenalty": 516019.471078,
+          "score": 312184.496949,
+          "visualPenalty": 311400.025949,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 0,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 2233970,
-            "canvasAspectRatioPenalty": 0.069896,
+            "canvasArea": 2148715,
+            "canvasAspectRatioPenalty": 0.029066,
             "compilationDistance": 531,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.989687,
+            "emptySpaceRatio": 0.989277,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 247.22,
-            "knowledgePenalty": 256.739,
+            "knowledgePenalty": 253.471,
             "knowledgeReferenceSimilarity": 0.742,
             "knowledgeSiblingGap": 60.189,
             "knowledgeViewportAspectRatio": 1.54,
@@ -2954,7 +3038,7 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 516019.471078,
+            "score": 311400.025949,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
@@ -2963,7 +3047,7 @@
           }
         },
         "compilationDistance": 531,
-        "scoreDelta": -20799523332.498676
+        "scoreDelta": -20799727955.211807
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -2977,6 +3061,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:817d75d92d1cb4307f37f013c0a92d0652f55b1856a58ad15fed4c0312f467f5",
+        "compiled": "sha256:b1ad907fe7710d55e4705bb3b1f1778761ace243078a0593db84240eca6dfe47"
+      },
       "changes": {
         "total": 23,
         "byKind": {
@@ -3104,8 +3192,8 @@
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-iam-users",
-        "brainboard:brainboard-cross-account-aws-s3",
-        "repository:static-web-hosting"
+        "brainboard:brainboard-aws-secure-s3-bucket",
+        "brainboard:brainboard-cross-account-aws-s3"
       ]
     },
     {
@@ -3114,6 +3202,10 @@
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:0300b56a1c255f4f444d20e7f35ec212cdfab565368d47ec114227e0a1ba6881",
+        "compiled": "sha256:ad4592ec346de24e7ee4645cb8fd2eeccbe4f3f896b6a05233acb8fa3ee08d06"
+      },
       "changes": {
         "total": 110,
         "byKind": {
@@ -3251,6 +3343,10 @@
       "source": "repository",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:a50ae30c657566560da2f4d78b95c32eb30778d7df7182213371d83d021d43a2",
+        "compiled": "sha256:7e31fcf3ded1ccd595fd1aa086c5c9d2b8b3c858e115b3f481d4d53bfc1ee242"
+      },
       "changes": {
         "total": 120,
         "byKind": {
@@ -3387,7 +3483,7 @@
             "knowledgeContainmentDepth": 3,
             "knowledgeEdgeLength": 378.829,
             "knowledgePenalty": 210.481,
-            "knowledgeReferenceSimilarity": 0.789,
+            "knowledgeReferenceSimilarity": 0.817,
             "knowledgeSiblingGap": 83.478,
             "knowledgeViewportAspectRatio": 2.364,
             "mainFlowContinuityError": 0,
@@ -3416,7 +3512,11 @@
       "title": "EKS Container App",
       "source": "repository",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:support-above-reversed",
+      "candidateId": "compiled:presentation:knowledge:repository:eks-container-app:support-above-reversed",
+      "diagramFingerprints": {
+        "source": "sha256:aff2ca8c14b20154b0bcc209a9907a88c161277c0e473226bebca8280787b357",
+        "compiled": "sha256:1f7d39279c5673c12e4565d200c20381f0372dbf64a9ec14d24aa5b9e3f014e2"
+      },
       "changes": {
         "total": 113,
         "byKind": {
@@ -3543,41 +3643,41 @@
           }
         },
         "after": {
-          "score": 3542597854.578104,
-          "visualPenalty": 3542593062.924104,
+          "score": 3542360702.292503,
+          "visualPenalty": 3542355917.750503,
           "structuralPenalty": 540,
           "semanticDiagnosticPenalty": 3500,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 1317600,
-            "canvasAspectRatioPenalty": 0.12963,
+            "canvasArea": 1260125.64,
+            "canvasAspectRatioPenalty": 0.080355,
             "compilationDistance": 629,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 6,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.977268,
+            "emptySpaceRatio": 0.976231,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 420.85,
-            "knowledgePenalty": 122.654,
-            "knowledgeReferenceSimilarity": 0.775,
+            "knowledgePenalty": 115.542,
+            "knowledgeReferenceSimilarity": 0.813,
             "knowledgeSiblingGap": 83.478,
             "knowledgeViewportAspectRatio": 1.606,
             "mainFlowContinuityError": 0,
             "nodeOverlapCount": 1,
             "parentBoundaryViolationCount": 1,
             "repeatAlignmentError": 176,
-            "score": 3542593062.924104,
+            "score": 3542355917.750503,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 1,
             "supportLaneIntrusionCount": 4,
             "terraformReferenceContainmentMismatchCount": 3,
-            "totalEdgeLength": 4030
+            "totalEdgeLength": 4511.044
           }
         },
         "compilationDistance": 629,
-        "scoreDelta": -5288417196.072554
+        "scoreDelta": -5288654348.358155
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-kubernetes-native-cnis",
@@ -3591,6 +3691,10 @@
       "source": "repository",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:6ed8a0fbe0ddba1d70a9bfe10b6fe6549a334028c127229b19d04373a8192589",
+        "compiled": "sha256:a45c90eff75199058624b6fda079a5d2ceb6c9051b2db3638478fa6ab5cf2f1c"
+      },
       "changes": {
         "total": 98,
         "byKind": {
@@ -3743,6 +3847,10 @@
       "source": "repository",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:ceb57df473c61d616dbe8a1a10a74ce4ef19e12f43b0ea699306d112cbf9c11e",
+        "compiled": "sha256:55a46a1f0ef0c355e84694e1da30a11464547e305841aa9b909094b1eae65d4b"
+      },
       "changes": {
         "total": 70,
         "byKind": {
@@ -3894,16 +4002,20 @@
       "title": "Static Web Hosting",
       "source": "repository",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "original",
+      "candidateId": "compiled:presentation:knowledge:repository:static-web-hosting:split-support",
+      "diagramFingerprints": {
+        "source": "sha256:a47779413a8e70a9919ef9f780f9958e93b9c6c23b18e7f2ed3a3bcdeb62194c",
+        "compiled": "sha256:f44735daca94440f8fbc04ea743457a390942f1fcf702c343c5bdae8e05e16c5"
+      },
       "changes": {
-        "total": 26,
+        "total": 37,
         "byKind": {
           "resource": 0,
           "relationship": 0,
           "configuration": 0,
           "containment": 4,
           "presentation": 8,
-          "geometry": 7,
+          "geometry": 18,
           "edge-routing": 7
         },
         "groups": [
@@ -3928,8 +4040,8 @@
           {
             "action": "modify",
             "kind": "geometry",
-            "count": 7,
-            "totalCost": 13
+            "count": 18,
+            "totalCost": 42
           },
           {
             "action": "remove",
@@ -3999,41 +4111,41 @@
           }
         },
         "after": {
-          "score": 160287801.878227,
-          "visualPenalty": 160286907.168227,
+          "score": 160229987.78842,
+          "visualPenalty": 160229040.80142,
           "structuralPenalty": 0,
           "semanticDiagnosticPenalty": 560,
           "metrics": {
             "backwardEdgeCount": 4,
-            "canvasArea": 144384,
+            "canvasArea": 76951.525224,
             "canvasAspectRatioPenalty": 0,
-            "compilationDistance": 167,
+            "compilationDistance": 196,
             "containmentMismatchCount": 0,
             "edgeAreaTitleIntersectionCount": 0,
             "edgeCrossingCount": 0,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.505319,
+            "emptySpaceRatio": 0.820354,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 1,
             "knowledgeEdgeLength": 220.539,
-            "knowledgePenalty": 167.71,
-            "knowledgeReferenceSimilarity": 0.736,
+            "knowledgePenalty": 190.987,
+            "knowledgeReferenceSimilarity": 0.686,
             "knowledgeSiblingGap": 91.429,
             "knowledgeViewportAspectRatio": 1.75,
-            "mainFlowContinuityError": 106.666667,
+            "mainFlowContinuityError": 62.476,
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 0,
-            "score": 160286907.168227,
+            "score": 160229040.80142,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 0,
-            "totalEdgeLength": 1116
+            "totalEdgeLength": 1083.43
           }
         },
-        "compilationDistance": 167,
-        "scoreDelta": -12042.693202
+        "compilationDistance": 196,
+        "scoreDelta": -69856.783008
       },
       "referenceTemplateIds": [
         "brainboard:brainboard-aws-iam-users",
@@ -4046,7 +4158,11 @@
       "title": "3-Tier Web App",
       "source": "repository",
       "compilerVersion": "architecture-board-compiler/v3",
-      "candidateId": "compiled:presentation:support-above",
+      "candidateId": "compiled:presentation:knowledge:repository:three-tier-web-app:support-above",
+      "diagramFingerprints": {
+        "source": "sha256:79ed19bd978a5b9b44257377fa74c2ae120f4d7204aec3df685a5ab11a47a285",
+        "compiled": "sha256:db6701d2b87f63c8a9cd19f38af0029044a7d9ca5770b68fce557489c6414df6"
+      },
       "changes": {
         "total": 178,
         "byKind": {
@@ -4167,24 +4283,24 @@
           }
         },
         "after": {
-          "score": 2812663284.620522,
-          "visualPenalty": 2812655212.279522,
+          "score": 2322627011.185198,
+          "visualPenalty": 2322618947.971198,
           "structuralPenalty": 540,
           "semanticDiagnosticPenalty": 6440,
           "metrics": {
             "backwardEdgeCount": 0,
-            "canvasArea": 2354704,
+            "canvasArea": 2113947.674912,
             "canvasAspectRatioPenalty": 0,
             "compilationDistance": 978,
             "containmentMismatchCount": 0,
-            "edgeAreaTitleIntersectionCount": 13,
-            "edgeCrossingCount": 38,
+            "edgeAreaTitleIntersectionCount": 11,
+            "edgeCrossingCount": 31,
             "edgeNodeIntersectionCount": 0,
-            "emptySpaceRatio": 0.982388,
+            "emptySpaceRatio": 0.980382,
             "invalidParentCount": 0,
             "knowledgeContainmentDepth": 4,
             "knowledgeEdgeLength": 412.563,
-            "knowledgePenalty": 114.341,
+            "knowledgePenalty": 105.214,
             "knowledgeReferenceSimilarity": 0.834,
             "knowledgeSiblingGap": 58.182,
             "knowledgeViewportAspectRatio": 1.333,
@@ -4192,19 +4308,19 @@
             "nodeOverlapCount": 0,
             "parentBoundaryViolationCount": 0,
             "repeatAlignmentError": 218,
-            "score": 2812655212.279522,
+            "score": 2322618947.971198,
             "securityGroupParentCount": 0,
             "siblingAreaOverlapCount": 0,
             "supportLaneIntrusionCount": 0,
             "terraformReferenceContainmentMismatchCount": 3,
-            "totalEdgeLength": 18260
+            "totalEdgeLength": 16517.003
           }
         },
         "compilationDistance": 978,
-        "scoreDelta": -13077586319.18224
+        "scoreDelta": -13567622592.617563
       },
       "referenceTemplateIds": [
-        "brainboard:brainboard-aws-jenkins-ec2",
+        "brainboard:brainboard-aws-three-tier-database",
         "repository:ecs-fargate-container-app",
         "repository:three-tier-web-app"
       ]

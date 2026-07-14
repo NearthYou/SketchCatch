@@ -176,3 +176,46 @@ pnpm architecture-board-evidence:generate
 ```
 
 `check`은 CI에서 생성 결과와 저장된 report가 같은지 확인하고, `generate`는 fixture 또는 Compiler 규칙 변경 뒤 report를 다시 만든다. 두 명령은 [compiler-evidence-baseline.json](./compiler-evidence-baseline.json)의 aggregate 시각 이상치 상한도 검사한다. 따라서 `nodeOverlapCount`, Area 겹침·경계 이탈, edge 교차·노드 교차 등이 기준선보다 늘면 `generate`도 실패한다. 상한 변경은 자동화하지 않으며, 보고서 diff를 검토한 뒤 baseline의 `recordedRationale`과 함께 명시적으로 커밋해야 한다.
+
+## Human Pairwise Review Queue
+
+[compiler-evidence-review.json](./compiler-evidence-review.json)은 score report의 29개 사용 가능
+Template 중 사람이 실제 Board 화면을 비교할 대표 8개를 결정론적으로 고른 **대기열**이다.
+선택은 Repository 3개와 Brainboard 5개를 남기고, 실제 visual anomaly 악화,
+diagnostic 수, change 수, score 변화량, ID 순서로 우선순위를 정한다. `canvasArea`나
+전체 edge 길이 같은 일반 수치는 이 우선순위에 사용하지 않는다.
+
+각 entry는 다음을 기록한다.
+
+- 원본/compiled `DiagramJson`의 canonical SHA-256 fingerprint
+- Compiler version과 candidate ID
+- before/after 품질 metrics
+- 실제 Board renderer로 만들어야 할 WebP의 **예상** 경로
+  (`compiler-evidence-captures/v1/<template>/before.webp`, `after.webp`)
+- `status: "pending"`, `reviewer: null`, `decision: null`, `rationale: null`
+
+이 JSON은 사람 검토나 Template 승인 기록이 아니다. 생성기는 WebP가 존재한다고 가정하지 않고,
+`pending`을 통과·승인·품질 보장으로 바꾸지 않는다. 실제 비교 때는 같은 capture contract
+(`1280 × 720`, `#f8fafc`, WebP)로 source와 compiled Board를 각각 캡처하고, 두 fingerprint와
+candidate/version을 확인한 뒤 별도 검토·승인 흐름에서 결정을 남긴다.
+
+캡처에는 production에 노출되지 않는 개발 전용 Board route를 사용한다.
+
+```text
+/dev/compiler-evidence?templateId=<manifest entry id>&stage=before
+/dev/compiler-evidence?templateId=<manifest entry id>&stage=after
+```
+
+이 route는 manifest의 template ID로 실제 `WorkspaceDraftManager` Board를 source 또는 compiled
+Diagram으로 연다. production에서는 404이며, WebP 생성·저장과 사람의 pairwise 판단은 의도적으로
+자동화하지 않는다.
+
+```bash
+pnpm architecture-board-evidence:generate
+pnpm architecture-board-evidence-review:generate
+pnpm architecture-board-evidence-review:check
+```
+
+`architecture-board-evidence-review:generate`와 `check`는 먼저 score report가 최신인지
+검증한다. review queue check는 예상 경로와 fingerprint가 현재 report에서 결정론적으로 다시
+만들어지는지만 확인하며, 미캡처 또는 미검토 pending 항목을 실패나 승인으로 해석하지 않는다.

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   ArchitectureBoardCompilationChangeKind,
   ArchitectureBoardCompilationDiagnostic,
@@ -119,6 +120,10 @@ export type ArchitectureBoardCompilerEvidenceTemplateResult = {
     readonly total: number;
   };
   readonly compilerVersion: string;
+  readonly diagramFingerprints: {
+    readonly compiled: string;
+    readonly source: string;
+  };
   readonly id: string;
   readonly quality: {
     readonly after: ReportedQuality;
@@ -223,6 +228,10 @@ function createTemplateResult(
     source: template.source,
     compilerVersion: proposal.provenance.compilerVersion,
     candidateId: proposal.provenance.candidateId,
+    diagramFingerprints: {
+      source: fingerprintDiagram(template.sourceDiagram),
+      compiled: fingerprintDiagram(proposal.diagram)
+    },
     changes: {
       total: changes.length,
       byKind: countByOrder(changes, CHANGE_KIND_ORDER, (change) => change.kind),
@@ -433,4 +442,23 @@ function mean(values: readonly number[]): number {
 
 function round(value: number): number {
   return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function fingerprintDiagram(diagram: DiagramJson): string {
+  const canonicalJson = JSON.stringify(canonicalize(diagram));
+  return `sha256:${createHash("sha256").update(canonicalJson).digest("hex")}`;
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, canonicalize(child)])
+    );
+  }
+  return value;
 }

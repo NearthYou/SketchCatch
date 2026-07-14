@@ -69,6 +69,13 @@ test("Compiler evidence report는 source fixture를 바꾸지 않고 ID 순서�
     }
   });
   assert.ok(first.templates.every((template) => template.referenceTemplateIds.length > 0));
+  assert.ok(
+    first.templates.every(
+      (template) =>
+        /^sha256:[0-9a-f]{64}$/u.test(template.diagramFingerprints.source) &&
+        /^sha256:[0-9a-f]{64}$/u.test(template.diagramFingerprints.compiled)
+    )
+  );
   assert.equal(
     renderArchitectureBoardCompilerEvidenceReport(first),
     renderArchitectureBoardCompilerEvidenceReport(second)
