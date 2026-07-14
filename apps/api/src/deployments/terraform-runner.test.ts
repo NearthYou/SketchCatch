@@ -5,10 +5,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createTerraformProcessEnv,
+  resolveTerraformBinary,
   runTerraformDestroyPlan,
   runTerraformProvidersSchemaJson,
   runTerraformValidate
 } from "./terraform-runner.js";
+
+test("resolveTerraformBinary uses the configured runtime binary outside PATH", () => {
+  assert.equal(
+    resolveTerraformBinary(undefined, {
+      TERRAFORM_BINARY: "/Users/example/.local/bin/terraform"
+    }),
+    "/Users/example/.local/bin/terraform"
+  );
+  assert.equal(resolveTerraformBinary("/custom/terraform", {}), "/custom/terraform");
+  assert.equal(resolveTerraformBinary(undefined, {}), "terraform");
+});
 
 test("createTerraformProcessEnv passes only required runtime env and explicit Terraform env", () => {
   const env = createTerraformProcessEnv(

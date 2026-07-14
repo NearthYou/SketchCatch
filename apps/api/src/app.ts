@@ -314,6 +314,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerDeploymentRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
+    projectAssetStorage: options.projectAssetStorage,
     runtimeCache
   });
   if (liveObservationV2Runtime) {

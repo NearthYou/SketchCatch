@@ -7,10 +7,10 @@ import type {
 } from "@sketchcatch/types";
 import {
   createTerraformArtifactCanonicalContent,
-  createTerraformArtifactSafetyContent,
-  defaultTerraformArtifactMaxBytes,
-  downloadTerraformArtifactFromS3
+  createTerraformArtifactSafetyContent
 } from "./terraform-workspace.js";
+import { createProjectAssetStorage } from "../projects/project-asset-storage-factory.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 import {
   DeploymentConflictError,
@@ -30,6 +30,7 @@ export type ApproveDeploymentPlanInput = {
 
 export type ApproveDeploymentPlanOptions = {
   downloadTerraformArtifact?: (objectKey: string) => Promise<Buffer | Uint8Array | string>;
+  projectAssetStorage?: ProjectAssetStorage;
   now?: () => Date;
 };
 
@@ -72,7 +73,7 @@ export async function approveDeploymentPlan(
   const downloadTerraformArtifact =
     options.downloadTerraformArtifact ??
     ((objectKey: string) =>
-      downloadTerraformArtifactFromS3(objectKey, { maxBytes: defaultTerraformArtifactMaxBytes }));
+      (options.projectAssetStorage ?? createProjectAssetStorage()).getObject({ objectKey }));
   const now = options.now ?? (() => new Date());
   const deployment = await getDeployment(input, repository);
 

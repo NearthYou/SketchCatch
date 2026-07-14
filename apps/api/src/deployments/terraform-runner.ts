@@ -34,6 +34,13 @@ export type RunTerraformInitOptions = {
 
 export type RunTerraformCommandOptions = RunTerraformInitOptions;
 
+export function resolveTerraformBinary(
+  configuredBinary: string | undefined,
+  runtimeEnv: NodeJS.ProcessEnv = process.env
+): string {
+  return configuredBinary?.trim() || runtimeEnv.TERRAFORM_BINARY?.trim() || "terraform";
+}
+
 const inheritedTerraformEnvKeys = [
   "PATH",
   "Path",
@@ -145,7 +152,7 @@ async function runTerraformCommand(
   args: string[],
   options: RunTerraformInitOptions
 ): Promise<TerraformRunResult> {
-  const terraformBinary = options.terraformBinary ?? "terraform";
+  const terraformBinary = resolveTerraformBinary(options.terraformBinary);
   const timeoutMs = options.timeoutMs ?? 60_000;
   const maxOutputBytes = options.maxOutputBytes ?? defaultTerraformOutputMaxBytes;
   const env = createTerraformProcessEnv(options.env);
