@@ -328,7 +328,8 @@ function inferInstallPreset(
   const lockfiles = evidence
     .filter((item) => item.kind === "lockfile")
     .map((item) => item.path.toLowerCase());
-  const normalizedRoot = sourceRoot.replace(/^\.\//, "").replace(/\/$/, "").toLowerCase();
+  const normalizedRoot =
+    sourceRoot.replace(/^\.\//, "").replace(/\/$/, "").toLowerCase() || ".";
   const scopedLockfiles = normalizedRoot === "."
     ? lockfiles.filter((path) => !path.includes("/"))
     : lockfiles.filter((path) => path.startsWith(`${normalizedRoot}/`) &&

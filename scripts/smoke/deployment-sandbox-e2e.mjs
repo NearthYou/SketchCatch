@@ -61,6 +61,8 @@ export async function runSandboxOrchestration(adapters, options = {}) {
     events
   });
 
+  if (!adapters) return result("blocked", "adapters_missing");
+
   record("prepare", "preflight", "running");
   const preflight = await adapters.preflight();
   record("prepare", "preflight", preflight?.ready === true ? "succeeded" : "failed");

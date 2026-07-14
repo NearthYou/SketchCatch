@@ -44,6 +44,14 @@ test("sandbox orchestration exposes three developer-facing stages", () => {
   ]);
 });
 
+test("sandbox orchestration blocks safely when adapters are missing", async () => {
+  const result = await runSandboxOrchestration(null);
+
+  assert.equal(result.acceptanceStatus, "blocked");
+  assert.equal(result.errorCode, "adapters_missing");
+  assert.deepEqual(result.events, []);
+});
+
 test("sandbox orchestration runs the exact matrix and passes only after cleanup and verification", async () => {
   const calls = [];
   const result = await runSandboxOrchestration({

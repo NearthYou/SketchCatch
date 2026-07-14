@@ -219,9 +219,10 @@ function detectDeploymentDescriptorUnits(
   existingUnits: readonly RepositoryApplicationUnit[],
   files: readonly GitHubRepositoryEvidenceFile[]
 ): RepositoryApplicationUnit[] {
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
   const descriptors = treePaths.flatMap((path) => {
     const fileName = getFileName(path).toLowerCase();
-    const file = files.find((candidate) => candidate.path === path);
+    const file = filesByPath.get(path);
     const framework =
       fileName === "appspec.yml" || fileName === "appspec.yaml"
         ? "AWS CodeDeploy"
