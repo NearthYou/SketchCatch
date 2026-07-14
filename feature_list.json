@@ -664,14 +664,14 @@
       "priority": 1,
       "area": "repository-analysis-draft",
       "title": "Korean repository recommendations with required inline CI/CD connection",
-      "user_visible_behavior": "Repository Analysis 추천에서 GitHub CI/CD를 연결하면 분석한 Repository가 자동 연결되고, 임시 callback 확인 버튼으로 재분석 없이 기존 상태로 돌아가 Architecture Board 생성을 계속한다.",
+      "user_visible_behavior": "Repository Analysis 추천에서 GitHub CI/CD를 연결하면 분석한 Repository가 자동 연결되고, callback 확인 버튼이 배포 타깃과 GitOps 설정을 모두 저장한 뒤 재분석 없이 기존 상태로 돌아가 Architecture Board 생성을 계속한다.",
       "status": "passing",
       "verification": [
         "AI와 deterministic 추천 후보가 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공한다.",
         "추가 질문, 선택지, 이유가 한국어로 표시되고 알려진 구형 영문 질문도 한국어로 정규화된다.",
         "CI/CD 인계 checkbox와 전역 설정 이동을 제거하고 같은 화면에서 분석 Repository에 고정된 GitHub App 설치를 시작한다.",
         "CI/CD 연결 없이 확인하면 이동을 중단하고 확인 버튼 위에 작은 빨간 안내 문구를 표시한다.",
-        "GitHub callback은 Repository 재선택 없이 서명된 target만 자동 연결하며, 임시 UI에서는 두 개별 저장 버튼 대신 하단 확인 버튼으로 즉시 복귀한다.",
+        "GitHub callback은 Repository 재선택 없이 서명된 target만 자동 연결하며, 두 개별 저장 버튼 대신 하단 확인 버튼이 두 API를 순서대로 저장한 뒤 복귀한다.",
         "30분짜리 일회성 browser resume state는 project와 active Repository가 일치할 때만 소비되며 API 재분석 없이 추천 상태를 복원한다.",
         "어떤 추천 Template을 선택해도 callback 배포 타깃은 ECS Fargate이며 project slug, commit SHA, Dockerfile evidence로 필수 좌표를 채운다.",
         "whiskend/audience-live-check의 명확한 컨테이너 근거는 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
@@ -690,7 +690,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Temporary callback-wide ECS defaults and single-confirm contract passed the focused callback tests 4/4. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
+        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults and ordered single-confirm saves passed focused callback tests 6/6. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
     }
