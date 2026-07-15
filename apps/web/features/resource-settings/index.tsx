@@ -36,6 +36,7 @@ import {
   type CuratedModuleDefinition
 } from "./module-catalog";
 import {
+  countModuleResources,
   createModuleCatalogGroups,
   moduleCatalogViews,
   type ModuleCatalogViewId
@@ -557,7 +558,7 @@ function ModuleCatalogCard({
     >
       <strong>{moduleDefinition.title}</strong>
       <span>{moduleDefinition.description}</span>
-      <small>리소스 {moduleDefinition.nodes.length}개</small>
+      <small>리소스 {countModuleResources(moduleDefinition)}개</small>
     </button>
   );
 }

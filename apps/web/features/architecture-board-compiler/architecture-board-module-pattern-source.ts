@@ -360,11 +360,46 @@ export function extractArchitectureBoardModulePatternCandidates(
         ).length
       };
     })
-    .filter(
-      (candidate) =>
-        candidate.nodes.length !== source.diagram.nodes.length ||
-        candidate.edges.length !== source.diagram.edges.length
-    );
+    .filter((candidate) => !duplicatesWholeDeployableGraph(candidate, source.diagram));
+}
+
+function duplicatesWholeDeployableGraph(
+  candidate: ArchitectureBoardModulePatternCandidate,
+  source: DiagramJson
+): boolean {
+  const sourceResourceIds = new Set(
+    source.nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
+  );
+  const candidateResourceIds = new Set(
+    candidate.nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
+  );
+  if (
+    candidateResourceIds.size !== sourceResourceIds.size ||
+    [...sourceResourceIds].some((id) => !candidateResourceIds.has(id))
+  ) {
+    return false;
+  }
+
+  const sourceResourceEdgeIds = new Set(
+    source.edges
+      .filter(
+        ({ sourceNodeId, targetNodeId }) =>
+          sourceResourceIds.has(sourceNodeId) && sourceResourceIds.has(targetNodeId)
+      )
+      .map(({ id }) => id)
+  );
+  const candidateResourceEdgeIds = new Set(
+    candidate.edges
+      .filter(
+        ({ sourceNodeId, targetNodeId }) =>
+          candidateResourceIds.has(sourceNodeId) && candidateResourceIds.has(targetNodeId)
+      )
+      .map(({ id }) => id)
+  );
+  return (
+    candidateResourceEdgeIds.size === sourceResourceEdgeIds.size &&
+    [...sourceResourceEdgeIds].every((id) => candidateResourceEdgeIds.has(id))
+  );
 }
 
 function refitSelectedPresentationAncestors(

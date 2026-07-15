@@ -7,6 +7,8 @@ import {
 import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
 
 const designAreaNodeTypes = new Set([
+  "region",
+  "aws-availability-zone",
   "aws-region",
   "aws_region",
   "aws_availability_zone",
@@ -29,6 +31,7 @@ const resourceAreaNodeTypes = new Set([
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 
 const designAreaNodeIconByType: Record<string, string> = {
+  "aws-availability-zone": `${groupIconPath}/AWS-Cloud_32.svg`,
   "aws-region": `${groupIconPath}/Region_32.svg`,
   design_az: `${groupIconPath}/AWS-Cloud_32.svg`,
   design_group: `${groupIconPath}/Auto-Scaling-group_32.svg`,
@@ -149,7 +152,10 @@ export function getAreaNodeIconUrl(node: DiagramNode): string | undefined {
     return node.iconUrl;
   }
 
-  return isDesignAreaNode(node) ? (node.iconUrl ?? designAreaNodeIconByType[node.type]) : undefined;
+  const presentationType = node.metadata?.presentationCatalogItemId ?? node.type;
+  return isDesignAreaNode(node)
+    ? (node.iconUrl ?? designAreaNodeIconByType[presentationType])
+    : undefined;
 }
 
 export function getAreaNodeMetaLabel(node: DiagramNode): string | undefined {
@@ -161,7 +167,12 @@ export function getAreaNodeMetaLabel(node: DiagramNode): string | undefined {
 }
 
 export function isDesignAreaNode(node: DiagramNode): boolean {
-  return node.kind === "design" && designAreaNodeTypes.has(node.type);
+  return (
+    node.kind === "design" &&
+    (designAreaNodeTypes.has(node.type) ||
+      (node.metadata?.presentationCatalogItemId !== undefined &&
+        designAreaNodeTypes.has(node.metadata.presentationCatalogItemId)))
+  );
 }
 
 export function isResourceAreaNode(node: DiagramNode): boolean {

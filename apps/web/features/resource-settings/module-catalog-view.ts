@@ -17,6 +17,10 @@ export type ModuleCatalogGroup = {
   readonly modules: readonly CuratedModuleDefinition[];
 };
 
+export function countModuleResources(moduleDefinition: CuratedModuleDefinition): number {
+  return moduleDefinition.nodes.filter(({ kind }) => kind === "resource").length;
+}
+
 export function createModuleCatalogGroups(input: {
   readonly modules: readonly CuratedModuleDefinition[];
   readonly query?: string | undefined;

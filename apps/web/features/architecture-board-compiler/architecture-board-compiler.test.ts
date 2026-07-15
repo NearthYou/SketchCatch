@@ -3,8 +3,10 @@ import test from "node:test";
 import type { ArchitectureJson, DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   ARCHITECTURE_BOARD_COMPILER_VERSION,
+  applyArchitectureBoardModulePatternKnowledge,
   architectureBoardKnowledge,
   compileArchitectureBoard,
+  createArchitectureBoardModulePatternResourceParentMap,
   createArchitectureBoardKnowledgeArtifact,
   evaluateArchitectureBoardKnowledgeLeaveOneOut
 } from ".";
@@ -239,6 +241,106 @@ test("Compiler는 조립된 모든 Curated Module을 같은 pattern knowledge로
       `${pattern.id} must keep valid edge endpoints`
     );
   }
+});
+
+test("Compiler roundtrip은 반복 조립한 Module instance를 서로 섞지 않고 모두 인식한다", () => {
+  let currentDiagram: DiagramJson = {
+    nodes: [],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    variables: []
+  };
+  for (let round = 0; round < 2; round += 1) {
+    for (const pattern of architectureBoardKnowledge.modulePatterns) {
+      currentDiagram = expandCuratedModuleIntoDiagram({
+        diagram: currentDiagram,
+        moduleId: pattern.id
+      });
+    }
+  }
+
+  const architecture = convertDiagramJsonToArchitectureJson(currentDiagram);
+  const roundtripDiagram = convertArchitectureJsonToDiagramJson(architecture);
+  const moduleInstanceByNodeId = Object.fromEntries(
+    currentDiagram.nodes.flatMap((node) => {
+      const source = node.metadata?.moduleSource;
+      return source
+        ? [
+            [
+              node.id,
+              { moduleId: source.moduleId, instanceId: source.instanceId ?? source.expandedAt }
+            ] as const
+          ]
+        : [];
+    })
+  );
+  const result = applyArchitectureBoardModulePatternKnowledge(
+    roundtripDiagram,
+    architectureBoardKnowledge,
+    {
+      projection: "compiler-roundtrip",
+      semanticEdgeLabelsById: Object.fromEntries(
+        architecture.edges.map(({ id, label }) => [id, label])
+      ),
+      moduleInstanceByNodeId,
+      resourceParentByNodeId: createArchitectureBoardModulePatternResourceParentMap(
+        currentDiagram.nodes
+      )
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result.matches.length, architectureBoardKnowledge.modulePatterns.length * 2);
+  for (const match of result.matches) {
+    const sources = new Set(
+      Object.values(match.nodeIdByPatternNodeId).map((nodeId) => {
+        const source = moduleInstanceByNodeId[nodeId];
+        assert.ok(source);
+        assert.equal(source.moduleId, match.patternId);
+        return `${source.moduleId}:${source.instanceId}`;
+      })
+    );
+    assert.equal(sources.size, 1, `${match.patternId} must stay inside one Module instance`);
+  }
+});
+
+test("Compiler roundtrip matcher는 presentation Area를 걷어내도 Resource containment를 요구한다", () => {
+  const pattern = architectureBoardKnowledge.modulePatterns.find(
+    ({ id }) => id === "relational-data-layer"
+  );
+  assert.ok(pattern);
+  const resourceNodeIds = new Set(
+    pattern.nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
+  );
+  const scattered: DiagramJson = {
+    nodes: pattern.nodes
+      .filter(({ kind }) => kind === "resource")
+      .map((node) => {
+        const cloned = structuredClone(node) as DiagramNode;
+        return {
+          ...cloned,
+          metadata: { ...cloned.metadata, parentAreaNodeId: undefined }
+        };
+      }),
+    edges: structuredClone(
+      pattern.edges.filter(
+        ({ sourceNodeId, targetNodeId, label }) =>
+          resourceNodeIds.has(sourceNodeId) &&
+          resourceNodeIds.has(targetNodeId) &&
+          label !== "contains" &&
+          label !== "hosts"
+      )
+    ) as DiagramJson["edges"],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    variables: []
+  };
+  const result = applyArchitectureBoardModulePatternKnowledge(
+    scattered,
+    architectureBoardKnowledge,
+    { projection: "compiler-roundtrip" }
+  );
+
+  assert.equal(result?.matchedPatternIds.includes(pattern.id) ?? false, false);
 });
 
 test("network pattern Compiler proposal은 containment만 숨기고 semantic Area edge는 보존한다", () => {

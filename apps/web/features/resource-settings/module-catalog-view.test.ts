@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { curatedModules, expandCuratedModuleIntoDiagram } from "./module-catalog";
-import { createModuleCatalogGroups, moduleCatalogViews } from "./module-catalog-view";
+import {
+  countModuleResources,
+  createModuleCatalogGroups,
+  moduleCatalogViews
+} from "./module-catalog-view";
 
 const catalogViewSource = readFileSync(new URL("./module-catalog-view.ts", import.meta.url), "utf8");
 const panelSource = readFileSync(new URL("./index.tsx", import.meta.url), "utf8");
@@ -67,6 +71,16 @@ test("Module은 실제 lens마다 중복 분류되고 어느 view에서도 같�
     moduleId: purposeMatch.id
   });
   assert.deepEqual(normalizeExpandedAt(fromFunctionalView), normalizeExpandedAt(fromPurposeView));
+});
+
+test("Module 카드의 리소스 수는 presentation Area를 제외한다", () => {
+  for (const moduleDefinition of curatedModules) {
+    assert.equal(
+      countModuleResources(moduleDefinition),
+      moduleDefinition.nodes.filter(({ kind }) => kind === "resource").length
+    );
+  }
+  assert.match(panelSource, /countModuleResources\(moduleDefinition\)/);
 });
 
 test("artifact 입력 순서가 달라도 group과 Module 정렬은 결정적이다", () => {

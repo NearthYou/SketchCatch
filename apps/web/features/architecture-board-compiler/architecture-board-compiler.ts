@@ -35,6 +35,7 @@ import {
 } from "./architecture-board-knowledge-policy";
 import {
   applyArchitectureBoardModulePatternKnowledge,
+  createArchitectureBoardModulePatternResourceParentMap,
   type ArchitectureBoardModulePatternKnowledgeResult
 } from "./architecture-board-module-pattern-policy";
 import {
@@ -320,6 +321,27 @@ function createModulePatternCandidate(
       projection: "compiler-roundtrip",
       semanticEdgeLabelsById: Object.fromEntries(
         baseCandidate.architecture.edges.map(({ id, label }) => [id, label])
+      ),
+      moduleInstanceByNodeId: Object.fromEntries(
+        beforeDiagram.nodes.flatMap((node) => {
+          const moduleSource = node.metadata?.moduleSource;
+          return moduleSource
+            ? [
+                [
+                  node.id,
+                  {
+                    moduleId: moduleSource.moduleId,
+                    instanceId:
+                      moduleSource.instanceId ??
+                      `${moduleSource.moduleId}:${moduleSource.expandedAt}`
+                  }
+                ] as const
+              ]
+            : [];
+        })
+      ),
+      resourceParentByNodeId: createArchitectureBoardModulePatternResourceParentMap(
+        beforeDiagram.nodes
       )
     }
   );

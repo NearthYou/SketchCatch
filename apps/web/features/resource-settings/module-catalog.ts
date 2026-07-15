@@ -56,6 +56,7 @@ export function materializeCuratedModulePattern(input: {
     input.pattern.id,
     "node"
   );
+  const moduleInstanceId = requireMappedValue(nodeIds, input.pattern.nodes[0]!.id);
   const edgeIds = createIdMap(
     input.pattern.edges.map(({ id }) => id),
     new Set(input.diagram.edges.map(({ id }) => id)),
@@ -110,6 +111,7 @@ export function materializeCuratedModulePattern(input: {
                 : {}),
               moduleSource: {
                 expandedAt,
+                instanceId: moduleInstanceId,
                 moduleId: input.pattern.id,
                 moduleVersion: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
                 representativeTemplateId: input.pattern.provenance.representativeTemplateId,
@@ -121,6 +123,7 @@ export function materializeCuratedModulePattern(input: {
             metadata: {
               moduleSource: {
                 expandedAt,
+                instanceId: moduleInstanceId,
                 moduleId: input.pattern.id,
                 moduleVersion: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
                 representativeTemplateId: input.pattern.provenance.representativeTemplateId,

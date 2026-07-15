@@ -10,6 +10,7 @@ import {
   type ArchitectureBoardModulePattern
 } from "../architecture-board-compiler/architecture-board-knowledge-contract";
 import { architectureBoardKnowledge } from "../architecture-board-compiler/architecture-board-knowledge";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 import {
   curatedModules,
   expandCuratedModuleIntoDiagram,
@@ -29,6 +30,19 @@ test("catalog는 생성된 Module Pattern Knowledge를 그대로 노출한다", 
     architectureBoardKnowledge.modulePatterns.map(({ id }) => id)
   );
   assert.ok(curatedModules.every(({ nodes, edges }) => nodes.length > 0 && edges.length > 0));
+});
+
+test("Module의 presentation container는 Board에서 실제 Area로 동작한다", () => {
+  for (const pattern of architectureBoardKnowledge.modulePatterns) {
+    const result = expandCuratedModuleIntoDiagram({
+      diagram: emptyDiagram,
+      moduleId: pattern.id
+    });
+
+    for (const node of result.nodes.filter(({ kind }) => kind === "design")) {
+      assert.equal(isAreaNode(node), true, `${pattern.id}/${node.type} must render as an Area`);
+    }
+  }
 });
 
 test("Module 추가는 source fragment의 node, edge, containment와 route를 함께 옮긴다", () => {
@@ -124,6 +138,15 @@ test("반복 추가는 ID와 Terraform resourceName/reference를 매번 고유�
 
   assert.equal(new Set(second.nodes.map(({ id }) => id)).size, second.nodes.length);
   assert.equal(new Set(second.edges.map(({ id }) => id)).size, second.edges.length);
+  const firstInstanceIds = new Set(
+    second.nodes.slice(0, first.nodes.length).map(({ metadata }) => metadata?.moduleSource?.instanceId)
+  );
+  const secondInstanceIds = new Set(
+    second.nodes.slice(first.nodes.length).map(({ metadata }) => metadata?.moduleSource?.instanceId)
+  );
+  assert.equal(firstInstanceIds.size, 1);
+  assert.equal(secondInstanceIds.size, 1);
+  assert.notEqual([...firstInstanceIds][0], [...secondInstanceIds][0]);
   const resourceNames = second.nodes.flatMap(({ parameters }) =>
     parameters ? [parameters.resourceName] : []
   );

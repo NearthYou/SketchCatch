@@ -25,6 +25,10 @@ export type ArchitectureBoardModulePatternKnowledgeResult = {
 export type ArchitectureBoardModulePatternKnowledgeOptions = {
   readonly projection?: "strict" | "compiler-roundtrip";
   readonly semanticEdgeLabelsById?: Readonly<Record<string, string | undefined>>;
+  readonly moduleInstanceByNodeId?: Readonly<
+    Record<string, { readonly moduleId: string; readonly instanceId: string }>
+  >;
+  readonly resourceParentByNodeId?: Readonly<Record<string, string | null>>;
 };
 
 type MutableMatch = {
@@ -88,8 +92,18 @@ export function applyArchitectureBoardModulePatternKnowledge(
   options: ArchitectureBoardModulePatternKnowledgeOptions = {}
 ): ArchitectureBoardModulePatternKnowledgeResult | null {
   const mode = options.projection ?? "strict";
-  const matchingDiagram = createMatchingDiagram(diagram, mode, options.semanticEdgeLabelsById);
-  const matches = findNonOverlappingPatternMatches(matchingDiagram, artifact.modulePatterns, mode);
+  const matchingDiagram = createMatchingDiagram(
+    diagram,
+    mode,
+    options.semanticEdgeLabelsById,
+    options.resourceParentByNodeId
+  );
+  const matches = findNonOverlappingPatternMatches(
+    matchingDiagram,
+    artifact.modulePatterns,
+    mode,
+    options.moduleInstanceByNodeId
+  );
   if (matches.length === 0) return null;
 
   const nextDiagram = applyPatternGeometry(diagram, matches);
@@ -115,7 +129,10 @@ export function applyArchitectureBoardModulePatternKnowledge(
 function findNonOverlappingPatternMatches(
   diagram: DiagramJson,
   patterns: readonly ArchitectureBoardModulePattern[],
-  mode: "strict" | "compiler-roundtrip"
+  mode: "strict" | "compiler-roundtrip",
+  moduleInstanceByNodeId:
+    | Readonly<Record<string, { readonly moduleId: string; readonly instanceId: string }>>
+    | undefined
 ): MutableMatch[] {
   const usedNodeIds = new Set<string>();
   const matches: MutableMatch[] = [];
@@ -131,7 +148,9 @@ function findNonOverlappingPatternMatches(
           .filter(hasInternalPatternRelation)
       : [];
   const resourceProjections = patterns.flatMap((pattern): PatternProjection[] => {
-    const nodes = pattern.nodes.filter(({ kind }) => kind === "resource");
+    const nodes = projectResourceNodes(
+      pattern.nodes.map((node) => structuredClone(node) as DiagramNode)
+    );
     if ((mode === "strict" && nodes.length === pattern.nodes.length) || nodes.length < 2) return [];
     const nodeIds = new Set(nodes.map(({ id }) => id));
     const edges = pattern.edges.filter(
@@ -148,9 +167,9 @@ function findNonOverlappingPatternMatches(
     ...resourceProjections.sort(compareProjections)
   ].map((projection) => ({
     ...projection,
-    relations: createRelationIndex(projection.nodes, projection.edges, mode === "strict")
+    relations: createRelationIndex(projection.nodes, projection.edges, mode, true)
   }));
-  const context = createMatchingContext(diagram, mode);
+  const context = createMatchingContext(diagram, mode, moduleInstanceByNodeId);
 
   for (const patternProjection of orderedProjections) {
     while (true) {
@@ -205,6 +224,10 @@ function findNextNodeMapping(
       patternNode.id,
       (context.nodesBySignature.get(nodeSignature(patternNode)) ?? [])
         .filter((node) => !excludedNodeIds.has(node.id))
+        .filter((node) => {
+          const moduleInstance = context.moduleInstanceByNodeId.get(node.id);
+          return !moduleInstance || moduleInstance.moduleId === patternProjection.pattern.id;
+        })
         .filter((node) =>
           hasEnoughRelations(patternNode.id, node.id, patternRelations, diagramRelations)
         )
@@ -233,6 +256,7 @@ function findNextNodeMapping(
     const patternNodeId = patternNodeOrder[index]!;
     for (const candidate of candidatesByPatternNodeId.get(patternNodeId) ?? []) {
       if (usedDiagramNodeIds.has(candidate.id)) continue;
+      if (!moduleInstancesAgreeWithMapping(candidate.id, mapping, context)) continue;
       if (
         !relationsAgreeWithMapping(
           patternNodeId,
@@ -256,6 +280,28 @@ function findNextNodeMapping(
   return matchNext(0) ? new Map(mapping) : null;
 }
 
+function moduleInstancesAgreeWithMapping(
+  candidateNodeId: string,
+  mapping: ReadonlyMap<string, string>,
+  context: MatchingContext
+): boolean {
+  const candidateInstance = context.moduleInstanceByNodeId.get(candidateNodeId);
+  for (const mappedNodeId of mapping.values()) {
+    const mappedInstance = context.moduleInstanceByNodeId.get(mappedNodeId);
+    if (!candidateInstance || !mappedInstance) {
+      if (candidateInstance !== mappedInstance) return false;
+      continue;
+    }
+    if (
+      candidateInstance.moduleId !== mappedInstance.moduleId ||
+      candidateInstance.instanceId !== mappedInstance.instanceId
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 type RelationIndex = {
   readonly bySource: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
   readonly incomingByNodeId: ReadonlyMap<string, readonly string[]>;
@@ -268,12 +314,17 @@ type MatchingContext = {
   readonly relations: RelationIndex;
   readonly nodesBySignature: ReadonlyMap<string, readonly DiagramNode[]>;
   readonly edgeIdsByMatchKey: ReadonlyMap<string, readonly string[]>;
+  readonly moduleInstanceByNodeId: ReadonlyMap<
+    string,
+    { readonly moduleId: string; readonly instanceId: string }
+  >;
   readonly mode: "strict" | "compiler-roundtrip";
 };
 
 function createRelationIndex(
   nodes: readonly StructuralNode[],
   edges: readonly StructuralEdge[],
+  mode: "strict" | "compiler-roundtrip",
   includeContainment: boolean
 ): RelationIndex {
   const nodeIds = new Set(nodes.map(({ id }) => id));
@@ -291,7 +342,7 @@ function createRelationIndex(
     add(
       edge.sourceNodeId,
       edge.targetNodeId,
-      `edge:${edgeSemanticSignature(edge, includeContainment ? "strict" : "compiler-roundtrip")}`
+      `edge:${edgeSemanticSignature(edge, mode)}`
     );
   }
   if (includeContainment) {
@@ -612,15 +663,25 @@ function edgeSemanticSignature(
 function createMatchingDiagram(
   diagram: DiagramJson,
   mode: "strict" | "compiler-roundtrip",
-  semanticEdgeLabelsById: Readonly<Record<string, string | undefined>> | undefined
+  semanticEdgeLabelsById: Readonly<Record<string, string | undefined>> | undefined,
+  resourceParentByNodeId: Readonly<Record<string, string | null>> | undefined
 ): DiagramJson {
   if (mode === "strict") return diagram;
-  const resourceNodeIds = new Set(
-    diagram.nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
-  );
+  const resourceNodes = projectResourceNodes(diagram.nodes).map((node) => {
+    if (!resourceParentByNodeId || !(node.id in resourceParentByNodeId)) return node;
+    const parentId = resourceParentByNodeId[node.id];
+    const metadata = { ...(node.metadata ?? {}) };
+    if (parentId) metadata.parentAreaNodeId = parentId;
+    else delete metadata.parentAreaNodeId;
+    return {
+      ...node,
+      ...(Object.keys(metadata).length > 0 ? { metadata } : { metadata: undefined })
+    };
+  });
+  const resourceNodeIds = new Set(resourceNodes.map(({ id }) => id));
   return {
     ...diagram,
-    nodes: diagram.nodes.filter(({ id }) => resourceNodeIds.has(id)),
+    nodes: resourceNodes,
     edges: diagram.edges
       .map((edge) => ({
         ...edge,
@@ -637,9 +698,45 @@ function createMatchingDiagram(
   };
 }
 
+export function createArchitectureBoardModulePatternResourceParentMap(
+  nodes: readonly DiagramNode[]
+): Readonly<Record<string, string | null>> {
+  return Object.fromEntries(
+    projectResourceNodes(nodes).map((node) => [node.id, node.metadata?.parentAreaNodeId ?? null])
+  );
+}
+
+function projectResourceNodes(nodes: readonly DiagramNode[]): DiagramNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const resourceNodeIds = new Set(
+    nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
+  );
+
+  return nodes
+    .filter(({ id }) => resourceNodeIds.has(id))
+    .map((node) => {
+      let parentId = node.metadata?.parentAreaNodeId;
+      const visited = new Set<string>();
+      while (parentId && !resourceNodeIds.has(parentId) && !visited.has(parentId)) {
+        visited.add(parentId);
+        parentId = nodeById.get(parentId)?.metadata?.parentAreaNodeId;
+      }
+      const metadata = { ...(node.metadata ?? {}) };
+      if (parentId && resourceNodeIds.has(parentId)) metadata.parentAreaNodeId = parentId;
+      else delete metadata.parentAreaNodeId;
+      return {
+        ...node,
+        ...(Object.keys(metadata).length > 0 ? { metadata } : { metadata: undefined })
+      };
+    });
+}
+
 function createMatchingContext(
   diagram: DiagramJson,
-  mode: "strict" | "compiler-roundtrip"
+  mode: "strict" | "compiler-roundtrip",
+  moduleInstanceByNodeId:
+    | Readonly<Record<string, { readonly moduleId: string; readonly instanceId: string }>>
+    | undefined
 ): MatchingContext {
   const nodesBySignature = new Map<string, DiagramNode[]>();
   for (const node of [...diagram.nodes].sort((left, right) => left.id.localeCompare(right.id))) {
@@ -654,9 +751,10 @@ function createMatchingContext(
   }
   return {
     diagram,
-    relations: createRelationIndex(diagram.nodes, diagram.edges, mode === "strict"),
+    relations: createRelationIndex(diagram.nodes, diagram.edges, mode, true),
     nodesBySignature,
     edgeIdsByMatchKey,
+    moduleInstanceByNodeId: new Map(Object.entries(moduleInstanceByNodeId ?? {})),
     mode
   };
 }
