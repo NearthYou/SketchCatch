@@ -12,6 +12,13 @@ on:
           - edge
           - data
           - legacy-rollback
+      runtime_plan_scope:
+        description: "Runtime-only review scope"
+        required: true
+        type: choice
+        options:
+          - complete
+          - runtime-cache-ingress
       confirmation:
         description: "Enter <management-group>-review-only"
         required: true
@@ -48,12 +55,14 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.8
+          terraform_wrapper: false
 
       - name: Resolve management group
         id: group
         shell: bash
         env:
           MANAGEMENT_GROUP: ${{ inputs.management_group }}
+          RUNTIME_PLAN_SCOPE: ${{ inputs.runtime_plan_scope }}
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
@@ -61,6 +70,10 @@ jobs:
           expected_confirmation="${MANAGEMENT_GROUP}-review-only"
           if [ "${CONFIRMATION}" != "${expected_confirmation}" ]; then
             echo "::error::confirmation must be ${expected_confirmation}"
+            exit 1
+          fi
+          if [ "${MANAGEMENT_GROUP}" != "runtime" ] && [ "${RUNTIME_PLAN_SCOPE}" != "complete" ]; then
+            echo "::error::runtime_plan_scope must be complete for non-runtime management groups"
             exit 1
           fi
 
@@ -198,11 +211,18 @@ jobs:
         env:
           TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
           MANAGEMENT_GROUP: ${{ inputs.management_group }}
+          RUNTIME_PLAN_SCOPE: ${{ inputs.runtime_plan_scope }}
         run: |
           set -euo pipefail
           plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)
           if [ "${MANAGEMENT_GROUP}" = "runtime" ]; then
             plan_args+=("-var-file=${RUNNER_TEMP}/runtime.tfvars.json")
+            if [ "${RUNTIME_PLAN_SCOPE}" = "runtime-cache-ingress" ]; then
+              plan_args+=(
+                '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]'
+                '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]'
+              )
+            fi
           fi
 
           set +e

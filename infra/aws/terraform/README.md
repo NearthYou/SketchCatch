@@ -68,7 +68,7 @@ API 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Paramete
 ## 적용 절차
 
 1. remote state와 production tfvars를 백업합니다.
-2. `terraform plan`에서 Runtime Cache ingress source가 현재 ECS API/worker 보안 그룹이고 Redis 포트 하나만 여는지 확인합니다.
+2. 장애 복구 review-only Plan은 `runtime_plan_scope=runtime-cache-ingress`로 실행하고, 두 ingress source가 현재 ECS API/worker 보안 그룹이며 Redis 포트 하나만 여는지 확인합니다. 전체 runtime drift 검토는 `complete` scope로 별도 수행합니다.
 3. 저장한 plan을 승인 후 apply합니다.
 4. API/web service가 안정화되고 target이 healthy인지 확인합니다.
 5. `/`, `/health`, `/health/db`, 인증이 필요한 `/api/projects`를 smoke합니다.
