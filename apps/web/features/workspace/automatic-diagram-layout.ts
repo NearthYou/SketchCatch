@@ -22,9 +22,16 @@ export type AutomaticDiagramLayoutEdge = {
 };
 
 export type AutomaticDiagramLayoutInput = {
+  readonly candidateProfiles?: readonly AutomaticDiagramLayoutCandidateProfile[] | undefined;
   readonly edges: readonly AutomaticDiagramLayoutEdge[];
   readonly nodes: readonly DiagramNode[];
   readonly protectedNodeIds?: ReadonlySet<string> | undefined;
+};
+
+export type AutomaticDiagramLayoutCandidateProfile = {
+  readonly columnGap: number;
+  readonly id: string;
+  readonly rowGap: number;
 };
 
 export type AutomaticDiagramLayoutResult = {
@@ -57,6 +64,7 @@ type LayoutLane = "primary" | "upper-support" | "lower-support";
 type LayoutCandidateConfig = {
   readonly columnGap: number;
   readonly id: string;
+  readonly knowledgeProfileId?: string | undefined;
   readonly primaryOrder: "ascending" | "descending";
   readonly rowGap: number;
   readonly supportPlacement: "split" | "above" | "below";
@@ -99,7 +107,7 @@ const LAYOUT_CANDIDATES: readonly LayoutCandidateConfig[] = [
 ];
 
 export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): AutomaticDiagramLayoutResult {
-  const candidates = LAYOUT_CANDIDATES.map((config) => {
+  const candidates = getLayoutCandidateConfigs(input).map((config) => {
     const nodes = createLayoutCandidate(input, config);
 
     return {
@@ -108,9 +116,16 @@ export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): Auto
       quality: evaluateAutomaticDiagramLayout({ edges: input.edges, nodes })
     };
   });
-  const bestCandidate = [...candidates].sort(
-    (left, right) => left.quality.score - right.quality.score || left.config.id.localeCompare(right.config.id)
-  )[0];
+  const baselineCandidate = selectBestCandidate(
+    candidates.filter(({ config }) => config.knowledgeProfileId === undefined)
+  );
+  const eligibleCandidates = baselineCandidate
+    ? candidates.filter(
+        ({ config, quality }) =>
+          config.knowledgeProfileId === undefined || doesNotRegressVisualAnomalies(quality, baselineCandidate.quality)
+      )
+    : candidates;
+  const bestCandidate = selectBestCandidate(eligibleCandidates);
 
   if (!bestCandidate) {
     const quality = evaluateAutomaticDiagramLayout(input);
@@ -129,6 +144,65 @@ export function layoutAutomaticDiagram(input: AutomaticDiagramLayoutInput): Auto
     nodes: bestCandidate.nodes,
     quality: bestCandidate.quality
   };
+}
+
+function selectBestCandidate<T extends { readonly config: LayoutCandidateConfig; readonly quality: AutomaticDiagramLayoutQuality }>(
+  candidates: readonly T[]
+): T | undefined {
+  return [...candidates].sort(
+    (left, right) => left.quality.score - right.quality.score || left.config.id.localeCompare(right.config.id)
+  )[0];
+}
+
+// A knowledge profile broadens the candidate search, but it must not trade a clean Board for a
+// lower weighted score with a newly introduced overlap, boundary violation, or edge obstruction.
+function doesNotRegressVisualAnomalies(
+  candidate: AutomaticDiagramLayoutQuality,
+  baseline: AutomaticDiagramLayoutQuality
+): boolean {
+  return (
+    candidate.nodeOverlapCount <= baseline.nodeOverlapCount &&
+    candidate.siblingAreaOverlapCount <= baseline.siblingAreaOverlapCount &&
+    candidate.parentBoundaryViolationCount <= baseline.parentBoundaryViolationCount &&
+    candidate.edgeNodeIntersectionCount <= baseline.edgeNodeIntersectionCount &&
+    candidate.edgeAreaTitleIntersectionCount <= baseline.edgeAreaTitleIntersectionCount &&
+    candidate.edgeCrossingCount <= baseline.edgeCrossingCount &&
+    candidate.backwardEdgeCount <= baseline.backwardEdgeCount &&
+    candidate.supportLaneIntrusionCount <= baseline.supportLaneIntrusionCount
+  );
+}
+
+function getLayoutCandidateConfigs(
+  input: AutomaticDiagramLayoutInput
+): readonly LayoutCandidateConfig[] {
+  const profiles = [...(input.candidateProfiles ?? [])]
+    .filter(isUsableCandidateProfile)
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  return [
+    ...LAYOUT_CANDIDATES,
+    ...profiles.flatMap((profile) =>
+      LAYOUT_CANDIDATES.map((candidate) => ({
+        ...candidate,
+        columnGap: profile.columnGap,
+        id: `${profile.id}:${candidate.id}`,
+        knowledgeProfileId: profile.id,
+        rowGap: profile.rowGap
+      }))
+    )
+  ];
+}
+
+function isUsableCandidateProfile(
+  profile: AutomaticDiagramLayoutCandidateProfile
+): boolean {
+  return (
+    profile.id.trim().length > 0 &&
+    Number.isFinite(profile.columnGap) &&
+    profile.columnGap > 0 &&
+    Number.isFinite(profile.rowGap) &&
+    profile.rowGap > 0
+  );
 }
 
 function createLayoutCandidate(

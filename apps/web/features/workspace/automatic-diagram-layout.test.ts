@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DiagramNode } from "@sketchcatch/types";
+import { buildTemplateDiagramJson, type DiagramNode } from "@sketchcatch/types";
 import {
   evaluateAutomaticDiagramLayout,
   layoutAutomaticDiagram
@@ -27,6 +27,66 @@ test("layoutAutomaticDiagram arranges the primary request flow from left to righ
   assert.ok(nodeById.get("entry")!.position.x < nodeById.get("compute")!.position.x);
   assert.ok(nodeById.get("compute")!.position.x < nodeById.get("database")!.position.x);
   assert.deepEqual(layoutAutomaticDiagram({ edges, nodes }), result);
+});
+
+test("layoutAutomaticDiagram은 선택 profile마다 기존 후보군을 확장한다", () => {
+  const nodes = [
+    makeNode("browser", "actor_browser", 0, 0, "design"),
+    makeNode("service", "aws_ecs_service", 0, 0)
+  ];
+  const edges = [{ id: "browser-service", sourceId: "browser", targetId: "service" }];
+  const input = {
+    edges,
+    nodes,
+    candidateProfiles: [{ id: "knowledge:compact-service", columnGap: 120, rowGap: 80 }]
+  } as Parameters<typeof layoutAutomaticDiagram>[0];
+
+  const result = layoutAutomaticDiagram(input);
+
+  assert.equal(result.candidateCount, 12);
+  assert.deepEqual(layoutAutomaticDiagram(input), result);
+});
+
+test("knowledge spacing profile은 baseline보다 edge/node/containment 이상치를 늘리면 선택하지 않는다", () => {
+  const input = {
+    edges: createFailureLikeEdges(),
+    nodes: createFailureLikeNodes()
+  };
+  const baseline = layoutAutomaticDiagram(input);
+  const result = layoutAutomaticDiagram({
+    ...input,
+    candidateProfiles: [{ id: "knowledge:risky-tight", columnGap: 8, rowGap: 8 }]
+  });
+
+  assert.equal(result.candidateId, baseline.candidateId);
+  assert.equal(result.quality.edgeNodeIntersectionCount, baseline.quality.edgeNodeIntersectionCount);
+  assert.equal(result.quality.edgeCrossingCount, baseline.quality.edgeCrossingCount);
+  assert.equal(result.quality.parentBoundaryViolationCount, baseline.quality.parentBoundaryViolationCount);
+});
+
+test("Template에 profile이 edge node 관통을 새로 만들면 낮은 총점이어도 baseline을 유지한다", () => {
+  const diagram = buildTemplateDiagramJson("three-tier-web-app", {
+    projectSlug: "profile-guard",
+    shortId: "profile-guard"
+  });
+  const input = {
+    edges: diagram.edges.map((edge) => ({
+      id: edge.id,
+      sourceId: edge.sourceNodeId,
+      targetId: edge.targetNodeId,
+      label: edge.label
+    })),
+    nodes: diagram.nodes
+  };
+  const baseline = layoutAutomaticDiagram(input);
+  const result = layoutAutomaticDiagram({
+    ...input,
+    candidateProfiles: [{ id: "knowledge:risky-tight", columnGap: 8, rowGap: 8 }]
+  });
+
+  assert.equal(result.candidateId, baseline.candidateId);
+  assert.equal(result.quality.edgeNodeIntersectionCount, baseline.quality.edgeNodeIntersectionCount);
+  assert.equal(result.quality.edgeCrossingCount, baseline.quality.edgeCrossingCount);
 });
 
 test("layoutAutomaticDiagram lays out containment before aligned repeated areas", () => {

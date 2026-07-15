@@ -310,7 +310,9 @@ export async function listAwsConnections(
 ): Promise<AwsConnection[]> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
 
-  return awsConnectionRows.map(toAwsConnection);
+  return awsConnectionRows
+    .filter((awsConnection) => awsConnection.status === "verified")
+    .map(toAwsConnection);
 }
 
 export async function createAwsConnection(

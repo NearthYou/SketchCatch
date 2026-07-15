@@ -1,0 +1,82 @@
+.launcher {
+  align-items: center;
+  background: #000000;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  bottom: 20px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 8%),
+    0 2px 2px rgb(0 0 0 / 4%),
+    0 16px 40px -24px rgb(23 23 23 / 24%);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: "Pretendard", "Noto Sans KR", "Inter", "Geist", sans-serif;
+  height: 44px;
+  justify-content: center;
+  padding: 4px;
+  position: fixed;
+  right: 80px;
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+  width: 44px;
+  z-index: 1302;
+}
+
+.launcher[data-right-panel-open="true"] {
+  right: calc(var(--right-panel-width, 0px) + 20px);
+}
+
+.launcher:hover {
+  background: #1a1a1a;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 10%),
+    0 4px 8px rgb(0 0 0 / 8%),
+    0 20px 44px -22px rgb(23 23 23 / 34%);
+  transform: translateY(-2px);
+}
+
+.launcher:active {
+  transform: translateY(0);
+}
+
+.launcher:focus-visible {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px #171717;
+  outline: none;
+}
+
+.mark {
+  align-items: center;
+  border: 1px solid rgb(255 255 255 / 32%);
+  border-radius: 6px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  height: 32px;
+  justify-content: center;
+  letter-spacing: -0.03em;
+  width: 32px;
+}
+
+@media (max-width: 768px) {
+  .launcher,
+  .launcher[data-right-panel-open="true"] {
+    bottom: max(16px, env(safe-area-inset-bottom));
+    right: 76px;
+  }
+
+  .launcher[data-right-panel-open="true"] {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher {
+    transition: none;
+  }
+}

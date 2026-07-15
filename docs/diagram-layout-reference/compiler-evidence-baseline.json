@@ -1,0 +1,15 @@
+{
+  "baselineVersion": "architecture-board-compiler-evidence-baseline/v1",
+  "compilerVersion": "architecture-board-compiler/v3",
+  "recordedRationale": "29개 사용 가능 Template을 Compiler v3 template-review 경로로 집계한 기준선이다. 상한을 높이려면 compiler-evidence-report.json diff와 해당 시각 이상치의 검토 근거를 함께 이 파일에 기록해야 한다.",
+  "aggregateAfterVisualAnomalyBudget": {
+    "nodeOverlapCount": 1,
+    "siblingAreaOverlapCount": 6,
+    "parentBoundaryViolationCount": 1,
+    "edgeCrossingCount": 89,
+    "edgeNodeIntersectionCount": 5,
+    "edgeAreaTitleIntersectionCount": 30,
+    "backwardEdgeCount": 4,
+    "supportLaneIntrusionCount": 4
+  }
+}

@@ -113,10 +113,6 @@ export function WorkspaceStartClient({
   const [errorMessage, setErrorMessage] = useState("");
   const [projectNameError, setProjectNameError] = useState("");
   const [submittingKind, setSubmittingKind] = useState<WorkspaceStartKind | null>(null);
-  const [repositoryUrlFormVisible, setRepositoryUrlFormVisible] = useState(
-    initialStartKind === "repository"
-  );
-  const [repositoryUrl, setRepositoryUrl] = useState("");
   const selectedTemplate = useMemo(() => {
     const template = boardTemplates.find((candidate) => candidate.id === selectedTemplateId);
     return template && isBoardTemplateAvailable(template) ? template : null;
@@ -126,10 +122,6 @@ export function WorkspaceStartClient({
     return template && isBoardTemplateAvailable(template) ? template : null;
   }, [previewTemplateId]);
   const isSubmitting = submittingKind !== null;
-  const isPrimarySubmitting = isSubmitting && submittingKind !== "blank";
-  const canContinue =
-    !isSubmitting &&
-    (selectedKind !== "repository" || !repositoryUrlFormVisible || repositoryUrl.trim().length > 0);
 
   useEffect(() => {
     if (initialStartKind) {
@@ -157,7 +149,6 @@ export function WorkspaceStartClient({
           : null;
       setSelectedTemplateId(restoredTemplateId);
       setPreviewTemplateId(restoredTemplateId);
-      setRepositoryUrlFormVisible(storedForm.selectedKind === "repository");
     } else {
       const aiDraft = readAiStartDraft();
       if (aiDraft?.projectName) {
@@ -195,11 +186,6 @@ export function WorkspaceStartClient({
 
       setErrorMessage("");
 
-      if (startKind === "repository" && repositoryUrlFormVisible) {
-        await startFromRepositoryUrl(projectName);
-        return;
-      }
-
       setSubmittingKind(startKind);
 
       try {
@@ -220,19 +206,23 @@ export function WorkspaceStartClient({
           return;
         }
 
-        if (action.kind === "showRepositoryUrlForm") {
-          setRepositoryUrlFormVisible(true);
-          setSubmittingKind(null);
-          return;
-        }
-
         let createdProjectId: string | null = null;
 
         try {
           const project = await createProject({ name: projectName });
           createdProjectId = project.id;
 
-          if (action.openMode === "template" && template) {
+          if (action.kind === "createRepositoryProject") {
+            clearWorkspaceStartForm();
+            const params = new URLSearchParams({
+              projectId: project.id,
+              projectName: project.name
+            });
+            router.push(`/workspace/repository?${params.toString()}`);
+            return;
+          }
+
+          if (action.kind === "createProject" && action.openMode === "template" && template) {
             await saveProjectDraft({
               diagramJson:
                 template.terraformFiles.length > 0
@@ -263,29 +253,22 @@ export function WorkspaceStartClient({
     });
   }
 
-  // 화면에서 선택한 시작 방식과 그 방식에 필요한 보조 입력 영역을 함께 맞춥니다.
-  function selectStartKind(kind: WorkspaceStartKind): void {
-    if (kind === "template") {
-      if (!validateProjectName()) {
-        return;
-      }
-
-      setSelectedKind(kind);
-      setTemplateStartView("catalog");
-      setRepositoryUrlFormVisible(false);
+  // 시작 방식 카드를 누르면 이름을 검증하고 해당 흐름으로 즉시 이동합니다.
+  function startWithKind(kind: WorkspaceStartKind): void {
+    if (!validateProjectName()) {
       return;
     }
 
     setSelectedKind(kind);
     setErrorMessage("");
-    setTemplateStartView(null);
 
-    if (kind === "repository") {
-      setRepositoryUrlFormVisible(true);
+    if (kind === "template") {
+      setTemplateStartView("catalog");
       return;
     }
 
-    setRepositoryUrlFormVisible(false);
+    setTemplateStartView(null);
+    void handleContinue(kind);
   }
 
   function validateProjectName(): boolean {
@@ -299,40 +282,6 @@ export function WorkspaceStartClient({
     projectNameInputRef.current?.focus();
     projectNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     return false;
-  }
-
-  // Repository URL 시작도 공용 제출 상태를 사용해 다른 시작 버튼을 함께 잠급니다.
-  async function startFromRepositoryUrl(projectName: string): Promise<void> {
-    const trimmedRepositoryUrl = repositoryUrl.trim();
-
-    if (!trimmedRepositoryUrl) {
-      setErrorMessage("Repository URL을 입력해주세요.");
-      return;
-    }
-
-    setSubmittingKind("repository");
-
-    let createdProjectId: string | null = null;
-
-    try {
-      const project = await createProject({ name: projectName });
-      createdProjectId = project.id;
-      clearWorkspaceStartForm();
-      const params = new URLSearchParams({
-        projectId: project.id,
-        projectName: project.name,
-        repositoryUrl: trimmedRepositoryUrl
-      });
-
-      router.push(`/workspace/repository?${params.toString()}`);
-    } catch {
-      if (createdProjectId) {
-        await deleteProject(createdProjectId).catch(() => undefined);
-      }
-
-      setSubmittingKind(null);
-      setErrorMessage("Repository 분석 페이지를 준비하지 못했습니다.");
-    }
   }
 
   function selectTemplate(templateId: string): void {
@@ -400,22 +349,26 @@ export function WorkspaceStartClient({
             title={title}
           />
 
-          <div className={styles.optionList} role="radiogroup" aria-label="프로젝트 시작 방식">
+          <div className={styles.optionList} role="group" aria-label="프로젝트 시작 방식">
             {mainStartOptions.map((option) => {
               const Icon = START_MODE_ICONS[option.kind];
-              const selected = selectedKind === option.kind;
+              const isOptionSubmitting = submittingKind === option.kind;
 
               return (
                 <button
-                  aria-checked={selected}
-                  className={selected ? `${styles.option} ${styles.optionSelected}` : styles.option}
+                  aria-busy={isOptionSubmitting}
+                  className={styles.option}
+                  disabled={isSubmitting}
                   key={option.kind}
-                  onClick={() => selectStartKind(option.kind)}
-                  role="radio"
+                  onClick={() => startWithKind(option.kind)}
                   type="button"
                 >
                   <span className={styles.optionIcon}>
-                    <Icon aria-hidden="true" size={20} />
+                    {isOptionSubmitting ? (
+                      <LoaderCircle aria-hidden="true" className={styles.spinner} size={20} />
+                    ) : (
+                      <Icon aria-hidden="true" size={20} />
+                    )}
                   </span>
                   <span className={styles.optionCopy}>
                     <strong>{option.title}</strong>
@@ -427,43 +380,7 @@ export function WorkspaceStartClient({
             })}
           </div>
 
-          {selectedKind === "repository" && repositoryUrlFormVisible ? (
-            <RepositoryUrlStartPanel
-              isSubmitting={isSubmitting}
-              onRepositoryUrlChange={(value) => {
-                setRepositoryUrl(value);
-                setErrorMessage("");
-              }}
-              repositoryUrl={repositoryUrl}
-            />
-          ) : null}
-
           <div className={styles.actions}>
-            <button
-              aria-busy={isPrimarySubmitting}
-              className={styles.primaryAction}
-              disabled={!canContinue}
-              onClick={() => {
-                if (selectedKind === "template") {
-                  setTemplateStartView(previewTemplate ? "detail" : "catalog");
-                  return;
-                }
-
-                void handleContinue();
-              }}
-              type="button"
-            >
-              {isPrimarySubmitting ? (
-                <LoaderCircle aria-hidden="true" className={styles.spinner} size={17} />
-              ) : null}
-              {isPrimarySubmitting
-                ? "처리 중"
-                : selectedKind === "template"
-                  ? previewTemplate
-                    ? "선택한 Template 보기"
-                    : "Template 고르기"
-                  : getContinueLabel(selectedKind, repositoryUrlFormVisible)}
-            </button>
             {blankStartOption ? (
               <button
                 aria-busy={submittingKind === "blank"}
@@ -706,55 +623,6 @@ function TemplateDetail({
       </section>
     </div>
   );
-}
-
-function RepositoryUrlStartPanel({
-  isSubmitting,
-  onRepositoryUrlChange,
-  repositoryUrl
-}: {
-  readonly isSubmitting: boolean;
-  readonly onRepositoryUrlChange: (value: string) => void;
-  readonly repositoryUrl: string;
-}) {
-  return (
-    <section className={styles.repositoryUrlPanel} aria-labelledby="repository-url-title">
-      <div className={styles.repositoryUrlHeader}>
-        <h2 id="repository-url-title">Repository URL 분석</h2>
-        <p>
-          public GitHub repository는 계정 연결 없이 분석합니다. private repository나 권한이 부족한
-          경우에는 환경설정에서 GitHub 권한을 연결해주세요.
-        </p>
-      </div>
-
-      <div className={styles.repositoryUrlForm}>
-        <label htmlFor="repository-url-input">
-          <span>GitHub URL</span>
-          <input
-            disabled={isSubmitting}
-            id="repository-url-input"
-            onChange={(event) => onRepositoryUrlChange(event.target.value)}
-            placeholder="https://github.com/owner/repository"
-            type="url"
-            value={repositoryUrl}
-          />
-        </label>
-      </div>
-    </section>
-  );
-}
-
-// 선택한 시작 방식에 맞는 한 개의 주 행동 문구를 반환합니다.
-function getContinueLabel(kind: WorkspaceStartKind, repositoryUrlFormVisible = false): string {
-  const labels: Record<WorkspaceStartKind, string> = {
-    ai: "AI로 계속",
-    blank: "빈 보드 열기",
-    repository: repositoryUrlFormVisible ? "Repository 분석하기" : "Repository URL 입력하기",
-    reverse: "기존 AWS 가져오기",
-    template: "Template으로 시작"
-  };
-
-  return labels[kind];
 }
 
 // 뒤로 돌아왔을 때 사용자가 고른 이름, 방식, Template을 복원합니다.

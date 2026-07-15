@@ -4,6 +4,7 @@ import type { ProjectAccessContext } from "../deployments/deployment-service.js"
 import {
   createAwsConnection,
   getAwsConnectionCloudFormationTemplate,
+  listAwsConnections,
   type AwsConnectionRecord,
   type AwsConnectionRepository
 } from "./aws-connection-service.js";
@@ -15,6 +16,24 @@ const accessContext: ProjectAccessContext = {
 const apiCallerPrincipalArn = "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-task";
 const workerCallerPrincipalArn =
   "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-worker-task";
+
+test("listAwsConnections hides pending and failed connection attempts", async () => {
+  const result = await listAwsConnections(
+    { accessContext },
+    createListRepository([
+      createAwsConnectionRecord({ id: "pending", status: "pending" }),
+      createAwsConnectionRecord({ id: "failed", status: "failed" }),
+      createAwsConnectionRecord({
+        id: "verified",
+        accountId: "123456789012",
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+        status: "verified"
+      })
+    ])
+  );
+
+  assert.deepEqual(result.map((connection) => connection.id), ["verified"]);
+});
 
 test("AWS connection templates trust every configured runtime caller role", async () => {
   const repository = createInMemoryAwsConnectionRepository();
@@ -100,5 +119,56 @@ function createInMemoryAwsConnectionRepository(): AwsConnectionRepository {
     async updateAwsConnectionVerification() {
       return undefined;
     }
+  };
+}
+
+// 목록 API의 표시 정책만 분리해 검증합니다.
+function createListRepository(rows: AwsConnectionRecord[]): AwsConnectionRepository {
+  return {
+    async createAwsConnection() {
+      throw new Error("Not used in this test");
+    },
+    async deleteAccessibleAwsConnection() {
+      return undefined;
+    },
+    async findAccessibleAwsConnection() {
+      return undefined;
+    },
+    async findAwsConnectionById() {
+      return undefined;
+    },
+    async findVerifiedAwsConnectionByAccountId() {
+      return undefined;
+    },
+    async hasDeploymentUsingAwsConnection() {
+      return false;
+    },
+    async listAccessibleAwsConnections() {
+      return rows;
+    },
+    async updateAwsConnectionVerification() {
+      return undefined;
+    }
+  };
+}
+
+// 확인 완료 상태만 목록에 노출되는지를 위한 고정 연결 레코드를 만듭니다.
+function createAwsConnectionRecord(
+  overrides: Partial<AwsConnectionRecord>
+): AwsConnectionRecord {
+  const now = new Date("2026-07-15T00:00:00.000Z");
+
+  return {
+    id: "connection",
+    userId: accessContext.userId,
+    accountId: null,
+    roleArn: null,
+    externalId: "sc_conn_connection_example",
+    region: "ap-northeast-2",
+    status: "pending",
+    lastVerifiedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides
   };
 }

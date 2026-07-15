@@ -127,9 +127,7 @@ import {
 } from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
-const AI_API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api"
-).replace(/\/+$/, "");
+const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api").replace(/\/+$/, "");
 
 type AiTerraformErrorExplanationRequest = {
   readonly diagnostic?: TerraformDiagnostic | undefined;
@@ -137,6 +135,10 @@ type AiTerraformErrorExplanationRequest = {
   readonly rawMessage: string;
   readonly relatedResourceId?: string | undefined;
   readonly terraformCodeContext?: string | undefined;
+};
+
+type PublicAiRequestOptions = {
+  readonly signal?: AbortSignal | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -387,7 +389,9 @@ export async function uploadProjectAsset(
   }
 }
 
-export async function generateTerraformCode(diagramJson: DiagramJson): Promise<TerraformGenerateResponse> {
+export async function generateTerraformCode(
+  diagramJson: DiagramJson
+): Promise<TerraformGenerateResponse> {
   return apiFetch<TerraformGenerateResponse>("/terraform/generate", {
     auth: true,
     method: "POST",
@@ -431,7 +435,8 @@ export async function syncTerraformToDiagram({
 
 // 실제 Workspace AI 패널에서 Requirement Prompt 기반 Architecture Draft를 요청합니다.
 export async function createAiArchitectureDraft(
-  input: CreateArchitectureDraftRequest
+  input: CreateArchitectureDraftRequest,
+  options: PublicAiRequestOptions = {}
 ): Promise<CreateArchitectureDraftResponse> {
   const prompt = input.prompt.trim();
 
@@ -442,10 +447,14 @@ export async function createAiArchitectureDraft(
     });
   }
 
-  return postPublicAiJson<CreateArchitectureDraftResponse>("/ai/architecture-draft", {
-    ...input,
-    prompt
-  });
+  return postPublicAiJson<CreateArchitectureDraftResponse>(
+    "/ai/architecture-draft",
+    {
+      ...input,
+      prompt
+    },
+    options
+  );
 }
 
 export async function analyzePublicSourceRepository(
@@ -461,19 +470,24 @@ export async function createGitHubArchitectureDraft(
 }
 
 export async function createAiArchitecturePatchPreview(
-  input: CreateArchitecturePatchPreviewRequest
+  input: CreateArchitecturePatchPreviewRequest,
+  options: PublicAiRequestOptions = {}
 ): Promise<ArchitecturePatchPreviewResponse> {
-  return postPublicAiJson<ArchitecturePatchPreviewResponse>("/ai/architecture-patch-preview", {
-    architectureJson: input.architectureJson,
-    instruction: input.instruction,
-    ...(input.selectedTargetResourceId !== undefined
-      ? { selectedTargetResourceId: input.selectedTargetResourceId }
-      : {}),
-    ...(input.connectionTargetResourceId !== undefined
-      ? { connectionTargetResourceId: input.connectionTargetResourceId }
-      : {}),
-    ...(input.skipConnection === true ? { skipConnection: true } : {})
-  });
+  return postPublicAiJson<ArchitecturePatchPreviewResponse>(
+    "/ai/architecture-patch-preview",
+    {
+      architectureJson: input.architectureJson,
+      instruction: input.instruction,
+      ...(input.selectedTargetResourceId !== undefined
+        ? { selectedTargetResourceId: input.selectedTargetResourceId }
+        : {}),
+      ...(input.connectionTargetResourceId !== undefined
+        ? { connectionTargetResourceId: input.connectionTargetResourceId }
+        : {}),
+      ...(input.skipConnection === true ? { skipConnection: true } : {})
+    },
+    options
+  );
 }
 
 // 현재 Architecture Board를 기준으로 Pre-Deployment Check를 실행합니다.
@@ -509,33 +523,41 @@ export async function runAiDesignSimulation(
 
 // Terraform Preview 설명은 실제 Terraform 실행 없이 코드 텍스트만 분석합니다.
 export async function runAiTerraformPreviewExplanation(
-  terraformCode: string
+  terraformCode: string,
+  options: PublicAiRequestOptions = {}
 ): Promise<AiTerraformPreviewExplanationResult> {
   return postPublicAiJson<AiTerraformPreviewExplanationResult>(
     "/ai/terraform-preview-explanation",
     {
       terraformCode
-    }
+    },
+    options
   );
 }
 
 // Terraform 오류 설명은 Preview 분석과 다른 endpoint로 보내 stage와 원인을 분리합니다.
 export async function runAiTerraformErrorExplanation(
-  input: AiTerraformErrorExplanationRequest
+  input: AiTerraformErrorExplanationRequest,
+  options: PublicAiRequestOptions = {}
 ): Promise<AiTerraformErrorExplanationResult> {
-  return postPublicAiJson<AiTerraformErrorExplanationResult>("/ai/terraform-error-explanation", {
-    diagnostic: input.diagnostic,
-    rawMessage: input.rawMessage,
-    relatedResourceId: input.relatedResourceId,
-    stage: input.stage,
-    terraformCodeContext: input.terraformCodeContext
-  });
+  return postPublicAiJson<AiTerraformErrorExplanationResult>(
+    "/ai/terraform-error-explanation",
+    {
+      diagnostic: input.diagnostic,
+      rawMessage: input.rawMessage,
+      relatedResourceId: input.relatedResourceId,
+      stage: input.stage,
+      terraformCodeContext: input.terraformCodeContext
+    },
+    options
+  );
 }
 
 // 인증 없는 gg AI endpoint는 Next rewrite 실패와 분리해 API 서버로 직접 요청합니다.
 async function postPublicAiJson<ResponseBody>(
   path: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  options: PublicAiRequestOptions = {}
 ): Promise<ResponseBody> {
   const requestContext: ApiRequestContext = {
     method: "POST",
@@ -557,7 +579,8 @@ async function postPublicAiJson<ResponseBody>(
       body: JSON.stringify(body),
       credentials: "include",
       headers,
-      method: "POST"
+      method: "POST",
+      ...(options.signal ? { signal: options.signal } : {})
     });
   } catch {
     throw new ApiClientError(
@@ -748,17 +771,16 @@ export async function createReverseEngineeringScan({
 export async function createReverseEngineeringPreviewScan(
   input: CreateReverseEngineeringScanRequest
 ): Promise<ReverseEngineeringScanResponse> {
-  return apiFetch<ReverseEngineeringScanResponse>(
-    "/reverse-engineering/scans/preview",
-    {
-      auth: true,
-      method: "POST",
-      body: input
-    }
-  );
+  return apiFetch<ReverseEngineeringScanResponse>("/reverse-engineering/scans/preview", {
+    auth: true,
+    method: "POST",
+    body: input
+  });
 }
 
-export async function listReverseEngineeringScans(projectId: string): Promise<ReverseEngineeringScan[]> {
+export async function listReverseEngineeringScans(
+  projectId: string
+): Promise<ReverseEngineeringScan[]> {
   const response = await apiFetch<ReverseEngineeringScanListResponse>(
     `/projects/${encodeURIComponent(projectId)}/reverse-engineering/scans`,
     {
@@ -1148,9 +1170,7 @@ export async function refreshProjectGitCicdPipelineRuns(
   );
 }
 
-export async function getGitCicdPipelineRun(
-  pipelineRunId: string
-): Promise<GitCicdPipelineRun> {
+export async function getGitCicdPipelineRun(pipelineRunId: string): Promise<GitCicdPipelineRun> {
   const response = await apiFetch<GitCicdPipelineRunResponse>(
     `/git-cicd-pipeline-runs/${encodeURIComponent(pipelineRunId)}`,
     { auth: true }
@@ -1314,18 +1334,13 @@ export async function createGitHubSourceRepositoryInstallUrl(
 }
 
 export async function createGitHubAccountInstallUrl(): Promise<GitHubAppInstallUrlResponse> {
-  return apiFetch<GitHubAppInstallUrlResponse>(
-    "/source-repositories/github/install-url",
-    {
-      auth: true,
-      method: "POST"
-    }
-  );
+  return apiFetch<GitHubAppInstallUrlResponse>("/source-repositories/github/install-url", {
+    auth: true,
+    method: "POST"
+  });
 }
 
-export async function listGitHubAccountInstallations(): Promise<
-  GitHubInstallationConnection[]
-> {
+export async function listGitHubAccountInstallations(): Promise<GitHubInstallationConnection[]> {
   const response = await apiFetch<ListGitHubInstallationsResponse>(
     "/source-repositories/github/installations",
     { auth: true }
@@ -1339,20 +1354,15 @@ export async function createGitHubExistingInstallationCallbackUrl(
   sourceRepositoryId?: string
 ): Promise<GitHubAppExistingInstallationCallbackUrlResponse> {
   const path = sourceRepositoryId
-    ? `/projects/${encodeURIComponent(
-        projectId
-      )}/source-repositories/github/${encodeURIComponent(
+    ? `/projects/${encodeURIComponent(projectId)}/source-repositories/github/${encodeURIComponent(
         sourceRepositoryId
       )}/existing-installation-callback-url`
     : `/projects/${encodeURIComponent(projectId)}/source-repositories/github/existing-installation-callback-url`;
 
-  return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(
-    path,
-    {
-      auth: true,
-      method: "POST"
-    }
-  );
+  return apiFetch<GitHubAppExistingInstallationCallbackUrlResponse>(path, {
+    auth: true,
+    method: "POST"
+  });
 }
 
 export async function listGitHubInstalledRepositories(
@@ -1424,11 +1434,14 @@ export async function listRecentSuccessfulDeploymentProjects(): Promise<
   return response.items;
 }
 
-export async function listCostProjectEstimates(input: {
-  expectedUserCount: number;
-  period: CostEstimatePeriod;
-  region?: string | undefined;
-}, options: { readonly signal?: AbortSignal | undefined } = {}): Promise<CostProjectEstimateListResponse> {
+export async function listCostProjectEstimates(
+  input: {
+    expectedUserCount: number;
+    period: CostEstimatePeriod;
+    region?: string | undefined;
+  },
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<CostProjectEstimateListResponse> {
   const params = new URLSearchParams({
     expectedUserCount: String(input.expectedUserCount),
     period: input.period,

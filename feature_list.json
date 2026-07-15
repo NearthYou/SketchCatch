@@ -544,6 +544,37 @@
       "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
     },
     {
+      "id": "ARCHITECTURE-BOARD-COMPILER-409",
+      "priority": 1,
+      "area": "ai-architecture-board",
+      "title": "Architecture Board Compiler and Workspace AI Chat",
+      "user_visible_behavior": "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 같은 Compiler 제안·diff·승인 경계를 통해 읽기 쉬운 Architecture Board를 만든다.",
+      "status": "in_progress",
+      "verification": [
+        "29개 사용 가능한 Template 사례와 1개 실패 evidence로 versioned knowledge artifact를 검증한다.",
+        "사례 기반 spacing 후보는 baseline보다 겹침·경계 이탈·edge 관통/교차·역방향·support lane 침범을 늘리지 않는다.",
+        "동일한 입력은 동일한 Compiler proposal, diff, diagnostic, quality 결과를 반환한다.",
+        "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 동일한 Compiler Interface를 사용한다.",
+        "Template variant는 source fingerprint와 visual-only approval 범위가 일치할 때만 authored source 위에 적용된다.",
+        "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
+        "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm harness:check",
+          "pnpm architecture-board-knowledge:check",
+          "pnpm architecture-board-evidence:check",
+          "pnpm architecture-board-evidence-review:check",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/workspace-ai-start-client.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/repository/repository-start-client.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm lint",
+          "pnpm typecheck"
+        ],
+        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact now expands bounded geometry candidates, source/requested-original/presentation/semantic selection is explicit, Reverse Engineering forwards scan diagnostics, and visual-only Template variants are fingerprint-gated. Evidence records SHA-256 source/compiled diagrams and creates an eight-entry pending real-Board review queue; captures and human decisions are intentionally not fabricated. The aggregate feature remains in_progress while the separately owned 001 Workspace AI Chat and final human review finish. Root pnpm typecheck is currently blocked by unrelated uncommitted DirectDeploymentScreen code; pnpm test retains three unrelated three-tier Template contract failures in packages/types; pnpm build retains the pre-existing apps/web/.codegraph ENOENT blocker."
+      },
+      "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
+    },
+    {
       "id": "AWS-TEMPLATE-LAYOUT-001",
       "priority": 2,
       "area": "template-board",

@@ -1,0 +1,129 @@
+# Workspace AI Chat Dock 리팩토링 결정
+
+## 1. 작업 식별
+
+- 이슈: `#409`
+- 브랜치: `feat/gg/409-architecture-board-compiler-chat`
+- 범위: Workspace 진입 이후 `AI Chat Dock`만
+- 기준 문서: `DESIGN.md`, `docs/gg/009_WorkspaceAI채팅재설계_gg.md`, `docs/gg/010_WorkspaceAI채팅완전재구축_gg.md`, `docs/gg/011_WorkspaceAI채팅QA매뉴얼_gg.md`
+
+이 문서는 같은 폴더의 `000_아키텍처보드컴파일러설계_gg.md`와 함께 #409의 AI Chat 영역을 정의한다. Compiler 자체의 권한과 Interface는 000 문서가 기준이며, 이 문서는 Chat Dock이 그 결과를 어떻게 안전하게 보여주고 승인 흐름에 연결할지의 기준이다.
+
+이번 작업은 기존 Workspace 전체를 다시 만들거나 AI 기능을 삭제하는 작업이 아니다. 현재 동작하는 AI Chat을 기준으로 화면 구조와 시각 계층을 리팩토링한다. 기존 AI Chat의 시각 구현을 그대로 따라가지 않으며, 현재 구현 작업자의 판단을 우선해 필요한 부분은 과감하게 재배치한다.
+
+## 2. 포함 범위
+
+- 닫힌 `AI 채팅 열기` launcher
+- desktop dock과 mobile full-screen surface
+- header, 현재 문맥, 기능 탭, 대화 transcript, suggestion, preview, approval action
+- 서로 독립된 `설계 제안`, `오류 분석`, `에이전트 리뷰` 대화와 history
+- empty, loading, error, completed, approval required 상태 표시
+- composer, voice input, submit, Escape 닫기와 focus 복원
+- 기존 AI Chat API, 상태, history, Board/Terraform preview와 사용자 승인 경계 연결
+- AI Chat 전용 구조 테스트와 화면 QA
+
+다음 영역은 이 브랜치에서 수정하지 않는다.
+
+- Architecture Board와 React Flow canvas
+- Resource / Terraform / Issues / Deployment / CI/CD / Live Observation
+- Dashboard, Auth, 프로젝트 시작 화면
+- AI Chat이 아닌 별도 AI 시작 화면
+
+## 3. 구현 원칙
+
+1. `DESIGN.md`를 최종 시각 기준으로 삼는다.
+2. canvas와 surface는 흰색을 기본으로 하고, primary CTA는 검정색으로 둔다.
+3. blue는 inline link와 상태 설명에 필요한 최소 표현으로만 사용한다.
+4. Pretendard 계열을 우선하고, 카드 radius는 12px, CTA radius는 8px 기준으로 정리한다.
+5. 코드와 Terraform 비교 영역만 dark surface를 사용한다.
+6. 기능 없는 장식, fake streaming, 승인 없는 Board/Terraform 변경은 추가하지 않는다.
+7. 실제 존재하는 API와 상태만 연결한다. 없는 응답이나 배포 동작을 mock으로 가장하지 않는다.
+
+## 4. 기능 계약
+
+- AI는 Architecture 또는 Terraform 변경안을 제안할 수 있지만 자동 적용하지 않는다.
+- `Board에 적용` 또는 `수정 적용`을 사용자가 눌러야 실제 상태가 바뀐다.
+- preview와 approval 상태에서는 원본 Board와 Terraform을 변경하지 않는다.
+- 기존 `features/workspace/api.ts`, `workspace-ai-*` 상태·routing·adapter 모듈을 재사용한다.
+- 입력 중인 문장, 대화 history, preview 상태는 dock을 닫았다 열어도 보존한다.
+- `설계 제안`, `오류 분석`, `에이전트 리뷰`는 대화 내역, 입력문, 요청 상태, 오류, 승인 대기 상태를 서로 섞지 않는다.
+- 일반 launcher는 마지막으로 사용한 대화를 복원한다. Terraform Issue와 Preview 요청은 각각 `오류 분석`, `에이전트 리뷰`로 직접 연다.
+- Board 또는 Terraform 기준이 달라진 설계 제안은 삭제하지 않고 `오래된 제안`으로 표시한다. 적용은 막고 최신 기준의 다시 생성만 허용한다.
+- 요청 처리 중에는 상태를 명확히 표시하고, 가능한 요청은 현재 구현의 취소/오류 흐름을 따른다.
+
+## 5. 구현 순서
+
+### Milestone 1. AI Chat surface 기준선
+
+- launcher를 44px compact square로 정리한다.
+- desktop dock을 오른쪽 utility surface로 정리하고 right panel과 겹치지 않게 한다.
+- 768px 이하에서는 `100dvh` full-screen surface로 전환한다.
+
+### Milestone 2. 상태와 승인 표현
+
+- 입력 가능, 처리 중, 응답 완료, 적용 대기, 요청 오류 상태를 화면에 표시한다.
+- AI 질문, preview, Terraform 오류 설명, 수정 action을 같은 대화 흐름에서 읽을 수 있게 한다.
+- 승인 전/후 문구가 실제 상태 전이와 일치하는지 확인한다.
+
+### Milestone 3. 접근성과 입력 흐름
+
+- dock open 시 composer로 focus를 이동한다.
+- `Escape`로 닫고 launcher로 focus를 복원한다.
+- tab, button, textarea, status의 semantic role과 keyboard 동작을 확인한다.
+- 모바일 safe-area와 가로 overflow를 확인한다.
+
+### Milestone 4. 검증과 화면 QA
+
+- AI Chat 상태 helper와 구조·동작 테스트를 실행한다.
+- `375px`, `768px`, `1280px` 이상에서 launcher, dock, long message, preview, error를 확인한다.
+- Workspace 다른 패널을 열었을 때 겹침과 기존 기능 연결을 확인한다.
+
+## 6. 완료 조건
+
+- AI Chat Dock만 변경되고 Workspace 다른 기능의 시각·동작은 수정하지 않는다.
+- 기존 AI API, history, Board/Terraform preview, 사용자 승인 경계가 연결되어 있다.
+- desktop/mobile에서 dock이 읽히고 입력할 수 있으며 가로 overflow가 없다.
+- 처리 중, 오류, 미리보기, 적용 대기 상태가 실제 상태와 일치한다.
+- `Escape` 닫기, focus 이동·복원, keyboard 입력이 동작한다.
+- 관련 테스트, web lint, web typecheck가 통과한다.
+
+## 7. 구현 결과와 검증
+
+2026-07-15 기준으로 이 문서의 AI Chat 범위를 실제 `/workspace`에 연결했다.
+
+- `설계 제안`, `오류 분석`, `에이전트 리뷰`는 message history, 요청 상태, 오류, 승인 대기 상태를 서로 분리한다.
+- 일반 launcher는 프로젝트별 마지막 대화를 복원한다. Terraform Issue와 Preview 요청은 각각 `오류 분석`, `에이전트 리뷰`를 직접 연다.
+- `오류 분석`과 `에이전트 리뷰`는 별도 후속 대화 API가 없으므로 가짜 composer를 표시하지 않는다. 실제 Terraform 진입점의 요청과 결과만 독립 history에 쌓는다.
+- Architecture Draft와 patch는 Board preview만 만들며, `생성` 또는 `적용` 전에는 현재 Board를 바꾸지 않는다.
+- Board revision이나 fingerprint가 달라진 제안은 계속 보여주되 적용 버튼을 막고 최신 기준 재생성만 허용한다.
+- Draft, Terraform 오류 분석, Terraform Preview 리뷰 요청은 대화별 `AbortController`를 사용한다. 처리 중에는 `요청 중지`가 보이며, 중지한 응답은 늦게 도착해도 화면 상태에 반영하지 않는다.
+- 닫았다 열어도 대화, 대화별 입력 상태, preview와 마지막 선택 대화를 유지한다.
+- desktop dock은 `aria-modal`과 focus trap을 사용하지 않아 Board keyboard 이동을 막지 않는다. 768px 이하 full-screen surface만 `aria-modal=true`와 focus 순환을 사용한다.
+- AI launcher와 배포 알림 launcher를 서로 다른 위치에 두고, 열린 mobile AI surface는 배포 알림보다 높은 stacking context를 사용한다.
+
+실제 브라우저 QA 결과:
+
+- `1280 x 800`: dock `396.8 x 736`, Workspace bar 아래 `y=64`, 가로 overflow 없음, `aria-modal` 없음
+- `768 x 800`: `768 x 800` full-screen, 가로 overflow 없음, `aria-modal=true`
+- `375 x 812`: `375 x 812` full-screen, 가로 overflow 없음, mobile focus 순환 확인
+- launcher를 닫으면 `AI 채팅 열기`로 focus가 복원되고, 다시 열면 마지막 `오류 분석` 대화가 선택됨
+- 요청 직후 `처리 중`과 `요청 중지`가 표시되고, 중지 후 `입력 가능`으로 복귀하며 늦은 preview가 나타나지 않음
+- desktop에서 닫기 버튼 앞쪽으로 `Shift+Tab`하면 Board 요소로 이동하고, mobile에서는 마지막 AI Chat 요소로 순환함
+
+집중 자동 검증:
+
+```text
+workspace-ai-chat-conversation.test.ts: 통과
+workspace-ai-chat-status.test.ts: 통과
+workspace-ai-chat-request.test.ts: 통과
+AI Chat 집중 테스트: 13개 통과
+AI Chat 관련 ESLint: 통과
+Web typecheck: 통과
+Web lint 전체: 통과
+Harness check: 통과
+Web production build: 통과
+```
+
+Web 전체 테스트도 실행했다. AI Chat 테스트는 모두 통과했지만, 병행 작업 중인 Architecture Board/Compiler 계약 테스트가 현재 구현과 어긋나 전체 명령은 실패했다. 실패 항목은 AI Chat 리팩토링 범위와 무관하며 이 문서의 구현에서는 수정하지 않았다.
+
+production build 최초 실행은 로컬 `.codegraph` 심볼릭 링크가 존재하지 않는 다른 사용자 경로를 가리켜 `ENOENT`로 중단됐다. 해당 로컬 링크를 build 동안만 제외하고 다시 실행했을 때 compile, TypeScript, static page generation을 포함한 전체 build가 통과했으며 링크는 원위치했다.

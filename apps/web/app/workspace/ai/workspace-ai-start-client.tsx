@@ -18,6 +18,7 @@ import type {
 import { AiDraftBoardPreview } from "./ai-draft-board-preview";
 import type { AiStartExistingProject, AiStartMessage } from "./ai-start-model";
 import { useAiStartWorkflow } from "./use-ai-start-workflow";
+import { ArchitectureBoardCompilationSummary } from "../../../features/architecture-board-compiler/architecture-board-compilation-summary";
 import styles from "./workspace-ai-start.module.css";
 
 export function WorkspaceAiStartClient({
@@ -164,6 +165,10 @@ export function WorkspaceAiStartClient({
               </header>
 
               <AiDraftBoardPreview diagram={workflow.previewDiagram} />
+
+              {workflow.compilationProposal ? (
+                <ArchitectureBoardCompilationSummary proposal={workflow.compilationProposal} />
+              ) : null}
 
               <footer className={styles.previewFooter}>
                 <DraftMetadata draft={workflow.draft} />

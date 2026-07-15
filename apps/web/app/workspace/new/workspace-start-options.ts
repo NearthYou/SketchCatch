@@ -36,7 +36,7 @@ export type WorkspaceStartAction =
       readonly href: string;
     }
   | {
-      readonly kind: "showRepositoryUrlForm";
+      readonly kind: "createRepositoryProject";
     };
 
 // 새 프로젝트 첫 화면에서 어떤 시작 방식을 크게 보여줄지 정합니다.
@@ -115,7 +115,7 @@ export function resolveWorkspaceStartAction({
 
   if (startKind === "repository") {
     return {
-      kind: "showRepositoryUrlForm"
+      kind: "createRepositoryProject"
     };
   }
 

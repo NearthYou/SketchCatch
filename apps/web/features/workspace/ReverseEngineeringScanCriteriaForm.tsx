@@ -1,5 +1,6 @@
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
+import { isReverseEngineeringResourceSelectionChecked } from "./reverse-engineering-resource-types";
 import styles from "./reverse-engineering.module.css";
 
 type ReverseEngineeringScanCriteriaFormProps = {
@@ -154,7 +155,7 @@ export function ReverseEngineeringScanCriteriaForm({
               {resourceTypes.map((resourceType) => (
                 <label key={resourceType} className={styles.resourceToggle}>
                   <input
-                    checked={selectedResourceTypes.includes(resourceType)}
+                    checked={isReverseEngineeringResourceSelectionChecked(selectedResourceTypes, resourceType)}
                     onChange={() => onResourceTypeToggle(resourceType)}
                     type="checkbox"
                   />
