@@ -21,6 +21,7 @@ Short English-only working log for the current agent context. Older records are 
 
 - Reproduced the production settings regression where a pending AWS connection lost its account verification controls after a page reload and exposed only deletion.
 - Added a pending-connection `설정 계속` action that refreshes the CloudFormation setup URL and restores the account ID verification flow from persisted connection data.
+- Clear stale setup UI before reloading the saved connection, and isolate the restore behavior in a testable helper instead of source-text regex assertions.
 - Added a red-green regression test for the reload recovery path; focused dashboard tests, harness, lint, typecheck, build, and diff checks pass.
 - The full Web baseline remains non-green on unrelated existing Diagram/Area contract tests; no cloud mutation, deployment, Git handoff, or credential change was performed.
 

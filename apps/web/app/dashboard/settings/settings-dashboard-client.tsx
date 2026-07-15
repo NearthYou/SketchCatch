@@ -19,6 +19,7 @@ import {
   testAwsConnection,
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
+import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
 import styles from "../dashboard-tools.module.css";
 import { GitHubAccountSettings } from "./github-account-settings";
 
@@ -77,14 +78,17 @@ export function SettingsDashboardClient() {
   async function resumeConnectionSetup(connection: AwsConnection): Promise<void> {
     setActionPending(true);
     setErrorMessage("");
+    setSetupConnection(null);
+    setCloudFormation(null);
     try {
-      const template = await getAwsConnectionCloudFormationTemplate({
-        connectionId: connection.id
-      });
-      setSetupConnection(connection);
-      setCloudFormation(template);
-      setAccountId(connection.accountId ?? "");
-      setRegion(connection.region);
+      const restored = await restoreAwsConnectionSetup(
+        connection,
+        getAwsConnectionCloudFormationTemplate
+      );
+      setSetupConnection(restored.connection);
+      setCloudFormation(restored.cloudFormation);
+      setAccountId(restored.accountId);
+      setRegion(restored.region);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결 설정을 불러오지 못했습니다.");
     } finally {

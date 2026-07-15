@@ -1,27 +1,49 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import type {
+  AwsConnection,
+  AwsConnectionCloudFormationTemplateResponse
+} from "@sketchcatch/types";
+import { restoreAwsConnectionSetup } from "./aws-connection-setup";
 
-const settingsSource = readFileSync(
-  fileURLToPath(
-    new URL("../../app/dashboard/settings/settings-dashboard-client.tsx", import.meta.url)
-  ),
-  "utf8"
-);
+const pendingConnection: AwsConnection = {
+  id: "connection-1",
+  userId: "user-1",
+  accountId: null,
+  roleArn: null,
+  externalId: "external-1",
+  region: "ap-northeast-2",
+  status: "pending",
+  lastVerifiedAt: null,
+  createdAt: "2026-07-15T00:00:00.000Z",
+  updatedAt: "2026-07-15T00:00:00.000Z"
+};
 
-test("pending AWS connections can resume Role verification after a page reload", () => {
-  assert.match(
-    settingsSource,
-    /async function resumeConnectionSetup\(connection: AwsConnection\): Promise<void>/
-  );
-  assert.match(
-    settingsSource,
-    /getAwsConnectionCloudFormationTemplate\(\{\s*connectionId: connection\.id\s*\}\)/s
-  );
-  assert.match(settingsSource, /setSetupConnection\(connection\)/);
-  assert.match(
-    settingsSource,
-    /onClick=\{\(\) => void resumeConnectionSetup\(connection\)\}[^>]*>\s*설정 계속\s*<\/button>/s
-  );
+const cloudFormation: AwsConnectionCloudFormationTemplateResponse = {
+  roleName: "SketchCatchConnectionRole",
+  stackName: "sketchcatch-connection-1",
+  region: "ap-northeast-2",
+  capabilities: ["CAPABILITY_NAMED_IAM"],
+  templateBody: "{}",
+  templateUrl: null,
+  templateUrlExpiresAt: null,
+  launchStackUrl: "https://console.aws.amazon.com/cloudformation",
+  manualTemplateFallbackAvailable: true
+};
+
+test("pending AWS connections restore the saved verification setup", async () => {
+  let requestedConnectionId = "";
+
+  const restored = await restoreAwsConnectionSetup(pendingConnection, async (input) => {
+    requestedConnectionId = input.connectionId;
+    return cloudFormation;
+  });
+
+  assert.equal(requestedConnectionId, pendingConnection.id);
+  assert.deepEqual(restored, {
+    connection: pendingConnection,
+    cloudFormation,
+    accountId: "",
+    region: pendingConnection.region
+  });
 });
