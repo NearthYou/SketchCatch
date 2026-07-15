@@ -25,7 +25,7 @@ test("AI Chat은 세 개의 독립 대화 범위를 제공한다", () => {
   );
   assert.equal(
     getWorkspaceAiChatScopeDefinition("preview").emptyDescription,
-    "Terraform Preview에서 ‘에이전트 리뷰’를 누르면 구성과 확인할 점을 보여드려요."
+    "아래 ‘에이전트 리뷰’를 누르면 최신 Terraform 구성과 확인할 점을 보여드려요."
   );
 });
 

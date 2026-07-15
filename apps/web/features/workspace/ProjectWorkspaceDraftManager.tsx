@@ -20,11 +20,12 @@ import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
-import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
-  TerraformSafeFixApplyRequest,
-  TerraformSafeFixApplyResult
+import {
+  createTerraformPreviewAiRequest,
+  type TerraformIssueAiRequest,
+  type TerraformPreviewAiRequest,
+  type TerraformSafeFixApplyRequest,
+  type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
@@ -506,6 +507,14 @@ export function ProjectWorkspaceDraftManager({
     setTerraformIssueAiRequest(request);
   }, []);
 
+  const requestTerraformPreviewReview = useCallback((): void => {
+    const request = createTerraformPreviewAiRequest(latestTerraformFilesRef.current);
+
+    if (request) {
+      setTerraformPreviewAiRequest(request);
+    }
+  }, []);
+
   const handleTerraformFilesChange = useCallback(
     (files: readonly TerraformSyncFileInput[]): void => {
       latestTerraformFilesRef.current = files.map((file) => ({ ...file }));
@@ -594,8 +603,12 @@ export function ProjectWorkspaceDraftManager({
         }
         floatingPanel={(context) => (
           <WorkspaceAiChatDock
+            canRequestTerraformPreviewReview={initialTerraformFiles.some(
+              (file) => file.terraformCode.trim().length > 0
+            )}
             context={context}
             onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+            onRequestTerraformPreviewReview={requestTerraformPreviewReview}
             projectId={projectId}
             repositoryAnalysisSourceRepositoryId={repositoryAnalysisHandoff?.sourceRepositoryId}
             repositoryTemplateId={repositoryTemplateId ?? undefined}
@@ -620,7 +633,6 @@ export function ProjectWorkspaceDraftManager({
             initialView={initialRightPanelView}
             initialTerraformFiles={initialTerraformFiles}
             onTerraformIssueAiRequest={requestTerraformIssueAi}
-            onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
             onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
             onTerraformFilesChange={handleTerraformFilesChange}
             onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}

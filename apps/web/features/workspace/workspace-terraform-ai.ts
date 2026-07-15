@@ -30,6 +30,33 @@ export type TerraformSafeFixApplyResult = {
   readonly message: string;
 };
 
+type TerraformPreviewReviewFile = {
+  readonly fileName: string;
+  readonly terraformCode: string;
+};
+
+export function createTerraformPreviewAiRequest(
+  files: readonly TerraformPreviewReviewFile[],
+  id = Date.now()
+): TerraformPreviewAiRequest | null {
+  const reviewFiles = files
+    .map((file) => ({ fileName: file.fileName, terraformCode: file.terraformCode.trim() }))
+    .filter((file) => file.terraformCode.length > 0);
+
+  if (reviewFiles.length === 0) {
+    return null;
+  }
+
+  return {
+    id,
+    label:
+      reviewFiles.length === 1
+        ? `현재 파일 · ${reviewFiles[0]?.fileName ?? "Terraform"}`
+        : `전체 Terraform · ${reviewFiles.length}개 파일`,
+    terraformCode: reviewFiles.map((file) => file.terraformCode).join("\n\n")
+  };
+}
+
 type TerraformIssueCodeContextFile = {
   readonly fileName: string;
   readonly code: string;

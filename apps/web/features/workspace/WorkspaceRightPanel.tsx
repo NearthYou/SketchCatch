@@ -69,7 +69,6 @@ import { replaceArchitectureDiagnostics } from "./architecture-diagnostics-state
 import {
   selectTerraformIssueCodeContext,
   type TerraformIssueAiRequest,
-  type TerraformPreviewAiRequest,
   type TerraformSafeFixApplyRequest,
   type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
@@ -85,7 +84,6 @@ export type WorkspaceRightPanelProps = {
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
-  readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
@@ -116,7 +114,6 @@ export function WorkspaceRightPanel({
   initialTerraformFiles,
   terraformFilesReplacement,
   onTerraformIssueAiRequest,
-  onTerraformPreviewAiRequest,
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
@@ -954,7 +951,6 @@ export function WorkspaceRightPanel({
                 onOpenIssues={focusTerraformIssuesPane}
                 onTerraformFilesChange={onTerraformFilesChange}
                 onTerraformFilesReplacementApplied={onTerraformFilesReplacementApplied}
-                onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}
               />
             </div>
             <div

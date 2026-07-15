@@ -27,7 +27,7 @@ const scopeDefinitions: Record<WorkspaceAiChatScope, WorkspaceAiChatScopeDefinit
     label: "오류 분석"
   },
   preview: {
-    emptyDescription: "Terraform Preview에서 ‘에이전트 리뷰’를 누르면 구성과 확인할 점을 보여드려요.",
+    emptyDescription: "아래 ‘에이전트 리뷰’를 누르면 최신 Terraform 구성과 확인할 점을 보여드려요.",
     inputAvailable: false,
     label: "에이전트 리뷰"
   }

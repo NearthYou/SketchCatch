@@ -95,11 +95,14 @@ import {
   WorkspaceAiChatRequestRegistry
 } from "./workspace-ai-chat-request";
 import { WorkspaceAiChatLauncher } from "./WorkspaceAiChatLauncher";
+import { TerraformAgentReviewButton } from "./TerraformAgentReviewButton";
 import styles from "./workspace.module.css";
 
 export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly canRequestTerraformPreviewReview: boolean;
   readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
+  readonly onRequestTerraformPreviewReview: () => void;
   readonly projectId: string;
   readonly repositoryAnalysisSourceRepositoryId?: string | undefined;
   readonly repositoryTemplateId?: string | undefined;
@@ -220,7 +223,9 @@ type SpeechRecognitionWindow = Window & {
 // Repository Analysis에서 넘긴 Template을 표시하고 이후 AI Draft 요청에 유지합니다.
 export function WorkspaceAiChatDock({
   context,
+  canRequestTerraformPreviewReview,
   onApplyTerraformIssueFix,
+  onRequestTerraformPreviewReview,
   projectId,
   repositoryAnalysisSourceRepositoryId,
   repositoryTemplateId,
@@ -1997,6 +2002,17 @@ export function WorkspaceAiChatDock({
             </article>
           ) : null}
         </div>
+
+        {activeChatTab === "preview" ? (
+          <div className={styles.aiReviewActionBar}>
+            <TerraformAgentReviewButton
+              disabled={!canRequestTerraformPreviewReview || isChatBusy}
+              isLoading={isChatBusy}
+              onRequest={onRequestTerraformPreviewReview}
+              title="최신 Terraform 전체 구성을 Amazon Q로 검토"
+            />
+          </div>
+        ) : null}
 
         {activeScopeDefinition.inputAvailable ? (
           <form

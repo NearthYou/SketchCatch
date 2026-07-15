@@ -5692,6 +5692,18 @@
   padding: 18px;
 }
 
+.aiReviewActionBar {
+  background: var(--workspace-surface, #ffffff);
+  border-top: 1px solid #e3e9f2;
+  display: grid;
+  padding: 20px 20px max(10px, env(safe-area-inset-bottom));
+}
+
+.aiReviewActionBar > button {
+  min-height: 44px;
+  width: 100%;
+}
+
 .aiReviewProgressCard {
   background:
     radial-gradient(circle at 100% 0%, rgb(72 101 255 / 8%), transparent 42%),
@@ -5838,6 +5850,49 @@
   overflow-wrap: anywhere;
 }
 
+.aiReviewSummaryList {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+}
+
+.aiReviewSummaryList li {
+  border-left: 3px solid var(--workspace-line-strong, #dcdee0);
+  display: grid;
+  gap: 3px;
+  padding: 2px 0 2px 10px;
+}
+
+.aiReviewSummaryList li[data-tone="positive"] {
+  border-left-color: #2f7d4b;
+}
+
+.aiReviewSummaryList li[data-tone="risk"] {
+  border-left-color: #b42318;
+}
+
+.aiReviewSummaryList strong {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.aiReviewSummaryList li[data-tone="positive"] > strong {
+  color: #2f7d4b;
+}
+
+.aiReviewSummaryList li[data-tone="risk"] > strong {
+  color: #b42318;
+}
+
+.aiReviewSummaryList p {
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.55;
+}
+
 .aiResultSection {
   border-top: 1px solid var(--workspace-line, #f0f0f3);
   display: grid;
@@ -5866,6 +5921,7 @@
 
 .aiResultCheckList {
   display: grid;
+  gap: 8px;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -5873,15 +5929,28 @@
 
 .aiResultCheckList li {
   align-items: start;
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line, #f0f0f3);
+  border-radius: 10px;
   display: grid;
   gap: 10px;
   grid-template-columns: 8px minmax(0, 1fr);
   min-width: 0;
-  padding: 11px 0;
+  padding: 11px 12px;
 }
 
 .aiResultCheckList li + li {
-  border-top: 1px solid var(--workspace-line-soft, #f5f5f7);
+  border-top-color: var(--workspace-line, #f0f0f3);
+}
+
+.aiResultCheckList li[data-severity="medium"] {
+  background: #fff8e6;
+  border-color: #f0cf83;
+}
+
+.aiResultCheckList li[data-severity="high"] {
+  background: #fff1f0;
+  border-color: #efb4b0;
 }
 
 .aiResultCheckMark {
@@ -5920,30 +5989,55 @@
 }
 
 .aiResultCheckHeading > span {
+  background: #f4f4f5;
+  border-radius: 999px;
   color: var(--workspace-muted, #60646c);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.4;
+  padding: 2px 7px;
 }
 
 .aiResultCheckList li[data-severity="medium"] .aiResultCheckHeading > span {
+  background: #fff0c2;
   color: var(--workspace-warning, #ab6400);
 }
 
 .aiResultCheckList li[data-severity="high"] .aiResultCheckHeading > span {
+  background: #ffd9d6;
   color: #b42318;
 }
 
-.aiResultCheckList p {
-  color: var(--workspace-text, #171717);
-  font-size: 13px;
-  line-height: 1.55;
-  margin: 0;
-  overflow-wrap: anywhere;
+.aiResultCheckDetails {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 0;
 }
 
-.aiResultCheckList p + p {
+.aiResultCheckDetails > div {
+  display: grid;
+  gap: 3px;
+}
+
+.aiResultCheckDetails > div + div {
+  border-top: 1px solid rgb(0 0 0 / 8%);
+  padding-top: 8px;
+}
+
+.aiResultCheckDetails dt {
   color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aiResultCheckDetails dd {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .aiResultNextStep > p {
@@ -9377,6 +9471,31 @@
 
 .aiChatTranscript {
   background: var(--workspace-surface, #ffffff);
+}
+
+.aiChatDock[data-chat-tab="preview"] .aiChatTranscript {
+  overflow-y: scroll;
+  scrollbar-color: var(--workspace-line-strong, #dcdee0) transparent;
+  scrollbar-width: thin;
+}
+
+.aiChatDock[data-chat-tab="preview"] .aiChatDraftCard {
+  align-self: start;
+  overflow: visible;
+}
+
+.aiChatDock[data-chat-tab="preview"] .aiChatTranscript::-webkit-scrollbar {
+  width: 8px;
+}
+
+.aiChatDock[data-chat-tab="preview"] .aiChatTranscript::-webkit-scrollbar-thumb {
+  background: var(--workspace-line-strong, #dcdee0);
+  border: 2px solid var(--workspace-surface, #ffffff);
+  border-radius: 999px;
+}
+
+.aiChatDock[data-chat-tab="preview"] .aiChatTranscript::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .aiChatTabButton[aria-selected="true"] {

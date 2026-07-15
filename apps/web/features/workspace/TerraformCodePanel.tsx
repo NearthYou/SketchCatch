@@ -59,62 +59,11 @@ import {
   combineTerraformDiagnostics,
   createTerraformDiagnosticKey
 } from "./terraform-issues-state";
-import type { TerraformPreviewAiRequest } from "./workspace-terraform-ai";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
 const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
-
-type TerraformPreviewExplanationScope = {
-  readonly code: string;
-  readonly key: string;
-  readonly label: string;
-};
-
-function createTerraformPreviewExplanationScope({
-  activeFileName,
-  displayedTerraformCode,
-  highlightedBlock,
-  inspectedBlock
-}: {
-  readonly activeFileName: string;
-  readonly displayedTerraformCode: string;
-  readonly highlightedBlock: { readonly address: string; readonly code: string } | null;
-  readonly inspectedBlock: { readonly address: string; readonly code: string } | null;
-}): TerraformPreviewExplanationScope {
-  if (inspectedBlock) {
-    return createTerraformPreviewExplanationScopeValue(
-      inspectedBlock.code,
-      `리소스 코드 · ${inspectedBlock.address}`
-    );
-  }
-
-  if (highlightedBlock) {
-    return createTerraformPreviewExplanationScopeValue(
-      highlightedBlock.code,
-      `강조 코드 · ${highlightedBlock.address}`
-    );
-  }
-
-  return createTerraformPreviewExplanationScopeValue(
-    displayedTerraformCode,
-    `현재 파일 · ${activeFileName}`
-  );
-}
-
-function createTerraformPreviewExplanationScopeValue(
-  code: string,
-  label: string
-): TerraformPreviewExplanationScope {
-  const trimmedCode = code.trim();
-
-  return {
-    code: trimmedCode,
-    key: JSON.stringify({ code: trimmedCode, label }),
-    label
-  };
-}
 
 function getTerraformLineStartOffset(code: string, line: number): number {
   if (line <= 1) {
@@ -248,7 +197,6 @@ export const TerraformCodePanel = forwardRef<
       | ((files: readonly TerraformSyncFileInput[]) => void)
       | undefined;
     readonly onTerraformFilesReplacementApplied?: ((id: number) => void) | undefined;
-    readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   }
 >(function TerraformCodePanel(
   {
@@ -264,8 +212,7 @@ export const TerraformCodePanel = forwardRef<
     onExternalSaveComplete,
     onOpenIssues,
     onTerraformFilesChange,
-    onTerraformFilesReplacementApplied,
-    onTerraformPreviewAiRequest
+    onTerraformFilesReplacementApplied
   },
   ref
 ) {
@@ -401,16 +348,6 @@ export const TerraformCodePanel = forwardRef<
   const displayedSourceLineOffset = inspectedBlock ? inspectedBlock.startLine - 1 : 0;
   const highlightedBlock =
     !isResourceCodeMode && selectedBlock?.fileName === activeFileName ? selectedBlock : null;
-  const terraformPreviewExplanationScope = useMemo(
-    () =>
-      createTerraformPreviewExplanationScope({
-        activeFileName,
-        displayedTerraformCode,
-        highlightedBlock,
-        inspectedBlock
-      }),
-    [activeFileName, displayedTerraformCode, highlightedBlock, inspectedBlock]
-  );
   const lineNumbers = useMemo(
     () =>
       Array.from(
@@ -476,18 +413,6 @@ export const TerraformCodePanel = forwardRef<
       setRequestState("error");
     }
   }, []);
-
-  function requestTerraformPreviewExplanation(): void {
-    if (!terraformPreviewExplanationScope.code) {
-      return;
-    }
-
-    onTerraformPreviewAiRequest({
-      id: Date.now(),
-      label: terraformPreviewExplanationScope.label,
-      terraformCode: terraformPreviewExplanationScope.code
-    });
-  }
 
   const refreshTerraformCode = useCallback(
     async (diagramFingerprint: string, preserveExistingSource = true) => {
@@ -1523,16 +1448,12 @@ export const TerraformCodePanel = forwardRef<
       <TerraformCodeToolbar
         actions={{
           closeResourceCode: context.closeInspectedNode,
-          requestExplanation: requestTerraformPreviewExplanation,
           searchFiles: setFileSearchQuery,
           selectFile: selectTerraformFile,
           toggleFileMenu: () => setIsFileMenuOpen((isOpen) => !isOpen)
         }}
         state={{
           activeFileName,
-          canRequestExplanation:
-            terraformPreviewExplanationScope.code.length > 0 && requestState !== "loading",
-          explanationLabel: terraformPreviewExplanationScope.label,
           fileOptions: filteredTerraformFileOptions,
           fileSearchQuery,
           inspectedResourceLabel:
