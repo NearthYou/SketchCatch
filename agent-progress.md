@@ -25,6 +25,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-16 - Keep Terraform error analysis scrollable and focused
+
+- Added the same always-visible thin transcript scrollbar used by Agent Review to the Error Analysis tab, keeping long results inside the AI Chat panel.
+- Removed the visible `Checks` and trailing `Next step` sections while preserving the explicit safe-fix action.
+- Rebuilt expanded technical details as readable location/type facts, cause and raw-error sections, numbered resolution steps, and vertically stacked current/fixed code without provider metadata.
+- Persisted successful error-analysis results per project, titled each entry as `error.type(line줄)`, and kept prior entries collapsed but individually restorable after tab changes or page reloads; only the current result retains its safe-fix action.
+- Chrome verification confirmed `overflow-y: scroll`, the themed scrollbar, no visible `Checks` or `Next step`, readable larger text, and a collapsed result that restores its full original analysis on click.
+
 ### 2026-07-16 - Preserve complete Agent Review sentences
 
 - Reproduced that the shared 120-character AI list-item limit cut Amazon Q pillar reviews mid-action, after which the Web presentation added punctuation and displayed fragments such as incomplete Terraform attributes as required actions.
@@ -139,13 +147,6 @@ Short English-only working log for the current agent context. Older records are 
 - Added an `audience-live-check` style regression proving ECS Fargate ranks ahead of 3-tier for a single containerized Node/React app with no persistent database.
 - Chrome verification: controlled Chrome reached the repository analysis route but redirected to login because the launched automation profile was unauthenticated; existing user Chrome exposed no debug port for attachment.
 - Verification: repository recommendation API test passed 10/10; public repository recommendation web test passed 8/8; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-
-### 2026-07-15 - Restore production Amazon Q deployment configuration
-
-- Found that the active ECS API task definition preserved disabled Terraform defaults even though the GitHub production environment contained the intended Amazon Q settings.
-- Updated the ECS deployment workflow to require, validate, and inject the production Amazon Q runtime configuration; added a structural regression check for the contract.
-- Added least-privilege `qbusiness:ChatSync` permission for the configured application to the production API task role and completed the missing GitHub production environment variable.
-- Verification passed: focused production infrastructure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production ECS deployment was not run following the user's explicit instruction.
 
 ### 2026-07-15 - Restore CI/CD pull request creation in the deployment console
 
