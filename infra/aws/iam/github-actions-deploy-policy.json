@@ -131,6 +131,17 @@
       "Effect": "Allow",
       "Action": ["ec2:DescribeSecurityGroupRules", "ec2:DescribeSecurityGroups"],
       "Resource": "*"
+    },
+    {
+      "Sid": "AllowRuntimeCacheIngressRuleTagsOnCreate",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:CreateAction": "AuthorizeSecurityGroupIngress"
+        }
+      }
     }
   ]
 }

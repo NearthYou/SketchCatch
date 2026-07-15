@@ -81,6 +81,21 @@ check(
     }),
   "deploy role must be able to read back the created Runtime Cache ingress rules"
 );
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeCacheIngressRuleTagsOnCreate")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeCacheIngressRuleTagsOnCreate",
+      Effect: "Allow",
+      Action: "ec2:CreateTags",
+      Resource: "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*",
+      Condition: {
+        StringEquals: {
+          "ec2:CreateAction": "AuthorizeSecurityGroupIngress"
+        }
+      }
+    }),
+  "deploy role must only tag Runtime Cache ingress rules during authorized creation"
+);
 const expectedGroups = new Map([
   ["runtime", { root: "infra/aws/terraform", key: "production/ecs-foundation/terraform.tfstate" }],
   ["edge", { root: "infra/aws/production/edge", key: "production/edge/terraform.tfstate" }],
