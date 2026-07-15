@@ -228,6 +228,11 @@ resource "aws_ecs_task_definition" "worker" {
       condition     = !var.enable_ecs_worker_dispatch || var.worker_rds_security_group_id != ""
       error_message = "worker_rds_security_group_id is required before ECS worker dispatch can be enabled."
     }
+
+    precondition {
+      condition     = !var.enable_ecs_worker_dispatch || var.runtime_cache_security_group_id != ""
+      error_message = "runtime_cache_security_group_id is required before ECS worker dispatch can be enabled."
+    }
   }
 }
 
@@ -282,6 +287,11 @@ resource "aws_ecs_task_definition" "api" {
     precondition {
       condition     = var.environment != "production" || length(setsubtract(local.ecs_api_secret_names, toset(keys(var.api_secret_arns)))) == 0
       error_message = "Production API task definitions require all approved api_secret_arns entries."
+    }
+
+    precondition {
+      condition     = !var.live_observation_enabled || var.runtime_cache_security_group_id != ""
+      error_message = "runtime_cache_security_group_id is required when Live Observation is enabled."
     }
   }
 }

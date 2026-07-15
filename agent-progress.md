@@ -4,6 +4,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Branch `codex/fix-live-observation-redis-readiness` adds runtime-owned Redis ingress from the current ECS API and worker security groups to the external Runtime Cache security group, with fail-closed Terraform preconditions.
+- PR #423 is open. Apply run `29387480668` successfully created and state-verified the two API/worker Redis ingress rules; post-apply review run `29387561447` reported no infrastructure changes.
+- The complete runtime plan also contains unrelated drift (`5 add, 7 change, 2 destroy`), so it must not be applied as the incident repair.
+- Production bootstrap now returns the expected `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND` instead of `503`, proving the collector can reach Runtime Cache and distinguish a missing session.
 - Production request `req-c2` was a local Git/CI/CD precondition conflict, not a duplicate GitHub resource: the target repository had no SketchCatch branch or PR, and project `0bdf56aa-68b7-4382-b37f-31d8996136c1` had no `project_deployment_targets` row.
 - The CI/CD console now loads the project deployment target, blocks PR creation before POST when confirmation or the ECS output URL is missing, and links directly to project target settings.
 - GitOps target conflicts expose stable precondition codes; mapped conflicts retain actionable Korean guidance and unknown conflicts use a neutral state-conflict message instead of the misleading duplicate-information message.
@@ -18,6 +22,20 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+
+### 2026-07-15 - Repair production Live Observation Runtime Cache ingress
+
+- Reproduced the production collector failure with a deterministic public bootstrap request and identified an unowned ECS-to-Runtime-Cache ingress gap, introduced by the earlier ECS cutover and consistent with the observed timeout.
+- Added optional Runtime Cache security-group and port inputs, API/worker Redis ingress rules, and production preconditions that block Live Observation or worker dispatch without the connection.
+- Added static production-infrastructure and Terraform plan regressions, documented CloudFormation-to-runtime ownership and the expected `404` readiness signal, and updated the import manifest without taking ownership of the existing ElastiCache resources.
+- Hardened the review-only workflow to resolve the Runtime Cache stack outputs, verify VPC ownership, preserve Terraform detailed exit codes, and isolate an incident-only `runtime-cache-ingress` plan from unrelated runtime drift.
+- Verification: red/green production structure check, Terraform fmt/validate/test (2/2), harness, lint, typecheck, build, JSON parse, and diff checks pass. No AWS, Terraform apply, deployment, or cost-bearing mutation was performed; Git handoff was approved for the follow-up.
+- Production evidence: full review-only run `29385795235` exposed unrelated drift; targeted run `29385936278` passed with only two ingress creates and no updates or destroys.
+- The first approved apply run `29386749008` failed before mutation on missing state access. Follow-up attempts `29387207829` and `29387371879` failed before rule creation on required EC2 rule-resource and tag-on-create permissions; direct SG/state checks confirmed zero partial resources after each failure.
+- Applied the reviewed deploy-role policy with exact state/lock access, exact Runtime Cache security-group authorization, the required new-rule ARN, and tag-on-create permission restricted by `ec2:CreateAction=AuthorizeSecurityGroupIngress`.
+- Verification after the IAM template fix: policy JSON parse, production infrastructure structure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Final apply run `29387480668` succeeded, created both TCP 6379 rules, verified both Terraform state addresses, and deleted its plan artifact. Direct AWS inspection found exactly the API and worker source rules, the public bootstrap returned `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`, and post-apply run `29387561447` reported no changes.
+- Next: merge PR #423 after required checks pass.
 
 ### 2026-07-15 - Resume pending AWS connection setup after reload
 

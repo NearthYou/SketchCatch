@@ -104,6 +104,44 @@
       "Effect": "Allow",
       "Action": ["sns:ListSubscriptionsByTopic", "sns:Subscribe"],
       "Resource": "arn:aws:sns:ap-northeast-2:555980271919:SketchCatchProductionAlerts"
+    },
+    {
+      "Sid": "AllowRuntimeTerraformStateObjectAccess",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::sketchcatch-terraform-state-555980271919-ap-northeast-2/production/ecs-foundation/terraform.tfstate"
+    },
+    {
+      "Sid": "AllowRuntimeTerraformStateLockAccess",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::sketchcatch-terraform-state-555980271919-ap-northeast-2/production/ecs-foundation/terraform.tfstate.tflock"
+    },
+    {
+      "Sid": "AllowRuntimeCacheIngressCreate",
+      "Effect": "Allow",
+      "Action": "ec2:AuthorizeSecurityGroupIngress",
+      "Resource": [
+        "arn:aws:ec2:ap-northeast-2:555980271919:security-group/sg-09d8b7030cba492b4",
+        "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*"
+      ]
+    },
+    {
+      "Sid": "AllowRuntimeCacheIngressReadback",
+      "Effect": "Allow",
+      "Action": ["ec2:DescribeSecurityGroupRules", "ec2:DescribeSecurityGroups"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowRuntimeCacheIngressRuleTagsOnCreate",
+      "Effect": "Allow",
+      "Action": "ec2:CreateTags",
+      "Resource": "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:CreateAction": "AuthorizeSecurityGroupIngress"
+        }
+      }
     }
   ]
 }

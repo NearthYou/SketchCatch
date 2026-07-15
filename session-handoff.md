@@ -4,6 +4,11 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
+- `codex/fix-live-observation-redis-readiness` connects the current ECS API/worker security groups to the external Runtime Cache security group on Redis port only and fails plans closed when the connection is required but missing.
+- PR #423 is open. Apply run `29387480668` succeeded and state-verified both Runtime Cache ingress resources; post-apply review run `29387561447` reported no changes.
+- The deploy-role policy was applied with exact runtime state/lock access, exact Cache SG authorization, required new-rule ARN access, and tag-on-create restricted to `AuthorizeSecurityGroupIngress`.
+- Direct AWS inspection shows exactly two managed TCP 6379 rules from the current ECS API and worker security groups. Production bootstrap returns `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND` instead of `503`.
+- Static and Terraform plan regressions, harness, lint, typecheck, and build pass.
 - Production Git/CI/CD handoff request `req-c2` failed before GitHub mutation because project `0bdf56aa-68b7-4382-b37f-31d8996136c1` has no confirmed project deployment target; the GitHub repository has no stale SketchCatch branch or PR.
 - The approved Terraform apply plan is current, but Git/CI/CD must remain blocked until the user saves a verified project deployment target and a real external HTTPS output URL.
 - Direct ECS evidence from the prior run remains valid, including persisted release/history/notifications and CloudWatch metrics.
@@ -36,11 +41,13 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Broken Or Unverified
 
+- Production Live Observation Runtime Cache readiness is verified. A real signed-in observation session remains outside this incident check.
 - Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
 - Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
 
 ## Best Next Action
 
-- Merge and deploy PR #420, then save the project's verified deployment target and real external HTTPS output URL in project settings before retrying CI/CD PR creation.
+- Merge PR #423 after required checks pass.
+- Save the project's verified deployment target and real external HTTPS output URL in project settings before retrying CI/CD PR creation.
 - Merge the code-completion PR after focused CI and review.
 - Keep Issue #378 open for a separately approved real-environment acceptance run covering Static, Lambda, EC2/ASG, rollback, QR/CloudWatch, and Web Push.

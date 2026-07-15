@@ -12,12 +12,37 @@ on:
           - edge
           - data
           - legacy-rollback
+      runtime_plan_scope:
+        description: "Runtime-only review scope"
+        required: true
+        type: choice
+        options:
+          - complete
+          - runtime-cache-ingress
+      operation:
+        description: "Review only, or apply the previously reviewed Runtime Cache ingress change"
+        required: true
+        type: choice
+        options:
+          - review-only
+          - apply-reviewed-runtime-cache-ingress
+      approved_plan_run_id:
+        description: "Successful review-only workflow run approved for apply"
+        required: false
+        type: string
+        default: ""
+      expected_head_sha:
+        description: "Exact 40-character head SHA approved for apply"
+        required: false
+        type: string
+        default: ""
       confirmation:
-        description: "Enter <management-group>-review-only"
+        description: "Review: <group>-review-only. Apply: runtime-cache-ingress-apply-<approved-plan-run-id>"
         required: true
         type: string
 
 permissions:
+  actions: write
   contents: read
   id-token: write
 
@@ -36,6 +61,12 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     environment: production-infra-plan
+    outputs:
+      artifact-id: ${{ steps.upload-reviewed-plan.outputs.artifact-id }}
+      artifact-name: ${{ steps.reviewed-plan.outputs.artifact-name }}
+      backend-bucket: ${{ steps.group.outputs.backend-bucket }}
+      backend-key: ${{ steps.group.outputs.backend-key }}
+      terraform-root: ${{ steps.group.outputs.terraform-root }}
 
     steps:
       - name: Checkout
@@ -48,19 +79,56 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.8
+          terraform_wrapper: false
 
       - name: Resolve management group
         id: group
         shell: bash
         env:
           MANAGEMENT_GROUP: ${{ inputs.management_group }}
+          RUNTIME_PLAN_SCOPE: ${{ inputs.runtime_plan_scope }}
+          OPERATION: ${{ inputs.operation }}
+          APPROVED_PLAN_RUN_ID: ${{ inputs.approved_plan_run_id }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
 
-          expected_confirmation="${MANAGEMENT_GROUP}-review-only"
+          case "${OPERATION}" in
+            review-only)
+              expected_confirmation="${MANAGEMENT_GROUP}-review-only"
+              ;;
+            apply-reviewed-runtime-cache-ingress)
+              if [ "${MANAGEMENT_GROUP}" != "runtime" ] || [ "${RUNTIME_PLAN_SCOPE}" != "runtime-cache-ingress" ]; then
+                echo "::error::reviewed apply is restricted to the runtime-cache-ingress scope"
+                exit 1
+              fi
+              if ! [[ "${APPROVED_PLAN_RUN_ID}" =~ ^[0-9]+$ ]]; then
+                echo "::error::approved_plan_run_id must identify the approved review-only run"
+                exit 1
+              fi
+              if ! [[ "${EXPECTED_HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]] || [ "${EXPECTED_HEAD_SHA}" != "${GITHUB_SHA}" ]; then
+                echo "::error::expected_head_sha must exactly match the dispatched commit"
+                exit 1
+              fi
+              if [ "${GITHUB_ACTOR}" != "${GITHUB_REPOSITORY_OWNER}" ]; then
+                echo "::error::production infrastructure apply must be dispatched by the repository owner"
+                exit 1
+              fi
+              expected_confirmation="runtime-cache-ingress-apply-${APPROVED_PLAN_RUN_ID}"
+              ;;
+            *)
+              echo "::error::unsupported operation"
+              exit 1
+              ;;
+          esac
+
           if [ "${CONFIRMATION}" != "${expected_confirmation}" ]; then
             echo "::error::confirmation must be ${expected_confirmation}"
+            exit 1
+          fi
+          if [ "${MANAGEMENT_GROUP}" != "runtime" ] && [ "${RUNTIME_PLAN_SCOPE}" != "complete" ]; then
+            echo "::error::runtime_plan_scope must be complete for non-runtime management groups"
             exit 1
           fi
 
@@ -89,8 +157,24 @@ jobs:
 
           {
             echo "terraform-root=${terraform_root}"
+            echo "backend-bucket=${PRODUCTION_INFRA_STATE_BUCKET}"
             echo "backend-key=${backend_key}"
           } >> "${GITHUB_OUTPUT}"
+
+      - name: Validate approved review evidence
+        if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED_PLAN_RUN_ID: ${{ inputs.approved_plan_run_id }}
+        run: |
+          set -euo pipefail
+          approved_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${APPROVED_PLAN_RUN_ID}")"
+          jq -e '
+            .conclusion == "success" and
+            .event == "workflow_dispatch" and
+            .name == "Production Infrastructure Plan"
+          ' <<< "${approved_run_json}" > /dev/null
 
       - name: Validate workflow configuration
         shell: bash
@@ -125,6 +209,60 @@ jobs:
             | jq -c 'if type == "object" then . else error("runtime tfvars must be a JSON object") end' \
             > "${RUNNER_TEMP}/runtime.tfvars.json"
 
+          runtime_vpc_id="$(jq -er '.vpc_id | select(type == "string" and length > 0)' "${RUNNER_TEMP}/runtime.tfvars.json")"
+          stack_names_json="$(
+            aws cloudformation list-stacks \
+              --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
+              --query 'StackSummaries[].StackName' \
+              --output json
+          )"
+          security_group_ids_json='[]'
+          while IFS= read -r stack_name; do
+            outputs_json="$(
+              aws cloudformation describe-stacks \
+                --stack-name "${stack_name}" \
+                --query 'Stacks[0].Outputs' \
+                --output json
+            )"
+            if ! jq -e 'any(.[]?; .OutputKey == "RedisUrl")' <<< "${outputs_json}" > /dev/null; then
+              continue
+            fi
+
+            stack_security_group_ids_json="$(
+              jq '[.[]? | select(.OutputKey == "SecurityGroupId") | .OutputValue]' <<< "${outputs_json}"
+            )"
+            security_group_ids_json="$(
+              jq -cn \
+                --argjson existing "${security_group_ids_json}" \
+                --argjson current "${stack_security_group_ids_json}" \
+                '$existing + $current | unique'
+            )"
+          done < <(jq -r '.[]' <<< "${stack_names_json}")
+
+          security_group_count="$(jq 'length' <<< "${security_group_ids_json}")"
+          if [ "${security_group_count}" -ne 1 ]; then
+            echo "::error::expected exactly one Runtime Cache CloudFormation stack with RedisUrl and SecurityGroupId outputs"
+            exit 1
+          fi
+
+          security_group_id="$(jq -r '.[0]' <<< "${security_group_ids_json}")"
+          security_group_vpc_id="$(
+            aws ec2 describe-security-groups \
+              --group-ids "${security_group_id}" \
+              --query 'SecurityGroups[0].VpcId' \
+              --output text
+          )"
+          if [ "${security_group_vpc_id}" != "${runtime_vpc_id}" ]; then
+            echo "::error::Runtime Cache security group does not belong to the configured runtime VPC"
+            exit 1
+          fi
+
+          jq --arg security_group_id "${security_group_id}" \
+            '.runtime_cache_security_group_id = $security_group_id' \
+            "${RUNNER_TEMP}/runtime.tfvars.json" \
+            > "${RUNNER_TEMP}/runtime.enriched.tfvars.json"
+          mv "${RUNNER_TEMP}/runtime.enriched.tfvars.json" "${RUNNER_TEMP}/runtime.tfvars.json"
+
       - name: Initialize selected remote state
         shell: bash
         env:
@@ -140,15 +278,23 @@ jobs:
             -backend-config="use_lockfile=true"
 
       - name: Review-only Terraform plan
+        if: inputs.operation == 'review-only'
         shell: bash
         env:
           TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
           MANAGEMENT_GROUP: ${{ inputs.management_group }}
+          RUNTIME_PLAN_SCOPE: ${{ inputs.runtime_plan_scope }}
         run: |
           set -euo pipefail
           plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)
           if [ "${MANAGEMENT_GROUP}" = "runtime" ]; then
             plan_args+=("-var-file=${RUNNER_TEMP}/runtime.tfvars.json")
+            if [ "${RUNTIME_PLAN_SCOPE}" = "runtime-cache-ingress" ]; then
+              plan_args+=(
+                '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]'
+                '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]'
+              )
+            fi
           fi
 
           set +e
@@ -165,3 +311,172 @@ jobs:
           else
             echo "::notice::Terraform reported no infrastructure changes"
           fi
+
+      - name: Create reviewed apply plan
+        if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+        shell: bash
+        env:
+          TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
+        run: |
+          set -euo pipefail
+          terraform -chdir="${TERRAFORM_ROOT}" plan \
+            -input=false \
+            -no-color \
+            -lock-timeout=5m \
+            -out=tfplan \
+            "-var-file=${RUNNER_TEMP}/runtime.tfvars.json" \
+            '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]' \
+            '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]'
+
+      - name: Validate reviewed apply plan
+        id: reviewed-plan
+        if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+        shell: bash
+        env:
+          TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
+        run: |
+          set -euo pipefail
+          reviewed_plan_json="${RUNNER_TEMP}/reviewed-plan.json"
+          terraform -chdir="${TERRAFORM_ROOT}" show -json tfplan > "${reviewed_plan_json}"
+
+          jq -e '
+            [
+              .resource_changes[]
+              | select(.change.actions != ["no-op"])
+              | {address, actions: .change.actions}
+            ]
+            | sort_by(.address)
+            == [
+              {
+                "address": "aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]",
+                "actions": ["create"]
+              },
+              {
+                "address": "aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]",
+                "actions": ["create"]
+              }
+            ]
+          ' "${reviewed_plan_json}" > /dev/null
+
+          jq -e '
+            [
+              .resource_changes[]
+              | select(
+                  .address == "aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]" or
+                  .address == "aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]"
+                )
+              | .change.after
+            ] as $rules
+            | ($rules | length) == 2
+              and all($rules[];
+                .from_port == 6379 and
+                .to_port == 6379 and
+                .ip_protocol == "tcp" and
+                (.security_group_id | test("^sg-[0-9a-f]+$")) and
+                (.referenced_security_group_id | test("^sg-[0-9a-f]+$"))
+              )
+              and (($rules | map(.security_group_id) | unique | length) == 1)
+              and (($rules | map(.referenced_security_group_id) | unique | length) == 2)
+          ' "${reviewed_plan_json}" > /dev/null
+
+          rm -f "${reviewed_plan_json}"
+          echo "artifact-name=production-runtime-cache-ingress-${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload reviewed plan for approved apply
+        id: upload-reviewed-plan
+        if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.reviewed-plan.outputs.artifact-name }}
+          path: ${{ steps.group.outputs.terraform-root }}/tfplan
+          if-no-files-found: error
+          retention-days: 1
+
+  apply:
+    if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "0"
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
+      TERRAFORM_ROOT: ${{ needs.plan.outputs.terraform-root }}
+      BACKEND_BUCKET: ${{ needs.plan.outputs.backend-bucket }}
+      BACKEND_KEY: ${{ needs.plan.outputs.backend-key }}
+
+    steps:
+      - name: Checkout approved SHA
+        uses: actions/checkout@v4
+
+      - name: Verify approved SHA before apply
+        shell: bash
+        env:
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_SHA}" != "${EXPECTED_HEAD_SHA}" ]; then
+            echo "::error::checked out SHA does not match the approved apply SHA"
+            exit 1
+          fi
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Configure production apply credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download reviewed plan
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.plan.outputs.artifact-name }}
+          path: ${{ needs.plan.outputs.terraform-root }}
+
+      - name: Initialize approved runtime state
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir="${TERRAFORM_ROOT}" init -input=false \
+            -backend-config="bucket=${BACKEND_BUCKET}" \
+            -backend-config="key=${BACKEND_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+
+      - name: Apply reviewed Runtime Cache ingress plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir="${TERRAFORM_ROOT}" apply -input=false -no-color tfplan
+
+      - name: Verify applied resources are in Terraform state
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir="${TERRAFORM_ROOT}" state show -no-color \
+            'aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]' \
+            > "${RUNNER_TEMP}/runtime-cache-api-ingress.state"
+          terraform -chdir="${TERRAFORM_ROOT}" state show -no-color \
+            'aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]' \
+            > "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
+          grep -q 'from_port.*=.*6379' "${RUNNER_TEMP}/runtime-cache-api-ingress.state"
+          grep -q 'from_port.*=.*6379' "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
+          rm -f "${RUNNER_TEMP}/runtime-cache-api-ingress.state" "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
+
+      - name: Delete reviewed plan artifact
+        if: always() && needs.plan.outputs.artifact-id != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.plan.outputs.artifact-id }}
+        run: |
+          set -euo pipefail
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}"
