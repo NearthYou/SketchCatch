@@ -8,7 +8,10 @@ import {
   createArchitectureBoardKnowledgeArtifact,
   evaluateArchitectureBoardKnowledgeLeaveOneOut
 } from ".";
-import { convertArchitectureJsonToDiagramJson } from "../workspace/workspace-ai-diagram-adapter";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "../workspace/workspace-ai-diagram-adapter";
 
 const architecture: ArchitectureJson = {
   nodes: [
@@ -146,6 +149,63 @@ test("Compiler는 유사 Template의 spacing profile을 실제 geometry 후보�
   assert.ok(
     (proposal.provenance as { layoutProfileIds?: readonly string[] }).layoutProfileIds?.some((id) =>
       id.startsWith("knowledge:")
+    )
+  );
+});
+
+test("Compiler는 presentation node가 없는 실제 artifact graph도 pattern 후보와 provenance에 포함한다", () => {
+  const pattern = architectureBoardKnowledge.modulePatterns.find(
+    ({ id }) => id === "static-web-delivery"
+  );
+  assert.ok(pattern);
+  const resourceNodeIds = new Set(
+    pattern.nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
+  );
+  const currentDiagram: DiagramJson = {
+    nodes: pattern.nodes
+      .filter(({ kind }) => kind === "resource")
+      .map((node) => {
+        const cloned = structuredClone(node) as DiagramNode;
+        const parentId = cloned.metadata?.parentAreaNodeId;
+        return {
+          ...cloned,
+          position: { x: 0, y: 0 },
+          ...(parentId && !resourceNodeIds.has(parentId)
+            ? { metadata: { ...cloned.metadata, parentAreaNodeId: undefined } }
+            : {})
+        };
+      }),
+    edges: structuredClone(
+      pattern.edges.filter(
+        ({ sourceNodeId, targetNodeId }) =>
+          resourceNodeIds.has(sourceNodeId) && resourceNodeIds.has(targetNodeId)
+      )
+    ) as DiagramJson["edges"],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const proposal = compileArchitectureBoard({
+    architecture: convertDiagramJsonToArchitectureJson(currentDiagram),
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+
+  assert.ok(
+    proposal.provenance.candidateIds?.some((id) => id.includes(`module-pattern:${pattern.id}`))
+  );
+  assert.ok(proposal.provenance.modulePatternIds?.includes(pattern.id));
+  assert.ok(
+    proposal.provenance.modulePatternRepresentativeTemplateIds?.includes(
+      pattern.provenance.representativeTemplateId
+    )
+  );
+  assert.deepEqual(
+    proposal.provenance.modulePatternSourceTemplateIds,
+    [...pattern.provenance.sourceTemplateIds].sort()
+  );
+  assert.ok(
+    pattern.provenance.sourceTemplateIds.every((templateId) =>
+      proposal.provenance.referenceTemplateIds.includes(templateId)
     )
   );
 });

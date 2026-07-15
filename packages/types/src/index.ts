@@ -3347,6 +3347,12 @@ export type ArchitectureBoardCompilationProposal = {
     candidateIds?: string[] | undefined;
     /** Knowledge-derived spacing profiles added to the geometry candidate search. */
     layoutProfileIds?: string[] | undefined;
+    /** Complete Template graph patterns that produced geometry candidates. */
+    modulePatternIds?: string[] | undefined;
+    /** Representative Templates selected by the matched pattern extractor. */
+    modulePatternRepresentativeTemplateIds?: string[] | undefined;
+    /** Every source Template supporting the matched pattern candidates. */
+    modulePatternSourceTemplateIds?: string[] | undefined;
     referenceTemplateIds: string[];
   };
 };

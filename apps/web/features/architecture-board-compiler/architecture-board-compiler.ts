@@ -34,6 +34,10 @@ import {
   rankArchitectureBoardKnowledgeCases
 } from "./architecture-board-knowledge-policy";
 import {
+  applyArchitectureBoardModulePatternKnowledge,
+  type ArchitectureBoardModulePatternKnowledgeResult
+} from "./architecture-board-module-pattern-policy";
+import {
   applyArchitectureBoardPresentationOperations,
   applyArchitectureBoardSemanticOperations,
   type ArchitectureBoardSemanticOperationIssue
@@ -202,6 +206,26 @@ export function compileArchitectureBoard(
     semanticOperationResult.presentationOperations,
     layoutProfiles
   );
+  const patternCandidateResults = [
+    createModulePatternCandidate(
+      presentationCandidate,
+      comparisonArchitecture,
+      comparisonDiagram,
+      sourceArchitecture,
+      diagnosticContext
+    ),
+    createModulePatternCandidate(
+      semanticCandidate,
+      comparisonArchitecture,
+      comparisonDiagram,
+      sourceArchitecture,
+      diagnosticContext
+    )
+  ].filter(
+    (entry): entry is { candidate: Candidate; pattern: ArchitectureBoardModulePatternKnowledgeResult } =>
+      entry !== null
+  );
+  const patternCandidates = patternCandidateResults.map(({ candidate }) => candidate);
   const sourceExactNeedsCompiledVariant =
     comparisonDiagram.presentation?.geometryPolicy === "source-exact" &&
     (input.trigger === "template-review" || input.trigger === "board-auto-organize");
@@ -209,12 +233,13 @@ export function compileArchitectureBoard(
     originalCandidate,
     ...(requestedOriginalCandidate ? [requestedOriginalCandidate] : []),
     presentationCandidate,
-    semanticCandidate
+    semanticCandidate,
+    ...patternCandidates
   ];
   const selectableCandidates = sourceExactNeedsCompiledVariant
-    ? [presentationCandidate, semanticCandidate]
+    ? [presentationCandidate, semanticCandidate, ...patternCandidates]
     : requestedOriginalCandidate
-      ? [requestedOriginalCandidate, presentationCandidate, semanticCandidate]
+      ? [requestedOriginalCandidate, presentationCandidate, semanticCandidate, ...patternCandidates]
       : candidates;
   const selected = selectableCandidates.sort(
     (left, right) => left.quality.score - right.quality.score || left.id.localeCompare(right.id)
@@ -239,6 +264,16 @@ export function compileArchitectureBoard(
     comparisonDiagram
   );
 
+  const matchedPatternIds = uniqueSorted(
+    patternCandidateResults.flatMap(({ pattern }) => pattern.matchedPatternIds)
+  );
+  const matchedPatternRepresentativeTemplateIds = uniqueSorted(
+    patternCandidateResults.flatMap(({ pattern }) => pattern.representativeTemplateIds)
+  );
+  const matchedPatternReferenceTemplateIds = uniqueSorted(
+    patternCandidateResults.flatMap(({ pattern }) => pattern.referenceTemplateIds)
+  );
+
   return {
     architecture: cloneArchitecture(selected.architecture),
     changes: selected.changes.map((entry) => structuredClone(entry)),
@@ -254,8 +289,42 @@ export function compileArchitectureBoard(
       candidateId: selected.id,
       candidateIds: candidates.map((candidate) => candidate.id).sort((left, right) => left.localeCompare(right)),
       layoutProfileIds: layoutProfiles.map((profile) => profile.id),
-      referenceTemplateIds: [...findReferenceTemplateIds(selected.diagram)]
+      modulePatternIds: matchedPatternIds,
+      modulePatternRepresentativeTemplateIds: matchedPatternRepresentativeTemplateIds,
+      modulePatternSourceTemplateIds: matchedPatternReferenceTemplateIds,
+      referenceTemplateIds: uniqueSorted([
+        ...findReferenceTemplateIds(selected.diagram),
+        ...matchedPatternRepresentativeTemplateIds,
+        ...matchedPatternReferenceTemplateIds
+      ])
     }
+  };
+}
+
+function createModulePatternCandidate(
+  baseCandidate: Candidate,
+  beforeArchitecture: ArchitectureJson,
+  beforeDiagram: DiagramJson,
+  sourceArchitecture: ArchitectureJson,
+  diagnosticContext: CompilationDiagnosticContext
+): { candidate: Candidate; pattern: ArchitectureBoardModulePatternKnowledgeResult } | null {
+  const pattern = applyArchitectureBoardModulePatternKnowledge(
+    baseCandidate.diagram,
+    architectureBoardKnowledge
+  );
+  if (!pattern) return null;
+
+  return {
+    candidate: createCandidate(
+      `compiled:${pattern.candidateId}:${baseCandidate.id}`,
+      baseCandidate.architecture,
+      pattern.diagram,
+      beforeArchitecture,
+      beforeDiagram,
+      sourceArchitecture,
+      diagnosticContext
+    ),
+    pattern
   };
 }
 
@@ -1661,6 +1730,10 @@ function findReferenceTemplateIds(diagram: DiagramJson): readonly string[] {
   return rankArchitectureBoardKnowledgeCases(diagram, architectureBoardKnowledge)
     .slice(0, 3)
     .map(({ knowledgeCase }) => knowledgeCase.id);
+}
+
+function uniqueSorted(values: readonly string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
 function change(
