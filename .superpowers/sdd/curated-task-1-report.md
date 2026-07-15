@@ -10,7 +10,9 @@ DONE
 - Added 10 fixed, named functional/purpose seeds covering Network, Traffic, Compute, Storage, Database, Security, Operations, and Delivery use.
 - The generator passes repository Template diagrams and all available Brainboard diagrams into a generator-only extractor; browser runtime reads only the checked-in artifact.
 - Candidate extraction preserves selected nodes, internal semantic edges, parent Area chains, parameters, variables/bindings, relative geometry, edge handles, and routed points.
-- Structural grouping uses direction, edge meaning, containment, and refined node roles; independent occurrences under a shared presentation Area remain separate.
+- Dependency closure recursively includes Terraform resource references, variable co-bindings, and their parent Area chains, so emitted modules contain no dangling resource references or bindings.
+- Occurrence discovery follows bounded directed semantic/reference connectivity before adding ancestors and dependencies; independent occurrences under a shared presentation Area remain separate and the relational-data module excludes unrelated app/public subnets.
+- Structural grouping uses the 32-bit fingerprint only as a bucket key, then verifies exact labeled, directed, containment-aware graph isomorphism before counting recurrence.
 - Representative geometry is selected as an actual medoid after aligning duplicate node types by structural role, then normalized to a `(0, 0)` module origin.
 
 ## TDD Evidence
@@ -34,10 +36,14 @@ AssertionError: ArchitectureBoardKnowledgeArtifact.modulePatterns must exist
 Command:
 
 ```bash
-pnpm --dir apps/web exec tsx --test features/architecture-board-compiler/architecture-board-module-pattern-source.test.ts
+pnpm --dir apps/web exec tsx --test \
+  features/architecture-board-compiler/architecture-board-module-pattern-source.test.ts \
+  features/architecture-board-compiler/architecture-board-module-pattern-artifact.test.ts
 ```
 
-Result: exit 1, 0/3 passed. The three new regression seams did not exist before the fixes for non-isomorphic fingerprint separation, shared-Area occurrence isolation, and structural-role medoid alignment.
+Result: exit 1 with three targeted failures: the artifact contained dangling IAM references, exact structural-equivalence support was absent, and recursive Terraform/variable dependencies were omitted.
+
+A final collision-grouping regression was also observed RED before exposing the selector seam: exit 1, 4/5 passed, failing with `structural grouping test seam must exist`.
 
 ### GREEN
 
@@ -50,14 +56,14 @@ pnpm --dir apps/web exec tsx --test \
   features/architecture-board-compiler/architecture-board-knowledge-artifact.test.ts
 ```
 
-Result: exit 0, 7/7 passed.
+Result: exit 0, 9/9 passed.
 
 Additional verification:
 
 ```text
 pnpm architecture-board-knowledge:check        -> exit 0, artifact up to date
 pnpm --filter @sketchcatch/web typecheck       -> exit 0
-pnpm --filter @sketchcatch/web lint            -> exit 0 (before the focused review fixes)
+pnpm --dir apps/web exec eslint <focused files> -> exit 0
 pnpm harness:check                             -> exit 0 (baseline)
 git diff --check                               -> exit 0
 ```
@@ -78,8 +84,9 @@ The parent requested no broader checks beyond Task 1 after review; the repositor
 
 ## Commit
 
-- Message: `Feat: Template 기반 Module pattern knowledge 생성`
-- This report is included in that focused Task 1 commit; the final hash is returned to the parent immediately after creation.
+- Initial implementation: `4317b109` (`Feat: Template 기반 Module pattern knowledge 생성`)
+- Review-fix message: `Fix: Module pattern dependency와 구조 동등성 보강`
+- This report is included in the focused review-fix commit; its final hash is returned to the parent immediately after creation.
 
 ## Self-review
 
@@ -87,10 +94,12 @@ The parent requested no broader checks beyond Task 1 after review; the repositor
 - Confirmed normalized node coordinates are finite/non-negative with both minima at zero; routed paths and points remain finite.
 - Confirmed generated output exactly equals source generation and the drift check passes.
 - Confirmed runtime knowledge code does not import Template registries/adapters and returns a detached pattern copy.
-- Addressed all three Important independent-review findings with regressions: fingerprint collisions, ancestor-induced occurrence merging, and coordinate-order medoid mismatch.
+- Confirmed every generated Terraform resource reference and variable binding resolves inside its pattern.
+- Confirmed exact grouping accepts a relabeled K3,3 graph while rejecting an equal-FNV-fingerprint triangular prism.
+- Addressed all three High independent-review findings with regressions: dependency closure, containment-driven sibling absorption, and hash-only structural grouping.
 - Preserved and excluded unrelated workspace files from staging.
 
 ## Concerns
 
-- The generated artifact is intentionally large because it persists complete Template fragments rather than aggregate metrics.
+- No known Task 1 correctness concerns. The generated artifact remains intentionally large because it persists complete Template fragments rather than aggregate metrics.
 - Repository-wide build verification is deferred to the parent completion task as requested.

@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-6e21c3b7",
+  hash: "fnv1a-9ed9d70a",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -1145,275 +1145,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "컨테이너 이미지 배포"
         }
       ],
-      "structuralFingerprint": "fnv1a-f568899b",
+      "structuralFingerprint": "fnv1a-3aaaedc3",
       "nodes": [
-        {
-          "id": "template-ecs-fargate-container-app-log-group",
-          "kind": "resource",
-          "label": "Fargate Log Group",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
-          },
-          "parameters": {
-            "resourceType": "aws_cloudwatch_log_group",
-            "resourceName": "log_group",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "/ecs/compiler-knowledge-app",
-              "retentionInDays": 7
-            }
-          },
-          "position": {
-            "x": 1640,
-            "y": 640
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_cloudwatch_log_group",
-          "zIndex": 1
-        },
-        {
-          "id": "template-ecs-fargate-container-app-presentation-definition-ops-group",
-          "kind": "design",
-          "label": "Definition / Ops",
-          "locked": false,
-          "metadata": {
-            "presentationCatalogItemId": "design-group",
-            "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-region"
-          },
-          "position": {
-            "x": 1600,
-            "y": 440
-          },
-          "size": {
-            "width": 280,
-            "height": 280
-          },
-          "type": "design_group",
-          "zIndex": 0
-        },
-        {
-          "id": "template-ecs-fargate-container-app-presentation-region",
-          "kind": "design",
-          "label": "Region",
-          "locked": false,
-          "metadata": {
-            "presentationCatalogItemId": "aws-region"
-          },
-          "position": {
-            "x": 0,
-            "y": 0
-          },
-          "size": {
-            "width": 1920,
-            "height": 880
-          },
-          "type": "aws-region",
-          "zIndex": 0
-        },
-        {
-          "id": "template-ecs-fargate-container-app-repository",
-          "kind": "resource",
-          "label": "ECR Repository",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
-          },
-          "parameters": {
-            "resourceType": "aws_ecr_repository",
-            "resourceName": "repository",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "compiler-knowledge-app",
-              "imageTagMutability": "IMMUTABLE"
-            }
-          },
-          "position": {
-            "x": 1640,
-            "y": 520
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_ecr_repository",
-          "zIndex": 1
-        },
-        {
-          "id": "template-ecs-fargate-container-app-task",
-          "kind": "resource",
-          "label": "ECS Task Definition",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-definition-ops-group"
-          },
-          "parameters": {
-            "resourceType": "aws_ecs_task_definition",
-            "resourceName": "task",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "family": "compiler-knowledge-app",
-              "networkMode": "awsvpc",
-              "requiresCompatibilities": [
-                "FARGATE"
-              ],
-              "cpu": 256,
-              "memory": 512,
-              "executionRoleArn": "aws_iam_role.execution_role.arn",
-              "taskRoleArn": "aws_iam_role.task_role.arn",
-              "containerDefinitions": "[{\"name\":\"web\",\"image\":\"public.ecr.aws/docker/library/nginx:stable\",\"essential\":true,\"portMappings\":[{\"containerPort\":80,\"hostPort\":80,\"protocol\":\"tcp\"}],\"logConfiguration\":{\"logDriver\":\"awslogs\",\"options\":{\"awslogs-group\":\"${aws_cloudwatch_log_group.log_group.name}\",\"awslogs-region\":\"ap-northeast-2\",\"awslogs-stream-prefix\":\"ecs\"}}}]"
-            }
-          },
-          "position": {
-            "x": 1760,
-            "y": 520
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_ecs_task_definition",
-          "zIndex": 1
-        }
-      ],
-      "edges": [
-        {
-          "id": "template-ecs-fargate-container-app-repository-task",
-          "label": "optional image source",
-          "metadata": {
-            "presentationRole": "detail"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-repository",
-          "targetNodeId": "template-ecs-fargate-container-app-task",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-bottom",
-          "targetHandleId": "handle-top"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-task-log-group",
-          "label": "writes logs",
-          "metadata": {
-            "presentationRole": "detail"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-task",
-          "targetNodeId": "template-ecs-fargate-container-app-log-group",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-right",
-          "targetHandleId": "handle-left"
-        }
-      ],
-      "variables": [],
-      "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
-        "representativeTemplateId": "repository:ecs-fargate-container-app",
-        "sourceTemplateIds": [
-          "repository:ecs-fargate-container-app"
-        ]
-      }
-    },
-    {
-      "id": "container-runtime",
-      "title": "Container Runtime",
-      "description": "Container cluster, task definition, service 실행 관계를 구성합니다.",
-      "lenses": [
-        {
-          "kind": "functional",
-          "key": "compute",
-          "label": "컴퓨트"
-        },
-        {
-          "kind": "purpose",
-          "key": "container-operations",
-          "label": "컨테이너 운영"
-        }
-      ],
-      "structuralFingerprint": "fnv1a-f8d42e31",
-      "nodes": [
-        {
-          "id": "template-ecs-fargate-container-app-alb-security-group",
-          "kind": "resource",
-          "label": "ALB Security Group",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-vpc"
-          },
-          "parameters": {
-            "resourceType": "aws_security_group",
-            "resourceName": "alb_security_group",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "fargate-alb",
-              "description": "Allow public HTTP to the load balancer",
-              "vpcId": "aws_vpc.vpc.id",
-              "ingress": [
-                {
-                  "fromPort": 80,
-                  "toPort": 80,
-                  "protocol": "tcp",
-                  "cidrBlocks": [
-                    "0.0.0.0/0"
-                  ]
-                }
-              ],
-              "egress": [
-                {
-                  "fromPort": 0,
-                  "toPort": 0,
-                  "protocol": "-1",
-                  "cidrBlocks": [
-                    "0.0.0.0/0"
-                  ]
-                }
-              ]
-            }
-          },
-          "position": {
-            "x": 320,
-            "y": 240
-          },
-          "size": {
-            "width": 200,
-            "height": 200
-          },
-          "type": "aws_security_group",
-          "zIndex": 1
-        },
-        {
-          "id": "template-ecs-fargate-container-app-cluster",
-          "kind": "resource",
-          "label": "ECS Cluster",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-vpc",
-            "presentationArea": true
-          },
-          "parameters": {
-            "resourceType": "aws_ecs_cluster",
-            "resourceName": "cluster",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "compiler-knowledge-cluster"
-            }
-          },
-          "position": {
-            "x": 1040,
-            "y": 240
-          },
-          "size": {
-            "width": 320,
-            "height": 240
-          },
-          "type": "aws_ecs_cluster",
-          "zIndex": 1
-        },
         {
           "id": "template-ecs-fargate-container-app-execution-role",
           "kind": "resource",
@@ -1441,76 +1174,6 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "height": 96
           },
           "type": "aws_iam_role",
-          "zIndex": 1
-        },
-        {
-          "id": "template-ecs-fargate-container-app-listener",
-          "kind": "resource",
-          "label": "HTTP Listener",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-vpc"
-          },
-          "parameters": {
-            "resourceType": "aws_lb_listener",
-            "resourceName": "listener",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "loadBalancerArn": "aws_lb.load_balancer.arn",
-              "port": 80,
-              "protocol": "HTTP",
-              "defaultAction": {
-                "type": "forward",
-                "targetGroupArn": "aws_lb_target_group.target_group.arn"
-              }
-            }
-          },
-          "position": {
-            "x": 640,
-            "y": 320
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_lb_listener",
-          "zIndex": 1
-        },
-        {
-          "id": "template-ecs-fargate-container-app-load-balancer",
-          "kind": "resource",
-          "label": "Application Load Balancer",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-vpc"
-          },
-          "parameters": {
-            "resourceType": "aws_lb",
-            "resourceName": "load_balancer",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "fargate-alb",
-              "loadBalancerType": "application",
-              "subnets": [
-                "aws_subnet.subnet_a.id",
-                "aws_subnet.subnet_b.id"
-              ],
-              "securityGroups": [
-                "aws_security_group.alb_security_group.id"
-              ]
-            }
-          },
-          "position": {
-            "x": 400,
-            "y": 320
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_lb",
           "zIndex": 1
         },
         {
@@ -1631,93 +1294,6 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "zIndex": 1
         },
         {
-          "id": "template-ecs-fargate-container-app-service",
-          "kind": "resource",
-          "label": "ECS Service",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-cluster"
-          },
-          "parameters": {
-            "resourceType": "aws_ecs_service",
-            "resourceName": "service",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "compiler-knowledge-service",
-              "cluster": "aws_ecs_cluster.cluster.id",
-              "taskDefinition": "aws_ecs_task_definition.task.arn",
-              "desiredCount": 1,
-              "launchType": "FARGATE",
-              "healthCheckGracePeriodSeconds": 30,
-              "networkConfiguration": {
-                "subnets": [
-                  "aws_subnet.subnet_a.id",
-                  "aws_subnet.subnet_b.id"
-                ],
-                "securityGroups": [
-                  "aws_security_group.task_security_group.id"
-                ],
-                "assignPublicIp": true
-              },
-              "loadBalancer": {
-                "targetGroupArn": "aws_lb_target_group.target_group.arn",
-                "containerName": "web",
-                "containerPort": 80
-              },
-              "dependsOn": [
-                "aws_lb_listener.listener"
-              ]
-            }
-          },
-          "position": {
-            "x": 1160,
-            "y": 320
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_ecs_service",
-          "zIndex": 1
-        },
-        {
-          "id": "template-ecs-fargate-container-app-target-group",
-          "kind": "resource",
-          "label": "Fargate Target Group",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-vpc"
-          },
-          "parameters": {
-            "resourceType": "aws_lb_target_group",
-            "resourceName": "target_group",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "fargate-web",
-              "port": 80,
-              "protocol": "HTTP",
-              "targetType": "ip",
-              "vpcId": "aws_vpc.vpc.id",
-              "healthCheck": {
-                "path": "/",
-                "matcher": "200-399"
-              }
-            }
-          },
-          "position": {
-            "x": 840,
-            "y": 320
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_lb_target_group",
-          "zIndex": 1
-        },
-        {
           "id": "template-ecs-fargate-container-app-task",
           "kind": "resource",
           "label": "ECS Task Definition",
@@ -1755,147 +1331,36 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "zIndex": 1
         },
         {
-          "id": "template-ecs-fargate-container-app-task-security-group",
+          "id": "template-ecs-fargate-container-app-task-role",
           "kind": "resource",
-          "label": "Task Security Group",
+          "label": "ECS Task Role",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-cluster"
+            "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-global-iam-group"
           },
           "parameters": {
-            "resourceType": "aws_security_group",
-            "resourceName": "task_security_group",
+            "resourceType": "aws_iam_role",
+            "resourceName": "task_role",
             "fileName": "main.tf",
             "terraformBlockType": "resource",
             "values": {
-              "name": "fargate-task",
-              "description": "Allow ALB traffic to Fargate tasks",
-              "vpcId": "aws_vpc.vpc.id",
-              "ingress": [
-                {
-                  "fromPort": 80,
-                  "toPort": 80,
-                  "protocol": "tcp",
-                  "securityGroups": [
-                    "aws_security_group.alb_security_group.id"
-                  ]
-                }
-              ],
-              "egress": [
-                {
-                  "fromPort": 0,
-                  "toPort": 0,
-                  "protocol": "-1",
-                  "cidrBlocks": [
-                    "0.0.0.0/0"
-                  ]
-                }
-              ]
+              "name": "fargate-task-role",
+              "assumeRolePolicy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ecs-tasks.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
             }
           },
           "position": {
-            "x": 1120,
+            "x": 1640,
             "y": 280
           },
           "size": {
-            "width": 160,
-            "height": 160
+            "width": 124,
+            "height": 96
           },
-          "type": "aws_security_group",
-          "zIndex": 1
-        },
-        {
-          "id": "template-ecs-fargate-container-app-vpc",
-          "kind": "resource",
-          "label": "VPC",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-region"
-          },
-          "parameters": {
-            "resourceType": "aws_vpc",
-            "resourceName": "vpc",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.30.0.0/16",
-              "enableDnsSupport": true,
-              "enableDnsHostnames": true
-            }
-          },
-          "position": {
-            "x": 160,
-            "y": 160
-          },
-          "size": {
-            "width": 1360,
-            "height": 560
-          },
-          "type": "aws_vpc",
+          "type": "aws_iam_role",
           "zIndex": 1
         }
       ],
       "edges": [
-        {
-          "id": "template-ecs-fargate-container-app-alb-sg-load-balancer",
-          "label": "applies to",
-          "metadata": {
-            "presentationRole": "detail"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-alb-security-group",
-          "targetNodeId": "template-ecs-fargate-container-app-load-balancer",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-bottom",
-          "targetHandleId": "handle-top"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-alb-sg-task-sg",
-          "label": "allows tcp/80",
-          "metadata": {
-            "presentationRole": "detail"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-alb-security-group",
-          "targetNodeId": "template-ecs-fargate-container-app-task-security-group",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-bottom",
-          "targetHandleId": "handle-top"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-cluster-service",
-          "label": "runs",
-          "metadata": {
-            "presentationRole": "detail"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-cluster",
-          "targetNodeId": "template-ecs-fargate-container-app-service",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-right",
-          "targetHandleId": "handle-left"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-listener-target-group",
-          "label": "forwards",
-          "metadata": {
-            "presentationRole": "primary"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-listener",
-          "targetNodeId": "template-ecs-fargate-container-app-target-group",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-right",
-          "targetHandleId": "handle-left"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-load-balancer-listener",
-          "label": "listens",
-          "metadata": {
-            "presentationRole": "primary"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-load-balancer",
-          "targetNodeId": "template-ecs-fargate-container-app-listener",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-right",
-          "targetHandleId": "handle-left"
-        },
         {
           "id": "template-ecs-fargate-container-app-repository-task",
           "label": "optional image source",
@@ -1907,30 +1372,6 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "type": "smoothstep",
           "sourceHandleId": "handle-bottom",
           "targetHandleId": "handle-top"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-service-task",
-          "label": "uses",
-          "metadata": {
-            "presentationRole": "detail"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-service",
-          "targetNodeId": "template-ecs-fargate-container-app-task",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-right",
-          "targetHandleId": "handle-left"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-target-group-service",
-          "label": "routes",
-          "metadata": {
-            "presentationRole": "primary"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-target-group",
-          "targetNodeId": "template-ecs-fargate-container-app-service",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-right",
-          "targetHandleId": "handle-left"
         },
         {
           "id": "template-ecs-fargate-container-app-task-log-group",
@@ -1955,18 +1396,6 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "type": "smoothstep",
           "sourceHandleId": "handle-top",
           "targetHandleId": "handle-bottom"
-        },
-        {
-          "id": "template-ecs-fargate-container-app-task-sg-service",
-          "label": "applies to",
-          "metadata": {
-            "presentationRole": "detail"
-          },
-          "sourceNodeId": "template-ecs-fargate-container-app-task-security-group",
-          "targetNodeId": "template-ecs-fargate-container-app-service",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-bottom",
-          "targetHandleId": "handle-top"
         }
       ],
       "variables": [],
@@ -1975,6 +1404,202 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         "representativeTemplateId": "repository:ecs-fargate-container-app",
         "sourceTemplateIds": [
           "repository:ecs-fargate-container-app"
+        ]
+      }
+    },
+    {
+      "id": "container-runtime",
+      "title": "Container Runtime",
+      "description": "Container cluster, task definition, service 실행 관계를 구성합니다.",
+      "lenses": [
+        {
+          "kind": "functional",
+          "key": "compute",
+          "label": "컴퓨트"
+        },
+        {
+          "kind": "purpose",
+          "key": "container-operations",
+          "label": "컨테이너 운영"
+        }
+      ],
+      "structuralFingerprint": "fnv1a-24606cf3",
+      "nodes": [
+        {
+          "id": "13f9d1bb-7e57-4f23-a141-d99ebc4d39e2",
+          "label": "video_processing_cluster",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
+          },
+          "position": {
+            "x": 370,
+            "y": 610
+          },
+          "rotation": 0,
+          "size": {
+            "width": 60,
+            "height": 60
+          },
+          "zIndex": 1,
+          "kind": "resource",
+          "type": "aws_ecs_cluster",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_ecs_cluster",
+            "resourceName": "video_processing_cluster",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "5069c2b1-c725-4588-8c24-bb96be01ffd9",
+          "label": "video_task",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
+          },
+          "position": {
+            "x": 695,
+            "y": 455
+          },
+          "rotation": 0,
+          "size": {
+            "width": 60,
+            "height": 60
+          },
+          "zIndex": 7,
+          "kind": "resource",
+          "type": "aws_ecs_task_definition",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_ecs_task_definition",
+            "resourceName": "video_task",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "50a96af0-1d2d-46fd-a526-01a847c44613",
+          "label": "video_service",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
+          },
+          "position": {
+            "x": 695,
+            "y": 615
+          },
+          "rotation": 0,
+          "size": {
+            "width": 60,
+            "height": 60
+          },
+          "zIndex": 8,
+          "kind": "resource",
+          "type": "aws_ecs_service",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_ecs_service",
+            "resourceName": "video_service",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "bc43454e-5410-4f46-9610-6622c8820e40",
+          "label": "US West (Oregon)",
+          "locked": false,
+          "metadata": {
+            "presentationCatalogItemId": "aws-region"
+          },
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "size": {
+            "width": 1205,
+            "height": 760
+          },
+          "zIndex": 0,
+          "kind": "design",
+          "type": "region"
+        }
+      ],
+      "edges": [
+        {
+          "id": "997c15d4-346f-4682-b41c-5532a58ce5b6",
+          "sourceNodeId": "50a96af0-1d2d-46fd-a526-01a847c44613",
+          "targetNodeId": "5069c2b1-c725-4588-8c24-bb96be01ffd9",
+          "sourceHandleId": "top",
+          "targetHandleId": "bottom",
+          "zIndex": 6,
+          "route": {
+            "svgPath": "M725,615 L725,515",
+            "sourcePoint": {
+              "x": 725,
+              "y": 615
+            },
+            "targetPoint": {
+              "x": 725,
+              "y": 515
+            },
+            "waypoints": [
+              {
+                "x": 725,
+                "y": 615
+              },
+              {
+                "x": 725,
+                "y": 515
+              }
+            ],
+            "arrowDirection": "source-to-target",
+            "arrowAngle": -90
+          }
+        },
+        {
+          "id": "f632c0e8-37ac-4290-a2bb-7dc5421a4bb7",
+          "sourceNodeId": "50a96af0-1d2d-46fd-a526-01a847c44613",
+          "targetNodeId": "13f9d1bb-7e57-4f23-a141-d99ebc4d39e2",
+          "sourceHandleId": "left",
+          "targetHandleId": "right",
+          "zIndex": 13,
+          "route": {
+            "svgPath": "M695,645 L430,645",
+            "sourcePoint": {
+              "x": 695,
+              "y": 645
+            },
+            "targetPoint": {
+              "x": 430,
+              "y": 645
+            },
+            "waypoints": [
+              {
+                "x": 695,
+                "y": 645
+              },
+              {
+                "x": 430,
+                "y": 645
+              }
+            ],
+            "arrowDirection": "source-to-target",
+            "arrowAngle": 180
+          }
+        }
+      ],
+      "variables": [],
+      "provenance": {
+        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "representativeTemplateId": "brainboard:brainboard-aws-dashcam-video-pipeline",
+        "sourceTemplateIds": [
+          "brainboard:brainboard-aws-dashcam-video-pipeline"
         ]
       }
     },
@@ -1994,15 +1619,15 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "접근 권한 관리"
         }
       ],
-      "structuralFingerprint": "fnv1a-b1381c89",
+      "structuralFingerprint": "fnv1a-bb610632",
       "nodes": [
         {
           "id": "1c28c7ec-2e94-4ac1-95ed-09370ec23e35",
           "label": "IAM group",
           "locked": false,
           "position": {
-            "x": 120,
-            "y": 400
+            "x": 0,
+            "y": 226.331
           },
           "rotation": 0,
           "size": {
@@ -2022,37 +1647,12 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           }
         },
         {
-          "id": "38a919c0-d6ae-430e-ba56-5a42ddda95d4",
-          "label": "mfa",
-          "locked": false,
-          "position": {
-            "x": 0,
-            "y": 0
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 3,
-          "kind": "resource",
-          "type": "aws_iam_policy",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_iam_policy",
-            "resourceName": "mfa",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
           "id": "76efa2d0-4ef5-414c-af9b-7e5467b8adb1",
           "label": "users",
           "locked": false,
           "position": {
-            "x": 848.257,
-            "y": 173.669
+            "x": 728.257,
+            "y": 0
           },
           "rotation": 0,
           "size": {
@@ -2072,62 +1672,12 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           }
         },
         {
-          "id": "8f00e827-caf6-40fd-9677-c8484b42f94c",
-          "label": "iam_group_policy_attachment_13_c_c",
-          "locked": false,
-          "position": {
-            "x": 240,
-            "y": 180
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 4,
-          "kind": "resource",
-          "type": "aws_iam_group_policy_attachment",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_iam_group_policy_attachment",
-            "resourceName": "iam_group_policy_attachment_13_c_c",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "b1fc8d2d-aa45-40dd-b38c-780b160f02e2",
-          "label": "IAM policy change password",
-          "locked": false,
-          "position": {
-            "x": 240,
-            "y": 0
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 5,
-          "kind": "resource",
-          "type": "aws_iam_policy",
-          "parameters": {
-            "terraformBlockType": "data",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_iam_policy",
-            "resourceName": "change_password",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
           "id": "b80b763b-bc6e-47c3-bdbd-ac5fe8bf37f7",
           "label": "default",
           "locked": false,
           "position": {
-            "x": 608.257,
-            "y": 173.669
+            "x": 488.257,
+            "y": 0
           },
           "rotation": 0,
           "size": {
@@ -2145,114 +1695,9 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "fileName": "main.tf",
             "values": {}
           }
-        },
-        {
-          "id": "f1b74bf3-c510-4da8-baaa-d199ffaa6267",
-          "label": "default",
-          "locked": false,
-          "position": {
-            "x": 0,
-            "y": 180
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 6,
-          "kind": "resource",
-          "type": "aws_iam_group_policy_attachment",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_iam_group_policy_attachment",
-            "resourceName": "default",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "f851591c-6a06-4091-874b-a9a3acce7c18",
-          "label": "default",
-          "locked": false,
-          "position": {
-            "x": 848.257,
-            "y": 343.669
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 9,
-          "kind": "resource",
-          "type": "aws_iam_user_login_profile",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_iam_user_login_profile",
-            "resourceName": "default",
-            "fileName": "main.tf",
-            "values": {}
-          }
         }
       ],
       "edges": [
-        {
-          "id": "659387c3-e27a-4912-9a10-5eef01011730",
-          "sourceNodeId": "8f00e827-caf6-40fd-9677-c8484b42f94c",
-          "targetNodeId": "1c28c7ec-2e94-4ac1-95ed-09370ec23e35",
-          "sourceHandleId": "bottom",
-          "targetHandleId": "top",
-          "zIndex": 0,
-          "route": {
-            "svgPath": "M270,240 L270,312 Q270,320 262,320 L158,320 Q150,320 150,328 L150,400",
-            "sourcePoint": {
-              "x": 270,
-              "y": 240
-            },
-            "targetPoint": {
-              "x": 150,
-              "y": 400
-            },
-            "waypoints": [
-              {
-                "x": 270,
-                "y": 240
-              },
-              {
-                "x": 270,
-                "y": 312
-              },
-              {
-                "x": 270,
-                "y": 320
-              },
-              {
-                "x": 262,
-                "y": 320
-              },
-              {
-                "x": 158,
-                "y": 320
-              },
-              {
-                "x": 150,
-                "y": 320
-              },
-              {
-                "x": 150,
-                "y": 328
-              },
-              {
-                "x": 150,
-                "y": 400
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 90
-          }
-        },
         {
           "id": "695424ca-87b1-4a4f-a6f0-b2ce9b8f96e9",
           "sourceNodeId": "b80b763b-bc6e-47c3-bdbd-ac5fe8bf37f7",
@@ -2261,156 +1706,39 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "right",
           "zIndex": 1,
           "route": {
-            "svgPath": "M638.257,233.669 L638.257,422 Q638.257,430 630.257,430 L180,430",
+            "svgPath": "M518.257,60 L518.257,248.331 Q518.257,256.331 510.257,256.331 L60,256.331",
             "sourcePoint": {
-              "x": 638.257,
-              "y": 233.669
+              "x": 518.257,
+              "y": 60
             },
             "targetPoint": {
-              "x": 180,
-              "y": 430
+              "x": 60,
+              "y": 256.331
             },
             "waypoints": [
               {
-                "x": 638.257,
-                "y": 233.669
+                "x": 518.257,
+                "y": 60
               },
               {
-                "x": 638.257,
-                "y": 422
+                "x": 518.257,
+                "y": 248.331
               },
               {
-                "x": 638.257,
-                "y": 430
+                "x": 518.257,
+                "y": 256.331
               },
               {
-                "x": 630.257,
-                "y": 430
+                "x": 510.257,
+                "y": 256.331
               },
               {
-                "x": 180,
-                "y": 430
+                "x": 60,
+                "y": 256.331
               }
             ],
             "arrowDirection": "source-to-target",
             "arrowAngle": 180
-          }
-        },
-        {
-          "id": "838da824-4bc8-4aec-99a1-b694091ec9e1",
-          "sourceNodeId": "f1b74bf3-c510-4da8-baaa-d199ffaa6267",
-          "targetNodeId": "38a919c0-d6ae-430e-ba56-5a42ddda95d4",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 2,
-          "route": {
-            "svgPath": "M30,180 L30,60",
-            "sourcePoint": {
-              "x": 30,
-              "y": 180
-            },
-            "targetPoint": {
-              "x": 30,
-              "y": 60
-            },
-            "waypoints": [
-              {
-                "x": 30,
-                "y": 180
-              },
-              {
-                "x": 30,
-                "y": 60
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -90
-          }
-        },
-        {
-          "id": "969a5274-1789-458b-8268-d1e637b63e6c",
-          "sourceNodeId": "8f00e827-caf6-40fd-9677-c8484b42f94c",
-          "targetNodeId": "b1fc8d2d-aa45-40dd-b38c-780b160f02e2",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 3,
-          "route": {
-            "svgPath": "M270,180 L270,60",
-            "sourcePoint": {
-              "x": 270,
-              "y": 180
-            },
-            "targetPoint": {
-              "x": 270,
-              "y": 60
-            },
-            "waypoints": [
-              {
-                "x": 270,
-                "y": 180
-              },
-              {
-                "x": 270,
-                "y": 60
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -90
-          }
-        },
-        {
-          "id": "9a40f5e2-e3b6-4d49-9601-3c383b8f87f3",
-          "sourceNodeId": "f1b74bf3-c510-4da8-baaa-d199ffaa6267",
-          "targetNodeId": "1c28c7ec-2e94-4ac1-95ed-09370ec23e35",
-          "sourceHandleId": "bottom",
-          "targetHandleId": "top",
-          "zIndex": 4,
-          "route": {
-            "svgPath": "M30,240 L30,312 Q30,320 38,320 L142,320 Q150,320 150,328 L150,400",
-            "sourcePoint": {
-              "x": 30,
-              "y": 240
-            },
-            "targetPoint": {
-              "x": 150,
-              "y": 400
-            },
-            "waypoints": [
-              {
-                "x": 30,
-                "y": 240
-              },
-              {
-                "x": 30,
-                "y": 312
-              },
-              {
-                "x": 30,
-                "y": 320
-              },
-              {
-                "x": 38,
-                "y": 320
-              },
-              {
-                "x": 142,
-                "y": 320
-              },
-              {
-                "x": 150,
-                "y": 320
-              },
-              {
-                "x": 150,
-                "y": 328
-              },
-              {
-                "x": 150,
-                "y": 400
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 90
           }
         },
         {
@@ -2421,58 +1749,27 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "left",
           "zIndex": 5,
           "route": {
-            "svgPath": "M668.257,203.669 L848.257,203.669",
+            "svgPath": "M548.257,30 L728.257,30",
             "sourcePoint": {
-              "x": 668.257,
-              "y": 203.669
+              "x": 548.257,
+              "y": 30
             },
             "targetPoint": {
-              "x": 848.257,
-              "y": 203.669
+              "x": 728.257,
+              "y": 30
             },
             "waypoints": [
               {
-                "x": 668.257,
-                "y": 203.669
+                "x": 548.257,
+                "y": 30
               },
               {
-                "x": 848.257,
-                "y": 203.669
+                "x": 728.257,
+                "y": 30
               }
             ],
             "arrowDirection": "source-to-target",
             "arrowAngle": 0
-          }
-        },
-        {
-          "id": "dc5d21ca-8e4b-470d-a50c-658dc2ab770b",
-          "sourceNodeId": "f851591c-6a06-4091-874b-a9a3acce7c18",
-          "targetNodeId": "76efa2d0-4ef5-414c-af9b-7e5467b8adb1",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 6,
-          "route": {
-            "svgPath": "M878.257,343.669 L878.257,233.669",
-            "sourcePoint": {
-              "x": 878.257,
-              "y": 343.669
-            },
-            "targetPoint": {
-              "x": 878.257,
-              "y": 233.669
-            },
-            "waypoints": [
-              {
-                "x": 878.257,
-                "y": 343.669
-              },
-              {
-                "x": 878.257,
-                "y": 233.669
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -90
           }
         }
       ],
@@ -2506,284 +1803,11 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "고가용성 웹 계층"
         }
       ],
-      "structuralFingerprint": "fnv1a-0aa43dc2",
+      "structuralFingerprint": "fnv1a-a7a9be24",
       "nodes": [
         {
-          "id": "00247cae-d87b-40b3-987f-08a702b062f3",
-          "label": "vpc_master",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
-          },
-          "position": {
-            "x": 190,
-            "y": 415
-          },
-          "rotation": 0,
-          "size": {
-            "width": 1585,
-            "height": 690
-          },
-          "zIndex": 1,
-          "kind": "resource",
-          "type": "aws_vpc",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_vpc",
-            "resourceName": "vpc_master",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
-          "label": "jenkins-master",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "b55a1748-7a18-424f-b047-ffa56acd1a92"
-          },
-          "position": {
-            "x": 1240,
-            "y": 595
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 32,
-          "kind": "resource",
-          "type": "aws_instance",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_instance",
-            "resourceName": "jenkins-master",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
-          "label": "jenkins-listener-https",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
-          },
-          "position": {
-            "x": 1015,
-            "y": 50
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 40,
-          "kind": "resource",
-          "type": "aws_lb_listener",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_lb_listener",
-            "resourceName": "jenkins-listener-https",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "33ce152b-f405-4f28-86e5-4e894df70cd4",
-          "label": "jenkins-sg",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
-          },
-          "position": {
-            "x": 570,
-            "y": 785
-          },
-          "rotation": 0,
-          "size": {
-            "width": 425,
-            "height": 305
-          },
-          "zIndex": 11,
-          "kind": "resource",
-          "type": "aws_security_group",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_security_group",
-            "resourceName": "jenkins-sg",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
-          "label": "application-lb",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
-          },
-          "position": {
-            "x": 650,
-            "y": 190
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 37,
-          "kind": "resource",
-          "type": "aws_lb",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_lb",
-            "resourceName": "application-lb",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "7284b103-be2a-4159-b7f4-b6ab0cb802fa",
-          "label": "us-east-2a",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "00247cae-d87b-40b3-987f-08a702b062f3",
-            "presentationCatalogItemId": "aws-availability-zone"
-          },
-          "position": {
-            "x": 1070,
-            "y": 455
-          },
-          "rotation": 0,
-          "size": {
-            "width": 315,
-            "height": 320
-          },
-          "zIndex": 2,
-          "kind": "design",
-          "type": "availability_zone"
-        },
-        {
-          "id": "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
-          "label": "jenkins-master-attach",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
-          },
-          "position": {
-            "x": 1015,
-            "y": 320
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 41,
-          "kind": "resource",
-          "type": "aws_lb_target_group_attachment",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_lb_target_group_attachment",
-            "resourceName": "jenkins-master-attach",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "a45b829c-0e30-4596-aebd-815bdfed85b5",
-          "label": "jenkins-listener-http",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "f4301d28-06e3-4263-a5ec-5315eb4f7e69"
-          },
-          "position": {
-            "x": 1015,
-            "y": 190
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 39,
-          "kind": "resource",
-          "type": "aws_lb_listener",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_lb_listener",
-            "resourceName": "aws_lb_listener_117174a9",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "b55a1748-7a18-424f-b047-ffa56acd1a92",
-          "label": "subnet_1",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "7284b103-be2a-4159-b7f4-b6ab0cb802fa"
-          },
-          "position": {
-            "x": 1105,
-            "y": 535
-          },
-          "rotation": 0,
-          "size": {
-            "width": 250,
-            "height": 200
-          },
-          "zIndex": 7,
-          "kind": "resource",
-          "type": "aws_subnet",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_subnet",
-            "resourceName": "subnet_1",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
-          "label": "app-lb-tg",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "00247cae-d87b-40b3-987f-08a702b062f3"
-          },
-          "position": {
-            "x": 410,
-            "y": 475
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 38,
-          "kind": "resource",
-          "type": "aws_lb_target_group",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_lb_target_group",
-            "resourceName": "app-lb-tg",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "f4301d28-06e3-4263-a5ec-5315eb4f7e69",
-          "label": "US East (Ohio)",
+          "id": "c8302f50-a584-4e73-bf3f-efca40fae066",
+          "label": "US East (N. Virginia)",
           "locked": false,
           "metadata": {
             "presentationCatalogItemId": "aws-region"
@@ -2794,359 +1818,137 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1820,
-            "height": 1185
+            "width": 1700,
+            "height": 1370
           },
           "zIndex": 0,
           "kind": "design",
           "type": "region"
+        },
+        {
+          "id": "d67cbec1-5217-44ea-95e8-93c2bae28504",
+          "label": "clb_9",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
+          },
+          "position": {
+            "x": 819.687,
+            "y": 953.163
+          },
+          "rotation": 0,
+          "size": {
+            "width": 60,
+            "height": 60
+          },
+          "zIndex": 12,
+          "kind": "resource",
+          "type": "aws_elb",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_elb",
+            "resourceName": "clb_9",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "d75efaba-a405-4bf0-9cf0-929116e2c267",
+          "label": "web",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "f5024a0a-d5e3-4403-a70f-d07a5402a90c"
+          },
+          "position": {
+            "x": 268.237,
+            "y": 617.503
+          },
+          "rotation": 0,
+          "size": {
+            "width": 1160,
+            "height": 221.083
+          },
+          "zIndex": 8,
+          "kind": "resource",
+          "type": "aws_autoscaling_group",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_autoscaling_group",
+            "resourceName": "web",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "f5024a0a-d5e3-4403-a70f-d07a5402a90c",
+          "label": "vpc",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "c8302f50-a584-4e73-bf3f-efca40fae066"
+          },
+          "position": {
+            "x": 90,
+            "y": 90
+          },
+          "rotation": 0,
+          "size": {
+            "width": 1535,
+            "height": 1250
+          },
+          "zIndex": 2,
+          "kind": "resource",
+          "type": "aws_vpc",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_vpc",
+            "resourceName": "vpc",
+            "fileName": "main.tf",
+            "values": {}
+          }
         }
       ],
       "edges": [
         {
-          "id": "1e7aed42-7d87-49c2-91e3-1198d030c7f7",
-          "sourceNodeId": "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
-          "targetNodeId": "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
+          "id": "cdcc9c1e-b540-4138-83a2-f85863549b53",
+          "sourceNodeId": "d75efaba-a405-4bf0-9cf0-929116e2c267",
+          "targetNodeId": "d67cbec1-5217-44ea-95e8-93c2bae28504",
           "sourceHandleId": "bottom",
           "targetHandleId": "top",
-          "zIndex": 0,
+          "zIndex": 3,
           "route": {
-            "svgPath": "M1045,380 L1045,502.169 Q1045,510.169 1053,510.169 L1262,510.169 Q1270,510.169 1270,518.169 L1270,595",
+            "svgPath": "M848.237,838.586 L849.687,953.163",
             "sourcePoint": {
-              "x": 1045,
-              "y": 380
+              "x": 848.237,
+              "y": 838.586
             },
             "targetPoint": {
-              "x": 1270,
-              "y": 595
+              "x": 849.687,
+              "y": 953.163
             },
             "waypoints": [
               {
-                "x": 1045,
-                "y": 380
+                "x": 848.237,
+                "y": 838.586
               },
               {
-                "x": 1045,
-                "y": 502.169
-              },
-              {
-                "x": 1045,
-                "y": 510.169
-              },
-              {
-                "x": 1053,
-                "y": 510.169
-              },
-              {
-                "x": 1262,
-                "y": 510.169
-              },
-              {
-                "x": 1270,
-                "y": 510.169
-              },
-              {
-                "x": 1270,
-                "y": 518.169
-              },
-              {
-                "x": 1270,
-                "y": 595
+                "x": 849.687,
+                "y": 953.163
               }
             ],
             "arrowDirection": "source-to-target",
-            "arrowAngle": 90
-          }
-        },
-        {
-          "id": "2b31bcb4-e462-4bc8-91f9-946e86c57fbb",
-          "sourceNodeId": "89e6ed9b-46d3-475c-a1fb-33c2d9abfae4",
-          "targetNodeId": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
-          "sourceHandleId": "left",
-          "targetHandleId": "top",
-          "zIndex": 1,
-          "route": {
-            "svgPath": "M1015,350 L448,350 Q440,350 440,358 L440,475",
-            "sourcePoint": {
-              "x": 1015,
-              "y": 350
-            },
-            "targetPoint": {
-              "x": 440,
-              "y": 475
-            },
-            "waypoints": [
-              {
-                "x": 1015,
-                "y": 350
-              },
-              {
-                "x": 448,
-                "y": 350
-              },
-              {
-                "x": 440,
-                "y": 350
-              },
-              {
-                "x": 440,
-                "y": 358
-              },
-              {
-                "x": 440,
-                "y": 475
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 90
-          }
-        },
-        {
-          "id": "363c9ed9-4e18-43d2-a017-80718fd2a7a3",
-          "sourceNodeId": "a45b829c-0e30-4596-aebd-815bdfed85b5",
-          "targetNodeId": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
-          "sourceHandleId": "left",
-          "targetHandleId": "top",
-          "zIndex": 2,
-          "route": {
-            "svgPath": "M1015,220 L952,220 Q944,220 944,228 L944,297.34 Q944,305.34 936,305.34 L448,305.34 Q440,305.34 440,313.34 L440,475",
-            "sourcePoint": {
-              "x": 1015,
-              "y": 220
-            },
-            "targetPoint": {
-              "x": 440,
-              "y": 475
-            },
-            "waypoints": [
-              {
-                "x": 1015,
-                "y": 220
-              },
-              {
-                "x": 952,
-                "y": 220
-              },
-              {
-                "x": 944,
-                "y": 220
-              },
-              {
-                "x": 944,
-                "y": 228
-              },
-              {
-                "x": 944,
-                "y": 297.34
-              },
-              {
-                "x": 944,
-                "y": 305.34
-              },
-              {
-                "x": 936,
-                "y": 305.34
-              },
-              {
-                "x": 448,
-                "y": 305.34
-              },
-              {
-                "x": 440,
-                "y": 305.34
-              },
-              {
-                "x": 440,
-                "y": 313.34
-              },
-              {
-                "x": 440,
-                "y": 475
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 90
-          }
-        },
-        {
-          "id": "86af3a8d-21bd-4b49-b0bd-8bc2b6a4e778",
-          "sourceNodeId": "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
-          "targetNodeId": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 8,
-          "route": {
-            "svgPath": "M1015,80 L870.5,80 Q862.5,80 862.5,88 L862.5,212 Q862.5,220 854.5,220 L710,220",
-            "sourcePoint": {
-              "x": 1015,
-              "y": 80
-            },
-            "targetPoint": {
-              "x": 710,
-              "y": 220
-            },
-            "waypoints": [
-              {
-                "x": 1015,
-                "y": 80
-              },
-              {
-                "x": 870.5,
-                "y": 80
-              },
-              {
-                "x": 862.5,
-                "y": 80
-              },
-              {
-                "x": 862.5,
-                "y": 88
-              },
-              {
-                "x": 862.5,
-                "y": 212
-              },
-              {
-                "x": 862.5,
-                "y": 220
-              },
-              {
-                "x": 854.5,
-                "y": 220
-              },
-              {
-                "x": 710,
-                "y": 220
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 180
-          }
-        },
-        {
-          "id": "babe477e-6a9e-47bf-a3b1-4bc53b045260",
-          "sourceNodeId": "258928c4-85a7-4bf8-bd79-773dfa53a4b9",
-          "targetNodeId": "b7918332-62bd-4112-8907-c1cfbb07f2f1",
-          "sourceHandleId": "left",
-          "targetHandleId": "top",
-          "zIndex": 12,
-          "route": {
-            "svgPath": "M1015,80 L448,80 Q440,80 440,88 L440,475",
-            "sourcePoint": {
-              "x": 1015,
-              "y": 80
-            },
-            "targetPoint": {
-              "x": 440,
-              "y": 475
-            },
-            "waypoints": [
-              {
-                "x": 1015,
-                "y": 80
-              },
-              {
-                "x": 448,
-                "y": 80
-              },
-              {
-                "x": 440,
-                "y": 80
-              },
-              {
-                "x": 440,
-                "y": 88
-              },
-              {
-                "x": 440,
-                "y": 475
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 90
-          }
-        },
-        {
-          "id": "e3facca6-cd56-441b-8987-21a12ef89b70",
-          "sourceNodeId": "a45b829c-0e30-4596-aebd-815bdfed85b5",
-          "targetNodeId": "6331936d-d4de-41f0-ab45-a1f9a8ed2260",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 16,
-          "route": {
-            "svgPath": "M1015,220 L710,220",
-            "sourcePoint": {
-              "x": 1015,
-              "y": 220
-            },
-            "targetPoint": {
-              "x": 710,
-              "y": 220
-            },
-            "waypoints": [
-              {
-                "x": 1015,
-                "y": 220
-              },
-              {
-                "x": 710,
-                "y": 220
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 180
-          }
-        },
-        {
-          "id": "f27ef04a-df3f-4136-aeec-3d1c5ba924c2",
-          "sourceNodeId": "0bc773fc-ee96-4d04-8113-fd6e67060f5f",
-          "targetNodeId": "33ce152b-f405-4f28-86e5-4e894df70cd4",
-          "sourceHandleId": "bottom",
-          "targetHandleId": "right",
-          "zIndex": 17,
-          "route": {
-            "svgPath": "M1270,655 L1270,929.5 Q1270,937.5 1262,937.5 L995,937.5",
-            "sourcePoint": {
-              "x": 1270,
-              "y": 655
-            },
-            "targetPoint": {
-              "x": 995,
-              "y": 937.5
-            },
-            "waypoints": [
-              {
-                "x": 1270,
-                "y": 655
-              },
-              {
-                "x": 1270,
-                "y": 929.5
-              },
-              {
-                "x": 1270,
-                "y": 937.5
-              },
-              {
-                "x": 1262,
-                "y": 937.5
-              },
-              {
-                "x": 995,
-                "y": 937.5
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 180
+            "arrowAngle": 89.27507340073257
           }
         }
       ],
       "variables": [],
       "provenance": {
         "extractorVersion": "architecture-board-module-pattern-extractor/v1",
-        "representativeTemplateId": "brainboard:brainboard-aws-jenkins-ec2",
+        "representativeTemplateId": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
         "sourceTemplateIds": [
-          "brainboard:brainboard-aws-jenkins-ec2"
+          "brainboard:brainboard-aws-asg-lb-vpc-subnets"
         ]
       }
     },
@@ -3166,200 +1968,435 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "격리 네트워크 기반"
         }
       ],
-      "structuralFingerprint": "fnv1a-323ffa9c",
+      "structuralFingerprint": "fnv1a-c1f3eff0",
       "nodes": [
         {
-          "id": "228e33c2-8279-40e1-ad69-745eebcae150",
-          "label": "rt association",
+          "id": "template-three-tier-web-app-app-route-a",
+          "kind": "resource",
+          "label": "App Route A",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "c7985a34-a745-4fc3-8e0c-32ceec6626f8"
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table_association",
+            "resourceName": "app_route_a",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "subnetId": "aws_subnet.app_subnet_a.id",
+              "routeTableId": "aws_route_table.app_route_table.id"
+            }
           },
           "position": {
-            "x": 630,
+            "x": 440,
+            "y": 680
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table_association",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-app-route-b",
+          "kind": "resource",
+          "label": "App Route B",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table_association",
+            "resourceName": "app_route_b",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "subnetId": "aws_subnet.app_subnet_b.id",
+              "routeTableId": "aws_route_table.app_route_table.id"
+            }
+          },
+          "position": {
+            "x": 1400,
+            "y": 680
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table_association",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-app-route-table",
+          "kind": "resource",
+          "label": "App Route Table",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table",
+            "resourceName": "app_route_table",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "vpcId": "aws_vpc.vpc.id",
+              "route": [
+                {
+                  "cidrBlock": "0.0.0.0/0",
+                  "natGatewayId": "aws_nat_gateway.nat_gateway.id"
+                }
+              ]
+            }
+          },
+          "position": {
+            "x": 960,
+            "y": 640
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-app-subnet-a",
+          "kind": "resource",
+          "label": "App Subnet A",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "app_subnet_a",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.11.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2a"
+            }
+          },
+          "position": {
+            "x": 320,
             "y": 720
           },
-          "rotation": 0,
           "size": {
-            "width": 60,
-            "height": 60
+            "width": 400,
+            "height": 280
           },
-          "zIndex": 20,
-          "kind": "resource",
-          "type": "aws_route_table_association",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_route_table_association",
-            "resourceName": "rt_association2",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "37304ca4-7959-4553-802c-96b74972173a",
-          "label": "default",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "839c066c-c756-4005-aeb5-67c1e8c34cf7"
-          },
-          "position": {
-            "x": 400,
-            "y": 95
-          },
-          "rotation": 0,
-          "size": {
-            "width": 1245,
-            "height": 1035
-          },
-          "zIndex": 1,
-          "kind": "resource",
-          "type": "aws_vpc",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_vpc",
-            "resourceName": "default",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "45cb2eaf-9c40-4235-aa0a-b588cd32fcb4",
-          "label": "Internet gateway",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "37304ca4-7959-4553-802c-96b74972173a"
-          },
-          "position": {
-            "x": 995,
-            "y": 65
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 15,
-          "kind": "resource",
-          "type": "aws_internet_gateway",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_internet_gateway",
-            "resourceName": "internet_gw",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "5941a072-4406-4e02-ab93-560811155e88",
-          "label": "sg",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "37304ca4-7959-4553-802c-96b74972173a"
-          },
-          "position": {
-            "x": 435,
-            "y": 420
-          },
-          "rotation": 0,
-          "size": {
-            "width": 1180,
-            "height": 665
-          },
-          "zIndex": 2,
-          "kind": "resource",
-          "type": "aws_security_group",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_security_group",
-            "resourceName": "sg",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "5adb3d4d-2c10-46fe-93f8-691ad10c863a",
-          "label": "us-east-1a",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "5941a072-4406-4e02-ab93-560811155e88",
-            "presentationCatalogItemId": "aws-availability-zone"
-          },
-          "position": {
-            "x": 510,
-            "y": 525
-          },
-          "rotation": 0,
-          "size": {
-            "width": 300,
-            "height": 480
-          },
-          "zIndex": 3,
-          "kind": "design",
-          "type": "availability_zone"
-        },
-        {
-          "id": "5b25dc4d-2481-4368-89be-255a3f450843",
-          "label": "snet-1b",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "e88227bb-9f4f-4710-87a7-ad9ae751e7c0"
-          },
-          "position": {
-            "x": 1270,
-            "y": 650
-          },
-          "rotation": 0,
-          "size": {
-            "width": 255,
-            "height": 260
-          },
-          "zIndex": 5,
-          "kind": "resource",
           "type": "aws_subnet",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_subnet",
-            "resourceName": "snet-1b",
-            "fileName": "main.tf",
-            "values": {}
-          }
+          "zIndex": 1
         },
         {
-          "id": "7928be85-4122-45f6-b424-fba82256c200",
-          "label": "Route table",
+          "id": "template-three-tier-web-app-app-subnet-b",
+          "kind": "resource",
+          "label": "App Subnet B",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "37304ca4-7959-4553-802c-96b74972173a"
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "app_subnet_b",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.12.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2b"
+            }
           },
           "position": {
-            "x": 995,
-            "y": 265
+            "x": 1280,
+            "y": 720
           },
-          "rotation": 0,
           "size": {
-            "width": 60,
-            "height": 60
+            "width": 400,
+            "height": 280
           },
-          "zIndex": 16,
-          "kind": "resource",
-          "type": "aws_route_table",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_route_table",
-            "resourceName": "rt",
-            "fileName": "main.tf",
-            "values": {}
-          }
+          "type": "aws_subnet",
+          "zIndex": 1
         },
         {
-          "id": "839c066c-c756-4005-aeb5-67c1e8c34cf7",
-          "label": "US East (N. Virginia)",
+          "id": "template-three-tier-web-app-db-route-a",
+          "kind": "resource",
+          "label": "DB Route A",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table_association",
+            "resourceName": "db_route_a",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "subnetId": "aws_subnet.db_subnet_a.id",
+              "routeTableId": "aws_route_table.db_route_table.id"
+            }
+          },
+          "position": {
+            "x": 440,
+            "y": 1040
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table_association",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-route-b",
+          "kind": "resource",
+          "label": "DB Route B",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table_association",
+            "resourceName": "db_route_b",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "subnetId": "aws_subnet.db_subnet_b.id",
+              "routeTableId": "aws_route_table.db_route_table.id"
+            }
+          },
+          "position": {
+            "x": 1400,
+            "y": 1040
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table_association",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-route-table",
+          "kind": "resource",
+          "label": "DB Route Table",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table",
+            "resourceName": "db_route_table",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "vpcId": "aws_vpc.vpc.id"
+            }
+          },
+          "position": {
+            "x": 160,
+            "y": 1040
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-subnet-a",
+          "kind": "resource",
+          "label": "DB Subnet A",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "db_subnet_a",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.21.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2a"
+            }
+          },
+          "position": {
+            "x": 320,
+            "y": 1080
+          },
+          "size": {
+            "width": 400,
+            "height": 240
+          },
+          "type": "aws_subnet",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-subnet-b",
+          "kind": "resource",
+          "label": "DB Subnet B",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "db_subnet_b",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.22.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2b"
+            }
+          },
+          "position": {
+            "x": 1280,
+            "y": 1080
+          },
+          "size": {
+            "width": 400,
+            "height": 240
+          },
+          "type": "aws_subnet",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-internet-gateway",
+          "kind": "resource",
+          "label": "Internet Gateway",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-region"
+          },
+          "parameters": {
+            "resourceType": "aws_internet_gateway",
+            "resourceName": "internet_gateway",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "vpcId": "aws_vpc.vpc.id"
+            }
+          },
+          "position": {
+            "x": 80,
+            "y": 200
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_internet_gateway",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-nat-eip",
+          "kind": "resource",
+          "label": "NAT Elastic IP",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-region"
+          },
+          "parameters": {
+            "resourceType": "aws_eip",
+            "resourceName": "nat_eip",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "domain": "vpc"
+            }
+          },
+          "position": {
+            "x": 40,
+            "y": 480
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_eip",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-nat-gateway",
+          "kind": "resource",
+          "label": "NAT Gateway",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-public-subnet-a"
+          },
+          "parameters": {
+            "resourceType": "aws_nat_gateway",
+            "resourceName": "nat_gateway",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "allocationId": "aws_eip.nat_eip.id",
+              "subnetId": "aws_subnet.public_subnet_a.id"
+            }
+          },
+          "position": {
+            "x": 440,
+            "y": 480
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_nat_gateway",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-presentation-az-a",
+          "kind": "design",
+          "label": "AZ A",
+          "locked": false,
+          "metadata": {
+            "presentationCatalogItemId": "aws-availability-zone",
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "position": {
+            "x": 240,
+            "y": 240
+          },
+          "size": {
+            "width": 560,
+            "height": 1120
+          },
+          "type": "aws-availability-zone",
+          "zIndex": 0
+        },
+        {
+          "id": "template-three-tier-web-app-presentation-az-b",
+          "kind": "design",
+          "label": "AZ B",
+          "locked": false,
+          "metadata": {
+            "presentationCatalogItemId": "aws-availability-zone",
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "position": {
+            "x": 1200,
+            "y": 240
+          },
+          "size": {
+            "width": 560,
+            "height": 1120
+          },
+          "type": "aws-availability-zone",
+          "zIndex": 0
+        },
+        {
+          "id": "template-three-tier-web-app-presentation-region",
+          "kind": "design",
+          "label": "Region",
           "locked": false,
           "metadata": {
             "presentationCatalogItemId": "aws-region"
@@ -3368,243 +2405,347 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "x": 0,
             "y": 0
           },
-          "rotation": 0,
           "size": {
-            "width": 2000,
-            "height": 1190
+            "width": 1960,
+            "height": 1560
           },
-          "zIndex": 0,
-          "kind": "design",
-          "type": "region"
+          "type": "aws-region",
+          "zIndex": 0
         },
         {
-          "id": "c7985a34-a745-4fc3-8e0c-32ceec6626f8",
-          "label": "snet-1a",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "5adb3d4d-2c10-46fe-93f8-691ad10c863a"
-          },
-          "position": {
-            "x": 530,
-            "y": 650
-          },
-          "rotation": 0,
-          "size": {
-            "width": 250,
-            "height": 260
-          },
-          "zIndex": 6,
+          "id": "template-three-tier-web-app-public-route-a",
           "kind": "resource",
-          "type": "aws_subnet",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_subnet",
-            "resourceName": "snet-1a",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "e88227bb-9f4f-4710-87a7-ad9ae751e7c0",
-          "label": "us-east-1b",
+          "label": "Public Route A",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "5941a072-4406-4e02-ab93-560811155e88",
-            "presentationCatalogItemId": "aws-availability-zone"
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
           },
-          "position": {
-            "x": 1250,
-            "y": 525
-          },
-          "rotation": 0,
-          "size": {
-            "width": 300,
-            "height": 480
-          },
-          "zIndex": 4,
-          "kind": "design",
-          "type": "availability_zone"
-        },
-        {
-          "id": "fa115f68-d3a4-433f-9f23-acba35012866",
-          "label": "rt association",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "5b25dc4d-2481-4368-89be-255a3f450843"
-          },
-          "position": {
-            "x": 1370,
-            "y": 720
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 21,
-          "kind": "resource",
-          "type": "aws_route_table_association",
           "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
             "resourceType": "aws_route_table_association",
-            "resourceName": "rt_association",
+            "resourceName": "public_route_a",
             "fileName": "main.tf",
-            "values": {}
-          }
+            "terraformBlockType": "resource",
+            "values": {
+              "subnetId": "aws_subnet.public_subnet_a.id",
+              "routeTableId": "aws_route_table.public_route_table.id"
+            }
+          },
+          "position": {
+            "x": 440,
+            "y": 320
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table_association",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-public-route-b",
+          "kind": "resource",
+          "label": "Public Route B",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table_association",
+            "resourceName": "public_route_b",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "subnetId": "aws_subnet.public_subnet_b.id",
+              "routeTableId": "aws_route_table.public_route_table.id"
+            }
+          },
+          "position": {
+            "x": 1400,
+            "y": 320
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table_association",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-public-route-table",
+          "kind": "resource",
+          "label": "Public Route Table",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "parameters": {
+            "resourceType": "aws_route_table",
+            "resourceName": "public_route_table",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "vpcId": "aws_vpc.vpc.id",
+              "route": [
+                {
+                  "cidrBlock": "0.0.0.0/0",
+                  "gatewayId": "aws_internet_gateway.internet_gateway.id"
+                }
+              ]
+            }
+          },
+          "position": {
+            "x": 960,
+            "y": 240
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_route_table",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-public-subnet-a",
+          "kind": "resource",
+          "label": "Public Subnet A",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "public_subnet_a",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.1.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2a",
+              "mapPublicIpOnLaunch": true
+            }
+          },
+          "position": {
+            "x": 320,
+            "y": 360
+          },
+          "size": {
+            "width": 400,
+            "height": 280
+          },
+          "type": "aws_subnet",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-public-subnet-b",
+          "kind": "resource",
+          "label": "Public Subnet B",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "public_subnet_b",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.2.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2b",
+              "mapPublicIpOnLaunch": true
+            }
+          },
+          "position": {
+            "x": 1280,
+            "y": 360
+          },
+          "size": {
+            "width": 400,
+            "height": 280
+          },
+          "type": "aws_subnet",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-vpc",
+          "kind": "resource",
+          "label": "VPC",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-region"
+          },
+          "parameters": {
+            "resourceType": "aws_vpc",
+            "resourceName": "vpc",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.0.0/16",
+              "enableDnsSupport": true,
+              "enableDnsHostnames": true
+            }
+          },
+          "position": {
+            "x": 120,
+            "y": 120
+          },
+          "size": {
+            "width": 1760,
+            "height": 1360
+          },
+          "type": "aws_vpc",
+          "zIndex": 1
         }
       ],
       "edges": [
         {
-          "id": "02dae22a-dcca-4e5b-98d9-b44d8f1a9d2b",
-          "sourceNodeId": "fa115f68-d3a4-433f-9f23-acba35012866",
-          "targetNodeId": "7928be85-4122-45f6-b424-fba82256c200",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 0,
-          "route": {
-            "svgPath": "M1400,720 L1400,608.407 Q1400,600.407 1392,600.407 L1033,600.407 Q1025,600.407 1025,592.407 L1025,325",
-            "sourcePoint": {
-              "x": 1400,
-              "y": 720
-            },
-            "targetPoint": {
-              "x": 1025,
-              "y": 325
-            },
-            "waypoints": [
-              {
-                "x": 1400,
-                "y": 720
-              },
-              {
-                "x": 1400,
-                "y": 608.407
-              },
-              {
-                "x": 1400,
-                "y": 600.407
-              },
-              {
-                "x": 1392,
-                "y": 600.407
-              },
-              {
-                "x": 1033,
-                "y": 600.407
-              },
-              {
-                "x": 1025,
-                "y": 600.407
-              },
-              {
-                "x": 1025,
-                "y": 592.407
-              },
-              {
-                "x": 1025,
-                "y": 325
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -90
-          }
+          "id": "template-three-tier-web-app-app-route-a-link",
+          "label": "associates",
+          "sourceNodeId": "template-three-tier-web-app-app-route-table",
+          "targetNodeId": "template-three-tier-web-app-app-route-a",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-left",
+          "targetHandleId": "handle-right"
         },
         {
-          "id": "c70bef85-722e-415f-b4ef-48c6e8244b12",
-          "sourceNodeId": "228e33c2-8279-40e1-ad69-745eebcae150",
-          "targetNodeId": "7928be85-4122-45f6-b424-fba82256c200",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 10,
-          "route": {
-            "svgPath": "M660,720 L660,607.604 Q660,599.604 668,599.604 L1017,599.604 Q1025,599.604 1025,591.604 L1025,325",
-            "sourcePoint": {
-              "x": 660,
-              "y": 720
-            },
-            "targetPoint": {
-              "x": 1025,
-              "y": 325
-            },
-            "waypoints": [
-              {
-                "x": 660,
-                "y": 720
-              },
-              {
-                "x": 660,
-                "y": 607.604
-              },
-              {
-                "x": 660,
-                "y": 599.604
-              },
-              {
-                "x": 668,
-                "y": 599.604
-              },
-              {
-                "x": 1017,
-                "y": 599.604
-              },
-              {
-                "x": 1025,
-                "y": 599.604
-              },
-              {
-                "x": 1025,
-                "y": 591.604
-              },
-              {
-                "x": 1025,
-                "y": 325
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -90
-          }
+          "id": "template-three-tier-web-app-app-route-b-link",
+          "label": "associates",
+          "sourceNodeId": "template-three-tier-web-app-app-route-table",
+          "targetNodeId": "template-three-tier-web-app-app-route-b",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-right",
+          "targetHandleId": "handle-left"
         },
         {
-          "id": "ce8604f3-1532-4cfd-a5d9-6384e59f4c9e",
-          "sourceNodeId": "7928be85-4122-45f6-b424-fba82256c200",
-          "targetNodeId": "45cb2eaf-9c40-4235-aa0a-b588cd32fcb4",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 11,
-          "route": {
-            "svgPath": "M1025,265 L1025,125",
-            "sourcePoint": {
-              "x": 1025,
-              "y": 265
-            },
-            "targetPoint": {
-              "x": 1025,
-              "y": 125
-            },
-            "waypoints": [
-              {
-                "x": 1025,
-                "y": 265
-              },
-              {
-                "x": 1025,
-                "y": 125
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -90
-          }
+          "id": "template-three-tier-web-app-db-route-a-link",
+          "label": "associates",
+          "sourceNodeId": "template-three-tier-web-app-db-route-table",
+          "targetNodeId": "template-three-tier-web-app-db-route-a",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-top",
+          "targetHandleId": "handle-top"
+        },
+        {
+          "id": "template-three-tier-web-app-db-route-b-link",
+          "label": "associates",
+          "sourceNodeId": "template-three-tier-web-app-db-route-table",
+          "targetNodeId": "template-three-tier-web-app-db-route-b",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-top",
+          "targetHandleId": "handle-top"
+        },
+        {
+          "id": "template-three-tier-web-app-igw-public-route-table",
+          "label": "default route",
+          "sourceNodeId": "template-three-tier-web-app-internet-gateway",
+          "targetNodeId": "template-three-tier-web-app-public-route-table",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-bottom",
+          "targetHandleId": "handle-top"
+        },
+        {
+          "id": "template-three-tier-web-app-nat-app-route-table",
+          "label": "private egress",
+          "sourceNodeId": "template-three-tier-web-app-nat-gateway",
+          "targetNodeId": "template-three-tier-web-app-app-route-table",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-bottom",
+          "targetHandleId": "handle-top"
+        },
+        {
+          "id": "template-three-tier-web-app-nat-eip-link",
+          "label": "allocates",
+          "sourceNodeId": "template-three-tier-web-app-nat-eip",
+          "targetNodeId": "template-three-tier-web-app-nat-gateway",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-right",
+          "targetHandleId": "handle-left"
+        },
+        {
+          "id": "template-three-tier-web-app-public-nat",
+          "label": "egress",
+          "sourceNodeId": "template-three-tier-web-app-public-subnet-a",
+          "targetNodeId": "template-three-tier-web-app-nat-gateway",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-top",
+          "targetHandleId": "handle-bottom"
+        },
+        {
+          "id": "template-three-tier-web-app-public-route-a-link",
+          "label": "associates",
+          "sourceNodeId": "template-three-tier-web-app-public-route-table",
+          "targetNodeId": "template-three-tier-web-app-public-route-a",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-left",
+          "targetHandleId": "handle-right"
+        },
+        {
+          "id": "template-three-tier-web-app-public-route-b-link",
+          "label": "associates",
+          "sourceNodeId": "template-three-tier-web-app-public-route-table",
+          "targetNodeId": "template-three-tier-web-app-public-route-b",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-right",
+          "targetHandleId": "handle-left"
+        },
+        {
+          "id": "template-three-tier-web-app-vpc-app-a",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-app-subnet-a",
+          "type": "smoothstep"
+        },
+        {
+          "id": "template-three-tier-web-app-vpc-app-b",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-app-subnet-b",
+          "type": "smoothstep"
+        },
+        {
+          "id": "template-three-tier-web-app-vpc-db-a",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-db-subnet-a",
+          "type": "smoothstep"
+        },
+        {
+          "id": "template-three-tier-web-app-vpc-db-b",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-db-subnet-b",
+          "type": "smoothstep"
+        },
+        {
+          "id": "template-three-tier-web-app-vpc-igw",
+          "label": "routes",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-internet-gateway",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-left",
+          "targetHandleId": "handle-right"
+        },
+        {
+          "id": "template-three-tier-web-app-vpc-public-a",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-public-subnet-a",
+          "type": "smoothstep"
+        },
+        {
+          "id": "template-three-tier-web-app-vpc-public-b",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-public-subnet-b",
+          "type": "smoothstep"
         }
       ],
       "variables": [],
       "provenance": {
         "extractorVersion": "architecture-board-module-pattern-extractor/v1",
-        "representativeTemplateId": "brainboard:brainboard-aws-kubernetes-native-cnis",
+        "representativeTemplateId": "repository:three-tier-web-app",
         "sourceTemplateIds": [
-          "brainboard:brainboard-aws-kubernetes-native-cnis",
-          "brainboard:brainboard-training-aws-onboarding"
+          "repository:three-tier-web-app"
         ]
       }
     },
@@ -3789,343 +2930,249 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "고가용성 데이터 계층"
         }
       ],
-      "structuralFingerprint": "fnv1a-8bbda0b7",
+      "structuralFingerprint": "fnv1a-2174fc35",
       "nodes": [
         {
-          "id": "template-three-tier-web-app-alb-security-group",
-          "kind": "resource",
-          "label": "ALB Security Group",
+          "id": "2adbfb12-8509-4302-9f1d-029292991c80",
+          "label": "us-west-2a",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-vpc"
-          },
-          "parameters": {
-            "resourceType": "aws_security_group",
-            "resourceName": "alb_security_group",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "three-tier-alb",
-              "description": "Allow HTTP to the ALB",
-              "vpcId": "aws_vpc.vpc.id",
-              "ingress": [
-                {
-                  "fromPort": 80,
-                  "toPort": 80,
-                  "protocol": "tcp",
-                  "cidrBlocks": [
-                    "0.0.0.0/0"
-                  ]
-                }
-              ],
-              "egress": [
-                {
-                  "fromPort": 0,
-                  "toPort": 0,
-                  "protocol": "-1",
-                  "cidrBlocks": [
-                    "0.0.0.0/0"
-                  ]
-                }
-              ]
-            }
+            "parentAreaNodeId": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
+            "presentationCatalogItemId": "aws-availability-zone"
           },
           "position": {
-            "x": 880,
-            "y": 360
+            "x": 225,
+            "y": 230
           },
+          "rotation": 0,
           "size": {
-            "width": 240,
+            "width": 295,
+            "height": 480
+          },
+          "zIndex": 3,
+          "kind": "design",
+          "type": "availability_zone"
+        },
+        {
+          "id": "4a365324-6e51-43b7-8084-59822f636a0d",
+          "label": "db1",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
+          },
+          "position": {
+            "x": 620,
+            "y": 800
+          },
+          "rotation": 0,
+          "size": {
+            "width": 60,
+            "height": 60
+          },
+          "zIndex": 8,
+          "kind": "resource",
+          "type": "aws_db_instance",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_db_instance",
+            "resourceName": "db1",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "53095c7c-9c63-4973-934d-398e684b2b0a",
+          "label": "postgres read replica",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
+          },
+          "position": {
+            "x": 1055,
+            "y": 950
+          },
+          "rotation": 0,
+          "size": {
+            "width": 60,
+            "height": 60
+          },
+          "zIndex": 9,
+          "kind": "resource",
+          "type": "aws_db_instance",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_db_instance",
+            "resourceName": "db_replica",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
+          "label": "default",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
+          },
+          "position": {
+            "x": 570,
+            "y": 425
+          },
+          "rotation": 0,
+          "size": {
+            "width": 160,
+            "height": 90
+          },
+          "zIndex": 4,
+          "kind": "resource",
+          "type": "aws_db_subnet_group",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_db_subnet_group",
+            "resourceName": "default",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "87a87f94-1a87-409c-9228-fca73e37a118",
+          "label": "subnet 2a",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "2adbfb12-8509-4302-9f1d-029292991c80"
+          },
+          "position": {
+            "x": 245,
+            "y": 370
+          },
+          "rotation": 0,
+          "size": {
+            "width": 250,
             "height": 200
           },
+          "zIndex": 6,
+          "kind": "resource",
+          "type": "aws_subnet",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_subnet",
+            "resourceName": "subnet_w_2a",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "8d685e1f-ef90-4fef-afde-9ba043869054",
+          "label": "us-west-2b",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
+            "presentationCatalogItemId": "aws-availability-zone"
+          },
+          "position": {
+            "x": 790,
+            "y": 230
+          },
+          "rotation": 0,
+          "size": {
+            "width": 310,
+            "height": 480
+          },
+          "zIndex": 5,
+          "kind": "design",
+          "type": "availability_zone"
+        },
+        {
+          "id": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
+          "label": "default security group",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
+          },
+          "position": {
+            "x": 123,
+            "y": 145
+          },
+          "rotation": 0,
+          "size": {
+            "width": 1255,
+            "height": 1080
+          },
+          "zIndex": 2,
+          "kind": "resource",
           "type": "aws_security_group",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-app-subnet-a",
-          "kind": "resource",
-          "label": "App Subnet A",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
-          },
           "parameters": {
-            "resourceType": "aws_subnet",
-            "resourceName": "app_subnet_a",
-            "fileName": "main.tf",
             "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.20.11.0/24",
-              "vpcId": "aws_vpc.vpc.id",
-              "availabilityZone": "ap-northeast-2a"
-            }
-          },
-          "position": {
-            "x": 320,
-            "y": 720
-          },
-          "size": {
-            "width": 400,
-            "height": 280
-          },
-          "type": "aws_subnet",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-app-subnet-b",
-          "kind": "resource",
-          "label": "App Subnet B",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
-          },
-          "parameters": {
-            "resourceType": "aws_subnet",
-            "resourceName": "app_subnet_b",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.20.12.0/24",
-              "vpcId": "aws_vpc.vpc.id",
-              "availabilityZone": "ap-northeast-2b"
-            }
-          },
-          "position": {
-            "x": 1280,
-            "y": 720
-          },
-          "size": {
-            "width": 400,
-            "height": 280
-          },
-          "type": "aws_subnet",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-database",
-          "kind": "resource",
-          "label": "RDS Database",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-vpc"
-          },
-          "parameters": {
-            "resourceType": "aws_db_instance",
-            "resourceName": "database",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "identifier": "three-tier-db",
-              "engine": "postgres",
-              "instanceClass": "db.t4g.micro",
-              "allocatedStorage": 20,
-              "publiclyAccessible": false,
-              "manageMasterUserPassword": true,
-              "username": "appadmin",
-              "skipFinalSnapshot": true,
-              "dbSubnetGroupName": "aws_db_subnet_group.db_subnet_group.name",
-              "vpcSecurityGroupIds": [
-                "aws_security_group.db_security_group.id"
-              ]
-            }
-          },
-          "position": {
-            "x": 960,
-            "y": 1160
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_db_instance",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-db-security-group",
-          "kind": "resource",
-          "label": "Database Security Group",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-vpc"
-          },
-          "parameters": {
+            "terraformSourceAuthority": "workspace-seed",
             "resourceType": "aws_security_group",
-            "resourceName": "db_security_group",
+            "resourceName": "default",
             "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "three-tier-db",
-              "description": "Allow PostgreSQL from application instances",
-              "vpcId": "aws_vpc.vpc.id",
-              "ingress": [
-                {
-                  "fromPort": 5432,
-                  "toPort": 5432,
-                  "protocol": "tcp",
-                  "securityGroups": [
-                    "aws_security_group.app_security_group.id"
-                  ]
-                }
-              ],
-              "egress": [
-                {
-                  "fromPort": 0,
-                  "toPort": 0,
-                  "protocol": "-1",
-                  "cidrBlocks": [
-                    "0.0.0.0/0"
-                  ]
-                }
-              ]
-            }
-          },
-          "position": {
-            "x": 880,
-            "y": 1080
-          },
-          "size": {
-            "width": 240,
-            "height": 240
-          },
-          "type": "aws_security_group",
-          "zIndex": 1
+            "values": {}
+          }
         },
         {
-          "id": "template-three-tier-web-app-db-subnet-a",
-          "kind": "resource",
-          "label": "DB Subnet A",
+          "id": "ac3623f0-25ad-4acb-92d8-0d35223ec63c",
+          "label": "default vpc",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
-          },
-          "parameters": {
-            "resourceType": "aws_subnet",
-            "resourceName": "db_subnet_a",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.20.21.0/24",
-              "vpcId": "aws_vpc.vpc.id",
-              "availabilityZone": "ap-northeast-2a"
-            }
+            "parentAreaNodeId": "b6bf501a-706d-48c9-b72e-4ab9c89dc437"
           },
           "position": {
-            "x": 320,
-            "y": 1080
+            "x": 60,
+            "y": 60
           },
+          "rotation": 0,
           "size": {
-            "width": 400,
-            "height": 240
+            "width": 1405,
+            "height": 1245
           },
+          "zIndex": 1,
+          "kind": "resource",
+          "type": "aws_vpc",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_vpc",
+            "resourceName": "default",
+            "fileName": "main.tf",
+            "values": {}
+          }
+        },
+        {
+          "id": "b45989bc-c032-4bca-a116-0b5f0ee6c759",
+          "label": "subnet 2b",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "8d685e1f-ef90-4fef-afde-9ba043869054"
+          },
+          "position": {
+            "x": 825,
+            "y": 370
+          },
+          "rotation": 0,
+          "size": {
+            "width": 250,
+            "height": 200
+          },
+          "zIndex": 7,
+          "kind": "resource",
           "type": "aws_subnet",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-db-subnet-b",
-          "kind": "resource",
-          "label": "DB Subnet B",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
-          },
           "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
             "resourceType": "aws_subnet",
-            "resourceName": "db_subnet_b",
+            "resourceName": "subnet_w_2b",
             "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.20.22.0/24",
-              "vpcId": "aws_vpc.vpc.id",
-              "availabilityZone": "ap-northeast-2b"
-            }
-          },
-          "position": {
-            "x": 1280,
-            "y": 1080
-          },
-          "size": {
-            "width": 400,
-            "height": 240
-          },
-          "type": "aws_subnet",
-          "zIndex": 1
+            "values": {}
+          }
         },
         {
-          "id": "template-three-tier-web-app-db-subnet-group",
-          "kind": "resource",
-          "label": "Database Subnet Group",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-vpc"
-          },
-          "parameters": {
-            "resourceType": "aws_db_subnet_group",
-            "resourceName": "db_subnet_group",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "name": "three-tier-db",
-              "subnetIds": [
-                "aws_subnet.db_subnet_a.id",
-                "aws_subnet.db_subnet_b.id"
-              ]
-            }
-          },
-          "position": {
-            "x": 1800,
-            "y": 1160
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_db_subnet_group",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-presentation-az-a",
-          "kind": "design",
-          "label": "AZ A",
-          "locked": false,
-          "metadata": {
-            "presentationCatalogItemId": "aws-availability-zone",
-            "parentAreaNodeId": "template-three-tier-web-app-vpc"
-          },
-          "position": {
-            "x": 240,
-            "y": 240
-          },
-          "size": {
-            "width": 560,
-            "height": 1120
-          },
-          "type": "aws-availability-zone",
-          "zIndex": 0
-        },
-        {
-          "id": "template-three-tier-web-app-presentation-az-b",
-          "kind": "design",
-          "label": "AZ B",
-          "locked": false,
-          "metadata": {
-            "presentationCatalogItemId": "aws-availability-zone",
-            "parentAreaNodeId": "template-three-tier-web-app-vpc"
-          },
-          "position": {
-            "x": 1200,
-            "y": 240
-          },
-          "size": {
-            "width": 560,
-            "height": 1120
-          },
-          "type": "aws-availability-zone",
-          "zIndex": 0
-        },
-        {
-          "id": "template-three-tier-web-app-presentation-region",
-          "kind": "design",
-          "label": "Region",
+          "id": "b6bf501a-706d-48c9-b72e-4ab9c89dc437",
+          "label": "US West (Oregon)",
           "locked": false,
           "metadata": {
             "presentationCatalogItemId": "aws-region"
@@ -4134,165 +3181,286 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "x": 0,
             "y": 0
           },
+          "rotation": 0,
           "size": {
-            "width": 1960,
-            "height": 1560
-          },
-          "type": "aws-region",
-          "zIndex": 0
-        },
-        {
-          "id": "template-three-tier-web-app-public-subnet-a",
-          "kind": "resource",
-          "label": "Public Subnet A",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
-          },
-          "parameters": {
-            "resourceType": "aws_subnet",
-            "resourceName": "public_subnet_a",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.20.1.0/24",
-              "vpcId": "aws_vpc.vpc.id",
-              "availabilityZone": "ap-northeast-2a",
-              "mapPublicIpOnLaunch": true
-            }
-          },
-          "position": {
-            "x": 320,
-            "y": 360
-          },
-          "size": {
-            "width": 400,
-            "height": 280
-          },
-          "type": "aws_subnet",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-public-subnet-b",
-          "kind": "resource",
-          "label": "Public Subnet B",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
-          },
-          "parameters": {
-            "resourceType": "aws_subnet",
-            "resourceName": "public_subnet_b",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.20.2.0/24",
-              "vpcId": "aws_vpc.vpc.id",
-              "availabilityZone": "ap-northeast-2b",
-              "mapPublicIpOnLaunch": true
-            }
-          },
-          "position": {
-            "x": 1280,
-            "y": 360
-          },
-          "size": {
-            "width": 400,
-            "height": 280
-          },
-          "type": "aws_subnet",
-          "zIndex": 1
-        },
-        {
-          "id": "template-three-tier-web-app-vpc",
-          "kind": "resource",
-          "label": "VPC",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-three-tier-web-app-presentation-region"
-          },
-          "parameters": {
-            "resourceType": "aws_vpc",
-            "resourceName": "vpc",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "cidrBlock": "10.20.0.0/16",
-              "enableDnsSupport": true,
-              "enableDnsHostnames": true
-            }
-          },
-          "position": {
-            "x": 120,
-            "y": 120
-          },
-          "size": {
-            "width": 1760,
+            "width": 1530,
             "height": 1360
           },
-          "type": "aws_vpc",
-          "zIndex": 1
+          "zIndex": 0,
+          "kind": "design",
+          "type": "region"
+        },
+        {
+          "id": "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
+          "label": "Log DB parameter",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
+          },
+          "position": {
+            "x": 620,
+            "y": 1080
+          },
+          "rotation": 0,
+          "size": {
+            "width": 60,
+            "height": 60
+          },
+          "zIndex": 10,
+          "kind": "resource",
+          "type": "aws_db_parameter_group",
+          "parameters": {
+            "terraformBlockType": "resource",
+            "terraformSourceAuthority": "workspace-seed",
+            "resourceType": "aws_db_parameter_group",
+            "resourceName": "log_db_parameter",
+            "fileName": "main.tf",
+            "values": {}
+          }
         }
       ],
       "edges": [
         {
-          "id": "template-three-tier-web-app-db-sg-database",
-          "label": "applies to",
-          "sourceNodeId": "template-three-tier-web-app-db-security-group",
-          "targetNodeId": "template-three-tier-web-app-database",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-bottom",
-          "targetHandleId": "handle-top"
+          "id": "94614b0a-600a-4956-84a3-34157314bf0e",
+          "sourceNodeId": "53095c7c-9c63-4973-934d-398e684b2b0a",
+          "targetNodeId": "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
+          "sourceHandleId": "left",
+          "targetHandleId": "right",
+          "zIndex": 0,
+          "route": {
+            "svgPath": "M1055,980 L875.5,980 Q867.5,980 867.5,988 L867.5,1102 Q867.5,1110 859.5,1110 L680,1110",
+            "sourcePoint": {
+              "x": 1055,
+              "y": 980
+            },
+            "targetPoint": {
+              "x": 680,
+              "y": 1110
+            },
+            "waypoints": [
+              {
+                "x": 1055,
+                "y": 980
+              },
+              {
+                "x": 875.5,
+                "y": 980
+              },
+              {
+                "x": 867.5,
+                "y": 980
+              },
+              {
+                "x": 867.5,
+                "y": 988
+              },
+              {
+                "x": 867.5,
+                "y": 1102
+              },
+              {
+                "x": 867.5,
+                "y": 1110
+              },
+              {
+                "x": 859.5,
+                "y": 1110
+              },
+              {
+                "x": 680,
+                "y": 1110
+              }
+            ],
+            "arrowDirection": "target-to-source",
+            "arrowAngle": 0
+          }
         },
         {
-          "id": "template-three-tier-web-app-vpc-app-a",
-          "label": "contains",
-          "sourceNodeId": "template-three-tier-web-app-vpc",
-          "targetNodeId": "template-three-tier-web-app-app-subnet-a",
-          "type": "smoothstep"
+          "id": "952c3f17-d3b6-4519-8f4d-5b637ec4f299",
+          "sourceNodeId": "53095c7c-9c63-4973-934d-398e684b2b0a",
+          "targetNodeId": "4a365324-6e51-43b7-8084-59822f636a0d",
+          "sourceHandleId": "left",
+          "targetHandleId": "right",
+          "zIndex": 1,
+          "route": {
+            "svgPath": "M1055,980 L875.5,980 Q867.5,980 867.5,972 L867.5,838 Q867.5,830 859.5,830 L680,830",
+            "sourcePoint": {
+              "x": 1055,
+              "y": 980
+            },
+            "targetPoint": {
+              "x": 680,
+              "y": 830
+            },
+            "waypoints": [
+              {
+                "x": 1055,
+                "y": 980
+              },
+              {
+                "x": 875.5,
+                "y": 980
+              },
+              {
+                "x": 867.5,
+                "y": 980
+              },
+              {
+                "x": 867.5,
+                "y": 972
+              },
+              {
+                "x": 867.5,
+                "y": 838
+              },
+              {
+                "x": 867.5,
+                "y": 830
+              },
+              {
+                "x": 859.5,
+                "y": 830
+              },
+              {
+                "x": 680,
+                "y": 830
+              }
+            ],
+            "arrowDirection": "target-to-source",
+            "arrowAngle": 0
+          }
         },
         {
-          "id": "template-three-tier-web-app-vpc-app-b",
-          "label": "contains",
-          "sourceNodeId": "template-three-tier-web-app-vpc",
-          "targetNodeId": "template-three-tier-web-app-app-subnet-b",
-          "type": "smoothstep"
+          "id": "b3e95a39-1480-44d6-a174-78463f37a5d3",
+          "sourceNodeId": "4a365324-6e51-43b7-8084-59822f636a0d",
+          "targetNodeId": "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
+          "sourceHandleId": "bottom",
+          "targetHandleId": "top",
+          "zIndex": 2,
+          "route": {
+            "svgPath": "M650,860 L650,1080",
+            "sourcePoint": {
+              "x": 650,
+              "y": 860
+            },
+            "targetPoint": {
+              "x": 650,
+              "y": 1080
+            },
+            "waypoints": [
+              {
+                "x": 650,
+                "y": 860
+              },
+              {
+                "x": 650,
+                "y": 1080
+              }
+            ],
+            "arrowDirection": "target-to-source",
+            "arrowAngle": -90
+          }
         },
         {
-          "id": "template-three-tier-web-app-vpc-db-a",
-          "label": "contains",
-          "sourceNodeId": "template-three-tier-web-app-vpc",
-          "targetNodeId": "template-three-tier-web-app-db-subnet-a",
-          "type": "smoothstep"
+          "id": "ccb52080-a71c-4122-9786-07b179f798c4",
+          "sourceNodeId": "4a365324-6e51-43b7-8084-59822f636a0d",
+          "targetNodeId": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
+          "sourceHandleId": "top",
+          "targetHandleId": "bottom",
+          "zIndex": 3,
+          "route": {
+            "svgPath": "M650,800 L650,515",
+            "sourcePoint": {
+              "x": 650,
+              "y": 800
+            },
+            "targetPoint": {
+              "x": 650,
+              "y": 515
+            },
+            "waypoints": [
+              {
+                "x": 650,
+                "y": 800
+              },
+              {
+                "x": 650,
+                "y": 515
+              }
+            ],
+            "arrowDirection": "target-to-source",
+            "arrowAngle": 90
+          }
         },
         {
-          "id": "template-three-tier-web-app-vpc-db-b",
-          "label": "contains",
-          "sourceNodeId": "template-three-tier-web-app-vpc",
-          "targetNodeId": "template-three-tier-web-app-db-subnet-b",
-          "type": "smoothstep"
+          "id": "ee4b43d4-291e-418a-b88f-c138ffb85d56",
+          "sourceNodeId": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
+          "targetNodeId": "b45989bc-c032-4bca-a116-0b5f0ee6c759",
+          "sourceHandleId": "right",
+          "targetHandleId": "left",
+          "zIndex": 4,
+          "route": {
+            "svgPath": "M730,470 L825,470",
+            "sourcePoint": {
+              "x": 730,
+              "y": 470
+            },
+            "targetPoint": {
+              "x": 825,
+              "y": 470
+            },
+            "waypoints": [
+              {
+                "x": 730,
+                "y": 470
+              },
+              {
+                "x": 825,
+                "y": 470
+              }
+            ],
+            "arrowDirection": "target-to-source",
+            "arrowAngle": 180
+          }
         },
         {
-          "id": "template-three-tier-web-app-vpc-public-a",
-          "label": "contains",
-          "sourceNodeId": "template-three-tier-web-app-vpc",
-          "targetNodeId": "template-three-tier-web-app-public-subnet-a",
-          "type": "smoothstep"
-        },
-        {
-          "id": "template-three-tier-web-app-vpc-public-b",
-          "label": "contains",
-          "sourceNodeId": "template-three-tier-web-app-vpc",
-          "targetNodeId": "template-three-tier-web-app-public-subnet-b",
-          "type": "smoothstep"
+          "id": "f0242dea-e949-4db4-9d81-ccab9ddc9f13",
+          "sourceNodeId": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
+          "targetNodeId": "87a87f94-1a87-409c-9228-fca73e37a118",
+          "sourceHandleId": "left",
+          "targetHandleId": "right",
+          "zIndex": 5,
+          "route": {
+            "svgPath": "M570,470 L495,470",
+            "sourcePoint": {
+              "x": 570,
+              "y": 470
+            },
+            "targetPoint": {
+              "x": 495,
+              "y": 470
+            },
+            "waypoints": [
+              {
+                "x": 570,
+                "y": 470
+              },
+              {
+                "x": 495,
+                "y": 470
+              }
+            ],
+            "arrowDirection": "target-to-source",
+            "arrowAngle": 0
+          }
         }
       ],
       "variables": [],
       "provenance": {
         "extractorVersion": "architecture-board-module-pattern-extractor/v1",
-        "representativeTemplateId": "repository:three-tier-web-app",
+        "representativeTemplateId": "brainboard:brainboard-aws-rds",
         "sourceTemplateIds": [
-          "repository:three-tier-web-app"
+          "brainboard:brainboard-aws-rds"
         ]
       }
     },
@@ -4317,151 +3485,67 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "보호된 객체 스토리지"
         }
       ],
-      "structuralFingerprint": "fnv1a-1e15ffa9",
+      "structuralFingerprint": "fnv1a-1a420e01",
       "nodes": [
         {
-          "id": "194c263d-746a-43f0-af23-18445c225246",
-          "label": "default",
+          "id": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
+          "label": "website_bucket",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "7e275d52-672d-4e38-b17a-aad1e06c04e8"
+            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
           },
           "position": {
-            "x": 1120,
-            "y": 1380
+            "x": 787.375,
+            "y": 377.136
           },
           "rotation": 0,
           "size": {
             "width": 60,
             "height": 60
           },
-          "zIndex": 17,
+          "zIndex": 3,
           "kind": "resource",
           "type": "aws_s3_bucket",
           "parameters": {
             "terraformBlockType": "resource",
             "terraformSourceAuthority": "workspace-seed",
             "resourceType": "aws_s3_bucket",
-            "resourceName": "default",
-            "fileName": "storage.tf",
+            "resourceName": "website_bucket",
+            "fileName": "main.tf",
             "values": {}
           }
         },
         {
-          "id": "364622cd-cd1c-483a-98b0-60f51b5ecdc9",
-          "label": "server side encryption configuration",
+          "id": "3afa58d4-2389-47e3-af6d-197aa176ca4a",
+          "label": "s3_bucket_versioning",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "7e275d52-672d-4e38-b17a-aad1e06c04e8"
+            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
           },
           "position": {
-            "x": 1120,
-            "y": 1540
+            "x": 1052.507,
+            "y": 527.896
           },
           "rotation": 0,
           "size": {
             "width": 60,
             "height": 60
           },
-          "zIndex": 28,
-          "kind": "resource",
-          "type": "aws_s3_bucket_server_side_encryption_configuration",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_s3_bucket_server_side_encryption_configuration",
-            "resourceName": "default",
-            "fileName": "storage.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "54dcd23d-fd8e-4f8f-bc56-a81fcde34c8e",
-          "label": "versioning",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "7e275d52-672d-4e38-b17a-aad1e06c04e8"
-          },
-          "position": {
-            "x": 1310,
-            "y": 1540
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 26,
+          "zIndex": 4,
           "kind": "resource",
           "type": "aws_s3_bucket_versioning",
           "parameters": {
             "terraformBlockType": "resource",
             "terraformSourceAuthority": "workspace-seed",
             "resourceType": "aws_s3_bucket_versioning",
-            "resourceName": "default",
-            "fileName": "storage.tf",
+            "resourceName": "s3_bucket_versioning",
+            "fileName": "main.tf",
             "values": {}
           }
         },
         {
-          "id": "6273bc80-9064-4f64-802d-e03902cbc52d",
-          "label": "Restrict public access",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "7e275d52-672d-4e38-b17a-aad1e06c04e8"
-          },
-          "position": {
-            "x": 1310,
-            "y": 1380
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 19,
-          "kind": "resource",
-          "type": "aws_s3_bucket_public_access_block",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_s3_bucket_public_access_block",
-            "resourceName": "default",
-            "fileName": "storage.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "7e275d52-672d-4e38-b17a-aad1e06c04e8",
-          "label": "default",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "e39ed138-6200-410e-9d54-f567019667b7"
-          },
-          "position": {
-            "x": 70,
-            "y": 80
-          },
-          "rotation": 0,
-          "size": {
-            "width": 1405,
-            "height": 1575
-          },
-          "zIndex": 1,
-          "kind": "resource",
-          "type": "aws_vpc",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_vpc",
-            "resourceName": "default",
-            "fileName": "vpc.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "e39ed138-6200-410e-9d54-f567019667b7",
-          "label": "US East (Ohio)",
+          "id": "a7275a97-1cba-448c-b797-76cf925ac3d5",
+          "label": "US East (N. Virginia)",
           "locked": false,
           "metadata": {
             "presentationCatalogItemId": "aws-region"
@@ -4472,8 +3556,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1555,
-            "height": 1720
+            "width": 1275,
+            "height": 1245
           },
           "zIndex": 0,
           "kind": "design",
@@ -4482,116 +3566,54 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "edges": [
         {
-          "id": "46dd3064-ed83-44cc-b5eb-9c5c24a8db1b",
-          "sourceNodeId": "6273bc80-9064-4f64-802d-e03902cbc52d",
-          "targetNodeId": "194c263d-746a-43f0-af23-18445c225246",
+          "id": "e6c4c782-bffb-4109-b42d-494735c77a9d",
+          "sourceNodeId": "3afa58d4-2389-47e3-af6d-197aa176ca4a",
+          "targetNodeId": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
           "sourceHandleId": "left",
           "targetHandleId": "right",
-          "zIndex": 2,
+          "zIndex": 18,
           "route": {
-            "svgPath": "M1310,1410 L1180,1410",
+            "svgPath": "M1052.507,557.896 L957.941,557.896 Q949.941,557.896 949.941,549.896 L949.941,415.136 Q949.941,407.136 941.941,407.136 L847.375,407.136",
             "sourcePoint": {
-              "x": 1310,
-              "y": 1410
+              "x": 1052.507,
+              "y": 557.896
             },
             "targetPoint": {
-              "x": 1180,
-              "y": 1410
+              "x": 847.375,
+              "y": 407.136
             },
             "waypoints": [
               {
-                "x": 1310,
-                "y": 1410
+                "x": 1052.507,
+                "y": 557.896
               },
               {
-                "x": 1180,
-                "y": 1410
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 180
-          }
-        },
-        {
-          "id": "74827bd4-36c7-4616-8078-33522cb94c68",
-          "sourceNodeId": "364622cd-cd1c-483a-98b0-60f51b5ecdc9",
-          "targetNodeId": "194c263d-746a-43f0-af23-18445c225246",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 3,
-          "route": {
-            "svgPath": "M1150,1540 L1150,1440",
-            "sourcePoint": {
-              "x": 1150,
-              "y": 1540
-            },
-            "targetPoint": {
-              "x": 1150,
-              "y": 1440
-            },
-            "waypoints": [
-              {
-                "x": 1150,
-                "y": 1540
+                "x": 957.941,
+                "y": 557.896
               },
               {
-                "x": 1150,
-                "y": 1440
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -90
-          }
-        },
-        {
-          "id": "a3108e96-8737-432a-a0fb-5d1bc491563b",
-          "sourceNodeId": "54dcd23d-fd8e-4f8f-bc56-a81fcde34c8e",
-          "targetNodeId": "194c263d-746a-43f0-af23-18445c225246",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 5,
-          "route": {
-            "svgPath": "M1310,1570 L1253,1570 Q1245,1570 1245,1562 L1245,1418 Q1245,1410 1237,1410 L1180,1410",
-            "sourcePoint": {
-              "x": 1310,
-              "y": 1570
-            },
-            "targetPoint": {
-              "x": 1180,
-              "y": 1410
-            },
-            "waypoints": [
-              {
-                "x": 1310,
-                "y": 1570
+                "x": 949.941,
+                "y": 557.896
               },
               {
-                "x": 1253,
-                "y": 1570
+                "x": 949.941,
+                "y": 549.896
               },
               {
-                "x": 1245,
-                "y": 1570
+                "x": 949.941,
+                "y": 415.136
               },
               {
-                "x": 1245,
-                "y": 1562
+                "x": 949.941,
+                "y": 407.136
               },
               {
-                "x": 1245,
-                "y": 1418
+                "x": 941.941,
+                "y": 407.136
               },
               {
-                "x": 1245,
-                "y": 1410
-              },
-              {
-                "x": 1237,
-                "y": 1410
-              },
-              {
-                "x": 1180,
-                "y": 1410
+                "x": 847.375,
+                "y": 407.136
               }
             ],
             "arrowDirection": "source-to-target",
@@ -4602,9 +3624,11 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "variables": [],
       "provenance": {
         "extractorVersion": "architecture-board-module-pattern-extractor/v1",
-        "representativeTemplateId": "brainboard:brainboard-aws-fsx",
+        "representativeTemplateId": "brainboard:brainboard-aws-serverless-cdn",
         "sourceTemplateIds": [
-          "brainboard:brainboard-aws-fsx"
+          "brainboard:brainboard-aws-secure-s3-bucket",
+          "brainboard:brainboard-aws-serverless-cdn",
+          "brainboard:brainboard-aws-three-tier-database"
         ]
       }
     },
@@ -5132,644 +4156,300 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "정적 웹 배포"
         }
       ],
-      "structuralFingerprint": "fnv1a-07786c19",
+      "structuralFingerprint": "fnv1a-7937e5a8",
       "nodes": [
         {
-          "id": "0c2d3032-4148-4e80-bae8-9cfb63f6ec6e",
-          "label": "www",
+          "id": "template-static-web-hosting-bucket",
+          "kind": "resource",
+          "label": "S3 Bucket",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
+            "parentAreaNodeId": "template-static-web-hosting-presentation-region"
           },
-          "position": {
-            "x": 491.991,
-            "y": 176.901
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 2,
-          "kind": "resource",
-          "type": "aws_route53_record",
           "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_route53_record",
-            "resourceName": "www",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "label": "website_bucket",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
-          },
-          "position": {
-            "x": 787.375,
-            "y": 377.136
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 3,
-          "kind": "resource",
-          "type": "aws_s3_bucket",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
             "resourceType": "aws_s3_bucket",
-            "resourceName": "website_bucket",
+            "resourceName": "bucket",
             "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "3afa58d4-2389-47e3-af6d-197aa176ca4a",
-          "label": "s3_bucket_versioning",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
+            "terraformBlockType": "resource",
+            "values": {
+              "forceDestroy": true
+            }
           },
           "position": {
-            "x": 1052.507,
-            "y": 527.896
+            "x": 240,
+            "y": 160
           },
-          "rotation": 0,
           "size": {
-            "width": 60,
-            "height": 60
+            "width": 124,
+            "height": 96
           },
-          "zIndex": 4,
-          "kind": "resource",
-          "type": "aws_s3_bucket_versioning",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_s3_bucket_versioning",
-            "resourceName": "s3_bucket_versioning",
-            "fileName": "main.tf",
-            "values": {}
-          }
+          "type": "aws_s3_bucket",
+          "zIndex": 1
         },
         {
-          "id": "96f0a15e-0305-405a-b9e9-eee46aed63e0",
-          "label": "error",
+          "id": "template-static-web-hosting-bucket-policy",
+          "kind": "resource",
+          "label": "S3 Bucket Policy",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
+            "parentAreaNodeId": "template-static-web-hosting-presentation-region"
+          },
+          "parameters": {
+            "resourceType": "aws_s3_bucket_policy",
+            "resourceName": "bucket_policy",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "bucket": "aws_s3_bucket.bucket.id",
+              "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"AllowCloudFrontServicePrincipalReadOnly\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"cloudfront.amazonaws.com\"},\"Action\":\"s3:GetObject\",\"Resource\":\"${aws_s3_bucket.bucket.arn}/*\",\"Condition\":{\"StringEquals\":{\"AWS:SourceArn\":\"${aws_cloudfront_distribution.distribution.arn}\"}}}]}"
+            }
           },
           "position": {
-            "x": 786.828,
-            "y": 530.944
+            "x": 440,
+            "y": 320
           },
-          "rotation": 0,
           "size": {
-            "width": 60,
-            "height": 60
+            "width": 124,
+            "height": 96
           },
-          "zIndex": 10,
+          "type": "aws_s3_bucket_policy",
+          "zIndex": 1
+        },
+        {
+          "id": "template-static-web-hosting-distribution",
           "kind": "resource",
-          "type": "aws_s3_object",
+          "label": "CloudFront Distribution",
+          "locked": false,
           "parameters": {
+            "resourceType": "aws_cloudfront_distribution",
+            "resourceName": "distribution",
+            "fileName": "main.tf",
             "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
+            "values": {
+              "enabled": true,
+              "defaultRootObject": "index.html",
+              "priceClass": "PriceClass_100",
+              "origin": [
+                {
+                  "domainName": "aws_s3_bucket.bucket.bucket_regional_domain_name",
+                  "originId": "static-bucket",
+                  "originAccessControlId": "aws_cloudfront_origin_access_control.oac.id"
+                }
+              ],
+              "defaultCacheBehavior": [
+                {
+                  "allowedMethods": [
+                    "GET",
+                    "HEAD"
+                  ],
+                  "cachedMethods": [
+                    "GET",
+                    "HEAD"
+                  ],
+                  "targetOriginId": "static-bucket",
+                  "viewerProtocolPolicy": "redirect-to-https",
+                  "forwardedValues": {
+                    "queryString": false,
+                    "cookies": {
+                      "forward": "none"
+                    }
+                  }
+                }
+              ],
+              "restrictions": [
+                {
+                  "geoRestriction": {
+                    "restrictionType": "none"
+                  }
+                }
+              ],
+              "viewerCertificate": [
+                {
+                  "cloudfrontDefaultCertificate": true
+                }
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 160
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_cloudfront_distribution",
+          "zIndex": 1
+        },
+        {
+          "id": "template-static-web-hosting-index-object",
+          "kind": "resource",
+          "label": "Index Document",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-static-web-hosting-presentation-region"
+          },
+          "parameters": {
             "resourceType": "aws_s3_object",
-            "resourceName": "error",
+            "resourceName": "index_object",
             "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "97ab46f5-02c0-4d3e-8d23-73e7cf4d9936",
-          "label": "route53_zone",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
-          },
-          "position": {
-            "x": 266.991,
-            "y": 173.84
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 11,
-          "kind": "resource",
-          "type": "aws_route53_zone",
-          "parameters": {
             "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_route53_zone",
-            "resourceName": "route53_zone",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "9c5f4598-f184-4890-bdd0-1899be4e8cf7",
-          "label": "index",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
+            "values": {
+              "bucket": "aws_s3_bucket.bucket.id",
+              "key": "index.html",
+              "contentType": "text/html; charset=utf-8",
+              "content": "<!doctype html><html><head><meta charset=\"utf-8\"><title>SketchCatch</title></head><body><h1>SketchCatch Static Web</h1></body></html>"
+            }
           },
           "position": {
-            "x": 1054.841,
-            "y": 378.545
+            "x": 440,
+            "y": 160
           },
-          "rotation": 0,
           "size": {
-            "width": 60,
-            "height": 60
+            "width": 124,
+            "height": 96
           },
-          "zIndex": 12,
-          "kind": "resource",
           "type": "aws_s3_object",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_s3_object",
-            "resourceName": "index",
-            "fileName": "main.tf",
-            "values": {}
-          }
+          "zIndex": 1
         },
         {
-          "id": "a7275a97-1cba-448c-b797-76cf925ac3d5",
-          "label": "US East (N. Virginia)",
+          "id": "template-static-web-hosting-oac",
+          "kind": "resource",
+          "label": "CloudFront Origin Access Control",
+          "locked": false,
+          "parameters": {
+            "resourceType": "aws_cloudfront_origin_access_control",
+            "resourceName": "oac",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "name": "static-site-oac",
+              "originAccessControlOriginType": "s3",
+              "signingBehavior": "always",
+              "signingProtocol": "sigv4"
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 320
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_cloudfront_origin_access_control",
+          "zIndex": 1
+        },
+        {
+          "id": "template-static-web-hosting-presentation-region",
+          "kind": "design",
+          "label": "Region",
           "locked": false,
           "metadata": {
             "presentationCatalogItemId": "aws-region"
           },
           "position": {
-            "x": 0,
+            "x": 160,
             "y": 0
           },
-          "rotation": 0,
           "size": {
-            "width": 1275,
-            "height": 1245
+            "width": 480,
+            "height": 480
           },
-          "zIndex": 0,
-          "kind": "design",
-          "type": "region"
+          "type": "aws-region",
+          "zIndex": 0
         },
         {
-          "id": "a9812863-e435-4e22-8ead-21024b258441",
-          "label": "website_distribution",
+          "id": "template-static-web-hosting-public-access",
+          "kind": "resource",
+          "label": "S3 Public Access Block",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
+            "parentAreaNodeId": "template-static-web-hosting-presentation-region"
+          },
+          "parameters": {
+            "resourceType": "aws_s3_bucket_public_access_block",
+            "resourceName": "public_access",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "bucket": "aws_s3_bucket.bucket.id"
+            }
           },
           "position": {
-            "x": 787.375,
-            "y": 176.901
+            "x": 240,
+            "y": 320
           },
-          "rotation": 0,
           "size": {
-            "width": 60,
-            "height": 60
+            "width": 124,
+            "height": 96
           },
-          "zIndex": 13,
-          "kind": "resource",
-          "type": "aws_cloudfront_distribution",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_cloudfront_distribution",
-            "resourceName": "website_distribution",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "d0fc5fc8-4e65-463c-96a9-abb6c4abd050",
-          "label": "origin_access_identity",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
-          },
-          "position": {
-            "x": 1048.483,
-            "y": 176.901
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 16,
-          "kind": "resource",
-          "type": "aws_cloudfront_origin_access_identity",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_cloudfront_origin_access_identity",
-            "resourceName": "origin_access_identity",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "ddbce9f8-63fd-43a9-a133-86dda6fed0e9",
-          "label": "s3_bucket_website_configuration",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
-          },
-          "position": {
-            "x": 492.397,
-            "y": 377.968
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 17,
-          "kind": "resource",
-          "type": "aws_s3_bucket_website_configuration",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_s3_bucket_website_configuration",
-            "resourceName": "s3_bucket_website_configuration",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "e608c4e1-a9bf-4675-be19-e67f7bde4f98",
-          "label": "s3_bucket_acl",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
-          },
-          "position": {
-            "x": 573.36,
-            "y": 531.095
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 18,
-          "kind": "resource",
-          "type": "aws_s3_bucket_acl",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_s3_bucket_acl",
-            "resourceName": "s3_bucket_acl",
-            "fileName": "main.tf",
-            "values": {}
-          }
+          "type": "aws_s3_bucket_public_access_block",
+          "zIndex": 1
         }
       ],
       "edges": [
         {
-          "id": "4edf2cf3-216b-414d-aa51-dd6bcf3410cf",
-          "sourceNodeId": "96f0a15e-0305-405a-b9e9-eee46aed63e0",
-          "targetNodeId": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 4,
-          "route": {
-            "svgPath": "M816.828,530.944 L817.375,437.136",
-            "sourcePoint": {
-              "x": 816.828,
-              "y": 530.944
-            },
-            "targetPoint": {
-              "x": 817.375,
-              "y": 437.136
-            },
-            "waypoints": [
-              {
-                "x": 816.828,
-                "y": 530.944
-              },
-              {
-                "x": 817.375,
-                "y": 437.136
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -89.66578679944418
-          }
+          "id": "template-static-web-hosting-bucket-index",
+          "label": "stores",
+          "sourceNodeId": "template-static-web-hosting-bucket",
+          "targetNodeId": "template-static-web-hosting-index-object",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-right",
+          "targetHandleId": "handle-left"
         },
         {
-          "id": "5de09fd2-a620-49a3-aa3b-d817f25bebd5",
-          "sourceNodeId": "97ab46f5-02c0-4d3e-8d23-73e7cf4d9936",
-          "targetNodeId": "0c2d3032-4148-4e80-bae8-9cfb63f6ec6e",
-          "sourceHandleId": "right",
-          "targetHandleId": "left",
-          "zIndex": 6,
-          "route": {
-            "svgPath": "M326.991,203.84 L491.991,206.901",
-            "sourcePoint": {
-              "x": 326.991,
-              "y": 203.84
-            },
-            "targetPoint": {
-              "x": 491.991,
-              "y": 206.901
-            },
-            "waypoints": [
-              {
-                "x": 326.991,
-                "y": 203.84
-              },
-              {
-                "x": 491.991,
-                "y": 206.901
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 1.0627870865292244
-          }
+          "id": "template-static-web-hosting-bucket-oac",
+          "label": "origin",
+          "sourceNodeId": "template-static-web-hosting-bucket",
+          "targetNodeId": "template-static-web-hosting-oac",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-bottom",
+          "targetHandleId": "handle-right"
         },
         {
-          "id": "60b9dc33-5565-48ff-8585-e3dc11c1a1cb",
-          "sourceNodeId": "a9812863-e435-4e22-8ead-21024b258441",
-          "targetNodeId": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "sourceHandleId": "bottom",
-          "targetHandleId": "top",
-          "zIndex": 7,
-          "route": {
-            "svgPath": "M817.375,236.901 L817.375,377.136",
-            "sourcePoint": {
-              "x": 817.375,
-              "y": 236.901
-            },
-            "targetPoint": {
-              "x": 817.375,
-              "y": 377.136
-            },
-            "waypoints": [
-              {
-                "x": 817.375,
-                "y": 236.901
-              },
-              {
-                "x": 817.375,
-                "y": 377.136
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 90
-          }
+          "id": "template-static-web-hosting-bucket-policy-bucket",
+          "label": "restricts",
+          "sourceNodeId": "template-static-web-hosting-bucket-policy",
+          "targetNodeId": "template-static-web-hosting-bucket",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-left",
+          "targetHandleId": "handle-right"
         },
         {
-          "id": "9f24801e-bf6b-483d-b2e2-e4b44857c700",
-          "sourceNodeId": "a9812863-e435-4e22-8ead-21024b258441",
-          "targetNodeId": "d0fc5fc8-4e65-463c-96a9-abb6c4abd050",
-          "sourceHandleId": "right",
-          "targetHandleId": "left",
-          "zIndex": 9,
-          "route": {
-            "svgPath": "M847.375,206.901 L1048.483,206.901",
-            "sourcePoint": {
-              "x": 847.375,
-              "y": 206.901
-            },
-            "targetPoint": {
-              "x": 1048.483,
-              "y": 206.901
-            },
-            "waypoints": [
-              {
-                "x": 847.375,
-                "y": 206.901
-              },
-              {
-                "x": 1048.483,
-                "y": 206.901
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 0
-          }
+          "id": "template-static-web-hosting-bucket-public-access",
+          "label": "controls",
+          "sourceNodeId": "template-static-web-hosting-bucket",
+          "targetNodeId": "template-static-web-hosting-public-access",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-bottom",
+          "targetHandleId": "handle-top"
         },
         {
-          "id": "b1b21dec-1a7f-453b-aecc-16baab7a100c",
-          "sourceNodeId": "9c5f4598-f184-4890-bdd0-1899be4e8cf7",
-          "targetNodeId": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 14,
-          "route": {
-            "svgPath": "M1054.841,408.545 L847.375,407.136",
-            "sourcePoint": {
-              "x": 1054.841,
-              "y": 408.545
-            },
-            "targetPoint": {
-              "x": 847.375,
-              "y": 407.136
-            },
-            "waypoints": [
-              {
-                "x": 1054.841,
-                "y": 408.545
-              },
-              {
-                "x": 847.375,
-                "y": 407.136
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -179.6107895262741
-          }
+          "id": "template-static-web-hosting-distribution-bucket",
+          "label": "origin",
+          "sourceNodeId": "template-static-web-hosting-distribution",
+          "targetNodeId": "template-static-web-hosting-bucket",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-right",
+          "targetHandleId": "handle-left"
         },
         {
-          "id": "c6681b91-c6a2-4c8c-88c6-b165f5c1de36",
-          "sourceNodeId": "e608c4e1-a9bf-4675-be19-e67f7bde4f98",
-          "targetNodeId": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "sourceHandleId": "right",
-          "targetHandleId": "left",
-          "zIndex": 16,
-          "route": {
-            "svgPath": "M633.36,561.095 L702.367,561.095 Q710.367,561.095 710.367,553.095 L710.367,415.136 Q710.367,407.136 718.367,407.136 L787.375,407.136",
-            "sourcePoint": {
-              "x": 633.36,
-              "y": 561.095
-            },
-            "targetPoint": {
-              "x": 787.375,
-              "y": 407.136
-            },
-            "waypoints": [
-              {
-                "x": 633.36,
-                "y": 561.095
-              },
-              {
-                "x": 702.367,
-                "y": 561.095
-              },
-              {
-                "x": 710.367,
-                "y": 561.095
-              },
-              {
-                "x": 710.367,
-                "y": 553.095
-              },
-              {
-                "x": 710.367,
-                "y": 415.136
-              },
-              {
-                "x": 710.367,
-                "y": 407.136
-              },
-              {
-                "x": 718.367,
-                "y": 407.136
-              },
-              {
-                "x": 787.375,
-                "y": 407.136
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 0
-          }
-        },
-        {
-          "id": "e6c4c782-bffb-4109-b42d-494735c77a9d",
-          "sourceNodeId": "3afa58d4-2389-47e3-af6d-197aa176ca4a",
-          "targetNodeId": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 18,
-          "route": {
-            "svgPath": "M1052.507,557.896 L957.941,557.896 Q949.941,557.896 949.941,549.896 L949.941,415.136 Q949.941,407.136 941.941,407.136 L847.375,407.136",
-            "sourcePoint": {
-              "x": 1052.507,
-              "y": 557.896
-            },
-            "targetPoint": {
-              "x": 847.375,
-              "y": 407.136
-            },
-            "waypoints": [
-              {
-                "x": 1052.507,
-                "y": 557.896
-              },
-              {
-                "x": 957.941,
-                "y": 557.896
-              },
-              {
-                "x": 949.941,
-                "y": 557.896
-              },
-              {
-                "x": 949.941,
-                "y": 549.896
-              },
-              {
-                "x": 949.941,
-                "y": 415.136
-              },
-              {
-                "x": 949.941,
-                "y": 407.136
-              },
-              {
-                "x": 941.941,
-                "y": 407.136
-              },
-              {
-                "x": 847.375,
-                "y": 407.136
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 180
-          }
-        },
-        {
-          "id": "f3886e54-ea74-4f39-ab63-f1f8c5b622a0",
-          "sourceNodeId": "ddbce9f8-63fd-43a9-a133-86dda6fed0e9",
-          "targetNodeId": "372d8cce-6e53-4d81-a7d5-5337d826b75b",
-          "sourceHandleId": "right",
-          "targetHandleId": "left",
-          "zIndex": 20,
-          "route": {
-            "svgPath": "M552.397,407.968 L787.375,407.136",
-            "sourcePoint": {
-              "x": 552.397,
-              "y": 407.968
-            },
-            "targetPoint": {
-              "x": 787.375,
-              "y": 407.136
-            },
-            "waypoints": [
-              {
-                "x": 552.397,
-                "y": 407.968
-              },
-              {
-                "x": 787.375,
-                "y": 407.136
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": -0.20279026597827726
-          }
-        },
-        {
-          "id": "f3d48e53-a3c0-4969-a934-4c9a85641425",
-          "sourceNodeId": "0c2d3032-4148-4e80-bae8-9cfb63f6ec6e",
-          "targetNodeId": "a9812863-e435-4e22-8ead-21024b258441",
-          "sourceHandleId": "right",
-          "targetHandleId": "left",
-          "zIndex": 21,
-          "route": {
-            "svgPath": "M551.991,206.901 L787.375,206.901",
-            "sourcePoint": {
-              "x": 551.991,
-              "y": 206.901
-            },
-            "targetPoint": {
-              "x": 787.375,
-              "y": 206.901
-            },
-            "waypoints": [
-              {
-                "x": 551.991,
-                "y": 206.901
-              },
-              {
-                "x": 787.375,
-                "y": 206.901
-              }
-            ],
-            "arrowDirection": "source-to-target",
-            "arrowAngle": 0
-          }
+          "id": "template-static-web-hosting-oac-distribution",
+          "label": "secures",
+          "sourceNodeId": "template-static-web-hosting-oac",
+          "targetNodeId": "template-static-web-hosting-distribution",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-top",
+          "targetHandleId": "handle-bottom"
         }
       ],
       "variables": [],
       "provenance": {
         "extractorVersion": "architecture-board-module-pattern-extractor/v1",
-        "representativeTemplateId": "brainboard:brainboard-aws-serverless-cdn",
+        "representativeTemplateId": "repository:static-web-hosting",
         "sourceTemplateIds": [
-          "brainboard:brainboard-aws-serverless-cdn"
+          "repository:static-web-hosting"
         ]
       }
     }

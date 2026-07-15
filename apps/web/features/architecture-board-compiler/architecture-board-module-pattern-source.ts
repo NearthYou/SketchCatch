@@ -23,6 +23,7 @@ export type ArchitectureBoardModulePatternSeed = {
   readonly lenses: readonly ArchitectureBoardModulePatternLens[];
   readonly requiredResourceTypeGroups: readonly (readonly string[])[];
   readonly includedResourceTypes: readonly string[];
+  readonly traverseContainmentRelationships?: boolean;
 };
 
 export type ArchitectureBoardModulePatternCandidate = {
@@ -31,6 +32,7 @@ export type ArchitectureBoardModulePatternCandidate = {
   readonly nodes: readonly DiagramNode[];
   readonly edges: readonly DiagramEdge[];
   readonly variables: readonly DiagramVariable[];
+  readonly dependencyResourceCount: number;
 };
 
 const MODULE_PATTERN_SEEDS: readonly ArchitectureBoardModulePatternSeed[] = [
@@ -43,6 +45,7 @@ const MODULE_PATTERN_SEEDS: readonly ArchitectureBoardModulePatternSeed[] = [
       { kind: "purpose", key: "isolated-network-foundation", label: "격리 네트워크 기반" }
     ],
     requiredResourceTypeGroups: [["aws_vpc"], ["aws_subnet"]],
+    traverseContainmentRelationships: true,
     includedResourceTypes: [
       "aws_eip",
       "aws_flow_log",
@@ -173,9 +176,7 @@ const MODULE_PATTERN_SEEDS: readonly ArchitectureBoardModulePatternSeed[] = [
       { kind: "functional", key: "database", label: "데이터베이스" },
       { kind: "purpose", key: "high-availability-data", label: "고가용성 데이터 계층" }
     ],
-    requiredResourceTypeGroups: [
-      ["aws_db_instance", "aws_docdb_cluster", "aws_rds_cluster"]
-    ],
+    requiredResourceTypeGroups: [["aws_db_instance", "aws_docdb_cluster", "aws_rds_cluster"]],
     includedResourceTypes: [
       "aws_db_instance",
       "aws_db_parameter_group",
@@ -285,7 +286,7 @@ export function extractArchitectureBoardModulePatterns(
       throw new Error(`No Template candidate matched Module pattern seed: ${seed.id}`);
     }
 
-    const selectedGroup = selectStructuralGroup(candidates);
+    const selectedGroup = selectArchitectureBoardModulePatternStructuralGroup(candidates);
     const representative = selectArchitectureBoardModulePatternGeometryMedoid(selectedGroup);
     const normalized = normalizeCandidate(representative);
 
@@ -301,8 +302,9 @@ export function extractArchitectureBoardModulePatterns(
       provenance: {
         extractorVersion: ARCHITECTURE_BOARD_MODULE_PATTERN_EXTRACTOR_VERSION,
         representativeTemplateId: representative.sourceTemplateId,
-        sourceTemplateIds: [...new Set(selectedGroup.map(({ sourceTemplateId }) => sourceTemplateId))]
-          .sort()
+        sourceTemplateIds: [
+          ...new Set(selectedGroup.map(({ sourceTemplateId }) => sourceTemplateId))
+        ].sort()
       }
     };
     return pattern;
@@ -321,14 +323,11 @@ export function extractArchitectureBoardModulePatternCandidates(
       .map(({ id }) => id)
   );
 
-  return connectedComponents(eligibleIds, source.diagram, nodeById)
-    .filter((ids) => matchesRequiredResourceTypes(ids, seed, nodeById))
+  return discoverRootedOccurrences(eligibleIds, seed, source.diagram, nodeById)
     .sort((left, right) => compareComponents(left, right, source.diagram, nodeById))
     .map((component) => {
       const selectedIds = new Set(component);
-      for (const nodeId of component) {
-        addParentChain(nodeId, selectedIds, nodeById, source.id);
-      }
+      addCandidateDependencies(selectedIds, source.diagram, nodeById, source.id);
 
       const nodes = source.diagram.nodes
         .filter(({ id }) => selectedIds.has(id))
@@ -342,12 +341,8 @@ export function extractArchitectureBoardModulePatternCandidates(
         .map(cloneValue)
         .sort((left, right) => left.id.localeCompare(right.id));
       const variables = (source.diagram.variables ?? [])
-        .flatMap((variable) => {
-          const bindings = variable.bindings.filter(({ nodeId }) => selectedIds.has(nodeId));
-          return bindings.length === 0
-            ? []
-            : [{ ...cloneValue(variable), bindings: bindings.map(cloneValue) }];
-        })
+        .filter((variable) => variable.bindings.some(({ nodeId }) => selectedIds.has(nodeId)))
+        .map(cloneValue)
         .sort((left, right) => left.id.localeCompare(right.id));
 
       return {
@@ -358,7 +353,10 @@ export function extractArchitectureBoardModulePatternCandidates(
         ),
         nodes,
         edges,
-        variables
+        variables,
+        dependencyResourceCount: nodes.filter(
+          (node) => node.kind === "resource" && !component.has(node.id)
+        ).length
       };
     });
 }
@@ -383,39 +381,145 @@ function addParentChain(
   }
 }
 
-function connectedComponents(
+function discoverRootedOccurrences(
   eligibleIds: ReadonlySet<string>,
+  seed: ArchitectureBoardModulePatternSeed,
   diagram: DiagramJson,
   nodeById: ReadonlyMap<string, DiagramNode>
 ): Set<string>[] {
   const adjacency = new Map([...eligibleIds].map((id) => [id, new Set<string>()]));
-  const connect = (left: string, right: string): void => {
+  const connect = (source: string, target: string): void => {
+    if (!eligibleIds.has(source) || !eligibleIds.has(target)) return;
+    adjacency.get(source)?.add(target);
+  };
+  const connectBothWays = (left: string, right: string): void => {
     if (!eligibleIds.has(left) || !eligibleIds.has(right)) return;
     adjacency.get(left)?.add(right);
     adjacency.get(right)?.add(left);
   };
 
-  for (const edge of diagram.edges) connect(edge.sourceNodeId, edge.targetNodeId);
+  for (const edge of diagram.edges) {
+    if (!seed.traverseContainmentRelationships && isContainmentRelationship(edge)) continue;
+    connect(edge.sourceNodeId, edge.targetNodeId);
+  }
+  const nodeIdByTerraformAddress = createNodeIdByTerraformAddress(nodeById.values());
   for (const nodeId of eligibleIds) {
-    const parentId = nodeById.get(nodeId)?.metadata?.parentAreaNodeId;
-    if (parentId) connect(nodeId, parentId);
+    const node = nodeById.get(nodeId);
+    for (const address of extractTerraformResourceAddresses(node?.parameters?.values)) {
+      const dependencyId = nodeIdByTerraformAddress.get(address);
+      if (dependencyId) connect(nodeId, dependencyId);
+    }
+  }
+  for (const variable of diagram.variables ?? []) {
+    const boundIds = variable.bindings
+      .map(({ nodeId }) => nodeId)
+      .filter((nodeId) => eligibleIds.has(nodeId));
+    for (const left of boundIds) {
+      for (const right of boundIds) connectBothWays(left, right);
+    }
   }
 
-  const remaining = new Set(eligibleIds);
-  const components: Set<string>[] = [];
-  while (remaining.size > 0) {
-    const start = [...remaining].sort()[0]!;
-    const component = new Set<string>();
-    const pending = [start];
-    while (pending.length > 0) {
-      const current = pending.pop()!;
-      if (!remaining.delete(current)) continue;
-      component.add(current);
-      pending.push(...[...(adjacency.get(current) ?? [])].sort().reverse());
+  const occurrences = [...eligibleIds]
+    .sort()
+    .map((start) => {
+      const occurrence = new Set<string>();
+      const remaining = new Set(eligibleIds);
+      const pending = [start];
+      while (pending.length > 0) {
+        const current = pending.pop()!;
+        if (!remaining.delete(current)) continue;
+        occurrence.add(current);
+        pending.push(...[...(adjacency.get(current) ?? [])].sort().reverse());
+      }
+      return occurrence;
+    })
+    .filter((ids) => matchesRequiredResourceTypes(ids, seed, nodeById));
+  return [
+    ...new Map(
+      occurrences.map((occurrence) => [[...occurrence].sort().join("|"), occurrence] as const)
+    ).values()
+  ];
+}
+
+function addCandidateDependencies(
+  selectedIds: Set<string>,
+  diagram: DiagramJson,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  sourceTemplateId: string
+): void {
+  const nodeIdByTerraformAddress = createNodeIdByTerraformAddress(nodeById.values());
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    const sizeBeforeParents = selectedIds.size;
+    for (const nodeId of [...selectedIds]) {
+      addParentChain(nodeId, selectedIds, nodeById, sourceTemplateId);
     }
-    components.push(component);
+    if (selectedIds.size !== sizeBeforeParents) changed = true;
+    for (const nodeId of [...selectedIds]) {
+      const node = nodeById.get(nodeId);
+      for (const address of extractTerraformResourceAddresses(node?.parameters?.values)) {
+        const dependencyId = nodeIdByTerraformAddress.get(address);
+        if (!dependencyId) {
+          throw new Error(
+            `Template ${sourceTemplateId} has unresolved Terraform reference ${address}.`
+          );
+        }
+        if (!selectedIds.has(dependencyId)) {
+          selectedIds.add(dependencyId);
+          changed = true;
+        }
+      }
+    }
+    for (const variable of diagram.variables ?? []) {
+      if (!variable.bindings.some(({ nodeId }) => selectedIds.has(nodeId))) continue;
+      for (const binding of variable.bindings) {
+        if (!nodeById.has(binding.nodeId)) {
+          throw new Error(
+            `Template ${sourceTemplateId} variable ${variable.id} has unresolved binding ${binding.nodeId}.`
+          );
+        }
+        if (!selectedIds.has(binding.nodeId)) {
+          selectedIds.add(binding.nodeId);
+          changed = true;
+        }
+      }
+    }
   }
-  return components;
+}
+
+function createNodeIdByTerraformAddress(nodes: Iterable<DiagramNode>): ReadonlyMap<string, string> {
+  return new Map(
+    [...nodes].flatMap((node) => {
+      const parameters = node.parameters;
+      return parameters
+        ? [
+            [
+              `${parameters.terraformBlockType === "data" ? "data." : ""}${parameters.resourceType}.${parameters.resourceName}`,
+              node.id
+            ] as const
+          ]
+        : [];
+    })
+  );
+}
+
+function extractTerraformResourceAddresses(value: unknown): string[] {
+  if (typeof value === "string") {
+    return [...value.matchAll(/(?:data\.)?(?:aws|kubernetes)_[a-z0-9_]+\.[a-z0-9_]+/g)].map(
+      ([address]) => address
+    );
+  }
+  if (Array.isArray(value)) return value.flatMap(extractTerraformResourceAddresses);
+  if (value !== null && typeof value === "object") {
+    return Object.values(value).flatMap(extractTerraformResourceAddresses);
+  }
+  return [];
+}
+
+function isContainmentRelationship(edge: DiagramEdge): boolean {
+  return edge.label?.trim().toLowerCase() === "contains";
 }
 
 function matchesRequiredResourceTypes(
@@ -447,7 +551,10 @@ function compareComponents(
   return (
     edgeCount(right) - edgeCount(left) ||
     resourceCount(right) - resourceCount(left) ||
-    [...left].sort().join("|").localeCompare([...right].sort().join("|"))
+    [...left]
+      .sort()
+      .join("|")
+      .localeCompare([...right].sort().join("|"))
   );
 }
 
@@ -457,9 +564,7 @@ export function createArchitectureBoardModulePatternStructuralFingerprint(
 ): string {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const structuralRoles = createNodeStructuralRoles(nodes, edges);
-  const nodeSignatures = nodes
-    .map((node) => structuralRoleKey(node, structuralRoles))
-    .sort();
+  const nodeSignatures = nodes.map((node) => structuralRoleKey(node, structuralRoles)).sort();
   const edgeSignatures = edges
     .map((edge) => {
       const source = nodeById.get(edge.sourceNodeId);
@@ -494,28 +599,196 @@ export function createArchitectureBoardModulePatternStructuralFingerprint(
   );
 }
 
-function selectStructuralGroup(
+export function selectArchitectureBoardModulePatternStructuralGroup(
   candidates: readonly ArchitectureBoardModulePatternCandidate[]
 ): readonly ArchitectureBoardModulePatternCandidate[] {
-  const groups = new Map<string, ArchitectureBoardModulePatternCandidate[]>();
+  const groupsByFingerprint = new Map<string, ArchitectureBoardModulePatternCandidate[][]>();
   for (const candidate of candidates) {
-    const group = groups.get(candidate.structuralFingerprint) ?? [];
-    group.push(candidate);
-    groups.set(candidate.structuralFingerprint, group);
+    const groups = groupsByFingerprint.get(candidate.structuralFingerprint) ?? [];
+    const exactGroup = groups.find((group) =>
+      areArchitectureBoardModulePatternStructuresEquivalent(
+        group[0]!.nodes,
+        group[0]!.edges,
+        candidate.nodes,
+        candidate.edges
+      )
+    );
+    if (exactGroup) exactGroup.push(candidate);
+    else groups.push([candidate]);
+    groupsByFingerprint.set(candidate.structuralFingerprint, groups);
   }
 
-  return [...groups.values()].sort((left, right) => {
+  return [...groupsByFingerprint.values()].flat().sort((left, right) => {
+    const leftDependencies = Math.min(
+      ...left.map(({ dependencyResourceCount }) => dependencyResourceCount)
+    );
+    const rightDependencies = Math.min(
+      ...right.map(({ dependencyResourceCount }) => dependencyResourceCount)
+    );
     const leftEdges = Math.max(...left.map(({ edges }) => edges.length));
     const rightEdges = Math.max(...right.map(({ edges }) => edges.length));
     const leftNodes = Math.max(...left.map(({ nodes }) => nodes.length));
     const rightNodes = Math.max(...right.map(({ nodes }) => nodes.length));
     return (
       right.length - left.length ||
+      leftDependencies - rightDependencies ||
       rightEdges - leftEdges ||
       rightNodes - leftNodes ||
-      left[0]!.structuralFingerprint.localeCompare(right[0]!.structuralFingerprint)
+      left[0]!.structuralFingerprint.localeCompare(right[0]!.structuralFingerprint) ||
+      left[0]!.sourceTemplateId.localeCompare(right[0]!.sourceTemplateId)
     );
   })[0]!;
+}
+
+export function areArchitectureBoardModulePatternStructuresEquivalent(
+  leftNodes: readonly DiagramNode[],
+  leftEdges: readonly DiagramEdge[],
+  rightNodes: readonly DiagramNode[],
+  rightEdges: readonly DiagramEdge[]
+): boolean {
+  if (leftNodes.length !== rightNodes.length || leftEdges.length !== rightEdges.length) {
+    return false;
+  }
+  const left = createExactStructuralGraph(leftNodes, leftEdges);
+  const right = createExactStructuralGraph(rightNodes, rightEdges);
+  const rightNodeIdsBySignature = new Map<string, string[]>();
+  for (const node of rightNodes) {
+    const signature = right.localSignatureByNodeId.get(node.id)!;
+    const ids = rightNodeIdsBySignature.get(signature) ?? [];
+    ids.push(node.id);
+    rightNodeIdsBySignature.set(signature, ids);
+  }
+  const leftOrder = [...leftNodes]
+    .sort((leftNode, rightNode) => {
+      const leftCandidates =
+        rightNodeIdsBySignature.get(left.localSignatureByNodeId.get(leftNode.id)!)?.length ?? 0;
+      const rightCandidates =
+        rightNodeIdsBySignature.get(left.localSignatureByNodeId.get(rightNode.id)!)?.length ?? 0;
+      return (
+        leftCandidates - rightCandidates ||
+        left.relationCountByNodeId.get(rightNode.id)! -
+          left.relationCountByNodeId.get(leftNode.id)! ||
+        leftNode.id.localeCompare(rightNode.id)
+      );
+    })
+    .map(({ id }) => id);
+  if (
+    leftOrder.some(
+      (nodeId) => !rightNodeIdsBySignature.has(left.localSignatureByNodeId.get(nodeId)!)
+    )
+  ) {
+    return false;
+  }
+
+  const mapping = new Map<string, string>();
+  const usedRightIds = new Set<string>();
+  const matchNext = (index: number): boolean => {
+    if (index === leftOrder.length) return true;
+    const leftId = leftOrder[index]!;
+    const candidates = rightNodeIdsBySignature.get(left.localSignatureByNodeId.get(leftId)!) ?? [];
+    for (const rightId of candidates) {
+      if (usedRightIds.has(rightId)) continue;
+      if (getExactRelations(left, leftId, leftId) !== getExactRelations(right, rightId, rightId)) {
+        continue;
+      }
+      const conflicts = [...mapping].some(
+        ([mappedLeftId, mappedRightId]) =>
+          getExactRelations(left, leftId, mappedLeftId) !==
+            getExactRelations(right, rightId, mappedRightId) ||
+          getExactRelations(left, mappedLeftId, leftId) !==
+            getExactRelations(right, mappedRightId, rightId)
+      );
+      if (conflicts) continue;
+      mapping.set(leftId, rightId);
+      usedRightIds.add(rightId);
+      if (matchNext(index + 1)) return true;
+      mapping.delete(leftId);
+      usedRightIds.delete(rightId);
+    }
+    return false;
+  };
+  return matchNext(0);
+}
+
+type ExactStructuralGraph = {
+  readonly relationsBySourceAndTarget: ReadonlyMap<string, ReadonlyMap<string, string>>;
+  readonly localSignatureByNodeId: ReadonlyMap<string, string>;
+  readonly relationCountByNodeId: ReadonlyMap<string, number>;
+};
+
+function createExactStructuralGraph(
+  nodes: readonly DiagramNode[],
+  edges: readonly DiagramEdge[]
+): ExactStructuralGraph {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const relationLabels = new Map<string, Map<string, string[]>>();
+  const addRelation = (sourceId: string, targetId: string, label: string): void => {
+    if (!nodeById.has(sourceId) || !nodeById.has(targetId)) {
+      throw new Error(`Module pattern structure has an unresolved relation endpoint.`);
+    }
+    const targets = relationLabels.get(sourceId) ?? new Map<string, string[]>();
+    const labels = targets.get(targetId) ?? [];
+    labels.push(label);
+    targets.set(targetId, labels);
+    relationLabels.set(sourceId, targets);
+  };
+  for (const edge of edges) {
+    addRelation(edge.sourceNodeId, edge.targetNodeId, `edge:${edgeStructuralSignature(edge)}`);
+  }
+  for (const node of nodes) {
+    const parentId = node.metadata?.parentAreaNodeId;
+    if (parentId) addRelation(node.id, parentId, "containment:parent");
+  }
+  const relationsBySourceAndTarget = new Map(
+    [...relationLabels].map(([sourceId, targets]) => [
+      sourceId,
+      new Map([...targets].map(([targetId, labels]) => [targetId, stableSerialize(labels.sort())]))
+    ])
+  );
+  const localSignatureByNodeId = new Map(
+    nodes.map((node) => {
+      const incoming: string[] = [];
+      const outgoing: string[] = [];
+      for (const [sourceId, targets] of relationsBySourceAndTarget) {
+        for (const [targetId, labels] of targets) {
+          if (sourceId === node.id) {
+            outgoing.push(`${labels}:${nodeSignature(nodeById.get(targetId)!)}`);
+          }
+          if (targetId === node.id) {
+            incoming.push(`${labels}:${nodeSignature(nodeById.get(sourceId)!)}`);
+          }
+        }
+      }
+      return [
+        node.id,
+        stableSerialize({
+          incoming: incoming.sort(),
+          node: nodeSignature(node),
+          outgoing: outgoing.sort()
+        })
+      ] as const;
+    })
+  );
+  const relationCountByNodeId = new Map(
+    nodes.map((node) => {
+      let count = 0;
+      for (const [sourceId, targets] of relationsBySourceAndTarget) {
+        for (const targetId of targets.keys()) {
+          if (sourceId === node.id || targetId === node.id) count += 1;
+        }
+      }
+      return [node.id, count] as const;
+    })
+  );
+  return { relationsBySourceAndTarget, localSignatureByNodeId, relationCountByNodeId };
+}
+
+function getExactRelations(
+  graph: ExactStructuralGraph,
+  sourceId: string,
+  targetId: string
+): string {
+  return graph.relationsBySourceAndTarget.get(sourceId)?.get(targetId) ?? "[]";
 }
 
 export function selectArchitectureBoardModulePatternGeometryMedoid(
@@ -524,10 +797,7 @@ export function selectArchitectureBoardModulePatternGeometryMedoid(
   return [...candidates]
     .map((candidate) => ({
       candidate,
-      distance: candidates.reduce(
-        (total, other) => total + geometryDistance(candidate, other),
-        0
-      )
+      distance: candidates.reduce((total, other) => total + geometryDistance(candidate, other), 0)
     }))
     .sort(
       (left, right) =>
@@ -543,7 +813,10 @@ function geometryDistance(
   const leftVector = geometryVector(left.nodes, left.edges);
   const rightVector = geometryVector(right.nodes, right.edges);
   if (leftVector.length !== rightVector.length) return Number.POSITIVE_INFINITY;
-  return leftVector.reduce((total, value, index) => total + Math.abs(value - rightVector[index]!), 0);
+  return leftVector.reduce(
+    (total, value, index) => total + Math.abs(value - rightVector[index]!),
+    0
+  );
 }
 
 function geometryVector(nodes: readonly DiagramNode[], edges: readonly DiagramEdge[]): number[] {
