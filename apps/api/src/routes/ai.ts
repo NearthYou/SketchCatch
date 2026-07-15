@@ -960,8 +960,8 @@ function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
   const repo = rawRepo?.replace(/\.git$/i, "");
 
   return {
-    owner: owner ?? "",
-    repo: repo ?? ""
+    owner: owner?.toLowerCase() ?? "",
+    repo: repo?.toLowerCase() ?? ""
   };
 }
 
