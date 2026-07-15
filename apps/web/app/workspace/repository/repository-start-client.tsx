@@ -53,11 +53,7 @@ import {
   shouldAskPublicRepositoryDeploymentType,
   type PublicRepositoryTemplateId
 } from "../../../features/workspace/public-repository-recommendation";
-import {
-  compileArchitectureDraftProposal,
-  type ArchitectureBoardCompilationProposal
-} from "../../../features/architecture-board-compiler";
-import { ArchitectureBoardCompilationSummary } from "../../../features/architecture-board-compiler/architecture-board-compilation-summary";
+import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
@@ -70,10 +66,6 @@ import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
 type PublicRecommendationStage = "configuration" | "questions";
-type PendingCompilerProposal = {
-  readonly proposal: ArchitectureBoardCompilationProposal;
-  readonly source: "public" | "connected";
-};
 type RepositoryQuestionView = Pick<
   RepositoryAnalysisQuestion,
   "answerType" | "id" | "options" | "prompt"
@@ -117,10 +109,6 @@ export function RepositoryStartClient({
   const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
   const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [pendingCompilerProposal, setPendingCompilerProposal] =
-    useState<PendingCompilerProposal | null>(null);
-  const [compilerReviewState, setCompilerReviewState] = useState<RequestState>("idle");
-  const [compilerReviewError, setCompilerReviewError] = useState("");
   const [restoredProjectName, setRestoredProjectName] = useState("");
   const effectiveProjectName = restoredProjectName || projectName;
   const activeRepository = useMemo(
@@ -370,9 +358,15 @@ export function RepositoryStartClient({
         return;
       }
 
-      const proposal = compileArchitectureDraftProposal(draft);
-      presentCompilerProposal(proposal, "public");
+      const diagram = getDiagramJsonForArchitectureDraft(draft);
+      await saveProjectDraft({ diagramJson: diagram, projectId });
       setPublicAnalysisState("idle");
+      router.push(
+        `/workspace?${new URLSearchParams({
+          projectId,
+          projectName: effectiveProjectName
+        }).toString()}`
+      );
     } catch (error) {
       setPublicAnalysisState("error");
       setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
@@ -406,9 +400,15 @@ export function RepositoryStartClient({
         return;
       }
 
-      const proposal = compileArchitectureDraftProposal(draft);
-      presentCompilerProposal(proposal, "connected");
+      const diagram = getDiagramJsonForArchitectureDraft(draft);
+      await saveProjectDraft({ diagramJson: diagram, projectId });
       setActionState("idle");
+      router.push(
+        `/workspace?${new URLSearchParams({
+          projectId,
+          projectName: effectiveProjectName
+        }).toString()}`
+      );
     } catch (error) {
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
@@ -518,41 +518,6 @@ export function RepositoryStartClient({
     setPublicRecommendationStage("questions");
   }
 
-  function presentCompilerProposal(
-    proposal: ArchitectureBoardCompilationProposal,
-    source: PendingCompilerProposal["source"]
-  ): void {
-    setCompilerReviewError("");
-    setCompilerReviewState("idle");
-    setPendingCompilerProposal({ proposal, source });
-  }
-
-  function cancelPendingCompilerProposal(): void {
-    if (compilerReviewState === "loading") return;
-    setCompilerReviewError("");
-    setPendingCompilerProposal(null);
-  }
-
-  async function approvePendingCompilerProposal(): Promise<void> {
-    if (pendingCompilerProposal === null || compilerReviewState === "loading") return;
-
-    setCompilerReviewState("loading");
-    setCompilerReviewError("");
-
-    try {
-      await saveProjectDraft({ diagramJson: pendingCompilerProposal.proposal.diagram, projectId });
-      router.push(
-        `/workspace?${new URLSearchParams({
-          projectId,
-          projectName: effectiveProjectName
-        }).toString()}`
-      );
-    } catch (error) {
-      setCompilerReviewState("error");
-      setCompilerReviewError(getApiErrorMessage(error, "Compiler 제안을 Board에 적용하지 못했습니다."));
-    }
-  }
-
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
@@ -566,18 +531,7 @@ export function RepositoryStartClient({
           <p>{effectiveProjectName}</p>
         </header>
 
-        {pendingCompilerProposal ? (
-          <RepositoryCompilerProposalReview
-            errorMessage={compilerReviewError}
-            isBusy={compilerReviewState === "loading"}
-            onApprove={() => void approvePendingCompilerProposal()}
-            onCancel={cancelPendingCompilerProposal}
-            proposal={pendingCompilerProposal.proposal}
-            source={pendingCompilerProposal.source}
-          />
-        ) : null}
-
-        {showUrlAnalysis && pendingCompilerProposal === null ? (
+        {showUrlAnalysis ? (
           <section className={styles.publicUrlPanel}>
             {publicRecommendationStage === "configuration" ? (
               <>
@@ -680,7 +634,7 @@ export function RepositoryStartClient({
           </section>
         ) : null}
 
-        {activeRepository && !publicAnalysis && pendingCompilerProposal === null ? (
+        {activeRepository && !publicAnalysis ? (
           <section className={styles.analysisPanel}>
             <div>
               <span>연결된 저장소</span>
@@ -741,56 +695,11 @@ export function RepositoryStartClient({
           </section>
         ) : null}
 
-        {errorMessage && loadState !== "error" && pendingCompilerProposal === null ? (
+        {errorMessage && loadState !== "error" ? (
           <ProductState compact description={errorMessage} kind="error" title="작업 실패" />
         ) : null}
       </section>
     </main>
-  );
-}
-
-function RepositoryCompilerProposalReview({
-  errorMessage,
-  isBusy,
-  onApprove,
-  onCancel,
-  proposal,
-  source
-}: {
-  readonly errorMessage: string;
-  readonly isBusy: boolean;
-  readonly onApprove: () => void;
-  readonly onCancel: () => void;
-  readonly proposal: ArchitectureBoardCompilationProposal;
-  readonly source: PendingCompilerProposal["source"];
-}) {
-  return (
-    <section aria-label="Compiler Board 제안 검토" className={styles.compilerReview}>
-      <header className={styles.compilerReviewHeader}>
-        <div>
-          <span>{source === "public" ? "PUBLIC REPOSITORY" : "CONNECTED REPOSITORY"}</span>
-          <h2>Board 제안 검토</h2>
-        </div>
-      </header>
-      <div className={styles.compilerReviewPreview}>
-        <AiDraftBoardPreview diagram={proposal.diagram} />
-      </div>
-      <ArchitectureBoardCompilationSummary proposal={proposal} />
-      {errorMessage ? (
-        <div className={styles.compilerReviewError} role="alert">
-          {errorMessage}
-        </div>
-      ) : null}
-      <footer className={styles.compilerReviewActions}>
-        <button disabled={isBusy} onClick={onCancel} type="button">
-          취소
-        </button>
-        <button disabled={isBusy} onClick={onApprove} type="button">
-          {isBusy ? <LoaderCircle aria-hidden="true" className={styles.spin} size={16} /> : <Check aria-hidden="true" size={16} />}
-          Board에 적용
-        </button>
-      </footer>
-    </section>
   );
 }
 
