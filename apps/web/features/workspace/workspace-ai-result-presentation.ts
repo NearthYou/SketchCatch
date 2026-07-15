@@ -156,40 +156,33 @@ const RISK_LEVEL_PRIORITY = {
 const ISSUE_COPY = {
   credential: {
     nextStep: "AWS 연결 상태를 다시 확인한 뒤 검증을 실행하세요.",
-    summary: "AWS 로그인 정보나 연결 상태를 확인하지 못했습니다.",
-    title: "AWS 연결을 확인해 주세요"
+    summary: "AWS 로그인 정보나 연결 상태를 확인하지 못했습니다."
   },
   dependency: {
     nextStep: "참조하는 리소스가 먼저 정의되어 있는지 확인한 뒤 다시 검증하세요.",
-    summary: "리소스 간 연결이나 생성 순서 때문에 검증을 계속할 수 없습니다.",
-    title: "리소스 연결을 확인해 주세요"
+    summary: "리소스 간 연결이나 생성 순서 때문에 검증을 계속할 수 없습니다."
   },
   permission: {
     nextStep: "연결된 AWS 계정의 권한을 확인한 뒤 다시 검증하세요.",
-    summary: "Terraform이 필요한 AWS 리소스에 접근하지 못했습니다.",
-    title: "AWS 접근 권한을 확인해 주세요"
+    summary: "Terraform이 필요한 AWS 리소스에 접근하지 못했습니다."
   },
   quota: {
     nextStep: "AWS 서비스 한도를 확인하고 필요하면 한도 증가를 요청하세요.",
-    summary: "현재 AWS 계정의 사용 한도 때문에 작업을 계속할 수 없습니다.",
-    title: "AWS 사용 한도를 확인해 주세요"
+    summary: "현재 AWS 계정의 사용 한도 때문에 작업을 계속할 수 없습니다."
   },
   region_or_resource: {
     nextStep: "리전과 리소스 이름이 실제 AWS 환경과 일치하는지 확인하세요.",
-    summary: "설정에 적힌 AWS 리소스나 리전 정보를 찾지 못했습니다.",
-    title: "리소스 위치와 이름을 확인해 주세요"
+    summary: "설정에 적힌 AWS 리소스나 리전 정보를 찾지 못했습니다."
   },
   syntax: {
     nextStep: "문제가 표시된 줄을 수정한 뒤 Terraform 검증을 다시 실행하세요.",
-    summary: "코드 형식이 올바르지 않아 검증을 계속할 수 없습니다.",
-    title: "Terraform 코드 형식을 확인해 주세요"
+    summary: ""
   },
   unknown: {
     nextStep: "기술 정보를 확인해 코드를 수정한 뒤 다시 검증하세요.",
-    summary: "Terraform 검증 중 확인이 필요한 문제가 발견되었습니다.",
-    title: "Terraform 설정을 확인해 주세요"
+    summary: "Terraform 검증 중 확인이 필요한 문제가 발견되었습니다."
   }
-} satisfies Record<AiTerraformErrorCategory, { readonly nextStep: string; readonly summary: string; readonly title: string }>;
+} satisfies Record<AiTerraformErrorCategory, { readonly nextStep: string; readonly summary: string }>;
 
 export function createTerraformPreviewPresentation(
   preview: AiTerraformPreviewExplanationResult
@@ -283,7 +276,7 @@ export function createTerraformIssuePresentation({
       ...(fixPlan.providerNotice ? { providerNotice: fixPlan.providerNotice } : {}),
       rawMessage: diagnostic.message || explanation.rawMessage
     },
-    title: copy.title
+    title: `${fixPlan.errorType}(${typeof diagnostic.line === "number" ? `${diagnostic.line}줄` : "위치 미상"})`
   };
 }
 

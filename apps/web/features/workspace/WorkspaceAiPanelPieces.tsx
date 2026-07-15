@@ -9,7 +9,7 @@ import type {
   LlmExplanation
 } from "@sketchcatch/types";
 import type { ReactNode } from "react";
-import { ArrowRight, Code2, ListChecks } from "lucide-react";
+import { Code2, ListChecks } from "lucide-react";
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import {
   createTerraformPreviewPresentation,
@@ -335,24 +335,24 @@ export function WorkspaceAiResultChecks({
   );
 }
 
-export function WorkspaceAiResultNextStep({ children }: { readonly children: ReactNode }) {
+export function WorkspaceAiTechnicalDetails({
+  children,
+  isOpen,
+  onOpenChange
+}: {
+  readonly children: ReactNode;
+  readonly isOpen: boolean;
+  readonly onOpenChange: (isOpen: boolean) => void;
+}) {
   return (
-    <section className={`${styles.aiResultSection} ${styles.aiResultNextStep}`}>
-      <div className={styles.aiResultSectionTitle}>
-        <ArrowRight aria-hidden="true" size={16} />
-        <h4>다음 단계</h4>
-      </div>
-      <p>{children}</p>
-    </section>
-  );
-}
-
-export function WorkspaceAiTechnicalDetails({ children }: { readonly children: ReactNode }) {
-  return (
-    <details className={styles.aiTechnicalDetails}>
+    <details
+      className={styles.aiTechnicalDetails}
+      onToggle={(event) => onOpenChange(event.currentTarget.open)}
+      open={isOpen}
+    >
       <summary>
         <Code2 aria-hidden="true" size={16} />
-        기술 정보 보기
+        {isOpen ? "원문 분석 접기" : "원문 분석 다시 보기"}
       </summary>
       <div className={styles.aiTechnicalDetailsBody}>{children}</div>
     </details>
@@ -369,11 +369,11 @@ export function WorkspaceAiTechnicalList({
   return (
     <div className={styles.aiTechnicalList}>
       <strong>{title}</strong>
-      <ul>
+      <ol>
         {items.map((item, index) => (
           <li key={`${title}-${index}-${item}`}>{item}</li>
         ))}
-      </ul>
+      </ol>
     </div>
   );
 }
