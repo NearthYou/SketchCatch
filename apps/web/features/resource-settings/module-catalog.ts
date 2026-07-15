@@ -75,7 +75,12 @@ export function materializeCuratedModulePattern(input: {
   );
   const rewrite = (value: unknown) => rewriteReferences(value, resourceNames, variableNames);
   const placement = getFragmentPlacement(input.diagram.nodes, input.pattern.nodes);
-  const zIndexDelta = getZIndexDelta(input.diagram.nodes, input.pattern.nodes);
+  const zIndexDelta = getZIndexDelta(
+    input.diagram.nodes,
+    input.diagram.edges,
+    input.pattern.nodes,
+    input.pattern.edges
+  );
 
   const nextNodes = input.pattern.nodes.map((sourceNode) => {
     const clonedNode = structuredClone(sourceNode) as DiagramNode;
@@ -146,6 +151,9 @@ export function materializeCuratedModulePattern(input: {
         id: requireMappedValue(edgeIds, sourceEdge.id),
         sourceNodeId: requireMappedValue(nodeIds, sourceEdge.sourceNodeId),
         targetNodeId: requireMappedValue(nodeIds, sourceEdge.targetNodeId),
+        ...(sourceEdge.zIndex === undefined
+          ? {}
+          : { zIndex: sourceEdge.zIndex + zIndexDelta }),
         ...(sourceEdge.route
           ? { route: translateRoute(sourceEdge.route, placement) }
           : {})
@@ -297,10 +305,19 @@ function getFragmentPlacement(
 
 function getZIndexDelta(
   currentNodes: readonly DiagramNode[],
-  sourceNodes: readonly ArchitectureBoardModulePattern["nodes"][number][]
+  currentEdges: readonly DiagramEdge[],
+  sourceNodes: readonly ArchitectureBoardModulePattern["nodes"][number][],
+  sourceEdges: ArchitectureBoardModulePattern["edges"]
 ): number {
-  const currentTop = Math.max(0, ...currentNodes.map(({ zIndex }) => zIndex));
-  const sourceBottom = Math.min(...sourceNodes.map(({ zIndex }) => zIndex));
+  const currentTop = Math.max(
+    0,
+    ...currentNodes.map(({ zIndex }) => zIndex),
+    ...currentEdges.flatMap(({ zIndex }) => (zIndex === undefined ? [] : [zIndex]))
+  );
+  const sourceBottom = Math.min(
+    ...sourceNodes.map(({ zIndex }) => zIndex),
+    ...sourceEdges.flatMap(({ zIndex }) => (zIndex === undefined ? [] : [zIndex]))
+  );
   return currentTop + 1 - sourceBottom;
 }
 
