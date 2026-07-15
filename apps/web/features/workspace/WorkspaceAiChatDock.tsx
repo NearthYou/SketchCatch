@@ -85,7 +85,11 @@ import {
   createTerraformIssuePresentation,
   formatTerraformReviewContext
 } from "./workspace-ai-result-presentation";
-import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
+import {
+  getTerraformPreviewReviewProgressStep,
+  getWorkspaceAiChatDockStatus,
+  terraformPreviewReviewSteps
+} from "./workspace-ai-chat-status";
 import {
   isWorkspaceAiChatAbortError,
   WorkspaceAiChatRequestRegistry
@@ -263,6 +267,7 @@ export function WorkspaceAiChatDock({
   const [patchPreviewSourceRevision, setPatchPreviewSourceRevision] = useState<number | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<TerraformPreviewExplanationState | null>(null);
+  const [terraformPreviewReviewElapsedMs, setTerraformPreviewReviewElapsedMs] = useState(0);
   const [terraformIssueResolution, setTerraformIssueResolution] =
     useState<TerraformIssueResolutionState | null>(null);
   const [applyingTerraformFixRequestId, setApplyingTerraformFixRequestId] = useState<number | null>(
@@ -642,6 +647,20 @@ export function WorkspaceAiChatDock({
 
     void explainPreview();
   }, [terraformPreviewRequest]);
+
+  useEffect(() => {
+    if (terraformPreviewExplanation?.state !== "loading") {
+      return;
+    }
+
+    const startedAt = Date.now();
+    setTerraformPreviewReviewElapsedMs(0);
+    const timerId = window.setInterval(() => {
+      setTerraformPreviewReviewElapsedMs(Date.now() - startedAt);
+    }, 500);
+
+    return () => window.clearInterval(timerId);
+  }, [terraformPreviewExplanation?.request.id, terraformPreviewExplanation?.state]);
 
   useEffect(() => {
     if (!terraformSafeFixApplyResult) {
@@ -1738,6 +1757,49 @@ export function WorkspaceAiChatDock({
 
           {activeChatTab === "draft" ? (
             <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
+          ) : null}
+
+          {activeChatTab === "preview" && terraformPreviewExplanation?.state === "loading" ? (
+            <article className={`${styles.aiChatDraftCard} ${styles.aiReviewProgressCard}`}>
+              <p className={styles.aiResultContext} aria-label="검토 범위">
+                {formatTerraformReviewContext(terraformPreviewExplanation.request.label)}
+              </p>
+              <div aria-live="polite" className={styles.aiReviewProgressHeader} role="status">
+                <span aria-hidden="true" className={styles.aiReviewProgressSpinner} />
+                <div>
+                  <strong>Amazon Q 에이전트 리뷰 중</strong>
+                  <span>
+                    {
+                      terraformPreviewReviewSteps[
+                        getTerraformPreviewReviewProgressStep(terraformPreviewReviewElapsedMs)
+                      ]?.description
+                    }
+                  </span>
+                </div>
+              </div>
+              <ol className={styles.aiReviewProgressSteps}>
+                {terraformPreviewReviewSteps.map((step, index) => {
+                  const currentStep = getTerraformPreviewReviewProgressStep(
+                    terraformPreviewReviewElapsedMs
+                  );
+                  const state = index < currentStep ? "complete" : index === currentStep ? "active" : "pending";
+
+                  return (
+                    <li
+                      aria-current={state === "active" ? "step" : undefined}
+                      data-state={state}
+                      key={step.label}
+                    >
+                      <span aria-hidden="true" className={styles.aiReviewProgressMarker} />
+                      <div>
+                        <strong>{step.label}</strong>
+                        <span>{step.description}</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </article>
           ) : null}
 
           {activeChatTab === "preview" &&

@@ -7,7 +7,6 @@ import type {
   AiProvider,
   AiProviderMetadata,
   AiProviderService,
-  LlmCodeSuggestion,
   LlmExplanation,
   LlmExplanationFallbackReason,
   LlmExplanationTarget
@@ -773,11 +772,7 @@ async function tryProvider(input: {
       provider: input.provider.provider,
       text: response.text
     });
-    const explanation = completeAmazonQTerraformCodeSuggestion({
-      explanation: parsedExplanation,
-      input: input.input,
-      provider: input.provider.provider
-    });
+    const explanation = parsedExplanation;
     const explanationWithMetadata = withProviderMetadata(explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
@@ -1006,84 +1001,6 @@ function parseProviderExplanationText(input: {
   }
 
   return parsed;
-}
-
-function completeAmazonQTerraformCodeSuggestion(input: {
-  readonly explanation: LlmExplanation;
-  readonly input: LlmExplanationInput;
-  readonly provider: AiProvider;
-}): LlmExplanation {
-  if (
-    input.provider !== "amazon_q" ||
-    input.input.target !== "terraform_error_explanation" ||
-    input.explanation.fallbackUsed ||
-    input.explanation.codeSuggestion !== undefined
-  ) {
-    return input.explanation;
-  }
-
-  const codeSuggestion = createStandaloneTerraformLineDeletionSuggestion(input.input);
-
-  if (codeSuggestion === undefined) {
-    return input.explanation;
-  }
-
-  return {
-    ...input.explanation,
-    codeSuggestion
-  };
-}
-
-function createStandaloneTerraformLineDeletionSuggestion(
-  input: Extract<LlmExplanationInput, { readonly target: "terraform_error_explanation" }>
-): LlmCodeSuggestion | undefined {
-  const diagnostic = input.result.diagnosticExplanation;
-  const lineNumber = diagnostic?.line;
-
-  if (
-    diagnostic === undefined ||
-    lineNumber === undefined ||
-    !isStandaloneTerraformSyntaxError(diagnostic.errorType) ||
-    input.terraformCodeContext === undefined ||
-    input.terraformCodeContext.trim().length === 0
-  ) {
-    return undefined;
-  }
-
-  const line = extractLine(input.terraformCodeContext, lineNumber);
-
-  if (line === undefined || line.trim().length === 0 || isLikelyTerraformBlockOrAttribute(line)) {
-    return undefined;
-  }
-
-  const lineBreak = input.terraformCodeContext.includes("\r\n") ? "\r\n" : "\n";
-  const currentCode = input.terraformCodeContext.includes(`${line}${lineBreak}`) ? `${line}${lineBreak}` : line;
-  const fileName = diagnostic.sourceFileName ?? "Terraform 파일";
-
-  return {
-    currentCode,
-    suggestedCode: "",
-    rationale: `${fileName} ${lineNumber}번째 줄의 \`${line.trim()}\` 코드는 Terraform block header나 attribute가 아니므로 삭제해야 합니다.`
-  };
-}
-
-function isStandaloneTerraformSyntaxError(errorType: string): boolean {
-  return errorType === "terraform.sync.block_header" || errorType === "terraform.unexpected_token";
-}
-
-function extractLine(value: string, lineNumber: number): string | undefined {
-  return value.split(/\r?\n/)[lineNumber - 1];
-}
-
-function isLikelyTerraformBlockOrAttribute(line: string): boolean {
-  const trimmed = line.trim();
-
-  return (
-    trimmed.startsWith("#") ||
-    trimmed.startsWith("//") ||
-    trimmed.endsWith("{") ||
-    /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)
-  );
 }
 
 function createAmazonQTerraformPlainTextExplanation(

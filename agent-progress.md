@@ -4,6 +4,8 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Terraform issue resolution now uses the diagnostic's source file instead of combined multi-file HCL, preserves a required closing brace when removing trailing tokens, and does not synthesize unsafe line deletions.
+- Terraform issue resolution no longer waits for an external AI provider; Terraform Agent Review still requires a successful Amazon Q Business response and shows four staged progress messages while waiting.
 - Branch `codex/fix-live-observation-redis-readiness` adds runtime-owned Redis ingress from the current ECS API and worker security groups to the external Runtime Cache security group, with fail-closed Terraform preconditions.
 - PR #423 is open. Apply run `29387480668` successfully created and state-verified the two API/worker Redis ingress rules; post-apply review run `29387561447` reported no infrastructure changes.
 - The complete runtime plan also contains unrelated drift (`5 add, 7 change, 2 destroy`), so it must not be applied as the incident repair.
@@ -21,6 +23,14 @@ Short English-only working log for the current agent context. Older records are 
 - Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
 
 ## Session Record
+
+### 2026-07-15 - Make Terraform issue resolution accurate and require Amazon Q Agent Review
+
+- Reproduced the production/local mismatch: production waited roughly 16 seconds for Terraform error assistance and 23 seconds for Preview review, while the shared multi-file context mapped a `main.tf:3` diagnostic to the wrong file frame.
+- Scoped issue context to `sourceFileName`, added the narrow `}trailing-token -> }` safe fix, and removed server/client deletion synthesis for ambiguous standalone lines.
+- Removed provider latency from Terraform issue resolution while keeping Agent Review provider-backed; successful Preview review now requires a non-fallback Amazon Q Business response.
+- Added a four-stage Agent Review progress card for code structure, resource/risk checks, Amazon Q Well-Architected review, and result assembly.
+- Verification: focused API tests passed 3/3; focused Web tests passed 12/12; `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed. Production deployment was not run.
 
 
 ### 2026-07-15 - Repair production Live Observation Runtime Cache ingress

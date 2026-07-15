@@ -30,6 +30,29 @@ export type TerraformSafeFixApplyResult = {
   readonly message: string;
 };
 
+type TerraformIssueCodeContextFile = {
+  readonly fileName: string;
+  readonly code: string;
+};
+
+export function selectTerraformIssueCodeContext(
+  files: readonly TerraformIssueCodeContextFile[],
+  diagnostic: TerraformDiagnostic
+): string {
+  if (diagnostic.sourceFileName) {
+    const sourceFile = files.find((file) => file.fileName === diagnostic.sourceFileName);
+
+    if (sourceFile) {
+      return sourceFile.code;
+    }
+  }
+
+  return files
+    .map((file) => file.code.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export type TerraformIssueFixPlan = {
   readonly canApply: boolean;
   readonly codePreview?: TerraformIssueCodePreview | undefined;
@@ -214,10 +237,7 @@ function createAmazonQTerraformIssueCodePreview({
   }
 
   if (codeSuggestion === undefined) {
-    return createAmazonQTerraformLineDeletionPreview({
-      diagnostic,
-      terraformCode
-    });
+    return undefined;
   }
 
   if (!terraformCode.includes(codeSuggestion.currentCode)) {
@@ -231,53 +251,6 @@ function createAmazonQTerraformIssueCodePreview({
     sourceLine: diagnostic.line ?? 1,
     source: "amazon_q"
   };
-}
-
-function createAmazonQTerraformLineDeletionPreview({
-  diagnostic,
-  terraformCode
-}: {
-  readonly diagnostic: TerraformDiagnostic;
-  readonly terraformCode: string;
-}): TerraformIssueCodePreview | undefined {
-  if (
-    diagnostic.line === undefined ||
-    !isStandaloneTerraformSyntaxDiagnostic(diagnostic)
-  ) {
-    return undefined;
-  }
-
-  const line = extractTerraformLine(terraformCode, diagnostic.line);
-
-  if (line === undefined || line.trim().length === 0 || isLikelyTerraformBlockOrAttribute(line)) {
-    return undefined;
-  }
-
-  const lineBreak = terraformCode.includes("\r\n") ? "\r\n" : "\n";
-  const currentCode = terraformCode.includes(`${line}${lineBreak}`) ? `${line}${lineBreak}` : line;
-
-  return {
-    currentCode,
-    nextCode: "",
-    rationale: `${formatTerraformDiagnosticLocation(diagnostic)}의 \`${line.trim()}\` 줄은 Terraform block header나 attribute가 아니므로 삭제해야 합니다.`,
-    sourceLine: diagnostic.line,
-    source: "amazon_q"
-  };
-}
-
-function isStandaloneTerraformSyntaxDiagnostic(diagnostic: TerraformDiagnostic): boolean {
-  return diagnostic.code === "terraform.sync.block_header" || diagnostic.code === "terraform.unexpected_token";
-}
-
-function isLikelyTerraformBlockOrAttribute(line: string): boolean {
-  const trimmed = line.trim();
-
-  return (
-    trimmed.startsWith("#") ||
-    trimmed.startsWith("//") ||
-    trimmed.endsWith("{") ||
-    /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)
-  );
 }
 
 function extractTerraformLine(code: string, lineNumber: number): string | undefined {

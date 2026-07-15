@@ -5692,6 +5692,115 @@
   padding: 18px;
 }
 
+.aiReviewProgressCard {
+  background:
+    radial-gradient(circle at 100% 0%, rgb(72 101 255 / 8%), transparent 42%),
+    var(--workspace-surface, #ffffff);
+}
+
+.aiReviewProgressHeader {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.aiReviewProgressHeader > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.aiReviewProgressHeader strong {
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.aiReviewProgressHeader span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.aiReviewProgressSpinner {
+  animation: ai-review-progress-spin 900ms linear infinite;
+  border: 2px solid rgb(72 101 255 / 18%);
+  border-radius: 999px;
+  border-top-color: var(--workspace-accent, #4865ff);
+  height: 22px;
+  width: 22px;
+}
+
+.aiReviewProgressSteps {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiReviewProgressSteps li {
+  align-items: start;
+  color: var(--workspace-muted, #60646c);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 12px minmax(0, 1fr);
+  padding: 8px 0;
+}
+
+.aiReviewProgressSteps li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aiReviewProgressSteps strong,
+.aiReviewProgressSteps span {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.aiReviewProgressSteps span {
+  font-size: 11px;
+}
+
+.aiReviewProgressSteps li[data-state="active"] strong {
+  color: var(--workspace-text, #171717);
+}
+
+.aiReviewProgressSteps li[data-state="pending"] {
+  opacity: 0.52;
+}
+
+.aiReviewProgressMarker {
+  background: var(--workspace-line, #d9d9df);
+  border-radius: 999px;
+  height: 8px;
+  margin-top: 5px;
+  width: 8px;
+}
+
+.aiReviewProgressSteps li[data-state="active"] .aiReviewProgressMarker {
+  background: var(--workspace-accent, #4865ff);
+  box-shadow: 0 0 0 4px rgb(72 101 255 / 12%);
+}
+
+.aiReviewProgressSteps li[data-state="complete"] .aiReviewProgressMarker {
+  background: var(--workspace-text, #171717);
+}
+
+@keyframes ai-review-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiReviewProgressSpinner {
+    animation: none;
+  }
+}
+
 .aiResultContext {
   color: var(--workspace-muted, #60646c);
   font-size: 12px;

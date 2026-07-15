@@ -66,11 +66,12 @@ import {
   type TerraformIssueRecord
 } from "./terraform-issues-state";
 import { replaceArchitectureDiagnostics } from "./architecture-diagnostics-state";
-import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
-  TerraformSafeFixApplyRequest,
-  TerraformSafeFixApplyResult
+import {
+  selectTerraformIssueCodeContext,
+  type TerraformIssueAiRequest,
+  type TerraformPreviewAiRequest,
+  type TerraformSafeFixApplyRequest,
+  type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { DeploymentAvailability } from "./deployment-availability";
@@ -238,7 +239,10 @@ export function WorkspaceRightPanel({
       onTerraformIssueAiRequest({
         id: Date.now(),
         issue,
-        terraformCode: terraformPanelRef.current?.getCurrentTerraformCode() ?? ""
+        terraformCode: selectTerraformIssueCodeContext(
+          terraformPanelRef.current?.getTerraformFiles() ?? [],
+          issue.diagnostic
+        )
       });
     },
     [onTerraformIssueAiRequest, openTerraformIssueSourceLocation]

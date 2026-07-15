@@ -26,7 +26,9 @@ export type TerraformCodeReplacementPreview = {
 
 export function getTerraformSafeFix(diagnostic: TerraformDiagnostic): AiTerraformSafeFix {
   const code = diagnostic.code ?? "terraform.unknown";
-  const applicable = APPLYABLE_TERRAFORM_SAFE_FIXES.has(code);
+  const applicable =
+    APPLYABLE_TERRAFORM_SAFE_FIXES.has(code) ||
+    (code === "terraform.unexpected_token" && isUnexpectedCodeAfterClosingBlock(diagnostic));
 
   if (code === "terraform.trailing_comma") {
     return {
@@ -43,6 +45,15 @@ export function getTerraformSafeFix(diagnostic: TerraformDiagnostic): AiTerrafor
       code,
       label: "Reference quote 제거",
       description: "Terraform reference를 문자열이 아니라 expression으로 해석되게 quote를 제거합니다."
+    };
+  }
+
+  if (code === "terraform.unexpected_token" && applicable) {
+    return {
+      applicable: true,
+      code,
+      label: "닫힌 block 뒤 코드 제거",
+      description: "닫는 중괄호는 유지하고 그 뒤에 붙은 알 수 없는 코드만 제거합니다."
     };
   }
 
@@ -85,6 +96,13 @@ export function applyTerraformSafeFix({
 
   if (diagnostic.code === "terraform.quoted_reference") {
     return applyLineFix(code, diagnostic.line, unquoteSimpleTerraformReference);
+  }
+
+  if (
+    diagnostic.code === "terraform.unexpected_token" &&
+    isUnexpectedCodeAfterClosingBlock(diagnostic)
+  ) {
+    return applyLineFix(code, diagnostic.line, removeCodeAfterClosingBrace);
   }
 
   return {
@@ -248,4 +266,18 @@ function unquoteSimpleTerraformReference(line: string): string {
     /(=\s*)"((?:data\.)?[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)"/,
     "$1$2"
   );
+}
+
+function isUnexpectedCodeAfterClosingBlock(diagnostic: TerraformDiagnostic): boolean {
+  return diagnostic.message.includes("닫힌 block 뒤에 알 수 없는 Terraform 코드가 붙어 있습니다.");
+}
+
+function removeCodeAfterClosingBrace(line: string): string {
+  const closingBraceIndex = line.lastIndexOf("}");
+
+  if (closingBraceIndex < 0 || line.slice(closingBraceIndex + 1).trim().length === 0) {
+    return line;
+  }
+
+  return line.slice(0, closingBraceIndex + 1);
 }

@@ -24,6 +24,142 @@ test("GET /health returns ok", async () => {
   await app.close();
 });
 
+test("Terraform 오류 설명 API는 provider를 호출하지 않고 deterministic 결과를 반환한다", async () => {
+  let providerCallCount = 0;
+  const app = buildApp({
+    createLlmExplanation: async () => {
+      providerCallCount += 1;
+      throw new Error("Terraform 설명 API에서 provider를 호출하면 안 됩니다.");
+    }
+  });
+
+  const errorResponse = await app.inject({
+    method: "POST",
+    url: "/api/ai/terraform-error-explanation",
+    payload: {
+      stage: "validate",
+      rawMessage: "terraform.unexpected_token",
+      diagnostic: {
+        severity: "error",
+        code: "terraform.unexpected_token",
+        message: "닫힌 block 뒤에 알 수 없는 Terraform 코드가 붙어 있습니다.",
+        sourceFileName: "main.tf",
+        line: 3
+      },
+      terraformCodeContext:
+        'resource "aws_s3_bucket" "s3_bucket" {\n  force_destroy = false\n}sdasd'
+    }
+  });
+  assert.equal(errorResponse.statusCode, 200);
+  assert.equal(providerCallCount, 0);
+  assert.deepEqual(errorResponse.json().diagnosticExplanation.codeSuggestion, {
+    currentCode: "}sdasd",
+    suggestedCode: "}",
+    rationale:
+      "The unexpected code after the closing Terraform block can be removed while preserving the closing brace.",
+    source: "rule"
+  });
+  assert.equal(
+    errorResponse
+      .json()
+      .diagnosticExplanation.codeFrame.find(
+        (line: { readonly isErrorLine: boolean }) => line.isErrorLine
+      )?.text,
+    "}sdasd"
+  );
+  await app.close();
+});
+
+test("Terraform 에이전트 리뷰 API는 Amazon Q 결과를 반드시 포함한다", async () => {
+  let providerCallCount = 0;
+  const app = buildApp({
+    createLlmExplanation: async (input) => {
+      providerCallCount += 1;
+      assert.equal(input.target, "terraform_preview_explanation");
+
+      return {
+        target: input.target,
+        summary: "Amazon Q가 Terraform 구성을 검토했습니다.",
+        highlights: ["S3 버킷의 삭제 보호 설정을 확인했습니다."],
+        nextActions: ["암호화와 액세스 차단 설정을 추가로 확인하세요."],
+        fallbackUsed: false,
+        wellArchitectedConclusion: "Amazon Q Well-Architected 검토가 완료되었습니다.",
+        providerMetadata: {
+          provider: "amazon_q",
+          service: "amazon_q_business",
+          routeTarget: input.target,
+          cacheHit: false,
+          cacheKey: "terraform-preview-test",
+          estimatedUsage: {
+            inputCharacters: 100,
+            inputTokensEstimate: 25
+          },
+          billingMode: "aws_credit_only",
+          generatedAt: "2026-07-15T00:00:00.000Z"
+        }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/terraform-preview-explanation",
+    payload: {
+      terraformCode: 'resource "aws_s3_bucket" "s3_bucket" {\n  force_destroy = false\n}'
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(providerCallCount, 1);
+  assert.equal(
+    response.json().llmExplanation?.summary,
+    "Amazon Q가 Terraform 구성을 검토했습니다."
+  );
+  assert.equal(response.json().detectedResources[0]?.terraformType, "aws_s3_bucket");
+
+  await app.close();
+});
+
+test("Terraform 에이전트 리뷰 API는 Amazon Q fallback을 성공 결과로 반환하지 않는다", async () => {
+  const app = buildApp({
+    createLlmExplanation: async (input) => ({
+      target: input.target,
+      summary: "deterministic fallback",
+      highlights: ["fallback"],
+      nextActions: ["retry"],
+      fallbackUsed: true,
+      fallbackReason: "provider_error",
+      providerMetadata: {
+        provider: "amazon_q",
+        service: "amazon_q_business",
+        routeTarget: input.target,
+        cacheHit: false,
+        cacheKey: "terraform-preview-fallback-test",
+        estimatedUsage: {
+          inputCharacters: 100,
+          inputTokensEstimate: 25
+        },
+        billingMode: "aws_credit_only",
+        generatedAt: "2026-07-15T00:00:00.000Z"
+      }
+    })
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/ai/terraform-preview-explanation",
+    payload: {
+      terraformCode: 'resource "aws_s3_bucket" "s3_bucket" {}'
+    }
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().error, "service_unavailable");
+  assert.equal(response.json().message, "Amazon Q 에이전트 리뷰 결과를 받지 못했습니다. 다시 시도해주세요.");
+
+  await app.close();
+});
+
 test("trusts exactly one ALB hop and ignores spoofed leading client IP headers", async () => {
   const app = buildApp();
 

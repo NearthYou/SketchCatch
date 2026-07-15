@@ -10,6 +10,8 @@ import {
   createTerraformPreviewPresentation,
   formatTerraformReviewContext
 } from "./workspace-ai-result-presentation";
+import { selectTerraformIssueCodeContext } from "./workspace-terraform-ai";
+import { applyTerraformSafeFix, getTerraformSafeFix } from "./terraform-safe-fixes";
 
 const preview = {
   checklist: [],
@@ -162,5 +164,84 @@ test("리뷰 문맥은 반복 접두어를 제거한다", () => {
   assert.equal(
     formatTerraformReviewContext("강조 코드 · module.network.aws_subnet.private"),
     "선택한 코드 기준"
+  );
+});
+
+test("오류 분석은 다중 Terraform 파일에서 진단 파일의 코드만 사용한다", () => {
+  const terraformCode = selectTerraformIssueCodeContext(
+    [
+      {
+        fileName: "providers.tf",
+        code: 'terraform {\n  required_providers {\n    aws = {\n      source = "hashicorp/aws"\n    }\n  }\n}'
+      },
+      {
+        fileName: "main.tf",
+        code: 'resource "aws_s3_bucket" "s3_bucket" {\n  force_destroy = false\n}sdasd'
+      }
+    ],
+    {
+      severity: "error",
+      code: "terraform.unexpected_token",
+      message: "닫힌 block 뒤에 알 수 없는 Terraform 코드가 붙어 있습니다.",
+      sourceFileName: "main.tf",
+      line: 3
+    }
+  );
+
+  assert.equal(
+    terraformCode,
+    'resource "aws_s3_bucket" "s3_bucket" {\n  force_destroy = false\n}sdasd'
+  );
+});
+
+test("닫힌 block 뒤 토큰은 닫는 중괄호를 보존해서 수정한다", () => {
+  const unexpectedTokenDiagnostic = {
+    severity: "error",
+    code: "terraform.unexpected_token",
+    message: "닫힌 block 뒤에 알 수 없는 Terraform 코드가 붙어 있습니다.",
+    sourceFileName: "main.tf",
+    line: 3
+  } satisfies TerraformDiagnostic;
+
+  assert.equal(getTerraformSafeFix(unexpectedTokenDiagnostic).applicable, true);
+  assert.deepEqual(
+    applyTerraformSafeFix({
+      code: 'resource "aws_s3_bucket" "s3_bucket" {\n  force_destroy = false\n}sdasd',
+      diagnostic: unexpectedTokenDiagnostic
+    }),
+    {
+      applied: true,
+      code: 'resource "aws_s3_bucket" "s3_bucket" {\n  force_destroy = false\n}',
+      message: "Terraform 안전 수정안을 적용했습니다."
+    }
+  );
+});
+
+test("독립된 알 수 없는 코드 줄은 의도를 단정해 자동 삭제하지 않는다", () => {
+  const standaloneTokenDiagnostic = {
+    severity: "error",
+    code: "terraform.unexpected_token",
+    message: "알 수 없는 Terraform 코드 줄입니다. resource/data block 또는 attribute 형식으로 작성하세요.",
+    sourceFileName: "main.tf",
+    line: 1
+  } satisfies TerraformDiagnostic;
+
+  assert.equal(getTerraformSafeFix(standaloneTokenDiagnostic).applicable, false);
+  assert.equal(
+    createTerraformIssuePresentation({
+      diagnostic: standaloneTokenDiagnostic,
+      explanation: {
+        ...explanation,
+        diagnosticExplanation: {
+          ...explanation.diagnosticExplanation,
+          codeFrame: [{ isErrorLine: true, lineNumber: 1, text: "sdasd" }],
+          errorType: "terraform.unexpected_token",
+          line: 1,
+          sourceFileName: "main.tf"
+        }
+      },
+      terraformCode: "sdasd"
+    }).canApply,
+    false
   );
 });

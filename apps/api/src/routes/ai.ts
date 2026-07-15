@@ -23,6 +23,7 @@ import type {
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   DesignSimulationResult,
+  LlmExplanation,
   RepositoryAnalysisTemplateId,
   SourceRepositoryAnalysisResult,
   TranscribeConfirmation,
@@ -98,6 +99,29 @@ const SAFETY_EXPLANATION_CACHE_NAMESPACE = "ai:safety-finding-explanation:v1";
 const SAFETY_EXPLANATION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
 const PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE = "pre-deployment-deep-scan:v1";
+
+class AmazonQTerraformReviewUnavailableError extends Error {
+  readonly statusCode = 503;
+  readonly errorCode = "service_unavailable";
+  readonly exposeMessage = true;
+
+  constructor() {
+    super("Amazon Q 에이전트 리뷰 결과를 받지 못했습니다. 다시 시도해주세요.");
+    this.name = "AmazonQTerraformReviewUnavailableError";
+  }
+}
+
+function requireAmazonQTerraformReview(explanation: LlmExplanation): LlmExplanation {
+  if (
+    explanation.fallbackUsed ||
+    explanation.providerMetadata?.provider !== "amazon_q" ||
+    explanation.providerMetadata.service !== "amazon_q_business"
+  ) {
+    throw new AmazonQTerraformReviewUnavailableError();
+  }
+
+  return explanation;
+}
 const PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS = 5 * 60 * 1000;
 const PRE_DEPLOYMENT_DEEP_SCAN_MAX_LOCAL_ENTRIES = 100;
 type LocalDeepScanEntry = {
@@ -600,12 +624,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       });
 
       return {
-        ...result,
-        llmExplanation: await createLlmExplanation({
-          target: "terraform_error_explanation",
-          result,
-          terraformCodeContext: body.terraformCodeContext
-        })
+        ...result
       };
     }
   );
@@ -615,13 +634,14 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     async (request): Promise<AiTerraformPreviewExplanationResult> => {
       const body = terraformPreviewExplanationBodySchema.parse(request.body);
       const result = explainTerraformPreview(body.terraformCode);
+      const llmExplanation = await createLlmExplanation({
+        target: "terraform_preview_explanation",
+        result
+      });
 
       return {
         ...result,
-        llmExplanation: await createLlmExplanation({
-          target: "terraform_preview_explanation",
-          result
-        })
+        llmExplanation: requireAmazonQTerraformReview(llmExplanation)
       };
     }
   );
