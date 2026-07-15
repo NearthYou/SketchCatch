@@ -1246,7 +1246,8 @@ export function assertGitOpsTarget(
     !target.awsRoleArn
   ) {
     throw new GitCicdHandoffProviderConflictError(
-      "GitOps application handoff requires a confirmed project deployment target"
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED",
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED"
     );
   }
 
@@ -1262,7 +1263,8 @@ export function assertGitOpsTarget(
 
   if (target.runtimeConfig?.runtimeTargetKind !== target.runtimeTargetKind) {
     throw new GitCicdHandoffProviderConflictError(
-      "GitOps application handoff requires a confirmed project deployment target"
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED",
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED"
     );
   }
 

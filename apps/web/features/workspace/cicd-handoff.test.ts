@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Deployment, GitCicdMonitoringConfig, SourceRepository } from "@sketchcatch/types";
-import { buildGitCicdHandoffRequest, selectGitCicdSourceDeployment } from "./cicd-handoff";
+import type {
+  Deployment,
+  GitCicdMonitoringConfig,
+  ProjectDeploymentTarget,
+  SourceRepository
+} from "@sketchcatch/types";
+import {
+  buildGitCicdHandoffRequest,
+  getGitCicdDeploymentTargetBlocker,
+  selectGitCicdSourceDeployment
+} from "./cicd-handoff";
 
 function deployment(
   overrides: Partial<Deployment> & Pick<Deployment, "id" | "createdAt">
@@ -90,4 +99,34 @@ test("uses the server-recorded approved plan artifact as the user acceptance id"
   assert.equal(request.sourceRepositoryId, "repository-1");
   assert.equal(request.targetBranch, "main");
   assert.equal(request.deploymentMode, "infra_and_app");
+});
+
+test("blocks Git handoff before POST when the project deployment target is missing", () => {
+  assert.equal(getGitCicdDeploymentTargetBlocker(null), "target_confirmation_required");
+});
+
+test("blocks ECS Git handoff before POST when the external output URL is missing", () => {
+  const target = {
+    confirmedBuildConfig: {},
+    runtimeTargetKind: "ecs_fargate",
+    runtimeConfig: {
+      runtimeTargetKind: "ecs_fargate",
+      outputUrl: null
+    }
+  } as ProjectDeploymentTarget;
+
+  assert.equal(getGitCicdDeploymentTargetBlocker(target), "output_url_required");
+});
+
+test("allows Git handoff preflight when the confirmed deployment target is complete", () => {
+  const target = {
+    confirmedBuildConfig: {},
+    runtimeTargetKind: "ecs_fargate",
+    runtimeConfig: {
+      runtimeTargetKind: "ecs_fargate",
+      outputUrl: "https://api.example.com"
+    }
+  } as ProjectDeploymentTarget;
+
+  assert.equal(getGitCicdDeploymentTargetBlocker(target), null);
 });

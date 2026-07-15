@@ -4,7 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-
+- Production request `req-c2` was a local Git/CI/CD precondition conflict, not a duplicate GitHub resource: the target repository had no SketchCatch branch or PR, and project `0bdf56aa-68b7-4382-b37f-31d8996136c1` had no `project_deployment_targets` row.
+- The CI/CD console now loads the project deployment target, blocks PR creation before POST when confirmation or the ECS output URL is missing, and links directly to project target settings.
+- GitOps target conflicts expose stable precondition codes; mapped conflicts retain actionable Korean guidance and unknown conflicts use a neutral state-conflict message instead of the misleading duplicate-information message.
 - `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
 - This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
 - Before the merge, focused notification SSE fixes passed API notification tests 17/17, Web notification tests 6/6, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
@@ -25,6 +27,12 @@ Short English-only working log for the current agent context. Older records are 
 - Added a red-green regression test for the reload recovery path; focused dashboard tests, harness, lint, typecheck, build, and diff checks pass.
 - The full Web baseline remains non-green on unrelated existing Diagram/Area contract tests; no cloud mutation, deployment, Git handoff, or credential change was performed.
 
+### 2026-07-15 - Diagnose and fix misleading Git/CI/CD handoff conflict
+
+- Reproduced the production HTTP 409 after regenerating and approving the current Terraform apply plan; verified that no GitHub PR or SketchCatch branch was created.
+- Queried the production configuration through an isolated read-only ECS diagnostic task and confirmed the project deployment target record is absent.
+- Added fail-closed Web preflight, a direct target-settings recovery link, stable API conflict codes, and actionable Korean conflict messages.
+- Verification: focused API tests passed 2/2 and focused Web tests passed 15/15; `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Full `pnpm test` remains non-green only on the three pre-existing three-tier Template layout/parent contract failures in `packages/types`.
 
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 
