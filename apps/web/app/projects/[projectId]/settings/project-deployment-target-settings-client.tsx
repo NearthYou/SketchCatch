@@ -11,6 +11,7 @@ import { useAuth } from "../../../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../../../lib/api-client";
 import {
   getProjectDeploymentTarget,
+  getProjectDraft,
   listAwsConnections,
   listSourceRepositories,
   putProjectDeploymentTarget
@@ -87,10 +88,11 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
       setRequestState("loading");
       setMessage("");
       try {
-        const [nextConnections, nextTarget, sourceRepositories] = await Promise.all([
+        const [nextConnections, nextTarget, sourceRepositories, projectDraftResponse] = await Promise.all([
           listAwsConnections(),
           getProjectDeploymentTarget(projectId),
-          listSourceRepositories(projectId)
+          listSourceRepositories(projectId),
+          getProjectDraft(projectId)
         ]);
         if (cancelled) return;
         const nextSourceRepository = sourceRepositories.find(
@@ -120,7 +122,8 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
             nextConnections,
             nextSourceRepository,
             nextEcsDefaults,
-            preferEcsDefaults ? "prefer_ecs_defaults" : "preserve_target"
+            preferEcsDefaults ? "prefer_ecs_defaults" : "preserve_target",
+            projectDraftResponse.draft?.diagramJson
           )
         );
         setRequestState("idle");

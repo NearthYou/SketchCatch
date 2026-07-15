@@ -62,6 +62,153 @@ test("ECS defaults are immediately saveable without a fabricated output URL", ()
   assert.equal(request.confirmedBuildConfig.healthCheckPath, "/");
 });
 
+test("empty ECS settings use Source Repository evidence and current Architecture defaults", () => {
+  const repositoryRevision = "b".repeat(40);
+  const draft = createDeploymentTargetDraft(
+    null,
+    [verifiedConnection],
+    {
+      id: "source-repository-1",
+      projectId: "project-1",
+      provider: "github",
+      status: "active",
+      githubInstallationId: "123",
+      githubRepositoryId: "456",
+      owner: "whiskend",
+      name: "audience-live-check",
+      defaultBranch: "main",
+      repositoryUrl: "https://github.com/whiskend/audience-live-check",
+      visibility: "public",
+      archived: false,
+      analysis: {
+        repositoryRevision,
+        analyzedAt: "2026-07-15T00:00:00.000Z",
+        aiHandoff: {
+          status: "template_selected",
+          templateId: "ecs-fargate-container-app",
+          selectionReasons: ["A Dockerized API is present."],
+          applicationUnits: [
+            {
+              id: "api",
+              rootPath: "apps/api",
+              kind: "backend",
+              frameworks: ["express"],
+              evidencePaths: ["apps/api/Dockerfile"]
+            }
+          ],
+          evidence: [
+            {
+              kind: "dockerfile",
+              path: "apps/api/Dockerfile",
+              applicationUnitId: "api",
+              signals: ["EXPOSE 8080"]
+            }
+          ],
+          architectureFacts: [],
+          missingEvidence: []
+        }
+      },
+      disconnectedAt: null,
+      createdAt: "2026-07-15T00:00:00.000Z",
+      updatedAt: "2026-07-15T00:00:00.000Z"
+    },
+    null,
+    "preserve_target",
+    {
+      nodes: [
+        deploymentNode("aws_ecr_repository", { name: "audience-live-check-api" }),
+        deploymentNode("aws_ecs_cluster", { name: "audience-live-check-cluster" }),
+        deploymentNode("aws_ecs_service", {
+          name: "audience-live-check-service",
+          loadBalancer: { containerName: "api" }
+        }),
+        deploymentNode("aws_lb_target_group", {
+          healthCheck: { path: "/health" }
+        })
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    }
+  );
+
+  assert.equal(draft.sourceRoot, "apps/api");
+  assert.equal(draft.evidencePath, "apps/api/Dockerfile");
+  assert.equal(draft.commitSha, repositoryRevision);
+  assert.equal(draft.codeBuildProjectName, "audience-live-check-api-build");
+  assert.equal(draft.ecrRepositoryName, "audience-live-check-api");
+  assert.equal(draft.clusterName, "audience-live-check-cluster");
+  assert.equal(draft.serviceName, "audience-live-check-service");
+  assert.equal(draft.containerName, "api");
+  assert.equal(draft.healthCheckPath, "/health");
+  assert.equal(draft.outputUrl, "");
+});
+
+test("Architecture defaults do not replace saved ECS settings", () => {
+  const draft = createDeploymentTargetDraft(
+    {
+      projectId: "project-1",
+      provider: "aws",
+      connectionId: verifiedConnection.id,
+      region: verifiedConnection.region,
+      runtimeTargetKind: "ecs_fargate",
+      confirmedBuildConfig: {
+        sourceRoot: ".",
+        evidence: [{ kind: "dockerfile", path: "Dockerfile.prod" }],
+        installPreset: "none",
+        buildPreset: "docker_build",
+        artifactOutputPath: null,
+        runtimeEntrypoint: null,
+        healthCheckPath: "/ready",
+        dockerfilePath: "Dockerfile.prod",
+        packageManifestPath: null,
+        samTemplatePath: null,
+        appSpecPath: null,
+        staticOutputPath: null,
+        exactSemVerTag: null,
+        manifestVersion: null,
+        confirmedCommitSha: "c".repeat(40),
+        confirmedAt: "2026-07-15T00:00:00.000Z"
+      },
+      runtimeConfig: {
+        runtimeTargetKind: "ecs_fargate",
+        codeBuildProjectName: "saved-build",
+        ecrRepositoryName: "saved-ecr",
+        clusterName: "saved-cluster",
+        serviceName: "saved-service",
+        containerName: "saved-container",
+        outputUrl: "https://saved.example.com"
+      },
+      rolloutStrategy: "all_at_once",
+      createdAt: "2026-07-15T00:00:00.000Z",
+      updatedAt: "2026-07-15T00:00:00.000Z"
+    },
+    [verifiedConnection],
+    null,
+    null,
+    "preserve_target",
+    {
+      nodes: [
+        deploymentNode("aws_ecr_repository", { name: "board-ecr" }),
+        deploymentNode("aws_ecs_cluster", { name: "board-cluster" }),
+        deploymentNode("aws_ecs_service", {
+          name: "board-service",
+          loadBalancer: { containerName: "board-container" }
+        })
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    }
+  );
+
+  assert.equal(draft.codeBuildProjectName, "saved-build");
+  assert.equal(draft.ecrRepositoryName, "saved-ecr");
+  assert.equal(draft.clusterName, "saved-cluster");
+  assert.equal(draft.serviceName, "saved-service");
+  assert.equal(draft.containerName, "saved-container");
+  assert.equal(draft.healthCheckPath, "/ready");
+  assert.equal(draft.outputUrl, "https://saved.example.com");
+});
+
 test("callback preference replaces an existing non-ECS target with complete ECS defaults", () => {
   const draft = createDeploymentTargetDraft(
     {
@@ -103,3 +250,22 @@ test("callback preference replaces an existing non-ECS target with complete ECS 
   assert.equal(draft.containerName, "web");
   assert.equal(draft.outputUrl, "");
 });
+
+function deploymentNode(resourceType: string, values: Record<string, unknown>) {
+  return {
+    id: resourceType,
+    type: resourceType,
+    kind: "resource" as const,
+    position: { x: 0, y: 0 },
+    size: { width: 120, height: 80 },
+    label: resourceType,
+    locked: false,
+    zIndex: 1,
+    parameters: {
+      resourceType,
+      resourceName: resourceType,
+      fileName: "main.tf",
+      values
+    }
+  };
+}

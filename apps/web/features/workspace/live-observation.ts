@@ -13,6 +13,13 @@ export type LiveObservationDeploymentCandidate = {
   readonly completedAt: string | null;
 };
 
+export type LiveObservationReleaseCandidate = {
+  readonly deploymentId: string | null;
+  readonly status: string;
+  readonly outputUrl: string | null;
+  readonly completedAt: string | null;
+};
+
 export type LiveObservationInstanceMarker = {
   readonly key: string;
   readonly label: string;
@@ -83,6 +90,45 @@ export function getEligibleLiveObservationDeployments<
         new Date(right.completedAt ?? 0).getTime() -
         new Date(left.completedAt ?? 0).getTime()
     );
+}
+
+export function getLiveObservationOutputUrl(
+  deploymentId: string,
+  releases: readonly LiveObservationReleaseCandidate[]
+): string | null {
+  const candidates = releases
+    .filter(
+      (release) =>
+        release.deploymentId === deploymentId &&
+        release.status === "succeeded" &&
+        release.completedAt !== null
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.completedAt ?? 0).getTime() -
+        new Date(left.completedAt ?? 0).getTime()
+    );
+
+  for (const release of candidates) {
+    if (!release.outputUrl) continue;
+
+    try {
+      const url = new URL(release.outputUrl);
+      if (
+        url.protocol === "https:" &&
+        url.username === "" &&
+        url.password === "" &&
+        url.search === "" &&
+        url.hash === ""
+      ) {
+        return url.toString();
+      }
+    } catch {
+      // Ignore malformed release output URLs and continue to an older valid release.
+    }
+  }
+
+  return null;
 }
 
 export function getLiveObservationAudienceUrl(

@@ -3,6 +3,7 @@ import type {
   BuildEvidenceKind,
   BuildExecutionPreset,
   BuildInstallPreset,
+  DiagramJson,
   ProjectDeploymentTarget,
   PutProjectDeploymentTargetRequest,
   RuntimeTargetKind,
@@ -75,7 +76,8 @@ export function createDeploymentTargetDraft(
   connections: readonly AwsConnection[],
   sourceRepository?: SourceRepository | null,
   ecsDefaultsInput?: EcsFargateDeploymentDefaultsInput | null,
-  mode: "preserve_target" | "prefer_ecs_defaults" = "preserve_target"
+  mode: "preserve_target" | "prefer_ecs_defaults" = "preserve_target",
+  diagramJson?: DiagramJson | null
 ): ProjectDeploymentTargetDraft {
   const ecsDefaults = (!target || mode === "prefer_ecs_defaults") && ecsDefaultsInput
     ? createEcsFargateDeploymentDefaults(ecsDefaultsInput)
@@ -97,38 +99,88 @@ export function createDeploymentTargetDraft(
   const staticConfig = target?.runtimeConfig?.runtimeTargetKind === "static_site"
     ? target.runtimeConfig
     : null;
-  const suggestion = target || preferEcsDefaults
-    ? null
-    : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  const suggestion = getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  const architectureDefaults = runtimeTargetKind === "ecs_fargate"
+    ? getEcsFargateArchitectureDefaults(diagramJson)
+    : null;
+  const repositoryRuntimeNames = runtimeTargetKind === "ecs_fargate" && sourceRepository
+    ? createEcsFargateRuntimeNames(sourceRepository.name)
+    : null;
+  const defaultEcrRepositoryName = firstNonBlank(
+    ecsDefaults?.ecrRepositoryName,
+    architectureDefaults?.ecrRepositoryName,
+    repositoryRuntimeNames?.ecrRepositoryName
+  );
   const codeBuildProjectName = preferEcsDefaults
-    ? ecsConfig?.codeBuildProjectName.trim() || ecsDefaults.codeBuildProjectName
-    : target?.runtimeConfig?.codeBuildProjectName ?? ecsDefaults?.codeBuildProjectName ?? "";
+    ? firstNonBlank(ecsConfig?.codeBuildProjectName, ecsDefaults.codeBuildProjectName)
+    : firstNonBlank(
+        target?.runtimeConfig?.codeBuildProjectName,
+        ecsDefaults?.codeBuildProjectName,
+        architectureDefaults?.codeBuildProjectName,
+        defaultEcrRepositoryName ? `${defaultEcrRepositoryName}-build` : null
+      );
   const ecrRepositoryName = preferEcsDefaults
-    ? ecsConfig?.ecrRepositoryName.trim() || ecsDefaults.ecrRepositoryName
-    : ecsConfig?.ecrRepositoryName ?? ecsDefaults?.ecrRepositoryName ?? "";
+    ? firstNonBlank(ecsConfig?.ecrRepositoryName, ecsDefaults.ecrRepositoryName)
+    : firstNonBlank(
+        ecsConfig?.ecrRepositoryName,
+        ecsDefaults?.ecrRepositoryName,
+        architectureDefaults?.ecrRepositoryName,
+        repositoryRuntimeNames?.ecrRepositoryName
+      );
   const clusterName = preferEcsDefaults
-    ? ecsConfig?.clusterName.trim() || ecsDefaults.clusterName
-    : ecsConfig?.clusterName ?? ecsDefaults?.clusterName ?? "";
+    ? firstNonBlank(ecsConfig?.clusterName, ecsDefaults.clusterName)
+    : firstNonBlank(
+        ecsConfig?.clusterName,
+        ecsDefaults?.clusterName,
+        architectureDefaults?.clusterName,
+        repositoryRuntimeNames?.clusterName
+      );
   const serviceName = preferEcsDefaults
-    ? ecsConfig?.serviceName.trim() || ecsDefaults.serviceName
-    : ecsConfig?.serviceName ?? ecsDefaults?.serviceName ?? "";
+    ? firstNonBlank(ecsConfig?.serviceName, ecsDefaults.serviceName)
+    : firstNonBlank(
+        ecsConfig?.serviceName,
+        ecsDefaults?.serviceName,
+        architectureDefaults?.serviceName,
+        repositoryRuntimeNames?.serviceName
+      );
   const containerName = preferEcsDefaults
-    ? ecsConfig?.containerName.trim() || ecsDefaults.containerName
-    : ecsConfig?.containerName ?? ecsDefaults?.containerName ?? "";
+    ? firstNonBlank(ecsConfig?.containerName, ecsDefaults.containerName)
+    : firstNonBlank(
+        ecsConfig?.containerName,
+        ecsDefaults?.containerName,
+        architectureDefaults?.containerName,
+        repositoryRuntimeNames?.containerName
+      );
   return {
     connectionId:
       target?.connectionId ?? connections.find((item) => item.status === "verified")?.id ?? "",
     runtimeTargetKind,
-    sourceRoot: config?.sourceRoot ?? ecsDefaults?.sourceRoot ?? suggestion?.sourceRoot ?? ".",
+    sourceRoot: firstNonBlank(
+      config?.sourceRoot,
+      ecsDefaults?.sourceRoot,
+      suggestion?.sourceRoot,
+      "."
+    ),
     evidencePath:
-      config?.evidence[0]?.path ??
-      ecsDefaults?.evidencePath ??
-      suggestion?.evidencePath ??
-      getDefaultDeploymentEvidencePath(runtimeTargetKind),
-    commitSha: config?.confirmedCommitSha ?? ecsDefaults?.commitSha ?? suggestion?.commitSha ?? "",
+      firstNonBlank(
+        config?.evidence[0]?.path,
+        ecsDefaults?.evidencePath,
+        suggestion?.evidencePath,
+        getDefaultDeploymentEvidencePath(runtimeTargetKind)
+      ),
+    commitSha: firstNonBlank(
+      config?.confirmedCommitSha,
+      ecsDefaults?.commitSha,
+      suggestion?.commitSha
+    ),
     version: config?.exactSemVerTag ?? config?.manifestVersion ?? "",
     installPreset: config?.installPreset ?? suggestion?.installPreset ?? "none",
-    healthCheckPath: config?.healthCheckPath ?? ecsDefaults?.healthCheckPath ?? "/health",
+    healthCheckPath: firstNonBlank(
+      config?.healthCheckPath,
+      architectureDefaults?.healthCheckPath,
+      ecsDefaults?.healthCheckPath,
+      "/health"
+    ),
     codeBuildProjectName,
     ecrRepositoryName,
     clusterName,
@@ -155,6 +207,67 @@ export function createDeploymentTargetDraft(
       ecsDefaults?.outputUrl ?? "",
     evidenceSuggested: Boolean(ecsDefaults || suggestion)
   };
+}
+
+function getEcsFargateArchitectureDefaults(diagramJson?: DiagramJson | null): {
+  codeBuildProjectName: string;
+  ecrRepositoryName: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  healthCheckPath: string;
+} | null {
+  if (!diagramJson) return null;
+
+  const codeBuildValues = getSingleResourceValues(diagramJson, "aws_codebuild_project");
+  const ecrValues = getSingleResourceValues(diagramJson, "aws_ecr_repository");
+  const clusterValues = getSingleResourceValues(diagramJson, "aws_ecs_cluster");
+  const serviceValues = getSingleResourceValues(diagramJson, "aws_ecs_service");
+  const targetGroupValues = getSingleResourceValues(diagramJson, "aws_lb_target_group");
+  const ecrRepositoryName = readString(ecrValues, "name");
+  const loadBalancer = readRecord(serviceValues, "loadBalancer");
+  const healthCheck = readRecord(targetGroupValues, "healthCheck");
+
+  return {
+    codeBuildProjectName: firstNonBlank(
+      readString(codeBuildValues, "name"),
+      ecrRepositoryName ? `${ecrRepositoryName}-build` : null
+    ),
+    ecrRepositoryName,
+    clusterName: readString(clusterValues, "name"),
+    serviceName: readString(serviceValues, "name"),
+    containerName: readString(loadBalancer, "containerName"),
+    healthCheckPath: readString(healthCheck, "path")
+  };
+}
+
+function getSingleResourceValues(
+  diagramJson: DiagramJson,
+  resourceType: string
+): Record<string, unknown> | null {
+  const matches = diagramJson.nodes.filter(
+    (node) => node.parameters?.resourceType === resourceType
+  );
+  return matches.length === 1 ? matches[0]?.parameters?.values ?? null : null;
+}
+
+function readRecord(
+  values: Record<string, unknown> | null,
+  key: string
+): Record<string, unknown> | null {
+  const value = values?.[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readString(values: Record<string, unknown> | null, key: string): string {
+  const value = values?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function firstNonBlank(...values: readonly (string | null | undefined)[]): string {
+  return values.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() ?? "";
 }
 
 export function createEcsFargateDeploymentDefaults(
