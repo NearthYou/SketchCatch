@@ -5,7 +5,10 @@ import type {
   DiagramNode,
   DiagramVariable
 } from "../../../../packages/types/src";
-import type { ArchitectureBoardModulePattern } from "../architecture-board-compiler/architecture-board-knowledge-contract";
+import {
+  ARCHITECTURE_BOARD_MODULE_PATTERN_EXTRACTOR_VERSION,
+  type ArchitectureBoardModulePattern
+} from "../architecture-board-compiler/architecture-board-knowledge-contract";
 import { architectureBoardKnowledge } from "../architecture-board-compiler/architecture-board-knowledge";
 import {
   curatedModules,
@@ -29,8 +32,8 @@ test("catalog는 생성된 Module Pattern Knowledge를 그대로 노출한다", 
 });
 
 test("Module 추가는 source fragment의 node, edge, containment와 route를 함께 옮긴다", () => {
-  const pattern = architectureBoardKnowledge.modulePatterns.find(
-    ({ id }) => id === "relational-data-layer"
+  const pattern = architectureBoardKnowledge.modulePatterns.find(({ edges }) =>
+    edges.some(({ route }) => route)
   );
   assert.ok(pattern);
 
@@ -277,7 +280,7 @@ function createVariablePattern(): ArchitectureBoardModulePattern {
       }
     ],
     provenance: {
-      extractorVersion: "architecture-board-module-pattern-extractor/v1",
+      extractorVersion: ARCHITECTURE_BOARD_MODULE_PATTERN_EXTRACTOR_VERSION,
       representativeTemplateId: "template-variable",
       sourceTemplateIds: ["template-variable"]
     }

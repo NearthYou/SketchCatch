@@ -47,6 +47,20 @@ test("generator는 이름 있는 기능별·용도별 Module pattern을 실제 T
           metadata?.parentAreaNodeId === undefined || nodeIds.has(metadata.parentAreaNodeId)
       )
     );
+    const nodeById = new Map(pattern.nodes.map((node) => [node.id, node]));
+    for (const node of pattern.nodes) {
+      const parentId = node.metadata?.parentAreaNodeId;
+      if (!parentId) continue;
+      const parent = nodeById.get(parentId);
+      assert.ok(parent, `${pattern.id}/${node.id} parent must exist`);
+      assert.ok(
+        node.position.x >= parent.position.x &&
+          node.position.y >= parent.position.y &&
+          node.position.x + node.size.width <= parent.position.x + parent.size.width &&
+          node.position.y + node.size.height <= parent.position.y + parent.size.height,
+        `${pattern.id}/${node.id} must fit inside ${parentId}`
+      );
+    }
     assert.ok(
       pattern.edges.every(
         ({ sourceNodeId, targetNodeId }) => nodeIds.has(sourceNodeId) && nodeIds.has(targetNodeId)
@@ -102,6 +116,17 @@ test("generator는 이름 있는 기능별·용도별 Module pattern을 실제 T
   }
 
   assert.ok(routedEdgeCount > 0);
+  const containerImageDelivery = modulePatterns.find(({ id }) => id === "container-image-delivery");
+  assert.ok(containerImageDelivery);
+  const repository = containerImageDelivery.nodes.find(
+    ({ parameters }) => parameters?.resourceType === "aws_ecr_repository"
+  );
+  const task = containerImageDelivery.nodes.find(
+    ({ parameters }) => parameters?.resourceType === "aws_ecs_task_definition"
+  );
+  assert.ok(repository);
+  assert.ok(task);
+  assert.equal(rectanglesOverlap(repository, task), false);
   const relationalDataLayer = modulePatterns.find(({ id }) => id === "relational-data-layer");
   assert.ok(relationalDataLayer);
   const relationalAddresses = new Set(
@@ -120,6 +145,18 @@ test("generator는 이름 있는 기능별·용도별 Module pattern을 실제 T
   assert.equal(relationalAddresses.has("aws_subnet.public_subnet_b"), false);
   assert.deepEqual(sourceArtifact, generatedArchitectureBoardKnowledgeArtifact);
 });
+
+function rectanglesOverlap(
+  left: ArchitectureBoardModulePattern["nodes"][number],
+  right: ArchitectureBoardModulePattern["nodes"][number]
+): boolean {
+  return (
+    left.position.x < right.position.x + right.size.width &&
+    left.position.x + left.size.width > right.position.x &&
+    left.position.y < right.position.y + right.size.height &&
+    left.position.y + left.size.height > right.position.y
+  );
+}
 
 function extractTerraformResourceAddresses(value: unknown): string[] {
   if (typeof value === "string") {

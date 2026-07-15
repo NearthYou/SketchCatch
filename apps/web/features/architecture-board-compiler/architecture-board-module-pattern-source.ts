@@ -174,7 +174,7 @@ const MODULE_PATTERN_SEEDS: readonly ArchitectureBoardModulePatternSeed[] = [
     description: "Database, subnet group, 보안 경계를 하나의 데이터 계층으로 구성합니다.",
     lenses: [
       { kind: "functional", key: "database", label: "데이터베이스" },
-      { kind: "purpose", key: "high-availability-data", label: "고가용성 데이터 계층" }
+      { kind: "purpose", key: "relational-data-layer", label: "관계형 데이터 계층" }
     ],
     requiredResourceTypeGroups: [["aws_db_instance", "aws_docdb_cluster", "aws_rds_cluster"]],
     includedResourceTypes: [
@@ -333,6 +333,7 @@ export function extractArchitectureBoardModulePatternCandidates(
         .filter(({ id }) => selectedIds.has(id))
         .map(cloneValue)
         .sort((left, right) => left.id.localeCompare(right.id));
+      const fittedNodes = refitSelectedPresentationAncestors(nodes, source.diagram.nodes);
       const edges = source.diagram.edges
         .filter(
           ({ sourceNodeId, targetNodeId }) =>
@@ -348,17 +349,100 @@ export function extractArchitectureBoardModulePatternCandidates(
       return {
         sourceTemplateId: source.id,
         structuralFingerprint: createArchitectureBoardModulePatternStructuralFingerprint(
-          nodes,
+          fittedNodes,
           edges
         ),
-        nodes,
+        nodes: fittedNodes,
         edges,
         variables,
         dependencyResourceCount: nodes.filter(
           (node) => node.kind === "resource" && !component.has(node.id)
         ).length
       };
+    })
+    .filter(
+      (candidate) =>
+        candidate.nodes.length !== source.diagram.nodes.length ||
+        candidate.edges.length !== source.diagram.edges.length
+    );
+}
+
+function refitSelectedPresentationAncestors(
+  selectedNodes: readonly DiagramNode[],
+  sourceNodes: readonly DiagramNode[]
+): DiagramNode[] {
+  const sourceNodeById = new Map(sourceNodes.map((node) => [node.id, node]));
+  const nextNodeById = new Map(selectedNodes.map((node) => [node.id, cloneValue(node)]));
+  const designAreas = selectedNodes
+    .filter(({ kind }) => kind === "design")
+    .sort(
+      (left, right) =>
+        presentationDepth(right, sourceNodeById) - presentationDepth(left, sourceNodeById) ||
+        left.id.localeCompare(right.id)
+    );
+
+  for (const area of designAreas) {
+    const currentArea = nextNodeById.get(area.id);
+    const sourceArea = sourceNodeById.get(area.id);
+    if (!currentArea || !sourceArea) continue;
+    const selectedChildren = [...nextNodeById.values()].filter(
+      ({ metadata }) => metadata?.parentAreaNodeId === area.id
+    );
+    const sourceChildren = sourceNodes.filter(
+      ({ metadata }) => metadata?.parentAreaNodeId === area.id
+    );
+    if (selectedChildren.length === 0 || sourceChildren.length === 0) continue;
+
+    const sourceRight = sourceArea.position.x + sourceArea.size.width;
+    const sourceBottom = sourceArea.position.y + sourceArea.size.height;
+    const leftInset = minNonNegative(
+      sourceChildren.map((child) => child.position.x - sourceArea.position.x)
+    );
+    const topInset = minNonNegative(
+      sourceChildren.map((child) => child.position.y - sourceArea.position.y)
+    );
+    const rightInset = minNonNegative(
+      sourceChildren.map((child) => sourceRight - child.position.x - child.size.width)
+    );
+    const bottomInset = minNonNegative(
+      sourceChildren.map((child) => sourceBottom - child.position.y - child.size.height)
+    );
+    const left = Math.min(...selectedChildren.map(({ position }) => position.x)) - leftInset;
+    const top = Math.min(...selectedChildren.map(({ position }) => position.y)) - topInset;
+    const right =
+      Math.max(...selectedChildren.map(({ position, size }) => position.x + size.width)) +
+      rightInset;
+    const bottom =
+      Math.max(...selectedChildren.map(({ position, size }) => position.y + size.height)) +
+      bottomInset;
+    nextNodeById.set(area.id, {
+      ...currentArea,
+      position: { x: normalizeNumber(left), y: normalizeNumber(top) },
+      size: {
+        width: normalizeNumber(right - left),
+        height: normalizeNumber(bottom - top)
+      }
     });
+  }
+
+  return selectedNodes.map((node) => nextNodeById.get(node.id) ?? cloneValue(node));
+}
+
+function presentationDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
+  let depth = 0;
+  let parentId = node.metadata?.parentAreaNodeId;
+  const visited = new Set<string>();
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    depth += 1;
+    parentId = nodeById.get(parentId)?.metadata?.parentAreaNodeId;
+  }
+  return depth;
+}
+
+function minNonNegative(values: readonly number[]): number {
+  const nonNegative = values.filter((value) => value >= 0);
+  return nonNegative.length === 0 ? 0 : Math.min(...nonNegative);
 }
 
 function addParentChain(

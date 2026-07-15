@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-9ed9d70a",
+  hash: "fnv1a-ca5f06ed",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -28,10 +28,10 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "nodeCount": 19,
       "edgeCount": 6,
-      "areaCount": 6,
+      "areaCount": 5,
       "parentedNodeCount": 18,
       "maxContainmentDepth": 4,
-      "meanAreaChildDensity": 2.333,
+      "meanAreaChildDensity": 2.8,
       "meanAreaPadding": 194.789,
       "meanSiblingGap": 70,
       "meanVerticalGap": 58.391,
@@ -745,10 +745,10 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "nodeCount": 40,
       "edgeCount": 19,
-      "areaCount": 9,
+      "areaCount": 7,
       "parentedNodeCount": 39,
       "maxContainmentDepth": 4,
-      "meanAreaChildDensity": 2.444,
+      "meanAreaChildDensity": 3.143,
       "meanAreaPadding": 92.298,
       "meanSiblingGap": 40,
       "meanVerticalGap": 45,
@@ -903,20 +903,20 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       "parentedNodeCount": 22,
       "maxContainmentDepth": 3,
       "meanAreaChildDensity": 2.444,
-      "meanAreaPadding": 71.636,
-      "meanSiblingGap": 83.478,
+      "meanAreaPadding": 80.364,
+      "meanSiblingGap": 85.217,
       "meanVerticalGap": 27.826,
-      "meanNodeWidth": 302.667,
-      "meanNodeHeight": 179.667,
-      "meanAspectRatio": 1.459,
+      "meanNodeWidth": 317.667,
+      "meanNodeHeight": 184.667,
+      "meanAspectRatio": 1.479,
       "meanCaptionWidth": 104.417,
       "meanZIndex": 0.833,
-      "meanEdgeLength": 378.829,
+      "meanEdgeLength": 385.653,
       "meanEdgeWaypointCount": 0,
       "routedEdgeRatio": 0,
       "horizontalFlowRatio": 0.889,
       "supportNodeRatio": 0.208,
-      "viewportAspectRatio": 2.364,
+      "viewportAspectRatio": 2.619,
       "whitespaceRatio": 0
     },
     {
@@ -1107,19 +1107,19 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "nodeCount": 34,
       "edgeCount": 27,
-      "areaCount": 12,
+      "areaCount": 11,
       "parentedNodeCount": 32,
       "maxContainmentDepth": 4,
-      "meanAreaChildDensity": 1.667,
-      "meanAreaPadding": 152.625,
-      "meanSiblingGap": 58.182,
+      "meanAreaChildDensity": 1.818,
+      "meanAreaPadding": 185.375,
+      "meanSiblingGap": 55.758,
       "meanVerticalGap": 35.152,
-      "meanNodeWidth": 314.235,
-      "meanNodeHeight": 284.471,
-      "meanAspectRatio": 1.241,
+      "meanNodeWidth": 308.471,
+      "meanNodeHeight": 277.882,
+      "meanAspectRatio": 1.25,
       "meanCaptionWidth": 100.676,
       "meanZIndex": 0.882,
-      "meanEdgeLength": 412.563,
+      "meanEdgeLength": 417.026,
       "meanEdgeWaypointCount": 0,
       "routedEdgeRatio": 0,
       "horizontalFlowRatio": 0.741,
@@ -1166,7 +1166,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 1640,
+            "x": 160,
             "y": 160
           },
           "size": {
@@ -1195,7 +1195,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 1640,
+            "x": 160,
             "y": 640
           },
           "size": {
@@ -1215,12 +1215,12 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-region"
           },
           "position": {
-            "x": 1600,
+            "x": 120,
             "y": 440
           },
           "size": {
-            "width": 280,
-            "height": 280
+            "width": 400,
+            "height": 360
           },
           "type": "design_group",
           "zIndex": 0
@@ -1235,12 +1235,12 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "template-ecs-fargate-container-app-presentation-region"
           },
           "position": {
-            "x": 1600,
+            "x": 120,
             "y": 80
           },
           "size": {
-            "width": 280,
-            "height": 280
+            "width": 240,
+            "height": 360
           },
           "type": "design_group",
           "zIndex": 0
@@ -1258,8 +1258,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "y": 0
           },
           "size": {
-            "width": 1920,
-            "height": 880
+            "width": 560,
+            "height": 840
           },
           "type": "aws-region",
           "zIndex": 0
@@ -1283,7 +1283,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 1640,
+            "x": 160,
             "y": 520
           },
           "size": {
@@ -1320,7 +1320,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 1760,
+            "x": 320,
             "y": 520
           },
           "size": {
@@ -1349,7 +1349,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             }
           },
           "position": {
-            "x": 1640,
+            "x": 160,
             "y": 280
           },
           "size": {
@@ -1400,7 +1400,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "repository:ecs-fargate-container-app",
         "sourceTemplateIds": [
           "repository:ecs-fargate-container-app"
@@ -1433,8 +1433,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 370,
-            "y": 610
+            "x": 145,
+            "y": 230
           },
           "rotation": 0,
           "size": {
@@ -1461,8 +1461,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 695,
-            "y": 455
+            "x": 470,
+            "y": 75
           },
           "rotation": 0,
           "size": {
@@ -1489,8 +1489,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 695,
-            "y": 615
+            "x": 470,
+            "y": 235
           },
           "rotation": 0,
           "size": {
@@ -1522,8 +1522,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1205,
-            "height": 760
+            "width": 560,
+            "height": 375
           },
           "zIndex": 0,
           "kind": "design",
@@ -1539,23 +1539,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "bottom",
           "zIndex": 6,
           "route": {
-            "svgPath": "M725,615 L725,515",
+            "svgPath": "M500,235 L500,135",
             "sourcePoint": {
-              "x": 725,
-              "y": 615
+              "x": 500,
+              "y": 235
             },
             "targetPoint": {
-              "x": 725,
-              "y": 515
+              "x": 500,
+              "y": 135
             },
             "waypoints": [
               {
-                "x": 725,
-                "y": 615
+                "x": 500,
+                "y": 235
               },
               {
-                "x": 725,
-                "y": 515
+                "x": 500,
+                "y": 135
               }
             ],
             "arrowDirection": "source-to-target",
@@ -1570,23 +1570,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "right",
           "zIndex": 13,
           "route": {
-            "svgPath": "M695,645 L430,645",
+            "svgPath": "M470,265 L205,265",
             "sourcePoint": {
-              "x": 695,
-              "y": 645
+              "x": 470,
+              "y": 265
             },
             "targetPoint": {
-              "x": 430,
-              "y": 645
+              "x": 205,
+              "y": 265
             },
             "waypoints": [
               {
-                "x": 695,
-                "y": 645
+                "x": 470,
+                "y": 265
               },
               {
-                "x": 430,
-                "y": 645
+                "x": 205,
+                "y": 265
               }
             ],
             "arrowDirection": "source-to-target",
@@ -1596,7 +1596,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "brainboard:brainboard-aws-dashcam-video-pipeline",
         "sourceTemplateIds": [
           "brainboard:brainboard-aws-dashcam-video-pipeline"
@@ -1775,7 +1775,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "brainboard:brainboard-aws-iam-users",
         "sourceTemplateIds": [
           "brainboard:brainboard-aws-iam-users"
@@ -1819,7 +1819,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "rotation": 0,
           "size": {
             "width": 1700,
-            "height": 1370
+            "height": 1339.798
           },
           "zIndex": 0,
           "kind": "design",
@@ -1834,7 +1834,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "position": {
             "x": 819.687,
-            "y": 953.163
+            "y": 922.961
           },
           "rotation": 0,
           "size": {
@@ -1862,7 +1862,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "position": {
             "x": 268.237,
-            "y": 617.503
+            "y": 587.301
           },
           "rotation": 0,
           "size": {
@@ -1890,7 +1890,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "position": {
             "x": 90,
-            "y": 90
+            "y": 59.798
           },
           "rotation": 0,
           "size": {
@@ -1919,23 +1919,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "top",
           "zIndex": 3,
           "route": {
-            "svgPath": "M848.237,838.586 L849.687,953.163",
+            "svgPath": "M848.237,808.384 L849.687,922.961",
             "sourcePoint": {
               "x": 848.237,
-              "y": 838.586
+              "y": 808.384
             },
             "targetPoint": {
               "x": 849.687,
-              "y": 953.163
+              "y": 922.961
             },
             "waypoints": [
               {
                 "x": 848.237,
-                "y": 838.586
+                "y": 808.384
               },
               {
                 "x": 849.687,
-                "y": 953.163
+                "y": 922.961
               }
             ],
             "arrowDirection": "source-to-target",
@@ -1945,7 +1945,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
         "sourceTemplateIds": [
           "brainboard:brainboard-aws-asg-lb-vpc-subnets"
@@ -2742,7 +2742,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "repository:three-tier-web-app",
         "sourceTemplateIds": [
           "repository:three-tier-web-app"
@@ -2776,7 +2776,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "position": {
             "x": 698.983,
-            "y": 755.231
+            "y": 725.029
           },
           "rotation": 0,
           "size": {
@@ -2804,7 +2804,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "position": {
             "x": 698.983,
-            "y": 629.535
+            "y": 599.333
           },
           "rotation": 0,
           "size": {
@@ -2837,7 +2837,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "rotation": 0,
           "size": {
             "width": 1700,
-            "height": 1370
+            "height": 1339.798
           },
           "zIndex": 0,
           "kind": "design",
@@ -2852,7 +2852,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "position": {
             "x": 90,
-            "y": 90
+            "y": 59.798
           },
           "rotation": 0,
           "size": {
@@ -2881,23 +2881,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "bottom",
           "zIndex": 4,
           "route": {
-            "svgPath": "M728.983,755.231 L728.983,689.535",
+            "svgPath": "M728.983,725.029 L728.983,659.333",
             "sourcePoint": {
               "x": 728.983,
-              "y": 755.231
+              "y": 725.029
             },
             "targetPoint": {
               "x": 728.983,
-              "y": 689.535
+              "y": 659.333
             },
             "waypoints": [
               {
                 "x": 728.983,
-                "y": 755.231
+                "y": 725.029
               },
               {
                 "x": 728.983,
-                "y": 689.535
+                "y": 659.333
               }
             ],
             "arrowDirection": "source-to-target",
@@ -2907,7 +2907,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
         "sourceTemplateIds": [
           "brainboard:brainboard-aws-asg-lb-vpc-subnets"
@@ -2926,253 +2926,337 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
         },
         {
           "kind": "purpose",
-          "key": "high-availability-data",
-          "label": "고가용성 데이터 계층"
+          "key": "relational-data-layer",
+          "label": "관계형 데이터 계층"
         }
       ],
-      "structuralFingerprint": "fnv1a-2174fc35",
+      "structuralFingerprint": "fnv1a-c2491a6a",
       "nodes": [
         {
-          "id": "2adbfb12-8509-4302-9f1d-029292991c80",
-          "label": "us-west-2a",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
-            "presentationCatalogItemId": "aws-availability-zone"
-          },
-          "position": {
-            "x": 225,
-            "y": 230
-          },
-          "rotation": 0,
-          "size": {
-            "width": 295,
-            "height": 480
-          },
-          "zIndex": 3,
-          "kind": "design",
-          "type": "availability_zone"
-        },
-        {
-          "id": "4a365324-6e51-43b7-8084-59822f636a0d",
-          "label": "db1",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
-          },
-          "position": {
-            "x": 620,
-            "y": 800
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 8,
+          "id": "template-three-tier-web-app-alb-security-group",
           "kind": "resource",
-          "type": "aws_db_instance",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_db_instance",
-            "resourceName": "db1",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "53095c7c-9c63-4973-934d-398e684b2b0a",
-          "label": "postgres read replica",
+          "label": "ALB Security Group",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
           },
-          "position": {
-            "x": 1055,
-            "y": 950
-          },
-          "rotation": 0,
-          "size": {
-            "width": 60,
-            "height": 60
-          },
-          "zIndex": 9,
-          "kind": "resource",
-          "type": "aws_db_instance",
           "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_db_instance",
-            "resourceName": "db_replica",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
-          "label": "default",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
-          },
-          "position": {
-            "x": 570,
-            "y": 425
-          },
-          "rotation": 0,
-          "size": {
-            "width": 160,
-            "height": 90
-          },
-          "zIndex": 4,
-          "kind": "resource",
-          "type": "aws_db_subnet_group",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_db_subnet_group",
-            "resourceName": "default",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "87a87f94-1a87-409c-9228-fca73e37a118",
-          "label": "subnet 2a",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "2adbfb12-8509-4302-9f1d-029292991c80"
-          },
-          "position": {
-            "x": 245,
-            "y": 370
-          },
-          "rotation": 0,
-          "size": {
-            "width": 250,
-            "height": 200
-          },
-          "zIndex": 6,
-          "kind": "resource",
-          "type": "aws_subnet",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_subnet",
-            "resourceName": "subnet_w_2a",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "8d685e1f-ef90-4fef-afde-9ba043869054",
-          "label": "us-west-2b",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
-            "presentationCatalogItemId": "aws-availability-zone"
-          },
-          "position": {
-            "x": 790,
-            "y": 230
-          },
-          "rotation": 0,
-          "size": {
-            "width": 310,
-            "height": 480
-          },
-          "zIndex": 5,
-          "kind": "design",
-          "type": "availability_zone"
-        },
-        {
-          "id": "a0e46c7b-3b5b-4d6e-8a12-3d468f1dc564",
-          "label": "default security group",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
-          },
-          "position": {
-            "x": 123,
-            "y": 145
-          },
-          "rotation": 0,
-          "size": {
-            "width": 1255,
-            "height": 1080
-          },
-          "zIndex": 2,
-          "kind": "resource",
-          "type": "aws_security_group",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
             "resourceType": "aws_security_group",
-            "resourceName": "default",
+            "resourceName": "alb_security_group",
             "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "ac3623f0-25ad-4acb-92d8-0d35223ec63c",
-          "label": "default vpc",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "b6bf501a-706d-48c9-b72e-4ab9c89dc437"
-          },
-          "position": {
-            "x": 60,
-            "y": 60
-          },
-          "rotation": 0,
-          "size": {
-            "width": 1405,
-            "height": 1245
-          },
-          "zIndex": 1,
-          "kind": "resource",
-          "type": "aws_vpc",
-          "parameters": {
             "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_vpc",
-            "resourceName": "default",
-            "fileName": "main.tf",
-            "values": {}
-          }
-        },
-        {
-          "id": "b45989bc-c032-4bca-a116-0b5f0ee6c759",
-          "label": "subnet 2b",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "8d685e1f-ef90-4fef-afde-9ba043869054"
+            "values": {
+              "name": "three-tier-alb",
+              "description": "Allow HTTP to the ALB",
+              "vpcId": "aws_vpc.vpc.id",
+              "ingress": [
+                {
+                  "fromPort": 80,
+                  "toPort": 80,
+                  "protocol": "tcp",
+                  "cidrBlocks": [
+                    "0.0.0.0/0"
+                  ]
+                }
+              ],
+              "egress": [
+                {
+                  "fromPort": 0,
+                  "toPort": 0,
+                  "protocol": "-1",
+                  "cidrBlocks": [
+                    "0.0.0.0/0"
+                  ]
+                }
+              ]
+            }
           },
           "position": {
-            "x": 825,
-            "y": 370
+            "x": 800,
+            "y": 360
           },
-          "rotation": 0,
           "size": {
-            "width": 250,
+            "width": 240,
             "height": 200
           },
-          "zIndex": 7,
-          "kind": "resource",
-          "type": "aws_subnet",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_subnet",
-            "resourceName": "subnet_w_2b",
-            "fileName": "main.tf",
-            "values": {}
-          }
+          "type": "aws_security_group",
+          "zIndex": 1
         },
         {
-          "id": "b6bf501a-706d-48c9-b72e-4ab9c89dc437",
-          "label": "US West (Oregon)",
+          "id": "template-three-tier-web-app-app-security-group",
+          "kind": "resource",
+          "label": "Application Security Group",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "parameters": {
+            "resourceType": "aws_security_group",
+            "resourceName": "app_security_group",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "name": "three-tier-app",
+              "description": "Allow ALB traffic to application instances",
+              "vpcId": "aws_vpc.vpc.id",
+              "ingress": [
+                {
+                  "fromPort": 80,
+                  "toPort": 80,
+                  "protocol": "tcp",
+                  "securityGroups": [
+                    "aws_security_group.alb_security_group.id"
+                  ]
+                }
+              ],
+              "egress": [
+                {
+                  "fromPort": 0,
+                  "toPort": 0,
+                  "protocol": "-1",
+                  "cidrBlocks": [
+                    "0.0.0.0/0"
+                  ]
+                }
+              ]
+            }
+          },
+          "position": {
+            "x": 800,
+            "y": 760
+          },
+          "size": {
+            "width": 240,
+            "height": 280
+          },
+          "type": "aws_security_group",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-database",
+          "kind": "resource",
+          "label": "RDS Database",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "parameters": {
+            "resourceType": "aws_db_instance",
+            "resourceName": "database",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "identifier": "three-tier-db",
+              "engine": "postgres",
+              "instanceClass": "db.t4g.micro",
+              "allocatedStorage": 20,
+              "publiclyAccessible": false,
+              "manageMasterUserPassword": true,
+              "username": "appadmin",
+              "skipFinalSnapshot": true,
+              "dbSubnetGroupName": "aws_db_subnet_group.db_subnet_group.name",
+              "vpcSecurityGroupIds": [
+                "aws_security_group.db_security_group.id"
+              ]
+            }
+          },
+          "position": {
+            "x": 880,
+            "y": 1160
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_db_instance",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-security-group",
+          "kind": "resource",
+          "label": "Database Security Group",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "parameters": {
+            "resourceType": "aws_security_group",
+            "resourceName": "db_security_group",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "name": "three-tier-db",
+              "description": "Allow PostgreSQL from application instances",
+              "vpcId": "aws_vpc.vpc.id",
+              "ingress": [
+                {
+                  "fromPort": 5432,
+                  "toPort": 5432,
+                  "protocol": "tcp",
+                  "securityGroups": [
+                    "aws_security_group.app_security_group.id"
+                  ]
+                }
+              ],
+              "egress": [
+                {
+                  "fromPort": 0,
+                  "toPort": 0,
+                  "protocol": "-1",
+                  "cidrBlocks": [
+                    "0.0.0.0/0"
+                  ]
+                }
+              ]
+            }
+          },
+          "position": {
+            "x": 800,
+            "y": 1080
+          },
+          "size": {
+            "width": 240,
+            "height": 240
+          },
+          "type": "aws_security_group",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-subnet-a",
+          "kind": "resource",
+          "label": "DB Subnet A",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-a"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "db_subnet_a",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.21.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2a"
+            }
+          },
+          "position": {
+            "x": 240,
+            "y": 1080
+          },
+          "size": {
+            "width": 400,
+            "height": 240
+          },
+          "type": "aws_subnet",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-subnet-b",
+          "kind": "resource",
+          "label": "DB Subnet B",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-az-b"
+          },
+          "parameters": {
+            "resourceType": "aws_subnet",
+            "resourceName": "db_subnet_b",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.22.0/24",
+              "vpcId": "aws_vpc.vpc.id",
+              "availabilityZone": "ap-northeast-2b"
+            }
+          },
+          "position": {
+            "x": 1200,
+            "y": 1080
+          },
+          "size": {
+            "width": 400,
+            "height": 240
+          },
+          "type": "aws_subnet",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-db-subnet-group",
+          "kind": "resource",
+          "label": "Database Subnet Group",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "parameters": {
+            "resourceType": "aws_db_subnet_group",
+            "resourceName": "db_subnet_group",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "name": "three-tier-db",
+              "subnetIds": [
+                "aws_subnet.db_subnet_a.id",
+                "aws_subnet.db_subnet_b.id"
+              ]
+            }
+          },
+          "position": {
+            "x": 1640,
+            "y": 1160
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_db_subnet_group",
+          "zIndex": 1
+        },
+        {
+          "id": "template-three-tier-web-app-presentation-az-a",
+          "kind": "design",
+          "label": "AZ A",
+          "locked": false,
+          "metadata": {
+            "presentationCatalogItemId": "aws-availability-zone",
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "position": {
+            "x": 160,
+            "y": 1000
+          },
+          "size": {
+            "width": 560,
+            "height": 360
+          },
+          "type": "aws-availability-zone",
+          "zIndex": 0
+        },
+        {
+          "id": "template-three-tier-web-app-presentation-az-b",
+          "kind": "design",
+          "label": "AZ B",
+          "locked": false,
+          "metadata": {
+            "presentationCatalogItemId": "aws-availability-zone",
+            "parentAreaNodeId": "template-three-tier-web-app-vpc"
+          },
+          "position": {
+            "x": 1120,
+            "y": 1000
+          },
+          "size": {
+            "width": 560,
+            "height": 360
+          },
+          "type": "aws-availability-zone",
+          "zIndex": 0
+        },
+        {
+          "id": "template-three-tier-web-app-presentation-region",
+          "kind": "design",
+          "label": "Region",
           "locked": false,
           "metadata": {
             "presentationCatalogItemId": "aws-region"
@@ -3181,286 +3265,75 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "x": 0,
             "y": 0
           },
-          "rotation": 0,
           "size": {
-            "width": 1530,
-            "height": 1360
+            "width": 1880,
+            "height": 1560
           },
-          "zIndex": 0,
-          "kind": "design",
-          "type": "region"
+          "type": "aws-region",
+          "zIndex": 0
         },
         {
-          "id": "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
-          "label": "Log DB parameter",
+          "id": "template-three-tier-web-app-vpc",
+          "kind": "resource",
+          "label": "VPC",
           "locked": false,
           "metadata": {
-            "parentAreaNodeId": "ac3623f0-25ad-4acb-92d8-0d35223ec63c"
+            "parentAreaNodeId": "template-three-tier-web-app-presentation-region"
+          },
+          "parameters": {
+            "resourceType": "aws_vpc",
+            "resourceName": "vpc",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "cidrBlock": "10.20.0.0/16",
+              "enableDnsSupport": true,
+              "enableDnsHostnames": true
+            }
           },
           "position": {
-            "x": 620,
-            "y": 1080
+            "x": 40,
+            "y": 120
           },
-          "rotation": 0,
           "size": {
-            "width": 60,
-            "height": 60
+            "width": 1760,
+            "height": 1360
           },
-          "zIndex": 10,
-          "kind": "resource",
-          "type": "aws_db_parameter_group",
-          "parameters": {
-            "terraformBlockType": "resource",
-            "terraformSourceAuthority": "workspace-seed",
-            "resourceType": "aws_db_parameter_group",
-            "resourceName": "log_db_parameter",
-            "fileName": "main.tf",
-            "values": {}
-          }
+          "type": "aws_vpc",
+          "zIndex": 1
         }
       ],
       "edges": [
         {
-          "id": "94614b0a-600a-4956-84a3-34157314bf0e",
-          "sourceNodeId": "53095c7c-9c63-4973-934d-398e684b2b0a",
-          "targetNodeId": "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 0,
-          "route": {
-            "svgPath": "M1055,980 L875.5,980 Q867.5,980 867.5,988 L867.5,1102 Q867.5,1110 859.5,1110 L680,1110",
-            "sourcePoint": {
-              "x": 1055,
-              "y": 980
-            },
-            "targetPoint": {
-              "x": 680,
-              "y": 1110
-            },
-            "waypoints": [
-              {
-                "x": 1055,
-                "y": 980
-              },
-              {
-                "x": 875.5,
-                "y": 980
-              },
-              {
-                "x": 867.5,
-                "y": 980
-              },
-              {
-                "x": 867.5,
-                "y": 988
-              },
-              {
-                "x": 867.5,
-                "y": 1102
-              },
-              {
-                "x": 867.5,
-                "y": 1110
-              },
-              {
-                "x": 859.5,
-                "y": 1110
-              },
-              {
-                "x": 680,
-                "y": 1110
-              }
-            ],
-            "arrowDirection": "target-to-source",
-            "arrowAngle": 0
-          }
+          "id": "template-three-tier-web-app-db-sg-database",
+          "label": "applies to",
+          "sourceNodeId": "template-three-tier-web-app-db-security-group",
+          "targetNodeId": "template-three-tier-web-app-database",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-bottom",
+          "targetHandleId": "handle-top"
         },
         {
-          "id": "952c3f17-d3b6-4519-8f4d-5b637ec4f299",
-          "sourceNodeId": "53095c7c-9c63-4973-934d-398e684b2b0a",
-          "targetNodeId": "4a365324-6e51-43b7-8084-59822f636a0d",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 1,
-          "route": {
-            "svgPath": "M1055,980 L875.5,980 Q867.5,980 867.5,972 L867.5,838 Q867.5,830 859.5,830 L680,830",
-            "sourcePoint": {
-              "x": 1055,
-              "y": 980
-            },
-            "targetPoint": {
-              "x": 680,
-              "y": 830
-            },
-            "waypoints": [
-              {
-                "x": 1055,
-                "y": 980
-              },
-              {
-                "x": 875.5,
-                "y": 980
-              },
-              {
-                "x": 867.5,
-                "y": 980
-              },
-              {
-                "x": 867.5,
-                "y": 972
-              },
-              {
-                "x": 867.5,
-                "y": 838
-              },
-              {
-                "x": 867.5,
-                "y": 830
-              },
-              {
-                "x": 859.5,
-                "y": 830
-              },
-              {
-                "x": 680,
-                "y": 830
-              }
-            ],
-            "arrowDirection": "target-to-source",
-            "arrowAngle": 0
-          }
+          "id": "template-three-tier-web-app-vpc-db-a",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-db-subnet-a",
+          "type": "smoothstep"
         },
         {
-          "id": "b3e95a39-1480-44d6-a174-78463f37a5d3",
-          "sourceNodeId": "4a365324-6e51-43b7-8084-59822f636a0d",
-          "targetNodeId": "d25dcc61-c9c3-4b64-922b-cd44cb13798b",
-          "sourceHandleId": "bottom",
-          "targetHandleId": "top",
-          "zIndex": 2,
-          "route": {
-            "svgPath": "M650,860 L650,1080",
-            "sourcePoint": {
-              "x": 650,
-              "y": 860
-            },
-            "targetPoint": {
-              "x": 650,
-              "y": 1080
-            },
-            "waypoints": [
-              {
-                "x": 650,
-                "y": 860
-              },
-              {
-                "x": 650,
-                "y": 1080
-              }
-            ],
-            "arrowDirection": "target-to-source",
-            "arrowAngle": -90
-          }
-        },
-        {
-          "id": "ccb52080-a71c-4122-9786-07b179f798c4",
-          "sourceNodeId": "4a365324-6e51-43b7-8084-59822f636a0d",
-          "targetNodeId": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
-          "sourceHandleId": "top",
-          "targetHandleId": "bottom",
-          "zIndex": 3,
-          "route": {
-            "svgPath": "M650,800 L650,515",
-            "sourcePoint": {
-              "x": 650,
-              "y": 800
-            },
-            "targetPoint": {
-              "x": 650,
-              "y": 515
-            },
-            "waypoints": [
-              {
-                "x": 650,
-                "y": 800
-              },
-              {
-                "x": 650,
-                "y": 515
-              }
-            ],
-            "arrowDirection": "target-to-source",
-            "arrowAngle": 90
-          }
-        },
-        {
-          "id": "ee4b43d4-291e-418a-b88f-c138ffb85d56",
-          "sourceNodeId": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
-          "targetNodeId": "b45989bc-c032-4bca-a116-0b5f0ee6c759",
-          "sourceHandleId": "right",
-          "targetHandleId": "left",
-          "zIndex": 4,
-          "route": {
-            "svgPath": "M730,470 L825,470",
-            "sourcePoint": {
-              "x": 730,
-              "y": 470
-            },
-            "targetPoint": {
-              "x": 825,
-              "y": 470
-            },
-            "waypoints": [
-              {
-                "x": 730,
-                "y": 470
-              },
-              {
-                "x": 825,
-                "y": 470
-              }
-            ],
-            "arrowDirection": "target-to-source",
-            "arrowAngle": 180
-          }
-        },
-        {
-          "id": "f0242dea-e949-4db4-9d81-ccab9ddc9f13",
-          "sourceNodeId": "5b7c9fe1-1c7e-4928-bb43-c3eb0b25f11c",
-          "targetNodeId": "87a87f94-1a87-409c-9228-fca73e37a118",
-          "sourceHandleId": "left",
-          "targetHandleId": "right",
-          "zIndex": 5,
-          "route": {
-            "svgPath": "M570,470 L495,470",
-            "sourcePoint": {
-              "x": 570,
-              "y": 470
-            },
-            "targetPoint": {
-              "x": 495,
-              "y": 470
-            },
-            "waypoints": [
-              {
-                "x": 570,
-                "y": 470
-              },
-              {
-                "x": 495,
-                "y": 470
-              }
-            ],
-            "arrowDirection": "target-to-source",
-            "arrowAngle": 0
-          }
+          "id": "template-three-tier-web-app-vpc-db-b",
+          "label": "contains",
+          "sourceNodeId": "template-three-tier-web-app-vpc",
+          "targetNodeId": "template-three-tier-web-app-db-subnet-b",
+          "type": "smoothstep"
         }
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
-        "representativeTemplateId": "brainboard:brainboard-aws-rds",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
+        "representativeTemplateId": "repository:three-tier-web-app",
         "sourceTemplateIds": [
-          "brainboard:brainboard-aws-rds"
+          "repository:three-tier-web-app"
         ]
       }
     },
@@ -3495,8 +3368,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
           },
           "position": {
-            "x": 787.375,
-            "y": 377.136
+            "x": 266.991,
+            "y": 173.84
           },
           "rotation": 0,
           "size": {
@@ -3523,8 +3396,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "a7275a97-1cba-448c-b797-76cf925ac3d5"
           },
           "position": {
-            "x": 1052.507,
-            "y": 527.896
+            "x": 532.123,
+            "y": 324.6
           },
           "rotation": 0,
           "size": {
@@ -3556,8 +3429,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1275,
-            "height": 1245
+            "width": 752.282,
+            "height": 493.351
           },
           "zIndex": 0,
           "kind": "design",
@@ -3573,47 +3446,47 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "right",
           "zIndex": 18,
           "route": {
-            "svgPath": "M1052.507,557.896 L957.941,557.896 Q949.941,557.896 949.941,549.896 L949.941,415.136 Q949.941,407.136 941.941,407.136 L847.375,407.136",
+            "svgPath": "M532.123,354.6 L437.557,354.6 Q429.557,354.6 429.557,346.6 L429.557,211.84 Q429.557,203.84 421.557,203.84 L326.991,203.84",
             "sourcePoint": {
-              "x": 1052.507,
-              "y": 557.896
+              "x": 532.123,
+              "y": 354.6
             },
             "targetPoint": {
-              "x": 847.375,
-              "y": 407.136
+              "x": 326.991,
+              "y": 203.84
             },
             "waypoints": [
               {
-                "x": 1052.507,
-                "y": 557.896
+                "x": 532.123,
+                "y": 354.6
               },
               {
-                "x": 957.941,
-                "y": 557.896
+                "x": 437.557,
+                "y": 354.6
               },
               {
-                "x": 949.941,
-                "y": 557.896
+                "x": 429.557,
+                "y": 354.6
               },
               {
-                "x": 949.941,
-                "y": 549.896
+                "x": 429.557,
+                "y": 346.6
               },
               {
-                "x": 949.941,
-                "y": 415.136
+                "x": 429.557,
+                "y": 211.84
               },
               {
-                "x": 949.941,
-                "y": 407.136
+                "x": 429.557,
+                "y": 203.84
               },
               {
-                "x": 941.941,
-                "y": 407.136
+                "x": 421.557,
+                "y": 203.84
               },
               {
-                "x": 847.375,
-                "y": 407.136
+                "x": 326.991,
+                "y": 203.84
               }
             ],
             "arrowDirection": "source-to-target",
@@ -3623,7 +3496,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "brainboard:brainboard-aws-serverless-cdn",
         "sourceTemplateIds": [
           "brainboard:brainboard-aws-secure-s3-bucket",
@@ -3658,8 +3531,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 755,
-            "y": 360
+            "x": 525,
+            "y": 330
           },
           "rotation": 0,
           "size": {
@@ -3686,8 +3559,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 535,
-            "y": 255
+            "x": 305,
+            "y": 225
           },
           "rotation": 0,
           "size": {
@@ -3714,8 +3587,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 755,
-            "y": 105
+            "x": 525,
+            "y": 75
           },
           "rotation": 0,
           "size": {
@@ -3747,8 +3620,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           },
           "rotation": 0,
           "size": {
-            "width": 1205,
-            "height": 760
+            "width": 975,
+            "height": 470
           },
           "zIndex": 0,
           "kind": "design",
@@ -3762,8 +3635,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 375,
-            "y": 255
+            "x": 145,
+            "y": 225
           },
           "rotation": 0,
           "size": {
@@ -3790,8 +3663,8 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "parentAreaNodeId": "bc43454e-5410-4f46-9610-6622c8820e40"
           },
           "position": {
-            "x": 1115,
-            "y": 255
+            "x": 885,
+            "y": 225
           },
           "rotation": 0,
           "size": {
@@ -3820,47 +3693,47 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "left",
           "zIndex": 0,
           "route": {
-            "svgPath": "M815,390 L957,390 Q965,390 965,382 L965,293 Q965,285 973,285 L1115,285",
+            "svgPath": "M585,360 L727,360 Q735,360 735,352 L735,263 Q735,255 743,255 L885,255",
             "sourcePoint": {
-              "x": 815,
-              "y": 390
+              "x": 585,
+              "y": 360
             },
             "targetPoint": {
-              "x": 1115,
-              "y": 285
+              "x": 885,
+              "y": 255
             },
             "waypoints": [
               {
-                "x": 815,
-                "y": 390
+                "x": 585,
+                "y": 360
               },
               {
-                "x": 957,
-                "y": 390
+                "x": 727,
+                "y": 360
               },
               {
-                "x": 965,
-                "y": 390
+                "x": 735,
+                "y": 360
               },
               {
-                "x": 965,
-                "y": 382
+                "x": 735,
+                "y": 352
               },
               {
-                "x": 965,
-                "y": 293
+                "x": 735,
+                "y": 263
               },
               {
-                "x": 965,
-                "y": 285
+                "x": 735,
+                "y": 255
               },
               {
-                "x": 973,
-                "y": 285
+                "x": 743,
+                "y": 255
               },
               {
-                "x": 1115,
-                "y": 285
+                "x": 885,
+                "y": 255
               }
             ],
             "arrowDirection": "source-to-target",
@@ -3875,47 +3748,47 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "left",
           "zIndex": 1,
           "route": {
-            "svgPath": "M815,135 L957,135 Q965,135 965,143 L965,277 Q965,285 973,285 L1115,285",
+            "svgPath": "M585,105 L727,105 Q735,105 735,113 L735,247 Q735,255 743,255 L885,255",
             "sourcePoint": {
-              "x": 815,
-              "y": 135
+              "x": 585,
+              "y": 105
             },
             "targetPoint": {
-              "x": 1115,
-              "y": 285
+              "x": 885,
+              "y": 255
             },
             "waypoints": [
               {
-                "x": 815,
-                "y": 135
+                "x": 585,
+                "y": 105
               },
               {
-                "x": 957,
-                "y": 135
+                "x": 727,
+                "y": 105
               },
               {
-                "x": 965,
-                "y": 135
+                "x": 735,
+                "y": 105
               },
               {
-                "x": 965,
-                "y": 143
+                "x": 735,
+                "y": 113
               },
               {
-                "x": 965,
-                "y": 277
+                "x": 735,
+                "y": 247
               },
               {
-                "x": 965,
-                "y": 285
+                "x": 735,
+                "y": 255
               },
               {
-                "x": 973,
-                "y": 285
+                "x": 743,
+                "y": 255
               },
               {
-                "x": 1115,
-                "y": 285
+                "x": 885,
+                "y": 255
               }
             ],
             "arrowDirection": "source-to-target",
@@ -3930,47 +3803,47 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "left",
           "zIndex": 2,
           "route": {
-            "svgPath": "M595,285 L667,285 Q675,285 675,277 L675,143 Q675,135 683,135 L755,135",
+            "svgPath": "M365,255 L437,255 Q445,255 445,247 L445,113 Q445,105 453,105 L525,105",
             "sourcePoint": {
-              "x": 595,
-              "y": 285
+              "x": 365,
+              "y": 255
             },
             "targetPoint": {
-              "x": 755,
-              "y": 135
+              "x": 525,
+              "y": 105
             },
             "waypoints": [
               {
-                "x": 595,
-                "y": 285
+                "x": 365,
+                "y": 255
               },
               {
-                "x": 667,
-                "y": 285
+                "x": 437,
+                "y": 255
               },
               {
-                "x": 675,
-                "y": 285
+                "x": 445,
+                "y": 255
               },
               {
-                "x": 675,
-                "y": 277
+                "x": 445,
+                "y": 247
               },
               {
-                "x": 675,
-                "y": 143
+                "x": 445,
+                "y": 113
               },
               {
-                "x": 675,
-                "y": 135
+                "x": 445,
+                "y": 105
               },
               {
-                "x": 683,
-                "y": 135
+                "x": 453,
+                "y": 105
               },
               {
-                "x": 755,
-                "y": 135
+                "x": 525,
+                "y": 105
               }
             ],
             "arrowDirection": "source-to-target",
@@ -3985,47 +3858,47 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "left",
           "zIndex": 4,
           "route": {
-            "svgPath": "M595,285 L667,285 Q675,285 675,293 L675,382 Q675,390 683,390 L755,390",
+            "svgPath": "M365,255 L437,255 Q445,255 445,263 L445,352 Q445,360 453,360 L525,360",
             "sourcePoint": {
-              "x": 595,
-              "y": 285
+              "x": 365,
+              "y": 255
             },
             "targetPoint": {
-              "x": 755,
-              "y": 390
+              "x": 525,
+              "y": 360
             },
             "waypoints": [
               {
-                "x": 595,
-                "y": 285
+                "x": 365,
+                "y": 255
               },
               {
-                "x": 667,
-                "y": 285
+                "x": 437,
+                "y": 255
               },
               {
-                "x": 675,
-                "y": 285
+                "x": 445,
+                "y": 255
               },
               {
-                "x": 675,
-                "y": 293
+                "x": 445,
+                "y": 263
               },
               {
-                "x": 675,
-                "y": 382
+                "x": 445,
+                "y": 352
               },
               {
-                "x": 675,
-                "y": 390
+                "x": 445,
+                "y": 360
               },
               {
-                "x": 683,
-                "y": 390
+                "x": 453,
+                "y": 360
               },
               {
-                "x": 755,
-                "y": 390
+                "x": 525,
+                "y": 360
               }
             ],
             "arrowDirection": "source-to-target",
@@ -4040,23 +3913,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "top",
           "zIndex": 8,
           "route": {
-            "svgPath": "M785,165 L785,360",
+            "svgPath": "M555,135 L555,330",
             "sourcePoint": {
-              "x": 785,
-              "y": 165
+              "x": 555,
+              "y": 135
             },
             "targetPoint": {
-              "x": 785,
-              "y": 360
+              "x": 555,
+              "y": 330
             },
             "waypoints": [
               {
-                "x": 785,
-                "y": 165
+                "x": 555,
+                "y": 135
               },
               {
-                "x": 785,
-                "y": 360
+                "x": 555,
+                "y": 330
               }
             ],
             "arrowDirection": "source-to-target",
@@ -4071,23 +3944,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "right",
           "zIndex": 9,
           "route": {
-            "svgPath": "M535,285 L435,285",
+            "svgPath": "M305,255 L205,255",
             "sourcePoint": {
-              "x": 535,
-              "y": 285
+              "x": 305,
+              "y": 255
             },
             "targetPoint": {
-              "x": 435,
-              "y": 285
+              "x": 205,
+              "y": 255
             },
             "waypoints": [
               {
-                "x": 535,
-                "y": 285
+                "x": 305,
+                "y": 255
               },
               {
-                "x": 435,
-                "y": 285
+                "x": 205,
+                "y": 255
               }
             ],
             "arrowDirection": "source-to-target",
@@ -4102,23 +3975,23 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "targetHandleId": "left",
           "zIndex": 11,
           "route": {
-            "svgPath": "M595,285 L1115,285",
+            "svgPath": "M365,255 L885,255",
             "sourcePoint": {
-              "x": 595,
-              "y": 285
+              "x": 365,
+              "y": 255
             },
             "targetPoint": {
-              "x": 1115,
-              "y": 285
+              "x": 885,
+              "y": 255
             },
             "waypoints": [
               {
-                "x": 595,
-                "y": 285
+                "x": 365,
+                "y": 255
               },
               {
-                "x": 1115,
-                "y": 285
+                "x": 885,
+                "y": 255
               }
             ],
             "arrowDirection": "source-to-target",
@@ -4128,7 +4001,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "brainboard:brainboard-aws-dashcam-video-pipeline",
         "sourceTemplateIds": [
           "brainboard:brainboard-aws-dashcam-video-pipeline"
@@ -4446,7 +4319,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "variables": [],
       "provenance": {
-        "extractorVersion": "architecture-board-module-pattern-extractor/v1",
+        "extractorVersion": "architecture-board-module-pattern-extractor/v2",
         "representativeTemplateId": "repository:static-web-hosting",
         "sourceTemplateIds": [
           "repository:static-web-hosting"

@@ -51,9 +51,9 @@ const EXPECTED_PRESENTATION_NODES = {
   },
   "ecs-fargate-container-app": {
     user: node("design-user-client", 80, 360),
-    region: node("aws-region", 240, 40, undefined, { width: 1920, height: 880 }),
-    "definition-ops-group": node("design-group", 1840, 480, "region", { width: 280, height: 280 }),
-    "global-iam-group": node("design-group", 1840, 120, "region", { width: 280, height: 280 })
+    region: node("aws-region", 240, 40, undefined, { width: 2040, height: 840 }),
+    "definition-ops-group": node("design-group", 1840, 480, "region", { width: 400, height: 360 }),
+    "global-iam-group": node("design-group", 1840, 120, "region", { width: 400, height: 360 })
   },
   "eks-container-app": {
     region: node("aws-region", 200, 40, undefined, { width: 2120, height: 1320 }),

@@ -208,8 +208,9 @@ test("candidate는 Terraform reference와 variable binding dependency를 재귀�
     "second"
   );
   const variablePeer = terraformNode("variable-peer", "aws_variable_peer", 500, region.id);
+  const unrelated = terraformNode("unrelated", "aws_unrelated", 600, region.id);
   const diagram: DiagramJson = {
-    nodes: [region, anchor, member, firstSupport, secondSupport, variablePeer],
+    nodes: [region, anchor, member, firstSupport, secondSupport, variablePeer, unrelated],
     edges: [diagramEdge("pair", anchor.id, member.id)],
     variables: [
       {
@@ -245,6 +246,30 @@ test("candidate는 Terraform reference와 variable binding dependency를 재귀�
     [anchor.id, firstSupport.id, member.id, secondSupport.id, variablePeer.id].sort()
   );
   assert.deepEqual(candidate.variables[0]?.bindings, diagram.variables?.[0]?.bindings);
+});
+
+test("candidate extractor는 Template 전체 graph를 Module로 이름만 바꾸어 내보내지 않는다", () => {
+  assert.equal(typeof extractCandidates, "function", "candidate extraction test seam must exist");
+  const region = areaNode("region");
+  const diagram: DiagramJson = {
+    nodes: [
+      region,
+      resourceNode("database", "aws_db_instance", 100, region.id),
+      resourceNode("subnet", "aws_subnet", 200, region.id)
+    ],
+    edges: [diagramEdge("database-subnet", "database", "subnet")],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const seed: TestSeed = {
+    id: "data-layer",
+    title: "Data Layer",
+    description: "test",
+    lenses: [{ kind: "functional", key: "database", label: "데이터베이스" }],
+    requiredResourceTypeGroups: [["aws_db_instance"], ["aws_subnet"]],
+    includedResourceTypes: ["aws_db_instance", "aws_subnet"]
+  };
+
+  assert.deepEqual(extractCandidates!(seed, { id: "repository:whole-template", diagram }), []);
 });
 
 function roleCandidate(

@@ -2,7 +2,7 @@ import type { DiagramEdge, DiagramNode, DiagramVariable } from "@sketchcatch/typ
 
 export const ARCHITECTURE_BOARD_KNOWLEDGE_VERSION = "architecture-board-knowledge/v1";
 export const ARCHITECTURE_BOARD_MODULE_PATTERN_EXTRACTOR_VERSION =
-  "architecture-board-module-pattern-extractor/v1";
+  "architecture-board-module-pattern-extractor/v2";
 
 type DeepReadonly<T> = T extends (...args: never[]) => unknown
   ? T
