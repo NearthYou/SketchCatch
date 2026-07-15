@@ -79,3 +79,15 @@
 - 결과를 대화 문자열로만 보여주지 않고 분석 artifact, 기술 세부 내용, 수정 action과 승인 tray로 구분했다.
 - desktop 비모달 상호작용과 오른쪽 패널 회피, mobile 전체 화면 modal을 각각 적용했다.
 - launcher, focus 복원, safe area, reduced motion, 세 mode와 승인 handler 계약을 회귀 테스트로 고정했다.
+- Draft 후속 질문에도 생성 당시 Board fingerprint와 revision을 유지하고, 취소되거나 새 요청으로 교체된 응답은 상태에 반영하지 않는다.
+- 오류 분석의 수정 승인은 최신 fingerprint와 실제 적용 가능한 코드 변경이 함께 있을 때만 표시한다.
+- transcript는 사용자가 아래쪽을 읽고 있을 때만 새 결과를 따라가며, 짧은 화면에서도 결과 card를 줄이지 않고 내부 스크롤로 모두 보여준다.
+- 기존 `.aiChat*` stylesheet를 제거하고 mobile focus 순환에 native `summary`와 작업실 밖 focus 재진입을 포함했다.
+
+## 8. 2026-07-16 검증 결과
+
+- Workspace AI 관련 테스트 `100/100`, Terraform provider chain 테스트 `8/8` 통과
+- `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build` 통과
+- Chrome `375px`, `768px`, `1024px`, `1920px` 확인: 가로 overflow 없음, mobile modal/focus 순환 정상, desktop 비모달 정상
+- 오류 분석 전·오래된 결과에는 적용 버튼이 노출되지 않고, 읽던 transcript 위치는 분석 상태가 바뀌어도 아래로 강제 이동하지 않음
+- Browser console 새 오류 없음, 최종 코드 리뷰 Critical/Important/Minor 모두 없음

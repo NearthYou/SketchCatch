@@ -4,6 +4,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Workspace AI now uses the rebuilt three-mode Workbench with explicit Board/Terraform approval, immutable proposal sources, request-identity cancellation, fresh-only Terraform fix actions, nonmodal desktop interaction, and modal mobile focus containment.
 - Branch `codex/fix-live-observation-redis-readiness` adds runtime-owned Redis ingress from the current ECS API and worker security groups to the external Runtime Cache security group, with fail-closed Terraform preconditions.
 - PR #423 is open. Apply run `29387480668` successfully created and state-verified the two API/worker Redis ingress rules; post-apply review run `29387561447` reported no infrastructure changes.
 - The complete runtime plan also contains unrelated drift (`5 add, 7 change, 2 destroy`), so it must not be applied as the incident repair.
@@ -21,6 +22,14 @@ Short English-only working log for the current agent context. Older records are 
 - Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
 
 ## Session Record
+
+### 2026-07-16 - Rebuild and harden the Workspace AI Workbench
+
+- Replaced the legacy chat presentation with a dedicated Workbench, three independent modes, structured result artifacts, explicit approval trays, and responsive desktop/mobile behavior while preserving the existing AI contracts.
+- Preserved the original Board fingerprint and revision through Draft follow-up, kept aborted or superseded requests from publishing late state, and limited Terraform approval controls to fresh applicable fixes.
+- Removed unused legacy AI chat CSS, made scope clearing preserve other conversations, kept transcript position while reading older results, and prevented short-height result cards from being compressed or clipped.
+- Chrome QA passed at 375px, 768px, 1024px, and 1920px: mobile focus returned from outside the dialog, keyboard Tab reached the technical-details summary, transcript updates did not force the reader to the bottom, no horizontal overflow appeared, and console errors were absent.
+- Verification passed: Workspace AI tests 100/100, Terraform provider-chain tests 8/8, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and two final reviews with no remaining findings. No Board/Terraform approval, deployment, or cloud mutation was performed.
 
 
 ### 2026-07-15 - Repair production Live Observation Runtime Cache ingress

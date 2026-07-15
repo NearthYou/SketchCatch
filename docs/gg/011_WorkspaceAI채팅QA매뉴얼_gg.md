@@ -128,7 +128,18 @@ Desktop 정상 기준:
 - [ ] mobile은 전체 화면, focus trap, safe area가 동작함
 - [ ] `375px`, `768px`, `1280px`에서 가로 overflow와 겹침이 없음
 
-## 12. 오류 기록 형식
+## 12. 2026-07-16 실화면 QA 기록
+
+- `375 x 812`: 전체 화면 modal, 가로 탭, 가로 overflow 없음
+- `768 x 900`: dialog 너비 768px, `aria-modal=true`, 가로 overflow 없음
+- `1024 x 500`: 긴 오류 결과가 card 안에서 잘리지 않고 transcript로 스크롤됨
+- `1920 x 912`: 비모달 작업실을 닫은 뒤 일반 viewport 복원, 가로 overflow 없음
+- desktop 바깥에 있던 focus가 mobile 전환 후 `Tab`에서 작업실 안으로 복귀함
+- mobile `Tab` 순서에 `기술 정보 보기` native `summary`가 포함됨
+- transcript 위쪽을 읽는 중 오류 분석 상태가 갱신되어도 아래쪽으로 강제 이동하지 않음
+- Browser console 새 오류 없음
+
+## 13. 오류 기록 형식
 
 ```text
 화면 크기:
