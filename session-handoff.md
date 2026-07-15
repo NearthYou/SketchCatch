@@ -5,6 +5,7 @@ Use this file only for compact continuation context. Write it in English.
 ## Currently Verified
 
 - `codex/fix-live-observation-redis-readiness` connects the current ECS API/worker security groups to the external Runtime Cache security group on Redis port only and fails plans closed when the connection is required but missing.
+- PR #423 is open. Review-only run `29385936278` passed with `2 add, 0 change, 0 destroy`; complete runtime run `29385795235` contains unrelated drift and must not be used for the incident repair.
 - Static and Terraform plan regressions, harness, lint, typecheck, and build pass; no production mutation has occurred.
 - Direct ECS evidence from the prior run remains valid, including persisted release/history/notifications and CloudWatch metrics.
 - ECS GitOps Infra run `29334708442` and App run `29334822683` succeeded for SHA `3a12e55c13e7be1a769cfbe920b112516d8c14ce`, digest `20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1`, and task definition revision 7.
@@ -37,6 +38,6 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Set `runtime_cache_security_group_id` to the Runtime Cache CloudFormation `SecurityGroupId` output, review a production runtime plan that adds only the ECS API/worker Redis ingress rules, apply through the operator-approved workflow, and verify `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND` for a nonexistent observation UUID.
+- After separate apply approval, apply only the two targets reviewed in run `29385936278`, then verify `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND` for a nonexistent observation UUID and run a refresh-only plan.
 - Merge the code-completion PR after focused CI and review.
 - Keep Issue #378 open for a separately approved real-environment acceptance run covering Static, Lambda, EC2/ASG, rollback, QR/CloudWatch, and Web Push.
