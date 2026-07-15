@@ -35,18 +35,25 @@ test("오류 분석과 에이전트 리뷰 작업은 Workbench 작업 행에 머
 
   assert.match(
     errorActionsSection,
-    /className=\{styles\.taskActions\}[\s\S]*>선택 오류 분석<\/[\s\S]*>모두 분석<\//
+    /className=\{styles\.taskActions\}[\s\S]*onClick=\{\(\) => void analyzeSelectedTerraformIssue\(\)\}[\s\S]*>선택 오류 분석<\/[\s\S]*onClick=\{\(\) => void analyzeAllTerraformIssues\(\)\}[\s\S]*>모두 분석<\//
   );
+  assert.match(errorActionsSection, /onClick=\{applyAllTerraformIssueFixes\}/);
   assert.match(
     reviewSection,
-    /className=\{styles\.taskActions\}[\s\S]*>에이전트 리뷰<\//
+    /className=\{styles\.taskActions\}[\s\S]*onClick=\{\(\) => void runTerraformAgentReview\(\)\}[\s\S]*>에이전트 리뷰<\//
   );
   assert.match(
     selectedErrorSection,
     /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applySelectedTerraformIssueFix\}/
   );
-  assert.match(draftSection, /className=\{styles\.approvalTray\}[\s\S]*>Board에 적용<\//);
-  assert.match(patchSection, /className=\{styles\.approvalTray\}[\s\S]*>Board에 적용<\//);
+  assert.match(
+    draftSection,
+    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applyDraftToBoard\}[\s\S]*>Board에 적용<\/[\s\S]*onClick=\{cancelDraftPreview\}[\s\S]*>취소<\/[\s\S]*regenerateDraft/
+  );
+  assert.match(
+    patchSection,
+    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applyPatchPreviewToBoard\}[\s\S]*>Board에 적용<\/[\s\S]*onClick=\{cancelPatchPreview\}[\s\S]*>취소<\/[\s\S]*regeneratePatchPreview/
+  );
 });
 
 test("오른쪽 패널 상호작용은 탭만 바꾸고 닫힌 채팅을 강제로 열지 않는다", () => {

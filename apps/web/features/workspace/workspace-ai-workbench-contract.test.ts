@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const controllerSource = read("WorkspaceAiChatDock.tsx");
@@ -17,6 +17,7 @@ test("AI chat controller delegates its outer surface to the AI Workbench", () =>
   );
   assert.match(controllerSource, /<WorkspaceAiWorkbench/);
   assert.doesNotMatch(controllerSource, /styles\.aiChatDock|styles\.aiChatChrome/);
+  assert.doesNotMatch(readProductionSources(), /styles\.aiChat[A-Z]/);
 });
 
 test("AI Workbench exposes the desktop mode rail and active work panel accessibly", () => {
@@ -107,6 +108,10 @@ test("AI Workbench becomes an interactive full-screen surface on mobile", () => 
     /@media \(max-width:\s*768px\)[\s\S]*\.workWindow[^{}]*\{(?=[^}]*inset:\s*0;)(?=[^}]*height:\s*100dvh;)[^}]*\}/s
   );
   assert.match(workbenchStyles, /\.mobileTabList/);
+  assert.match(workbenchStyles, /padding-bottom:\s*env\(safe-area-inset-bottom\);/);
+  assert.match(launcherStyles, /env\(safe-area-inset-bottom\)/);
+  assert.match(workbenchStyles, /@media \(prefers-reduced-motion:\s*reduce\)/);
+  assert.match(launcherStyles, /@media \(prefers-reduced-motion:\s*reduce\)/);
 });
 
 test("desktop Workbench and launcher stay left of the open right panel", () => {
@@ -135,6 +140,13 @@ test("selected Terraform issue result is inset inside the artifact body", () => 
   );
 });
 
+test("closing the Workbench restores focus to its launcher", () => {
+  assert.match(
+    controllerSource,
+    /const closeChatDock = useCallback\(\(\) => \{[\s\S]*?setOpen\(false\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?launcherButtonRef\.current\?\.focus\(\);/
+  );
+});
+
 function read(relativePath: string): string {
   try {
     return readFileSync(new URL(relativePath, import.meta.url), "utf8");
@@ -145,4 +157,34 @@ function read(relativePath: string): string {
 
     throw error;
   }
+}
+
+function readProductionSources(): string {
+  const webRoot = new URL("../../", import.meta.url);
+  const collected: string[] = [];
+
+  visit(webRoot);
+  return collected.join("\n");
+
+  function visit(directory: URL): void {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === ".next" || entry.name === "node_modules") continue;
+
+      const entryUrl = new URL(entry.name, ensureDirectoryUrl(directory));
+      if (entry.isDirectory()) {
+        visit(new URL(`${entry.name}/`, ensureDirectoryUrl(directory)));
+        continue;
+      }
+
+      if (!entry.isFile() || !/\.(?:ts|tsx)$/.test(entry.name) || entry.name.includes(".test.")) {
+        continue;
+      }
+
+      collected.push(readFileSync(entryUrl, "utf8"));
+    }
+  }
+}
+
+function ensureDirectoryUrl(url: URL): URL {
+  return url.pathname.endsWith("/") ? url : new URL(`${url.pathname}/`, url);
 }
