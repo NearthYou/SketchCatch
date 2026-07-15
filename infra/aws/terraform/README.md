@@ -18,6 +18,7 @@ API -> ECS RunTask one-off worker
 - API/web ECR repository와 최근 tagged image 20개 lifecycle
 - ECS cluster, API/web service, API/web/worker task definition
 - API/web/worker execution role, task role, security group
+- 기존 internal Runtime Cache 보안 그룹에 대한 ECS API/worker Redis ingress
 - API/web `ip` target group, HTTP redirect, HTTPS listener와 API path rule
 - API/web/worker CloudWatch log group, error/CPU/memory/ALB/RDS availability alarm
 - API/web Application Auto Scaling target과 CPU target-tracking policy
@@ -50,6 +51,8 @@ artifact_bucket_name        = "sketchcatch-..."
 sketchcatch_public_base_url = "https://sketchcatch.net"
 oauth_redirect_base_url     = "https://sketchcatch.net"
 certificate_arn             = "arn:aws:acm:ap-northeast-2:...:certificate/..."
+runtime_cache_security_group_id = "sg-..."
+runtime_cache_port              = 6379
 
 ecs_desired_count                  = 1
 enable_ecs_service_autoscaling     = true
@@ -60,14 +63,17 @@ ecs_autoscaling_target_cpu_percent = 60
 
 API 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Parameter Store ARN으로 전달합니다. `DATABASE_URL`, `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `REDIS_URL`, OAuth secret, GitHub App secret와 `OPENAI_API_KEY`는 `api_secret_arns`에 있어야 합니다. Web Push를 켤 때는 `WEB_PUSH_VAPID_PRIVATE_KEY`와 `WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY`도 `api_secret_arns`로만 전달합니다. public URL, client ID, bucket name, region, VAPID public key와 subject만 일반 environment에 둡니다.
 
+`runtime_cache_security_group_id`에는 `infra/aws/cloudformation/runtime-cache-elasticache.yml` stack output `SecurityGroupId`를 입력합니다. runtime Terraform은 이 보안 그룹에 현재 ECS API와, worker dispatch가 활성화된 경우 ECS worker 보안 그룹만 Redis 포트로 허용합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 값이 없으면 plan이 실패합니다.
+
 ## 적용 절차
 
 1. remote state와 production tfvars를 백업합니다.
-2. `terraform plan`에서 legacy ECS service/target group 삭제, API/web autoscaling과 alarm 생성 외 예상하지 않은 변경이 없는지 확인합니다.
+2. `terraform plan`에서 Runtime Cache ingress source가 현재 ECS API/worker 보안 그룹이고 Redis 포트 하나만 여는지 확인합니다.
 3. 저장한 plan을 승인 후 apply합니다.
 4. API/web service가 안정화되고 target이 healthy인지 확인합니다.
 5. `/`, `/health`, `/health/db`, 인증이 필요한 `/api/projects`를 smoke합니다.
-6. 최종 refresh-only plan과 task revision, desired/running count, alarm 상태를 기록합니다.
+6. Live Observation이 활성화된 경우 존재하지 않는 UUID로 public bootstrap을 호출해 `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`가 반환되는지 확인합니다. `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE`은 Runtime Cache 연결 실패입니다.
+7. 최종 refresh-only plan과 task revision, desired/running count, alarm 상태를 기록합니다.
 
 ## 정적 검증
 

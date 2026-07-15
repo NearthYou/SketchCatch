@@ -4,6 +4,8 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Branch `codex/fix-live-observation-redis-readiness` adds runtime-owned Redis ingress from the current ECS API and worker security groups to the external Runtime Cache security group, with fail-closed Terraform preconditions.
+- Production still returns `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE` until an approved production runtime plan supplies the CloudFormation `SecurityGroupId` output and applies the two ingress rules.
 
 - `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
 - This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
@@ -16,6 +18,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+
+### 2026-07-15 - Repair production Live Observation Runtime Cache ingress
+
+- Reproduced the production collector failure with a deterministic public bootstrap request and identified an unowned ECS-to-Runtime-Cache ingress gap, introduced by the earlier ECS cutover and consistent with the observed timeout.
+- Added optional Runtime Cache security-group and port inputs, API/worker Redis ingress rules, and production preconditions that block Live Observation or worker dispatch without the connection.
+- Added static production-infrastructure and Terraform plan regressions, documented CloudFormation-to-runtime ownership and the expected `404` readiness signal, and updated the import manifest without taking ownership of the existing ElastiCache resources.
+- Verification: red/green production structure check, Terraform fmt/validate/test (2/2), harness, lint, typecheck, build, JSON parse, and diff checks pass. No AWS, Terraform apply, deployment, or cost-bearing mutation was performed; Git handoff was approved for the follow-up.
+- Next: run an approved production runtime plan with `runtime_cache_security_group_id` set to the Runtime Cache stack output, apply only the two ingress rules, and verify the bootstrap response changes from `503` to `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`.
 
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 

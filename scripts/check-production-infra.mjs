@@ -254,6 +254,8 @@ for (const retiredPath of [
 const runtimeEcs = read("infra/aws/terraform/ecs.tf");
 const runtimeAlb = read("infra/aws/terraform/alb.tf");
 const runtimeAutoscaling = read("infra/aws/terraform/autoscaling.tf");
+const runtimeNetwork = read("infra/aws/terraform/network.tf");
+const runtimeVariables = read("infra/aws/terraform/variables.tf");
 check(
   !/resource\s+"aws_ecs_service"\s+"app"/.test(runtimeEcs),
   "legacy ECS service must not exist"
@@ -269,6 +271,30 @@ for (const marker of [
 ]) {
   check(runtimeAutoscaling.includes(marker), `runtime autoscaling is missing ${marker}`);
 }
+for (const marker of [
+  'variable "runtime_cache_security_group_id"',
+  'variable "runtime_cache_port"'
+]) {
+  check(runtimeVariables.includes(marker), `runtime cache networking is missing ${marker}`);
+}
+for (const marker of [
+  'resource "aws_vpc_security_group_ingress_rule" "runtime_cache_from_ecs_api"',
+  'resource "aws_vpc_security_group_ingress_rule" "runtime_cache_from_ecs_worker"',
+  "referenced_security_group_id = aws_security_group.ecs_service.id",
+  "referenced_security_group_id = aws_security_group.ecs_worker.id"
+]) {
+  check(runtimeNetwork.includes(marker), `runtime cache networking is missing ${marker}`);
+}
+check(
+  runtimeEcs.includes("runtime_cache_security_group_id is required when Live Observation is enabled"),
+  "Live Observation must fail its production plan when Runtime Cache ingress is not configured"
+);
+check(
+  runtimeEcs.includes(
+    "runtime_cache_security_group_id is required before ECS worker dispatch can be enabled"
+  ),
+  "ECS worker dispatch must fail its production plan when Runtime Cache ingress is not configured"
+);
 
 const deployWorkflow = fs.readFileSync(deployWorkflowPath, "utf8");
 for (const marker of [

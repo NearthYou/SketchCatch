@@ -685,11 +685,14 @@ Redis는 SketchCatch API의 내부 Runtime Cache입니다. 제품 resource catal
 
 운영에서는 `infra/aws/cloudformation/runtime-cache-elasticache.yml`로 ElastiCache Redis를 생성한 뒤 output `RedisUrl`을 API runtime의 `REDIS_URL`로 주입합니다. 이 리소스는 비용이 발생하며, API runtime security group에서만 접근 가능하게 제한해야 합니다.
 
+ECS 전환 뒤에는 CloudFormation stack output `SecurityGroupId`를 production runtime Terraform의 `runtime_cache_security_group_id`에 입력합니다. runtime Terraform이 현재 ECS API 보안 그룹과, worker dispatch가 활성화된 경우 ECS worker 보안 그룹에서만 `runtime_cache_port`로 들어오는 ingress를 관리합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 연결이 없으면 plan을 실패시켜, ECS 이전 보안 그룹만 남은 상태에서 배포가 성공한 것처럼 보이지 않게 합니다.
+
 검증 대상:
 
 - Deployment log cursor가 Runtime Cache를 사용할 수 있는지
 - Git/CI/CD pipeline status cache가 Runtime Cache를 사용할 수 있는지
 - Redis 장애 또는 미설정 시 in-memory fallback으로 degraded 동작이 가능한지
+- Live Observation이 활성화된 production에서는 존재하지 않는 UUID의 public bootstrap이 `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`를 반환하는지. `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE`이면 Redis endpoint, TLS 또는 보안 그룹 연결을 복구해야 함
 
 로컬 검증:
 

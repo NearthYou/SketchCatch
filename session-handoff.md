@@ -4,6 +4,8 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
+- `codex/fix-live-observation-redis-readiness` connects the current ECS API/worker security groups to the external Runtime Cache security group on Redis port only and fails plans closed when the connection is required but missing.
+- Static and Terraform plan regressions, harness, lint, typecheck, and build pass; no production mutation has occurred.
 - Direct ECS evidence from the prior run remains valid, including persisted release/history/notifications and CloudWatch metrics.
 - ECS GitOps Infra run `29334708442` and App run `29334822683` succeeded for SHA `3a12e55c13e7be1a769cfbe920b112516d8c14ce`, digest `20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1`, and task definition revision 7.
 - Project refresh returns `stale=false`; all seven CI stages succeeded, 1,161 masked logs persisted, and release/history includes the matching SHA, digest, revision, URL, and healthy 1/1 ECS evidence.
@@ -29,10 +31,12 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Broken Or Unverified
 
+- Production Live Observation still returns `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE` until the approved Runtime Cache ingress plan is applied and the public bootstrap returns the expected not-found response.
 - Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
 - Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
 
 ## Best Next Action
 
+- Set `runtime_cache_security_group_id` to the Runtime Cache CloudFormation `SecurityGroupId` output, review a production runtime plan that adds only the ECS API/worker Redis ingress rules, apply through the operator-approved workflow, and verify `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND` for a nonexistent observation UUID.
 - Merge the code-completion PR after focused CI and review.
 - Keep Issue #378 open for a separately approved real-environment acceptance run covering Static, Lambda, EC2/ASG, rollback, QR/CloudWatch, and Web Push.
