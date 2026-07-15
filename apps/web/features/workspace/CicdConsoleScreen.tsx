@@ -23,7 +23,6 @@ import {
   getCicdPollIntervalMs,
   getSelectedCicdPipelineRunId,
   initialCicdConsoleRequestState,
-  isGitHubIdentityRequiredError,
   mergeCicdPipelineRun,
   reduceCicdLogState,
   reduceCicdConsoleRequestState
@@ -127,14 +126,7 @@ export function CicdConsoleScreen({
         ) ?? null;
         let githubAccountConnected = true;
         if (!activeRepository) {
-          try {
-            githubAccountConnected = (await listGitHubAccountInstallations()).length > 0;
-          } catch (error) {
-            if (!isGitHubIdentityRequiredError(error)) {
-              throw error;
-            }
-            githubAccountConnected = false;
-          }
+          githubAccountConnected = (await listGitHubAccountInstallations()).length > 0;
         }
         const monitoringConfig = activeRepository
           ? await getGitCicdMonitoringConfig(projectId, activeRepository.id)
@@ -334,7 +326,7 @@ export function CicdConsoleScreen({
       <div className={styles.cicdState} role="alert">
         <h3>GitHub 권한을 확인해 주세요.</h3>
         <p>{screenErrorMessage}</p>
-        <a className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>GitHub 계정 설정 열기</a>
+        <a className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>GitHub App 설정 열기</a>
         <button className={styles.deploymentSecondaryButton} onClick={() => {
           loadedProjectIdRef.current = null;
           setIsInitialLoading(true);
@@ -361,13 +353,13 @@ export function CicdConsoleScreen({
   if (!repository && hasGitHubAccountConnection === false) {
     return (
       <div className={styles.cicdState} role="status">
-        <h3>GitHub 계정 연결이 필요합니다.</h3>
-        <p>GitHub App을 먼저 연결한 뒤 이 프로젝트의 저장소를 선택할 수 있습니다.</p>
+        <h3>GitHub App 연결이 필요합니다.</h3>
+        <p>현재 로그인 방식과 관계없이 GitHub App을 연결한 뒤 이 프로젝트의 저장소를 선택할 수 있습니다.</p>
         <a
           className={styles.deploymentPrimaryButton}
           href={githubAccountSettingsHref}
         >
-          GitHub 계정 설정 열기
+          GitHub App 설정 열기
         </a>
       </div>
     );
@@ -448,9 +440,6 @@ function mergeLogs(current: readonly GitCicdPipelineLog[], next: readonly GitCic
 }
 
 function isGitHubPermissionFailure(error: unknown): boolean {
-  if (isGitHubIdentityRequiredError(error)) {
-    return false;
-  }
   if (error instanceof ApiClientError && error.status === 403) {
     return true;
   }

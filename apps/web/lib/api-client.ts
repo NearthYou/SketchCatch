@@ -44,10 +44,8 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "API 데이터베이스 마이그레이션이 필요합니다. 서버에서 pnpm --filter @sketchcatch/api db:migrate를 실행한 뒤 다시 시도해주세요.",
   "GIT_APP_AUTHENTICATION_FAILED":
     "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요.",
-  "GIT_APP_GITHUB_IDENTITY_REQUIRED":
-    "GitHub로 로그인한 계정만 GitHub App repository를 연결할 수 있습니다.",
   "GIT_APP_INSTALLATION_FORBIDDEN":
-    "현재 GitHub 계정이 소유한 GitHub App 설치가 아닙니다. 올바른 계정으로 다시 연결해주세요.",
+    "이 GitHub App installation은 다른 SketchCatch 계정에 연결되어 있거나 접근할 수 없습니다. GitHub App 연결을 다시 진행해주세요.",
   "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE":
     "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요.",
   "GIT_APP_REPOSITORY_ARCHIVED":
