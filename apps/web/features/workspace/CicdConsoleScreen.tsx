@@ -5,6 +5,7 @@ import type {
   GitCicdMonitoringConfig,
   GitCicdPipelineLog,
   GitCicdPipelineRun,
+  ProjectDeploymentTarget,
   SourceRepository
 } from "@sketchcatch/types";
 import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
@@ -16,6 +17,7 @@ import {
   createGitCicdHandoff,
   getGitCicdMonitoringConfig,
   getGitCicdPipelineRun,
+  getProjectDeploymentTarget,
   listGitHubAccountInstallations,
   listDeployments,
   listGitCicdHandoffs,
@@ -37,7 +39,11 @@ import {
   reduceCicdLogState,
   reduceCicdConsoleRequestState
 } from "./cicd-console-state";
-import { buildGitCicdHandoffRequest, selectGitCicdSourceDeployment } from "./cicd-handoff";
+import {
+  buildGitCicdHandoffRequest,
+  getGitCicdDeploymentTargetBlocker,
+  selectGitCicdSourceDeployment
+} from "./cicd-handoff";
 import { getSafePipelineRunLinks } from "./deployment-output-links";
 import handoffStyles from "./cicd-handoff.module.css";
 import styles from "./workspace.module.css";
@@ -59,6 +65,7 @@ export function CicdConsoleScreen({
     null
   );
   const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(null);
+  const [deploymentTarget, setDeploymentTarget] = useState<ProjectDeploymentTarget | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [handoffs, setHandoffs] = useState<GitCicdHandoff[]>([]);
   const [selectedHandoffId, setSelectedHandoffId] = useState<string | null>(null);
@@ -103,6 +110,10 @@ export function CicdConsoleScreen({
       : [];
   const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
   const sourceDeployment = useMemo(() => selectGitCicdSourceDeployment(deployments), [deployments]);
+  const deploymentTargetBlocker = useMemo(
+    () => getGitCicdDeploymentTargetBlocker(deploymentTarget),
+    [deploymentTarget]
+  );
   const currentHandoff = useMemo(() => {
     const sorted = [...handoffs].sort((left, right) =>
       right.updatedAt.localeCompare(left.updatedAt)
@@ -146,7 +157,7 @@ export function CicdConsoleScreen({
   }, [projectId]);
 
   const createHandoff = useCallback(async (): Promise<void> => {
-    if (!repository || !config || !sourceDeployment) {
+    if (!repository || !config || !sourceDeployment || deploymentTargetBlocker) {
       return;
     }
 
@@ -171,7 +182,7 @@ export function CicdConsoleScreen({
     } finally {
       setIsHandoffBusy(false);
     }
-  }, [config, projectId, repository, sourceDeployment]);
+  }, [config, deploymentTargetBlocker, projectId, repository, sourceDeployment]);
 
   const runHandoffAction = useCallback(
     async (action: () => Promise<unknown>): Promise<void> => {
@@ -220,11 +231,18 @@ export function CicdConsoleScreen({
       setIsInitialLoading(true);
 
       try {
-        const [repositories, initialRuns, loadedDeployments, loadedHandoffs] = await Promise.all([
+        const [
+          repositories,
+          initialRuns,
+          loadedDeployments,
+          loadedHandoffs,
+          loadedDeploymentTarget
+        ] = await Promise.all([
           listSourceRepositories(projectId),
           listGitCicdPipelineRuns(projectId, { limit: 50 }),
           listDeployments(projectId),
-          listGitCicdHandoffs(projectId)
+          listGitCicdHandoffs(projectId),
+          getProjectDeploymentTarget(projectId)
         ]);
         const activeRepository =
           repositories.find((item) => item.provider === "github" && item.status === "active") ??
@@ -251,6 +269,7 @@ export function CicdConsoleScreen({
         setRepository(activeRepository);
         setHasGitHubAccountConnection(githubAccountConnected);
         setConfig(monitoringConfig);
+        setDeploymentTarget(loadedDeploymentTarget);
         setDeployments(loadedDeployments);
         setHandoffs(loadedHandoffs);
         setSelectedHandoffId((selected) =>
@@ -309,13 +328,15 @@ export function CicdConsoleScreen({
     if (!isVisible || document.visibilityState !== "visible") return;
     setIsRefreshing(true);
     try {
-      const [result, loadedDeployments, loadedHandoffs] = await Promise.all([
+      const [result, loadedDeployments, loadedHandoffs, loadedDeploymentTarget] = await Promise.all([
         refreshProjectGitCicdPipelineRuns(projectId),
         listDeployments(projectId),
-        listGitCicdHandoffs(projectId)
+        listGitCicdHandoffs(projectId),
+        getProjectDeploymentTarget(projectId)
       ]);
       applyRuns(result.runs);
       setDeployments(loadedDeployments);
+      setDeploymentTarget(loadedDeploymentTarget);
       setHandoffs(loadedHandoffs);
       setSelectedHandoffId((selected) =>
         loadedHandoffs.some((handoff) => handoff.id === selected)
@@ -594,6 +615,13 @@ export function CicdConsoleScreen({
           <p className={handoffStyles.notice}>
             프로젝트 설정에서 CI/CD branch와 경로 검증을 완료해야 합니다.
           </p>
+        ) : deploymentTargetBlocker ? (
+          <p className={handoffStyles.notice}>
+            {deploymentTargetBlocker === "output_url_required"
+              ? "프로젝트 설정에서 ECS Output URL을 외부 HTTPS URL로 저장해야 합니다."
+              : "프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 배포 대상으로 저장해야 합니다."}
+            <a href={projectSettingsHref}>프로젝트 배포 대상 설정 열기</a>
+          </p>
         ) : existingHandoff ? (
           <p className={handoffStyles.notice}>
             이 승인 Plan으로 만든 PR이 이미 있습니다.
@@ -612,6 +640,7 @@ export function CicdConsoleScreen({
               isHandoffBusy ||
               !sourceDeployment ||
               config?.validationStatus !== "valid" ||
+              deploymentTargetBlocker !== null ||
               existingHandoff !== null
             }
             onClick={() => setIsHandoffReviewOpen(true)}

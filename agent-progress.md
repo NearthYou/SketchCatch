@@ -8,7 +8,9 @@ Short English-only working log for the current agent context. Older records are 
 - PR #423 is open. Review-only production run `29385936278` resolved the Runtime Cache CloudFormation outputs and produced a targeted plan of `2 add, 0 change, 0 destroy` for the API/worker Redis ingress rules.
 - The complete runtime plan also contains unrelated drift (`5 add, 7 change, 2 destroy`), so it must not be applied as the incident repair.
 - Production still returns `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE` until an approved production runtime plan supplies the CloudFormation `SecurityGroupId` output and applies the two ingress rules.
-
+- Production request `req-c2` was a local Git/CI/CD precondition conflict, not a duplicate GitHub resource: the target repository had no SketchCatch branch or PR, and project `0bdf56aa-68b7-4382-b37f-31d8996136c1` had no `project_deployment_targets` row.
+- The CI/CD console now loads the project deployment target, blocks PR creation before POST when confirmation or the ECS output URL is missing, and links directly to project target settings.
+- GitOps target conflicts expose stable precondition codes; mapped conflicts retain actionable Korean guidance and unknown conflicts use a neutral state-conflict message instead of the misleading duplicate-information message.
 - `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
 - This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
 - Before the merge, focused notification SSE fixes passed API notification tests 17/17, Web notification tests 6/6, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
@@ -30,6 +32,13 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: red/green production structure check, Terraform fmt/validate/test (2/2), harness, lint, typecheck, build, JSON parse, and diff checks pass. No AWS, Terraform apply, deployment, or cost-bearing mutation was performed; Git handoff was approved for the follow-up.
 - Production evidence: full review-only run `29385795235` exposed unrelated drift; targeted run `29385936278` passed with only two ingress creates and no updates or destroys.
 - Next: after separate apply approval, apply only the reviewed ingress targets and verify the bootstrap response changes from `503` to `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`.
+
+### 2026-07-15 - Diagnose and fix misleading Git/CI/CD handoff conflict
+
+- Reproduced the production HTTP 409 after regenerating and approving the current Terraform apply plan; verified that no GitHub PR or SketchCatch branch was created.
+- Queried the production configuration through an isolated read-only ECS diagnostic task and confirmed the project deployment target record is absent.
+- Added fail-closed Web preflight, a direct target-settings recovery link, stable API conflict codes, and actionable Korean conflict messages.
+- Verification: focused API tests passed 2/2 and focused Web tests passed 15/15; `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Full `pnpm test` remains non-green only on the three pre-existing three-tier Template layout/parent contract failures in `packages/types`.
 
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 
