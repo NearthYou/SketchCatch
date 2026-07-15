@@ -30,7 +30,7 @@ export function getWorkspaceAiChatDockStatus({
 
   if (isStale) {
     return {
-      description: "보드 기준이 바뀌어 적용할 수 없습니다. 최신 기준으로 다시 생성하세요.",
+      description: "작업 기준이 바뀌어 적용할 수 없습니다. 최신 기준으로 다시 실행하세요.",
       label: "오래된 제안"
     };
   }

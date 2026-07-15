@@ -36,6 +36,7 @@ export type WorkspaceAiWorkbenchProps = {
   ) => void;
   readonly onScopeChange: (scope: WorkspaceAiChatScope) => void;
   readonly onScopeKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  readonly onTranscriptScroll: () => void;
   readonly scopeDefinitions: readonly WorkspaceAiWorkbenchScopeDefinition[];
   readonly status: WorkspaceAiChatDockStatus | null;
   readonly surfaceRef: Ref<HTMLElement>;
@@ -62,6 +63,7 @@ export function WorkspaceAiWorkbench({
   onScopeButtonRef,
   onScopeChange,
   onScopeKeyDown,
+  onTranscriptScroll,
   scopeDefinitions,
   status,
   surfaceRef,
@@ -161,6 +163,7 @@ export function WorkspaceAiWorkbench({
             aria-labelledby={`workspace-ai-chat-tab-${activeScope}`}
             className={styles.transcript}
             id={`workspace-ai-chat-panel-${activeScope}`}
+            onScroll={onTranscriptScroll}
             ref={transcriptRef}
             role="tabpanel"
           >

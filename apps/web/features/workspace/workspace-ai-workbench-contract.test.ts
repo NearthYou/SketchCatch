@@ -9,6 +9,7 @@ const launcherStyles = read("workspace-ai-chat-launcher.module.css");
 const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
 const workbenchSource = read("WorkspaceAiWorkbench.tsx");
 const workbenchStyles = read("workspace-ai-workbench.module.css");
+const workspaceStyles = read("workspace.module.css");
 
 test("AI chat controller delegates its outer surface to the AI Workbench", () => {
   assert.match(
@@ -140,6 +141,10 @@ test("selected Terraform issue result is inset inside the artifact body", () => 
   );
 });
 
+test("legacy AI chat selectors are removed from the shared workspace stylesheet", () => {
+  assert.doesNotMatch(workspaceStyles, /\.aiChat[A-Za-z0-9_-]*/);
+});
+
 test("closing the Workbench restores focus to its launcher", () => {
   assert.match(
     controllerSource,
@@ -151,6 +156,44 @@ test("mobile focus trap ignores roving tabs that are not keyboard focusable", ()
   assert.match(
     controllerSource,
     /function trapFocusWithin[\s\S]*?\.filter\([\s\S]*?element\.tabIndex >= 0/
+  );
+  assert.match(
+    controllerSource,
+    /button:not\(:disabled\)[\s\S]*?summary[\s\S]*?\[tabindex\]/
+  );
+  assert.match(controllerSource, /element\.closest\("\[inert\]"\)/);
+  assert.match(controllerSource, /element\.getClientRects\(\)\.length > 0/);
+  assert.match(
+    controllerSource,
+    /!container\.contains\(document\.activeElement\)[\s\S]*?event\.shiftKey \? last : first/
+  );
+});
+
+test("transcript follows new content only while the reader is near the bottom", () => {
+  assert.match(workbenchSource, /onScroll=\{onTranscriptScroll\}/);
+  assert.match(controllerSource, /transcriptShouldFollowRef/);
+  assert.match(controllerSource, /isWorkspaceAiTranscriptNearBottom/);
+  assert.match(controllerSource, /shouldForceTranscriptScroll/);
+});
+
+test("Errors scope exposes approval only for an applicable fresh fix plan", () => {
+  assert.match(controllerSource, /const selectedTerraformFixPlan = useMemo/);
+  assert.match(controllerSource, /selectedTerraformFixPlan\.canApply/);
+  assert.match(
+    controllerSource,
+    /showSelectedTerraformApproval[\s\S]*?<div className=\{styles\.approvalTray\}/
+  );
+  assert.match(
+    controllerSource,
+    /disabled=\{[\s\S]*?!selectedTerraformFixPlan\.canApply[\s\S]*?applyingTerraformFixRequestId/
+  );
+});
+
+test("clearing one scope preserves pending suggestion selections in other scopes", () => {
+  assert.match(controllerSource, /removeWorkspaceAiSelectionEntries/);
+  assert.match(
+    controllerSource,
+    /getChatMessageScope\(message\) === activeChatTab[\s\S]*?activeMessageIds/
   );
 });
 
