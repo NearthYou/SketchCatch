@@ -176,7 +176,7 @@ function createStore(env: RuntimeEnv): LiveObservationStore {
   }
   if (!env.redisUrl?.trim()) return createUnavailableStore();
   return createRedisLiveObservationStore({
-    keyNamespace: "sketchcatch:live-observation:v2",
+    keyNamespace: "production",
     redisUrl: env.redisUrl.trim()
   });
 }
