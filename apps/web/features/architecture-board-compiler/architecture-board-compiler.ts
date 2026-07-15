@@ -417,10 +417,13 @@ function createMaterializedCandidate(
     nodes: materialized.nodes,
     protectedNodeIds
   });
-  const diagram = routeAndLayerDiagram({
-    ...cloneDiagram(materialized),
-    nodes: restoreLockedNodeGeometry(layout.nodes, materialized.nodes)
-  });
+  const diagram = routeAndLayerDiagram(
+    {
+      ...cloneDiagram(materialized),
+      nodes: restoreLockedNodeGeometry(layout.nodes, materialized.nodes)
+    },
+    beforeDiagram
+  );
   const presentationResult = applyArchitectureBoardPresentationOperations(
     diagram,
     presentationOperations
@@ -1089,9 +1092,12 @@ function hasDiagramAreaAncestor(
   return false;
 }
 
-function routeAndLayerDiagram(diagram: DiagramJson): DiagramJson {
+function routeAndLayerDiagram(diagram: DiagramJson, semanticSourceDiagram: DiagramJson): DiagramJson {
   const layeredNodes = applyCompilerLayerOrder(diagram.nodes);
   const nodeById = new Map(layeredNodes.map((node) => [node.id, node]));
+  const semanticSourceEdgeById = new Map(
+    semanticSourceDiagram.edges.map((edge) => [edge.id, edge])
+  );
 
   return {
     ...cloneDiagram(diagram),
@@ -1107,8 +1113,18 @@ function routeAndLayerDiagram(diagram: DiagramJson): DiagramJson {
         segments.length === 0 ? [] : [segments[0]!.from, ...segments.map((segment) => segment.to)];
       const sourcePoint = points[0] ?? { x: source.position.x, y: source.position.y };
       const targetPoint = points.at(-1) ?? { x: target.position.x, y: target.position.y };
+      const semanticSourceEdge = semanticSourceEdgeById.get(edge.id);
+      const semanticSourceRoute =
+        semanticSourceEdge?.sourceNodeId === edge.sourceNodeId &&
+        semanticSourceEdge.targetNodeId === edge.targetNodeId
+          ? semanticSourceEdge.route
+          : undefined;
+      const arrowDirection =
+        semanticSourceRoute?.arrowDirection ?? edge.route?.arrowDirection ?? "source-to-target";
+      const arrowAngle = semanticSourceRoute?.arrowAngle ?? edge.route?.arrowAngle;
       const route = {
-        arrowDirection: "source-to-target" as const,
+        arrowDirection,
+        ...(arrowAngle === undefined ? {} : { arrowAngle }),
         labelPosition: getPolylineHalfwayPoint(points),
         sourcePoint,
         svgPath: points
