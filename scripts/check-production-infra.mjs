@@ -163,9 +163,26 @@ for (const marker of [
   "environment: production-infra-plan",
   "management_group:",
   "runtime_plan_scope:",
+  "operation:",
+  "approved_plan_run_id:",
+  "expected_head_sha:",
   "confirmation:",
   'expected_confirmation="${MANAGEMENT_GROUP}-review-only"',
   "Review-only Terraform plan",
+  "Create reviewed apply plan",
+  "Validate reviewed apply plan",
+  "expected_head_sha must exactly match the dispatched commit",
+  ".resource_changes[]",
+  '"actions": ["create"]',
+  "all($rules[];",
+  "environment: production",
+  "actions: write",
+  "actions/upload-artifact@v4",
+  "actions/download-artifact@v4",
+  "retention-days: 1",
+  "terraform -chdir=\"${TERRAFORM_ROOT}\" apply -input=false -no-color tfplan",
+  "Delete reviewed plan artifact",
+  "actions/artifacts/${ARTIFACT_ID}",
   "plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)",
   "terraform_wrapper: false",
   "-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]",
@@ -212,15 +229,21 @@ for (const fixture of parserFixtures) {
 const terraformOperations = extractTerraformOperations(workflow);
 check(terraformOperations.includes("init"), "plan workflow must initialize the selected backend");
 check(terraformOperations.includes("plan"), "plan workflow must run Terraform plan");
+check(terraformOperations.includes("apply"), "approved workflow must apply the reviewed plan file");
 check(
-  terraformOperations.every((operation) => ["init", "plan"].includes(operation)),
-  `plan workflow contains non-review Terraform operations: ${terraformOperations.join(", ")}`
+  terraformOperations.every((operation) =>
+    ["init", "plan", "show", "state", "apply"].includes(operation)
+  ),
+  `production infrastructure workflow contains unsupported Terraform operations: ${terraformOperations.join(", ")}`
+);
+check(
+  terraformOperations.filter((operation) => operation === "apply").length === 1,
+  "production infrastructure workflow must have exactly one reviewed apply command"
 );
 
 for (const forbidden of [
-  /\bterraform(?:[ \t]+-[^ \t\r\n\\]+)*[ \t]+(?:apply|destroy|import)\b/i,
+  /\bterraform(?:[ \t]+-[^ \t\r\n\\]+)*[ \t]+(?:destroy|import)\b/i,
   /-auto-approve\b/i,
-  /upload-artifact/i,
   /\bpull_request:\s*$/m,
   /\bpush:\s*$/m
 ]) {

@@ -501,7 +501,7 @@ Phase 9부터 SketchCatch 자체 production infrastructure를 Terraform-managed 
 
 모든 group은 versioning과 encryption이 적용된 production S3 backend의 서로 다른 key를 사용하고 `use_lockfile = true`로 lock을 획득합니다. runtime key는 state migration이 승인되기 전까지 변경하지 않습니다. backend bucket은 자신의 state에서 관리하지 않습니다.
 
-`Production Infrastructure Plan` workflow는 `workflow_dispatch`와 GitHub Environment `production-infra-plan` required reviewer를 사용합니다. group별 `<group>-review-only` 문자열, resource-read-only AWS plan role, 선택한 exact state/lock key 권한이 있어야 실행됩니다. workflow에는 `terraform apply`, `destroy`, `import`, binary plan artifact가 없습니다. runtime plan은 전체 production tfvars JSON이 없으면 실패합니다.
+`Production Infrastructure Plan` workflow는 `workflow_dispatch`와 GitHub Environment `production-infra-plan` required reviewer를 사용합니다. group별 `<group>-review-only` 문자열, resource-read-only AWS plan role, 선택한 exact state/lock key 권한이 있어야 review-only Plan이 실행됩니다. Runtime Cache 복구 apply는 `runtime-cache-ingress` scope, 성공한 review-only run ID, exact head SHA, `runtime-cache-ingress-apply-<run-id>` 확인 문자열을 모두 검증합니다. 새 binary plan이 API/worker Redis ingress 두 건의 `create`만 포함할 때만 1일 retention artifact로 전달하고, `production` Environment 배포 역할로 해당 plan 파일을 apply한 뒤 artifact를 즉시 삭제합니다. `destroy`, `import`, `-auto-approve`는 허용하지 않습니다. runtime plan은 전체 production tfvars JSON이 없으면 실패합니다.
 
 import는 다음 순서를 지킵니다.
 

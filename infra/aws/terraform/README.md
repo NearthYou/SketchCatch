@@ -69,7 +69,7 @@ API 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Paramete
 
 1. remote state와 production tfvars를 백업합니다.
 2. 장애 복구 review-only Plan은 `runtime_plan_scope=runtime-cache-ingress`로 실행하고, 두 ingress source가 현재 ECS API/worker 보안 그룹이며 Redis 포트 하나만 여는지 확인합니다. 전체 runtime drift 검토는 `complete` scope로 별도 수행합니다.
-3. 저장한 plan을 승인 후 apply합니다.
+3. 성공한 review-only run ID와 현재 head SHA를 승인한 뒤 `operation=apply-reviewed-runtime-cache-ingress`, `confirmation=runtime-cache-ingress-apply-<run-id>`로 실행합니다. workflow가 동일한 두 `create`만 든 새 plan 파일을 검증하고 `production` Environment에서 apply합니다.
 4. API/web service가 안정화되고 target이 healthy인지 확인합니다.
 5. `/`, `/health`, `/health/db`, 인증이 필요한 `/api/projects`를 smoke합니다.
 6. Live Observation이 활성화된 경우 존재하지 않는 UUID로 public bootstrap을 호출해 `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`가 반환되는지 확인합니다. `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE`은 Runtime Cache 연결 실패입니다.
