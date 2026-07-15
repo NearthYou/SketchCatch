@@ -147,6 +147,13 @@ test("closing the Workbench restores focus to its launcher", () => {
   );
 });
 
+test("mobile focus trap ignores roving tabs that are not keyboard focusable", () => {
+  assert.match(
+    controllerSource,
+    /function trapFocusWithin[\s\S]*?\.filter\([\s\S]*?element\.tabIndex >= 0/
+  );
+});
+
 function read(relativePath: string): string {
   try {
     return readFileSync(new URL(relativePath, import.meta.url), "utf8");

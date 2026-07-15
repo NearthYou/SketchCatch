@@ -320,6 +320,13 @@ export const TerraformCodePanel = forwardRef<
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const [codeScrollLeft, setCodeScrollLeft] = useState(0);
+  const handleTerraformFocusAiInteraction = useCallback((): void => {
+    if (pendingSourceLocation !== null) {
+      return;
+    }
+
+    onTerraformAiInteraction();
+  }, [onTerraformAiInteraction, pendingSourceLocation]);
   const codeRequestIdRef = useRef(0);
   const codeVersionRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
@@ -1549,7 +1556,7 @@ export const TerraformCodePanel = forwardRef<
   return (
     <div
       className={styles.terraformPanel}
-      onFocusCapture={onTerraformAiInteraction}
+      onFocusCapture={handleTerraformFocusAiInteraction}
       onPointerDown={onTerraformAiInteraction}
     >
       <TerraformCodeToolbar

@@ -13,7 +13,11 @@ test("Terraform 패널은 현재 코드와 정확한 fingerprint를 AI 채팅 co
 });
 
 test("Terraform 패널의 명시적인 pointer와 focus 상호작용만 AI 탭 의도를 알린다", () => {
-  assert.match(panelSource, /onFocusCapture=\{onTerraformAiInteraction\}/);
+  assert.match(
+    panelSource,
+    /const handleTerraformFocusAiInteraction = useCallback[\s\S]*?if \(pendingSourceLocation !== null\) \{\s*return;\s*\}[\s\S]*?onTerraformAiInteraction\(\)/
+  );
+  assert.match(panelSource, /onFocusCapture=\{handleTerraformFocusAiInteraction\}/);
   assert.match(panelSource, /onPointerDown=\{onTerraformAiInteraction\}/);
 });
 

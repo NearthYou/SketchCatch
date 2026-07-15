@@ -2461,7 +2461,9 @@ function trapFocusWithin(container: HTMLElement, event: KeyboardEvent): void {
     ...container.querySelectorAll<HTMLElement>(
       "button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex='-1'])"
     )
-  ].filter((element) => element.getAttribute("aria-hidden") !== "true");
+  ].filter(
+    (element) => element.tabIndex >= 0 && element.getAttribute("aria-hidden") !== "true"
+  );
   const first = focusableElements[0];
   const last = focusableElements.at(-1);
 
