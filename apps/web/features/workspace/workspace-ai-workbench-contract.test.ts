@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const controllerSource = read("WorkspaceAiChatDock.tsx");
+const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
 const workbenchSource = read("WorkspaceAiWorkbench.tsx");
 const workbenchStyles = read("workspace-ai-workbench.module.css");
 
@@ -40,6 +41,42 @@ test("AI Workbench shell uses only its dedicated visual token vocabulary", () =>
   assert.match(workbenchStyles, /--ai-workbench-/);
   assert.doesNotMatch(workbenchStyles, /--workspace-/);
   assert.doesNotMatch(workbenchStyles, /gradient\(/);
+  assert.doesNotMatch(workbenchStyles, /font-size:\s*(?:9|10)px;/);
+});
+
+test("AI chat controller uses only the new Workbench transcript and workflow presentation", () => {
+  assert.match(
+    controllerSource,
+    /import styles from "\.\/workspace-ai-workbench\.module\.css";/
+  );
+  assert.doesNotMatch(controllerSource, /from "\.\/workspace\.module\.css"/);
+  assert.doesNotMatch(controllerSource, /WorkspaceAiPanelPieces/);
+  assert.match(controllerSource, /styles\.message/);
+  assert.match(controllerSource, /styles\.choiceGroup/);
+  assert.match(controllerSource, /styles\.artifact/);
+  assert.match(controllerSource, /styles\.taskActions/);
+  assert.match(controllerSource, /styles\.approvalTray/);
+  assert.match(controllerSource, /styles\.composer/);
+});
+
+test("AI Workbench owns dedicated result primitives and code-diff presentation", () => {
+  assert.match(resultSource, /createTerraformPreviewPresentation/);
+  assert.match(resultSource, /createTerraformIssuePresentation/);
+  assert.match(resultSource, /styles\.result/);
+  assert.match(resultSource, /styles\.technicalDetails/);
+  assert.match(resultSource, /styles\.codeDiff/);
+  assert.doesNotMatch(resultSource, /WorkspaceAiPanelPieces|workspace\.module\.css/);
+});
+
+test("draft composer grows to a six-line maximum and is absent from unsupported scopes", () => {
+  assert.match(
+    controllerSource,
+    /footer=\{\s*activeScopeDefinition\.inputAvailable \? \([\s\S]*className=\{styles\.composer\}/
+  );
+  assert.match(controllerSource, /rows=\{1\}/);
+  assert.match(workbenchStyles, /\.composerInput textarea\s*\{[^}]*field-sizing:\s*content;/s);
+  assert.match(workbenchStyles, /\.composerInput textarea\s*\{[^}]*max-height:\s*calc\(/s);
+  assert.match(workbenchStyles, /--ai-workbench-composer-max-lines:\s*6;/);
 });
 
 test("AI Workbench becomes an interactive full-screen surface on mobile", () => {

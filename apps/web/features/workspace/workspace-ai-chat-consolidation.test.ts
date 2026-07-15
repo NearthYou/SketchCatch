@@ -5,7 +5,7 @@ import test from "node:test";
 const chatSource = read("WorkspaceAiChatDock.tsx");
 const toolbarSource = read("TerraformCodeToolbar.tsx");
 const issuesSource = read("TerraformIssuesPanel.tsx");
-const stylesSource = read("workspace.module.css");
+const stylesSource = read("workspace-ai-workbench.module.css");
 
 test("오류 분석과 에이전트 리뷰 실행은 AI 채팅에만 존재한다", () => {
   assert.doesNotMatch(toolbarSource, /TerraformAgentReviewButton/);
@@ -18,12 +18,28 @@ test("오류 분석과 에이전트 리뷰 실행은 AI 채팅에만 존재한�
 
 test("데스크톱 AI 채팅은 명시적으로 닫을 때까지 Board 상호작용을 막지 않는다", () => {
   assert.doesNotMatch(chatSource, /event\.target === event\.currentTarget[\s\S]*closeChatDock/);
-  assert.match(stylesSource, /\.aiChatOverlay\s*\{[^}]*pointer-events:\s*none;/s);
-  assert.match(stylesSource, /\.aiChatDock\s*\{[^}]*pointer-events:\s*auto;/s);
+  assert.match(stylesSource, /\.overlay\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(stylesSource, /\.workWindow\s*\{[^}]*pointer-events:\s*auto;/s);
   assert.match(
     stylesSource,
-    /@media \(max-width: 768px\)[\s\S]*\.aiChatOverlay\s*\{[^}]*pointer-events:\s*auto;/s
+    /@media \(max-width:\s*768px\)[\s\S]*\.overlay\s*\{[^}]*pointer-events:\s*auto;/s
   );
+});
+
+test("오류 분석과 에이전트 리뷰 작업은 Workbench 작업 행에 머문다", () => {
+  assert.match(
+    chatSource,
+    /className=\{styles\.taskActions\}[\s\S]*>선택 오류 분석<\/[\s\S]*>모두 분석<\//
+  );
+  assert.match(
+    chatSource,
+    /className=\{styles\.taskActions\}[\s\S]*>에이전트 리뷰<\//
+  );
+  assert.match(
+    chatSource,
+    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applySelectedTerraformIssueFix\}/
+  );
+  assert.match(chatSource, />Board에 적용<\//);
 });
 
 test("오른쪽 패널 상호작용은 탭만 바꾸고 닫힌 채팅을 강제로 열지 않는다", () => {

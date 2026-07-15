@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import type {
   AiProviderAttempt,
@@ -14,6 +15,8 @@ import {
   createWorkspaceAiExplanationBadge,
   formatTerraformReviewContext
 } from "./workspace-ai-result-presentation";
+
+const workbenchResultSource = readWorkbenchResultSource();
 
 const preview = {
   checklist: [],
@@ -269,3 +272,26 @@ test("리뷰 문맥은 반복 접두어를 제거한다", () => {
     "선택한 코드 기준"
   );
 });
+
+test("Workbench 결과는 기존 표시 모델만 재사용하고 레거시 카드 UI를 재사용하지 않는다", () => {
+  assert.match(workbenchResultSource, /createTerraformPreviewPresentation/);
+  assert.match(workbenchResultSource, /createTerraformIssuePresentation/);
+  assert.match(workbenchResultSource, /WorkspaceAiWorkbenchTerraformPreviewResult/);
+  assert.match(workbenchResultSource, /WorkspaceAiWorkbenchTerraformIssueResult/);
+  assert.doesNotMatch(
+    workbenchResultSource,
+    /WorkspaceAiPanelPieces|aiStructuredResult|aiResultLead|workspace\.module\.css/
+  );
+});
+
+function readWorkbenchResultSource(): string {
+  try {
+    return readFileSync(new URL("WorkspaceAiWorkbenchResults.tsx", import.meta.url), "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return "";
+    }
+
+    throw error;
+  }
+}
