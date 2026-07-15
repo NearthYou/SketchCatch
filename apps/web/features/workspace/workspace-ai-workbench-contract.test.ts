@@ -174,6 +174,10 @@ test("transcript follows new content only while the reader is near the bottom", 
   assert.match(controllerSource, /transcriptShouldFollowRef/);
   assert.match(controllerSource, /isWorkspaceAiTranscriptNearBottom/);
   assert.match(controllerSource, /shouldForceTranscriptScroll/);
+  assert.match(
+    workbenchStyles,
+    /\.transcript\s*\{[^}]*grid-auto-rows:\s*max-content;/s
+  );
 });
 
 test("Errors scope exposes approval only for an applicable fresh fix plan", () => {
