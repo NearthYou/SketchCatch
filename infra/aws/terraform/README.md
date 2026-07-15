@@ -63,7 +63,7 @@ ecs_autoscaling_target_cpu_percent = 60
 
 API 민감 값은 secret 원문이 아니라 Secrets Manager 또는 SSM Parameter Store ARN으로 전달합니다. `DATABASE_URL`, `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `REDIS_URL`, OAuth secret, GitHub App secret와 `OPENAI_API_KEY`는 `api_secret_arns`에 있어야 합니다. Web Push를 켤 때는 `WEB_PUSH_VAPID_PRIVATE_KEY`와 `WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY`도 `api_secret_arns`로만 전달합니다. public URL, client ID, bucket name, region, VAPID public key와 subject만 일반 environment에 둡니다.
 
-`runtime_cache_security_group_id`에는 `infra/aws/cloudformation/runtime-cache-elasticache.yml` stack output `SecurityGroupId`를 입력합니다. runtime Terraform은 이 보안 그룹에 현재 ECS API와, worker dispatch가 활성화된 경우 ECS worker 보안 그룹만 Redis 포트로 허용합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 값이 없으면 plan이 실패합니다.
+`runtime_cache_security_group_id`에는 `infra/aws/cloudformation/runtime-cache-elasticache.yml` stack output `SecurityGroupId`를 입력합니다. `.github/workflows/production-infra-plan.yml`은 runtime VPC에서 `Name=sketchcatch-runtime-cache`, `Component=runtime-cache` 태그가 모두 일치하는 보안 그룹을 정확히 하나 찾은 경우에만 complete runtime tfvars에 이 값을 자동 주입합니다. runtime Terraform은 이 보안 그룹에 현재 ECS API와, worker dispatch가 활성화된 경우 ECS worker 보안 그룹만 Redis 포트로 허용합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 값이 없으면 plan이 실패합니다.
 
 ## 적용 절차
 

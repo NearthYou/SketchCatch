@@ -125,6 +125,29 @@ jobs:
             | jq -c 'if type == "object" then . else error("runtime tfvars must be a JSON object") end' \
             > "${RUNNER_TEMP}/runtime.tfvars.json"
 
+          runtime_vpc_id="$(jq -er '.vpc_id | select(type == "string" and length > 0)' "${RUNNER_TEMP}/runtime.tfvars.json")"
+          security_group_ids_json="$(
+            aws ec2 describe-security-groups \
+              --filters \
+                "Name=vpc-id,Values=${runtime_vpc_id}" \
+                "Name=tag:Name,Values=sketchcatch-runtime-cache" \
+                "Name=tag:Component,Values=runtime-cache" \
+              --query 'SecurityGroups[].GroupId' \
+              --output json
+          )"
+          security_group_count="$(jq 'length' <<< "${security_group_ids_json}")"
+          if [ "${security_group_count}" -ne 1 ]; then
+            echo "::error::expected exactly one tagged Runtime Cache security group in the runtime VPC"
+            exit 1
+          fi
+
+          security_group_id="$(jq -r '.[0]' <<< "${security_group_ids_json}")"
+          jq --arg security_group_id "${security_group_id}" \
+            '.runtime_cache_security_group_id = $security_group_id' \
+            "${RUNNER_TEMP}/runtime.tfvars.json" \
+            > "${RUNNER_TEMP}/runtime.enriched.tfvars.json"
+          mv "${RUNNER_TEMP}/runtime.enriched.tfvars.json" "${RUNNER_TEMP}/runtime.tfvars.json"
+
       - name: Initialize selected remote state
         shell: bash
         env:
