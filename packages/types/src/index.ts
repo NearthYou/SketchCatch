@@ -3055,6 +3055,8 @@ export type DiagramNodeMetadata = {
         moduleId: string;
         moduleVersion: string;
         expandedAt: IsoDateTimeString;
+        representativeTemplateId?: string | undefined;
+        referenceTemplateIds?: string[] | undefined;
       }
     | undefined;
   reverseEngineering?:
