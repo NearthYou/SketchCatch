@@ -37,6 +37,8 @@ import type {
   GitCicdPipelineStageKind,
   GitCicdPipelineStageStatus,
   GitCicdRepositorySettingsPreview,
+  GitHubInstallationConnectionStatus,
+  GitHubRepositorySelection,
   JsonValue,
   ProjectDeploymentRuntimeConfig,
   RepositoryAnalysisAiHandoff,
@@ -301,9 +303,12 @@ export const githubInstallationConnections = pgTable(
     accountId: varchar("account_id", { length: 255 }).notNull(),
     accountLogin: varchar("account_login", { length: 255 }).notNull(),
     accountType: varchar("account_type", { length: 64 }),
-    repositorySelection: varchar("repository_selection", { length: 32 }),
+    repositorySelection: varchar("repository_selection", { length: 32 }).$type<GitHubRepositorySelection>(),
     htmlUrl: text("html_url"),
-    status: varchar("status", { length: 32 }).notNull().default("active"),
+    status: varchar("status", { length: 32 })
+      .$type<GitHubInstallationConnectionStatus>()
+      .notNull()
+      .default("active"),
     connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }).notNull().defaultNow(),
     disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),

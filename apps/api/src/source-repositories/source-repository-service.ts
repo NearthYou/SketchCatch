@@ -500,7 +500,12 @@ export async function listGitHubInstallationRepositories(
     return { scope: "account" };
   }
 
-  const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
+  const repositories = await listGitHubInstallationRepositoriesWithDisconnect(
+    state.userId,
+    input.installationId,
+    repository,
+    githubAppClient
+  );
 
   return {
     scope: "project",
@@ -519,18 +524,30 @@ export async function listGitHubAccountInstallations(
     repository,
     githubAppClient
   );
-  const connections = await Promise.all(
-    installations.map(async (installation): Promise<GitHubInstallationConnection> => ({
-      installationId: installation.installationId,
-      accountLogin: installation.accountLogin,
-      accountType: installation.accountType,
-      repositorySelection: installation.repositorySelection,
-      repositoryCount: (
-        await githubAppClient.listInstallationRepositories(installation.installationId)
-      ).length,
-      htmlUrl: installation.htmlUrl
-    }))
-  );
+  const connections: GitHubInstallationConnection[] = [];
+
+  for (const installation of installations) {
+    try {
+      const installationRepositories = await listGitHubInstallationRepositoriesWithDisconnect(
+        input.accessContext.userId,
+        installation.installationId,
+        repository,
+        githubAppClient
+      );
+      connections.push({
+        installationId: installation.installationId,
+        accountLogin: installation.accountLogin,
+        accountType: installation.accountType,
+        repositorySelection: installation.repositorySelection,
+        repositoryCount: installationRepositories.length,
+        htmlUrl: installation.htmlUrl
+      });
+    } catch (error) {
+      if (!isGitHubRepositoryAccessUnavailableConflict(error)) {
+        throw error;
+      }
+    }
+  }
 
   return {
     installations: connections.sort(
@@ -570,9 +587,21 @@ export async function listGitHubInstalledRepositories(
   const repositories: GitHubInstalledRepositoryCandidate[] = [];
 
   for (const installation of installations) {
-    const installationRepositories = await githubAppClient.listInstallationRepositories(
-      installation.installationId
-    );
+    let installationRepositories: GitHubRepositoryCandidate[];
+
+    try {
+      installationRepositories = await listGitHubInstallationRepositoriesWithDisconnect(
+        input.accessContext.userId,
+        installation.installationId,
+        repository,
+        githubAppClient
+      );
+    } catch (error) {
+      if (isGitHubRepositoryAccessUnavailableConflict(error)) {
+        continue;
+      }
+      throw error;
+    }
 
     repositories.push(
       ...installationRepositories.map((candidate) => {
@@ -622,7 +651,12 @@ export async function connectGitHubSourceRepository(
     githubAppClient
   );
 
-  const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
+  const repositories = await listGitHubInstallationRepositoriesWithDisconnect(
+    state.userId,
+    input.installationId,
+    repository,
+    githubAppClient
+  );
   const selectedRepository = repositories.find(
     (candidate) => candidate.githubRepositoryId === input.githubRepositoryId
   );
@@ -899,6 +933,42 @@ async function listOwnedGitHubInstallations(
   }
 
   return ownedInstallations;
+}
+
+async function listGitHubInstallationRepositoriesWithDisconnect(
+  userId: string,
+  installationId: string,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+): Promise<GitHubRepositoryCandidate[]> {
+  try {
+    return await githubAppClient.listInstallationRepositories(installationId);
+  } catch (error) {
+    if (!isGitHubInstallationAccessError(error)) {
+      throw error;
+    }
+
+    await repository.markGitHubInstallationDisconnected(userId, installationId);
+    throw new SourceRepositoryConflictError("GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE");
+  }
+}
+
+function isGitHubInstallationAccessError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("statusCode" in error)) {
+    return false;
+  }
+
+  const statusCode = (error as { readonly statusCode?: unknown }).statusCode;
+  return statusCode === 403 || statusCode === 404;
+}
+
+function isGitHubRepositoryAccessUnavailableConflict(
+  error: unknown
+): error is SourceRepositoryConflictError {
+  return (
+    error instanceof SourceRepositoryConflictError &&
+    error.message === "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE"
+  );
 }
 
 async function connectGitHubInstallationFromCallback(

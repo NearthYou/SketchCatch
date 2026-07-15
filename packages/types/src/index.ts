@@ -559,11 +559,14 @@ export type ListGitHubInstallationRepositoriesRequest = {
   state: string;
 };
 
+export type GitHubRepositorySelection = "all" | "selected";
+export type GitHubInstallationConnectionStatus = "active" | "disconnected";
+
 export type GitHubInstallationConnection = {
   installationId: string;
   accountLogin: string;
   accountType: string | null;
-  repositorySelection: "all" | "selected" | null;
+  repositorySelection: GitHubRepositorySelection | null;
   repositoryCount: number;
   htmlUrl: string | null;
 };

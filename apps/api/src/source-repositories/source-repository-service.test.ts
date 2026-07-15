@@ -206,6 +206,40 @@ test("missing GitHub App installations are disconnected and omitted", async () =
   assert.equal(disconnectedInstallationId, installation.installationId);
 });
 
+test("repository access failures disconnect and omit the installation", async () => {
+  const userId = "github-login-user";
+  const connection = createConnection(userId, installation.installationId);
+  let disconnectedInstallationId: string | null = null;
+  const repository = createRepository({
+    async listActiveGitHubInstallationConnections() {
+      return [connection];
+    },
+    async connectGitHubInstallation() {
+      return connection;
+    },
+    async markGitHubInstallationDisconnected(_userId: string, installationId: string) {
+      disconnectedInstallationId = installationId;
+    }
+  });
+  const client = createGitHubAppClient([installation]);
+  client.listInstallationRepositories = async () => {
+    const error = new Error("GitHub installation access forbidden") as Error & {
+      statusCode: number;
+    };
+    error.statusCode = 403;
+    throw error;
+  };
+
+  const result = await listGitHubAccountInstallations(
+    { accessContext: { kind: "user", userId } },
+    repository,
+    client
+  );
+
+  assert.deepEqual(result, { installations: [] });
+  assert.equal(disconnectedInstallationId, installation.installationId);
+});
+
 function createRepository(
   overrides: Record<string, unknown>
 ): SourceRepositoryRepository {
