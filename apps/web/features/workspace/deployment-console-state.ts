@@ -1,4 +1,4 @@
-import type { Deployment } from "@sketchcatch/types";
+import type { AiPreDeploymentAnalysisResult, CheckFinding, Deployment } from "@sketchcatch/types";
 import type { RequestState } from "./workspace-right-panel.types";
 
 export type DirectDeploymentStepId = "validation" | "approval" | "deployment";
@@ -60,6 +60,13 @@ export type QueuedApplyPlanInput = {
   readonly requestState: RequestState;
 };
 
+export type DirectDeploymentPreflightInput = {
+  readonly analysis: AiPreDeploymentAnalysisResult | null;
+  readonly errorMessage: string;
+  readonly hasStaleAnalysis: boolean;
+  readonly requestState: RequestState;
+};
+
 const STEP_META: Readonly<
   Record<DirectDeploymentStepId, Pick<DirectDeploymentStep, "description" | "label">>
 > = {
@@ -67,6 +74,53 @@ const STEP_META: Readonly<
   approval: { description: "scope·변경·비용 검토", label: "승인" },
   deployment: { description: "실행·health·Output", label: "배포" }
 };
+
+export function getDirectDeploymentPreflightState(
+  input: DirectDeploymentPreflightInput
+): DirectDeploymentPreflightState {
+  if (input.requestState === "loading") {
+    return "loading";
+  }
+
+  if (input.requestState === "error" || input.errorMessage) {
+    return "error";
+  }
+
+  if (!input.analysis || input.hasStaleAnalysis) {
+    return "idle";
+  }
+
+  const findingById = new Map(input.analysis.findings.map((finding) => [finding.id, finding]));
+  const hasBlockingChecklistFailure = input.analysis.checklist.some(
+    (item) =>
+      item.status === "fail" &&
+      (item.relatedFindingIds.length === 0 ||
+        item.relatedFindingIds.some((findingId) =>
+          isBlockingPreDeploymentFinding(findingById.get(findingId))
+        ))
+  );
+
+  if (hasBlockingChecklistFailure) {
+    return "blocked";
+  }
+
+  if (
+    input.analysis.findings.length > 0 ||
+    input.analysis.checklist.some((item) => item.status === "fail" || item.status === "warning")
+  ) {
+    return "warning";
+  }
+
+  return "passed";
+}
+
+function isBlockingPreDeploymentFinding(finding: CheckFinding | undefined): boolean {
+  if (!finding) {
+    return true;
+  }
+
+  return finding.category === "configuration";
+}
 
 export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): DirectDeploymentFlow {
   const validation = getValidationStep(input);
