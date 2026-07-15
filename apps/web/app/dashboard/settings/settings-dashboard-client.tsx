@@ -4,8 +4,7 @@ import { CheckCircle2, Cloud, ExternalLink, RefreshCw, Trash2 } from "lucide-rea
 import { useEffect, useState } from "react";
 import type {
   AwsConnection,
-  AwsConnectionCloudFormationTemplateResponse,
-  CreateAwsConnectionResponse
+  AwsConnectionCloudFormationTemplateResponse
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import {
@@ -20,6 +19,7 @@ import {
   testAwsConnection,
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
+import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
 import styles from "../dashboard-tools.module.css";
 import { GitHubAccountSettings } from "./github-account-settings";
 
@@ -38,7 +38,7 @@ export function SettingsDashboardClient() {
   const [actionPending, setActionPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [region, setRegion] = useState("ap-northeast-2");
-  const [setup, setSetup] = useState<CreateAwsConnectionResponse | null>(null);
+  const [setupConnection, setSetupConnection] = useState<AwsConnection | null>(null);
   const [cloudFormation, setCloudFormation] = useState<AwsConnectionCloudFormationTemplateResponse | null>(null);
   const [accountId, setAccountId] = useState("");
   const [deleteCandidateId, setDeleteCandidateId] = useState("");
@@ -64,7 +64,7 @@ export function SettingsDashboardClient() {
       const template = await getAwsConnectionCloudFormationTemplate({
         connectionId: created.awsConnection.id
       });
-      setSetup(created);
+      setSetupConnection(created.awsConnection);
       setCloudFormation(template);
       await loadConnections();
     } catch (error) {
@@ -74,17 +74,39 @@ export function SettingsDashboardClient() {
     }
   }
 
+  // 새로고침 뒤에도 저장된 미검증 연결의 CloudFormation 설정을 다시 이어갑니다.
+  async function resumeConnectionSetup(connection: AwsConnection): Promise<void> {
+    setActionPending(true);
+    setErrorMessage("");
+    setSetupConnection(null);
+    setCloudFormation(null);
+    try {
+      const restored = await restoreAwsConnectionSetup(
+        connection,
+        getAwsConnectionCloudFormationTemplate
+      );
+      setSetupConnection(restored.connection);
+      setCloudFormation(restored.cloudFormation);
+      setAccountId(restored.accountId);
+      setRegion(restored.region);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "AWS 연결 설정을 불러오지 못했습니다.");
+    } finally {
+      setActionPending(false);
+    }
+  }
+
   // CloudFormation에서 Role을 만든 뒤 AWS 계정 ID로 AssumeRole 연결을 검증합니다.
   async function verifyCreatedRole(): Promise<void> {
-    if (!setup || !/^\d{12}$/.test(accountId)) return;
+    if (!setupConnection || !/^\d{12}$/.test(accountId)) return;
     setActionPending(true);
     setErrorMessage("");
     try {
       await verifyAwsConnectionCreatedRole({
-        connectionId: setup.awsConnection.id,
+        connectionId: setupConnection.id,
         accountId
       });
-      setSetup(null);
+      setSetupConnection(null);
       setCloudFormation(null);
       setAccountId("");
       await loadConnections();
@@ -168,7 +190,7 @@ export function SettingsDashboardClient() {
             </div>
           </section>
 
-          {setup && cloudFormation ? (
+          {setupConnection && cloudFormation ? (
             <section className={styles.setupSection}>
               <div><span>1</span><div><strong>CloudFormation으로 Role 만들기</strong><p>{cloudFormation.roleName}</p></div></div>
               {cloudFormation.launchStackUrl ? <a href={cloudFormation.launchStackUrl} rel="noreferrer" target="_blank">AWS Console 열기 <ExternalLink size={15} /></a> : <pre>{cloudFormation.templateBody}</pre>}
@@ -179,7 +201,7 @@ export function SettingsDashboardClient() {
 
           <section className={styles.connectionList}>
             <div className={styles.sectionHeading}><h2>연결된 AWS 계정</h2><span>{connections.length}개</span></div>
-            {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : null}<button data-danger={deleteCandidateId === connection.id} disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />{deleteCandidateId === connection.id ? "한 번 더 눌러 삭제" : "삭제"}</button></div></article>)}
+            {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : <button disabled={actionPending} onClick={() => void resumeConnectionSetup(connection)} type="button">설정 계속</button>}<button data-danger={deleteCandidateId === connection.id} disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />{deleteCandidateId === connection.id ? "한 번 더 눌러 삭제" : "삭제"}</button></div></article>)}
           </section>
         </>
       )}

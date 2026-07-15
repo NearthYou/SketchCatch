@@ -19,6 +19,14 @@ Short English-only working log for the current agent context. Older records are 
 ## Session Record
 
 
+### 2026-07-15 - Resume pending AWS connection setup after reload
+
+- Reproduced the production settings regression where a pending AWS connection lost its account verification controls after a page reload and exposed only deletion.
+- Added a pending-connection `설정 계속` action that refreshes the CloudFormation setup URL and restores the account ID verification flow from persisted connection data.
+- Clear stale setup UI before reloading the saved connection, and isolate the restore behavior in a testable helper instead of source-text regex assertions.
+- Added a red-green regression test for the reload recovery path; focused dashboard tests, harness, lint, typecheck, build, and diff checks pass.
+- The full Web baseline remains non-green on unrelated existing Diagram/Area contract tests; no cloud mutation, deployment, Git handoff, or credential change was performed.
+
 ### 2026-07-15 - Diagnose and fix misleading Git/CI/CD handoff conflict
 
 - Reproduced the production HTTP 409 after regenerating and approving the current Terraform apply plan; verified that no GitHub PR or SketchCatch branch was created.
