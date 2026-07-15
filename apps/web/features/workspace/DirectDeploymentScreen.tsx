@@ -75,9 +75,9 @@ import { getDeploymentPreparationErrorMessage } from "./deployment-preparation-e
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
+  getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   shouldStartQueuedApplyPlan,
-  type DirectDeploymentPreflightState,
   type DirectDeploymentStepId
 } from "./deployment-console-state";
 import {
@@ -245,7 +245,7 @@ export function DirectDeploymentScreen({
   const hasStalePreDeploymentAnalysis =
     preDeploymentAnalysis !== null &&
     isWorkspaceAiResultStale(preDeploymentFingerprint, boardSnapshot.fingerprint);
-  const directPreflightState = getDirectPreflightState({
+  const directPreflightState = getDirectDeploymentPreflightState({
     analysis: preDeploymentAnalysis,
     errorMessage: preDeploymentErrorMessage,
     hasStaleAnalysis: hasStalePreDeploymentAnalysis,
@@ -1847,54 +1847,6 @@ function formatApplicationReleaseStatus(status: ApplicationRelease["status"]): s
   };
 
   return labels[status];
-}
-
-function getDirectPreflightState({
-  analysis,
-  errorMessage,
-  hasStaleAnalysis,
-  requestState
-}: {
-  readonly analysis: AiPreDeploymentAnalysisResult | null;
-  readonly errorMessage: string;
-  readonly hasStaleAnalysis: boolean;
-  readonly requestState: AiRequestState;
-}): DirectDeploymentPreflightState {
-  if (requestState === "loading") {
-    return "loading";
-  }
-
-  if (requestState === "error" || errorMessage) {
-    return "error";
-  }
-
-  if (!analysis || hasStaleAnalysis) {
-    return "idle";
-  }
-
-  const highFindingIds = new Set(
-    analysis.findings.filter((finding) => finding.severity === "high").map((finding) => finding.id)
-  );
-  const hasIndependentChecklistFailure = analysis.checklist.some(
-    (item) =>
-      item.status === "fail" &&
-      (item.relatedFindingIds.length === 0 ||
-        item.relatedFindingIds.some((findingId) => !highFindingIds.has(findingId)))
-  );
-
-  if (hasIndependentChecklistFailure) {
-    return "blocked";
-  }
-
-  if (
-    analysis.findings.length > 0 ||
-    countChecklistItems(analysis, "fail") > 0 ||
-    countChecklistItems(analysis, "warning") > 0
-  ) {
-    return "warning";
-  }
-
-  return "passed";
 }
 
 function getPrimaryDeploymentStepStatus(deployment: Deployment | null): string {
