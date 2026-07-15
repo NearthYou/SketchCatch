@@ -20,9 +20,12 @@ test("CI/CD sends users without a GitHub account installation to global settings
 test("CI/CD sends connected GitHub accounts without a repository to source repository", () => {
   assert.match(source, /GitHub 저장소 연결이 필요합니다\./);
   assert.match(source, /프로젝트 소스 저장소 열기/);
-  assert.match(
-    source,
-    /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/repository/
-  );
+  assert.match(source, /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/repository/);
   assert.doesNotMatch(source, /settings\?tab=github/);
+});
+
+test("CI/CD exposes the Git handoff action that creates the deployment pull request", () => {
+  assert.match(source, /createGitCicdHandoff/);
+  assert.match(source, /listGitCicdHandoffs/);
+  assert.match(source, /CI\/CD PR 생성/);
 });

@@ -92,6 +92,13 @@ Short English-only working log for the current agent context. Older records are 
 - Added least-privilege `qbusiness:ChatSync` permission for the configured application to the production API task role and completed the missing GitHub production environment variable.
 - Verification passed: focused production infrastructure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production ECS deployment was not run following the user's explicit instruction.
 
+### 2026-07-15 - Restore CI/CD pull request creation in the deployment console
+
+- Restored the Git/CI/CD handoff entry point in `CicdConsoleScreen` against the current backend contract rather than copying the reverted legacy panel.
+- The UI selects the latest directly approved Terraform apply plan, requires an explicit review, and sends the server-recorded approved plan artifact as `userAcceptedChangeId` when creating the deployment PR.
+- Existing handoffs expose the PR link and separately approved Repository settings, GitHub OAuth, and AWS Role actions while duplicate handoffs for the same plan are blocked.
+- Verification: focused Web regressions passed 5/5; Web typecheck and build passed. No GitHub deployment PR or cloud mutation was executed during verification.
+
 ## Next Action
 
 - Review and merge `codex/fix-production-amazon-q-runtime`; run the production ECS deployment only after explicit approval.
