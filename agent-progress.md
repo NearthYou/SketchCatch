@@ -19,8 +19,16 @@ Short English-only working log for the current agent context. Older records are 
 - Incoming dev verification recorded 25 sandbox runner tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks as passing; full Web/API suites were intentionally omitted.
 - Incoming cleanup evidence records no remaining cost-bearing Issue #378 resources; no Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during this code-integration pass.
 - Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
+- Public Repository Analysis treats the whiskend and jh-9999 audience-live-check forks as independent GitHub targets while preserving the same ECS Fargate-first evidence flow.
 
 ## Session Record
+
+
+### 2026-07-15 - Preserve golden-path Repository owner parity
+
+- Verified that the whiskend and jh-9999 audience-live-check repositories currently resolve to the same commit and independently produce ECS Fargate as the top recommendation.
+- Normalized public GitHub owner/name casing and added an endpoint-level regression covering both `.git` URLs without adding an owner allowlist or cache alias.
+- Verification: the pre-change focused route/recommendation baseline passed 15/15, and the new endpoint regression passed 3/3 after reproducing the expected casing failure. Harness, lint, typecheck, build, and diff checks pass. No GitHub, cloud, deployment, or Terraform mutation was performed.
 
 
 ### 2026-07-15 - Repair production Live Observation Runtime Cache ingress
