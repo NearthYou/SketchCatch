@@ -214,7 +214,8 @@ export function ResourceSettingsPanel({
         </button>
       </div>
 
-      <div className="resourceControlBar">
+      {activeTab === "resources" ? (
+        <div className="resourceControlBar">
         <div className="providerControls">
           <div
             aria-label="AWS provider"
@@ -290,6 +291,7 @@ export function ResourceSettingsPanel({
           </button>
         </div>
       </div>
+      ) : null}
 
       {activeTab === "templates" ? (
         <TemplatesPanel onTemplateApply={onTemplateApply} />
