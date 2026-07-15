@@ -582,7 +582,14 @@ async function postPublicAiJson<ResponseBody>(
       method: "POST",
       ...(options.signal ? { signal: options.signal } : {})
     });
-  } catch {
+  } catch (error) {
+    if (
+      options.signal?.aborted === true ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      throw error;
+    }
+
     throw new ApiClientError(
       0,
       {

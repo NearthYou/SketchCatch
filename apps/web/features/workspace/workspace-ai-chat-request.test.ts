@@ -14,10 +14,15 @@ test("AI Chat 요청은 대화별로 독립되고 같은 대화의 이전 요청
   assert.equal(firstDraft.signal.aborted, true);
   assert.equal(errors.signal.aborted, false);
   assert.equal(nextDraft.signal.aborted, false);
+  assert.equal(registry.isActive("draft", firstDraft), false);
+  assert.equal(registry.isActive("draft", nextDraft), true);
+  assert.equal(registry.isActive("errors", errors), true);
 
   registry.complete("draft", firstDraft);
+  assert.equal(registry.isActive("draft", nextDraft), true);
   assert.equal(registry.cancel("draft"), true);
   assert.equal(nextDraft.signal.aborted, true);
+  assert.equal(registry.isActive("draft", nextDraft), false);
   assert.equal(errors.signal.aborted, false);
 });
 

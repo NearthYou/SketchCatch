@@ -180,6 +180,11 @@ type WorkspaceAiProposalSource = {
   readonly revision: number;
 };
 
+type PendingArchitectureDraftFollowUp = {
+  readonly proposalSource: WorkspaceAiProposalSource;
+  readonly session: ArchitectureDraftFollowUpSession;
+};
+
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
@@ -269,7 +274,7 @@ export function WorkspaceAiChatDock({
   const [draftClarification, setDraftClarification] =
     useState<PendingArchitectureDraftClarification | null>(null);
   const [draftFollowUpSession, setDraftFollowUpSession] =
-    useState<ArchitectureDraftFollowUpSession | null>(null);
+    useState<PendingArchitectureDraftFollowUp | null>(null);
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
     null
   );
@@ -1455,6 +1460,10 @@ export function WorkspaceAiChatDock({
         { signal: controller.signal }
       );
 
+      if (!requestRegistryRef.current.isActive("draft", controller)) {
+        return;
+      }
+
       if (response.status === "needs_clarification") {
         setPatchClarification(response);
         setDraftState("idle");
@@ -1468,7 +1477,11 @@ export function WorkspaceAiChatDock({
 
       showPatchPreview(response, options.baseDiagram, proposalSource);
     } catch (error) {
-      if (isWorkspaceAiChatAbortError(error)) {
+      if (
+        controller.signal.aborted ||
+        !requestRegistryRef.current.isActive("draft", controller) ||
+        isWorkspaceAiChatAbortError(error)
+      ) {
         return;
       }
 
@@ -1502,13 +1515,16 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    const resolution = resolveArchitectureDraftFollowUpAnswer(draftFollowUpSession, trimmedPrompt);
+    const resolution = resolveArchitectureDraftFollowUpAnswer(
+      draftFollowUpSession.session,
+      trimmedPrompt
+    );
 
     if (resolution.action === "show_pending_draft") {
-      const pendingDraft = draftFollowUpSession.pendingDraft;
+      const pendingDraft = draftFollowUpSession.session.pendingDraft;
 
       setDraftFollowUpSession(null);
-      showDraftPreview(pendingDraft);
+      showDraftPreview(pendingDraft, draftFollowUpSession.proposalSource);
       return;
     }
 
@@ -1592,6 +1608,10 @@ export function WorkspaceAiChatDock({
         signal: controller.signal
       });
 
+      if (!requestRegistryRef.current.isActive("draft", controller)) {
+        return;
+      }
+
       if (isArchitectureDraftClarification(result)) {
         setDraftClarification({
           prompt,
@@ -1604,7 +1624,10 @@ export function WorkspaceAiChatDock({
 
       const previewDecision = planArchitectureDraftPreview(normalizedDraftRequest, result);
       if (previewDecision.action === "ask_follow_up") {
-        setDraftFollowUpSession(previewDecision.session);
+        setDraftFollowUpSession({
+          proposalSource,
+          session: previewDecision.session
+        });
         setDraftState("idle");
         appendAssistantMessage(
           "question",
@@ -1616,7 +1639,11 @@ export function WorkspaceAiChatDock({
 
       showDraftPreview(previewDecision.result, proposalSource);
     } catch (error) {
-      if (isWorkspaceAiChatAbortError(error)) {
+      if (
+        controller.signal.aborted ||
+        !requestRegistryRef.current.isActive("draft", controller) ||
+        isWorkspaceAiChatAbortError(error)
+      ) {
         return;
       }
 
