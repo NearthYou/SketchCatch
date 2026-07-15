@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const controllerSource = read("WorkspaceAiChatDock.tsx");
+const conversationSource = read("workspace-ai-chat-conversation.ts");
+const launcherSource = read("WorkspaceAiChatLauncher.tsx");
+const launcherStyles = read("workspace-ai-chat-launcher.module.css");
 const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
 const workbenchSource = read("WorkspaceAiWorkbench.tsx");
 const workbenchStyles = read("workspace-ai-workbench.module.css");
@@ -41,7 +44,13 @@ test("AI Workbench shell uses only its dedicated visual token vocabulary", () =>
   assert.match(workbenchStyles, /--ai-workbench-/);
   assert.doesNotMatch(workbenchStyles, /--workspace-/);
   assert.doesNotMatch(workbenchStyles, /gradient\(/);
-  assert.doesNotMatch(workbenchStyles, /font-size:\s*(?:9|10)px;/);
+  assert.doesNotMatch(workbenchStyles, /(?:text-shadow|filter:\s*drop-shadow|--[^:]*glow)/i);
+
+  const pixelFontSizes = [...workbenchStyles.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(
+    ([, size]) => Number(size)
+  );
+  assert.ok(pixelFontSizes.length > 0);
+  assert.ok(pixelFontSizes.every((size) => size >= 11));
 });
 
 test("AI chat controller uses only the new Workbench transcript and workflow presentation", () => {
@@ -77,9 +86,18 @@ test("draft composer grows to a six-line maximum and is absent from unsupported 
   assert.match(workbenchStyles, /\.composerInput textarea\s*\{[^}]*field-sizing:\s*content;/s);
   assert.match(workbenchStyles, /\.composerInput textarea\s*\{[^}]*max-height:\s*calc\(/s);
   assert.match(workbenchStyles, /--ai-workbench-composer-max-lines:\s*6;/);
+  assert.match(
+    conversationSource,
+    /errors:\s*\{[\s\S]*?inputAvailable:\s*false,[\s\S]*?label:\s*"오류 분석"/
+  );
+  assert.match(
+    conversationSource,
+    /preview:\s*\{[\s\S]*?inputAvailable:\s*false,[\s\S]*?label:\s*"에이전트 리뷰"/
+  );
 });
 
 test("AI Workbench becomes an interactive full-screen surface on mobile", () => {
+  assert.match(workbenchSource, /aria-modal=\{isMobileSurface \|\| undefined\}/);
   assert.match(
     workbenchStyles,
     /@media \(max-width:\s*768px\)[\s\S]*\.overlay\s*\{[^}]*pointer-events:\s*auto;/s
@@ -89,6 +107,32 @@ test("AI Workbench becomes an interactive full-screen surface on mobile", () => 
     /@media \(max-width:\s*768px\)[\s\S]*\.workWindow[^{}]*\{(?=[^}]*inset:\s*0;)(?=[^}]*height:\s*100dvh;)[^}]*\}/s
   );
   assert.match(workbenchStyles, /\.mobileTabList/);
+});
+
+test("desktop Workbench and launcher stay left of the open right panel", () => {
+  assert.match(
+    workbenchStyles,
+    /\.workWindow\[data-right-panel-open="true"\]\s*\{[^}]*right:\s*calc\(var\(--right-panel-width, 0px\) \+ 24px\);/s
+  );
+  assert.match(
+    launcherStyles,
+    /\.launcher\[data-right-panel-open="true"\]\s*\{[^}]*right:\s*calc\(var\(--right-panel-width, 0px\) \+ 20px\);/s
+  );
+});
+
+test("launcher is a new labelled AI Workbench trigger instead of the legacy square badge", () => {
+  assert.match(launcherSource, />AI 작업실<\/span>/);
+  assert.match(launcherSource, /MessageSquareText/);
+  assert.doesNotMatch(launcherSource, /className=\{styles\.mark\}|>\s*AI\s*<\/span>/);
+  assert.match(launcherStyles, /--ai-workbench-launcher-/);
+  assert.doesNotMatch(launcherStyles, /width:\s*44px|height:\s*44px|background:\s*#000000/);
+});
+
+test("selected Terraform issue result is inset inside the artifact body", () => {
+  assert.match(
+    controllerSource,
+    /selectedTerraformIssueAnalysis\?\.explanation\s*\?\s*\(\s*<div className=\{styles\.artifactBody\}>\s*<WorkspaceAiWorkbenchTerraformIssueResult/
+  );
 });
 
 function read(relativePath: string): string {

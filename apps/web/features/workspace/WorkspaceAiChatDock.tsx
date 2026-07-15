@@ -2256,11 +2256,13 @@ export function WorkspaceAiChatDock({
                 />
               ) : null}
               {selectedTerraformIssueAnalysis?.explanation ? (
-                <WorkspaceAiWorkbenchTerraformIssueResult
-                  diagnostic={selectedTerraformIssue.diagnostic}
-                  explanation={selectedTerraformIssueAnalysis.explanation}
-                  terraformCode={selectedTerraformIssueCode}
-                />
+                <div className={styles.artifactBody}>
+                  <WorkspaceAiWorkbenchTerraformIssueResult
+                    diagnostic={selectedTerraformIssue.diagnostic}
+                    explanation={selectedTerraformIssueAnalysis.explanation}
+                    terraformCode={selectedTerraformIssueCode}
+                  />
+                </div>
               ) : null}
               {terraformFixUnavailableReasons[selectedTerraformIssue.diagnosticKey] ? (
                 <p className={styles.fixUnavailable} role="status">

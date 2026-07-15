@@ -27,19 +27,26 @@ test("데스크톱 AI 채팅은 명시적으로 닫을 때까지 Board 상호작
 });
 
 test("오류 분석과 에이전트 리뷰 작업은 Workbench 작업 행에 머문다", () => {
+  const errorActionsSection = readSection("workspace-ai-error-actions-title");
+  const selectedErrorSection = readSection("workspace-ai-selected-error-title");
+  const reviewSection = readSection("workspace-ai-review-title");
+  const draftSection = readSection("workspace-ai-draft-result-title");
+  const patchSection = readSection("workspace-ai-patch-result-title");
+
   assert.match(
-    chatSource,
+    errorActionsSection,
     /className=\{styles\.taskActions\}[\s\S]*>선택 오류 분석<\/[\s\S]*>모두 분석<\//
   );
   assert.match(
-    chatSource,
+    reviewSection,
     /className=\{styles\.taskActions\}[\s\S]*>에이전트 리뷰<\//
   );
   assert.match(
-    chatSource,
+    selectedErrorSection,
     /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applySelectedTerraformIssueFix\}/
   );
-  assert.match(chatSource, />Board에 적용<\//);
+  assert.match(draftSection, /className=\{styles\.approvalTray\}[\s\S]*>Board에 적용<\//);
+  assert.match(patchSection, /className=\{styles\.approvalTray\}[\s\S]*>Board에 적용<\//);
 });
 
 test("오른쪽 패널 상호작용은 탭만 바꾸고 닫힌 채팅을 강제로 열지 않는다", () => {
@@ -77,4 +84,14 @@ test("안전 수정은 최신 분석과 정확한 파일이 있을 때만 batch 
 
 function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
+}
+
+function readSection(labelledBy: string): string {
+  const labelIndex = chatSource.indexOf(`aria-labelledby="${labelledBy}"`);
+  assert.notEqual(labelIndex, -1, `${labelledBy} section must exist`);
+  const sectionStart = chatSource.lastIndexOf("<section", labelIndex);
+  const sectionEnd = chatSource.indexOf("</section>", labelIndex);
+  assert.notEqual(sectionStart, -1, `${labelledBy} section start must exist`);
+  assert.notEqual(sectionEnd, -1, `${labelledBy} section end must exist`);
+  return chatSource.slice(sectionStart, sectionEnd + "</section>".length);
 }
