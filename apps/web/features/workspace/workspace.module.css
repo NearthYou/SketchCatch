@@ -2726,7 +2726,7 @@
 
 .aiChatOverlay {
   inset: 0;
-  pointer-events: auto;
+  pointer-events: none;
   position: fixed;
 }
 
@@ -2743,6 +2743,7 @@
   min-height: min(590px, calc(100vh - 48px));
   min-width: 0;
   overflow: hidden;
+  pointer-events: auto;
   position: fixed;
   right: 24px;
   width: min(860px, calc(100vw - 48px));
@@ -5700,6 +5701,53 @@
   margin: 0;
 }
 
+.aiTerraformIssueSelect {
+  display: grid;
+  gap: 7px;
+}
+
+.aiTerraformIssueSelect span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.aiTerraformIssueSelect select {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  font: inherit;
+  min-height: 40px;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.aiTerraformIssueProgress,
+.aiTerraformFixHint,
+.aiTerraformFixUnavailable {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.aiTerraformIssueProgress {
+  color: var(--workspace-muted, #60646c);
+  font-weight: 700;
+}
+
+.aiTerraformFixHint {
+  color: var(--workspace-muted, #60646c);
+}
+
+.aiTerraformFixUnavailable {
+  background: #fff8e7;
+  border: 1px solid #f2d58a;
+  border-radius: 8px;
+  color: #7a4b00;
+  padding: 10px 12px;
+}
+
 .aiStructuredResult {
   display: grid;
   min-width: 0;
@@ -5975,6 +6023,7 @@
 @media (max-width: 768px) {
   .aiChatOverlay {
     background: var(--workspace-surface, #ffffff);
+    pointer-events: auto;
   }
 
   .aiChatDock,

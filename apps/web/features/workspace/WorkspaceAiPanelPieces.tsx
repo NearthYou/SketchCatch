@@ -1,6 +1,5 @@
 import type {
   ArchitectureGuardrailWarning,
-  AiProvider,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -12,6 +11,7 @@ import type { ReactNode } from "react";
 import { ArrowRight, Code2, ListChecks } from "lucide-react";
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import {
+  createWorkspaceAiExplanationBadge,
   createTerraformPreviewPresentation,
   getWorkspaceAiResultSeverityLabel,
   type WorkspaceAiResultCheck
@@ -113,7 +113,7 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
     <div className={styles.aiExplanation}>
       <div className={styles.aiExplanationHeader}>
         <strong>AI 설명</strong>
-        <span>{explanation.fallbackUsed ? "기본 설명" : getWorkspaceAiProviderLabel(explanation.providerMetadata?.provider)}</span>
+        <span>{createWorkspaceAiExplanationBadge(explanation)}</span>
       </div>
       <p>{explanation.summary}</p>
       {explanation.wellArchitectedConclusion ? (
@@ -125,22 +125,6 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
       ) : null}
     </div>
   );
-}
-
-function getWorkspaceAiProviderLabel(provider: AiProvider | undefined): string {
-  switch (provider) {
-    case "bedrock":
-      return "Bedrock 설명";
-    case "amazon_q":
-      return "Amazon Q 설명";
-    case "amazon_transcribe":
-      return "Amazon Transcribe";
-    case "openai":
-      return "OpenAI legacy 설명";
-    case "fallback":
-    case undefined:
-      return "AI 설명";
-  }
 }
 
 // Architecture Draft가 MVP 범위 밖 요구를 감지했을 때 사용자가 놓치지 않게 보여줍니다.
@@ -294,6 +278,12 @@ export function WorkspaceAiTerraformPreviewResult({
         </dl>
         {result.technical.resources.length > 0 ? (
           <WorkspaceAiTechnicalList title="감지한 리소스" items={result.technical.resources} />
+        ) : null}
+        {result.technical.providerAttempts.length > 0 ? (
+          <WorkspaceAiTechnicalList
+            title="AI 제공자 시도 이력"
+            items={result.technical.providerAttempts}
+          />
         ) : null}
         {result.technical.findings.length > 0 ? (
           <WorkspaceAiTechnicalList title="점검 원문" items={result.technical.findings} />

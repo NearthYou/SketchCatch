@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import type {
   AiBillingMode,
   AiProvider,
+  AiProviderAttempt,
   AiProviderMetadata,
   AiProviderService,
   LlmCodeSuggestion,
@@ -220,6 +221,18 @@ export type AiTextProvider = {
   readonly generate: (request: AiTextProviderRequest) => Promise<AiTextProviderResponse>;
 };
 
+export type AiTextProviderFor<
+  Provider extends AiTextProvider["provider"],
+  Service extends AiTextProvider["service"]
+> = Omit<AiTextProvider, "provider" | "service"> & {
+  readonly provider: Provider;
+  readonly service: Service;
+};
+
+export type BedrockTextProvider = AiTextProviderFor<"bedrock", "bedrock_runtime">;
+export type AmazonQTextProvider = AiTextProviderFor<"amazon_q", "amazon_q_business">;
+export type OpenAiTextProvider = AiTextProviderFor<"openai", "openai_responses">;
+
 export type AiCreditPolicy = {
   readonly bedrock: boolean;
   readonly amazonQ: boolean;
@@ -240,18 +253,18 @@ export type AiProviderRegions = {
 };
 
 export type CreateAiProviderBackedLlmExplanationOptions = {
-  readonly bedrockProvider?: AiTextProvider | undefined;
-  readonly amazonQProvider?: AiTextProvider | undefined;
-  readonly openAiProvider?: AiTextProvider | undefined;
+  readonly bedrockProvider?: BedrockTextProvider | undefined;
+  readonly amazonQProvider?: AmazonQTextProvider | undefined;
+  readonly openAiProvider?: OpenAiTextProvider | undefined;
   readonly fallbackProvider?: CreateLlmExplanation | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
   readonly limits?: AiProviderLimits | undefined;
 };
 
 export type CreateConfiguredAiExplanationOptions = {
-  readonly bedrockProvider?: AiTextProvider | undefined;
-  readonly amazonQProvider?: AiTextProvider | undefined;
-  readonly openAiProvider?: AiTextProvider | undefined;
+  readonly bedrockProvider?: BedrockTextProvider | undefined;
+  readonly amazonQProvider?: AmazonQTextProvider | undefined;
+  readonly openAiProvider?: OpenAiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
   readonly limits?: AiProviderLimits | undefined;
 };
@@ -309,46 +322,109 @@ export function createAiProviderBackedLlmExplanation(
   const callWindows = new Map<AiProvider, ProviderCallWindow>();
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const limits = options.limits ?? readAiProviderLimitsFromEnv();
+  const amazonQProvider = isExpectedTextProvider(
+    options.amazonQProvider,
+    "amazon_q",
+    "amazon_q_business"
+  )
+    ? options.amazonQProvider
+    : undefined;
+  const bedrockProvider = isExpectedTextProvider(
+    options.bedrockProvider,
+    "bedrock",
+    "bedrock_runtime"
+  )
+    ? options.bedrockProvider
+    : undefined;
+  const openAiProvider = isExpectedTextProvider(
+    options.openAiProvider,
+    "openai",
+    "openai_responses"
+  )
+    ? options.openAiProvider
+    : undefined;
 
   return async (input) => {
-    let primaryProviderFallback: LlmExplanation | null = null;
-
     if (isAmazonQPrimaryTarget(input.target)) {
-      if (options.amazonQProvider === undefined) {
-        return createFallbackExplanationWithProviderMetadata(
-          input,
-          resolveAmazonQUnavailableFallbackReason(creditPolicy),
-          creditPolicy.billingMode,
-          {
+      const attempts: AiProviderAttempt[] = [];
+
+      if (amazonQProvider === undefined) {
+        attempts.push(
+          createProviderAttempt({
             provider: "amazon_q",
-            service: "amazon_q_business"
-          }
+            service: "amazon_q_business",
+            status: "skipped",
+            fallbackReason:
+              options.amazonQProvider === undefined
+                ? resolveProviderUnavailableFallbackReason("amazon_q", creditPolicy)
+                : "provider_not_configured"
+          })
         );
-      }
+      } else {
+        const qResult = await tryProvider({
+          provider: amazonQProvider,
+          input,
+          cache,
+          callWindows,
+          creditPolicy,
+          limits,
+          attempts
+        });
 
-      const qResult = await tryProvider({
-        provider: options.amazonQProvider,
-        input,
-        cache,
-        callWindows,
-        creditPolicy,
-        limits
-      });
-
-      if (qResult !== null) {
-        if (
-          input.target === "terraform_error_explanation" &&
-          shouldTrySecondaryProviderAfterAmazonQ(qResult)
-        ) {
-          primaryProviderFallback = qResult;
-        } else {
-          return qResult;
+        if (qResult !== null && !qResult.fallbackUsed) {
+          return withProviderAttempts(qResult, attempts);
         }
       }
+
+      if (bedrockProvider === undefined) {
+        attempts.push(
+          createProviderAttempt({
+            provider: "bedrock",
+            service: "bedrock_runtime",
+            status: "skipped",
+            fallbackReason:
+              options.bedrockProvider === undefined
+                ? resolveProviderUnavailableFallbackReason("bedrock", creditPolicy)
+                : "provider_not_configured"
+          })
+        );
+      } else {
+        const bedrockResult = await tryProvider({
+          provider: bedrockProvider,
+          input,
+          cache,
+          callWindows,
+          creditPolicy,
+          limits,
+          attempts
+        });
+
+        if (bedrockResult !== null && !bedrockResult.fallbackUsed) {
+          return withProviderAttempts(bedrockResult, attempts);
+        }
+      }
+
+      const fallbackExplanation = createFallbackExplanationWithMetadata(
+        input,
+        resolveProviderChainFallbackReason(
+          attempts,
+          resolveFallbackReasonForMissingProvider(input.target, creditPolicy)
+        ),
+        creditPolicy.billingMode
+      );
+      attempts.push(
+        createProviderAttempt({
+          provider: "fallback",
+          service: "rule_fallback",
+          status: "succeeded"
+        })
+      );
+
+      return withProviderAttempts(fallbackExplanation, attempts);
     }
 
     const bedrockResult = await tryProvider({
-      provider: options.bedrockProvider,
+      provider: bedrockProvider,
       input,
       cache,
       callWindows,
@@ -357,15 +433,11 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (bedrockResult !== null) {
-      if (bedrockResult.fallbackUsed && primaryProviderFallback !== null) {
-        return primaryProviderFallback;
-      }
-
       return bedrockResult;
     }
 
     const openAiResult = await tryProvider({
-      provider: options.openAiProvider,
+      provider: openAiProvider,
       input,
       cache,
       callWindows,
@@ -374,10 +446,6 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (openAiResult !== null) {
-      if (openAiResult.fallbackUsed && primaryProviderFallback !== null) {
-        return primaryProviderFallback;
-      }
-
       return openAiResult;
     }
 
@@ -389,15 +457,22 @@ export function createAiProviderBackedLlmExplanation(
   };
 }
 
-function shouldTrySecondaryProviderAfterAmazonQ(explanation: LlmExplanation): boolean {
-  return explanation.fallbackUsed && explanation.fallbackReason === "invalid_response";
-}
-
 function isAmazonQPrimaryTarget(target: LlmExplanationTarget): boolean {
   return target === "terraform_error_explanation" || target === "terraform_preview_explanation";
 }
 
-export function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): AiTextProvider {
+function isExpectedTextProvider<
+  Provider extends AiTextProvider["provider"],
+  Service extends AiTextProvider["service"]
+>(
+  provider: AiTextProvider | undefined,
+  expectedProvider: Provider,
+  expectedService: Service
+): provider is AiTextProviderFor<Provider, Service> {
+  return provider?.provider === expectedProvider && provider.service === expectedService;
+}
+
+export function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): BedrockTextProvider {
   const client = new BedrockRuntimeClient({ region: input.region });
 
   return {
@@ -430,7 +505,7 @@ export function createBedrockTextProvider(input: { readonly region: string; read
   };
 }
 
-export function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AiTextProvider | undefined {
+export function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AmazonQTextProvider | undefined {
   if (process.env.AMAZON_Q_ENABLED !== "true") {
     return undefined;
   }
@@ -458,7 +533,7 @@ export function createAmazonQBusinessTextProvider(input: {
   readonly userId?: string | undefined;
   readonly region: string;
   readonly client?: AmazonQBusinessChatClient | undefined;
-}): AiTextProvider {
+}): AmazonQTextProvider {
   const client = input.client ?? createDefaultAmazonQBusinessChatClient(input.region);
 
   return {
@@ -699,6 +774,7 @@ async function tryProvider(input: {
   readonly callWindows: Map<AiProvider, ProviderCallWindow>;
   readonly creditPolicy: AiCreditPolicy;
   readonly limits: AiProviderLimits;
+  readonly attempts?: AiProviderAttempt[] | undefined;
 }): Promise<LlmExplanation | null> {
   if (input.provider === undefined) {
     return null;
@@ -707,6 +783,8 @@ async function tryProvider(input: {
   const creditFallbackReason = getCreditFallbackReason(input.provider.provider, input.creditPolicy);
 
   if (creditFallbackReason !== null) {
+    recordProviderAttempt(input.attempts, input.provider, "skipped", creditFallbackReason);
+
     if (
       isAmazonQPrimaryTarget(input.input.target) &&
       input.provider.provider === "amazon_q"
@@ -740,7 +818,7 @@ async function tryProvider(input: {
   const cached = input.cache.get(cacheKey);
 
   if (cached !== undefined) {
-    return withProviderMetadata(cached.explanation, {
+    const cachedExplanation = withProviderMetadata(cached.explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
       model: input.provider.model,
@@ -750,11 +828,20 @@ async function tryProvider(input: {
       billingMode: input.creditPolicy.billingMode,
       payload
     });
+    recordProviderAttempt(
+      input.attempts,
+      input.provider,
+      cachedExplanation.fallbackUsed ? "fallback" : "succeeded",
+      cachedExplanation.fallbackReason
+    );
+
+    return cachedExplanation;
   }
 
   const rateLimitReason = reserveProviderCall(input.provider.provider, input.callWindows, input.limits);
 
   if (rateLimitReason !== null) {
+    recordProviderAttempt(input.attempts, input.provider, "skipped", rateLimitReason);
     return createFallbackExplanationWithMetadata(input.input, rateLimitReason, input.creditPolicy.billingMode);
   }
 
@@ -767,12 +854,7 @@ async function tryProvider(input: {
       payload
     });
     const fallback = createFallbackExplanation(input.input, "invalid_response");
-    const parsedExplanation = parseProviderExplanationText({
-      fallback,
-      input: input.input,
-      provider: input.provider.provider,
-      text: response.text
-    });
+    const parsedExplanation = parseLlmExplanationText(response.text, fallback);
     const explanation = completeAmazonQTerraformCodeSuggestion({
       explanation: parsedExplanation,
       input: input.input,
@@ -793,15 +875,54 @@ async function tryProvider(input: {
     input.cache.set(cacheKey, {
       explanation: explanationWithMetadata
     });
+    recordProviderAttempt(
+      input.attempts,
+      input.provider,
+      explanationWithMetadata.fallbackUsed ? "fallback" : "succeeded",
+      explanationWithMetadata.fallbackReason
+    );
 
     return explanationWithMetadata;
   } catch (error) {
+    const fallbackReason = classifyProviderError(error);
+    recordProviderAttempt(input.attempts, input.provider, "failed", fallbackReason);
+
     return createFallbackExplanationWithMetadata(
       input.input,
-      classifyProviderError(error),
+      fallbackReason,
       input.creditPolicy.billingMode
     );
   }
+}
+
+function recordProviderAttempt(
+  attempts: AiProviderAttempt[] | undefined,
+  provider: AiTextProvider,
+  status: AiProviderAttempt["status"],
+  fallbackReason?: LlmExplanationFallbackReason | undefined
+): void {
+  attempts?.push(
+    createProviderAttempt({
+      provider: provider.provider,
+      service: provider.service,
+      status,
+      fallbackReason
+    })
+  );
+}
+
+function createProviderAttempt(input: {
+  readonly provider: AiProvider;
+  readonly service: AiProviderService;
+  readonly status: AiProviderAttempt["status"];
+  readonly fallbackReason?: LlmExplanationFallbackReason | undefined;
+}): AiProviderAttempt {
+  return {
+    provider: input.provider,
+    service: input.service,
+    status: input.status,
+    ...(input.fallbackReason === undefined ? {} : { fallbackReason: input.fallbackReason })
+  };
 }
 
 function createProviderPrompt(provider: AiProvider, target: LlmExplanationTarget, payload: unknown): string {
@@ -989,25 +1110,6 @@ function trimProviderPrompt(value: string, maxLength: number): string {
   return value.slice(0, Math.max(0, maxLength - 1)).trimEnd();
 }
 
-function parseProviderExplanationText(input: {
-  readonly fallback: LlmExplanation;
-  readonly input: LlmExplanationInput;
-  readonly provider: AiProvider;
-  readonly text: string;
-}): LlmExplanation {
-  const parsed = parseLlmExplanationText(input.text, input.fallback);
-
-  if (!parsed.fallbackUsed || parsed.fallbackReason !== "invalid_response") {
-    return parsed;
-  }
-
-  if (input.provider === "amazon_q" && input.input.target === "terraform_error_explanation") {
-    return createAmazonQTerraformPlainTextExplanation(input.text, input.fallback);
-  }
-
-  return parsed;
-}
-
 function completeAmazonQTerraformCodeSuggestion(input: {
   readonly explanation: LlmExplanation;
   readonly input: LlmExplanationInput;
@@ -1086,52 +1188,6 @@ function isLikelyTerraformBlockOrAttribute(line: string): boolean {
   );
 }
 
-function createAmazonQTerraformPlainTextExplanation(
-  text: string,
-  fallback: LlmExplanation
-): LlmExplanation {
-  const items = normalizeProviderTextItems(text);
-  const summary = items[0] ?? "";
-
-  if (summary.length === 0 || isUnhelpfulProviderText(summary)) {
-    return fallback;
-  }
-
-  return {
-    target: "terraform_error_explanation",
-    summary: trimProviderText(summary, 300),
-    highlights: items.slice(1, 4).map((item) => trimProviderText(item, 120)),
-    nextActions: fallback.nextActions.slice(0, 5),
-    fallbackUsed: false
-  };
-}
-
-function isUnhelpfulProviderText(value: string): boolean {
-  const normalized = value.toLowerCase();
-
-  return (
-    normalized.includes("could not find relevant information") ||
-    normalized.includes("cannot find relevant information") ||
-    normalized.includes("sorry, i could not") ||
-    normalized.includes("not enough information")
-  );
-}
-
-function normalizeProviderTextItems(text: string): string[] {
-  return text
-    .split(/\r?\n+/)
-    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
-    .filter((line) => line.length > 0 && !/^```/.test(line));
-}
-
-function trimProviderText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-
-  return value.slice(0, maxLength).trim();
-}
-
 function createFallbackExplanationWithMetadata(
   input: LlmExplanationInput,
   fallbackReason: LlmExplanationFallbackReason,
@@ -1192,6 +1248,23 @@ function withProviderMetadata(
   };
 }
 
+function withProviderAttempts(
+  explanation: LlmExplanation,
+  attempts: readonly AiProviderAttempt[]
+): LlmExplanation {
+  if (explanation.providerMetadata === undefined) {
+    return explanation;
+  }
+
+  return {
+    ...explanation,
+    providerMetadata: {
+      ...explanation.providerMetadata,
+      attempts: attempts.map((attempt) => ({ ...attempt }))
+    }
+  };
+}
+
 function createProviderMetadata(input: {
   readonly provider: AiProvider;
   readonly service: AiProviderService;
@@ -1236,14 +1309,26 @@ function getCreditFallbackReason(provider: AiProvider, creditPolicy: AiCreditPol
   return null;
 }
 
-function resolveAmazonQUnavailableFallbackReason(
+function resolveProviderUnavailableFallbackReason(
+  provider: Extract<AiProvider, "amazon_q" | "bedrock">,
   creditPolicy: AiCreditPolicy
 ): LlmExplanationFallbackReason {
-  if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
-    return "credit_not_confirmed";
+  return getCreditFallbackReason(provider, creditPolicy) ?? "provider_not_configured";
+}
+
+function resolveProviderChainFallbackReason(
+  attempts: readonly AiProviderAttempt[],
+  defaultReason: LlmExplanationFallbackReason
+): LlmExplanationFallbackReason {
+  for (let index = attempts.length - 1; index >= 0; index -= 1) {
+    const fallbackReason = attempts[index]?.fallbackReason;
+
+    if (fallbackReason !== undefined) {
+      return fallbackReason;
+    }
   }
 
-  return "provider_not_configured";
+  return defaultReason;
 }
 
 function reserveProviderCall(

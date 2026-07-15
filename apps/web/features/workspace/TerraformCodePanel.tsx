@@ -50,16 +50,19 @@ import {
   rewriteTerraformReferencesForSyncProposals
 } from "./terraform-sync-proposals";
 import {
-  applyTerraformCodeReplacement,
-  applyTerraformSafeFix,
-  type TerraformCodeReplacementPreview,
+  applyTerraformSafeFixesAtomically,
+  type TerraformSafeFixBatchResult,
   type TerraformSafeFixResult
 } from "./terraform-safe-fixes";
 import {
   combineTerraformDiagnostics,
   createTerraformDiagnosticKey
 } from "./terraform-issues-state";
-import type { TerraformPreviewAiRequest } from "./workspace-terraform-ai";
+import {
+  createWorkspaceTerraformFingerprint,
+  type TerraformSafeFixApplyItem,
+  type WorkspaceTerraformAiCodeContext
+} from "./workspace-terraform-ai";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -67,21 +70,23 @@ const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
 
 type TerraformPreviewExplanationScope = {
-  readonly code: string;
   readonly key: string;
   readonly label: string;
+  readonly terraformCode: string;
 };
 
 function createTerraformPreviewExplanationScope({
   activeFileName,
   displayedTerraformCode,
   highlightedBlock,
-  inspectedBlock
+  inspectedBlock,
+  selectedBlock
 }: {
   readonly activeFileName: string;
   readonly displayedTerraformCode: string;
   readonly highlightedBlock: { readonly address: string; readonly code: string } | null;
   readonly inspectedBlock: { readonly address: string; readonly code: string } | null;
+  readonly selectedBlock: { readonly address: string; readonly code: string } | null;
 }): TerraformPreviewExplanationScope {
   if (inspectedBlock) {
     return createTerraformPreviewExplanationScopeValue(
@@ -94,6 +99,13 @@ function createTerraformPreviewExplanationScope({
     return createTerraformPreviewExplanationScopeValue(
       highlightedBlock.code,
       `강조 코드 · ${highlightedBlock.address}`
+    );
+  }
+
+  if (selectedBlock) {
+    return createTerraformPreviewExplanationScopeValue(
+      selectedBlock.code,
+      `선택 코드 · ${selectedBlock.address}`
     );
   }
 
@@ -110,9 +122,9 @@ function createTerraformPreviewExplanationScopeValue(
   const trimmedCode = code.trim();
 
   return {
-    code: trimmedCode,
     key: JSON.stringify({ code: trimmedCode, label }),
-    label
+    label,
+    terraformCode: trimmedCode
   };
 }
 
@@ -211,8 +223,11 @@ export type PreparedTerraformArtifactSource = {
 export type TerraformCodePanelHandle = {
   readonly applyTerraformSafeFix: (
     diagnostic: TerraformDiagnostic,
-    codePreview?: TerraformCodeReplacementPreview | undefined
+    codePreview?: TerraformSafeFixApplyItem["codePreview"]
   ) => Promise<TerraformSafeFixResult>;
+  readonly applyTerraformSafeFixes: (
+    fixes: readonly TerraformSafeFixApplyItem[]
+  ) => Promise<TerraformSafeFixBatchResult>;
   readonly getCurrentTerraformCode: () => string;
   readonly getTerraformFiles: () => readonly TerraformVirtualFile[];
   readonly openTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
@@ -244,11 +259,14 @@ export const TerraformCodePanel = forwardRef<
     readonly onDirtyChange: (isDirty: boolean) => void;
     readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
     readonly onOpenIssues: () => void;
+    readonly onTerraformAiCodeContextChange: (
+      context: WorkspaceTerraformAiCodeContext
+    ) => void;
+    readonly onTerraformAiInteraction: () => void;
     readonly onTerraformFilesChange?:
       | ((files: readonly TerraformSyncFileInput[]) => void)
       | undefined;
     readonly onTerraformFilesReplacementApplied?: ((id: number) => void) | undefined;
-    readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   }
 >(function TerraformCodePanel(
   {
@@ -263,9 +281,10 @@ export const TerraformCodePanel = forwardRef<
     onDirtyChange,
     onExternalSaveComplete,
     onOpenIssues,
+    onTerraformAiCodeContextChange,
+    onTerraformAiInteraction,
     onTerraformFilesChange,
-    onTerraformFilesReplacementApplied,
-    onTerraformPreviewAiRequest
+    onTerraformFilesReplacementApplied
   },
   ref
 ) {
@@ -407,10 +426,31 @@ export const TerraformCodePanel = forwardRef<
         activeFileName,
         displayedTerraformCode,
         highlightedBlock,
-        inspectedBlock
+        inspectedBlock,
+        selectedBlock
       }),
-    [activeFileName, displayedTerraformCode, highlightedBlock, inspectedBlock]
+    [activeFileName, displayedTerraformCode, highlightedBlock, inspectedBlock, selectedBlock]
   );
+  const terraformAiFiles = useMemo(
+    () => toTerraformValidationFiles(terraformFiles),
+    [terraformFiles]
+  );
+  const terraformAiCodeContext = useMemo<WorkspaceTerraformAiCodeContext>(
+    () => ({
+      combinedTerraformCode,
+      files: terraformAiFiles,
+      fingerprint: createWorkspaceTerraformFingerprint(terraformAiFiles),
+      reviewScope: {
+        key: terraformPreviewExplanationScope.key,
+        label: terraformPreviewExplanationScope.label,
+        terraformCode: terraformPreviewExplanationScope.terraformCode
+      }
+    }),
+    [combinedTerraformCode, terraformAiFiles, terraformPreviewExplanationScope]
+  );
+  useEffect(() => {
+    onTerraformAiCodeContextChange(terraformAiCodeContext);
+  }, [onTerraformAiCodeContextChange, terraformAiCodeContext]);
   const lineNumbers = useMemo(
     () =>
       Array.from(
@@ -476,18 +516,6 @@ export const TerraformCodePanel = forwardRef<
       setRequestState("error");
     }
   }, []);
-
-  function requestTerraformPreviewExplanation(): void {
-    if (!terraformPreviewExplanationScope.code) {
-      return;
-    }
-
-    onTerraformPreviewAiRequest({
-      id: Date.now(),
-      label: terraformPreviewExplanationScope.label,
-      terraformCode: terraformPreviewExplanationScope.code
-    });
-  }
 
   const refreshTerraformCode = useCallback(
     async (diagramFingerprint: string, preserveExistingSource = true) => {
@@ -872,50 +900,32 @@ export const TerraformCodePanel = forwardRef<
     }
   }, [hasTerraformCode, onDiagnosticsChange, requestState, runTerraformModuleValidation]);
 
-  const applyTerraformSafeFixToCode = useCallback(
+  const applyTerraformSafeFixesToCode = useCallback(
     async (
-      diagnostic: TerraformDiagnostic,
-      codePreview?: TerraformCodeReplacementPreview | undefined
-    ): Promise<TerraformSafeFixResult> => {
+      fixes: readonly TerraformSafeFixApplyItem[]
+    ): Promise<TerraformSafeFixBatchResult> => {
       if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
         return {
           applied: false,
-          code: combinedTerraformCode,
+          files: terraformFiles,
           message: "Terraform 요청을 처리하는 중입니다."
         };
       }
 
-      const targetFileName = diagnostic.sourceFileName ?? activeFileName;
-      const targetFile = terraformFiles.find((file) => file.fileName === targetFileName);
+      const preflightResult = applyTerraformSafeFixesAtomically({
+        files: terraformFiles,
+        fixes
+      });
 
-      if (!targetFile) {
-        return {
-          applied: false,
-          code: combinedTerraformCode,
-          message: "진단이 가리키는 Terraform 파일을 찾지 못했습니다."
-        };
+      if (!preflightResult.applied) {
+        return preflightResult;
       }
 
-      const fixResult =
-        codePreview === undefined || codePreview.source === "safe_fix"
-          ? applyTerraformSafeFix({
-              code: targetFile.code,
-              diagnostic
-            })
-          : applyTerraformCodeReplacement({
-              code: targetFile.code,
-              preview: codePreview
-            });
-
-      if (!fixResult.applied) {
-        return fixResult;
-      }
-
-      const nextFiles = terraformFiles.map((file) =>
-        file.fileName === targetFile.fileName ? { ...file, code: fixResult.code } : file
-      );
+      const nextFiles = preflightResult.files.map((file) => ({ ...file }));
       const nextCombinedTerraformCode = combineTerraformFiles(nextFiles);
-      const originalDiagnosticKey = createTerraformDiagnosticKey(diagnostic);
+      const originalDiagnosticKeys = new Set(
+        fixes.map(({ diagnostic }) => createTerraformDiagnosticKey(diagnostic))
+      );
 
       codeVersionRef.current += 1;
       const requestCodeVersion = codeVersionRef.current;
@@ -923,7 +933,6 @@ export const TerraformCodePanel = forwardRef<
       const requestDiagramRevision = context.getDiagramRevision();
       setRequestState("loading");
       setTerraformFiles(nextFiles);
-      setActiveFileName(targetFile.fileName);
       setHasLocalEdits(true);
       setSaveBanner({ kind: "dirty" });
       setStatusMessage("AI 수정안 적용 중");
@@ -941,25 +950,25 @@ export const TerraformCodePanel = forwardRef<
         ) {
           setRequestState("idle");
           return {
-            applied: false,
-            code: nextCombinedTerraformCode,
-            message: "Terraform 코드가 변경되어 AI 수정 완료를 무시했습니다. 다시 시도하세요."
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 이후 Terraform 코드가 변경되어 후속 검증 결과를 반영하지 않았습니다."
           };
         }
 
         setDiagnostics(validationDiagnostics);
         onDiagnosticsChange(validationDiagnostics);
 
-        const stillHasOriginalDiagnostic = validationDiagnostics.some(
-          (nextDiagnostic) => createTerraformDiagnosticKey(nextDiagnostic) === originalDiagnosticKey
+        const stillHasOriginalDiagnostic = validationDiagnostics.some((nextDiagnostic) =>
+          originalDiagnosticKeys.has(createTerraformDiagnosticKey(nextDiagnostic))
         );
 
         if (hasBlockingTerraformDiagnostic(validationDiagnostics) && stillHasOriginalDiagnostic) {
           setRequestState("idle");
           setStatusMessage("재검증 필요");
           return {
-            applied: false,
-            code: nextCombinedTerraformCode,
+            applied: true,
+            files: nextFiles,
             message: "수정안은 적용됐지만 같은 Terraform 진단이 남아 있습니다."
           };
         }
@@ -969,7 +978,7 @@ export const TerraformCodePanel = forwardRef<
           setStatusMessage("재검증 필요");
           return {
             applied: true,
-            code: nextCombinedTerraformCode,
+            files: nextFiles,
             message:
               "AI 수정안을 적용했습니다. 남아 있는 Terraform 이슈를 Issues 탭에서 확인하세요."
           };
@@ -988,9 +997,9 @@ export const TerraformCodePanel = forwardRef<
         ) {
           setRequestState("idle");
           return {
-            applied: false,
-            code: nextCombinedTerraformCode,
-            message: "Terraform 코드가 변경되어 AI 수정 완료를 무시했습니다. 다시 시도하세요."
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 이후 Terraform 코드가 변경되어 동기화 결과를 반영하지 않았습니다."
           };
         }
 
@@ -1010,8 +1019,8 @@ export const TerraformCodePanel = forwardRef<
           setRequestState("idle");
           setStatusMessage("재검증 필요");
           return {
-            applied: false,
-            code: nextCombinedTerraformCode,
+            applied: true,
+            files: nextFiles,
             message: "수정안은 적용됐지만 다이어그램 동기화 진단이 남아 있습니다."
           };
         }
@@ -1029,9 +1038,9 @@ export const TerraformCodePanel = forwardRef<
         ) {
           setRequestState("idle");
           return {
-            applied: false,
-            code: nextCombinedTerraformCode,
-            message: "다이어그램이 변경되어 AI 수정 완료를 무시했습니다. 다시 시도하세요."
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 다이어그램이 변경되어 동기화 결과를 반영하지 않았습니다."
           };
         }
 
@@ -1055,7 +1064,7 @@ export const TerraformCodePanel = forwardRef<
 
         return {
           applied: true,
-          code: nextCombinedTerraformCode,
+          files: nextFiles,
           message: "AI 수정안을 적용하고 재검증/저장/다이어그램 동기화를 완료했습니다."
         };
       } catch (error) {
@@ -1066,23 +1075,24 @@ export const TerraformCodePanel = forwardRef<
         ) {
           setRequestState("idle");
           return {
-            applied: false,
-            code: nextCombinedTerraformCode,
-            message: "Terraform 코드가 변경되어 AI 수정 완료를 무시했습니다. 다시 시도하세요."
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 이후 코드 변경 때문에 후속 처리 결과를 반영하지 않았습니다."
           };
         }
         setRequestState("error");
-        setStatusMessage("AI 수정안 적용 실패");
+        setStatusMessage("수정 후 재검증 필요");
         return {
-          applied: false,
-          code: nextCombinedTerraformCode,
-          message: getApiErrorMessage(error, "AI 수정안 적용 중 오류가 발생했습니다.")
+          applied: true,
+          files: nextFiles,
+          message: getApiErrorMessage(
+            error,
+            "수정안은 적용됐지만 재검증 또는 다이어그램 동기화를 완료하지 못했습니다."
+          )
         };
       }
     },
     [
-      activeFileName,
-      combinedTerraformCode,
       context,
       onDiagnosticsChange,
       onDirtyChange,
@@ -1092,10 +1102,27 @@ export const TerraformCodePanel = forwardRef<
     ]
   );
 
+  const applyTerraformSafeFixToCode = useCallback(
+    async (
+      diagnostic: TerraformDiagnostic,
+      codePreview?: TerraformSafeFixApplyItem["codePreview"]
+    ): Promise<TerraformSafeFixResult> => {
+      const result = await applyTerraformSafeFixesToCode([{ codePreview, diagnostic }]);
+
+      return {
+        applied: result.applied,
+        code: combineTerraformFiles(result.files),
+        message: result.message
+      };
+    },
+    [applyTerraformSafeFixesToCode]
+  );
+
   useImperativeHandle(
     ref,
     () => ({
       applyTerraformSafeFix: applyTerraformSafeFixToCode,
+      applyTerraformSafeFixes: applyTerraformSafeFixesToCode,
       getCurrentTerraformCode: () => combinedTerraformCode,
       getTerraformFiles: () => terraformFiles,
       openTerraformSourceLocation,
@@ -1131,6 +1158,7 @@ export const TerraformCodePanel = forwardRef<
     }),
     [
       applyTerraformSafeFixToCode,
+      applyTerraformSafeFixesToCode,
       combinedTerraformCode,
       hasTerraformCode,
       openTerraformSourceLocation,
@@ -1519,20 +1547,20 @@ export const TerraformCodePanel = forwardRef<
   }
 
   return (
-    <div className={styles.terraformPanel}>
+    <div
+      className={styles.terraformPanel}
+      onFocusCapture={onTerraformAiInteraction}
+      onPointerDown={onTerraformAiInteraction}
+    >
       <TerraformCodeToolbar
         actions={{
           closeResourceCode: context.closeInspectedNode,
-          requestExplanation: requestTerraformPreviewExplanation,
           searchFiles: setFileSearchQuery,
           selectFile: selectTerraformFile,
           toggleFileMenu: () => setIsFileMenuOpen((isOpen) => !isOpen)
         }}
         state={{
           activeFileName,
-          canRequestExplanation:
-            terraformPreviewExplanationScope.code.length > 0 && requestState !== "loading",
-          explanationLabel: terraformPreviewExplanationScope.label,
           fileOptions: filteredTerraformFileOptions,
           fileSearchQuery,
           inspectedResourceLabel:

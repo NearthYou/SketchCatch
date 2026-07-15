@@ -2300,6 +2300,15 @@ export type AiProviderService =
   | "openai_responses"
   | "rule_fallback";
 
+export type AiProviderAttemptStatus = "succeeded" | "fallback" | "skipped" | "failed";
+
+export type AiProviderAttempt = {
+  provider: AiProvider;
+  service: AiProviderService;
+  status: AiProviderAttemptStatus;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+};
+
 export type AiBillingMode = "aws_credit_only" | "standard" | "disabled";
 
 export type AiEstimatedUsage = {
@@ -2318,6 +2327,7 @@ export type AiProviderMetadata = {
   cacheKey: string;
   estimatedUsage: AiEstimatedUsage;
   billingMode: AiBillingMode;
+  attempts?: AiProviderAttempt[] | undefined;
   generatedAt: IsoDateTimeString;
 };
 

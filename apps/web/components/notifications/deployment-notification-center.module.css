@@ -5,6 +5,12 @@
   z-index: 1400;
 }
 
+.center[data-placement="workspace"] {
+  bottom: auto;
+  position: relative;
+  right: auto;
+}
+
 .trigger {
   align-items: center;
   background: #111827;
@@ -17,6 +23,23 @@
   justify-content: center;
   position: relative;
   width: 44px;
+}
+
+.center[data-placement="workspace"] .trigger {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--workspace-text, #171717);
+  height: 36px;
+  width: 36px;
+}
+
+.center[data-placement="workspace"] .trigger:hover,
+.center[data-placement="workspace"] .trigger:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  outline: none;
 }
 
 .trigger span {
@@ -36,6 +59,10 @@
   top: -6px;
 }
 
+.center[data-placement="workspace"] .trigger span {
+  border-color: var(--workspace-surface, #fff);
+}
+
 .panel {
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -50,24 +77,29 @@
   width: min(380px, calc(100vw - 32px));
 }
 
-.panel header,
+.center[data-placement="workspace"] .panel {
+  bottom: auto;
+  top: 44px;
+}
+
+.panelHeader,
 .controls {
   align-items: center;
   display: flex;
   justify-content: space-between;
 }
 
-.panel header {
+.panelHeader {
   border-bottom: 1px solid #eef0f3;
   padding: 15px 16px;
 }
 
-.panel header div {
+.panelHeader div {
   display: grid;
   gap: 2px;
 }
 
-.panel header span,
+.panelHeader span,
 .list time {
   color: #6b7280;
   font-size: 12px;

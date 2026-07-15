@@ -1,7 +1,15 @@
 "use client";
 
 import { Bell, CheckCheck, X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode
+} from "react";
 import type { WebPushSubscriptionInput } from "@sketchcatch/types";
 import { useAuth } from "../auth/auth-provider";
 import {
@@ -18,13 +26,30 @@ import {
   markAllNotificationsReadLocally,
   markNotificationReadLocally,
   mergeNotification,
-  replaceNotificationCenterState
+  replaceNotificationCenterState,
+  type NotificationCenterState
 } from "./notification-center-state";
+import { getDeploymentNotificationCenterPlacement } from "./notification-center-placement";
 import styles from "./deployment-notification-center.module.css";
 
 type PushState = "idle" | "enabling" | "enabled" | "denied" | "unsupported" | "unavailable" | "error";
 
+type NotificationCenterContextValue = {
+  readonly close: () => void;
+  readonly disablePush: () => Promise<void>;
+  readonly enablePush: () => Promise<void>;
+  readonly open: boolean;
+  readonly openNotification: (notificationId: string, actionUrl: string) => Promise<void>;
+  readonly pushState: PushState;
+  readonly readAll: () => Promise<void>;
+  readonly state: NotificationCenterState;
+  readonly toggle: () => void;
+};
+
+const NotificationCenterContext = createContext<NotificationCenterContextValue | null>(null);
+
 export function DeploymentNotificationCenter({ children }: { readonly children: ReactNode }) {
+  const pathname = usePathname();
   const { status } = useAuth();
   const [state, setState] = useState(createNotificationCenterState);
   const [open, setOpen] = useState(false);
@@ -159,74 +184,119 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
     }
   }
 
-  if (status !== "authenticated") return <>{children}</>;
+  const contextValue: NotificationCenterContextValue = {
+    close: () => setOpen(false),
+    disablePush,
+    enablePush,
+    open,
+    openNotification,
+    pushState,
+    readAll,
+    state,
+    toggle: () => setOpen((value) => !value)
+  };
 
   return (
-    <>
+    <NotificationCenterContext.Provider value={contextValue}>
       {children}
-      <aside className={styles.center} aria-label="배포 알림">
-        <button
-          aria-expanded={open}
-          aria-label={`배포 알림${state.unreadCount ? ` ${state.unreadCount}개 읽지 않음` : ""}`}
-          className={styles.trigger}
-          onClick={() => setOpen((value) => !value)}
-          type="button"
-        >
-          <Bell aria-hidden="true" size={19} />
-          {state.unreadCount > 0 ? <span>{Math.min(state.unreadCount, 99)}</span> : null}
-        </button>
-        {open ? (
-          <section className={styles.panel}>
-            <header>
-              <div>
-                <strong>배포 알림</strong>
-                <span>{state.unreadCount}개 읽지 않음</span>
-              </div>
-              <button aria-label="알림 닫기" onClick={() => setOpen(false)} type="button">
-                <X aria-hidden="true" size={18} />
-              </button>
-            </header>
-            <div className={styles.controls}>
-              <button disabled={state.unreadCount === 0} onClick={() => void readAll()} type="button">
-                <CheckCheck aria-hidden="true" size={15} /> 모두 읽음
-              </button>
-              {pushState === "enabled" ? (
-                <button onClick={() => void disablePush()} type="button">브라우저 알림 끄기</button>
-              ) : (
-                <button disabled={pushState === "enabling"} onClick={() => void enablePush()} type="button">
-                  {pushState === "enabling" ? "연결 중" : "브라우저 알림 켜기"}
-                </button>
-              )}
+      {status === "authenticated" &&
+      getDeploymentNotificationCenterPlacement(pathname) === "floating" ? (
+        <NotificationCenterSurface placement="floating" />
+      ) : null}
+    </NotificationCenterContext.Provider>
+  );
+}
+
+export function WorkspaceDeploymentNotificationCenterSlot() {
+  const pathname = usePathname();
+
+  if (getDeploymentNotificationCenterPlacement(pathname) !== "workspace") return null;
+  return <NotificationCenterSurface placement="workspace" />;
+}
+
+function NotificationCenterSurface({
+  placement
+}: {
+  readonly placement: "floating" | "workspace";
+}) {
+  const context = useContext(NotificationCenterContext);
+
+  if (!context) return null;
+  const {
+    close,
+    disablePush,
+    enablePush,
+    open,
+    openNotification,
+    pushState,
+    readAll,
+    state,
+    toggle
+  } = context;
+
+  return (
+    <aside className={styles.center} data-placement={placement} aria-label="배포 알림">
+      <button
+        aria-expanded={open}
+        aria-label={`배포 알림${state.unreadCount ? ` ${state.unreadCount}개 읽지 않음` : ""}`}
+        className={styles.trigger}
+        onClick={toggle}
+        type="button"
+      >
+        <Bell aria-hidden="true" size={19} />
+        {state.unreadCount > 0 ? <span>{Math.min(state.unreadCount, 99)}</span> : null}
+      </button>
+      {open ? (
+        <section className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <div>
+              <strong>배포 알림</strong>
+              <span>{state.unreadCount}개 읽지 않음</span>
             </div>
-            {pushState === "denied" ? <p className={styles.notice}>권한이 거부되어 Inbox로만 알립니다.</p> : null}
-            {pushState === "unsupported" ? <p className={styles.notice}>이 브라우저는 Web Push를 지원하지 않습니다.</p> : null}
-            {pushState === "unavailable" ? <p className={styles.notice}>서버 Web Push 설정이 준비되지 않았습니다.</p> : null}
-            {pushState === "error" ? <p className={styles.notice}>브라우저 알림 연결을 완료하지 못했습니다.</p> : null}
-            {state.notifications.length ? (
-              <ol className={styles.list} aria-live="polite">
-                {state.notifications.map((item) => (
-                  <li data-read={item.readAt !== null} key={item.id}>
-                    <a
-                      href={item.actionUrl}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void openNotification(item.id, item.actionUrl);
-                      }}
-                    >
-                      <strong>{item.title}</strong>
-                      <span>{item.body}</span>
-                      <time dateTime={item.createdAt}>{formatCreatedAt(item.createdAt)}</time>
-                    </a>
-                  </li>
-                ))}
-              </ol>
+            <button aria-label="알림 닫기" onClick={close} type="button">
+              <X aria-hidden="true" size={18} />
+            </button>
+          </div>
+          <div className={styles.controls}>
+            <button disabled={state.unreadCount === 0} onClick={() => void readAll()} type="button">
+              <CheckCheck aria-hidden="true" size={15} /> 모두 읽음
+            </button>
+            {pushState === "enabled" ? (
+              <button onClick={() => void disablePush()} type="button">브라우저 알림 끄기</button>
             ) : (
-              <p className={styles.empty}>아직 배포 알림이 없습니다.</p>
+              <button disabled={pushState === "enabling"} onClick={() => void enablePush()} type="button">
+                {pushState === "enabling" ? "연결 중" : "브라우저 알림 켜기"}
+              </button>
             )}
-          </section>
-        ) : null}
-      </aside>
-    </>
+          </div>
+          {pushState === "denied" ? <p className={styles.notice}>권한이 거부되어 Inbox로만 알립니다.</p> : null}
+          {pushState === "unsupported" ? <p className={styles.notice}>이 브라우저는 Web Push를 지원하지 않습니다.</p> : null}
+          {pushState === "unavailable" ? <p className={styles.notice}>서버 Web Push 설정이 준비되지 않았습니다.</p> : null}
+          {pushState === "error" ? <p className={styles.notice}>브라우저 알림 연결을 완료하지 못했습니다.</p> : null}
+          {state.notifications.length ? (
+            <ol className={styles.list} aria-live="polite">
+              {state.notifications.map((item) => (
+                <li data-read={item.readAt !== null} key={item.id}>
+                  <a
+                    href={item.actionUrl}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void openNotification(item.id, item.actionUrl);
+                    }}
+                  >
+                    <strong>{item.title}</strong>
+                    <span>{item.body}</span>
+                    <time dateTime={item.createdAt}>{formatCreatedAt(item.createdAt)}</time>
+                  </a>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className={styles.empty}>아직 배포 알림이 없습니다.</p>
+          )}
+        </section>
+      ) : null}
+    </aside>
   );
 }
 
