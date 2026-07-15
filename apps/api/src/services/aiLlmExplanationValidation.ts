@@ -4,6 +4,7 @@ import type { LlmExplanation } from "@sketchcatch/types";
 
 const SUMMARY_MAX_LENGTH = 300;
 const ITEM_MAX_LENGTH = 120;
+const TERRAFORM_PREVIEW_ITEM_MAX_LENGTH = 360;
 const DEFAULT_ITEM_MAX_COUNT = 6;
 const DESIGN_SIMULATION_ITEM_MAX_COUNT = 5;
 const CODE_SNIPPET_MAX_LENGTH = 8_000;
@@ -57,9 +58,20 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
   }
 
   const itemMaxCount = getTextItemMaxCount(parsed.data.target);
+  const itemMaxLength = getTextItemMaxLength(parsed.data.target);
   const summary = validateSummary(parsed.data.summary, fallback.summary);
-  const highlights = validateTextItems(parsed.data.highlights, fallback.highlights, itemMaxCount);
-  const nextActions = validateTextItems(parsed.data.nextActions, fallback.nextActions, itemMaxCount);
+  const highlights = validateTextItems(
+    parsed.data.highlights,
+    fallback.highlights,
+    itemMaxCount,
+    itemMaxLength
+  );
+  const nextActions = validateTextItems(
+    parsed.data.nextActions,
+    fallback.nextActions,
+    itemMaxCount,
+    itemMaxLength
+  );
   const codeSuggestion = validateCodeSuggestion(parsed.data.codeSuggestion ?? undefined);
   const wellArchitectedConclusion = validateOptionalLongText(parsed.data.wellArchitectedConclusion ?? undefined);
   const includeWellArchitectedConclusion = parsed.data.target !== "terraform_error_explanation";
@@ -120,7 +132,8 @@ function validateSummary(value: string, fallbackValue: string): ValidationResult
 function validateTextItems(
   values: readonly string[],
   fallbackValues: string[],
-  itemMaxCount: number
+  itemMaxCount: number,
+  itemMaxLength: number
 ): ValidationResult<string[]> {
   let blockedItemFound = false;
   const normalized: string[] = [];
@@ -137,7 +150,7 @@ function validateTextItems(
       continue;
     }
 
-    normalized.push(trimTextItem(trimmed));
+    normalized.push(trimTextItem(trimmed, itemMaxLength));
 
     if (normalized.length >= itemMaxCount) {
       break;
@@ -159,6 +172,12 @@ function validateTextItems(
 
 function getTextItemMaxCount(target: LlmExplanation["target"]): number {
   return target === "design_simulation" ? DESIGN_SIMULATION_ITEM_MAX_COUNT : DEFAULT_ITEM_MAX_COUNT;
+}
+
+function getTextItemMaxLength(target: LlmExplanation["target"]): number {
+  return target === "terraform_preview_explanation"
+    ? TERRAFORM_PREVIEW_ITEM_MAX_LENGTH
+    : ITEM_MAX_LENGTH;
 }
 
 function validateCodeSuggestion(value: LlmExplanation["codeSuggestion"]): LlmExplanation["codeSuggestion"] {
@@ -206,12 +225,12 @@ function validateOptionalLongText(value: string | undefined): string | undefined
   return normalized;
 }
 
-function trimTextItem(value: string): string {
-  if (value.length <= ITEM_MAX_LENGTH) {
+function trimTextItem(value: string, maxLength = ITEM_MAX_LENGTH): string {
+  if (value.length <= maxLength) {
     return value;
   }
 
-  return value.slice(0, ITEM_MAX_LENGTH).trim();
+  return value.slice(0, maxLength).trim();
 }
 
 // LLM이 비용, 보안, 배포 가능성을 보장하는 문장은 MVP에서 그대로 노출하지 않습니다.

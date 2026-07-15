@@ -71,7 +71,7 @@ test("Amazon Q가 유용한 일반 텍스트를 반환해도 Terraform 리뷰로
   const plainTextReview = [
     "[보통] 운영 우수성: Terraform 리소스 관계가 명확해 변경 범위를 추적할 수 있습니다.",
     "[보통] 보안: 퍼블릭 액세스 차단과 이미지 스캔 설정이 확인됩니다.",
-    "[심각] 안정성: desired_count가 1이어서 단일 장애점이 생길 수 있으므로 최소 2개로 늘려야 합니다.",
+    "[심각] 안정성: 실행 중인 ECS 작업이 1개뿐이라 작업 장애가 곧 서비스 중단으로 이어질 수 있고 현재 구성만으로는 자동 복구 이후의 가용성도 보장할 수 없습니다. desired_count를 최소 2개로 늘리고 서로 다른 가용 영역에 배치해야 합니다.",
     "[보통] 성능 효율성: 현재 Fargate 크기는 초기 트래픽을 처리할 수 있는 구성입니다.",
     "[확인 필요] 비용 최적화: 실제 트래픽과 보존 기간을 기준으로 비용을 다시 확인해야 합니다.",
     "[보통] 지속 가능성: 정리 가능한 리소스 구성이며 만료 태그를 추가하면 추적이 쉬워집니다."
@@ -98,7 +98,8 @@ test("Amazon Q가 유용한 일반 텍스트를 반환해도 Terraform 리뷰로
 
   assert.equal(result.fallbackUsed, false);
   assert.equal(result.highlights.length, 6);
-  assert.match(result.wellArchitectedConclusion ?? "", /단일 장애점/u);
+  assert.match(result.highlights[2] ?? "", /서로 다른 가용 영역에 배치해야 합니다\.$/u);
+  assert.match(result.wellArchitectedConclusion ?? "", /서비스 중단/u);
   assert.ok((result.wellArchitectedConclusion?.length ?? 0) >= 200);
 });
 

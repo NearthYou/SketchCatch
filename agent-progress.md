@@ -25,6 +25,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-16 - Preserve complete Agent Review sentences
+
+- Reproduced that the shared 120-character AI list-item limit cut Amazon Q pillar reviews mid-action, after which the Web presentation added punctuation and displayed fragments such as incomplete Terraform attributes as required actions.
+- Raised the Terraform Preview pillar limit to 360 characters in both validated JSON and loose-response recovery, made the Web discard any observation or action that still lacks a complete Korean sentence ending, and split `판단: ... 확인: ...` into separate problem and action blocks even when Amazon Q omits pipe separators.
+- Verification: the exact fragment and no-pipe Web regressions pass 11/11; provider and validation regressions pass 7/7, including long JSON and plain-text pillar actions.
+
 ### 2026-07-15 - Expand grounded Amazon Q Agent Review conclusions
 
 - Reproduced that the Web presentation discarded Amazon Q's `wellArchitectedConclusion` and replaced it with a fixed two-sentence resource count, while the Amazon Q prompt explicitly demonstrated a short result.
@@ -133,11 +139,6 @@ Short English-only working log for the current agent context. Older records are 
 - Added an `audience-live-check` style regression proving ECS Fargate ranks ahead of 3-tier for a single containerized Node/React app with no persistent database.
 - Chrome verification: controlled Chrome reached the repository analysis route but redirected to login because the launched automation profile was unauthenticated; existing user Chrome exposed no debug port for attachment.
 - Verification: repository recommendation API test passed 10/10; public repository recommendation web test passed 8/8; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-
-### 2026-07-14 - Prior dev work now merged into this branch
-
-- Dev brought in ECS GitOps persistence and cleanup evidence, production ECS deployment speed optimization, live sandbox Direct recovery hardening, deployment sandbox E2E gates, Web UI clarity/accessibility improvements, dashboard navigation/copy simplification, and Brainboard AWS Template branch integration records.
-- Detailed older dev records remain available in `docs/agent-history/2026-07.md` and the merge commit history.
 
 ### 2026-07-15 - Restore production Amazon Q deployment configuration
 

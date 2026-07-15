@@ -379,22 +379,36 @@ function getAiPillarReview(
     .replace(/^\s*\[(?:보통|확인 필요|심각)\]\s*/u, "")
     .trim();
   const structuredSummary = review.match(
-    /(?:^|\|)\s*(?:문제|판단|현재 판단)\s*:\s*([^|]+)/u
+    /(?:^|\|\s*|\s)(?:문제|판단|현재 판단)\s*:\s*(.*?)(?=\s*(?:\|\s*)?(?:확인|확인할 부분|조치)\s*:|$)/u
   )?.[1]?.trim();
   const structuredAction = review.match(
-    /(?:^|\|)\s*(?:확인|확인할 부분|조치)\s*:\s*([^|]+)/u
+    /(?:^|\|\s*|\s)(?:확인|확인할 부분|조치)\s*:\s*([^|]+)/u
   )?.[1]?.trim();
+  const completeSummary =
+    structuredSummary && isCompleteReviewDetail(structuredSummary) ? structuredSummary : undefined;
+  const completeAction =
+    structuredAction && isCompleteReviewDetail(structuredAction) ? structuredAction : undefined;
 
-  if (structuredSummary) {
+  if (completeSummary) {
     return {
-      ...(structuredAction ? { action: structuredAction } : {}),
-      summary: structuredSummary
+      ...(completeAction ? { action: completeAction } : {}),
+      summary: completeSummary
     };
   }
 
   const plainReview = review.replace(/^[^:：|]{1,32}[:：|]\s*/u, "").trim();
 
-  return plainReview.length > 0 ? { summary: plainReview } : null;
+  return plainReview.length > 0 && isCompleteReviewDetail(plainReview)
+    ? { summary: plainReview }
+    : null;
+}
+
+function isCompleteReviewDetail(value: string): boolean {
+  const readableEnding = sanitizeReviewDetail(value)
+    .replace(/[.!?。]+$/gu, "")
+    .trim();
+
+  return /[다요]$/u.test(readableEnding);
 }
 
 function createReviewSummaryItems(

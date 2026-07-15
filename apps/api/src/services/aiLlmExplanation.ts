@@ -1056,7 +1056,7 @@ function createAmazonQTerraformPreviewPlainTextExplanation(
 
   const highlights =
     items.length >= 6
-      ? items.slice(0, 6).map((item) => trimProviderText(item, 120))
+      ? items.slice(0, 6).map((item) => trimProviderText(item, 360))
       : fallback.highlights.slice(0, 6);
   const reviewFragments = [
     looseConclusion,
