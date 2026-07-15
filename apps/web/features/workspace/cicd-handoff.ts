@@ -2,8 +2,14 @@ import type {
   CreateGitCicdHandoffRequest,
   Deployment,
   GitCicdMonitoringConfig,
+  ProjectDeploymentTarget,
   SourceRepository
 } from "@sketchcatch/types";
+
+export type GitCicdDeploymentTargetBlocker =
+  | "target_confirmation_required"
+  | "output_url_required"
+  | null;
 
 type GitCicdSourceDeployment = Pick<
   Deployment,
@@ -35,6 +41,30 @@ export function selectGitCicdSourceDeployment(
           deployment.approvedPlanArtifactId !== null
       ) ?? null
   );
+}
+
+export function getGitCicdDeploymentTargetBlocker(
+  target: ProjectDeploymentTarget | null
+): GitCicdDeploymentTargetBlocker {
+  if (!target?.confirmedBuildConfig) {
+    return "target_confirmation_required";
+  }
+
+  if (
+    target.runtimeTargetKind === "ecs_fargate" &&
+    !target.runtimeConfig?.outputUrl?.trim()
+  ) {
+    return "output_url_required";
+  }
+
+  if (
+    !target.runtimeConfig ||
+    target.runtimeConfig.runtimeTargetKind !== target.runtimeTargetKind
+  ) {
+    return "target_confirmation_required";
+  }
+
+  return null;
 }
 
 export function buildGitCicdHandoffRequest({
