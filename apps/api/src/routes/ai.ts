@@ -420,9 +420,21 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const defaultBranch = resolvePublicRepositoryAnalysisBranch(
         requestedBranch,
         branchInventory.defaultBranch,
-        branchInventory.branches
+        branchInventory.branches.map((branch) => branch.name)
       );
-      const availableBranches = orderPublicRepositoryBranches(defaultBranch, branchInventory.branches);
+      const repositoryRevision = resolvePublicRepositoryRevision(
+        branchInventory.branches,
+        defaultBranch
+      );
+
+      if (!repositoryRevision) {
+        throw new PublicRepositoryRevisionUnavailableError(defaultBranch);
+      }
+
+      const availableBranches = orderPublicRepositoryBranches(
+        defaultBranch,
+        branchInventory.branches.map((branch) => branch.name)
+      );
       const snapshot = await fetchRepositoryEvidence(repository, defaultBranch);
       const legacyAnalysis = analyzeLegacyRepositoryEvidence({
         defaultBranch,
@@ -431,14 +443,14 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       });
 
       const aiHandoff = analyzeSourceRepositorySnapshot({
-        revision: defaultBranch,
+        revision: repositoryRevision,
         treePaths: snapshot.treePaths,
         files: snapshot.files
       });
       const recommendation = aiHandoff.deploymentTypeDefault
         ? await recommendRepositoryTemplatesWithAi({
             snapshot: {
-              revision: defaultBranch,
+              revision: repositoryRevision,
               treePaths: snapshot.treePaths,
               files: snapshot.files
             },
@@ -454,6 +466,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       const result: SourceRepositoryAnalysisResult = {
         ...legacyAnalysis,
         availableBranches,
+        repositoryRevision,
         recommendedTemplateId: recommendation?.candidates[0]?.templateId
           ?? legacyAnalysis.recommendedTemplateId,
         recommendationReason: recommendation?.candidates[0]?.reasons.join(" ")
@@ -918,11 +931,19 @@ type PublicGitHubRepositoryResponse = {
 
 type PublicGitHubBranchResponse = Array<{
   readonly name?: unknown;
+  readonly commit?: {
+    readonly sha?: unknown;
+  };
 }>;
+
+type PublicRepositoryBranch = {
+  readonly name: string;
+  readonly revision: string | null;
+};
 
 type PublicRepositoryBranchInventory = {
   readonly defaultBranch: string | null;
-  readonly branches: readonly string[];
+  readonly branches: readonly PublicRepositoryBranch[];
 };
 
 const PUBLIC_GITHUB_API_BASE_URL = "https://api.github.com";
@@ -965,7 +986,7 @@ async function fetchPublicRepositoryBranchInventory(
     signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
   };
   const metadataPromise = fetch(repositoryPath, requestOptions).catch(() => null);
-  const branches: string[] = [];
+  const branches: PublicRepositoryBranch[] = [];
 
   for (let page = 1; page <= MAX_PUBLIC_REPOSITORY_BRANCH_PAGES; page += 1) {
     const response = await fetch(
@@ -976,11 +997,17 @@ async function fetchPublicRepositoryBranchInventory(
     if (!response?.ok) break;
 
     const pageBranches = (await response.json()) as PublicGitHubBranchResponse;
-    branches.push(
-      ...pageBranches.flatMap((branch) =>
-        typeof branch.name === "string" && branch.name.trim() ? [branch.name.trim()] : []
-      )
-    );
+    branches.push(...pageBranches.flatMap((branch) => {
+      if (typeof branch.name !== "string" || !branch.name.trim()) return [];
+
+      return [{
+        name: branch.name.trim(),
+        revision:
+          typeof branch.commit?.sha === "string" && branch.commit.sha.trim()
+            ? branch.commit.sha.trim()
+            : null
+      }];
+    }));
 
     if (pageBranches.length < 100) break;
   }
@@ -995,8 +1022,29 @@ async function fetchPublicRepositoryBranchInventory(
       typeof metadata?.default_branch === "string" && metadata.default_branch.trim()
         ? metadata.default_branch.trim()
         : null,
-    branches: [...new Set(branches)]
+    branches: [...new Map(branches.map((branch) => [branch.name, branch])).values()]
   };
+}
+
+export function resolvePublicRepositoryRevision(
+  branches: readonly PublicRepositoryBranch[],
+  selectedBranch: string
+): string | null {
+  const revision = branches.find((branch) => branch.name === selectedBranch)?.revision ?? null;
+
+  return revision && /^(?:[a-f\d]{40}|[a-f\d]{64})$/iu.test(revision)
+    ? revision.toLowerCase()
+    : null;
+}
+
+class PublicRepositoryRevisionUnavailableError extends Error {
+  readonly statusCode = 422;
+  readonly code = "PUBLIC_REPOSITORY_REVISION_UNAVAILABLE";
+
+  constructor(branch: string) {
+    super(`GitHub에서 ${branch} branch의 commit SHA를 확인할 수 없습니다.`);
+    this.name = "PublicRepositoryRevisionUnavailableError";
+  }
 }
 
 function resolvePublicRepositoryAnalysisBranch(

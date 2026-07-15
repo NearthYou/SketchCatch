@@ -4,85 +4,53 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Branch: `feat/gg/409-architecture-board-compiler-chat`.
-- Latest `origin/dev` is merged at `c677ed61`; the branch contains the current Workspace AI Chat and Architecture Board Compiler commits.
-- 000 Architecture Board Compiler is implemented as `architecture-board-compiler/v3`: versioned 29+1 Template knowledge, bounded nearest-case spacing candidates with anomaly regression rejection, true source/requested-original/presentation/semantic candidates, semantic containment repair, complete visible diff recording, and source-exact compiled variants are in place.
-- AI Draft, Board automatic organization, Reverse Engineering, and Template review use the same Compiler interface. Reverse Engineering forwards scan findings, exclusions, and provider errors as Compiler diagnostics. AI and Repository starts show a proposal summary and only save after `Board에 적용`.
-- Template variants are source-fingerprint-bound and visual-only; nonvisual proposals remain on hold. Evidence reports carry source/compiled SHA-256 fingerprints, and a dev-only real Board route plus an eight-entry pending review queue defines manual before/after capture without fabricating screenshots or review decisions.
-- Latest integrated 000 Compiler suite passed 73/73 across candidates, knowledge, layout, approval, evidence, capture route, and Reverse Engineering; knowledge/evidence/review artifact checks, `pnpm harness:check`, and `pnpm lint` passed.
-- Known unrelated baseline: root `pnpm typecheck` stops at the uncommitted `DirectDeploymentScreen.tsx` missing `canStartDeploymentReview`; `pnpm test` stops at three existing `packages/types` three-tier Template contract failures; `pnpm build` stops at the pre-existing missing `apps/web/.codegraph` path.
-- No migration, DB schema change, Terraform execution, cloud mutation, or Git/CI/CD handoff was performed.
-- The 001 Workspace AI Chat commit is already present independently on this integration branch. Uncommitted clipboard work remains outside the 000 Compiler commit.
-- Incoming dev includes a least-privilege `aws-connections/*` S3 permission repair and Repository ECS live-deployment profile support. Neither Terraform change has been applied by this branch.
+- Branch `codex/fix-live-observation-redis-readiness` adds runtime-owned Redis ingress from the current ECS API and worker security groups to the external Runtime Cache security group, with fail-closed Terraform preconditions.
+- PR #423 is open. Apply run `29387480668` successfully created and state-verified the two API/worker Redis ingress rules; post-apply review run `29387561447` reported no infrastructure changes.
+- The complete runtime plan also contains unrelated drift (`5 add, 7 change, 2 destroy`), so it must not be applied as the incident repair.
+- Production bootstrap now returns the expected `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND` instead of `503`, proving the collector can reach Runtime Cache and distinguish a missing session.
+- Production request `req-c2` was a local Git/CI/CD precondition conflict, not a duplicate GitHub resource: the target repository had no SketchCatch branch or PR, and project `0bdf56aa-68b7-4382-b37f-31d8996136c1` had no `project_deployment_targets` row.
+- The CI/CD console now loads the project deployment target, blocks PR creation before POST when confirmation or the ECS output URL is missing, and links directly to project target settings.
+- GitOps target conflicts expose stable precondition codes; mapped conflicts retain actionable Korean guidance and unknown conflicts use a neutral state-conflict message instead of the misleading duplicate-information message.
+- `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
+- This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
+- Before the merge, focused notification SSE fixes passed API notification tests 17/17, Web notification tests 6/6, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
+- Before the merge, focused repository template layout tests passed: workspace adapter 45/45, public repository recommendation 8/8, repository template recommendation 10/10, plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
+- Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
+- Incoming dev verification recorded 25 sandbox runner tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks as passing; full Web/API suites were intentionally omitted.
+- Incoming cleanup evidence records no remaining cost-bearing Issue #378 resources; no Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during this code-integration pass.
+- Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
 
 ## Session Record
 
-### 2026-07-15 - Rebuild the Terraform issue AI action
 
-- Removed the Sparkles-based `AI로 해결` JSX and every `.terraformDiagnosticAiButton` rule, separating the Architecture `보드에서 보기` action into its own secondary style.
-- Added a dedicated black `오류 분석` action with a compact AI mark, 8px radius, focus ring, and reduced-motion handling while preserving the Terraform leave-guard data contract.
-- Chrome QA confirmed the 91x32 control opens AI Chat directly on the independent `오류 분석` conversation with no console errors.
-- Verification in an isolated worktree: AI Chat focused tests passed 14/14; lint, typecheck, production build, harness, and diff checks passed. Root tests remain non-green only on three existing three-tier Template contract failures.
+### 2026-07-15 - Repair production Live Observation Runtime Cache ingress
 
-### 2026-07-15 - Rebuild the Terraform agent review action
+- Reproduced the production collector failure with a deterministic public bootstrap request and identified an unowned ECS-to-Runtime-Cache ingress gap, introduced by the earlier ECS cutover and consistent with the observed timeout.
+- Added optional Runtime Cache security-group and port inputs, API/worker Redis ingress rules, and production preconditions that block Live Observation or worker dispatch without the connection.
+- Added static production-infrastructure and Terraform plan regressions, documented CloudFormation-to-runtime ownership and the expected `404` readiness signal, and updated the import manifest without taking ownership of the existing ElastiCache resources.
+- Hardened the review-only workflow to resolve the Runtime Cache stack outputs, verify VPC ownership, preserve Terraform detailed exit codes, and isolate an incident-only `runtime-cache-ingress` plan from unrelated runtime drift.
+- Verification: red/green production structure check, Terraform fmt/validate/test (2/2), harness, lint, typecheck, build, JSON parse, and diff checks pass. No AWS, Terraform apply, deployment, or cost-bearing mutation was performed; Git handoff was approved for the follow-up.
+- Production evidence: full review-only run `29385795235` exposed unrelated drift; targeted run `29385936278` passed with only two ingress creates and no updates or destroys.
+- The first approved apply run `29386749008` failed before mutation on missing state access. Follow-up attempts `29387207829` and `29387371879` failed before rule creation on required EC2 rule-resource and tag-on-create permissions; direct SG/state checks confirmed zero partial resources after each failure.
+- Applied the reviewed deploy-role policy with exact state/lock access, exact Runtime Cache security-group authorization, the required new-rule ARN, and tag-on-create permission restricted by `ec2:CreateAction=AuthorizeSecurityGroupIngress`.
+- Verification after the IAM template fix: policy JSON parse, production infrastructure structure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Final apply run `29387480668` succeeded, created both TCP 6379 rules, verified both Terraform state addresses, and deleted its plan artifact. Direct AWS inspection found exactly the API and worker source rules, the public bootstrap returned `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`, and post-apply run `29387561447` reported no changes.
+- Next: merge PR #423 after required checks pass.
 
-- Removed the Sparkles-based `Preview 설명` JSX, local component, and `.terraformPreviewButton` rules from the Terraform code toolbar.
-- Added a dedicated black `에이전트 리뷰` action with a compact AI mark, 8px radius, focus ring, disabled state, and reduced-motion handling.
-- Chrome QA confirmed the 112x32 control opens AI Chat directly on the independent `에이전트 리뷰` conversation with no console errors.
-- Verification: AI Chat focused tests passed 14/14; lint, typecheck, production build, and diff checks passed. Root tests remain non-green only on the three existing three-tier Template contract failures.
+### 2026-07-15 - Resume pending AWS connection setup after reload
 
-### 2026-07-15 - Merge latest dev into Compiler integration
+- Reproduced the production settings regression where a pending AWS connection lost its account verification controls after a page reload and exposed only deletion.
+- Added a pending-connection `설정 계속` action that refreshes the CloudFormation setup URL and restores the account ID verification flow from persisted connection data.
+- Clear stale setup UI before reloading the saved connection, and isolate the restore behavior in a testable helper instead of source-text regex assertions.
+- Added a red-green regression test for the reload recovery path; focused dashboard tests, harness, lint, typecheck, build, and diff checks pass.
+- The full Web baseline remains non-green on unrelated existing Diagram/Area contract tests; no cloud mutation, deployment, Git handoff, or credential change was performed.
 
-- Fetched and merged `origin/dev` at `cb3ead40` into `feat/gg/409-architecture-board-compiler-chat` after the Compiler commits were pushed.
-- Resolved only the shared progress-log conflict by preserving the Compiler, Workspace AI launcher, AWS Console permission, and Repository ECS records. Existing uncommitted clipboard and unrelated Web edits stayed outside the merge commit.
-- Post-merge verification passed: `pnpm harness:check`, focused 27-test Compiler/AI/Repository suite, `pnpm lint`, and `pnpm typecheck`.
-- Root `pnpm build` remains blocked before Web compilation by the existing missing `apps/web/.codegraph` path. Root `pnpm test` was previously confirmed to stop only at the unchanged three-tier Template contract baseline.
+### 2026-07-15 - Diagnose and fix misleading Git/CI/CD handoff conflict
 
-### 2026-07-15 - Implement Architecture Board Compiler 000
-
-- Implemented the versioned 29-usable-Template knowledge policy, provenance ranking, source-exact compiled variants, protected-node layout preservation, viewport/presentation state handling, and visible edge/viewport diff accounting.
-- Connected the same proposal contract to AI Draft, Board automatic organization, Reverse Engineering, and Template review. Repository-based draft creation now stages a compiled Board review instead of saving immediately; AI and Repository review show score, distance, grouped changes, diagnostics, and evidence before user application.
-- Updated the 000 design record with implemented behavior and verification commands. `ARCHITECTURE-BOARD-COMPILER-409` remains in progress because the aggregate feature includes separately owned 001 AI Chat completion.
-- Verification passed: `pnpm harness:check`, focused 27-test Compiler/AI/Repository suite, `pnpm architecture-board-knowledge:check`, `pnpm architecture-board-evidence:generate`, `pnpm architecture-board-evidence:check`, `pnpm lint`, and `pnpm typecheck`.
-- Known baselines: root `pnpm test` fails only in three existing three-tier Template contract checks in `packages/types`; root `pnpm build` fails before compilation because `apps/web/.codegraph` is absent. The unauthenticated local browser redirected to login, so visual review was covered by component/source contracts rather than a live authenticated flow.
-
-### 2026-07-15 - Harden Architecture Board Compiler evidence and approval boundaries
-
-- Expanded the 29+1 knowledge artifact from score-only evidence into bounded nearest-case spacing candidates. A profile cannot win if it worsens node/Area overlap, boundary violations, edge obstruction/crossing, backward flow, or support-lane intrusion compared with the ordinary layout baseline.
-- Preserved the real source graph as `original` when semantic operations exist, introduced `requested-original` for the authorized graph, and prevented AI Draft config/relationship changes from being silently paired with a stale same-shape Board.
-- Forwarded Reverse Engineering scan findings, analysis exclusions, and provider scan errors through the Compiler diagnostic context for both replace and append proposals.
-- Added source-fingerprint-bound, visual-only Template review variants; semantic/relationship/configuration/containment proposals cannot become a gallery overlay. Stale approvals fall back to authored source.
-- Added deterministic SHA-256 evidence fingerprints, an eight-entry source-balanced pending human review manifest, and `/dev/compiler-evidence` to render real before/after Boards for manual WebP capture. No screenshot or reviewer decision was fabricated.
-- Verification: focused Compiler/Reverse tests passed 28/28; knowledge/layout tests passed 46/46; evidence route/report/review tests passed 6/6; evidence and review artifact checks, harness, and lint passed. Root typecheck remains blocked only by an unrelated uncommitted `DirectDeploymentScreen` symbol error; full test and build retain the known baseline failures.
-
-### 2026-07-15 - Rebuild the Workspace AI launcher
-
-- Removed the Sparkles-only launcher JSX and all legacy `.aiChatLauncher` rules from the shared Workspace stylesheet.
-- Added a focused 44px black AI monogram launcher component and isolated CSS module following the DESIGN.md CTA, radius, type, focus, and reduced-motion rules.
-- Chrome QA confirmed the 44x44 launcher does not overlap the deployment notification, opens the existing dock, and receives focus again after Escape closes the dock.
-- Verification: AI Chat focused tests passed 14/14; lint, typecheck, production build, harness, and diff checks passed. The full test command remains non-green only on three existing three-tier Template geometry/parent contract failures.
-
-### 2026-07-15 - Restore the production AWS Console launch permission
-
-- Added a least-privilege ECS API task-role statement for the S3 prefix used by generated AWS connection CloudFormation templates.
-- Verification passed: `terraform fmt -check -recursive`, `terraform validate`, `terraform test` (2/2), `pnpm harness:check`, `pnpm lint`, and `pnpm typecheck`.
-- `pnpm build` exceeded the local two-minute command limit without emitting a build error; no Terraform apply, deployment, or cloud mutation was performed.
-- The existing Terraform mock-provider test cannot observe configured IAM document contents at plan time, so no weak source-coupled regression assertion was retained.
-
-### 2026-07-15 - Enable the current Repository ECS diagram for Terraform Plan and live deployment
-
-- Added the six missing `practice` live-apply resource types used by the current Board: EIP, NAT Gateway, ECR Repository, CloudFront Origin Access Control, S3 Bucket Policy, and S3 Object.
-- Separated read-only Terraform Plan resource validation from the narrower live-apply profile while keeping approval, Apply, and Destroy execution fail-closed against the selected live profile.
-- Removed Diagram Template metadata from Terraform rendering and marked the visual Fargate runtime as reference-only so the deployable control-plane Task Definition is emitted exactly once.
-- Browser verification on the local `frsgf` Board found 33 Terraform resources across the expected 24 types, zero `template_id` attributes, zero empty Task Definitions, and one real Task Definition block.
-- Verification: focused API/Web regressions passed 9/9; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `scripts/init-harness.ps1 -Full`, and `git diff --check` passed. No Terraform Apply/Destroy or cloud mutation was performed.
-
-### 2026-07-15 - Diagnose missing production AWS Console launch link
-
-- Reproduced the production-only AWS connection setup regression in the signed-in settings page: the CloudFormation setup rendered an inline YAML template and no `AWS Console 열기` link.
-- Traced the response to the S3 publisher fallback. `S3_BUCKET_NAME` is wired into the ECS API environment, but the API task role lacks `s3:PutObject` and `s3:GetObject` for `aws-connections/*`.
-- Ruled out a Web/API response-contract mismatch because the same response successfully rendered `roleName` and `templateBody`; the launch link is conditional only on `launchStackUrl`.
-- Verification: `pnpm harness:check` passed; the production browser loop reproduced the missing link twice. No cloud mutation, Terraform apply, or source-code fix was performed.
+- Reproduced the production HTTP 409 after regenerating and approving the current Terraform apply plan; verified that no GitHub PR or SketchCatch branch was created.
+- Queried the production configuration through an isolated read-only ECS diagnostic task and confirmed the project deployment target record is absent.
+- Added fail-closed Web preflight, a direct target-settings recovery link, stable API conflict codes, and actionable Korean conflict messages.
+- Verification: focused API tests passed 2/2 and focused Web tests passed 15/15; `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed. Full `pnpm test` remains non-green only on the three pre-existing three-tier Template layout/parent contract failures in `packages/types`.
 
 ### 2026-07-15 - Localize Repository Draft and require inline CI/CD connection
 
@@ -118,20 +86,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused API notification tests passed 17/17; focused Web notification tests passed 6/6; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 - Known local action: run `pnpm --filter api db:migrate:runtime` before testing deployment notifications locally.
 
-### 2026-07-15 - Architecture Board Compiler design
-
-- Created `feat/gg/architecture-board-compiler` from the latest `origin/dev` and kept the unrelated Workspace AI chat commits on their original branch.
-- Defined an unconstrained, proposal-only Architecture Board Compiler with one deep in-process interface, full semantic and visual change authority, Compilation Distance, diff/diagnostic provenance, and four integration surfaces.
-- Recorded the domain language, ADR, product/architecture/data-model contracts, and a gg design reference covering the 29 usable Template corpus, scoring, feasibility, risks, and implementation order.
-- Verification passed 29 focused Brainboard registry/source and automatic layout tests, `pnpm harness:check`, and `git diff --check`. No source code, DB schema, migration, cloud, Deployment, or GitHub state was changed.
-
-### 2026-07-15 - Consolidate Workspace AI chat and Architecture Board Compiler
-
-- Created Issue #409 and pushed `feat/gg/409-architecture-board-compiler-chat` as the single integration branch for the Workspace AI chat refactor and Architecture Board Compiler work.
-- Merged the prior AI chat and compiler branches, kept the AI chat and compiler worktree changes, union-merged independent Workspace CSS additions, and accepted the current dev removal of the obsolete right-panel aggregate test.
-- Deleted the two replaced local branches only after both were ancestors of the integration branch; neither replaced branch had a remote counterpart.
-- Verification passed `pnpm harness:check`, staged and unstaged `git diff --check`, and a conflict-marker scan. The retained autostash is a recovery backup for the in-progress worktree changes.
-
 ### 2026-07-15 - Strict template preservation and readable support lanes
 
 - Re-read the good/failure diagram references and tightened repository-generated template layout rules: selected template nodes are hard-preserved, generated support nodes are placed in a separate left-side support lane, and generated nodes cannot intrude into the template bounds.
@@ -166,15 +120,23 @@ Short English-only working log for the current agent context. Older records are 
 - Dev brought in ECS GitOps persistence and cleanup evidence, production ECS deployment speed optimization, live sandbox Direct recovery hardening, deployment sandbox E2E gates, Web UI clarity/accessibility improvements, dashboard navigation/copy simplification, and Brainboard AWS Template branch integration records.
 - Detailed older dev records remain available in `docs/agent-history/2026-07.md` and the merge commit history.
 
-### 2026-07-15 - Unify Terraform review and diagnostics panel
+### 2026-07-15 - Restore production Amazon Q deployment configuration
 
-- Rebuilt the Terraform toolbar, status strip, dark code surface, split handle, and diagnostics hierarchy around the new `에이전트 리뷰` and `오류 분석` actions.
-- Preserved file selection, editing, diagnostics, Architecture focus, and the three independent Workspace AI conversation entry points.
-- Removed a stray duplicate notification selector that prevented `workspace.module.css` from compiling.
-- Chrome QA passed at the live 359px right-panel width with no horizontal overflow or console warnings; agent review opened the correct conversation and Escape closed the dialog.
-- Verification: harness, Web lint, Web typecheck, focused AI Chat tests (14/14), formatting, and diff checks passed. The full Workspace test run has two unrelated Architecture Board Compiler expectation failures; production build compiles and then stops on the existing invalid named Route export in `app/api/ai/architecture-draft/route.ts`.
+- Found that the active ECS API task definition preserved disabled Terraform defaults even though the GitHub production environment contained the intended Amazon Q settings.
+- Updated the ECS deployment workflow to require, validate, and inject the production Amazon Q runtime configuration; added a structural regression check for the contract.
+- Added least-privilege `qbusiness:ChatSync` permission for the configured application to the production API task role and completed the missing GitHub production environment variable.
+- Verification passed: focused production infrastructure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production ECS deployment was not run following the user's explicit instruction.
+
+### 2026-07-15 - Restore CI/CD pull request creation in the deployment console
+
+- Restored the Git/CI/CD handoff entry point in `CicdConsoleScreen` against the current backend contract rather than copying the reverted legacy panel.
+- The UI selects the latest directly approved Terraform apply plan, requires an explicit review, and sends the server-recorded approved plan artifact as `userAcceptedChangeId` when creating the deployment PR.
+- Existing handoffs expose the PR link and separately approved Repository settings, GitHub OAuth, and AWS Role actions while duplicate handoffs for the same plan are blocked.
+- Verification: focused Web regressions passed 5/5; Web typecheck and build passed. No GitHub deployment PR or cloud mutation was executed during verification.
 
 ## Next Action
 
-- Review the current integration PR after the latest dev merge; leave the independently committed 001 work and uncommitted clipboard work untouched for their owner.
-- Apply the separate, approved production Terraform permission change and re-run the signed-in production AWS Console launch verification when that workstream is resumed.
+- Review and merge `codex/fix-production-amazon-q-runtime`; run the production ECS deployment only after explicit approval.
+- Review and apply the approved production Terraform change, then re-run the signed-in production browser loop to confirm the AWS Console launch link is rendered.
+- Continue notification work separately from the completed repository diagram commit.
+- Run local API DB migrations before testing deployment notifications locally.

@@ -3,6 +3,7 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  ApplicationRelease,
   Deployment,
   LiveObservationV2Session,
   LiveObservationV2Snapshot
@@ -14,13 +15,14 @@ import { copyTextToClipboard } from "../../lib/clipboard";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   createLiveObservation,
+  listApplicationReleases,
   listDeployments,
   stopLiveObservation,
   streamLiveObservationSnapshots
 } from "./api";
 import {
   getEligibleLiveObservationDeployments,
-  getLiveObservationAudienceUrl,
+  getLiveObservationOutputUrl,
   getLiveObservationProviderEvidence,
   getLiveObservationPressureLabel
 } from "./live-observation";
@@ -40,6 +42,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   const copiedTimerRef = useRef<number | null>(null);
   const [mounted, setMounted] = useState(false);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [releases, setReleases] = useState<ApplicationRelease[]>([]);
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
@@ -60,7 +63,10 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   const selectedDeployment = eligibleDeployments.find(
     (deployment) => deployment.id === selectedDeploymentId
   );
-  const audienceUrl = session ? getLiveObservationAudienceUrl(session) : null;
+  const selectedOutputUrl = getLiveObservationOutputUrl(selectedDeploymentId, releases);
+  const outputUrl = session
+    ? getLiveObservationOutputUrl(session.deploymentId, releases)
+    : null;
   const remainingSeconds = session
     ? Math.max(0, Math.ceil((new Date(session.expiresAt).getTime() - nowMs) / 1_000))
     : 0;
@@ -95,11 +101,15 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
     setListState("loading");
     setErrorMessage("");
 
-    void listDeployments(projectId, { signal: abortController.signal })
-      .then((items) => {
+    void Promise.all([
+      listDeployments(projectId, { signal: abortController.signal }),
+      listApplicationReleases(projectId)
+    ])
+      .then(([items, releaseItems]) => {
         if (abortController.signal.aborted) return;
         const eligible = getEligibleLiveObservationDeployments(items);
         setDeployments(items);
+        setReleases(releaseItems);
         setSelectedDeploymentId((current) =>
           eligible.some((deployment) => deployment.id === current)
             ? current
@@ -122,7 +132,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   }, []);
 
   useEffect(() => {
-    if (!audienceUrl) {
+    if (!outputUrl) {
       setQrDataUrl("");
       setQrState("idle");
       return;
@@ -131,7 +141,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
     let cancelled = false;
     setQrDataUrl("");
     setQrState("loading");
-    void QRCode.toDataURL(audienceUrl, {
+    void QRCode.toDataURL(outputUrl, {
       color: { dark: "#171717", light: "#ffffff" },
       errorCorrectionLevel: "M",
       margin: 1,
@@ -154,7 +164,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
     return () => {
       cancelled = true;
     };
-  }, [audienceUrl]);
+  }, [outputUrl]);
 
   useEffect(() => {
     if (!session) {
@@ -213,7 +223,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   }
 
   async function startObservation(): Promise<void> {
-    if (!selectedDeploymentId || requestState === "loading") return;
+    if (!selectedDeploymentId || !selectedOutputUrl || requestState === "loading") return;
     operationControllerRef.current?.abort();
     const abortController = new AbortController();
     operationControllerRef.current = abortController;
@@ -228,10 +238,6 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
       setSession(response.session);
       setSnapshot(response.snapshot);
       setNowMs(Date.now());
-      if (!getLiveObservationAudienceUrl(response.session)) {
-        setAudienceUtilityOpen(false);
-        return;
-      }
     } catch (error) {
       if (!abortController.signal.aborted) {
         setErrorMessage(getApiErrorMessage(error, "관측 세션을 시작하지 못했습니다."));
@@ -264,17 +270,17 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
     }
   }
 
-  async function copyAudienceUrl(): Promise<void> {
-    if (!audienceUrl) return;
+  async function copyOutputUrl(): Promise<void> {
+    if (!outputUrl) return;
     try {
-      await copyTextToClipboard(audienceUrl);
+      await copyTextToClipboard(outputUrl);
       if (!activeRef.current) return;
       setCopied(true);
       if (copiedTimerRef.current !== null) window.clearTimeout(copiedTimerRef.current);
       copiedTimerRef.current = window.setTimeout(() => setCopied(false), 1_500);
     } catch {
       if (!activeRef.current) return;
-      setErrorMessage("관객 URL을 복사하지 못했습니다. 링크를 직접 열어주세요.");
+      setErrorMessage("Output URL을 복사하지 못했습니다. 링크를 직접 열어주세요.");
     }
   }
 
@@ -327,11 +333,16 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
             <div className={styles.liveObservationTargetActions}>
               <button
                 className={styles.liveObservationPrimaryButton}
-                disabled={!selectedDeployment || requestState === "loading" || isSessionActive}
+                disabled={
+                  !selectedDeployment ||
+                  !selectedOutputUrl ||
+                  requestState === "loading" ||
+                  isSessionActive
+                }
                 onClick={() => void startObservation()}
                 type="button"
               >관측 시작</button>
-              {session && audienceUrl ? (
+              {session && outputUrl ? (
                 <button
                   aria-controls="live-observation-audience-utility"
                   aria-expanded={audienceUtilityOpen}
@@ -351,33 +362,33 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
           ><X size={20} aria-hidden="true" /></button>
         </header>
 
-        {session && audienceUrl && audienceUtilityOpen ? (
+        {session && outputUrl && audienceUtilityOpen ? (
           <section
-            aria-label="관객 접속"
+            aria-label="배포 Output URL 접속"
             className={styles.liveObservationAudienceUtility}
             id="live-observation-audience-utility"
           >
             <div>
-              <span className={styles.liveObservationSectionLabel}>관객 접속</span>
-              <strong>15분 공개 요청 페이지</strong>
-              <p>QR 또는 링크로 검증된 서비스에 요청을 보낼 수 있습니다.</p>
+              <span className={styles.liveObservationSectionLabel}>배포 Output URL</span>
+              <strong>실제 배포 서비스 접속</strong>
+              <p>QR 또는 링크로 선택한 배포의 Output URL에 접속합니다.</p>
               <div className={styles.liveObservationAudienceUtilityActions}>
                 <button
                   className={styles.liveObservationSecondaryButton}
-                  onClick={() => void copyAudienceUrl()}
+                  onClick={() => void copyOutputUrl()}
                   type="button"
                 >
                   {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-                  관객 URL 복사
+                  Output URL 복사
                 </button>
-                <a href={audienceUrl} rel="noreferrer" target="_blank">
+                <a href={outputUrl} rel="noreferrer" target="_blank">
                   새 창에서 열기 <ExternalLink size={14} aria-hidden="true" />
                 </a>
               </div>
             </div>
             <div className={styles.liveObservationQr}>
               {qrState === "ready" && qrDataUrl ? (
-                <img alt="관객 URL QR 코드" height={184} src={qrDataUrl} width={184} />
+                <img alt="배포 Output URL QR 코드" height={184} src={qrDataUrl} width={184} />
               ) : qrState === "error" ? (
                 <span role="alert">QR 생성 실패</span>
               ) : (
@@ -400,9 +411,14 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
           {visibleErrorMessage ? (
             <div className={styles.liveObservationError} role="alert">{visibleErrorMessage}</div>
           ) : null}
-          {session && !audienceUrl ? (
+          {!session && selectedDeployment && !selectedOutputUrl ? (
             <div className={styles.liveObservationError} role="alert">
-              관객 접속 주소를 안전하게 확인하지 못했습니다.
+              선택한 배포에 안전한 HTTPS Output URL이 없습니다.
+            </div>
+          ) : null}
+          {session && !outputUrl ? (
+            <div className={styles.liveObservationError} role="alert">
+              이 관측 세션의 배포 Output URL을 안전하게 확인하지 못했습니다.
             </div>
           ) : null}
 

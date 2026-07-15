@@ -27,6 +27,7 @@ import type {
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
   CreateGitHubArchitectureDraftRequest,
+  CreateGitHubProjectInstallUrlRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
@@ -118,7 +119,12 @@ import type {
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
-import { ApiClientError, apiFetch, buildApiUrl } from "../../lib/api-client";
+import {
+  ApiClientError,
+  apiFetch,
+  buildApiUrl,
+  type ApiRequestContext
+} from "../../lib/api-client";
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
 const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api").replace(/\/+$/, "");
@@ -553,6 +559,10 @@ async function postPublicAiJson<ResponseBody>(
   body: Record<string, unknown>,
   options: PublicAiRequestOptions = {}
 ): Promise<ResponseBody> {
+  const requestContext: ApiRequestContext = {
+    method: "POST",
+    path: new URL(`${AI_API_BASE_URL}${path}`, "http://sketchcatch.local").pathname
+  };
   const headers = new Headers({
     "Content-Type": "application/json"
   });
@@ -562,37 +572,63 @@ async function postPublicAiJson<ResponseBody>(
     headers.set("Authorization", `Bearer ${session.accessToken}`);
   }
 
-  const response = await fetch(`${AI_API_BASE_URL}${path}`, {
-    body: JSON.stringify(body),
-    credentials: "include",
-    headers,
-    method: "POST",
-    ...(options.signal ? { signal: options.signal } : {})
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${AI_API_BASE_URL}${path}`, {
+      body: JSON.stringify(body),
+      credentials: "include",
+      headers,
+      method: "POST",
+      ...(options.signal ? { signal: options.signal } : {})
+    });
+  } catch {
+    throw new ApiClientError(
+      0,
+      {
+        error: "internal_server_error",
+        message:
+          "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
+      },
+      requestContext
+    );
+  }
 
   if (!response.ok) {
-    throw await readPublicAiError(response);
+    throw await readPublicAiError(response, requestContext);
   }
 
   return response.json() as Promise<ResponseBody>;
 }
 
 // API 서버의 JSON 오류를 공용 에러 타입으로 유지해 화면별 메시지 fallback에 덮이지 않게 합니다.
-async function readPublicAiError(response: Response): Promise<ApiClientError> {
+async function readPublicAiError(
+  response: Response,
+  requestContext: ApiRequestContext
+): Promise<ApiClientError> {
+  const requestId = response.headers.get("x-request-id")?.trim();
+  const responseContext: ApiRequestContext = requestId
+    ? { ...requestContext, requestId }
+    : requestContext;
+
   try {
     const body: unknown = await response.json();
 
     if (isPublicAiErrorBody(body)) {
-      return new ApiClientError(response.status, body);
+      return new ApiClientError(response.status, body, responseContext);
     }
   } catch {
     // Fall through to a typed fallback error below.
   }
 
-  return new ApiClientError(response.status, {
-    error: response.status >= 500 ? "internal_server_error" : "bad_request",
-    message: `API 요청 실패: ${response.status}`
-  });
+  return new ApiClientError(
+    response.status,
+    {
+      error: response.status >= 500 ? "internal_server_error" : "bad_request",
+      message: `API 요청 실패: ${response.status}`
+    },
+    responseContext
+  );
 }
 
 // API 오류 응답에서 표준 error/message 필드가 있는 경우에만 사용자 메시지로 사용합니다.
@@ -1284,13 +1320,15 @@ export async function recommendRepositoryTemplate({
 }
 
 export async function createGitHubSourceRepositoryInstallUrl(
-  projectId: string
+  projectId: string,
+  input: CreateGitHubProjectInstallUrlRequest
 ): Promise<GitHubAppInstallUrlResponse> {
   return apiFetch<GitHubAppInstallUrlResponse>(
     `/projects/${encodeURIComponent(projectId)}/source-repositories/github/install-url`,
     {
       auth: true,
-      method: "POST"
+      method: "POST",
+      body: input
     }
   );
 }

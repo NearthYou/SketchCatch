@@ -2,7 +2,7 @@ import { z } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
   getRuntimeEnv,
-  requireSketchCatchAwsCallerPrincipalArn
+  requireSketchCatchAwsCallerPrincipalArns
 } from "../config/env.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { publishAwsConnectionCloudFormationTemplateToS3 } from "../aws-connections/aws-connection-template-storage.js";
@@ -77,7 +77,7 @@ export type AwsConnectionRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createAwsConnectionRepository?: (db: DatabaseClient["db"]) => AwsConnectionRepository;
   awsConnectionConfig?: {
-    callerPrincipalArn: string;
+    callerPrincipalArns: readonly string[];
   };
   cloudFormationTemplatePublisher?: AwsConnectionCloudFormationTemplatePublisher | null;
   awsConnectionTester?: AwsConnectionTester;
@@ -152,9 +152,9 @@ export async function registerAwsConnectionRoutes(
         {
           accessContext,
           region: body.region,
-          callerPrincipalArn:
-            options?.awsConnectionConfig?.callerPrincipalArn ??
-            requireSketchCatchAwsCallerPrincipalArn()
+          callerPrincipalArns:
+            options?.awsConnectionConfig?.callerPrincipalArns ??
+            requireSketchCatchAwsCallerPrincipalArns()
         },
         repository,
         createOptions
@@ -372,9 +372,9 @@ export async function registerAwsConnectionRoutes(
           {
             connectionId: params.connectionId,
             accessContext: createUserProjectAccessContext(currentUserId),
-            callerPrincipalArn:
-              options?.awsConnectionConfig?.callerPrincipalArn ??
-              requireSketchCatchAwsCallerPrincipalArn()
+            callerPrincipalArns:
+              options?.awsConnectionConfig?.callerPrincipalArns ??
+              requireSketchCatchAwsCallerPrincipalArns()
           },
           repository,
           templateOptions

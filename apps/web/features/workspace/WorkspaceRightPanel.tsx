@@ -50,6 +50,7 @@ import {
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
 import { requireSavedProjectDraftRevision } from "./project-deployment-preparation";
+import { DeploymentPreparationError } from "./deployment-preparation-error";
 import {
   createTerraformLeaveSaveStartFeedback,
   resolveTerraformLeaveSaveCompletion,
@@ -622,14 +623,37 @@ export function WorkspaceRightPanel({
   const prepareDeploymentArtifacts = useCallback(async (): Promise<
     PreparedWorkspaceDeploymentArtifacts
   > => {
-    const preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+    let preparedSource: PreparedTerraformArtifactSource | undefined;
 
-    if (!preparedSource) {
-      throw new Error("Terraform 패널을 준비하지 못했습니다.");
+    try {
+      preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
     }
 
-    const saveResult = await context.saveDiagramNow?.();
-    const preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
+    if (!preparedSource) {
+      throw new DeploymentPreparationError({
+        cause: new Error("Terraform panel did not provide deployment artifacts"),
+        stage: "terraform_prepare"
+      });
+    }
+
+    let saveResult: unknown;
+
+    try {
+      saveResult = await context.saveDiagramNow?.();
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
+    }
+
+    let preparedDraftRevision: number;
+
+    try {
+      preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
+    }
+
     const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
     setHasUnsavedTerraformChanges(false);

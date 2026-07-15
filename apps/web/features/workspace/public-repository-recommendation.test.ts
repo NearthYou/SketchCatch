@@ -291,6 +291,7 @@ function createAnalysis(): SourceRepositoryAnalysisResult {
     evidenceFiles: [],
     recommendationReason: "React, Node API, Python API, Database, Container 신호가 있습니다.",
     recommendedTemplateId: "three-tier-web-app",
+    repositoryRevision: "a".repeat(40),
     repositoryUrl: "https://github.com/example/fullstack",
     aiHandoff: {
       status: "template_selection_failed",

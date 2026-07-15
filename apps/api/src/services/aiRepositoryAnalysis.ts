@@ -30,7 +30,7 @@ export function analyzeRepositoryEvidence({
   readonly defaultBranch: string;
   readonly evidence: readonly RepositoryEvidenceFile[];
   readonly repositoryUrl: string;
-}): SourceRepositoryAnalysisResult {
+}): Omit<SourceRepositoryAnalysisResult, "repositoryRevision"> {
   const combinedEvidence = evidence.map((file) => `${file.path}\n${file.content}`).join("\n").toLowerCase();
   const detectedSignals = SIGNAL_RULES.filter((rule) =>
     rule.patterns.some((pattern) => combinedEvidence.includes(pattern))

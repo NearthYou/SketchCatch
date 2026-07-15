@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type {
   GitCicdMonitoringConfig,
   SourceRepository,
@@ -13,16 +13,40 @@ import {
   listSourceRepositories,
   updateGitCicdMonitoringConfig
 } from "../../../../features/workspace/api";
-import { CicdMonitoringSettings } from "../../../../features/workspace/CicdMonitoringSettings";
+import {
+  CicdMonitoringSettings,
+  type CicdMonitoringSettingsHandle
+} from "../../../../features/workspace/CicdMonitoringSettings";
 
 type RequestState = "loading" | "idle" | "saving" | "error";
 
-export function ProjectCicdMonitoringSettingsClient({
-  projectId
-}: {
-  readonly projectId: string;
-}) {
+export type ProjectCicdMonitoringSettingsHandle = {
+  readonly save: () => Promise<boolean>;
+};
+
+export const ProjectCicdMonitoringSettingsClient = forwardRef<
+  ProjectCicdMonitoringSettingsHandle,
+  {
+    readonly projectId: string;
+    readonly initialDraft?: {
+      readonly enabled: boolean;
+      readonly monitorBranch: string;
+      readonly appPath: UpdateGitCicdMonitoringConfigRequest["appPath"];
+      readonly infraPath: UpdateGitCicdMonitoringConfigRequest["infraPath"];
+    } | undefined;
+    readonly onDirty?: (() => void) | undefined;
+    readonly onSaved?: (() => void) | undefined;
+    readonly showSaveButton?: boolean | undefined;
+  }
+>(function ProjectCicdMonitoringSettingsClient({
+  projectId,
+  initialDraft,
+  onDirty,
+  onSaved,
+  showSaveButton = true
+}, ref) {
   const { status: authStatus } = useAuth();
+  const monitoringSettingsRef = useRef<CicdMonitoringSettingsHandle>(null);
   const [repository, setRepository] = useState<SourceRepository | null>(null);
   const [config, setConfig] = useState<GitCicdMonitoringConfig | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("loading");
@@ -58,8 +82,11 @@ export function ProjectCicdMonitoringSettingsClient({
     };
   }, [authStatus, projectId]);
 
-  async function save(request: UpdateGitCicdMonitoringConfigRequest): Promise<void> {
-    if (!repository) return;
+  async function save(request: UpdateGitCicdMonitoringConfigRequest): Promise<boolean> {
+    if (!repository) {
+      setMessage("연결된 Repository를 확인할 수 없습니다.");
+      return false;
+    }
     setRequestState("saving");
     setMessage("");
     try {
@@ -67,11 +94,24 @@ export function ProjectCicdMonitoringSettingsClient({
       setConfig(saved);
       setRequestState("idle");
       setMessage("CI/CD branch와 경로를 저장했습니다.");
+      onSaved?.();
+      return true;
     } catch (error) {
       setRequestState("error");
       setMessage(getApiErrorMessage(error, "CI/CD 설정을 저장하지 못했습니다."));
+      return false;
     }
   }
+
+  useImperativeHandle(ref, () => ({
+    async save() {
+      if (!monitoringSettingsRef.current) {
+        setMessage("GitOps 감시 설정을 불러온 뒤 다시 확인해주세요.");
+        return false;
+      }
+      return monitoringSettingsRef.current.save();
+    }
+  }));
 
   return (
     <section className="dashboardPanel integrationPanel" aria-labelledby="project-cicd-settings-title">
@@ -89,11 +129,15 @@ export function ProjectCicdMonitoringSettingsClient({
       {config ? (
         <CicdMonitoringSettings
           config={config}
+          initialDraft={initialDraft}
           isSaving={requestState === "saving"}
+          onDirty={onDirty}
           onSave={save}
+          ref={monitoringSettingsRef}
+          showSaveButton={showSaveButton}
         />
       ) : null}
       {message ? <p role={requestState === "error" ? "alert" : "status"}>{message}</p> : null}
     </section>
   );
-}
+});

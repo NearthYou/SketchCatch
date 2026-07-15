@@ -122,8 +122,11 @@
             "aws_vpc_security_group_egress_rule.ecs_service_all",
             "aws_vpc_security_group_egress_rule.ecs_web_all",
             "aws_vpc_security_group_egress_rule.ecs_worker_all",
+            "aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api",
+            "aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker",
             "aws_vpc_security_group_ingress_rule.rds_from_ecs_worker"
-          ]
+          ],
+          "note": "Runtime owns only the ECS-source ingress rule IDs on the external Runtime Cache security group; the security group and ElastiCache resources remain outside this state."
         },
         {
           "category": "Route53",
@@ -198,7 +201,8 @@
             "subnet group",
             "security group",
             "snapshot and maintenance settings"
-          ]
+          ],
+          "note": "The data group retains ownership review for the Runtime Cache security group; runtime state may own only explicitly listed ECS-source ingress rule IDs."
         }
       ]
     },

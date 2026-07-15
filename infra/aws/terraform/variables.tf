@@ -147,6 +147,28 @@ variable "worker_rds_port" {
   default     = 5432
 }
 
+variable "runtime_cache_security_group_id" {
+  description = "Existing internal Runtime Cache security group that receives Redis ingress from the ECS API and worker security groups."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.runtime_cache_security_group_id == "" || can(regex("^sg-[0-9a-f]+$", var.runtime_cache_security_group_id))
+    error_message = "runtime_cache_security_group_id must be empty or a valid security group ID."
+  }
+}
+
+variable "runtime_cache_port" {
+  description = "Redis port opened on the internal Runtime Cache security group."
+  type        = number
+  default     = 6379
+
+  validation {
+    condition     = var.runtime_cache_port >= 1024 && var.runtime_cache_port <= 65535
+    error_message = "runtime_cache_port must be between 1024 and 65535."
+  }
+}
+
 variable "ecs_task_cpu" {
   description = "API Fargate task CPU units, retained from the shared task sizing for migration safety. Cost-bearing."
   type        = number
@@ -258,6 +280,20 @@ variable "enable_alb_deletion_protection" {
 variable "artifact_bucket_name" {
   description = "Existing SketchCatch S3 artifact bucket used by the API runtime."
   type        = string
+}
+
+variable "artifact_bucket_additional_cors_origins" {
+  description = "Additional browser origins allowed to use presigned artifact uploads. The production public base URL is always included."
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+
+  validation {
+    condition = alltrue([
+      for origin in var.artifact_bucket_additional_cors_origins :
+      can(regex("^https?://[^/]+$", origin))
+    ])
+    error_message = "Artifact bucket CORS origins must be HTTP(S) origins without paths or trailing slashes."
+  }
 }
 
 variable "rds_endpoint" {

@@ -172,6 +172,15 @@ run "routes_directly_to_cost_scaled_services" {
     )
     error_message = "API and web autoscaling must keep the cost-first min=1, max=2 range."
   }
+
+  assert {
+    condition = (
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_origins, "https://sketchcatch.example") &&
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_origins, "http://localhost:3000") &&
+      contains(one(aws_s3_bucket_cors_configuration.artifact.cors_rule).allowed_methods, "PUT")
+    )
+    error_message = "Artifact bucket CORS must allow browser uploads from the configured public site and approved development origins."
+  }
 }
 
 run "https_routes_and_enables_worker_dispatch" {
@@ -202,15 +211,16 @@ run "https_routes_and_enables_worker_dispatch" {
   }
 
   variables {
-    environment                  = "test"
-    vpc_id                       = "vpc-0123456789abcdef0"
-    public_subnet_ids            = ["subnet-11111111111111111", "subnet-22222222222222222"]
-    artifact_bucket_name         = "sketchcatch-test-artifacts"
-    sketchcatch_public_base_url  = "https://sketchcatch.example"
-    oauth_redirect_base_url      = "https://sketchcatch.example"
-    certificate_arn              = "arn:aws:acm:ap-northeast-2:111122223333:certificate/11111111-2222-3333-4444-555555555555"
-    enable_ecs_worker_dispatch   = true
-    worker_rds_security_group_id = "sg-0fedcba9876543210"
+    environment                     = "test"
+    vpc_id                          = "vpc-0123456789abcdef0"
+    public_subnet_ids               = ["subnet-11111111111111111", "subnet-22222222222222222"]
+    artifact_bucket_name            = "sketchcatch-test-artifacts"
+    sketchcatch_public_base_url     = "https://sketchcatch.example"
+    oauth_redirect_base_url         = "https://sketchcatch.example"
+    certificate_arn                 = "arn:aws:acm:ap-northeast-2:111122223333:certificate/11111111-2222-3333-4444-555555555555"
+    enable_ecs_worker_dispatch      = true
+    worker_rds_security_group_id    = "sg-0fedcba9876543210"
+    runtime_cache_security_group_id = "sg-0abcdeffedcba0123"
   }
 
   override_resource {
@@ -236,6 +246,14 @@ run "https_routes_and_enables_worker_dispatch" {
     values = {
       arn        = "arn:aws:elasticloadbalancing:ap-northeast-2:111122223333:targetgroup/web/1234567890"
       arn_suffix = "targetgroup/web/1234567890"
+    }
+    override_during = plan
+  }
+
+  override_resource {
+    target = aws_security_group.ecs_service
+    values = {
+      id = "sg-0a111111111111111"
     }
     override_during = plan
   }
@@ -293,7 +311,26 @@ run "https_routes_and_enables_worker_dispatch" {
         for item in one(jsondecode(aws_ecs_task_definition.api.container_definitions)).environment :
         item.name => item.value
       }.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN == aws_iam_role.ecs_task.arn
+      && {
+        for item in one(jsondecode(aws_ecs_task_definition.api.container_definitions)).environment :
+        item.name => item.value
+        }.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARNS == join(",", [
+          aws_iam_role.ecs_task.arn,
+          aws_iam_role.ecs_worker_task.arn
+      ])
     )
-    error_message = "Worker-enabled API tasks must dispatch to ECS while publishing the API principal for connection trust."
+    error_message = "Worker-enabled API tasks must dispatch to ECS while publishing both runtime principals for connection trust."
+  }
+
+  assert {
+    condition = (
+      aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0].security_group_id == var.runtime_cache_security_group_id &&
+      aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0].referenced_security_group_id == aws_security_group.ecs_service.id &&
+      aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0].from_port == var.runtime_cache_port &&
+      aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0].to_port == var.runtime_cache_port &&
+      aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0].security_group_id == var.runtime_cache_security_group_id &&
+      aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0].referenced_security_group_id == aws_security_group.ecs_worker.id
+    )
+    error_message = "Runtime Cache ingress must allow only the current ECS API and worker security groups on the configured Redis port."
   }
 }

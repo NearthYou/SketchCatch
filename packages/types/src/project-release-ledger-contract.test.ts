@@ -30,6 +30,15 @@ export const projectDeploymentTargetContract = {
   region: "ap-northeast-2",
   runtimeTargetKind: "ecs_fargate",
   confirmedBuildConfig,
+  runtimeConfig: {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName: "audience-live-check-app-build",
+    ecrRepositoryName: "audience-live-check-app",
+    clusterName: "audience-live-check-cluster",
+    serviceName: "audience-live-check-service",
+    containerName: "web",
+    outputUrl: null
+  },
   rolloutStrategy: "all_at_once",
   createdAt: "2026-07-14T00:00:00.000Z",
   updatedAt: "2026-07-14T00:00:00.000Z"
