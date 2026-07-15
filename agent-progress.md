@@ -109,6 +109,16 @@ Short English-only working log for the current agent context. Older records are 
 - Dev brought in ECS GitOps persistence and cleanup evidence, production ECS deployment speed optimization, live sandbox Direct recovery hardening, deployment sandbox E2E gates, Web UI clarity/accessibility improvements, dashboard navigation/copy simplification, and Brainboard AWS Template branch integration records.
 - Detailed older dev records remain available in `docs/agent-history/2026-07.md` and the merge commit history.
 
+### 2026-07-15 - Decouple GitHub App connections from login identity
+
+- Added migration `0043_github_installation_connections` and persisted GitHub App installation ownership by SketchCatch `user_id`, independent of password/Naver/Kakao/GitHub login identity.
+- Added signed setup state, PKCE user authorization, and GitHub `/user/installations` verification before accepting an installation; provider user tokens and code verifiers are not persisted.
+- Removed the GitHub-login-only gate and copy, added disconnected-state handling, and routed the setup callback through provider verification before repository selection.
+- Fixed the direct provider callback so it restores the initiating user from signed state plus the HttpOnly PKCE cookie and does not require a browser Bearer header.
+- Verification: focused API tests passed 12/12; focused Web tests passed 6/6; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm migration:compatibility:check`, `terraform fmt -check -recursive`, and `pnpm test:terraform` passed. Standards and spec reviews reported zero remaining findings.
+- Known unrelated baseline: full `pnpm test` remains non-green on the existing three-tier Template position/parent expectations in `packages/types`; changed-path tests are green.
+- Operator next action: configure the GitHub App client ID and client secret, register the user-authorization callback URL, apply migration 0043 through the reviewed production workflow, and redeploy the API before production login-method verification.
+
 ## Next Action
 
 - Review and apply the approved production Terraform change, then re-run the signed-in production browser loop to confirm the AWS Console launch link is rendered.
