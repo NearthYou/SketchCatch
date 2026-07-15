@@ -60,6 +60,10 @@ _Avoid_: AI 오류, auto fix
 The independent Workspace AI conversation for reviewing an IaC Preview and explaining its expected changes without executing or applying it.
 _Avoid_: Preview 설명, Deployment approval
 
+**AI 채팅**:
+Architecture Board 안에서 설계 제안, 오류 분석, 에이전트 리뷰를 각각의 독립된 대화로 제공하는 공통 진입점이다. 각 대화의 결과와 사용자 승인 경계는 서로 합쳐지지 않는다.
+_Avoid_: AI modal, right-panel AI buttons, single AI result
+
 **User-Accepted Change**:
 A state-changing update that only happens after the user explicitly accepts an Architecture Draft, Architecture Suggestion, IaC handoff, Git change, or Deployment action. AI may propose or explain the change, but it does not silently alter the Practice Architecture or execution path.
 _Avoid_: Auto apply, silent fix, AI edit
