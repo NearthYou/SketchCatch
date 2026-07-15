@@ -51,6 +51,7 @@ import {
   clearGitHubAppUserAuthorizationCookie,
   readGitHubAppUserAuthorizationCookie,
   setGitHubAppUserAuthorizationCookie,
+  verifyGitHubAppUserAuthorization,
   type GitHubAppUserAuthorizationConfig
 } from "../source-repositories/github-app-user-authorization.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
@@ -67,7 +68,7 @@ const projectSourceRepositoryParamsSchema = projectParamsSchema.extend({
   sourceRepositoryId: z.uuid()
 });
 
-const listGitHubInstallationRepositoriesBodySchema = z
+const githubInstallationSetupStateBodySchema = z
   .object({
     installationId: z.string().trim().min(1).max(128),
     state: z.string().trim().min(1)
@@ -395,7 +396,7 @@ export async function registerSourceRepositoryRoutes(
   app.post(
     "/source-repositories/github/user-authorization-url",
     async (request, reply) => {
-      const body = listGitHubInstallationRepositoriesBodySchema.parse(request.body);
+      const body = githubInstallationSetupStateBodySchema.parse(request.body);
       const { accessContext, repository } = await getSourceRepositoryRequestContext(
         request,
         options,
@@ -437,11 +438,6 @@ export async function registerSourceRepositoryRoutes(
     "/source-repositories/github/user-authorization/callback",
     async (request, reply) => {
       const query = githubUserAuthorizationCallbackQuerySchema.parse(request.query);
-      const { accessContext, repository } = await getSourceRepositoryRequestContext(
-        request,
-        options,
-        getSourceRepositoryDatabaseClient
-      );
       const runtime = getGitHubAppRouteRuntime(options);
 
       try {
@@ -455,6 +451,19 @@ export async function registerSourceRepositoryRoutes(
         if (!cookie) {
           throw new SourceRepositoryStateError("GIT_APP_USER_AUTHORIZATION_INVALID");
         }
+        const authorization = await verifyGitHubAppUserAuthorization({
+          state: query.state,
+          stateSecret: runtime.stateSecret,
+          cookie
+        });
+        const client = getSourceRepositoryDatabaseClient();
+        const repository =
+          options?.createSourceRepositoryRepository?.(client.db) ??
+          createPostgresSourceRepositoryRepository(client.db);
+        const accessContext: ProjectAccessContext = {
+          kind: "user",
+          userId: authorization.userId
+        };
         const userAuthorizationConfig =
           options?.githubAppUserAuthorizationConfig ??
           requireGitHubAppUserAuthorizationConfig();
@@ -486,7 +495,7 @@ export async function registerSourceRepositoryRoutes(
   );
 
   app.post("/source-repositories/github/installation-repositories", async (request, reply) => {
-    const body = listGitHubInstallationRepositoriesBodySchema.parse(request.body);
+    const body = githubInstallationSetupStateBodySchema.parse(request.body);
     const { accessContext, repository } = await getSourceRepositoryRequestContext(
       request,
       options,

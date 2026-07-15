@@ -2602,6 +2602,10 @@ SketchCatch 로그인 계정과 GitHub App installation 연결은 별도 인증 
 
 GitHub setup URL의 `installation_id`는 소유권 증거로 신뢰하지 않습니다. callback 뒤 GitHub App user authorization(PKCE)을 수행하고, 일시적인 user access token으로 `/user/installations`를 조회해 현재 GitHub 사용자가 해당 installation에 접근할 수 있을 때만 연결 row를 생성합니다. user access token, refresh token, code verifier는 RDS에 저장하지 않습니다.
 
+GitHub App user authorization 시작 API DTO는 `CreateGitHubInstallationUserAuthorizationRequest`와 `GitHubInstallationUserAuthorizationUrlResponse`입니다. 요청은 서명된 setup `state`와 `installationId`를 받고, 응답은 `authorizationUrl`과 `expiresAt: IsoDateTimeString`을 반환합니다.
+
+provider callback은 브라우저 redirect이므로 SketchCatch access token header에 의존하지 않고, 서명된 authorization state와 `HttpOnly` PKCE cookie에서 시작 사용자를 복원합니다. 이후 GitHub `/user/installations` 검증까지 통과해야 installation 연결을 저장합니다.
+
 GitHub installation access token과 GitHub App private key는 이 테이블에 저장하지 않습니다. repository 목록과 repository 개수도 요청 시 GitHub API에서 조회하며 RDS에 저장하지 않습니다.
 
 Dashboard 전역 설정은 계정 단위 GitHub App installation을 관리하는 보조 경로입니다. Repository Analysis에서 Architecture Draft를 시작하는 흐름은 전역 설정으로 이동시키지 않고, 추천 Template 선택 화면 안에서 프로젝트 단위 CI/CD 연결을 직접 제공합니다. 사용자가 GitHub App 연결을 시작하거나 접근 가능한 repository를 선택하면 기존 프로젝트 연결 API가 `source_repositories`를 생성하거나 활성화합니다. active Source Repository가 생기기 전에는 다음 단계로 이동할 수 없으며, 이동을 시도하면 같은 화면의 CI/CD 연결 구역에 경고를 표시합니다.
