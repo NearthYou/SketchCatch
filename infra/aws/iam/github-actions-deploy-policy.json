@@ -121,7 +121,10 @@
       "Sid": "AllowRuntimeCacheIngressCreate",
       "Effect": "Allow",
       "Action": "ec2:AuthorizeSecurityGroupIngress",
-      "Resource": "arn:aws:ec2:ap-northeast-2:555980271919:security-group/sg-09d8b7030cba492b4"
+      "Resource": [
+        "arn:aws:ec2:ap-northeast-2:555980271919:security-group/sg-09d8b7030cba492b4",
+        "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*"
+      ]
     },
     {
       "Sid": "AllowRuntimeCacheIngressReadback",

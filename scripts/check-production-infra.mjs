@@ -64,7 +64,10 @@ check(
       Sid: "AllowRuntimeCacheIngressCreate",
       Effect: "Allow",
       Action: "ec2:AuthorizeSecurityGroupIngress",
-      Resource: runtimeCacheSecurityGroup
+      Resource: [
+        runtimeCacheSecurityGroup,
+        "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*"
+      ]
     }),
   "deploy role must only create ingress on the production Runtime Cache security group"
 );

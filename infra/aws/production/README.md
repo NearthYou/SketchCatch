@@ -55,7 +55,7 @@ secrets.PRODUCTION_INFRA_RUNTIME_TFVARS_JSON=<complete runtime tfvars JSON>
 
 runtime plan은 production 값을 누락해 secret ARN이나 runtime 설정을 제거하는 잘못된 diff를 만들지 않도록 전체 tfvars JSON이 없으면 실패합니다. tfvars JSON에는 secret 원문을 넣지 않고 ECS task가 참조할 Secrets Manager/SSM ARN만 넣습니다. review-only 경로는 binary plan artifact를 저장하지 않습니다. 승인된 Runtime Cache apply 경로만 새 plan의 변경 주소, `create` 동작, Redis TCP 6379, 공통 cache 보안 그룹과 서로 다른 API/worker source를 검증한 뒤 binary plan을 1일 retention artifact로 전달하고, `production` Environment에서 그 파일만 apply한 다음 즉시 삭제합니다. `destroy`, `import`, `-auto-approve`는 포함하지 않습니다.
 
-Runtime Cache apply 전에 `production` Environment의 `GitHubActionsDeployRole`에 `infra/aws/iam/github-actions-deploy-policy.json`의 최신 정책이 연결되어 있어야 합니다. 정책은 runtime state 객체와 `.tflock` 객체, 현재 Runtime Cache 보안 그룹 `sg-09d8b7030cba492b4`의 ingress 생성, 생성 결과 조회만 추가로 허용합니다. Runtime Cache stack을 교체해 보안 그룹 ID가 바뀌면 정책 템플릿과 정적 검증을 함께 갱신하고 별도 IAM 변경 승인을 받아야 합니다. workflow는 IAM 정책을 자동으로 변경하지 않습니다.
+Runtime Cache apply 전에 `production` Environment의 `GitHubActionsDeployRole`에 `infra/aws/iam/github-actions-deploy-policy.json`의 최신 정책이 연결되어 있어야 합니다. 정책은 runtime state 객체와 `.tflock` 객체, 현재 Runtime Cache 보안 그룹 `sg-09d8b7030cba492b4`의 ingress 생성, 생성 결과 조회만 추가로 허용합니다. AWS가 ingress 생성 시 함께 평가하는 신규 `security-group-rule/*` ARN도 허용하지만 exact Cache 보안 그룹 ARN 승인을 동시에 요구하므로 다른 보안 그룹에는 적용할 수 없습니다. Runtime Cache stack을 교체해 보안 그룹 ID가 바뀌면 정책 템플릿과 정적 검증을 함께 갱신하고 별도 IAM 변경 승인을 받아야 합니다. workflow는 IAM 정책을 자동으로 변경하지 않습니다.
 
 plan role에는 다음 두 경계만 허용합니다.
 
