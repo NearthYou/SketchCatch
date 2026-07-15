@@ -5,9 +5,9 @@ Use this file only for compact continuation context. Write it in English.
 ## Currently Verified
 
 - `codex/fix-live-observation-redis-readiness` connects the current ECS API/worker security groups to the external Runtime Cache security group on Redis port only and fails plans closed when the connection is required but missing.
-- PR #423 is open. Review-only run `29385936278` passed with `2 add, 0 change, 0 destroy`; complete runtime run `29385795235` contains unrelated drift and must not be used for the incident repair.
-- Approved apply run `29386749008` failed before Terraform apply because `GitHubActionsDeployRole` could not read the exact runtime state object from S3. Apply/state verification were skipped, the artifact was deleted, and no production mutation occurred.
-- The deploy-role policy template now grants only the exact runtime state/lock objects, ingress create on Runtime Cache security group `sg-09d8b7030cba492b4`, and security-group readback. The template has not been applied to AWS.
+- PR #423 is open. Apply run `29387480668` succeeded and state-verified both Runtime Cache ingress resources; post-apply review run `29387561447` reported no changes.
+- The deploy-role policy was applied with exact runtime state/lock access, exact Cache SG authorization, required new-rule ARN access, and tag-on-create restricted to `AuthorizeSecurityGroupIngress`.
+- Direct AWS inspection shows exactly two managed TCP 6379 rules from the current ECS API and worker security groups. Production bootstrap returns `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND` instead of `503`.
 - Static and Terraform plan regressions, harness, lint, typecheck, and build pass.
 - Production Git/CI/CD handoff request `req-c2` failed before GitHub mutation because project `0bdf56aa-68b7-4382-b37f-31d8996136c1` has no confirmed project deployment target; the GitHub repository has no stale SketchCatch branch or PR.
 - The approved Terraform apply plan is current, but Git/CI/CD must remain blocked until the user saves a verified project deployment target and a real external HTTPS output URL.
@@ -41,13 +41,13 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Broken Or Unverified
 
-- Production Live Observation still returns `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE` because the first approved apply never reached Terraform apply.
+- Production Live Observation Runtime Cache readiness is verified. A real signed-in observation session remains outside this incident check.
 - Static/Lambda/EC2-ASG execution, rollback drills, QR public session, and Web Push provider delivery remain unverified.
 - Full API tests include pre-existing Windows symlink EPERM and AI diagram expectation failures; do not report the full suite as passing.
 
 ## Best Next Action
 
-- Obtain separate approval and an IAM-capable operator to apply the updated `GitHubActionsDeployRole` policy template. Then obtain a new explicit apply approval, dispatch exactly one targeted run for the two resources reviewed in `29385936278`, verify `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`, and run a refresh-only plan.
+- Merge PR #423 after required checks pass.
 - Save the project's verified deployment target and real external HTTPS output URL in project settings before retrying CI/CD PR creation.
 - Merge the code-completion PR after focused CI and review.
 - Keep Issue #378 open for a separately approved real-environment acceptance run covering Static, Lambda, EC2/ASG, rollback, QR/CloudWatch, and Web Push.
