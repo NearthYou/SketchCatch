@@ -22,6 +22,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  AI_BILLING_MODE: ${{ vars.AI_BILLING_MODE }}
+  AMAZON_Q_APPLICATION_ID: ${{ vars.AMAZON_Q_APPLICATION_ID }}
+  AMAZON_Q_CREDIT_CONFIRMED: ${{ vars.AMAZON_Q_CREDIT_CONFIRMED }}
+  AMAZON_Q_ENABLED: ${{ vars.AMAZON_Q_ENABLED }}
+  AMAZON_Q_REGION: ${{ vars.AMAZON_Q_REGION }}
+  AMAZON_Q_RETRIEVAL_APPLICATION_ID: ${{ vars.AMAZON_Q_RETRIEVAL_APPLICATION_ID }}
   AWS_REGION: ${{ vars.AWS_REGION }}
   ECR_API_REPOSITORY: ${{ vars.ECR_API_REPOSITORY }}
   ECR_WEB_REPOSITORY: ${{ vars.ECR_WEB_REPOSITORY }}
@@ -96,6 +102,12 @@ jobs:
           set -euo pipefail
 
           required_vars=(
+            AI_BILLING_MODE
+            AMAZON_Q_APPLICATION_ID
+            AMAZON_Q_CREDIT_CONFIRMED
+            AMAZON_Q_ENABLED
+            AMAZON_Q_REGION
+            AMAZON_Q_RETRIEVAL_APPLICATION_ID
             AWS_REGION
             ECR_API_REPOSITORY
             ECR_WEB_REPOSITORY
@@ -121,6 +133,19 @@ jobs:
               exit 1
             fi
           done
+
+          if [ "${AI_BILLING_MODE}" != "aws_credit_only" ]; then
+            echo "::error::AI_BILLING_MODE must be aws_credit_only for production ECS deployment."
+            exit 1
+          fi
+          if [ "${AMAZON_Q_ENABLED}" != "true" ]; then
+            echo "::error::AMAZON_Q_ENABLED must be true for production ECS deployment."
+            exit 1
+          fi
+          if [ "${AMAZON_Q_CREDIT_CONFIRMED}" != "true" ]; then
+            echo "::error::AMAZON_Q_CREDIT_CONFIRMED must be true for production ECS deployment."
+            exit 1
+          fi
 
   build-api:
     needs: validate
@@ -491,6 +516,12 @@ jobs:
           container-name: ${{ env.ECS_API_CONTAINER_NAME }}
           image: ${{ needs.build-api.outputs.image }}
           environment-variables: |
+            AI_BILLING_MODE=${{ env.AI_BILLING_MODE }}
+            AMAZON_Q_APPLICATION_ID=${{ env.AMAZON_Q_APPLICATION_ID }}
+            AMAZON_Q_CREDIT_CONFIRMED=${{ env.AMAZON_Q_CREDIT_CONFIRMED }}
+            AMAZON_Q_ENABLED=${{ env.AMAZON_Q_ENABLED }}
+            AMAZON_Q_REGION=${{ env.AMAZON_Q_REGION }}
+            AMAZON_Q_RETRIEVAL_APPLICATION_ID=${{ env.AMAZON_Q_RETRIEVAL_APPLICATION_ID }}
             ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}
             GIT_OAUTH_CLIENT_ID=${{ env.GIT_OAUTH_CLIENT_ID }}
             KAKAO_OAUTH_CLIENT_ID=${{ env.KAKAO_OAUTH_CLIENT_ID }}

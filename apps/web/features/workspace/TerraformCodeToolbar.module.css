@@ -2,16 +2,17 @@
 .resourceCodeHeader,
 .resourceActionBar {
   background: #ffffff;
-  border-bottom: 1px solid #f0f0f3;
+  border-bottom: 1px solid #dcdee0;
 }
 
 .terraformTopBar {
   align-items: center;
-  display: flex;
-  gap: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 8px 12px;
+  min-height: 64px;
+  padding: 9px 12px;
 }
 
 .terraformTopActions {
@@ -21,13 +22,27 @@
   min-width: 0;
 }
 
+.terraformFileContext {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.terraformToolbarLabel {
+  color: #60646c;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .terraformFilePicker {
   min-width: 0;
   position: relative;
 }
 
 .terraformFileButton,
-.terraformPreviewButton,
 .resourceCodeBackButton,
 .resourceCodeCloseButton {
   align-items: center;
@@ -43,11 +58,11 @@
 }
 
 .terraformFileButton {
-  font-size: 12px;
-  gap: 7px;
-  height: 32px;
-  max-width: min(210px, 42vw);
-  padding: 0 10px;
+  font-size: 13px;
+  gap: 8px;
+  height: 36px;
+  max-width: min(220px, 48vw);
+  padding: 0 11px;
 }
 
 .terraformFileButton span,
@@ -60,28 +75,36 @@
 
 .terraformFileButton:hover,
 .terraformFileButton:focus-visible,
-.terraformPreviewButton:not(:disabled):hover,
-.terraformPreviewButton:not(:disabled):focus-visible,
 .resourceCodeBackButton:hover,
 .resourceCodeBackButton:focus-visible,
 .resourceCodeCloseButton:hover,
 .resourceCodeCloseButton:focus-visible {
   background: #fafafa;
-  border-color: #b8babc;
+  border-color: #171717;
   outline: none;
+}
+
+.terraformFileButton:focus-visible,
+.resourceCodeBackButton:focus-visible,
+.resourceCodeCloseButton:focus-visible {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px #171717;
 }
 
 .terraformFileMenu {
   background: #ffffff;
   border: 1px solid #dcdee0;
   border-radius: 12px;
-  box-shadow: 0 16px 36px rgba(23, 23, 23, 0.14);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 8%),
+    0 16px 40px -24px rgb(23 23 23 / 24%);
   display: grid;
   gap: 8px;
   left: 0;
   max-width: calc(100vw - 32px);
   min-width: 250px;
-  padding: 10px;
+  padding: 12px;
   position: absolute;
   top: calc(100% + 8px);
   z-index: 8;
@@ -146,33 +169,13 @@
   padding: 10px;
 }
 
-.terraformPreviewButton {
-  font-size: 12px;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 10px;
-  white-space: nowrap;
-}
-
-.terraformPreviewButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.terraformShortcut {
-  color: #60646c;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .resourceCodeHeader {
   align-items: center;
   display: flex;
   gap: 10px;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 8px 10px;
+  min-height: 56px;
+  padding: 10px 12px;
 }
 
 .resourceCodeTitle {
@@ -197,14 +200,13 @@
   align-items: center;
   display: flex;
   justify-content: flex-end;
-  min-height: 44px;
-  padding: 6px 10px;
+  min-height: 52px;
+  padding: 8px 12px;
 }
 
 @media (max-width: 520px) {
   .terraformTopBar {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .terraformTopActions {

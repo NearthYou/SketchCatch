@@ -1,6 +1,8 @@
 .issuesPanel {
   align-content: start;
+  background: #ffffff;
   display: grid;
+  gap: 8px;
   grid-template-rows: max-content max-content;
   height: 100%;
   min-height: 0;
@@ -9,5 +11,6 @@
 }
 
 .terraformIssues {
+  border-bottom: 1px solid #f0f0f3;
   min-height: 0;
 }

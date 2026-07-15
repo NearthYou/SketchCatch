@@ -34,6 +34,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 - 음성 요구사항은 Amazon Transcribe 기반 Voice Requirement Input으로 받고, 사용자가 확인한 뒤 Requirement Prompt로 확정한다.
 - 다이어그램과 Terraform이 같은 설계 데이터를 바라보게 한다.
 - AI, Bedrock, Amazon Q Assistance는 Architecture Draft, 설명, 리뷰, 수정 제안을 보강한다.
+- Architecture Board Compiler는 AI Draft, 현재 Board, Reverse Engineering 결과를 Template 사례에 근거해 Resource 의미와 시각 배치까지 다시 구성하는 제안을 만들며, 틀리거나 IaC 유효성을 위반한 변경도 diff와 진단으로 드러낸 뒤 사용자 승인을 받는다.
 - 배포 전 비용, 보안, 설정 위험을 보여주되 High Security Risk도 사용자 검토 정보로 유지하며 Terraform Plan 승인은 허용한다.
 - 사용자가 승인한 Terraform Plan만 Direct Deployment Path로 실제 클라우드에 반영한다.
 - 팀 운영 배포는 Source Repository와 Git/CI/CD Integration으로 넘긴다.
@@ -58,6 +59,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Requirement Input | 텍스트와 Voice Requirement Input을 Requirement Prompt로 정규화한다. |
 | AI Architecture Recommendation | Requirement Prompt를 Architecture Draft로 변환하고 수락 전 설명을 제공한다. |
 | 다이어그램 편집 | Architecture Board에서 Resource와 관계를 직접 수정한다. |
+| Board 자동 정리 | Architecture Board Compiler가 Resource·관계·설정·소속·배치를 함께 재구성한 제안을 비교·승인·되돌릴 수 있게 한다. |
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
@@ -82,6 +84,8 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | 비용 분석 | Practice Architecture, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다. |
 | Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
 | Runtime Cache | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍을 보조한다. |
+
+Repository Analysis에서 Git/CI/CD 연결을 시작하면 GitHub App callback은 이미 분석한 Repository만 자동으로 연결한다. 사용자는 Repository를 다시 고르거나 다시 분석하지 않는다. 초기 UI 검증 기간에는 callback의 개별 저장 버튼을 숨기고 하단 `확인`이 배포 타깃과 GitOps 감시 설정을 순서대로 저장한 뒤 기존 추천·질문 상태에 돌아가 Board 생성을 계속한다. callback 화면의 배포 타깃 초안은 어떤 추천 Template을 선택해도 ECS Fargate로 통일하고 분석 commit SHA와 Dockerfile 근거, 프로젝트 이름으로 안전한 기본값을 채운다. 이 설정 저장은 실제 cloud 배포나 Git 변경을 실행하지 않는다.
 | Deployment 관측 | Live event, CloudWatch measured, Auto Scaling actual을 서로 다른 근거로 표시하고 AWS 조회 실패 시 sample 값을 만들지 않는다. |
 
 ## AWS-first 실행 범위와 Representative Use Journey

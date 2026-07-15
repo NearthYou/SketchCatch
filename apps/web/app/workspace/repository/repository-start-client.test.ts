@@ -12,7 +12,7 @@ test("Repository start screen exposes an explicit AI chat fallback", () => {
   assert.match(source, /createPublicRepositoryRecommendation/);
   assert.match(source, /createPublicRepositoryArchitectureDraftRequest/);
   assert.match(source, /createAiArchitectureDraft/);
-  assert.match(source, /getDiagramJsonForArchitectureDraft/);
+  assert.match(source, /compileArchitectureDraftProposal/);
   assert.match(source, /createWorkspaceAiStartHref/);
   assert.match(source, /원하는 구성이 없나요\? AI로 새 설계 만들기/);
   assert.match(source, /className=\{styles\.publicAiFallbackAction\}/);
@@ -26,11 +26,26 @@ test("Repository start screen exposes an explicit AI chat fallback", () => {
 
 test("connected Repository board generation uses the AI Architecture Draft path", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const publicBoardBody = source.slice(
+    source.indexOf("async function createPublicRepositoryBoard"),
+    source.indexOf("async function createConnectedRepositoryBoard")
+  );
+  const connectedBoardBody = source.slice(
+    source.indexOf("async function createConnectedRepositoryBoard"),
+    source.indexOf("async function saveTemplateBoard")
+  );
 
   assert.match(source, /createConnectedRepositoryBoard/);
   assert.match(source, /createConnectedRepositoryArchitectureDraftRequest/);
   assert.match(source, /createAiArchitectureDraft/);
-  assert.match(source, /getDiagramJsonForArchitectureDraft\(draft\)/);
+  assert.match(source, /compileArchitectureDraftProposal\(draft\)/);
+  assert.match(source, /presentCompilerProposal\(proposal, "public"\)/);
+  assert.match(source, /presentCompilerProposal\(proposal, "connected"\)/);
+  assert.match(source, /function approvePendingCompilerProposal/);
+  assert.match(source, /diagramJson:\s*pendingCompilerProposal\.proposal\.diagram/);
+  assert.match(source, /RepositoryCompilerProposalReview/);
+  assert.doesNotMatch(publicBoardBody, /saveProjectDraft/);
+  assert.doesNotMatch(connectedBoardBody, /saveProjectDraft/);
   assert.match(source, /repositoryAnalysis:\s*{/);
   assert.match(source, /sourceRepositoryId:\s*repository\.id/);
   assert.match(source, /repositoryEvidence:\s*{/);
@@ -66,4 +81,16 @@ test("Repository draft requires an inline CI/CD connection before continuing", (
   assert.doesNotMatch(source, /CI\/CD 인계 사용/);
   assert.doesNotMatch(source, /환경설정에서 권한 관리/);
   assert.doesNotMatch(source, /추천 결과를 아키텍처에 맞게 조정합니다\./);
+});
+
+test("GitHub connection preserves and restores public analysis without reanalysis", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /createRepositoryAnalysisResumeKey/);
+  assert.match(source, /writeRepositoryAnalysisResume/);
+  assert.match(source, /consumeRepositoryAnalysisResume/);
+  assert.match(source, /repositoryUrl:\s*publicAnalysis\.repositoryUrl/);
+  assert.match(source, /resumeKey/);
+  assert.match(source, /if \(initialResumeKey\) return/);
+  assert.match(source, /setPublicAnalysis\(resume\.publicAnalysis\)/);
 });

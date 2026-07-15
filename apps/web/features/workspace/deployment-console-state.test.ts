@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { AiPreDeploymentAnalysisResult } from "@sketchcatch/types";
 import {
+  getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   shouldStartQueuedApplyPlan,
   type DirectDeploymentFlowInput
@@ -79,6 +81,73 @@ test("a warning Preflight still advances a created deployment to Plan", () => {
 
   assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "warning");
+});
+
+test("Trivy security findings remain advisory even when their checklist item fails", () => {
+  const analysis = createPreDeploymentAnalysis({
+    findings: [
+      {
+        id: "trivy:aws-0010:main.tf:aws_s3_bucket.assets:1",
+        category: "security",
+        severity: "medium",
+        resourceId: "aws_s3_bucket.assets",
+        title: "S3 security setting review",
+        description: "Review the generated bucket configuration.",
+        recommendation: "Review the Trivy recommendation before deployment."
+      }
+    ],
+    checklist: [
+      {
+        id: "security-open-ssh-check",
+        label: "Security review",
+        status: "fail",
+        relatedFindingIds: ["trivy:aws-0010:main.tf:aws_s3_bucket.assets:1"]
+      }
+    ]
+  });
+
+  assert.equal(
+    getDirectDeploymentPreflightState({
+      analysis,
+      errorMessage: "",
+      hasStaleAnalysis: false,
+      requestState: "idle"
+    }),
+    "warning"
+  );
+});
+
+test("non-security checklist failures still block Direct Deployment", () => {
+  const analysis = createPreDeploymentAnalysis({
+    findings: [
+      {
+        id: "terraform-diagnostic-0-error",
+        category: "configuration",
+        severity: "high",
+        title: "Terraform configuration error",
+        description: "A required Terraform value is invalid.",
+        recommendation: "Fix the Terraform diagnostic before deployment."
+      }
+    ],
+    checklist: [
+      {
+        id: "terraform-diagnostics-check",
+        label: "Terraform diagnostics",
+        status: "fail",
+        relatedFindingIds: ["terraform-diagnostic-0-error"]
+      }
+    ]
+  });
+
+  assert.equal(
+    getDirectDeploymentPreflightState({
+      analysis,
+      errorMessage: "",
+      hasStaleAnalysis: false,
+      requestState: "idle"
+    }),
+    "blocked"
+  );
 });
 
 test("an unapproved apply plan advances to approval", () => {
@@ -199,3 +268,21 @@ test("a queued deployment starts its apply plan after init returns to PENDING", 
     false
   );
 });
+
+function createPreDeploymentAnalysis(
+  overrides: Partial<AiPreDeploymentAnalysisResult> = {}
+): AiPreDeploymentAnalysisResult {
+  return {
+    summary: "Pre-deployment result",
+    totalMonthlyEstimate: {
+      amount: 0,
+      currency: "USD",
+      pricingAssumption: "Test fixture"
+    },
+    resourceCostEstimates: [],
+    findings: [],
+    checklist: [],
+    suggestions: [],
+    ...overrides
+  };
+}

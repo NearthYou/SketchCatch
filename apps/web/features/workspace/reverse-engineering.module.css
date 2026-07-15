@@ -240,6 +240,119 @@ button.candidateCardSelected {
   border-bottom: 0;
 }
 
+.compilationReview {
+  background: var(--reverse-surface-muted);
+  border-bottom: 1px solid var(--reverse-line);
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.compilationReviewHeader {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.compilationReviewHeader h3 {
+  color: var(--reverse-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.compilationReviewHeader > strong {
+  color: var(--reverse-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.compilationStats {
+  border: 1px solid var(--reverse-line-strong);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.compilationStats > span {
+  background: var(--reverse-surface);
+  color: var(--reverse-muted);
+  display: flex;
+  flex-direction: column-reverse;
+  font-size: 12px;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.compilationStats > span + span {
+  border-left: 1px solid var(--reverse-line);
+}
+
+.compilationStats strong {
+  color: var(--reverse-text);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.compilationHint,
+.compilationProvenance {
+  color: var(--reverse-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.compilationDiagnostics {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compilationDiagnostics li {
+  background: var(--reverse-surface);
+  border: 1px solid var(--reverse-line);
+  border-radius: 6px;
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+}
+
+.compilationDiagnostics li[data-level="warning"] {
+  border-color: #f1d59a;
+}
+
+.compilationDiagnostics li[data-level="error"] {
+  border-color: #efb3b5;
+}
+
+.compilationDiagnostics strong {
+  color: var(--reverse-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.compilationDiagnostics span,
+.compilationDiagnosticRemainder {
+  color: var(--reverse-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.compilationDiagnostics .compilationDiagnosticRemainder {
+  background: transparent;
+  border-style: dashed;
+  display: block;
+}
+
 .section h3,
 .detailSummary,
 .fieldLabel {

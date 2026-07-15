@@ -7,6 +7,10 @@ const manifestPath = path.join(repositoryRoot, "infra/aws/production/import-mani
 const workflowPath = path.join(repositoryRoot, ".github/workflows/production-infra-plan.yml");
 const deployWorkflowPath = path.join(repositoryRoot, ".github/workflows/deploy-ecs.yml");
 const migrationWorkflowPath = path.join(repositoryRoot, ".github/workflows/migrate.yml");
+const deployPolicyPath = path.join(
+  repositoryRoot,
+  "infra/aws/iam/github-actions-deploy-policy.json"
+);
 const apiDockerfilePath = path.join(repositoryRoot, "docker/api.Dockerfile");
 const webDockerfilePath = path.join(repositoryRoot, "docker/web.Dockerfile");
 
@@ -24,6 +28,74 @@ const read = (relativePath) => {
 };
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+const deployPolicy = JSON.parse(fs.readFileSync(deployPolicyPath, "utf8"));
+const deployPolicyStatements = new Map(
+  deployPolicy.Statement.map((statement) => [statement.Sid, statement])
+);
+const runtimeStateObject =
+  "arn:aws:s3:::sketchcatch-terraform-state-555980271919-ap-northeast-2/production/ecs-foundation/terraform.tfstate";
+const runtimeStateLockObject = `${runtimeStateObject}.tflock`;
+const runtimeCacheSecurityGroup =
+  "arn:aws:ec2:ap-northeast-2:555980271919:security-group/sg-09d8b7030cba492b4";
+
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeTerraformStateObjectAccess")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeTerraformStateObjectAccess",
+      Effect: "Allow",
+      Action: ["s3:GetObject", "s3:PutObject"],
+      Resource: runtimeStateObject
+    }),
+  "deploy role must have exact runtime Terraform state object access"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeTerraformStateLockAccess")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeTerraformStateLockAccess",
+      Effect: "Allow",
+      Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      Resource: runtimeStateLockObject
+    }),
+  "deploy role must have exact runtime Terraform lock object access"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeCacheIngressCreate")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeCacheIngressCreate",
+      Effect: "Allow",
+      Action: "ec2:AuthorizeSecurityGroupIngress",
+      Resource: [
+        runtimeCacheSecurityGroup,
+        "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*"
+      ]
+    }),
+  "deploy role must only create ingress on the production Runtime Cache security group"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeCacheIngressReadback")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeCacheIngressReadback",
+      Effect: "Allow",
+      Action: ["ec2:DescribeSecurityGroupRules", "ec2:DescribeSecurityGroups"],
+      Resource: "*"
+    }),
+  "deploy role must be able to read back the created Runtime Cache ingress rules"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeCacheIngressRuleTagsOnCreate")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeCacheIngressRuleTagsOnCreate",
+      Effect: "Allow",
+      Action: "ec2:CreateTags",
+      Resource: "arn:aws:ec2:ap-northeast-2:555980271919:security-group-rule/*",
+      Condition: {
+        StringEquals: {
+          "ec2:CreateAction": "AuthorizeSecurityGroupIngress"
+        }
+      }
+    }),
+  "deploy role must only tag Runtime Cache ingress rules during authorized creation"
+);
 const expectedGroups = new Map([
   ["runtime", { root: "infra/aws/terraform", key: "production/ecs-foundation/terraform.tfstate" }],
   ["edge", { root: "infra/aws/production/edge", key: "production/edge/terraform.tfstate" }],
@@ -162,13 +234,40 @@ for (const marker of [
   "workflow_dispatch:",
   "environment: production-infra-plan",
   "management_group:",
+  "runtime_plan_scope:",
+  "operation:",
+  "approved_plan_run_id:",
+  "expected_head_sha:",
   "confirmation:",
   'expected_confirmation="${MANAGEMENT_GROUP}-review-only"',
   "Review-only Terraform plan",
+  "Create reviewed apply plan",
+  "Validate reviewed apply plan",
+  "expected_head_sha must exactly match the dispatched commit",
+  ".resource_changes[]",
+  '"actions": ["create"]',
+  "all($rules[];",
+  "environment: production",
+  "actions: write",
+  "actions/upload-artifact@v4",
+  "actions/download-artifact@v4",
+  "retention-days: 1",
+  "terraform -chdir=\"${TERRAFORM_ROOT}\" apply -input=false -no-color tfplan",
+  "Delete reviewed plan artifact",
+  "actions/artifacts/${ARTIFACT_ID}",
   "plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)",
+  "terraform_wrapper: false",
+  "-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]",
+  "-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]",
   "use_lockfile=true",
   "PRODUCTION_INFRA_RUNTIME_TFVARS_JSON",
-  "runtime tfvars must be a JSON object"
+  "runtime tfvars must be a JSON object",
+  "aws cloudformation list-stacks",
+  "aws cloudformation describe-stacks",
+  '.OutputKey == "RedisUrl"',
+  '.OutputKey == "SecurityGroupId"',
+  "aws ec2 describe-security-groups",
+  ".runtime_cache_security_group_id = $security_group_id"
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);
 }
@@ -202,15 +301,21 @@ for (const fixture of parserFixtures) {
 const terraformOperations = extractTerraformOperations(workflow);
 check(terraformOperations.includes("init"), "plan workflow must initialize the selected backend");
 check(terraformOperations.includes("plan"), "plan workflow must run Terraform plan");
+check(terraformOperations.includes("apply"), "approved workflow must apply the reviewed plan file");
 check(
-  terraformOperations.every((operation) => ["init", "plan"].includes(operation)),
-  `plan workflow contains non-review Terraform operations: ${terraformOperations.join(", ")}`
+  terraformOperations.every((operation) =>
+    ["init", "plan", "show", "state", "apply"].includes(operation)
+  ),
+  `production infrastructure workflow contains unsupported Terraform operations: ${terraformOperations.join(", ")}`
+);
+check(
+  terraformOperations.filter((operation) => operation === "apply").length === 1,
+  "production infrastructure workflow must have exactly one reviewed apply command"
 );
 
 for (const forbidden of [
-  /\bterraform(?:[ \t]+-[^ \t\r\n\\]+)*[ \t]+(?:apply|destroy|import)\b/i,
+  /\bterraform(?:[ \t]+-[^ \t\r\n\\]+)*[ \t]+(?:destroy|import)\b/i,
   /-auto-approve\b/i,
-  /upload-artifact/i,
   /\bpull_request:\s*$/m,
   /\bpush:\s*$/m
 ]) {
@@ -254,6 +359,8 @@ for (const retiredPath of [
 const runtimeEcs = read("infra/aws/terraform/ecs.tf");
 const runtimeAlb = read("infra/aws/terraform/alb.tf");
 const runtimeAutoscaling = read("infra/aws/terraform/autoscaling.tf");
+const runtimeNetwork = read("infra/aws/terraform/network.tf");
+const runtimeVariables = read("infra/aws/terraform/variables.tf");
 check(
   !/resource\s+"aws_ecs_service"\s+"app"/.test(runtimeEcs),
   "legacy ECS service must not exist"
@@ -269,6 +376,30 @@ for (const marker of [
 ]) {
   check(runtimeAutoscaling.includes(marker), `runtime autoscaling is missing ${marker}`);
 }
+for (const marker of [
+  'variable "runtime_cache_security_group_id"',
+  'variable "runtime_cache_port"'
+]) {
+  check(runtimeVariables.includes(marker), `runtime cache networking is missing ${marker}`);
+}
+for (const marker of [
+  'resource "aws_vpc_security_group_ingress_rule" "runtime_cache_from_ecs_api"',
+  'resource "aws_vpc_security_group_ingress_rule" "runtime_cache_from_ecs_worker"',
+  "referenced_security_group_id = aws_security_group.ecs_service.id",
+  "referenced_security_group_id = aws_security_group.ecs_worker.id"
+]) {
+  check(runtimeNetwork.includes(marker), `runtime cache networking is missing ${marker}`);
+}
+check(
+  runtimeEcs.includes("runtime_cache_security_group_id is required when Live Observation is enabled"),
+  "Live Observation must fail its production plan when Runtime Cache ingress is not configured"
+);
+check(
+  runtimeEcs.includes(
+    "runtime_cache_security_group_id is required before ECS worker dispatch can be enabled"
+  ),
+  "ECS worker dispatch must fail its production plan when Runtime Cache ingress is not configured"
+);
 
 const deployWorkflow = fs.readFileSync(deployWorkflowPath, "utf8");
 for (const marker of [
@@ -303,6 +434,21 @@ for (const marker of [
   "Register worker task definition",
   "task-definition-arn: ${{ steps.register-worker.outputs.task-definition-arn }}",
   "ECS_WORKER_TASK_DEFINITION=${{ needs.register-worker.outputs.task-definition-arn }}",
+  "AI_BILLING_MODE: ${{ vars.AI_BILLING_MODE }}",
+  "AMAZON_Q_ENABLED: ${{ vars.AMAZON_Q_ENABLED }}",
+  "AMAZON_Q_REGION: ${{ vars.AMAZON_Q_REGION }}",
+  "AMAZON_Q_CREDIT_CONFIRMED: ${{ vars.AMAZON_Q_CREDIT_CONFIRMED }}",
+  "AMAZON_Q_APPLICATION_ID: ${{ vars.AMAZON_Q_APPLICATION_ID }}",
+  "AMAZON_Q_RETRIEVAL_APPLICATION_ID: ${{ vars.AMAZON_Q_RETRIEVAL_APPLICATION_ID }}",
+  'if [ "${AI_BILLING_MODE}" != "aws_credit_only" ]',
+  'if [ "${AMAZON_Q_ENABLED}" != "true" ]',
+  'if [ "${AMAZON_Q_CREDIT_CONFIRMED}" != "true" ]',
+  "AI_BILLING_MODE=${{ env.AI_BILLING_MODE }}",
+  "AMAZON_Q_ENABLED=${{ env.AMAZON_Q_ENABLED }}",
+  "AMAZON_Q_REGION=${{ env.AMAZON_Q_REGION }}",
+  "AMAZON_Q_CREDIT_CONFIRMED=${{ env.AMAZON_Q_CREDIT_CONFIRMED }}",
+  "AMAZON_Q_APPLICATION_ID=${{ env.AMAZON_Q_APPLICATION_ID }}",
+  "AMAZON_Q_RETRIEVAL_APPLICATION_ID=${{ env.AMAZON_Q_RETRIEVAL_APPLICATION_ID }}",
   "GIT_OAUTH_CLIENT_ID=${{ env.GIT_OAUTH_CLIENT_ID }}",
   "KAKAO_OAUTH_CLIENT_ID=${{ env.KAKAO_OAUTH_CLIENT_ID }}",
   "NAVER_OAUTH_CLIENT_ID=${{ env.NAVER_OAUTH_CLIENT_ID }}",

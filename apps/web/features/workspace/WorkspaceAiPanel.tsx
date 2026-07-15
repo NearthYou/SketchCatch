@@ -9,12 +9,12 @@ import type {
   DesignSimulationResult
 } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../lib/api-client";
+import { compileArchitectureDraftProposal } from "../architecture-board-compiler";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createAiArchitectureDraft,
   runAiDesignSimulation
 } from "./api";
-import { getDiagramJsonForArchitectureDraft } from "./workspace-ai-diagram-adapter";
 import {
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
@@ -87,7 +87,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
         return;
       }
 
-      const previewDiagram = getDiagramJsonForArchitectureDraft(result);
+      const previewDiagram = compileArchitectureDraftProposal(result, context.diagram).diagram;
 
       setDraft(result);
       context.setPreviewDiagram(previewDiagram);
@@ -103,7 +103,7 @@ export function WorkspaceAiPanel({ context }: WorkspaceAiPanelProps) {
       return;
     }
 
-    context.applyDiagramJson(getDiagramJsonForArchitectureDraft(draft));
+    context.applyDiagramJson(compileArchitectureDraftProposal(draft, context.diagram).diagram);
     requestImmediateDiagramSave();
     setDraft(null);
     setDesignSimulation(null);

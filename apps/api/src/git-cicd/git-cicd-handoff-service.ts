@@ -384,7 +384,7 @@ export class GitCicdHandoffProviderPermissionError extends Error {
 }
 
 export class GitCicdHandoffProviderConflictError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly code: string | null = null) {
     super(message);
     this.name = "GitCicdHandoffProviderConflictError";
   }
@@ -1231,7 +1231,7 @@ export async function createGitCicdHandoff(
   });
 }
 
-function assertGitOpsTarget(
+export function assertGitOpsTarget(
   target: GitCicdHandoffDeploymentTargetRecord | undefined,
   sourceRepository: GitCicdHandoffSourceRepositoryRecord,
   appPath: GitCicdMonitoredPath
@@ -1243,12 +1243,28 @@ function assertGitOpsTarget(
   if (
     !target ||
     !target.confirmedBuildConfig ||
-    !target.runtimeConfig ||
-    target.runtimeConfig.runtimeTargetKind !== target.runtimeTargetKind ||
     !target.awsRoleArn
   ) {
     throw new GitCicdHandoffProviderConflictError(
-      "GitOps application handoff requires a confirmed project deployment target"
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED",
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED"
+    );
+  }
+
+  if (
+    target.runtimeTargetKind === "ecs_fargate" &&
+    !target.runtimeConfig?.outputUrl
+  ) {
+    throw new GitCicdHandoffProviderConflictError(
+      "DEPLOYMENT_OUTPUT_URL_REQUIRED",
+      "DEPLOYMENT_OUTPUT_URL_REQUIRED"
+    );
+  }
+
+  if (target.runtimeConfig?.runtimeTargetKind !== target.runtimeTargetKind) {
+    throw new GitCicdHandoffProviderConflictError(
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED",
+      "PROJECT_DEPLOYMENT_TARGET_REQUIRED"
     );
   }
 
@@ -1264,7 +1280,7 @@ function assertGitOpsTarget(
       (item) => item.kind === "dockerfile"
     ) ?? [];
     if (
-      target.runtimeConfig.runtimeTargetKind !== "ecs_fargate" ||
+      target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
       build.buildPreset !== "docker_build" ||
       !build.dockerfilePath ||
       !hasCurrentRevision ||

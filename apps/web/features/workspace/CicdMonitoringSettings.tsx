@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import type {
   GitCicdMonitoredPath,
   GitCicdMonitoringConfig,
@@ -11,36 +11,57 @@ import {
 } from "./cicd-console-state";
 import styles from "./workspace.module.css";
 
-export function CicdMonitoringSettings({
-  config,
-  isSaving,
-  onSave
-}: {
-  readonly config: GitCicdMonitoringConfig;
-  readonly isSaving: boolean;
-  readonly onSave: (request: UpdateGitCicdMonitoringConfigRequest) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState<CicdMonitoringDraft>(() => toDraft(config));
+export type CicdMonitoringSettingsHandle = {
+  readonly save: () => Promise<boolean>;
+};
 
-  useEffect(() => setDraft(toDraft(config)), [config]);
+export const CicdMonitoringSettings = forwardRef<
+  CicdMonitoringSettingsHandle,
+  {
+    readonly config: GitCicdMonitoringConfig;
+    readonly initialDraft?: Partial<CicdMonitoringDraft> | undefined;
+    readonly isSaving: boolean;
+    readonly onDirty?: (() => void) | undefined;
+    readonly onSave: (request: UpdateGitCicdMonitoringConfigRequest) => Promise<boolean | void>;
+    readonly showSaveButton?: boolean | undefined;
+  }
+>(function CicdMonitoringSettings({
+  config,
+  initialDraft,
+  isSaving,
+  onDirty,
+  onSave,
+  showSaveButton = true
+}, ref) {
+  const [draft, setDraft] = useState<CicdMonitoringDraft>(() => toDraft(config, initialDraft));
+
+  useEffect(() => setDraft(toDraft(config, initialDraft)), [config, initialDraft]);
 
   const canSave = !isSaving && isCicdMonitoringDraftComplete(draft);
 
-  async function save(): Promise<void> {
+  function updateDraft(updater: (current: CicdMonitoringDraft) => CicdMonitoringDraft): void {
+    onDirty?.();
+    setDraft(updater);
+  }
+
+  async function save(): Promise<boolean> {
     const appPath = normalizeCicdMonitoredPath(draft.appPath);
     const infraPath = normalizeCicdMonitoredPath(draft.infraPath);
     if (!canSave || appPath === null || infraPath === null) {
-      return;
+      return false;
     }
 
-    await onSave({
+    const saved = await onSave({
       ...draft,
       monitorBranch: draft.monitorBranch.trim() || config.monitorBranch,
       appPath,
       infraPath,
       userAcceptedChangeId: `cicd-monitoring-${crypto.randomUUID()}`
     });
+    return saved !== false;
   }
+
+  useImperativeHandle(ref, () => ({ save }));
 
   return (
     <section className={styles.cicdSettings} aria-labelledby="cicd-settings-title">
@@ -49,20 +70,22 @@ export function CicdMonitoringSettings({
           <h3 id="cicd-settings-title">모니터링 설정</h3>
           <p>저장소 branch와 앱·인프라 변경 범위를 명시적으로 선택합니다.</p>
         </div>
-        <button
-          className={styles.deploymentPrimaryButton}
-          disabled={!canSave}
-          onClick={() => void save()}
-          type="button"
-        >
-          {isSaving ? "저장 중" : "설정 저장"}
-        </button>
+        {showSaveButton ? (
+          <button
+            className={styles.deploymentPrimaryButton}
+            disabled={!canSave}
+            onClick={() => void save()}
+            type="button"
+          >
+            {isSaving ? "저장 중" : "설정 저장"}
+          </button>
+        ) : null}
       </div>
 
       <label className={styles.cicdToggleField}>
         <input
           checked={draft.enabled}
-          onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
+          onChange={(event) => updateDraft((current) => ({ ...current, enabled: event.target.checked }))}
           type="checkbox"
         />
         CI/CD Pipeline 모니터링 사용
@@ -72,7 +95,7 @@ export function CicdMonitoringSettings({
         모니터링 branch
         <input
           disabled={!draft.enabled}
-          onChange={(event) => setDraft((current) => ({ ...current, monitorBranch: event.target.value }))}
+          onChange={(event) => updateDraft((current) => ({ ...current, monitorBranch: event.target.value }))}
           placeholder="main"
           value={draft.monitorBranch}
         />
@@ -81,13 +104,13 @@ export function CicdMonitoringSettings({
       <MonitoredPathField
         disabled={!draft.enabled}
         label="애플리케이션 경로"
-        onChange={(appPath) => setDraft((current) => ({ ...current, appPath }))}
+        onChange={(appPath) => updateDraft((current) => ({ ...current, appPath }))}
         value={draft.appPath}
       />
       <MonitoredPathField
         disabled={!draft.enabled}
         label="인프라 경로"
-        onChange={(infraPath) => setDraft((current) => ({ ...current, infraPath }))}
+        onChange={(infraPath) => updateDraft((current) => ({ ...current, infraPath }))}
         value={draft.infraPath}
       />
 
@@ -98,7 +121,7 @@ export function CicdMonitoringSettings({
       ) : null}
     </section>
   );
-}
+});
 
 function MonitoredPathField({
   disabled,
@@ -144,11 +167,18 @@ function MonitoredPathField({
   );
 }
 
-function toDraft(config: GitCicdMonitoringConfig): CicdMonitoringDraft {
-  return {
+function toDraft(
+  config: GitCicdMonitoringConfig,
+  initialDraft?: Partial<CicdMonitoringDraft>
+): CicdMonitoringDraft {
+  const draft = {
     enabled: config.enabled,
     monitorBranch: config.monitorBranch,
     appPath: config.appPath,
     infraPath: config.infraPath
   };
+
+  return config.validationStatus === "required"
+    ? { ...draft, ...initialDraft }
+    : draft;
 }

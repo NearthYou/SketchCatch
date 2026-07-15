@@ -1050,8 +1050,8 @@
 }
 
 .terraformPanel {
-  background: #f7f9fd;
-  color: #172033;
+  background: #ffffff;
+  color: #171717;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -1063,7 +1063,7 @@
 .terraformSplitLayout {
   --terraform-code-pane-ratio: 62%;
 
-  background: #f7f9fd;
+  background: #ffffff;
   display: grid;
   grid-template-rows: var(--terraform-code-pane-ratio) 10px minmax(0, 1fr);
   height: 100%;
@@ -1072,11 +1072,13 @@
 }
 
 .terraformCodePane {
+  background: #ffffff;
   min-height: 0;
   overflow: hidden;
 }
 
 .terraformIssuesPane {
+  background: #ffffff;
   min-height: 0;
   overflow: hidden;
 }
@@ -1086,16 +1088,16 @@
 }
 
 .terraformSplitResizeHandle {
-  background: #ffffff;
-  border-bottom: 1px solid #dce3ee;
-  border-top: 1px solid #dce3ee;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f3;
+  border-top: 1px solid #f0f0f3;
   cursor: row-resize;
   min-height: 10px;
   position: relative;
 }
 
 .terraformSplitResizeHandle::before {
-  background: #9ca3af;
+  background: #cccccc;
   border-radius: 999px;
   content: "";
   height: 2px;
@@ -1108,13 +1110,13 @@
 
 .terraformSplitResizeHandle:hover,
 .terraformSplitResizeHandle:focus-visible {
-  background: #f8fafc;
+  background: #f0f0f3;
   outline: none;
 }
 
 .terraformSplitResizeHandle:hover::before,
 .terraformSplitResizeHandle:focus-visible::before {
-  background: #64748b;
+  background: #60646c;
 }
 
 .terraformTopBar {
@@ -2025,30 +2027,6 @@
   color: #475569;
 }
 
-.terraformDiagnosticAiButton {
-  align-items: center;
-  background: var(--workspace-accent, #000000);
-  border: 1px solid var(--workspace-accent, #000000);
-  border-radius: 6px;
-  color: #ffffff;
-  cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 900;
-  justify-content: center;
-  justify-self: start;
-  min-height: 28px;
-  padding: 0 9px;
-}
-
-.terraformDiagnosticAiButton:hover,
-.terraformDiagnosticAiButton:focus-visible {
-  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
-  border-color: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
-  outline: none;
-}
-
 .terraformDialogBackdrop {
   align-items: center;
   backdrop-filter: blur(6px);
@@ -2397,126 +2375,6 @@
   color: #334155;
 }
 
-.aiTerraformPreviewAssessment {
-  gap: 14px;
-}
-
-.aiTerraformPreviewAssessment .aiResultSummary {
-  color: #172033;
-  font-size: 15px;
-  font-weight: 850;
-  line-height: 1.55;
-}
-
-.aiTerraformPreviewConclusion {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  display: grid;
-  gap: 7px;
-  padding: 13px 14px;
-}
-
-.aiTerraformPreviewConclusion strong {
-  color: #1d4ed8;
-  font-size: 13px;
-  font-weight: 950;
-}
-
-.aiTerraformPreviewConclusion p {
-  color: #172033;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.55;
-  margin: 0;
-}
-
-.aiTerraformPreviewAgentGrid {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.aiTerraformPreviewAgentCard {
-  background: #ffffff;
-  border: 1px solid #d7e3f3;
-  border-radius: 8px;
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 12px;
-}
-
-.aiTerraformPreviewAgentCard span {
-  color: #1d4ed8;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.aiTerraformPreviewAgentCard strong {
-  color: #172033;
-  font-size: 14px;
-  font-weight: 950;
-}
-
-.aiTerraformPreviewAgentCard p {
-  color: #334155;
-  font-size: 13px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.aiTerraformPreviewAgentCard p:last-child {
-  color: #475569;
-}
-
-.terraformIssueGuidanceList {
-  display: grid;
-  gap: 7px;
-  margin: 0;
-}
-
-.terraformIssueFixPlan {
-  background: #f8fbff;
-  border: 1px solid #cfe0f4;
-  border-radius: 6px;
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-}
-
-.terraformIssueFixPlanHeader {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.terraformIssueFixPlanHeader strong {
-  color: #172033;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.terraformIssueFixPlanHeader span {
-  color: #1f4f82;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.terraformIssueFixPlan p,
-.terraformIssueFixPlan li {
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.terraformIssueFixPlan .terraformIssueFixPlanNotice {
-  color: #9a3412;
-  font-weight: 850;
-}
-
 .terraformIssueCodePreview {
   display: grid;
   gap: 8px;
@@ -2524,13 +2382,13 @@
 }
 
 .terraformIssueCodeFrame {
-  background: #ffffff;
-  border: 1px solid #d7e3f3;
-  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .terraformIssueCodeFrame strong {
@@ -2540,27 +2398,27 @@
 }
 
 .terraformIssueCodeFrame pre {
-  background: #0f172a;
-  border-radius: 4px;
-  color: #e2e8f0;
+  background: var(--workspace-surface-dark, #171717);
+  border-radius: 12px;
+  color: #ffffff;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
   margin: 0;
   min-width: 0;
   overflow-x: auto;
-  padding: 8px;
+  padding: 12px;
   white-space: pre;
 }
 
 .terraformIssueCodePreview section {
-  background: #ffffff;
-  border: 1px solid #d7e3f3;
-  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .terraformIssueCodePreview strong {
@@ -2570,16 +2428,16 @@
 }
 
 .terraformIssueCodePreview pre {
-  background: #0f172a;
-  border-radius: 4px;
-  color: #e2e8f0;
+  background: var(--workspace-surface-dark, #171717);
+  border-radius: 12px;
+  color: #ffffff;
   font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
   margin: 0;
   min-width: 0;
   overflow-x: auto;
-  padding: 8px;
+  padding: 12px;
   white-space: pre;
 }
 
@@ -2587,84 +2445,6 @@
   .terraformIssueCodePreview {
     grid-template-columns: 1fr;
   }
-
-  .aiTerraformPreviewAgentGrid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.terraformIssueFixPlan ol {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding-left: 18px;
-}
-
-.terraformIssueRawMessage {
-  color: rgba(30, 41, 59, 0.78);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.terraformIssueGuidanceList div {
-  display: grid;
-  gap: 2px;
-}
-
-.terraformIssueGuidanceList dt {
-  color: #172033;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.terraformIssueGuidanceList dd {
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.terraformIssuePillars {
-  display: grid;
-  gap: 7px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.terraformIssuePillars section {
-  background: #ffffff;
-  border: 1px solid #dfe7f4;
-  border-radius: 6px;
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-}
-
-.terraformIssuePillars strong {
-  color: #172033;
-  font-size: 12px;
-  font-weight: 950;
-}
-
-.terraformIssuePillars p,
-.terraformIssuePillars span,
-.terraformIssueActions li {
-  color: #475569;
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.terraformIssuePillars span {
-  color: #1f4f82;
-  font-weight: 850;
-}
-
-.terraformIssueActions {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding-left: 16px;
 }
 
 .aiHint {
@@ -2942,39 +2722,6 @@
   font-size: 12px;
   font-weight: 900;
   padding: 4px 7px;
-}
-
-.aiChatLauncher {
-  align-items: center;
-  background: var(--workspace-accent, #000000);
-  border: 1px solid var(--workspace-accent, #000000);
-  border-radius: 999px;
-  bottom: 24px;
-  box-shadow: 0 18px 44px color-mix(in srgb, var(--workspace-accent, #000000) 24%, transparent);
-  color: #ffffff;
-  cursor: pointer;
-  display: inline-flex;
-  height: 56px;
-  justify-content: center;
-  position: fixed;
-  right: 24px;
-  transition:
-    background 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.15s ease;
-  width: 56px;
-}
-
-.aiChatLauncher[data-right-panel-open="true"] {
-  right: calc(var(--right-panel-width) + 24px);
-}
-
-.aiChatLauncher:hover,
-.aiChatLauncher:focus-visible {
-  background: color-mix(in srgb, var(--workspace-accent, #000000) 88%, #000000);
-  box-shadow: 0 22px 54px color-mix(in srgb, var(--workspace-accent, #000000) 30%, transparent);
-  outline: none;
-  transform: translateY(-1px);
 }
 
 .aiChatOverlay {
@@ -5330,12 +5077,6 @@
     padding: 14px;
   }
 
-  .aiChatLauncher,
-  .aiChatLauncher[data-right-panel-open="true"] {
-    bottom: 76px;
-    right: 14px;
-  }
-
   .aiChatDock,
   .aiChatDock[data-right-panel-open="true"] {
     border-radius: 8px 8px 0 0;
@@ -5528,17 +5269,12 @@
 .terraformDiagnosticList li,
 .terraformPreviewExplanationPanel,
 .terraformPreviewExplanationResult,
-.terraformIssueFixPlan,
-.terraformIssueCodeFrame,
-.terraformIssueCodePreview section,
 .aiField textarea,
 .aiField input,
 .aiField select,
 .aiResultCard,
 .aiExplanation,
 .aiWarning,
-.aiTerraformPreviewConclusion,
-.aiTerraformPreviewAgentCard,
 .aiSafetyFindingCard,
 .aiSimulationCard,
 .aiChatAssistantMessage p,
@@ -5701,10 +5437,8 @@
 
 .aiPrimaryButton,
 .deploymentPrimaryButton,
-.aiChatLauncher,
 .aiChatSendButton,
-.aiChatSelectionSubmitButton,
-.terraformDiagnosticAiButton {
+.aiChatSelectionSubmitButton {
   background: var(--workspace-accent, #000000);
   border-color: var(--workspace-accent, #000000);
   color: #ffffff;
@@ -5714,14 +5448,10 @@
 .aiPrimaryButton:not(:disabled):focus-visible,
 .deploymentPrimaryButton:not(:disabled):hover,
 .deploymentPrimaryButton:not(:disabled):focus-visible,
-.aiChatLauncher:hover,
-.aiChatLauncher:focus-visible,
 .aiChatSendButton:not(:disabled):hover,
 .aiChatSendButton:not(:disabled):focus-visible,
 .aiChatSelectionSubmitButton:hover,
-.aiChatSelectionSubmitButton:focus-visible,
-.terraformDiagnosticAiButton:hover,
-.terraformDiagnosticAiButton:focus-visible {
+.aiChatSelectionSubmitButton:focus-visible {
   background: var(--workspace-accent-active, #1a1a1a);
   border-color: var(--workspace-accent-active, #1a1a1a);
   box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
@@ -5758,6 +5488,547 @@
 }
 
 .deploymentPrimaryButton {
+  background: var(--workspace-accent, #000000);
+  border-color: var(--workspace-accent, #000000);
+  color: #ffffff;
+}
+
+.aiChatCloseButton:focus-visible,
+.aiChatTabButton:focus-visible,
+.aiChatClearButton:focus-visible,
+.aiChatSuggestionButton:focus-visible,
+.aiChatSelectionSubmitButton:focus-visible,
+.aiChatVoiceButton:focus-visible,
+.aiChatSendButton:focus-visible {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px #171717;
+  outline: none;
+}
+
+.aiChatOverlay {
+  z-index: 1300;
+}
+
+.aiChatDock {
+  border-radius: 0;
+  border-width: 1px 0 0 1px;
+  bottom: 0;
+  box-shadow: -20px 0 48px rgb(23 23 23 / 12%);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: none;
+  min-height: 0;
+  right: 0;
+  top: 64px;
+  width: clamp(360px, 31vw, 420px);
+  z-index: 1301;
+}
+
+.aiChatChrome {
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  min-width: 0;
+}
+
+.aiChatDock[data-right-panel-open="true"] {
+  right: var(--right-panel-width, 0px);
+  width: min(420px, calc(100vw - var(--right-panel-width, 0px)));
+}
+
+.aiChatHeader {
+  min-height: 64px;
+  padding: 12px 20px;
+}
+
+.aiChatHeader span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.aiChatHeader h2 {
+  font-size: 18px;
+}
+
+.aiChatStatusBar {
+  align-items: center;
+  background: var(--workspace-surface-muted, #fafafa);
+  border-bottom: 1px solid var(--workspace-line, #f0f0f3);
+  display: flex;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 20px;
+}
+
+.aiChatStatusBar > div {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aiChatCancelRequestButton {
+  background: var(--workspace-surface, #ffffff);
+  border: 1px solid var(--workspace-line-strong, #dcdee0);
+  border-radius: 8px;
+  color: var(--workspace-text, #171717);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.aiChatCancelRequestButton:hover,
+.aiChatCancelRequestButton:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-text, #171717);
+  outline: none;
+}
+
+.aiChatStatusBar strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+}
+
+.aiChatStatusBar p {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aiChatStatusMark {
+  background: #16a34a;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.aiChatStatusBar[data-status="처리 중"] .aiChatStatusMark {
+  background: #ab6400;
+}
+
+.aiChatStatusBar[data-status="요청 오류"] .aiChatStatusMark {
+  background: #b42318;
+}
+
+.aiChatStatusBar[data-status="적용 대기"] .aiChatStatusMark {
+  background: #8145b5;
+}
+
+.aiChatTabBar {
+  gap: 10px;
+  padding: 10px 20px;
+}
+
+.aiChatTabs {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0;
+}
+
+.aiChatTabButton {
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  min-height: 34px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: transparent;
+  border-bottom-color: var(--workspace-accent, #000000);
+  box-shadow: none;
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatClearButton {
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.aiChatTranscript {
+  background: var(--workspace-surface, #ffffff);
+  gap: 20px;
+  padding: 20px;
+}
+
+.aiChatAssistantMessage,
+.aiChatUserMessage {
+  max-width: 92%;
+}
+
+.aiChatAssistantMessage p,
+.aiChatUserMessage p {
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 12px 14px;
+}
+
+.aiChatAssistantMessage p {
+  box-shadow: none;
+}
+
+.aiChatUserMessage p {
+  border-radius: 12px 12px 4px 12px;
+}
+
+.aiChatAssistantMessage[data-kind="question"] p {
+  box-shadow: inset 3px 0 0 var(--workspace-accent, #000000);
+}
+
+.aiChatDraftCard {
+  border-color: var(--workspace-line, #f0f0f3);
+  border-radius: 12px;
+  gap: 14px;
+  overflow: hidden;
+  padding: 18px;
+}
+
+.aiResultContext {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aiStructuredResult {
+  display: grid;
+  min-width: 0;
+}
+
+.aiResultLead {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 0 16px;
+}
+
+.aiResultLead h3 {
+  color: var(--workspace-text, #171717);
+  font-size: 18px;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiResultLead p {
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiResultSection {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 0;
+}
+
+.aiResultSectionTitle {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  display: flex;
+  gap: 8px;
+}
+
+.aiResultSectionTitle svg {
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+.aiResultSectionTitle h4 {
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aiResultCheckList {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aiResultCheckList li {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 8px minmax(0, 1fr);
+  min-width: 0;
+  padding: 11px 0;
+}
+
+.aiResultCheckList li + li {
+  border-top: 1px solid var(--workspace-line-soft, #f5f5f7);
+}
+
+.aiResultCheckMark {
+  background: var(--workspace-text, #171717);
+  border-radius: 999px;
+  height: 7px;
+  margin-top: 6px;
+  width: 7px;
+}
+
+.aiResultCheckList li[data-severity="medium"] .aiResultCheckMark {
+  background: var(--workspace-warning, #ab6400);
+}
+
+.aiResultCheckList li[data-severity="high"] .aiResultCheckMark {
+  background: #b42318;
+}
+
+.aiResultCheckList li > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.aiResultCheckList strong {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.aiResultCheckHeading {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.aiResultCheckHeading > span {
+  color: var(--workspace-muted, #60646c);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.aiResultCheckList li[data-severity="medium"] .aiResultCheckHeading > span {
+  color: var(--workspace-warning, #ab6400);
+}
+
+.aiResultCheckList li[data-severity="high"] .aiResultCheckHeading > span {
+  color: #b42318;
+}
+
+.aiResultCheckList p {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.aiResultCheckList p + p {
+  color: var(--workspace-muted, #60646c);
+}
+
+.aiResultNextStep > p {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-radius: 12px;
+  color: var(--workspace-text, #171717);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 12px 14px;
+}
+
+.aiTechnicalDetails {
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  min-width: 0;
+}
+
+.aiTechnicalDetails summary {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+  list-style: none;
+  min-height: 44px;
+  padding: 2px 0 0;
+}
+
+.aiTechnicalDetails summary::-webkit-details-marker {
+  display: none;
+}
+
+.aiTechnicalDetails summary::after {
+  color: var(--workspace-muted, #60646c);
+  content: "+";
+  font-size: 18px;
+  font-weight: 400;
+  margin-left: auto;
+}
+
+.aiTechnicalDetails[open] summary::after {
+  content: "−";
+}
+
+.aiTechnicalDetails summary:focus-visible {
+  border-radius: 8px;
+  box-shadow: 0 0 0 3px rgb(23 23 23 / 10%);
+  outline: 1px solid var(--workspace-text, #171717);
+  outline-offset: 2px;
+}
+
+.aiTechnicalDetailsBody {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-radius: 12px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.aiTechnicalMeta {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  min-width: 0;
+}
+
+.aiTechnicalMeta > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.aiTechnicalMeta dt,
+.aiTechnicalList > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.aiTechnicalMeta dd,
+.aiTechnicalList li {
+  color: var(--workspace-muted, #60646c);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.aiTechnicalList {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.aiTechnicalList ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.aiChatComposer,
+.aiChatDock[data-chat-tab="errors"] .aiChatComposer,
+.aiChatDock[data-chat-tab="preview"] .aiChatComposer {
+  background: var(--workspace-surface, #ffffff);
+  display: grid;
+  gap: 8px;
+  padding: 12px 20px max(16px, env(safe-area-inset-bottom));
+}
+
+.aiChatInput {
+  gap: 4px;
+}
+
+.aiChatInput textarea {
+  border-radius: 8px;
+  max-height: 132px;
+  min-height: 48px;
+  padding: 11px 12px;
+}
+
+.aiChatVoiceButton,
+.aiChatSendButton {
+  min-height: 48px;
+}
+
+.aiChatSendButton {
+  border-radius: 8px;
+  padding: 0 16px;
+}
+
+@media (max-width: 768px) {
+  .aiChatOverlay {
+    background: var(--workspace-surface, #ffffff);
+  }
+
+  .aiChatDock,
+  .aiChatDock[data-right-panel-open="true"] {
+    border: 0;
+    bottom: 0;
+    height: 100dvh;
+    left: 0;
+    min-height: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  .aiChatHeader,
+  .aiChatStatusBar,
+  .aiChatTabBar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .aiChatTranscript {
+    padding: 16px;
+  }
+
+  .aiChatComposer,
+  .aiChatDock[data-chat-tab="errors"] .aiChatComposer,
+  .aiChatDock[data-chat-tab="preview"] .aiChatComposer {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .aiChatInput {
+    grid-column: 1 / -1;
+  }
+
+  .aiChatVoiceButton,
+  .aiChatSendButton {
+    align-self: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aiChatCloseButton,
+  .aiChatTabButton,
+  .aiChatSuggestionButton,
+  .aiChatVoiceButton,
+  .aiChatSendButton {
+    transition: none;
+  }
+}
+
+.aiChatSendButton {
   background: var(--workspace-accent, #000000);
   border-color: var(--workspace-accent, #000000);
   color: #ffffff;
@@ -6521,13 +6792,6 @@
   border-color: var(--workspace-line-strong, #dcdee0);
   color: var(--workspace-text, #171717);
   outline: none;
-}
-
-.aiChatLauncher {
-  background: var(--workspace-accent, #000000);
-  border-color: var(--workspace-accent, #000000);
-  box-shadow: 0 18px 44px rgba(23, 23, 23, 0.16);
-  color: #ffffff;
 }
 
 .aiChatDock {
@@ -8214,7 +8478,6 @@
     right: 10px;
     top: 74px;
   }
-
 }
 
 @media (max-width: 640px) {
@@ -8991,5 +9254,39 @@
   .deploymentHistoryGrid {
     padding-bottom: 0;
     padding-top: 0;
+  }
+}
+
+/* Keep the rebuilt AI Chat surface authoritative over legacy Workspace theme rules above. */
+.aiChatDock,
+.aiChatDock[data-right-panel-open="true"] {
+  border-radius: 0;
+  bottom: 0;
+  max-height: none;
+  top: 64px;
+}
+
+.aiChatTranscript {
+  background: var(--workspace-surface, #ffffff);
+}
+
+.aiChatTabButton[aria-selected="true"] {
+  background: transparent;
+  border-bottom-color: var(--workspace-accent, #000000);
+  color: var(--workspace-text, #171717);
+}
+
+.aiChatStatusBar[data-status="오래된 제안"] .aiChatStatusMark {
+  background: #b42318;
+}
+
+@media (max-width: 768px) {
+  .aiChatDock,
+  .aiChatDock[data-right-panel-open="true"] {
+    height: 100dvh;
+    left: 0;
+    right: 0;
+    top: 0;
+    width: 100%;
   }
 }

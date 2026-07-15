@@ -1,11 +1,16 @@
 import type {
+  ArchitectureBoardCompilationContextSignal,
   ArchitectureJson,
   DiagramEdge,
   DiagramJson,
   DiagramNode,
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
-import { createPlannedDiagramJson } from "./workspace-ai-diagram-adapter";
+import {
+  compileArchitectureBoard,
+  type ArchitectureBoardCompilationProposal
+} from "../architecture-board-compiler";
+import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
 
@@ -41,6 +46,7 @@ const UNKNOWN_RESOURCE_STYLE = {
 const UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX = "확인 필요";
 
 export type ReverseEngineeringBoardApplication = {
+  readonly compilation: ArchitectureBoardCompilationProposal;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly diagram: DiagramJson;
   readonly previewDiagram: DiagramJson;
@@ -61,21 +67,32 @@ export type CreateReverseEngineeringBoardComparisonInput = {
 export function createReverseEngineeringBoardApplication(
   input: CreateReverseEngineeringBoardApplicationInput
 ): ReverseEngineeringBoardApplication {
-  const previewDiagram = createReverseEngineeringPreviewDiagram(input.result);
+  const preview = createReverseEngineeringPreview(input.result);
+  const previewDiagram = preview.diagram;
   const comparison = compareDiagrams(input.currentDiagram, previewDiagram);
 
   if (input.mode === "replace") {
     return {
+      compilation: preview.compilation,
       comparison,
       diagram: previewDiagram,
       previewDiagram
     };
   }
 
+  const appendDiagram = appendAdditionsToCurrentDiagram(input.currentDiagram, previewDiagram, comparison);
+  const compilation = compileReverseEngineeringAppendArchitecture(
+    input.currentDiagram,
+    appendDiagram,
+    new Set(comparison.additions.map((item) => item.nodeId)),
+    input.result
+  );
+
   return {
+    compilation,
     comparison,
-    diagram: appendAdditionsToCurrentDiagram(input.currentDiagram, previewDiagram, comparison),
-    previewDiagram
+    diagram: compilation.diagram,
+    previewDiagram: compilation.diagram
   };
 }
 
@@ -88,9 +105,94 @@ export function createReverseEngineeringBoardComparison(
 
 // 오래된 scan 기록에 UNKNOWN 노드가 남아 있어도 보드 중앙에는 올리지 않습니다.
 function createReverseEngineeringPreviewDiagram(result: ReverseEngineeringScanResult): DiagramJson {
-  return markReverseEngineeringDiagram(
-    createPlannedDiagramJson({ architectureJson: removeUnsupportedNodes(result.architectureJson) })
-  );
+  return createReverseEngineeringPreview(result).diagram;
+}
+
+function createReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
+  readonly compilation: ArchitectureBoardCompilationProposal;
+  readonly diagram: DiagramJson;
+} {
+  const compilation = compileReverseEngineeringArchitecture(result);
+  const diagram = markReverseEngineeringDiagram(compilation.diagram);
+
+  return {
+    compilation: { ...compilation, diagram },
+    diagram
+  };
+}
+
+// append는 원본 보드와 안전한 scan 추가분을 합친 뒤에만 Compiler에 넘깁니다.
+// 그래야 proposal의 quality/diff와 실제 승인·저장할 Board가 같은 상태를 가리킵니다.
+function compileReverseEngineeringAppendArchitecture(
+  currentDiagram: DiagramJson,
+  appendDiagram: DiagramJson,
+  reverseEngineeringNodeIds: ReadonlySet<string>,
+  result: ReverseEngineeringScanResult
+): ArchitectureBoardCompilationProposal {
+  const compilation = compileArchitectureBoard({
+    architecture: convertDiagramJsonToArchitectureJson(appendDiagram),
+    currentDiagram,
+    semanticContext: { signals: createReverseEngineeringContextSignals(result) },
+    trigger: "reverse-engineering"
+  });
+
+  return {
+    ...compilation,
+    diagram: markReverseEngineeringDiagram(compilation.diagram, reverseEngineeringNodeIds)
+  };
+}
+
+export function compileReverseEngineeringArchitecture(
+  result: ReverseEngineeringScanResult
+): ArchitectureBoardCompilationProposal {
+  return compileArchitectureBoard({
+    architecture: removeUnsupportedNodes(result.architectureJson),
+    semanticContext: { signals: createReverseEngineeringContextSignals(result) },
+    trigger: "reverse-engineering"
+  });
+}
+
+// Scan facts are not hard gates. Passing them through the Compiler keeps the imported
+// diagram, the review summary, and the user-accepted apply boundary on the same proposal.
+function createReverseEngineeringContextSignals(
+  result: ReverseEngineeringScanResult
+): ArchitectureBoardCompilationContextSignal[] {
+  return [
+    ...result.findings.map((finding) => ({
+      id: finding.id,
+      kind: "deployment" as const,
+      level: toFindingDiagnosticLevel(finding.severity),
+      summary: finding.title,
+      message: `${finding.description} ${finding.recommendation}`.trim(),
+      ...(finding.resourceId ? { relatedResourceIds: [finding.resourceId] } : {}),
+      penalty: finding.severity === "high" ? 500 : finding.severity === "medium" ? 200 : 50
+    })),
+    ...result.analysisExclusions.map((exclusion) => ({
+      id: exclusion.id,
+      kind: "provider" as const,
+      level: "warning" as const,
+      summary: `분석 제외: ${exclusion.reason}`,
+      message: exclusion.message,
+      relatedResourceIds: [exclusion.resourceId],
+      penalty: 150
+    })),
+    ...result.scanErrors.map((error) => ({
+      id: error.id,
+      kind: "provider" as const,
+      level: error.retryable ? "warning" as const : "error" as const,
+      summary: `스캔 ${error.stage}: ${error.reason}`,
+      message: error.message,
+      penalty: error.retryable ? 200 : 500
+    }))
+  ].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function toFindingDiagnosticLevel(
+  severity: ReverseEngineeringScanResult["findings"][number]["severity"]
+): ArchitectureBoardCompilationContextSignal["level"] {
+  if (severity === "high") return "error";
+  if (severity === "medium") return "warning";
+  return "info";
 }
 
 // 지원하지 않는 리소스는 오른쪽 확인 목록에서 보게 하고 Architecture Board에서는 제외합니다.
@@ -110,10 +212,15 @@ function removeUnsupportedNodes(architectureJson: ArchitectureJson): Architectur
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.
-function markReverseEngineeringDiagram(diagram: DiagramJson): DiagramJson {
+function markReverseEngineeringDiagram(
+  diagram: DiagramJson,
+  nodeIds?: ReadonlySet<string>
+): DiagramJson {
   return {
     ...diagram,
-    nodes: diagram.nodes.map(markReverseEngineeringNode)
+    nodes: diagram.nodes.map((node) =>
+      nodeIds === undefined || nodeIds.has(node.id) ? markReverseEngineeringNode(node) : node
+    )
   };
 }
 

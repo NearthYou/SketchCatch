@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type {
   AnalyzeSourceRepositoryResponse,
+  CreateGitHubProjectInstallUrlRequest,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   GitHubInstallationUserAuthorizationUrlResponse,
@@ -82,6 +83,13 @@ const githubUserAuthorizationCallbackQuerySchema = z
     state: z.string().trim().min(1).optional()
   })
   .passthrough();
+
+const createGitHubProjectInstallUrlBodySchema = z
+  .object({
+    repositoryUrl: z.url().max(500),
+    resumeKey: z.string().trim().min(8).max(128)
+  })
+  .strict();
 
 const connectGitHubRepositoryBodySchema = z
   .object({
@@ -298,6 +306,9 @@ export async function registerSourceRepositoryRoutes(
 
   app.post("/projects/:projectId/source-repositories/github/install-url", async (request, reply) => {
     const params = projectParamsSchema.parse(request.params);
+    const body = createGitHubProjectInstallUrlBodySchema.parse(
+      request.body
+    ) satisfies CreateGitHubProjectInstallUrlRequest;
     const { accessContext, repository } = await getSourceRepositoryRequestContext(
       request,
       options,
@@ -309,6 +320,8 @@ export async function registerSourceRepositoryRoutes(
       const result = await createGitHubInstallUrl(
         {
           projectId: params.projectId,
+          repositoryUrl: body.repositoryUrl,
+          resumeKey: body.resumeKey,
           accessContext,
           appSlug: runtime.appSlug,
           stateSecret: runtime.stateSecret

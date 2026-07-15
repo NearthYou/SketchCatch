@@ -55,6 +55,7 @@ flowchart TB
 | 책임 | 위치 | 금지 |
 | --- | --- | --- |
 | UI 표시와 사용자 승인 | `apps/web` | AWS SDK 직접 호출, Terraform CLI 실행 |
+| Architecture Board Compiler 제안 계산 | 초기에는 `apps/web`의 순수 in-process Module | DB 직접 변경, 승인 없는 Board mutation, Deployment Safety Gate 우회 |
 | Terraform 생성/검증 API | `apps/api` | 프론트에 실행 책임 위임 |
 | Terraform Plan/Apply/Destroy | `apps/api` 또는 ECS RunTask worker | 승인 없는 apply/destroy |
 | SketchCatch production infra Plan/Import/Apply | 승인된 GitHub Actions/운영자 경로 | product API/worker에서 호출, 승인 없는 state/resource mutation |
@@ -69,6 +70,8 @@ flowchart TB
 프론트엔드는 버튼과 상태를 보여줄 뿐 실제 클라우드 변경을 직접 수행하지 않는다. 실제 리소스 변경은 backend/worker에서 승인 게이트, 로그 마스킹, cleanup 경로를 갖춘 뒤 실행한다.
 
 음성 Requirement Input은 Amazon Transcribe로 전사한 뒤 사용자 확인을 거쳐 Requirement Prompt가 된다. AI, Bedrock, Amazon Q Assistance는 추천과 설명을 보강하지만 Practice Architecture, IaC Preview, Git 변경, Deployment 실행을 사용자 수락 없이 변경하지 않는다.
+
+Architecture Board Compiler는 Resource·관계·설정·소속·시각 표현을 모두 바꾼 제안을 계산할 수 있고 입력 요구사항이나 Provider·Terraform 유효성과 충돌하는 후보도 허용한다. 이 권한은 제안 계산에만 적용하며, Compiler Interface는 결과와 전체 diff·diagnostics·Compilation Distance를 반환할 뿐 현재 Board를 직접 저장하지 않는다.
 
 ## SketchCatch production infrastructure 관리 경계
 
@@ -151,10 +154,13 @@ Representative Use Journey는 위 실제 서비스 흐름을 증명하는 발표
 - Live Observation API는 valid v2 manifest와 현재 verified connection을 가진 성공 Deployment에서만 15분 Store 세션을 만들고 인증 snapshot/SSE, capability-free audience URL, 제한된 public bootstrap/request를 제공한다.
 - Git/CI/CD Integration API는 Source Repository 연결, Terraform handoff, PR 생성, pipeline 상태 추적 흐름으로 확장한다.
 - Repository Analysis API는 repository 원문을 실행하거나 저장하지 않고, 마지막 구조화된 AI Handoff와 분석 revision만 RDS에 저장한다.
+- Public Repository Analysis 응답은 선택 branch의 실제 head SHA를 `repositoryRevision`으로 반환한다. GitHub App project state는 분석 target owner/name과 일회성 resume key를 서명하며 callback은 다른 repository로 fallback하지 않는다.
 - Reverse Engineering API는 Provider Adapter를 통해 기존 cloud Resource를 스캔하고 Practice Architecture와 import suggestion을 반환한다.
 - 실제 AWS credential과 Terraform 실행 세부는 프론트에 노출하지 않는다.
 
 API DTO와 모델명은 [데이터 모델](./data-models.md)을 따른다.
+
+Repository Analysis UI의 GitHub 왕복 복귀 상태는 Web `sessionStorage`에만 저장하는 30분짜리 schema v1 record다. callback은 target Repository를 연결하고 `ProjectDeploymentTarget`과 `GitCicdMonitoringConfig` 저장 성공을 모두 확인한 뒤 이 record의 key만 안전한 query로 돌려준다. 분석 화면은 project, active Repository, resume key가 모두 일치할 때 record를 한 번 소비해 상태를 복원하며 API 재분석을 호출하지 않는다. GitHub JWT state, installation token, credential과 원본 evidence 파일 내용은 browser storage에 저장하지 않는다.
 
 ## Deployment/CI/CD 콘솔 상태 경계
 

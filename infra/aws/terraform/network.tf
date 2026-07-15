@@ -119,6 +119,28 @@ resource "aws_vpc_security_group_egress_rule" "ecs_worker_all" {
   cidr_ipv4         = "0.0.0.0/0"
 }
 
+resource "aws_vpc_security_group_ingress_rule" "runtime_cache_from_ecs_api" {
+  count = var.runtime_cache_security_group_id == "" ? 0 : 1
+
+  security_group_id            = var.runtime_cache_security_group_id
+  description                  = "Allow SketchCatch ECS API tasks to reach the internal Runtime Cache"
+  ip_protocol                  = "tcp"
+  from_port                    = var.runtime_cache_port
+  to_port                      = var.runtime_cache_port
+  referenced_security_group_id = aws_security_group.ecs_service.id
+}
+
+resource "aws_vpc_security_group_ingress_rule" "runtime_cache_from_ecs_worker" {
+  count = var.runtime_cache_security_group_id != "" && var.enable_ecs_worker_dispatch ? 1 : 0
+
+  security_group_id            = var.runtime_cache_security_group_id
+  description                  = "Allow SketchCatch one-off ECS workers to reach the internal Runtime Cache"
+  ip_protocol                  = "tcp"
+  from_port                    = var.runtime_cache_port
+  to_port                      = var.runtime_cache_port
+  referenced_security_group_id = aws_security_group.ecs_worker.id
+}
+
 resource "aws_vpc_security_group_ingress_rule" "rds_from_ecs_worker" {
   count = var.worker_rds_security_group_id == "" ? 0 : 1
 

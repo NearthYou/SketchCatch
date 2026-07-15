@@ -8,7 +8,14 @@ import type {
   DesignSimulationResult,
   LlmExplanation
 } from "@sketchcatch/types";
+import type { ReactNode } from "react";
+import { ArrowRight, Code2, ListChecks } from "lucide-react";
 import { SelectMenu } from "../../components/ui/SelectMenu";
+import {
+  createTerraformPreviewPresentation,
+  getWorkspaceAiResultSeverityLabel,
+  type WorkspaceAiResultCheck
+} from "./workspace-ai-result-presentation";
 import styles from "./workspace.module.css";
 
 export type AiRequestState = "idle" | "loading" | "error";
@@ -255,24 +262,122 @@ export function WorkspaceAiTerraformPreviewResult({
 }: {
   readonly preview: AiTerraformPreviewExplanationResult;
 }) {
+  const result = createTerraformPreviewPresentation(preview);
+
   return (
-    <div className={`${styles.aiResultStack} ${styles.aiTerraformPreviewAssessment}`}>
-      <p className={styles.aiResultSummary}>{preview.summary}</p>
-      <section className={styles.aiTerraformPreviewConclusion}>
-        <strong>결론</strong>
-        <p>{preview.consensusRecommendation}</p>
+    <div className={styles.aiStructuredResult}>
+      <section className={styles.aiResultLead}>
+        <h3>검토 요약</h3>
+        <p>{result.summary}</p>
       </section>
-      <div className={styles.aiTerraformPreviewAgentGrid}>
-        {preview.wellArchitectedGuidance.map((guidance) => (
-          <section key={guidance.pillar} className={styles.aiTerraformPreviewAgentCard}>
-            <span>{guidance.title}</span>
-            <strong>{formatAiSignalLabel(guidance.pillar)}</strong>
-            <p>{guidance.observation}</p>
-            <p>{guidance.recommendation}</p>
-          </section>
-        ))}
+
+      <WorkspaceAiResultChecks checks={result.checks} />
+
+      <WorkspaceAiResultNextStep>{result.nextStep}</WorkspaceAiResultNextStep>
+
+      <WorkspaceAiTechnicalDetails>
+        <dl className={styles.aiTechnicalMeta}>
+          <div>
+            <dt>원문 요약</dt>
+            <dd>{result.technical.rawSummary}</dd>
+          </div>
+          <div>
+            <dt>원문 권장 사항</dt>
+            <dd>{result.technical.rawRecommendation}</dd>
+          </div>
+          {result.technical.provider ? (
+            <div>
+              <dt>응답 제공자</dt>
+              <dd>{result.technical.provider}</dd>
+            </div>
+          ) : null}
+        </dl>
+        {result.technical.resources.length > 0 ? (
+          <WorkspaceAiTechnicalList title="감지한 리소스" items={result.technical.resources} />
+        ) : null}
+        {result.technical.findings.length > 0 ? (
+          <WorkspaceAiTechnicalList title="점검 원문" items={result.technical.findings} />
+        ) : null}
+      </WorkspaceAiTechnicalDetails>
+    </div>
+  );
+}
+
+export function WorkspaceAiResultChecks({
+  checks
+}: {
+  readonly checks: readonly WorkspaceAiResultCheck[];
+}) {
+  if (checks.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className={styles.aiResultSection}>
+      <div className={styles.aiResultSectionTitle}>
+        <ListChecks aria-hidden="true" size={16} />
+        <h4>확인할 점</h4>
       </div>
-      <WorkspaceAiFindingList findings={preview.findings} />
+      <ul className={styles.aiResultCheckList}>
+        {checks.map((item) => (
+          <li data-severity={item.severity} key={item.id}>
+            <span aria-hidden="true" className={styles.aiResultCheckMark} />
+            <div>
+              <div className={styles.aiResultCheckHeading}>
+                <strong>{item.label}</strong>
+                {item.severity ? (
+                  <span>{getWorkspaceAiResultSeverityLabel(item.severity)}</span>
+                ) : null}
+              </div>
+              <p>{item.summary}</p>
+              {item.action && item.action !== item.summary ? <p>{item.action}</p> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export function WorkspaceAiResultNextStep({ children }: { readonly children: ReactNode }) {
+  return (
+    <section className={`${styles.aiResultSection} ${styles.aiResultNextStep}`}>
+      <div className={styles.aiResultSectionTitle}>
+        <ArrowRight aria-hidden="true" size={16} />
+        <h4>다음 단계</h4>
+      </div>
+      <p>{children}</p>
+    </section>
+  );
+}
+
+export function WorkspaceAiTechnicalDetails({ children }: { readonly children: ReactNode }) {
+  return (
+    <details className={styles.aiTechnicalDetails}>
+      <summary>
+        <Code2 aria-hidden="true" size={16} />
+        기술 정보 보기
+      </summary>
+      <div className={styles.aiTechnicalDetailsBody}>{children}</div>
+    </details>
+  );
+}
+
+export function WorkspaceAiTechnicalList({
+  items,
+  title
+}: {
+  readonly items: readonly string[];
+  readonly title: string;
+}) {
+  return (
+    <div className={styles.aiTechnicalList}>
+      <strong>{title}</strong>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${title}-${index}-${item}`}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }

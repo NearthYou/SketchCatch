@@ -98,6 +98,15 @@ export type BuildTemplateDiagramInput = {
   readonly shortId: string;
 };
 
+export type EcsFargateRuntimeNames = {
+  readonly ecrRepositoryName: string;
+  readonly clusterName: string;
+  readonly serviceName: string;
+  readonly taskFamily: string;
+  readonly containerName: string;
+  readonly logGroupName: string;
+};
+
 const TERRAFORM_LOCAL_NAME_MAX_LENGTH = 48;
 
 const LAMBDA_ASSUME_ROLE_POLICY = JSON.stringify({
@@ -1658,12 +1667,14 @@ export function buildTemplateDiagramJson(
   input: BuildTemplateDiagramInput
 ): DiagramJson {
   // Keep project metadata out of Terraform local names so Board labels and deployable identity remain separate.
-  void input;
   const definition = getTemplateDefinitionById(templateId);
-  const resourceById = new Map(definition.resources.map((resource) => [resource.id, resource]));
-  const resourceNames = createTemplateTerraformResourceNames(definition.resources);
+  const resources = templateId === "ecs-fargate-container-app"
+    ? applyEcsFargateRuntimeNames(definition.resources, input.projectSlug)
+    : definition.resources;
+  const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
+  const resourceNames = createTemplateTerraformResourceNames(resources);
   const nodeIdByResourceId = new Map(
-    definition.resources.map((resource) => [resource.id, `template-${templateId}-${resource.id}`])
+    resources.map((resource) => [resource.id, `template-${templateId}-${resource.id}`])
   );
   const nodeIdByPresentationId = new Map(
     definition.presentationNodes.map((node) => [
@@ -1675,7 +1686,7 @@ export function buildTemplateDiagramJson(
 
   return {
     nodes: [
-      ...definition.resources.map((resource) =>
+      ...resources.map((resource) =>
         createDiagramNode(
           resource,
           resourceById,
@@ -1729,6 +1740,90 @@ export function buildTemplateDiagramJson(
         }
       : {})
   };
+}
+
+export function createEcsFargateRuntimeNames(projectSlug: string): EcsFargateRuntimeNames {
+  const normalizedSlug = projectSlug
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 48)
+    .replace(/-+$/gu, "") || "sketchcatch";
+  const applicationName = `${normalizedSlug}-app`;
+
+  return {
+    ecrRepositoryName: applicationName,
+    clusterName: `${normalizedSlug}-cluster`,
+    serviceName: `${normalizedSlug}-service`,
+    taskFamily: applicationName,
+    containerName: "web",
+    logGroupName: `/ecs/${applicationName}`
+  };
+}
+
+function applyEcsFargateRuntimeNames(
+  resources: readonly TemplateResourceDefinition[],
+  projectSlug: string
+): readonly TemplateResourceDefinition[] {
+  const names = createEcsFargateRuntimeNames(projectSlug);
+
+  return resources.map((resource) => {
+    if (resource.id === "repository") {
+      return { ...resource, values: { ...resource.values, name: names.ecrRepositoryName } };
+    }
+    if (resource.id === "cluster") {
+      return { ...resource, values: { ...resource.values, name: names.clusterName } };
+    }
+    if (resource.id === "service") {
+      const loadBalancer = isTemplateRecord(resource.values.loadBalancer)
+        ? { ...resource.values.loadBalancer, containerName: names.containerName }
+        : resource.values.loadBalancer;
+      return {
+        ...resource,
+        values: { ...resource.values, name: names.serviceName, loadBalancer }
+      };
+    }
+    if (resource.id === "log-group") {
+      return { ...resource, values: { ...resource.values, name: names.logGroupName } };
+    }
+    if (resource.id === "task") {
+      return {
+        ...resource,
+        values: {
+          ...resource.values,
+          family: names.taskFamily,
+          containerDefinitions: renameEcsContainerDefinition(
+            resource.values.containerDefinitions,
+            names.containerName
+          )
+        }
+      };
+    }
+
+    return resource;
+  });
+}
+
+function renameEcsContainerDefinition(value: unknown, containerName: string): unknown {
+  if (typeof value !== "string") return value;
+
+  try {
+    const definitions: unknown = JSON.parse(value);
+    if (!Array.isArray(definitions)) return value;
+
+    return JSON.stringify(definitions.map((definition, index) =>
+      index === 0 && isTemplateRecord(definition)
+        ? { ...definition, name: containerName }
+        : definition
+    ));
+  } catch {
+    return value;
+  }
+}
+
+function isTemplateRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 const ECS_FARGATE_PRIMARY_RELATIONSHIP_IDS = new Set([

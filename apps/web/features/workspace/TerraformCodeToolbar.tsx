@@ -1,4 +1,5 @@
-import { ArrowLeft, ChevronDown, FileCode2, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, FileCode2, X } from "lucide-react";
+import { TerraformAgentReviewButton } from "./TerraformAgentReviewButton";
 import styles from "./TerraformCodeToolbar.module.css";
 
 export type TerraformCodeToolbarState = {
@@ -53,7 +54,11 @@ export function TerraformCodeToolbar({
           </button>
         </header>
         <div className={styles.resourceActionBar}>
-          <TerraformExplanationButton actions={actions} state={state} />
+          <TerraformAgentReviewButton
+            disabled={!state.canRequestExplanation}
+            onRequest={actions.requestExplanation}
+            title={state.explanationLabel}
+          />
         </div>
       </>
     );
@@ -61,77 +66,61 @@ export function TerraformCodeToolbar({
 
   return (
     <header className={styles.terraformTopBar}>
-      <div className={styles.terraformFilePicker}>
-        <button
-          aria-expanded={state.isFileMenuOpen}
-          aria-haspopup="listbox"
-          className={styles.terraformFileButton}
-          onClick={actions.toggleFileMenu}
-          type="button"
-        >
-          <FileCode2 aria-hidden="true" size={16} />
-          <span>{state.activeFileName}</span>
-          <ChevronDown aria-hidden="true" size={15} />
-        </button>
-        {state.isFileMenuOpen ? (
-          <div className={styles.terraformFileMenu}>
-            <input
-              aria-label="Terraform 파일 검색"
-              className={styles.terraformFileSearch}
-              onChange={(event) => actions.searchFiles(event.currentTarget.value)}
-              placeholder="파일 검색"
-              value={state.fileSearchQuery}
-            />
-            <div className={styles.terraformFileList} role="listbox">
-              {state.fileOptions.map((fileName) => (
-                <button
-                  aria-selected={fileName === state.activeFileName}
-                  className={
-                    fileName === state.activeFileName
-                      ? styles.terraformFileOptionActive
-                      : styles.terraformFileOption
-                  }
-                  key={fileName}
-                  onClick={() => actions.selectFile(fileName)}
-                  role="option"
-                  type="button"
-                >
-                  {fileName}
-                </button>
-              ))}
-              {state.fileOptions.length === 0 ? (
-                <span className={styles.terraformFileEmpty}>일치하는 파일이 없습니다</span>
-              ) : null}
+      <div className={styles.terraformFileContext}>
+        <span className={styles.terraformToolbarLabel}>Terraform preview</span>
+        <div className={styles.terraformFilePicker}>
+          <button
+            aria-expanded={state.isFileMenuOpen}
+            aria-haspopup="listbox"
+            className={styles.terraformFileButton}
+            onClick={actions.toggleFileMenu}
+            type="button"
+          >
+            <FileCode2 aria-hidden="true" size={16} />
+            <span>{state.activeFileName}</span>
+            <ChevronDown aria-hidden="true" size={15} />
+          </button>
+          {state.isFileMenuOpen ? (
+            <div className={styles.terraformFileMenu}>
+              <input
+                aria-label="Terraform 파일 검색"
+                className={styles.terraformFileSearch}
+                onChange={(event) => actions.searchFiles(event.currentTarget.value)}
+                placeholder="파일 검색"
+                value={state.fileSearchQuery}
+              />
+              <div className={styles.terraformFileList} role="listbox">
+                {state.fileOptions.map((fileName) => (
+                  <button
+                    aria-selected={fileName === state.activeFileName}
+                    className={
+                      fileName === state.activeFileName
+                        ? styles.terraformFileOptionActive
+                        : styles.terraformFileOption
+                    }
+                    key={fileName}
+                    onClick={() => actions.selectFile(fileName)}
+                    role="option"
+                    type="button"
+                  >
+                    {fileName}
+                  </button>
+                ))}
+                {state.fileOptions.length === 0 ? (
+                  <span className={styles.terraformFileEmpty}>일치하는 파일이 없습니다</span>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
       <div className={styles.terraformTopActions}>
-        <TerraformExplanationButton actions={actions} state={state} />
-        <span className={styles.terraformShortcut}>Ctrl/⌘ + S</span>
+        <TerraformAgentReviewButton
+          disabled={!state.canRequestExplanation}
+          onRequest={actions.requestExplanation}
+          title={state.explanationLabel}
+        />
       </div>
     </header>
-  );
-}
-
-// 현재 보이는 Terraform 범위만 AI 설명 요청으로 보냅니다.
-function TerraformExplanationButton({
-  actions,
-  state
-}: {
-  readonly actions: TerraformCodeToolbarActions;
-  readonly state: TerraformCodeToolbarState;
-}) {
-  return (
-    <button
-      className={styles.terraformPreviewButton}
-      disabled={!state.canRequestExplanation}
-      onClick={actions.requestExplanation}
-      title={state.explanationLabel}
-      type="button"
-    >
-      <Sparkles aria-hidden="true" size={14} />
-      <span>Preview 설명</span>
-    </button>
   );
 }

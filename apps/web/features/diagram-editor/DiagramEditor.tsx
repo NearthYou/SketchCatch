@@ -35,6 +35,7 @@ import {
   MousePointer2,
   Move,
   Redo2,
+  Sparkles,
   Undo2,
   ZoomIn,
   ZoomOut
@@ -50,6 +51,11 @@ import type {
 import type { DiagramEdge, DiagramJson, DiagramNode } from "../../../../packages/types/src";
 
 import { BOARD_THUMBNAIL_CAPTURE_CONTRACT } from "../../components/architecture-board/board-thumbnail-capture-contract";
+import {
+  createBoardAutoOrganizeProposal,
+  createArchitectureBoardCompilationPreview,
+  type ArchitectureBoardCompilationProposal
+} from "../architecture-board-compiler";
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
@@ -177,6 +183,10 @@ const BOARD_VIEWPORT_BOTTOM_INSET = 72;
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
+function formatCompilerScore(value: number): string {
+  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value);
+}
+
 function areBoardViewportFramesEqual(left: BoardViewportFrame, right: BoardViewportFrame): boolean {
   return (
     left.x === right.x &&
@@ -216,6 +226,25 @@ export function DiagramEditor(props: DiagramEditorProps) {
     <ReactFlowProvider>
       <DiagramEditorInner {...props} />
     </ReactFlowProvider>
+  );
+}
+
+function CompilerPreviewDetail({
+  emptyLabel,
+  items,
+  label,
+  title
+}: {
+  readonly emptyLabel: string;
+  readonly items: readonly string[];
+  readonly label: string;
+  readonly title?: string;
+}) {
+  return (
+    <div className={styles.compilerPreviewDetail}>
+      <span>{label}</span>
+      <strong title={title}>{items.length > 0 ? items.join(" · ") : emptyLabel}</strong>
+    </div>
   );
 }
 
@@ -263,6 +292,15 @@ function DiagramEditorInner({
   );
   const [previewAnnotations, setPreviewAnnotations] = useState<DiagramPreviewAnnotations | null>(
     () => (initialPreviewDiagram ? (initialPreviewAnnotations ?? null) : null)
+  );
+  const [compilerPreview, setCompilerPreview] =
+    useState<ArchitectureBoardCompilationProposal | null>(null);
+  const compilerPreviewSummary = useMemo(
+    () =>
+      compilerPreview === null
+        ? null
+        : createArchitectureBoardCompilationPreview(compilerPreview),
+    [compilerPreview]
   );
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
@@ -399,6 +437,7 @@ function DiagramEditorInner({
 
   const setPreviewDiagram = useCallback<DiagramEditorPanelContext["setPreviewDiagram"]>(
     (nextPreviewDiagram, nextPreviewAnnotations = null) => {
+      setCompilerPreview(null);
       shouldApplySourceViewportRef.current = true;
       setPreviewDiagramState(
         nextPreviewDiagram === null
@@ -908,6 +947,25 @@ function DiagramEditorInner({
     },
     [commitDiagramUpdate]
   );
+
+  const previewAutomaticOrganization = useCallback(() => {
+    const currentDiagram = diagramRef.current;
+    const proposal = createBoardAutoOrganizeProposal(currentDiagram);
+
+    setPreviewDiagram(proposal.diagram);
+    setCompilerPreview(proposal);
+  }, [setPreviewDiagram]);
+
+  const applyAutomaticOrganization = useCallback(() => {
+    if (compilerPreview === null) return;
+    applyDiagramJson(compilerPreview.diagram);
+    setCompilerPreview(null);
+  }, [applyDiagramJson, compilerPreview]);
+
+  const cancelAutomaticOrganization = useCallback(() => {
+    setPreviewDiagram(null);
+    setCompilerPreview(null);
+  }, [setPreviewDiagram]);
 
   const commitTerraformSourceAuthority = useCallback<
     DiagramEditorPanelContext["commitTerraformSourceAuthority"]
@@ -2950,6 +3008,16 @@ function DiagramEditorInner({
 
           <div className={styles.toolbarGroup} aria-label="History">
             <button
+              aria-label="Architecture Board 자동 정리 미리보기"
+              className={styles.iconButton}
+              disabled={isPreviewActive || diagram.nodes.length === 0}
+              onClick={previewAutomaticOrganization}
+              title="자동 정리"
+              type="button"
+            >
+              <Sparkles aria-hidden="true" size={16} />
+            </button>
+            <button
               aria-label="Undo"
               className={styles.iconButton}
               disabled={isPreviewActive || history.past.length === 0}
@@ -3006,7 +3074,62 @@ function DiagramEditorInner({
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        {isPreviewActive ? (
+        {compilerPreviewSummary ? (
+          <section
+            aria-label="자동 정리 미리보기"
+            className={`${styles.previewNotice} ${styles.compilerPreviewNotice}`}
+          >
+            <div className={styles.compilerPreviewHeader}>
+              <div>
+                <strong>자동 정리 미리보기</strong>
+                <span>
+                  점수 {formatCompilerScore(compilerPreviewSummary.quality.beforeScore)} →{" "}
+                  {formatCompilerScore(compilerPreviewSummary.quality.afterScore)} · 거리{" "}
+                  {formatCompilerScore(compilerPreviewSummary.quality.compilationDistance)}
+                </span>
+              </div>
+              <div className={styles.compilerPreviewActions}>
+                <button onClick={cancelAutomaticOrganization} type="button">
+                  취소
+                </button>
+                <button onClick={applyAutomaticOrganization} type="button">
+                  적용
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.compilerPreviewDetails}>
+              <CompilerPreviewDetail
+                emptyLabel="변경 없음"
+                items={compilerPreviewSummary.changeGroups.map(({ count, label }) => `${label} ${count}`)}
+                label="변경"
+              />
+              <CompilerPreviewDetail
+                emptyLabel="진단 없음"
+                items={compilerPreviewSummary.diagnosticGroups.map(({ count, label }) => `${label} ${count}`)}
+                label="진단"
+              />
+              <CompilerPreviewDetail
+                emptyLabel="일반 규칙"
+                items={compilerPreviewSummary.referenceTemplateIds}
+                label="근거"
+                title={[
+                  `후보 ${compilerPreviewSummary.candidateId}`,
+                  `Compiler ${compilerPreviewSummary.compilerVersion}`
+                ].join(" · ")}
+              />
+            </div>
+
+            {compilerPreviewSummary.diagnosticSummaries.length > 0 ? (
+              <p className={styles.compilerPreviewDiagnostic}>
+                {compilerPreviewSummary.diagnosticSummaries.slice(0, 2).join(" · ")}
+                {compilerPreviewSummary.diagnosticSummaries.length > 2
+                  ? ` 외 ${compilerPreviewSummary.diagnosticSummaries.length - 2}`
+                  : ""}
+              </p>
+            ) : null}
+          </section>
+        ) : isPreviewActive ? (
           <div className={styles.previewNotice} role="status">
             미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
           </div>
