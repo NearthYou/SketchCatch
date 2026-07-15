@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-448ee2d7",
+  hash: "fnv1a-d7dd6f99",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -4029,7 +4029,7 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
           "label": "정적 웹 배포"
         }
       ],
-      "structuralFingerprint": "fnv1a-c4e2ec4b",
+      "structuralFingerprint": "fnv1a-9a68b0d4",
       "nodes": [
         {
           "id": "template-static-web-hosting-bucket",
@@ -4057,6 +4057,35 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "height": 96
           },
           "type": "aws_s3_bucket",
+          "zIndex": 1
+        },
+        {
+          "id": "template-static-web-hosting-bucket-policy",
+          "kind": "resource",
+          "label": "S3 Bucket Policy",
+          "locked": false,
+          "metadata": {
+            "parentAreaNodeId": "template-static-web-hosting-presentation-region"
+          },
+          "parameters": {
+            "resourceType": "aws_s3_bucket_policy",
+            "resourceName": "bucket_policy",
+            "fileName": "main.tf",
+            "terraformBlockType": "resource",
+            "values": {
+              "bucket": "aws_s3_bucket.bucket.id",
+              "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"AllowCloudFrontServicePrincipalReadOnly\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"cloudfront.amazonaws.com\"},\"Action\":\"s3:GetObject\",\"Resource\":\"${aws_s3_bucket.bucket.arn}/*\",\"Condition\":{\"StringEquals\":{\"AWS:SourceArn\":\"${aws_cloudfront_distribution.distribution.arn}\"}}}]}"
+            }
+          },
+          "position": {
+            "x": 440,
+            "y": 320
+          },
+          "size": {
+            "width": 124,
+            "height": 96
+          },
+          "type": "aws_s3_bucket_policy",
           "zIndex": 1
         },
         {
@@ -4123,37 +4152,6 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
             "height": 96
           },
           "type": "aws_cloudfront_distribution",
-          "zIndex": 1
-        },
-        {
-          "id": "template-static-web-hosting-index-object",
-          "kind": "resource",
-          "label": "Index Document",
-          "locked": false,
-          "metadata": {
-            "parentAreaNodeId": "template-static-web-hosting-presentation-region"
-          },
-          "parameters": {
-            "resourceType": "aws_s3_object",
-            "resourceName": "index_object",
-            "fileName": "main.tf",
-            "terraformBlockType": "resource",
-            "values": {
-              "bucket": "aws_s3_bucket.bucket.id",
-              "key": "index.html",
-              "contentType": "text/html; charset=utf-8",
-              "content": "<!doctype html><html><head><meta charset=\"utf-8\"><title>SketchCatch</title></head><body><h1>SketchCatch Static Web</h1></body></html>"
-            }
-          },
-          "position": {
-            "x": 440,
-            "y": 160
-          },
-          "size": {
-            "width": 124,
-            "height": 96
-          },
-          "type": "aws_s3_object",
           "zIndex": 1
         },
         {
@@ -4234,21 +4232,21 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "edges": [
         {
-          "id": "template-static-web-hosting-bucket-index",
-          "label": "stores",
-          "sourceNodeId": "template-static-web-hosting-bucket",
-          "targetNodeId": "template-static-web-hosting-index-object",
-          "type": "smoothstep",
-          "sourceHandleId": "handle-right",
-          "targetHandleId": "handle-left"
-        },
-        {
           "id": "template-static-web-hosting-bucket-oac",
           "label": "origin",
           "sourceNodeId": "template-static-web-hosting-bucket",
           "targetNodeId": "template-static-web-hosting-oac",
           "type": "smoothstep",
           "sourceHandleId": "handle-bottom",
+          "targetHandleId": "handle-right"
+        },
+        {
+          "id": "template-static-web-hosting-bucket-policy-bucket",
+          "label": "restricts",
+          "sourceNodeId": "template-static-web-hosting-bucket-policy",
+          "targetNodeId": "template-static-web-hosting-bucket",
+          "type": "smoothstep",
+          "sourceHandleId": "handle-left",
           "targetHandleId": "handle-right"
         },
         {

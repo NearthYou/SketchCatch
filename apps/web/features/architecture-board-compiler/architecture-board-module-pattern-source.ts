@@ -79,8 +79,7 @@ const MODULE_PATTERN_SEEDS: readonly ArchitectureBoardModulePatternSeed[] = [
       "aws_s3_bucket_policy",
       "aws_s3_bucket_public_access_block",
       "aws_s3_bucket_versioning",
-      "aws_s3_bucket_website_configuration",
-      "aws_s3_object"
+      "aws_s3_bucket_website_configuration"
     ]
   },
   {

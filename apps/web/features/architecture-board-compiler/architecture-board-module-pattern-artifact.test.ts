@@ -143,6 +143,25 @@ test("generator는 이름 있는 기능별·용도별 Module pattern을 실제 T
   assert.equal(relationalAddresses.has("aws_subnet.app_subnet_b"), false);
   assert.equal(relationalAddresses.has("aws_subnet.public_subnet_a"), false);
   assert.equal(relationalAddresses.has("aws_subnet.public_subnet_b"), false);
+  const staticWebDelivery = modulePatterns.find(({ id }) => id === "static-web-delivery");
+  assert.ok(staticWebDelivery);
+  const staticWebResourceTypes = new Set(
+    staticWebDelivery.nodes.flatMap(({ parameters }) =>
+      parameters ? [parameters.resourceType] : []
+    )
+  );
+  assert.equal(staticWebResourceTypes.has("aws_s3_bucket_policy"), true);
+  assert.equal(staticWebResourceTypes.has("aws_s3_object"), false);
+  assert.ok(
+    staticWebDelivery.edges.some(
+      ({ label, sourceNodeId, targetNodeId }) =>
+        label === "restricts" &&
+        staticWebDelivery.nodes.find(({ id }) => id === sourceNodeId)?.parameters?.resourceType ===
+          "aws_s3_bucket_policy" &&
+        staticWebDelivery.nodes.find(({ id }) => id === targetNodeId)?.parameters?.resourceType ===
+          "aws_s3_bucket"
+    )
+  );
   assert.deepEqual(sourceArtifact, generatedArchitectureBoardKnowledgeArtifact);
 });
 
