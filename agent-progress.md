@@ -7,7 +7,7 @@ Short English-only working log for the current agent context. Older records are 
 - Branch `codex/fix-live-observation-redis-readiness` adds runtime-owned Redis ingress from the current ECS API and worker security groups to the external Runtime Cache security group, with fail-closed Terraform preconditions.
 - PR #423 is open. Review-only production run `29385936278` resolved the Runtime Cache CloudFormation outputs and produced a targeted plan of `2 add, 0 change, 0 destroy` for the API/worker Redis ingress rules.
 - The complete runtime plan also contains unrelated drift (`5 add, 7 change, 2 destroy`), so it must not be applied as the incident repair.
-- Production still returns `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE` until an approved production runtime plan supplies the CloudFormation `SecurityGroupId` output and applies the two ingress rules.
+- Approved apply run `29386749008` failed before Terraform apply because `GitHubActionsDeployRole` received `403 Forbidden` on the exact runtime state object. The plan artifact was deleted, no cloud mutation occurred, and production still returns `503 LIVE_OBSERVATION_COLLECTOR_UNAVAILABLE`.
 - Production request `req-c2` was a local Git/CI/CD precondition conflict, not a duplicate GitHub resource: the target repository had no SketchCatch branch or PR, and project `0bdf56aa-68b7-4382-b37f-31d8996136c1` had no `project_deployment_targets` row.
 - The CI/CD console now loads the project deployment target, blocks PR creation before POST when confirmation or the ECS output URL is missing, and links directly to project target settings.
 - GitOps target conflicts expose stable precondition codes; mapped conflicts retain actionable Korean guidance and unknown conflicts use a neutral state-conflict message instead of the misleading duplicate-information message.
@@ -31,7 +31,10 @@ Short English-only working log for the current agent context. Older records are 
 - Hardened the review-only workflow to resolve the Runtime Cache stack outputs, verify VPC ownership, preserve Terraform detailed exit codes, and isolate an incident-only `runtime-cache-ingress` plan from unrelated runtime drift.
 - Verification: red/green production structure check, Terraform fmt/validate/test (2/2), harness, lint, typecheck, build, JSON parse, and diff checks pass. No AWS, Terraform apply, deployment, or cost-bearing mutation was performed; Git handoff was approved for the follow-up.
 - Production evidence: full review-only run `29385795235` exposed unrelated drift; targeted run `29385936278` passed with only two ingress creates and no updates or destroys.
-- Next: after separate apply approval, apply only the reviewed ingress targets and verify the bootstrap response changes from `503` to `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`.
+- The first approved apply run `29386749008` created and validated the same two-resource plan, but the apply job failed during backend initialization because the production deploy role lacked `s3:GetObject` on the runtime state. Terraform apply and state verification were skipped, the plan artifact was deleted, and the endpoint remained `503`.
+- Added exact state/lock object access and exact Runtime Cache security-group ingress create/readback permissions to the deploy-role policy template, with static assertions and operator documentation. These IAM permissions have not been applied to AWS.
+- Verification after the IAM template fix: policy JSON parse, production infrastructure structure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
+- Next: obtain separate approval to update `GitHubActionsDeployRole` from the reviewed policy template. After that change and a new explicit apply approval, dispatch one new targeted run and verify `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`.
 
 ### 2026-07-15 - Resume pending AWS connection setup after reload
 

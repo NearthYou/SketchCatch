@@ -7,6 +7,10 @@ const manifestPath = path.join(repositoryRoot, "infra/aws/production/import-mani
 const workflowPath = path.join(repositoryRoot, ".github/workflows/production-infra-plan.yml");
 const deployWorkflowPath = path.join(repositoryRoot, ".github/workflows/deploy-ecs.yml");
 const migrationWorkflowPath = path.join(repositoryRoot, ".github/workflows/migrate.yml");
+const deployPolicyPath = path.join(
+  repositoryRoot,
+  "infra/aws/iam/github-actions-deploy-policy.json"
+);
 const apiDockerfilePath = path.join(repositoryRoot, "docker/api.Dockerfile");
 const webDockerfilePath = path.join(repositoryRoot, "docker/web.Dockerfile");
 
@@ -24,6 +28,56 @@ const read = (relativePath) => {
 };
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+const deployPolicy = JSON.parse(fs.readFileSync(deployPolicyPath, "utf8"));
+const deployPolicyStatements = new Map(
+  deployPolicy.Statement.map((statement) => [statement.Sid, statement])
+);
+const runtimeStateObject =
+  "arn:aws:s3:::sketchcatch-terraform-state-555980271919-ap-northeast-2/production/ecs-foundation/terraform.tfstate";
+const runtimeStateLockObject = `${runtimeStateObject}.tflock`;
+const runtimeCacheSecurityGroup =
+  "arn:aws:ec2:ap-northeast-2:555980271919:security-group/sg-09d8b7030cba492b4";
+
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeTerraformStateObjectAccess")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeTerraformStateObjectAccess",
+      Effect: "Allow",
+      Action: ["s3:GetObject", "s3:PutObject"],
+      Resource: runtimeStateObject
+    }),
+  "deploy role must have exact runtime Terraform state object access"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeTerraformStateLockAccess")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeTerraformStateLockAccess",
+      Effect: "Allow",
+      Action: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      Resource: runtimeStateLockObject
+    }),
+  "deploy role must have exact runtime Terraform lock object access"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeCacheIngressCreate")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeCacheIngressCreate",
+      Effect: "Allow",
+      Action: "ec2:AuthorizeSecurityGroupIngress",
+      Resource: runtimeCacheSecurityGroup
+    }),
+  "deploy role must only create ingress on the production Runtime Cache security group"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowRuntimeCacheIngressReadback")) ===
+    JSON.stringify({
+      Sid: "AllowRuntimeCacheIngressReadback",
+      Effect: "Allow",
+      Action: ["ec2:DescribeSecurityGroupRules", "ec2:DescribeSecurityGroups"],
+      Resource: "*"
+    }),
+  "deploy role must be able to read back the created Runtime Cache ingress rules"
+);
 const expectedGroups = new Map([
   ["runtime", { root: "infra/aws/terraform", key: "production/ecs-foundation/terraform.tfstate" }],
   ["edge", { root: "infra/aws/production/edge", key: "production/edge/terraform.tfstate" }],
