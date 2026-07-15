@@ -46,7 +46,7 @@ flowchart TB
 | 파일 저장 | S3 | Terraform, export, image, tfplan, state/output artifact |
 | Runtime Cache | Redis | Deployment, Reverse Engineering, Git/CI/CD 상태와 15분 Live Observation 세션·집계 보조 |
 | IaC | Terraform | MVP 기준 IaC, 멀티 클라우드 확장 기반 |
-| AI 계층 | Bedrock, Amazon Q, OpenAI, Amazon Transcribe | 추천, 설명, Guardrails, AWS 특화 reasoning, 음성 전사 |
+| AI 계층 | Bedrock, Amazon Q, Amazon Transcribe | 추천, 설명, Guardrails, AWS 특화 reasoning, 음성 전사 |
 | 운영 배포 | ECS/Fargate, ALB, ECR | API/web 분리 서비스와 path routing |
 | CI/CD | GitHub Actions, OIDC | 장기 AWS key 없는 운영 배포 |
 
@@ -71,7 +71,7 @@ flowchart TB
 
 음성 Requirement Input은 Amazon Transcribe로 전사한 뒤 사용자 확인을 거쳐 Requirement Prompt가 된다. AI, Bedrock, Amazon Q Assistance는 추천과 설명을 보강하지만 Practice Architecture, IaC Preview, Git 변경, Deployment 실행을 사용자 수락 없이 변경하지 않는다.
 
-오류 분석과 에이전트 리뷰의 `hybrid` provider 체인은 `apps/api`가 소유한다. Web은 provider를 직접 호출하거나 선택하지 않고, API가 반환한 최종 설명과 비밀값이 제거된 provider 시도 metadata만 표시한다.
+오류 분석과 에이전트 리뷰의 AWS credit provider 체인은 `apps/api`가 소유한다. Web은 provider를 직접 호출하거나 선택하지 않고, API가 반환한 최종 설명과 비밀값이 제거된 provider 시도 metadata만 표시한다.
 
 Architecture Board Compiler는 Resource·관계·설정·소속·시각 표현을 모두 바꾼 제안을 계산할 수 있고 입력 요구사항이나 Provider·Terraform 유효성과 충돌하는 후보도 허용한다. 이 권한은 제안 계산에만 적용하며, Compiler Interface는 결과와 전체 diff·diagnostics·Compilation Distance를 반환할 뿐 현재 Board를 직접 저장하지 않는다.
 

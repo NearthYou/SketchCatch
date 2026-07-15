@@ -1962,7 +1962,7 @@ SSE는 연결 직후 전체 snapshot을 보내고 live count는 최대 1초, AWS
 
 AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한 artifact는 deterministic graph, generator, validation, Terraform CLI 결과를 거쳐야 한다.
 
-AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. `AI_BILLING_MODE=aws_credit_only`는 provider별 credit confirmation flag가 확인된 AWS provider만 허용한다. `AI_BILLING_MODE=hybrid`는 같은 AWS credit guard를 유지하면서 오류 분석과 에이전트 리뷰에 한해 Amazon Q, Bedrock, OpenAI, deterministic rule fallback 순서로 전환한다. 조건이 맞지 않는 provider는 호출하지 않고 안전한 시도 결과만 metadata에 남긴다.
+AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 오류 분석과 에이전트 리뷰는 Amazon Q, Bedrock, deterministic rule fallback 순서로 전환하며, 조건이 맞지 않는 provider는 호출하지 않고 안전한 시도 결과만 metadata에 남긴다.
 
 Architecture Draft는 사용자 최초 질의와 질문 답변을 `ArchitectureIntentPlan`으로 정규화한다. OpenAI normalizer는 이 단계에서만 선택적으로 사용하며 `patternIds`, 필수 리소스, 수량, 금지 capability, runtime topology, 리전과 가용성을 반환한다. OpenAI 결과는 deterministic normalizer 결과와 병합되고, `no EC2`, Fargate, 파일 업로드 없음과 같은 명시적 금지 조건이 우선한다.
 
@@ -2002,7 +2002,7 @@ type AiProviderMetadata = {
     outputCharacters?: number;
     outputTokensEstimate?: number;
   };
-  billingMode: "aws_credit_only" | "hybrid" | "standard" | "disabled";
+  billingMode: "aws_credit_only" | "standard" | "disabled";
   attempts?: AiProviderAttempt[];
   generatedAt: IsoDateTimeString;
 };
