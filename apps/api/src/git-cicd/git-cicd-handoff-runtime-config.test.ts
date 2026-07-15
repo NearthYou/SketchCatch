@@ -8,6 +8,20 @@ import {
   type GitCicdHandoffSourceRepositoryRecord
 } from "./git-cicd-handoff-service.js";
 
+test("GitOps handoff reports a stable code when the deployment target is missing", () => {
+  assert.throws(
+    () =>
+      assertGitOpsTarget(
+        undefined,
+        {} as GitCicdHandoffSourceRepositoryRecord,
+        { mode: "repository_root", path: "." }
+      ),
+    (error: unknown) =>
+      error instanceof GitCicdHandoffProviderConflictError &&
+      error.code === "PROJECT_DEPLOYMENT_TARGET_REQUIRED"
+  );
+});
+
 test("ECS GitOps handoff reports the required output URL for a null runtime config", () => {
   const target = {
     runtimeTargetKind: "ecs_fargate",

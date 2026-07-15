@@ -29,3 +29,10 @@ test("CI/CD exposes the Git handoff action that creates the deployment pull requ
   assert.match(source, /listGitCicdHandoffs/);
   assert.match(source, /CI\/CD PR 생성/);
 });
+
+test("CI/CD blocks PR creation until the project deployment target is ready", () => {
+  assert.match(source, /getProjectDeploymentTarget/);
+  assert.match(source, /getGitCicdDeploymentTargetBlocker/);
+  assert.match(source, /deploymentTargetBlocker !== null/);
+  assert.match(source, /프로젝트 배포 대상 설정 열기/);
+});

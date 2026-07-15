@@ -60,6 +60,53 @@ test("apiFetch identifies requests that receive no HTTP response", async (contex
   });
 });
 
+test("Git/CI/CD handoff conflicts keep the actionable server precondition", async () => {
+  const error = new ApiClientError(
+    409,
+    {
+      error: "conflict",
+      message: "DEPLOYMENT_OUTPUT_URL_REQUIRED"
+    },
+    {
+      method: "POST",
+      path: "/api/projects/project-id/git-cicd-handoffs",
+      requestId: "req-handoff-409"
+    }
+  );
+
+  assert.equal(
+    getApiErrorMessage(error, "CI/CD PR을 만들지 못했습니다."),
+    "ECS 배포 결과 URL이 설정되지 않았습니다. 프로젝트 배포 대상 설정에서 외부 HTTPS URL을 입력한 뒤 다시 시도해주세요. " +
+      "[POST /api/projects/project-id/git-cicd-handoffs · HTTP 409 · conflict · 요청 ID req-handoff-409]"
+  );
+});
+
+test("Git/CI/CD handoff explains a missing confirmed deployment target", () => {
+  for (const message of [
+    "GitOps application handoff requires a confirmed project deployment target",
+    "PROJECT_DEPLOYMENT_TARGET_REQUIRED"
+  ]) {
+    const error = new ApiClientError(409, { error: "conflict", message });
+
+    assert.equal(
+      getApiErrorMessage(error, "CI/CD PR을 만들지 못했습니다."),
+      "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요."
+    );
+  }
+});
+
+test("unknown conflicts use a neutral state-conflict message", () => {
+  const error = new ApiClientError(409, {
+    error: "conflict",
+    message: "UNMAPPED_CONFLICT"
+  });
+
+  assert.equal(
+    getApiErrorMessage(error, "요청을 완료하지 못했습니다."),
+    "현재 상태와 요청 조건이 충돌합니다. 최신 상태와 필요한 설정을 확인해주세요."
+  );
+});
+
 test("public AI requests use the same visible request diagnostics", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => {
