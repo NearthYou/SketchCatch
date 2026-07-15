@@ -2229,7 +2229,7 @@ type AiTerraformErrorExplanationResult = {
 };
 ```
 
-Terraform Preview 설명은 Terraform 코드를 실제 실행하지 않고, 감지한 resource block과 deterministic finding을 근거로 현재 다이어그램/IaC Preview를 평가하는 설명 DTO다. 에이전트 리뷰 성공 응답은 Amazon Q Business를 반드시 호출해 정상 결과를 받은 경우에만 반환하며, provider fallback을 정상 리뷰처럼 표시하지 않는다. 화면은 응답을 기다리는 동안 `Terraform 코드 구조 분석 -> 리소스 및 위험 점검 -> Amazon Q Well-Architected 검토 -> 검토 결과 정리` 단계를 보여주고, 완료 후에는 감지 리소스 나열보다 Well-Architected 6개 기준별 에이전트 평가와 최종 결론을 우선 표시한다. `detectedResources`는 legacy/LLM 근거 호환을 위해 유지하지만 사용자 화면의 주요 정보가 아니다.
+Terraform Preview 설명은 Terraform 코드를 실제 실행하지 않고, 감지한 resource block과 deterministic finding을 근거로 현재 다이어그램/IaC Preview를 평가하는 설명 DTO다. 에이전트 리뷰 성공 응답은 Amazon Q Business를 반드시 호출해 정상 결과를 받은 경우에만 반환하며, provider fallback을 정상 리뷰처럼 표시하지 않는다. AI 채팅의 에이전트 리뷰 탭 하단 버튼은 최신 Terraform 전체 파일 snapshot을 요청하며, 화면은 응답을 기다리는 동안 `Terraform 코드 구조 분석 -> 리소스 및 위험 점검 -> Amazon Q Well-Architected 검토 -> 검토 결과 정리` 단계를 보여준다. Amazon Q에는 3문장, 200~380자의 결론과 정해진 순서의 Well-Architected 6개 기준을 요청하되, 충분한 근거를 가진 더 긴 결론을 문장 수만으로 실패시키지 않는다. 완료된 응답은 줄바꿈과 `잘한 점`/`문제점` 표제를 제거해 정규화하며, 화면의 검토 요약은 가장 명확한 강점과 우선순위가 높은 문제를 기준별 결과에서 뽑아 표시한다. 각 기준은 위험도에 따라 `문제 / 필요한 조치` 또는 `잘된 점 / 확인된 설정`으로 보여주며, Terraform 속성은 의미를 풀어 쓴 한국어 문장으로 우선 표시한다. 근거가 없는 설정은 없다고 단정하지 않고 확인할 수 없다고 표현한다. `detectedResources`는 legacy/LLM 근거 호환을 위해 유지하지만 사용자 화면의 주요 정보가 아니다.
 
 ```ts
 type AiTerraformPreviewExplanationResult = {
