@@ -169,9 +169,11 @@ for (const marker of [
   "use_lockfile=true",
   "PRODUCTION_INFRA_RUNTIME_TFVARS_JSON",
   "runtime tfvars must be a JSON object",
+  "aws cloudformation list-stacks",
+  "aws cloudformation describe-stacks",
+  '.OutputKey == "RedisUrl"',
+  '.OutputKey == "SecurityGroupId"',
   "aws ec2 describe-security-groups",
-  "Name=tag:Name,Values=sketchcatch-runtime-cache",
-  "Name=tag:Component,Values=runtime-cache",
   ".runtime_cache_security_group_id = $security_group_id"
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);

@@ -126,22 +126,53 @@ jobs:
             > "${RUNNER_TEMP}/runtime.tfvars.json"
 
           runtime_vpc_id="$(jq -er '.vpc_id | select(type == "string" and length > 0)' "${RUNNER_TEMP}/runtime.tfvars.json")"
-          security_group_ids_json="$(
-            aws ec2 describe-security-groups \
-              --filters \
-                "Name=vpc-id,Values=${runtime_vpc_id}" \
-                "Name=tag:Name,Values=sketchcatch-runtime-cache" \
-                "Name=tag:Component,Values=runtime-cache" \
-              --query 'SecurityGroups[].GroupId' \
+          stack_names_json="$(
+            aws cloudformation list-stacks \
+              --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
+              --query 'StackSummaries[].StackName' \
               --output json
           )"
+          security_group_ids_json='[]'
+          while IFS= read -r stack_name; do
+            outputs_json="$(
+              aws cloudformation describe-stacks \
+                --stack-name "${stack_name}" \
+                --query 'Stacks[0].Outputs' \
+                --output json
+            )"
+            if ! jq -e 'any(.[]?; .OutputKey == "RedisUrl")' <<< "${outputs_json}" > /dev/null; then
+              continue
+            fi
+
+            stack_security_group_ids_json="$(
+              jq '[.[]? | select(.OutputKey == "SecurityGroupId") | .OutputValue]' <<< "${outputs_json}"
+            )"
+            security_group_ids_json="$(
+              jq -cn \
+                --argjson existing "${security_group_ids_json}" \
+                --argjson current "${stack_security_group_ids_json}" \
+                '$existing + $current | unique'
+            )"
+          done < <(jq -r '.[]' <<< "${stack_names_json}")
+
           security_group_count="$(jq 'length' <<< "${security_group_ids_json}")"
           if [ "${security_group_count}" -ne 1 ]; then
-            echo "::error::expected exactly one tagged Runtime Cache security group in the runtime VPC"
+            echo "::error::expected exactly one Runtime Cache CloudFormation stack with RedisUrl and SecurityGroupId outputs"
             exit 1
           fi
 
           security_group_id="$(jq -r '.[0]' <<< "${security_group_ids_json}")"
+          security_group_vpc_id="$(
+            aws ec2 describe-security-groups \
+              --group-ids "${security_group_id}" \
+              --query 'SecurityGroups[0].VpcId' \
+              --output text
+          )"
+          if [ "${security_group_vpc_id}" != "${runtime_vpc_id}" ]; then
+            echo "::error::Runtime Cache security group does not belong to the configured runtime VPC"
+            exit 1
+          fi
+
           jq --arg security_group_id "${security_group_id}" \
             '.runtime_cache_security_group_id = $security_group_id' \
             "${RUNNER_TEMP}/runtime.tfvars.json" \

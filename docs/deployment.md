@@ -685,7 +685,7 @@ Redis는 SketchCatch API의 내부 Runtime Cache입니다. 제품 resource catal
 
 운영에서는 `infra/aws/cloudformation/runtime-cache-elasticache.yml`로 ElastiCache Redis를 생성한 뒤 output `RedisUrl`을 API runtime의 `REDIS_URL`로 주입합니다. 이 리소스는 비용이 발생하며, API runtime security group에서만 접근 가능하게 제한해야 합니다.
 
-ECS 전환 뒤에는 CloudFormation stack output `SecurityGroupId`를 production runtime Terraform의 `runtime_cache_security_group_id`에 입력합니다. review-only production Plan 워크플로는 complete runtime tfvars의 VPC 안에서 `Name=sketchcatch-runtime-cache`, `Component=runtime-cache` 태그가 모두 일치하는 보안 그룹을 정확히 하나만 허용하고 이 값을 자동 주입합니다. runtime Terraform이 현재 ECS API 보안 그룹과, worker dispatch가 활성화된 경우 ECS worker 보안 그룹에서만 `runtime_cache_port`로 들어오는 ingress를 관리합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 연결이 없으면 plan을 실패시켜, ECS 이전 보안 그룹만 남은 상태에서 배포가 성공한 것처럼 보이지 않게 합니다.
+ECS 전환 뒤에는 CloudFormation stack output `SecurityGroupId`를 production runtime Terraform의 `runtime_cache_security_group_id`에 입력합니다. review-only production Plan 워크플로는 `RedisUrl`과 `SecurityGroupId` output을 함께 가진 Runtime Cache stack을 정확히 하나만 허용하고, 보안 그룹이 complete runtime tfvars의 VPC에 속하는지 검증한 뒤 이 값을 자동 주입합니다. runtime Terraform이 현재 ECS API 보안 그룹과, worker dispatch가 활성화된 경우 ECS worker 보안 그룹에서만 `runtime_cache_port`로 들어오는 ingress를 관리합니다. `live_observation_enabled=true` 또는 `enable_ecs_worker_dispatch=true`인데 이 연결이 없으면 plan을 실패시켜, ECS 이전 보안 그룹만 남은 상태에서 배포가 성공한 것처럼 보이지 않게 합니다.
 
 검증 대상:
 
