@@ -20,6 +20,7 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
   | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
   | "LIVE_OBSERVATION_GONE"
@@ -506,6 +507,16 @@ export type GitHubAppInstallUrlResponse = {
   expiresAt: IsoDateTimeString;
 };
 
+export type GitHubProjectConnectionTarget = {
+  owner: string;
+  name: string;
+};
+
+export type CreateGitHubProjectInstallUrlRequest = {
+  repositoryUrl: string;
+  resumeKey: string;
+};
+
 export type GitHubAppExistingInstallationCallbackUrlResponse = {
   callbackUrl: string;
   expiresAt: IsoDateTimeString;
@@ -541,6 +552,7 @@ export type AnalyzeSourceRepositoryRequest = {
 
 export type SourceRepositoryAnalysisResult = {
   repositoryUrl: string;
+  repositoryRevision: string;
   defaultBranch: string;
   availableBranches: string[];
   evidenceFiles: RepositoryAnalysisEvidenceFile[];
@@ -578,6 +590,8 @@ export type ListGitHubInstallationRepositoriesResponse =
       scope: "project";
       projectId: string;
       repositories: GitHubRepositoryCandidate[];
+      targetRepository: GitHubProjectConnectionTarget | null;
+      resumeKey: string | null;
     };
 
 export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
@@ -1170,7 +1184,7 @@ export type EcsFargateRuntimeConfig = {
   clusterName: string;
   serviceName: string;
   containerName: string;
-  outputUrl: string;
+  outputUrl: string | null;
 };
 
 export type LambdaRuntimeConfig = {
@@ -1558,6 +1572,7 @@ export type {
 
 export {
   buildTemplateDiagramJson,
+  createEcsFargateRuntimeNames,
   getTemplateDefinitionById,
   REPOSITORY_TEMPLATE_IDS,
   TEMPLATE_IDS,
@@ -1565,6 +1580,7 @@ export {
 } from "./template-definitions.ts";
 export type {
   BuildTemplateDiagramInput,
+  EcsFargateRuntimeNames,
   RepositoryTemplateId,
   TemplateDefinition,
   TemplateId,

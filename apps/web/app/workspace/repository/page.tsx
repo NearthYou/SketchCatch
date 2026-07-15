@@ -14,6 +14,7 @@ export default async function RepositoryStartPage({ searchParams }: RepositorySt
       <RepositoryStartClient
         initialDefaultBranch={getSingleValue(params?.defaultBranch) ?? ""}
         initialRepositoryUrl={getSingleValue(params?.repositoryUrl) ?? ""}
+        initialResumeKey={getSingleValue(params?.resumeKey) ?? ""}
         projectId={getSingleValue(params?.projectId) ?? ""}
         projectName={getSingleValue(params?.projectName) ?? "새 프로젝트"}
       />

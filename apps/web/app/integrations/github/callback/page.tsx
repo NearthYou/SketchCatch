@@ -1,47 +1,71 @@
 "use client";
 
-import { ArrowLeft, FileCode2, LoaderCircle, Settings2, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, Save, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { GitHubRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
 import { ProductBrand } from "../../../../components/ui/ProductBrand";
 import {
   connectGitHubSourceRepository,
   listGitHubInstallationRepositories
 } from "../../../../features/workspace/api";
 import { getApiErrorMessage } from "../../../../lib/api-client";
+import {
+  ProjectCicdMonitoringSettingsClient,
+  type ProjectCicdMonitoringSettingsHandle
+} from "../../../projects/[projectId]/settings/project-cicd-monitoring-settings-client";
+import {
+  ProjectDeploymentTargetSettingsClient,
+  type ProjectDeploymentTargetSettingsHandle
+} from "../../../projects/[projectId]/settings/project-deployment-target-settings-client";
+import {
+  readRepositoryAnalysisResume,
+  type RepositoryAnalysisResumeState
+} from "../../../workspace/repository/repository-analysis-resume";
+import {
+  createCallbackEcsDefaults,
+  saveCallbackSettings,
+  selectCallbackTarget
+} from "./github-callback-state";
 import styles from "./github-callback.module.css";
 
 type CallbackState =
-  | { readonly status: "loading" }
+  | { readonly status: "loading" | "connecting" }
   | { readonly message: string; readonly status: "error" }
   | {
-      readonly installationId: string;
       readonly projectId: string;
-      readonly repositories: readonly GitHubRepositoryCandidate[];
-      readonly state: string;
-      readonly status: "ready";
-    }
-  | { readonly status: "saving" };
+      readonly repository: SourceRepository;
+      readonly resume: RepositoryAnalysisResumeState;
+      readonly resumeKey: string;
+      readonly status: "configuring";
+    };
 
-// GitHub App에서 돌아온 사용자가 Repository 하나를 골라 프로젝트 시작 흐름을 이어가게 합니다.
+// GitHub App callback은 분석했던 Repository만 연결하고 두 필수 설정을 저장한 뒤 분석 화면으로 돌아갑니다.
 export default function GitHubIntegrationCallbackPage() {
   const router = useRouter();
+  const deploymentTargetRef = useRef<ProjectDeploymentTargetSettingsHandle>(null);
+  const gitOpsMonitoringRef = useRef<ProjectCicdMonitoringSettingsHandle>(null);
   const [callbackState, setCallbackState] = useState<CallbackState>({ status: "loading" });
-  const selectableCount = useMemo(
-    () =>
-      callbackState.status === "ready"
-        ? callbackState.repositories.filter((repository) => !repository.archived).length
-        : 0,
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState("");
+  const ecsDefaults = useMemo(
+    () => callbackState.status === "configuring"
+      ? createCallbackEcsDefaults(callbackState.resume)
+      : null,
     [callbackState]
   );
+  const monitoringDefaults = useMemo(
+    () => callbackState.status === "configuring"
+      ? createCallbackMonitoringDefaults(callbackState.resume, ecsDefaults?.sourceRoot ?? ".")
+      : undefined,
+    [callbackState, ecsDefaults?.sourceRoot]
+  );
 
-  // URL의 GitHub callback 값을 서버에 보내 선택 가능한 Repository를 불러옵니다.
   useEffect(() => {
     let cancelled = false;
 
-    async function loadRepositories(): Promise<void> {
+    async function connectTargetRepository(): Promise<void> {
       const searchParams = new URLSearchParams(window.location.search);
       const installationId = searchParams.get("installation_id")?.trim();
       const state = searchParams.get("state")?.trim();
@@ -61,57 +85,90 @@ export default function GitHubIntegrationCallbackPage() {
           router.replace("/dashboard/settings?github=connected");
           return;
         }
-        setCallbackState({
+        if (!result.targetRepository || !result.resumeKey) {
+          throw new Error("분석한 Repository 복귀 정보가 GitHub 연결에 포함되지 않았습니다.");
+        }
+
+        const target = selectCallbackTarget(result.repositories, result.targetRepository);
+        if (!target || target.archived) {
+          throw new Error(
+            "분석한 Repository에 대한 GitHub App 권한이 없습니다. GitHub 설정에서 해당 Repository 접근 권한을 추가해주세요."
+          );
+        }
+        const repositoryUrl = getRepositoryUrl(target);
+        const resume = readRepositoryAnalysisResume(window.sessionStorage, {
+          resumeKey: result.resumeKey,
+          projectId: result.projectId,
+          repositoryUrl
+        });
+        if (!resume) {
+          throw new Error("이전 Repository 분석 정보가 만료되었거나 현재 연결 대상과 일치하지 않습니다.");
+        }
+
+        setCallbackState({ status: "connecting" });
+        const connected = await connectGitHubSourceRepository({
+          githubRepositoryId: target.githubRepositoryId,
           installationId,
           projectId: result.projectId,
-          repositories: result.repositories,
-          state,
-          status: "ready"
+          state
+        });
+        if (cancelled) return;
+
+        window.history.replaceState(null, "", window.location.pathname);
+        setCallbackState({
+          status: "configuring",
+          projectId: result.projectId,
+          repository: connected,
+          resume,
+          resumeKey: result.resumeKey
         });
       } catch (error) {
         if (cancelled) return;
         setCallbackState({
           status: "error",
-          message: getApiErrorMessage(error, "Repository 목록을 불러오지 못했습니다.")
+          message: getCallbackErrorMessage(error)
         });
       }
     }
 
-    void loadRepositories();
+    void connectTargetRepository();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
-  // 사용자가 고른 Repository만 프로젝트에 연결하고 분석 시작 화면으로 돌아갑니다.
-  async function selectRepository(repository: GitHubRepositoryCandidate): Promise<void> {
-    if (callbackState.status !== "ready" || repository.archived) return;
-    setCallbackState({ status: "saving" });
+  function returnToRepositoryAnalysis(): void {
+    if (callbackState.status !== "configuring") return;
 
-    try {
-      const connected = await connectGitHubSourceRepository({
-        githubRepositoryId: repository.githubRepositoryId,
-        installationId: callbackState.installationId,
-        projectId: callbackState.projectId,
-        state: callbackState.state
-      });
-      const params = new URLSearchParams({
-        projectId: connected.projectId,
-        projectName: connected.name,
-        sourceRepositoryId: connected.id
-      });
-      router.replace(`/workspace/repository?${params.toString()}`);
-    } catch (error) {
-      setCallbackState({
-        status: "error",
-        message: getApiErrorMessage(error, "Repository를 연결하지 못했습니다.")
-      });
-    }
+    const params = new URLSearchParams({
+      projectId: callbackState.projectId,
+      projectName: callbackState.resume.projectName,
+      resumeKey: callbackState.resumeKey
+    });
+    router.replace(`/workspace/repository?${params.toString()}`);
   }
 
-  // GitHub App installation과 repository 권한은 전역 설정에서 관리합니다.
-  function openGitHubSettings(): void {
-    router.push("/dashboard/settings");
+  async function saveSettingsAndReturn(): Promise<void> {
+    if (callbackState.status !== "configuring" || isSavingSettings) return;
+    if (!deploymentTargetRef.current || !gitOpsMonitoringRef.current) {
+      setConfirmationMessage("설정을 불러온 뒤 다시 확인해주세요.");
+      return;
+    }
+
+    setIsSavingSettings(true);
+    setConfirmationMessage("");
+    const saved = await saveCallbackSettings({
+      saveDeploymentTarget: deploymentTargetRef.current.save,
+      saveGitOpsMonitoring: gitOpsMonitoringRef.current.save
+    });
+    setIsSavingSettings(false);
+
+    if (!saved) {
+      setConfirmationMessage("두 설정을 모두 저장하지 못했습니다. 표시된 항목을 확인해주세요.");
+      return;
+    }
+
+    returnToRepositoryAnalysis();
   }
 
   return (
@@ -127,16 +184,16 @@ export default function GitHubIntegrationCallbackPage() {
       <section aria-labelledby="github-callback-title" className={styles.content}>
         <header className={styles.heading}>
           <span>GitHub App</span>
-          <h1 id="github-callback-title">Repository 선택</h1>
-          <p>Architecture 초안을 만들 코드 저장소 하나를 고르세요.</p>
+          <h1 id="github-callback-title">필수 배포 설정</h1>
+          <p>분석한 Repository를 연결했습니다. 설정을 확인한 뒤 보드 생성 흐름으로 돌아갑니다.</p>
         </header>
 
-        {callbackState.status === "loading" || callbackState.status === "saving" ? (
+        {callbackState.status === "loading" || callbackState.status === "connecting" ? (
           <div aria-live="polite" className={styles.progress} role="status">
             <LoaderCircle aria-hidden="true" size={18} />
             <div>
-              <strong>{callbackState.status === "loading" ? "목록을 불러오는 중" : "Repository 연결 중"}</strong>
-              <span>이 화면을 닫지 마세요.</span>
+              <strong>{callbackState.status === "loading" ? "연결 대상을 확인하는 중" : "분석한 Repository 연결 중"}</strong>
+              <span>Repository를 다시 선택하거나 분석하지 않습니다.</span>
             </div>
           </div>
         ) : null}
@@ -145,45 +202,111 @@ export default function GitHubIntegrationCallbackPage() {
           <div className={styles.errorState} role="alert">
             <TriangleAlert aria-hidden="true" size={18} />
             <div><strong>연결을 완료하지 못했습니다</strong><span>{callbackState.message}</span></div>
-            <Link href="/workspace/new">시작 방식 다시 선택</Link>
+            <Link href="/dashboard/settings">GitHub 권한 설정</Link>
           </div>
         ) : null}
 
-        {callbackState.status === "ready" ? (
+        {callbackState.status === "configuring" ? (
           <>
-            <div className={styles.listHeader}>
-              <span>선택 가능 {selectableCount}개</span>
-              <button onClick={openGitHubSettings} type="button">
-                <Settings2 aria-hidden="true" size={15} />
-                Manage permissions in settings
-              </button>
-            </div>
-            <div className={styles.repositoryList}>
-              {callbackState.repositories.map((repository) => (
-                <button
-                  disabled={repository.archived}
-                  key={repository.githubRepositoryId}
-                  onClick={() => void selectRepository(repository)}
-                  type="button"
-                >
-                  <FileCode2 aria-hidden="true" size={18} />
-                  <span>
-                    <strong>{repository.fullName}</strong>
-                    <small>{repository.defaultBranch} · {repository.visibility}</small>
-                  </span>
-                  <b>{repository.archived ? "Archived" : "선택"}</b>
-                </button>
-              ))}
-            </div>
-            {selectableCount === 0 ? (
-              <div className={styles.emptyState}>
-                <strong>선택 가능한 Repository가 없습니다.</strong>
-                <span>Manage repository access from Dashboard settings.</span>
+            <div className={styles.connectedRepository}>
+              <Check aria-hidden="true" size={18} />
+              <div>
+                <strong>{callbackState.repository.owner}/{callbackState.repository.name}</strong>
+                <span>{callbackState.resume.defaultBranch} · {callbackState.resume.publicAnalysis.repositoryRevision.slice(0, 12)}</span>
               </div>
-            ) : null}
+            </div>
+
+            <div className={styles.settingsStack}>
+              <ProjectDeploymentTargetSettingsClient
+                ecsDefaults={ecsDefaults}
+                onDirty={() => setConfirmationMessage("")}
+                preferEcsDefaults
+                projectId={callbackState.projectId}
+                ref={deploymentTargetRef}
+                showSaveButton={false}
+              />
+              <ProjectCicdMonitoringSettingsClient
+                initialDraft={monitoringDefaults}
+                onDirty={() => setConfirmationMessage("")}
+                projectId={callbackState.projectId}
+                ref={gitOpsMonitoringRef}
+                showSaveButton={false}
+              />
+            </div>
+
+            <section
+              aria-labelledby="callback-completion-title"
+              className={styles.completionPanel}
+            >
+              <div className={styles.completionCopy}>
+                <span aria-hidden="true" className={styles.completionIcon}>
+                  <Save size={19} strokeWidth={2.2} />
+                </span>
+                <div className={styles.completionText}>
+                  <strong id="callback-completion-title">설정을 저장하고 다음 단계로 이동합니다</strong>
+                  <p>배포 타깃과 GitOps 감시 설정을 함께 저장한 뒤 보드 선택 화면으로 돌아갑니다.</p>
+                </div>
+              </div>
+
+              {confirmationMessage ? (
+                <p className={styles.completionError} role="alert">
+                  <TriangleAlert aria-hidden="true" size={17} />
+                  <span>{confirmationMessage}</span>
+                </p>
+              ) : null}
+
+              <button
+                className={styles.completionButton}
+                disabled={isSavingSettings}
+                onClick={saveSettingsAndReturn}
+                type="button"
+              >
+                {isSavingSettings ? (
+                  <>
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className={styles.buttonSpinner}
+                      size={17}
+                    />
+                    <span>설정 저장 중</span>
+                  </>
+                ) : (
+                  <>
+                    <span>설정 저장 후 계속</span>
+                    <ArrowRight aria-hidden="true" size={17} />
+                  </>
+                )}
+              </button>
+            </section>
           </>
         ) : null}
       </section>
     </main>
   );
+}
+
+function getRepositoryUrl(repository: GitHubRepositoryCandidate): string {
+  return repository.repositoryUrl ?? `https://github.com/${repository.owner}/${repository.name}`;
+}
+
+function getCallbackErrorMessage(error: unknown): string {
+  if (error instanceof Error && /[가-힣]/u.test(error.message)) {
+    return error.message;
+  }
+
+  return getApiErrorMessage(error, "분석한 Repository를 연결하지 못했습니다.");
+}
+
+function createCallbackMonitoringDefaults(
+  resume: RepositoryAnalysisResumeState,
+  sourceRoot: string
+) {
+  return {
+    enabled: true,
+    monitorBranch: resume.defaultBranch,
+    appPath: sourceRoot === "."
+      ? { mode: "repository_root" as const, path: "." }
+      : { mode: "subdirectory" as const, path: sourceRoot },
+    infraPath: { mode: "repository_root" as const, path: "." }
+  };
 }

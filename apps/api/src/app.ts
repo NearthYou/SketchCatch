@@ -260,6 +260,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.addHook("onRequest", async (request, reply) => {
+    reply.header("x-request-id", request.id);
     setCorsHeaders(request, reply);
 
     if (request.method === "OPTIONS") {
@@ -317,15 +318,23 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectAssetStorage: options.projectAssetStorage,
     runtimeCache
   });
+  app.register(
+    registerLiveObservationV2Routes,
+    liveObservationV2Runtime
+      ? {
+          prefix: "/api",
+          enabled: true,
+          liveObservationService: liveObservationV2Runtime.liveObservationService,
+          prepareDeploymentManifest: liveObservationV2Runtime.prepareDeploymentManifest,
+          requireDeploymentAccess: liveObservationV2Runtime.requireDeploymentAccess,
+          refreshObservation: liveObservationV2Runtime.refreshObservation
+        }
+      : {
+          prefix: "/api",
+          enabled: false
+        }
+  );
   if (liveObservationV2Runtime) {
-    app.register(registerLiveObservationV2Routes, {
-      prefix: "/api",
-      enabled: true,
-      liveObservationService: liveObservationV2Runtime.liveObservationService,
-      prepareDeploymentManifest: liveObservationV2Runtime.prepareDeploymentManifest,
-      requireDeploymentAccess: liveObservationV2Runtime.requireDeploymentAccess,
-      refreshObservation: liveObservationV2Runtime.refreshObservation
-    });
     app.register(registerLiveObservationPublicCollectorRoutes, {
       prefix: "/api",
       collector: liveObservationV2Runtime.collector,

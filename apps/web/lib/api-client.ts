@@ -22,6 +22,7 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   bad_gateway: "AI 응답을 아키텍처로 해석하지 못했습니다. 다시 시도해주세요.",
   conflict: "이미 사용 중인 정보입니다.",
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+  LIVE_OBSERVATION_DISABLED: "실시간 관측 기능이 서버에서 비활성화되어 있습니다.",
   LIVE_OBSERVATION_CACHE_UNAVAILABLE:
     "실시간 관측 저장소에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
   LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE:
@@ -102,16 +103,28 @@ type ApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
   retryOnUnauthorized?: boolean;
 };
 
+export type ApiRequestContext = Readonly<{
+  method: string;
+  path: string;
+  requestId?: string | undefined;
+}>;
+
 export class ApiClientError extends Error {
   readonly status: number;
   readonly code: ApiErrorCode;
   readonly lockedUntil?: string;
+  readonly requestContext: ApiRequestContext | undefined;
 
-  constructor(status: number, response: ApiErrorResponse | LoginLockedErrorResponse) {
+  constructor(
+    status: number,
+    response: ApiErrorResponse | LoginLockedErrorResponse,
+    requestContext?: ApiRequestContext
+  ) {
     super(response.message);
     this.name = "ApiClientError";
     this.status = status;
     this.code = response.error;
+    this.requestContext = requestContext;
 
     if ("lockedUntil" in response) {
       this.lockedUntil = response.lockedUntil;
@@ -121,6 +134,7 @@ export class ApiClientError extends Error {
 
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { auth = false, body, headers, retryOnUnauthorized = true, ...requestInit } = options;
+  const requestContext = createApiRequestContext(path, requestInit.method);
   const requestHeaders = new Headers(headers);
   let requestAccessToken: string | null = null;
 
@@ -158,7 +172,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   try {
     response = await fetch(buildApiUrl(path), request);
   } catch {
-    throw createConnectionError();
+    throw createConnectionError(requestContext);
   }
 
   if (response.status === 401 && auth && retryOnUnauthorized) {
@@ -186,7 +200,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   }
 
   if (!response.ok) {
-    throw await toApiClientError(response);
+    throw await toApiClientError(response, requestContext);
   }
 
   if (response.status === 204) {
@@ -203,15 +217,8 @@ export function getApiErrorMessage(error: unknown, fallbackMessage: string): str
       : fallbackMessage;
   }
 
-  if (error.status === 0) {
-    return error.message || fallbackMessage;
-  }
-
-  if (error.code === "too_many_requests" && error.lockedUntil) {
-    return `로그인 시도가 잠시 차단되었습니다. ${formatLockedUntil(error.lockedUntil)} 이후 다시 시도해주세요.`;
-  }
-
-  return getKoreanApiMessage(error, fallbackMessage);
+  const message = getBaseApiErrorMessage(error, fallbackMessage);
+  return appendApiDiagnostic(message, error);
 }
 
 export async function refreshAuthSession(): Promise<AuthSession | null> {
@@ -231,6 +238,7 @@ async function refreshStoredSessionOnce(): Promise<AuthSession | null> {
 }
 
 async function refreshStoredSession(): Promise<AuthSession | null> {
+  const requestContext = createApiRequestContext("/auth/refresh", "POST");
   let response: Response;
 
   try {
@@ -243,7 +251,7 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
       method: "POST"
     });
   } catch {
-    throw createConnectionError();
+    throw createConnectionError(requestContext);
   }
 
   if (response.status === 400 || response.status === 401) {
@@ -252,7 +260,7 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
   }
 
   if (!response.ok) {
-    throw await toApiClientError(response);
+    throw await toApiClientError(response, requestContext);
   }
 
   const authResponse = (await readJson(response)) as AuthResponse;
@@ -261,17 +269,24 @@ async function refreshStoredSession(): Promise<AuthSession | null> {
   return authResponse.session;
 }
 
-async function toApiClientError(response: Response): Promise<ApiClientError> {
+async function toApiClientError(
+  response: Response,
+  requestContext: ApiRequestContext
+): Promise<ApiClientError> {
+  const responseContext = withRequestId(
+    requestContext,
+    response.headers.get("x-request-id")
+  );
   const responseBody = await readJson(response);
 
   if (isApiErrorResponse(responseBody)) {
-    return new ApiClientError(response.status, responseBody);
+    return new ApiClientError(response.status, responseBody, responseContext);
   }
 
   return new ApiClientError(response.status, {
     error: response.status >= 500 ? "internal_server_error" : "bad_request",
     message: "요청 처리 중 오류가 발생했습니다."
-  });
+  }, responseContext);
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -298,11 +313,57 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse | LoginLo
   return typeof candidate.error === "string" && typeof candidate.message === "string";
 }
 
-function createConnectionError(): ApiClientError {
+function createConnectionError(requestContext: ApiRequestContext): ApiClientError {
   return new ApiClientError(0, {
     error: "internal_server_error",
     message: API_CONNECTION_ERROR_MESSAGE
-  });
+  }, requestContext);
+}
+
+function getBaseApiErrorMessage(error: ApiClientError, fallbackMessage: string): string {
+  if (error.status === 0) {
+    return error.message || fallbackMessage;
+  }
+
+  if (error.code === "too_many_requests" && error.lockedUntil) {
+    return `로그인 시도가 잠시 차단되었습니다. ${formatLockedUntil(error.lockedUntil)} 이후 다시 시도해주세요.`;
+  }
+
+  return getKoreanApiMessage(error, fallbackMessage);
+}
+
+function createApiRequestContext(path: string, method?: string): ApiRequestContext {
+  return {
+    method: (method ?? "GET").toUpperCase(),
+    path: getSafeApiPath(buildApiUrl(path))
+  };
+}
+
+function getSafeApiPath(value: string): string {
+  try {
+    return new URL(value, "http://sketchcatch.local").pathname;
+  } catch {
+    return "/api";
+  }
+}
+
+function withRequestId(
+  context: ApiRequestContext,
+  requestId: string | null
+): ApiRequestContext {
+  const normalizedRequestId = requestId?.trim();
+  return normalizedRequestId
+    ? { ...context, requestId: normalizedRequestId }
+    : context;
+}
+
+function appendApiDiagnostic(message: string, error: ApiClientError): string {
+  const context = error.requestContext;
+  if (!context) return message;
+
+  const response = error.status === 0 ? "응답 없음" : `HTTP ${error.status}`;
+  const requestId = context.requestId ? ` · 요청 ID ${context.requestId}` : "";
+  return `${message} [${context.method} ${context.path} · ${response} · ${error.code}${requestId}]`;
 }
 
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {

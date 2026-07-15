@@ -151,10 +151,13 @@ Representative Use Journey는 위 실제 서비스 흐름을 증명하는 발표
 - Live Observation API는 valid v2 manifest와 현재 verified connection을 가진 성공 Deployment에서만 15분 Store 세션을 만들고 인증 snapshot/SSE, capability-free audience URL, 제한된 public bootstrap/request를 제공한다.
 - Git/CI/CD Integration API는 Source Repository 연결, Terraform handoff, PR 생성, pipeline 상태 추적 흐름으로 확장한다.
 - Repository Analysis API는 repository 원문을 실행하거나 저장하지 않고, 마지막 구조화된 AI Handoff와 분석 revision만 RDS에 저장한다.
+- Public Repository Analysis 응답은 선택 branch의 실제 head SHA를 `repositoryRevision`으로 반환한다. GitHub App project state는 분석 target owner/name과 일회성 resume key를 서명하며 callback은 다른 repository로 fallback하지 않는다.
 - Reverse Engineering API는 Provider Adapter를 통해 기존 cloud Resource를 스캔하고 Practice Architecture와 import suggestion을 반환한다.
 - 실제 AWS credential과 Terraform 실행 세부는 프론트에 노출하지 않는다.
 
 API DTO와 모델명은 [데이터 모델](./data-models.md)을 따른다.
+
+Repository Analysis UI의 GitHub 왕복 복귀 상태는 Web `sessionStorage`에만 저장하는 30분짜리 schema v1 record다. callback은 target Repository를 연결하고 `ProjectDeploymentTarget`과 `GitCicdMonitoringConfig` 저장 성공을 모두 확인한 뒤 이 record의 key만 안전한 query로 돌려준다. 분석 화면은 project, active Repository, resume key가 모두 일치할 때 record를 한 번 소비해 상태를 복원하며 API 재분석을 호출하지 않는다. GitHub JWT state, installation token, credential과 원본 evidence 파일 내용은 browser storage에 저장하지 않는다.
 
 ## Deployment/CI/CD 콘솔 상태 경계
 

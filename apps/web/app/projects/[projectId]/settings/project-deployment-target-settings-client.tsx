@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import type {
   AwsConnection,
   ProjectDeploymentTarget,
@@ -21,6 +21,7 @@ import {
   createDeploymentTargetRequest,
   formatDeploymentTargetUpdatedAt,
   isDeploymentTargetDraftReady,
+  type EcsFargateDeploymentDefaultsInput,
   type ProjectDeploymentTargetDraft
 } from "./project-deployment-target-state";
 import styles from "./project-deployment-target-settings.module.css";
@@ -34,11 +35,28 @@ const runtimeLabels: Record<RuntimeTargetKind, string> = {
   static_site: "Static site"
 };
 
-export function ProjectDeploymentTargetSettingsClient({
-  projectId
-}: {
-  readonly projectId: string;
-}) {
+export type ProjectDeploymentTargetSettingsHandle = {
+  readonly save: () => Promise<boolean>;
+};
+
+export const ProjectDeploymentTargetSettingsClient = forwardRef<
+  ProjectDeploymentTargetSettingsHandle,
+  {
+    readonly projectId: string;
+    readonly ecsDefaults?: EcsFargateDeploymentDefaultsInput | null;
+    readonly onDirty?: (() => void) | undefined;
+    readonly onSaved?: (() => void) | undefined;
+    readonly preferEcsDefaults?: boolean | undefined;
+    readonly showSaveButton?: boolean | undefined;
+  }
+>(function ProjectDeploymentTargetSettingsClient({
+  projectId,
+  ecsDefaults = null,
+  onDirty,
+  onSaved,
+  preferEcsDefaults = false,
+  showSaveButton = true
+}, ref) {
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(null);
@@ -48,6 +66,10 @@ export function ProjectDeploymentTargetSettingsClient({
   );
   const [requestState, setRequestState] = useState<RequestState>("loading");
   const [message, setMessage] = useState("");
+  const ecsDefaultsProjectName = ecsDefaults?.projectName;
+  const ecsDefaultsRepositoryRevision = ecsDefaults?.repositoryRevision;
+  const ecsDefaultsSourceRoot = ecsDefaults?.sourceRoot;
+  const ecsDefaultsDockerfilePath = ecsDefaults?.dockerfilePath;
   const verifiedConnections = useMemo(
     () => connections.filter((connection) => connection.status === "verified"),
     [connections]
@@ -80,7 +102,27 @@ export function ProjectDeploymentTargetSettingsClient({
         setConnections(nextConnections);
         setTarget(nextTarget);
         setSourceRepository(nextSourceRepository ?? null);
-        setDraft(createDeploymentTargetDraft(nextTarget, nextConnections, nextSourceRepository));
+        const nextEcsDefaults =
+          ecsDefaultsProjectName &&
+          ecsDefaultsRepositoryRevision &&
+          ecsDefaultsSourceRoot &&
+          ecsDefaultsDockerfilePath
+            ? {
+                projectName: ecsDefaultsProjectName,
+                repositoryRevision: ecsDefaultsRepositoryRevision,
+                sourceRoot: ecsDefaultsSourceRoot,
+                dockerfilePath: ecsDefaultsDockerfilePath
+              }
+            : null;
+        setDraft(
+          createDeploymentTargetDraft(
+            nextTarget,
+            nextConnections,
+            nextSourceRepository,
+            nextEcsDefaults,
+            preferEcsDefaults ? "prefer_ecs_defaults" : "preserve_target"
+          )
+        );
         setRequestState("idle");
       } catch (error) {
         if (cancelled) return;
@@ -93,25 +135,38 @@ export function ProjectDeploymentTargetSettingsClient({
     return () => {
       cancelled = true;
     };
-  }, [authStatus, projectId]);
+  }, [
+    authStatus,
+    ecsDefaultsDockerfilePath,
+    ecsDefaultsProjectName,
+    ecsDefaultsRepositoryRevision,
+    ecsDefaultsSourceRoot,
+    preferEcsDefaults,
+    projectId
+  ]);
 
   function updateDraft<K extends keyof ProjectDeploymentTargetDraft>(
     key: K,
     value: ProjectDeploymentTargetDraft[K]
   ) {
+    onDirty?.();
     setDraft((current) => ({ ...current, [key]: value }));
     setMessage("");
   }
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
+    onDirty?.();
     setDraft((current) =>
       changeDeploymentTargetRuntime(current, runtimeTargetKind, sourceRepository)
     );
     setMessage("");
   }
 
-  async function saveTarget(): Promise<void> {
-    if (!canSave) return;
+  async function saveTarget(): Promise<boolean> {
+    if (!canSave) {
+      setMessage("배포 타깃 필수 값을 확인해주세요.");
+      return false;
+    }
     setRequestState("saving");
     setMessage("");
     try {
@@ -123,11 +178,16 @@ export function ProjectDeploymentTargetSettingsClient({
       setDraft(createDeploymentTargetDraft(saved, connections));
       setRequestState("idle");
       setMessage("배포 타깃을 저장했습니다.");
+      onSaved?.();
+      return true;
     } catch (error) {
       setRequestState("error");
       setMessage(getApiErrorMessage(error, "배포 타깃을 저장하지 못했습니다."));
+      return false;
     }
   }
+
+  useImperativeHandle(ref, () => ({ save: saveTarget }));
 
   return (
     <section className="dashboardPanel integrationPanel" aria-labelledby="deployment-target-title">
@@ -227,6 +287,7 @@ export function ProjectDeploymentTargetSettingsClient({
             <label className={styles.field}>
               <span>Output URL</span>
               <input onChange={(event) => updateDraft("outputUrl", event.target.value)} placeholder="https://api.example.com" value={draft.outputUrl} />
+              <small>Board 또는 배포에서 실제 HTTPS URL이 확정되기 전에는 비워둘 수 있습니다.</small>
             </label>
             <label className={styles.field}>
               <span>Health check path</span>
@@ -335,16 +396,18 @@ export function ProjectDeploymentTargetSettingsClient({
       {message ? (
         <p className="dashboardMessage" role={requestState === "error" ? "alert" : "status"}>{message}</p>
       ) : null}
-      <div className="settingsActionRow">
-        <button
-          className="dashboardTopbarAction"
-          disabled={!canSave}
-          onClick={() => void saveTarget()}
-          type="button"
-        >
-          {requestState === "saving" ? "저장 중" : "배포 타깃 저장"}
-        </button>
-      </div>
+      {showSaveButton ? (
+        <div className="settingsActionRow">
+          <button
+            className="dashboardTopbarAction"
+            disabled={!canSave}
+            onClick={() => void saveTarget()}
+            type="button"
+          >
+            {requestState === "saving" ? "저장 중" : "배포 타깃 저장"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
-}
+});

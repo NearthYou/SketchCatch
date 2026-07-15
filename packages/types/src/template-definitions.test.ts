@@ -283,6 +283,22 @@ test("template labels and AWS-facing names stay separate from Terraform local na
   assert.equal(albSecurityGroup?.parameters?.values.name, "fargate-alb");
 });
 
+test("ECS Fargate Board uses project-scoped runtime names", () => {
+  const diagram = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "Audience Live Check",
+    shortId: "repository"
+  });
+  const values = (resourceType: string) => diagram.nodes.find(
+    (node) => node.parameters?.resourceType === resourceType
+  )?.parameters?.values;
+
+  assert.equal(values("aws_ecr_repository")?.name, "audience-live-check-app");
+  assert.equal(values("aws_ecs_cluster")?.name, "audience-live-check-cluster");
+  assert.equal(values("aws_ecs_service")?.name, "audience-live-check-service");
+  assert.equal(values("aws_ecs_task_definition")?.family, "audience-live-check-app");
+  assert.equal(values("aws_cloudwatch_log_group")?.name, "/ecs/audience-live-check-app");
+});
+
 test("all built-in template references resolve through the final Terraform local-name map", () => {
   for (const templateId of REPOSITORY_TEMPLATE_IDS) {
     const diagram = buildTemplateDiagramJson(templateId, {

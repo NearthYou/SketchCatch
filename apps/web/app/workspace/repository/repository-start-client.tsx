@@ -57,6 +57,11 @@ import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
+import {
+  consumeRepositoryAnalysisResume,
+  createRepositoryAnalysisResumeKey,
+  writeRepositoryAnalysisResume
+} from "./repository-analysis-resume";
 import styles from "./repository-start.module.css";
 
 type RequestState = "idle" | "loading" | "error";
@@ -69,6 +74,7 @@ type RepositoryQuestionView = Pick<
 type RepositoryStartClientProps = {
   readonly initialDefaultBranch?: string;
   readonly initialRepositoryUrl?: string;
+  readonly initialResumeKey?: string;
   readonly projectId: string;
   readonly projectName: string;
 };
@@ -76,11 +82,13 @@ type RepositoryStartClientProps = {
 export function RepositoryStartClient({
   initialDefaultBranch = "",
   initialRepositoryUrl = "",
+  initialResumeKey = "",
   projectId,
   projectName
 }: RepositoryStartClientProps) {
   const router = useRouter();
   const hasAutoAnalyzedPublicUrl = useRef(false);
+  const hasRestoredRepositoryAnalysis = useRef(false);
   const connectionSectionRef = useRef<HTMLElement | null>(null);
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
@@ -101,6 +109,8 @@ export function RepositoryStartClient({
   const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
   const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [restoredProjectName, setRestoredProjectName] = useState("");
+  const effectiveProjectName = restoredProjectName || projectName;
   const activeRepository = useMemo(
     () => findActiveGitHubRepository(repositories),
     [repositories]
@@ -110,7 +120,7 @@ export function RepositoryStartClient({
     ?.map(localizePublicRepositoryQuestion)
     .slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
-  const previewDiagram = createRepositoryPreviewDiagram(projectName, activeRepository);
+  const previewDiagram = createRepositoryPreviewDiagram(effectiveProjectName, activeRepository);
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(projectId && (!activeRepository || publicAnalysis));
 
@@ -125,13 +135,15 @@ export function RepositoryStartClient({
   }, [projectId]);
 
   useEffect(() => {
+    if (initialResumeKey) return;
+
     if (!projectId || !initialRepositoryUrl.trim() || hasAutoAnalyzedPublicUrl.current) {
       return;
     }
 
     hasAutoAnalyzedPublicUrl.current = true;
     void analyzePublicRepositoryUrl(initialRepositoryUrl, initialDefaultBranch);
-  }, [initialDefaultBranch, initialRepositoryUrl, projectId]);
+  }, [initialDefaultBranch, initialRepositoryUrl, initialResumeKey, projectId]);
 
   async function loadRepositories(): Promise<void> {
     setLoadState("loading");
@@ -143,8 +155,39 @@ export function RepositoryStartClient({
       const handoff = active?.analysis?.aiHandoff;
 
       setRepositories(loadedRepositories);
+
+      if (initialResumeKey && !hasRestoredRepositoryAnalysis.current) {
+        hasRestoredRepositoryAnalysis.current = true;
+
+        if (!active) {
+          setRepositoryConnectionError("연결된 Repository를 확인할 수 없어 이전 분석으로 돌아가지 못했습니다.");
+        } else {
+          const resume = consumeRepositoryAnalysisResume(window.sessionStorage, {
+            resumeKey: initialResumeKey,
+            projectId,
+            repositoryUrl: active.repositoryUrl ?? `https://github.com/${active.owner}/${active.name}`
+          });
+
+          if (resume) {
+            setPublicAnalysis(resume.publicAnalysis);
+            setRepositoryUrl(resume.repositoryUrl);
+            setDefaultBranch(resume.defaultBranch);
+            setSelectedPublicTemplateId(resume.selectedTemplateId);
+            setDeploymentType(resume.deploymentType);
+            setAnswers({ ...resume.answers });
+            setPublicRecommendationStage(resume.stage);
+            setRestoredProjectName(resume.projectName);
+            setPublicAnalysisState("idle");
+          } else {
+            setRepositoryConnectionError("이전 Repository 분석 복귀 정보가 만료되었거나 일치하지 않습니다.");
+          }
+        }
+      }
+
       setRecommendation(handoff?.recommendation ?? null);
-      setDeploymentType(handoff?.deploymentTypeDefault ?? "serverless");
+      if (!initialResumeKey) {
+        setDeploymentType(handoff?.deploymentTypeDefault ?? "serverless");
+      }
       setLoadState("idle");
     } catch (error) {
       setLoadState("error");
@@ -169,12 +212,30 @@ export function RepositoryStartClient({
   }
 
   async function openGitHubConnection(): Promise<void> {
-    if (actionState === "loading") return;
+    if (actionState === "loading" || !publicAnalysis) return;
     setActionState("loading");
     setRepositoryConnectionError("");
 
     try {
-      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId);
+      const resumeKey = createRepositoryAnalysisResumeKey();
+      writeRepositoryAnalysisResume(window.sessionStorage, {
+        schemaVersion: 1,
+        resumeKey,
+        createdAt: new Date().toISOString(),
+        projectId,
+        projectName: effectiveProjectName,
+        repositoryUrl: publicAnalysis.repositoryUrl,
+        defaultBranch,
+        publicAnalysis,
+        selectedTemplateId: selectedPublicTemplateId,
+        deploymentType,
+        answers,
+        stage: publicRecommendationStage
+      });
+      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId, {
+        repositoryUrl: publicAnalysis.repositoryUrl,
+        resumeKey
+      });
       window.location.assign(installUrl);
     } catch (error) {
       setActionState("error");
@@ -303,7 +364,7 @@ export function RepositoryStartClient({
       router.push(
         `/workspace?${new URLSearchParams({
           projectId,
-          projectName
+          projectName: effectiveProjectName
         }).toString()}`
       );
     } catch (error) {
@@ -345,7 +406,7 @@ export function RepositoryStartClient({
       router.push(
         `/workspace?${new URLSearchParams({
           projectId,
-          projectName
+          projectName: effectiveProjectName
         }).toString()}`
       );
     } catch (error) {
@@ -356,7 +417,7 @@ export function RepositoryStartClient({
 
   async function saveTemplateBoard(templateId: PublicRepositoryTemplateId): Promise<void> {
     const diagram = buildBoardTemplateDiagram(templateId, {
-      projectSlug: projectName,
+      projectSlug: effectiveProjectName,
       shortId: "repository"
     });
 
@@ -368,7 +429,7 @@ export function RepositoryStartClient({
     router.push(
       `/workspace?${new URLSearchParams({
         projectId,
-        projectName
+        projectName: effectiveProjectName
       }).toString()}`
     );
   }
@@ -467,7 +528,7 @@ export function RepositoryStartClient({
       <section className={styles.content} aria-labelledby="repository-start-title">
         <header className={styles.heading}>
           <h1 id="repository-start-title">GitHub 저장소</h1>
-          <p>{projectName}</p>
+          <p>{effectiveProjectName}</p>
         </header>
 
         {showUrlAnalysis ? (
@@ -529,7 +590,7 @@ export function RepositoryStartClient({
             ) : null}
             {publicAnalysis ? (
               <PublicRepositoryRecommendationStep
-                aiDesignHref={createWorkspaceAiStartHref({ projectId, projectName })}
+                aiDesignHref={createWorkspaceAiStartHref({ projectId, projectName: effectiveProjectName })}
                 answers={answers}
                 analysis={publicAnalysis}
                 configurationWarning={connectionWarning}

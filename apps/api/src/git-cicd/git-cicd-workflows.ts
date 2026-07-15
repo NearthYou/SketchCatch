@@ -115,6 +115,7 @@ export function createRepositorySettingsPreview(
   input: GitCicdWorkflowRenderInput
 ): GitCicdRepositorySettingsPreview {
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
+  const runtimeOutputUrl = getRuntimeOutputUrl(input.runtimeConfig);
 
   return {
     environmentName,
@@ -182,15 +183,7 @@ export function createRepositorySettingsPreview(
           ? input.runtimeConfig.containerName
           : "",
       SKETCHCATCH_OUTPUT_URL:
-        input.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
-          ? input.runtimeConfig.outputUrl
-          : input.runtimeConfig?.runtimeTargetKind === "lambda"
-            ? input.runtimeConfig.outputUrl
-            : input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
-              ? input.runtimeConfig.outputUrl
-              : input.runtimeConfig?.runtimeTargetKind === "static_site"
-                ? input.runtimeConfig.outputUrl
-                : ""
+        runtimeOutputUrl
     },
     secrets: [],
     workflowFiles: [
@@ -206,7 +199,9 @@ type EcsFargateWorkflowInput = {
     buildPreset: "docker_build";
     dockerfilePath: string;
   };
-  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>;
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }> & {
+    outputUrl: string;
+  };
 };
 
 type LambdaWorkflowInput = {
@@ -249,14 +244,25 @@ function getEcsFargateWorkflowInput(
   ) {
     return null;
   }
+  const outputUrl = getRuntimeOutputUrl(runtime);
   return {
     confirmedBuildConfig: {
       ...build,
       buildPreset: "docker_build",
       dockerfilePath: build.dockerfilePath
     },
-    runtimeConfig: runtime
+    runtimeConfig: { ...runtime, outputUrl }
   };
+}
+
+function getRuntimeOutputUrl(
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null | undefined
+): string {
+  if (runtimeConfig?.runtimeTargetKind === "ecs_fargate" && !runtimeConfig.outputUrl) {
+    throw new Error("DEPLOYMENT_OUTPUT_URL_REQUIRED");
+  }
+
+  return runtimeConfig?.outputUrl ?? "";
 }
 
 function getLambdaWorkflowInput(input: GitCicdWorkflowRenderInput): LambdaWorkflowInput | null {

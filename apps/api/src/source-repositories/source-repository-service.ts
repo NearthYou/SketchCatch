@@ -4,6 +4,7 @@ import type {
   AnalyzeSourceRepositoryResponse,
   GitHubInstalledRepositoryCandidate,
   GitHubInstallationConnection,
+  GitHubProjectConnectionTarget,
   GitHubRepositoryCandidate,
   RecommendRepositoryTemplateResponse,
   RepositoryAnalysisAnswer,
@@ -52,6 +53,8 @@ export type CreateActiveGitHubSourceRepositoryInput = {
 
 export type CreateGitHubInstallUrlInput = {
   projectId: string;
+  repositoryUrl: string;
+  resumeKey: string;
   accessContext: ProjectAccessContext;
   appSlug: string;
   stateSecret: string;
@@ -105,6 +108,8 @@ export type ListGitHubInstallationRepositoriesResult =
       scope: "project";
       projectId: string;
       repositories: GitHubRepositoryCandidate[];
+      targetRepository: GitHubProjectConnectionTarget | null;
+      resumeKey: string | null;
     };
 
 export type ListGitHubInstalledRepositoriesInput = {
@@ -306,10 +311,14 @@ export async function createGitHubInstallUrl(
     "Project not found"
   );
 
+  const targetRepository = parseGitHubProjectConnectionTarget(input.repositoryUrl);
+
   const stateInput = {
     scope: "project" as const,
     userId: input.accessContext.userId,
     projectId: input.projectId,
+    targetRepository,
+    resumeKey: input.resumeKey,
     secret: input.stateSecret,
     ...(input.now ? { now: input.now } : {})
   };
@@ -406,7 +415,9 @@ export async function listGitHubInstallationRepositories(
   return {
     scope: "project",
     projectId: state.projectId,
-    repositories
+    repositories,
+    targetRepository: state.targetRepository ?? null,
+    resumeKey: state.resumeKey ?? null
   };
 }
 
@@ -524,16 +535,30 @@ export async function connectGitHubSourceRepository(
   );
 
   const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
-  const selectedRepository = repositories.find(
+  const selectedRepository = state.scope === "project" && state.targetRepository
+    ? findTargetGitHubRepository(repositories, state.targetRepository)
+    : repositories.find(
     (candidate) => candidate.githubRepositoryId === input.githubRepositoryId
   );
 
-  if (!selectedRepository) {
+  if (!selectedRepository || selectedRepository.githubRepositoryId !== input.githubRepositoryId) {
     throw new SourceRepositoryNotFoundError("GitHub repository not found in installation");
   }
 
   if (selectedRepository.archived) {
     throw new SourceRepositoryConflictError("Archived GitHub repositories cannot be connected");
+  }
+
+  const existingRepository = (await repository.listProjectSourceRepositories(input.projectId)).find(
+    (candidate) =>
+      candidate.provider === "github" &&
+      candidate.status === "active" &&
+      candidate.githubInstallationId === input.installationId &&
+      candidate.githubRepositoryId === selectedRepository.githubRepositoryId
+  );
+
+  if (existingRepository) {
+    return existingRepository;
   }
 
   return repository.createActiveGitHubSourceRepository({
@@ -543,6 +568,51 @@ export async function connectGitHubSourceRepository(
     githubInstallationId: input.installationId,
     repository: selectedRepository
   });
+}
+
+export function findTargetGitHubRepository(
+  repositories: readonly GitHubRepositoryCandidate[],
+  target: GitHubProjectConnectionTarget
+): GitHubRepositoryCandidate | null {
+  const targetOwner = target.owner.trim().toLowerCase();
+  const targetName = target.name.trim().toLowerCase();
+
+  return repositories.find(
+    (candidate) =>
+      candidate.owner.toLowerCase() === targetOwner &&
+      candidate.name.toLowerCase() === targetName
+  ) ?? null;
+}
+
+function parseGitHubProjectConnectionTarget(repositoryUrl: string): GitHubProjectConnectionTarget {
+  let url: URL;
+  try {
+    url = new URL(repositoryUrl);
+  } catch {
+    throw new SourceRepositoryStateError("Invalid GitHub Repository URL");
+  }
+  const pathSegments = url.pathname.split("/").filter(Boolean);
+
+  if (
+    url.protocol !== "https:" ||
+    url.hostname.toLowerCase() !== "github.com" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    pathSegments.length !== 2
+  ) {
+    throw new SourceRepositoryStateError("Invalid GitHub Repository URL");
+  }
+
+  const [owner = "", rawName = ""] = pathSegments;
+  const name = rawName.replace(/\.git$/iu, "");
+
+  if (!owner || !name) {
+    throw new SourceRepositoryStateError("Invalid GitHub Repository URL");
+  }
+
+  return { owner: owner.toLowerCase(), name: name.toLowerCase() };
 }
 
 export async function listSourceRepositories(

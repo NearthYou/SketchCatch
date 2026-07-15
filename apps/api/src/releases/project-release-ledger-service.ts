@@ -531,7 +531,9 @@ export function validateProjectDeploymentRuntimeConfig(
     );
   }
 
-  validateRuntimeOutputUrl(config.outputUrl);
+  if (config.outputUrl !== null) {
+    validateRuntimeOutputUrl(config.outputUrl);
+  }
 }
 
 function validateRuntimeOutputUrl(value: string): void {

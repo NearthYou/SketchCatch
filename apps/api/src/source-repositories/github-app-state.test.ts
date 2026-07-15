@@ -41,3 +41,26 @@ test("GitHub App state keeps the project id only for project scope", async () =>
     expiresAt: new Date("2026-07-15T00:10:00.000Z")
   });
 });
+
+test("GitHub App project state binds the analyzed Repository and resume key", async () => {
+  const { state } = await createGitHubAppState({
+    scope: "project",
+    projectId: "project-1",
+    userId: "user-1",
+    targetRepository: { owner: "NearthYou", name: "SketchCatch" },
+    resumeKey: "resume-12345678",
+    secret: stateSecret,
+    now,
+    generateNonce: () => "nonce-target"
+  });
+
+  const payload = await verifyGitHubAppState({ state, secret: stateSecret, now });
+  assert.equal(payload.scope, "project");
+
+  if (payload.scope !== "project") {
+    assert.fail("project scope expected");
+  }
+
+  assert.deepEqual(payload.targetRepository, { owner: "nearthyou", name: "sketchcatch" });
+  assert.equal(payload.resumeKey, "resume-12345678");
+});

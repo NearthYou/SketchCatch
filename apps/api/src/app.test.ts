@@ -120,7 +120,7 @@ test("unknown routes return the standard 404 error response", async () => {
   await app.close();
 });
 
-test("Live Observation v2 registers no routes while disabled and does not require a keyring", async () => {
+test("Live Observation v2 returns an explicit unavailable error while disabled", async () => {
   const app = buildApp({
     runtimeEnv: createLiveObservationRuntimeEnv({ liveObservationEnabled: "false" })
   });
@@ -130,7 +130,14 @@ test("Live Observation v2 registers no routes while disabled and does not requir
     url: "/api/deployments/123e4567-e89b-42d3-a456-426614174000/live-observations"
   });
 
-  assert.equal(response.statusCode, 404);
+  assert.equal(response.statusCode, 503);
+  assert.deepEqual(response.json(), {
+    error: "LIVE_OBSERVATION_DISABLED",
+    message: "Live Observation is disabled"
+  });
+  assert.equal(typeof response.headers["x-request-id"], "string");
+  assert.ok(String(response.headers["x-request-id"]).length > 0);
+
   await app.close();
 });
 

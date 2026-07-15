@@ -664,20 +664,27 @@
       "priority": 1,
       "area": "repository-analysis-draft",
       "title": "Korean repository recommendations with required inline CI/CD connection",
-      "user_visible_behavior": "Repository Analysis 추천은 저장소 근거를 연결한 상세 한국어 이유와 고려할 점을 제공하고, 같은 화면에서 CI/CD 연결을 완료해야 한국어 추가 질문과 Architecture Draft 생성으로 이동한다.",
+      "user_visible_behavior": "Repository Analysis 추천에서 GitHub CI/CD를 연결하면 분석한 Repository가 자동 연결되고, callback 확인 버튼이 배포 타깃과 GitOps 설정을 모두 저장한 뒤 재분석 없이 기존 상태로 돌아가 Architecture Board 생성을 계속한다.",
       "status": "passing",
       "verification": [
         "AI와 deterministic 추천 후보가 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공한다.",
         "추가 질문, 선택지, 이유가 한국어로 표시되고 알려진 구형 영문 질문도 한국어로 정규화된다.",
-        "CI/CD 인계 checkbox와 전역 설정 이동을 제거하고 같은 화면에서 GitHub App 설치와 repository 선택을 시작한다.",
+        "CI/CD 인계 checkbox와 전역 설정 이동을 제거하고 같은 화면에서 분석 Repository에 고정된 GitHub App 설치를 시작한다.",
         "CI/CD 연결 없이 확인하면 이동을 중단하고 확인 버튼 위에 작은 빨간 안내 문구를 표시한다.",
+        "GitHub callback은 Repository 재선택 없이 서명된 target만 자동 연결하며, 두 개별 저장 버튼 대신 하단 확인 버튼이 두 API를 순서대로 저장한 뒤 복귀한다.",
+        "Callback 완료 액션 바는 두 저장 결과를 설명하고 48px CTA, 저장 중 상태, 인라인 오류, 모바일 전체 너비를 제공한다.",
+        "nullable runtimeConfig와 잘못된 Repository URL은 TypeError 대신 제어된 배포 또는 Source Repository 오류로 차단한다.",
+        "30분짜리 일회성 browser resume state는 project와 active Repository가 일치할 때만 소비되며 API 재분석 없이 추천 상태를 복원한다.",
+        "어떤 추천 Template을 선택해도 callback 배포 타깃은 ECS Fargate이며 project slug, commit SHA, Dockerfile evidence로 필수 좌표를 채운다.",
         "whiskend/audience-live-check의 명확한 컨테이너 근거는 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-15",
         "commands": [
-          "pnpm --filter @sketchcatch/api exec tsx --test src/source-repositories/repository-template-recommendation.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/repository/repository-start-client.test.ts app/workspace/repository/repository-draft-readiness.test.ts features/workspace/public-repository-recommendation.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-app-state.test.ts src/source-repositories/github-target-connection.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-start-client.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
+          "pnpm --filter @sketchcatch/types exec tsx --test --test-name-pattern='ECS Fargate Board uses project-scoped runtime names' src/template-definitions.test.ts",
           "live POST /api/ai/source-repository-analysis for https://github.com/whiskend/audience-live-check",
           "authenticated in-app Browser verification of Repository Analysis recommendation and required inline CI/CD gate",
           "pnpm lint",
@@ -685,7 +692,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Focused API tests passed 13/13 and focused Web tests passed 14/14. The live public analysis returned ECS Fargate 0.91, 3-tier 0.78, EKS 0.63 with ECS Fargate as recommendedTemplateId. Full pnpm test remains non-green on the pre-existing three-tier Template position/parent contract failures in packages/types."
+        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
     }

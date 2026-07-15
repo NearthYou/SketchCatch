@@ -8,6 +8,7 @@ import type {
   RuntimeTargetKind,
   SourceRepository
 } from "@sketchcatch/types";
+import { createEcsFargateRuntimeNames } from "@sketchcatch/types";
 
 export type ProjectDeploymentTargetDraft = {
   connectionId: string;
@@ -34,6 +35,13 @@ export type ProjectDeploymentTargetDraft = {
   cloudFrontOriginId: string;
   outputUrl: string;
   evidenceSuggested: boolean;
+};
+
+export type EcsFargateDeploymentDefaultsInput = {
+  readonly projectName: string;
+  readonly repositoryRevision: string;
+  readonly sourceRoot: string;
+  readonly dockerfilePath: string;
 };
 
 const runtimeBuildConfig: Record<
@@ -65,10 +73,18 @@ const runtimeBuildConfig: Record<
 export function createDeploymentTargetDraft(
   target: ProjectDeploymentTarget | null,
   connections: readonly AwsConnection[],
-  sourceRepository?: SourceRepository | null
+  sourceRepository?: SourceRepository | null,
+  ecsDefaultsInput?: EcsFargateDeploymentDefaultsInput | null,
+  mode: "preserve_target" | "prefer_ecs_defaults" = "preserve_target"
 ): ProjectDeploymentTargetDraft {
-  const runtimeTargetKind = target?.runtimeTargetKind ?? "ecs_fargate";
-  const config = target?.confirmedBuildConfig;
+  const ecsDefaults = (!target || mode === "prefer_ecs_defaults") && ecsDefaultsInput
+    ? createEcsFargateDeploymentDefaults(ecsDefaultsInput)
+    : null;
+  const preferEcsDefaults = mode === "prefer_ecs_defaults" && ecsDefaults !== null;
+  const runtimeTargetKind = preferEcsDefaults
+    ? "ecs_fargate"
+    : target?.runtimeTargetKind ?? ecsDefaults?.runtimeTargetKind ?? "ecs_fargate";
+  const config = preferEcsDefaults ? null : target?.confirmedBuildConfig;
   const ecsConfig = target?.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
     ? target.runtimeConfig
     : null;
@@ -81,25 +97,43 @@ export function createDeploymentTargetDraft(
   const staticConfig = target?.runtimeConfig?.runtimeTargetKind === "static_site"
     ? target.runtimeConfig
     : null;
-  const suggestion = target ? null : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  const suggestion = target || preferEcsDefaults
+    ? null
+    : getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  const codeBuildProjectName = preferEcsDefaults
+    ? ecsConfig?.codeBuildProjectName.trim() || ecsDefaults.codeBuildProjectName
+    : target?.runtimeConfig?.codeBuildProjectName ?? ecsDefaults?.codeBuildProjectName ?? "";
+  const ecrRepositoryName = preferEcsDefaults
+    ? ecsConfig?.ecrRepositoryName.trim() || ecsDefaults.ecrRepositoryName
+    : ecsConfig?.ecrRepositoryName ?? ecsDefaults?.ecrRepositoryName ?? "";
+  const clusterName = preferEcsDefaults
+    ? ecsConfig?.clusterName.trim() || ecsDefaults.clusterName
+    : ecsConfig?.clusterName ?? ecsDefaults?.clusterName ?? "";
+  const serviceName = preferEcsDefaults
+    ? ecsConfig?.serviceName.trim() || ecsDefaults.serviceName
+    : ecsConfig?.serviceName ?? ecsDefaults?.serviceName ?? "";
+  const containerName = preferEcsDefaults
+    ? ecsConfig?.containerName.trim() || ecsDefaults.containerName
+    : ecsConfig?.containerName ?? ecsDefaults?.containerName ?? "";
   return {
     connectionId:
       target?.connectionId ?? connections.find((item) => item.status === "verified")?.id ?? "",
     runtimeTargetKind,
-    sourceRoot: config?.sourceRoot ?? suggestion?.sourceRoot ?? ".",
+    sourceRoot: config?.sourceRoot ?? ecsDefaults?.sourceRoot ?? suggestion?.sourceRoot ?? ".",
     evidencePath:
       config?.evidence[0]?.path ??
+      ecsDefaults?.evidencePath ??
       suggestion?.evidencePath ??
       getDefaultDeploymentEvidencePath(runtimeTargetKind),
-    commitSha: config?.confirmedCommitSha ?? suggestion?.commitSha ?? "",
+    commitSha: config?.confirmedCommitSha ?? ecsDefaults?.commitSha ?? suggestion?.commitSha ?? "",
     version: config?.exactSemVerTag ?? config?.manifestVersion ?? "",
     installPreset: config?.installPreset ?? suggestion?.installPreset ?? "none",
-    healthCheckPath: config?.healthCheckPath ?? "/health",
-    codeBuildProjectName: target?.runtimeConfig?.codeBuildProjectName ?? "",
-    ecrRepositoryName: ecsConfig?.ecrRepositoryName ?? "",
-    clusterName: ecsConfig?.clusterName ?? "",
-    serviceName: ecsConfig?.serviceName ?? "",
-    containerName: ecsConfig?.containerName ?? "",
+    healthCheckPath: config?.healthCheckPath ?? ecsDefaults?.healthCheckPath ?? "/health",
+    codeBuildProjectName,
+    ecrRepositoryName,
+    clusterName,
+    serviceName,
+    containerName,
     functionLogicalId: lambdaConfig?.functionLogicalId ?? "",
     functionName: lambdaConfig?.functionName ?? "",
     aliasName: lambdaConfig?.aliasName ?? "",
@@ -115,11 +149,44 @@ export function createDeploymentTargetDraft(
     cloudFrontOriginId: staticConfig?.cloudFrontOriginId ?? "",
     outputUrl:
       ecsConfig?.outputUrl ??
-      lambdaConfig?.outputUrl ??
-      ec2AsgConfig?.outputUrl ??
-      staticConfig?.outputUrl ??
-      "",
-    evidenceSuggested: Boolean(suggestion)
+      (preferEcsDefaults ? null : lambdaConfig?.outputUrl) ??
+      (preferEcsDefaults ? null : ec2AsgConfig?.outputUrl) ??
+      (preferEcsDefaults ? null : staticConfig?.outputUrl) ??
+      ecsDefaults?.outputUrl ?? "",
+    evidenceSuggested: Boolean(ecsDefaults || suggestion)
+  };
+}
+
+export function createEcsFargateDeploymentDefaults(
+  input: EcsFargateDeploymentDefaultsInput
+): Pick<
+  ProjectDeploymentTargetDraft,
+  | "runtimeTargetKind"
+  | "sourceRoot"
+  | "evidencePath"
+  | "commitSha"
+  | "codeBuildProjectName"
+  | "ecrRepositoryName"
+  | "clusterName"
+  | "serviceName"
+  | "containerName"
+  | "healthCheckPath"
+  | "outputUrl"
+> {
+  const runtimeNames = createEcsFargateRuntimeNames(input.projectName);
+
+  return {
+    runtimeTargetKind: "ecs_fargate",
+    sourceRoot: input.sourceRoot.trim() || ".",
+    evidencePath: input.dockerfilePath.trim() || "Dockerfile",
+    commitSha: input.repositoryRevision.trim().toLowerCase(),
+    codeBuildProjectName: `${runtimeNames.ecrRepositoryName}-build`,
+    ecrRepositoryName: runtimeNames.ecrRepositoryName,
+    clusterName: runtimeNames.clusterName,
+    serviceName: runtimeNames.serviceName,
+    containerName: runtimeNames.containerName,
+    healthCheckPath: "/",
+    outputUrl: ""
   };
 }
 
@@ -212,7 +279,7 @@ export function createDeploymentTargetRequest(
             clusterName: draft.clusterName.trim(),
             serviceName: draft.serviceName.trim(),
             containerName: draft.containerName.trim(),
-            outputUrl: draft.outputUrl.trim()
+            outputUrl: draft.outputUrl.trim() || null
           }
         : draft.runtimeTargetKind === "lambda"
           ? {
@@ -357,7 +424,7 @@ function hasCompleteEcsCoordinates(draft: ProjectDeploymentTargetDraft): boolean
     draft.containerName
   ];
   if (values.some((value) => value.trim().length === 0)) return false;
-  return hasSafeHttpsOutputUrl(draft.outputUrl);
+  return !draft.outputUrl.trim() || hasSafeHttpsOutputUrl(draft.outputUrl);
 }
 
 function hasCompleteLambdaCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
