@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { curatedModules, expandCuratedModuleIntoDiagram } from "./module-catalog";
 import { createModuleCatalogGroups, moduleCatalogViews } from "./module-catalog-view";
+
+const catalogViewSource = readFileSync(new URL("./module-catalog-view.ts", import.meta.url), "utf8");
+const panelSource = readFileSync(new URL("./index.tsx", import.meta.url), "utf8");
+const modulePanelSource = panelSource.slice(
+  panelSource.indexOf("function ModuleCatalogPanel"),
+  panelSource.indexOf("function ModuleCatalogCard")
+);
 
 test("catalog view는 기능별·용도별 사용자 언어로 모든 Module을 노출한다", () => {
   assert.deepEqual(moduleCatalogViews, [
@@ -106,6 +114,13 @@ test("검색은 Module 제목·설명·lens label을 대상으로 같은 그룹 
     byLens.flatMap(({ modules }) => modules.map(({ id }) => id)),
     ["identity-access-boundary"]
   );
+});
+
+test("검색과 view 전환은 locale 독립적이며 단순 pressed-button 접근성 계약을 사용한다", () => {
+  assert.doesNotMatch(catalogViewSource, /toLocaleLowerCase/);
+  assert.match(modulePanelSource, /aria-label="모듈 분류"[^>]*role="group"/);
+  assert.match(modulePanelSource, /aria-pressed=\{activeView === view\.id\}/);
+  assert.doesNotMatch(modulePanelSource, /role="tab(?:list)?"/);
 });
 
 function normalizeExpandedAt(diagram: DiagramJson): DiagramJson {

@@ -492,14 +492,13 @@ function ModuleCatalogPanel({ onModuleAdd }: { readonly onModuleAdd?: ((moduleId
   return (
     <div className="moduleCatalogPanel">
       <div className="moduleCatalogToolbar">
-        <div aria-label="모듈 분류" className="moduleCatalogViewTabs" role="tablist">
+        <div aria-label="모듈 분류" className="moduleCatalogViewTabs" role="group">
           {moduleCatalogViews.map((view) => (
             <button
-              aria-selected={activeView === view.id}
+              aria-pressed={activeView === view.id}
               className={activeView === view.id ? "moduleCatalogViewTabActive" : "moduleCatalogViewTab"}
               key={view.id}
               onClick={() => setActiveView(view.id)}
-              role="tab"
               type="button"
             >
               {view.label}

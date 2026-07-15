@@ -81,7 +81,7 @@ function matchesModuleSearch(
 }
 
 function normalizeSearchText(value: string): string {
-  return value.trim().toLocaleLowerCase();
+  return value.trim().toLowerCase();
 }
 
 function compareModules(left: CuratedModuleDefinition, right: CuratedModuleDefinition): number {
