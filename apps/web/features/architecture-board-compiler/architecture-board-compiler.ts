@@ -322,7 +322,7 @@ function createModulePatternCandidate(
       semanticEdgeLabelsById: Object.fromEntries(
         baseCandidate.architecture.edges.map(({ id, label }) => [id, label])
       ),
-      moduleInstanceByNodeId: Object.fromEntries(
+      moduleExpansionByNodeId: Object.fromEntries(
         beforeDiagram.nodes.flatMap((node) => {
           const moduleSource = node.metadata?.moduleSource;
           return moduleSource
@@ -331,9 +331,7 @@ function createModulePatternCandidate(
                   node.id,
                   {
                     moduleId: moduleSource.moduleId,
-                    instanceId:
-                      moduleSource.instanceId ??
-                      `${moduleSource.moduleId}:${moduleSource.expandedAt}`
+                    expansionId: moduleSource.expandedAt
                   }
                 ] as const
               ]

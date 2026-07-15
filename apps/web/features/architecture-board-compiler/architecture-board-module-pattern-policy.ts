@@ -25,8 +25,8 @@ export type ArchitectureBoardModulePatternKnowledgeResult = {
 export type ArchitectureBoardModulePatternKnowledgeOptions = {
   readonly projection?: "strict" | "compiler-roundtrip";
   readonly semanticEdgeLabelsById?: Readonly<Record<string, string | undefined>>;
-  readonly moduleInstanceByNodeId?: Readonly<
-    Record<string, { readonly moduleId: string; readonly instanceId: string }>
+  readonly moduleExpansionByNodeId?: Readonly<
+    Record<string, { readonly moduleId: string; readonly expansionId: string }>
   >;
   readonly resourceParentByNodeId?: Readonly<Record<string, string | null>>;
 };
@@ -102,7 +102,7 @@ export function applyArchitectureBoardModulePatternKnowledge(
     matchingDiagram,
     artifact.modulePatterns,
     mode,
-    options.moduleInstanceByNodeId
+    options.moduleExpansionByNodeId
   );
   if (matches.length === 0) return null;
 
@@ -130,8 +130,8 @@ function findNonOverlappingPatternMatches(
   diagram: DiagramJson,
   patterns: readonly ArchitectureBoardModulePattern[],
   mode: "strict" | "compiler-roundtrip",
-  moduleInstanceByNodeId:
-    | Readonly<Record<string, { readonly moduleId: string; readonly instanceId: string }>>
+  moduleExpansionByNodeId:
+    | Readonly<Record<string, { readonly moduleId: string; readonly expansionId: string }>>
     | undefined
 ): MutableMatch[] {
   const usedNodeIds = new Set<string>();
@@ -169,7 +169,7 @@ function findNonOverlappingPatternMatches(
     ...projection,
     relations: createRelationIndex(projection.nodes, projection.edges, mode, true)
   }));
-  const context = createMatchingContext(diagram, mode, moduleInstanceByNodeId);
+  const context = createMatchingContext(diagram, mode, moduleExpansionByNodeId);
 
   for (const patternProjection of orderedProjections) {
     while (true) {
@@ -225,8 +225,8 @@ function findNextNodeMapping(
       (context.nodesBySignature.get(nodeSignature(patternNode)) ?? [])
         .filter((node) => !excludedNodeIds.has(node.id))
         .filter((node) => {
-          const moduleInstance = context.moduleInstanceByNodeId.get(node.id);
-          return !moduleInstance || moduleInstance.moduleId === patternProjection.pattern.id;
+          const moduleExpansion = context.moduleExpansionByNodeId.get(node.id);
+          return !moduleExpansion || moduleExpansion.moduleId === patternProjection.pattern.id;
         })
         .filter((node) =>
           hasEnoughRelations(patternNode.id, node.id, patternRelations, diagramRelations)
@@ -256,7 +256,7 @@ function findNextNodeMapping(
     const patternNodeId = patternNodeOrder[index]!;
     for (const candidate of candidatesByPatternNodeId.get(patternNodeId) ?? []) {
       if (usedDiagramNodeIds.has(candidate.id)) continue;
-      if (!moduleInstancesAgreeWithMapping(candidate.id, mapping, context)) continue;
+      if (!moduleExpansionsAgreeWithMapping(candidate.id, mapping, context)) continue;
       if (
         !relationsAgreeWithMapping(
           patternNodeId,
@@ -280,21 +280,21 @@ function findNextNodeMapping(
   return matchNext(0) ? new Map(mapping) : null;
 }
 
-function moduleInstancesAgreeWithMapping(
+function moduleExpansionsAgreeWithMapping(
   candidateNodeId: string,
   mapping: ReadonlyMap<string, string>,
   context: MatchingContext
 ): boolean {
-  const candidateInstance = context.moduleInstanceByNodeId.get(candidateNodeId);
+  const candidateExpansion = context.moduleExpansionByNodeId.get(candidateNodeId);
   for (const mappedNodeId of mapping.values()) {
-    const mappedInstance = context.moduleInstanceByNodeId.get(mappedNodeId);
-    if (!candidateInstance || !mappedInstance) {
-      if (candidateInstance !== mappedInstance) return false;
+    const mappedExpansion = context.moduleExpansionByNodeId.get(mappedNodeId);
+    if (!candidateExpansion || !mappedExpansion) {
+      if (candidateExpansion !== mappedExpansion) return false;
       continue;
     }
     if (
-      candidateInstance.moduleId !== mappedInstance.moduleId ||
-      candidateInstance.instanceId !== mappedInstance.instanceId
+      candidateExpansion.moduleId !== mappedExpansion.moduleId ||
+      candidateExpansion.expansionId !== mappedExpansion.expansionId
     ) {
       return false;
     }
@@ -314,9 +314,9 @@ type MatchingContext = {
   readonly relations: RelationIndex;
   readonly nodesBySignature: ReadonlyMap<string, readonly DiagramNode[]>;
   readonly edgeIdsByMatchKey: ReadonlyMap<string, readonly string[]>;
-  readonly moduleInstanceByNodeId: ReadonlyMap<
+  readonly moduleExpansionByNodeId: ReadonlyMap<
     string,
-    { readonly moduleId: string; readonly instanceId: string }
+    { readonly moduleId: string; readonly expansionId: string }
   >;
   readonly mode: "strict" | "compiler-roundtrip";
 };
@@ -734,8 +734,8 @@ function projectResourceNodes(nodes: readonly DiagramNode[]): DiagramNode[] {
 function createMatchingContext(
   diagram: DiagramJson,
   mode: "strict" | "compiler-roundtrip",
-  moduleInstanceByNodeId:
-    | Readonly<Record<string, { readonly moduleId: string; readonly instanceId: string }>>
+  moduleExpansionByNodeId:
+    | Readonly<Record<string, { readonly moduleId: string; readonly expansionId: string }>>
     | undefined
 ): MatchingContext {
   const nodesBySignature = new Map<string, DiagramNode[]>();
@@ -754,7 +754,7 @@ function createMatchingContext(
     relations: createRelationIndex(diagram.nodes, diagram.edges, mode, true),
     nodesBySignature,
     edgeIdsByMatchKey,
-    moduleInstanceByNodeId: new Map(Object.entries(moduleInstanceByNodeId ?? {})),
+    moduleExpansionByNodeId: new Map(Object.entries(moduleExpansionByNodeId ?? {})),
     mode
   };
 }

@@ -49,14 +49,13 @@ export function materializeCuratedModulePattern(input: {
 }): DiagramJson {
   if (input.pattern.nodes.length === 0) return input.diagram;
 
-  const expandedAt = input.expandedAt ?? new Date().toISOString();
+  const expandedAt = input.expandedAt ?? createUniqueExpandedAt(input.diagram);
   const nodeIds = createIdMap(
     input.pattern.nodes.map(({ id }) => id),
     new Set(input.diagram.nodes.map(({ id }) => id)),
     input.pattern.id,
     "node"
   );
-  const moduleInstanceId = requireMappedValue(nodeIds, input.pattern.nodes[0]!.id);
   const edgeIds = createIdMap(
     input.pattern.edges.map(({ id }) => id),
     new Set(input.diagram.edges.map(({ id }) => id)),
@@ -111,7 +110,6 @@ export function materializeCuratedModulePattern(input: {
                 : {}),
               moduleSource: {
                 expandedAt,
-                instanceId: moduleInstanceId,
                 moduleId: input.pattern.id,
                 moduleVersion: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
                 representativeTemplateId: input.pattern.provenance.representativeTemplateId,
@@ -123,7 +121,6 @@ export function materializeCuratedModulePattern(input: {
             metadata: {
               moduleSource: {
                 expandedAt,
-                instanceId: moduleInstanceId,
                 moduleId: input.pattern.id,
                 moduleVersion: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
                 representativeTemplateId: input.pattern.provenance.representativeTemplateId,
@@ -187,6 +184,17 @@ export function materializeCuratedModulePattern(input: {
       ? { variables: [...(input.diagram.variables ?? []), ...nextVariables] }
       : {})
   };
+}
+
+function createUniqueExpandedAt(diagram: DiagramJson): string {
+  const used = new Set(
+    diagram.nodes.flatMap((node) =>
+      node.metadata?.moduleSource ? [node.metadata.moduleSource.expandedAt] : []
+    )
+  );
+  let timestamp = Date.now();
+  while (used.has(new Date(timestamp).toISOString())) timestamp += 1;
+  return new Date(timestamp).toISOString();
 }
 
 function createIdMap(
