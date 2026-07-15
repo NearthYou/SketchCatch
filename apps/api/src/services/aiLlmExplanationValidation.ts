@@ -7,7 +7,7 @@ const ITEM_MAX_LENGTH = 120;
 const DEFAULT_ITEM_MAX_COUNT = 6;
 const DESIGN_SIMULATION_ITEM_MAX_COUNT = 5;
 const CODE_SNIPPET_MAX_LENGTH = 8_000;
-const CONCLUSION_MAX_LENGTH = 600;
+const CONCLUSION_MAX_LENGTH = 2_400;
 const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;
 const llmCodeSuggestionSchema = z.object({
   currentCode: z.string(),
@@ -46,7 +46,7 @@ type JsonRecord = Record<string, unknown>;
 
 // OpenAI 응답은 field별로 다시 확인해 깨진 부분만 rule 기반 fallback으로 바꿉니다.
 export function validateLlmExplanation(value: LlmExplanation | null, fallback: LlmExplanation): LlmExplanation {
-  const parsed = llmExplanationSchema.safeParse(normalizeLlmExplanationCandidate(value));
+  const parsed = llmExplanationSchema.safeParse(normalizeLlmExplanationCandidate(value, fallback));
 
   if (!parsed.success) {
     return fallback;
@@ -246,17 +246,19 @@ function parseJsonObject(value: string): unknown | null {
   }
 }
 
-function normalizeLlmExplanationCandidate(value: unknown): unknown {
+function normalizeLlmExplanationCandidate(value: unknown, fallback: LlmExplanation): unknown {
   if (!isJsonRecord(value)) {
     return value;
   }
 
-  const target = typeof value.target === "string" ? value.target : undefined;
-  const summary = typeof value.summary === "string" ? value.summary : undefined;
-  const highlights = normalizeTextListCandidate(value.highlights);
-  const nextActions = normalizeTextListCandidate(
+  const target = typeof value.target === "string" ? value.target : fallback.target;
+  const summary = typeof value.summary === "string" ? value.summary : fallback.summary;
+  const candidateHighlights = normalizeTextListCandidate(value.highlights);
+  const highlights = candidateHighlights.length > 0 ? candidateHighlights : fallback.highlights;
+  const candidateNextActions = normalizeTextListCandidate(
     value.nextActions ?? value.next_actions ?? value.nextSteps ?? value.next_steps
   );
+  const nextActions = candidateNextActions.length > 0 ? candidateNextActions : fallback.nextActions;
   const codeSuggestion = normalizeCodeSuggestionCandidate(
     value.codeSuggestion ?? value.code_suggestion ?? value.fixSuggestion ?? value.fix_suggestion
   );
@@ -264,10 +266,6 @@ function normalizeLlmExplanationCandidate(value: unknown): unknown {
     typeof (value.wellArchitectedConclusion ?? value.well_architected_conclusion) === "string"
       ? (value.wellArchitectedConclusion ?? value.well_architected_conclusion)
       : undefined;
-
-  if (target === undefined || summary === undefined || highlights.length === 0 || nextActions.length === 0) {
-    return value;
-  }
 
   return {
     target,

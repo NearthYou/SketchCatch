@@ -651,6 +651,7 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
     value === "conflict" ||
     value === "github_oauth_required" ||
     value === "too_many_requests" ||
+    value === "service_unavailable" ||
     value === "internal_server_error"
   );
 }
