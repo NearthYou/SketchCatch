@@ -27,6 +27,7 @@ import type {
   CreateArchitectureDraftRequest,
   CreateArchitectureDraftResponse,
   CreateGitHubArchitectureDraftRequest,
+  CreateGitHubInstallationUserAuthorizationRequest,
   CreateAwsConnectionRequest,
   CreateAwsConnectionResponse,
   CreateDeploymentRequest,
@@ -70,6 +71,7 @@ import type {
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
   GitHubInstallationConnection,
+  GitHubInstallationUserAuthorizationUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationsResponse,
   ListGitHubInstallationRepositoriesRequest,
@@ -1334,6 +1336,19 @@ export async function listGitHubInstallationRepositories(
 ): Promise<ListGitHubInstallationRepositoriesResponse> {
   return apiFetch<ListGitHubInstallationRepositoriesResponse>(
     "/source-repositories/github/installation-repositories",
+    {
+      auth: true,
+      method: "POST",
+      body: input
+    }
+  );
+}
+
+export async function createGitHubInstallationUserAuthorization(
+  input: CreateGitHubInstallationUserAuthorizationRequest
+): Promise<GitHubInstallationUserAuthorizationUrlResponse> {
+  return apiFetch<GitHubInstallationUserAuthorizationUrlResponse>(
+    "/source-repositories/github/user-authorization-url",
     {
       auth: true,
       method: "POST",

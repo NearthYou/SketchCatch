@@ -46,6 +46,12 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요.",
   "GIT_APP_INSTALLATION_FORBIDDEN":
     "이 GitHub App installation은 다른 SketchCatch 계정에 연결되어 있거나 접근할 수 없습니다. GitHub App 연결을 다시 진행해주세요.",
+  "GIT_APP_USER_AUTHORIZATION_CANCELLED":
+    "GitHub 사용자 권한 확인이 취소됐습니다. GitHub App 연결을 다시 진행해주세요.",
+  "GIT_APP_USER_AUTHORIZATION_FAILED":
+    "GitHub 사용자 권한을 확인하지 못했습니다. GitHub App 설정과 Client Secret을 확인해주세요.",
+  "GIT_APP_USER_AUTHORIZATION_INVALID":
+    "GitHub 사용자 권한 확인 정보가 만료됐거나 올바르지 않습니다. 연결을 다시 진행해주세요.",
   "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE":
     "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요.",
   "GIT_APP_REPOSITORY_ARCHIVED":
