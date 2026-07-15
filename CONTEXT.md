@@ -16,6 +16,14 @@ _Avoid_: Main board, canvas, drawing board
 An infrastructure building block from a cloud provider inside a Practice Architecture, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
 _Avoid_: Component, block, service
 
+**Curated Module**:
+A reusable, preassembled group of Resources, relationships, configuration, and Board structure offered from the Workspace `Modules` catalog. Expanding one creates editable Resources on the Architecture Board; it is not a Terraform module or an indivisible parent Resource.
+_Avoid_: Terraform module, Template, Resource category, AI pattern
+
+**Module Pattern Knowledge**:
+Versioned, normalized Resource relationships, containment, relative geometry, layering, and edge routing extracted deterministically from Template Boards. Curated Modules and the Architecture Board Compiler share it instead of inventing separate layouts.
+_Avoid_: Hand-authored module coordinates, LLM layout, Template screenshot
+
 **Provider Adapter**:
 The cloud-specific connector that translates provider APIs, Resource types, IaC import details, and deployment constraints into SketchCatch's provider-neutral Practice Architecture model.
 _Avoid_: Cloud plugin, provider switch, cloud mode
