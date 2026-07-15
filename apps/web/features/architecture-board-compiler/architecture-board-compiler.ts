@@ -173,17 +173,18 @@ export function compileArchitectureBoard(
     sourceArchitecture,
     diagnosticContext
   );
-  const requestedOriginalCandidate = semanticOperations.length > 0
-    ? createRequestedOriginalCandidate(
-        requestedArchitecture,
-        baseDiagram,
-        comparisonArchitecture,
-        comparisonDiagram,
-        sourceArchitecture,
-        diagnosticContext,
-        semanticOperationResult.presentationOperations
-      )
-    : undefined;
+  const requestedOriginalCandidate =
+    semanticOperations.length > 0
+      ? createRequestedOriginalCandidate(
+          requestedArchitecture,
+          baseDiagram,
+          comparisonArchitecture,
+          comparisonDiagram,
+          sourceArchitecture,
+          diagnosticContext,
+          semanticOperationResult.presentationOperations
+        )
+      : undefined;
   const presentationArchitecture = inferPresentationArchitecture(requestedArchitecture);
   const presentationCandidate = createMaterializedCandidate(
     "presentation",
@@ -222,7 +223,9 @@ export function compileArchitectureBoard(
       diagnosticContext
     )
   ].filter(
-    (entry): entry is { candidate: Candidate; pattern: ArchitectureBoardModulePatternKnowledgeResult } =>
+    (
+      entry
+    ): entry is { candidate: Candidate; pattern: ArchitectureBoardModulePatternKnowledgeResult } =>
       entry !== null
   );
   const patternCandidates = patternCandidateResults.map(({ candidate }) => candidate);
@@ -287,7 +290,9 @@ export function compileArchitectureBoard(
     provenance: {
       compilerVersion: ARCHITECTURE_BOARD_COMPILER_VERSION,
       candidateId: selected.id,
-      candidateIds: candidates.map((candidate) => candidate.id).sort((left, right) => left.localeCompare(right)),
+      candidateIds: candidates
+        .map((candidate) => candidate.id)
+        .sort((left, right) => left.localeCompare(right)),
       layoutProfileIds: layoutProfiles.map((profile) => profile.id),
       modulePatternIds: matchedPatternIds,
       modulePatternRepresentativeTemplateIds: matchedPatternRepresentativeTemplateIds,
@@ -310,9 +315,16 @@ function createModulePatternCandidate(
 ): { candidate: Candidate; pattern: ArchitectureBoardModulePatternKnowledgeResult } | null {
   const pattern = applyArchitectureBoardModulePatternKnowledge(
     baseCandidate.diagram,
-    architectureBoardKnowledge
+    architectureBoardKnowledge,
+    {
+      projection: "compiler-roundtrip",
+      semanticEdgeLabelsById: Object.fromEntries(
+        baseCandidate.architecture.edges.map(({ id, label }) => [id, label])
+      )
+    }
   );
   if (!pattern) return null;
+  if (!hasVisibleSemanticEdgeParity(baseCandidate.architecture, pattern.diagram)) return null;
 
   return {
     candidate: createCandidate(
@@ -328,6 +340,32 @@ function createModulePatternCandidate(
   };
 }
 
+function hasVisibleSemanticEdgeParity(
+  architecture: ArchitectureJson,
+  diagram: DiagramJson
+): boolean {
+  const diagramEdgeKeys = new Set(
+    diagram.edges.map(
+      ({ id, sourceNodeId, targetNodeId }) => `${id}\u0000${sourceNodeId}\u0000${targetNodeId}`
+    )
+  );
+  const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]));
+
+  return architecture.edges.every((edge) => {
+    if (diagramEdgeKeys.has(`${edge.id}\u0000${edge.sourceId}\u0000${edge.targetId}`)) {
+      return true;
+    }
+    if (isContainmentEdge(edge)) return true;
+    const target = nodeById.get(edge.targetId);
+    return (
+      edge.label?.trim().toLowerCase() === "references" &&
+      target !== undefined &&
+      isDiagramPresentationArea(target) &&
+      hasDiagramAreaAncestor(nodeById.get(edge.sourceId), target.id, nodeById)
+    );
+  });
+}
+
 function createRequestedOriginalCandidate(
   requestedArchitecture: ArchitectureJson,
   baseDiagram: DiagramJson,
@@ -337,7 +375,10 @@ function createRequestedOriginalCandidate(
   diagnosticContext: CompilationDiagnosticContext,
   presentationOperations: Parameters<typeof applyArchitectureBoardPresentationOperations>[1]
 ): Candidate {
-  const requestedPresentation = applyArchitectureBoardPresentationOperations(baseDiagram, presentationOperations);
+  const requestedPresentation = applyArchitectureBoardPresentationOperations(
+    baseDiagram,
+    presentationOperations
+  );
 
   return createCandidate(
     "requested-original",
@@ -402,7 +443,10 @@ function createMaterializedCandidate(
 // Compiler는 Resource graph를 다시 materialize하지만, variable binding과 사용자가 저장한
 // viewport/presentation은 graph에서 유도할 수 없는 Board 상태다. 자동 정리 proposal이 이를
 // 잃으면 안 되므로 후보에 그대로 carry-forward한다.
-function preserveCurrentBoardState(nextDiagram: DiagramJson, currentDiagram: DiagramJson): DiagramJson {
+function preserveCurrentBoardState(
+  nextDiagram: DiagramJson,
+  currentDiagram: DiagramJson
+): DiagramJson {
   const currentNodeById = new Map(currentDiagram.nodes.map((node) => [node.id, node]));
   const lockedPresentationNodeIds = new Set(
     currentDiagram.nodes
@@ -542,7 +586,10 @@ function createCompilationQuality(
   compilationDistance: number,
   diagram: DiagramJson
 ): ArchitectureBoardCompilationQuality {
-  const semanticDiagnosticPenalty = diagnostics.reduce((total, diagnostic) => total + diagnostic.penalty, 0);
+  const semanticDiagnosticPenalty = diagnostics.reduce(
+    (total, diagnostic) => total + diagnostic.penalty,
+    0
+  );
   const knowledge = evaluateArchitectureBoardKnowledgeQuality(diagram, architectureBoardKnowledge);
 
   return {
@@ -666,7 +713,9 @@ function normalizeTerraformConfiguration(source: ArchitectureJson): Architecture
     ...cloneArchitecture(source),
     nodes: source.nodes.map((node) => {
       const config = normalizeTerraformConfigurationValue(node.config) as Record<string, unknown>;
-      return sameValue(config, node.config) ? structuredClone(node) : { ...structuredClone(node), config };
+      return sameValue(config, node.config)
+        ? structuredClone(node)
+        : { ...structuredClone(node), config };
     })
   };
 }
@@ -694,7 +743,9 @@ function removeDanglingRelationships(source: ArchitectureJson): ArchitectureJson
     (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
   );
 
-  return edges.length === source.edges.length ? cloneArchitecture(source) : { ...cloneArchitecture(source), edges };
+  return edges.length === source.edges.length
+    ? cloneArchitecture(source)
+    : { ...cloneArchitecture(source), edges };
 }
 
 function inferTerraformReferenceRelationships(source: ArchitectureJson): ArchitectureJson {
@@ -743,7 +794,9 @@ function inferNonSecurityGroupParents(
     edgeParentsByChildId.set(edge.targetId, parentIds);
   }
 
-  for (const node of [...architecture.nodes].sort((left, right) => left.id.localeCompare(right.id))) {
+  for (const node of [...architecture.nodes].sort((left, right) =>
+    left.id.localeCompare(right.id)
+  )) {
     const existingParentId = normalizeParentId(declaredParents.get(node.id));
     const existingParentIsUsable = Boolean(
       existingParentId &&
@@ -794,7 +847,10 @@ function createContainmentParentCandidates({
       const candidate = nodesById.get(candidateId);
       if (!candidate || !isNonSecurityGroupAreaNode(candidate)) continue;
       if (wouldCreateContainmentCycle(nodeId, candidateId, parentByNodeId)) continue;
-      sourcePriorityById.set(candidateId, Math.max(sourcePriorityById.get(candidateId) ?? 0, priority));
+      sourcePriorityById.set(
+        candidateId,
+        Math.max(sourcePriorityById.get(candidateId) ?? 0, priority)
+      );
     }
   };
 
@@ -856,7 +912,9 @@ function getReferencedNodeIds(
     if (nodesById.has(normalized)) {
       directIds.add(normalized);
     }
-    for (const match of normalized.matchAll(/(?:data\.)?(aws_[a-z0-9_]+)\.([a-zA-Z0-9_-]+)(?:\.[a-zA-Z0-9_]+)?/gu)) {
+    for (const match of normalized.matchAll(
+      /(?:data\.)?(aws_[a-z0-9_]+)\.([a-zA-Z0-9_-]+)(?:\.[a-zA-Z0-9_]+)?/gu
+    )) {
       const type = match[1];
       const resourceName = match[2];
       if (!type || !resourceName) continue;
@@ -873,7 +931,9 @@ function createTerraformReferenceIndex(
 ): Map<string, string> {
   const references = new Map<string, string>();
 
-  for (const node of [...nodesById.values()].sort((left, right) => left.id.localeCompare(right.id))) {
+  for (const node of [...nodesById.values()].sort((left, right) =>
+    left.id.localeCompare(right.id)
+  )) {
     const resourceType = getTerraformResourceType(node);
     if (!resourceType.startsWith("aws_") && !resourceType.startsWith("kubernetes_")) continue;
     for (const name of getTerraformReferenceNames(node)) {
@@ -887,8 +947,14 @@ function createTerraformReferenceIndex(
 
 function getTerraformReferenceNames(node: ArchitectureJson["nodes"][number]): string[] {
   const configuredName = readString(node.config["terraformResourceName"]);
-  return [...new Set([node.id, configuredName, toTerraformName(node.id), toTerraformName(node.label ?? "")])]
-    .filter((value): value is string => Boolean(value && value.length > 0));
+  return [
+    ...new Set([
+      node.id,
+      configuredName,
+      toTerraformName(node.id),
+      toTerraformName(node.label ?? "")
+    ])
+  ].filter((value): value is string => Boolean(value && value.length > 0));
 }
 
 function collectConfigStringValues(value: unknown, key?: string): string[] {
@@ -897,7 +963,9 @@ function collectConfigStringValues(value: unknown, key?: string): string[] {
   }
   if (Array.isArray(value)) return value.flatMap((entry) => collectConfigStringValues(entry));
   if (!isRecord(value)) return [];
-  return Object.entries(value).flatMap(([entryKey, entry]) => collectConfigStringValues(entry, entryKey));
+  return Object.entries(value).flatMap(([entryKey, entry]) =>
+    collectConfigStringValues(entry, entryKey)
+  );
 }
 
 function normalizeTerraformReference(value: string): string {
@@ -983,8 +1051,8 @@ function applyCompilerPresentationMetadata(
   });
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
-  // A Terraform reference to a newly inferred parent is useful in ArchitectureJson,
-  // but rendering it through the Area frame makes a noisy self-containment edge.
+  // Only containment and a redundant child-to-ancestor reference are presentation noise.
+  // Other semantic Area edges (routes, egress, health, etc.) remain visible.
   return {
     ...cloneDiagram(diagram),
     nodes,
@@ -993,7 +1061,14 @@ function applyCompilerPresentationMetadata(
       return !(
         target &&
         isDiagramPresentationArea(target) &&
-        hasDiagramAreaAncestor(nodeById.get(edge.sourceNodeId), target.id, nodeById)
+        hasDiagramAreaAncestor(nodeById.get(edge.sourceNodeId), target.id, nodeById) &&
+        (isContainmentEdge({
+          id: edge.id,
+          sourceId: edge.sourceNodeId,
+          targetId: edge.targetNodeId,
+          label: edge.label
+        }) ||
+          edge.label?.trim().toLowerCase() === "references")
       );
     })
   };
@@ -1028,16 +1103,17 @@ function routeAndLayerDiagram(diagram: DiagramJson): DiagramJson {
 
       const handles = getObstacleSafeEdgeHandles(source, target, layeredNodes);
       const segments = getObstacleSafeOrthogonalRouteSegments(source, target, handles);
-      const points = segments.length === 0
-        ? []
-        : [segments[0]!.from, ...segments.map((segment) => segment.to)];
+      const points =
+        segments.length === 0 ? [] : [segments[0]!.from, ...segments.map((segment) => segment.to)];
       const sourcePoint = points[0] ?? { x: source.position.x, y: source.position.y };
       const targetPoint = points.at(-1) ?? { x: target.position.x, y: target.position.y };
       const route = {
         arrowDirection: "source-to-target" as const,
         labelPosition: getPolylineHalfwayPoint(points),
         sourcePoint,
-        svgPath: points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" "),
+        svgPath: points
+          .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+          .join(" "),
         targetPoint,
         waypoints: points.slice(1, -1)
       };
@@ -1068,7 +1144,10 @@ function applyCompilerLayerOrder(nodes: readonly DiagramNode[]): DiagramNode[] {
   });
 }
 
-function getDiagramAreaDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
+function getDiagramAreaDepth(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): number {
   let depth = 0;
   let parentId = node.metadata?.parentAreaNodeId;
   const visited = new Set<string>();
@@ -1089,9 +1168,10 @@ function isDiagramPresentationArea(node: DiagramNode): boolean {
   );
 }
 
-function getPolylineHalfwayPoint(
-  points: readonly { readonly x: number; readonly y: number }[]
-): { x: number; y: number } {
+function getPolylineHalfwayPoint(points: readonly { readonly x: number; readonly y: number }[]): {
+  x: number;
+  y: number;
+} {
   if (points.length === 0) return { x: 0, y: 0 };
   const segments = points.slice(1).map((point, index) => {
     const start = points[index] ?? points[0]!;
@@ -1127,7 +1207,9 @@ function evaluateDiagram(diagram: DiagramJson): AutomaticDiagramLayoutQuality {
 
 function evaluateStructuralQuality(architecture: ArchitectureJson): StructuralQuality {
   const nodesById = new Map(architecture.nodes.map((node) => [node.id, node]));
-  const parentById = new Map(architecture.nodes.map((node) => [node.id, readDeclaredParentId(node)]));
+  const parentById = new Map(
+    architecture.nodes.map((node) => [node.id, readDeclaredParentId(node)])
+  );
   let invalidParentCount = 0;
   let securityGroupParentCount = 0;
   let containmentMismatchCount = 0;
@@ -1208,21 +1290,61 @@ function compareCompilationChanges(
     const after = afterNodes.get(id);
     if (!before && after) {
       if (renamedNodeIds.has(id)) continue;
-      changes.push(change("resource", "add", [id], `Resource ${id} 추가`, COMPILATION_DISTANCE_COST.resourceAdd, null, after));
+      changes.push(
+        change(
+          "resource",
+          "add",
+          [id],
+          `Resource ${id} 추가`,
+          COMPILATION_DISTANCE_COST.resourceAdd,
+          null,
+          after
+        )
+      );
       continue;
     }
     if (before && !after) {
-      changes.push(change("resource", "remove", [id], `Resource ${id} 삭제`, COMPILATION_DISTANCE_COST.resourceRemove, before, null));
+      changes.push(
+        change(
+          "resource",
+          "remove",
+          [id],
+          `Resource ${id} 삭제`,
+          COMPILATION_DISTANCE_COST.resourceRemove,
+          before,
+          null
+        )
+      );
       continue;
     }
     if (!before || !after) continue;
     if (before.type !== after.type || before.label !== after.label) {
-      changes.push(change("resource", "modify", [id], `Resource ${id} 정체성 변경`, COMPILATION_DISTANCE_COST.resourceIdentity, { type: before.type, label: before.label }, { type: after.type, label: after.label }));
+      changes.push(
+        change(
+          "resource",
+          "modify",
+          [id],
+          `Resource ${id} 정체성 변경`,
+          COMPILATION_DISTANCE_COST.resourceIdentity,
+          { type: before.type, label: before.label },
+          { type: after.type, label: after.label }
+        )
+      );
     }
     const beforeConfig = stripPresentationConfiguration(before.config);
     const afterConfig = stripPresentationConfiguration(after.config);
     if (!sameValue(beforeConfig, afterConfig)) {
-      changes.push(change("configuration", "modify", [id], `Resource ${id} 설정 정규화`, COMPILATION_DISTANCE_COST.configuration, beforeConfig, afterConfig));
+      changes.push(
+        change(
+          "configuration",
+          "modify",
+          [id],
+          `Resource ${id} 설정 정규화`,
+          COMPILATION_DISTANCE_COST.configuration,
+          beforeConfig,
+          afterConfig
+        )
+      );
     }
     const beforeParentId = readDeclaredParentId(before) ?? null;
     const afterParentId = readDeclaredParentId(after) ?? null;
@@ -1242,7 +1364,18 @@ function compareCompilationChanges(
   }
 
   for (const rename of renamedNodeIds.values()) {
-    changes.push(change("resource", "modify", [rename.beforeId, rename.afterId], `중복 Resource id ${rename.beforeId} 정규화`, COMPILATION_DISTANCE_COST.resourceIdentity, rename.before, rename.after, rename.afterId));
+    changes.push(
+      change(
+        "resource",
+        "modify",
+        [rename.beforeId, rename.afterId],
+        `중복 Resource id ${rename.beforeId} 정규화`,
+        COMPILATION_DISTANCE_COST.resourceIdentity,
+        rename.before,
+        rename.after,
+        rename.afterId
+      )
+    );
   }
 
   compareArchitectureRelationships(beforeArchitecture, afterArchitecture, changes);
@@ -1257,14 +1390,30 @@ function compareCompilationChanges(
 function findCompilerNormalizedDuplicateIds(
   beforeArchitecture: ArchitectureJson,
   afterArchitecture: ArchitectureJson
-): Map<string, { readonly after: ArchitectureJson["nodes"][number]; readonly afterId: string; readonly before: ArchitectureJson["nodes"][number]; readonly beforeId: string }> {
+): Map<
+  string,
+  {
+    readonly after: ArchitectureJson["nodes"][number];
+    readonly afterId: string;
+    readonly before: ArchitectureJson["nodes"][number];
+    readonly beforeId: string;
+  }
+> {
   const beforeById = new Map<string, ArchitectureJson["nodes"][number][]>();
   for (const node of beforeArchitecture.nodes) {
     const entries = beforeById.get(node.id) ?? [];
     entries.push(node);
     beforeById.set(node.id, entries);
   }
-  const renamed = new Map<string, { readonly after: ArchitectureJson["nodes"][number]; readonly afterId: string; readonly before: ArchitectureJson["nodes"][number]; readonly beforeId: string }>();
+  const renamed = new Map<
+    string,
+    {
+      readonly after: ArchitectureJson["nodes"][number];
+      readonly afterId: string;
+      readonly before: ArchitectureJson["nodes"][number];
+      readonly beforeId: string;
+    }
+  >();
   for (const after of afterArchitecture.nodes) {
     const match = after.id.match(/^(.*)__([2-9][0-9]*)$/u);
     const baseId = match?.[1];
@@ -1288,11 +1437,44 @@ function compareArchitectureRelationships(
     const previous = beforeEdges.get(id);
     const next = afterEdges.get(id);
     if (!previous && next) {
-      changes.push(change("relationship", "add", [next.sourceId, next.targetId], `관계 ${id} 추가`, COMPILATION_DISTANCE_COST.relationship, null, next, id));
+      changes.push(
+        change(
+          "relationship",
+          "add",
+          [next.sourceId, next.targetId],
+          `관계 ${id} 추가`,
+          COMPILATION_DISTANCE_COST.relationship,
+          null,
+          next,
+          id
+        )
+      );
     } else if (previous && !next) {
-      changes.push(change("relationship", "remove", [previous.sourceId, previous.targetId], `관계 ${id} 삭제`, COMPILATION_DISTANCE_COST.relationship, previous, null, id));
+      changes.push(
+        change(
+          "relationship",
+          "remove",
+          [previous.sourceId, previous.targetId],
+          `관계 ${id} 삭제`,
+          COMPILATION_DISTANCE_COST.relationship,
+          previous,
+          null,
+          id
+        )
+      );
     } else if (previous && next && !sameValue(previous, next)) {
-      changes.push(change("relationship", "modify", [next.sourceId, next.targetId], `관계 ${id} 변경`, COMPILATION_DISTANCE_COST.relationship, previous, next, id));
+      changes.push(
+        change(
+          "relationship",
+          "modify",
+          [next.sourceId, next.targetId],
+          `관계 ${id} 변경`,
+          COMPILATION_DISTANCE_COST.relationship,
+          previous,
+          next,
+          id
+        )
+      );
     }
   }
 }
@@ -1309,11 +1491,31 @@ function compareDiagramPresentationAndGeometry(
     const previous = beforeNodes.get(id);
     const next = afterNodes.get(id);
     if (!previous && next && next.kind === "design") {
-      changes.push(change("presentation", "add", [id], `표현 Area ${id} 추가`, COMPILATION_DISTANCE_COST.presentation, null, next));
+      changes.push(
+        change(
+          "presentation",
+          "add",
+          [id],
+          `표현 Area ${id} 추가`,
+          COMPILATION_DISTANCE_COST.presentation,
+          null,
+          next
+        )
+      );
       continue;
     }
     if (previous && !next && previous.kind === "design") {
-      changes.push(change("presentation", "remove", [id], `표현 Area ${id} 삭제`, COMPILATION_DISTANCE_COST.presentation, previous, null));
+      changes.push(
+        change(
+          "presentation",
+          "remove",
+          [id],
+          `표현 Area ${id} 삭제`,
+          COMPILATION_DISTANCE_COST.presentation,
+          previous,
+          null
+        )
+      );
       continue;
     }
     if (!previous || !next) continue;
@@ -1321,25 +1523,76 @@ function compareDiagramPresentationAndGeometry(
     const afterParent = next.metadata?.parentAreaNodeId ?? null;
     if (
       beforeParent !== afterParent &&
-      !changes.some(
-        (change) => change.kind === "containment" && change.targetIds.includes(id)
-      )
+      !changes.some((change) => change.kind === "containment" && change.targetIds.includes(id))
     ) {
-      changes.push(change("containment", "modify", [id, ...(afterParent ? [afterParent] : [])], `Resource ${id} 소속 변경`, COMPILATION_DISTANCE_COST.containment, beforeParent, afterParent));
+      changes.push(
+        change(
+          "containment",
+          "modify",
+          [id, ...(afterParent ? [afterParent] : [])],
+          `Resource ${id} 소속 변경`,
+          COMPILATION_DISTANCE_COST.containment,
+          beforeParent,
+          afterParent
+        )
+      );
     }
     const beforePresentation = getDiagramPresentationState(previous);
     const afterPresentation = getDiagramPresentationState(next);
     if (!sameValue(beforePresentation, afterPresentation)) {
-      changes.push(change("presentation", "modify", [id], `Resource ${id} 표현 Area 변경`, COMPILATION_DISTANCE_COST.presentation, beforePresentation, afterPresentation));
+      changes.push(
+        change(
+          "presentation",
+          "modify",
+          [id],
+          `Resource ${id} 표현 Area 변경`,
+          COMPILATION_DISTANCE_COST.presentation,
+          beforePresentation,
+          afterPresentation
+        )
+      );
     }
     if (!sameValue(previous.position, next.position)) {
-      changes.push(change("geometry", "modify", [id], `Resource ${id} 위치 변경`, COMPILATION_DISTANCE_COST.position, previous.position, next.position, `${id}:position`));
+      changes.push(
+        change(
+          "geometry",
+          "modify",
+          [id],
+          `Resource ${id} 위치 변경`,
+          COMPILATION_DISTANCE_COST.position,
+          previous.position,
+          next.position,
+          `${id}:position`
+        )
+      );
     }
     if (!sameValue(previous.size, next.size)) {
-      changes.push(change("geometry", "modify", [id], `Resource ${id} 크기 변경`, COMPILATION_DISTANCE_COST.size, previous.size, next.size, `${id}:size`));
+      changes.push(
+        change(
+          "geometry",
+          "modify",
+          [id],
+          `Resource ${id} 크기 변경`,
+          COMPILATION_DISTANCE_COST.size,
+          previous.size,
+          next.size,
+          `${id}:size`
+        )
+      );
     }
     if (previous.zIndex !== next.zIndex) {
-      changes.push(change("geometry", "modify", [id], `Resource ${id} z-index 변경`, COMPILATION_DISTANCE_COST.zIndex, previous.zIndex, next.zIndex, `${id}:z-index`));
+      changes.push(
+        change(
+          "geometry",
+          "modify",
+          [id],
+          `Resource ${id} z-index 변경`,
+          COMPILATION_DISTANCE_COST.zIndex,
+          previous.zIndex,
+          next.zIndex,
+          `${id}:z-index`
+        )
+      );
     }
   }
 
@@ -1443,7 +1696,18 @@ function compareDiagramRoutes(
     const beforeRoute = routeState(previous);
     const afterRoute = routeState(next);
     if (!sameValue(beforeRoute, afterRoute)) {
-      changes.push(change("edge-routing", "modify", [previous.sourceNodeId, previous.targetNodeId], `관계 ${id} 경로 변경`, COMPILATION_DISTANCE_COST.edgeRouting, beforeRoute, afterRoute, id));
+      changes.push(
+        change(
+          "edge-routing",
+          "modify",
+          [previous.sourceNodeId, previous.targetNodeId],
+          `관계 ${id} 경로 변경`,
+          COMPILATION_DISTANCE_COST.edgeRouting,
+          beforeRoute,
+          afterRoute,
+          id
+        )
+      );
     }
   }
 }
@@ -1474,10 +1738,14 @@ function createDiagnostics(
 ): ArchitectureBoardCompilationDiagnostic[] {
   const diagnostics: ArchitectureBoardCompilationDiagnostic[] = [];
   const sourceDuplicateIds = findDuplicateIds(sourceArchitecture.nodes.map((node) => node.id));
-  const candidateDuplicateIds = findDuplicateIds(candidateArchitecture.nodes.map((node) => node.id));
+  const candidateDuplicateIds = findDuplicateIds(
+    candidateArchitecture.nodes.map((node) => node.id)
+  );
   const candidateNodeIds = new Set(candidateArchitecture.nodes.map((node) => node.id));
   const sourceDanglingEdges = sourceArchitecture.edges.filter(
-    (edge) => !sourceArchitecture.nodes.some((node) => node.id === edge.sourceId) || !sourceArchitecture.nodes.some((node) => node.id === edge.targetId)
+    (edge) =>
+      !sourceArchitecture.nodes.some((node) => node.id === edge.sourceId) ||
+      !sourceArchitecture.nodes.some((node) => node.id === edge.targetId)
   );
   const candidateDanglingEdges = candidateArchitecture.edges.filter(
     (edge) => !candidateNodeIds.has(edge.sourceId) || !candidateNodeIds.has(edge.targetId)
@@ -1489,7 +1757,9 @@ function createDiagnostics(
       .map((change) => change.id);
     const normalized = !candidateDuplicateIds.has(id);
     diagnostics.push({
-      code: normalized ? "compiler.duplicate_resource_id_normalized" : "compiler.duplicate_resource_id",
+      code: normalized
+        ? "compiler.duplicate_resource_id_normalized"
+        : "compiler.duplicate_resource_id",
       level: normalized ? "info" : "warning",
       summary: normalized ? "중복 Resource id 정규화 제안" : "중복 Resource id",
       message: normalized
@@ -1510,7 +1780,9 @@ function createDiagnostics(
       message: removed
         ? `관계 ${edge.id}는 존재하지 않는 Resource를 가리켜 제거 후보로 만들었습니다.`
         : `관계 ${edge.id}의 시작 또는 대상 Resource가 없습니다.`,
-      relatedChangeIds: changes.filter((change) => change.id.endsWith(`:${edge.id}`)).map((change) => change.id),
+      relatedChangeIds: changes
+        .filter((change) => change.id.endsWith(`:${edge.id}`))
+        .map((change) => change.id),
       relatedResourceIds: [edge.sourceId, edge.targetId],
       penalty: removed ? 0 : 300
     });
@@ -1624,7 +1896,9 @@ function createDiagnostics(
   for (const change of changes.filter(
     (change) => change.kind === "relationship" && change.action === "add"
   )) {
-    const edge = candidateArchitecture.edges.find((candidate) => change.id.endsWith(`:${candidate.id}`));
+    const edge = candidateArchitecture.edges.find((candidate) =>
+      change.id.endsWith(`:${candidate.id}`)
+    );
     if (edge?.label !== "references") continue;
     diagnostics.push({
       code: "compiler.inferred_terraform_relationship",
@@ -1656,7 +1930,8 @@ function createDiagnostics(
       code: "compiler.empty_candidate",
       level: "warning",
       summary: "빈 Board 결과",
-      message: "Resource가 있는 Architecture가 빈 Board로 materialize되었습니다. 이 proposal은 그대로 검토할 수 있습니다.",
+      message:
+        "Resource가 있는 Architecture가 빈 Board로 materialize되었습니다. 이 proposal은 그대로 검토할 수 있습니다.",
       relatedChangeIds: [],
       relatedResourceIds: candidateArchitecture.nodes.map((node) => node.id),
       penalty: 10_000
@@ -1666,7 +1941,8 @@ function createDiagnostics(
   diagnostics.push(...createContextDiagnostics(diagnosticContext, changes));
 
   return diagnostics.sort(
-    (left, right) => left.code.localeCompare(right.code) || left.message.localeCompare(right.message)
+    (left, right) =>
+      left.code.localeCompare(right.code) || left.message.localeCompare(right.message)
   );
 }
 
@@ -1700,7 +1976,8 @@ function createContextDiagnostics(
   }));
 
   return [...operationDiagnostics, ...signalDiagnostics].sort(
-    (left, right) => left.code.localeCompare(right.code) || left.message.localeCompare(right.message)
+    (left, right) =>
+      left.code.localeCompare(right.code) || left.message.localeCompare(right.message)
   );
 }
 

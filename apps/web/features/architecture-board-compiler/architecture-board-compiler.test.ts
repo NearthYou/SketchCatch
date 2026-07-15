@@ -12,6 +12,7 @@ import {
   convertArchitectureJsonToDiagramJson,
   convertDiagramJsonToArchitectureJson
 } from "../workspace/workspace-ai-diagram-adapter";
+import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
 
 const architecture: ArchitectureJson = {
   nodes: [
@@ -210,6 +211,66 @@ test("Compiler는 presentation node가 없는 실제 artifact graph도 pattern �
   );
 });
 
+test("Compiler는 조립된 모든 Curated Module을 같은 pattern knowledge로 인식한다", () => {
+  for (const pattern of architectureBoardKnowledge.modulePatterns) {
+    const currentDiagram = expandCuratedModuleIntoDiagram({
+      diagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, variables: [] },
+      moduleId: pattern.id
+    });
+    const architecture = convertDiagramJsonToArchitectureJson(currentDiagram);
+
+    const proposal = compileArchitectureBoard({
+      architecture,
+      currentDiagram,
+      trigger: "board-auto-organize"
+    });
+
+    assert.ok(
+      proposal.provenance.modulePatternIds?.includes(pattern.id),
+      `${pattern.id} must be recognized after the compiler roundtrip`
+    );
+    assert.equal(proposal.architecture.edges.length, architecture.edges.length, pattern.id);
+    assert.ok(
+      proposal.diagram.edges.every(
+        ({ sourceNodeId, targetNodeId }) =>
+          proposal.diagram.nodes.some(({ id }) => id === sourceNodeId) &&
+          proposal.diagram.nodes.some(({ id }) => id === targetNodeId)
+      ),
+      `${pattern.id} must keep valid edge endpoints`
+    );
+  }
+});
+
+test("network pattern Compiler proposal은 containment만 숨기고 semantic Area edge는 보존한다", () => {
+  const currentDiagram = expandCuratedModuleIntoDiagram({
+    diagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, variables: [] },
+    moduleId: "network-foundation"
+  });
+  const architecture = convertDiagramJsonToArchitectureJson(currentDiagram);
+
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+
+  assert.equal(architecture.edges.length, 17);
+  assert.equal(proposal.architecture.edges.length, 17);
+  assert.equal(proposal.diagram.edges.length, 11);
+  const visibleEdgeIds = new Set(proposal.diagram.edges.map(({ id }) => id));
+  assert.ok(
+    [...visibleEdgeIds].some((id) => id.endsWith("vpc-igw")),
+    "VPC to Internet Gateway route must remain visible"
+  );
+  assert.ok(
+    [...visibleEdgeIds].some((id) => id.endsWith("public-nat")),
+    "Subnet to NAT egress must remain visible"
+  );
+  assert.ok(proposal.architecture.edges.some(({ label }) => label === "routes"));
+  assert.ok(proposal.architecture.edges.some(({ label }) => label === "egress"));
+  assert.ok(proposal.provenance.modulePatternIds?.includes("network-foundation"));
+});
+
 test("Compiler는 승인된 semantic operation과 외부 충돌 신호를 하나의 proposal로 설명한다", () => {
   const proposal = compileArchitectureBoard({
     architecture: {
@@ -276,9 +337,21 @@ test("Compiler는 승인된 semantic operation과 외부 충돌 신호를 하나
     "vpc"
   );
   assert.ok(proposal.diagram.nodes.some((node) => node.id === "platform-group"));
-  assert.ok(proposal.changes.some(({ action, kind, targetIds }) => action === "add" && kind === "resource" && targetIds.includes("vpc")));
-  assert.ok(proposal.changes.some(({ action, kind, targetIds }) => action === "add" && kind === "presentation" && targetIds.includes("platform-group")));
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:provider-limit"));
+  assert.ok(
+    proposal.changes.some(
+      ({ action, kind, targetIds }) =>
+        action === "add" && kind === "resource" && targetIds.includes("vpc")
+    )
+  );
+  assert.ok(
+    proposal.changes.some(
+      ({ action, kind, targetIds }) =>
+        action === "add" && kind === "presentation" && targetIds.includes("platform-group")
+    )
+  );
+  assert.ok(
+    proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:provider-limit")
+  );
   assert.ok(proposal.quality.after.semanticDiagnosticPenalty >= 321);
 });
 
@@ -321,7 +394,8 @@ test("semantic operation이 있으면 진짜 원본을 보존하되 요청된 gr
   assert.ok(proposal.architecture.nodes.some((node) => node.id === "vpc"));
   assert.ok(
     proposal.changes.some(
-      ({ action, kind, targetIds }) => action === "add" && kind === "resource" && targetIds.includes("vpc")
+      ({ action, kind, targetIds }) =>
+        action === "add" && kind === "resource" && targetIds.includes("vpc")
     )
   );
 });
@@ -419,15 +493,20 @@ test("Compiler는 hosted EKS Cluster를 presentation Area로 만들고 Terraform
   const nodeGroup = proposal.architecture.nodes.find((node) => node.id === "node-group");
   const referenceChange = proposal.changes.find(
     ({ kind, action, after }) =>
-      kind === "relationship" && action === "add" &&
-      typeof after === "object" && after !== null && (after as { label?: unknown }).label === "references"
+      kind === "relationship" &&
+      action === "add" &&
+      typeof after === "object" &&
+      after !== null &&
+      (after as { label?: unknown }).label === "references"
   );
 
   assert.equal(cluster?.config["presentationArea"], true);
   assert.equal(nodeGroup?.config["parentAreaNodeId"], "cluster");
   assert.ok(referenceChange);
   assert.ok(proposal.changes.some(({ kind }) => kind === "presentation"));
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.inferred_terraform_relationship"));
+  assert.ok(
+    proposal.diagnostics.some(({ code }) => code === "compiler.inferred_terraform_relationship")
+  );
 });
 
 test("Compiler는 중복 Resource와 dangling 관계를 optional repair proposal 및 diagnostic으로 남긴다", () => {
@@ -442,20 +521,13 @@ test("Compiler는 중복 Resource와 dangling 관계를 optional repair proposal
     trigger: "reverse-engineering"
   });
 
-  assert.deepEqual(
-    proposal.architecture.nodes.map((node) => node.id).sort(),
-    ["api", "api__2"]
-  );
+  assert.deepEqual(proposal.architecture.nodes.map((node) => node.id).sort(), ["api", "api__2"]);
   assert.equal(proposal.architecture.edges.length, 0);
   assert.ok(
-    proposal.changes.some(
-      ({ kind, action }) => kind === "resource" && action === "modify"
-    )
+    proposal.changes.some(({ kind, action }) => kind === "resource" && action === "modify")
   );
   assert.ok(
-    proposal.changes.some(
-      ({ kind, action }) => kind === "relationship" && action === "remove"
-    )
+    proposal.changes.some(({ kind, action }) => kind === "relationship" && action === "remove")
   );
   assert.ok(
     proposal.diagnostics.some(({ code }) => code === "compiler.duplicate_resource_id_normalized")
@@ -587,9 +659,7 @@ test("source-exact 자동 정리는 잠긴 Resource의 위치·크기·z-index�
   const currentDiagram: DiagramJson = {
     ...structuredClone(source),
     nodes: source.nodes.map((node) =>
-      node.id === "api"
-        ? { ...node, ...lockedGeometry, locked: true }
-        : structuredClone(node)
+      node.id === "api" ? { ...node, ...lockedGeometry, locked: true } : structuredClone(node)
     ),
     presentation: { geometryPolicy: "source-exact" }
   };
@@ -835,7 +905,9 @@ test("숨긴 Area 내부 edge도 proposal diff와 compilation distance에 기록
         }
       }
     ],
-    edges: [{ id: "instance-subnet", sourceId: "instance", targetId: "subnet", label: "references" }]
+    edges: [
+      { id: "instance-subnet", sourceId: "instance", targetId: "subnet", label: "references" }
+    ]
   };
   const initialDiagram = convertArchitectureJsonToDiagramJson(containedArchitecture);
   const currentDiagram: DiagramJson = {
@@ -861,7 +933,8 @@ test("숨긴 Area 내부 edge도 proposal diff와 compilation distance에 기록
   assert.ok(!proposal.diagram.edges.some((edge) => edge.id === "instance-subnet"));
   assert.ok(
     proposal.changes.some(
-      ({ action, id, kind }) => action === "remove" && kind === "edge-routing" && id.endsWith("instance-subnet")
+      ({ action, id, kind }) =>
+        action === "remove" && kind === "edge-routing" && id.endsWith("instance-subnet")
     )
   );
 });
@@ -886,8 +959,6 @@ test("동일 관계의 object key 순서만 달라도 relationship 변경으로 
   });
 
   assert.ok(
-    !proposal.changes.some(
-      ({ action, kind }) => kind === "relationship" && action === "modify"
-    )
+    !proposal.changes.some(({ action, kind }) => kind === "relationship" && action === "modify")
   );
 });
