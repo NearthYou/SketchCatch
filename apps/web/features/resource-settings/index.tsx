@@ -33,9 +33,13 @@ import {
 } from "./catalog-provider";
 import {
   curatedModules,
-  type CuratedModuleCategory,
   type CuratedModuleDefinition
 } from "./module-catalog";
+import {
+  createModuleCatalogGroups,
+  moduleCatalogViews,
+  type ModuleCatalogViewId
+} from "./module-catalog-view";
 import {
   isBoardTemplateAvailable,
   listBoardTemplates,
@@ -478,30 +482,63 @@ function TemplateLibraryModal({
 }
 
 function ModuleCatalogPanel({ onModuleAdd }: { readonly onModuleAdd?: ((moduleId: string) => void) | undefined }) {
+  const [activeView, setActiveView] = useState<ModuleCatalogViewId>("functional");
+  const [query, setQuery] = useState("");
+  const groups = useMemo(
+    () => createModuleCatalogGroups({ modules: curatedModules, query, view: activeView }),
+    [activeView, query]
+  );
+
   return (
     <div className="moduleCatalogPanel">
-      {moduleCategories.map((category) => {
-        const modules = curatedModules.filter((moduleDefinition) => moduleDefinition.category === category.id);
-        const CategoryIcon = category.icon;
+      <div className="moduleCatalogToolbar">
+        <div aria-label="모듈 분류" className="moduleCatalogViewTabs" role="tablist">
+          {moduleCatalogViews.map((view) => (
+            <button
+              aria-selected={activeView === view.id}
+              className={activeView === view.id ? "moduleCatalogViewTabActive" : "moduleCatalogViewTab"}
+              key={view.id}
+              onClick={() => setActiveView(view.id)}
+              role="tab"
+              type="button"
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
+        <label className="moduleCatalogSearch">
+          <Search aria-hidden="true" size={16} />
+          <input
+            aria-label="모듈 검색"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="모듈 검색"
+            type="search"
+            value={query}
+          />
+        </label>
+      </div>
 
-        return (
-          <section className="moduleCatalogSection" key={category.id}>
+      <div className="moduleCatalogGroups">
+        {groups.length > 0 ? groups.map((group) => (
+          <section className="moduleCatalogSection" key={group.key}>
             <div className="moduleCatalogHeader">
-              <CategoryIcon size={18} aria-hidden="true" />
-              <span>{category.label}</span>
+              <span>{group.label}</span>
+              <small>{group.modules.length}</small>
             </div>
             <div className="moduleCatalogGrid">
-              {modules.map((moduleDefinition) => (
+              {group.modules.map((moduleDefinition) => (
                 <ModuleCatalogCard
-                  key={moduleDefinition.id}
+                  key={`${group.key}:${moduleDefinition.id}`}
                   moduleDefinition={moduleDefinition}
                   onModuleAdd={onModuleAdd}
                 />
               ))}
             </div>
           </section>
-        );
-      })}
+        )) : (
+          <div className="emptyPanelState">검색 결과가 없습니다.</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -519,23 +556,12 @@ function ModuleCatalogCard({
       onClick={() => onModuleAdd?.(moduleDefinition.id)}
       type="button"
     >
-      <span>{moduleDefinition.name}</span>
-      <strong>{moduleDefinition.resources.length} resources</strong>
+      <strong>{moduleDefinition.title}</strong>
+      <span>{moduleDefinition.description}</span>
+      <small>리소스 {moduleDefinition.nodes.length}개</small>
     </button>
   );
 }
-
-const moduleCategories: readonly {
-  readonly id: CuratedModuleCategory;
-  readonly label: string;
-  readonly icon: LucideIcon;
-}[] = [
-  { id: "compute", label: "Compute", icon: Cpu },
-  { id: "network", label: "Network", icon: Network },
-  { id: "storage", label: "Storage", icon: Archive },
-  { id: "database", label: "Database", icon: Database },
-  { id: "security-identity", label: "Security & Identity", icon: ShieldCheck }
-];
 
 function ResourceSection({
   isOpen,

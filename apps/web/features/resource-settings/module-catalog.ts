@@ -11,22 +11,8 @@ import {
   type ArchitectureBoardModulePattern
 } from "../architecture-board-compiler/architecture-board-knowledge";
 
-export type CuratedModuleProvider = "aws" | "azure" | "gcp";
-
-// Kept until the catalog view switches from the legacy sections to pattern lenses.
-export type CuratedModuleCategory =
-  | "compute"
-  | "network"
-  | "storage"
-  | "database"
-  | "security-identity";
-
 export type CuratedModuleDefinition = ArchitectureBoardModulePattern & {
-  readonly name: string;
-  readonly provider: CuratedModuleProvider;
-  readonly category: CuratedModuleCategory;
   readonly version: typeof ARCHITECTURE_BOARD_KNOWLEDGE_VERSION;
-  readonly resources: ArchitectureBoardModulePattern["nodes"];
 };
 
 /**
@@ -36,11 +22,7 @@ export type CuratedModuleDefinition = ArchitectureBoardModulePattern & {
 export const curatedModules: readonly CuratedModuleDefinition[] =
   architectureBoardKnowledge.modulePatterns.map((pattern) => ({
     ...pattern,
-    name: pattern.title,
-    provider: "aws",
-    category: legacyCategoryFor(pattern),
-    version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-    resources: pattern.nodes
+    version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION
   }));
 
 export function expandCuratedModuleIntoDiagram(input: {
@@ -402,13 +384,4 @@ function escapeRegExp(value: string): string {
 
 function normalizeNumber(value: number): number {
   return Math.round(value * 1_000_000) / 1_000_000;
-}
-
-function legacyCategoryFor(pattern: ArchitectureBoardModulePattern): CuratedModuleCategory {
-  const keys = new Set(pattern.lenses.map(({ key }) => key));
-  if (keys.has("network") || pattern.id === "network-foundation") return "network";
-  if (keys.has("storage") || pattern.id.includes("storage")) return "storage";
-  if (keys.has("database") || pattern.id.includes("data")) return "database";
-  if (keys.has("security") || pattern.id.includes("identity")) return "security-identity";
-  return "compute";
 }
