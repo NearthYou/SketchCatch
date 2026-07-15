@@ -3,6 +3,7 @@ import type {
   AnalyzeSourceRepositoryResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
+  GitHubInstallationUserAuthorizationUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationsResponse,
   ListGitHubInstallationRepositoriesResponse,
@@ -17,6 +18,7 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   requireGitHubAppConfig,
+  requireGitHubAppUserAuthorizationConfig,
   requireGitHubAppStateSecret
 } from "../config/env.js";
 import {
@@ -28,9 +30,11 @@ import {
 import {
   analyzeSourceRepository,
   connectGitHubSourceRepository,
+  completeGitHubInstallationUserAuthorization,
   createGitHubAccountInstallUrl,
   createGitHubExistingInstallationCallbackUrl,
   createGitHubInstallUrl,
+  createGitHubInstallationUserAuthorization,
   createPostgresSourceRepositoryRepository,
   listGitHubAccountInstallations,
   listGitHubInstalledRepositories,
@@ -43,6 +47,12 @@ import {
   type SourceRepositoryRepository,
   SourceRepositoryStateError
 } from "../source-repositories/source-repository-service.js";
+import {
+  clearGitHubAppUserAuthorizationCookie,
+  readGitHubAppUserAuthorizationCookie,
+  setGitHubAppUserAuthorizationCookie,
+  type GitHubAppUserAuthorizationConfig
+} from "../source-repositories/github-app-user-authorization.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
 import {
   createInMemoryRateLimiter,
@@ -63,6 +73,14 @@ const listGitHubInstallationRepositoriesBodySchema = z
     state: z.string().trim().min(1)
   })
   .strict();
+
+const githubUserAuthorizationCallbackQuerySchema = z
+  .object({
+    code: z.string().trim().min(1).optional(),
+    error: z.string().trim().min(1).optional(),
+    state: z.string().trim().min(1).optional()
+  })
+  .passthrough();
 
 const connectGitHubRepositoryBodySchema = z
   .object({
@@ -95,6 +113,8 @@ export type SourceRepositoryRouteOptions = {
   githubAppSlug?: string;
   githubAppStateSecret?: string;
   githubAppCallbackUrl?: string;
+  githubAppUserAuthorizationConfig?: GitHubAppUserAuthorizationConfig;
+  githubAppUserAuthorizationFetch?: typeof fetch;
   sourceRepositoryAnalysisRateLimiter?: RateLimiter;
 };
 
@@ -367,6 +387,99 @@ export async function registerSourceRepositoryRoutes(
 
         return reply.status(201).send(response);
       } catch (error) {
+        return handleSourceRepositoryError(error, reply);
+      }
+    }
+  );
+
+  app.post(
+    "/source-repositories/github/user-authorization-url",
+    async (request, reply) => {
+      const body = listGitHubInstallationRepositoriesBodySchema.parse(request.body);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+
+      try {
+        const runtime = getGitHubAppRouteRuntime(options);
+        const userAuthorizationConfig =
+          options?.githubAppUserAuthorizationConfig ??
+          requireGitHubAppUserAuthorizationConfig();
+        const result = await createGitHubInstallationUserAuthorization(
+          {
+            installationId: body.installationId,
+            setupState: body.state,
+            accessContext,
+            stateSecret: runtime.stateSecret,
+            config: userAuthorizationConfig
+          },
+          repository
+        );
+        setGitHubAppUserAuthorizationCookie(
+          reply,
+          result.cookie,
+          runtime.stateSecret
+        );
+        const response: GitHubInstallationUserAuthorizationUrlResponse = {
+          authorizationUrl: result.authorizationUrl,
+          expiresAt: result.expiresAt.toISOString()
+        };
+        return reply.status(201).send(response);
+      } catch (error) {
+        return handleSourceRepositoryError(error, reply);
+      }
+    }
+  );
+
+  app.get(
+    "/source-repositories/github/user-authorization/callback",
+    async (request, reply) => {
+      const query = githubUserAuthorizationCallbackQuerySchema.parse(request.query);
+      const { accessContext, repository } = await getSourceRepositoryRequestContext(
+        request,
+        options,
+        getSourceRepositoryDatabaseClient
+      );
+      const runtime = getGitHubAppRouteRuntime(options);
+
+      try {
+        if (query.error || !query.code || !query.state) {
+          throw new SourceRepositoryStateError("GIT_APP_USER_AUTHORIZATION_CANCELLED");
+        }
+        const cookie = readGitHubAppUserAuthorizationCookie(
+          request,
+          runtime.stateSecret
+        );
+        if (!cookie) {
+          throw new SourceRepositoryStateError("GIT_APP_USER_AUTHORIZATION_INVALID");
+        }
+        const userAuthorizationConfig =
+          options?.githubAppUserAuthorizationConfig ??
+          requireGitHubAppUserAuthorizationConfig();
+        const result = await completeGitHubInstallationUserAuthorization(
+          {
+            code: query.code,
+            authorizationState: query.state,
+            cookie,
+            accessContext,
+            stateSecret: runtime.stateSecret,
+            config: userAuthorizationConfig,
+            ...(options?.githubAppUserAuthorizationFetch
+              ? { fetcher: options.githubAppUserAuthorizationFetch }
+              : {})
+          },
+          repository
+        );
+        clearGitHubAppUserAuthorizationCookie(reply);
+        const callbackUrl = new URL(runtime.callbackUrl);
+        callbackUrl.searchParams.set("installation_id", result.installationId);
+        callbackUrl.searchParams.set("state", result.setupState);
+        callbackUrl.searchParams.set("authorization", "verified");
+        return reply.redirect(callbackUrl.toString());
+      } catch (error) {
+        clearGitHubAppUserAuthorizationCookie(reply);
         return handleSourceRepositoryError(error, reply);
       }
     }

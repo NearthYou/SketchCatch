@@ -3,6 +3,8 @@ import test from "node:test";
 import { createGitHubAppState } from "./github-app-state.js";
 import type { GitHubAppClient, GitHubAppInstallation } from "./github-app-client.js";
 import {
+  completeGitHubInstallationUserAuthorization,
+  createGitHubInstallationUserAuthorization,
   listGitHubAccountInstallations,
   listGitHubInstallationRepositories,
   SourceRepositoryConflictError,
@@ -30,6 +32,9 @@ test("account callback connects a GitHub installation without a GitHub OAuth log
   });
   let connectedInstallationId: string | null = null;
   const repository = createRepository({
+    async findActiveGitHubInstallationConnection() {
+      return createConnection(userId, installation.installationId);
+    },
     async connectGitHubInstallation(input: {
       userId: string;
       installation: GitHubAppInstallation;
@@ -54,6 +59,115 @@ test("account callback connects a GitHub installation without a GitHub OAuth log
   assert.equal(connectedInstallationId, installation.installationId);
 });
 
+test("GitHub App user authorization connects an installation without changing login identity", async () => {
+  const userId = "naver-login-user";
+  const { state: setupState } = await createGitHubAppState({
+    scope: "account",
+    userId,
+    secret: stateSecret
+  });
+  let connectedUserId: string | null = null;
+  const repository = createRepository({
+    async connectGitHubInstallation(input: {
+      userId: string;
+      installation: GitHubAppInstallation;
+    }) {
+      connectedUserId = input.userId;
+      return createConnection(input.userId, input.installation.installationId);
+    }
+  });
+  const config = {
+    clientId: "github-app-client-id",
+    clientSecret: "github-app-client-secret",
+    callbackUrl:
+      "https://sketchcatch.test/api/source-repositories/github/user-authorization/callback"
+  };
+  const authorization = await createGitHubInstallationUserAuthorization(
+    {
+      installationId: installation.installationId,
+      setupState,
+      accessContext: { kind: "user", userId },
+      stateSecret,
+      config
+    },
+    repository
+  );
+  const authorizationState = new URL(authorization.authorizationUrl).searchParams.get("state");
+  assert.ok(authorizationState);
+
+  const result = await completeGitHubInstallationUserAuthorization(
+    {
+      code: "provider-code",
+      authorizationState,
+      cookie: authorization.cookie,
+      accessContext: { kind: "user", userId },
+      stateSecret,
+      config,
+      fetcher: createUserAuthorizationFetch([installation])
+    },
+    repository
+  );
+
+  assert.deepEqual(result, {
+    installationId: installation.installationId,
+    setupState
+  });
+  assert.equal(connectedUserId, userId);
+});
+
+test("spoofed setup installation ids fail provider user-access verification", async () => {
+  const userId = "password-login-user";
+  const { state: setupState } = await createGitHubAppState({
+    scope: "account",
+    userId,
+    secret: stateSecret
+  });
+  let connectionAttempted = false;
+  const repository = createRepository({
+    async connectGitHubInstallation() {
+      connectionAttempted = true;
+      return createConnection(userId, "spoofed-installation");
+    }
+  });
+  const config = {
+    clientId: "github-app-client-id",
+    clientSecret: "github-app-client-secret",
+    callbackUrl:
+      "https://sketchcatch.test/api/source-repositories/github/user-authorization/callback"
+  };
+  const authorization = await createGitHubInstallationUserAuthorization(
+    {
+      installationId: "spoofed-installation",
+      setupState,
+      accessContext: { kind: "user", userId },
+      stateSecret,
+      config
+    },
+    repository
+  );
+  const authorizationState = new URL(authorization.authorizationUrl).searchParams.get("state");
+  assert.ok(authorizationState);
+
+  await assert.rejects(
+    completeGitHubInstallationUserAuthorization(
+      {
+        code: "provider-code",
+        authorizationState,
+        cookie: authorization.cookie,
+        accessContext: { kind: "user", userId },
+        stateSecret,
+        config,
+        fetcher: createUserAuthorizationFetch([installation])
+      },
+      repository
+    ),
+    (error) =>
+      error instanceof SourceRepositoryConflictError &&
+      error.message === "GIT_APP_INSTALLATION_FORBIDDEN"
+  );
+  assert.equal(connectionAttempted, false);
+});
+
 test("account callback rejects an installation already connected to another user", async () => {
   const userId = "naver-login-user";
   const { state } = await createGitHubAppState({
@@ -62,7 +176,7 @@ test("account callback rejects an installation already connected to another user
     secret: stateSecret
   });
   const repository = createRepository({
-    async connectGitHubInstallation() {
+    async findActiveGitHubInstallationConnection() {
       return undefined;
     }
   });
@@ -96,6 +210,9 @@ test("project callback connects the installation and returns its repositories", 
   const repository = createRepository({
     async findAccessibleProject() {
       return { id: projectId, userId };
+    },
+    async findActiveGitHubInstallationConnection() {
+      return createConnection(userId, installation.installationId);
     },
     async connectGitHubInstallation() {
       return createConnection(userId, installation.installationId);
@@ -296,6 +413,32 @@ function createGitHubAppClient(
       }));
     }
   } as unknown as GitHubAppClient;
+}
+
+function createUserAuthorizationFetch(
+  installations: GitHubAppInstallation[]
+): typeof fetch {
+  return (async (input: URL | RequestInfo) => {
+    const url = String(input);
+    if (url === "https://github.com/login/oauth/access_token") {
+      return Response.json({ access_token: "ghu_test_token" });
+    }
+    if (url.startsWith("https://api.github.com/user/installations")) {
+      return Response.json({
+        installations: installations.map((candidate) => ({
+          id: candidate.installationId,
+          account: {
+            id: candidate.accountId,
+            login: candidate.accountLogin,
+            type: candidate.accountType
+          },
+          repository_selection: candidate.repositorySelection,
+          html_url: candidate.htmlUrl
+        }))
+      });
+    }
+    throw new Error(`Unexpected GitHub URL: ${url}`);
+  }) as typeof fetch;
 }
 
 function createConnection(

@@ -64,6 +64,7 @@ locals {
     AMAZON_Q_USER_ID                       = var.amazon_q_user_id
     GIT_OAUTH_CLIENT_ID                    = var.git_oauth_client_id
     GIT_APP_ID                             = var.git_app_id
+    GIT_APP_CLIENT_ID                      = var.git_app_client_id
     GIT_APP_SLUG                           = var.git_app_slug
     GIT_APP_CALLBACK_URL                   = var.git_app_callback_url
     KAKAO_OAUTH_CLIENT_ID                  = var.kakao_oauth_client_id

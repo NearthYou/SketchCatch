@@ -559,6 +559,14 @@ export type ListGitHubInstallationRepositoriesRequest = {
   state: string;
 };
 
+export type CreateGitHubInstallationUserAuthorizationRequest =
+  ListGitHubInstallationRepositoriesRequest;
+
+export type GitHubInstallationUserAuthorizationUrlResponse = {
+  authorizationUrl: string;
+  expiresAt: IsoDateTimeString;
+};
+
 export type GitHubRepositorySelection = "all" | "selected";
 export type GitHubInstallationConnectionStatus = "active" | "disconnected";
 

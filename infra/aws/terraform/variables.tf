@@ -306,6 +306,7 @@ variable "api_environment" {
       "CLOUDFORMATION_TEMPLATE_TOKEN_SECRET",
       "DATABASE_URL",
       "GIT_APP_PRIVATE_KEY_BASE64",
+      "GIT_APP_CLIENT_SECRET",
       "GIT_APP_STATE_SECRET",
       "GIT_OAUTH_CLIENT_SECRET",
       "KAKAO_OAUTH_CLIENT_SECRET",
@@ -338,6 +339,7 @@ variable "api_secret_arns" {
       "CLOUDFORMATION_TEMPLATE_TOKEN_SECRET",
       "DATABASE_URL",
       "GIT_APP_PRIVATE_KEY_BASE64",
+      "GIT_APP_CLIENT_SECRET",
       "GIT_APP_STATE_SECRET",
       "GIT_OAUTH_CLIENT_SECRET",
       "KAKAO_OAUTH_CLIENT_SECRET",
@@ -472,6 +474,12 @@ variable "git_oauth_client_id" {
 
 variable "git_app_id" {
   description = "GitHub App ID."
+  type        = string
+  default     = ""
+}
+
+variable "git_app_client_id" {
+  description = "GitHub App OAuth client ID used for provider-verified installation ownership."
   type        = string
   default     = ""
 }

@@ -27,6 +27,13 @@ import type {
 } from "./github-app-client.js";
 import { analyzeRepositoryEvidence } from "./repository-analysis.js";
 import { recommendRepositoryTemplatesWithAi } from "./repository-template-recommendation.js";
+import {
+  createGitHubAppUserAuthorization,
+  findUserAuthorizedGitHubInstallation,
+  verifyGitHubAppUserAuthorization,
+  type GitHubAppUserAuthorizationConfig,
+  type GitHubAppUserAuthorizationCookie
+} from "./github-app-user-authorization.js";
 
 export type SourceRepositoryRecord = typeof sourceRepositories.$inferSelect;
 export type SourceRepositoryProjectRecord = typeof projects.$inferSelect;
@@ -91,6 +98,24 @@ export type CreateGitHubAccountInstallUrlInput = {
   appSlug: string;
   stateSecret: string;
   now?: () => Date;
+};
+
+export type CreateGitHubInstallationUserAuthorizationInput = {
+  installationId: string;
+  setupState: string;
+  accessContext: ProjectAccessContext;
+  stateSecret: string;
+  config: Pick<GitHubAppUserAuthorizationConfig, "clientId" | "callbackUrl">;
+};
+
+export type CompleteGitHubInstallationUserAuthorizationInput = {
+  code: string;
+  authorizationState: string;
+  cookie: GitHubAppUserAuthorizationCookie;
+  accessContext: ProjectAccessContext;
+  stateSecret: string;
+  config: GitHubAppUserAuthorizationConfig;
+  fetcher?: typeof fetch;
 };
 
 export type ListGitHubAccountInstallationsInput = {
@@ -441,6 +466,79 @@ export async function createGitHubAccountInstallUrl(
   };
 }
 
+export async function createGitHubInstallationUserAuthorization(
+  input: CreateGitHubInstallationUserAuthorizationInput,
+  repository: SourceRepositoryRepository
+) {
+  const setupState = await verifyAndAuthorizeState(
+    {
+      state: input.setupState,
+      stateSecret: input.stateSecret,
+      accessContext: input.accessContext
+    },
+    repository
+  );
+
+  return createGitHubAppUserAuthorization({
+    userId: setupState.userId,
+    installationId: input.installationId,
+    setupState: input.setupState,
+    stateSecret: input.stateSecret,
+    config: input.config
+  });
+}
+
+export async function completeGitHubInstallationUserAuthorization(
+  input: CompleteGitHubInstallationUserAuthorizationInput,
+  repository: SourceRepositoryRepository
+): Promise<{ installationId: string; setupState: string }> {
+  const authorization = await verifyGitHubAppUserAuthorization({
+    state: input.authorizationState,
+    stateSecret: input.stateSecret,
+    cookie: input.cookie
+  });
+
+  if (authorization.userId !== input.accessContext.userId) {
+    throw new SourceRepositoryStateError("GitHub App authorization user mismatch");
+  }
+
+  const setupState = await verifyAndAuthorizeState(
+    {
+      state: authorization.setupState,
+      stateSecret: input.stateSecret,
+      accessContext: input.accessContext
+    },
+    repository
+  );
+  if (setupState.userId !== authorization.userId) {
+    throw new SourceRepositoryStateError("GitHub App authorization state mismatch");
+  }
+
+  const installation = await findUserAuthorizedGitHubInstallation({
+    code: input.code,
+    codeVerifier: input.cookie.codeVerifier,
+    installationId: authorization.installationId,
+    config: input.config,
+    ...(input.fetcher ? { fetcher: input.fetcher } : {})
+  });
+  if (!installation) {
+    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  const connection = await repository.connectGitHubInstallation({
+    userId: authorization.userId,
+    installation
+  });
+  if (!connection) {
+    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  return {
+    installationId: authorization.installationId,
+    setupState: authorization.setupState
+  };
+}
+
 export async function createGitHubExistingInstallationCallbackUrl(
   input: CreateGitHubExistingInstallationCallbackUrlInput,
   repository: SourceRepositoryRepository
@@ -489,7 +587,7 @@ export async function listGitHubInstallationRepositories(
   githubAppClient: GitHubAppClient
 ): Promise<ListGitHubInstallationRepositoriesResult> {
   const state = await verifyAndAuthorizeState(input, repository);
-  await connectGitHubInstallationFromCallback(
+  await requireOwnedGitHubInstallation(
     state.userId,
     input.installationId,
     repository,
@@ -969,30 +1067,6 @@ function isGitHubRepositoryAccessUnavailableConflict(
     error instanceof SourceRepositoryConflictError &&
     error.message === "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE"
   );
-}
-
-async function connectGitHubInstallationFromCallback(
-  userId: string,
-  installationId: string,
-  repository: SourceRepositoryRepository,
-  githubAppClient: GitHubAppClient
-) {
-  const installations = await githubAppClient.listInstallations();
-  const installation = installations.find(
-    (candidate) => candidate.installationId === installationId
-  );
-
-  if (!installation) {
-    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
-  }
-
-  const connection = await repository.connectGitHubInstallation({ userId, installation });
-
-  if (!connection) {
-    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
-  }
-
-  return installation;
 }
 
 async function requireOwnedGitHubInstallation(
