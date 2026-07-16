@@ -522,49 +522,6 @@ jobs:
             )
           ' "${reviewed_plan_json}" > /dev/null
 
-          jq -e --slurpfile current_state "${current_state_json}" '
-            def task_container($definitions; $name):
-              ($definitions | fromjson | map(select(.name == $name))) as $containers
-              | if ($containers | length) == 1 then $containers[0] else error("task container is missing or ambiguous") end;
-            def state_task_definition($name):
-              [
-                $current_state[0].resources[]
-                | select(
-                    .mode == "managed" and
-                    .type == "aws_ecs_task_definition" and
-                    .name == $name
-                  )
-                | .instances[]?
-                | .attributes.container_definitions
-              ] as $definitions
-              | if ($definitions | length) == 1 and ($definitions[0] | type) == "string"
-                then $definitions[0]
-                else error("Terraform state task definition is missing or ambiguous")
-                end;
-            def secret_pairs($container):
-              [($container.secrets // [])[] | [.name, .valueFrom]];
-            def has_required_github_app_inputs($container):
-              (($container.environment // []) | any(.name == "GIT_APP_CLIENT_ID")) and
-              (($container.secrets // []) | any(.name == "GIT_APP_CLIENT_SECRET"));
-            [
-              .resource_changes[]
-              | select(.address == "aws_ecs_task_definition.api" or .address == "aws_ecs_task_definition.worker")
-            ] as $task_definitions
-            | ($task_definitions | length) == 2
-              and all($task_definitions[];
-                .address as $address
-                | (if $address == "aws_ecs_task_definition.api" then "api" else "worker" end) as $task_definition_name
-                | state_task_definition($task_definition_name) as $before_definitions
-                | task_container($before_definitions; $task_definition_name) as $before
-                | task_container(.change.after.container_definitions; $task_definition_name) as $after
-                | (secret_pairs($before)) as $before_secrets
-                | (secret_pairs($after)) as $after_secrets
-                | ($before.image == $after.image)
-                  and has_required_github_app_inputs($after)
-                  and ($after_secrets | contains($before_secrets))
-              )
-          ' "${reviewed_plan_json}" > /dev/null
-
           rm -f "${reviewed_plan_json}" "${current_state_json}"
 
       - name: Set reviewed plan artifact metadata
@@ -664,6 +621,9 @@ jobs:
             def task_container($definitions; $name):
               ($definitions | fromjson | map(select(.name == $name))) as $containers
               | if ($containers | length) == 1 then $containers[0] else error("task container is missing or ambiguous") end;
+            def has_required_github_app_inputs($container):
+              (($container.environment // []) | any(.name == "GIT_APP_CLIENT_ID")) and
+              (($container.secrets // []) | any(.name == "GIT_APP_CLIENT_SECRET"));
             def get_secret_values($policy):
               [
                 ($policy | fromjson).Statement[]?
@@ -672,7 +632,20 @@ jobs:
                 | .Resource
                 | if type == "array" then .[] else . end
               ] | unique;
-            (
+            [
+              .resources[]
+              | select(
+                  .mode == "managed" and
+                  .type == "aws_ecs_task_definition" and
+                  (.name == "api" or .name == "worker")
+                )
+              | .name as $task_definition_name
+              | .instances[]?
+              | .attributes.container_definitions
+              | task_container(.; $task_definition_name)
+              | has_required_github_app_inputs(.)
+            ] as $github_app_inputs
+            | (
               .resources[]
               | select(
                   .mode == "managed" and
@@ -696,7 +669,9 @@ jobs:
                 | .attributes.policy
                 | get_secret_values(.)
               ) as $execution_secret_values
-            | ($worker_secret_values | length) > 0
+            | ($github_app_inputs | length) == 2
+              and all($github_app_inputs[])
+              and ($worker_secret_values | length) > 0
               and ($execution_secret_values | contains($worker_secret_values))
           ' "${applied_state_json}" > /dev/null
 
