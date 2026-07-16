@@ -547,7 +547,16 @@ for (const marker of [
 }
 
 const runtimeLocals = read("infra/aws/terraform/locals.tf");
+const runtimeConfig = read("infra/aws/terraform/runtime-config.tf");
 const runtimeObservability = read("infra/aws/terraform/observability.tf");
+check(
+  /worker_secret_names\s*=\s*toset\(\[[\s\S]*?"GIT_APP_CLIENT_SECRET"/.test(runtimeLocals),
+  "worker secret contracts must retain the GitHub App client secret"
+);
+check(
+  /ecs_api_ssm_secure_string_names\s*=\s*toset\(\[[\s\S]*?"LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"/.test(runtimeConfig),
+  "production API secret requirements must retain the Live Observation capability secret"
+);
 check(
   runtimeLocals.includes('?ERROR ?Error ?error -\\"Failed to find Server Action\\"'),
   "web error metrics must exclude stale Next.js Server Action requests"

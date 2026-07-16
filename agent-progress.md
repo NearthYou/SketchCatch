@@ -5,7 +5,7 @@ Short English-only working log for the current agent context. Older records are 
 ## Current Verified State
 
 - Branch `fix/ys/414-github-연동-로직-수정` keeps GitHub App repository authorization separate from GitHub OAuth login.
-- The production infrastructure plan overlays `GIT_APP_CLIENT_ID` and the `GIT_APP_CLIENT_SECRET` ARN onto the existing runtime tfvars without replacing unrelated settings.
+- The production infrastructure plan overlays `GIT_APP_CLIENT_ID` and the `GIT_APP_CLIENT_SECRET` ARN onto the existing runtime tfvars without replacing unrelated settings; the runtime tfvars owner must retain the Live Observation capability Secret ARN before a complete runtime review plan.
 - The workflow rejects malformed Client IDs and Secret ARNs from another AWS region or account.
 - `scripts/check-production-infra.mjs` guards the four GitHub App runtime wiring markers.
 
@@ -19,6 +19,12 @@ Short English-only working log for the current agent context. Older records are 
 - Full `pnpm test` remains non-green only on the three pre-existing three-tier Template position, security-scope, and parent contract failures in `packages/types`.
 - No workflow dispatch, Terraform apply, cloud mutation, push, or production deployment was performed.
 
+### 2026-07-16 - Production runtime plan drift review
+
+- Blocked Apply after review-only run 29479563543: the worker task definition did not receive `GIT_APP_CLIENT_SECRET`, and the complete runtime input would remove the existing Live Observation capability Secret ARN.
+- Added worker Secret wiring, a fail-closed worker precondition, and source/Terraform contract coverage that preserves the capability Secret requirement.
+- Verification: harness, production-infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check pass. Terraform validate/test could not initialize the uncached AWS provider within the local timeout.
+
 ## Next Action
 
-- Push the branch only after explicit approval, then run the production runtime complete review-only plan and inspect it for unrelated updates or destroys before any apply.
+- Open the drift-review branch as a PR, then restore the existing Live Observation capability Secret ARN in `PRODUCTION_INFRA_RUNTIME_TFVARS_JSON` and run a complete review-only Plan. Inspect the masked task-definition JSON, Secret ARN sets, image identity, and all planned actions before any Apply.

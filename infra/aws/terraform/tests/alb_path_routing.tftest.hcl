@@ -221,6 +221,10 @@ run "https_routes_and_enables_worker_dispatch" {
     enable_ecs_worker_dispatch      = true
     worker_rds_security_group_id    = "sg-0fedcba9876543210"
     runtime_cache_security_group_id = "sg-0abcdeffedcba0123"
+    api_secret_arns = {
+      GIT_APP_CLIENT_SECRET                      = "arn:aws:secretsmanager:ap-northeast-2:111122223333:secret:sketchcatch/test/git-app-client-secret-example"
+      LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET = "arn:aws:ssm:ap-northeast-2:111122223333:parameter/sketchcatch/test/live-observation-capability-current-secret"
+    }
   }
 
   override_resource {
@@ -332,5 +336,24 @@ run "https_routes_and_enables_worker_dispatch" {
       aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0].referenced_security_group_id == aws_security_group.ecs_worker.id
     )
     error_message = "Runtime Cache ingress must allow only the current ECS API and worker security groups on the configured Redis port."
+  }
+
+  assert {
+    condition = contains(
+      [
+        for item in one(jsondecode(aws_ecs_task_definition.worker.container_definitions)).secrets :
+        item.name
+      ],
+      "GIT_APP_CLIENT_SECRET"
+    )
+    error_message = "Worker task definitions must receive the GitHub App client secret when it is configured for the API."
+  }
+
+  assert {
+    condition = contains(
+      tolist(local.ecs_api_secret_names),
+      "LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"
+    )
+    error_message = "Production API secret requirements must preserve the Live Observation capability secret."
   }
 }
