@@ -56,3 +56,8 @@ Short English-only working log for the current agent context. Older records are 
 - Made the worker Secret assertion select the named worker container and removed an unnecessary set-to-list conversion.
 - Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
 - Follow-up review handling uses `try(..., [])` for nullable worker container Secret lists, preventing Terraform test evaluation errors before the intended assertion runs.
+
+### 2026-07-16 - Complete runtime Apply validator repair
+
+- Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for the valid and invalid forms.
+- Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed by this repair.

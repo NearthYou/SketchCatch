@@ -494,7 +494,7 @@ jobs:
               ]
               | sort_by(.address)
               == [
-                {"address": "aws_cloudwatch_log_metric_filter.ecs_error[\\"web\\"]", "actions": ["update"]},
+                {"address": "aws_cloudwatch_log_metric_filter.ecs_error[\"web\"]", "actions": ["update"]},
                 {"address": "aws_ecs_service.web", "actions": ["update"]},
                 {"address": "aws_iam_role_policy.ecs_task", "actions": ["update"]},
                 {"address": "aws_iam_role_policy.ecs_worker_execution", "actions": ["update"]},
