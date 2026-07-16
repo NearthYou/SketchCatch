@@ -73,3 +73,8 @@ Short English-only working log for the current agent context. Older records are 
 - Complete runtime Apply validation now obtains the existing worker execution inline policy from Terraform state when Plan JSON masks its previous policy as null.
 - Synthetic jq checks passed when prior permissions were retained and failed when a prior permission was removed; no Secret value was emitted.
 - Harness, structure check, formatting, lint, typecheck, build, and diff check passed. Terraform validate/test remain blocked locally by the unavailable AWS provider cache.
+
+### 2026-07-16 - Complete runtime post-apply policy verification
+
+- Plan JSON masks the desired inline policy, so the complete Apply guard now verifies all worker Task Definition Secret references are present in the worker execution policy immediately after Apply using Terraform state.
+- Synthetic jq checks passed when every worker Secret reference was present and failed when the GitHub App reference was removed.
