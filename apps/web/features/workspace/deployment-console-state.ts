@@ -136,8 +136,10 @@ function isBlockingPreDeploymentFinding(finding: CheckFinding | undefined): bool
 
 export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): DirectDeploymentFlow {
   const validation = getValidationStep(input);
+  const hasUnsavedApplyBaseline =
+    input.hasUnsavedBaseline && input.deployment?.currentPlanOperation !== "destroy";
   if (
-    input.hasUnsavedBaseline ||
+    hasUnsavedApplyBaseline ||
     input.preflightState === "loading" ||
     input.preflightState === "blocked" ||
     input.preflightState === "error" ||

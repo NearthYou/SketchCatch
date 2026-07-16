@@ -155,3 +155,10 @@ Short English-only working log for the current agent context. Older records are 
 - A successful Destroy Plan retry now clears a prior Plan-stage failure and stale SSO error instead of leaving the deployment marked as failed.
 - Prior Apply or Destroy failures remain preserved after planning because they may represent partial cloud mutation.
 - Verification: focused Destroy Plan service tests passed 6/6.
+
+### 2026-07-17 - Advance successful Destroy Plans to approval
+
+- Persisted Destroy Plans now advance to the approval step even when the current Board has unrelated unsaved changes.
+- The cleanup action no longer offers another Destroy Plan while a current Destroy Plan is already available; approval remains required before execution.
+- Verification: focused Web deployment action and flow tests passed 45/45, and authenticated Chrome showed Step 2 with no duplicate Destroy Plan action.
+- No Plan approval or Destroy execution was performed during verification.

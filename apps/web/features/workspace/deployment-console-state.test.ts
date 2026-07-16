@@ -253,6 +253,25 @@ test("destroy uses the same approval and deployment phases", () => {
   assert.equal(flow.steps[1]?.state, "active");
 });
 
+test("a persisted destroy plan advances despite unrelated draft changes", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "destroy-plan",
+        currentPlanOperation: "destroy",
+        status: "SUCCESS"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[1]?.state, "active");
+});
+
 test("an unchanged successful deployment returns to cleanup after reload", () => {
   const flow = getDirectDeploymentFlow(
     createInput({

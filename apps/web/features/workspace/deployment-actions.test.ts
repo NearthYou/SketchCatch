@@ -172,7 +172,8 @@ test("destroy plan waits for approval before showing destroy execution", () => {
   assert.equal(state.canApprovePlan, true);
   assert.equal(state.approvePlanLabel, "Destroy Plan 승인");
   assert.equal(state.shouldShowApplyPlanButton, false);
-  assert.equal(state.shouldShowDestroyPlanButton, true);
+  assert.equal(state.shouldShowDestroyPlanButton, false);
+  assert.equal(state.canRunDestroyPlan, false);
   assert.equal(state.shouldShowDestroyButton, false);
 });
 
@@ -273,8 +274,8 @@ test("approved destroy plan enables destroy and keeps apply hidden", () => {
 
   assert.equal(state.shouldShowApplyButton, false);
   assert.equal(state.canApply, false);
-  assert.equal(state.shouldShowDestroyPlanButton, true);
-  assert.equal(state.canRunDestroyPlan, true);
+  assert.equal(state.shouldShowDestroyPlanButton, false);
+  assert.equal(state.canRunDestroyPlan, false);
   assert.equal(state.shouldShowDestroyButton, true);
   assert.equal(state.canDestroy, true);
 });
