@@ -67,3 +67,9 @@ Short English-only working log for the current agent context. Older records are 
 - Complete runtime Apply validation now compares planned API and worker Secret references with the Terraform state rather than nullable plan `before` data, and verifies the worker execution policy retains every existing secret reference.
 - The API ECS service now reconciles task definition changes while retaining autoscaling ownership of desired count, so the active service rolls from manual revision drift to the reviewed task definition.
 - Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed. Terraform validate/test remain blocked locally by the unavailable AWS provider cache.
+
+### 2026-07-16 - Complete runtime policy state validation
+
+- Complete runtime Apply validation now obtains the existing worker execution inline policy from Terraform state when Plan JSON masks its previous policy as null.
+- Synthetic jq checks passed when prior permissions were retained and failed when a prior permission was removed; no Secret value was emitted.
+- Harness, structure check, formatting, lint, typecheck, build, and diff check passed. Terraform validate/test remain blocked locally by the unavailable AWS provider cache.

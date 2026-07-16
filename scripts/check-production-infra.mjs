@@ -363,6 +363,8 @@ for (const marker of [
   '.api_secret_arns["LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"] = $live_observation_capability_current_secret_arn',
   "$after_secrets | contains($before_secrets)",
   "$after_values | contains($before_values)",
+  "def state_worker_execution_policy:",
+  "get_secret_values(state_worker_execution_policy)",
   "aws cloudformation list-stacks",
   "aws cloudformation describe-stacks",
   '.OutputKey == "RedisUrl"',
