@@ -107,6 +107,11 @@ test("Deployment History selects one successful version and renders only its det
   assert.ok(historyEnd > historyStart);
   assert.match(historySource, /id="deployment-history-version-select"/);
   assert.match(historySource, /onChange=\{setSelectedHistoryDeploymentId\}/);
+  assert.match(historySource, /deploymentHistoryHeader/);
+  assert.match(historySource, /deploymentHistoryPicker/);
+  assert.match(historySource, /deploymentHistorySnapshot/);
+  assert.match(historySource, /deploymentHistoryMetrics/);
+  assert.match(directDeploymentSource, /label: formatDeploymentVersionDate\(deployment\.createdAt\)/);
   assert.doesNotMatch(historySource, /deploymentHistoryEntries\.map/);
   assert.doesNotMatch(historySource, /setSelectedDeploymentId/);
   assert.match(directDeploymentSource, /listDeploymentLogs\(deploymentId\)/);

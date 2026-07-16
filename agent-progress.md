@@ -16,10 +16,7 @@ Short English-only working log for the current agent context. Older records are 
 - GitOps target conflicts expose stable precondition codes; mapped conflicts retain actionable Korean guidance and unknown conflicts use a neutral state-conflict message instead of the misleading duplicate-information message.
 - `origin/dev` was fetched and merged into this branch on 2026-07-15; incoming dev state includes the fail-closed three-stage sandbox orchestration contract, standalone AWS SAM and CodeDeploy application units, application-local static install roots, generated artifact cleanup, Web clarity/accessibility, dashboard copy, ECS deployment speed, and Brainboard Template updates.
 - This branch still carries the Repository ECS frontend diagram readability fix, including good-reference layout criteria, strict template preservation, support-lane separation, and saved DiagramJson restore normalization.
-- Before the merge, focused notification SSE fixes passed API notification tests 17/17, Web notification tests 6/6, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
-- Before the merge, focused repository template layout tests passed: workspace adapter 45/45, public repository recommendation 8/8, repository template recommendation 10/10, plus `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build`.
 - Static, Lambda, EC2/ASG, rollback drills, QR public session, and Web Push provider delivery remain incomplete and must not be reported as passing.
-- Incoming dev verification recorded 25 sandbox runner tests, 88 maintained API deployment tests, 40 maintained Web deployment tests, harness, lint, typecheck, build, and diff checks as passing; full Web/API suites were intentionally omitted.
 - Incoming cleanup evidence records no remaining cost-bearing Issue #378 resources; no Terraform Apply/Destroy, deployment, Git handoff, or cloud mutation was performed during this code-integration pass.
 - Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
 
@@ -174,3 +171,12 @@ Short English-only working log for the current agent context. Older records are 
 - Amazon Q must return an explicit severity marker for each ordered pillar, failed or invalid provider responses are no longer cached, and 503 messages distinguish authentication, timeout, rate-limit, configuration, invalid-response, and provider failures.
 - The remaining 503 cause was a 2,006-character fenced Amazon Q JSON response truncated before valid JSON completion. Amazon Q output is now bounded to compact six-pillar highlights and a three-sentence conclusion, while useful plain text, partial JSON, and truncated fenced JSON are normalized with deterministic guidance instead of discarded.
 - Verification: focused Web presentation tests passed 9/9, focused provider/validation tests passed 6/6, AWS STS and Q application read checks passed, `pnpm harness:check` passed, and a signed-in Chrome run returned a real Amazon Q review with a labeled summary, six concrete severity-colored criteria, no trailing next step, and no 503.
+
+### 2026-07-16 - Repair Direct Deployment history and lifecycle controls
+
+- Restored versioned successful deployment history, retained Destroy after reload, and kept Save and validate beside Destroy only when the draft has changed.
+- Confirmed redeployments reuse the Terraform execution workspace so Plan/Apply performs incremental create, update, and delete operations.
+- Made History select a single successful version, default to the latest successful deployment, and exclude failed attempts from deployable versions.
+- Removed the idle Cancel action while preserving cancellation for running validation, Plan, Apply, and Destroy work.
+- Rebuilt Deployment History around a version picker and selected-version summary card with localized scope, status, timestamp, and separate create/update/delete metrics following `DESIGN.md`.
+- Verification: focused Direct Deployment Web tests passed 10/10; Web typecheck, Web lint, harness check, and diff check passed. No cloud deployment or destroy was executed.

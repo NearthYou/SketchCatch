@@ -230,9 +230,9 @@ export function DirectDeploymentScreen({
   );
   const deploymentHistoryOptions = useMemo<SelectMenuOption[]>(
     () =>
-      deploymentHistoryEntries.map(({ deployment, versionLabel }) => ({
-        detail: `${getDeploymentStatusPresentation(deployment.status).label} · ${deployment.scope} · ${formatDate(deployment.createdAt)}`,
-        label: versionLabel,
+      deploymentHistoryEntries.map(({ deployment }) => ({
+        detail: `${getDeploymentStatusPresentation(deployment.status).label} · ${formatDeploymentScope(deployment.scope)}`,
+        label: formatDeploymentVersionDate(deployment.createdAt),
         value: deployment.id
       })),
     [deploymentHistoryEntries]
@@ -1621,54 +1621,115 @@ export function DirectDeploymentScreen({
 
     return (
       <section className={styles.deploymentHistorySection} id="deployment-history">
-        <div className={styles.deploymentSectionHeader}>
-          <h3>배포 이력</h3>
-          <small>{deploymentHistoryEntries.length}개 성공 버전</small>
-        </div>
+        <header className={styles.deploymentHistoryHeader}>
+          <div>
+            <span className={styles.deploymentHistoryEyebrow}>Deployment history</span>
+            <h3>배포 이력</h3>
+            <p>성공한 버전의 변경 범위와 실행 결과를 확인합니다.</p>
+          </div>
+          <span className={styles.deploymentHistoryCount}>
+            <CheckCircle2 aria-hidden="true" size={16} />
+            <strong>{deploymentHistoryEntries.length}</strong>
+            성공 버전
+          </span>
+        </header>
         {deploymentHistoryEntries.length === 0 ? (
           <div className={styles.deploymentHistoryEmpty}>
             <strong>아직 성공한 배포 버전이 없습니다.</strong>
             <p>첫 번째 배포가 성공하면 이곳에 표시됩니다.</p>
           </div>
         ) : (
-          <div className={styles.deploymentResultRows}>
-            <div className={styles.deploymentLabeledField}>
-              <label htmlFor="deployment-history-version-select">배포 버전</label>
+          <div className={styles.deploymentHistoryBody}>
+            <div className={styles.deploymentHistoryPicker}>
+              <div className={styles.deploymentHistoryPickerLabel}>
+                <label htmlFor="deployment-history-version-select">버전 선택</label>
+                <span>성공한 배포만 표시</span>
+              </div>
               <SelectMenu
                 ariaLabel="배포 이력 버전 선택"
                 emptyLabel="배포 버전 없음"
                 id="deployment-history-version-select"
                 onChange={setSelectedHistoryDeploymentId}
                 options={deploymentHistoryOptions}
+                size="large"
                 tone="workspace"
                 value={selectedHistoryDeploymentId}
               />
             </div>
             {deployment && selectedEntry && status ? (
-              <article className={styles.deploymentResultRow} key={deployment.id}>
-                <strong>{selectedEntry.versionLabel}</strong>
-                <span className={styles.deploymentResultMeta}>
-                  {status.label} · {deployment.scope} · {formatDate(deployment.createdAt)}
-                </span>
-                <span className={styles.deploymentResultValue}>
-                  변경 {deployment.planSummary?.createCount ?? 0}개 추가 ·{" "}
-                  {deployment.planSummary?.updateCount ?? 0}개 수정 ·{" "}
-                  {deployment.planSummary?.deleteCount ?? 0}개 삭제
-                </span>
+              <article className={styles.deploymentHistorySnapshot} key={deployment.id}>
+                <header className={styles.deploymentHistorySnapshotHeader}>
+                  <div className={styles.deploymentHistorySnapshotIdentity}>
+                    <span
+                      className={styles.deploymentHistoryStatus}
+                      data-tone={deployment.status === "DESTROYED" ? "neutral" : "success"}
+                    >
+                      <CheckCircle2 aria-hidden="true" size={15} />
+                      {status.label}
+                    </span>
+                    <div>
+                      <span>선택한 배포</span>
+                      <strong>
+                        {deployment.status === "DESTROYED" ? "정리 완료된 버전" : "배포 완료"}
+                      </strong>
+                    </div>
+                  </div>
+                  <time dateTime={deployment.createdAt}>{formatDate(deployment.createdAt)}</time>
+                </header>
+
+                <div className={styles.deploymentHistoryMetrics} aria-label="Terraform 변경 요약">
+                  <div data-change="create">
+                    <span>추가</span>
+                    <strong>{deployment.planSummary?.createCount ?? 0}</strong>
+                    <small>resources</small>
+                  </div>
+                  <div data-change="update">
+                    <span>수정</span>
+                    <strong>{deployment.planSummary?.updateCount ?? 0}</strong>
+                    <small>resources</small>
+                  </div>
+                  <div data-change="delete">
+                    <span>삭제</span>
+                    <strong>{deployment.planSummary?.deleteCount ?? 0}</strong>
+                    <small>resources</small>
+                  </div>
+                </div>
+
+                <dl className={styles.deploymentHistoryMetadata}>
+                  <div>
+                    <dt>실행 범위</dt>
+                    <dd>{formatDeploymentScope(deployment.scope)}</dd>
+                  </div>
+                  <div>
+                    <dt>버전 ID</dt>
+                    <dd>
+                      <code title={selectedEntry.versionLabel}>{selectedEntry.versionLabel}</code>
+                    </dd>
+                  </div>
+                </dl>
                 {release ? (
-                  <span className={styles.deploymentResultValue}>
-                    릴리즈 {release.version} · {formatDeploymentSource(release.source)} ·{" "}
-                    {formatApplicationReleaseStatus(release.status)} ·{" "}
-                    {formatShortReleaseIdentity(release)}
-                  </span>
+                  <div className={styles.deploymentHistoryRelease}>
+                    <span>Application release</span>
+                    <strong>{release.version}</strong>
+                    <small>
+                      {formatDeploymentSource(release.source)} ·{" "}
+                      {formatApplicationReleaseStatus(release.status)} ·{" "}
+                      {formatShortReleaseIdentity(release)}
+                    </small>
+                  </div>
                 ) : null}
                 {release?.providerRevision ? (
-                  <span className={styles.deploymentResultValue}>
+                  <span className={styles.deploymentHistoryRevision}>
                     {release.providerRevision.resourceType}: {release.providerRevision.revisionId}
                   </span>
                 ) : null}
                 {outputUrl ? (
-                  <a href={outputUrl} rel="noreferrer" target="_blank">
+                  <a
+                    className={styles.deploymentHistoryOutputLink}
+                    href={outputUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
                     {outputUrl}
                   </a>
                 ) : null}
@@ -2321,6 +2382,23 @@ function formatOutputValue(output: TerraformOutput): string {
   }
 
   return JSON.stringify(output.value);
+}
+
+function formatDeploymentScope(scope: DeploymentScope): string {
+  if (scope === "infrastructure") {
+    return "인프라";
+  }
+
+  if (scope === "application") {
+    return "애플리케이션";
+  }
+
+  return "전체 스택";
+}
+
+function formatDeploymentVersionDate(value: string): string {
+  const formatted = formatDate(value);
+  return formatted === value ? value : `${formatted} 배포`;
 }
 
 function formatDate(value: string): string {
