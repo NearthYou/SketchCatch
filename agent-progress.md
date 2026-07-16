@@ -26,6 +26,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-16 - Remove local herry612 project and AWS connection records
+
+- Deleted all 26 local project records owned by `herry612` with their associated SketchCatch artifacts and deployment history; no active AWS resources were tracked by the deleted projects.
+- Deleted all 6 AWS connection metadata records owned by the same user. The user account itself was retained.
+- Verification query reports zero remaining projects and zero remaining AWS connections for `herry612`; project artifact cleanup reported zero failures.
+
 ### 2026-07-16 - Preserve actionable AWS connection failures during Deployment
 
 - Direct Deployment credential preparation now preserves specific STS permission-denied and expired-caller errors instead of replacing them with the generic AWS Role connection failure.
