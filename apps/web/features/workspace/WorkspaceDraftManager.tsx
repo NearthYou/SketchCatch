@@ -22,11 +22,12 @@ import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
-import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
-  TerraformSafeFixApplyRequest,
-  TerraformSafeFixApplyResult
+import {
+  createTerraformPreviewAiRequest,
+  type TerraformIssueAiRequest,
+  type TerraformPreviewAiRequest,
+  type TerraformSafeFixApplyRequest,
+  type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
 
@@ -302,6 +303,14 @@ export function WorkspaceDraftManager({
     []
   );
 
+  const requestTerraformPreviewReview = useCallback((): void => {
+    const request = createTerraformPreviewAiRequest(latestTerraformFilesRef.current);
+
+    if (request) {
+      setTerraformPreviewAiRequest(request);
+    }
+  }, []);
+
   if (loadState === "loading") {
     return <WorkspaceNotice title="Workspace loading" body="로컬 저장 정보를 불러오는 중입니다." />;
   }
@@ -319,8 +328,12 @@ export function WorkspaceDraftManager({
     <DiagramEditor
       floatingPanel={(context) => (
         <WorkspaceAiChatDock
+          canRequestTerraformPreviewReview={initialTerraformFiles.some(
+            (file) => file.terraformCode.trim().length > 0
+          )}
           context={context}
           onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+          onRequestTerraformPreviewReview={requestTerraformPreviewReview}
           projectId={LOCAL_PROJECT_ID}
           terraformIssueRequest={terraformIssueAiRequest}
           terraformPreviewRequest={terraformPreviewAiRequest}
@@ -346,7 +359,6 @@ export function WorkspaceDraftManager({
           initialTerraformFiles={initialTerraformFiles}
           initialView={initialRightPanelView}
           onTerraformIssueAiRequest={setTerraformIssueAiRequest}
-          onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
           onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
           onTerraformFilesChange={handleTerraformFilesChange}
           onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}

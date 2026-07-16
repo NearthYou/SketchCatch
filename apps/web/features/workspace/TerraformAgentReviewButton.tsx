@@ -2,12 +2,14 @@ import styles from "./TerraformAgentReviewButton.module.css";
 
 export type TerraformAgentReviewButtonProps = {
   readonly disabled: boolean;
+  readonly isLoading?: boolean | undefined;
   readonly onRequest: () => void;
   readonly title: string;
 };
 
 export function TerraformAgentReviewButton({
   disabled,
+  isLoading = false,
   onRequest,
   title
 }: TerraformAgentReviewButtonProps) {
@@ -22,7 +24,7 @@ export function TerraformAgentReviewButton({
       <span aria-hidden="true" className={styles.mark}>
         AI
       </span>
-      <span>에이전트 리뷰</span>
+      <span>{isLoading ? "Amazon Q 리뷰 중" : "에이전트 리뷰"}</span>
     </button>
   );
 }

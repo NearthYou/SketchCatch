@@ -4,6 +4,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
+- Terraform issue resolution now uses the diagnostic's source file instead of combined multi-file HCL, preserves a required closing brace when removing trailing tokens, and does not synthesize unsafe line deletions.
+- Terraform issue resolution no longer waits for an external AI provider; Terraform Agent Review still requires a successful Amazon Q Business response and shows four staged progress messages while waiting.
+- Terraform Agent Review now turns Amazon Q's grounded conclusion into a compact labeled summary and six concrete Well-Architected checks, each with an explicit issue/current assessment and verification action.
 - Branch `codex/fix-live-observation-redis-readiness` adds runtime-owned Redis ingress from the current ECS API and worker security groups to the external Runtime Cache security group, with fail-closed Terraform preconditions.
 - PR #423 is open. Apply run `29387480668` successfully created and state-verified the two API/worker Redis ingress rules; post-apply review run `29387561447` reported no infrastructure changes.
 - The complete runtime plan also contains unrelated drift (`5 add, 7 change, 2 destroy`), so it must not be applied as the incident repair.
@@ -21,6 +24,42 @@ Short English-only working log for the current agent context. Older records are 
 - Repository Analysis now keeps evidence-anchored template priorities stable, provides detailed Korean recommendation copy and questions, and requires an inline project CI/CD connection before Architecture Draft creation.
 
 ## Session Record
+
+### 2026-07-16 - Address PR #429 review feedback
+
+- Prevented SSR hydration and project switches from overwriting persisted AI Chat messages, active scope, or Terraform issue history before the current project's browser state is restored.
+- Made Amazon Q metadata access consistently optional, selected the valid snake_case review conclusion when the camelCase field has an invalid type, and removed duplicated Korean resource wording after Terraform address sanitization.
+- Verification: focused API tests passed 27/27, focused Web tests passed 19/19, and `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
+
+### 2026-07-16 - Keep Terraform error analysis scrollable and focused
+
+- Added the same always-visible thin transcript scrollbar used by Agent Review to the Error Analysis tab, keeping long results inside the AI Chat panel.
+- Removed the visible `Checks` and trailing `Next step` sections while preserving the explicit safe-fix action.
+- Rebuilt expanded technical details as readable location/type facts, cause and raw-error sections, numbered resolution steps, and vertically stacked current/fixed code without provider metadata.
+- Persisted successful error-analysis results per project, titled each entry as `error.type(line줄)`, and kept prior entries collapsed but individually restorable after tab changes or page reloads; only the current result retains its safe-fix action.
+- Chrome verification confirmed `overflow-y: scroll`, the themed scrollbar, no visible `Checks` or `Next step`, readable larger text, and a collapsed result that restores its full original analysis on click.
+
+### 2026-07-16 - Preserve complete Agent Review sentences
+
+- Reproduced that the shared 120-character AI list-item limit cut Amazon Q pillar reviews mid-action, after which the Web presentation added punctuation and displayed fragments such as incomplete Terraform attributes as required actions.
+- Raised the Terraform Preview pillar limit to 360 characters in both validated JSON and loose-response recovery, made the Web discard any observation or action that still lacks a complete Korean sentence ending, and split `판단: ... 확인: ...` into separate problem and action blocks even when Amazon Q omits pipe separators.
+- Verification: the exact fragment and no-pipe Web regressions pass 11/11; provider and validation regressions pass 7/7, including long JSON and plain-text pillar actions.
+
+### 2026-07-15 - Expand grounded Amazon Q Agent Review conclusions
+
+- Reproduced that the Web presentation discarded Amazon Q's `wellArchitectedConclusion` and replaced it with a fixed two-sentence resource count, while the Amazon Q prompt explicitly demonstrated a short result.
+- Made the successful review contract require a 4-6 sentence, 200-600 character Korean paragraph with no strengths/problems headings, and reject short, split, fallback, or ungrounded-form responses.
+- Added compact Terraform resource-type counts to the Amazon Q evidence payload and instructed the provider to distinguish supported facts from settings that cannot be verified.
+- The Web summary now renders the accepted Amazon Q conclusion directly while retaining deterministic fallback copy outside successful Agent Review responses.
+- Verification: focused API tests passed 4/4 and focused Web tests passed 13/13; full `pnpm lint`, `pnpm typecheck`, `pnpm build`, harness, and diff checks passed.
+
+### 2026-07-15 - Make Terraform issue resolution accurate and require Amazon Q Agent Review
+
+- Reproduced the production/local mismatch: production waited roughly 16 seconds for Terraform error assistance and 23 seconds for Preview review, while the shared multi-file context mapped a `main.tf:3` diagnostic to the wrong file frame.
+- Scoped issue context to `sourceFileName`, added the narrow `}trailing-token -> }` safe fix, and removed server/client deletion synthesis for ambiguous standalone lines.
+- Removed provider latency from Terraform issue resolution while keeping Agent Review provider-backed; successful Preview review now requires a non-fallback Amazon Q Business response.
+- Added a four-stage Agent Review progress card for code structure, resource/risk checks, Amazon Q Well-Architected review, and result assembly.
+- Verification: focused API tests passed 3/3; focused Web tests passed 12/12; `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed. Production deployment was not run.
 
 
 ### 2026-07-15 - Repair production Live Observation Runtime Cache ingress
@@ -107,26 +146,6 @@ Short English-only working log for the current agent context. Older records are 
 - Confirmed ECS Task Definition remains enabled in the manual resource palette with parameter panel, Terraform Preview, and Terraform Sync capabilities.
 - Verification: focused DiagramNodeView, workspace draft restore, resource catalog, workspace adapter, and flow mapper tests passed; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 
-### 2026-07-14 - Repository analysis template ranking and layout preservation
-
-- Updated repository analysis so every available board template can be used as a ranking candidate pool while the user-facing recommendation list is capped at the top three choices.
-- Preserved authored template layouts for selected repository-analysis templates and routed non-built-in templates through direct template board creation so their saved positions are not moved.
-- Added an `audience-live-check` style regression proving ECS Fargate ranks ahead of 3-tier for a single containerized Node/React app with no persistent database.
-- Chrome verification: controlled Chrome reached the repository analysis route but redirected to login because the launched automation profile was unauthenticated; existing user Chrome exposed no debug port for attachment.
-- Verification: repository recommendation API test passed 10/10; public repository recommendation web test passed 8/8; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-
-### 2026-07-14 - Prior dev work now merged into this branch
-
-- Dev brought in ECS GitOps persistence and cleanup evidence, production ECS deployment speed optimization, live sandbox Direct recovery hardening, deployment sandbox E2E gates, Web UI clarity/accessibility improvements, dashboard navigation/copy simplification, and Brainboard AWS Template branch integration records.
-- Detailed older dev records remain available in `docs/agent-history/2026-07.md` and the merge commit history.
-
-### 2026-07-15 - Restore production Amazon Q deployment configuration
-
-- Found that the active ECS API task definition preserved disabled Terraform defaults even though the GitHub production environment contained the intended Amazon Q settings.
-- Updated the ECS deployment workflow to require, validate, and inject the production Amazon Q runtime configuration; added a structural regression check for the contract.
-- Added least-privilege `qbusiness:ChatSync` permission for the configured application to the production API task role and completed the missing GitHub production environment variable.
-- Verification passed: focused production infrastructure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production ECS deployment was not run following the user's explicit instruction.
-
 ### 2026-07-15 - Restore CI/CD pull request creation in the deployment console
 
 - Restored the Git/CI/CD handoff entry point in `CicdConsoleScreen` against the current backend contract rather than copying the reverted legacy panel.
@@ -140,3 +159,18 @@ Short English-only working log for the current agent context. Older records are 
 - Review and apply the approved production Terraform change, then re-run the signed-in production browser loop to confirm the AWS Console launch link is rendered.
 - Continue notification work separately from the completed repository diagram commit.
 - Run local API DB migrations before testing deployment notifications locally.
+
+### 2026-07-15 - Move Terraform Agent Review into AI Chat and harden Amazon Q delivery
+
+- Moved the Agent Review action out of the Terraform toolbar and into a persistent footer in the AI Chat Agent Review tab; requests now use the latest complete Terraform file snapshot.
+- Added the existing staged progress experience to the footer action state and kept the action available for retry after success or failure.
+- Replaced the short-lived generic Next rewrite with a 115-second dedicated proxy route, forwarded request IDs, accepted sufficiently detailed three-sentence or longer Amazon Q reviews, normalized provider headings/newlines into one paragraph, and allowed longer valid conclusions.
+- Added high-signal Terraform settings to the compact Amazon Q evidence payload so the review can distinguish configured controls from unverifiable ones.
+- Chrome verification confirmed the only Agent Review button is at the bottom of AI Chat, staged progress is visible, and the full two-file Terraform review returns an Amazon Q result.
+
+### 2026-07-15 - Make Agent Review status readable and retries real
+
+- Agent Review now shows all six Well-Architected criteria with white, yellow, or red cards for normal, needs-review, or serious results; the summary is rebuilt from the clearest strengths and highest-priority problems, raw Terraform attributes are translated into plain Korean, and each card consistently presents `Problem / Required action` or `Strength / Confirmed setting` before omitting technical details and the trailing next-step section.
+- Amazon Q must return an explicit severity marker for each ordered pillar, failed or invalid provider responses are no longer cached, and 503 messages distinguish authentication, timeout, rate-limit, configuration, invalid-response, and provider failures.
+- The remaining 503 cause was a 2,006-character fenced Amazon Q JSON response truncated before valid JSON completion. Amazon Q output is now bounded to compact six-pillar highlights and a three-sentence conclusion, while useful plain text, partial JSON, and truncated fenced JSON are normalized with deterministic guidance instead of discarded.
+- Verification: focused Web presentation tests passed 9/9, focused provider/validation tests passed 6/6, AWS STS and Q application read checks passed, `pnpm harness:check` passed, and a signed-in Chrome run returned a real Amazon Q review with a labeled summary, six concrete severity-colored criteria, no trailing next step, and no 503.

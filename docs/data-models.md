@@ -2161,7 +2161,7 @@ type AiPreDeploymentCheckRequest = {
 };
 ```
 
-Terraform 오류 설명은 Issues 탭에서 해결 전까지 유지되는 진단을 사용자가 이해하고 승인 기반으로 고치기 위한 설명 DTO다. 오류 해결 화면은 Well-Architected 리뷰를 다루지 않고 `진단 -> 코드 위치 -> 수정 방법 -> 적용 가능 여부`만 보여준다. Well-Architected 리뷰는 Pre-Deployment Check의 책임이다. 자동 적용 가능한 수정은 deterministic rule metadata로 먼저 표현하고, Amazon Q는 rule로 처리하기 어려운 오류의 설명 보강이나 fallback 제안에만 사용한다. 실제 Terraform 코드 변경은 사용자가 `적용`을 누른 뒤에만 가능하다.
+Terraform 오류 설명은 Issues 탭에서 해결 전까지 유지되는 진단을 사용자가 이해하고 승인 기반으로 고치기 위한 설명 DTO다. 오류 해결 화면은 Well-Architected 리뷰를 다루지 않고 `진단 -> 코드 위치 -> 수정 방법 -> 적용 가능 여부`만 보여준다. 오류 위치와 수정 후보는 진단의 `sourceFileName`에 해당하는 단일 파일 문맥에서 deterministic rule로 계산하며, 동기 요청 경로에서 외부 AI provider를 기다리지 않는다. 실제 Terraform 코드 변경은 사용자가 `적용`을 누른 뒤에만 가능하다.
 
 ```ts
 type AiTerraformSafeFix = {
@@ -2229,7 +2229,7 @@ type AiTerraformErrorExplanationResult = {
 };
 ```
 
-Terraform Preview 설명은 Terraform 코드를 실제 실행하지 않고, 감지한 resource block과 deterministic finding을 근거로 현재 다이어그램/IaC Preview를 평가하는 설명 DTO다. 화면은 감지 리소스 나열보다 Well-Architected 6개 기준별 에이전트 평가와 최종 결론을 우선 표시한다. `detectedResources`는 legacy/LLM 근거 호환을 위해 유지하지만 사용자 화면의 주요 정보가 아니다.
+Terraform Preview 설명은 Terraform 코드를 실제 실행하지 않고, 감지한 resource block과 deterministic finding을 근거로 현재 다이어그램/IaC Preview를 평가하는 설명 DTO다. 에이전트 리뷰 성공 응답은 Amazon Q Business를 반드시 호출해 정상 결과를 받은 경우에만 반환하며, provider fallback을 정상 리뷰처럼 표시하지 않는다. AI 채팅의 에이전트 리뷰 탭 하단 버튼은 최신 Terraform 전체 파일 snapshot을 요청하며, 화면은 응답을 기다리는 동안 `Terraform 코드 구조 분석 -> 리소스 및 위험 점검 -> Amazon Q Well-Architected 검토 -> 검토 결과 정리` 단계를 보여준다. Amazon Q에는 3문장, 200~380자의 결론과 정해진 순서의 Well-Architected 6개 기준을 요청하되, 충분한 근거를 가진 더 긴 결론을 문장 수만으로 실패시키지 않는다. 완료된 응답은 줄바꿈과 `잘한 점`/`문제점` 표제를 제거해 정규화하며, 화면의 검토 요약은 가장 명확한 강점과 우선순위가 높은 문제를 기준별 결과에서 뽑아 표시한다. 각 기준은 위험도에 따라 `문제 / 필요한 조치` 또는 `잘된 점 / 확인된 설정`으로 보여주며, Terraform 속성은 의미를 풀어 쓴 한국어 문장으로 우선 표시한다. 근거가 없는 설정은 없다고 단정하지 않고 확인할 수 없다고 표현한다. `detectedResources`는 legacy/LLM 근거 호환을 위해 유지하지만 사용자 화면의 주요 정보가 아니다.
 
 ```ts
 type AiTerraformPreviewExplanationResult = {
@@ -2243,7 +2243,7 @@ type AiTerraformPreviewExplanationResult = {
 };
 ```
 
-v1에서 rule-first 자동 적용 후보가 될 수 있는 진단은 `terraform.trailing_comma`, `terraform.quoted_reference`뿐이다. 그 외 진단은 `safeFix.applicable: false` 또는 `diagnosticExplanation.canApply: false`로 내려가며 Issues 탭과 AI chat dock은 수동 수정 필요 상태로 표시한다. Amazon Q가 `codeSuggestion`을 반환하더라도 현재 코드와 정확히 매칭되는 경우에만 적용 버튼을 활성화한다.
+v1에서 rule-first 자동 적용 후보가 될 수 있는 진단은 `terraform.trailing_comma`, `terraform.quoted_reference`, 그리고 닫는 중괄호 뒤에 불필요한 토큰이 붙은 `terraform.unexpected_token`이다. 마지막 경우에는 닫는 중괄호를 보존하고 뒤의 토큰만 제거할 수 있을 때만 적용 후보로 만든다. 독립된 알 수 없는 코드 줄처럼 의도를 단정할 수 없는 `terraform.unexpected_token`은 자동 삭제하지 않고 `safeFix.applicable: false` 또는 `diagnosticExplanation.canApply: false`로 내려간다. Amazon Q가 `codeSuggestion`을 반환하더라도 현재 진단 파일의 코드와 정확히 매칭되는 경우에만 적용 버튼을 활성화하며, provider 응답이 제안을 생략했을 때 삭제 제안을 임의로 합성하지 않는다.
 
 자연어 Architecture 수정 요청은 `ArchitecturePatchPreview`로만 반환한다. 이 preview는 `proposedArchitectureJson`과 diff 성격의 `changes`를 보여줄 뿐이며, `requiresUserAcceptance: true`와 `userAcceptedChange: null` 상태로 내려간다. 실제 Architecture Board 반영은 별도 적용 버튼에서 `UserAcceptedChange`를 기록한 뒤에만 가능하다.
 

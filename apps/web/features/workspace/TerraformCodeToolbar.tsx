@@ -1,11 +1,8 @@
 import { ArrowLeft, ChevronDown, FileCode2, X } from "lucide-react";
-import { TerraformAgentReviewButton } from "./TerraformAgentReviewButton";
 import styles from "./TerraformCodeToolbar.module.css";
 
 export type TerraformCodeToolbarState = {
   readonly activeFileName: string;
-  readonly canRequestExplanation: boolean;
-  readonly explanationLabel: string;
   readonly fileOptions: readonly string[];
   readonly fileSearchQuery: string;
   readonly inspectedResourceLabel: string;
@@ -15,7 +12,6 @@ export type TerraformCodeToolbarState = {
 
 export type TerraformCodeToolbarActions = {
   readonly closeResourceCode: () => void;
-  readonly requestExplanation: () => void;
   readonly searchFiles: (query: string) => void;
   readonly selectFile: (fileName: string) => void;
   readonly toggleFileMenu: () => void;
@@ -53,13 +49,6 @@ export function TerraformCodeToolbar({
             <X aria-hidden="true" size={18} />
           </button>
         </header>
-        <div className={styles.resourceActionBar}>
-          <TerraformAgentReviewButton
-            disabled={!state.canRequestExplanation}
-            onRequest={actions.requestExplanation}
-            title={state.explanationLabel}
-          />
-        </div>
       </>
     );
   }
@@ -113,13 +102,6 @@ export function TerraformCodeToolbar({
             </div>
           ) : null}
         </div>
-      </div>
-      <div className={styles.terraformTopActions}>
-        <TerraformAgentReviewButton
-          disabled={!state.canRequestExplanation}
-          onRequest={actions.requestExplanation}
-          title={state.explanationLabel}
-        />
       </div>
     </header>
   );
