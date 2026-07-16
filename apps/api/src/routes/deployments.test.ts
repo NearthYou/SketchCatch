@@ -1022,6 +1022,10 @@ type DeploymentRouteTestOptions = {
     input: ApproveDeploymentPlanInput,
     repository: DeploymentRepository
   ) => Promise<DeploymentRecord>;
+  revokeDeploymentApproval?: (
+    input: { deploymentId: string; accessContext: ProjectAccessContext },
+    repository: DeploymentRepository
+  ) => Promise<DeploymentRecord>;
   runDeploymentApply?: (
     input: RunDeploymentApplyInput,
     repository: DeploymentRepository
@@ -1064,6 +1068,9 @@ async function buildDeploymentTestApp(
       : {}),
     ...(routeOptions.approveDeploymentPlan
       ? { approveDeploymentPlan: routeOptions.approveDeploymentPlan }
+      : {}),
+    ...(routeOptions.revokeDeploymentApproval
+      ? { revokeDeploymentApproval: routeOptions.revokeDeploymentApproval }
       : {}),
     ...(routeOptions.runDeploymentApply
       ? { runDeploymentApply: routeOptions.runDeploymentApply }
@@ -2149,6 +2156,62 @@ test("POST /api/deployments/:deploymentId/approve approves the current plan", as
 
   await app.close();
 });
+test("POST /api/deployments/:deploymentId/revoke-approval clears the apply approval", async () => {
+  const repository = new FakeDeploymentRepository();
+  const revokeCalls: string[] = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    currentPlanArtifactId: planArtifactId,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "a".repeat(64),
+    approvedTfplanHash: "b".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2",
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    revokeDeploymentApproval: async (input) => {
+      revokeCalls.push(input.deploymentId);
+      return createDeploymentRecord(input.deploymentId, {
+        currentPlanArtifactId: planArtifactId,
+        approvedAt: null,
+        approvedByUserId: null,
+        approvedTerraformArtifactId: null,
+        approvedPlanArtifactId: null,
+        approvedTerraformArtifactHash: null,
+        approvedTfplanHash: null,
+        approvedAwsAccountId: null,
+        approvedAwsRegion: null,
+        isBlocked: true,
+        blockedBy: "missing_approval",
+        blockedReason: "Terraform Plan requires user approval before apply"
+      });
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/revoke-approval`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.approvedAt, null);
+  assert.equal(body.deployment.approvedPlanArtifactId, null);
+  assert.equal(body.deployment.isBlocked, true);
+  assert.equal(body.deployment.blockedBy, "missing_approval");
+  assert.deepEqual(revokeCalls, [deploymentId]);
+  await app.close();
+});
+
+
+
 
 test("POST /api/deployments/:deploymentId/execute starts Terraform apply through the same safety path", async () => {
   const repository = new FakeDeploymentRepository();

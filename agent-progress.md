@@ -26,6 +26,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-17 - Return cancelled Plan approval to Direct Deployment approval step
+
+- Replaced the Stage 3 local-only Cancel action with an explicit Plan approval cancellation.
+- Added an authenticated approval-revocation endpoint that clears the approval snapshot while preserving the current Plan and restores the missing-approval gate.
+- Direct Deployment now updates the persisted deployment, closes the execution confirmation, and returns to Stage 2 so the Plan can be reviewed and approved again.
+- Verification: focused API approval and deployment route tests pass 55/55; focused Web deployment flow tests pass 17/17; API typecheck and workspace lint pass.
+
 ### 2026-07-17 - Add compact Direct Deployment execution progress
 
 - Added a thin progress bar directly above Deployment Settings for Terraform Plan, Apply, Destroy Plan, and Destroy runs.

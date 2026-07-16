@@ -33,6 +33,7 @@ import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMen
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   approveDeploymentPlan,
+  revokeDeploymentApproval,
   cancelDeployment as cancelDeploymentRun,
   executeDeployment,
   getAiPreDeploymentDeepScan,
@@ -966,6 +967,37 @@ export function DirectDeploymentScreen({
     }, "Terraform Plan을 승인하지 못했습니다.");
   }
 
+  async function revokeCurrentPlanApproval(): Promise<void> {
+    if (!selectedDeployment || !selectedDeployment.approvedAt || requestState === "loading") {
+      return;
+    }
+
+    setActiveProgress(null);
+    dispatchTerraformOutputState({
+      type: "clear",
+      deploymentId: selectedDeployment.id
+    });
+    await runRequest(async () => {
+      const deployment = await revokeDeploymentApproval(selectedDeployment.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((currentDeployment) =>
+          currentDeployment.id === deployment.id ? deployment : currentDeployment
+        )
+      );
+      setSelectedDeploymentId(deployment.id);
+      setSelectedDirectStepId("approval");
+      setShowApplyConfirmation(false);
+      const [logs, resources, outputs] = await Promise.all([
+        listDeploymentLogs(deployment.id),
+        listDeploymentResources(deployment.id),
+        listTerraformOutputs(deployment.id)
+      ]);
+      setDeploymentLogs(logs);
+      setDeploymentResources(resources);
+      dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
+    }, "Plan 승인을 취소하지 못했습니다.");
+  }
+
   async function startTerraformApply(): Promise<void> {
     if (!selectedDeployment || !canApply) {
       return;
@@ -1423,10 +1455,11 @@ export function DirectDeploymentScreen({
                 <>
                   <button
                     className={styles.deploymentSecondaryButton}
-                    onClick={() => setShowApplyConfirmation(false)}
+                    disabled={requestState === "loading"}
+                    onClick={() => void revokeCurrentPlanApproval()}
                     type="button"
                   >
-                    취소
+                    Plan 승인 취소
                   </button>
                   <button
                     className={styles.deploymentPrimaryButton}

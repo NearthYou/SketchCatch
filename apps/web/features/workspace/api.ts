@@ -1538,6 +1538,19 @@ export async function approveDeploymentPlan(
   return response.deployment;
 }
 
+export async function revokeDeploymentApproval(deploymentId: string): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/revoke-approval`,
+    {
+      auth: true,
+      method: "POST",
+      body: {}
+    }
+  );
+
+  return response.deployment;
+}
+
 export async function runDeploymentApply(deploymentId: string): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/apply`,

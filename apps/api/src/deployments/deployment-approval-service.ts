@@ -182,6 +182,48 @@ export async function approveDeploymentPlan(
   return approvedDeployment;
 }
 
+export type RevokeDeploymentApprovalRequest = {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+};
+
+export async function revokeDeploymentApproval(
+  input: RevokeDeploymentApprovalRequest,
+  repository: DeploymentRepository
+): Promise<DeploymentRecord> {
+  const deployment = await getDeployment(input, repository);
+
+  if (!deployment.approvedAt || !deployment.approvedPlanArtifactId) {
+    throw new DeploymentConflictError("Deployment approval is not active");
+  }
+
+  if (deployment.status !== "PENDING") {
+    throw new DeploymentConflictError("Only a pending deployment approval can be cancelled");
+  }
+
+  if (!repository.revokeDeploymentApproval) {
+    throw new Error("Deployment repository does not support approval cancellation");
+  }
+
+  const currentPlanArtifact = deployment.currentPlanArtifactId
+    ? await repository.findDeploymentPlanArtifactById(deployment.currentPlanArtifactId)
+    : undefined;
+  const blockedReason =
+    currentPlanArtifact?.operation === "destroy"
+      ? "Terraform Destroy Plan requires user approval before destroy"
+      : "Terraform Plan requires user approval before apply";
+  const revokedDeployment = await repository.revokeDeploymentApproval(deployment.id, {
+    blockedBy: "missing_approval",
+    blockedReason
+  });
+
+  if (!revokedDeployment) {
+    throw new DeploymentConflictError("Deployment approval state changed");
+  }
+
+  return revokedDeployment;
+}
+
 export function assertDeploymentApplyPreconditions(
   input: AssertDeploymentApplyPreconditionsInput
 ): void {

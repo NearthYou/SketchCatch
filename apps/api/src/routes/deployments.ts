@@ -42,6 +42,7 @@ import {
 } from "../deployments/deployment-destroy-service.js";
 import {
   approveDeploymentPlan as defaultApproveDeploymentPlan,
+  revokeDeploymentApproval as defaultRevokeDeploymentApproval,
   type ApproveDeploymentPlanInput
 } from "../deployments/deployment-approval-service.js";
 import {
@@ -176,6 +177,10 @@ type DeploymentRouteOptions = {
   ) => Promise<RunDeploymentPlanResult>;
   approveDeploymentPlan?: (
     input: ApproveDeploymentPlanInput,
+    repository: DeploymentRepository
+  ) => Promise<DeploymentRecord>;
+  revokeDeploymentApproval?: (
+    input: { deploymentId: string; accessContext: ProjectAccessContext },
     repository: DeploymentRepository
   ) => Promise<DeploymentRecord>;
   runDeploymentApply?: (
@@ -912,7 +917,34 @@ export async function registerDeploymentRoutes(
     }
   });
 
+  app.post("/deployments/:deploymentId/revoke-approval", async (request, reply) => {
+    const params = deploymentParamsSchema.parse(request.params);
+    z.object({}).parse(request.body ?? {});
+    const { accessContext, repository } = await getDeploymentRequestContext(
+      request,
+      options,
+      getDeploymentDatabaseClient
+    );
+    const revokeApproval = options?.revokeDeploymentApproval;
+
+    try {
+      const input = {
+        deploymentId: params.deploymentId,
+        accessContext
+      };
+      const deployment = revokeApproval
+        ? await revokeApproval(input, repository)
+        : await defaultRevokeDeploymentApproval(input, repository);
+
+      return reply.status(200).send({
+        deployment: await toDeployment(deployment, repository)
+      });
+    } catch (error) {
+      return handleDeploymentError(error, reply);
+    }
+  });
   const handleDeploymentExecute = async (request: FastifyRequest, reply: FastifyReply) => {
+
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
     const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(

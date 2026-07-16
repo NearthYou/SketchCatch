@@ -146,6 +146,11 @@ export type ApproveDeploymentInput = {
   preserveFailureDetails?: boolean;
 };
 
+export type RevokeDeploymentApprovalInput = {
+  blockedBy: DeploymentBlockedBy;
+  blockedReason: string;
+};
+
 export type CreateDeployedResourceRecordInput = {
   id: string;
   deploymentId: string;
@@ -263,6 +268,10 @@ export type DeploymentRepository = {
     deploymentId: string,
     input: ApproveDeploymentInput
   ): Promise<DeploymentRecord | undefined>;
+  revokeDeploymentApproval?: (
+    deploymentId: string,
+    input: RevokeDeploymentApprovalInput
+  ) => Promise<DeploymentRecord | undefined>;
   completeDeploymentApply(
     deploymentId: string,
     input: CompleteDeploymentApplyInput
@@ -802,6 +811,32 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             eq(deployments.id, deploymentId),
             eq(deployments.currentPlanArtifactId, input.approvedPlanArtifactId),
             inArray(deployments.status, ["PENDING", "SUCCESS", "FAILED"])
+          )
+        )
+        .returning();
+
+      return deployment;
+    },
+
+    async revokeDeploymentApproval(deploymentId, input) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          ...clearDeploymentApprovalFields,
+          status: "PENDING",
+          activeStage: null,
+          isBlocked: true,
+          blockedBy: input.blockedBy,
+          blockedReason: input.blockedReason,
+          failureStage: null,
+          errorSummary: null,
+          ...touchUpdatedAt
+        })
+        .where(
+          and(
+            eq(deployments.id, deploymentId),
+            eq(deployments.status, "PENDING"),
+            isNotNull(deployments.approvedAt)
           )
         )
         .returning();
