@@ -7,6 +7,14 @@ export type DeploymentStatusPresentation = {
   readonly tone: DeploymentStatusTone;
 };
 
+export type DeploymentHistorySummary = Pick<Deployment, "createdAt" | "id" | "status">;
+
+export type DeploymentHistoryEntry<T extends DeploymentHistorySummary = DeploymentHistorySummary> =
+  {
+    readonly deployment: T;
+    readonly versionLabel: string;
+  };
+
 const DEPLOYMENT_STATUS_PRESENTATIONS: Readonly<
   Record<Deployment["status"], DeploymentStatusPresentation>
 > = {
@@ -22,6 +30,31 @@ export function getDeploymentStatusPresentation(
   status: Deployment["status"]
 ): DeploymentStatusPresentation {
   return DEPLOYMENT_STATUS_PRESENTATIONS[status];
+}
+
+export function getDeploymentHistoryEntries<T extends DeploymentHistorySummary>(
+  deployments: readonly T[]
+): DeploymentHistoryEntry<T>[] {
+  const ascendingDeployments = [...deployments].sort(compareDeploymentHistoryAscending);
+
+  return ascendingDeployments
+    .map((deployment) => ({
+      deployment,
+      versionLabel:
+        deployment.status === "SUCCESS" || deployment.status === "DESTROYED"
+          ? createStableDeploymentVersionLabel(deployment)
+          : "배포 시도"
+    }))
+    .reverse();
+}
+
+function createStableDeploymentVersionLabel(deployment: DeploymentHistorySummary): string {
+  const timestamp = deployment.createdAt
+    .replace(/[-:TZ.]/gu, "")
+    .replace(/^(\d{8})(\d{6})(\d{3})$/u, "$1-$2-$3");
+  const identitySuffix = deployment.id.replace(/[^a-zA-Z0-9]/gu, "").slice(-6);
+
+  return `v${timestamp}-${identitySuffix}`;
 }
 
 export function getRecentDeploymentResultTitle(
@@ -40,4 +73,13 @@ export function getRecentDeploymentResultTitle(
   }
 
   return "최근 배포 결과";
+}
+
+function compareDeploymentHistoryAscending(
+  left: DeploymentHistorySummary,
+  right: DeploymentHistorySummary
+): number {
+  const createdAtDifference = Date.parse(left.createdAt) - Date.parse(right.createdAt);
+
+  return createdAtDifference !== 0 ? createdAtDifference : left.id.localeCompare(right.id);
 }

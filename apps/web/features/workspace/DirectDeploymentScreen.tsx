@@ -81,6 +81,7 @@ import {
   type DirectDeploymentStepId
 } from "./deployment-console-state";
 import {
+  getDeploymentHistoryEntries,
   getDeploymentStatusPresentation,
   getRecentDeploymentResultTitle,
   type DeploymentStatusTone
@@ -207,6 +208,10 @@ export function DirectDeploymentScreen({
         (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)
       ),
     [applicationReleases]
+  );
+  const deploymentHistoryEntries = useMemo(
+    () => getDeploymentHistoryEntries(deployments),
+    [deployments]
   );
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
@@ -1379,32 +1384,50 @@ export function DirectDeploymentScreen({
     </section>
   );
 
-  const renderApplicationReleaseHistory = () => (
+  const renderDeploymentHistory = () => (
     <section className={styles.deploymentHistorySection} id="deployment-history">
       <div className={styles.deploymentSectionHeader}>
         <h3>배포 이력</h3>
-        <small>{applicationReleases.length}건</small>
+        <small>{deploymentHistoryEntries.length}건</small>
       </div>
-      {applicationReleases.length === 0 ? (
+      {deploymentHistoryEntries.length === 0 ? (
         <div className={styles.deploymentHistoryEmpty}>
           <strong>아직 배포 이력이 없습니다.</strong>
           <p>첫 번째 배포가 완료되면 이곳에 표시됩니다.</p>
         </div>
       ) : (
         <div className={styles.deploymentResultRows}>
-          {sortedApplicationReleases.map((release) => {
-            const outputUrl = getSafeReleaseOutputUrl(release.outputUrl);
+          {deploymentHistoryEntries.map(({ deployment, versionLabel }) => {
+            const release = sortedApplicationReleases.find(
+              (candidate) => candidate.deploymentId === deployment.id
+            );
+            const status = getDeploymentStatusPresentation(deployment.status);
+            const outputUrl = getSafeReleaseOutputUrl(release?.outputUrl ?? null);
             return (
-              <article className={styles.deploymentResultRow} key={release.id}>
-                <strong>{release.version}</strong>
-                <span className={styles.deploymentResultMeta}>
-                  {formatDeploymentSource(release.source)} ·{" "}
-                  {formatApplicationReleaseStatus(release.status)} · {release.runtimeTargetKind}
-                </span>
-                <span className={styles.deploymentResultValue}>
-                  {formatShortReleaseIdentity(release)}
-                </span>
-                {release.providerRevision ? (
+              <article className={styles.deploymentResultRow} key={deployment.id}>
+                <button
+                  className={styles.deploymentHistoryEntryButton}
+                  onClick={() => setSelectedDeploymentId(deployment.id)}
+                  type="button"
+                >
+                  <strong>{versionLabel}</strong>
+                  <span className={styles.deploymentResultMeta}>
+                    {status.label} · {deployment.scope} · {formatDate(deployment.createdAt)}
+                  </span>
+                  <span className={styles.deploymentResultValue}>
+                    변경 {deployment.planSummary?.createCount ?? 0}개 추가 ·{" "}
+                    {deployment.planSummary?.updateCount ?? 0}개 수정 ·{" "}
+                    {deployment.planSummary?.deleteCount ?? 0}개 삭제
+                  </span>
+                </button>
+                {release ? (
+                  <span className={styles.deploymentResultValue}>
+                    릴리즈 {release.version} · {formatDeploymentSource(release.source)} ·{" "}
+                    {formatApplicationReleaseStatus(release.status)} ·{" "}
+                    {formatShortReleaseIdentity(release)}
+                  </span>
+                ) : null}
+                {release?.providerRevision ? (
                   <span className={styles.deploymentResultValue}>
                     {release.providerRevision.resourceType}: {release.providerRevision.revisionId}
                   </span>
@@ -1424,7 +1447,7 @@ export function DirectDeploymentScreen({
 
   const renderHistoryView = () => (
     <div className={styles.deploymentHistoryGrid}>
-      {renderApplicationReleaseHistory()}
+      {renderDeploymentHistory()}
       <div className={styles.deploymentHistorySecondary}>
         <details className={styles.deploymentDisclosure}>
           <summary>
