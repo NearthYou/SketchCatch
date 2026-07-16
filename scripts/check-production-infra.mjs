@@ -560,6 +560,10 @@ check(
   "production API secret requirements must retain the Live Observation capability secret"
 );
 check(
+  runtimeVariables.includes('"LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"'),
+  "api_secret_arns validation must allow the Live Observation capability secret"
+);
+check(
   runtimeLocals.includes('?ERROR ?Error ?error -\\"Failed to find Server Action\\"'),
   "web error metrics must exclude stale Next.js Server Action requests"
 );
