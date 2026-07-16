@@ -32,6 +32,7 @@ import {
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
+  selectDeploymentStateBaseline,
   type DeploymentRecord,
   type DeploymentRepository,
   type ProjectAccessContext
@@ -88,6 +89,7 @@ export type RunDeploymentApplyOptions = {
   applyArtifactStorage?: DeploymentApplyArtifactStorage;
   readTerraformArtifactFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
   writePlanFile?: (filePath: string, content: Buffer) => Promise<void>;
+  writeTerraformStateFile?: (filePath: string, content: Buffer) => Promise<void>;
   generateResultId?: () => string;
   executeApplicationRelease?: (input: {
     deployment: DeploymentRecord;
@@ -129,9 +131,9 @@ export async function runDeploymentApply(
       ));
   const applyArtifactStorage =
     options.applyArtifactStorage ?? createS3DeploymentApplyArtifactStorage();
-  const readTerraformArtifactFile =
-    options.readTerraformArtifactFile ?? readFile;
+  const readTerraformArtifactFile = options.readTerraformArtifactFile ?? readFile;
   const writePlanFile = options.writePlanFile ?? writeFile;
+  const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
   const generateResultId = options.generateResultId ?? randomUUID;
   const executeApplicationRelease =
     options.executeApplicationRelease ?? defaultExecuteApplicationRelease;
@@ -209,6 +211,19 @@ export async function runDeploymentApply(
       currentTfplanHash,
       currentAwsConnection: awsConnection
     });
+
+    const stateBaseline = selectDeploymentStateBaseline(
+      deployment,
+      await repository.listDeploymentsByProject(deployment.projectId)
+    );
+
+    if (stateBaseline?.stateObjectKey) {
+      const state = await applyArtifactStorage.downloadDeploymentState({
+        deploymentId: stateBaseline.id,
+        objectKey: stateBaseline.stateObjectKey
+      });
+      await writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), state);
+    }
 
     const [awsCredentials] = await Promise.all([
       prepareAwsCredentialsForApply({
@@ -405,7 +420,9 @@ export async function runDeploymentApply(
       warnings.push("Terraform output collection was cancelled after successful apply");
     } else if (terraform.outputJson.exitCode === 0) {
       try {
-        outputs = parseOptionalTerraformOutputs(parseTerraformOutputsJson(terraform.outputJson.stdout));
+        outputs = parseOptionalTerraformOutputs(
+          parseTerraformOutputsJson(terraform.outputJson.stdout)
+        );
       } catch (error) {
         warnings.push(summarizePostApplyWarning("Terraform output parse", error));
       }
@@ -580,11 +597,7 @@ async function runApplicationOnlyDeploymentApply(input: {
     const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
       requireDeploymentTerraformArtifact(input.deployment, input.repository),
       requireCurrentPlanArtifact(input.deployment, input.repository),
-      requireDeploymentAwsConnection(
-        input.deployment,
-        input.input.accessContext,
-        input.repository
-      )
+      requireDeploymentAwsConnection(input.deployment, input.input.accessContext, input.repository)
     ]);
     const [planBuffer, preparedWorkspace] = await Promise.all([
       input.applyArtifactStorage.downloadDeploymentArtifact({

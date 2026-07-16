@@ -34,7 +34,7 @@ const userId = "55555555-5555-4555-8555-555555555555";
 const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const planArtifactId = "99999999-9999-4999-8999-999999999999";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
-const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
+const terraformArtifactContent = 'terraform { required_version = ">= 1.6.0" }\n';
 const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 const planBuffer = Buffer.from("approved binary tfplan");
 const tfplanSha256 = createSha256(planBuffer);
@@ -46,6 +46,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
   planArtifact: DeploymentPlanArtifactRecord | undefined = createPlanArtifactRecord();
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
+  deployments: DeploymentRecord[] | null = null;
   logs: DeploymentLogRecord[] = [];
   completedInput: CompleteDeploymentApplyInput | undefined;
   failedInput:
@@ -129,7 +130,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
-    return this.deployment ? [this.deployment] : [];
+    return this.deployments ?? (this.deployment ? [this.deployment] : []);
   }
 
   updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (
@@ -340,6 +341,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
 class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   readonly uploadedStates: UploadDeploymentStateInput[] = [];
+  readonly downloadedStates: Array<{ deploymentId: string; objectKey: string }> = [];
   stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
 
   async downloadDeploymentArtifact(input: {
@@ -356,8 +358,12 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
     return planBuffer;
   }
 
-  async downloadDeploymentState(): Promise<Buffer> {
-    return Buffer.from("{}");
+  async downloadDeploymentState(input: {
+    deploymentId: string;
+    objectKey: string;
+  }): Promise<Buffer> {
+    this.downloadedStates.push(input);
+    return Buffer.from('{"version":4,"serial":7}');
   }
 
   async uploadDeploymentState(input: UploadDeploymentStateInput) {
@@ -375,10 +381,24 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
     scope: "full_stack",
     targetKind: "ecs_fargate"
   });
+  const previousDeploymentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const previousStateObjectKey = `deployments/${previousDeploymentId}/state/terraform.tfstate`;
+  repository.deployments = [
+    repository.deployment,
+    createApprovedDeploymentRecord({
+      id: previousDeploymentId,
+      approvedPlanArtifactId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      createdAt: new Date("2025-12-31T00:00:00.000Z"),
+      currentPlanArtifactId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      stateObjectKey: previousStateObjectKey,
+      status: "SUCCESS"
+    })
+  ];
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const runnerStages: string[] = [];
   let cleanupCalled = false;
   let writtenPlanFile: { filePath: string; content: Buffer } | undefined;
+  let restoredState: { filePath: string; content: Buffer } | undefined;
 
   const result = await runDeploymentApply(
     {
@@ -394,6 +414,9 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
           filePath,
           content: Buffer.from(content)
         };
+      },
+      writeTerraformStateFile: async (filePath, content) => {
+        restoredState = { filePath, content };
       },
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-apply",
@@ -489,6 +512,11 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   assert.equal(cleanupCalled, true);
   assert.match(writtenPlanFile?.filePath ?? "", /[\\/]tfplan$/);
   assert.deepEqual(writtenPlanFile?.content, planBuffer);
+  assert.deepEqual(applyArtifactStorage.downloadedStates, [
+    { deploymentId: previousDeploymentId, objectKey: previousStateObjectKey }
+  ]);
+  assert.match(restoredState?.filePath ?? "", /[\\/]terraform\.tfstate$/);
+  assert.equal(restoredState?.content.toString(), '{"version":4,"serial":7}');
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(result.deployment.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.equal(result.deployment.resultWarningSummary, null);
@@ -744,7 +772,10 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
   assert.equal(planWritten, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.failedInput?.failureStage, "apply");
-  assert.match(repository.failedInput?.errorSummary ?? "", /data source "aws_region" is not allowed/);
+  assert.match(
+    repository.failedInput?.errorSummary ?? "",
+    /data source "aws_region" is not allowed/
+  );
 });
 
 test("runDeploymentApply rejects approval snapshot drift before credentials or Terraform", async () => {
@@ -844,9 +875,7 @@ test("runDeploymentApply rejects approval snapshot drift before credentials or T
     assert.equal(repository.failedInput?.failureStage, "approval", testCase.name);
     assert.match(repository.failedInput?.errorSummary ?? "", testCase.expectedError, testCase.name);
     assert.equal(
-      repository.logs.some((log) =>
-        log.message.includes("Apply blocked before Terraform apply")
-      ),
+      repository.logs.some((log) => log.message.includes("Apply blocked before Terraform apply")),
       true,
       testCase.name
     );
@@ -909,7 +938,8 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
       { level: "ERROR", message: "apply failed" },
       {
         level: "WARN",
-        message: "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
+        message:
+          "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
       }
     ]
   );
@@ -945,8 +975,7 @@ test("runDeploymentApply reports apply timeouts with a partial resource warning"
       runTerraformApply: async () =>
         createRunnerResult("apply", {
           exitCode: 143,
-          stdout:
-            "aws_instance.web: Still creating... [id=i-1234567890abcdef0, 00m50s elapsed]\n",
+          stdout: "aws_instance.web: Still creating... [id=i-1234567890abcdef0, 00m50s elapsed]\n",
           timedOut: true
         })
     }

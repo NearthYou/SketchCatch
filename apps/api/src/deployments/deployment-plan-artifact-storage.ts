@@ -5,6 +5,7 @@ import { requireS3BucketName } from "../config/env.js";
 import { getS3Client } from "../s3/client.js";
 import {
   assertDeploymentPlanArtifactObjectKey,
+  assertDeploymentStateObjectKey,
   createDeploymentArtifactMetadata,
   createDeploymentArtifactTagging,
   createS3ChecksumSha256
@@ -13,6 +14,7 @@ import {
   createS3DeploymentTerraformLockFileStorage,
   type DeploymentTerraformLockFileStorage
 } from "./terraform-lock-file-storage.js";
+import { downloadTerraformArtifactFromS3 } from "./terraform-workspace.js";
 
 export type UploadDeploymentPlanArtifactInput = {
   deploymentId: string;
@@ -26,6 +28,7 @@ export type UploadedDeploymentPlanArtifact = {
 };
 
 export type DeploymentPlanArtifactStorage = Partial<DeploymentTerraformLockFileStorage> & {
+  downloadDeploymentState(input: { deploymentId: string; objectKey: string }): Promise<Buffer>;
   uploadDeploymentPlanArtifact(
     input: UploadDeploymentPlanArtifactInput
   ): Promise<UploadedDeploymentPlanArtifact>;
@@ -49,6 +52,12 @@ export function createS3DeploymentPlanArtifactStorage(
 
   return {
     ...terraformLockFileStorage,
+
+    async downloadDeploymentState(input) {
+      assertDeploymentStateObjectKey(input);
+
+      return downloadTerraformArtifactFromS3(input.objectKey);
+    },
 
     async uploadDeploymentPlanArtifact(input) {
       const body = await readFile(input.planFilePath);

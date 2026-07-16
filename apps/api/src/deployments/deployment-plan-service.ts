@@ -38,6 +38,7 @@ import {
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
+  selectDeploymentStateBaseline,
   type DeploymentRecord,
   type DeploymentRepository,
   type ProjectAccessContext
@@ -96,6 +97,7 @@ export type RunDeploymentPlanOptions = {
     repository: DeploymentRepository;
   }) => Promise<PreparedApplicationReleaseSummary | null>;
   writeApplicationPlanFile?: (filePath: string, content: string) => Promise<void>;
+  writeTerraformStateFile?: (filePath: string, content: Buffer) => Promise<void>;
 };
 
 export type PreparedApplicationReleaseSummary = {
@@ -141,6 +143,7 @@ export async function runDeploymentPlan(
   const prepareApplicationArtifact =
     options.prepareApplicationArtifact ?? defaultPrepareApplicationArtifact;
   const writeApplicationPlanFile = options.writeApplicationPlanFile ?? writeFile;
+  const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -165,14 +168,16 @@ export async function runDeploymentPlan(
     const preparedApplicationRelease =
       deployment.scope !== "infrastructure"
         ? await prepareApplicationArtifact({
-        deployment,
-        accessContext: input.accessContext,
-        repository,
-        ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+            deployment,
+            accessContext: input.accessContext,
+            repository,
+            ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
           })
         : null;
     if (deployment.scope !== "infrastructure" && !preparedApplicationRelease) {
-      throw new DeploymentConflictError("Application artifact preparation did not return a release");
+      throw new DeploymentConflictError(
+        "Application artifact preparation did not return a release"
+      );
     }
 
     const [artifact, awsConnection] = await Promise.all([
@@ -249,6 +254,19 @@ export async function runDeploymentPlan(
         repository,
         terraform
       });
+    }
+
+    const stateBaseline = selectDeploymentStateBaseline(
+      deployment,
+      await repository.listDeploymentsByProject(deployment.projectId)
+    );
+
+    if (stateBaseline?.stateObjectKey) {
+      const state = await planArtifactStorage.downloadDeploymentState({
+        deploymentId: stateBaseline.id,
+        objectKey: stateBaseline.stateObjectKey
+      });
+      await writeTerraformStateFile(join(workspace.workdir, "terraform.tfstate"), state);
     }
 
     const [awsCredentials] = await Promise.all([

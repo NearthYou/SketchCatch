@@ -29,10 +29,7 @@ import type {
   TerraformArtifactRecord,
   TerraformOutputRecord
 } from "./deployment-service.js";
-import {
-  terraformMutationTimeoutMs,
-  type TerraformRunResult
-} from "./terraform-runner.js";
+import { terraformMutationTimeoutMs, type TerraformRunResult } from "./terraform-runner.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -42,7 +39,7 @@ const userId = "55555555-5555-4555-8555-555555555555";
 const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const planArtifactId = "99999999-9999-4999-8999-999999999999";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
-const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
+const terraformArtifactContent = 'terraform { required_version = ">= 1.6.0" }\n';
 const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 const stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
 
@@ -268,6 +265,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
 class FakePlanArtifactStorage implements DeploymentPlanArtifactStorage {
   uploads: UploadDeploymentPlanArtifactInput[] = [];
 
+  async downloadDeploymentState(): Promise<Buffer> {
+    throw new Error("destroy plan storage should not restore baseline state");
+  }
+
   async uploadDeploymentPlanArtifact(input: UploadDeploymentPlanArtifactInput) {
     this.uploads.push(input);
 
@@ -295,9 +296,7 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
     return Buffer.from('{"version":4}');
   }
 
-  async uploadDeploymentState(
-    _input: UploadDeploymentStateInput
-  ): Promise<{ objectKey: string }> {
+  async uploadDeploymentState(_input: UploadDeploymentStateInput): Promise<{ objectKey: string }> {
     throw new Error("destroy plan generation should not upload state");
   }
 }
@@ -337,7 +336,10 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.deepEqual(runnerStages, ["init", "destroy-plan", "show-json"]);
   assert.equal(planArtifactStorage.uploads[0]?.planArtifactId, planArtifactId);
   assert.equal(repository.savedPlans[0]?.planArtifact.operation, "destroy");
-  assert.equal(repository.savedPlans[0]?.planArtifact.terraformArtifactSha256, terraformArtifactSha256);
+  assert.equal(
+    repository.savedPlans[0]?.planArtifact.terraformArtifactSha256,
+    terraformArtifactSha256
+  );
   assert.equal(repository.savedPlans[0]?.terminalStatus, "SUCCESS");
   assert.equal(repository.savedPlans[0]?.isBlocked, false);
   assert.equal(repository.savedPlans[0]?.blockedBy, null);
@@ -357,7 +359,10 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
       log.message.startsWith("[duration] deployment destroy plan save completed in ")
     )
   );
-  assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
+  assert.equal(
+    repository.logs.some((log) => log.message.includes("resource_changes")),
+    false
+  );
 });
 
 test("application cleanup creates an approved rollback manifest without Terraform state", async () => {
@@ -498,9 +503,7 @@ function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyP
   };
 }
 
-function createDeploymentRecord(
-  overrides: Partial<DeploymentRecord> = {}
-): DeploymentRecord {
+function createDeploymentRecord(overrides: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     id: deploymentId,
     projectId,

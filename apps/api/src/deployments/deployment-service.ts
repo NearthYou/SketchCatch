@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, ne, notInArray, sql } from "drizzle-orm";
 import type {
   AwsConnection,
   DeployedResource,
@@ -356,6 +356,60 @@ function createTerminalDeploymentValues(
   };
 }
 
+function isTerraformDeploymentScope(scope: DeploymentScope): boolean {
+  return scope === "infrastructure" || scope === "full_stack";
+}
+
+export function selectDeploymentStateBaseline(
+  deployment: DeploymentRecord,
+  projectDeployments: readonly DeploymentRecord[]
+): DeploymentRecord | null {
+  if (!isTerraformDeploymentScope(deployment.scope) || !deployment.awsConnectionId) {
+    return null;
+  }
+
+  const candidates = [
+    deployment,
+    ...projectDeployments.filter((candidate) => candidate.id !== deployment.id)
+  ]
+    .filter(
+      (candidate) =>
+        candidate.projectId === deployment.projectId &&
+        candidate.awsConnectionId === deployment.awsConnectionId &&
+        isTerraformDeploymentScope(candidate.scope) &&
+        ((candidate.id === deployment.id && candidate.stateObjectKey !== null) ||
+          candidate.status === "SUCCESS" ||
+          candidate.status === "FAILED" ||
+          candidate.status === "DESTROYED")
+    )
+    .sort(
+      (left, right) =>
+        right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id)
+    );
+
+  for (const candidate of candidates) {
+    if (candidate.status === "DESTROYED") {
+      return null;
+    }
+
+    if (candidate.stateObjectKey) {
+      return candidate;
+    }
+
+    if (
+      candidate.status === "SUCCESS" ||
+      (candidate.status === "FAILED" &&
+        candidate.resultWarningSummary?.includes("state upload"))
+    ) {
+      throw new DeploymentConflictError(
+        "The latest Terraform state was not persisted; automatic redeployment is blocked to avoid using stale state"
+      );
+    }
+  }
+
+  return null;
+}
+
 export function createPostgresDeploymentRepository(db: Database): DeploymentRepository {
   const directReleaseRepository = createPostgresDirectApplicationReleaseRepository(db);
   return {
@@ -458,7 +512,9 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             .for("update");
 
           if (!draft || draft.revision !== input.preparedDraftRevision) {
-            throw new DeploymentConflictError("Project draft revision changed before deployment creation");
+            throw new DeploymentConflictError(
+              "Project draft revision changed before deployment creation"
+            );
           }
         }
 
@@ -755,17 +811,6 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
 
     async completeDeploymentApply(deploymentId, input) {
       return db.transaction(async (tx) => {
-        await tx.delete(deployedResources).where(eq(deployedResources.deploymentId, deploymentId));
-        await tx.delete(terraformOutputs).where(eq(terraformOutputs.deploymentId, deploymentId));
-
-        if (input.resources.length > 0) {
-          await tx.insert(deployedResources).values(input.resources);
-        }
-
-        if (input.outputs.length > 0) {
-          await tx.insert(terraformOutputs).values(input.outputs);
-        }
-
         const [deployment] = await tx
           .update(deployments)
           .set({
@@ -775,11 +820,47 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             failureStage: null,
             errorSummary: null
           })
-          .where(eq(deployments.id, deploymentId))
+          .where(
+            and(
+              eq(deployments.id, deploymentId),
+              eq(deployments.status, "RUNNING"),
+              eq(deployments.activeStage, "apply")
+            )
+          )
           .returning();
 
         if (!deployment) {
           throw new Error("Deployment apply could not be completed");
+        }
+
+        if (
+          input.stateObjectKey &&
+          deployment.awsConnectionId &&
+          isTerraformDeploymentScope(deployment.scope)
+        ) {
+          await tx
+            .update(deployments)
+            .set({ stateObjectKey: null })
+            .where(
+              and(
+                eq(deployments.projectId, deployment.projectId),
+                eq(deployments.awsConnectionId, deployment.awsConnectionId),
+                inArray(deployments.scope, ["infrastructure", "full_stack"]),
+                ne(deployments.id, deploymentId),
+                isNotNull(deployments.stateObjectKey)
+              )
+            );
+        }
+
+        await tx.delete(deployedResources).where(eq(deployedResources.deploymentId, deploymentId));
+        await tx.delete(terraformOutputs).where(eq(terraformOutputs.deploymentId, deploymentId));
+
+        if (input.resources.length > 0) {
+          await tx.insert(deployedResources).values(input.resources);
+        }
+
+        if (input.outputs.length > 0) {
+          await tx.insert(terraformOutputs).values(input.outputs);
         }
 
         return deployment;
@@ -814,18 +895,51 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async failDeployment(deploymentId, input) {
-      const [deployment] = await db
-        .update(deployments)
-        .set({
-          ...createTerminalDeploymentValues("FAILED"),
-          failedAt: sql`now()`,
-          ...input,
-          ...clearDeploymentApprovalFields
-        })
-        .where(eq(deployments.id, deploymentId))
-        .returning();
+      return db.transaction(async (tx) => {
+        const [deployment] = await tx
+          .update(deployments)
+          .set({
+            ...createTerminalDeploymentValues("FAILED"),
+            failedAt: sql`now()`,
+            ...input,
+            ...clearDeploymentApprovalFields
+          })
+          .where(
+            input.stateObjectKey
+              ? and(
+                  eq(deployments.id, deploymentId),
+                  eq(deployments.status, "RUNNING"),
+                  eq(deployments.activeStage, "apply")
+                )
+              : eq(deployments.id, deploymentId)
+          )
+          .returning();
 
-      return deployment;
+        if (!deployment) {
+          return undefined;
+        }
+
+        if (
+          input.stateObjectKey &&
+          deployment.awsConnectionId &&
+          isTerraformDeploymentScope(deployment.scope)
+        ) {
+          await tx
+            .update(deployments)
+            .set({ stateObjectKey: null })
+            .where(
+              and(
+                eq(deployments.projectId, deployment.projectId),
+                eq(deployments.awsConnectionId, deployment.awsConnectionId),
+                inArray(deployments.scope, ["infrastructure", "full_stack"]),
+                ne(deployments.id, deploymentId),
+                isNotNull(deployments.stateObjectKey)
+              )
+            );
+        }
+
+        return deployment;
+      });
     },
 
     async requestDeploymentCancellation(deploymentId) {
