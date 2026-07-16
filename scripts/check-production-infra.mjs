@@ -333,6 +333,7 @@ for (const marker of [
   "Validate reviewed complete runtime plan",
   "aws_ecs_task_definition.api",
   "aws_ecs_task_definition.worker",
+  '"address": "aws_ecs_service.api"',
   'aws_cloudwatch_log_metric_filter.ecs_error[\\"web\\"]',
   '"address": "aws_s3_bucket_cors_configuration.artifact"',
   "expected_head_sha must exactly match the dispatched commit",
@@ -360,6 +361,8 @@ for (const marker of [
   ".git_app_client_id = $client_id",
   '.api_secret_arns["GIT_APP_CLIENT_SECRET"] = $client_secret_arn',
   '.api_secret_arns["LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"] = $live_observation_capability_current_secret_arn',
+  "$after_secrets | contains($before_secrets)",
+  "$after_values | contains($before_values)",
   "aws cloudformation list-stacks",
   "aws cloudformation describe-stacks",
   '.OutputKey == "RedisUrl"',
@@ -369,6 +372,10 @@ for (const marker of [
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);
 }
+check(
+  workflow.includes('terraform -chdir="${TERRAFORM_ROOT}" state pull > "${current_state_json}"'),
+  "complete runtime plan validation must compare the planned task definitions with Terraform state"
+);
 check(
   !workflow.includes('aws_cloudwatch_log_metric_filter.ecs_error[\\\\"web\\\\"]'),
   "complete runtime plan validation must use jq-compatible resource address escaping"
@@ -464,6 +471,18 @@ const runtimeAutoscaling = read("infra/aws/terraform/autoscaling.tf");
 const runtimeNetwork = read("infra/aws/terraform/network.tf");
 const runtimeVariables = read("infra/aws/terraform/variables.tf");
 const runtimeIam = read("infra/aws/terraform/iam.tf");
+const apiEcsService =
+  runtimeEcs.match(
+    /resource "aws_ecs_service" "api" \{([\s\S]*?)\r?\n\}\r?\n\r?\nresource "aws_ecs_service" "web"/
+  )?.[1] ?? "";
+check(
+  apiEcsService.includes("ignore_changes = [desired_count]"),
+  "API ECS service must reconcile the Terraform task definition while preserving autoscaling ownership"
+);
+check(
+  !apiEcsService.includes("ignore_changes = [desired_count, task_definition]"),
+  "API ECS service must not ignore task definition changes"
+);
 check(
   !/resource\s+"aws_ecs_service"\s+"app"/.test(runtimeEcs),
   "legacy ECS service must not exist"

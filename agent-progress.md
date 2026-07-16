@@ -61,3 +61,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for the valid and invalid forms.
 - Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed by this repair.
+
+### 2026-07-16 - Complete runtime deployment reconciliation
+
+- Complete runtime Apply validation now compares planned API and worker Secret references with the Terraform state rather than nullable plan `before` data, and verifies the worker execution policy retains every existing secret reference.
+- The API ECS service now reconciles task definition changes while retaining autoscaling ownership of desired count, so the active service rolls from manual revision drift to the reviewed task definition.
+- Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed. Terraform validate/test remain blocked locally by the unavailable AWS provider cache.
