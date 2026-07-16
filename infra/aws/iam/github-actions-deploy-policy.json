@@ -144,13 +144,10 @@
       }
     },
     {
-      "Sid": "AllowReviewedRuntimeCompleteTaskDefinitionReplacement",
+      "Sid": "AllowReviewedRuntimeCompleteTaskDefinitionDeregistration",
       "Effect": "Allow",
-      "Action": ["ecs:DeregisterTaskDefinition", "ecs:RegisterTaskDefinition"],
-      "Resource": [
-        "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-api:*",
-        "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-worker:*"
-      ]
+      "Action": ["ecs:DeregisterTaskDefinition"],
+      "Resource": "*"
     },
     {
       "Sid": "AllowReviewedRuntimeCompleteInlinePolicyUpdate",
@@ -181,6 +178,7 @@
       "Action": [
         "elasticloadbalancing:DescribeLoadBalancerAttributes",
         "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTags",
         "elasticloadbalancing:DescribeTargetGroupAttributes",
         "elasticloadbalancing:DescribeTargetGroups"
       ],
