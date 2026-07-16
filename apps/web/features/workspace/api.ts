@@ -12,6 +12,8 @@ import type {
   AnalyzeSourceRepositoryRequest,
   ApiErrorCode,
   ApiErrorResponse,
+  ArchitectureDraftProgressSnapshot,
+  ArchitectureDraftStreamEvent,
   ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
   ApproveDeploymentPlanRequest,
@@ -141,6 +143,12 @@ type AiTerraformErrorExplanationRequest = {
 
 type PublicAiRequestOptions = {
   readonly signal?: AbortSignal | undefined;
+};
+
+export type ArchitectureDraftStreamOptions = PublicAiRequestOptions & {
+  readonly onProgress?:
+    | ((snapshot: ArchitectureDraftProgressSnapshot) => void)
+    | undefined;
 };
 
 type ArchitectureSnapshotResponse = {
@@ -459,6 +467,49 @@ export async function createAiArchitectureDraft(
   );
 }
 
+// 새 프로젝트 첫 초안에서만 사용하는 NDJSON progress 경계입니다.
+// 기존 JSON 함수는 Repository/기존 프로젝트 호출 호환을 위해 별도로 유지합니다.
+export async function createAiArchitectureDraftStream(
+  input: CreateArchitectureDraftRequest,
+  options: ArchitectureDraftStreamOptions = {}
+): Promise<CreateArchitectureDraftResponse> {
+  const prompt = input.prompt.trim();
+
+  if (prompt.length === 0) {
+    throw new ApiClientError(400, {
+      error: "bad_request",
+      message: "Requirement Prompt를 먼저 입력해주세요."
+    });
+  }
+
+  const path = "/ai/architecture-draft/stream";
+  const requestContext = createPublicAiRequestContext(path);
+  const headers = createPublicAiHeaders("application/x-ndjson");
+  let response: Response;
+
+  try {
+    response = await fetch(`${AI_API_BASE_URL}${path}`, {
+      body: JSON.stringify({ ...input, prompt }),
+      credentials: "include",
+      headers,
+      method: "POST",
+      ...(options.signal ? { signal: options.signal } : {})
+    });
+  } catch (error) {
+    if (isPublicAiAbort(error, options.signal)) {
+      throw error;
+    }
+
+    throw createPublicAiConnectionError(requestContext);
+  }
+
+  if (!response.ok) {
+    throw await readPublicAiError(response, requestContext);
+  }
+
+  return readArchitectureDraftStream(response, requestContext, options.onProgress);
+}
+
 export async function analyzePublicSourceRepository(
   input: AnalyzeSourceRepositoryRequest
 ): Promise<SourceRepositoryAnalysisResult> {
@@ -561,18 +612,8 @@ async function postPublicAiJson<ResponseBody>(
   body: Record<string, unknown>,
   options: PublicAiRequestOptions = {}
 ): Promise<ResponseBody> {
-  const requestContext: ApiRequestContext = {
-    method: "POST",
-    path: new URL(`${AI_API_BASE_URL}${path}`, "http://sketchcatch.local").pathname
-  };
-  const headers = new Headers({
-    "Content-Type": "application/json"
-  });
-  const session = readStoredAuthSession();
-
-  if (session) {
-    headers.set("Authorization", `Bearer ${session.accessToken}`);
-  }
+  const requestContext = createPublicAiRequestContext(path);
+  const headers = createPublicAiHeaders("application/json");
 
   let response: Response;
 
@@ -585,22 +626,11 @@ async function postPublicAiJson<ResponseBody>(
       ...(options.signal ? { signal: options.signal } : {})
     });
   } catch (error) {
-    if (
-      options.signal?.aborted === true ||
-      (error instanceof Error && error.name === "AbortError")
-    ) {
+    if (isPublicAiAbort(error, options.signal)) {
       throw error;
     }
 
-    throw new ApiClientError(
-      0,
-      {
-        error: "internal_server_error",
-        message:
-          "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
-      },
-      requestContext
-    );
+    throw createPublicAiConnectionError(requestContext);
   }
 
   if (!response.ok) {
@@ -608,6 +638,166 @@ async function postPublicAiJson<ResponseBody>(
   }
 
   return response.json() as Promise<ResponseBody>;
+}
+
+async function readArchitectureDraftStream(
+  response: Response,
+  requestContext: ApiRequestContext,
+  onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
+): Promise<CreateArchitectureDraftResponse> {
+  if (response.body === null) {
+    throw createInvalidArchitectureDraftStreamError(requestContext);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: CreateArchitectureDraftResponse | undefined;
+
+  const consumeLine = (line: string): void => {
+    const trimmedLine = line.trim();
+    if (trimmedLine.length === 0) {
+      return;
+    }
+
+    let parsedEvent: unknown;
+    try {
+      parsedEvent = JSON.parse(trimmedLine) as unknown;
+    } catch {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
+    }
+
+    if (!isArchitectureDraftStreamEvent(parsedEvent)) {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
+    }
+    const event = parsedEvent;
+
+    if (event.type === "progress") {
+      onProgress?.(event.snapshot);
+      return;
+    }
+
+    if (event.type === "result") {
+      result = event.result;
+      return;
+    }
+
+    if (event.type === "error") {
+      throw new ApiClientError(event.error.statusCode, event.error, requestContext);
+    }
+
+    throw createInvalidArchitectureDraftStreamError(requestContext);
+  };
+
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) {
+      buffer += decoder.decode();
+      break;
+    }
+
+    buffer += decoder.decode(chunk.value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      consumeLine(line);
+    }
+  }
+
+  consumeLine(buffer);
+  if (result === undefined) {
+    throw createInvalidArchitectureDraftStreamError(requestContext);
+  }
+
+  return result;
+}
+
+function createPublicAiRequestContext(path: string): ApiRequestContext {
+  return {
+    method: "POST",
+    path: new URL(`${AI_API_BASE_URL}${path}`, "http://sketchcatch.local").pathname
+  };
+}
+
+function createPublicAiHeaders(accept: string): Headers {
+  const headers = new Headers({
+    Accept: accept,
+    "Content-Type": "application/json"
+  });
+  const session = readStoredAuthSession();
+
+  if (session) {
+    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  }
+
+  return headers;
+}
+
+function isPublicAiAbort(error: unknown, signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true || (error instanceof Error && error.name === "AbortError");
+}
+
+function createPublicAiConnectionError(requestContext: ApiRequestContext): ApiClientError {
+  return new ApiClientError(
+    0,
+    {
+      error: "internal_server_error",
+      message:
+        "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
+    },
+    requestContext
+  );
+}
+
+function createInvalidArchitectureDraftStreamError(
+  requestContext: ApiRequestContext
+): ApiClientError {
+  return new ApiClientError(
+    500,
+    {
+      error: "internal_server_error",
+      message: "아키텍처 생성 응답을 확인하지 못했습니다. 다시 시도해주세요."
+    },
+    requestContext
+  );
+}
+
+function isArchitectureDraftStreamEvent(value: unknown): value is ArchitectureDraftStreamEvent {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+
+  if (value.type === "progress") {
+    return (
+      "stage" in value &&
+      typeof value.stage === "string" &&
+      "snapshot" in value &&
+      typeof value.snapshot === "object" &&
+      value.snapshot !== null &&
+      "sequence" in value.snapshot &&
+      typeof value.snapshot.sequence === "number"
+    );
+  }
+
+  if (value.type === "result") {
+    return "result" in value && typeof value.result === "object" && value.result !== null;
+  }
+
+  if (value.type === "error") {
+    return (
+      "error" in value &&
+      typeof value.error === "object" &&
+      value.error !== null &&
+      "statusCode" in value.error &&
+      typeof value.error.statusCode === "number" &&
+      "error" in value.error &&
+      isApiErrorCode(value.error.error) &&
+      "message" in value.error &&
+      typeof value.error.message === "string"
+    );
+  }
+
+  return false;
 }
 
 // API 서버의 JSON 오류를 공용 에러 타입으로 유지해 화면별 메시지 fallback에 덮이지 않게 합니다.

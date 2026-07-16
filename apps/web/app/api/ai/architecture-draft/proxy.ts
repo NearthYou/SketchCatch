@@ -17,6 +17,8 @@ export async function forwardArchitectureDraftProxyRequest(
 ): Promise<Response> {
   const apiOrigin = (options.apiOrigin ?? DEFAULT_API_PROXY_ORIGIN).replace(/\/+$/, "");
   const fetcher = options.fetcher ?? fetch;
+  const timeoutSignal = AbortSignal.timeout(ARCHITECTURE_DRAFT_PROXY_TIMEOUT_MS);
+  const signal = AbortSignal.any([request.signal, timeoutSignal]);
 
   try {
     const response = await fetcher(`${apiOrigin}${options.backendPath}`, {
@@ -27,7 +29,7 @@ export async function forwardArchitectureDraftProxyRequest(
         "content-type": request.headers.get("content-type") ?? "application/json"
       },
       method: "POST",
-      signal: AbortSignal.timeout(ARCHITECTURE_DRAFT_PROXY_TIMEOUT_MS)
+      signal
     });
     const headers = new Headers();
     headers.set("cache-control", "no-cache, no-transform");
@@ -39,6 +41,10 @@ export async function forwardArchitectureDraftProxyRequest(
       statusText: response.statusText
     });
   } catch (error) {
+    if (request.signal.aborted) {
+      throw error;
+    }
+
     const timedOut = error instanceof Error && error.name === "TimeoutError";
     return Response.json(
       {
