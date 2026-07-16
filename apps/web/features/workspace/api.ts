@@ -3,6 +3,7 @@ import type {
   AiPreDeploymentAnalysisResult,
   AiPreDeploymentCheckRequest,
   AiPreDeploymentDeepScanResponse,
+  AiProviderMetadata,
   AiSafetyExplanation,
   ApplicationRelease,
   ApplicationReleaseListResponse,
@@ -870,8 +871,7 @@ function isCreateArchitectureDraftResponse(
       "suggestions" in value &&
       isStringArray(value.suggestions) &&
       "providerMetadata" in value &&
-      typeof value.providerMetadata === "object" &&
-      value.providerMetadata !== null
+      isAiProviderMetadata(value.providerMetadata)
     );
   }
 
@@ -881,7 +881,13 @@ function isCreateArchitectureDraftResponse(
     "title" in value &&
     typeof value.title === "string" &&
     "metadata" in value &&
-    isArchitectureDraftMetadata(value.metadata)
+    isArchitectureDraftMetadata(value.metadata) &&
+    (!("diagramJson" in value) ||
+      value.diagramJson === undefined ||
+      isDiagramJson(value.diagramJson)) &&
+    (!("llmExplanation" in value) ||
+      value.llmExplanation === undefined ||
+      isLlmExplanation(value.llmExplanation))
   );
 }
 
@@ -896,7 +902,97 @@ function isArchitectureDraftMetadata(value: unknown): boolean {
     "assumptions" in value &&
     isStringArray(value.assumptions) &&
     "explanations" in value &&
-    isStringArray(value.explanations)
+    isStringArray(value.explanations) &&
+    (!("guardrailWarnings" in value) ||
+      value.guardrailWarnings === undefined ||
+      (Array.isArray(value.guardrailWarnings) &&
+        value.guardrailWarnings.every(
+          (warning) =>
+            isRecord(warning) &&
+            typeof warning.code === "string" &&
+            typeof warning.message === "string"
+        ))) &&
+    (!("capabilities" in value) ||
+      value.capabilities === undefined ||
+      isStringArray(value.capabilities)) &&
+    (!("requirementFacts" in value) ||
+      value.requirementFacts === undefined ||
+      isStringArray(value.requirementFacts)) &&
+    (!("architectureIntent" in value) ||
+      value.architectureIntent === undefined ||
+      isRecord(value.architectureIntent)) &&
+    (!("operatingProfile" in value) ||
+      value.operatingProfile === undefined ||
+      isRecord(value.operatingProfile))
+  );
+}
+
+function isLlmExplanation(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.target === "string" &&
+    typeof value.summary === "string" &&
+    isStringArray(value.highlights) &&
+    isStringArray(value.nextActions) &&
+    typeof value.fallbackUsed === "boolean" &&
+    (value.fallbackReason === undefined || typeof value.fallbackReason === "string") &&
+    (value.wellArchitectedConclusion === undefined ||
+      typeof value.wellArchitectedConclusion === "string") &&
+    (value.codeSuggestion === undefined ||
+      (isRecord(value.codeSuggestion) &&
+        typeof value.codeSuggestion.currentCode === "string" &&
+        typeof value.codeSuggestion.suggestedCode === "string" &&
+        typeof value.codeSuggestion.rationale === "string")) &&
+    (value.providerMetadata === undefined || isAiProviderMetadata(value.providerMetadata))
+  );
+}
+
+function isAiProviderMetadata(value: unknown): value is AiProviderMetadata {
+  return (
+    isRecord(value) &&
+    (value.provider === "bedrock" ||
+      value.provider === "amazon_q" ||
+      value.provider === "amazon_transcribe" ||
+      value.provider === "openai" ||
+      value.provider === "fallback") &&
+    (value.service === "bedrock_runtime" ||
+      value.service === "amazon_q_business" ||
+      value.service === "amazon_transcribe" ||
+      value.service === "openai_responses" ||
+      value.service === "rule_fallback") &&
+    (value.model === undefined || typeof value.model === "string") &&
+    typeof value.routeTarget === "string" &&
+    typeof value.cacheHit === "boolean" &&
+    typeof value.cacheKey === "string" &&
+    isEstimatedUsage(value.estimatedUsage) &&
+    (value.billingMode === "aws_credit_only" ||
+      value.billingMode === "standard" ||
+      value.billingMode === "disabled") &&
+    (value.attempts === undefined ||
+      (Array.isArray(value.attempts) &&
+        value.attempts.every(
+          (attempt) =>
+            isRecord(attempt) &&
+            typeof attempt.provider === "string" &&
+            typeof attempt.service === "string" &&
+            (attempt.status === "succeeded" ||
+              attempt.status === "fallback" ||
+              attempt.status === "skipped" ||
+              attempt.status === "failed") &&
+            (attempt.fallbackReason === undefined ||
+              typeof attempt.fallbackReason === "string")
+        ))) &&
+    typeof value.generatedAt === "string"
+  );
+}
+
+function isEstimatedUsage(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isFiniteNumber(value.inputCharacters) &&
+    isFiniteNumber(value.inputTokensEstimate) &&
+    (value.outputCharacters === undefined || isFiniteNumber(value.outputCharacters)) &&
+    (value.outputTokensEstimate === undefined || isFiniteNumber(value.outputTokensEstimate))
   );
 }
 
@@ -946,6 +1042,89 @@ function isArchitectureJson(value: unknown): value is ArchitectureJson {
         (!("label" in edge) || edge.label === undefined || typeof edge.label === "string")
     )
   );
+}
+
+function isDiagramJson(value: unknown): value is DiagramJson {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.nodes) &&
+    value.nodes.every(isDiagramNode) &&
+    Array.isArray(value.edges) &&
+    value.edges.every(isDiagramEdge) &&
+    isDiagramViewport(value.viewport) &&
+    (value.variables === undefined || Array.isArray(value.variables)) &&
+    (value.presentation === undefined || isRecord(value.presentation))
+  );
+}
+
+function isDiagramNode(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.type === "string" &&
+    (value.kind === "resource" || value.kind === "design") &&
+    isDiagramPoint(value.position) &&
+    isDiagramSize(value.size) &&
+    typeof value.label === "string" &&
+    typeof value.locked === "boolean" &&
+    isFiniteNumber(value.zIndex) &&
+    (value.iconUrl === undefined || typeof value.iconUrl === "string") &&
+    (value.rotation === undefined || isFiniteNumber(value.rotation)) &&
+    (value.style === undefined || isRecord(value.style)) &&
+    (value.metadata === undefined || isRecord(value.metadata)) &&
+    (value.parameters === undefined || isDiagramNodeParameters(value.parameters))
+  );
+}
+
+function isDiagramNodeParameters(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.resourceType === "string" &&
+    typeof value.resourceName === "string" &&
+    typeof value.fileName === "string" &&
+    isRecord(value.values) &&
+    (value.terraformBlockType === undefined || typeof value.terraformBlockType === "string") &&
+    (value.terraformSourceAuthority === undefined ||
+      value.terraformSourceAuthority === "workspace-seed") &&
+    (value.invalid === undefined || typeof value.invalid === "boolean")
+  );
+}
+
+function isDiagramEdge(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.sourceNodeId === "string" &&
+    typeof value.targetNodeId === "string" &&
+    (value.sourceHandleId === undefined || typeof value.sourceHandleId === "string") &&
+    (value.targetHandleId === undefined || typeof value.targetHandleId === "string") &&
+    (value.label === undefined || typeof value.label === "string") &&
+    (value.type === undefined || typeof value.type === "string") &&
+    (value.style === undefined || isRecord(value.style)) &&
+    (value.metadata === undefined || isRecord(value.metadata)) &&
+    (value.route === undefined || isRecord(value.route)) &&
+    (value.zIndex === undefined || isFiniteNumber(value.zIndex))
+  );
+}
+
+function isDiagramViewport(value: unknown): boolean {
+  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y) && isFiniteNumber(value.zoom);
+}
+
+function isDiagramPoint(value: unknown): boolean {
+  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y);
+}
+
+function isDiagramSize(value: unknown): boolean {
+  return isRecord(value) && isFiniteNumber(value.width) && isFiniteNumber(value.height);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function isArchitectureDraftProgressStage(
