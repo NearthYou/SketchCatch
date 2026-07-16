@@ -812,6 +812,12 @@ export async function registerDeploymentRoutes(
       await requireDeploymentInitArtifact(deployment, repository);
 
       if (deployment.status === "RUNNING") {
+        if (deployment.activeStage === "plan") {
+          return reply.status(202).send({
+            deployment: await toDeployment(deployment, repository)
+          });
+        }
+
         throw new DeploymentConflictError("Deployment plan is already running");
       }
 

@@ -4,6 +4,8 @@ import { join } from "node:path";
 import type {
   AiPreDeploymentAnalysisResult,
   AwsConnection,
+  DeploymentOptimizationDecision,
+  TerraformDesiredStateIdentity,
   DeploymentStatus
 } from "@sketchcatch/types";
 import {
@@ -32,6 +34,16 @@ import {
   createS3DeploymentPlanArtifactStorage,
   type DeploymentPlanArtifactStorage
 } from "./deployment-plan-artifact-storage.js";
+import {
+  createDeploymentPlanOptimizationEvidence,
+  createDeploymentPlanSingleFlight,
+  createTerraformDesiredStateIdentity,
+  createTerraformResourceChangeEvidence,
+  defaultDeploymentPlanDriftTtlMs,
+  evaluatePendingPlanReuse,
+  isTerraformPlanNoChange,
+  parseDeploymentPlanOptimizationEvidence
+} from "./deployment-optimization.js";
 import { evaluateDeploymentSafetyGate } from "./deployment-safety-gate.js";
 import {
   appendDeploymentLogs,
@@ -59,6 +71,7 @@ import {
   restoreTerraformLockFile,
   uploadTerraformLockFile
 } from "./terraform-lock-file-workspace.js";
+import { terraformLockFileName } from "./terraform-lock-file-storage.js";
 import { createAwsCodeBuildDirectApplicationReleaseGateway } from "./aws-codebuild-direct-application-release-gateway.js";
 import {
   prepareDirectApplicationRelease as defaultPrepareDirectApplicationRelease,
@@ -96,6 +109,11 @@ export type RunDeploymentPlanOptions = {
     repository: DeploymentRepository;
   }) => Promise<PreparedApplicationReleaseSummary | null>;
   writeApplicationPlanFile?: (filePath: string, content: string) => Promise<void>;
+  readTerraformLockFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
+  readTerraformStateFile?: (filePath: string) => Promise<Buffer | Uint8Array | string>;
+  writeTerraformStateFile?: (filePath: string, content: Buffer) => Promise<void>;
+  driftTtlMs?: number;
+  now?: () => Date;
 };
 
 export type PreparedApplicationReleaseSummary = {
@@ -108,6 +126,7 @@ export type PreparedApplicationReleaseSummary = {
 
 export type RunDeploymentPlanResult = {
   deployment: DeploymentRecord;
+  optimization: DeploymentOptimizationDecision;
   terraform: {
     init: TerraformRunResult | null;
     validate: TerraformRunResult | null;
@@ -116,10 +135,42 @@ export type RunDeploymentPlanResult = {
   };
 };
 
+const deploymentPlanSingleFlight = createDeploymentPlanSingleFlight<RunDeploymentPlanResult>();
+
 export async function runDeploymentPlan(
   input: RunDeploymentPlanInput,
   repository: DeploymentRepository,
   options: RunDeploymentPlanOptions = {}
+): Promise<RunDeploymentPlanResult> {
+  const deployment = await getDeployment(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext
+    },
+    repository
+  );
+  const flight = deploymentPlanSingleFlight.run(
+    deployment.id,
+    () => runDeploymentPlanOnce(input, repository, options, deployment)
+  );
+  const result = await flight.promise;
+
+  return flight.joined
+    ? {
+        ...result,
+        optimization: {
+          outcome: "reuse",
+          reason: "concurrent_plan_joined"
+        }
+      }
+    : result;
+}
+
+async function runDeploymentPlanOnce(
+  input: RunDeploymentPlanInput,
+  repository: DeploymentRepository,
+  options: RunDeploymentPlanOptions,
+  deployment: DeploymentRecord
 ): Promise<RunDeploymentPlanResult> {
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
@@ -141,10 +192,16 @@ export async function runDeploymentPlan(
   const prepareApplicationArtifact =
     options.prepareApplicationArtifact ?? defaultPrepareApplicationArtifact;
   const writeApplicationPlanFile = options.writeApplicationPlanFile ?? writeFile;
+  const readTerraformLockFile = options.readTerraformLockFile ?? readFile;
+  const readTerraformStateFile = options.readTerraformStateFile ?? readFile;
+  const writeTerraformStateFile = options.writeTerraformStateFile ?? writeFile;
+  const driftTtlMs = options.driftTtlMs ?? defaultDeploymentPlanDriftTtlMs;
+  const now = options.now ?? (() => new Date());
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
   let failureRecorded = false;
+  let optimization: DeploymentOptimizationDecision;
   const terraform: RunDeploymentPlanResult["terraform"] = {
     init: null,
     validate: null,
@@ -153,13 +210,6 @@ export async function runDeploymentPlan(
   };
 
   try {
-    const deployment = await getDeployment(
-      {
-        deploymentId: input.deploymentId,
-        accessContext: input.accessContext
-      },
-      repository
-    );
     deploymentId = deployment.id;
 
     const preparedApplicationRelease =
@@ -175,34 +225,34 @@ export async function runDeploymentPlan(
       throw new DeploymentConflictError("Application artifact preparation did not return a release");
     }
 
-    const [artifact, awsConnection] = await Promise.all([
-      requireDeploymentTerraformArtifact(deployment, repository),
-      requireDeploymentAwsConnection(deployment, input.accessContext, repository)
-    ]);
-    const canReusePlanArtifact = await canReuseDeploymentPlanArtifact({
+    const artifactPromise = requireDeploymentTerraformArtifact(deployment, repository);
+    const awsConnectionPromise = requireDeploymentAwsConnection(
       deployment,
-      startedFromStatus: input.startedFromStatus,
-      terraformArtifactId: artifact.id,
-      accountId: awsConnection.accountId,
-      region: awsConnection.region,
+      input.accessContext,
       repository
-    });
-
-    if (canReusePlanArtifact) {
-      return {
-        deployment: await restorePendingDeploymentStatus(deployment, repository),
-        terraform
-      };
-    }
-
-    const [architecture, preparedWorkspace] = await Promise.all([
-      repository.findArchitectureInProject(deployment.architectureId, deployment.projectId),
+    );
+    const architecturePromise = repository.findArchitectureInProject(
+      deployment.architectureId,
+      deployment.projectId
+    );
+    const currentPlanArtifactPromise = deployment.currentPlanArtifactId
+      ? repository.findDeploymentPlanArtifactById(deployment.currentPlanArtifactId)
+      : Promise.resolve(undefined);
+    const workspacePromise = artifactPromise.then((artifact) =>
       prepareTerraformWorkspace({
         objectKey: artifact.objectKey,
         fileName: artifact.fileName,
         contentType: artifact.contentType
       })
-    ]);
+    );
+    const [artifact, awsConnection, architecture, preparedWorkspace, currentPlanArtifact] =
+      await Promise.all([
+        artifactPromise,
+        awsConnectionPromise,
+        architecturePromise,
+        workspacePromise,
+        currentPlanArtifactPromise
+      ]);
     workspace = preparedWorkspace;
 
     if (!architecture) {
@@ -224,15 +274,15 @@ export async function runDeploymentPlan(
             terraformCode: toTerraformCodeString(terraformArtifactContent)
           }
         ];
-    const preDeploymentAnalysis = await analyzePreDeployment({
-      architectureJson: architecture.architectureJson,
-      ...(preDeploymentTerraformFiles.length === 1
-        ? { artifactSha256: terraformArtifactSha256 }
-        : {}),
-      terraformFiles: preDeploymentTerraformFiles
-    });
-
     if (deployment.scope === "application") {
+      const preDeploymentAnalysis = await analyzePreDeployment({
+        architectureJson: architecture.architectureJson,
+        ...(preDeploymentTerraformFiles.length === 1
+          ? { artifactSha256: terraformArtifactSha256 }
+          : {}),
+        terraformFiles: preDeploymentTerraformFiles
+      });
+
       return await saveApplicationOnlyPlan({
         deployment,
         artifact,
@@ -251,7 +301,7 @@ export async function runDeploymentPlan(
       });
     }
 
-    const [awsCredentials] = await Promise.all([
+    const [awsCredentials, lockFileRestored, stateFileRestored] = await Promise.all([
       prepareAwsCredentialsForPlan({
         deploymentId: deployment.id,
         awsConnection,
@@ -265,6 +315,12 @@ export async function runDeploymentPlan(
         deploymentId: deployment.id,
         workspace: preparedWorkspace,
         storage: planArtifactStorage
+      }),
+      restoreTerraformStateForPlan({
+        deployment,
+        workspace: preparedWorkspace,
+        planArtifactStorage,
+        writeTerraformStateFile
       })
     ]);
 
@@ -280,6 +336,24 @@ export async function runDeploymentPlan(
     }
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
+    sequence = await appendDeploymentOptimizationLog({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      event: "provider_lock_cache",
+      outcome: lockFileRestored ? "hit" : "miss",
+      reason: lockFileRestored ? "verified_lock_restored" : "lock_not_found",
+      repository
+    });
+    sequence = await appendDeploymentOptimizationLog({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      event: "terraform_state_restore",
+      outcome: stateFileRestored ? "hit" : "miss",
+      reason: stateFileRestored ? "verified_state_restored" : "state_not_available",
+      repository
+    });
 
     terraform.init = await runTerraformInit(workspace.workdir, {
       env: awsCredentials.env,
@@ -329,6 +403,75 @@ export async function runDeploymentPlan(
         })
     });
     sequence = lockUpload.sequence;
+
+    const [providerLockContent, terraformStateContent] = await Promise.all([
+      readOptionalTerraformFile(
+        readTerraformLockFile,
+        join(workspace.workdir, terraformLockFileName)
+      ),
+      readOptionalTerraformFile(
+        readTerraformStateFile,
+        join(workspace.workdir, "terraform.tfstate")
+      )
+    ]);
+    const desiredStateIdentity = createTerraformDesiredStateIdentity({
+      projectId: deployment.projectId,
+      canonicalTerraformBundle: terraformArtifactContent,
+      terraformFiles: preDeploymentTerraformFiles,
+      providerLockContent,
+      target: {
+        provider: "aws",
+        accountId: awsCredentials.accountId,
+        region: awsCredentials.region
+      },
+      state: parseTerraformStateIdentity(terraformStateContent)
+    });
+    const reuseValidation = await runLoggedDeploymentOperation({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "plan",
+      label: "deployment plan reuse validation",
+      repository,
+      operation: () =>
+        evaluateDeploymentPlanReuse({
+          deployment,
+          startedFromStatus: input.startedFromStatus ?? deployment.status,
+          artifactId: artifact.id,
+          accountId: awsCredentials.accountId,
+          region: awsCredentials.region,
+          currentPlanArtifact,
+          desiredStateIdentity,
+          planArtifactStorage,
+          now: now(),
+          driftTtlMs
+        })
+    });
+    optimization = reuseValidation.result;
+    sequence = reuseValidation.sequence;
+    sequence = await appendDeploymentOptimizationDecision({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      decision: optimization,
+      repository
+    });
+
+    if (optimization.outcome === "reuse") {
+      return {
+        deployment: await restorePendingDeploymentStatus(deployment, repository),
+        optimization,
+        terraform
+      };
+    }
+
+    const preDeploymentAnalysis = await analyzePreDeployment({
+      architectureJson: architecture.architectureJson,
+      ...(preDeploymentTerraformFiles.length === 1
+        ? { artifactSha256: terraformArtifactSha256 }
+        : {}),
+      terraformFiles: preDeploymentTerraformFiles
+    });
 
     terraform.plan = await runTerraformPlan(workspace.workdir, {
       env: awsCredentials.env,
@@ -409,6 +552,29 @@ export async function runDeploymentPlan(
       findings: preDeploymentAnalysis.findings,
       unsupportedResourceTypes
     });
+    const resourceChanges = createTerraformResourceChangeEvidence(terraform.showJson.stdout);
+    sequence = await appendTerraformResourceChangeEvidenceLogs({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      resourceChanges,
+      repository
+    });
+
+    if (isTerraformPlanNoChange(planSummary)) {
+      optimization = {
+        outcome: "no_change",
+        reason: "terraform_plan_no_changes"
+      };
+      sequence = await appendDeploymentOptimizationDecision({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        decision: optimization,
+        repository
+      });
+    }
+
     const planArtifactId = generatePlanArtifactId();
     let uploadedPlanArtifact: Awaited<
       ReturnType<DeploymentPlanArtifactStorage["uploadDeploymentPlanArtifact"]>
@@ -432,6 +598,57 @@ export async function runDeploymentPlan(
       const uploadedPlan = planArtifactUpload.result;
       uploadedPlanArtifact = uploadedPlan;
       sequence = planArtifactUpload.sequence;
+
+      let optimizationEvidence: ReturnType<
+        typeof createDeploymentPlanOptimizationEvidence
+      > | null = null;
+
+      try {
+        optimizationEvidence = createDeploymentPlanOptimizationEvidence({
+          projectId: deployment.projectId,
+          deploymentId: deployment.id,
+          planArtifactId,
+          planArtifactSha256: uploadedPlan.sha256,
+          desiredStateIdentity,
+          driftVerifiedAt: now().toISOString(),
+          planSummary,
+          preDeploymentResult: preDeploymentAnalysis,
+          resourceChanges
+        });
+      } catch {
+        optimizationEvidence = null;
+      }
+
+      const evidenceUpload = await runLoggedDeploymentOperation({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        stage: "plan",
+        label: "deployment plan optimization evidence upload",
+        repository,
+        operation: () =>
+          optimizationEvidence
+            ? uploadDeploymentPlanOptimizationEvidence({
+                deploymentId: deployment.id,
+                planArtifactId,
+                evidence: optimizationEvidence,
+                planArtifactStorage
+              })
+            : Promise.resolve(false)
+      });
+      sequence = evidenceUpload.sequence;
+
+      if (!evidenceUpload.result) {
+        sequence = await appendDeploymentOptimizationLog({
+          deploymentId: deployment.id,
+          accessContext: input.accessContext,
+          sequence,
+          event: "optimization_evidence_cache",
+          outcome: "miss",
+          reason: "evidence_unavailable",
+          repository
+        });
+      }
 
       const planSave = await runLoggedDeploymentOperation({
         deploymentId: deployment.id,
@@ -468,6 +685,7 @@ export async function runDeploymentPlan(
 
       return {
         deployment: updatedDeployment,
+        optimization,
         terraform
       };
     } catch (error) {
@@ -486,6 +704,7 @@ export async function runDeploymentPlan(
 
       return {
         deployment: failedDeployment,
+        optimization,
         terraform
       };
     }
@@ -607,7 +826,14 @@ async function saveApplicationOnlyPlan(input: {
         })
     });
     if (!save.result) throw new DeploymentNotFoundError("Deployment not found");
-    return { deployment: save.result, terraform: input.terraform };
+    return {
+      deployment: save.result,
+      optimization: {
+        outcome: "unsupported",
+        reason: "resource_not_deployable"
+      },
+      terraform: input.terraform
+    };
   } catch (error) {
     if (uploadedPlanArtifact) {
       await cleanupUploadedPlanArtifact({
@@ -653,6 +879,7 @@ function requireDirectApplicationReleaseRepository(
   repository: DeploymentRepository
 ): DirectApplicationReleaseRepository {
   if (
+    !repository.artifactRegistry ||
     !repository.findContext ||
     !repository.findRelease ||
     !repository.savePreparedRelease ||
@@ -663,6 +890,7 @@ function requireDirectApplicationReleaseRepository(
     throw new DeploymentConflictError("Direct application release repository is unavailable");
   }
   return {
+    artifactRegistry: repository.artifactRegistry,
     findContext: repository.findContext.bind(repository),
     findRelease: repository.findRelease.bind(repository),
     savePreparedRelease: repository.savePreparedRelease.bind(repository),
@@ -672,48 +900,182 @@ function requireDirectApplicationReleaseRepository(
   };
 }
 
-async function canReuseDeploymentPlanArtifact(input: {
+async function evaluateDeploymentPlanReuse(input: {
   deployment: DeploymentRecord;
-  startedFromStatus: DeploymentStatus | undefined;
-  terraformArtifactId: string;
-  accountId: string | null;
+  startedFromStatus: DeploymentStatus;
+  artifactId: string;
+  accountId: string;
   region: string;
-  repository: DeploymentRepository;
-}): Promise<boolean> {
-  const startedFromStatus = input.startedFromStatus ?? input.deployment.status;
-
-  if (startedFromStatus !== "PENDING") {
-    return false;
-  }
-
+  currentPlanArtifact: Awaited<
+    ReturnType<DeploymentRepository["findDeploymentPlanArtifactById"]>
+  >;
+  desiredStateIdentity: TerraformDesiredStateIdentity;
+  planArtifactStorage: DeploymentPlanArtifactStorage;
+  now: Date;
+  driftTtlMs: number;
+}): Promise<DeploymentOptimizationDecision> {
   if (
+    input.startedFromStatus !== "PENDING" ||
     !input.deployment.currentPlanArtifactId ||
     !input.deployment.planSummary ||
-    input.deployment.approvedAt
+    input.deployment.approvedAt ||
+    !input.currentPlanArtifact
   ) {
+    return { outcome: "execute", reason: "cache_miss" };
+  }
+
+  const downloadPlanArtifact = input.planArtifactStorage.downloadDeploymentPlanArtifact;
+  const downloadEvidence =
+    input.planArtifactStorage.downloadDeploymentPlanOptimizationEvidence;
+
+  if (!downloadPlanArtifact || !downloadEvidence) {
+    return { outcome: "execute", reason: "cache_miss" };
+  }
+
+  try {
+    const [planArtifactContent, evidenceContent] = await Promise.all([
+      downloadPlanArtifact.call(input.planArtifactStorage, {
+        deploymentId: input.deployment.id,
+        planArtifactId: input.currentPlanArtifact.id,
+        objectKey: input.currentPlanArtifact.objectKey
+      }),
+      downloadEvidence.call(input.planArtifactStorage, {
+        deploymentId: input.deployment.id,
+        planArtifactId: input.currentPlanArtifact.id
+      })
+    ]);
+
+    if (!evidenceContent) {
+      return { outcome: "execute", reason: "cache_miss" };
+    }
+
+    return evaluatePendingPlanReuse({
+      startedFromStatus: input.startedFromStatus,
+      projectId: input.deployment.projectId,
+      deploymentId: input.deployment.id,
+      currentPlanArtifactId: input.deployment.currentPlanArtifactId,
+      approvedAt: input.deployment.approvedAt,
+      planSummary: input.deployment.planSummary,
+      planArtifact: input.currentPlanArtifact,
+      expectedTerraformArtifactId: input.artifactId,
+      expectedAccountId: input.accountId,
+      expectedRegion: input.region,
+      actualPlanArtifactSha256: createSha256(planArtifactContent),
+      evidence: parseDeploymentPlanOptimizationEvidence(evidenceContent),
+      currentDesiredStateIdentity: input.desiredStateIdentity,
+      now: input.now,
+      driftTtlMs: input.driftTtlMs
+    });
+  } catch {
+    return { outcome: "fallback_execute", reason: "cache_validation_failed" };
+  }
+}
+
+async function restoreTerraformStateForPlan(input: {
+  deployment: DeploymentRecord;
+  workspace: PreparedTerraformWorkspace;
+  planArtifactStorage: DeploymentPlanArtifactStorage;
+  writeTerraformStateFile: (filePath: string, content: Buffer) => Promise<void>;
+}): Promise<boolean> {
+  if (!input.deployment.stateObjectKey) {
     return false;
   }
 
-  const currentPlanArtifact = await input.repository.findDeploymentPlanArtifactById(
-    input.deployment.currentPlanArtifactId
+  const downloadDeploymentState = input.planArtifactStorage.downloadDeploymentState;
+
+  if (!downloadDeploymentState) {
+    throw new Error("Terraform state restore storage is unavailable");
+  }
+
+  const stateContent = await downloadDeploymentState.call(input.planArtifactStorage, {
+    deploymentId: input.deployment.id,
+    objectKey: input.deployment.stateObjectKey
+  });
+  await input.writeTerraformStateFile(
+    join(input.workspace.workdir, "terraform.tfstate"),
+    stateContent
   );
 
-  if (!currentPlanArtifact || currentPlanArtifact.deploymentId !== input.deployment.id) {
-    return false;
-  }
-
-  if (
-    currentPlanArtifact.terraformArtifactId !== input.terraformArtifactId ||
-    currentPlanArtifact.operation !== "apply" ||
-    !currentPlanArtifact.terraformArtifactSha256 ||
-    !input.accountId ||
-    currentPlanArtifact.accountId !== input.accountId ||
-    currentPlanArtifact.region !== input.region
-  ) {
-    return false;
-  }
-
   return true;
+}
+
+async function readOptionalTerraformFile(
+  reader: (filePath: string) => Promise<Buffer | Uint8Array | string>,
+  filePath: string
+): Promise<Buffer | null> {
+  try {
+    const content = await reader(filePath);
+    return Buffer.from(content);
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function parseTerraformStateIdentity(content: Buffer | null): {
+  lineage: string | null;
+  serial: number | null;
+} {
+  if (!content) {
+    return { lineage: null, serial: null };
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(content.toString("utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const state = parsed as { lineage?: unknown; serial?: unknown };
+      return {
+        lineage:
+          typeof state.lineage === "string" && state.lineage.length > 0
+            ? state.lineage
+            : null,
+        serial:
+          Number.isSafeInteger(state.serial) && (state.serial as number) >= 0
+            ? (state.serial as number)
+            : null
+      };
+    }
+  } catch {
+    return { lineage: null, serial: null };
+  }
+
+  return { lineage: null, serial: null };
+}
+
+async function uploadDeploymentPlanOptimizationEvidence(input: {
+  deploymentId: string;
+  planArtifactId: string;
+  evidence: ReturnType<typeof createDeploymentPlanOptimizationEvidence>;
+  planArtifactStorage: DeploymentPlanArtifactStorage;
+}): Promise<boolean> {
+  const uploadEvidence = input.planArtifactStorage.uploadDeploymentPlanOptimizationEvidence;
+
+  if (!uploadEvidence) {
+    return false;
+  }
+
+  try {
+    await uploadEvidence.call(input.planArtifactStorage, {
+      deploymentId: input.deploymentId,
+      planArtifactId: input.planArtifactId,
+      evidence: input.evidence
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 async function restorePendingDeploymentStatus(
@@ -803,6 +1165,7 @@ async function cancelDeploymentPlanRun(input: {
   repository: DeploymentRepository;
   terraform: RunDeploymentPlanResult["terraform"];
   errorSummary: string;
+  optimization?: DeploymentOptimizationDecision;
 }): Promise<RunDeploymentPlanResult> {
   const cancelledDeployment = await input.repository.cancelDeployment(input.deployment.id, {
     errorSummary: input.errorSummary
@@ -814,6 +1177,7 @@ async function cancelDeploymentPlanRun(input: {
 
   return {
     deployment: cancelledDeployment,
+    optimization: input.optimization ?? { outcome: "execute", reason: "initial_plan" },
     terraform: input.terraform
   };
 }
@@ -825,6 +1189,7 @@ async function failDeploymentPlanRun(input: {
   terraform: RunDeploymentPlanResult["terraform"];
   failureStage: "init" | "validate" | "plan";
   errorSummary: string;
+  optimization?: DeploymentOptimizationDecision;
 }): Promise<RunDeploymentPlanResult> {
   const failedDeployment = await input.repository.failDeployment(input.deployment.id, {
     failureStage: input.failureStage,
@@ -837,6 +1202,7 @@ async function failDeploymentPlanRun(input: {
 
   return {
     deployment: failedDeployment,
+    optimization: input.optimization ?? { outcome: "execute", reason: "initial_plan" },
     terraform: input.terraform
   };
 }
@@ -857,6 +1223,99 @@ async function failDeployment(
   }
 
   return failedDeployment;
+}
+
+type DeploymentOptimizationLogReason =
+  | DeploymentOptimizationDecision["reason"]
+  | "verified_lock_restored"
+  | "lock_not_found"
+  | "verified_state_restored"
+  | "state_not_available"
+  | "evidence_unavailable";
+
+async function appendDeploymentOptimizationLog(input: {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  event: "provider_lock_cache" | "terraform_state_restore" | "optimization_evidence_cache";
+  outcome: "hit" | "miss";
+  reason: DeploymentOptimizationLogReason;
+  repository: DeploymentRepository;
+}): Promise<number> {
+  await appendDeploymentLogs(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      logs: [
+        {
+          sequence: input.sequence,
+          stage: "plan",
+          level: "INFO",
+          message: `[optimization] event=${input.event} outcome=${input.outcome} reason=${input.reason}`,
+          relatedResourceId: null
+        }
+      ]
+    },
+    input.repository
+  );
+
+  return input.sequence + 1;
+}
+
+async function appendDeploymentOptimizationDecision(input: {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  decision: DeploymentOptimizationDecision;
+  repository: DeploymentRepository;
+}): Promise<number> {
+  await appendDeploymentLogs(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      logs: [
+        {
+          sequence: input.sequence,
+          stage: "plan",
+          level: "INFO",
+          message: `[optimization] event=plan_decision outcome=${input.decision.outcome} reason=${input.decision.reason}`,
+          relatedResourceId: null
+        }
+      ]
+    },
+    input.repository
+  );
+
+  return input.sequence + 1;
+}
+
+async function appendTerraformResourceChangeEvidenceLogs(input: {
+  deploymentId: string;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  resourceChanges: ReturnType<typeof createTerraformResourceChangeEvidence>;
+  repository: DeploymentRepository;
+}): Promise<number> {
+  if (input.resourceChanges.length === 0) {
+    return input.sequence;
+  }
+
+  await appendDeploymentLogs(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext,
+      logs: input.resourceChanges.map((resourceChange, index) => ({
+        sequence: input.sequence + index,
+        stage: "plan",
+        level: "INFO",
+        message: `[optimization] event=resource_change action=${resourceChange.action} address=${resourceChange.resourceAddress}`,
+        relatedResourceId: null
+      }))
+    },
+    input.repository
+  );
+
+  return input.sequence + input.resourceChanges.length;
 }
 
 async function appendTerraformOutput(input: {

@@ -7,12 +7,15 @@ import {
   type EnvironmentVariable
 } from "@aws-sdk/client-codebuild";
 import type {
+  ApplicationArtifact,
   ApplicationReleaseStatus,
   ApplicationReleaseProviderRevision,
   GitOpsReleaseEvidence,
   JsonValue,
   RuntimeTargetKind
 } from "@sketchcatch/types";
+import { createAwsApplicationArtifactProviderVerifier } from "../artifacts/aws-application-artifact-verifier.js";
+import type { ApplicationArtifactProviderVerification } from "../artifacts/application-artifact-registry.js";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
 import {
   DirectApplicationReleaseError,
@@ -77,6 +80,10 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
   createClient?: CreateCodeBuildClient;
   wait?: WaitForCodeBuildPoll;
   verifyEvidence?: VerifyDirectReleaseEvidence;
+  verifyArtifact?: (
+    context: DirectApplicationReleaseContext,
+    artifact: ApplicationArtifact
+  ) => Promise<ApplicationArtifactProviderVerification>;
 } = {}): DirectApplicationReleaseGateway {
   const assumeRole = options.assumeRole ?? (async (input) => {
     const credentials = await createAwsSdkStsGateway().assumeRole(input);
@@ -87,8 +94,19 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
   const wait = options.wait ?? waitForPoll;
   const verifyEvidence =
     options.verifyEvidence ?? createDirectApplicationReleaseEvidenceVerifier();
+  const verifyArtifact = options.verifyArtifact ?? (async (context, artifact) =>
+    createAwsApplicationArtifactProviderVerifier({
+      projectId: context.deployment.projectId,
+      accountId: context.connection.accountId,
+      roleArn: context.connection.roleArn,
+      externalId: context.connection.externalId,
+      region: context.connection.region
+    }).verify(artifact));
 
   return {
+    async verifyArtifact(context, artifact) {
+      return verifyArtifact(context, artifact);
+    },
     async prepareArtifact(context, abortSignal) {
       const result = await runCodeBuildPhase({
         context,
@@ -599,7 +617,7 @@ function parseReleaseEvidence(
   if (
     !value ||
     typeof value !== "object" ||
-    (value as { schemaVersion?: unknown }).schemaVersion !== 1 ||
+    ![1, 2].includes(Number((value as { schemaVersion?: unknown }).schemaVersion)) ||
     (value as { runtimeTargetKind?: unknown }).runtimeTargetKind !== expectedRuntimeTargetKind
   ) {
     throw new DirectApplicationReleaseError(

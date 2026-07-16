@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 
-export type DeploymentArtifactKind = "tfplan" | "terraform-state" | "terraform-lock";
+export type DeploymentArtifactKind =
+  | "tfplan"
+  | "terraform-state"
+  | "terraform-lock"
+  | "plan-optimization";
 
 export function assertDeploymentPlanArtifactObjectKey(input: {
   deploymentId: string;
