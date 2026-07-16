@@ -7,18 +7,24 @@ import styles from "./WorkspaceIssuesPanel.module.css";
 export function WorkspaceIssuesPanel({
   architectureDiagnostics,
   onFocusArchitectureResource,
-  onResolveTerraformIssueWithAi,
+  onSelectTerraformIssue,
+  selectedTerraformIssueKey,
   terraformIssues
 }: {
   readonly architectureDiagnostics: readonly ArchitectureDiagnostic[];
   readonly onFocusArchitectureResource: (diagnostic: ArchitectureDiagnostic) => void;
-  readonly onResolveTerraformIssueWithAi: (issue: TerraformIssueRecord) => void;
+  readonly onSelectTerraformIssue: (issue: TerraformIssueRecord) => void;
+  readonly selectedTerraformIssueKey: string | null;
   readonly terraformIssues: readonly TerraformIssueRecord[];
 }) {
   return (
     <div className={styles.issuesPanel}>
       <div className={styles.terraformIssues}>
-        <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={onResolveTerraformIssueWithAi} />
+        <TerraformIssuesPanel
+          issues={terraformIssues}
+          onSelectIssue={onSelectTerraformIssue}
+          selectedIssueKey={selectedTerraformIssueKey}
+        />
       </div>
       <ArchitectureIssuesPanel
         diagnostics={architectureDiagnostics}

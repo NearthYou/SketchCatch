@@ -1892,10 +1892,7 @@ function restoreSavedRepositoryGeneratedNodeSemantics(
   nodes: readonly DiagramNode[]
 ): DiagramNode[] {
   return nodes.map((node) => {
-    if (
-      node.id !== "repository-fargate-runtime" ||
-      node.type !== "aws_ecs_task_definition"
-    ) {
+    if (node.id !== "repository-fargate-runtime" || node.type !== "aws_ecs_task_definition") {
       return node;
     }
 
@@ -2138,9 +2135,11 @@ function isAreaContainmentRenderEdge(
     return true;
   }
 
+  const normalizedLabel = edge.label?.trim().toLowerCase();
   return (
-    (isContainmentAreaNode(sourceNode) && hasAreaAncestor(targetNode, sourceNode.id, nodeById)) ||
-    (isContainmentAreaNode(targetNode) && hasAreaAncestor(sourceNode, targetNode.id, nodeById))
+    normalizedLabel === "references" &&
+    isContainmentAreaNode(targetNode) &&
+    hasAreaAncestor(sourceNode, targetNode.id, nodeById)
   );
 }
 

@@ -3,7 +3,12 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TEMPLATE_IDS, type TemplateId } from "@sketchcatch/types";
+import {
+  adaptBrainboardTemplateSource,
+  brainboardTemplateRegistry,
+  TEMPLATE_IDS,
+  type TerraformSyncFileInput
+} from "@sketchcatch/types";
 import {
   runTerraformInit,
   runTerraformValidate
@@ -11,30 +16,43 @@ import {
 import { createTemplateTerraformValidationFiles } from "../apps/api/src/services/terraform/template-terraform-validation.js";
 
 type TemplateTerraformValidationResult = {
-  readonly templateId: TemplateId;
+  readonly templateId: string;
   readonly initExitCode: number;
   readonly validateExitCode: number | null;
   readonly diagnostic: string;
 };
 
+type TemplateTerraformValidationCase = {
+  readonly templateId: string;
+  readonly files: readonly TerraformSyncFileInput[];
+};
+
 void main();
 
 async function main(): Promise<void> {
+  const requestedTemplateIds = new Set(
+    process.argv.slice(2).filter((value) => value !== "--")
+  );
+  const allCases = createValidationCases();
+  const knownTemplateIds = new Set(allCases.map(({ templateId }) => templateId));
+  const unknownTemplateIds = [...requestedTemplateIds].filter(
+    (templateId) => !knownTemplateIds.has(templateId)
+  );
+  const validationCases = requestedTemplateIds.size === 0
+    ? allCases
+    : allCases.filter(({ templateId }) => requestedTemplateIds.has(templateId));
+
+  if (unknownTemplateIds.length > 0) {
+    throw new Error(`Unknown Template ID: ${unknownTemplateIds.join(", ")}`);
+  }
+
   const validationRoot = await mkdtemp(join(tmpdir(), "sketchcatch-template-validation-"));
   const results: TemplateTerraformValidationResult[] = [];
-  const requestedTemplateIds = process.argv.slice(2).filter((value) => value !== "--");
-  const templateIds = requestedTemplateIds.length > 0
-    ? requestedTemplateIds.map(parseTemplateId)
-    : TEMPLATE_IDS;
 
   try {
-    for (const templateId of templateIds) {
+    for (const { files, templateId } of validationCases) {
       const startedAt = Date.now();
       const workdir = join(validationRoot, templateId);
-      const files = createTemplateTerraformValidationFiles(templateId, {
-        projectSlug: "validation",
-        shortId: "test01"
-      });
 
       await mkdir(workdir, { recursive: true });
 
@@ -81,12 +99,24 @@ async function main(): Promise<void> {
   }
 }
 
-function parseTemplateId(value: string): TemplateId {
-  const templateId = TEMPLATE_IDS.find((candidate) => candidate === value);
+function createValidationCases(): readonly TemplateTerraformValidationCase[] {
+  const repositoryCases = TEMPLATE_IDS.map((templateId) => ({
+    templateId,
+    files: createTemplateTerraformValidationFiles(templateId, {
+      projectSlug: "validation",
+      shortId: "test01"
+    })
+  }));
+  const brainboardCases = brainboardTemplateRegistry.flatMap((entry) =>
+    entry.status === "available"
+      ? [
+          {
+            templateId: entry.id,
+            files: adaptBrainboardTemplateSource(entry.source).terraformFiles
+          }
+        ]
+      : []
+  );
 
-  if (!templateId) {
-    throw new Error(`Unknown AWS template ID: ${value}`);
-  }
-
-  return templateId;
+  return [...repositoryCases, ...brainboardCases];
 }

@@ -48,6 +48,9 @@ import type {
   RepositoryAnalysisAiHandoff,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult,
+  RuntimeAdapterKind,
+  RuntimeConvergenceOutcome,
+  RuntimeDeploymentTarget,
   RuntimeTargetKind,
   TerraformSyncFileInput
 } from "@sketchcatch/types";
@@ -531,6 +534,8 @@ export const projectDeploymentTargets = pgTable(
       .notNull(),
     confirmedBuildConfig: jsonb("confirmed_build_config").$type<ConfirmedBuildConfig>(),
     runtimeConfig: jsonb("runtime_config").$type<ProjectDeploymentRuntimeConfig>(),
+    runtimeTarget: jsonb("runtime_target").$type<RuntimeDeploymentTarget>(),
+    deploymentTargetFingerprint: varchar("deployment_target_fingerprint", { length: 64 }),
     rolloutStrategy: varchar("rollout_strategy", { length: 32 })
       .$type<"all_at_once">()
       .notNull()
@@ -559,6 +564,17 @@ export const projectDeploymentTargets = pgTable(
           or (${table.runtimeTargetKind} = 'ec2_asg' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'ec2_asg')
           or (${table.runtimeTargetKind} = 'static_site' and ${table.runtimeConfig}->>'runtimeTargetKind' = 'static_site')
         )
+      )`
+    ),
+    check(
+      "project_deployment_targets_runtime_convergence_check",
+      sql`(
+        ${table.runtimeTarget} is null
+        and ${table.deploymentTargetFingerprint} is null
+      ) or (
+        jsonb_typeof(${table.runtimeTarget}) = 'object'
+        and ${table.runtimeTarget}->>'adapterKind' in ('ecs_service_fargate', 'ecs_service_ec2_capacity_provider', 'ec2_instance', 'ec2_auto_scaling_group', 'eks_managed_node_group', 'eks_self_managed_node', 'eks_fargate_profile', 'kubernetes_deployment', 'lambda_alias', 'static_s3_cloudfront')
+        and ${table.deploymentTargetFingerprint} ~ '^[0-9a-f]{64}$'
       )`
     )
   ]
@@ -1049,6 +1065,11 @@ export const applicationReleases = pgTable(
     runtimeTargetKind: varchar("runtime_target_kind", { length: 32 })
       .$type<RuntimeTargetKind>()
       .notNull(),
+    runtimeAdapterKind: varchar("runtime_adapter_kind", { length: 64 })
+      .$type<RuntimeAdapterKind>(),
+    deploymentTargetFingerprint: varchar("deployment_target_fingerprint", { length: 64 }),
+    convergenceOutcome: varchar("convergence_outcome", { length: 32 })
+      .$type<RuntimeConvergenceOutcome>(),
     version: varchar("version", { length: 128 }).notNull(),
     commitSha: varchar("commit_sha", { length: 64 }).notNull(),
     artifactDigestAlgorithm: varchar("artifact_digest_algorithm", { length: 16 })
@@ -1102,6 +1123,18 @@ export const applicationReleases = pgTable(
     check(
       "application_releases_commit_sha_check",
       sql`${table.commitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    ),
+    check(
+      "application_releases_runtime_convergence_check",
+      sql`(
+        ${table.runtimeAdapterKind} is null
+        and ${table.deploymentTargetFingerprint} is null
+        and ${table.convergenceOutcome} is null
+      ) or (
+        ${table.runtimeAdapterKind} in ('ecs_service_fargate', 'ecs_service_ec2_capacity_provider', 'ec2_instance', 'ec2_auto_scaling_group', 'eks_managed_node_group', 'eks_self_managed_node', 'eks_fargate_profile', 'kubernetes_deployment', 'lambda_alias', 'static_s3_cloudfront')
+        and ${table.deploymentTargetFingerprint} ~ '^[0-9a-f]{64}$'
+        and (${table.convergenceOutcome} is null or ${table.convergenceOutcome} in ('already_active', 'rolled_out'))
+      )`
     )
   ]
 );

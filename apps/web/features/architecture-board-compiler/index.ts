@@ -1,6 +1,7 @@
 export * from "./architecture-board-compiler";
 export * from "./architecture-board-compilation-preview";
 export * from "./architecture-board-knowledge";
+export * from "./architecture-board-module-pattern-policy";
 export * from "./architecture-draft-compilation";
 export * from "./board-auto-organize";
 export * from "./template-review";

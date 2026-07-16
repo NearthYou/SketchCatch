@@ -16,6 +16,14 @@ _Avoid_: Main board, canvas, drawing board
 An infrastructure building block from a cloud provider inside a Practice Architecture, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
 _Avoid_: Component, block, service
 
+**Curated Module**:
+A reusable, preassembled group of Resources, relationships, configuration, and Board structure offered from the Workspace `Modules` catalog. Expanding one creates editable Resources on the Architecture Board; it is not a Terraform module or an indivisible parent Resource.
+_Avoid_: Terraform module, Template, Resource category, AI pattern
+
+**Module Pattern Knowledge**:
+Versioned, normalized Resource relationships, containment, relative geometry, layering, and edge routing extracted deterministically from Template Boards. Curated Modules and the Architecture Board Compiler share it instead of inventing separate layouts.
+_Avoid_: Hand-authored module coordinates, LLM layout, Template screenshot
+
 **Provider Adapter**:
 The cloud-specific connector that translates provider APIs, Resource types, IaC import details, and deployment constraints into SketchCatch's provider-neutral Practice Architecture model.
 _Avoid_: Cloud plugin, provider switch, cloud mode
@@ -71,6 +79,10 @@ _Avoid_: AI 오류, auto fix
 **에이전트 리뷰**:
 The independent Workspace AI conversation for reviewing an IaC Preview and explaining its expected changes without executing or applying it.
 _Avoid_: Preview 설명, Deployment approval
+
+**AI 채팅**:
+Architecture Board 안에서 설계 제안, 오류 분석, 에이전트 리뷰를 각각의 독립된 대화로 제공하는 공통 진입점이다. 각 대화의 결과와 사용자 승인 경계는 서로 합쳐지지 않는다.
+_Avoid_: AI modal, right-panel AI buttons, single AI result
 
 **User-Accepted Change**:
 A state-changing update that only happens after the user explicitly accepts an Architecture Draft, Architecture Suggestion, IaC handoff, Git change, or Deployment action. AI may propose or explain the change, but it does not silently alter the Practice Architecture or execution path.

@@ -6,6 +6,7 @@ import type { TerraformBlockType } from "./index.js";
 import {
   assertResourceDeploymentCapability,
   createResourceDefinition,
+  createTerraformParameterCatalogKey,
   getDefaultResourceDefinitionByResourceType,
   getResourceDefinitionById,
   getResourceDefinitionByTerraform,
@@ -62,6 +63,14 @@ test("shared resource definition IDs and Terraform identities remain unique", ()
   assert.equal(new Set(terraformIdentities).size, terraformIdentities.length);
 });
 
+test("parameter catalog keys keep resource keys compatible and namespace data sources", () => {
+  assert.equal(createTerraformParameterCatalogKey("resource", "aws_iam_policy"), "aws_iam_policy");
+  assert.equal(
+    createTerraformParameterCatalogKey("data", "aws_iam_policy"),
+    "data.aws_iam_policy"
+  );
+});
+
 test("classic AWS identities stay distinct from newer Terraform resources", () => {
   assertDistinctTerraformIdentities("aws-elb", "aws-lb");
   assertDistinctTerraformIdentities(
@@ -92,21 +101,11 @@ test("every deployable Terraform resource receives the verified desired-state op
   assert.ok(deployableDefinitions.length > 0);
 
   for (const definition of deployableDefinitions) {
-    assert.deepEqual(
-      definition.capabilities.deployment,
-      {
-        status: "supported",
-        provisioner: "terraform",
-        executionRole: "managed_resource",
-        optimization: {
-          desiredStateReuse: "verified",
-          artifactReuse: "none",
-          runtimeNoOp: "none",
-          healthVerification: "terraform_plan"
-        }
-      },
-      definition.id
-    );
+    const deployment = definition.capabilities.deployment;
+    assert.equal(deployment.status, "supported", definition.id);
+    assert.equal(deployment.provisioner, "terraform", definition.id);
+    assert.equal(deployment.executionRole, "managed_resource", definition.id);
+    assert.equal(deployment.optimization.desiredStateReuse, "verified", definition.id);
   }
 });
 

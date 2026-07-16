@@ -12,6 +12,7 @@ import type {
   BrainboardTemplateSource
 } from "./source-types.ts";
 import { validateBrainboardTemplateSource } from "./validate-source.ts";
+import { normalizeBrainboardWorkspaceTerraform } from "./workspace-terraform-normalization.ts";
 
 export type AdaptedBrainboardTemplate = {
   readonly diagramJson: DiagramJson;
@@ -64,7 +65,11 @@ export function adaptBrainboardTemplateSource(
       .filter(({ includeInWorkspace }) => includeInWorkspace)
       .map((file) => ({
         fileName: file.fileName,
-        terraformCode: file.workspaceSeed?.code ?? file.code
+        terraformCode: normalizeBrainboardWorkspaceTerraform({
+          templateId: source.id,
+          fileName: file.fileName,
+          code: file.workspaceSeed?.code ?? file.code
+        })
       }))
   };
 }

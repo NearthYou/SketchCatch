@@ -41,6 +41,15 @@ test("POST /api/terraform/generate returns Terraform code for an active user", a
             type: "aws_vpc",
             kind: "resource",
             label: "main_vpc",
+            metadata: {
+              moduleSource: {
+                moduleId: "network-foundation",
+                moduleVersion: "architecture-board-knowledge/v1",
+                expandedAt: "2026-07-16T01:02:03.000Z",
+                representativeTemplateId: "repository:three-tier-web-app",
+                referenceTemplateIds: ["repository:three-tier-web-app"]
+              }
+            },
             parameters: {
               resourceType: "aws_vpc",
               resourceName: "main",

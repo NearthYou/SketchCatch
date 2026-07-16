@@ -483,7 +483,7 @@ jobs:
           jq -e '
             def is_task_definition_replacement($actions):
               $actions == ["delete", "create"] or $actions == ["create", "delete"];
-            (
+            def changed_non_task_definition_resources:
               [
                 .resource_changes[]
                 | select(
@@ -494,8 +494,9 @@ jobs:
                   )
                 | {address, actions: .change.actions}
               ]
-              | sort_by(.address)
-              == [
+              | sort_by(.address);
+            def full_runtime_changes:
+              [
                 {"address": "aws_cloudwatch_log_metric_filter.ecs_error[\"web\"]", "actions": ["update"]},
                 {"address": "aws_ecs_service.api", "actions": ["update"]},
                 {"address": "aws_ecs_service.web", "actions": ["update"]},
@@ -505,7 +506,16 @@ jobs:
                 {"address": "aws_lb_target_group.api", "actions": ["update"]},
                 {"address": "aws_lb_target_group.web", "actions": ["update"]},
                 {"address": "aws_s3_bucket_cors_configuration.artifact", "actions": ["create"]}
-              ]
+              ] | sort_by(.address);
+            def resumed_runtime_changes:
+              [
+                {"address": "aws_ecs_service.api", "actions": ["update"]},
+                {"address": "aws_ecs_service.web", "actions": ["update"]},
+                {"address": "aws_iam_role_policy.ecs_task", "actions": ["update"]}
+              ] | sort_by(.address);
+            (
+              changed_non_task_definition_resources == full_runtime_changes or
+              changed_non_task_definition_resources == resumed_runtime_changes
             )
             and (
               [

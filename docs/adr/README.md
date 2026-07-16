@@ -17,6 +17,8 @@
 | [0009-persist-latest-repository-analysis-summary.md](./0009-persist-latest-repository-analysis-summary.md) | 원본 source 없이 마지막 Repository Analysis 요약과 revision을 저장하며 0008을 대체한다 | 분석 결과 조회, 새로고침 복원, 재분석 조건을 다룰 때 |
 | [0010-ai-preserves-gg-template-selection.md](./0010-ai-preserves-gg-template-selection.md) | AI는 gg가 선택한 Template을 교체하지 않고 부족한 요구사항만 보완한다 | AI Handoff와 Architecture Draft 책임 경계를 다룰 때 |
 | [0011-unconstrained-architecture-board-compiler-proposals.md](./0011-unconstrained-architecture-board-compiler-proposals.md) | Architecture Board Compiler는 입력 제약과 유효성에 충돌하는 변경도 제안할 수 있고, Compilation Distance로 파괴적 변경 비용을 관리한다 | 자동 정리, AI Board 생성, Template 기반 배치와 변경 승인 경계를 다룰 때 |
+| [0012-workspace-ai-chat-통합.md](./0012-workspace-ai-chat-통합.md) | Workspace AI 작업과 결과 상태를 AI 채팅이 소유하고 오른쪽 패널은 현재 문맥만 제공한다 | AI 채팅, 오류 분석, 에이전트 리뷰, 수정안 적용 흐름을 바꿀 때 |
+| [0013-aws-credit-ai-provider-체인.md](./0013-aws-credit-ai-provider-체인.md) | AWS credit 모드에서 Amazon Q, Bedrock, rule fallback 순서로 설명 provider를 전환한다 | AI provider 과금 정책, fallback 순서, provider metadata를 바꿀 때 |
 
 ## 추가 규칙
 

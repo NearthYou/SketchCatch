@@ -1,4 +1,5 @@
 import type { DiagramNode } from "@sketchcatch/types";
+import { createTerraformParameterCatalogKey } from "@sketchcatch/types/resource-definitions";
 import { isDesignAreaNode } from "../diagram-editor/area-nodes";
 import { getAwsAvailabilityZoneLabel } from "../parameter-input/aws-availability-zone-options";
 import {
@@ -81,7 +82,12 @@ function buildTerraformResourceListItem(
   catalog: ParameterCatalog
 ): ResourceListItemSummary {
   const parameters = mergeNodeParameters(node, catalog);
-  const definitions = catalog.resources[parameters.resourceType] ?? [];
+  const definitions = catalog.resources[
+    createTerraformParameterCatalogKey(
+      parameters.terraformBlockType ?? "resource",
+      parameters.resourceType
+    )
+  ] ?? [];
   const validationDefinitions = getValidationDefinitions(definitions, parameters.values);
   const validation = validateParameters(parameters, validationDefinitions, nodes, node.id, catalog);
 

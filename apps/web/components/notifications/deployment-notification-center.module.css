@@ -5,6 +5,12 @@
   z-index: 1400;
 }
 
+.center[data-placement="workspace"] {
+  bottom: auto;
+  position: relative;
+  right: auto;
+}
+
 .trigger {
   align-items: center;
   background: #111827;
@@ -19,21 +25,38 @@
   width: 44px;
 }
 
-.trigger span {
+.center[data-placement="workspace"] .trigger {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  color: var(--workspace-text, #171717);
+  height: 36px;
+  width: 36px;
+}
+
+.center[data-placement="workspace"] .trigger:hover,
+.center[data-placement="workspace"] .trigger:focus-visible {
+  background: var(--workspace-surface-muted, #fafafa);
+  border-color: var(--workspace-line-strong, #dcdee0);
+  outline: none;
+}
+
+.unreadCountBadge {
   align-items: center;
-  background: #ef4444;
-  border: 2px solid #fff;
+  background: #fef2f2;
   border-radius: 999px;
-  display: flex;
+  color: #b42318;
+  display: inline-flex;
   font-size: 12px;
-  font-weight: 800;
-  height: 20px;
+  font-weight: 900;
+  height: 16px;
   justify-content: center;
-  min-width: 20px;
+  min-width: 16px;
   padding: 0 4px;
   position: absolute;
-  right: -6px;
-  top: -6px;
+  right: -5px;
+  top: -5px;
 }
 
 .panel {
@@ -50,24 +73,29 @@
   width: min(380px, calc(100vw - 32px));
 }
 
-.panel header,
+.center[data-placement="workspace"] .panel {
+  bottom: auto;
+  top: 44px;
+}
+
+.panelHeader,
 .controls {
   align-items: center;
   display: flex;
   justify-content: space-between;
 }
 
-.panel header {
+.panelHeader {
   border-bottom: 1px solid #eef0f3;
   padding: 15px 16px;
 }
 
-.panel header div {
+.panelHeader div {
   display: grid;
   gap: 2px;
 }
 
-.panel header span,
+.panelHeader span,
 .list time {
   color: #6b7280;
   font-size: 12px;
