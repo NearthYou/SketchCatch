@@ -26,6 +26,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-16 - Preserve actionable AWS connection failures during Deployment
+
+- Direct Deployment credential preparation now preserves specific STS permission-denied and expired-caller errors instead of replacing them with the generic AWS Role connection failure.
+- Focused runtime credential tests pass 2/2, targeted ESLint passes, and API typecheck passes.
+- Local browser reproduction confirmed the configured SSO profile is valid but the stored execution Role rejects AssumeRole; legacy local caller profiles are invalid, so successful local Deployment still requires an approved Role trust/permission repair or renewed caller credentials.
+
 ### 2026-07-16 - Wire production GitHub App runtime inputs
 
 - Added fail-closed GitHub Environment input validation and runtime tfvars overlay to the production infrastructure plan.
