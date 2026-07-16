@@ -793,6 +793,27 @@ test("deleting a Resource refits the Security Group scopes that referenced it", 
   );
 });
 
+test("diagram copy shortcuts preserve native text copy and only intercept selected nodes", () => {
+  const handleKeyDownSource = getSourceBlock(
+    diagramEditorSource,
+    "const handleKeyDown = useCallback(",
+    "useEffect(() => {\n    window.addEventListener(\"keydown\", handleKeyDown);"
+  );
+
+  assert.match(
+    diagramEditorSource,
+    /import \{ resolveDiagramCopyShortcut \} from "\.\/diagram-keyboard-shortcuts";/
+  );
+  assert.match(
+    handleKeyDownSource,
+    /resolveDiagramCopyShortcut\(\{[\s\S]*selectedNodeCount: selectedNodeIds\.length,[\s\S]*selectedText: window\.getSelection\(\)\?\.toString\(\) \?\? ""[\s\S]*\}\)/
+  );
+  assert.match(
+    handleKeyDownSource,
+    /if \(copyShortcutResolution === "copy_nodes"\) \{\s*event\.preventDefault\(\);\s*copySelectedNodes\(\);\s*return;\s*\}/
+  );
+});
+
 test("finishing a Resource resize refits its referenced Security Group scope", () => {
   const handleResizeEndSource = getSourceBlock(
     diagramEditorSource,

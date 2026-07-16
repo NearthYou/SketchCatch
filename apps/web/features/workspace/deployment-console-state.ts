@@ -1,4 +1,9 @@
-import type { AiPreDeploymentAnalysisResult, CheckFinding, Deployment } from "@sketchcatch/types";
+import type {
+  AiPreDeploymentAnalysisResult,
+  CheckFinding,
+  Deployment,
+  ProjectBuildEnvironmentStatus
+} from "@sketchcatch/types";
 import type { RequestState } from "./workspace-right-panel.types";
 
 export type DirectDeploymentStepId = "validation" | "approval" | "deployment";
@@ -67,6 +72,14 @@ export type DirectDeploymentPreflightInput = {
   readonly requestState: RequestState;
 };
 
+export type DeploymentBuildEnvironmentTarget = Pick<Deployment, "scope" | "targetKind">;
+
+export type DeploymentPlanActionLabelInput = {
+  readonly buildEnvironmentStatus: ProjectBuildEnvironmentStatus | null;
+  readonly deployment: DeploymentBuildEnvironmentTarget | null;
+  readonly isLoading: boolean;
+};
+
 const STEP_META: Readonly<
   Record<DirectDeploymentStepId, Pick<DirectDeploymentStep, "description" | "label">>
 > = {
@@ -112,6 +125,28 @@ export function getDirectDeploymentPreflightState(
   }
 
   return "passed";
+}
+
+export function requiresProjectBuildEnvironment(
+  deployment: DeploymentBuildEnvironmentTarget | null
+): boolean {
+  return Boolean(
+    deployment &&
+      deployment.scope !== "infrastructure" &&
+      deployment.targetKind === "ecs_fargate"
+  );
+}
+
+export function getDeploymentPlanActionLabel(input: DeploymentPlanActionLabelInput): string {
+  const needsPreparation =
+    requiresProjectBuildEnvironment(input.deployment) &&
+    input.buildEnvironmentStatus !== "ready";
+
+  if (input.isLoading) {
+    return needsPreparation ? "빌드 환경 준비 및 Plan 생성 중" : "Plan 생성 중";
+  }
+
+  return needsPreparation ? "빌드 환경 준비 후 Plan 생성" : "Plan 생성";
 }
 
 function isBlockingPreDeploymentFinding(finding: CheckFinding | undefined): boolean {
@@ -229,6 +264,7 @@ function getDeploymentState(
 ): DirectDeploymentStepState {
   if (status === "RUNNING" || requestState === "loading") return "running";
   if (status === "FAILED" || status === "CANCELLED") return "error";
+  if (status === "PARTIALLY_FAILED" || status === "PARTIALLY_CANCELED") return "warning";
   if (status === "SUCCESS" || status === "DESTROYED") return "done";
   return "active";
 }
@@ -241,6 +277,8 @@ function getDeploymentStatusLabel(
   if (status === "RUNNING") return `${action} 중`;
   if (status === "FAILED") return `${action} 실패`;
   if (status === "CANCELLED") return `${action} 취소됨`;
+  if (status === "PARTIALLY_FAILED") return "웹 배포 부분 실패";
+  if (status === "PARTIALLY_CANCELED") return "웹 배포 부분 취소";
   if (status === "SUCCESS") return "배포 완료";
   if (status === "DESTROYED") return "정리 완료";
   return `${action} 실행 가능`;

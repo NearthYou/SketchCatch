@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type {
   ApplicationReleaseProviderRevision,
   ApplicationReleaseStatus,
@@ -16,8 +16,11 @@ import {
   awsConnections,
   deployments,
   gitCicdPipelineRuns,
+  projectBuildEnvironments,
   projectDeploymentTargets,
-  projects
+  projectExecutionLeases,
+  projects,
+  releaseCandidates
 } from "../db/schema.js";
 import {
   resolveApplicationReleaseVersion,
@@ -41,8 +44,23 @@ export type SaveProjectDeploymentTargetInput = {
 
 export type CreateApplicationReleaseRecordInput = Omit<
   ApplicationReleaseRecord,
-  "artifactDigestAlgorithm"
->;
+  | "artifactDigestAlgorithm"
+  | "releaseCandidateId"
+  | "compositeDigest"
+  | "frontendEvidence"
+  | "failureStage"
+  | "baselineReleaseId"
+> &
+  Partial<
+    Pick<
+      ApplicationReleaseRecord,
+      | "releaseCandidateId"
+      | "compositeDigest"
+      | "frontendEvidence"
+      | "failureStage"
+      | "baselineReleaseId"
+    >
+  >;
 
 export type ProjectReleaseLedgerRepository = {
   findAccessibleProject(projectId: string, userId: string): Promise<{ id: string } | undefined>;
@@ -133,24 +151,87 @@ export function createPostgresProjectReleaseLedgerRepository(
       return target;
     },
     async saveProjectDeploymentTarget(input) {
-      const [target] = await db
-        .insert(projectDeploymentTargets)
-        .values(input)
-        .onConflictDoUpdate({
-          target: projectDeploymentTargets.projectId,
-          set: {
-            provider: input.provider,
-            connectionId: input.connectionId,
-            region: input.region,
-            runtimeTargetKind: input.runtimeTargetKind,
-            confirmedBuildConfig: input.confirmedBuildConfig,
-            runtimeConfig: input.runtimeConfig,
-            rolloutStrategy: input.rolloutStrategy,
-            updatedAt: input.updatedAt
-          }
-        })
-        .returning();
-      return requireWrittenRecord(target, "Deployment target was not saved");
+      return db.transaction(async (transaction) => {
+        const [lockedProject] = await transaction
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.id, input.projectId))
+          .for("update");
+        if (!lockedProject) {
+          throw new ReleaseLedgerConflictError("배포 대상을 저장할 프로젝트가 없습니다.");
+        }
+        const [activeLease] = await transaction
+          .select({ holderId: projectExecutionLeases.holderId })
+          .from(projectExecutionLeases)
+          .where(
+            and(
+              eq(projectExecutionLeases.projectId, input.projectId),
+              eq(projectExecutionLeases.status, "active")
+            )
+          )
+          .for("update");
+        if (activeLease) {
+          throw new ReleaseLedgerConflictError(
+            "앱 릴리즈가 실행 중인 프로젝트의 배포 대상과 빌드 설정은 변경할 수 없습니다."
+          );
+        }
+        const [existing] = await transaction
+          .select({
+            connectionId: projectDeploymentTargets.connectionId,
+            region: projectDeploymentTargets.region,
+            runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+            confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
+            runtimeConfig: projectDeploymentTargets.runtimeConfig
+          })
+          .from(projectDeploymentTargets)
+          .where(eq(projectDeploymentTargets.projectId, input.projectId))
+          .for("update");
+        const targetChanged =
+          existing !== undefined &&
+          (existing.connectionId !== input.connectionId ||
+            existing.region !== input.region ||
+            existing.runtimeTargetKind !== input.runtimeTargetKind ||
+            JSON.stringify(existing.confirmedBuildConfig) !==
+              JSON.stringify(input.confirmedBuildConfig) ||
+            JSON.stringify(existing.runtimeConfig) !== JSON.stringify(input.runtimeConfig));
+        const [target] = await transaction
+          .insert(projectDeploymentTargets)
+          .values(input)
+          .onConflictDoUpdate({
+            target: projectDeploymentTargets.projectId,
+            set: {
+              provider: input.provider,
+              connectionId: input.connectionId,
+              region: input.region,
+              runtimeTargetKind: input.runtimeTargetKind,
+              confirmedBuildConfig: input.confirmedBuildConfig,
+              runtimeConfig: input.runtimeConfig,
+              rolloutStrategy: input.rolloutStrategy,
+              updatedAt: input.updatedAt
+            }
+          })
+          .returning();
+        if (targetChanged) {
+          await transaction
+            .update(projectBuildEnvironments)
+            .set({
+              status: "verification_failed",
+              lastVerifiedAt: null,
+              updatedAt: input.updatedAt
+            })
+            .where(eq(projectBuildEnvironments.projectId, input.projectId));
+          await transaction
+            .update(releaseCandidates)
+            .set({ status: "failed", updatedAt: input.updatedAt })
+            .where(
+              and(
+                eq(releaseCandidates.projectId, input.projectId),
+                inArray(releaseCandidates.status, ["building", "pending"])
+              )
+            );
+        }
+        return requireWrittenRecord(target, "Deployment target was not saved");
+      });
     },
     async findDeploymentInProject(deploymentId, projectId) {
       const [deployment] = await db
@@ -175,7 +256,14 @@ export function createPostgresProjectReleaseLedgerRepository(
       return db.transaction(async (transaction) => {
         const [release] = await transaction
           .insert(applicationReleases)
-          .values(input)
+          .values({
+            ...input,
+            releaseCandidateId: input.releaseCandidateId ?? null,
+            compositeDigest: input.compositeDigest ?? null,
+            frontendEvidence: input.frontendEvidence ?? null,
+            failureStage: input.failureStage ?? null,
+            baselineReleaseId: input.baselineReleaseId ?? null
+          })
           .returning();
         const written = requireWrittenRecord(release, "Application release was not saved");
 
@@ -377,8 +465,14 @@ export function validateConfirmedBuildConfig(
     config.packageManifestPath,
     config.samTemplatePath,
     config.appSpecPath,
-    config.staticOutputPath
-  ].filter((path): path is string => path !== null);
+    config.staticOutputPath,
+    config.ecsWeb?.api.sourceRoot,
+    config.ecsWeb?.api.dockerfilePath,
+    config.ecsWeb?.frontend.sourceRoot,
+    config.ecsWeb?.frontend.packageManifestPath,
+    config.ecsWeb?.frontend.lockfilePath,
+    config.ecsWeb?.frontend.outputPath
+  ].filter((path): path is string => typeof path === "string");
   if (paths.some((path) => !isSafeRepositoryPath(path))) {
     throw new ReleaseLedgerValidationError("Build evidence must use safe repository-relative paths.");
   }
@@ -398,6 +492,34 @@ export function validateConfirmedBuildConfig(
   }
   if (!Number.isFinite(Date.parse(config.confirmedAt))) {
     throw new ReleaseLedgerValidationError("Build confirmation timestamp is invalid.");
+  }
+  if (runtimeTargetKind === "ecs_fargate" && !config.ecsWeb) {
+    throw new ReleaseLedgerValidationError(
+      "ECS web build configuration is required for a new ECS/Fargate deployment target."
+    );
+  }
+  if (runtimeTargetKind === "ecs_fargate" && config.ecsWeb) {
+    const frontend = config.ecsWeb.frontend;
+    const expectedInstallPreset = {
+      npm: "npm_ci",
+      pnpm: "pnpm_frozen_lockfile",
+      yarn: "yarn_frozen_lockfile"
+    }[frontend.packageManager];
+    const expectedBuildPreset = {
+      npm: "npm_build",
+      pnpm: "pnpm_build",
+      yarn: "yarn_build"
+    }[frontend.packageManager];
+    if (
+      frontend.installPreset !== expectedInstallPreset ||
+      frontend.buildPreset !== expectedBuildPreset ||
+      config.ecsWeb.api.containerPort < 1 ||
+      config.ecsWeb.api.containerPort > 65_535
+    ) {
+      throw new ReleaseLedgerValidationError(
+        "ECS web build configuration does not match its package manager or container port."
+      );
+    }
   }
 
   const evidenceKinds = new Set(config.evidence.map((item) => item.kind));

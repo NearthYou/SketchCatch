@@ -20,6 +20,12 @@ export type LiveObservationReleaseCandidate = {
   readonly completedAt: string | null;
 };
 
+export type LiveObservationSelection = {
+  readonly runId: string;
+  readonly deploymentId: string;
+  readonly outputUrl: string;
+};
+
 export type LiveObservationInstanceMarker = {
   readonly key: string;
   readonly label: string;
@@ -82,7 +88,9 @@ export function getEligibleLiveObservationDeployments<
   return deployments
     .filter(
       (deployment) =>
-        deployment.status === "SUCCESS" &&
+        ["SUCCESS", "PARTIALLY_FAILED", "PARTIALLY_CANCELED"].includes(
+          deployment.status
+        ) &&
         deployment.completedAt !== null
     )
     .sort(
@@ -100,7 +108,13 @@ export function getLiveObservationOutputUrl(
     .filter(
       (release) =>
         release.deploymentId === deploymentId &&
-        release.status === "succeeded" &&
+        [
+          "succeeded",
+          "rolled_back",
+          "retrying",
+          "partially_failed",
+          "partially_cancelled"
+        ].includes(release.status) &&
         release.completedAt !== null
     )
     .sort(
@@ -129,6 +143,38 @@ export function getLiveObservationOutputUrl(
   }
 
   return null;
+}
+
+export function getSelectedLiveObservationOutputUrl(
+  selection: LiveObservationSelection | null | undefined,
+  deploymentId: string,
+  releases: readonly LiveObservationReleaseCandidate[]
+): string | null {
+  if (!selection) {
+    return getLiveObservationOutputUrl(deploymentId, releases);
+  }
+  if (selection.deploymentId !== deploymentId) {
+    return null;
+  }
+  return normalizeLiveObservationOutputUrl(selection.outputUrl);
+}
+
+export function normalizeLiveObservationOutputUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:" ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      url.hash !== ""
+    ) {
+      return null;
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function getLiveObservationAudienceUrl(

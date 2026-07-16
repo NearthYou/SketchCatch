@@ -70,6 +70,7 @@ import {
   markTerraformSourceAuthoritative
 } from "../workspace/terraform-panel-utils";
 import { DEFAULT_DIAGRAM_VIEWPORT, EDGE_LABEL_MIN_ZOOM, EMPTY_DIAGRAM } from "./constants";
+import { resolveDiagramCopyShortcut } from "./diagram-keyboard-shortcuts";
 import {
   applyAreaNodeParentAssignments,
   clearDeletedAreaParentAssignments,
@@ -2711,7 +2712,15 @@ function DiagramEditorInner({
         return;
       }
 
-      if (isModifierPressed && key === "c") {
+      const copyShortcutResolution = resolveDiagramCopyShortcut({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        selectedNodeCount: selectedNodeIds.length,
+        selectedText: window.getSelection()?.toString() ?? ""
+      });
+
+      if (copyShortcutResolution === "copy_nodes") {
         event.preventDefault();
         copySelectedNodes();
         return;
@@ -2734,7 +2743,16 @@ function DiagramEditorInner({
         undo();
       }
     },
-    [copySelectedNodes, deleteSelection, isPreviewActive, onDiagramSaveRequest, pasteNodes, redo, undo]
+    [
+      copySelectedNodes,
+      deleteSelection,
+      isPreviewActive,
+      onDiagramSaveRequest,
+      pasteNodes,
+      redo,
+      selectedNodeIds,
+      undo
+    ]
   );
 
   useEffect(() => {

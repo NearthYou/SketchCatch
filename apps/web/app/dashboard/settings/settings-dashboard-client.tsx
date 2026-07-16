@@ -1,21 +1,29 @@
 "use client";
 
-import { CheckCircle2, Cloud, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CheckCircle2, Cloud, ExternalLink, RefreshCw, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AwsConnection,
-  AwsConnectionCloudFormationTemplateResponse
+  AwsCodeConnectionResponse,
+  AwsConnectionCloudFormationTemplateResponse,
+  AwsConnectionDeletionPreviewResponse
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
+import { DashboardIcon } from "../../../components/dashboard/dashboard-icons";
+import { setupModalAccessibility } from "../../../components/ui/modal-accessibility";
 import {
   SelectMenu,
   type SelectMenuOption
 } from "../../../components/ui/SelectMenu";
 import {
   createAwsConnectionSetup,
+  createAwsCodeConnection,
   deleteAwsConnection,
+  getAwsCodeConnection,
+  getAwsConnectionDeletionPreview,
   getAwsConnectionCloudFormationTemplate,
   listAwsConnections,
+  refreshAwsCodeConnection,
   testAwsConnection,
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
@@ -41,13 +49,43 @@ export function SettingsDashboardClient() {
   const [setupConnection, setSetupConnection] = useState<AwsConnection | null>(null);
   const [cloudFormation, setCloudFormation] = useState<AwsConnectionCloudFormationTemplateResponse | null>(null);
   const [accountId, setAccountId] = useState("");
-  const [deleteCandidateId, setDeleteCandidateId] = useState("");
+  const [deletionPreview, setDeletionPreview] =
+    useState<AwsConnectionDeletionPreviewResponse | null>(null);
+  const [codeConnections, setCodeConnections] = useState<
+    Record<string, AwsCodeConnectionResponse>
+  >({});
+  const [selectedBuildAwsConnectionId, setSelectedBuildAwsConnectionId] = useState("");
+  const [showAwsRequiredModal, setShowAwsRequiredModal] = useState(false);
+  const modalOverlayRef = useRef<HTMLDivElement>(null);
+  const modalDialogRef = useRef<HTMLElement>(null);
+  const modalCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const verifiedConnections = connections.filter(
+    (connection) => connection.status === "verified"
+  );
 
   // 저장된 AWS 연결 목록을 다시 읽고 현재 상태를 최신으로 맞춥니다.
   async function loadConnections(): Promise<void> {
     setErrorMessage("");
     try {
-      setConnections(await listAwsConnections());
+      const loadedConnections = await listAwsConnections();
+      const loadedVerifiedConnections = loadedConnections.filter(
+        (connection) => connection.status === "verified"
+      );
+      setConnections(loadedConnections);
+      setSelectedBuildAwsConnectionId((current) =>
+        loadedVerifiedConnections.some((connection) => connection.id === current)
+          ? current
+          : loadedVerifiedConnections.length === 1
+            ? (loadedVerifiedConnections[0]?.id ?? "")
+            : ""
+      );
+      const codeConnectionEntries = await Promise.all(
+        loadedVerifiedConnections.map(async (connection) => [
+          connection.id,
+          await getAwsCodeConnection(connection.id)
+        ] as const)
+      );
+      setCodeConnections(Object.fromEntries(codeConnectionEntries));
       setLoadState("ready");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 불러오지 못했습니다.");
@@ -132,20 +170,75 @@ export function SettingsDashboardClient() {
     }
   }
 
-  // 같은 삭제 버튼을 한 번 더 눌렀을 때만 AWS 연결 기록을 삭제합니다.
+  // AWS를 변경하지 않는 미리보기를 먼저 열어 사용자가 정리 대상을 확인하게 합니다.
   async function removeConnection(connectionId: string): Promise<void> {
-    if (deleteCandidateId !== connectionId) {
-      setDeleteCandidateId(connectionId);
+    setActionPending(true);
+    setErrorMessage("");
+    try {
+      setDeletionPreview(await getAwsConnectionDeletionPreview(connectionId));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "삭제 대상을 불러오지 못했습니다.");
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  // 미리보기에서 확인한 exact managed Resource 집합에만 삭제 승인을 보냅니다.
+  async function confirmRemoveConnection(): Promise<void> {
+    if (!deletionPreview?.canDelete) return;
+    setActionPending(true);
+    setErrorMessage("");
+    try {
+      await deleteAwsConnection(deletionPreview.connectionId, {
+        confirmedManagedCleanup: true,
+        confirmationToken: deletionPreview.confirmationToken
+      });
+      setDeletionPreview(null);
+      await loadConnections();
+    } catch (error) {
+      setDeletionPreview(null);
+      setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 삭제하지 못했습니다.");
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function connectGitHubBuild(): Promise<void> {
+    if (verifiedConnections.length === 0) {
+      setShowAwsRequiredModal(true);
+      return;
+    }
+    if (!verifiedConnections.some((connection) => connection.id === selectedBuildAwsConnectionId)) {
+      setErrorMessage("GitHub 빌드에 사용할 AWS 계정을 선택해 주세요.");
       return;
     }
     setActionPending(true);
     setErrorMessage("");
     try {
-      await deleteAwsConnection(connectionId);
-      setDeleteCandidateId("");
-      await loadConnections();
+      const response = await createAwsCodeConnection(selectedBuildAwsConnectionId);
+      setCodeConnections((current) => ({
+        ...current,
+        [selectedBuildAwsConnectionId]: response
+      }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 삭제하지 못했습니다.");
+      setErrorMessage(error instanceof Error ? error.message : "GitHub 빌드 연결을 만들지 못했습니다.");
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function refreshGitHubBuildConnection(): Promise<void> {
+    if (!selectedBuildAwsConnectionId) return;
+    setActionPending(true);
+    setErrorMessage("");
+    try {
+      const response = await refreshAwsCodeConnection(selectedBuildAwsConnectionId);
+      setCodeConnections((current) => ({
+        ...current,
+        [selectedBuildAwsConnectionId]: response
+      }));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "GitHub 승인 상태를 확인하지 못했습니다.");
     } finally {
       setActionPending(false);
     }
@@ -155,6 +248,25 @@ export function SettingsDashboardClient() {
   useEffect(() => {
     void loadConnections();
   }, []);
+
+  useEffect(() => {
+    if (!showAwsRequiredModal && !deletionPreview) return;
+    const overlay = modalOverlayRef.current;
+    const dialog = modalDialogRef.current;
+    const closeButton = modalCloseButtonRef.current;
+    if (!overlay || !dialog || !closeButton) return;
+
+    return setupModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: document,
+      onClose: () => {
+        setShowAwsRequiredModal(false);
+        setDeletionPreview(null);
+      },
+      overlay
+    });
+  }, [deletionPreview, showAwsRequiredModal]);
 
   return (
     <div className="dashboardRouteStack">
@@ -171,7 +283,7 @@ export function SettingsDashboardClient() {
         <>
           {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
-          <section className={styles.settingsSection}>
+          <section className={styles.settingsSection} id="aws-account-connection">
             <header><Cloud size={20} /><div><h2>AWS 계정 연결</h2><p>Access Key 대신 한 번 만든 Role을 사용합니다.</p></div></header>
             <div className={styles.controlRow}>
               <div className={styles.controlField}>
@@ -190,6 +302,42 @@ export function SettingsDashboardClient() {
             </div>
           </section>
 
+          <section className={styles.settingsSection}>
+            <header>
+              <DashboardIcon name="github" />
+              <div>
+                <h2>GitHub 빌드 연결</h2>
+                <p>선택한 AWS 계정에 SketchCatch 관리 CodeConnections를 한 번 만듭니다.</p>
+              </div>
+            </header>
+            <div className={styles.controlRow}>
+              {verifiedConnections.length > 1 ? (
+                <div className={styles.controlField}>
+                  <span>사용할 AWS 계정</span>
+                  <SelectMenu
+                    ariaLabel="GitHub 빌드 AWS 계정 선택"
+                    emptyLabel="AWS 계정 선택"
+                    onChange={setSelectedBuildAwsConnectionId}
+                    options={verifiedConnections.map((connection) => ({
+                      label: connection.accountId ?? connection.region,
+                      detail: connection.region,
+                      value: connection.id
+                    }))}
+                    size="large"
+                    tone="surface"
+                    value={selectedBuildAwsConnectionId}
+                  />
+                </div>
+              ) : null}
+              <GitHubBuildConnectionAction
+                actionPending={actionPending}
+                connection={codeConnections[selectedBuildAwsConnectionId]}
+                onConnect={() => void connectGitHubBuild()}
+                onRefresh={() => void refreshGitHubBuildConnection()}
+              />
+            </div>
+          </section>
+
           {setupConnection && cloudFormation ? (
             <section className={styles.setupSection}>
               <div><span>1</span><div><strong>CloudFormation으로 Role 만들기</strong><p>{cloudFormation.roleName}</p></div></div>
@@ -201,12 +349,173 @@ export function SettingsDashboardClient() {
 
           <section className={styles.connectionList}>
             <div className={styles.sectionHeading}><h2>연결된 AWS 계정</h2><span>{connections.length}개</span></div>
-            {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : <button disabled={actionPending} onClick={() => void resumeConnectionSetup(connection)} type="button">설정 계속</button>}<button data-danger={deleteCandidateId === connection.id} disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />{deleteCandidateId === connection.id ? "한 번 더 눌러 삭제" : "삭제"}</button></div></article>)}
+            {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : <button disabled={actionPending} onClick={() => void resumeConnectionSetup(connection)} type="button">설정 계속</button>}<button data-danger="true" disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />삭제</button></div></article>)}
           </section>
         </>
       )}
 
       <GitHubAccountSettings />
+
+      {deletionPreview ? (
+        <div className={styles.modalBackdrop} ref={modalOverlayRef} role="presentation">
+          <section
+            aria-describedby="aws-deletion-description"
+            aria-labelledby="aws-deletion-title"
+            aria-modal="true"
+            className={styles.modalCard}
+            ref={modalDialogRef}
+            role="dialog"
+          >
+            <button
+              aria-label="AWS 연결 삭제 닫기"
+              className={styles.modalClose}
+              disabled={actionPending}
+              onClick={() => setDeletionPreview(null)}
+              ref={modalCloseButtonRef}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+            <Trash2 size={24} />
+            <h2 id="aws-deletion-title">AWS 연결 삭제 대상 확인</h2>
+            <p id="aws-deletion-description">
+              삭제를 승인하면 아래 SketchCatch 관리 리소스만 AWS에서 정리한 뒤 연결 기록을 삭제합니다.
+            </p>
+            <div className={styles.cleanupPreview}>
+              <strong>정리할 리소스</strong>
+              <ul>
+                <li>CodeBuild 프로젝트 {deletionPreview.managedResources.codeBuildProjects.length}개</li>
+                <li>CodeBuild Service Role {deletionPreview.managedResources.codeBuildProjects.length}개</li>
+                <li>CodeBuild 로그 그룹 {deletionPreview.managedResources.codeBuildProjects.length}개</li>
+                <li>GitHub CodeConnection {deletionPreview.managedResources.codeConnection ? "1개" : "없음"}</li>
+              </ul>
+              <strong>삭제하지 않는 리소스</strong>
+              <p>{deletionPreview.preservedResources.join(", ")}</p>
+            </div>
+            {deletionPreview.blockerMessage ? (
+              <p className={styles.cleanupBlocker}>{deletionPreview.blockerMessage}</p>
+            ) : null}
+            <div className={styles.modalActions}>
+              <button disabled={actionPending} onClick={() => setDeletionPreview(null)} type="button">취소</button>
+              {deletionPreview.canDelete ? (
+                <button
+                  className={styles.dangerAction}
+                  disabled={actionPending}
+                  onClick={() => void confirmRemoveConnection()}
+                  type="button"
+                >
+                  관리 리소스 정리 후 연결 삭제
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {showAwsRequiredModal ? (
+        <div className={styles.modalBackdrop} ref={modalOverlayRef} role="presentation">
+          <section
+            aria-describedby="aws-required-description"
+            aria-labelledby="aws-required-title"
+            aria-modal="true"
+            className={styles.modalCard}
+            ref={modalDialogRef}
+            role="dialog"
+          >
+            <button
+              aria-label="AWS 연결 안내 닫기"
+              className={styles.modalClose}
+              onClick={() => setShowAwsRequiredModal(false)}
+              ref={modalCloseButtonRef}
+              type="button"
+            >
+              <X size={18} />
+            </button>
+            <Cloud size={24} />
+            <h2 id="aws-required-title">AWS 연결이 먼저 필요합니다</h2>
+            <p id="aws-required-description">
+              GitHub 코드를 빌드할 AWS 계정을 먼저 연결하고 Role 검증을 완료해 주세요.
+            </p>
+            <div className={styles.modalActions}>
+              <button onClick={() => setShowAwsRequiredModal(false)} type="button">취소</button>
+              <button
+                className={styles.primaryAction}
+                onClick={() => {
+                  setShowAwsRequiredModal(false);
+                  document.getElementById("aws-account-connection")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start"
+                  });
+                }}
+                type="button"
+              >
+                AWS 연결하러 가기
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function GitHubBuildConnectionAction({
+  actionPending,
+  connection,
+  onConnect,
+  onRefresh
+}: {
+  readonly actionPending: boolean;
+  readonly connection: AwsCodeConnectionResponse | undefined;
+  readonly onConnect: () => void;
+  readonly onRefresh: () => void;
+}) {
+  if (!connection?.codeConnection) {
+    return (
+      <button className={styles.primaryAction} disabled={actionPending} onClick={onConnect} type="button">
+        GitHub 빌드 연결
+      </button>
+    );
+  }
+  if (connection.codeConnection.status === "CREATING") {
+    return (
+      <div className={styles.buildConnectionPending} role="status">
+        <span>GitHub 빌드 연결 생성 중</span>
+        <button disabled={actionPending} onClick={onConnect} type="button">상태 확인</button>
+      </div>
+    );
+  }
+  if (
+    connection.codeConnection.status === "ERROR" &&
+    !connection.codeConnection.connectionArn
+  ) {
+    return (
+      <div className={styles.buildConnectionPending} role="alert">
+        <span>{connection.codeConnection.statusReason ?? "GitHub 빌드 연결 생성에 실패했습니다."}</span>
+        <button disabled={actionPending} onClick={onConnect} type="button">
+          다시 생성
+        </button>
+      </div>
+    );
+  }
+  if (connection.codeConnection.status === "AVAILABLE") {
+    return (
+      <div className={styles.buildConnectionReady} role="status">
+        <CheckCircle2 size={16} />
+        <span>GitHub 빌드 연결 완료</span>
+        <button disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.buildConnectionPending} role="status">
+      <span>GitHub 승인 필요</span>
+      {connection.setupUrl ? (
+        <a href={connection.setupUrl} rel="noreferrer" target="_blank">
+          AWS에서 승인하기 <ExternalLink size={14} />
+        </a>
+      ) : null}
+      <button disabled={actionPending} onClick={onRefresh} type="button">승인 상태 확인</button>
     </div>
   );
 }

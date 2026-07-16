@@ -22,13 +22,35 @@ type ConnectionEvidence = {
   readonly lastVerifiedAt: string | Date | null;
 };
 
+export type VerifiedCloudFrontLiveObservationTopology = {
+  readonly cloudFrontDistributionId: string;
+  readonly cloudFrontDomainName: string;
+  readonly frontendBucketName: string;
+  readonly loadBalancerArn: string;
+  readonly loadBalancerDnsName: string;
+  readonly targetGroupArn: string;
+  readonly clusterName: string;
+  readonly serviceName: string;
+  readonly defaultOriginId: string;
+  readonly originAccessControlId: string;
+  readonly apiOriginId: string;
+  readonly apiPathPattern: "/api/*";
+  readonly healthPathPattern: "/health";
+  readonly frontendBucketPublicAccessBlocked: true;
+  readonly bucketPolicyAllowsCloudFrontRead: true;
+  readonly topologyVerifiedAt: string;
+};
+
+type ManifestMaterializationInput = {
+  readonly audienceBaseUrl: string;
+  readonly deployment: DeploymentEvidence;
+  readonly connection: ConnectionEvidence | null;
+  readonly outputs: Readonly<Record<string, unknown>>;
+  readonly topology?: VerifiedCloudFrontLiveObservationTopology | undefined;
+};
+
 export async function materializeDeploymentLiveObservationManifest(
-  input: {
-    readonly audienceBaseUrl: string;
-    readonly deployment: DeploymentEvidence;
-    readonly connection: ConnectionEvidence | null;
-    readonly outputs: Readonly<Record<string, unknown>>;
-  },
+  input: ManifestMaterializationInput,
   repository: DeploymentLiveObservationManifestRepository
 ): Promise<DeploymentLiveObservationManifestRecord> {
   let manifest: DeploymentLiveObservationManifestV2;
@@ -43,17 +65,14 @@ export async function materializeDeploymentLiveObservationManifest(
   return repository.saveValid(manifest);
 }
 
-export function createDeploymentLiveObservationManifest(input: {
-  readonly audienceBaseUrl: string;
-  readonly deployment: DeploymentEvidence;
-  readonly connection: ConnectionEvidence | null;
-  readonly outputs: Readonly<Record<string, unknown>>;
-}): DeploymentLiveObservationManifestV2 {
+export function createDeploymentLiveObservationManifest(
+  input: ManifestMaterializationInput
+): DeploymentLiveObservationManifestV2 {
   const { deployment, connection, outputs } = input;
   const accountId = connection?.accountId;
   const artifactHash = deployment.approvedTerraformArtifactHash;
   if (
-    deployment.status !== "SUCCESS" ||
+    !isLiveObservationEligibleDeploymentStatus(deployment.status) ||
     !connection ||
     connection.status !== "verified" ||
     deployment.awsConnectionId !== connection.id ||
@@ -70,6 +89,16 @@ export function createDeploymentLiveObservationManifest(input: {
 
   const verifiedAt = toIsoDateTime(connection.lastVerifiedAt);
   const audienceBaseUrl = input.audienceBaseUrl;
+  if (input.topology) {
+    return createCloudFrontDeploymentManifest({
+      audienceBaseUrl,
+      connection,
+      deployment,
+      outputs,
+      topology: input.topology,
+      verifiedAt
+    });
+  }
   const trafficUrl = readString(outputs, "traffic_url");
   const trafficHostname = readString(outputs, "traffic_hostname");
   const loadBalancerDnsName = readString(outputs, "load_balancer_dns_name");
@@ -124,6 +153,118 @@ export function createDeploymentLiveObservationManifest(input: {
   });
 }
 
+function createCloudFrontDeploymentManifest(input: {
+  readonly audienceBaseUrl: string;
+  readonly connection: ConnectionEvidence;
+  readonly deployment: DeploymentEvidence;
+  readonly outputs: Readonly<Record<string, unknown>>;
+  readonly topology: VerifiedCloudFrontLiveObservationTopology;
+  readonly verifiedAt: string;
+}): DeploymentLiveObservationManifestV2 {
+  const { outputs, topology } = input;
+  const cloudFrontDistributionId = readString(outputs, "cloudfront_distribution_id");
+  const cloudFrontDomainName = readString(outputs, "cloudfront_domain_name");
+  const frontendBucketName = readString(outputs, "static_bucket_name");
+  const loadBalancerArn = readFirstString(outputs, ["alb_arn", "load_balancer_arn"]);
+  const loadBalancerDnsName = readFirstString(outputs, [
+    "alb_dns_name",
+    "load_balancer_dns_name"
+  ]);
+  const targetGroupArn = readString(outputs, "target_group_arn");
+  const clusterName = readString(outputs, "ecs_cluster_name");
+  const serviceName = readString(outputs, "ecs_service_name");
+  const outputUrl = new URL(readString(outputs, "cloudfront_url"));
+  if (
+    outputUrl.protocol !== "https:" ||
+    outputUrl.hostname !== cloudFrontDomainName ||
+    outputUrl.username !== "" ||
+    outputUrl.password !== "" ||
+    outputUrl.port !== "" ||
+    outputUrl.pathname !== "/" ||
+    outputUrl.search !== "" ||
+    outputUrl.hash !== ""
+  ) {
+    throw new Error("CloudFront topology output URL is invalid");
+  }
+  const expected = {
+    cloudFrontDistributionId,
+    cloudFrontDomainName,
+    frontendBucketName,
+    loadBalancerArn,
+    loadBalancerDnsName,
+    targetGroupArn,
+    clusterName,
+    serviceName
+  };
+  for (const [name, value] of Object.entries(expected)) {
+    if (topology[name as keyof typeof expected] !== value) {
+      throw new Error(`CloudFront topology does not match ${name}`);
+    }
+  }
+  if (
+    !topology.defaultOriginId.trim() ||
+    !topology.apiOriginId.trim() ||
+    topology.defaultOriginId === topology.apiOriginId ||
+    !topology.originAccessControlId.trim() ||
+    topology.apiPathPattern !== "/api/*" ||
+    topology.healthPathPattern !== "/health" ||
+    topology.frontendBucketPublicAccessBlocked !== true ||
+    topology.bucketPolicyAllowsCloudFrontRead !== true
+  ) {
+    throw new Error("CloudFront topology evidence is incomplete");
+  }
+
+  return parseDeploymentLiveObservationManifestV2({
+    schemaVersion: 2,
+    provider: "aws",
+    provenance: {
+      deploymentId: input.deployment.id,
+      terraformArtifactSha256: input.deployment.approvedTerraformArtifactHash,
+      awsConnectionId: input.connection.id,
+      region: input.connection.region,
+      verifiedAt: input.verifiedAt
+    },
+    endpoints: {
+      audienceBaseUrl: input.audienceBaseUrl,
+      trafficUrl: new URL("/api/traffic", outputUrl).toString()
+    },
+    pressure: {
+      metric: "requests_per_target_per_minute",
+      target: requirePressureTarget(outputs),
+      windowSeconds: 60
+    },
+    adapter: {
+      kind: "aws-live-observation",
+      version: 3,
+      payload: {
+        cloudFrontDistributionId,
+        cloudFrontDomainName,
+        frontendBucketName,
+        defaultOriginId: topology.defaultOriginId,
+        originAccessControlId: topology.originAccessControlId,
+        apiOriginId: topology.apiOriginId,
+        apiPathPattern: topology.apiPathPattern,
+        healthPathPattern: topology.healthPathPattern,
+        frontendBucketPublicAccessBlocked: true,
+        bucketPolicyAllowsCloudFrontRead: true,
+        topologyVerifiedAt: toIsoDateTime(topology.topologyVerifiedAt),
+        frontendState:
+          input.deployment.status === "SUCCESS" ? "current" : "may_be_previous",
+        loadBalancerDnsName,
+        loadBalancerArn,
+        targetGroupArn,
+        logGroupNames: readLogGroupNames(outputs),
+        capacityTarget: {
+          kind: "ecs_fargate",
+          clusterName,
+          serviceName,
+          maxCapacity: readPositiveNumber(outputs, "max_capacity")
+        }
+      }
+    }
+  });
+}
+
 export function assertDeploymentLiveObservationManifestReusable(input: {
   readonly audienceBaseUrl: string;
   readonly deployment: DeploymentEvidence;
@@ -138,12 +279,12 @@ export function assertDeploymentLiveObservationManifestReusable(input: {
   if (
     record.status !== "valid" ||
     !manifest ||
-    manifest.adapter.version !== 2 ||
+    (manifest.adapter.version !== 2 && manifest.adapter.version !== 3) ||
     normalizeBaseUrl(manifest.endpoints.audienceBaseUrl) !==
       normalizeBaseUrl(input.audienceBaseUrl) ||
     record.deploymentId !== deployment.id ||
     manifest.provenance.deploymentId !== deployment.id ||
-    deployment.status !== "SUCCESS" ||
+    !isLiveObservationEligibleDeploymentStatus(deployment.status) ||
     manifest.provenance.terraformArtifactSha256 !==
       deployment.approvedTerraformArtifactHash ||
     deployment.awsConnectionId !== connection?.id ||
@@ -157,7 +298,6 @@ export function assertDeploymentLiveObservationManifestReusable(input: {
   ) {
     throw new Error("Immutable manifest evidence does not match deployment approval");
   }
-
   for (const arn of [
     manifest.adapter.payload.loadBalancerArn,
     manifest.adapter.payload.targetGroupArn
@@ -169,6 +309,17 @@ export function assertDeploymentLiveObservationManifestReusable(input: {
       throw new Error("Immutable manifest AWS identity does not match deployment approval");
     }
   }
+}
+
+function isLiveObservationEligibleDeploymentStatus(status: string): boolean {
+  return status === "SUCCESS" || status === "PARTIALLY_FAILED" || status === "PARTIALLY_CANCELED";
+}
+
+function requirePressureTarget(outputs: Readonly<Record<string, unknown>>): 60 {
+  if (readPositiveNumber(outputs, "scale_out_threshold") !== 60) {
+    throw new Error("Unsupported pressure target");
+  }
+  return 60;
 }
 
 function normalizeBaseUrl(value: string): string {
@@ -241,6 +392,17 @@ function readString(outputs: Readonly<Record<string, unknown>>, name: string): s
   const value = readOptionalString(outputs, name);
   if (!value) throw new Error(`Missing ${name}`);
   return value;
+}
+
+function readFirstString(
+  outputs: Readonly<Record<string, unknown>>,
+  names: readonly string[]
+): string {
+  for (const name of names) {
+    const value = readOptionalString(outputs, name);
+    if (value) return value;
+  }
+  throw new Error(`Missing ${names.join(" or ")}`);
 }
 
 function readOptionalString(

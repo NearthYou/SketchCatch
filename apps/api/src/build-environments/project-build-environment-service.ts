@@ -1,0 +1,595 @@
+import { createHash, randomUUID } from "node:crypto";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import type {
+  AwsCodeConnectionStatus,
+  ConfirmedBuildConfig,
+  ProjectBuildEnvironmentResponse
+} from "@sketchcatch/types";
+import type { Database } from "../db/client.js";
+import {
+  awsCodeConnections,
+  awsConnections,
+  projectBuildEnvironments,
+  projectDeploymentTargets,
+  projectExecutionLeases,
+  projects,
+  sourceRepositories
+} from "../db/schema.js";
+import { createCodeBuildPermissionsBoundaryName } from "../aws-connections/aws-connection-service.js";
+
+export const projectBuildImage = "aws/codebuild/standard:7.0";
+export const projectBuildComputeType = "BUILD_GENERAL1_SMALL";
+
+export type ProjectBuildEnvironmentPreparationContext = {
+  projectId: string;
+  sourceRepository: {
+    id: string;
+    owner: string;
+    name: string;
+  } | null;
+  awsConnection: {
+    id: string;
+    accountId: string;
+    roleArn: string;
+    externalId: string;
+    region: string;
+  } | null;
+  codeConnection: {
+    id: string;
+    connectionArn: string | null;
+    status: AwsCodeConnectionStatus;
+  } | null;
+  confirmedBuildConfig: ConfirmedBuildConfig | null;
+};
+
+export type ProjectBuildEnvironmentRecord = typeof projectBuildEnvironments.$inferSelect;
+
+export type SaveProjectBuildEnvironmentInput = Omit<
+  ProjectBuildEnvironmentRecord,
+  "createdAt"
+> & { createdAt?: Date };
+
+export type ProjectBuildEnvironmentRepository = {
+  findPreparationContext(
+    projectId: string,
+    userId: string
+  ): Promise<ProjectBuildEnvironmentPreparationContext | undefined>;
+  findByProjectId(projectId: string): Promise<ProjectBuildEnvironmentRecord | undefined>;
+  findRemovalContext(
+    projectId: string,
+    userId: string
+  ): Promise<{
+    environment: ProjectBuildEnvironmentRecord;
+    awsConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["awsConnection"]>;
+  } | undefined>;
+  hasActiveExecution(projectId: string): Promise<boolean>;
+  deleteByProjectId(projectId: string): Promise<void>;
+  save(input: SaveProjectBuildEnvironmentInput): Promise<ProjectBuildEnvironmentRecord>;
+};
+
+export type ProjectBuildEnvironmentRemoval = {
+  projectId: string;
+  awsConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["awsConnection"]>;
+  codeBuildProjectName: string;
+  codeBuildServiceRoleName: string;
+  codeBuildServiceRoleArn: string;
+  permissionsBoundaryArn: string;
+};
+
+export type DesiredProjectBuildEnvironment = {
+  projectId: string;
+  awsConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["awsConnection"]>;
+  awsCodeConnectionId: string;
+  codeConnectionArn: string;
+  codeBuildProjectName: string;
+  codeBuildServiceRoleName: string;
+  codeBuildServiceRoleArn: string;
+  permissionsBoundaryArn: string;
+  sourceRepositoryUrl: string;
+  image: typeof projectBuildImage;
+  computeType: typeof projectBuildComputeType;
+  runtimeFingerprint: string;
+};
+
+export type ProjectBuildEnvironmentVerification = {
+  verified: boolean;
+  statusReason: string | null;
+};
+
+export type ProjectBuildEnvironmentGateway = {
+  reconcile(
+    input: DesiredProjectBuildEnvironment
+  ): Promise<ProjectBuildEnvironmentVerification>;
+  verify(
+    input: DesiredProjectBuildEnvironment
+  ): Promise<ProjectBuildEnvironmentVerification>;
+  remove?(input: ProjectBuildEnvironmentRemoval): Promise<void>;
+};
+
+export type ProjectBuildEnvironmentServiceOptions = {
+  generateId?: () => string;
+  now?: () => Date;
+};
+
+export type ProjectBuildEnvironmentErrorCode =
+  | "PROJECT_NOT_FOUND"
+  | "SOURCE_REPOSITORY_REQUIRED"
+  | "AWS_CONNECTION_REQUIRED"
+  | "CODECONNECTION_REQUIRED"
+  | "BUILD_CONFIG_REQUIRED"
+  | "BUILD_ENVIRONMENT_NOT_FOUND"
+  | "BUILD_ENVIRONMENT_DELETE_BLOCKED"
+  | "BUILD_ENVIRONMENT_DELETE_FAILED"
+  | "BUILD_ENVIRONMENT_PREPARE_FAILED";
+
+export class ProjectBuildEnvironmentError extends Error {
+  constructor(
+    readonly code: ProjectBuildEnvironmentErrorCode,
+    message: string,
+    readonly statusCode = 409
+  ) {
+    super(message);
+    this.name = "ProjectBuildEnvironmentError";
+  }
+}
+
+export function createPostgresProjectBuildEnvironmentRepository(
+  db: Database
+): ProjectBuildEnvironmentRepository {
+  return {
+    async findPreparationContext(projectId, userId) {
+      const [project] = await db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.id, projectId),
+            eq(projects.userId, userId),
+            isNull(projects.deletionStartedAt)
+          )
+        );
+      if (!project) return undefined;
+
+      const [sourceRepository] = await db
+        .select({
+          id: sourceRepositories.id,
+          owner: sourceRepositories.owner,
+          name: sourceRepositories.name
+        })
+        .from(sourceRepositories)
+        .where(
+          and(
+            eq(sourceRepositories.projectId, projectId),
+            eq(sourceRepositories.provider, "github"),
+            eq(sourceRepositories.status, "active")
+          )
+        );
+
+      const [awsConnection] = await db
+        .select({
+          id: awsConnections.id,
+          accountId: awsConnections.accountId,
+          roleArn: awsConnections.roleArn,
+          externalId: awsConnections.externalId,
+          region: awsConnections.region,
+          confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig
+        })
+        .from(projectDeploymentTargets)
+        .innerJoin(
+          awsConnections,
+          eq(awsConnections.id, projectDeploymentTargets.connectionId)
+        )
+        .where(
+          and(
+            eq(projectDeploymentTargets.projectId, projectId),
+            eq(awsConnections.userId, userId),
+            eq(awsConnections.status, "verified"),
+            isNull(awsConnections.deletionStartedAt),
+            isNotNull(awsConnections.accountId),
+            isNotNull(awsConnections.roleArn)
+          )
+        );
+
+      const normalizedAwsConnection =
+        awsConnection?.accountId && awsConnection.roleArn
+          ? {
+              id: awsConnection.id,
+              accountId: awsConnection.accountId,
+              roleArn: awsConnection.roleArn,
+              externalId: awsConnection.externalId,
+              region: awsConnection.region
+            }
+          : null;
+      const [codeConnection] = normalizedAwsConnection
+        ? await db
+            .select({
+              id: awsCodeConnections.id,
+              connectionArn: awsCodeConnections.connectionArn,
+              status: awsCodeConnections.status
+            })
+            .from(awsCodeConnections)
+            .where(eq(awsCodeConnections.awsConnectionId, normalizedAwsConnection.id))
+        : [];
+
+      return {
+        projectId: project.id,
+        sourceRepository: sourceRepository ?? null,
+        awsConnection: normalizedAwsConnection,
+        codeConnection: codeConnection ?? null,
+        confirmedBuildConfig: awsConnection?.confirmedBuildConfig ?? null
+      };
+    },
+
+    async findByProjectId(projectId) {
+      const [environment] = await db
+        .select()
+        .from(projectBuildEnvironments)
+        .where(eq(projectBuildEnvironments.projectId, projectId));
+      return environment;
+    },
+
+    async findRemovalContext(projectId, userId) {
+      const [row] = await db
+        .select({
+          projectId: projects.id,
+          environment: projectBuildEnvironments,
+          accountId: awsConnections.accountId,
+          roleArn: awsConnections.roleArn,
+          externalId: awsConnections.externalId,
+          region: awsConnections.region,
+          awsConnectionId: awsConnections.id
+        })
+        .from(projects)
+        .innerJoin(
+          projectBuildEnvironments,
+          eq(projectBuildEnvironments.projectId, projects.id)
+        )
+        .innerJoin(
+          awsConnections,
+          eq(awsConnections.id, projectBuildEnvironments.awsConnectionId)
+        )
+        .where(
+          and(
+            eq(projects.id, projectId),
+            eq(projects.userId, userId),
+            isNull(projects.deletionStartedAt),
+            eq(awsConnections.userId, userId),
+            isNotNull(awsConnections.accountId),
+            isNotNull(awsConnections.roleArn)
+          )
+        );
+      if (!row?.accountId || !row.roleArn) return undefined;
+      return {
+        environment: row.environment,
+        awsConnection: {
+          id: row.awsConnectionId,
+          accountId: row.accountId,
+          roleArn: row.roleArn,
+          externalId: row.externalId,
+          region: row.region
+        }
+      };
+    },
+
+    async hasActiveExecution(projectId) {
+      const [lease] = await db
+        .select({ projectId: projectExecutionLeases.projectId })
+        .from(projectExecutionLeases)
+        .where(
+          and(
+            eq(projectExecutionLeases.projectId, projectId),
+            eq(projectExecutionLeases.status, "active")
+          )
+        )
+        .limit(1);
+      return Boolean(lease);
+    },
+
+    async deleteByProjectId(projectId) {
+      await db
+        .delete(projectBuildEnvironments)
+        .where(eq(projectBuildEnvironments.projectId, projectId));
+    },
+
+    async save(input) {
+      const createdAt = input.createdAt ?? input.updatedAt;
+      const [environment] = await db
+        .insert(projectBuildEnvironments)
+        .values({ ...input, createdAt })
+        .onConflictDoUpdate({
+          target: projectBuildEnvironments.projectId,
+          set: {
+            awsConnectionId: input.awsConnectionId,
+            awsCodeConnectionId: input.awsCodeConnectionId,
+            codeBuildProjectName: input.codeBuildProjectName,
+            codeBuildServiceRoleArn: input.codeBuildServiceRoleArn,
+            permissionsBoundaryArn: input.permissionsBoundaryArn,
+            sourceRepositoryUrl: input.sourceRepositoryUrl,
+            runtimeFingerprint: input.runtimeFingerprint,
+            status: input.status,
+            lastVerifiedAt: input.lastVerifiedAt,
+            updatedAt: input.updatedAt
+          }
+        })
+        .returning();
+      if (!environment) throw new Error("Project build environment was not saved");
+      return environment;
+    }
+  };
+}
+
+export async function prepareProjectBuildEnvironment(
+  input: { projectId: string; userId: string },
+  repository: ProjectBuildEnvironmentRepository,
+  gateway: ProjectBuildEnvironmentGateway,
+  options: ProjectBuildEnvironmentServiceOptions = {}
+): Promise<ProjectBuildEnvironmentResponse> {
+  const context = await requirePreparationContext(input, repository);
+  const desired = createDesiredProjectBuildEnvironment(context);
+  const existing = await repository.findByProjectId(input.projectId);
+  const now = options.now?.() ?? new Date();
+
+  const preparing = await repository.save({
+    id: existing?.id ?? options.generateId?.() ?? randomUUID(),
+    projectId: input.projectId,
+    awsConnectionId: context.awsConnection.id,
+    awsCodeConnectionId: context.codeConnection.id,
+    codeBuildProjectName: desired.codeBuildProjectName,
+    codeBuildServiceRoleArn: desired.codeBuildServiceRoleArn,
+    permissionsBoundaryArn: desired.permissionsBoundaryArn,
+    sourceRepositoryUrl: desired.sourceRepositoryUrl,
+    runtimeFingerprint: desired.runtimeFingerprint,
+    status: "preparing",
+    lastVerifiedAt: null,
+    ...(existing ? { createdAt: existing.createdAt } : {}),
+    updatedAt: now
+  });
+
+  let verification: ProjectBuildEnvironmentVerification;
+  try {
+    await requirePreparationContext(input, repository);
+    verification = await gateway.reconcile(desired);
+    await requirePreparationContext(input, repository);
+  } catch (error) {
+    await repository.save({
+      ...preparing,
+      status: "verification_failed",
+      lastVerifiedAt: null,
+      updatedAt: now
+    });
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_PREPARE_FAILED",
+      `AWS 빌드 환경을 준비하지 못했습니다: ${safeAwsPreparationError(error)}`,
+      502
+    );
+  }
+  const saved = await repository.save({
+    id: preparing.id,
+    projectId: input.projectId,
+    awsConnectionId: context.awsConnection.id,
+    awsCodeConnectionId: context.codeConnection.id,
+    codeBuildProjectName: desired.codeBuildProjectName,
+    codeBuildServiceRoleArn: desired.codeBuildServiceRoleArn,
+    permissionsBoundaryArn: desired.permissionsBoundaryArn,
+    sourceRepositoryUrl: desired.sourceRepositoryUrl,
+    runtimeFingerprint: desired.runtimeFingerprint,
+    status: verification.verified ? "ready" : "verification_failed",
+    lastVerifiedAt: verification.verified ? now : null,
+    createdAt: preparing.createdAt,
+    updatedAt: now
+  });
+  return { buildEnvironment: toProjectBuildEnvironment(saved) };
+}
+
+function safeAwsPreparationError(error: unknown): string {
+  if (!(error instanceof Error) || !error.message.trim()) return "AWS 요청이 실패했습니다.";
+  return error.message.replace(/[\r\n\t]+/gu, " ").slice(0, 500);
+}
+
+export async function getProjectBuildEnvironment(
+  input: { projectId: string; userId: string },
+  repository: ProjectBuildEnvironmentRepository
+): Promise<ProjectBuildEnvironmentResponse> {
+  const context = await repository.findPreparationContext(input.projectId, input.userId);
+  if (!context) {
+    throw new ProjectBuildEnvironmentError("PROJECT_NOT_FOUND", "Project not found", 404);
+  }
+  const environment = await repository.findByProjectId(input.projectId);
+  return { buildEnvironment: environment ? toProjectBuildEnvironment(environment) : null };
+}
+
+export async function verifyProjectBuildEnvironment(
+  input: { projectId: string; userId: string },
+  repository: ProjectBuildEnvironmentRepository,
+  gateway: ProjectBuildEnvironmentGateway,
+  options: Pick<ProjectBuildEnvironmentServiceOptions, "now"> = {}
+): Promise<ProjectBuildEnvironmentResponse> {
+  const context = await requirePreparationContext(input, repository);
+  const existing = await repository.findByProjectId(input.projectId);
+  if (!existing) {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_NOT_FOUND",
+      "Project build environment has not been prepared",
+      404
+    );
+  }
+  const desired = createDesiredProjectBuildEnvironment(context);
+  const verification = await gateway.verify(desired);
+  const now = options.now?.() ?? new Date();
+  const saved = await repository.save({
+    ...existing,
+    awsConnectionId: context.awsConnection.id,
+    awsCodeConnectionId: context.codeConnection.id,
+    codeBuildProjectName: desired.codeBuildProjectName,
+    codeBuildServiceRoleArn: desired.codeBuildServiceRoleArn,
+    permissionsBoundaryArn: desired.permissionsBoundaryArn,
+    sourceRepositoryUrl: desired.sourceRepositoryUrl,
+    runtimeFingerprint: desired.runtimeFingerprint,
+    status: verification.verified ? "ready" : "verification_failed",
+    lastVerifiedAt: verification.verified ? now : null,
+    updatedAt: now
+  });
+  return { buildEnvironment: toProjectBuildEnvironment(saved) };
+}
+
+export async function deleteProjectBuildEnvironment(
+  input: { projectId: string; userId: string },
+  repository: ProjectBuildEnvironmentRepository,
+  gateway: ProjectBuildEnvironmentGateway
+): Promise<void> {
+  const existing = await repository.findByProjectId(input.projectId);
+  if (!existing) {
+    const context = await repository.findPreparationContext(input.projectId, input.userId);
+    if (!context) {
+      throw new ProjectBuildEnvironmentError("PROJECT_NOT_FOUND", "Project not found", 404);
+    }
+    return;
+  }
+  const context = await repository.findRemovalContext(input.projectId, input.userId);
+  if (!context || context.environment.id !== existing.id) {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_DELETE_FAILED",
+      "AWS 연결이 변경되어 빌드 환경 소유권을 확인할 수 없습니다. AWS 연결을 다시 확인해 주세요."
+    );
+  }
+  if (await repository.hasActiveExecution(input.projectId)) {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_DELETE_BLOCKED",
+      "현재 앱 빌드 또는 배포가 진행 중입니다. 완료하거나 취소한 뒤 빌드 환경을 삭제해 주세요."
+    );
+  }
+  if (!gateway.remove) {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_DELETE_FAILED",
+      "빌드 환경 정리 기능을 사용할 수 없습니다."
+    );
+  }
+  const roleName = existing.codeBuildServiceRoleArn.split("/").at(-1);
+  if (!roleName) {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_DELETE_FAILED",
+      "CodeBuild service role 이름을 확인할 수 없습니다."
+    );
+  }
+  try {
+    await gateway.remove({
+      projectId: input.projectId,
+      awsConnection: context.awsConnection,
+      codeBuildProjectName: existing.codeBuildProjectName,
+      codeBuildServiceRoleName: roleName,
+      codeBuildServiceRoleArn: existing.codeBuildServiceRoleArn,
+      permissionsBoundaryArn: existing.permissionsBoundaryArn
+    });
+    await repository.deleteByProjectId(input.projectId);
+  } catch (error) {
+    if (error instanceof ProjectBuildEnvironmentError) throw error;
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_DELETE_FAILED",
+      `AWS 빌드 환경을 삭제하지 못했습니다: ${safeAwsPreparationError(error)}`,
+      502
+    );
+  }
+}
+
+async function requirePreparationContext(
+  input: { projectId: string; userId: string },
+  repository: ProjectBuildEnvironmentRepository
+): Promise<RequiredPreparationContext> {
+  const context = await repository.findPreparationContext(input.projectId, input.userId);
+  if (!context) {
+    throw new ProjectBuildEnvironmentError("PROJECT_NOT_FOUND", "Project not found", 404);
+  }
+  if (!context.sourceRepository) {
+    throw new ProjectBuildEnvironmentError(
+      "SOURCE_REPOSITORY_REQUIRED",
+      "An active GitHub source repository is required"
+    );
+  }
+  if (!context.awsConnection) {
+    throw new ProjectBuildEnvironmentError(
+      "AWS_CONNECTION_REQUIRED",
+      "A verified AWS connection must be selected for this project"
+    );
+  }
+  if (
+    !context.codeConnection ||
+    context.codeConnection.status !== "AVAILABLE" ||
+    !context.codeConnection.connectionArn
+  ) {
+    throw new ProjectBuildEnvironmentError(
+      "CODECONNECTION_REQUIRED",
+      "The selected AWS connection needs an available GitHub CodeConnection"
+    );
+  }
+  if (!context.confirmedBuildConfig?.ecsWeb) {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_CONFIG_REQUIRED",
+      "A confirmed ECS web build configuration is required"
+    );
+  }
+  return context as RequiredPreparationContext;
+}
+
+type RequiredPreparationContext = ProjectBuildEnvironmentPreparationContext & {
+  sourceRepository: NonNullable<ProjectBuildEnvironmentPreparationContext["sourceRepository"]>;
+  awsConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["awsConnection"]>;
+  codeConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["codeConnection"]> & {
+    connectionArn: string;
+  };
+  confirmedBuildConfig: ConfirmedBuildConfig & {
+    ecsWeb: NonNullable<ConfirmedBuildConfig["ecsWeb"]>;
+  };
+};
+
+export function createDesiredProjectBuildEnvironment(
+  context: RequiredPreparationContext
+): DesiredProjectBuildEnvironment {
+  const projectSuffix = context.projectId.replaceAll("-", "").slice(0, 8).toLowerCase();
+  const codeBuildProjectName = `sketchcatch-${projectSuffix}-build`;
+  const codeBuildServiceRoleName = `SketchCatchCodeBuild-${projectSuffix}`;
+  const codeBuildServiceRoleArn = `arn:aws:iam::${context.awsConnection.accountId}:role/${codeBuildServiceRoleName}`;
+  const permissionsBoundaryArn = `arn:aws:iam::${context.awsConnection.accountId}:policy/${createCodeBuildPermissionsBoundaryName(context.awsConnection.id)}`;
+  const repositoryName = context.sourceRepository.name.replace(/\.git$/iu, "");
+  const sourceRepositoryUrl = `https://github.com/${context.sourceRepository.owner}/${repositoryName}.git`;
+  const fingerprintInput = {
+    projectId: context.projectId,
+    codeBuildProjectName,
+    codeBuildServiceRoleArn,
+    permissionsBoundaryArn,
+    sourceRepositoryUrl,
+    codeConnectionArn: context.codeConnection.connectionArn,
+    image: projectBuildImage,
+    computeType: projectBuildComputeType,
+    buildConfig: context.confirmedBuildConfig.ecsWeb
+  } as const;
+  const runtimeFingerprint = createHash("sha256")
+    .update(JSON.stringify(fingerprintInput))
+    .digest("hex");
+  return {
+    ...fingerprintInput,
+    awsConnection: context.awsConnection,
+    awsCodeConnectionId: context.codeConnection.id,
+    codeBuildServiceRoleName,
+    runtimeFingerprint
+  };
+}
+
+function toProjectBuildEnvironment(
+  record: ProjectBuildEnvironmentRecord
+): NonNullable<ProjectBuildEnvironmentResponse["buildEnvironment"]> {
+  return {
+    id: record.id,
+    projectId: record.projectId,
+    awsConnectionId: record.awsConnectionId,
+    awsCodeConnectionId: record.awsCodeConnectionId,
+    codeBuildProjectName: record.codeBuildProjectName,
+    codeBuildServiceRoleArn: record.codeBuildServiceRoleArn,
+    permissionsBoundaryArn: record.permissionsBoundaryArn,
+    sourceRepositoryUrl: record.sourceRepositoryUrl,
+    runtimeFingerprint: record.runtimeFingerprint,
+    status: record.status,
+    lastVerifiedAt: record.lastVerifiedAt?.toISOString() ?? null,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString()
+  };
+}

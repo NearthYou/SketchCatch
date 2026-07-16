@@ -134,6 +134,41 @@ local function manifestJson(value, deploymentId)
     }, payloadCount) and type(payload.trafficHostname) == 'string' and
       type(payload.loadBalancerDnsName) == 'string' and type(payload.loadBalancerArn) == 'string' and
       type(payload.targetGroupArn) == 'string' and validLogs and validCapacity
+  elseif adapter.kind == 'aws-live-observation' and adapter.version == 3 then
+    local payloadCount = payload.logGroupNames == nil and 16 or 17
+    local validLogs = payload.logGroupNames == nil
+    if type(payload.logGroupNames) == 'table' then
+      validLogs = #payload.logGroupNames <= 10
+      for index = 1, #payload.logGroupNames do
+        if type(payload.logGroupNames[index]) ~= 'string' or payload.logGroupNames[index] == '' then
+          validLogs = false
+        end
+      end
+    end
+    local capacity = payload.capacityTarget
+    local validCapacity = type(capacity) == 'table' and
+      capacity.kind == 'ecs_fargate' and exactObjectKeys(capacity, {
+        kind = true, clusterName = true, serviceName = true, maxCapacity = true
+      }, 4) and type(capacity.clusterName) == 'string' and
+      type(capacity.serviceName) == 'string' and type(capacity.maxCapacity) == 'number' and
+      capacity.maxCapacity > 0 and math.floor(capacity.maxCapacity) == capacity.maxCapacity
+    validAdapter = exactObjectKeys(payload, {
+      cloudFrontDistributionId = true, cloudFrontDomainName = true,
+      frontendBucketName = true, defaultOriginId = true, originAccessControlId = true,
+      apiOriginId = true, apiPathPattern = true, healthPathPattern = true,
+      frontendBucketPublicAccessBlocked = true, bucketPolicyAllowsCloudFrontRead = true,
+      topologyVerifiedAt = true, frontendState = true, loadBalancerDnsName = true,
+      loadBalancerArn = true, targetGroupArn = true, logGroupNames = true,
+      capacityTarget = true
+    }, payloadCount) and type(payload.cloudFrontDistributionId) == 'string' and
+      type(payload.cloudFrontDomainName) == 'string' and type(payload.frontendBucketName) == 'string' and
+      type(payload.defaultOriginId) == 'string' and type(payload.originAccessControlId) == 'string' and
+      type(payload.apiOriginId) == 'string' and payload.apiPathPattern == '/api/*' and
+      payload.healthPathPattern == '/health' and payload.frontendBucketPublicAccessBlocked == true and
+      payload.bucketPolicyAllowsCloudFrontRead == true and type(payload.topologyVerifiedAt) == 'string' and
+      (payload.frontendState == 'current' or payload.frontendState == 'may_be_previous') and
+      type(payload.loadBalancerDnsName) == 'string' and type(payload.loadBalancerArn) == 'string' and
+      type(payload.targetGroupArn) == 'string' and validLogs and validCapacity
   end
   return manifest.schemaVersion == 2 and manifest.provider == 'aws' and validAdapter and
     provenance.deploymentId == deploymentId and canonicalUuid(provenance.deploymentId) and

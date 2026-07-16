@@ -10,7 +10,10 @@ import * as databaseSchema from "./schema.js";
 import {
   architectures,
   awsConnectionStatusEnum,
+  awsCodeConnections,
   awsConnections,
+  applicationReleaseSteps,
+  applicationReleases,
   deploymentFailureStageEnum,
   deploymentLiveObservationManifests,
   deploymentLiveObservationManifestStatusEnum,
@@ -29,9 +32,12 @@ import {
   gitCicdPipelineRuns,
   gitCicdPipelineStages,
   gitCicdRepositoryProviderEnum,
+  projectBuildEnvironments,
   projectAssets,
   projectDrafts,
+  projectExecutionLeases,
   projects,
+  releaseCandidates,
   reverseEngineeringScanLogs,
   reverseEngineeringScanStatusEnum,
   reverseEngineeringScans,
@@ -116,6 +122,53 @@ test("Git/CI/CD monitoring migration safely backfills active repositories", () =
 test("deployment status enum uses a domain-specific database name", () => {
   assert.equal(deploymentStatusEnum.enumName, "deployment_status");
   assert(deploymentStatusEnum.enumValues.includes("DESTROYED"));
+  assert(deploymentStatusEnum.enumValues.includes("PARTIALLY_FAILED"));
+  assert(deploymentStatusEnum.enumValues.includes("PARTIALLY_CANCELED"));
+});
+
+test("GitHub CodeBuild release plane persists build, candidate, lease, and step evidence", () => {
+  assert(findColumn(getTableConfig(awsCodeConnections).columns, "connection_arn"));
+  assert(findColumn(getTableConfig(projectBuildEnvironments).columns, "permissions_boundary_arn"));
+  assert(findColumn(getTableConfig(projectExecutionLeases).columns, "fencing_version"));
+  assert(findColumn(getTableConfig(releaseCandidates).columns, "composite_digest"));
+  assert(findColumn(getTableConfig(applicationReleaseSteps).columns, "fencing_version"));
+  assert(findColumn(getTableConfig(gitCicdPipelineRuns).columns, "release_request_key"));
+  assert(findColumn(getTableConfig(gitCicdPipelineRuns).columns, "github_workflow_run_id"));
+  assert(findColumn(getTableConfig(gitCicdPipelineRuns).columns, "cancellation_requested_at"));
+
+  const deploymentConfig = getTableConfig(deployments);
+  assert(findColumn(deploymentConfig.columns, "aws_account_id_snapshot"));
+  assert(findColumn(deploymentConfig.columns, "aws_region_snapshot"));
+  assert(findColumn(deploymentConfig.columns, "aws_connection_name_snapshot"));
+  assert(findColumn(deploymentConfig.columns, "release_candidate_id"));
+  assert(findColumn(deploymentConfig.columns, "rollback_of_deployment_id"));
+  assert(findColumn(deploymentConfig.columns, "rollback_target_deployment_id"));
+
+  const releaseConfig = getTableConfig(applicationReleases);
+  assert(findColumn(releaseConfig.columns, "release_candidate_id"));
+  assert(findColumn(releaseConfig.columns, "composite_digest"));
+  assert(findColumn(releaseConfig.columns, "frontend_evidence"));
+  assert(findColumn(releaseConfig.columns, "failure_stage"));
+  assert(findColumn(releaseConfig.columns, "baseline_release_id"));
+});
+
+test("0044 release plane migration preserves history while disconnecting deleted AWS metadata", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0044_github_codebuild_release_plane.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /ADD VALUE IF NOT EXISTS 'PARTIALLY_FAILED'/);
+  assert.match(migration, /ADD VALUE IF NOT EXISTS 'PARTIALLY_CANCELED'/);
+  assert.match(migration, /CREATE TABLE "release_candidates"/);
+  assert.match(migration, /CREATE TABLE "project_execution_leases"/);
+  assert.match(migration, /ON DELETE set null/);
+  assert.match(migration, /ADD COLUMN "rollback_of_deployment_id" varchar\(36\)/);
+  assert.match(migration, /ADD COLUMN "rollback_target_deployment_id" varchar\(36\)/);
+  assert.match(migration, /UPDATE "deployments"[\s\S]+FROM "aws_connections"/);
+  assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM/i);
 });
 
 test("deployment failure stages use validate consistently with deployment log stages", () => {

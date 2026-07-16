@@ -17,6 +17,11 @@ import type {
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
+  createPostgresProjectExecutionLeaseRepository,
+  type LeaseFence,
+  type ProjectExecutionLeaseRepository
+} from "../releases/project-execution-lease-service.js";
+import {
   architectures,
   awsConnections,
   deploymentLogs,
@@ -24,15 +29,19 @@ import {
   deployedResources,
   deployments,
   projectDeploymentTargets,
+  projectBuildEnvironments,
   projectDrafts,
+  projectExecutionLeases,
   projectAssets,
   projects,
+  releaseCandidates,
   terraformOutputs,
   touchUpdatedAt
 } from "../db/schema.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   createPostgresDirectApplicationReleaseRepository,
+  type DirectApplicationOutputReconciliationRepository,
   type DirectApplicationReleaseRepository
 } from "./direct-application-release-service.js";
 
@@ -41,6 +50,7 @@ export type DeploymentLogRecord = typeof deploymentLogs.$inferSelect;
 export type DeploymentPlanArtifactRecord = typeof deploymentPlanArtifacts.$inferSelect;
 export type DeployedResourceRecord = typeof deployedResources.$inferSelect;
 export type TerraformOutputRecord = typeof terraformOutputs.$inferSelect;
+export type ReleaseCandidateRecord = typeof releaseCandidates.$inferSelect;
 
 export type ProjectAccessContext = {
   kind: "user";
@@ -59,6 +69,8 @@ export type CreateDeploymentInput = {
   source?: DeploymentSource | undefined;
   preparedDraftRevision?: number | null | undefined;
   preparedSnapshotHash?: string | null | undefined;
+  rollbackOfDeploymentId?: string | null | undefined;
+  rollbackTargetDeploymentId?: string | null | undefined;
 };
 
 export type CreateDeploymentRecordInput = {
@@ -67,12 +79,17 @@ export type CreateDeploymentRecordInput = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string;
+  awsAccountIdSnapshot: string | null;
+  awsRegionSnapshot: string;
+  awsConnectionNameSnapshot: string;
   liveProfile: DeploymentLiveProfile;
   scope: DeploymentScope;
   targetKind: RuntimeTargetKind | null;
   source: DeploymentSource;
   preparedDraftRevision: number | null;
   preparedSnapshotHash: string | null;
+  rollbackOfDeploymentId: string | null;
+  rollbackTargetDeploymentId: string | null;
   status: "PENDING";
 };
 
@@ -164,7 +181,7 @@ export type CreateTerraformOutputRecordInput = {
   sensitive: boolean;
 };
 
-export type CompleteDeploymentApplyInput = {
+export type SaveDeploymentApplyResultsInput = {
   stateObjectKey: string | null;
   resultWarningSummary: string | null;
   resources: CreateDeployedResourceRecordInput[];
@@ -194,6 +211,7 @@ export type RecoverInterruptedDeploymentsInput = {
 };
 
 export type DeploymentRepository = {
+  projectExecutionLeaseRepository?: ProjectExecutionLeaseRepository;
   findAccessibleProject(
     projectId: string,
     accessContext: ProjectAccessContext
@@ -219,6 +237,9 @@ export type DeploymentRepository = {
   findDeploymentPlanArtifactById(
     planArtifactId: string
   ): Promise<DeploymentPlanArtifactRecord | undefined>;
+  findReleaseCandidateById?(
+    candidateId: string
+  ): Promise<ReleaseCandidateRecord | undefined>;
   findRunningDeploymentInProject(projectId: string): Promise<DeploymentRecord | undefined>;
   findProjectDraftForPreparation?(
     projectId: string
@@ -248,6 +269,10 @@ export type DeploymentRepository = {
   markDeploymentPlanRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentApplyRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
   markDeploymentDestroyRunning(deploymentId: string): Promise<DeploymentRecord | undefined>;
+  markDeploymentActiveStage?(
+    deploymentId: string,
+    activeStage: DeploymentStage
+  ): Promise<DeploymentRecord | undefined>;
   markDeploymentInitSucceeded(deploymentId: string): Promise<DeploymentRecord | undefined>;
   updateDeploymentPlan(
     deploymentId: string,
@@ -263,9 +288,13 @@ export type DeploymentRepository = {
     deploymentId: string,
     input: ApproveDeploymentInput
   ): Promise<DeploymentRecord | undefined>;
+  saveDeploymentApplyResults(
+    deploymentId: string,
+    input: SaveDeploymentApplyResultsInput
+  ): Promise<DeploymentRecord | undefined>;
   completeDeploymentApply(
     deploymentId: string,
-    input: CompleteDeploymentApplyInput
+    input?: { leaseFence?: LeaseFence; fenceCheckedAt?: Date }
   ): Promise<DeploymentRecord | undefined>;
   completeDeploymentDestroy(
     deploymentId: string,
@@ -278,6 +307,8 @@ export type DeploymentRepository = {
       errorSummary: string;
       stateObjectKey?: string | null;
       resultWarningSummary?: string | null;
+      leaseFence?: LeaseFence;
+      fenceCheckedAt?: Date;
     }
   ): Promise<DeploymentRecord | undefined>;
   requestDeploymentCancellation(deploymentId: string): Promise<DeploymentRecord | undefined>;
@@ -285,6 +316,8 @@ export type DeploymentRepository = {
     deploymentId: string,
     input: {
       errorSummary: string;
+      leaseFence?: LeaseFence;
+      fenceCheckedAt?: Date;
     }
   ): Promise<DeploymentRecord | undefined>;
   recoverInterruptedDeployments(
@@ -302,7 +335,9 @@ export type DeploymentRepository = {
   ): Promise<DeploymentLogRecord[]>;
   listDeployedResources(deploymentId: string): Promise<DeployedResourceRecord[]>;
   listTerraformOutputs(deploymentId: string): Promise<TerraformOutputRecord[]>;
-} & Partial<DirectApplicationReleaseRepository>;
+} & Partial<
+    DirectApplicationReleaseRepository & DirectApplicationOutputReconciliationRepository
+  >;
 
 export class DeploymentNotFoundError extends Error {
   constructor(message: string) {
@@ -356,10 +391,38 @@ function createTerminalDeploymentValues(
   };
 }
 
+async function runWithOptionalDeploymentFence<T>(
+  db: Database,
+  fence: LeaseFence | undefined,
+  now: Date,
+  operation: (executor: Database) => Promise<T>
+): Promise<T> {
+  if (!fence) return operation(db);
+  return db.transaction(async (transaction) => {
+    const executor = transaction as unknown as Database;
+    const [lease] = await executor
+      .select({ projectId: projectExecutionLeases.projectId })
+      .from(projectExecutionLeases)
+      .where(
+        and(
+          eq(projectExecutionLeases.projectId, fence.projectId),
+          eq(projectExecutionLeases.holderId, fence.holderId),
+          eq(projectExecutionLeases.fencingVersion, fence.fencingVersion),
+          eq(projectExecutionLeases.status, "active"),
+          gt(projectExecutionLeases.expiresAt, now)
+        )
+      )
+      .for("update");
+    if (!lease) throw new DeploymentConflictError("Stale recovery cannot save Deployment state");
+    return operation(executor);
+  });
+}
+
 export function createPostgresDeploymentRepository(db: Database): DeploymentRepository {
   const directReleaseRepository = createPostgresDirectApplicationReleaseRepository(db);
   return {
     ...directReleaseRepository,
+    projectExecutionLeaseRepository: createPostgresProjectExecutionLeaseRepository(db),
     async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
         .select()
@@ -512,6 +575,31 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         .where(eq(deploymentPlanArtifacts.id, planArtifactId));
 
       return planArtifact;
+    },
+
+    async findReleaseCandidateById(candidateId) {
+      const [candidate] = await db
+        .select()
+        .from(releaseCandidates)
+        .where(eq(releaseCandidates.id, candidateId));
+      if (!candidate) return undefined;
+      const [buildEnvironment] = await db
+        .select({
+          id: projectBuildEnvironments.id,
+          runtimeFingerprint: projectBuildEnvironments.runtimeFingerprint,
+          status: projectBuildEnvironments.status
+        })
+        .from(projectBuildEnvironments)
+        .where(eq(projectBuildEnvironments.projectId, candidate.projectId));
+      if (
+        !buildEnvironment ||
+        buildEnvironment.id !== candidate.buildEnvironmentId ||
+        buildEnvironment.runtimeFingerprint !== candidate.configFingerprint ||
+        buildEnvironment.status !== "ready"
+      ) {
+        return undefined;
+      }
+      return candidate;
     },
 
     async findRunningDeploymentInProject(projectId) {
@@ -689,6 +777,15 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       }
     },
 
+    async markDeploymentActiveStage(deploymentId, activeStage) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({ activeStage, ...touchUpdatedAt })
+        .where(and(eq(deployments.id, deploymentId), eq(deployments.status, "RUNNING")))
+        .returning();
+      return deployment;
+    },
+
     async saveDeploymentPlan(input) {
       return db.transaction(async (tx) => {
         await tx.insert(deploymentPlanArtifacts).values(input.planArtifact);
@@ -753,7 +850,7 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
-    async completeDeploymentApply(deploymentId, input) {
+    async saveDeploymentApplyResults(deploymentId, input) {
       return db.transaction(async (tx) => {
         await tx.delete(deployedResources).where(eq(deployedResources.deploymentId, deploymentId));
         await tx.delete(terraformOutputs).where(eq(terraformOutputs.deploymentId, deploymentId));
@@ -769,21 +866,39 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
         const [deployment] = await tx
           .update(deployments)
           .set({
-            ...createTerminalDeploymentValues("SUCCESS"),
             stateObjectKey: input.stateObjectKey,
             resultWarningSummary: input.resultWarningSummary,
-            failureStage: null,
-            errorSummary: null
+            ...touchUpdatedAt
           })
           .where(eq(deployments.id, deploymentId))
           .returning();
 
         if (!deployment) {
-          throw new Error("Deployment apply could not be completed");
+          throw new Error("Deployment apply results could not be saved");
         }
 
         return deployment;
       });
+    },
+
+    async completeDeploymentApply(deploymentId, input = {}) {
+      return runWithOptionalDeploymentFence(
+        db,
+        input.leaseFence,
+        input.fenceCheckedAt ?? new Date(),
+        async (executor) => {
+          const [deployment] = await executor
+            .update(deployments)
+            .set({
+              ...createTerminalDeploymentValues("SUCCESS"),
+              failureStage: null,
+              errorSummary: null
+            })
+            .where(and(eq(deployments.id, deploymentId), eq(deployments.status, "RUNNING")))
+            .returning();
+          return deployment;
+        }
+      );
     },
 
     async completeDeploymentDestroy(deploymentId, input) {
@@ -814,18 +929,25 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async failDeployment(deploymentId, input) {
-      const [deployment] = await db
-        .update(deployments)
-        .set({
-          ...createTerminalDeploymentValues("FAILED"),
-          failedAt: sql`now()`,
-          ...input,
-          ...clearDeploymentApprovalFields
-        })
-        .where(eq(deployments.id, deploymentId))
-        .returning();
-
-      return deployment;
+      return runWithOptionalDeploymentFence(
+        db,
+        input.leaseFence,
+        input.fenceCheckedAt ?? new Date(),
+        async (executor) => {
+          const { leaseFence: _leaseFence, fenceCheckedAt: _fenceCheckedAt, ...values } = input;
+          const [deployment] = await executor
+            .update(deployments)
+            .set({
+              ...createTerminalDeploymentValues("FAILED"),
+              failedAt: sql`now()`,
+              ...values,
+              ...clearDeploymentApprovalFields
+            })
+            .where(eq(deployments.id, deploymentId))
+            .returning();
+          return deployment;
+        }
+      );
     },
 
     async requestDeploymentCancellation(deploymentId) {
@@ -842,19 +964,25 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
     },
 
     async cancelDeployment(deploymentId, input) {
-      const [deployment] = await db
-        .update(deployments)
-        .set({
-          ...createTerminalDeploymentValues("CANCELLED"),
-          cancelledAt: sql`now()`,
-          failureStage: null,
-          errorSummary: input.errorSummary,
-          ...clearDeploymentApprovalFields
-        })
-        .where(eq(deployments.id, deploymentId))
-        .returning();
-
-      return deployment;
+      return runWithOptionalDeploymentFence(
+        db,
+        input.leaseFence,
+        input.fenceCheckedAt ?? new Date(),
+        async (executor) => {
+          const [deployment] = await executor
+            .update(deployments)
+            .set({
+              ...createTerminalDeploymentValues("CANCELLED"),
+              cancelledAt: sql`now()`,
+              failureStage: null,
+              errorSummary: input.errorSummary,
+              ...clearDeploymentApprovalFields
+            })
+            .where(eq(deployments.id, deploymentId))
+            .returning();
+          return deployment;
+        }
+      );
     },
 
     async recoverInterruptedDeployments(input) {
@@ -998,12 +1126,18 @@ export async function createDeployment(
     architectureId: input.architectureId,
     terraformArtifactId: input.terraformArtifactId,
     awsConnectionId: awsConnection.id,
+    awsAccountIdSnapshot: awsConnection.accountId,
+    awsRegionSnapshot: awsConnection.region,
+    awsConnectionNameSnapshot:
+      awsConnection.accountId ?? awsConnection.roleArn ?? awsConnection.id,
     liveProfile: input.liveProfile ?? "practice",
     scope: input.scope ?? "infrastructure",
     targetKind: input.targetKind ?? null,
     source: input.source ?? "direct",
     preparedDraftRevision: input.preparedDraftRevision ?? null,
     preparedSnapshotHash: input.preparedSnapshotHash ?? null,
+    rollbackOfDeploymentId: input.rollbackOfDeploymentId ?? null,
+    rollbackTargetDeploymentId: input.rollbackTargetDeploymentId ?? null,
     status: "PENDING"
   });
 }

@@ -23,11 +23,19 @@ export function setupModalAccessibility({
   const previouslyFocusedElement =
     documentRoot.activeElement instanceof HTMLElement ? documentRoot.activeElement : null;
   const previousBodyOverflow = documentRoot.body.style.overflow;
-  const bodySiblingInertStates = Array.from(documentRoot.body.children)
-    .filter(
-      (element): element is HTMLElement => element instanceof HTMLElement && element !== overlay
-    )
-    .map((element) => ({ element, inert: element.inert }));
+  const bodySiblingInertStates: Array<{ element: HTMLElement; inert: boolean }> = [];
+  let modalBranch: HTMLElement = overlay;
+  let parent = modalBranch.parentElement;
+  while (parent) {
+    for (const sibling of Array.from(parent.children)) {
+      if (sibling instanceof HTMLElement && sibling !== modalBranch) {
+        bodySiblingInertStates.push({ element: sibling, inert: sibling.inert });
+      }
+    }
+    if (parent === documentRoot.body) break;
+    modalBranch = parent;
+    parent = parent.parentElement;
+  }
 
   bodySiblingInertStates.forEach(({ element }) => {
     element.inert = true;

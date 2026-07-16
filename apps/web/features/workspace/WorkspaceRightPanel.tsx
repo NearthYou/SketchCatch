@@ -42,6 +42,7 @@ import {
 import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
+import type { LiveObservationSelection } from "./live-observation";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
@@ -172,6 +173,8 @@ export function WorkspaceRightPanel({
   }, [deploymentOpenRequestId]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
+  const [liveObservationSelection, setLiveObservationSelection] =
+    useState<LiveObservationSelection | null>(null);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -497,7 +500,8 @@ export function WorkspaceRightPanel({
     setIsDeploymentConsoleOpen(true);
   }, [requestTerraformLeave]);
 
-  const openLiveObservation = useCallback((): void => {
+  const openLiveObservation = useCallback((selection?: LiveObservationSelection): void => {
+    setLiveObservationSelection(selection ?? null);
     setIsLiveObservationOpen(true);
   }, []);
 
@@ -793,8 +797,12 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
-      onClose={() => setIsLiveObservationOpen(false)}
+      onClose={() => {
+        setIsLiveObservationOpen(false);
+        setLiveObservationSelection(null);
+      }}
       projectId={projectId}
+      selection={liveObservationSelection}
     />
   ) : null;
   const terraformSplitStyle = {
@@ -844,7 +852,7 @@ export function WorkspaceRightPanel({
           </button>
           <button
             className={styles.collapsedPanelButton}
-            onClick={openLiveObservation}
+            onClick={() => openLiveObservation()}
             title="Live Observation"
             type="button"
           >
@@ -908,7 +916,7 @@ export function WorkspaceRightPanel({
           </div>
           <button
             className={styles.panelModeTextButton}
-            onClick={openLiveObservation}
+            onClick={() => openLiveObservation()}
             title="Live Observation"
             type="button"
           >

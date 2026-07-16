@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import type {
   GitCicdMonitoredPath,
   GitCicdPipelineChangeScope,
@@ -65,6 +65,7 @@ export type PipelineRefreshTarget = {
 export type PersistedPipelineRun = {
   id: string;
   projectId: string;
+  infrastructureDeploymentId: string | null;
   sourceRepositoryId: string;
   handoffId: string | null;
   commitSha: string;
@@ -242,6 +243,7 @@ export function createGitCicdPipelineRunService(options: {
     const run: PersistedPipelineRun = {
       id: runId,
       projectId: target.projectId,
+      infrastructureDeploymentId: null,
       sourceRepositoryId: target.sourceRepositoryId,
       handoffId: target.handoffId,
       commitSha: snapshot.commitSha,
@@ -607,7 +609,8 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
         .where(
           and(
             eq(gitCicdPipelineRuns.sourceRepositoryId, sourceRepositoryId),
-            inArray(gitCicdPipelineRuns.commitSha, [...commitShas])
+            inArray(gitCicdPipelineRuns.commitSha, [...commitShas]),
+            isNull(gitCicdPipelineRuns.releaseRequestKey)
           )
         );
       return new Map(runs.map((run) => [run.commitSha, run]));
@@ -620,6 +623,7 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
           .values(input.run)
           .onConflictDoUpdate({
             target: [gitCicdPipelineRuns.sourceRepositoryId, gitCicdPipelineRuns.commitSha],
+            targetWhere: isNull(gitCicdPipelineRuns.releaseRequestKey),
             set: {
               ...(input.run.handoffId === null
                 ? {}
@@ -658,7 +662,8 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
             .where(
               and(
                 eq(gitCicdPipelineRuns.sourceRepositoryId, input.run.sourceRepositoryId),
-                eq(gitCicdPipelineRuns.commitSha, input.run.commitSha)
+                eq(gitCicdPipelineRuns.commitSha, input.run.commitSha),
+                isNull(gitCicdPipelineRuns.releaseRequestKey)
               )
             );
           if (!persistedRun) throw new Error("Failed to read persisted Pipeline Run");

@@ -16,8 +16,10 @@ import type {
   ArchitectureSnapshot,
   ApproveDeploymentPlanRequest,
   AwsConnectionCloudFormationTemplateResponse,
+  AwsConnectionDeletionPreviewResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  AwsCodeConnectionResponse,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
   CostUsageAnalysisRange,
@@ -41,6 +43,7 @@ import type {
   CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
   DeleteProjectResponse,
+  DeleteAwsConnectionRequest,
   DesignSimulationResult,
   DeployedResource,
   Deployment,
@@ -66,6 +69,7 @@ import type {
   GitCicdPipelineRunListResponse,
   GitCicdPipelineRunRefreshResponse,
   GitCicdPipelineRunResponse,
+  GitCicdReleaseRunResponse,
   GitCicdRepositorySettingsApplyResponse,
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
@@ -86,6 +90,8 @@ import type {
   ProjectResponse,
   ProjectDeploymentTarget,
   ProjectDeploymentTargetResponse,
+  ProjectBuildEnvironment,
+  ProjectBuildEnvironmentResponse,
   PrepareDeploymentRequest,
   PutProjectDeploymentTargetRequest,
   RecommendRepositoryTemplateRequest,
@@ -731,11 +737,51 @@ export async function verifyAwsConnectionCreatedRole({
   );
 }
 
-export async function deleteAwsConnection(connectionId: string): Promise<void> {
+export async function getAwsConnectionDeletionPreview(
+  connectionId: string
+): Promise<AwsConnectionDeletionPreviewResponse> {
+  return apiFetch<AwsConnectionDeletionPreviewResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/deletion-preview`,
+    { auth: true }
+  );
+}
+
+export async function deleteAwsConnection(
+  connectionId: string,
+  input: DeleteAwsConnectionRequest
+): Promise<void> {
   await apiFetch<void>(`/aws/connections/${encodeURIComponent(connectionId)}`, {
     auth: true,
-    method: "DELETE"
+    method: "DELETE",
+    body: input
   });
+}
+
+export async function getAwsCodeConnection(
+  connectionId: string
+): Promise<AwsCodeConnectionResponse> {
+  return apiFetch<AwsCodeConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
+    { auth: true }
+  );
+}
+
+export async function createAwsCodeConnection(
+  connectionId: string
+): Promise<AwsCodeConnectionResponse> {
+  return apiFetch<AwsCodeConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
+    { auth: true, method: "POST" }
+  );
+}
+
+export async function refreshAwsCodeConnection(
+  connectionId: string
+): Promise<AwsCodeConnectionResponse> {
+  return apiFetch<AwsCodeConnectionResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection/refresh`,
+    { auth: true, method: "POST" }
+  );
 }
 
 export async function getAwsConnectionCloudFormationTemplate({
@@ -917,6 +963,32 @@ export async function prepareDeployment({
   );
 
   return response.deployment;
+}
+
+export async function getProjectBuildEnvironment(
+  projectId: string
+): Promise<ProjectBuildEnvironment | null> {
+  const response = await apiFetch<ProjectBuildEnvironmentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/build-environment`,
+    { auth: true }
+  );
+
+  return response.buildEnvironment;
+}
+
+export async function prepareProjectBuildEnvironment(
+  projectId: string
+): Promise<ProjectBuildEnvironment> {
+  const response = await apiFetch<ProjectBuildEnvironmentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/build-environment/prepare`,
+    { auth: true, method: "POST" }
+  );
+
+  if (!response.buildEnvironment) {
+    throw new Error("빌드 환경 준비 결과를 확인하지 못했습니다.");
+  }
+
+  return response.buildEnvironment;
 }
 
 export async function listDeployments(
@@ -1176,6 +1248,16 @@ export async function getGitCicdPipelineRun(pipelineRunId: string): Promise<GitC
     { auth: true }
   );
 
+  return response.run;
+}
+
+export async function retryGitCicdFrontendRelease(
+  pipelineRunId: string
+): Promise<GitCicdReleaseRunResponse["run"]> {
+  const response = await apiFetch<GitCicdReleaseRunResponse>(
+    `/git-cicd/release-runs/${encodeURIComponent(pipelineRunId)}/frontend/retry`,
+    { auth: true, method: "POST" }
+  );
   return response.run;
 }
 
@@ -1502,6 +1584,24 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   );
 
   return response.deployment;
+}
+
+export async function prepareInfrastructureRollback(
+  deploymentId: string
+): Promise<Deployment> {
+  const response = await apiFetch<DeploymentResponse>(
+    `/deployments/${encodeURIComponent(deploymentId)}/infrastructure-rollback`,
+    { auth: true, method: "POST" }
+  );
+
+  return response.deployment;
+}
+
+export async function retryDeploymentFrontend(deploymentId: string): Promise<void> {
+  await apiFetch<void>(
+    `/deployments/${encodeURIComponent(deploymentId)}/application-release/frontend/retry`,
+    { auth: true, method: "POST" }
+  );
 }
 
 export async function approveDeploymentPlan(

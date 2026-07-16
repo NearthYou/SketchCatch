@@ -831,6 +831,7 @@ API 경로:
 - `POST /api/aws/connections/:connectionId/test`
 - `POST /api/aws/connections/:connectionId/verify`
 - `POST /api/aws/connections/:connectionId/verify-created-role`
+- `GET /api/aws/connections/:connectionId/deletion-preview`
 - `DELETE /api/aws/connections/:connectionId`
 - `GET /api/aws/connections/:connectionId/cloudformation-template`
 
@@ -839,7 +840,17 @@ API 경로:
 connection ID로 이 ARN을 계산해 저장합니다. 기존에 저장됐거나 사용자가 직접 검증한
 `SketchCatchTerraformExecutionRole` 고정 이름 Role ARN은 하위 호환을 위해 계속 허용합니다.
 
-`DELETE /api/aws/connections/:connectionId`는 SketchCatch의 연결 metadata만 삭제한다. 사용자 AWS 계정에 생성된 IAM Role이나 CloudFormation Stack은 자동으로 삭제하지 않는다. `Deployment`가 참조 중인 연결은 삭제할 수 없고 `409 conflict`를 반환한다.
+`GET /api/aws/connections/:connectionId/deletion-preview`는 AWS를 변경하지 않고 RDS에 기록된 정리 대상을
+보여준다. 응답에는 SketchCatch가 만든 CodeBuild project, 그 전용 Service Role, CodeBuild log group,
+CodeConnection의 개수와 exact resource 집합에 묶인 `confirmationToken`이 포함된다.
+
+`DELETE /api/aws/connections/:connectionId`는 `confirmedManagedCleanup: true`와 방금 확인한
+`confirmationToken`을 필수로 받는다. 둘 중 하나가 없거나 대상 집합이 바뀌면 AWS API를 호출하지 않는다.
+확인이 유효할 때만 `ManagedBy=SketchCatch` ownership tag와 DB 좌표가 모두 일치하는 CodeBuild project,
+그 전용 Service Role과 log group, CodeConnection을 정리한 뒤 연결 metadata를 삭제한다. 사용자가 AWS 연결을
+위해 만든 CloudFormation Stack과 Terraform Execution Role은 자동으로 삭제하지 않는다. `Deployment`가 참조
+중인 연결은 삭제할 수 없고 `409 conflict`를 반환한다. cleanup 실패 claim과 오류 요약은 남겨 같은 미리보기와
+명시 확인 절차로 안전하게 재시도한다.
 
 `Deployment`는 이 연결을 `awsConnectionId`로 참조한다.
 
@@ -856,7 +867,7 @@ type RuntimeTargetKind = "ecs_fargate" | "lambda" | "ec2_asg" | "static_site";
 type ProjectDeploymentTarget = {
   projectId: string;
   provider: "aws";
-  connectionId: string;
+  connectionId: string | null;
   region: string;
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig | null;
@@ -869,10 +880,19 @@ type ProjectDeploymentTarget = {
 type EcsFargateRuntimeConfig = {
   runtimeTargetKind: "ecs_fargate";
   codeBuildProjectName: string;
+  buildEnvironmentId: string | null;
   ecrRepositoryName: string;
+  ecrRepositoryArn: string | null;
   clusterName: string;
   serviceName: string;
   containerName: string;
+  containerPort: number;
+  taskDefinitionFamily: string | null;
+  targetGroupArn: string | null;
+  apiOriginUrl: string | null;
+  frontendBucketName: string | null;
+  cloudFrontDistributionId: string | null;
+  cloudFrontDomainName: string | null;
   outputUrl: string | null;
 };
 
@@ -932,8 +952,11 @@ URL을 비민감 `runtimeConfig`로 저장한다. `0038_lambda_gitops_runtime.sq
 
 `ConfirmedBuildConfig`는 임의 shell command를 저장하지 않는다. repository-relative `sourceRoot`, evidence 종류와
 경로, 허용된 install/build preset, runtime별 artifact/entrypoint/health path, exact SemVer tag 또는 manifest
-version, 확인한 commit SHA와 시각만 저장한다. `null`은 migration으로 복원한 legacy target에만 허용하며,
-사용자가 PUT으로 저장하는 새 target은 확인된 build config가 필수다.
+version, 확인한 commit SHA와 시각만 저장한다. 웹 포함 ECS target의 `ecsWeb`은 API의 source root,
+Dockerfile, container port, health path와 frontend의 source/output, package manifest, lockfile, package manager
+version, install/build preset을 분리해 저장한다. 이 값 전체를 candidate config fingerprint에 포함한다. 기존
+runtime 필드는 Lambda·EC2·정적 사이트와 legacy ECS row를 읽기 위해 유지하지만, 새 웹 포함 ECS PUT은 완전한
+`ecsWeb.api`와 `ecsWeb.frontend`가 필수다.
 
 `runtimeConfig`는 provider adapter가 실제 런타임을 재조회하는 데 필요한 비밀이 아닌 좌표다. ECS/Fargate,
 Lambda, EC2/ASG, Static target은 각 adapter의 완전한 좌표가 필수다. `0037_ecs_gitops_runtime.sql`은 기존
@@ -941,17 +964,18 @@ row를 유지하기 위해 nullable JSONB로 추가했고, `0038_lambda_gitops_r
 `0039_ec2_asg_gitops_runtime.sql`, `0040_static_gitops_runtime.sql`이 discriminator를 순차 확장한다.
 새 PUT은 service validation에서 선택한 runtime과 일치하는 완전한 값을 요구한다.
 
-ECS Fargate target은 Board 생성 전에 실제 entry URL이 아직 없을 수 있으므로 `outputUrl: null`을 저장할 수 있다. 이때도 CodeBuild, ECR, cluster, service, container 좌표와 확정된 Dockerfile/commit SHA는 필수다. Direct application release 준비와 GitOps workflow/settings 생성은 안전한 HTTPS `outputUrl`이 없으면 `DEPLOYMENT_OUTPUT_URL_REQUIRED`로 중단하며 빈 환경 변수를 배포 입력으로 넘기지 않는다.
+ECS Fargate target은 Board 생성 전에 실제 entry URL이 아직 없을 수 있으므로 `outputUrl: null`을 저장할 수 있다. 이때도 CodeBuild, ECR, cluster, service, container 좌표와 확정된 Dockerfile/commit SHA는 필수다. `application` scope의 Direct release 준비와 GitOps workflow/settings 생성은 안전한 HTTPS `outputUrl`이 없으면 `DEPLOYMENT_OUTPUT_URL_REQUIRED`로 중단하며 빈 환경 변수를 배포 입력으로 넘기지 않는다. `full_stack` ECS는 URL이 없는 상태에서도 immutable artifact를 준비할 수 있다. 승인된 Terraform Apply 뒤 비민감 `api_base_url` HTTPS output과 준비 시점의 runtime 좌표 fingerprint가 모두 유효할 때만 같은 target row에 URL을 저장하고 runtime release를 시작한다.
 
 API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Direct와 GitOps는 같은 target row를
 읽으며 환경별 복제, EKS, 임의 rollout 전략은 이 계약에 포함하지 않는다.
 
 ### Direct application release 실행 계약
 
-모든 runtime target은 SketchCatch가 관리하는 격리된 `codeBuildProjectName`을 가진다. 이 project는 확인된
-commit만 checkout하고 `prepare`, `deploy` phase에서 immutable artifact와 release evidence를 export한다.
-ECS/Fargate는 SketchCatch가 고정한 buildspec override를 사용하고, Lambda, EC2/ASG, Static은 같은 export
-계약을 구현한 내부 build plane project를 사용한다. 사용자 임의 shell 문자열은 저장하거나 실행하지 않는다.
+웹 포함 ECS target은 SketchCatch가 관리하는 격리된 `ProjectBuildEnvironment`를 가진다. CodeBuild project는
+확인된 commit만 checkout하고 API OCI archive, frontend archive, 파일별 SHA-256 manifest를 만든 뒤 SketchCatch
+내부 Artifact S3의 `ReleaseCandidate` prefix에 업로드한다. CodeBuild는 ECR, ECS, 서비스 S3, CloudFront를
+변경하지 않는다. 실제 release activation은 SketchCatch trusted worker가 수행한다. Lambda, EC2/ASG, Static의
+기존 runtime adapter는 이 ECS 전용 전환과 별도로 호환한다. 사용자 임의 shell 문자열은 저장하거나 실행하지 않는다.
 Direct build를 시작하기 전에 active GitHub Source Repository의 owner/name과 CodeBuild project의 `GITHUB` source
 URL을 비교하고, source auth가 `CODECONNECTIONS`인지 확인한다. 다른 저장소, OAuth source, inactive installation은
 build 시작 전에 차단한다.
@@ -960,9 +984,9 @@ scope별 실행 의미는 다음과 같다.
 
 - `infrastructure`: Terraform Plan 승인 후 Terraform Apply/Destroy를 실행한다.
 - `application`: immutable artifact와 artifact approval manifest를 준비한 후 runtime release만 실행한다. Terraform init/plan/apply는 실행하지 않는다.
-- `full_stack`: immutable artifact를 먼저 준비하고 Terraform Plan을 승인한다. 실행 시 Terraform Apply와 output/state 저장을 완료한 뒤 준비된 artifact를 runtime에 release한다.
+- `full_stack`: immutable artifact를 먼저 준비하고 Terraform Plan을 승인한다. 실행 시 Terraform Apply와 output/state/resource inventory를 먼저 저장하고, 안전한 `api_base_url`을 ECS target에 연결한 뒤 준비된 artifact를 runtime에 release한다. output 누락·민감값·HTTP URL·좌표 변경·기존 URL 충돌은 release 전에 실패로 기록하며 이미 저장한 Terraform 결과는 보존한다.
 
-Direct runtime 성공은 CodeBuild 결과만 신뢰하지 않는다. ECS, Lambda, CodeDeploy/S3/ASG, S3/CloudFront adapter가
+Direct runtime 성공은 build 결과만 신뢰하지 않는다. ECS, Lambda, CodeDeploy/S3/ASG, S3/CloudFront adapter가
 AWS 상태를 다시 조회해 commit, digest, provider revision, HTTPS Output URL과 health가 모두 일치할 때만 성공을
 기록한다. provider metadata에는 CodeBuild build revision과 이전 정상 runtime revision을 함께 남겨 rollback과
 cleanup 기준을 고정한다.
@@ -991,12 +1015,19 @@ type ApplicationRelease = {
   commitSha: string;
   artifactDigestAlgorithm: "sha256";
   artifactDigest: string;
+  releaseCandidateId: string | null;
+  compositeDigest: CompositeReleaseDigest | null;
   providerRevision: ApplicationReleaseProviderRevision | null;
+  frontendEvidence: FrontendReleaseEvidence | null;
+  failureStage: ApplicationReleaseFailureStage | null;
+  baselineReleaseId: string | null;
   outputUrl: string | null;
   status:
     | "pending"
     | "building"
     | "deploying"
+    | "partially_failed"
+    | "partially_cancelled"
     | "succeeded"
     | "failed"
     | "rolled_back"
@@ -1010,10 +1041,57 @@ type ApplicationRelease = {
 };
 ```
 
-release version은 exact SemVer tag, manifest version, `sha-<commit 앞 12자리>` 순으로 결정한다. artifact는
-SHA-256 digest로 식별한다. `providerRevision`은 provider, resource type, revision ID, artifact reference,
+release version은 exact SemVer tag, manifest version, `sha-<commit 앞 12자리>` 순으로 결정한다. 웹 포함 ECS
+artifact는 API OCI SHA-256과 frontend 파일 manifest SHA-256을 묶은 canonical composite SHA-256으로 식별한다.
+frontend evidence에는 manifest URI/VersionId, `index.html` VersionId, CloudFront invalidation ID와 commit marker를
+저장한다. `providerRevision`은 provider, resource type, revision ID, artifact reference,
 비민감 metadata를 담고 canonical fingerprint 비교로 실제 provider revision drift를 판정한다. 실제 artifact와
 release evidence는 S3에 두며 RDS에는 식별자, 상태, 검증 결과만 저장한다.
+
+## AwsCodeConnection, ProjectBuildEnvironment, ReleaseCandidate, ProjectExecutionLease
+
+`AwsCodeConnection`은 verified AWS connection 안에 생성한 GitHub CodeConnections 연결 metadata다. GitHub
+Repository를 고르는 별도 사용자 입력을 받지 않고 active `SourceRepository`와 연결한다. AWS가 `AVAILABLE`로
+확인한 connection만 build environment에서 사용할 수 있다.
+
+생성은 AWS API보다 먼저 RDS에 `CREATING` row를 예약한다. 같은 AWS connection의 동시 요청은 이 row를 보고
+AWS Resource를 하나만 만들며, API가 AWS 생성 뒤 중단되면 결정적 이름과 `ManagedBy=SketchCatch`,
+`SketchCatchAwsConnection=<id>` tag가 모두 맞는 connection만 다시 채택한다. `connectionArn`은 이 예약 단계에서
+`null`일 수 있고, 상태는 `CREATING | PENDING | AVAILABLE | ERROR | DELETING` 중 하나다. 외부에서 만든
+CodeConnections나 이름만 같은 Resource는 채택하지 않는다.
+
+`ProjectBuildEnvironment`는 Repository가 제공된 프로젝트에만 lazy create하는 CodeBuild project와 build-only
+service role이다. service role에는 permissions boundary를 붙이고 Repository checkout, CloudWatch Logs,
+SketchCatch가 발급한 presigned multipart upload 외에는 cloud mutation 권한을 주지 않는다. project, role,
+source URL, CodeConnection, build image와 compute 설정의 canonical fingerprint를 RDS에 저장한다.
+
+`ReleaseCandidate`는 preflight에서 한 번 만든 API OCI archive와 frontend archive의 immutable 묶음이다. 대용량
+파일은 SketchCatch 내부 Artifact S3의 `deployments/<deployment-or-run-id>/release-candidates/<candidateId>/` 아래에 두고 RDS에는 object
+key, byte size, SHA-256, composite digest, 상태와 retention 시간만 저장한다. 승인 전 candidate는 생성 시점부터
+24시간 보존한다. frontend 부분 실패는 frontend archive retention을 실패 시점부터 24시간 연장한다. release
+성공 뒤 대용량 archive는 삭제할 수 있지만 manifest, digest와 release evidence는 유지한다.
+
+`ProjectExecutionLease`는 Direct와 GitOps 중 하나만 프로젝트 release를 실행하게 하는 DB lock이다. acquire할
+때마다 증가하는 `fencingVersion`, holder, source, active CodeBuild ID, active worker task ARN, heartbeat와 만료
+시각을 저장한다. 모든 AWS mutation과 결과 저장은 현재 holder/fencing version을 다시 확인한다. lease 상실 시
+API는 CodeBuild `StopBuild` 또는 worker `StopTask`를 요청하고 terminal 상태를 확인한다. application mutation이
+시작된 실행은 API process에서 직접 복구하지 않고 `recover_application_release` worker를 dispatch해 durable step과
+AWS 상태를 재검증하며, 복구 terminal 기록이 완료된 뒤에만 lease를 해제한다. release가 끝나도 row는
+`released`로 남겨 다음 acquire가 기존 generation에서 증가하도록 한다.
+
+프로젝트와 AWS connection에는 각각 nullable `deletionStartedAt` claim이 있다. 삭제 transaction이 project 또는
+connection row를 잠그고 claim을 기록한 뒤에만 외부 managed Resource cleanup을 시작한다. AWS connection 삭제는
+AWS를 변경하지 않는 deletion preview와 exact resource fingerprint 확인을 먼저 통과해야 한다. 새 Deployment,
+build-environment prepare, Direct/GitOps lease acquire는 claim이 있는 대상을 거부한다. cleanup 실패 시 claim을
+오류 요약과 함께 보존해 재시도할 수 있고, 성공 시 마지막 transaction에서 blocker를 다시 확인한 뒤 metadata를
+삭제한다.
+
+GitOps frontend 부분 실패 재시도는
+`POST /api/git-cicd/release-runs/:runId/frontend/retry`를 사용한다. project owner만 호출할 수 있고,
+`ApplicationRelease.status=partially_failed`, frontend failure stage, 만료되지 않은 동일 `ReleaseCandidate`를
+transaction에서 확인한 뒤 pipeline run을 다시 `queued`로 만든다. 재시도 worker는 API image build, ECR publish,
+Task Definition 등록, ECS update를 실행하지 않고 frontend archive checksum 검증과 S3/CloudFront 단계만 수행한다.
+API 재시작으로 queued retry가 복구될 때도 worker mode는 `retry_frontend`로 유지한다.
 
 ## Deployment
 
@@ -1026,11 +1104,17 @@ type Deployment = {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  awsAccountIdSnapshot: string | null;
+  awsRegionSnapshot: string | null;
+  awsConnectionNameSnapshot: string | null;
   liveProfile: "practice" | "demo_web_service" | "demo_web_service_with_rds";
   scope: "infrastructure" | "application" | "full_stack";
   targetKind: RuntimeTargetKind | null;
   source: "direct" | "gitops";
   releaseId: string | null;
+  releaseCandidateId: string | null;
+  rollbackOfDeploymentId: string | null;
+  rollbackTargetDeploymentId: string | null;
   consolePhase: "validation" | "approval" | "deployment";
   preparedDraftRevision: number | null;
   preparedSnapshotHash: string | null;
@@ -1039,20 +1123,41 @@ type Deployment = {
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
   resultWarningSummary: string | null;
-  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED" | "DESTROYED";
-  activeStage: "init" | "validate" | "plan" | "apply" | "destroy" | null;
+  status:
+    | "PENDING"
+    | "RUNNING"
+    | "SUCCESS"
+    | "PARTIALLY_FAILED"
+    | "PARTIALLY_CANCELED"
+    | "FAILED"
+    | "CANCELLED"
+    | "DESTROYED";
+  activeStage:
+    | "init"
+    | "preflight"
+    | "validate"
+    | "plan"
+    | "apply"
+    | "application_release"
+    | "rollback"
+    | "destroy"
+    | null;
   planSummary: DeploymentPlanSummary | null;
   isBlocked: boolean;
   blockedBy: "risk_analysis" | "cost_analysis" | "missing_approval" | null;
   blockedReason: string | null;
   failureStage:
     | "init"
+    | "build_environment"
+    | "preflight"
     | "validate"
     | "plan"
     | "approval"
     | "aws_connection"
     | "mock_run"
     | "apply"
+    | "application_release"
+    | "rollback"
     | "destroy"
     | null;
   errorSummary: string | null;
@@ -1895,7 +2000,8 @@ type LiveObservationSession = {
 
 public token은 256-bit base64url로 만들고 SHA-256 lookup key만 Runtime Cache key에 사용한다. token 원문은 독립 response 필드, RDS, 로그, `localStorage`에 저장하지 않고 `audienceUrl` query 안에서만 전달한다.
 
-`LiveObservationSnapshot`은 즉시 수집한 `live`, 지연된 CloudWatch 실측 `cloudWatch`, ASG/EC2 실제 상태 `capacity`를 분리한다.
+`LiveObservationSnapshot`은 즉시 수집한 `live`, 지연된 CloudWatch 실측 `cloudWatch`, ASG/EC2 또는
+ECS/Fargate 실제 상태 `capacity`를 분리한다.
 
 ```ts
 type LiveObservationSnapshot = {

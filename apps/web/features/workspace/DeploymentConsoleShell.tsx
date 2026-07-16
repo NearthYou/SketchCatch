@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
 import { DirectDeploymentScreen, type DirectDeploymentScreenProps } from "./DirectDeploymentScreen";
+import type { LiveObservationSelection } from "./live-observation";
 import styles from "./workspace.module.css";
 
 export type DeploymentConsoleScreen = "deployment" | "cicd";
@@ -12,7 +13,7 @@ export type DeploymentConsoleShellProps = DirectDeploymentScreenProps & {
   readonly initialExpanded?: boolean | undefined;
   readonly onActiveScreenChange?: ((screen: DeploymentConsoleScreen) => void) | undefined;
   readonly onExpandedClose?: (() => void) | undefined;
-  readonly onOpenLiveObservation?: (() => void) | undefined;
+  readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
   readonly projectName: string;
 };
 
@@ -120,6 +121,7 @@ export function DeploymentConsoleShell({
           onConfirmationStateChange={(isOpen) => {
             confirmationOpenRef.current = isOpen;
           }}
+          onOpenLiveObservation={onOpenLiveObservation}
         />
       </div>
       <div hidden={activeScreen !== "cicd"}>

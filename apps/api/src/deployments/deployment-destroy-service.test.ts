@@ -24,6 +24,10 @@ import type {
   TerraformOutputRecord
 } from "./deployment-service.js";
 import type { TerraformRunResult } from "./terraform-runner.js";
+import type {
+  ProjectExecutionLeaseRecord,
+  ProjectExecutionLeaseRepository
+} from "../releases/project-execution-lease-service.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -41,6 +45,8 @@ const stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
 const expectedTerraformMutationTimeoutMs = 15 * 60 * 1_000;
 
 class FakeDeploymentRepository implements DeploymentRepository {
+  projectExecutionLeaseRepository?: ProjectExecutionLeaseRepository;
+  readonly lifecycleEvents: string[] = [];
   project: ProjectRecord | undefined = createProjectRecord();
   deployment: DeploymentRecord | undefined = createApprovedDestroyDeploymentRecord();
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
@@ -163,6 +169,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   approveDeployment: DeploymentRepository["approveDeployment"] = async () => this.deployment;
 
+  saveDeploymentApplyResults: DeploymentRepository["saveDeploymentApplyResults"] = async () =>
+    this.deployment;
+
   completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async () =>
     this.deployment;
 
@@ -170,6 +179,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     candidateDeploymentId,
     input
   ) => {
+    this.lifecycleEvents.push("terminal-save");
     this.completedDestroyInput = input;
 
     if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
@@ -291,6 +301,9 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
 
 test("runDeploymentDestroy retries an approved cleanup after plan failure and clears results", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.projectExecutionLeaseRepository = createTrackingLeaseRepository(
+    repository.lifecycleEvents
+  );
   repository.deployment = createApprovedDestroyDeploymentRecord({
     status: "FAILED",
     failureStage: "plan",
@@ -304,7 +317,8 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
   const result = await runDeploymentDestroy(
     {
       deploymentId,
-      accessContext: createAccessContext()
+      accessContext: createAccessContext(),
+      workerTaskArn: "arn:aws:ecs:region:account:task/destroy-worker"
     },
     repository,
     {
@@ -331,6 +345,7 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
         assert.ok(options);
         assert.equal(options.timeoutMs, expectedTerraformMutationTimeoutMs);
         runnerStages.push("destroy");
+        repository.lifecycleEvents.push("terraform-destroy");
         return createRunnerResult("apply", {
           stdout: "aws_instance.web: Destruction complete\n"
         });
@@ -339,6 +354,13 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
   );
 
   assert.deepEqual(runnerStages, ["init", "destroy"]);
+  assert.deepEqual(repository.lifecycleEvents, [
+    "lease-acquire:destroy:44444444-4444-4444-8444-444444444444",
+    "lease-worker:arn:aws:ecs:region:account:task/destroy-worker",
+    "terraform-destroy",
+    "terminal-save",
+    "lease-release:destroy:44444444-4444-4444-8444-444444444444"
+  ]);
   assert.equal(applyArtifactStorage.downloadedPlanObjectKey, createDestroyPlanArtifactRecord().objectKey);
   assert.equal(applyArtifactStorage.downloadedStateObjectKey, stateObjectKey);
   assert.equal(writtenState?.filePath.endsWith("terraform.tfstate"), true);
@@ -375,6 +397,9 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
 
 test("application cleanup restores its release without Terraform state or destroy apply", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.projectExecutionLeaseRepository = createTrackingLeaseRepository(
+    repository.lifecycleEvents
+  );
   const applicationPlanBuffer = Buffer.from(JSON.stringify({
     schemaVersion: 1,
     kind: "application_release_cleanup_plan",
@@ -394,7 +419,11 @@ test("application cleanup restores its release without Terraform state or destro
   let cleanupCalls = 0;
 
   const result = await runDeploymentDestroy(
-    { deploymentId, accessContext: createAccessContext() },
+    {
+      deploymentId,
+      accessContext: createAccessContext(),
+      workerTaskArn: "arn:aws:ecs:region:account:task/application-cleanup-worker"
+    },
     repository,
     {
       applyArtifactStorage: new FakeApplyArtifactStorage(applicationPlanBuffer),
@@ -405,13 +434,15 @@ test("application cleanup restores its release without Terraform state or destro
         terraformFiles: [],
         cleanup: async () => undefined
       }),
-      executeApplicationCleanup: async ({ cleanupPlan }) => {
+      executeApplicationCleanup: async ({ cleanupPlan, retainProjectLease }) => {
         assert.deepEqual(cleanupPlan, {
           releaseId: "88888888-8888-4888-8888-888888888888",
           runtimeTargetKind: "ecs_fargate",
           currentRevision: "task-definition/api:42",
           previousRevision: "task-definition/api:41"
         });
+        assert.equal(retainProjectLease, true);
+        repository.lifecycleEvents.push("application-rollback");
         cleanupCalls += 1;
       },
       runTerraformInit: async () => {
@@ -424,6 +455,13 @@ test("application cleanup restores its release without Terraform state or destro
   );
 
   assert.equal(cleanupCalls, 1);
+  assert.deepEqual(repository.lifecycleEvents, [
+    "lease-acquire:88888888-8888-4888-8888-888888888888",
+    "lease-worker:arn:aws:ecs:region:account:task/application-cleanup-worker",
+    "application-rollback",
+    "terminal-save",
+    "lease-release:88888888-8888-4888-8888-888888888888"
+  ]);
   assert.equal(result.deployment.status, "DESTROYED");
   assert.equal(result.terraform.init, null);
   assert.equal(result.terraform.destroy, null);
@@ -488,11 +526,17 @@ function createApprovedDestroyDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
     liveProfile: "practice",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
@@ -557,6 +601,8 @@ function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRec
     userId,
     name: "Test Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides
@@ -648,4 +694,53 @@ function createLogRecord(input: CreateDeploymentLogRecordInput): DeploymentLogRe
 
 function createSha256(value: Buffer | Uint8Array | string): string {
   return createHash("sha256").update(Buffer.from(value)).digest("hex");
+}
+
+function createTrackingLeaseRepository(events: string[]): ProjectExecutionLeaseRepository {
+  let record: ProjectExecutionLeaseRecord | undefined;
+  return {
+    async acquire(input) {
+      record = {
+        projectId: input.projectId,
+        holderId: input.holderId,
+        source: input.source,
+        fencingVersion: (record?.fencingVersion ?? 0) + 1,
+        status: "active",
+        activeCodeBuildId: null,
+        activeWorkerTaskArn: null,
+        heartbeatAt: input.now,
+        expiresAt: input.expiresAt,
+        createdAt: record?.createdAt ?? input.now,
+        updatedAt: input.now
+      };
+      events.push(`lease-acquire:${input.holderId}`);
+      return record;
+    },
+    async find() {
+      return record;
+    },
+    async heartbeat() {
+      return record;
+    },
+    async setExecutionCoordinates(input) {
+      if (record && input.activeWorkerTaskArn) {
+        record = { ...record, activeWorkerTaskArn: input.activeWorkerTaskArn };
+        events.push(`lease-worker:${input.activeWorkerTaskArn}`);
+      }
+      return record;
+    },
+    async release(input) {
+      if (
+        !record ||
+        record.status !== "active" ||
+        record.holderId !== input.holderId ||
+        record.fencingVersion !== input.fencingVersion
+      ) {
+        return false;
+      }
+      events.push(`lease-release:${record.holderId}`);
+      record = { ...record, status: "released", expiresAt: input.now, updatedAt: input.now };
+      return true;
+    }
+  };
 }

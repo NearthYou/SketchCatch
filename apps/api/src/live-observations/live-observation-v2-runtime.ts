@@ -9,12 +9,17 @@ import {
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
 import type { RuntimeCache } from "../runtime-cache/index.js";
+import {
+  createAwsCloudFrontLiveObservationTopologyVerifier,
+  type CloudFrontLiveObservationTopologyVerifier
+} from "./aws-cloudfront-live-observation-topology-verifier.js";
 import { createAwsLiveObservationSnapshotProvider } from "./aws-live-observation-snapshot-provider.js";
 import { createInMemoryLiveObservationStore } from "./in-memory-live-observation-store.js";
 import { createLiveObservationCapability, type LiveObservationCapabilityKeyring } from "./live-observation-capability.js";
 import {
   assertDeploymentLiveObservationManifestReusable,
-  materializeDeploymentLiveObservationManifest
+  materializeDeploymentLiveObservationManifest,
+  type VerifiedCloudFrontLiveObservationTopology
 } from "./live-observation-manifest-materializer.js";
 import {
   createPostgresDeploymentLiveObservationManifestRepository,
@@ -57,11 +62,14 @@ export function createLiveObservationV2Runtime(options: {
   readonly keyring: LiveObservationCapabilityKeyring;
   readonly runtimeCache: RuntimeCache;
   readonly runtimeEnv: RuntimeEnv;
+  readonly topologyVerifier?: CloudFrontLiveObservationTopologyVerifier | undefined;
 }): LiveObservationV2Runtime {
   const audienceBaseUrl = requireAudienceBaseUrl(options.runtimeEnv);
   const capability = createLiveObservationCapability({ keyring: options.keyring });
   const store = createStore(options.runtimeEnv);
   const manifestRepository = createLazyManifestRepository(options.getDatabaseClient);
+  const topologyVerifier =
+    options.topologyVerifier ?? createAwsCloudFrontLiveObservationTopologyVerifier();
   const liveObservationService = createLiveObservationV2Service({
     audienceBaseUrl,
     capabilityKid: capability.currentKid,
@@ -108,7 +116,7 @@ export function createLiveObservationV2Runtime(options: {
             context.accessContext
           ) ?? null
         : null;
-      if (context.deployment.status !== "SUCCESS" || !connection) {
+      if (!isLiveObservationEligibleDeploymentStatus(context.deployment.status) || !connection) {
         throw new LiveObservationV2ServiceError(
           "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
         );
@@ -140,12 +148,45 @@ export function createLiveObservationV2Runtime(options: {
           .map((output) => [output.name, output.value])
       );
 
+      let topology: VerifiedCloudFrontLiveObservationTopology | undefined;
+      if (typeof outputs["cloudfront_distribution_id"] === "string") {
+        try {
+          topology = await topologyVerifier.verify({
+            connection,
+            expected: {
+              accountId: requireString(connection.accountId),
+              region: connection.region,
+              cloudFrontDistributionId: requireOutputString(
+                outputs,
+                "cloudfront_distribution_id"
+              ),
+              cloudFrontDomainName: requireOutputString(outputs, "cloudfront_domain_name"),
+              frontendBucketName: requireOutputString(outputs, "static_bucket_name"),
+              loadBalancerArn: requireOutputString(outputs, "alb_arn"),
+              loadBalancerDnsName: requireOutputString(outputs, "alb_dns_name"),
+              targetGroupArn: requireOutputString(outputs, "target_group_arn"),
+              clusterName: requireOutputString(outputs, "ecs_cluster_name"),
+              serviceName: requireOutputString(outputs, "ecs_service_name")
+            }
+          });
+        } catch {
+          await repository.saveInvalid({
+            deploymentId,
+            reason: "cloudfront topology verification failed"
+          });
+          throw new LiveObservationV2ServiceError(
+            "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
+          );
+        }
+      }
+
       await materializeDeploymentLiveObservationManifest(
         {
           audienceBaseUrl,
           deployment: context.deployment,
           connection,
-          outputs
+          outputs,
+          topology
         },
         repository
       );
@@ -168,6 +209,26 @@ export function createLiveObservationV2Runtime(options: {
       });
     }
   };
+}
+
+function isLiveObservationEligibleDeploymentStatus(status: string): boolean {
+  return status === "SUCCESS" || status === "PARTIALLY_FAILED" || status === "PARTIALLY_CANCELED";
+}
+
+function requireOutputString(
+  outputs: Readonly<Record<string, unknown>>,
+  name: string
+): string {
+  const value = outputs[name];
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Missing ${name}`);
+  }
+  return value.trim();
+}
+
+function requireString(value: string | null): string {
+  if (!value) throw new Error("Missing verified AWS account ID");
+  return value;
 }
 
 function createStore(env: RuntimeEnv): LiveObservationStore {

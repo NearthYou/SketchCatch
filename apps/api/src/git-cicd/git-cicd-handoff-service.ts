@@ -474,6 +474,7 @@ export function createGitHubGitCicdHandoffProvider(
             },
             ...createGitCicdAutomationFiles({
               handoffId: input.handoffId,
+              projectId: input.projectId,
               projectSlug: input.projectSlug,
               repositoryOwner: input.sourceRepository.owner,
               repositoryName: input.sourceRepository.name,
@@ -489,6 +490,7 @@ export function createGitHubGitCicdHandoffProvider(
               rdsEnabled: input.rdsEnabled,
               staticSiteUrl: input.staticSiteUrl,
               apiBaseUrl: input.apiBaseUrl,
+              sketchCatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL ?? null,
               runtimeTargetKind: input.runtimeTargetKind,
               confirmedBuildConfig: input.confirmedBuildConfig,
               runtimeConfig: input.runtimeConfig

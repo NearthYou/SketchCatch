@@ -42,7 +42,7 @@ export function createLiveObservationV2Service(options: {
       if (
         record?.status !== "valid" ||
         !record.manifest ||
-        record.manifest.adapter.version !== 2
+        (record.manifest.adapter.version !== 2 && record.manifest.adapter.version !== 3)
       ) {
         throw serviceError("LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE");
       }

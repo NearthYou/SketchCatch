@@ -21,6 +21,14 @@ test("deployment statuses use Korean labels and semantic tones", () => {
   assert.equal(getDeploymentStatusPresentation("PENDING").label, "대기 중");
   assert.equal(getDeploymentStatusPresentation("CANCELLED").label, "취소됨");
   assert.equal(getDeploymentStatusPresentation("DESTROYED").label, "정리 완료");
+  assert.deepEqual(getDeploymentStatusPresentation("PARTIALLY_FAILED"), {
+    label: "부분 실패",
+    tone: "error"
+  });
+  assert.deepEqual(getDeploymentStatusPresentation("PARTIALLY_CANCELED"), {
+    label: "부분 취소",
+    tone: "neutral"
+  });
 });
 
 test("a failed unapproved run is presented as a validation result", () => {

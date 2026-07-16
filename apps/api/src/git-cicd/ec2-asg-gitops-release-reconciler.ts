@@ -166,6 +166,8 @@ export function createEc2AsgGitOpsReleaseReconciler(options: {
         commitSha: input.commitSha.toLowerCase(),
         artifactDigestAlgorithm: "sha256",
         artifactDigest: input.evidence.artifactDigest.slice("sha256:".length),
+        releaseCandidateId: null,
+        compositeDigest: null,
         providerRevision: {
           provider: "aws",
           resourceType: "codedeploy_deployment",
@@ -189,6 +191,9 @@ export function createEc2AsgGitOpsReleaseReconciler(options: {
             attemptedSucceededInstanceCount: observed.originalSucceededInstanceIds.length
           }
         },
+        frontendEvidence: null,
+        failureStage: null,
+        baselineReleaseId: null,
         outputUrl: input.evidence.outputUrl,
         status,
         healthEvidence: {

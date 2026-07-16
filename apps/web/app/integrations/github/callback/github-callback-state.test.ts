@@ -67,7 +67,36 @@ test("callback creates ECS defaults even when another architecture was selected"
       evidenceFiles: [{ path: "apps/api/Dockerfile", found: true }],
       detectedSignals: ["Container"],
       recommendedTemplateId: "ecs-fargate-container-app",
-      recommendationReason: "Dockerfile"
+      recommendationReason: "Dockerfile",
+      aiHandoff: {
+        status: "template_selected",
+        templateId: "ecs-fargate-container-app",
+        selectionReasons: ["Container API and Vite frontend"],
+        applicationUnits: [
+          {
+            id: "api",
+            rootPath: "apps/api",
+            kind: "backend",
+            frameworks: ["Express"],
+            evidencePaths: ["apps/api/package.json", "apps/api/Dockerfile"]
+          },
+          {
+            id: "web",
+            rootPath: "apps/web",
+            kind: "frontend",
+            frameworks: ["React", "Vite"],
+            evidencePaths: ["apps/web/package.json"]
+          }
+        ],
+        evidence: [
+          { kind: "package_json", path: "package.json", applicationUnitId: null, signals: [] },
+          { kind: "lockfile", path: "package-lock.json", applicationUnitId: null, signals: [] },
+          { kind: "dockerfile", path: "apps/api/Dockerfile", applicationUnitId: "api", signals: [] },
+          { kind: "package_json", path: "apps/web/package.json", applicationUnitId: "web", signals: ["React", "Vite"] },
+          { kind: "static_output", path: "apps/web/dist", applicationUnitId: "web", signals: ["Vite static build output"] }
+        ],
+        missingEvidence: []
+      }
     },
     selectedTemplateId: "three-tier-web-app",
     deploymentType: "container",
@@ -78,8 +107,26 @@ test("callback creates ECS defaults even when another architecture was selected"
   assert.deepEqual(createCallbackEcsDefaults(resume), {
     projectName: "Audience Live Check",
     repositoryRevision: "a".repeat(40),
-    sourceRoot: "apps/api",
-    dockerfilePath: "apps/api/Dockerfile"
+    sourceRoot: ".",
+    dockerfilePath: "apps/api/Dockerfile",
+    ecsWeb: {
+      api: {
+        sourceRoot: ".",
+        dockerfilePath: "apps/api/Dockerfile",
+        containerPort: 8080,
+        healthCheckPath: "/health"
+      },
+      frontend: {
+        sourceRoot: "apps/web",
+        packageManifestPath: "apps/web/package.json",
+        lockfilePath: "package-lock.json",
+        packageManager: "npm",
+        packageManagerVersion: "10.9.2",
+        installPreset: "npm_ci",
+        buildPreset: "npm_build",
+        outputPath: "apps/web/dist"
+      }
+    }
   });
 });
 

@@ -56,6 +56,9 @@ importers:
       '@aws-sdk/client-codebuild':
         specifier: 3.1073.0
         version: 3.1073.0
+      '@aws-sdk/client-codeconnections':
+        specifier: 3.1073.0
+        version: 3.1073.0
       '@aws-sdk/client-codedeploy':
         specifier: 3.1073.0
         version: 3.1073.0
@@ -63,6 +66,9 @@ importers:
         specifier: 3.1073.0
         version: 3.1073.0
       '@aws-sdk/client-ec2':
+        specifier: 3.1073.0
+        version: 3.1073.0
+      '@aws-sdk/client-ecr':
         specifier: 3.1073.0
         version: 3.1073.0
       '@aws-sdk/client-ecs':
@@ -121,7 +127,7 @@ importers:
         version: 6.2.3
       openai:
         specifier: ^6.45.0
-        version: 6.45.0(@aws-sdk/credential-provider-node@3.972.57)(@smithy/signature-v4@5.6.0)(zod@4.4.3)
+        version: 6.45.0(@aws-sdk/credential-provider-node@3.972.57)(@smithy/signature-v4@5.6.2)(zod@4.4.3)
       pg:
         specifier: 8.22.0
         version: 8.22.0
@@ -274,6 +280,10 @@ packages:
     resolution: {integrity: sha512-cC9H6CaSeDXvyFSbitqPvktjSEIzIt6K/mP4JbVn7gWrvFq8MUEPcTccFY4RB1Oih5+uDHCJQVs6FOLWdBsVNw==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-codeconnections@3.1073.0':
+    resolution: {integrity: sha512-L8ELSR9K7xbTPunCO4O1q7vX1+szApJM2fDvsJsWV30C1LoFN/Dk4dSX+/Frn+SBK7nQx0Qg7E71fnEgru41yQ==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-codedeploy@3.1073.0':
     resolution: {integrity: sha512-xpNvDQFpx9h3CFMBrq+JiFOMBOs9N/z/aSp/Z1brG/BYRHau9etWwHse5V1ODcwC4VCxkYJoSBJ7XuAHZfMH1g==}
     engines: {node: '>=20.0.0'}
@@ -284,6 +294,10 @@ packages:
 
   '@aws-sdk/client-ec2@3.1073.0':
     resolution: {integrity: sha512-vo7Q39L9oKK8UKP1rTscCTbxrYnm4nkz3nuEoXy+iZZ3eDaqhSZGxA6fwXlS5nDdZnk75ww9tpKQYc2pxONs1A==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-ecr@3.1073.0':
+    resolution: {integrity: sha512-xAvjmkzXxbma11FdPjNOYfybRnewl9OgBrA8kmOTV8sWPy6sUIe3l60iN/VM2kOmk1zcbnpcTI3GhKU17/momw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-ecs@3.1073.0':
@@ -2607,6 +2621,19 @@ snapshots:
       '@smithy/types': 4.15.1
       tslib: 2.8.1
 
+  '@aws-sdk/client-codeconnections@3.1073.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.27
+      '@aws-sdk/credential-provider-node': 3.972.57
+      '@aws-sdk/types': 3.973.15
+      '@smithy/core': 3.29.1
+      '@smithy/fetch-http-handler': 5.6.1
+      '@smithy/node-http-handler': 4.8.1
+      '@smithy/types': 4.15.1
+      tslib: 2.8.1
+
   '@aws-sdk/client-codedeploy@3.1073.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
@@ -2640,6 +2667,19 @@ snapshots:
       '@aws-sdk/core': 3.974.25
       '@aws-sdk/credential-provider-node': 3.972.57
       '@aws-sdk/middleware-sdk-ec2': 3.972.41
+      '@aws-sdk/types': 3.973.15
+      '@smithy/core': 3.29.1
+      '@smithy/fetch-http-handler': 5.6.1
+      '@smithy/node-http-handler': 4.8.1
+      '@smithy/types': 4.15.1
+      tslib: 2.8.1
+
+  '@aws-sdk/client-ecr@3.1073.0':
+    dependencies:
+      '@aws-crypto/sha256-browser': 5.2.0
+      '@aws-crypto/sha256-js': 5.2.0
+      '@aws-sdk/core': 3.974.27
+      '@aws-sdk/credential-provider-node': 3.972.57
       '@aws-sdk/types': 3.973.15
       '@smithy/core': 3.29.1
       '@smithy/fetch-http-handler': 5.6.1
@@ -4350,10 +4390,10 @@ snapshots:
 
   on-exit-leak-free@2.1.2: {}
 
-  openai@6.45.0(@aws-sdk/credential-provider-node@3.972.57)(@smithy/signature-v4@5.6.0)(zod@4.4.3):
+  openai@6.45.0(@aws-sdk/credential-provider-node@3.972.57)(@smithy/signature-v4@5.6.2)(zod@4.4.3):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.57
-      '@smithy/signature-v4': 5.6.0
+      '@smithy/signature-v4': 5.6.2
       zod: 4.4.3
 
   optionator@0.9.4:

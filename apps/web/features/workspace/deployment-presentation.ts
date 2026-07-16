@@ -13,6 +13,8 @@ const DEPLOYMENT_STATUS_PRESENTATIONS: Readonly<
   CANCELLED: { label: "취소됨", tone: "neutral" },
   DESTROYED: { label: "정리 완료", tone: "success" },
   FAILED: { label: "실패", tone: "error" },
+  PARTIALLY_CANCELED: { label: "부분 취소", tone: "neutral" },
+  PARTIALLY_FAILED: { label: "부분 실패", tone: "error" },
   PENDING: { label: "대기 중", tone: "neutral" },
   RUNNING: { label: "실행 중", tone: "running" },
   SUCCESS: { label: "성공", tone: "success" }

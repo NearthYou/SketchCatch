@@ -55,6 +55,7 @@ const workerAccessContextSchema = z
 export type DeploymentWorkerOperationInput = {
   operation: DeploymentJobOperation;
   deploymentId: string;
+  workerTaskArn: string | null;
   accessContext: ProjectAccessContext;
   startedFromStatus: DeploymentStatus;
   startedFromFailureStage: DeploymentFailureStage | null;
@@ -158,7 +159,8 @@ export function createDeploymentWorkerOperationRunner(
     const commonInput = {
       deploymentId: input.deploymentId,
       accessContext: input.accessContext,
-      startedFromStatus: input.startedFromStatus
+      startedFromStatus: input.startedFromStatus,
+      ...(input.workerTaskArn ? { workerTaskArn: input.workerTaskArn } : {})
     };
 
     let result: { deployment: DeploymentRecord };
@@ -218,6 +220,7 @@ function createOperationInput(job: DeploymentJobRecord): DeploymentWorkerOperati
   return {
     operation: job.operation,
     deploymentId: job.deploymentId,
+    workerTaskArn: job.ecsTaskArn,
     accessContext: accessContextResult.data,
     startedFromStatus: job.startedFromStatus,
     startedFromFailureStage: job.startedFromFailureStage

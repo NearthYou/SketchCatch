@@ -22,18 +22,20 @@ import {
 } from "./api";
 import {
   getEligibleLiveObservationDeployments,
-  getLiveObservationOutputUrl,
+  getSelectedLiveObservationOutputUrl,
   getLiveObservationProviderEvidence,
-  getLiveObservationPressureLabel
+  getLiveObservationPressureLabel,
+  type LiveObservationSelection
 } from "./live-observation";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
   readonly onClose: () => void;
   readonly projectId: string;
+  readonly selection?: LiveObservationSelection | null | undefined;
 };
 
-export function LiveObservationModal({ onClose, projectId }: LiveObservationModalProps) {
+export function LiveObservationModal({ onClose, projectId, selection }: LiveObservationModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -53,7 +55,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrState, setQrState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [copied, setCopied] = useState(false);
-  const [audienceUtilityOpen, setAudienceUtilityOpen] = useState(false);
+  const [audienceUtilityOpen, setAudienceUtilityOpen] = useState(true);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   const eligibleDeployments = useMemo(
@@ -63,10 +65,14 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
   const selectedDeployment = eligibleDeployments.find(
     (deployment) => deployment.id === selectedDeploymentId
   );
-  const selectedOutputUrl = getLiveObservationOutputUrl(selectedDeploymentId, releases);
+  const selectedOutputUrl = getSelectedLiveObservationOutputUrl(
+    selection,
+    selectedDeploymentId,
+    releases
+  );
   const outputUrl = session
-    ? getLiveObservationOutputUrl(session.deploymentId, releases)
-    : null;
+    ? getSelectedLiveObservationOutputUrl(selection, session.deploymentId, releases)
+    : selectedOutputUrl;
   const remainingSeconds = session
     ? Math.max(0, Math.ceil((new Date(session.expiresAt).getTime() - nowMs) / 1_000))
     : 0;
@@ -110,11 +116,27 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
         const eligible = getEligibleLiveObservationDeployments(items);
         setDeployments(items);
         setReleases(releaseItems);
-        setSelectedDeploymentId((current) =>
-          eligible.some((deployment) => deployment.id === current)
-            ? current
-            : eligible[0]?.id ?? ""
-        );
+        if (selection) {
+          const exactDeployment = eligible.find(
+            (deployment) => deployment.id === selection.deploymentId
+          );
+          setSelectedDeploymentId(exactDeployment?.id ?? "");
+          if (!exactDeployment) {
+            setErrorMessage(
+              "선택한 CI/CD 실행과 연결된 인프라 배포를 관측할 수 없습니다."
+            );
+          } else if (
+            !getSelectedLiveObservationOutputUrl(selection, exactDeployment.id, releaseItems)
+          ) {
+            setErrorMessage("선택한 CI/CD 실행의 안전한 HTTPS 주소를 확인할 수 없습니다.");
+          }
+        } else {
+          setSelectedDeploymentId((current) =>
+            eligible.some((deployment) => deployment.id === current)
+              ? current
+              : eligible[0]?.id ?? ""
+          );
+        }
         setListState("ready");
       })
       .catch((error) => {
@@ -124,7 +146,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
       });
 
     return () => abortController.abort();
-  }, [projectId]);
+  }, [projectId, selection]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -311,7 +333,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
             <label>
               <span>Deployment</span>
               <select
-                disabled={isSessionActive || listState !== "ready"}
+                disabled={Boolean(selection) || isSessionActive || listState !== "ready"}
                 onChange={(event) => setSelectedDeploymentId(event.target.value)}
                 value={selectedDeploymentId}
               >
@@ -322,6 +344,11 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
                 ))}
               </select>
             </label>
+            {selection ? (
+              <span className={styles.liveObservationMuted}>
+                CI/CD 실행 {selection.runId.slice(0, 8)} 기준
+              </span>
+            ) : null}
             <div
               className={styles.liveObservationSessionStatus}
               data-status={snapshot?.status ?? "ready"}
@@ -342,7 +369,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
                 onClick={() => void startObservation()}
                 type="button"
               >관측 시작</button>
-              {session && outputUrl ? (
+              {outputUrl ? (
                 <button
                   aria-controls="live-observation-audience-utility"
                   aria-expanded={audienceUtilityOpen}
@@ -362,7 +389,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
           ><X size={20} aria-hidden="true" /></button>
         </header>
 
-        {session && outputUrl && audienceUtilityOpen ? (
+        {outputUrl && audienceUtilityOpen ? (
           <section
             aria-label="배포 Output URL 접속"
             className={styles.liveObservationAudienceUtility}
@@ -372,6 +399,13 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
               <span className={styles.liveObservationSectionLabel}>배포 Output URL</span>
               <strong>실제 배포 서비스 접속</strong>
               <p>QR 또는 링크로 선택한 배포의 Output URL에 접속합니다.</p>
+              {selectedDeployment?.status === "PARTIALLY_FAILED" ||
+              selectedDeployment?.status === "PARTIALLY_CANCELED" ? (
+                <p className={styles.liveObservationFrontendWarning} role="status">
+                  API는 배포된 상태지만 현재 웹 화면은 이전 버전일 수 있습니다. CloudFront
+                  주소와 ALB/ECS 운영 지표는 계속 사용할 수 있습니다.
+                </p>
+              ) : null}
               <div className={styles.liveObservationAudienceUtilityActions}>
                 <button
                   className={styles.liveObservationSecondaryButton}
@@ -405,7 +439,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
           {listState === "ready" && eligibleDeployments.length === 0 ? (
             <div className={styles.liveObservationMessage}>
               <strong>관측 가능한 성공 배포가 없습니다.</strong>
-              <p>Output URL과 연결 검증이 완료된 Deployment가 필요합니다.</p>
+              <p>CloudFront Output URL과 AWS topology 검증이 완료된 Deployment가 필요합니다.</p>
             </div>
           ) : null}
           {visibleErrorMessage ? (
@@ -438,7 +472,7 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
                 <span>요청</span>
                 <strong>{providerEvidence?.requests ?? "—"}</strong>
                 <p>CloudWatch ALB RequestCount</p>
-                <small>{providerEvidence?.stateLabel ?? "수집 대기"}</small>
+                <small>공개 경로 CloudFront · {providerEvidence?.stateLabel ?? "수집 대기"}</small>
               </div>
               <div data-source="aws">
                 <span>오류율</span>
@@ -465,7 +499,10 @@ export function LiveObservationModal({ onClose, projectId }: LiveObservationModa
             <div className={styles.liveObservationIntro}>
               <div>
                 <strong>관측은 명시적으로 시작됩니다.</strong>
-                <p>세션 생성 전에 Deployment의 Output URL과 연결 상태를 검증합니다.</p>
+                <p>
+                  세션 생성 전에 CloudFront → S3/ALB → ECS 연결 상태를 AWS에서 다시
+                  검증합니다.
+                </p>
               </div>
             </div>
           )}
@@ -525,7 +562,8 @@ function formatDeploymentOption(deployment: Deployment): string {
         timeStyle: "short"
       })
     : "완료 시각 없음";
-  return `${completedAt} · ${deployment.id.slice(0, 8)}`;
+  const state = deployment.status === "SUCCESS" ? "성공" : "웹 부분 상태";
+  return `${completedAt} · ${deployment.id.slice(0, 8)} · ${state}`;
 }
 
 function getSessionStatusLabel(

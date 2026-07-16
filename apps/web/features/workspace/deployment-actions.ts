@@ -163,6 +163,55 @@ export function shouldAutoRefreshDeployment(deployment: Deployment | null): bool
   return deployment?.status === "RUNNING";
 }
 
+export function getInfrastructureRollbackTarget(
+  source: Deployment | null,
+  deployments: readonly Deployment[]
+): Deployment | null {
+  if (
+    !source ||
+    source.scope === "application" ||
+    !source.stateObjectKey ||
+    !(
+      source.status === "SUCCESS" ||
+      (source.status === "FAILED" &&
+        (source.failureStage === "apply" || source.failureStage === "destroy"))
+    ) ||
+    !source.awsConnectionId ||
+    !source.awsAccountIdSnapshot ||
+    !source.awsRegionSnapshot
+  ) {
+    return null;
+  }
+
+  const sourceCreatedAt = Date.parse(source.createdAt);
+  const hasNewerState = deployments.some(
+    (candidate) =>
+      candidate.id !== source.id &&
+      candidate.status !== "DESTROYED" &&
+      candidate.stateObjectKey !== null &&
+      candidate.awsAccountIdSnapshot === source.awsAccountIdSnapshot &&
+      candidate.awsRegionSnapshot === source.awsRegionSnapshot &&
+      Date.parse(candidate.createdAt) > sourceCreatedAt
+  );
+  if (hasNewerState) return null;
+
+  return (
+    deployments
+      .filter(
+        (candidate) =>
+          candidate.id !== source.id &&
+          candidate.projectId === source.projectId &&
+          candidate.status === "SUCCESS" &&
+          candidate.scope !== "application" &&
+          candidate.stateObjectKey !== null &&
+          candidate.awsAccountIdSnapshot === source.awsAccountIdSnapshot &&
+          candidate.awsRegionSnapshot === source.awsRegionSnapshot &&
+          Date.parse(candidate.createdAt) < sourceCreatedAt
+      )
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))[0] ?? null
+  );
+}
+
 export function shouldAutoRefreshGitCicdHandoff(handoff: GitCicdHandoff | null): boolean {
   return handoff?.status === "pr_created" || handoff?.status === "pipeline_running";
 }

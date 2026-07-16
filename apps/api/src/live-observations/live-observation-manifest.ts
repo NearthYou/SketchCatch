@@ -6,7 +6,10 @@ const awsPartitionPattern = "(?:aws|aws-cn|aws-us-gov)";
 const awsRegionPattern = "[a-z]{2}(?:-[a-z0-9]+)+-[0-9]";
 const resourceSuffixPattern = "[0-9a-f]{12}";
 
-const cloudFrontDistributionIdPattern = /^E[A-Z0-9]{13}$/;
+const cloudFrontDistributionIdPattern = /^E[A-Z0-9]{8,31}$/;
+const cloudFrontDomainNamePattern = /^[a-z0-9-]{8,64}\.cloudfront\.net$/;
+const s3BucketNamePattern = /^(?!xn--)(?!.*\.\.)(?!.*-$)[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+const cloudFrontOriginAccessControlIdPattern = /^[A-Z0-9]{8,32}$/;
 const loadBalancerArnPattern = new RegExp(
   `^arn:(${awsPartitionPattern}):elasticloadbalancing:(${awsRegionPattern}):([0-9]{12}):loadbalancer/app/sc-lo-alb-(${resourceSuffixPattern})/[0-9a-f]{16}$`
 );
@@ -94,6 +97,38 @@ const awsLiveObservationAdapterPayloadV2Schema = z
   })
   .strict();
 
+const awsLiveObservationAdapterPayloadV3Schema = z
+  .object({
+    cloudFrontDistributionId: z.string().regex(cloudFrontDistributionIdPattern),
+    cloudFrontDomainName: z.string().regex(cloudFrontDomainNamePattern),
+    frontendBucketName: z.string().regex(s3BucketNamePattern),
+    defaultOriginId: nonBlankStringSchema,
+    originAccessControlId: z.string().regex(cloudFrontOriginAccessControlIdPattern),
+    apiOriginId: nonBlankStringSchema,
+    apiPathPattern: z.literal("/api/*"),
+    healthPathPattern: z.literal("/health"),
+    frontendBucketPublicAccessBlocked: z.literal(true),
+    bucketPolicyAllowsCloudFrontRead: z.literal(true),
+    topologyVerifiedAt: z.iso.datetime({ offset: true }),
+    frontendState: z.enum(["current", "may_be_previous"]),
+    loadBalancerDnsName: z.string().min(1).max(253),
+    loadBalancerArn: z.string().regex(generalLoadBalancerArnPattern),
+    targetGroupArn: z.string().regex(generalTargetGroupArnPattern),
+    logGroupNames: z
+      .array(z.string().regex(/^[A-Za-z0-9_./#-]{1,512}$/))
+      .max(10)
+      .optional(),
+    capacityTarget: z
+      .object({
+        kind: z.literal("ecs_fargate"),
+        clusterName: z.string().regex(ecsNamePattern),
+        serviceName: z.string().regex(ecsNamePattern),
+        maxCapacity: z.number().int().positive()
+      })
+      .strict()
+  })
+  .strict();
+
 const awsLiveObservationAdapterSchema = z.discriminatedUnion("version", [
   z
     .object({
@@ -107,6 +142,13 @@ const awsLiveObservationAdapterSchema = z.discriminatedUnion("version", [
       kind: z.literal("aws-live-observation"),
       version: z.literal(2),
       payload: awsLiveObservationAdapterPayloadV2Schema
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("aws-live-observation"),
+      version: z.literal(3),
+      payload: awsLiveObservationAdapterPayloadV3Schema
     })
     .strict()
 ]);
@@ -260,6 +302,43 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
           });
         }
       }
+
+      if (manifest.adapter.version === 3) {
+        const trafficUrl = new URL(manifest.endpoints.trafficUrl);
+        const payload = manifest.adapter.payload;
+        if (
+          trafficUrl.hostname !== payload.cloudFrontDomainName ||
+          trafficUrl.port !== "" ||
+          trafficUrl.pathname !== "/api/traffic"
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["endpoints", "trafficUrl"],
+            message: "Traffic URL must use the verified CloudFront /api/traffic route"
+          });
+        }
+        if (payload.defaultOriginId === payload.apiOriginId) {
+          context.addIssue({
+            code: "custom",
+            path: ["adapter", "payload", "apiOriginId"],
+            message: "CloudFront frontend and API origins must be distinct"
+          });
+        }
+        if (
+          !isPublicAlbDnsName({
+            dnsName: payload.loadBalancerDnsName,
+            loadBalancerName: loadBalancerIdentity.resourceSuffix,
+            partition: loadBalancerIdentity.partition,
+            region: loadBalancerIdentity.region
+          })
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["adapter", "payload", "loadBalancerDnsName"],
+            message: "Load balancer DNS name must identify the approved public ALB"
+          });
+        }
+      }
     });
 
 export function parseDeploymentLiveObservationManifestV2(
@@ -278,16 +357,26 @@ export function requireLiveObservationTrafficTargetEvidence(value: unknown): {
   readonly trafficUrl: string;
   readonly trafficHostname: string;
   readonly loadBalancerDnsName: string;
+  readonly routingKind: "alb_custom_domain" | "cloudfront";
 } {
   const manifest = parseDeploymentLiveObservationManifestV2(value);
-  if (manifest.adapter.version !== 2) {
-    throw new Error("Live Observation traffic target requires adapter v2 evidence");
+  if (manifest.adapter.version === 2) {
+    return {
+      trafficUrl: manifest.endpoints.trafficUrl,
+      trafficHostname: manifest.adapter.payload.trafficHostname,
+      loadBalancerDnsName: manifest.adapter.payload.loadBalancerDnsName,
+      routingKind: "alb_custom_domain"
+    };
   }
-  return {
-    trafficUrl: manifest.endpoints.trafficUrl,
-    trafficHostname: manifest.adapter.payload.trafficHostname,
-    loadBalancerDnsName: manifest.adapter.payload.loadBalancerDnsName
-  };
+  if (manifest.adapter.version === 3) {
+    return {
+      trafficUrl: manifest.endpoints.trafficUrl,
+      trafficHostname: manifest.adapter.payload.cloudFrontDomainName,
+      loadBalancerDnsName: manifest.adapter.payload.loadBalancerDnsName,
+      routingKind: "cloudfront"
+    };
+  }
+  throw new Error("Live Observation traffic target requires adapter v2 or v3 evidence");
 }
 
 type ElasticLoadBalancingArnIdentity = {

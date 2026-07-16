@@ -10,6 +10,7 @@ export const defaultGitCicdEnvironmentName = "sketchcatch-production";
 
 export type GitCicdWorkflowRenderInput = {
   handoffId?: string | undefined;
+  projectId?: string | undefined;
   projectSlug: string;
   repositoryOwner: string;
   repositoryName: string;
@@ -26,6 +27,7 @@ export type GitCicdWorkflowRenderInput = {
   rdsEnabled?: boolean | undefined;
   staticSiteUrl?: string | null | undefined;
   apiBaseUrl?: string | null | undefined;
+  sketchCatchPublicBaseUrl?: string | null | undefined;
   approvedByUserId?: string | null | undefined;
   approvedAt?: string | null | undefined;
   runtimeTargetKind?: RuntimeTargetKind | undefined;
@@ -87,15 +89,8 @@ export function createGitCicdAutomationFiles(
       content: `${JSON.stringify(createHandoffManifest(input), null, 2)}\n`,
       contentType: "application/json"
     },
-    ...(ecsFargate
-      ? [
-          {
-            path: `sketchcatch/${input.projectSlug}/ci-cd/buildspec-ecs.yml`,
-            content: renderEcsFargateBuildspec(),
-            contentType: "text/yaml"
-          }
-        ]
-      : [])
+    // ECS application builds use a server-generated buildspec inside SketchCatch.
+    // Repository-controlled buildspecs must not receive deployment credentials.
   ];
 }
 
@@ -128,6 +123,8 @@ export function createRepositorySettingsPreview(
       SKETCHCATCH_RDS_ENABLED: String(input.rdsEnabled === true),
       SKETCHCATCH_STATIC_SITE_URL: input.staticSiteUrl ?? "",
       SKETCHCATCH_API_BASE_URL: input.apiBaseUrl ?? "",
+      SKETCHCATCH_RELEASE_API_URL: input.sketchCatchPublicBaseUrl ?? "",
+      SKETCHCATCH_PROJECT_ID: input.projectId ?? "",
       SKETCHCATCH_ASG_NAME:
         input.runtimeConfig?.runtimeTargetKind === "ec2_asg"
           ? input.runtimeConfig.autoScalingGroupName
@@ -342,15 +339,23 @@ function renderEcsFargateAppWorkflow(
   ecs: EcsFargateWorkflowInput
 ): string {
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
-  const buildspecPath = `sketchcatch/${input.projectSlug}/ci-cd/buildspec-ecs.yml`;
+  const appPathGlob = createMonitoredPathGlob(
+    input.appPath ?? ecs.confirmedBuildConfig.sourceRoot
+  );
+  const generatedProjectPath = `sketchcatch/${input.projectSlug}`;
 
   return `name: SketchCatch App
 
 on:
-  workflow_run:
-    workflows: ["SketchCatch Infra"]
-    types: [completed]
+  push:
     branches: [${JSON.stringify(input.targetBranch)}]
+    paths:
+      - ${JSON.stringify(appPathGlob)}
+      - ${JSON.stringify(`!${generatedProjectPath}/terraform/**`)}
+      - ${JSON.stringify(`!${generatedProjectPath}/ci-cd/**`)}
+      - '!.github/workflows/sketchcatch-infra.yml'
+      - '!.github/workflows/sketchcatch-app.yml'
+      - '!.github/workflows/sketchcatch-destroy.yml'
   workflow_dispatch:
 
 permissions:
@@ -358,229 +363,70 @@ permissions:
   contents: read
 
 env:
-  SKETCHCATCH_CODEBUILD_PROJECT: \${{ vars.SKETCHCATCH_CODEBUILD_PROJECT }}
-  SKETCHCATCH_ECR_REPOSITORY: \${{ vars.SKETCHCATCH_ECR_REPOSITORY }}
-  SKETCHCATCH_ECS_CLUSTER: \${{ vars.SKETCHCATCH_ECS_CLUSTER }}
-  SKETCHCATCH_ECS_SERVICE: \${{ vars.SKETCHCATCH_ECS_SERVICE }}
-  SKETCHCATCH_ECS_CONTAINER: \${{ vars.SKETCHCATCH_ECS_CONTAINER }}
-  SKETCHCATCH_OUTPUT_URL: \${{ vars.SKETCHCATCH_OUTPUT_URL }}
-  SKETCHCATCH_HEALTH_CHECK_PATH: ${JSON.stringify(ecs.confirmedBuildConfig.healthCheckPath ?? "/")}
-  SKETCHCATCH_SOURCE_ROOT: ${JSON.stringify(ecs.confirmedBuildConfig.sourceRoot)}
-  SKETCHCATCH_DOCKERFILE_PATH: ${JSON.stringify(ecs.confirmedBuildConfig.dockerfilePath)}
-  SKETCHCATCH_BUILDSPEC_PATH: ${JSON.stringify(buildspecPath)}
-  SKETCHCATCH_RELEASE_SHA: \${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  SKETCHCATCH_RELEASE_API_URL: \${{ vars.SKETCHCATCH_RELEASE_API_URL }}
+  SKETCHCATCH_PROJECT_ID: \${{ vars.SKETCHCATCH_PROJECT_ID }}
+  SKETCHCATCH_OIDC_AUDIENCE: sketchcatch-release-run
+  SKETCHCATCH_RELEASE_SHA: \${{ github.sha }}
 
 jobs:
   release:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == '${input.targetBranch.replaceAll("'", "''")}')
     runs-on: ubuntu-latest
     environment: ${environmentName}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: \${{ env.SKETCHCATCH_RELEASE_SHA }}
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: \${{ vars.SKETCHCATCH_AWS_ROLE_ARN }}
-          aws-region: \${{ vars.SKETCHCATCH_AWS_REGION }}
-      - name: Validate confirmed build config
+      - name: Request trusted SketchCatch release
+        id: release
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SKETCHCATCH_CODEBUILD_PROJECT"
-          test -n "$SKETCHCATCH_ECR_REPOSITORY"
-          test -n "$SKETCHCATCH_ECS_CLUSTER"
-          test -n "$SKETCHCATCH_ECS_SERVICE"
-          test -n "$SKETCHCATCH_ECS_CONTAINER"
-          test -n "$SKETCHCATCH_OUTPUT_URL"
-          test -n "$SKETCHCATCH_HEALTH_CHECK_PATH"
-          test -f "$SKETCHCATCH_DOCKERFILE_PATH"
-          test -f "$SKETCHCATCH_BUILDSPEC_PATH"
-      - name: Run CodeBuild
+          test -n "$SKETCHCATCH_RELEASE_API_URL"
+          test -n "$SKETCHCATCH_PROJECT_ID"
+          OIDC_TOKEN=$(curl --fail --silent --show-error \
+            --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
+          IDEMPOTENCY_KEY="\${{ github.repository_id }}:$SKETCHCATCH_RELEASE_SHA:\${{ github.run_id }}:\${{ github.run_attempt }}"
+          jq -n \
+            --arg repository "\${{ github.repository }}" \
+            --arg repositoryId "\${{ github.repository_id }}" \
+            --arg commitSha "$SKETCHCATCH_RELEASE_SHA" \
+            --arg ref "\${{ github.ref }}" \
+            --arg workflow "\${{ github.workflow_ref }}" \
+            --arg runId "\${{ github.run_id }}" \
+            --arg runAttempt "\${{ github.run_attempt }}" \
+            --arg runUrl "\${{ github.server_url }}/\${{ github.repository }}/actions/runs/\${{ github.run_id }}" \
+            '{repository:$repository,repositoryId:$repositoryId,commitSha:$commitSha,ref:$ref,workflow:$workflow,workflowRunId:$runId,workflowRunAttempt:($runAttempt|tonumber),workflowRunUrl:$runUrl}' > release-request.json
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $OIDC_TOKEN" \
+            --header "Content-Type: application/json" \
+            --header "Idempotency-Key: $IDEMPOTENCY_KEY" \
+            --data @release-request.json \
+            "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/projects/$SKETCHCATCH_PROJECT_ID/release-runs" > release-run.json
+          RELEASE_RUN_ID=$(jq -er '.run.id' release-run.json)
+          echo "run_id=$RELEASE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "SketchCatch release run: $RELEASE_RUN_ID"
+      - name: Wait for trusted release
         shell: bash
+        env:
+          SKETCHCATCH_RELEASE_RUN_ID: \${{ steps.release.outputs.run_id }}
         run: |
           set -euo pipefail
-          BUILD_ID=$(aws codebuild start-build \\
-            --project-name "$SKETCHCATCH_CODEBUILD_PROJECT" \\
-            --source-version "$SKETCHCATCH_RELEASE_SHA" \\
-            --buildspec-override "$SKETCHCATCH_BUILDSPEC_PATH" \\
-            --environment-variables-override \\
-              name=SKETCHCATCH_SOURCE_ROOT,value="$SKETCHCATCH_SOURCE_ROOT",type=PLAINTEXT \\
-              name=SKETCHCATCH_DOCKERFILE_PATH,value="$SKETCHCATCH_DOCKERFILE_PATH",type=PLAINTEXT \\
-              name=SKETCHCATCH_ECR_REPOSITORY,value="$SKETCHCATCH_ECR_REPOSITORY",type=PLAINTEXT \\
-              name=SKETCHCATCH_COMMIT_SHA,value="$SKETCHCATCH_RELEASE_SHA",type=PLAINTEXT \\
-            --query 'build.id' --output text)
-          for attempt in $(seq 1 120); do
-            aws codebuild batch-get-builds --ids "$BUILD_ID" --output json > sketchcatch-codebuild.json
-            STATUS=$(jq -r '.builds[0].buildStatus' sketchcatch-codebuild.json)
+          for attempt in $(seq 1 180); do
+            OIDC_TOKEN=$(curl --fail --silent --show-error \
+              --header "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$SKETCHCATCH_OIDC_AUDIENCE" | jq -er '.value')
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $OIDC_TOKEN" \
+              "\${SKETCHCATCH_RELEASE_API_URL%/}/api/git-cicd/release-runs/$SKETCHCATCH_RELEASE_RUN_ID" > release-run.json
+            STATUS=$(jq -er '.run.status' release-run.json)
+            echo "SketchCatch release status: $STATUS"
             case "$STATUS" in
-              SUCCEEDED) break ;;
-              FAILED|FAULT|STOPPED|TIMED_OUT) exit 1 ;;
+              succeeded) exit 0 ;;
+              failed|cancelled|partially_failed|partially_cancelled) jq . release-run.json; exit 1 ;;
             esac
             sleep 5
           done
-          test "$(jq -r '.builds[0].buildStatus' sketchcatch-codebuild.json)" = "SUCCEEDED"
-          IMAGE_DIGEST=$(jq -r '.builds[0].exportedEnvironmentVariables[] | select(.name == "SKETCHCATCH_IMAGE_DIGEST") | .value' sketchcatch-codebuild.json)
-          ECR_URI=$(jq -r '.builds[0].exportedEnvironmentVariables[] | select(.name == "SKETCHCATCH_ECR_URI") | .value' sketchcatch-codebuild.json)
-          echo "SKETCHCATCH_IMAGE_DIGEST=$IMAGE_DIGEST" >> "$GITHUB_ENV"
-          echo "SKETCHCATCH_ECR_URI=$ECR_URI" >> "$GITHUB_ENV"
-      - name: Publish immutable ECR digest
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$SKETCHCATCH_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          test "$(aws ecr describe-images --repository-name "$SKETCHCATCH_ECR_REPOSITORY" --image-ids imageDigest="$SKETCHCATCH_IMAGE_DIGEST" --query 'imageDetails[0].imageDigest' --output text)" = "$SKETCHCATCH_IMAGE_DIGEST"
-          echo "SKETCHCATCH_IMAGE_URI=$SKETCHCATCH_ECR_URI@$SKETCHCATCH_IMAGE_DIGEST" >> "$GITHUB_ENV"
-      - name: Deploy ECS Fargate revision
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws ecs describe-services --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE" --output json > sketchcatch-service-before.json
-          PREVIOUS_TASK_DEFINITION=$(jq -r '.services[0].taskDefinition' sketchcatch-service-before.json)
-          SKETCHCATCH_DESIRED_COUNT=$(jq -r '.services[0].desiredCount' sketchcatch-service-before.json)
-          [[ "$SKETCHCATCH_DESIRED_COUNT" =~ ^[1-9][0-9]*$ ]]
-          aws ecs describe-task-definition --task-definition "$PREVIOUS_TASK_DEFINITION" --query 'taskDefinition' --output json > sketchcatch-task-definition.json
-          python3 - "$SKETCHCATCH_ECS_CONTAINER" "$SKETCHCATCH_IMAGE_URI" <<'PY'
-          import json
-          import sys
-
-          container_name, image_uri = sys.argv[1:]
-          with open("sketchcatch-task-definition.json", encoding="utf-8") as handle:
-              task = json.load(handle)
-          for key in ["taskDefinitionArn", "revision", "status", "requiresAttributes", "compatibilities", "registeredAt", "registeredBy", "deregisteredAt"]:
-              task.pop(key, None)
-          containers = [item for item in task.get("containerDefinitions", []) if item.get("name") == container_name]
-          if len(containers) != 1:
-              raise SystemExit("confirmed ECS container was not found exactly once")
-          containers[0]["image"] = image_uri
-          with open("sketchcatch-task-definition-next.json", "w", encoding="utf-8") as handle:
-              json.dump(task, handle)
-          PY
-          NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://sketchcatch-task-definition-next.json --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "SKETCHCATCH_PREVIOUS_TASK_DEFINITION=$PREVIOUS_TASK_DEFINITION" >> "$GITHUB_ENV"
-          echo "SKETCHCATCH_NEW_TASK_DEFINITION=$NEW_TASK_DEFINITION" >> "$GITHUB_ENV"
-          echo "SKETCHCATCH_DESIRED_COUNT=$SKETCHCATCH_DESIRED_COUNT" >> "$GITHUB_ENV"
-          aws ecs update-service \\
-            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
-            --service "$SKETCHCATCH_ECS_SERVICE" \\
-            --desired-count 0 \\
-            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' >/dev/null
-          aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE"
-          aws ecs update-service \\
-            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
-            --service "$SKETCHCATCH_ECS_SERVICE" \\
-            --task-definition "$NEW_TASK_DEFINITION" \\
-            --desired-count "$SKETCHCATCH_DESIRED_COUNT" \\
-            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=200,deploymentCircuitBreaker={enable=true,rollback=true}' \\
-            --force-new-deployment >/dev/null
-          aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE"
-          aws ecs update-service \\
-            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
-            --service "$SKETCHCATCH_ECS_SERVICE" \\
-            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' >/dev/null
-      - name: Verify ECS release
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws ecs describe-services --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE" --output json > sketchcatch-service-after.json
-          aws ecs describe-task-definition --task-definition "$SKETCHCATCH_NEW_TASK_DEFINITION" --query 'taskDefinition' --output json > sketchcatch-task-definition-after.json
-          python3 - "$SKETCHCATCH_NEW_TASK_DEFINITION" "$SKETCHCATCH_ECS_CONTAINER" "$SKETCHCATCH_IMAGE_URI" <<'PY'
-          import json
-          import sys
-
-          expected_task, container_name, image_uri = sys.argv[1:]
-          with open("sketchcatch-service-after.json", encoding="utf-8") as handle:
-              service = json.load(handle)["services"][0]
-          with open("sketchcatch-task-definition-after.json", encoding="utf-8") as handle:
-              task = json.load(handle)
-          config = service.get("deploymentConfiguration") or {}
-          breaker = config.get("deploymentCircuitBreaker") or {}
-          desired_count = service.get("desiredCount")
-          running_count = service.get("runningCount")
-          images = [item.get("image") for item in task.get("containerDefinitions", []) if item.get("name") == container_name]
-          valid = (
-              service.get("taskDefinition") == expected_task
-              and isinstance(desired_count, int)
-              and isinstance(running_count, int)
-              and desired_count >= 0
-              and running_count >= 0
-              and desired_count == running_count
-              and config.get("minimumHealthyPercent") == 0
-              and config.get("maximumPercent") == 100
-              and breaker.get("enable") is True
-              and breaker.get("rollback") is True
-              and images == [image_uri]
-          )
-          if not valid:
-              raise SystemExit("ECS release verification failed")
-          PY
-          HEALTH_URL="\${SKETCHCATCH_OUTPUT_URL%/}\${SKETCHCATCH_HEALTH_CHECK_PATH}"
-          curl --fail --show-error --max-time 10 --max-redirs 0 --proto '=https' "$HEALTH_URL" >/dev/null
-          python3 - <<'PY'
-          import base64
-          import json
-          import os
-
-          evidence = {
-              "schemaVersion": 1,
-              "runtimeTargetKind": "ecs_fargate",
-              "outcome": "succeeded",
-              "commitSha": os.environ["SKETCHCATCH_RELEASE_SHA"],
-              "imageDigest": os.environ["SKETCHCATCH_IMAGE_DIGEST"],
-              "imageUri": os.environ["SKETCHCATCH_IMAGE_URI"],
-              "clusterName": os.environ["SKETCHCATCH_ECS_CLUSTER"],
-              "serviceName": os.environ["SKETCHCATCH_ECS_SERVICE"],
-              "containerName": os.environ["SKETCHCATCH_ECS_CONTAINER"],
-              "taskDefinitionArn": os.environ["SKETCHCATCH_NEW_TASK_DEFINITION"],
-              "previousTaskDefinitionArn": os.environ["SKETCHCATCH_PREVIOUS_TASK_DEFINITION"],
-              "outputUrl": os.environ["SKETCHCATCH_OUTPUT_URL"]
-          }
-          encoded = base64.b64encode(json.dumps(evidence, separators=(",", ":")).encode()).decode()
-          print(f"SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64={encoded}")
-          PY
-      - name: Capture ECS rollback evidence
-        if: failure() && env.SKETCHCATCH_NEW_TASK_DEFINITION != ''
-        shell: bash
-        run: |
-          aws ecs update-service \\
-            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
-            --service "$SKETCHCATCH_ECS_SERVICE" \\
-            --task-definition "$SKETCHCATCH_PREVIOUS_TASK_DEFINITION" \\
-            --desired-count "$SKETCHCATCH_DESIRED_COUNT" \\
-            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=200,deploymentCircuitBreaker={enable=true,rollback=true}' \\
-            --force-new-deployment >/dev/null || true
-          aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE" || true
-          aws ecs update-service \\
-            --cluster "$SKETCHCATCH_ECS_CLUSTER" \\
-            --service "$SKETCHCATCH_ECS_SERVICE" \\
-            --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' >/dev/null || true
-          CURRENT_TASK_DEFINITION=$(aws ecs describe-services --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE" --query 'services[0].taskDefinition' --output text)
-          OUTCOME=failed
-          if [ "$CURRENT_TASK_DEFINITION" = "$SKETCHCATCH_PREVIOUS_TASK_DEFINITION" ]; then OUTCOME=rolled_back; fi
-          python3 - "$OUTCOME" "$CURRENT_TASK_DEFINITION" <<'PY'
-          import base64
-          import json
-          import os
-          import sys
-
-          evidence = {
-              "schemaVersion": 1,
-              "runtimeTargetKind": "ecs_fargate",
-              "outcome": sys.argv[1],
-              "commitSha": os.environ["SKETCHCATCH_RELEASE_SHA"],
-              "imageDigest": os.environ["SKETCHCATCH_IMAGE_DIGEST"],
-              "imageUri": os.environ["SKETCHCATCH_IMAGE_URI"],
-              "clusterName": os.environ["SKETCHCATCH_ECS_CLUSTER"],
-              "serviceName": os.environ["SKETCHCATCH_ECS_SERVICE"],
-              "containerName": os.environ["SKETCHCATCH_ECS_CONTAINER"],
-              "taskDefinitionArn": os.environ["SKETCHCATCH_NEW_TASK_DEFINITION"],
-              "previousTaskDefinitionArn": os.environ["SKETCHCATCH_PREVIOUS_TASK_DEFINITION"],
-              "restoredTaskDefinitionArn": sys.argv[2],
-              "outputUrl": os.environ["SKETCHCATCH_OUTPUT_URL"]
-          }
-          encoded = base64.b64encode(json.dumps(evidence, separators=(",", ":")).encode()).decode()
-          print(f"SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64={encoded}")
-          PY
+          echo "SketchCatch release status polling timed out" >&2
+          exit 1
 `;
 }
 
@@ -1435,45 +1281,6 @@ jobs:
 `;
 }
 
-function renderEcsFargateBuildspec(): string {
-  return `version: 0.2
-
-env:
-  shell: bash
-  exported-variables:
-    - SKETCHCATCH_IMAGE_DIGEST
-    - SKETCHCATCH_ECR_URI
-
-phases:
-  pre_build:
-    commands:
-      - set -euo pipefail
-      - test -n "$SKETCHCATCH_COMMIT_SHA"
-      - test -f "$SKETCHCATCH_DOCKERFILE_PATH"
-      - AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      - SKETCHCATCH_ECR_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$SKETCHCATCH_ECR_REPOSITORY"
-      - SKETCHCATCH_CACHE_URI="$SKETCHCATCH_ECR_URI:sketchcatch-buildcache-v1"
-      - aws ecr describe-repositories --repository-names "$SKETCHCATCH_ECR_REPOSITORY" >/dev/null
-      - aws ecr get-login-password | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
-      - docker buildx create --use --name sketchcatch-builder || docker buildx use sketchcatch-builder
-      - docker buildx inspect --bootstrap
-  build:
-    commands:
-      - >-
-        docker buildx build
-        --file "$SKETCHCATCH_DOCKERFILE_PATH"
-        --tag "$SKETCHCATCH_ECR_URI:$SKETCHCATCH_COMMIT_SHA"
-        --cache-from type=registry,ref="$SKETCHCATCH_CACHE_URI"
-        --cache-to type=registry,ref="$SKETCHCATCH_CACHE_URI",mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true
-        --push
-        "$SKETCHCATCH_SOURCE_ROOT"
-  post_build:
-    commands:
-      - SKETCHCATCH_IMAGE_DIGEST=$(aws ecr describe-images --repository-name "$SKETCHCATCH_ECR_REPOSITORY" --image-ids imageTag="$SKETCHCATCH_COMMIT_SHA" --query 'imageDetails[0].imageDigest' --output text)
-      - test "$(aws ecr describe-images --repository-name "$SKETCHCATCH_ECR_REPOSITORY" --image-ids imageDigest="$SKETCHCATCH_IMAGE_DIGEST" --query 'imageDetails[0].imageDigest' --output text)" = "$SKETCHCATCH_IMAGE_DIGEST"
-`;
-}
-
 export function createAwsRoleDiffPreview(input: GitCicdWorkflowRenderInput): GitCicdAwsRoleDiff {
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
   const repository = `${input.repositoryOwner}/${input.repositoryName}`;
@@ -1496,9 +1303,11 @@ export function createAwsRoleDiffPreview(input: GitCicdWorkflowRenderInput): Git
 
 function renderInfraWorkflow(input: GitCicdWorkflowRenderInput): string {
   const terraformDirectory = `sketchcatch/${input.projectSlug}/terraform`;
-  const infraPathGlob = createMonitoredPathGlob(input.infraPath ?? terraformDirectory);
   const environmentName = input.environmentName ?? defaultGitCicdEnvironmentName;
   const ecsFargate = getEcsFargateWorkflowInput(input);
+  const infraPathGlob = createMonitoredPathGlob(
+    ecsFargate ? terraformDirectory : input.infraPath ?? terraformDirectory
+  );
   const lambda = getLambdaWorkflowInput(input);
   const ec2Asg = getEc2AsgWorkflowInput(input);
   const staticSite = getStaticSiteWorkflowInput(input);
@@ -1508,9 +1317,7 @@ function renderInfraWorkflow(input: GitCicdWorkflowRenderInput): string {
     ec2Asg?.confirmedBuildConfig.sourceRoot ??
     staticSite?.confirmedBuildConfig.sourceRoot;
   const applicationTriggerPaths = applicationSourceRoot
-    ? `\n      - ${JSON.stringify(createMonitoredPathGlob(input.appPath ?? applicationSourceRoot))}${
-        ecsFargate ? `\n      - 'sketchcatch/${input.projectSlug}/ci-cd/buildspec-ecs.yml'` : ""
-      }`
+    ? `\n      - ${JSON.stringify(createMonitoredPathGlob(input.appPath ?? applicationSourceRoot))}`
     : "";
 
   return `name: SketchCatch Infra

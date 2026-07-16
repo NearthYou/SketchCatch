@@ -90,7 +90,9 @@ export function createProviderTarget(
   manifest: DeploymentLiveObservationManifestV2,
   connection: LiveObservationAwsConnectionEvidence | null
 ): AwsLiveObservationSnapshotTarget | null {
-  if (manifest.adapter.version !== 2 || !connection) return null;
+  if ((manifest.adapter.version !== 2 && manifest.adapter.version !== 3) || !connection) {
+    return null;
+  }
   const loadBalancer = parseAlbArn(manifest.adapter.payload.loadBalancerArn);
   const targetGroup = parseTargetGroupArn(manifest.adapter.payload.targetGroupArn);
   const role = /^arn:(aws|aws-cn|aws-us-gov):iam::([0-9]{12}):role\/[\w+=,.@/-]+$/.exec(

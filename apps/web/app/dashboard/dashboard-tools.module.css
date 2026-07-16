@@ -407,6 +407,28 @@
 .rowActions { display: flex; gap: 7px; }
 .rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: 12px; font-weight: 700; }
 .rowActions button[data-danger="true"] { border-color: var(--color-error); color: var(--color-error); }
+.buildConnectionReady,
+.buildConnectionPending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-body); font-size: 13px; font-weight: 700; }
+.buildConnectionReady { color: var(--color-success); }
+.buildConnectionReady button,
+.buildConnectionPending button { min-height: 36px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 11px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: 700; }
+.buildConnectionPending > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-warning-surface); color: var(--color-warning); }
+.buildConnectionPending a { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border-radius: var(--radius-control); padding: 0 11px; background: var(--color-ink); color: var(--color-on-primary); text-decoration: none; }
+
+.modalBackdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 17 23 / 46%); z-index: 100; }
+.modalCard { position: relative; display: grid; width: min(100%, 440px); gap: 12px; border: 1px solid var(--color-hairline); border-radius: var(--radius-card); padding: 24px; background: var(--color-canvas); box-shadow: var(--shadow-card); }
+.modalCard > svg { color: var(--color-ink); }
+.modalCard h2 { margin: 0; color: var(--color-ink); font-size: 19px; }
+.modalCard p { margin: 0; color: var(--color-body); font-size: 14px; line-height: 1.55; }
+.modalClose { position: absolute; top: 12px; right: 12px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--color-body); cursor: pointer; }
+.modalActions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.modalActions > button:not(.primaryAction) { min-height: 42px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 14px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: 700; }
+.modalActions > .dangerAction { border-color: var(--color-error); background: var(--color-error); color: var(--color-on-primary); }
+.cleanupPreview { display: grid; gap: 8px; border: 1px solid var(--color-hairline); border-radius: var(--radius-control); padding: 14px; background: var(--color-surface-strong); }
+.cleanupPreview strong { color: var(--color-ink); font-size: 13px; }
+.cleanupPreview ul { display: grid; gap: 4px; margin: 0; padding-left: 20px; color: var(--color-body); font-size: 13px; line-height: 1.45; }
+.cleanupPreview p { font-size: 13px; }
+.modalCard .cleanupBlocker { border-left: 3px solid var(--color-error); padding: 9px 10px; background: var(--color-error-surface); color: var(--color-ink); font-weight: 600; }
 
 .githubSettingsMessage {
   border-top: 1px solid var(--color-hairline);

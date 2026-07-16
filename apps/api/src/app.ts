@@ -29,6 +29,10 @@ import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerLiveObservationV2Routes } from "./routes/live-observations-v2.js";
 import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-observation-public-collector.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import {
+  registerGitHubReleaseRunRoutes,
+  type GitHubReleaseRunRouteOptions
+} from "./routes/git-cicd-release-runs.js";
 import { registerCostRoutes } from "./routes/costs.js";
 import {
   registerNotificationRoutes,
@@ -54,6 +58,10 @@ import {
   type TerraformRouteOptions
 } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerProjectBuildEnvironmentRoutes,
+  type ProjectBuildEnvironmentRouteOptions
+} from "./routes/project-build-environments.js";
 import {
   registerReverseEngineeringRoutes,
   type ReverseEngineeringRouteOptions
@@ -128,6 +136,14 @@ export type BuildAppOptions = {
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
   projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
+  projectBuildEnvironmentRoutes?: Pick<
+    ProjectBuildEnvironmentRouteOptions,
+    "createRepository" | "gateway" | "generateId" | "now"
+  >;
+  gitHubReleaseRunRoutes?: Pick<
+    GitHubReleaseRunRouteOptions,
+    "repository" | "executor" | "verifyIdentity" | "now" | "generateId"
+  >;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
     | "createSourceRepositoryRepository"
@@ -353,6 +369,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     gitCicdRunProvider: createGitHubActionsRunProvider(githubAppClient),
     runtimeCache
   });
+  app.register(registerGitHubReleaseRunRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.gitHubReleaseRunRoutes
+  });
   app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(
     registerTerraformRoutes,
@@ -361,6 +382,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerProjectBuildEnvironmentRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectBuildEnvironmentRoutes
   });
   app.register(registerReverseEngineeringRoutes, {
     prefix: "/api",

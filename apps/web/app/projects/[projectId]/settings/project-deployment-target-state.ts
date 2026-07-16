@@ -4,8 +4,10 @@ import type {
   BuildExecutionPreset,
   BuildInstallPreset,
   DiagramJson,
+  EcsWebBuildConfig,
   ProjectDeploymentTarget,
   PutProjectDeploymentTargetRequest,
+  RepositoryAnalysisAiHandoff,
   RuntimeTargetKind,
   SourceRepository
 } from "@sketchcatch/types";
@@ -35,6 +37,7 @@ export type ProjectDeploymentTargetDraft = {
   cloudFrontDistributionId: string;
   cloudFrontOriginId: string;
   outputUrl: string;
+  ecsWeb: EcsWebBuildConfig | null;
   evidenceSuggested: boolean;
 };
 
@@ -43,6 +46,7 @@ export type EcsFargateDeploymentDefaultsInput = {
   readonly repositoryRevision: string;
   readonly sourceRoot: string;
   readonly dockerfilePath: string;
+  readonly ecsWeb?: EcsWebBuildConfig | null;
 };
 
 const runtimeBuildConfig: Record<
@@ -103,6 +107,13 @@ export function createDeploymentTargetDraft(
   const architectureDefaults = runtimeTargetKind === "ecs_fargate"
     ? getEcsFargateArchitectureDefaults(diagramJson)
     : null;
+  const inferredEcsWeb = runtimeTargetKind === "ecs_fargate" &&
+      hasWebInclusiveEcsArchitecture(diagramJson)
+    ? inferEcsWebBuildConfig(sourceRepository?.analysis?.aiHandoff, architectureDefaults)
+    : null;
+  const ecsWeb = runtimeTargetKind === "ecs_fargate"
+    ? config?.ecsWeb ?? ecsDefaults?.ecsWeb ?? inferredEcsWeb
+    : null;
   const repositoryRuntimeNames = runtimeTargetKind === "ecs_fargate" && sourceRepository
     ? createEcsFargateRuntimeNames(sourceRepository.name)
     : null;
@@ -156,6 +167,7 @@ export function createDeploymentTargetDraft(
       target?.connectionId ?? connections.find((item) => item.status === "verified")?.id ?? "",
     runtimeTargetKind,
     sourceRoot: firstNonBlank(
+      ecsWeb?.api.sourceRoot,
       config?.sourceRoot,
       ecsDefaults?.sourceRoot,
       suggestion?.sourceRoot,
@@ -176,6 +188,7 @@ export function createDeploymentTargetDraft(
     version: config?.exactSemVerTag ?? config?.manifestVersion ?? "",
     installPreset: config?.installPreset ?? suggestion?.installPreset ?? "none",
     healthCheckPath: firstNonBlank(
+      ecsWeb?.api.healthCheckPath,
       config?.healthCheckPath,
       architectureDefaults?.healthCheckPath,
       ecsDefaults?.healthCheckPath,
@@ -205,8 +218,123 @@ export function createDeploymentTargetDraft(
       (preferEcsDefaults ? null : ec2AsgConfig?.outputUrl) ??
       (preferEcsDefaults ? null : staticConfig?.outputUrl) ??
       ecsDefaults?.outputUrl ?? "",
+    ecsWeb,
     evidenceSuggested: Boolean(ecsDefaults || suggestion)
   };
+}
+
+function hasWebInclusiveEcsArchitecture(diagramJson?: DiagramJson | null): boolean {
+  if (!diagramJson) return false;
+  const resourceTypes = new Set(
+    diagramJson.nodes.map((node) => node.parameters?.resourceType).filter(Boolean)
+  );
+  return (
+    resourceTypes.has("aws_s3_bucket") &&
+    resourceTypes.has("aws_cloudfront_distribution") &&
+    resourceTypes.has("aws_ecs_service")
+  );
+}
+
+export function inferEcsWebBuildConfig(
+  handoff?: RepositoryAnalysisAiHandoff,
+  architectureDefaults?: { healthCheckPath: string } | null
+): EcsWebBuildConfig | null {
+  if (!handoff) return null;
+  const frontendUnits = handoff.applicationUnits.filter(
+    (unit) => unit.kind === "frontend" || unit.kind === "fullstack"
+  );
+  const dockerEvidence = handoff.evidence.filter((item) => item.kind === "dockerfile");
+  if (frontendUnits.length !== 1 || dockerEvidence.length !== 1) return null;
+
+  const frontendUnit = frontendUnits[0]!;
+  const dockerfile = dockerEvidence[0]!;
+  const packageManifests = handoff.evidence.filter(
+    (item) => item.kind === "package_json" && item.applicationUnitId === frontendUnit.id
+  );
+  const staticOutputs = handoff.evidence.filter(
+    (item) => item.kind === "static_output" && item.applicationUnitId === frontendUnit.id
+  );
+  if (packageManifests.length !== 1 || staticOutputs.length !== 1) return null;
+
+  const lockfile = selectFrontendLockfile(
+    handoff.evidence.filter((item) => item.kind === "lockfile").map((item) => item.path),
+    frontendUnit.rootPath
+  );
+  const packageManager = getPackageManagerDefaults(lockfile);
+  if (!lockfile || !packageManager) return null;
+
+  const hasRootPackageManifest = handoff.evidence.some(
+    (item) => item.kind === "package_json" && item.path === "package.json"
+  );
+  const apiSourceRoot = hasRootPackageManifest && dockerfile.path.includes("/")
+    ? "."
+    : handoff.applicationUnits.find((unit) => unit.id === dockerfile.applicationUnitId)?.rootPath ??
+      getParentRepositoryPath(dockerfile.path);
+  const healthCheckPath = architectureDefaults?.healthCheckPath || "/health";
+
+  return {
+    api: {
+      sourceRoot: apiSourceRoot,
+      dockerfilePath: dockerfile.path,
+      containerPort: 8080,
+      healthCheckPath
+    },
+    frontend: {
+      sourceRoot: frontendUnit.rootPath,
+      packageManifestPath: packageManifests[0]!.path,
+      lockfilePath: lockfile,
+      packageManager: packageManager.kind,
+      packageManagerVersion: packageManager.version,
+      installPreset: packageManager.installPreset,
+      buildPreset: packageManager.buildPreset,
+      outputPath: staticOutputs[0]!.path
+    }
+  };
+}
+
+function selectFrontendLockfile(paths: readonly string[], sourceRoot: string): string | null {
+  const scoped = paths.filter((path) => path.startsWith(`${sourceRoot}/`));
+  if (scoped.length === 1) return scoped[0]!;
+  const root = paths.filter((path) => !path.includes("/"));
+  return root.length === 1 ? root[0]! : null;
+}
+
+function getPackageManagerDefaults(lockfilePath: string | null): {
+  kind: "npm" | "pnpm" | "yarn";
+  version: string;
+  installPreset: Exclude<BuildInstallPreset, "none">;
+  buildPreset: Extract<BuildExecutionPreset, "pnpm_build" | "npm_build" | "yarn_build">;
+} | null {
+  if (lockfilePath?.endsWith("package-lock.json")) {
+    return {
+      kind: "npm",
+      version: "10.9.2",
+      installPreset: "npm_ci",
+      buildPreset: "npm_build"
+    };
+  }
+  if (lockfilePath?.endsWith("pnpm-lock.yaml")) {
+    return {
+      kind: "pnpm",
+      version: "11.8.0",
+      installPreset: "pnpm_frozen_lockfile",
+      buildPreset: "pnpm_build"
+    };
+  }
+  if (lockfilePath?.endsWith("yarn.lock")) {
+    return {
+      kind: "yarn",
+      version: "1.22.22",
+      installPreset: "yarn_frozen_lockfile",
+      buildPreset: "yarn_build"
+    };
+  }
+  return null;
+}
+
+function getParentRepositoryPath(path: string): string {
+  const separator = path.lastIndexOf("/");
+  return separator === -1 ? "." : path.slice(0, separator);
 }
 
 function getEcsFargateArchitectureDefaults(diagramJson?: DiagramJson | null): {
@@ -285,21 +413,23 @@ export function createEcsFargateDeploymentDefaults(
   | "containerName"
   | "healthCheckPath"
   | "outputUrl"
+  | "ecsWeb"
 > {
   const runtimeNames = createEcsFargateRuntimeNames(input.projectName);
 
   return {
     runtimeTargetKind: "ecs_fargate",
-    sourceRoot: input.sourceRoot.trim() || ".",
+    sourceRoot: input.ecsWeb?.api.sourceRoot ?? (input.sourceRoot.trim() || "."),
     evidencePath: input.dockerfilePath.trim() || "Dockerfile",
     commitSha: input.repositoryRevision.trim().toLowerCase(),
     codeBuildProjectName: `${runtimeNames.ecrRepositoryName}-build`,
     ecrRepositoryName: runtimeNames.ecrRepositoryName,
     clusterName: runtimeNames.clusterName,
     serviceName: runtimeNames.serviceName,
-    containerName: runtimeNames.containerName,
-    healthCheckPath: "/",
-    outputUrl: ""
+    containerName: input.ecsWeb ? "api" : runtimeNames.containerName,
+    healthCheckPath: input.ecsWeb?.api.healthCheckPath ?? "/",
+    outputUrl: "",
+    ecsWeb: input.ecsWeb ?? null
   };
 }
 
@@ -323,6 +453,7 @@ export function changeDeploymentTargetRuntime(
         ? draft.healthCheckPath || "/health"
         : "",
     outputUrl: "",
+    ecsWeb: runtimeTargetKind === "ecs_fargate" ? draft.ecsWeb : null,
     evidenceSuggested: Boolean(suggestion)
   };
 }
@@ -443,7 +574,8 @@ export function createDeploymentTargetRequest(
       exactSemVerTag: version?.startsWith("v") ? version : null,
       manifestVersion: version?.startsWith("v") ? null : version,
       confirmedCommitSha: draft.commitSha.toLowerCase(),
-      confirmedAt: confirmedAt.toISOString()
+      confirmedAt: confirmedAt.toISOString(),
+      ecsWeb: draft.runtimeTargetKind === "ecs_fargate" ? draft.ecsWeb : null
     }
   };
 }

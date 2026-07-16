@@ -110,6 +110,26 @@ export function createPreparedDraftSnapshotHash(value: {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 
+export function createPreparedReleaseSnapshotHash(input: {
+  candidateId: string;
+  commitSha: string;
+  compositeDigest: string;
+  configFingerprint: string;
+}): string {
+  return createHash("sha256")
+    .update(
+      canonicalJson({
+        releaseCandidate: {
+          id: input.candidateId,
+          commitSha: input.commitSha,
+          compositeDigest: input.compositeDigest,
+          configFingerprint: input.configFingerprint
+        }
+      })
+    )
+    .digest("hex");
+}
+
 export function getDeploymentConsolePhase(deployment: {
   status: DeploymentStatus;
   currentPlanArtifactId: string | null;

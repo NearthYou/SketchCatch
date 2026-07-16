@@ -156,6 +156,8 @@ export function createLambdaGitOpsReleaseReconciler(options: {
         commitSha: input.commitSha.toLowerCase(),
         artifactDigestAlgorithm: "sha256",
         artifactDigest: input.evidence.artifactDigest.slice("sha256:".length),
+        releaseCandidateId: null,
+        compositeDigest: null,
         providerRevision: {
           provider: "aws",
           resourceType: "lambda_alias",
@@ -170,6 +172,9 @@ export function createLambdaGitOpsReleaseReconciler(options: {
             rollbackEnabled: observed.rollbackEnabled
           }
         },
+        frontendEvidence: null,
+        failureStage: null,
+        baselineReleaseId: null,
         outputUrl: input.evidence.outputUrl,
         status,
         healthEvidence: {

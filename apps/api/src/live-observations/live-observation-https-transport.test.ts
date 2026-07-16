@@ -126,6 +126,75 @@ test("HTTPS transport validates DNS, pins the validated address, and preserves T
   });
 });
 
+test("HTTPS transport sends CloudFront adapter traffic through the verified public CloudFront hostname", async () => {
+  let requestOptions: PinnedHttpsRequestOptions | undefined;
+  let cnameCalled = false;
+  const cloudFrontManifest = {
+    ...manifest,
+    endpoints: {
+      ...manifest.endpoints,
+      trafficUrl: "https://d111111abcdef8.cloudfront.net/api/traffic"
+    },
+    adapter: {
+      kind: "aws-live-observation" as const,
+      version: 3 as const,
+      payload: {
+        cloudFrontDistributionId: "E123456789ABC",
+        cloudFrontDomainName: "d111111abcdef8.cloudfront.net",
+        frontendBucketName: "audience-live-check-web-assets",
+        defaultOriginId: "web-assets",
+        originAccessControlId: "E123456789OAC",
+        apiOriginId: "api-alb",
+        apiPathPattern: "/api/*" as const,
+        healthPathPattern: "/health" as const,
+        frontendBucketPublicAccessBlocked: true as const,
+        bucketPolicyAllowsCloudFrontRead: true as const,
+        topologyVerifiedAt: "2026-07-16T04:00:00.000Z",
+        frontendState: "current" as const,
+        loadBalancerDnsName: manifest.adapter.payload.loadBalancerDnsName,
+        loadBalancerArn: manifest.adapter.payload.loadBalancerArn,
+        targetGroupArn: manifest.adapter.payload.targetGroupArn,
+        capacityTarget: {
+          kind: "ecs_fargate" as const,
+          clusterName: "audience-live-check-cluster",
+          serviceName: "audience-live-check-service",
+          maxCapacity: 4
+        }
+      }
+    }
+  };
+  const transport = createLiveObservationHttpsTransport({
+    resolveCname: async () => {
+      cnameCalled = true;
+      return [];
+    },
+    resolve4: async (hostname) => {
+      assert.equal(hostname, "d111111abcdef8.cloudfront.net");
+      return ["3.34.1.10"];
+    },
+    resolve6: async () => [],
+    request(options, onResponse) {
+      requestOptions = options;
+      const request = {
+        destroy() {},
+        end() {
+          onResponse({ statusCode: 204, destroy() {} });
+        },
+        on() {
+          return request;
+        }
+      };
+      return request;
+    }
+  });
+
+  assert.deepEqual(await transport.post(cloudFrontManifest), { status: 204 });
+  assert.equal(cnameCalled, false);
+  assert.equal(requestOptions?.hostname, "d111111abcdef8.cloudfront.net");
+  assert.equal(requestOptions?.servername, "d111111abcdef8.cloudfront.net");
+  assert.equal(requestOptions?.path, "/api/traffic");
+});
+
 test("HTTPS pins IPv6 with a single-address lookup contract", async () => {
   let requestOptions: PinnedHttpsRequestOptions | undefined;
   const transport = createLiveObservationHttpsTransport({

@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
+import { createAwsConnectionManagedCleanup } from "../aws-connections/aws-connection-managed-cleanup.js";
+import type { CleanupAwsConnectionManagedResources } from "../aws-connections/aws-connection-service.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import {
@@ -153,6 +155,7 @@ type ProjectRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  cleanupManagedResources?: CleanupAwsConnectionManagedResources;
 };
 
 export async function registerProjectRoutes(
@@ -163,6 +166,8 @@ export async function registerProjectRoutes(
   const projectAssetStorage = options.projectAssetStorage ?? createProjectAssetStorage();
   const projectDeletionStorage =
     options.projectDeletionStorage ?? createProjectDeletionStorage(projectAssetStorage);
+  const cleanupManagedResources =
+    options.cleanupManagedResources ?? createAwsConnectionManagedCleanup();
 
   app.addContentTypeParser(
     ["image/png", "image/webp"],
@@ -276,6 +281,7 @@ export async function registerProjectRoutes(
       db,
       projectId: params.id,
       storage: projectDeletionStorage,
+      cleanupManagedResources,
       userId: currentUserId
     });
 
@@ -824,6 +830,13 @@ function sendConflict(reply: FastifyReply, message: string): FastifyReply {
 function createProjectDeletionStorage(storage: ProjectAssetStorage): ProjectDeletionStorage {
   return {
     async deleteObject(objectKey) {
+      await storage.deleteObject({ objectKey });
+    },
+    async deleteObjectVersion(objectKey, versionId) {
+      if (storage.deleteObjectVersion) {
+        await storage.deleteObjectVersion({ objectKey, versionId });
+        return;
+      }
       await storage.deleteObject({ objectKey });
     }
   };

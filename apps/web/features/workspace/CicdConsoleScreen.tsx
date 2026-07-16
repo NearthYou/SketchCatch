@@ -24,7 +24,8 @@ import {
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
   listSourceRepositories,
-  refreshProjectGitCicdPipelineRuns
+  refreshProjectGitCicdPipelineRuns,
+  retryGitCicdFrontendRelease
 } from "./api";
 import { CicdActivityView } from "./CicdActivityView";
 import { CicdLogsView } from "./CicdLogsView";
@@ -45,6 +46,12 @@ import {
   selectGitCicdSourceDeployment
 } from "./cicd-handoff";
 import { getSafePipelineRunLinks } from "./deployment-output-links";
+import {
+  canOpenGitCicdLiveObservation,
+  canRetryGitCicdFrontend,
+  getGitCicdLiveObservationSelection
+} from "./cicd-frontend-retry";
+import type { LiveObservationSelection } from "./live-observation";
 import handoffStyles from "./cicd-handoff.module.css";
 import styles from "./workspace.module.css";
 
@@ -56,7 +63,7 @@ export function CicdConsoleScreen({
   projectId
 }: {
   readonly isVisible: boolean;
-  readonly onOpenLiveObservation?: (() => void) | undefined;
+  readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
   readonly projectId: string;
 }) {
   const [activeView, setActiveView] = useState<CicdConsoleView>("activity");
@@ -82,6 +89,8 @@ export function CicdConsoleScreen({
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
+  const [isFrontendRetrying, setIsFrontendRetrying] = useState(false);
+  const [frontendRetryError, setFrontendRetryError] = useState("");
   const [loadRequestId, setLoadRequestId] = useState(0);
   const [logsReloadRequestId, setLogsReloadRequestId] = useState(0);
   const [requestState, dispatchRequestState] = useReducer(
@@ -109,6 +118,14 @@ export function CicdConsoleScreen({
       ? logs
       : [];
   const outputLinks = useMemo(() => getSafePipelineRunLinks(selectedRun), [selectedRun]);
+  const liveObservationSelection = useMemo(
+    () => getGitCicdLiveObservationSelection(selectedRun),
+    [selectedRun]
+  );
+  const openSelectedLiveObservation =
+    liveObservationSelection && onOpenLiveObservation
+      ? () => onOpenLiveObservation(liveObservationSelection)
+      : undefined;
   const sourceDeployment = useMemo(() => selectGitCicdSourceDeployment(deployments), [deployments]);
   const deploymentTargetBlocker = useMemo(
     () => getGitCicdDeploymentTargetBlocker(deploymentTarget),
@@ -364,6 +381,22 @@ export function CicdConsoleScreen({
       setIsRefreshing(false);
     }
   }, [applyRuns, isVisible, projectId]);
+
+  const retryFrontend = useCallback(async (): Promise<void> => {
+    if (!selectedRun || !canRetryGitCicdFrontend(selectedRun)) return;
+    setIsFrontendRetrying(true);
+    setFrontendRetryError("");
+    try {
+      await retryGitCicdFrontendRelease(selectedRun.id);
+      applyRuns(await loadRuns());
+    } catch (error) {
+      setFrontendRetryError(
+        getApiErrorMessage(error, "웹 배포 재시도를 시작하지 못했습니다.")
+      );
+    } finally {
+      setIsFrontendRetrying(false);
+    }
+  }, [applyRuns, loadRuns, selectedRun]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -788,8 +821,31 @@ export function CicdConsoleScreen({
         </label>
       ) : null}
 
-      <DeploymentOutputLinks links={outputLinks} scopeKey={selectedRun?.id ?? null} />
+      <DeploymentOutputLinks
+        links={outputLinks}
+        onOpenLiveObservation={
+          canOpenGitCicdLiveObservation(selectedRun) ? openSelectedLiveObservation : undefined
+        }
+        scopeKey={selectedRun?.id ?? null}
+      />
 
+      {canRetryGitCicdFrontend(selectedRun) ? (
+        <section className={styles.deploymentStageAlert} aria-live="polite">
+          <strong>API는 정상 배포됐지만 웹 활성화가 완료되지 않았습니다.</strong>
+          <p>기존 HTTPS URL과 API는 유지됩니다. 검증된 동일 frontend Artifact로 웹 단계만 다시 실행합니다.</p>
+          <button
+            className={styles.deploymentPrimaryButton}
+            disabled={isFrontendRetrying}
+            onClick={() => void retryFrontend()}
+            type="button"
+          >
+            {isFrontendRetrying ? "웹 배포 재시도 중" : "웹 배포만 재시도"}
+          </button>
+        </section>
+      ) : null}
+      {frontendRetryError ? (
+        <p className={styles.deploymentStageAlert} role="alert">{frontendRetryError}</p>
+      ) : null}
       {config?.validationStatus === "valid" && runs.length === 0 ? (
         <p className={styles.cicdState} role="status">
           아직 감지된 Pipeline Run이 없습니다.
@@ -801,7 +857,7 @@ export function CicdConsoleScreen({
           errorMessage={logsErrorMessage}
           isLoading={isLogsLoading}
           logs={visibleLogs}
-          onOpenLiveObservation={onOpenLiveObservation}
+          onOpenLiveObservation={openSelectedLiveObservation}
           onRetry={() => setLogsReloadRequestId((requestId) => requestId + 1)}
           run={selectedRun}
         />
