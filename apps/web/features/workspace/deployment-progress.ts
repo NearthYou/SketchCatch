@@ -54,6 +54,20 @@ const STAGE_WINDOWS: Readonly<Record<DeploymentStage, ProgressWindow>> = {
 const RESOURCE_COMPLETION_PATTERN =
   /([\w.-]+(?:\[[^\]]+\])?):\s+(?:Creation|Modifications|Destruction) complete/i;
 
+export function advanceDisplayedDeploymentProgress(
+  currentPercent: number,
+  targetPercent: number
+): number {
+  const current = Math.min(100, Math.max(0, Math.floor(currentPercent)));
+  const target = Math.min(100, Math.max(0, Math.floor(targetPercent)));
+
+  if (target <= current) {
+    return current;
+  }
+
+  return Math.min(target, current + 1);
+}
+
 export function getDeploymentProgress(
   input: DeploymentProgressInput
 ): DeploymentProgress | null {

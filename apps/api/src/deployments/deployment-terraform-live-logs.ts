@@ -10,6 +10,7 @@ import type { TerraformOutputLine, TerraformRunResult } from "./terraform-runner
 
 const liveLogBatchSize = 5;
 const liveLogFlushDelayMs = 500;
+const liveLogHeartbeatIntervalMs = 10_000;
 
 type DeploymentTerraformLiveLogWriterInput = {
   accessContext: ProjectAccessContext;
@@ -19,14 +20,29 @@ type DeploymentTerraformLiveLogWriterInput = {
   stage: DeploymentStage;
 };
 
+type DeploymentTerraformLiveLogWriterOptions = {
+  clearInterval?: (timer: NodeJS.Timeout) => void;
+  heartbeatIntervalMs?: number;
+  now?: () => number;
+  setInterval?: (callback: () => void, delayMs: number) => NodeJS.Timeout;
+};
+
 type CompleteTerraformLiveLogsInput = {
   label: string;
   result: TerraformRunResult;
 };
 
 export function createDeploymentTerraformLiveLogWriter(
-  input: DeploymentTerraformLiveLogWriterInput
+  input: DeploymentTerraformLiveLogWriterInput,
+  options: DeploymentTerraformLiveLogWriterOptions = {}
 ) {
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? liveLogHeartbeatIntervalMs;
+  const now = options.now ?? Date.now;
+  const scheduleInterval = options.setInterval ?? setInterval;
+  const cancelInterval = options.clearInterval ?? clearInterval;
+  const startedAtMs = now();
+  let lastActivityAtMs = startedAtMs;
+  let completed = false;
   let nextSequence = input.sequence;
   let persistedStdoutLineCount = 0;
   let livePersistenceFailed = false;
@@ -65,6 +81,38 @@ export function createDeploymentTerraformLiveLogWriter(
     return liveFlushPromise;
   }
 
+  function appendHeartbeat(): Promise<void> {
+    const heartbeatAtMs = now();
+
+    if (
+      completed ||
+      livePersistenceFailed ||
+      heartbeatAtMs - lastActivityAtMs < heartbeatIntervalMs
+    ) {
+      return liveFlushPromise;
+    }
+
+    lastActivityAtMs = heartbeatAtMs;
+    const elapsedSeconds = Math.max(1, Math.floor((heartbeatAtMs - startedAtMs) / 1_000));
+
+    liveFlushPromise = liveFlushPromise.then(async () => {
+      try {
+        nextSequence = await appendOutputLines({
+          ...input,
+          sequence: nextSequence,
+          lines: [
+            `[progress] Terraform ${input.stage} is still running (${elapsedSeconds}s elapsed)`
+          ],
+          level: "INFO"
+        });
+      } catch {
+        livePersistenceFailed = true;
+      }
+    });
+
+    return liveFlushPromise;
+  }
+
   function scheduleLiveFlush(): void {
     if (liveFlushTimer || pendingStdoutLines.length === 0) {
       return;
@@ -86,6 +134,7 @@ export function createDeploymentTerraformLiveLogWriter(
     if (lines.length === 0) {
       return;
     }
+    lastActivityAtMs = now();
 
     pendingStdoutLines.push(...lines);
 
@@ -98,7 +147,14 @@ export function createDeploymentTerraformLiveLogWriter(
     await flushPendingStdoutLines();
   };
 
+  const heartbeatTimer = scheduleInterval(() => {
+    void appendHeartbeat();
+  }, heartbeatIntervalMs);
+  heartbeatTimer.unref?.();
+
   const complete = async ({ label, result }: CompleteTerraformLiveLogsInput): Promise<number> => {
+    completed = true;
+    cancelInterval(heartbeatTimer);
     clearLiveFlushTimer();
     await flushPendingStdoutLines();
     nextSequence = await appendOutputLines({

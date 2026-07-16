@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  advanceDisplayedDeploymentProgress,
   getDeploymentProgress,
   resolveDeploymentProgressOperation
 } from "./deployment-progress";
@@ -37,6 +38,20 @@ test("a requested Plan starts with a small moving percentage", () => {
   assert.equal(progress?.operation, "plan");
   assert.equal(progress?.percent, 7);
   assert.match(progress?.detail ?? "", /실행 요청/);
+});
+
+test("displayed progress catches up to a large stage jump one point at a time", () => {
+  const samples: number[] = [];
+  let displayedPercent = 16;
+
+  for (let index = 0; index < 4; index += 1) {
+    displayedPercent = advanceDisplayedDeploymentProgress(displayedPercent, 51);
+    samples.push(displayedPercent);
+  }
+
+  assert.deepEqual(samples, [17, 18, 19, 20]);
+  assert.equal(advanceDisplayedDeploymentProgress(51, 16), 51);
+  assert.equal(advanceDisplayedDeploymentProgress(98, 100), 99);
 });
 
 test("Plan progress advances with the server stage but never claims completion", () => {

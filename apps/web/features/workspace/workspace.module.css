@@ -10251,7 +10251,7 @@
   display: block;
   height: 100%;
   min-width: 8px;
-  transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 160ms linear;
 }
 
 @media (max-width: 640px) {

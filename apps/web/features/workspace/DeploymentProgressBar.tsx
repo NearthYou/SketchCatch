@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Deployment, DeploymentLog } from "@sketchcatch/types";
 import {
+  advanceDisplayedDeploymentProgress,
   getDeploymentProgress,
   type DeploymentProgressOperation
 } from "./deployment-progress";
@@ -23,12 +24,16 @@ export function DeploymentProgressBar({
 }: DeploymentProgressBarProps) {
   const isActive = isStarting || deployment?.status === "RUNNING";
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [displayedProgress, setDisplayedProgress] = useState({
+    key: "",
+    percent: 0
+  });
 
   useEffect(() => {
     if (!isActive) return;
 
     setNowMs(Date.now());
-    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 500);
 
     return () => window.clearInterval(intervalId);
   }, [deployment?.activeStage, deployment?.id, isActive, operationHint]);
@@ -45,6 +50,39 @@ export function DeploymentProgressBar({
       }),
     [deployment, isStarting, logs, nowMs, operationHint, requestedAtMs]
   );
+  const hasProgress = progress !== null;
+  const targetPercent = progress?.percent ?? 0;
+  const progressRunKey =
+    requestedAtMs !== null
+      ? `${operationHint ?? "operation"}:${requestedAtMs}`
+      : `${deployment?.id ?? "deployment"}:${progress?.operation ?? operationHint ?? "operation"}`;
+
+  useEffect(() => {
+    if (!hasProgress) {
+      return;
+    }
+
+    const advance = () => {
+      setDisplayedProgress((current) => {
+        const currentPercent = current.key === progressRunKey ? current.percent : 0;
+        const percent = advanceDisplayedDeploymentProgress(currentPercent, targetPercent);
+
+        if (current.key === progressRunKey && current.percent === percent) {
+          return current;
+        }
+
+        return { key: progressRunKey, percent };
+      });
+    };
+
+    advance();
+    const intervalId = window.setInterval(advance, 120);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasProgress, progressRunKey, targetPercent]);
+
+  const displayedPercent =
+    displayedProgress.key === progressRunKey ? displayedProgress.percent : 0;
 
   if (!progress) {
     return null;
@@ -57,14 +95,14 @@ export function DeploymentProgressBar({
         aria-label={`${progress.title} 예상 진행률`}
         aria-valuemax={100}
         aria-valuemin={0}
-        aria-valuenow={progress.percent}
-        aria-valuetext={`${progress.percent}% · ${progress.detail}`}
+        aria-valuenow={displayedPercent}
+        aria-valuetext={`${displayedPercent}% · ${progress.detail}`}
         className={styles.deploymentProgressTrack}
         role="progressbar"
       >
-        <span style={{ width: `${progress.percent}%` }} />
+        <span style={{ width: `${displayedPercent}%` }} />
       </div>
-      <output aria-label="예상 진행률">{progress.percent}%</output>
+      <output aria-label="예상 진행률">{displayedPercent}%</output>
     </section>
   );
 }

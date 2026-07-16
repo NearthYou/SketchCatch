@@ -142,3 +142,10 @@ Short English-only working log for the current agent context. Older records are 
 - Rebuilt Deployment History around a version picker and selected-version summary card, aligned the non-sticky recent result with settings, moved compact horizontal actions above it, removed repeated disclosure headings, and matched History chrome to surrounding cards.
 - Verification: focused Direct Deployment Web tests passed 13/13; Web typecheck and diff checks passed. Signed-in Chrome confirmed aligned columns, 157px/139px nowrap actions, and the subdued History card. No cloud deployment or destroy was executed.
 - Push the branch only after explicit approval, then run the production runtime complete review-only plan and inspect it for unrelated updates or destroys before any apply.
+
+### 2026-07-17 - Smooth Deployment progress and fill silent Terraform log periods
+
+- Deployment progress now follows estimator jumps one percentage point at a time with a linear transition instead of visibly jumping between stage minimums.
+- Live Terraform execution emits an informational heartbeat every 10 seconds only while stdout is silent; real output still flushes within the existing 500 ms window.
+- Verification: focused Web progress tests passed 7/7, focused API live-log tests passed 2/2, `pnpm harness:check` passed, and `git diff --check` passed.
+- Package typechecks exceeded the two-minute verification limit without emitting an error and were stopped; direct ESLint binaries were unavailable in the package environments.
