@@ -2,6 +2,7 @@ locals {
   ecs_api_secrets_manager_names = toset([
     "DATABASE_URL",
     "GIT_APP_PRIVATE_KEY_BASE64",
+    "GIT_APP_CLIENT_SECRET",
     "GIT_OAUTH_CLIENT_SECRET",
     "KAKAO_OAUTH_CLIENT_SECRET",
     "NAVER_OAUTH_CLIENT_SECRET",

@@ -34,6 +34,8 @@ export type RuntimeEnv = {
   githubOauthClientId: string | undefined;
   githubOauthClientSecret: string | undefined;
   githubAppId?: string | undefined;
+  githubAppClientId?: string | undefined;
+  githubAppClientSecret?: string | undefined;
   githubAppSlug?: string | undefined;
   githubAppPrivateKeyBase64?: string | undefined;
   githubAppCallbackUrl?: string | undefined;
@@ -105,6 +107,8 @@ export function getRuntimeEnv(): RuntimeEnv {
     githubOauthClientId: process.env.GIT_OAUTH_CLIENT_ID,
     githubOauthClientSecret: process.env.GIT_OAUTH_CLIENT_SECRET,
     githubAppId: process.env.GIT_APP_ID,
+    githubAppClientId: process.env.GIT_APP_CLIENT_ID,
+    githubAppClientSecret: process.env.GIT_APP_CLIENT_SECRET,
     githubAppSlug: process.env.GIT_APP_SLUG,
     githubAppPrivateKeyBase64: process.env.GIT_APP_PRIVATE_KEY_BASE64,
     githubAppCallbackUrl: process.env.GIT_APP_CALLBACK_URL,
@@ -337,6 +341,30 @@ export function requireGitHubAppStateSecret(): string {
   }
 
   return stateSecret;
+}
+
+export function requireGitHubAppUserAuthorizationConfig(
+  env: RuntimeEnv = getRuntimeEnv()
+): { clientId: string; clientSecret: string; callbackUrl: string } {
+  const clientId = env.githubAppClientId?.trim();
+  const clientSecret = env.githubAppClientSecret?.trim();
+  const setupCallbackUrl = env.githubAppCallbackUrl?.trim();
+
+  if (!clientId) {
+    throw new Error("GIT_APP_CLIENT_ID is required");
+  }
+  if (!clientSecret) {
+    throw new Error("GIT_APP_CLIENT_SECRET is required");
+  }
+  if (!setupCallbackUrl) {
+    throw new Error("GIT_APP_CALLBACK_URL is required");
+  }
+
+  const callbackUrl = new URL(
+    "/api/source-repositories/github/user-authorization/callback",
+    setupCallbackUrl
+  ).toString();
+  return { clientId, clientSecret, callbackUrl };
 }
 
 export function requireDatabaseUrl(): string {

@@ -110,7 +110,7 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
       setHasGitHubAccountConnection(null);
       setAccountState("error");
       setAccountErrorMessage(
-        getApiErrorMessage(error, "GitHub 계정 연결 상태를 불러오지 못했습니다.")
+        getApiErrorMessage(error, "GitHub App 연결 상태를 불러오지 못했습니다.")
       );
     }
   }
@@ -281,18 +281,18 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
         ) : null}
 
         {accountState === "loading" ? (
-          <p className="dashboardMessage" role="status">GitHub 계정 연결 상태를 확인하는 중입니다.</p>
+          <p className="dashboardMessage" role="status">GitHub App 연결 상태를 확인하는 중입니다.</p>
         ) : null}
 
         {hasGitHubAccountConnection === false ? (
           <div className="dashboardStateBand">
-            <strong>GitHub 계정 연결이 필요합니다.</strong>
-            <p>전역 설정에서 GitHub App을 연결한 뒤 프로젝트 repository를 선택할 수 있습니다.</p>
+            <strong>GitHub App 연결이 필요합니다.</strong>
+            <p>로그인 방식과 관계없이 GitHub App을 연결한 뒤 프로젝트 repository를 선택할 수 있습니다.</p>
             <Link
               className="dashboardPrimaryAction"
               href="/dashboard/settings#github-account-settings-title"
             >
-              GitHub 계정 연결
+              GitHub App 연결
             </Link>
           </div>
         ) : null}

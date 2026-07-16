@@ -11,10 +11,11 @@ const source = readFileSync(
 test("CI/CD sends users without a GitHub account installation to global settings", () => {
   assert.match(source, /listGitHubAccountInstallations/);
   assert.match(source, /hasGitHubAccountConnection/);
-  assert.match(source, /isGitHubIdentityRequiredError/);
+  assert.doesNotMatch(source, /isGitHubIdentityRequiredError/);
   assert.match(source, /\/dashboard\/settings#github-account-settings-title/);
-  assert.match(source, /GitHub 계정 연결이 필요합니다\./);
-  assert.match(source, /GitHub 계정 설정 열기/);
+  assert.match(source, /GitHub App 연결이 필요합니다\./);
+  assert.match(source, /로그인 방식과 관계없이/);
+  assert.match(source, /GitHub App 설정 열기/);
 });
 
 test("CI/CD sends connected GitHub accounts without a repository to source repository", () => {

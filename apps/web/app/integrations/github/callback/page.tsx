@@ -8,6 +8,7 @@ import type { GitHubRepositoryCandidate, SourceRepository } from "@sketchcatch/t
 import { ProductBrand } from "../../../../components/ui/ProductBrand";
 import {
   connectGitHubSourceRepository,
+  createGitHubInstallationUserAuthorization,
   listGitHubInstallationRepositories
 } from "../../../../features/workspace/api";
 import { getApiErrorMessage } from "../../../../lib/api-client";
@@ -62,6 +63,7 @@ export default function GitHubIntegrationCallbackPage() {
     [callbackState, ecsDefaults?.sourceRoot]
   );
 
+  // setup URL의 installation_id를 바로 신뢰하지 않고 GitHub 사용자 권한으로 먼저 검증합니다.
   useEffect(() => {
     let cancelled = false;
 
@@ -69,6 +71,7 @@ export default function GitHubIntegrationCallbackPage() {
       const searchParams = new URLSearchParams(window.location.search);
       const installationId = searchParams.get("installation_id")?.trim();
       const state = searchParams.get("state")?.trim();
+      const authorization = searchParams.get("authorization")?.trim();
 
       if (!installationId || !state) {
         setCallbackState({
@@ -79,6 +82,17 @@ export default function GitHubIntegrationCallbackPage() {
       }
 
       try {
+        if (authorization !== "verified") {
+          const result = await createGitHubInstallationUserAuthorization({
+            installationId,
+            state
+          });
+          if (!cancelled) {
+            window.location.assign(result.authorizationUrl);
+          }
+          return;
+        }
+
         const result = await listGitHubInstallationRepositories({ installationId, state });
         if (cancelled) return;
         if (result.scope === "account") {
@@ -192,8 +206,8 @@ export default function GitHubIntegrationCallbackPage() {
           <div aria-live="polite" className={styles.progress} role="status">
             <LoaderCircle aria-hidden="true" size={18} />
             <div>
-              <strong>{callbackState.status === "loading" ? "연결 대상을 확인하는 중" : "분석한 Repository 연결 중"}</strong>
-              <span>Repository를 다시 선택하거나 분석하지 않습니다.</span>
+              <strong>{callbackState.status === "loading" ? "GitHub 권한을 확인하는 중" : "분석한 Repository 연결 중"}</strong>
+              <span>연결 대상을 확인하고 있으므로 Repository를 다시 선택하거나 분석하지 않습니다.</span>
             </div>
           </div>
         ) : null}

@@ -12,7 +12,8 @@ test("global settings owns GitHub App installation without project repository be
   assert.equal(existsSync(fileURLToPath(githubSettingsUrl)), true);
   const source = readFileSync(fileURLToPath(githubSettingsUrl), "utf8");
 
-  assert.match(source, /GitHub 계정 연결/);
+  assert.match(source, /GitHub App 연결/);
+  assert.match(source, /로그인 방식과 관계없이/);
   assert.match(source, /listGitHubAccountInstallations/);
   assert.match(source, /createGitHubAccountInstallUrl/);
   assert.doesNotMatch(
