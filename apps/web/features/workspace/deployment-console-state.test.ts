@@ -271,14 +271,14 @@ test("an unchanged successful deployment returns to cleanup after reload", () =>
   assert.equal(flow.steps[2]?.statusLabel, "배포 완료");
 });
 
-test("a changed draft keeps validation active over an existing successful deployment", () => {
+test("an approved plan returns to validation with an explicit revalidation status after a draft change", () => {
   const flow = getDirectDeploymentFlow(
     createInput({
       deployment: {
         approvedAt: "2026-07-16T00:00:00.000Z",
         currentPlanArtifactId: "apply-plan",
         currentPlanOperation: "apply",
-        status: "SUCCESS"
+        status: "PENDING"
       },
       hasUnsavedBaseline: true,
       preflightState: "idle"
@@ -286,7 +286,7 @@ test("a changed draft keeps validation active over an existing successful deploy
   );
 
   assert.equal(flow.activeStepId, "validation");
-  assert.equal(flow.steps[0]?.statusLabel, "저장 필요");
+  assert.equal(flow.steps[0]?.statusLabel, "변경 후 재검증 필요");
 });
 
 test("save and validation actions depend on changes after a successful deployment", () => {

@@ -1071,13 +1071,18 @@ export function DirectDeploymentScreen({
           ? errorMessage
           : "";
     const validationIsBusy = requestState === "loading" || preDeploymentState === "loading";
+    const requiresApprovedPlanRevalidation = Boolean(
+      hasCurrentDeploymentChanges && selectedDeployment?.approvedAt
+    );
     const selectedStepHeading =
       selectedStep.id === "validation"
         ? {
             description:
-              "배포 전에 설정을 저장하고 Terraform Plan과 안전 검사를 실행합니다.",
+              requiresApprovedPlanRevalidation
+                ? "승인된 Plan 이후 변경사항이 있어, 새 설정을 저장하고 다시 검증합니다."
+                : "배포 전에 설정을 저장하고 Terraform Plan과 안전 검사를 실행합니다.",
             label: "1단계",
-            title: "배포 검증"
+            title: requiresApprovedPlanRevalidation ? "변경사항 재검증" : "배포 검증"
           }
         : selectedStep.id === "approval"
           ? {
@@ -1295,7 +1300,11 @@ export function DirectDeploymentScreen({
                   type="button"
                 >
                   <DeploymentBaselineIcon size={16} aria-hidden="true" />
-                  {validationIsBusy ? "저장 및 검증 실행 중" : "저장 후 검증 실행"}
+                  {validationIsBusy
+                    ? "저장 및 검증 실행 중"
+                    : requiresApprovedPlanRevalidation
+                      ? "새 변경사항 검증"
+                      : "저장 후 검증 실행"}
                 </button>
               </div>
             ) : !hasCurrentPlan ? (

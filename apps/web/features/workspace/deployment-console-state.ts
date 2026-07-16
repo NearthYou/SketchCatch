@@ -216,7 +216,11 @@ export function shouldStartQueuedApplyPlan(input: QueuedApplyPlanInput): boolean
 
 function getValidationStep(input: DirectDeploymentFlowInput): DirectDeploymentStep {
   if (input.hasUnsavedBaseline) {
-    return step("validation", "active", "저장 필요");
+    return step(
+      "validation",
+      "active",
+      input.deployment?.approvedAt ? "변경 후 재검증 필요" : "저장 필요"
+    );
   }
   const mapped = {
     blocked: ["blocked", "차단 항목 확인"],

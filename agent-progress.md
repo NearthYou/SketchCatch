@@ -64,6 +64,12 @@ Short English-only working log for the current agent context. Older records are 
 - Full `pnpm test` remains non-green only on the three pre-existing three-tier Template position, security-scope, and parent contract failures in `packages/types`.
 - No workflow dispatch, Terraform apply, cloud mutation, push, or production deployment was performed.
 
+### 2026-07-16 - Explain approved Plan revalidation after draft changes
+
+- Direct Deployment now distinguishes a first validation from revalidation required after an approved Plan's prepared draft diverges.
+- The workflow remains safely at validation for a changed draft, while the status, heading, and action explicitly say that the earlier approval must be revalidated.
+- Verification: focused deployment console tests passed 31/31; targeted Web lint, Web typecheck, and `pnpm harness:check` passed.
+
 ## Next Action
 
 - Review and merge `codex/fix-production-amazon-q-runtime`; run the production ECS deployment only after explicit approval.
