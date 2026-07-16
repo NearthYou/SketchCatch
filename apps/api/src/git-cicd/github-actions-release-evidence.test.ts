@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseReleaseEvidence } from "./github-actions-run-provider.js";
 
-test("GitHub Actions release parser accepts strict v2 artifact evidence and keeps v1 compatible", () => {
+test("GitHub Actions release parser accepts strict convergence v3 evidence and keeps v1/v2 compatible", () => {
   const digest = "a".repeat(64);
   const imageUri =
     `123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/customer-api@sha256:${digest}`;
@@ -41,7 +41,26 @@ test("GitHub Actions release parser accepts strict v2 artifact evidence and keep
       }
     }
   };
-  const logs = [v1, v2]
+  const v3 = {
+    ...v2,
+    schemaVersion: 3,
+    convergence: {
+      contractVersion: "runtime-convergence/v1",
+      adapterKind: "ecs_service_fargate",
+      outcome: "already_active",
+      deploymentTargetFingerprint: "d".repeat(64),
+      artifactFingerprint: v2.artifact.artifactFingerprint,
+      artifactDigestAlgorithm: "sha256",
+      artifactDigest: digest,
+      providerStateVerifiedAt: "2026-07-16T00:00:00.000Z",
+      fallbackReason: null
+    }
+  };
+  const invalidV3 = {
+    ...v3,
+    convergence: { ...v3.convergence, artifactFingerprint: "e".repeat(64) }
+  };
+  const logs = [v1, v2, v3, invalidV3]
     .map(
       (evidence) =>
         `SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=${Buffer.from(JSON.stringify(evidence)).toString("base64")}`
@@ -49,5 +68,5 @@ test("GitHub Actions release parser accepts strict v2 artifact evidence and keep
     .join("\n");
 
   const parsed = parseReleaseEvidence(logs);
-  assert.deepEqual(parsed.map((evidence) => evidence.schemaVersion), [1, 2]);
+  assert.deepEqual(parsed.map((evidence) => evidence.schemaVersion), [1, 2, 3]);
 });

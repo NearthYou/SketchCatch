@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
+import {
+  APPLICATION_ARTIFACT_CONTRACT_VERSION
+} from "@sketchcatch/types";
 import type {
   ConfirmedBuildConfig,
   DeploymentPlanSummary,
@@ -15,6 +18,11 @@ import type {
   SourceRepositoryProvider
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
+import { createApplicationArtifactIdentity } from "../artifacts/application-artifact-identity.js";
+import {
+  applicationArtifactKindForRuntime,
+  applicationArtifactPlatformForRuntime
+} from "../artifacts/application-artifact-runtime.js";
 import {
   architectures,
   awsConnections,
@@ -34,6 +42,10 @@ import {
   createRepositorySettingsPreview,
   defaultGitCicdEnvironmentName
 } from "./git-cicd-workflows.js";
+import {
+  DeploymentTargetFingerprintMismatchError,
+  resolveAwsDeploymentTargetIdentity
+} from "../runtime-convergence/deployment-target-identity.js";
 
 export type GitCicdHandoffRecord = typeof gitCicdHandoffs.$inferSelect;
 export type ProjectAccessContext = {
@@ -69,7 +81,10 @@ export type GitCicdHandoffSourceRepositoryRecord = Pick<
   | "analyzedAt"
 >;
 export type GitCicdHandoffDeploymentTargetRecord =
-  typeof projectDeploymentTargets.$inferSelect & { awsRoleArn: string | null };
+  typeof projectDeploymentTargets.$inferSelect & {
+    awsRoleArn: string | null;
+    awsAccountId: string | null;
+  };
 export type GitCicdHandoffApprovedDeploymentRecord = Pick<
   typeof deployments.$inferSelect,
   | "id"
@@ -198,6 +213,7 @@ export type GitCicdProviderCreateInput = {
   environmentName: string;
   rdsEnabled: boolean;
   awsRegion: string;
+  awsAccountId: string;
   awsRoleArn: string | null;
   tfStateBucket: string | null;
   releaseBucket: string | null;
@@ -206,6 +222,8 @@ export type GitCicdProviderCreateInput = {
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig;
   runtimeConfig: ProjectDeploymentRuntimeConfig;
+  applicationArtifactFingerprint: string;
+  deploymentTargetFingerprint: string;
   terraformArtifact: {
     id: string;
     objectKey: string;
@@ -474,6 +492,7 @@ export function createGitHubGitCicdHandoffProvider(
             },
             ...createGitCicdAutomationFiles({
               handoffId: input.handoffId,
+              projectId: input.projectId,
               projectSlug: input.projectSlug,
               repositoryOwner: input.sourceRepository.owner,
               repositoryName: input.sourceRepository.name,
@@ -483,6 +502,7 @@ export function createGitHubGitCicdHandoffProvider(
               userAcceptedChangeId: input.userAcceptedChangeId,
               environmentName: input.environmentName,
               awsRegion: input.awsRegion,
+              awsAccountId: input.awsAccountId,
               awsRoleArn: input.awsRoleArn,
               tfStateBucket: input.tfStateBucket ?? undefined,
               releaseBucket: input.releaseBucket ?? undefined,
@@ -491,7 +511,9 @@ export function createGitHubGitCicdHandoffProvider(
               apiBaseUrl: input.apiBaseUrl,
               runtimeTargetKind: input.runtimeTargetKind,
               confirmedBuildConfig: input.confirmedBuildConfig,
-              runtimeConfig: input.runtimeConfig
+              runtimeConfig: input.runtimeConfig,
+              applicationArtifactFingerprint: input.applicationArtifactFingerprint,
+              deploymentTargetFingerprint: input.deploymentTargetFingerprint
             })
           ],
           pullRequest: input.pullRequestDraft,
@@ -747,7 +769,8 @@ export function createPostgresGitCicdHandoffRepository(
       const [target] = await db
         .select({
           ...getTableColumns(projectDeploymentTargets),
-          awsRoleArn: awsConnections.roleArn
+          awsRoleArn: awsConnections.roleArn,
+          awsAccountId: awsConnections.accountId
         })
         .from(projectDeploymentTargets)
         .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
@@ -1060,6 +1083,28 @@ export async function createGitCicdHandoff(
   }
   const deploymentTarget = await repository.findProjectDeploymentTarget(input.projectId);
   assertGitOpsTarget(deploymentTarget, sourceRepository, monitoringConfig.appPath);
+  if (!deploymentTarget.awsAccountId) {
+    throw new GitCicdHandoffProviderConflictError(
+      "Git/CI/CD handoff requires a verified AWS account identity"
+    );
+  }
+  const runtimeTargetIdentity = resolveGitOpsHandoffRuntimeTargetIdentity(
+    input.projectId,
+    deploymentTarget
+  );
+  const applicationArtifactIdentity = createApplicationArtifactIdentity({
+    repository: {
+      provider: sourceRepository.provider,
+      owner: sourceRepository.owner,
+      name: sourceRepository.name
+    },
+    commitSha: deploymentTarget.confirmedBuildConfig.confirmedCommitSha,
+    kind: applicationArtifactKindForRuntime(deploymentTarget.runtimeTargetKind),
+    confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
+    buildContractVersion: APPLICATION_ARTIFACT_CONTRACT_VERSION,
+    ...applicationArtifactPlatformForRuntime(deploymentTarget.runtimeTargetKind),
+    buildInputs: {}
+  });
 
   const handoffId = generateId();
   const projectSlug = createProjectSlug(project.name);
@@ -1100,6 +1145,7 @@ export async function createGitCicdHandoff(
     infraPath: monitoringConfig.infraPath.path,
     environmentName,
     awsRegion,
+    awsAccountId: deploymentTarget.awsAccountId,
     awsRoleArn,
     tfStateBucket: tfStateBucket ?? undefined,
     releaseBucket: releaseBucket ?? undefined,
@@ -1126,6 +1172,8 @@ export async function createGitCicdHandoff(
     runtimeTargetKind: deploymentTarget.runtimeTargetKind,
     confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
     runtimeConfig: deploymentTarget.runtimeConfig,
+    applicationArtifactFingerprint: applicationArtifactIdentity.artifactFingerprint,
+    deploymentTargetFingerprint: runtimeTargetIdentity.deploymentTargetFingerprint,
     approvedByUserId: null,
     approvedAt: null
   });
@@ -1152,6 +1200,7 @@ export async function createGitCicdHandoff(
     environmentName,
     rdsEnabled,
     awsRegion,
+    awsAccountId: deploymentTarget.awsAccountId,
     awsRoleArn,
     tfStateBucket,
     releaseBucket,
@@ -1160,6 +1209,8 @@ export async function createGitCicdHandoff(
     runtimeTargetKind: deploymentTarget.runtimeTargetKind,
     confirmedBuildConfig: deploymentTarget.confirmedBuildConfig,
     runtimeConfig: deploymentTarget.runtimeConfig,
+    applicationArtifactFingerprint: applicationArtifactIdentity.artifactFingerprint,
+    deploymentTargetFingerprint: runtimeTargetIdentity.deploymentTargetFingerprint,
     terraformArtifact: {
       id: terraformArtifact.id,
       objectKey: terraformArtifact.objectKey,
@@ -1356,6 +1407,38 @@ export function assertGitOpsTarget(
   throw new GitCicdHandoffProviderConflictError(
     "GitOps application handoff does not yet support the selected runtime"
   );
+}
+
+export function resolveGitOpsHandoffRuntimeTargetIdentity(
+  projectId: string,
+  target: GitCicdHandoffDeploymentTargetRecord & {
+    confirmedBuildConfig: ConfirmedBuildConfig;
+    runtimeConfig: ProjectDeploymentRuntimeConfig;
+  }
+) {
+  if (!target.awsAccountId) {
+    throw new GitCicdHandoffProviderConflictError(
+      "Git/CI/CD handoff requires a verified AWS account identity"
+    );
+  }
+  try {
+    return resolveAwsDeploymentTargetIdentity({
+      projectId,
+      accountId: target.awsAccountId,
+      region: target.region,
+      runtimeTarget: target.runtimeTarget,
+      runtimeConfig: target.runtimeConfig,
+      healthCheckPath: target.confirmedBuildConfig.healthCheckPath,
+      persistedDeploymentTargetFingerprint: target.deploymentTargetFingerprint
+    });
+  } catch (error) {
+    if (error instanceof DeploymentTargetFingerprintMismatchError) {
+      throw new GitCicdHandoffProviderConflictError(
+        "Confirmed deployment target fingerprint does not match its runtime configuration"
+      );
+    }
+    throw error;
+  }
 }
 
 export async function listProjectGitCicdHandoffs(

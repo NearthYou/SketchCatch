@@ -22,6 +22,10 @@ import {
   projectDeploymentTargets
 } from "../db/schema.js";
 import { resolveApplicationReleaseVersion } from "../releases/application-release-identity.js";
+import {
+  resolveGitOpsDeploymentTargetFingerprint,
+  verifyGitOpsRuntimeConvergence
+} from "./gitops-runtime-convergence.js";
 
 export type EcsGitOpsReleaseRecord = typeof applicationReleases.$inferSelect;
 
@@ -33,18 +37,24 @@ export type EcsGitOpsVerificationTarget = {
     region: string;
   };
   runtimeConfig: EcsFargateRuntimeConfig;
+  deploymentTargetFingerprint?: string | null | undefined;
 };
 
 export type EcsGitOpsObservedState = {
   taskDefinitionArn: string;
+  serviceStatus: string;
   desiredCount: number;
   runningCount: number;
+  pendingCount: number;
+  deploymentCount: number;
+  fargateCapacity: boolean;
   minimumHealthyPercent: number;
   maximumPercent: number;
   circuitBreakerEnabled: boolean;
   circuitBreakerRollback: boolean;
   containerName: string;
   imageUri: string;
+  runtimeConvergenceMarker?: string | null | undefined;
 };
 
 export type EcsGitOpsReleaseRepository = {
@@ -110,6 +120,11 @@ export function createEcsGitOpsReleaseReconciler(options: {
         attemptedTaskDefinitionArn: input.evidence.taskDefinitionArn
       });
       validateObservedState(input.evidence, input.pipelineStatus, observed);
+      const convergence = verifyGitOpsRuntimeConvergence({
+        evidence: input.evidence,
+        expectedAdapterKind: "ecs_service_fargate",
+        expectedDeploymentTargetFingerprint: target.deploymentTargetFingerprint
+      });
 
       const timestamp = now();
       const status = mapReleaseStatus(input.evidence.outcome);
@@ -131,6 +146,7 @@ export function createEcsGitOpsReleaseReconciler(options: {
         pipelineRunId: input.pipelineRunId,
         source: "gitops",
         runtimeTargetKind: "ecs_fargate",
+        ...convergence,
         version: resolveApplicationReleaseVersion({ commitSha: input.commitSha }),
         commitSha: input.commitSha.toLowerCase(),
         artifactDigestAlgorithm: "sha256",
@@ -157,7 +173,10 @@ export function createEcsGitOpsReleaseReconciler(options: {
           observedTaskDefinitionArn: observed.taskDefinitionArn,
           desiredCount: observed.desiredCount,
           runningCount: observed.runningCount,
-          verifiedAt: timestamp.toISOString()
+          verifiedAt: timestamp.toISOString(),
+          ...(input.evidence.schemaVersion === 3
+            ? { convergence: input.evidence.convergence }
+            : {})
         },
         rollbackEvidence,
         startedAt: input.startedAt,
@@ -205,17 +224,25 @@ function validateObservedState(
     : [evidence.taskDefinitionArn, evidence.previousTaskDefinitionArn].includes(
         observed.taskDefinitionArn
       );
+  const expectedMarker = evidence.schemaVersion === 3
+    ? `sketchcatch:artifact=${evidence.artifact.artifactFingerprint};target=${evidence.convergence.deploymentTargetFingerprint}`
+    : null;
   if (
     !validRevision ||
-    observed.desiredCount < 0 ||
+    observed.serviceStatus !== "ACTIVE" ||
+    observed.desiredCount <= 0 ||
     observed.runningCount < 0 ||
     observed.desiredCount !== observed.runningCount ||
+    observed.pendingCount !== 0 ||
+    observed.deploymentCount !== 1 ||
+    !observed.fargateCapacity ||
     observed.minimumHealthyPercent !== 0 ||
     observed.maximumPercent !== 100 ||
     !observed.circuitBreakerEnabled ||
     !observed.circuitBreakerRollback ||
     observed.containerName !== evidence.containerName ||
     observed.imageUri !== evidence.imageUri ||
+    (expectedMarker !== null && observed.runtimeConvergenceMarker !== expectedMarker) ||
     (pipelineStatus === "succeeded" && evidence.outcome !== "succeeded")
   ) {
     throw new EcsGitOpsReleaseVerificationError(
@@ -239,7 +266,11 @@ export function createPostgresEcsGitOpsReleaseRepository(
         .select({
           projectId: projectDeploymentTargets.projectId,
           runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+          confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
           runtimeConfig: projectDeploymentTargets.runtimeConfig,
+          runtimeTarget: projectDeploymentTargets.runtimeTarget,
+          deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
+          accountId: awsConnections.accountId,
           roleArn: awsConnections.roleArn,
           externalId: awsConnections.externalId,
           region: awsConnections.region
@@ -258,6 +289,8 @@ export function createPostgresEcsGitOpsReleaseRepository(
         );
       if (
         !row?.roleArn ||
+        !row.accountId ||
+        !row.confirmedBuildConfig ||
         row.runtimeTargetKind !== "ecs_fargate" ||
         row.runtimeConfig?.runtimeTargetKind !== "ecs_fargate"
       ) return undefined;
@@ -268,7 +301,16 @@ export function createPostgresEcsGitOpsReleaseRepository(
           externalId: row.externalId,
           region: row.region
         },
-        runtimeConfig: row.runtimeConfig
+        runtimeConfig: row.runtimeConfig,
+        deploymentTargetFingerprint: resolveGitOpsDeploymentTargetFingerprint({
+          projectId: row.projectId,
+          accountId: row.accountId,
+          region: row.region,
+          runtimeTarget: row.runtimeTarget,
+          runtimeConfig: row.runtimeConfig,
+          healthCheckPath: row.confirmedBuildConfig.healthCheckPath,
+          persistedDeploymentTargetFingerprint: row.deploymentTargetFingerprint
+        })
       };
     },
     async upsertRelease(input) {
@@ -282,6 +324,9 @@ export function createPostgresEcsGitOpsReleaseRepository(
             version: input.version,
             commitSha: input.commitSha,
             artifactDigest: input.artifactDigest,
+            runtimeAdapterKind: input.runtimeAdapterKind,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+            convergenceOutcome: input.convergenceOutcome,
             providerRevision: input.providerRevision,
             outputUrl: input.outputUrl,
             status: input.status,
@@ -331,7 +376,8 @@ export function createAwsEcsGitOpsCloudGateway(options: {
         }
         const taskResponse = await client.send(
           new DescribeTaskDefinitionCommand({
-            taskDefinition: input.attemptedTaskDefinitionArn
+            taskDefinition: input.attemptedTaskDefinitionArn,
+            include: ["TAGS"]
           }),
           { abortSignal: controller.signal }
         );
@@ -339,16 +385,28 @@ export function createAwsEcsGitOpsCloudGateway(options: {
           (container) => container.name === input.containerName
         ) ?? [];
         const configuration = service.deploymentConfiguration;
+        const capacityProviders = service.capacityProviderStrategy ?? [];
+        const fargateCapacity = service.launchType === "FARGATE" ||
+          capacityProviders.length > 0 && capacityProviders.every((item) =>
+            item.capacityProvider === "FARGATE" || item.capacityProvider === "FARGATE_SPOT"
+          );
         return {
           taskDefinitionArn: service.taskDefinition,
+          serviceStatus: service.status ?? "",
           desiredCount: service.desiredCount ?? -1,
           runningCount: service.runningCount ?? -1,
+          pendingCount: service.pendingCount ?? -1,
+          deploymentCount: service.deployments?.length ?? -1,
+          fargateCapacity,
           minimumHealthyPercent: configuration?.minimumHealthyPercent ?? -1,
           maximumPercent: configuration?.maximumPercent ?? -1,
           circuitBreakerEnabled: configuration?.deploymentCircuitBreaker?.enable === true,
           circuitBreakerRollback: configuration?.deploymentCircuitBreaker?.rollback === true,
           containerName: containers.length === 1 ? (containers[0]?.name ?? "") : "",
-          imageUri: containers.length === 1 ? (containers[0]?.image ?? "") : ""
+          imageUri: containers.length === 1 ? (containers[0]?.image ?? "") : "",
+          runtimeConvergenceMarker: taskResponse.tags?.find(
+            (tag) => tag.key === "sketchcatch:runtime-convergence"
+          )?.value ?? null
         };
       } finally {
         client?.destroy();

@@ -6,14 +6,22 @@ import {
   type CodeBuildClientConfig,
   type EnvironmentVariable
 } from "@aws-sdk/client-codebuild";
+import {
+  DescribeServicesCommand,
+  DescribeTaskDefinitionCommand,
+  ECSClient,
+  type ECSClientConfig
+} from "@aws-sdk/client-ecs";
 import type {
   ApplicationArtifact,
   ApplicationReleaseStatus,
   ApplicationReleaseProviderRevision,
   GitOpsReleaseEvidence,
   JsonValue,
+  RuntimeDeploymentTarget,
   RuntimeTargetKind
 } from "@sketchcatch/types";
+import { normalizeLegacyRuntimeDeploymentTarget } from "@sketchcatch/types";
 import { createAwsApplicationArtifactProviderVerifier } from "../artifacts/aws-application-artifact-verifier.js";
 import type { ApplicationArtifactProviderVerification } from "../artifacts/application-artifact-registry.js";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
@@ -25,6 +33,12 @@ import {
   type DirectApplicationReleaseRecord
 } from "./direct-application-release-service.js";
 import { createDirectApplicationReleaseEvidenceVerifier } from "./direct-application-release-evidence-verifier.js";
+import { createDeploymentTargetIdentity } from "../runtime-convergence/deployment-target-identity.js";
+import type { RuntimeProviderCurrentState } from "../runtime-convergence/runtime-convergence-service.js";
+import {
+  createPublicHttpsHealthProbe,
+  type PublicHttpsHealthProbe
+} from "./public-https-health-probe.js";
 
 export type CodeBuildCommandClient = {
   send(
@@ -73,11 +87,14 @@ type AssumeDirectReleaseRole = (input: {
 }) => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken?: string }>;
 
 type CreateCodeBuildClient = (configuration: CodeBuildClientConfig) => CodeBuildCommandClient;
+type CreateEcsClient = (configuration: ECSClientConfig) => ECSClient;
 type WaitForCodeBuildPoll = (milliseconds: number, abortSignal?: AbortSignal) => Promise<void>;
 
 export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
   assumeRole?: AssumeDirectReleaseRole;
   createClient?: CreateCodeBuildClient;
+  createEcsClient?: CreateEcsClient;
+  probeHealth?: PublicHttpsHealthProbe;
   wait?: WaitForCodeBuildPoll;
   verifyEvidence?: VerifyDirectReleaseEvidence;
   verifyArtifact?: (
@@ -91,6 +108,9 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
   });
   const createClient = options.createClient ?? ((configuration) =>
     new CodeBuildClient(configuration) as unknown as CodeBuildCommandClient);
+  const createEcsClient = options.createEcsClient ?? ((configuration) =>
+    new ECSClient(configuration));
+  const probeHealth = options.probeHealth ?? createPublicHttpsHealthProbe();
   const wait = options.wait ?? waitForPoll;
   const verifyEvidence =
     options.verifyEvidence ?? createDirectApplicationReleaseEvidenceVerifier();
@@ -132,6 +152,16 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
           runtimeTargetKind: context.target.runtimeTargetKind
         }
       };
+    },
+    async inspectCurrentRuntime({ context, target, abortSignal }) {
+      return inspectEcsDirectRuntime({
+        context,
+        target,
+        assumeRole,
+        createEcsClient,
+        probeHealth,
+        ...(abortSignal ? { abortSignal } : {})
+      });
     },
     async deployArtifact({ context, artifact, abortSignal }) {
       const result = await runCodeBuildPhase({
@@ -175,6 +205,169 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
       return { ...verified, status: "rolled_back" };
     }
   };
+}
+
+export async function inspectEcsDirectRuntime(input: {
+  readonly context: DirectApplicationReleaseContext;
+  readonly target: RuntimeDeploymentTarget;
+  readonly abortSignal?: AbortSignal | undefined;
+  readonly assumeRole: AssumeDirectReleaseRole;
+  readonly createEcsClient: CreateEcsClient;
+  readonly probeHealth: PublicHttpsHealthProbe;
+}): Promise<RuntimeProviderCurrentState> {
+  assertEcsFargateRuntimeTarget(input.target);
+  const target = input.target;
+  const credentials = await input.assumeRole({
+    ...input.context.connection,
+    roleSessionName: `sketchcatch-direct-inspect-${input.context.deployment.id}`,
+    ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+  });
+  const client = input.createEcsClient({
+    region: input.context.connection.region,
+    credentials
+  });
+  try {
+    const serviceResponse = await client.send(
+      new DescribeServicesCommand({
+        cluster: target.orchestrator.clusterName,
+        services: [target.orchestrator.serviceName]
+      }),
+      input.abortSignal ? { abortSignal: input.abortSignal } : undefined
+    );
+    const service = serviceResponse.services?.[0];
+    if (!service?.taskDefinition || serviceResponse.failures?.length) {
+      throw new DirectApplicationReleaseError("ECS service current state was unavailable");
+    }
+    const taskResponse = await client.send(
+      new DescribeTaskDefinitionCommand({
+        taskDefinition: service.taskDefinition,
+        include: ["TAGS"]
+      }),
+      input.abortSignal ? { abortSignal: input.abortSignal } : undefined
+    );
+    const containers = taskResponse.taskDefinition?.containerDefinitions?.filter(
+      (container) => container.name === target.compute.containerName
+    ) ?? [];
+    if (containers.length !== 1 || !containers[0]?.image) {
+      throw new DirectApplicationReleaseError("ECS task definition current state was incomplete");
+    }
+    const marker = taskResponse.tags?.find(
+      (tag) => tag.key === "sketchcatch:runtime-convergence"
+    )?.value ?? "";
+    const markerMatch = /^sketchcatch:artifact=([a-f0-9]{64});target=([a-f0-9]{64})$/u.exec(
+      marker
+    );
+    const deploymentConfiguration = service.deploymentConfiguration;
+    const activeDeployment = service.deployments?.length === 1
+      ? service.deployments[0]
+      : undefined;
+    const fargateCapacity = service.launchType === "FARGATE" ||
+      (service.capacityProviderStrategy?.length ?? 0) > 0 &&
+      service.capacityProviderStrategy?.every((item) =>
+        item.capacityProvider === "FARGATE" || item.capacityProvider === "FARGATE_SPOT"
+      ) === true;
+    const providerHealthy =
+      service.status === "ACTIVE" &&
+      service.desiredCount !== undefined &&
+      service.desiredCount > 0 &&
+      service.runningCount === service.desiredCount &&
+      (service.pendingCount ?? 0) === 0 &&
+      (service.deployments?.length ?? 0) === 1 &&
+      fargateCapacity &&
+      (target.capacity.platformVersion === null ||
+        activeDeployment?.platformVersion === target.capacity.platformVersion) &&
+      deploymentConfiguration?.minimumHealthyPercent ===
+        target.rollout.minimumHealthyPercent &&
+      deploymentConfiguration.maximumPercent === target.rollout.maximumPercent &&
+      deploymentConfiguration.deploymentCircuitBreaker?.enable === true &&
+      deploymentConfiguration.deploymentCircuitBreaker.rollback ===
+        target.rollout.circuitBreakerRollback;
+    const healthVerifiedAt = new Date().toISOString();
+    const endpointHealthy = await inspectDirectHealthEndpoint(
+      target,
+      input.probeHealth,
+      input.abortSignal
+    );
+    const image = containers[0].image;
+    const digest = /@sha256:([a-f0-9]{64})$/u.exec(image)?.[1] ?? "0".repeat(64);
+
+    return {
+      adapterKind: "ecs_service_fargate",
+      deploymentTargetFingerprint: markerMatch?.[2] ?? "0".repeat(64),
+      scope: {
+        projectId: input.context.deployment.projectId,
+        provider: "aws",
+        accountId: input.context.connection.accountId,
+        region: input.context.connection.region
+      },
+      target,
+      artifact: {
+        artifactFingerprint: markerMatch?.[1] ?? "0".repeat(64),
+        digestAlgorithm: "sha256",
+        digest,
+        reference: image
+      },
+      providerRevision: {
+        provider: "aws",
+        resourceType: "ecs_service",
+        revisionId: service.taskDefinition,
+        artifactReference: image,
+        metadata: {
+          clusterName: target.orchestrator.clusterName,
+          serviceName: target.orchestrator.serviceName,
+          desiredCount: service.desiredCount ?? -1,
+          runningCount: service.runningCount ?? -1
+        }
+      },
+      health: {
+        status: providerHealthy && endpointHealthy ? "healthy" : "unhealthy",
+        verifiedAt: healthVerifiedAt
+      },
+      healthEvidence: {
+        state: providerHealthy && endpointHealthy ? "healthy" : "unhealthy",
+        providerHealthy,
+        endpointHealthy,
+        desiredCount: service.desiredCount ?? -1,
+        runningCount: service.runningCount ?? -1,
+        verifiedAt: healthVerifiedAt
+      },
+      rollbackEvidence: null
+    };
+  } finally {
+    client.destroy();
+  }
+}
+
+function assertEcsFargateRuntimeTarget(
+  target: RuntimeDeploymentTarget
+): asserts target is Extract<RuntimeDeploymentTarget, { adapterKind: "ecs_service_fargate" }> {
+  if (target.adapterKind !== "ecs_service_fargate") {
+    throw new DirectApplicationReleaseError(
+      "A read-only provider inspector is not configured for this Direct runtime adapter"
+    );
+  }
+}
+
+async function inspectDirectHealthEndpoint(
+  target: Extract<RuntimeDeploymentTarget, { adapterKind: "ecs_service_fargate" }>,
+  probeHealth: PublicHttpsHealthProbe,
+  abortSignal?: AbortSignal
+): Promise<boolean> {
+  if (target.health.kind === "provider") return true;
+  if (target.health.kind !== "https") return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const onAbort = () => controller.abort();
+  abortSignal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    const url = `${target.health.outputUrl.replace(/\/+$/u, "")}/${target.health.path.replace(/^\/+/, "")}`;
+    return await probeHealth(url, controller.signal);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+    abortSignal?.removeEventListener("abort", onAbort);
+  }
 }
 
 async function runCodeBuildPhase(input: {
@@ -358,9 +551,28 @@ function createEnvironmentOverrides(
     );
   }
   if (artifact) {
+    const runtimeTarget = context.target.runtimeTarget ??
+      normalizeLegacyRuntimeDeploymentTarget(context.target.runtimeConfig, {
+        healthCheckPath: context.target.confirmedBuildConfig.healthCheckPath
+      });
+    const targetIdentity = createDeploymentTargetIdentity({
+      contractVersion: "runtime-convergence/v1",
+      scope: {
+        projectId: context.deployment.projectId,
+        provider: "aws",
+        accountId: context.connection.accountId,
+        region: context.connection.region
+      },
+      target: runtimeTarget
+    });
     values.push(
       ["SKETCHCATCH_ARTIFACT_DIGEST", `sha256:${artifact.digest}`],
-      ["SKETCHCATCH_ARTIFACT_REFERENCE", artifact.reference]
+      ["SKETCHCATCH_ARTIFACT_REFERENCE", artifact.reference],
+      ["SKETCHCATCH_ARTIFACT_FINGERPRINT", artifact.artifactFingerprint],
+      [
+        "SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT",
+        targetIdentity.deploymentTargetFingerprint
+      ]
     );
   }
   if (release?.providerRevision) {
@@ -478,7 +690,7 @@ phases:
         with open("task-next.json", "w", encoding="utf-8") as handle:
             json.dump(task, handle)
         PY
-        NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://task-next.json --query taskDefinition.taskDefinitionArn --output text)
+        NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://task-next.json --tags key=sketchcatch:runtime-convergence,value="sketchcatch:artifact=$SKETCHCATCH_ARTIFACT_FINGERPRINT;target=$SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT" --query taskDefinition.taskDefinitionArn --output text)
         set +e
         aws ecs update-service --cluster "$SKETCHCATCH_ECS_CLUSTER" --service "$SKETCHCATCH_ECS_SERVICE" --task-definition "$NEW_TASK_DEFINITION" --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' --force-new-deployment >/dev/null
         aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE"

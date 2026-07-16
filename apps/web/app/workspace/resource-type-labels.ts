@@ -95,6 +95,7 @@ const resourceTypeLabels: Record<ResourceType, string> = {
   ECS_CAPACITY_PROVIDER: "ECS Capacity Provider",
   EKS_CLUSTER: "EKS Cluster",
   EKS_NODE_GROUP: "EKS Node Group",
+  EKS_FARGATE_PROFILE: "EKS Fargate Profile",
   EKS_ADDON: "EKS Add-on",
   KUBERNETES_NAMESPACE: "Kubernetes Namespace",
   KUBERNETES_DEPLOYMENT: "Kubernetes Deployment",

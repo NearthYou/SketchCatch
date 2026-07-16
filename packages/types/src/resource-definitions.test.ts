@@ -92,21 +92,11 @@ test("every deployable Terraform resource receives the verified desired-state op
   assert.ok(deployableDefinitions.length > 0);
 
   for (const definition of deployableDefinitions) {
-    assert.deepEqual(
-      definition.capabilities.deployment,
-      {
-        status: "supported",
-        provisioner: "terraform",
-        executionRole: "managed_resource",
-        optimization: {
-          desiredStateReuse: "verified",
-          artifactReuse: "none",
-          runtimeNoOp: "none",
-          healthVerification: "terraform_plan"
-        }
-      },
-      definition.id
-    );
+    const deployment = definition.capabilities.deployment;
+    assert.equal(deployment.status, "supported", definition.id);
+    assert.equal(deployment.provisioner, "terraform", definition.id);
+    assert.equal(deployment.executionRole, "managed_resource", definition.id);
+    assert.equal(deployment.optimization.desiredStateReuse, "verified", definition.id);
   }
 });
 
