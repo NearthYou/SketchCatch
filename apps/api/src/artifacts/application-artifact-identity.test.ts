@@ -165,6 +165,32 @@ test("canonical fingerprint rejects secret-shaped inputs and commit mismatches",
   );
 });
 
+test("secret-free build input keys reject repeated delimiter bypasses", () => {
+  for (const secretKey of ["api__key", "private--key"] as const) {
+    const input = createInput();
+    input.buildInputs[secretKey] = "must-not-enter-the-fingerprint";
+
+    assert.throws(
+      () => createApplicationArtifactIdentity(input),
+      /secret-free build input key/i
+    );
+  }
+});
+
+test("canonical fingerprint rejects malformed build input containers", () => {
+  for (const buildInputs of [null, ["unexpected"]] as const) {
+    const input = {
+      ...createInput(),
+      buildInputs
+    } as unknown as ApplicationArtifactFingerprintInput;
+
+    assert.throws(
+      () => createApplicationArtifactIdentity(input),
+      /build inputs must be a record/i
+    );
+  }
+});
+
 function toCanonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toCanonicalValue);
   if (typeof value === "object" && value !== null) {

@@ -93,12 +93,17 @@ function normalizeSecretFreeBuildInputs(
 ): Record<string, string | number | boolean | null> {
   const normalized: Record<string, string | number | boolean | null> = {};
 
+  if (!isRecord(inputs)) {
+    throw new Error("Application artifact build inputs must be a record");
+  }
+
   for (const key of Object.keys(inputs).sort()) {
     const normalizedKey = requireNonEmpty(key, "build input key");
     if (normalizedKey !== key) {
       throw new Error(`Build input key must not contain surrounding whitespace: ${key}`);
     }
-    if (secretKeyPattern.test(normalizedKey)) {
+    const secretDetectionKey = normalizedKey.replace(/[-_]+/gu, "");
+    if (secretKeyPattern.test(secretDetectionKey)) {
       throw new Error(`Secret-free build input key is required: ${normalizedKey}`);
     }
 

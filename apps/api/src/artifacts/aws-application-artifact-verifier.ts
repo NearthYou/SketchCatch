@@ -228,6 +228,12 @@ async function hasMatchingS3Digest(
 
 async function hashProviderBody(body: unknown): Promise<string | null> {
   const hash = createHash("sha256");
+  if (body && typeof body === "object" && Symbol.asyncIterator in body) {
+    for await (const chunk of body as AsyncIterable<Uint8Array | string>) {
+      hash.update(chunk);
+    }
+    return hash.digest("hex");
+  }
   if (
     body &&
     typeof body === "object" &&
@@ -235,12 +241,6 @@ async function hashProviderBody(body: unknown): Promise<string | null> {
     typeof body.transformToByteArray === "function"
   ) {
     hash.update(await body.transformToByteArray());
-    return hash.digest("hex");
-  }
-  if (body && typeof body === "object" && Symbol.asyncIterator in body) {
-    for await (const chunk of body as AsyncIterable<Uint8Array | string>) {
-      hash.update(chunk);
-    }
     return hash.digest("hex");
   }
   return null;

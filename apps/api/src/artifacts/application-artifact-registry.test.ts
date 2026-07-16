@@ -476,3 +476,56 @@ test("a long-running build renews its persistent claim lease", async () => {
 
   assert.ok(repository.renewed.length >= 1);
 });
+
+test("a failed lease renewal releases its heartbeat timer before the build ends", async (context) => {
+  const claim = createClaim();
+  const repository = createRepository([{ outcome: "claimed", claim }]);
+  let signalRenewalAttempt: () => void = () => undefined;
+  const renewalAttempted = new Promise<void>((resolve) => {
+    signalRenewalAttempt = resolve;
+  });
+  let finishBuild: () => void = () => undefined;
+  const buildMayFinish = new Promise<void>((resolve) => {
+    finishBuild = resolve;
+  });
+  repository.renew = async (input) => {
+    repository.renewed.push(input.claim.artifactId);
+    signalRenewalAttempt();
+    throw new Error("lease renewal failed");
+  };
+  const clearIntervalMock = context.mock.method(globalThis, "clearInterval");
+
+  const resolution = resolveApplicationArtifact({
+    projectId,
+    sourceRepositoryId,
+    identity,
+    expectedLocation: {
+      provider: "aws",
+      accountId: location.accountId,
+      region: location.region,
+      storageNamespace: location.storageNamespace,
+      ownershipScope: location.ownershipScope
+    },
+    now,
+    leaseDurationMs: 30,
+    repository,
+    verifier: {
+      async verify(artifact) {
+        return { outcome: "verified", digest: artifact.digest, location: artifact.location };
+      }
+    },
+    async build() {
+      await buildMayFinish;
+      return { digest: "e".repeat(64), location };
+    }
+  });
+
+  await renewalAttempted;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    assert.equal(clearIntervalMock.mock.callCount(), 1);
+  } finally {
+    finishBuild();
+    await assert.rejects(resolution, /lease renewal failed/i);
+  }
+});

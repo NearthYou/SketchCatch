@@ -277,12 +277,17 @@ function startClaimLeaseHeartbeat(
   let renewal: Promise<void> | null = null;
   let renewalError: unknown;
   const timer = setInterval(() => {
-    if (stopped || renewal || renewalError) return;
+    if (stopped || renewalError) {
+      clearInterval(timer);
+      return;
+    }
+    if (renewal) return;
     renewal = repository
       .renew({ claim, renewedAt: new Date(), leaseDurationMs })
       .then(() => undefined)
       .catch((error: unknown) => {
         renewalError = error;
+        clearInterval(timer);
       })
       .finally(() => {
         renewal = null;

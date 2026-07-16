@@ -9,7 +9,7 @@ Short English-only working log for the current agent context. Older records are 
 - Canonical identity includes repository, commit, normalized build config, build contract, target platform, and secret-free build inputs. Provider verification checks the actual ECR/S3 artifact before reuse.
 - Project-scoped active uniqueness, hashed claim tokens, renewable leases, and the composite release foreign key prevent duplicate builds and cross-project reuse.
 - Migration `0045_application_artifact_registry.sql` intentionally avoids the `0044` number reserved by another branch; `_journal.json` is updated.
-- Focused PR 2 tests pass 55/55, including corrupt cache/claim/persistence boundaries. Harness, migration compatibility, lint, typecheck, and build pass.
+- Focused PR 2 tests pass 59/59, including review regressions for malformed/secret-shaped inputs, streamed S3 hashing, and failed lease renewal cleanup. Harness, migration compatibility, lint, typecheck, and build pass.
 - Clean-state review passes; the evaluator rubric result is Accept (12/12, no hard fail).
 
 ## Session Record
@@ -21,6 +21,13 @@ Short English-only working log for the current agent context. Older records are 
 - RDS stores identity/metadata only. User artifact bytes stay in the user's ECR/S3 or provider storage; Redis is not a source of truth.
 - Review hardening added locale-independent ordering, path normalization, whitespace-preserving build inputs, full identity checks, exact GitOps references, runtime namespace checks, lease heartbeats, and provider-computed S3 digest verification.
 - No real credentials, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff were performed. PR 3 / issue #435 was not started.
+
+### 2026-07-16 - Address PR #438 review feedback
+
+- Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
+- Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
+- Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
+- No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
 
 ## Broken Or Unverified
 
