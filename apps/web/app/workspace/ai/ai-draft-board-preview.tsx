@@ -31,9 +31,26 @@ const NODE_TYPES = {
   draftPreview: DraftPreviewNode
 };
 
-export function AiDraftBoardPreview({ diagram }: { readonly diagram: DiagramJson }) {
+type AiDraftBoardPreviewProps = {
+  readonly diagram: DiagramJson;
+  readonly excludableCandidateIds?: readonly string[];
+  readonly onExcludeCandidate?: (candidateId: string) => void;
+};
+
+export function AiDraftBoardPreview({
+  diagram,
+  excludableCandidateIds = [],
+  onExcludeCandidate
+}: AiDraftBoardPreviewProps) {
   const nodes = useMemo(() => createPreviewNodes(diagram), [diagram]);
   const edges = useMemo(() => createPreviewEdges(diagram), [diagram]);
+  const excludableCandidates = useMemo(
+    () =>
+      onExcludeCandidate === undefined
+        ? []
+        : diagram.nodes.filter((node) => excludableCandidateIds.includes(node.id)),
+    [diagram.nodes, excludableCandidateIds, onExcludeCandidate]
+  );
 
   return (
     <div className={styles.previewCanvas} data-testid="ai-draft-board-preview">
@@ -56,6 +73,21 @@ export function AiDraftBoardPreview({ diagram }: { readonly diagram: DiagramJson
         <Background color="#d9dde3" gap={24} size={1} variant={BackgroundVariant.Dots} />
         <Controls position="bottom-right" showInteractive={false} />
       </ReactFlow>
+      {onExcludeCandidate !== undefined && excludableCandidates.length > 0 ? (
+        <aside className={styles.previewExclusionOverlay} aria-label="제외 가능한 Resource 후보">
+          <strong>후보 제외</strong>
+          <ul className={styles.previewExclusionList}>
+            {excludableCandidates.map((node) => (
+              <li key={node.id}>
+                <span title={getPreviewNodeLabel(node)}>{getPreviewNodeLabel(node)}</span>
+                <button onClick={() => onExcludeCandidate(node.id)} type="button">
+                  제외
+                </button>
+              </li>
+            ))}
+          </ul>
+        </aside>
+      ) : null}
     </div>
   );
 }
@@ -95,6 +127,10 @@ function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
       <small>{node.parameters?.resourceType ?? node.type}</small>
     </article>
   );
+}
+
+function getPreviewNodeLabel(node: DiagramNode): string {
+  return isAreaNode(node) ? getAreaNodeLabel(node) : node.label;
 }
 
 function createPreviewNodes(diagram: DiagramJson): DraftPreviewFlowNode[] {

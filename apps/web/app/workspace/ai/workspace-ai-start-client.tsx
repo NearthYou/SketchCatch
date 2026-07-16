@@ -7,12 +7,14 @@ import {
   Mic,
   RefreshCw,
   Send,
-  TriangleAlert
+  TriangleAlert,
+  Undo2
 } from "lucide-react";
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import type {
   AiArchitectureDraftResult,
   AiResultSource,
+  ArchitectureDraftProgressStage,
   LlmExplanationFallbackReason
 } from "@sketchcatch/types";
 import { AiDraftBoardPreview } from "./ai-draft-board-preview";
@@ -20,6 +22,8 @@ import type { AiStartExistingProject, AiStartMessage } from "./ai-start-model";
 import { useAiStartWorkflow } from "./use-ai-start-workflow";
 import { ArchitectureBoardCompilationSummary } from "../../../features/architecture-board-compiler/architecture-board-compilation-summary";
 import styles from "./workspace-ai-start.module.css";
+
+type AiStartWorkflow = ReturnType<typeof useAiStartWorkflow>;
 
 export function WorkspaceAiStartClient({
   existingProject
@@ -49,6 +53,27 @@ export function WorkspaceAiStartClient({
     void workflow.submitPrompt();
   }
 
+  function handleMobileTabKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+    let nextPane: AiStartWorkflow["mobilePane"] =
+      event.currentTarget.id === "ai-start-conversation-tab" ? "progress" : "conversation";
+    if (event.key === "Home") {
+      nextPane = "conversation";
+    } else if (event.key === "End") {
+      nextPane = "progress";
+    }
+    workflow.setMobilePane(nextPane);
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(`ai-start-${nextPane === "conversation" ? "conversation" : "progress"}-tab`)
+        ?.focus();
+    });
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
@@ -64,13 +89,65 @@ export function WorkspaceAiStartClient({
           <span>AI ARCHITECTURE</span>
           <strong>{workflow.projectDraft.projectName}</strong>
         </div>
-        <span className={styles.previewStatus} data-active={workflow.previewDiagram !== null}>
-          {workflow.previewDiagram === null ? "요구사항 입력" : "PREVIEW 준비됨"}
+        <span
+          className={styles.previewStatus}
+          data-active={workflow.previewDiagram !== null || workflow.progressSnapshot !== null}
+          role="status"
+        >
+          {getTopStatusLabel(workflow)}
         </span>
       </header>
 
-      <div className={styles.workspace} data-has-preview={workflow.previewDiagram !== null}>
-        <section className={styles.conversation} aria-label="AI Architecture 대화">
+      <div
+        className={styles.workspace}
+        data-has-preview={
+          workflow.previewDiagram !== null || workflow.progressSnapshot !== null
+        }
+        data-mobile-pane={workflow.mobilePane}
+        data-progress-enabled={existingProject === undefined}
+      >
+        {existingProject === undefined ? (
+          <div
+            aria-label="AI Architecture 모바일 화면"
+            className={styles.mobilePaneTabs}
+            role="tablist"
+          >
+            <button
+              aria-controls="ai-start-conversation-pane"
+              aria-selected={workflow.mobilePane === "conversation"}
+              id="ai-start-conversation-tab"
+              onClick={() => workflow.setMobilePane("conversation")}
+              onKeyDown={handleMobileTabKeyDown}
+              role="tab"
+              tabIndex={workflow.mobilePane === "conversation" ? 0 : -1}
+              type="button"
+            >
+              대화
+            </button>
+            <button
+              aria-controls="ai-start-progress-pane"
+              aria-selected={workflow.mobilePane === "progress"}
+              id="ai-start-progress-tab"
+              onClick={() => workflow.setMobilePane("progress")}
+              onKeyDown={handleMobileTabKeyDown}
+              role="tab"
+              tabIndex={workflow.mobilePane === "progress" ? 0 : -1}
+              type="button"
+            >
+              진행 중인 초안
+            </button>
+          </div>
+        ) : null}
+
+        <section
+          aria-label="AI Architecture 대화"
+          aria-labelledby={
+            existingProject === undefined ? "ai-start-conversation-tab" : undefined
+          }
+          className={styles.conversation}
+          id="ai-start-conversation-pane"
+          role={existingProject === undefined ? "tabpanel" : undefined}
+        >
           <div className={styles.transcript} ref={transcriptRef}>
             {workflow.messages.map((message) => (
               <ConversationMessage
@@ -144,13 +221,25 @@ export function WorkspaceAiStartClient({
           </div>
         </section>
 
-        <section className={styles.preview} aria-label="Architecture Draft PREVIEW">
+        <section
+          aria-label="Architecture Draft PREVIEW"
+          aria-labelledby={existingProject === undefined ? "ai-start-progress-tab" : undefined}
+          className={styles.preview}
+          id="ai-start-progress-pane"
+          role={existingProject === undefined ? "tabpanel" : undefined}
+        >
           {workflow.previewDiagram !== null && workflow.draft !== null ? (
             <>
               <header className={styles.previewHeader}>
                 <div>
                   <span>ARCHITECTURE DRAFT</span>
                   <h1>{workflow.draft.title}</h1>
+                  {workflow.finalProgressDifference !== null ? (
+                    <p className={styles.finalTransition} role="status">
+                      진행 초안에서 {workflow.finalProgressDifference.added}개 추가 ·{" "}
+                      {workflow.finalProgressDifference.removed}개 제외
+                    </p>
+                  ) : null}
                 </div>
                 <dl>
                   <div>
@@ -194,6 +283,8 @@ export function WorkspaceAiStartClient({
                 </div>
               </footer>
             </>
+          ) : existingProject === undefined && workflow.progressSnapshot !== null ? (
+            <DraftProgressPreview workflow={workflow} />
           ) : (
             <div className={styles.emptyPreview}>
               <span>PREVIEW</span>
@@ -204,6 +295,104 @@ export function WorkspaceAiStartClient({
         </section>
       </div>
     </main>
+  );
+}
+
+function DraftProgressPreview({ workflow }: { readonly workflow: AiStartWorkflow }) {
+  const snapshot = workflow.progressSnapshot;
+  if (snapshot === null) {
+    return null;
+  }
+
+  const recentHistory = workflow.progressHistory.slice(-6);
+  const excludableCandidateIds = snapshot.excludableCandidateIds;
+
+  return (
+    <div className={styles.progressPreview}>
+      <header className={`${styles.previewHeader} ${styles.progressHeader}`}>
+        <div>
+          <span>진행 중인 초안</span>
+          <h1>{getProgressStageLabel(snapshot.stage)}</h1>
+        </div>
+        <span className={styles.progressState} data-status={workflow.progressStatus}>
+          {getProgressStatusLabel(workflow.progressStatus)}
+        </span>
+      </header>
+
+      <section className={styles.progressContext} aria-label="확정된 요구사항과 남은 질문">
+        <div className={styles.progressRequirements}>
+          <strong>확정된 요구사항</strong>
+          {snapshot.confirmedRequirements.length > 0 ? (
+            <ul>
+              {snapshot.confirmedRequirements.map((requirement) => (
+                <li key={requirement}>{requirement}</li>
+              ))}
+            </ul>
+          ) : (
+            <span>대화에서 요구사항을 확인하고 있습니다.</span>
+          )}
+        </div>
+        <div className={styles.pendingQuestions}>
+          <span>남은 질문</span>
+          <strong>{snapshot.pendingQuestions.length}개</strong>
+        </div>
+      </section>
+
+      <div className={styles.progressBoard}>
+        <p className={styles.provisionalNotice}>대화에 따라 바뀔 수 있어요</p>
+        {workflow.progressDiagram !== null ? (
+          <AiDraftBoardPreview
+            diagram={workflow.progressDiagram}
+            excludableCandidateIds={excludableCandidateIds}
+            onExcludeCandidate={workflow.excludeProgressCandidate}
+          />
+        ) : (
+          <div className={styles.progressWaiting} role="status">
+            <LoaderCircle aria-hidden="true" size={18} />
+            Resource 후보를 구조화하고 있습니다.
+          </div>
+        )}
+      </div>
+
+      <footer className={styles.progressFooter}>
+        {recentHistory.length > 0 ? (
+          <div className={styles.progressHistory} aria-label="최근 초안 변경">
+            <strong>최근 변경</strong>
+            <ul>
+              {recentHistory.map((entry, index) => (
+                <li key={`${entry.kind}-${entry.candidateId}-${index}`} data-kind={entry.kind}>
+                  <span>{entry.kind === "added" ? "+" : "−"}</span>
+                  {entry.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <span className={styles.progressHistoryEmpty}>구조 변경을 기다리는 중</span>
+        )}
+
+        <div className={styles.progressNotices}>
+          {workflow.lastExclusion !== null ? (
+            <div aria-live="polite" className={styles.exclusionNotice} role="status">
+              <span>{workflow.lastExclusion.label} 후보를 제외했습니다.</span>
+              <button onClick={workflow.undoLastExclusion} type="button">
+                <Undo2 aria-hidden="true" size={14} />
+                되돌리기
+              </button>
+            </div>
+          ) : null}
+          {workflow.progressStatus === "interrupted" ? (
+            <div className={styles.interruptedNotice} role="alert">
+              <span>업데이트가 중단됐습니다. 마지막 초안을 유지합니다.</span>
+              <button onClick={() => void workflow.retryDraft()} type="button">
+                <RefreshCw aria-hidden="true" size={14} />
+                다시 시도
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </footer>
+    </div>
   );
 }
 
@@ -231,6 +420,48 @@ function ConversationMessage({
       </div>
     </article>
   );
+}
+
+function getTopStatusLabel(workflow: AiStartWorkflow): string {
+  if (workflow.previewDiagram !== null) {
+    return "PREVIEW 준비됨";
+  }
+  if (workflow.progressStatus === "interrupted") {
+    return "업데이트 중단됨";
+  }
+  if (workflow.progressStatus === "awaiting_input") {
+    return "추가 확인 필요";
+  }
+  if (workflow.progressSnapshot !== null) {
+    return getProgressStageLabel(workflow.progressSnapshot.stage);
+  }
+  if (workflow.requestState === "loading") {
+    return "초안 생성 중";
+  }
+  return "요구사항 입력";
+}
+
+function getProgressStatusLabel(status: AiStartWorkflow["progressStatus"]): string {
+  const labels = {
+    awaiting_input: "답변 기다리는 중",
+    idle: "업데이트 대기",
+    interrupted: "업데이트 중단",
+    streaming: "업데이트 중"
+  } as const;
+
+  return labels[status];
+}
+
+function getProgressStageLabel(stage: ArchitectureDraftProgressStage): string {
+  const labels: Record<ArchitectureDraftProgressStage, string> = {
+    building_diagram: "다이어그램 구성",
+    normalizing_requirements: "요구사항 정리",
+    preparing_requirements: "요구사항 준비",
+    querying_amazon_q: "Resource 후보 탐색",
+    validating_architecture: "구조 검증"
+  };
+
+  return labels[stage];
 }
 
 function DraftMetadata({ draft }: { readonly draft: AiArchitectureDraftResult }) {
