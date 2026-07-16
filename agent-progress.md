@@ -4,18 +4,33 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- PR 1 / issue #434 is merged into `dev` at the PR 2 base `207a979f`.
-- PR 2 / issue #433 implements a provider-neutral `ApplicationArtifact` Registry shared by Direct Deployment and GitOps while keeping `ApplicationRelease` as a separate ledger.
-- Canonical identity includes repository, commit, normalized build config, build contract, target platform, and secret-free build inputs. Provider verification checks the actual ECR/S3 artifact before reuse.
-- Project-scoped active uniqueness, hashed claim tokens, renewable leases, and the composite release foreign key prevent duplicate builds and cross-project reuse.
-- Migration `0045_application_artifact_registry.sql` intentionally avoids the `0044` number reserved by another branch; `_journal.json` is updated.
-- Focused PR 2 tests pass 59/59, including review regressions for malformed/secret-shaped inputs, streamed S3 hashing, and failed lease renewal cleanup. Harness, migration compatibility, lint, typecheck, and build pass.
-- Clean-state review passes; the evaluator rubric result is Accept (12/12, no hard fail).
-- Branch `fix/sw/production-runtime-plan-drift` overlays GitHub App runtime inputs without replacing unrelated runtime tfvars; the Live Observation capability Secret ARN is retained through its dedicated Environment Secret.
-- The workflow rejects malformed GitHub App inputs and Secret ARNs from another AWS region or account.
-- `scripts/check-production-infra.mjs` guards the GitHub App and Live Observation runtime wiring markers.
+- PR 1 / issue #434 and PR 2 / issue #433 are merged into `dev`. PR 3 / issue #435 started from merge commit `13716049532bcedc61d68e094bf829747077b989`, which contains reviewed PR 2 head `efdda2294830c9e8b4f8d863f280cc677daba61d`.
+- Runtime Convergence v1 separates `artifactFingerprint` from project/account/region-scoped `deploymentTargetFingerprint` and models ten distinct ECS, EC2, EKS, Kubernetes, Lambda, and Static adapters.
+- No-op requires read-only provider evidence for the canonical target, provider/account/region boundary, exact artifact fingerprint/digest/reference, and verified healthy state. Missing, mismatched, or unhealthy evidence falls back to rollout.
+- Direct ECS/Fargate and generated GitOps ECS/Lambda/EC2 ASG/Static workflows use the contract. The remaining canonical adapters are isolated ports verified with test doubles and explicit ResourceDefinition coverage.
+- Migration `0046_runtime_convergence.sql` is additive and `_journal.json` is updated after merged revision 0045.
+- Focused runtime/resource/storage/integration regressions pass. Harness, migration compatibility, lint, typecheck, build, generated Bash/Python syntax, and `git diff --check` pass.
+- Clean-state review and the evaluator rubric result are Accept (12/12, no hard fail).
+- Production runtime validation on `dev` preserves GitHub App and Live Observation Secret wiring, rejects cross-account or cross-region ARNs, reconciles ECS task definitions, and checks post-apply worker execution-policy coverage without exposing Secret values.
 
 ## Session Record
+
+### 2026-07-16 - Implement provider-verified Runtime Convergence v1
+
+- Added provider-neutral shared targets, strict Zod DTOs, canonical target identity, nullable RDS release evidence, and legacy target reconstruction with fail-closed canonical/legacy consistency checks.
+- Added a ten-adapter registry with current-state reads, provider/target and artifact comparison, rollout, health, rollback evidence, already-active decisions, and secret-shaped evidence rejection.
+- Added adversarial regressions for cross-provider revisions, pre-provider stale target rejection, inactive ECS services, non-Fargate GitOps observations, unhealthy Lambda versions, GitOps region drift, v3 rollback evidence, and divergent handoff targets.
+- Integrated Direct releases with read-only ECS/Fargate inspection, a DNS-pinned public HTTPS health probe, safe rollout fallback, and persisted convergence outcomes.
+- Extended generated GitOps workflows and v3 evidence for ECS, Lambda, EC2 ASG, and Static S3/CloudFront. Mutations are skipped only after provider preflight and independently rechecked by reconcilers.
+- Kept static artifact bytes target-independent by storing convergence markers on the CloudFront origin rather than in the artifact manifest.
+- Added explicit coverage for all ten runtime adapters across deployable ResourceDefinitions and documented the contract, safety boundaries, compatibility behavior, and operational flow.
+- No real credentials, live AWS mutation, Terraform apply/destroy, user artifact upload, or user Git/CI/CD handoff was performed.
+
+### 2026-07-17 - Address PR #446 review feedback
+
+- Kept missing ECS deployment configuration fail-closed, made every nested access explicit, and guarded unexpected DNS lookup result shapes before address processing.
+- Converted malformed health URLs into Zod validation errors and malformed provider revision metadata into `provider_revision_unverified` rather than native runtime errors.
+- Review regressions pass with the full focused runtime/resource/API set at 79/79. Harness, migration compatibility, lint, typecheck, build, and diff checks pass.
 
 ### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
@@ -23,7 +38,7 @@ Short English-only working log for the current agent context. Older records are 
 - Direct preparation reuses a verified artifact without CodeBuild; GitOps registers its already-built artifact and links verified releases while preserving v1 evidence fallback.
 - RDS stores identity/metadata only. User artifact bytes stay in the user's ECR/S3 or provider storage; Redis is not a source of truth.
 - Review hardening added locale-independent ordering, path normalization, whitespace-preserving build inputs, full identity checks, exact GitOps references, runtime namespace checks, lease heartbeats, and provider-computed S3 digest verification.
-- No real credentials, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff were performed. PR 3 / issue #435 was not started.
+- No real credentials, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff were performed.
 
 ### 2026-07-16 - Address PR #438 review feedback
 
@@ -32,19 +47,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
 - No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
 
-## Broken Or Unverified
-
-- `pnpm --filter @sketchcatch/api test` passes 666/669; three unchanged filesystem security tests cannot create symlinks on this Windows host and fail with `EPERM`.
-- `pnpm test:core` stops on three pre-existing three-tier Template security-scope/position/parent assertions; PR 2 changes none of those Template files.
-- A first API run hit a transient Fetch `bad port` in the unchanged notification SSE test because the host dynamic TCP range overlaps blocked ports. The isolated test and the second full API run passed it.
-- Generated workflows remain v1 evidence producers; the parser and registrar accept both v1 and strict v2. No live provider acceptance test was run by design.
-
-## Next Action
-
-- Review and merge the Ready PR from `feature/sw/433-application-artifact-reuse` into `dev` after required CI.
-- Start PR 3 / issue #435 only after PR 2 is merged.
-- Merge the production runtime drift-review PR after its refreshed review-only Plan passes, then use the approved full-runtime Apply workflow for the exact merged revision.
-
 ### 2026-07-16 - Production runtime plan drift review
 
 - Review-only Plan 29498864502 succeeded with 3 add, 7 change, and only 2 task-definition replacement destroys. Worker Secret wiring and the Live Observation capability Secret preservation were added without exposing Secret values.
@@ -52,34 +54,36 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-16 - Follow up merged PR #439 review
 
-- Scoped runtime Secret contract regexes to their Terraform set literals, so an unrelated later marker cannot satisfy the checks.
-- Made the worker Secret assertion select the named worker container and removed an unnecessary set-to-list conversion.
+- Scoped runtime Secret contract regexes to their Terraform set literals, selected the named worker container, and used `try(..., [])` for nullable Secret lists so unrelated markers cannot satisfy the checks.
 - Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
-- Follow-up review handling uses `try(..., [])` for nullable worker container Secret lists, preventing Terraform test evaluation errors before the intended assertion runs.
 
 ### 2026-07-16 - Complete runtime Apply validator repair
 
-- Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for the valid and invalid forms.
-- Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed by this repair.
+- Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for valid and invalid forms.
+- Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed.
 
 ### 2026-07-16 - Complete runtime deployment reconciliation
 
-- Complete runtime Apply validation now compares planned API and worker Secret references with the Terraform state rather than nullable plan `before` data, and verifies the worker execution policy retains every existing secret reference.
-- The API ECS service now reconciles task definition changes while retaining autoscaling ownership of desired count, so the active service rolls from manual revision drift to the reviewed task definition.
-- Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed. Terraform validate/test remain blocked locally by the unavailable AWS provider cache.
+- Complete runtime Apply validation compares planned API and worker Secret references with Terraform state and verifies that the worker execution policy retains every existing secret reference.
+- The API ECS service reconciles task definition changes while retaining autoscaling ownership of desired count.
+- Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed.
 
-### 2026-07-16 - Complete runtime policy state validation
+### 2026-07-16 - Complete runtime policy and post-apply verification
 
-- Complete runtime Apply validation now obtains the existing worker execution inline policy from Terraform state when Plan JSON masks its previous policy as null.
-- Synthetic jq checks passed when prior permissions were retained and failed when a prior permission was removed; no Secret value was emitted.
-- Harness, structure check, formatting, lint, typecheck, build, and diff check passed. Terraform validate/test remain blocked locally by the unavailable AWS provider cache.
-
-### 2026-07-16 - Complete runtime post-apply policy verification
-
-- Plan JSON masks the desired inline policy, so the complete Apply guard now verifies all worker Task Definition Secret references are present in the worker execution policy immediately after Apply using Terraform state.
-- Synthetic jq checks passed when every worker Secret reference was present and failed when the GitHub App reference was removed.
+- Complete runtime Apply validation reads the existing worker execution inline policy from state when Plan JSON masks prior policy data, then verifies every worker Task Definition Secret reference after Apply.
+- Synthetic jq checks passed when prior permissions were retained and failed when a prior permission or Secret reference was removed; no Secret value was emitted.
 
 ### 2026-07-17 - Complete runtime post-apply task definition verification
 
-- Plan JSON also masks the desired task definition payload, so the complete Apply guard now verifies GitHub App runtime inputs in the applied API and worker task definitions from Terraform state.
+- Plan JSON also masks the desired task definition payload, so the complete Apply guard verifies GitHub App runtime inputs in the applied API and worker task definitions from Terraform state.
 - Synthetic jq checks passed with both required inputs and failed when the worker Client ID environment entry was removed.
+
+## Broken Or Unverified
+
+- `pnpm test` stops in `@sketchcatch/types` at 40/43 on the same three pre-existing three-tier Template security-scope/position/parent assertions. This branch does not modify those Template sources or failing tests.
+- `pnpm --filter @sketchcatch/api test` passes 710/713. The remaining three unchanged filesystem security tests fail during Windows symlink setup with `EPERM`, before their assertions.
+- Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
+
+## Next Action
+
+- Monitor the Ready PR targeting `dev`, resolve any actionable review or branch-owned CI failure, and merge only through normal review.

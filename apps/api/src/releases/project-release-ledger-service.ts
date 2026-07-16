@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq } from "drizzle-orm";
 import type {
   ApplicationArtifact,
@@ -9,6 +10,7 @@ import type {
   JsonValue,
   ProjectDeploymentRuntimeConfig,
   PutProjectDeploymentTargetRequest,
+  RuntimeDeploymentTarget,
   RuntimeTargetKind
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
@@ -23,6 +25,8 @@ import {
   projects
 } from "../db/schema.js";
 import { toAvailableArtifact } from "../artifacts/postgres-application-artifact-registry.js";
+import { createDeploymentTargetIdentity } from "../runtime-convergence/deployment-target-identity.js";
+import { normalizeLegacyRuntimeDeploymentTarget } from "@sketchcatch/types";
 import {
   resolveApplicationReleaseVersion,
   type ApplicationReleaseVersionEvidence
@@ -39,6 +43,8 @@ export type SaveProjectDeploymentTargetInput = {
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig;
   runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget: RuntimeDeploymentTarget | null;
+  deploymentTargetFingerprint: string | null;
   rolloutStrategy: "all_at_once";
   updatedAt: Date;
 };
@@ -53,7 +59,7 @@ export type ProjectReleaseLedgerRepository = {
   findVerifiedConnection(
     connectionId: string,
     userId: string
-  ): Promise<{ id: string; region: string } | undefined>;
+  ): Promise<{ id: string; accountId: string; region: string } | undefined>;
   findProjectDeploymentTarget(
     projectId: string
   ): Promise<ProjectDeploymentTargetRecord | undefined>;
@@ -123,7 +129,11 @@ export function createPostgresProjectReleaseLedgerRepository(
     },
     async findVerifiedConnection(connectionId, userId) {
       const [connection] = await db
-        .select({ id: awsConnections.id, region: awsConnections.region })
+        .select({
+          id: awsConnections.id,
+          accountId: awsConnections.accountId,
+          region: awsConnections.region
+        })
         .from(awsConnections)
         .where(
           and(
@@ -132,7 +142,9 @@ export function createPostgresProjectReleaseLedgerRepository(
             eq(awsConnections.status, "verified")
           )
         );
-      return connection;
+      return connection?.accountId
+        ? { id: connection.id, accountId: connection.accountId, region: connection.region }
+        : undefined;
     },
     async findProjectDeploymentTarget(projectId) {
       const [target] = await db
@@ -154,6 +166,8 @@ export function createPostgresProjectReleaseLedgerRepository(
             runtimeTargetKind: input.runtimeTargetKind,
             confirmedBuildConfig: input.confirmedBuildConfig,
             runtimeConfig: input.runtimeConfig,
+            runtimeTarget: input.runtimeTarget,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
             rolloutStrategy: input.rolloutStrategy,
             updatedAt: input.updatedAt
           }
@@ -297,6 +311,20 @@ export async function putProjectDeploymentTarget(
     input.target.runtimeConfig
   );
 
+  const runtimeTarget = resolveCanonicalRuntimeTarget(input.target);
+  const deploymentTargetFingerprint = runtimeTarget
+    ? createDeploymentTargetIdentity({
+        contractVersion: "runtime-convergence/v1",
+        scope: {
+          projectId: input.projectId,
+          provider: "aws",
+          accountId: connection.accountId,
+          region: connection.region
+        },
+        target: runtimeTarget
+      }).deploymentTargetFingerprint
+    : null;
+
   return repository.saveProjectDeploymentTarget({
     projectId: input.projectId,
     provider: input.target.provider,
@@ -305,9 +333,30 @@ export async function putProjectDeploymentTarget(
     runtimeTargetKind: input.target.runtimeTargetKind,
     confirmedBuildConfig: input.target.confirmedBuildConfig,
     runtimeConfig: input.target.runtimeConfig,
+    runtimeTarget,
+    deploymentTargetFingerprint,
     rolloutStrategy: input.target.rolloutStrategy,
     updatedAt: now()
   });
+}
+
+function resolveCanonicalRuntimeTarget(
+  target: PutProjectDeploymentTargetRequest
+): RuntimeDeploymentTarget | null {
+  const legacyTarget = target.runtimeConfig
+    ? normalizeLegacyRuntimeDeploymentTarget(target.runtimeConfig, {
+        healthCheckPath: target.confirmedBuildConfig.healthCheckPath
+      })
+    : null;
+  if (target.runtimeTarget) {
+    if (!legacyTarget || !isDeepStrictEqual(target.runtimeTarget, legacyTarget)) {
+      throw new ReleaseLedgerValidationError(
+        "Canonical runtime target must exactly match the backward-compatible runtime config."
+      );
+    }
+    return target.runtimeTarget;
+  }
+  return legacyTarget;
 }
 
 export async function listApplicationReleases(
@@ -412,6 +461,9 @@ export async function recordApplicationRelease(
     pipelineRunId: input.pipelineRunId,
     source: input.source,
     runtimeTargetKind: input.runtimeTargetKind,
+    runtimeAdapterKind: null,
+    deploymentTargetFingerprint: null,
+    convergenceOutcome: null,
     version,
     commitSha: input.versionEvidence.commitSha.toLowerCase(),
     artifactDigest: input.artifactDigest,
