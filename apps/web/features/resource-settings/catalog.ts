@@ -83,6 +83,7 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-eip": "EC2 Core",
   "aws-eks-addon": "EKS",
   "aws-eks-cluster": "EKS",
+  "aws-eks-fargate-profile": "EKS",
   "aws-eks-node-group": "EKS",
   "aws-amplify-app": "Frontend / Web Mobile",
   "kubernetes-namespace": "Kubernetes",
@@ -1294,6 +1295,15 @@ const terraformResourcePresentations = [
     category: "Containers",
     iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
     label: "Node Group",
+    size
+  },
+  {
+    definitionId: "aws-eks-fargate-profile",
+    name: "EKS Fargate Profile",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Fargate Profile",
     size
   },
   {

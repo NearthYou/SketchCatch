@@ -325,7 +325,18 @@ test("Autoscaling Policy is available through the shared definition and resource
     capabilities: {
       parameterPanel: true,
       terraformPreview: true,
-      terraformSync: true
+      terraformSync: true,
+      deployment: {
+        status: "supported",
+        provisioner: "terraform",
+        executionRole: "managed_resource",
+        optimization: {
+          desiredStateReuse: "verified",
+          artifactReuse: "none",
+          runtimeNoOp: "none",
+          healthVerification: "terraform_plan"
+        }
+      }
     }
   });
   assert.equal(resource?.category, "EC2 Launch & Scaling");

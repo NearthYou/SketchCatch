@@ -102,18 +102,15 @@ check(
 );
 check(
   JSON.stringify(
-    deployPolicyStatements.get("AllowReviewedRuntimeCompleteTaskDefinitionReplacement")
+    deployPolicyStatements.get("AllowReviewedRuntimeCompleteTaskDefinitionDeregistration")
   ) ===
     JSON.stringify({
-      Sid: "AllowReviewedRuntimeCompleteTaskDefinitionReplacement",
+      Sid: "AllowReviewedRuntimeCompleteTaskDefinitionDeregistration",
       Effect: "Allow",
-      Action: ["ecs:DeregisterTaskDefinition", "ecs:RegisterTaskDefinition"],
-      Resource: [
-        `arn:aws:ecs:${productionRegion}:${productionAccount}:task-definition/${productionPrefix}-api:*`,
-        `arn:aws:ecs:${productionRegion}:${productionAccount}:task-definition/${productionPrefix}-worker:*`
-      ]
+      Action: ["ecs:DeregisterTaskDefinition"],
+      Resource: "*"
     }),
-  "deploy role must only replace the reviewed API and worker task definition families"
+  "deploy role must allow only the AWS-required unscoped task definition deregistration action"
 );
 check(
   JSON.stringify(deployPolicyStatements.get("AllowReviewedRuntimeCompleteInlinePolicyUpdate")) ===
@@ -154,6 +151,7 @@ check(
       Action: [
         "elasticloadbalancing:DescribeLoadBalancerAttributes",
         "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTags",
         "elasticloadbalancing:DescribeTargetGroupAttributes",
         "elasticloadbalancing:DescribeTargetGroups"
       ],
@@ -361,9 +359,10 @@ for (const marker of [
   ".git_app_client_id = $client_id",
   '.api_secret_arns["GIT_APP_CLIENT_SECRET"] = $client_secret_arn',
   '.api_secret_arns["LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"] = $live_observation_capability_current_secret_arn',
-  "$after_secrets | contains($before_secrets)",
   "Verify applied worker Secret execution access",
   "applied-runtime-state.json",
+  "has_required_github_app_inputs($container)",
+  "$github_app_inputs | length) == 2",
   "$execution_secret_values | contains($worker_secret_values)",
   "aws cloudformation list-stacks",
   "aws cloudformation describe-stacks",

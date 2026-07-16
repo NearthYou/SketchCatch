@@ -1,4 +1,5 @@
 import type { CloudProvider, ResourceType, TerraformBlockType } from "./index.js";
+import type { RuntimeAdapterKind } from "./runtime-convergence.js";
 
 export type ResourceDeploymentOptimizationProfile =
   | {
@@ -12,6 +13,13 @@ export type ResourceDeploymentOptimizationProfile =
       readonly artifactReuse: "none";
       readonly runtimeNoOp: "none";
       readonly healthVerification: "none";
+    }
+  | {
+      readonly desiredStateReuse: "verified";
+      readonly artifactReuse: "verified";
+      readonly runtimeNoOp: "provider_verified";
+      readonly healthVerification: "provider";
+      readonly runtimeAdapters: readonly RuntimeAdapterKind[];
     };
 
 export type ResourceDeploymentCapability =
@@ -70,6 +78,24 @@ export type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terrafor
 
 const DEFAULT_RESOURCE_TYPE: ResourceType = "UNKNOWN";
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE = {
+  aws_cloudfront_distribution: ["static_s3_cloudfront"],
+  aws_instance: ["ec2_instance"],
+  aws_autoscaling_group: ["ec2_auto_scaling_group", "eks_self_managed_node"],
+  aws_s3_bucket: ["static_s3_cloudfront"],
+  aws_lambda_alias: ["lambda_alias"],
+  aws_ecs_service: ["ecs_service_fargate", "ecs_service_ec2_capacity_provider"],
+  aws_eks_node_group: ["eks_managed_node_group"],
+  aws_eks_fargate_profile: ["eks_fargate_profile"],
+  kubernetes_deployment: ["kubernetes_deployment"]
+} as const satisfies Readonly<Record<string, readonly RuntimeAdapterKind[]>>;
+
+export const runtimeAdapterResourceCoverage = Object.freeze(
+  Object.entries(RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE).flatMap(
+    ([terraformResourceType, adapterKinds]) =>
+      adapterKinds.map((adapterKind) => ({ adapterKind, terraformResourceType }))
+  )
+);
 const DEFAULT_RESOURCE_DEFINITION_ALIASES = [
   ["RDS_READ_REPLICA", "aws-rds-instance"]
 ] as const satisfies readonly (readonly [ResourceType, string])[];
@@ -900,6 +926,13 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-eks-fargate-profile",
+    resourceType: "EKS_FARGATE_PROFILE",
+    terraformPreview: true,
+    terraformResourceType: "aws_eks_fargate_profile",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-eks-addon",
     resourceType: "EKS_ADDON",
     terraformPreview: true,
@@ -1334,7 +1367,8 @@ export function createResourceDefinition({
       deployment: createResourceDeploymentCapability({
         resourceType,
         terraformBlockType,
-        terraformPreview
+        terraformPreview,
+        terraformResourceType
       })
     }
   };
@@ -1350,7 +1384,8 @@ export function assertResourceDeploymentCapability(
   const expected = createResourceDeploymentCapability({
     resourceType: definition.resourceType,
     terraformBlockType: definition.terraform.blockType,
-    terraformPreview: definition.capabilities.terraformPreview
+    terraformPreview: definition.capabilities.terraformPreview,
+    terraformResourceType: definition.terraform.resourceType
   });
 
   if (!hasSameDeploymentCapability(definition.capabilities.deployment, expected)) {
@@ -1364,6 +1399,7 @@ function createResourceDeploymentCapability(input: {
   readonly resourceType: ResourceType;
   readonly terraformBlockType: TerraformBlockType;
   readonly terraformPreview: boolean;
+  readonly terraformResourceType: string;
 }): ResourceDeploymentCapability {
   const excludedOptimization = {
     desiredStateReuse: "none",
@@ -1402,6 +1438,24 @@ function createResourceDeploymentCapability(input: {
     };
   }
 
+  const runtimeAdapters = RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE[
+    input.terraformResourceType as keyof typeof RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE
+  ];
+  if (runtimeAdapters) {
+    return {
+      status: "supported",
+      provisioner: "terraform",
+      executionRole: "managed_resource",
+      optimization: {
+        desiredStateReuse: "verified",
+        artifactReuse: "verified",
+        runtimeNoOp: "provider_verified",
+        healthVerification: "provider",
+        runtimeAdapters
+      }
+    };
+  }
+
   return {
     status: "supported",
     provisioner: "terraform",
@@ -1429,6 +1483,15 @@ function hasSameDeploymentCapability(
     left.optimization.healthVerification !== right.optimization.healthVerification
   ) {
     return false;
+  }
+
+  if (
+    left.optimization.runtimeNoOp === "provider_verified" ||
+    right.optimization.runtimeNoOp === "provider_verified"
+  ) {
+    return left.optimization.runtimeNoOp === "provider_verified" &&
+      right.optimization.runtimeNoOp === "provider_verified" &&
+      left.optimization.runtimeAdapters.join("|") === right.optimization.runtimeAdapters.join("|");
   }
 
   return left.status === "supported" ||

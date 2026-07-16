@@ -4,6 +4,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { TerraformBlockType } from "./index.js";
 import {
+  assertResourceDeploymentCapability,
+  createResourceDefinition,
   createTerraformParameterCatalogKey,
   getDefaultResourceDefinitionByResourceType,
   getResourceDefinitionById,
@@ -85,6 +87,129 @@ test("classic AWS identities stay distinct from newer Terraform resources", () =
   assert.equal(
     getResourceDefinitionByTerraform("resource", "aws_waf_ipset")?.terraform.resourceType,
     "aws_waf_ipset"
+  );
+});
+
+test("every deployable Terraform resource receives the verified desired-state optimization profile", () => {
+  const deployableDefinitions = resourceDefinitions.filter(
+    (definition) =>
+      definition.capabilities.terraformPreview &&
+      definition.terraform.blockType === "resource" &&
+      definition.resourceType !== "UNKNOWN"
+  );
+
+  assert.ok(deployableDefinitions.length > 0);
+
+  for (const definition of deployableDefinitions) {
+    const deployment = definition.capabilities.deployment;
+    assert.equal(deployment.status, "supported", definition.id);
+    assert.equal(deployment.provisioner, "terraform", definition.id);
+    assert.equal(deployment.executionRole, "managed_resource", definition.id);
+    assert.equal(deployment.optimization.desiredStateReuse, "verified", definition.id);
+  }
+});
+
+test("data sources, UNKNOWN resources, and catalog-only definitions carry explicit deployment exclusions", () => {
+  let dataSourceCount = 0;
+  let unknownCount = 0;
+
+  for (const definition of resourceDefinitions) {
+    if (definition.terraform.blockType === "data") {
+      dataSourceCount += 1;
+      assert.equal(definition.capabilities.deployment.status, "excluded", definition.id);
+      assert.equal(definition.capabilities.deployment.reason, "terraform_data_source", definition.id);
+      continue;
+    }
+
+    if (definition.resourceType === "UNKNOWN") {
+      unknownCount += 1;
+      assert.equal(definition.capabilities.deployment.status, "excluded", definition.id);
+      assert.equal(definition.capabilities.deployment.reason, "unmodeled_resource", definition.id);
+      continue;
+    }
+
+    if (!definition.capabilities.terraformPreview) {
+      assert.equal(definition.capabilities.deployment.status, "excluded", definition.id);
+      assert.equal(definition.capabilities.deployment.reason, "catalog_only", definition.id);
+    }
+  }
+
+  const catalogOnlyDefinition = createResourceDefinition({
+    id: "catalog-only-queue",
+    provider: "aws",
+    resourceType: "SQS_QUEUE",
+    terraformPreview: false,
+    terraformResourceType: "catalog_queue"
+  });
+
+  assert.ok(dataSourceCount > 0);
+  assert.ok(unknownCount > 0);
+  assert.deepEqual(catalogOnlyDefinition.capabilities.deployment, {
+    status: "excluded",
+    provisioner: "terraform",
+    executionRole: "catalog_resource",
+    reason: "catalog_only",
+    optimization: {
+      desiredStateReuse: "none",
+      artifactReuse: "none",
+      runtimeNoOp: "none",
+      healthVerification: "none"
+    }
+  });
+});
+
+test("new provider definitions inherit deployment optimization without a central switch", () => {
+  const definition = createResourceDefinition({
+    id: "future-provider-queue",
+    provider: "aws",
+    resourceType: "SQS_QUEUE",
+    terraformPreview: true,
+    terraformResourceType: "future_queue"
+  });
+
+  assert.equal(definition.capabilities.deployment.status, "supported");
+  assert.equal(definition.capabilities.deployment.optimization.desiredStateReuse, "verified");
+});
+
+test("AWS and Kubernetes definitions share the provider-neutral deployment contract", () => {
+  const awsDefinition = getResourceDefinitionById("aws-vpc");
+  const kubernetesDefinition = getResourceDefinitionById("kubernetes-namespace");
+
+  assert.ok(awsDefinition);
+  assert.ok(kubernetesDefinition);
+  assert.equal(awsDefinition.provider, "aws");
+  assert.equal(kubernetesDefinition.provider, "kubernetes");
+  assert.deepEqual(
+    awsDefinition.capabilities.deployment,
+    kubernetesDefinition.capabilities.deployment
+  );
+});
+
+test("invalid deployment capability combinations are rejected", () => {
+  const awsVpc = getResourceDefinitionById("aws-vpc");
+
+  assert.ok(awsVpc);
+  assert.throws(
+    () =>
+      assertResourceDeploymentCapability({
+        ...awsVpc,
+        capabilities: {
+          ...awsVpc.capabilities,
+          deployment: {
+            status: "excluded",
+            provisioner: "terraform",
+            executionRole: "managed_resource",
+            reason: "catalog_only",
+            optimization: {
+              desiredStateReuse: "none",
+              artifactReuse: "none",
+              runtimeNoOp: "none",
+              healthVerification: "none"
+            }
+          }
+        }
+      }),
+    /deployment capability does not match its Terraform identity/
   );
 });
 

@@ -3,6 +3,12 @@ import { AVAILABLE_BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts
 import type { AvailableBrainboardTemplateId } from "./brainboard-templates/ids.ts";
 import { TEMPLATE_IDS } from "./template-definitions.ts";
 import type { TemplateId } from "./template-definitions.ts";
+import type {
+  RuntimeAdapterKind,
+  RuntimeConvergenceEvidence,
+  RuntimeConvergenceOutcome,
+  RuntimeDeploymentTarget
+} from "./runtime-convergence.js";
 
 export type IsoDateTimeString = string;
 
@@ -140,6 +146,7 @@ export const RESOURCE_TYPES = [
   "ECS_CAPACITY_PROVIDER",
   "EKS_CLUSTER",
   "EKS_NODE_GROUP",
+  "EKS_FARGATE_PROFILE",
   "EKS_ADDON",
   "KUBERNETES_NAMESPACE",
   "KUBERNETES_DEPLOYMENT",
@@ -1200,9 +1207,15 @@ export type EcsGitOpsReleaseEvidenceV2 = Omit<EcsGitOpsReleaseEvidenceV1, "schem
   artifact: ApplicationArtifactEvidenceV2;
 };
 
+export type EcsGitOpsReleaseEvidenceV3 = Omit<EcsGitOpsReleaseEvidenceV2, "schemaVersion"> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
 export type EcsGitOpsReleaseEvidence =
   | EcsGitOpsReleaseEvidenceV1
-  | EcsGitOpsReleaseEvidenceV2;
+  | EcsGitOpsReleaseEvidenceV2
+  | EcsGitOpsReleaseEvidenceV3;
 
 export type LambdaGitOpsReleaseEvidenceV1 = {
   schemaVersion: 1;
@@ -1229,9 +1242,18 @@ export type LambdaGitOpsReleaseEvidenceV2 = Omit<
   artifact: ApplicationArtifactEvidenceV2;
 };
 
+export type LambdaGitOpsReleaseEvidenceV3 = Omit<
+  LambdaGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
 export type LambdaGitOpsReleaseEvidence =
   | LambdaGitOpsReleaseEvidenceV1
-  | LambdaGitOpsReleaseEvidenceV2;
+  | LambdaGitOpsReleaseEvidenceV2
+  | LambdaGitOpsReleaseEvidenceV3;
 
 export type Ec2AsgGitOpsReleaseEvidenceV1 = {
   schemaVersion: 1;
@@ -1263,9 +1285,18 @@ export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<
   artifact: ApplicationArtifactEvidenceV2;
 };
 
+export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<
+  Ec2AsgGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
 export type Ec2AsgGitOpsReleaseEvidence =
   | Ec2AsgGitOpsReleaseEvidenceV1
-  | Ec2AsgGitOpsReleaseEvidenceV2;
+  | Ec2AsgGitOpsReleaseEvidenceV2
+  | Ec2AsgGitOpsReleaseEvidenceV3;
 
 export type StaticSiteGitOpsReleaseEvidenceV1 = {
   schemaVersion: 1;
@@ -1300,9 +1331,18 @@ export type StaticSiteGitOpsReleaseEvidenceV2 = Omit<
   artifact: ApplicationArtifactEvidenceV2;
 };
 
+export type StaticSiteGitOpsReleaseEvidenceV3 = Omit<
+  StaticSiteGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
 export type StaticSiteGitOpsReleaseEvidence =
   | StaticSiteGitOpsReleaseEvidenceV1
-  | StaticSiteGitOpsReleaseEvidenceV2;
+  | StaticSiteGitOpsReleaseEvidenceV2
+  | StaticSiteGitOpsReleaseEvidenceV3;
 
 export type GitOpsReleaseEvidence =
   | EcsGitOpsReleaseEvidence
@@ -1363,6 +1403,8 @@ export type ProjectDeploymentTarget = {
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig | null;
   runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget?: RuntimeDeploymentTarget | null | undefined;
+  deploymentTargetFingerprint?: string | null | undefined;
   rolloutStrategy: DeploymentRolloutStrategy;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -1370,10 +1412,17 @@ export type ProjectDeploymentTarget = {
 
 export type PutProjectDeploymentTargetRequest = Omit<
   ProjectDeploymentTarget,
-  "projectId" | "confirmedBuildConfig" | "runtimeConfig" | "createdAt" | "updatedAt"
+  | "projectId"
+  | "confirmedBuildConfig"
+  | "runtimeConfig"
+  | "runtimeTarget"
+  | "deploymentTargetFingerprint"
+  | "createdAt"
+  | "updatedAt"
 > & {
   confirmedBuildConfig: ConfirmedBuildConfig;
   runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget?: RuntimeDeploymentTarget | null | undefined;
 };
 
 export type ProjectDeploymentTargetResponse = {
@@ -1405,6 +1454,9 @@ export type ApplicationRelease = {
   pipelineRunId: string | null;
   source: DeploymentSource;
   runtimeTargetKind: RuntimeTargetKind;
+  runtimeAdapterKind: RuntimeAdapterKind | null;
+  deploymentTargetFingerprint: string | null;
+  convergenceOutcome: RuntimeConvergenceOutcome | null;
   version: string;
   commitSha: string;
   artifactDigestAlgorithm: "sha256";
@@ -3738,3 +3790,5 @@ export type TerraformSyncToDiagramResponse = {
   preservedResourceAddresses?: string[] | undefined;
   proposals?: TerraformDiagramChangeProposal[] | undefined;
 };
+
+export * from "./runtime-convergence.ts";

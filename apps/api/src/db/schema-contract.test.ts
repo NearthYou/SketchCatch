@@ -32,6 +32,7 @@ import {
   gitCicdPipelineStages,
   gitCicdRepositoryProviderEnum,
   projectAssets,
+  projectDeploymentTargets,
   projectDrafts,
   projects,
   reverseEngineeringScanLogs,
@@ -121,6 +122,33 @@ test("ApplicationArtifact Registry migration is additive and reserves coordinate
   assert.match(migration, /ADD COLUMN "artifact_id" varchar\(36\)/);
   assert.match(migration, /UNIQUE.*"project_id".*"artifact_fingerprint"/s);
   assert.match(migration, /FOREIGN KEY \("artifact_id","project_id"\)/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
+});
+
+test("Runtime convergence storage is additive and preserves legacy release rows", () => {
+  const targetConfig = getTableConfig(projectDeploymentTargets);
+  const releaseConfig = getTableConfig(applicationReleases);
+
+  assert(findColumn(targetConfig.columns, "runtime_target"));
+  assert(findColumn(targetConfig.columns, "deployment_target_fingerprint"));
+  assert(findColumn(releaseConfig.columns, "runtime_adapter_kind"));
+  assert(findColumn(releaseConfig.columns, "deployment_target_fingerprint"));
+  assert(findColumn(releaseConfig.columns, "convergence_outcome"));
+
+  const migrationUrl = new URL(
+    "../../drizzle/0046_runtime_convergence.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /ALTER TABLE "project_deployment_targets" ADD COLUMN "runtime_target" jsonb/);
+  assert.match(
+    migration,
+    /ALTER TABLE "project_deployment_targets" ADD COLUMN "deployment_target_fingerprint" varchar\(64\)/
+  );
+  assert.match(migration, /ALTER TABLE "application_releases" ADD COLUMN "runtime_adapter_kind" varchar\(64\)/);
+  assert.match(migration, /ALTER TABLE "application_releases" ADD COLUMN "convergence_outcome" varchar\(32\)/);
   assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
 });
 

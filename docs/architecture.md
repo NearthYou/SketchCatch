@@ -149,6 +149,24 @@ Representative Use Journey는 위 실제 서비스 흐름을 증명하는 발표
 
 ## Deployment 최적화 경계
 
+Runtime Convergence는 IaC desired-state 재사용 및 ApplicationArtifact 재사용 다음의 독립 계층이다.
+`artifactFingerprint`는 repository/build identity를, `deploymentTargetFingerprint`는 project/account/
+region과 orchestrator/compute/capacity/rollout/health 구성을 식별한다. 둘 중 하나라도 다르면 같은
+digest여도 runtime no-op으로 보지 않는다.
+
+API의 deep module은 provider-neutral adapter registry와 `RuntimeProviderGateway` port만 소유한다.
+각 adapter는 provider current state를 read-only로 읽고 target, artifact marker, digest/reference,
+health를 검증한 뒤 `already_active` 또는 안전한 rollout fallback을 반환한다. ECS, EC2, EKS,
+Kubernetes, Lambda, Static adapter 객체는 서로 분리하며 특히 EKS/Kubernetes를 ECS 구현에
+포함하지 않는다. 현재 Direct ECS gateway와 생성된 GitHub Actions의 ECS/Lambda/EC2 ASG/Static
+preflight는 실제 AWS 상태를 읽고, 나머지 canonical adapter는 같은 port와 test double 계약으로
+확장한다.
+
+RDS와 Runtime Cache는 provider state의 대체물이 아니다. current state 조회가 실패하거나
+project/account/region, marker, config, digest, health 중 하나를 검증할 수 없으면 no-op을 금지한다.
+기존 Approval, Plan hash, Terraform artifact hash, state lineage/serial, rollback/cleanup/retention
+검증은 Runtime Convergence 바깥의 선행·후행 gate로 그대로 유지한다.
+
 Deployment 최적화의 지원 여부는 `packages/types`의 provider-neutral `ResourceDefinition.capabilities.deployment`를 source of truth로 삼는다. Terraform managed resource는 검증된 desired-state 재사용을 지원하고, data source, `UNKNOWN`, catalog-only definition은 명시적으로 제외한다. AWS와 Kubernetes를 포함한 provider adapter는 같은 계약을 소비한다.
 
 최적화는 한 종류의 cache가 아니라 세 계층으로 분리한다.
@@ -157,7 +175,7 @@ Deployment 최적화의 지원 여부는 `packages/types`의 provider-neutral `R
 | --- | --- | --- |
 | IaC desired state | Terraform bundle + provider lock/identity + target + state lineage/serial | v1 구현 |
 | application artifact | repository/commit + normalized build config/contract + platform + secret-free input + immutable digest | Direct/GitOps 공통 Registry v1 구현 |
-| runtime release | desired runtime revision + provider actual state + health evidence | 후속 resource adapter |
+| runtime release | deployment target fingerprint + ApplicationArtifact fingerprint/digest + provider actual state + health evidence | Runtime Convergence Adapter v1 구현 |
 
 IaC 계층은 canonical Terraform bundle과 provider lock을 재사용하되 account, region, state lineage/serial, drift TTL을 함께 검증한다. 안전한 pending Plan 재사용은 실제 `tfplan`, S3 optimization evidence, Plan summary, Pre-Deployment result가 모두 같은 경우에만 허용한다. 동일 process의 같은 Deployment Plan은 single-flight로 합치고, API route는 이미 실행 중인 동일 Plan에 합류한다. RDS의 Deployment/job 제약은 process 간 중복 실행을 막는 영구 경계이며 Redis는 이 결정의 source of truth가 아니다.
 
