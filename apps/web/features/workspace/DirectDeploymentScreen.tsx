@@ -1540,8 +1540,11 @@ export function DirectDeploymentScreen({
   const renderResultsSection = () => {
     if (historyDetailsIsLoading) {
       return (
-        <section aria-busy="true" className={styles.deploymentSection}>
-          <h3>리소스와 Output</h3>
+        <section
+          aria-busy="true"
+          aria-label="리소스와 Output 세부 내용"
+          className={styles.deploymentSection}
+        >
           <p className={styles.deploymentHint} role="status">
             선택한 배포 버전의 리소스와 Output을 불러오는 중입니다.
           </p>
@@ -1551,8 +1554,10 @@ export function DirectDeploymentScreen({
 
     if (historyDetailsErrorMessage) {
       return (
-        <section className={styles.deploymentSection}>
-          <h3>리소스와 Output</h3>
+        <section
+          aria-label="리소스와 Output 세부 내용"
+          className={styles.deploymentSection}
+        >
           <p className={styles.deploymentRecentResultError} role="alert">
             {historyDetailsErrorMessage}
           </p>
@@ -1561,44 +1566,46 @@ export function DirectDeploymentScreen({
     }
 
     return (
-      <section className={styles.deploymentSection}>
-      <h3>리소스와 Output</h3>
-      {historyDeploymentResources.length === 0 ? (
-        <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
-      ) : (
-        <div className={styles.deploymentResultRows}>
-          {historyDeploymentResources.map((resource) => (
-            <article className={styles.deploymentResultRow} key={resource.id}>
-              <strong>{resource.terraformAddress}</strong>
-              <span className={styles.deploymentResultMeta}>{resource.terraformType}</span>
-              <span className={styles.deploymentResultValue}>
-                {resource.resourceId ?? "resource id 없음"}
-              </span>
-            </article>
-          ))}
-        </div>
-      )}
-      {historyTerraformOutputs.length === 0 ? (
-        <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
-      ) : (
-        <>
-          <DeploymentOutputLinks
-            links={historyDeploymentOutputLinks}
-            scopeKey={selectedHistoryDeploymentId || null}
-          />
+      <section
+        aria-label="리소스와 Output 세부 내용"
+        className={styles.deploymentSection}
+      >
+        {historyDeploymentResources.length === 0 ? (
+          <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
+        ) : (
           <div className={styles.deploymentResultRows}>
-            {historyTerraformOutputs.map((output) => (
-              <article className={styles.deploymentResultRow} key={output.id}>
-                <strong>{output.name}</strong>
-                <span className={styles.deploymentResultMeta}>
-                  {output.sensitive ? "sensitive" : "plain"}
+            {historyDeploymentResources.map((resource) => (
+              <article className={styles.deploymentResultRow} key={resource.id}>
+                <strong>{resource.terraformAddress}</strong>
+                <span className={styles.deploymentResultMeta}>{resource.terraformType}</span>
+                <span className={styles.deploymentResultValue}>
+                  {resource.resourceId ?? "resource id 없음"}
                 </span>
-                <span className={styles.deploymentResultValue}>{formatOutputValue(output)}</span>
               </article>
             ))}
           </div>
-        </>
-      )}
+        )}
+        {historyTerraformOutputs.length === 0 ? (
+          <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
+        ) : (
+          <>
+            <DeploymentOutputLinks
+              links={historyDeploymentOutputLinks}
+              scopeKey={selectedHistoryDeploymentId || null}
+            />
+            <div className={styles.deploymentResultRows}>
+              {historyTerraformOutputs.map((output) => (
+                <article className={styles.deploymentResultRow} key={output.id}>
+                  <strong>{output.name}</strong>
+                  <span className={styles.deploymentResultMeta}>
+                    {output.sensitive ? "sensitive" : "plain"}
+                  </span>
+                  <span className={styles.deploymentResultValue}>{formatOutputValue(output)}</span>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
       </section>
     );
   };
@@ -1606,8 +1613,11 @@ export function DirectDeploymentScreen({
   const renderLogsSection = () => {
     if (historyDetailsIsLoading) {
       return (
-        <section aria-busy="true" className={styles.deploymentSection}>
-          <h3>전체 로그</h3>
+        <section
+          aria-busy="true"
+          aria-label="전체 로그 세부 내용"
+          className={styles.deploymentSection}
+        >
           <p className={styles.deploymentHint} role="status">
             선택한 배포 버전의 로그를 불러오는 중입니다.
           </p>
@@ -1617,8 +1627,7 @@ export function DirectDeploymentScreen({
 
     if (historyDetailsErrorMessage) {
       return (
-        <section className={styles.deploymentSection}>
-          <h3>전체 로그</h3>
+        <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
           <p className={styles.deploymentRecentResultError} role="alert">
             {historyDetailsErrorMessage}
           </p>
@@ -1627,8 +1636,7 @@ export function DirectDeploymentScreen({
     }
 
     return (
-      <section className={styles.deploymentSection}>
-        <h3>전체 로그</h3>
+      <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
         <DeploymentLogList logs={historyDeploymentLogs} />
       </section>
     );

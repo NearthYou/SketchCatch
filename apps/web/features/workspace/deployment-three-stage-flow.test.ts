@@ -183,6 +183,19 @@ test("Deployment History selects one successful version and renders only its det
   assert.match(directDeploymentSource, /historyTerraformOutputs/);
 });
 
+test("expanded history details do not repeat their disclosure titles", () => {
+  const resultsStart = directDeploymentSource.indexOf("const renderResultsSection");
+  const logsStart = directDeploymentSource.indexOf("const renderLogsSection", resultsStart);
+  const historyStart = directDeploymentSource.indexOf("const renderDeploymentHistory", logsStart);
+  const resultsSource = directDeploymentSource.slice(resultsStart, logsStart);
+  const logsSource = directDeploymentSource.slice(logsStart, historyStart);
+
+  assert.doesNotMatch(resultsSource, /<h3>리소스와 Output<\/h3>/);
+  assert.doesNotMatch(logsSource, /<h3>전체 로그<\/h3>/);
+  assert.match(resultsSource, /aria-label="리소스와 Output 세부 내용"/);
+  assert.match(logsSource, /aria-label="전체 로그 세부 내용"/);
+});
+
 function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
