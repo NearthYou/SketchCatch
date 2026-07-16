@@ -86,6 +86,7 @@ import {
   createGitOpsReleaseReconciler,
   type GitOpsReleaseReconciler
 } from "../git-cicd/gitops-release-reconciler.js";
+import { createPostgresGitOpsApplicationArtifactRegistrar } from "../git-cicd/gitops-application-artifact-registrar.js";
 import {
   createGitCicdPipelineRunService,
   createPostgresGitCicdPipelinePersistenceRepository,
@@ -982,7 +983,8 @@ async function getGitCicdPipelineRunRequestContext(
           staticSite: createStaticSiteGitOpsReleaseReconciler({
             repository: createPostgresStaticSiteGitOpsReleaseRepository(client.db),
             gateway: createAwsStaticSiteGitOpsCloudGateway()
-          })
+          }),
+          artifactRegistrar: createPostgresGitOpsApplicationArtifactRegistrar(client.db)
         }));
   return {
     accessContext,

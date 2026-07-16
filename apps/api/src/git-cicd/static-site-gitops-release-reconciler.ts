@@ -81,6 +81,7 @@ export type StaticSiteGitOpsCloudGateway = {
 
 export type StaticSiteGitOpsReleaseReconcileInput = {
   projectId: string;
+  artifactId?: string | null;
   pipelineRunId: string;
   commitSha: string;
   pipelineStatus: GitCicdPipelineRunStatus;
@@ -146,6 +147,7 @@ export function createStaticSiteGitOpsReleaseReconciler(options: {
       return options.repository.upsertRelease({
         id: createId(),
         projectId: input.projectId,
+        artifactId: input.artifactId ?? null,
         deploymentId: null,
         pipelineRunId: input.pipelineRunId,
         source: "gitops",

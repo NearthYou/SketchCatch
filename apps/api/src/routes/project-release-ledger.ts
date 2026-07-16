@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  ApplicationArtifactListResponse,
   ApplicationRelease,
   ApplicationReleaseListResponse,
   ApplicationReleaseResponse,
@@ -14,6 +15,7 @@ import {
   createPostgresProjectReleaseLedgerRepository,
   getApplicationRelease,
   getProjectDeploymentTarget,
+  listApplicationArtifacts,
   listApplicationReleases,
   putProjectDeploymentTarget,
   ReleaseLedgerConflictError,
@@ -187,6 +189,21 @@ export async function registerProjectReleaseLedgerRoutes(
     }
   });
 
+  app.get("/projects/:projectId/artifacts", async (request, reply) => {
+    const params = projectParamsSchema.parse(request.params);
+    const context = await createRequestContext(request, options, getClient);
+    try {
+      const artifacts = await listApplicationArtifacts(
+        { projectId: params.projectId, userId: context.userId },
+        context.repository
+      );
+      const response: ApplicationArtifactListResponse = { artifacts };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleReleaseLedgerError(error, reply);
+    }
+  });
+
   app.get("/projects/:projectId/releases/:releaseId", async (request, reply) => {
     const params = releaseParamsSchema.parse(request.params);
     const context = await createRequestContext(request, options, getClient);
@@ -236,6 +253,7 @@ function toApplicationRelease(row: ApplicationReleaseRecord): ApplicationRelease
   return {
     id: row.id,
     projectId: row.projectId,
+    artifactId: row.artifactId,
     deploymentId: row.deploymentId,
     pipelineRunId: row.pipelineRunId,
     source: row.source,

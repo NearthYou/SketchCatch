@@ -142,6 +142,61 @@
           "ec2:CreateAction": "AuthorizeSecurityGroupIngress"
         }
       }
+    },
+    {
+      "Sid": "AllowReviewedRuntimeCompleteTaskDefinitionReplacement",
+      "Effect": "Allow",
+      "Action": ["ecs:DeregisterTaskDefinition", "ecs:RegisterTaskDefinition"],
+      "Resource": [
+        "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-api:*",
+        "arn:aws:ecs:ap-northeast-2:555980271919:task-definition/sketchcatch-production-worker:*"
+      ]
+    },
+    {
+      "Sid": "AllowReviewedRuntimeCompleteInlinePolicyUpdate",
+      "Effect": "Allow",
+      "Action": ["iam:GetRolePolicy", "iam:PutRolePolicy"],
+      "Resource": [
+        "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-task",
+        "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-worker-execution"
+      ]
+    },
+    {
+      "Sid": "AllowReviewedRuntimeCompleteLoadBalancerUpdate",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:ModifyTargetGroup",
+        "elasticloadbalancing:ModifyTargetGroupAttributes"
+      ],
+      "Resource": [
+        "arn:aws:elasticloadbalancing:ap-northeast-2:555980271919:loadbalancer/app/sketchcatch-production-ecs/*",
+        "arn:aws:elasticloadbalancing:ap-northeast-2:555980271919:targetgroup/sketchcatch-production-api/*",
+        "arn:aws:elasticloadbalancing:ap-northeast-2:555980271919:targetgroup/sketchcatch-production-web/*"
+      ]
+    },
+    {
+      "Sid": "AllowReviewedRuntimeCompleteReadback",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:DescribeLoadBalancerAttributes",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTargetGroupAttributes",
+        "elasticloadbalancing:DescribeTargetGroups"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowReviewedRuntimeCompleteMetricFilterUpdate",
+      "Effect": "Allow",
+      "Action": ["logs:DescribeMetricFilters", "logs:PutMetricFilter"],
+      "Resource": "arn:aws:logs:ap-northeast-2:555980271919:log-group:/sketchcatch/production/ecs/web:*"
+    },
+    {
+      "Sid": "AllowReviewedRuntimeCompleteArtifactCorsUpdate",
+      "Effect": "Allow",
+      "Action": ["s3:GetBucketCORS", "s3:PutBucketCORS"],
+      "Resource": "arn:aws:s3:::sketchcatch-555980271919-ap-northeast-2-an"
     }
   ]
 }

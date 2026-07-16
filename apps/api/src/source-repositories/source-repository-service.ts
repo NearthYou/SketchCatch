@@ -13,21 +13,46 @@ import type {
 } from "@sketchcatch/types";
 import type { RepositoryDeploymentType } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { oauthAccounts, projects, sourceRepositories, touchUpdatedAt } from "../db/schema.js";
+import {
+  githubInstallationConnections,
+  projects,
+  sourceRepositories,
+  touchUpdatedAt
+} from "../db/schema.js";
 import type { ProjectAccessContext } from "../git-cicd/git-cicd-handoff-service.js";
 import { createGitHubAppState, verifyGitHubAppState } from "./github-app-state.js";
 import type {
   GitHubAppClient,
+  GitHubAppInstallation,
   GitHubRepositoryEvidenceReader
 } from "./github-app-client.js";
 import { analyzeRepositoryEvidence } from "./repository-analysis.js";
 import { recommendRepositoryTemplatesWithAi } from "./repository-template-recommendation.js";
+import {
+  createGitHubAppUserAuthorization,
+  findUserAuthorizedGitHubInstallation,
+  verifyGitHubAppUserAuthorization,
+  type GitHubAppUserAuthorizationConfig,
+  type GitHubAppUserAuthorizationCookie
+} from "./github-app-user-authorization.js";
 
 export type SourceRepositoryRecord = typeof sourceRepositories.$inferSelect;
 export type SourceRepositoryProjectRecord = typeof projects.$inferSelect;
+export type GitHubInstallationConnectionRecord =
+  typeof githubInstallationConnections.$inferSelect;
 
 export type SourceRepositoryRepository = {
-  findGitHubProviderUserId(userId: string): Promise<string | null>;
+  connectGitHubInstallation(
+    input: ConnectGitHubInstallationInput
+  ): Promise<GitHubInstallationConnectionRecord | undefined>;
+  listActiveGitHubInstallationConnections(
+    userId: string
+  ): Promise<GitHubInstallationConnectionRecord[]>;
+  findActiveGitHubInstallationConnection(
+    userId: string,
+    installationId: string
+  ): Promise<GitHubInstallationConnectionRecord | undefined>;
+  markGitHubInstallationDisconnected(userId: string, installationId: string): Promise<void>;
   findAccessibleProject(
     projectId: string,
     accessContext: ProjectAccessContext
@@ -41,6 +66,11 @@ export type SourceRepositoryRepository = {
   saveProjectSourceRepositoryAnalysis(
     input: SaveProjectSourceRepositoryAnalysisInput
   ): Promise<SourceRepositoryRecord | undefined>;
+};
+
+export type ConnectGitHubInstallationInput = {
+  userId: string;
+  installation: GitHubAppInstallation;
 };
 
 export type CreateActiveGitHubSourceRepositoryInput = {
@@ -71,6 +101,24 @@ export type CreateGitHubAccountInstallUrlInput = {
   appSlug: string;
   stateSecret: string;
   now?: () => Date;
+};
+
+export type CreateGitHubInstallationUserAuthorizationInput = {
+  installationId: string;
+  setupState: string;
+  accessContext: ProjectAccessContext;
+  stateSecret: string;
+  config: Pick<GitHubAppUserAuthorizationConfig, "clientId" | "callbackUrl">;
+};
+
+export type CompleteGitHubInstallationUserAuthorizationInput = {
+  code: string;
+  authorizationState: string;
+  cookie: GitHubAppUserAuthorizationCookie;
+  accessContext: ProjectAccessContext;
+  stateSecret: string;
+  config: GitHubAppUserAuthorizationConfig;
+  fetcher?: typeof fetch;
 };
 
 export type ListGitHubAccountInstallationsInput = {
@@ -194,13 +242,84 @@ export function createPostgresSourceRepositoryRepository(
   db: Database
 ): SourceRepositoryRepository {
   return {
-    async findGitHubProviderUserId(userId) {
-      const [account] = await db
-        .select({ providerUserId: oauthAccounts.providerUserId })
-        .from(oauthAccounts)
-        .where(and(eq(oauthAccounts.userId, userId), eq(oauthAccounts.provider, "github")));
+    async connectGitHubInstallation(input) {
+      const now = new Date();
+      const [connection] = await db
+        .insert(githubInstallationConnections)
+        .values({
+          id: randomUUID(),
+          userId: input.userId,
+          githubInstallationId: input.installation.installationId,
+          accountId: input.installation.accountId,
+          accountLogin: input.installation.accountLogin,
+          accountType: input.installation.accountType,
+          repositorySelection: input.installation.repositorySelection,
+          htmlUrl: input.installation.htmlUrl,
+          status: "active",
+          connectedAt: now,
+          lastVerifiedAt: now
+        })
+        .onConflictDoUpdate({
+          target: githubInstallationConnections.githubInstallationId,
+          set: {
+            accountId: input.installation.accountId,
+            accountLogin: input.installation.accountLogin,
+            accountType: input.installation.accountType,
+            repositorySelection: input.installation.repositorySelection,
+            htmlUrl: input.installation.htmlUrl,
+            status: "active",
+            lastVerifiedAt: now,
+            disconnectedAt: null,
+            updatedAt: now
+          },
+          setWhere: eq(githubInstallationConnections.userId, input.userId)
+        })
+        .returning();
 
-      return account?.providerUserId ?? null;
+      return connection;
+    },
+    async listActiveGitHubInstallationConnections(userId) {
+      return db
+        .select()
+        .from(githubInstallationConnections)
+        .where(
+          and(
+            eq(githubInstallationConnections.userId, userId),
+            eq(githubInstallationConnections.status, "active")
+          )
+        )
+        .orderBy(desc(githubInstallationConnections.connectedAt));
+    },
+    async findActiveGitHubInstallationConnection(userId, installationId) {
+      const [connection] = await db
+        .select()
+        .from(githubInstallationConnections)
+        .where(
+          and(
+            eq(githubInstallationConnections.userId, userId),
+            eq(githubInstallationConnections.githubInstallationId, installationId),
+            eq(githubInstallationConnections.status, "active")
+          )
+        );
+
+      return connection;
+    },
+    async markGitHubInstallationDisconnected(userId, installationId) {
+      const now = new Date();
+      await db
+        .update(githubInstallationConnections)
+        .set({
+          status: "disconnected",
+          disconnectedAt: now,
+          updatedAt: now
+        })
+        .where(
+          and(
+            eq(githubInstallationConnections.userId, userId),
+            eq(githubInstallationConnections.githubInstallationId, installationId),
+            eq(githubInstallationConnections.status, "active")
+          )
+        );
     },
     async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
@@ -356,6 +475,79 @@ export async function createGitHubAccountInstallUrl(
   };
 }
 
+export async function createGitHubInstallationUserAuthorization(
+  input: CreateGitHubInstallationUserAuthorizationInput,
+  repository: SourceRepositoryRepository
+) {
+  const setupState = await verifyAndAuthorizeState(
+    {
+      state: input.setupState,
+      stateSecret: input.stateSecret,
+      accessContext: input.accessContext
+    },
+    repository
+  );
+
+  return createGitHubAppUserAuthorization({
+    userId: setupState.userId,
+    installationId: input.installationId,
+    setupState: input.setupState,
+    stateSecret: input.stateSecret,
+    config: input.config
+  });
+}
+
+export async function completeGitHubInstallationUserAuthorization(
+  input: CompleteGitHubInstallationUserAuthorizationInput,
+  repository: SourceRepositoryRepository
+): Promise<{ installationId: string; setupState: string }> {
+  const authorization = await verifyGitHubAppUserAuthorization({
+    state: input.authorizationState,
+    stateSecret: input.stateSecret,
+    cookie: input.cookie
+  });
+
+  if (authorization.userId !== input.accessContext.userId) {
+    throw new SourceRepositoryStateError("GitHub App authorization user mismatch");
+  }
+
+  const setupState = await verifyAndAuthorizeState(
+    {
+      state: authorization.setupState,
+      stateSecret: input.stateSecret,
+      accessContext: input.accessContext
+    },
+    repository
+  );
+  if (setupState.userId !== authorization.userId) {
+    throw new SourceRepositoryStateError("GitHub App authorization state mismatch");
+  }
+
+  const installation = await findUserAuthorizedGitHubInstallation({
+    code: input.code,
+    codeVerifier: input.cookie.codeVerifier,
+    installationId: authorization.installationId,
+    config: input.config,
+    ...(input.fetcher ? { fetcher: input.fetcher } : {})
+  });
+  if (!installation) {
+    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  const connection = await repository.connectGitHubInstallation({
+    userId: authorization.userId,
+    installation
+  });
+  if (!connection) {
+    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  return {
+    installationId: authorization.installationId,
+    setupState: authorization.setupState
+  };
+}
+
 export async function createGitHubExistingInstallationCallbackUrl(
   input: CreateGitHubExistingInstallationCallbackUrlInput,
   repository: SourceRepositoryRepository
@@ -404,13 +596,23 @@ export async function listGitHubInstallationRepositories(
   githubAppClient: GitHubAppClient
 ): Promise<ListGitHubInstallationRepositoriesResult> {
   const state = await verifyAndAuthorizeState(input, repository);
-  await requireOwnedGitHubInstallation(state.userId, input.installationId, repository, githubAppClient);
+  await requireOwnedGitHubInstallation(
+    state.userId,
+    input.installationId,
+    repository,
+    githubAppClient
+  );
 
   if (state.scope === "account") {
     return { scope: "account" };
   }
 
-  const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
+  const repositories = await listGitHubInstallationRepositoriesWithDisconnect(
+    state.userId,
+    input.installationId,
+    repository,
+    githubAppClient
+  );
 
   return {
     scope: "project",
@@ -431,18 +633,30 @@ export async function listGitHubAccountInstallations(
     repository,
     githubAppClient
   );
-  const connections = await Promise.all(
-    installations.map(async (installation): Promise<GitHubInstallationConnection> => ({
-      installationId: installation.installationId,
-      accountLogin: installation.accountLogin,
-      accountType: installation.accountType,
-      repositorySelection: installation.repositorySelection,
-      repositoryCount: (
-        await githubAppClient.listInstallationRepositories(installation.installationId)
-      ).length,
-      htmlUrl: installation.htmlUrl
-    }))
-  );
+  const connections: GitHubInstallationConnection[] = [];
+
+  for (const installation of installations) {
+    try {
+      const installationRepositories = await listGitHubInstallationRepositoriesWithDisconnect(
+        input.accessContext.userId,
+        installation.installationId,
+        repository,
+        githubAppClient
+      );
+      connections.push({
+        installationId: installation.installationId,
+        accountLogin: installation.accountLogin,
+        accountType: installation.accountType,
+        repositorySelection: installation.repositorySelection,
+        repositoryCount: installationRepositories.length,
+        htmlUrl: installation.htmlUrl
+      });
+    } catch (error) {
+      if (!isGitHubRepositoryAccessUnavailableConflict(error)) {
+        throw error;
+      }
+    }
+  }
 
   return {
     installations: connections.sort(
@@ -482,9 +696,21 @@ export async function listGitHubInstalledRepositories(
   const repositories: GitHubInstalledRepositoryCandidate[] = [];
 
   for (const installation of installations) {
-    const installationRepositories = await githubAppClient.listInstallationRepositories(
-      installation.installationId
-    );
+    let installationRepositories: GitHubRepositoryCandidate[];
+
+    try {
+      installationRepositories = await listGitHubInstallationRepositoriesWithDisconnect(
+        input.accessContext.userId,
+        installation.installationId,
+        repository,
+        githubAppClient
+      );
+    } catch (error) {
+      if (isGitHubRepositoryAccessUnavailableConflict(error)) {
+        continue;
+      }
+      throw error;
+    }
 
     repositories.push(
       ...installationRepositories.map((candidate) => {
@@ -534,7 +760,12 @@ export async function connectGitHubSourceRepository(
     githubAppClient
   );
 
-  const repositories = await githubAppClient.listInstallationRepositories(input.installationId);
+  const repositories = await listGitHubInstallationRepositoriesWithDisconnect(
+    state.userId,
+    input.installationId,
+    repository,
+    githubAppClient
+  );
   const selectedRepository = state.scope === "project" && state.targetRepository
     ? findTargetGitHubRepository(repositories, state.targetRepository)
     : repositories.find(
@@ -848,14 +1079,64 @@ async function listOwnedGitHubInstallations(
   repository: SourceRepositoryRepository,
   githubAppClient: GitHubAppClient
 ) {
-  const providerUserId = await repository.findGitHubProviderUserId(userId);
+  const connections = await repository.listActiveGitHubInstallationConnections(userId);
+  const installations = await githubAppClient.listInstallations();
+  const ownedInstallations: GitHubAppInstallation[] = [];
 
-  if (!providerUserId) {
-    throw new SourceRepositoryConflictError("GIT_APP_GITHUB_IDENTITY_REQUIRED");
+  for (const connection of connections) {
+    const installation = installations.find(
+      (candidate) => candidate.installationId === connection.githubInstallationId
+    );
+
+    if (!installation) {
+      await repository.markGitHubInstallationDisconnected(
+        userId,
+        connection.githubInstallationId
+      );
+      continue;
+    }
+
+    await repository.connectGitHubInstallation({ userId, installation });
+    ownedInstallations.push(installation);
   }
 
-  const installations = await githubAppClient.listInstallations();
-  return installations.filter((installation) => installation.accountId === providerUserId);
+  return ownedInstallations;
+}
+
+async function listGitHubInstallationRepositoriesWithDisconnect(
+  userId: string,
+  installationId: string,
+  repository: SourceRepositoryRepository,
+  githubAppClient: GitHubAppClient
+): Promise<GitHubRepositoryCandidate[]> {
+  try {
+    return await githubAppClient.listInstallationRepositories(installationId);
+  } catch (error) {
+    if (!isGitHubInstallationAccessError(error)) {
+      throw error;
+    }
+
+    await repository.markGitHubInstallationDisconnected(userId, installationId);
+    throw new SourceRepositoryConflictError("GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE");
+  }
+}
+
+function isGitHubInstallationAccessError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("statusCode" in error)) {
+    return false;
+  }
+
+  const statusCode = (error as { readonly statusCode?: unknown }).statusCode;
+  return statusCode === 403 || statusCode === 404;
+}
+
+function isGitHubRepositoryAccessUnavailableConflict(
+  error: unknown
+): error is SourceRepositoryConflictError {
+  return (
+    error instanceof SourceRepositoryConflictError &&
+    error.message === "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE"
+  );
 }
 
 async function requireOwnedGitHubInstallation(
@@ -864,15 +1145,26 @@ async function requireOwnedGitHubInstallation(
   repository: SourceRepositoryRepository,
   githubAppClient: GitHubAppClient
 ) {
-  const installations = await listOwnedGitHubInstallations(userId, repository, githubAppClient);
+  const connection = await repository.findActiveGitHubInstallationConnection(
+    userId,
+    installationId
+  );
+
+  if (!connection) {
+    throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  const installations = await githubAppClient.listInstallations();
   const installation = installations.find(
     (candidate) => candidate.installationId === installationId
   );
 
   if (!installation) {
+    await repository.markGitHubInstallationDisconnected(userId, installationId);
     throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
   }
 
+  await repository.connectGitHubInstallation({ userId, installation });
   return installation;
 }
 

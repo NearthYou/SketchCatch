@@ -37,6 +37,10 @@ const runtimeStateObject =
 const runtimeStateLockObject = `${runtimeStateObject}.tflock`;
 const runtimeCacheSecurityGroup =
   "arn:aws:ec2:ap-northeast-2:555980271919:security-group/sg-09d8b7030cba492b4";
+const productionAccount = "555980271919";
+const productionRegion = "ap-northeast-2";
+const productionPrefix = "sketchcatch-production";
+const productionArtifactBucket = "sketchcatch-555980271919-ap-northeast-2-an";
 
 check(
   JSON.stringify(deployPolicyStatements.get("AllowRuntimeTerraformStateObjectAccess")) ===
@@ -95,6 +99,87 @@ check(
       }
     }),
   "deploy role must only tag Runtime Cache ingress rules during authorized creation"
+);
+check(
+  JSON.stringify(
+    deployPolicyStatements.get("AllowReviewedRuntimeCompleteTaskDefinitionReplacement")
+  ) ===
+    JSON.stringify({
+      Sid: "AllowReviewedRuntimeCompleteTaskDefinitionReplacement",
+      Effect: "Allow",
+      Action: ["ecs:DeregisterTaskDefinition", "ecs:RegisterTaskDefinition"],
+      Resource: [
+        `arn:aws:ecs:${productionRegion}:${productionAccount}:task-definition/${productionPrefix}-api:*`,
+        `arn:aws:ecs:${productionRegion}:${productionAccount}:task-definition/${productionPrefix}-worker:*`
+      ]
+    }),
+  "deploy role must only replace the reviewed API and worker task definition families"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowReviewedRuntimeCompleteInlinePolicyUpdate")) ===
+    JSON.stringify({
+      Sid: "AllowReviewedRuntimeCompleteInlinePolicyUpdate",
+      Effect: "Allow",
+      Action: ["iam:GetRolePolicy", "iam:PutRolePolicy"],
+      Resource: [
+        `arn:aws:iam::${productionAccount}:role/${productionPrefix}-ecs-task`,
+        `arn:aws:iam::${productionAccount}:role/${productionPrefix}-ecs-worker-execution`
+      ]
+    }),
+  "deploy role must only update the two reviewed runtime inline policies"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowReviewedRuntimeCompleteLoadBalancerUpdate")) ===
+    JSON.stringify({
+      Sid: "AllowReviewedRuntimeCompleteLoadBalancerUpdate",
+      Effect: "Allow",
+      Action: [
+        "elasticloadbalancing:ModifyLoadBalancerAttributes",
+        "elasticloadbalancing:ModifyTargetGroup",
+        "elasticloadbalancing:ModifyTargetGroupAttributes"
+      ],
+      Resource: [
+        `arn:aws:elasticloadbalancing:${productionRegion}:${productionAccount}:loadbalancer/app/${productionPrefix}-ecs/*`,
+        `arn:aws:elasticloadbalancing:${productionRegion}:${productionAccount}:targetgroup/${productionPrefix}-api/*`,
+        `arn:aws:elasticloadbalancing:${productionRegion}:${productionAccount}:targetgroup/${productionPrefix}-web/*`
+      ]
+    }),
+  "deploy role must only update the reviewed production load balancer and target groups"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowReviewedRuntimeCompleteReadback")) ===
+    JSON.stringify({
+      Sid: "AllowReviewedRuntimeCompleteReadback",
+      Effect: "Allow",
+      Action: [
+        "elasticloadbalancing:DescribeLoadBalancerAttributes",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTargetGroupAttributes",
+        "elasticloadbalancing:DescribeTargetGroups"
+      ],
+      Resource: "*"
+    }),
+  "deploy role readback must be limited to the ELBv2 attributes Terraform verifies after the reviewed update"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowReviewedRuntimeCompleteMetricFilterUpdate")) ===
+    JSON.stringify({
+      Sid: "AllowReviewedRuntimeCompleteMetricFilterUpdate",
+      Effect: "Allow",
+      Action: ["logs:DescribeMetricFilters", "logs:PutMetricFilter"],
+      Resource: `arn:aws:logs:${productionRegion}:${productionAccount}:log-group:/sketchcatch/production/ecs/web:*`
+    }),
+  "deploy role must only update the reviewed web ECS metric filter"
+);
+check(
+  JSON.stringify(deployPolicyStatements.get("AllowReviewedRuntimeCompleteArtifactCorsUpdate")) ===
+    JSON.stringify({
+      Sid: "AllowReviewedRuntimeCompleteArtifactCorsUpdate",
+      Effect: "Allow",
+      Action: ["s3:GetBucketCORS", "s3:PutBucketCORS"],
+      Resource: `arn:aws:s3:::${productionArtifactBucket}`
+    }),
+  "deploy role must only update CORS on the reviewed production artifact bucket"
 );
 const expectedGroups = new Map([
   ["runtime", { root: "infra/aws/terraform", key: "production/ecs-foundation/terraform.tfstate" }],
@@ -243,6 +328,14 @@ for (const marker of [
   "Review-only Terraform plan",
   "Create reviewed apply plan",
   "Validate reviewed apply plan",
+  "apply-reviewed-runtime-complete",
+  "runtime-complete-apply-${APPROVED_PLAN_RUN_ID}",
+  "Validate reviewed complete runtime plan",
+  "aws_ecs_task_definition.api",
+  "aws_ecs_task_definition.worker",
+  '"address": "aws_ecs_service.api"',
+  'aws_cloudwatch_log_metric_filter.ecs_error[\\"web\\"]',
+  '"address": "aws_s3_bucket_cors_configuration.artifact"',
   "expected_head_sha must exactly match the dispatched commit",
   ".resource_changes[]",
   '"actions": ["create"]',
@@ -252,7 +345,7 @@ for (const marker of [
   "actions/upload-artifact@v4",
   "actions/download-artifact@v4",
   "retention-days: 1",
-  "terraform -chdir=\"${TERRAFORM_ROOT}\" apply -input=false -no-color tfplan",
+  'terraform -chdir="${TERRAFORM_ROOT}" apply -input=false -no-color tfplan',
   "Delete reviewed plan artifact",
   "actions/artifacts/${ARTIFACT_ID}",
   "plan_args=(-input=false -no-color -detailed-exitcode -lock-timeout=5m)",
@@ -262,6 +355,16 @@ for (const marker of [
   "use_lockfile=true",
   "PRODUCTION_INFRA_RUNTIME_TFVARS_JSON",
   "runtime tfvars must be a JSON object",
+  "GIT_APP_CLIENT_ID: ${{ vars.GIT_APP_CLIENT_ID }}",
+  "GIT_APP_CLIENT_SECRET_ARN: ${{ secrets.GIT_APP_CLIENT_SECRET_ARN }}",
+  "LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN: ${{ secrets.LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN }}",
+  ".git_app_client_id = $client_id",
+  '.api_secret_arns["GIT_APP_CLIENT_SECRET"] = $client_secret_arn',
+  '.api_secret_arns["LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"] = $live_observation_capability_current_secret_arn',
+  "$after_secrets | contains($before_secrets)",
+  "Verify applied worker Secret execution access",
+  "applied-runtime-state.json",
+  "$execution_secret_values | contains($worker_secret_values)",
   "aws cloudformation list-stacks",
   "aws cloudformation describe-stacks",
   '.OutputKey == "RedisUrl"',
@@ -271,6 +374,14 @@ for (const marker of [
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);
 }
+check(
+  workflow.includes('terraform -chdir="${TERRAFORM_ROOT}" state pull > "${current_state_json}"'),
+  "complete runtime plan validation must compare the planned task definitions with Terraform state"
+);
+check(
+  !workflow.includes('aws_cloudwatch_log_metric_filter.ecs_error[\\\\"web\\\\"]'),
+  "complete runtime plan validation must use jq-compatible resource address escaping"
+);
 const extractTerraformOperations = (workflowText) =>
   workflowText
     .split(/\r?\n/)
@@ -361,6 +472,19 @@ const runtimeAlb = read("infra/aws/terraform/alb.tf");
 const runtimeAutoscaling = read("infra/aws/terraform/autoscaling.tf");
 const runtimeNetwork = read("infra/aws/terraform/network.tf");
 const runtimeVariables = read("infra/aws/terraform/variables.tf");
+const runtimeIam = read("infra/aws/terraform/iam.tf");
+const apiEcsService =
+  runtimeEcs.match(
+    /resource "aws_ecs_service" "api" \{([\s\S]*?)\r?\n\}\r?\n\r?\nresource "aws_ecs_service" "web"/
+  )?.[1] ?? "";
+check(
+  apiEcsService.includes("ignore_changes = [desired_count]"),
+  "API ECS service must reconcile the Terraform task definition while preserving autoscaling ownership"
+);
+check(
+  !apiEcsService.includes("ignore_changes = [desired_count, task_definition]"),
+  "API ECS service must not ignore task definition changes"
+);
 check(
   !/resource\s+"aws_ecs_service"\s+"app"/.test(runtimeEcs),
   "legacy ECS service must not exist"
@@ -391,7 +515,9 @@ for (const marker of [
   check(runtimeNetwork.includes(marker), `runtime cache networking is missing ${marker}`);
 }
 check(
-  runtimeEcs.includes("runtime_cache_security_group_id is required when Live Observation is enabled"),
+  runtimeEcs.includes(
+    "runtime_cache_security_group_id is required when Live Observation is enabled"
+  ),
   "Live Observation must fail its production plan when Runtime Cache ingress is not configured"
 );
 check(
@@ -400,6 +526,22 @@ check(
   ),
   "ECS worker dispatch must fail its production plan when Runtime Cache ingress is not configured"
 );
+for (const sid of [
+  "AllowProjectArtifacts",
+  "AllowDeploymentArtifacts",
+  "AllowAwsConnectionCloudFormationTemplates",
+  "AllowSketchCatchAwsConnectionAssumeRole",
+  "RunWorkerTask",
+  "ManageWorkerTask",
+  "TagWorkerTaskOnRun",
+  "PassWorkerTaskRoles",
+  "AllowConfiguredBedrockModels"
+]) {
+  check(
+    new RegExp(`sid\\s*=\\s*\"${sid}\"`).test(runtimeIam),
+    `runtime ecs_task policy must retain ${sid}`
+  );
+}
 
 const deployWorkflow = fs.readFileSync(deployWorkflowPath, "utf8");
 for (const marker of [
@@ -543,7 +685,24 @@ for (const marker of [
 }
 
 const runtimeLocals = read("infra/aws/terraform/locals.tf");
+const runtimeConfig = read("infra/aws/terraform/runtime-config.tf");
 const runtimeObservability = read("infra/aws/terraform/observability.tf");
+check(
+  /worker_secret_names\s*=\s*toset\(\[[^\]]*?"GIT_APP_CLIENT_SECRET"/.test(runtimeLocals),
+  "worker secret contracts must retain the GitHub App client secret"
+);
+check(
+  /ecs_api_ssm_secure_string_names\s*=\s*toset\(\[[^\]]*?"LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"/.test(
+    runtimeConfig
+  ),
+  "production API secret requirements must retain the Live Observation capability secret"
+);
+check(
+  /variable "api_secret_arns" \{[\s\S]*?"LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"/.test(
+    runtimeVariables
+  ),
+  "api_secret_arns validation must allow the Live Observation capability secret"
+);
 check(
   runtimeLocals.includes('?ERROR ?Error ?error -\\"Failed to find Server Action\\"'),
   "web error metrics must exclude stale Next.js Server Action requests"

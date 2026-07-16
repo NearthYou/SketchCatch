@@ -4,8 +4,10 @@ import { Bell, CheckCheck, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode
@@ -108,7 +110,7 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
     };
   }, [inboxReady, status]);
 
-  async function readNotification(notificationId: string): Promise<void> {
+  const readNotification = useCallback(async (notificationId: string): Promise<void> => {
     const readAt = new Date().toISOString();
     setState((current) => markNotificationReadLocally(current, notificationId, readAt));
     try {
@@ -119,14 +121,14 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
         setState(replaceNotificationCenterState(response))
       ).catch(() => undefined);
     }
-  }
+  }, []);
 
-  async function openNotification(notificationId: string, actionUrl: string): Promise<void> {
+  const openNotification = useCallback(async (notificationId: string, actionUrl: string): Promise<void> => {
     await readNotification(notificationId);
     window.location.assign(actionUrl);
-  }
+  }, [readNotification]);
 
-  async function readAll(): Promise<void> {
+  const readAll = useCallback(async (): Promise<void> => {
     const readAt = new Date().toISOString();
     setState((current) => markAllNotificationsReadLocally(current, readAt));
     try {
@@ -136,9 +138,9 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
         setState(replaceNotificationCenterState(response))
       ).catch(() => undefined);
     }
-  }
+  }, []);
 
-  async function enablePush(): Promise<void> {
+  const enablePush = useCallback(async (): Promise<void> => {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setPushState("unsupported");
       return;
@@ -168,9 +170,9 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
     } catch {
       setPushState("error");
     }
-  }
+  }, []);
 
-  async function disablePush(): Promise<void> {
+  const disablePush = useCallback(async (): Promise<void> => {
     try {
       const registration = await navigator.serviceWorker.getRegistration("/");
       const subscription = await registration?.pushManager.getSubscription();
@@ -182,19 +184,22 @@ export function DeploymentNotificationCenter({ children }: { readonly children: 
     } catch {
       setPushState("error");
     }
-  }
+  }, []);
 
-  const contextValue: NotificationCenterContextValue = {
-    close: () => setOpen(false),
-    disablePush,
-    enablePush,
-    open,
-    openNotification,
-    pushState,
-    readAll,
-    state,
-    toggle: () => setOpen((value) => !value)
-  };
+  const contextValue = useMemo<NotificationCenterContextValue>(
+    () => ({
+      close: () => setOpen(false),
+      disablePush,
+      enablePush,
+      open,
+      openNotification,
+      pushState,
+      readAll,
+      state,
+      toggle: () => setOpen((value) => !value)
+    }),
+    [disablePush, enablePush, open, openNotification, pushState, readAll, state]
+  );
 
   return (
     <NotificationCenterContext.Provider value={contextValue}>

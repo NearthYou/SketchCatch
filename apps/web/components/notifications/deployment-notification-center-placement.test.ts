@@ -72,6 +72,14 @@ test("the notification context remains mounted while authentication state change
   );
 });
 
+test("the notification context value is memoized from its current actions and state", () => {
+  assert.match(centerSource, /useMemo,/);
+  assert.match(
+    centerSource,
+    /const contextValue = useMemo<NotificationCenterContextValue>\(\s*\(\) => \(\{[\s\S]*?\}\),\s*\[\s*disablePush,[\s\S]*?state\s*\]\s*\);/
+  );
+});
+
 test("the Workspace project bar places the notification slot after save and before deploy", () => {
   assert.match(
     projectBarSource,
