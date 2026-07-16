@@ -560,7 +560,7 @@ check(
   "production API secret requirements must retain the Live Observation capability secret"
 );
 check(
-  runtimeVariables.includes('"LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"'),
+  /variable "api_secret_arns" \{[\s\S]*?"LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"/.test(runtimeVariables),
   "api_secret_arns validation must allow the Live Observation capability secret"
 );
 check(
