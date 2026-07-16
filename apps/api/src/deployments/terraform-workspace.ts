@@ -31,6 +31,16 @@ export type PreparedTerraformWorkspace = {
   cleanup: () => Promise<void>;
 };
 
+export async function cleanupPreparedTerraformWorkspace(input: {
+  workspace: PreparedTerraformWorkspace | undefined;
+  workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
+}): Promise<void> {
+  const workspace =
+    input.workspace ?? (await input.workspacePromise?.catch(() => undefined));
+
+  await workspace?.cleanup();
+}
+
 export async function prepareTerraformWorkspace(
   input: PrepareTerraformWorkspaceInput,
   options: PrepareTerraformWorkspaceOptions = {}
