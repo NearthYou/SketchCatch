@@ -80,12 +80,14 @@ export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly deploymentAvailability: DeploymentAvailability;
   readonly deploymentOpenRequestId?: number | undefined;
+  readonly hasUnsavedProjectDraft?: boolean | undefined;
   readonly initialView?: WorkspaceRightPanelView | undefined;
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
+  readonly projectDraftRevision?: number | null | undefined;
   readonly projectName: string;
   readonly onTerraformFilesChange?:
     | ((files: readonly TerraformSyncFileInput[]) => void)
@@ -110,12 +112,14 @@ export function WorkspaceRightPanel({
   context,
   deploymentAvailability,
   deploymentOpenRequestId = 0,
+  hasUnsavedProjectDraft = false,
   initialView,
   initialTerraformFiles,
   terraformFilesReplacement,
   onTerraformIssueAiRequest,
   onTerraformSafeFixApplyResult,
   projectId,
+  projectDraftRevision = null,
   projectName,
   onTerraformFilesChange,
   onTerraformFilesReplacementApplied,
@@ -136,9 +140,9 @@ export function WorkspaceRightPanel({
     defaultResourceWorkspaceView
   );
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
-  const [isDeploymentBaselineDirty, setIsDeploymentBaselineDirty] = useState(true);
+  const [isDeploymentBaselineDirty, setIsDeploymentBaselineDirty] = useState(false);
   const [lastSavedDeploymentBaselineFingerprint, setLastSavedDeploymentBaselineFingerprint] =
-    useState<string | null>(null);
+    useState<string | null>(() => toDeploymentBaselineFingerprint(context.diagram));
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
   const [terraformLeaveSaveState, setTerraformLeaveSaveState] =
     useState<TerraformLeaveSaveState>("idle");
@@ -192,6 +196,7 @@ export function WorkspaceRightPanel({
     [context.diagram]
   );
   const hasUnsavedDeploymentBaseline =
+    hasUnsavedProjectDraft ||
     isDeploymentBaselineDirty ||
     lastSavedDeploymentBaselineFingerprint !== currentDeploymentBaselineFingerprint;
 
@@ -621,55 +626,54 @@ export function WorkspaceRightPanel({
     [projectId]
   );
 
-  const prepareDeploymentArtifacts = useCallback(async (): Promise<
-    PreparedWorkspaceDeploymentArtifacts
-  > => {
-    let preparedSource: PreparedTerraformArtifactSource | undefined;
+  const prepareDeploymentArtifacts =
+    useCallback(async (): Promise<PreparedWorkspaceDeploymentArtifacts> => {
+      let preparedSource: PreparedTerraformArtifactSource | undefined;
 
-    try {
-      preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
-    } catch (cause) {
-      throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
-    }
+      try {
+        preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+      } catch (cause) {
+        throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
+      }
 
-    if (!preparedSource) {
-      throw new DeploymentPreparationError({
-        cause: new Error("Terraform panel did not provide deployment artifacts"),
-        stage: "terraform_prepare"
-      });
-    }
+      if (!preparedSource) {
+        throw new DeploymentPreparationError({
+          cause: new Error("Terraform panel did not provide deployment artifacts"),
+          stage: "terraform_prepare"
+        });
+      }
 
-    let saveResult: unknown;
+      let saveResult: unknown;
 
-    try {
-      saveResult = await context.saveDiagramNow?.();
-    } catch (cause) {
-      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
-    }
+      try {
+        saveResult = await context.saveDiagramNow?.();
+      } catch (cause) {
+        throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
+      }
 
-    let preparedDraftRevision: number;
+      let preparedDraftRevision: number;
 
-    try {
-      preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
-    } catch (cause) {
-      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
-    }
+      try {
+        preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
+      } catch (cause) {
+        throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
+      }
 
-    const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
+      const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
-    setHasUnsavedTerraformChanges(false);
-    setLastSavedDeploymentBaselineFingerprint(
-      toDeploymentBaselineFingerprint(preparedSource.diagramJson)
-    );
-    setIsDeploymentBaselineDirty(false);
+      setHasUnsavedTerraformChanges(false);
+      setLastSavedDeploymentBaselineFingerprint(
+        toDeploymentBaselineFingerprint(preparedSource.diagramJson)
+      );
+      setIsDeploymentBaselineDirty(false);
 
-    return {
-      ...savedArtifacts,
-      diagramJson: preparedSource.diagramJson,
-      preparedDraftRevision,
-      terraformFiles: preparedSource.terraformFiles
-    };
-  }, [context, savePreparedTerraformArtifact]);
+      return {
+        ...savedArtifacts,
+        diagramJson: preparedSource.diagramJson,
+        preparedDraftRevision,
+        terraformFiles: preparedSource.terraformFiles
+      };
+    }, [context, savePreparedTerraformArtifact]);
 
   const validateTerraformForPreDeployment = useCallback(async (): Promise<
     TerraformDiagnostic[]
@@ -786,6 +790,7 @@ export function WorkspaceRightPanel({
         onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
         preDeploymentCheckState={preDeploymentCheckState}
         projectId={projectId}
+        projectDraftRevision={projectDraftRevision}
         projectName={projectName}
       />
     ) : null;
@@ -793,10 +798,7 @@ export function WorkspaceRightPanel({
     ? createPortal(deploymentConsoleContent, document.body)
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
-    <LiveObservationModal
-      onClose={() => setIsLiveObservationOpen(false)}
-      projectId={projectId}
-    />
+    <LiveObservationModal onClose={() => setIsLiveObservationOpen(false)} projectId={projectId} />
   ) : null;
   const terraformSplitStyle = {
     "--terraform-code-pane-ratio": `${terraformCodePaneRatio}%`

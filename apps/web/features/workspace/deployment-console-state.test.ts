@@ -4,6 +4,8 @@ import type { AiPreDeploymentAnalysisResult } from "@sketchcatch/types";
 import {
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
+  hasDeploymentDraftChanges,
+  shouldShowDeploymentValidationActions,
   shouldStartQueuedApplyPlan,
   type DirectDeploymentFlowInput
 } from "./deployment-console-state";
@@ -33,7 +35,10 @@ function createInput(
 test("Direct Deployment exposes exactly validation, approval, and deployment", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
 
-  assert.deepEqual(flow.steps.map((step) => step.id), ["validation", "approval", "deployment"]);
+  assert.deepEqual(
+    flow.steps.map((step) => step.id),
+    ["validation", "approval", "deployment"]
+  );
   assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "active");
   assert.equal(flow.steps[1]?.state, "idle");
@@ -228,6 +233,88 @@ test("destroy uses the same approval and deployment phases", () => {
 
   assert.equal(flow.activeStepId, "approval");
   assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("an unchanged successful deployment returns to cleanup after reload", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      deployment: {
+        approvedAt: "2026-07-16T00:00:00.000Z",
+        currentPlanArtifactId: "apply-plan",
+        currentPlanOperation: "apply",
+        status: "SUCCESS"
+      },
+      hasUnsavedBaseline: false,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[2]?.statusLabel, "배포 완료");
+});
+
+test("a changed draft keeps validation active over an existing successful deployment", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      deployment: {
+        approvedAt: "2026-07-16T00:00:00.000Z",
+        currentPlanArtifactId: "apply-plan",
+        currentPlanOperation: "apply",
+        status: "SUCCESS"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.statusLabel, "저장 필요");
+});
+
+test("save and validation actions depend on changes after a successful deployment", () => {
+  assert.equal(
+    shouldShowDeploymentValidationActions({
+      deploymentStatus: "SUCCESS",
+      hasUnsavedBaseline: false,
+      preflightState: "idle"
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowDeploymentValidationActions({
+      deploymentStatus: "SUCCESS",
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    }),
+    true
+  );
+});
+
+test("persisted draft revisions restore whether a successful deployment changed after reload", () => {
+  assert.equal(
+    hasDeploymentDraftChanges({
+      currentDraftRevision: 7,
+      hasUnsavedWorkspaceChanges: false,
+      preparedDraftRevision: 7
+    }),
+    false
+  );
+  assert.equal(
+    hasDeploymentDraftChanges({
+      currentDraftRevision: 8,
+      hasUnsavedWorkspaceChanges: false,
+      preparedDraftRevision: 7
+    }),
+    true
+  );
+  assert.equal(
+    hasDeploymentDraftChanges({
+      currentDraftRevision: 7,
+      hasUnsavedWorkspaceChanges: true,
+      preparedDraftRevision: 7
+    }),
+    true
+  );
 });
 
 test("a queued deployment starts its apply plan after init returns to PENDING", () => {

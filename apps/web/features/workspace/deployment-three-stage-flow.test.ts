@@ -46,6 +46,31 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
+test("changed drafts keep cleanup available beside save and validation", () => {
+  const validationStart = directDeploymentSource.indexOf('if (stepId === "validation")');
+  const approvalStart = directDeploymentSource.indexOf('if (stepId === "approval")');
+  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+
+  assert.ok(validationStart > -1);
+  assert.ok(approvalStart > validationStart);
+  assert.match(validationSource, /startTerraformDestroyPlan/);
+  assert.match(validationSource, /저장 후 검증 실행/);
+});
+
+test("reload restores the persisted ProjectDraft revision instead of assuming changes", () => {
+  assert.match(
+    managerSource,
+    /setProjectDraftRevision\(loadedDraft\.serverDraft\?\.revision \?\? null\)/
+  );
+  assert.match(managerSource, /projectDraftRevision=\{projectDraftRevision\}/);
+  assert.match(rightPanelSource, /useState\(false\)/);
+  assert.match(
+    rightPanelSource,
+    /useState<string \| null>\(\(\) => toDeploymentBaselineFingerprint\(context\.diagram\)\)/
+  );
+  assert.match(rightPanelSource, /projectDraftRevision=\{projectDraftRevision\}/);
+});
+
 test("Direct Deployment auto-selects the verified AWS connection without rendering a selector", () => {
   assert.doesNotMatch(directDeploymentSource, /ariaLabel="AWS 연결 선택"/);
   assert.match(directDeploymentSource, /awsConnectionId: selectedAwsConnectionId/);

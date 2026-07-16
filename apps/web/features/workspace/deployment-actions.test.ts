@@ -9,6 +9,8 @@ import {
   getDeploymentLogTone,
   getRecommendedDeploymentLiveProfile,
   hasCompleteDeploymentApprovalSnapshot,
+  selectDeploymentCleanupTarget,
+  selectDeploymentCleanupTargets,
   shouldAutoRefreshDeployment,
   shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue
@@ -52,6 +54,90 @@ test("successful apply deployment offers cleanup planning but not direct destroy
   assert.equal(state.canRunDestroyPlan, true);
   assert.equal(state.shouldShowDestroyButton, false);
   assert.equal(state.canDestroy, false);
+});
+
+test("cleanup remains attached to the stateful success when a newer validation attempt exists", () => {
+  const currentAttempt = createDeployment({
+    id: "88888888-8888-4888-8888-888888888888",
+    status: "PENDING",
+    updatedAt: "2026-07-16T02:00:00.000Z"
+  });
+  const deployedVersion = createDeployment({
+    id: "77777777-7777-4777-8777-777777777777",
+    stateObjectKey: "deployments/deployed-version/state/terraform.tfstate",
+    status: "SUCCESS",
+    updatedAt: "2026-07-16T01:00:00.000Z"
+  });
+
+  assert.equal(
+    selectDeploymentCleanupTarget([currentAttempt, deployedVersion])?.id,
+    deployedVersion.id
+  );
+});
+
+test("successful application releases remain cleanup targets without Terraform state", () => {
+  const applicationDeployment = createDeployment({
+    releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    scope: "application",
+    stateObjectKey: null,
+    status: "SUCCESS"
+  });
+
+  assert.equal(selectDeploymentCleanupTarget([applicationDeployment])?.id, applicationDeployment.id);
+  assert.equal(
+    getDeploymentActionState(applicationDeployment, "idle").shouldShowDestroyPlanButton,
+    true
+  );
+});
+
+test("a destroyed latest version never falls back to an older successful state", () => {
+  const olderSuccess = createDeployment({
+    id: "66666666-6666-4666-8666-666666666666",
+    createdAt: "2026-07-16T01:00:00.000Z",
+    stateObjectKey: "deployments/older/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+  const destroyedLatestVersion = createDeployment({
+    id: "77777777-7777-4777-8777-777777777777",
+    createdAt: "2026-07-16T02:00:00.000Z",
+    stateObjectKey: null,
+    status: "DESTROYED"
+  });
+
+  assert.equal(selectDeploymentCleanupTarget([olderSuccess, destroyedLatestVersion]), null);
+});
+
+test("application cleanup lifecycle never hides an independent infrastructure cleanup", () => {
+  const infrastructureDeployment = createDeployment({
+    id: "55555555-5555-4555-8555-555555555555",
+    createdAt: "2026-07-16T01:00:00.000Z",
+    scope: "infrastructure",
+    stateObjectKey: "deployments/infrastructure/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+  const applicationDeployment = createDeployment({
+    id: "66666666-6666-4666-8666-666666666666",
+    createdAt: "2026-07-16T02:00:00.000Z",
+    releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    scope: "application",
+    stateObjectKey: null,
+    status: "SUCCESS"
+  });
+
+  assert.deepEqual(
+    selectDeploymentCleanupTargets([infrastructureDeployment, applicationDeployment]).map(
+      (deployment) => deployment.id
+    ),
+    [applicationDeployment.id, infrastructureDeployment.id]
+  );
+
+  assert.deepEqual(
+    selectDeploymentCleanupTargets([
+      infrastructureDeployment,
+      { ...applicationDeployment, status: "DESTROYED" }
+    ]).map((deployment) => deployment.id),
+    [infrastructureDeployment.id]
+  );
 });
 
 test("pending deployment without a current plan offers a Terraform plan action", () => {
@@ -297,18 +383,36 @@ test("keeps meaningful deployment info values in the detail list", () => {
 });
 
 test("deployment log tone highlights only important log levels", () => {
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "ERROR", stage: "apply" })), "error");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "WARN", stage: "plan" })), "warning");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "destroy" })), "default");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "apply" })), "default");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "plan" })), "default");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "init" })), "default");
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "ERROR", stage: "apply" })),
+    "error"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "WARN", stage: "plan" })),
+    "warning"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "destroy" })),
+    "default"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "apply" })),
+    "default"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "plan" })),
+    "default"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "init" })),
+    "default"
+  );
 });
 
 test("deployment log message tokens highlight Terraform signals without coloring everything", () => {
   assert.deepEqual(
     getDeploymentLogMessageTokens(
-      'aws_vpc.main: Creation complete after 11s [id=vpc-0e88956e55c0cb2b2]'
+      "aws_vpc.main: Creation complete after 11s [id=vpc-0e88956e55c0cb2b2]"
     ),
     [
       { text: "aws_vpc.main", tone: "resource" },
@@ -318,14 +422,11 @@ test("deployment log message tokens highlight Terraform signals without coloring
       { text: "[id=vpc-0e88956e55c0cb2b2]", tone: "metadata" }
     ]
   );
-  assert.deepEqual(
-    getDeploymentLogMessageTokens('ec2_public_ip = "15.165.43.171"'),
-    [
-      { text: "ec2_public_ip", tone: "output" },
-      { text: " = ", tone: "plain" },
-      { text: '"15.165.43.171"', tone: "string" }
-    ]
-  );
+  assert.deepEqual(getDeploymentLogMessageTokens('ec2_public_ip = "15.165.43.171"'), [
+    { text: "ec2_public_ip", tone: "output" },
+    { text: " = ", tone: "plain" },
+    { text: '"15.165.43.171"', tone: "string" }
+  ]);
 });
 
 function createDeployment(

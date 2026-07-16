@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  DiagramJson,
-  TerraformSyncFileInput
-} from "../../../../packages/types/src";
+import type { DiagramJson, TerraformSyncFileInput } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
@@ -103,6 +100,7 @@ export function ProjectWorkspaceDraftManager({
   const [repositoryTemplateId, setRepositoryTemplateId] = useState<string | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
+  const [projectDraftRevision, setProjectDraftRevision] = useState<number | null>(null);
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
@@ -266,6 +264,7 @@ export function ProjectWorkspaceDraftManager({
             if (result.ok) {
               if (draftChangeVersionRef.current === serverSaveVersion) {
                 setCurrentLocalDraft(result.localDraft);
+                setProjectDraftRevision(result.serverDraft.revision);
                 serverDirtyRef.current = false;
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
@@ -396,6 +395,7 @@ export function ProjectWorkspaceDraftManager({
         setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
         setRepositoryTemplateId(verifiedRepositoryTemplateId);
         setCurrentLocalDraft(loadedDraft.localDraft);
+        setProjectDraftRevision(loadedDraft.serverDraft?.revision ?? null);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
 
@@ -630,6 +630,12 @@ export function ProjectWorkspaceDraftManager({
             context={context}
             deploymentOpenRequestId={deploymentOpenRequestId}
             deploymentAvailability="enabled"
+            hasUnsavedProjectDraft={
+              serverSaveState === "server-dirty" ||
+              serverSaveState === "server-saving" ||
+              serverSaveState === "server-checkpoint-pending" ||
+              serverSaveState === "server-failed"
+            }
             initialView={initialRightPanelView}
             initialTerraformFiles={initialTerraformFiles}
             onTerraformIssueAiRequest={requestTerraformIssueAi}
@@ -637,6 +643,7 @@ export function ProjectWorkspaceDraftManager({
             onTerraformFilesChange={handleTerraformFilesChange}
             onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
             projectId={projectId}
+            projectDraftRevision={projectDraftRevision}
             projectName={projectName}
             terraformFilesReplacement={terraformFilesReplacement}
             terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}

@@ -67,6 +67,18 @@ export type DirectDeploymentPreflightInput = {
   readonly requestState: RequestState;
 };
 
+export type DeploymentValidationActionInput = {
+  readonly deploymentStatus: Deployment["status"] | null;
+  readonly hasUnsavedBaseline: boolean;
+  readonly preflightState: DirectDeploymentPreflightState;
+};
+
+export type DeploymentDraftChangeInput = {
+  readonly currentDraftRevision: number | null;
+  readonly hasUnsavedWorkspaceChanges: boolean;
+  readonly preparedDraftRevision: number | null;
+};
+
 const STEP_META: Readonly<
   Record<DirectDeploymentStepId, Pick<DirectDeploymentStep, "description" | "label">>
 > = {
@@ -126,7 +138,7 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   const validation = getValidationStep(input);
   if (
     input.hasUnsavedBaseline ||
-    input.preflightState === "idle" ||
+    (input.preflightState === "idle" && input.deployment?.status !== "SUCCESS") ||
     input.preflightState === "loading" ||
     input.preflightState === "blocked" ||
     input.preflightState === "error" ||
@@ -171,13 +183,35 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   );
 }
 
+export function shouldShowDeploymentValidationActions(
+  input: DeploymentValidationActionInput
+): boolean {
+  return (
+    input.deploymentStatus === null ||
+    input.hasUnsavedBaseline ||
+    (input.preflightState === "idle" && input.deploymentStatus !== "SUCCESS")
+  );
+}
+
+export function hasDeploymentDraftChanges(input: DeploymentDraftChangeInput): boolean {
+  if (input.hasUnsavedWorkspaceChanges) {
+    return true;
+  }
+
+  return (
+    input.currentDraftRevision !== null &&
+    input.preparedDraftRevision !== null &&
+    input.currentDraftRevision !== input.preparedDraftRevision
+  );
+}
+
 export function shouldStartQueuedApplyPlan(input: QueuedApplyPlanInput): boolean {
   return Boolean(
     input.deployment &&
-      input.queuedDeploymentId === input.deployment.id &&
-      input.deployment.status === "PENDING" &&
-      !input.deployment.currentPlanArtifactId &&
-      input.requestState === "idle"
+    input.queuedDeploymentId === input.deployment.id &&
+    input.deployment.status === "PENDING" &&
+    !input.deployment.currentPlanArtifactId &&
+    input.requestState === "idle"
   );
 }
 
