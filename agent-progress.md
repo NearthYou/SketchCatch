@@ -78,3 +78,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Plan JSON masks the desired inline policy, so the complete Apply guard now verifies all worker Task Definition Secret references are present in the worker execution policy immediately after Apply using Terraform state.
 - Synthetic jq checks passed when every worker Secret reference was present and failed when the GitHub App reference was removed.
+
+### 2026-07-17 - Complete runtime post-apply task definition verification
+
+- Plan JSON also masks the desired task definition payload, so the complete Apply guard now verifies GitHub App runtime inputs in the applied API and worker task definitions from Terraform state.
+- Synthetic jq checks passed with both required inputs and failed when the worker Client ID environment entry was removed.
