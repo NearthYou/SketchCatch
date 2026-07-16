@@ -38,6 +38,12 @@ Short English-only working log for the current agent context. Older records are 
 - Focused runtime credential tests pass 2/2, targeted ESLint passes, and API typecheck passes.
 - Local browser reproduction confirmed the configured SSO profile is valid but the stored execution Role rejects AssumeRole; legacy local caller profiles are invalid, so successful local Deployment still requires an approved Role trust/permission repair or renewed caller credentials.
 
+### 2026-07-16 - Keep unchanged draft checkpoints from invalidating Deployment
+
+- Project draft saves now return the existing draft without changing its revision or project timestamp when the diagram and Terraform files are unchanged.
+- This prevents an automatic no-op checkpoint from making a completed Deployment look modified and incorrectly showing the save-required validation state.
+- Verification: focused project draft and route tests passed 8/8; API lint, API typecheck, and `pnpm harness:check` passed.
+
 ### 2026-07-16 - Wire production GitHub App runtime inputs
 
 - Added fail-closed GitHub Environment input validation and runtime tfvars overlay to the production infrastructure plan.

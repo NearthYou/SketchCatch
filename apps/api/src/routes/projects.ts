@@ -25,7 +25,11 @@ import {
   projects,
   touchUpdatedAt
 } from "../db/schema.js";
-import { getNextDraftRevision, toProjectDraft } from "../modules/projects/project-drafts.js";
+import {
+  getNextDraftRevision,
+  hasSameProjectDraftContent,
+  toProjectDraft
+} from "../modules/projects/project-drafts.js";
 import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
@@ -383,9 +387,23 @@ export async function registerProjectRoutes(
     }
 
     const [existingDraft] = await db
-      .select({ revision: projectDrafts.revision })
+      .select()
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
+
+    const terraformFiles = body.terraformFiles ?? null;
+    if (
+      existingDraft &&
+      hasSameProjectDraftContent(existingDraft, {
+        diagramJson: body.diagramJson,
+        terraformFiles
+      })
+    ) {
+      return {
+        draft: toProjectDraft(existingDraft)
+      };
+    }
+
     const now = new Date();
     const revision = getNextDraftRevision(existingDraft?.revision);
 
@@ -395,7 +413,7 @@ export async function registerProjectRoutes(
         id: randomUUID(),
         projectId: params.id,
         diagramJson: body.diagramJson,
-        terraformFiles: body.terraformFiles ?? null,
+        terraformFiles,
         revision,
         serverSavedAt: now,
         updatedAt: now
@@ -404,7 +422,7 @@ export async function registerProjectRoutes(
         target: projectDrafts.projectId,
         set: {
           diagramJson: body.diagramJson,
-          terraformFiles: body.terraformFiles ?? null,
+          terraformFiles,
           revision,
           serverSavedAt: now,
           updatedAt: now
