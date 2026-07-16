@@ -24,8 +24,9 @@ Short English-only working log for the current agent context. Older records are 
 - Blocked Apply after review-only run 29479563543: the worker task definition did not receive `GIT_APP_CLIENT_SECRET`, and the complete runtime input would remove the existing Live Observation capability Secret ARN.
 - Added worker Secret wiring, a fail-closed worker precondition, and source/Terraform contract coverage that preserves the capability Secret requirement.
 - Added a dedicated production-infra-plan Environment Secret for the existing Live Observation capability ARN and overlay it into the runtime tfvars without replacing the opaque runtime JSON.
+- Final review-only run 29498864502 succeeded with 3 add, 7 change, and 2 task-definition replacement destroys. The API execution policy no longer removes the capability Secret; the worker execution policy adds the GitHub App Secret. Apply remains unapproved because unrelated ALB, CORS, and observability changes share the Plan.
 - Verification: harness, production-infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check pass. Terraform validate/test could not initialize the uncached AWS provider within the local timeout.
 
 ## Next Action
 
-- Merge the drift-review PR, then run a complete review-only Plan. Inspect the masked task-definition JSON, Secret ARN sets, image identity, and all planned actions before any Apply.
+- Review and merge the drift-review PR. Do not Apply the combined runtime Plan until the unrelated ALB, CORS, and observability changes have their own approval and the masked task-definition image identity has been read-only verified.
