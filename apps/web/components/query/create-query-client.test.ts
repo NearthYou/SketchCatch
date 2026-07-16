@@ -36,4 +36,12 @@ test("server-state query keys are isolated by user", () => {
     "dashboard",
     "overview"
   ]);
+  assert.notDeepEqual(
+    queryKeys.costEstimates("user-1", "month", 1000),
+    queryKeys.costEstimates("user-1", "week", 1000)
+  );
+  assert.notDeepEqual(
+    queryKeys.costUsage("user-1", "30d", "connection-1"),
+    queryKeys.costUsage("user-1", "30d", "connection-2")
+  );
 });
