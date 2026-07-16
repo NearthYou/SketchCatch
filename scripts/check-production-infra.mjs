@@ -102,18 +102,15 @@ check(
 );
 check(
   JSON.stringify(
-    deployPolicyStatements.get("AllowReviewedRuntimeCompleteTaskDefinitionReplacement")
+    deployPolicyStatements.get("AllowReviewedRuntimeCompleteTaskDefinitionDeregistration")
   ) ===
     JSON.stringify({
-      Sid: "AllowReviewedRuntimeCompleteTaskDefinitionReplacement",
+      Sid: "AllowReviewedRuntimeCompleteTaskDefinitionDeregistration",
       Effect: "Allow",
-      Action: ["ecs:DeregisterTaskDefinition", "ecs:RegisterTaskDefinition"],
-      Resource: [
-        `arn:aws:ecs:${productionRegion}:${productionAccount}:task-definition/${productionPrefix}-api:*`,
-        `arn:aws:ecs:${productionRegion}:${productionAccount}:task-definition/${productionPrefix}-worker:*`
-      ]
+      Action: ["ecs:DeregisterTaskDefinition"],
+      Resource: "*"
     }),
-  "deploy role must only replace the reviewed API and worker task definition families"
+  "deploy role must allow only the AWS-required unscoped task definition deregistration action"
 );
 check(
   JSON.stringify(deployPolicyStatements.get("AllowReviewedRuntimeCompleteInlinePolicyUpdate")) ===
@@ -154,6 +151,7 @@ check(
       Action: [
         "elasticloadbalancing:DescribeLoadBalancerAttributes",
         "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTags",
         "elasticloadbalancing:DescribeTargetGroupAttributes",
         "elasticloadbalancing:DescribeTargetGroups"
       ],
