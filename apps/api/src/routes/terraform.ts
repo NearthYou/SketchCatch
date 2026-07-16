@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { diagramNodeModuleSourceSchema } from "./diagram-node-module-source-schema.js";
 import type {
   ApiErrorResponse,
   DiagramBounds,
@@ -118,7 +119,8 @@ const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
       })
       .optional(),
     presentationArea: z.boolean().optional(),
-    presentationCatalogItemId: z.string().min(1).optional()
+    presentationCatalogItemId: z.string().min(1).optional(),
+    moduleSource: diagramNodeModuleSourceSchema.optional()
   })
   .strict();
 

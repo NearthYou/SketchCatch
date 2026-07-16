@@ -35,9 +35,11 @@ const areaNodeMaxResizeBounds = {
 const designAreaResizeBoundsByType: Record<string, NodeResizeBounds> = Object.fromEntries(
   [
     "design_region",
+    "design-aws-account",
     "design_az",
     "design_group",
     "sketchcatch_region",
+    "sketchcatch_aws_account",
     "sketchcatch_az",
     "sketchcatch_group"
   ].map((type) => [
@@ -75,11 +77,6 @@ const resourceAreaResizeBoundsByType: Record<string, NodeResizeBounds> = {
     ...areaNodeMaxResizeBounds,
     minHeight: 56,
     minWidth: 72
-  },
-  aws_autoscaling_group: {
-    ...areaNodeMaxResizeBounds,
-    minHeight: 65,
-    minWidth: 100
   }
 };
 

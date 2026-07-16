@@ -2544,6 +2544,15 @@ export type AiProviderService =
   | "openai_responses"
   | "rule_fallback";
 
+export type AiProviderAttemptStatus = "succeeded" | "fallback" | "skipped" | "failed";
+
+export type AiProviderAttempt = {
+  provider: AiProvider;
+  service: AiProviderService;
+  status: AiProviderAttemptStatus;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+};
+
 export type AiBillingMode = "aws_credit_only" | "standard" | "disabled";
 
 export type AiEstimatedUsage = {
@@ -2562,6 +2571,7 @@ export type AiProviderMetadata = {
   cacheKey: string;
   estimatedUsage: AiEstimatedUsage;
   billingMode: AiBillingMode;
+  attempts?: AiProviderAttempt[] | undefined;
   generatedAt: IsoDateTimeString;
 };
 
@@ -3289,6 +3299,8 @@ export type DiagramNodeMetadata = {
         moduleId: string;
         moduleVersion: string;
         expandedAt: IsoDateTimeString;
+        representativeTemplateId?: string | undefined;
+        referenceTemplateIds?: string[] | undefined;
       }
     | undefined;
   reverseEngineering?:
@@ -3579,6 +3591,12 @@ export type ArchitectureBoardCompilationProposal = {
     candidateIds?: string[] | undefined;
     /** Knowledge-derived spacing profiles added to the geometry candidate search. */
     layoutProfileIds?: string[] | undefined;
+    /** Complete Template graph patterns that produced geometry candidates. */
+    modulePatternIds?: string[] | undefined;
+    /** Representative Templates selected by the matched pattern extractor. */
+    modulePatternRepresentativeTemplateIds?: string[] | undefined;
+    /** Every source Template supporting the matched pattern candidates. */
+    modulePatternSourceTemplateIds?: string[] | undefined;
     referenceTemplateIds: string[];
   };
 };

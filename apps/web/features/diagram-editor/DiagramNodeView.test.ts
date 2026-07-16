@@ -476,22 +476,19 @@ test("reduced motion overrides are ordered after label and connection transition
   assert.ok(reducedMotionIndex > diagramEditorCssSource.indexOf(".edgeHalo {"));
 });
 
-test("resource and area metadata visibility follows the 50 and 75 percent LOD", () => {
-  const compactRule = getCssRuleContaining(".nodeShellZoomMedium .resourceNodeLabel,");
-  const revealRule = getCssRuleContaining(".nodeShellZoomMedium:hover .resourceNodeLabel,");
+test("resource labels scale while area metadata hides at the 50 and 75 percent LOD", () => {
+  const areaMetadataRule = getCssRuleContaining(".nodeShellZoomMedium .areaNodeHeaderMeta,");
+  const resourceLabelRule = getCssRuleContaining(".nodeShellZoomMedium .resourceNodeLabel,");
 
-  assert.match(compactRule, /\.nodeShellZoomFar \.resourceNodeLabel/);
-  assert.match(compactRule, /\.nodeShellZoomMedium \.areaNodeHeaderMeta/);
-  assert.match(compactRule, /\.nodeShellZoomFar \.areaNodeHeaderMeta/);
-  assert.match(compactRule, /opacity:\s*0;/);
-  assert.match(compactRule, /visibility:\s*hidden;/);
+  assert.match(areaMetadataRule, /\.nodeShellZoomFar \.areaNodeHeaderMeta/);
+  assert.match(areaMetadataRule, /opacity:\s*0;/);
+  assert.match(areaMetadataRule, /visibility:\s*hidden;/);
 
-  assert.match(revealRule, /\.nodeShellZoomMedium\.nodeShellSelected \.resourceNodeLabel/);
-  assert.match(revealRule, /\.nodeShellZoomFar\.nodeShellSelected \.resourceNodeLabel/);
-  assert.match(revealRule, /react-flow__node:focus-visible/);
-  assert.match(revealRule, /opacity:\s*1;/);
-  assert.match(revealRule, /visibility:\s*visible;/);
-  assert.doesNotMatch(revealRule, /\.nodeShellZoomFar:hover/);
+  assert.match(resourceLabelRule, /\.nodeShellZoomFar \.resourceNodeLabel/);
+  assert.match(resourceLabelRule, /scale\(var\(--board-lod-label-scale\)\)/);
+  assert.match(resourceLabelRule, /transform-origin:\s*top center;/);
+  assert.doesNotMatch(resourceLabelRule, /opacity:\s*0;/);
+  assert.doesNotMatch(resourceLabelRule, /visibility:\s*hidden;/);
 
   assert.match(
     diagramEditorCssSource,

@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  getTerraformPreviewReviewProgressStep,
-  getWorkspaceAiChatDockStatus,
-  terraformPreviewReviewSteps
-} from "./workspace-ai-chat-status";
+import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
 
 const readyState = {
   hasPendingApproval: false,
@@ -46,7 +42,7 @@ test("AI Chat 상태는 오래된 제안을 적용 대기보다 먼저 표시한
       isStale: true
     }),
     {
-      description: "보드 기준이 바뀌어 적용할 수 없습니다. 최신 기준으로 다시 생성하세요.",
+      description: "작업 기준이 바뀌어 적용할 수 없습니다. 최신 기준으로 다시 실행하세요.",
       label: "오래된 제안"
     }
   );
@@ -54,22 +50,4 @@ test("AI Chat 상태는 오래된 제안을 적용 대기보다 먼저 표시한
 
 test("AI Chat 상태는 사용자의 대응이 필요하지 않으면 상태 바를 숨긴다", () => {
   assert.equal(getWorkspaceAiChatDockStatus(readyState), null);
-});
-
-test("에이전트 리뷰는 Amazon Q 결과를 기다리는 동안 단계별 진행 상태를 제공한다", () => {
-  assert.deepEqual(
-    terraformPreviewReviewSteps.map((step) => step.label),
-    [
-      "Terraform 코드 구조 분석",
-      "리소스 및 위험 점검",
-      "Amazon Q Well-Architected 검토",
-      "검토 결과 정리"
-    ]
-  );
-  assert.equal(getTerraformPreviewReviewProgressStep(0), 0);
-  assert.equal(getTerraformPreviewReviewProgressStep(3_499), 0);
-  assert.equal(getTerraformPreviewReviewProgressStep(3_500), 1);
-  assert.equal(getTerraformPreviewReviewProgressStep(7_000), 2);
-  assert.equal(getTerraformPreviewReviewProgressStep(10_500), 3);
-  assert.equal(getTerraformPreviewReviewProgressStep(60_000), 3);
 });

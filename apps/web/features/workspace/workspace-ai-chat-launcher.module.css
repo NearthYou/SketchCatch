@@ -1,27 +1,31 @@
 .launcher {
+  --ai-workbench-launcher-line: #d9dade;
+  --ai-workbench-launcher-muted: #666970;
+  --ai-workbench-launcher-surface: #ffffff;
+  --ai-workbench-launcher-surface-hover: #f4f4f5;
+  --ai-workbench-launcher-text: #1b1b1d;
   align-items: center;
-  background: #000000;
-  border: 1px solid #000000;
-  border-radius: 8px;
+  background: var(--ai-workbench-launcher-surface);
+  border: 1px solid var(--ai-workbench-launcher-line);
+  border-radius: 999px;
   bottom: 20px;
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 8%),
-    0 2px 2px rgb(0 0 0 / 4%),
-    0 16px 40px -24px rgb(23 23 23 / 24%);
-  color: #ffffff;
+  box-shadow: 0 10px 28px rgb(24 24 27 / 14%);
+  color: var(--ai-workbench-launcher-text);
   cursor: pointer;
   display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
   font-family: "Pretendard", "Noto Sans KR", "Inter", "Geist", sans-serif;
-  height: 44px;
+  gap: 7px;
+  min-height: 40px;
   justify-content: center;
-  padding: 4px;
+  padding: 0 14px 0 12px;
   position: fixed;
-  right: 80px;
+  right: 24px;
   transition:
     background-color 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
-  width: 44px;
+    border-color 150ms ease,
+    box-shadow 150ms ease;
   z-index: 1302;
 }
 
@@ -30,48 +34,28 @@
 }
 
 .launcher:hover {
-  background: #1a1a1a;
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 10%),
-    0 4px 8px rgb(0 0 0 / 8%),
-    0 20px 44px -22px rgb(23 23 23 / 34%);
-  transform: translateY(-2px);
-}
-
-.launcher:active {
-  transform: translateY(0);
+  background: var(--ai-workbench-launcher-surface-hover);
+  border-color: var(--ai-workbench-launcher-muted);
+  box-shadow: 0 12px 30px rgb(24 24 27 / 18%);
 }
 
 .launcher:focus-visible {
   box-shadow:
-    0 0 0 2px #ffffff,
-    0 0 0 4px #171717;
+    0 0 0 2px var(--ai-workbench-launcher-surface),
+    0 0 0 4px var(--ai-workbench-launcher-text);
   outline: none;
 }
 
-.mark {
-  align-items: center;
-  border: 1px solid rgb(255 255 255 / 32%);
-  border-radius: 6px;
-  color: #ffffff;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 800;
-  height: 32px;
-  justify-content: center;
-  letter-spacing: -0.03em;
-  width: 32px;
+.launcher svg {
+  color: var(--ai-workbench-launcher-muted);
+  flex: 0 0 auto;
 }
 
 @media (max-width: 768px) {
   .launcher,
   .launcher[data-right-panel-open="true"] {
     bottom: max(16px, env(safe-area-inset-bottom));
-    right: 76px;
-  }
-
-  .launcher[data-right-panel-open="true"] {
-    display: none;
+    right: max(16px, env(safe-area-inset-right));
   }
 }
 
