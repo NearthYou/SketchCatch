@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Cloud, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type {
@@ -20,6 +21,8 @@ import {
 } from "../../../features/workspace/api";
 import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
 import { useAwsConnectionsQuery } from "../../../features/dashboard/connection-queries";
+import { useAuth } from "../../../components/auth/auth-provider";
+import { invalidateAwsConnectionQueries } from "../../../components/query/dashboard-query-invalidation";
 import styles from "../dashboard-tools.module.css";
 import { GitHubAccountSettings } from "./github-account-settings";
 
@@ -31,6 +34,8 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
 
 // AWS Role 생성 안내, CloudFormation 이동, 연결 검증과 삭제를 관리합니다.
 export function SettingsDashboardClient() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const connectionsQuery = useAwsConnectionsQuery();
   const connections: readonly AwsConnection[] = connectionsQuery.data ?? [];
   const [actionPending, setActionPending] = useState(false);
@@ -52,7 +57,7 @@ export function SettingsDashboardClient() {
       });
       setSetupConnection(created.awsConnection);
       setCloudFormation(template);
-      await connectionsQuery.refetch();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결 준비에 실패했습니다.");
     } finally {
@@ -95,7 +100,7 @@ export function SettingsDashboardClient() {
       setSetupConnection(null);
       setCloudFormation(null);
       setAccountId("");
-      await connectionsQuery.refetch();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS Role 검증에 실패했습니다.");
     } finally {
@@ -110,7 +115,7 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     try {
       await testAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
-      await connectionsQuery.refetch();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결 테스트에 실패했습니다.");
     } finally {
@@ -129,7 +134,7 @@ export function SettingsDashboardClient() {
     try {
       await deleteAwsConnection(connectionId);
       setDeleteCandidateId("");
-      await connectionsQuery.refetch();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 삭제하지 못했습니다.");
     } finally {

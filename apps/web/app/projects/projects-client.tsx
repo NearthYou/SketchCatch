@@ -20,6 +20,7 @@ import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMen
 import { ApiProjectCard, getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { useAuth } from "../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../components/query/dashboard-query-invalidation";
 import { queryKeys } from "../../lib/query-keys";
 import {
   approveDeploymentPlan,
@@ -167,6 +168,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     queryClient.setQueryData<ProjectsQueryData>(queryKeys.projects(user.id), (currentData) =>
       currentData ? removeProjectFromQueryData(currentData, projectId) : currentData
     );
+    void invalidateProjectQueries(queryClient, user.id);
   }
 
   async function openProjectDeleteDialog(

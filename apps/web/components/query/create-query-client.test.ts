@@ -7,6 +7,10 @@ import {
   shouldClearQueryCache
 } from "./create-query-client";
 import { queryKeys } from "../../lib/query-keys";
+import {
+  invalidateAwsConnectionQueries,
+  invalidateProjectQueries
+} from "./dashboard-query-invalidation";
 
 test("app query defaults keep recent data without refetching on window focus", () => {
   const queryClient = createAppQueryClient();
@@ -17,6 +21,7 @@ test("app query defaults keep recent data without refetching on window focus", (
   assert.equal(queries?.refetchOnWindowFocus, false);
   assert.equal(queries?.refetchOnReconnect, true);
   assert.equal(queries?.retry, 1);
+  queryClient.clear();
 });
 
 test("query cache is cleared only after a resolved user identity changes", () => {
@@ -44,4 +49,40 @@ test("server-state query keys are isolated by user", () => {
     queryKeys.costUsage("user-1", "30d", "connection-1"),
     queryKeys.costUsage("user-1", "30d", "connection-2")
   );
+});
+
+test("project invalidation stays inside the active user cache", async () => {
+  const queryClient = createAppQueryClient();
+  const userOneProjectsKey = queryKeys.projects("user-1");
+  const userOneCostsKey = queryKeys.costEstimates("user-1", "month", 1000);
+  const userTwoProjectsKey = queryKeys.projects("user-2");
+
+  queryClient.setQueryData(userOneProjectsKey, []);
+  queryClient.setQueryData(userOneCostsKey, {});
+  queryClient.setQueryData(userTwoProjectsKey, []);
+
+  await invalidateProjectQueries(queryClient, "user-1");
+
+  assert.equal(queryClient.getQueryState(userOneProjectsKey)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState(userOneCostsKey)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState(userTwoProjectsKey)?.isInvalidated, false);
+  queryClient.clear();
+});
+
+test("AWS connection invalidation refreshes connection, dashboard, and cost data", async () => {
+  const queryClient = createAppQueryClient();
+  const connectionKey = queryKeys.awsConnections("user-1");
+  const dashboardKey = queryKeys.dashboardOverview("user-1");
+  const costKey = queryKeys.costUsage("user-1", "30d", "connection-1");
+
+  queryClient.setQueryData(connectionKey, []);
+  queryClient.setQueryData(dashboardKey, {});
+  queryClient.setQueryData(costKey, {});
+
+  await invalidateAwsConnectionQueries(queryClient, "user-1");
+
+  assert.equal(queryClient.getQueryState(connectionKey)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState(dashboardKey)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState(costKey)?.isInvalidated, true);
+  queryClient.clear();
 });
