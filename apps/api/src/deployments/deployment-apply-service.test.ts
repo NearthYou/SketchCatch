@@ -27,6 +27,10 @@ import type {
 } from "./deployment-service.js";
 import type { TerraformRunResult } from "./terraform-runner.js";
 import { createTerraformArtifactCanonicalContent } from "./terraform-workspace.js";
+import {
+  createDeploymentPlanOptimizationEvidence,
+  createTerraformDesiredStateIdentity
+} from "./deployment-optimization.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -36,7 +40,7 @@ const userId = "55555555-5555-4555-8555-555555555555";
 const awsConnectionId = "77777777-7777-4777-8777-777777777777";
 const planArtifactId = "99999999-9999-4999-8999-999999999999";
 const fixedNow = new Date("2026-01-01T00:00:00.000Z");
-const terraformArtifactContent = "terraform { required_version = \">= 1.6.0\" }\n";
+const terraformArtifactContent = 'terraform { required_version = ">= 1.6.0" }\n';
 const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 const planBuffer = Buffer.from("approved binary tfplan");
 const tfplanSha256 = createSha256(planBuffer);
@@ -54,6 +58,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   relatedDeployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
   completeCalls = 0;
+  completedInput: SaveDeploymentApplyResultsInput | undefined;
   savedInput: SaveDeploymentApplyResultsInput | undefined;
   lifecycleEvents: string[] = [];
   failedInput:
@@ -139,7 +144,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
-    return this.deployment ? [this.deployment, ...this.relatedDeployments] : this.relatedDeployments;
+    return this.deployment
+      ? [this.deployment, ...this.relatedDeployments]
+      : this.relatedDeployments;
   }
 
   updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (
@@ -215,10 +222,14 @@ class FakeDeploymentRepository implements DeploymentRepository {
   approveDeployment: DeploymentRepository["approveDeployment"] = async () => this.deployment;
 
   completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
-    candidateDeploymentId
+    candidateDeploymentId,
+    input
   ) => {
     this.lifecycleEvents.push("terminal-complete");
     this.completeCalls += 1;
+    if (input && "resources" in input) {
+      this.completedInput = input as unknown as SaveDeploymentApplyResultsInput;
+    }
 
     if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
       return undefined;
@@ -375,6 +386,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
 class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   readonly uploadedStates: UploadDeploymentStateInput[] = [];
   stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
+  optimizationEvidenceContent: Buffer | undefined;
 
   async downloadDeploymentArtifact(input: {
     deploymentId: string;
@@ -395,6 +407,10 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
     objectKey: string;
   }): Promise<Buffer> {
     return Buffer.from("{}");
+  }
+
+  async downloadDeploymentPlanOptimizationEvidence(): Promise<Buffer | undefined> {
+    return this.optimizationEvidenceContent;
   }
 
   async uploadDeploymentState(input: UploadDeploymentStateInput) {
@@ -677,6 +693,142 @@ test("full-stack output reconciliation failure preserves Terraform results and s
   ]);
   assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.match(repository.failedInput?.errorSummary ?? "", /DEPLOYMENT_OUTPUT_URL_CONFLICT/);
+});
+
+test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", async () => {
+  const repository = new FakeDeploymentRepository();
+  const existingStateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
+  repository.deployment = createApprovedDeploymentRecord({
+    stateObjectKey: existingStateObjectKey,
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    }
+  });
+  const noChangePlanSummary = repository.deployment.planSummary!;
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  applyArtifactStorage.optimizationEvidenceContent = Buffer.from(
+    JSON.stringify(
+      createDeploymentPlanOptimizationEvidence({
+        projectId,
+        deploymentId,
+        planArtifactId,
+        planArtifactSha256: tfplanSha256,
+        desiredStateIdentity: createTerraformDesiredStateIdentity({
+          projectId,
+          canonicalTerraformBundle: terraformArtifactContent,
+          terraformFiles: [{ fileName: "main.tf", terraformCode: terraformArtifactContent }],
+          providerLockContent: null,
+          target: {
+            provider: "aws",
+            accountId: "123456789012",
+            region: "ap-northeast-2"
+          },
+          state: { lineage: null, serial: null }
+        }),
+        driftVerifiedAt: fixedNow.toISOString(),
+        planSummary: noChangePlanSummary,
+        preDeploymentResult: { findings: [] },
+        resourceChanges: []
+      })
+    )
+  );
+  let credentialsPrepared = false;
+  let terraformRan = false;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-no-change-apply",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-no-change-apply/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => {
+        credentialsPrepared = true;
+        throw new Error("No-change Apply must not prepare Terraform credentials");
+      },
+      runTerraformInit: async () => {
+        terraformRan = true;
+        throw new Error("No-change Apply must not run Terraform init");
+      },
+      runTerraformApply: async () => {
+        terraformRan = true;
+        throw new Error("No-change Apply must not run Terraform apply");
+      },
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(credentialsPrepared, false);
+  assert.equal(terraformRan, false);
+  assert.equal(repository.savedInput?.stateObjectKey, existingStateObjectKey);
+  assert(
+    repository.logs.some(
+      (log) =>
+        log.message ===
+        "[optimization] event=apply_decision outcome=no_change reason=terraform_plan_no_changes"
+    )
+  );
+});
+
+test("runDeploymentApply safely falls back when no-change evidence cannot be verified", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    }
+  });
+  let applyCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-no-change-fallback",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-no-change-fallback/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => {
+        applyCalls += 1;
+        return createRunnerResult("apply");
+      },
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", { stdout: '{"values":{"root_module":{"resources":[]}}}' })
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(applyCalls, 1);
+  assert(
+    repository.logs.some(
+      (log) =>
+        log.message ===
+        "[optimization] event=apply_decision outcome=fallback_execute reason=cache_validation_failed"
+    )
+  );
 });
 
 test("application scope releases the approved artifact without Terraform init or apply", async () => {
@@ -967,7 +1119,10 @@ test("runDeploymentApply rejects unsafe Terraform before preparing AWS credentia
   assert.equal(planWritten, false);
   assert.equal(repository.deployment?.status, "FAILED");
   assert.equal(repository.failedInput?.failureStage, "apply");
-  assert.match(repository.failedInput?.errorSummary ?? "", /data source "aws_region" is not allowed/);
+  assert.match(
+    repository.failedInput?.errorSummary ?? "",
+    /data source "aws_region" is not allowed/
+  );
 });
 
 test("runDeploymentApply rejects approval snapshot drift before credentials or Terraform", async () => {
@@ -1067,9 +1222,7 @@ test("runDeploymentApply rejects approval snapshot drift before credentials or T
     assert.equal(repository.failedInput?.failureStage, "approval", testCase.name);
     assert.match(repository.failedInput?.errorSummary ?? "", testCase.expectedError, testCase.name);
     assert.equal(
-      repository.logs.some((log) =>
-        log.message.includes("Apply blocked before Terraform apply")
-      ),
+      repository.logs.some((log) => log.message.includes("Apply blocked before Terraform apply")),
       true,
       testCase.name
     );
@@ -1132,7 +1285,8 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
       { level: "ERROR", message: "apply failed" },
       {
         level: "WARN",
-        message: "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
+        message:
+          "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
       }
     ]
   );
@@ -1168,8 +1322,7 @@ test("runDeploymentApply reports apply timeouts with a partial resource warning"
       runTerraformApply: async () =>
         createRunnerResult("apply", {
           exitCode: 143,
-          stdout:
-            "aws_instance.web: Still creating... [id=i-1234567890abcdef0, 00m50s elapsed]\n",
+          stdout: "aws_instance.web: Still creating... [id=i-1234567890abcdef0, 00m50s elapsed]\n",
           timedOut: true
         })
     }

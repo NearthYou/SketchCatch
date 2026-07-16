@@ -51,10 +51,14 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
   "GIT_APP_AUTHENTICATION_FAILED":
     "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요.",
-  "GIT_APP_GITHUB_IDENTITY_REQUIRED":
-    "GitHub로 로그인한 계정만 GitHub App repository를 연결할 수 있습니다.",
   "GIT_APP_INSTALLATION_FORBIDDEN":
-    "현재 GitHub 계정이 소유한 GitHub App 설치가 아닙니다. 올바른 계정으로 다시 연결해주세요.",
+    "이 GitHub App installation은 다른 SketchCatch 계정에 연결되어 있거나 접근할 수 없습니다. GitHub App 연결을 다시 진행해주세요.",
+  "GIT_APP_USER_AUTHORIZATION_CANCELLED":
+    "GitHub 사용자 권한 확인이 취소됐습니다. GitHub App 연결을 다시 진행해주세요.",
+  "GIT_APP_USER_AUTHORIZATION_FAILED":
+    "GitHub 사용자 권한을 확인하지 못했습니다. GitHub App 설정과 Client Secret을 확인해주세요.",
+  "GIT_APP_USER_AUTHORIZATION_INVALID":
+    "GitHub 사용자 권한 확인 정보가 만료됐거나 올바르지 않습니다. 연결을 다시 진행해주세요.",
   "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE":
     "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요.",
   "GIT_APP_REPOSITORY_ARCHIVED":

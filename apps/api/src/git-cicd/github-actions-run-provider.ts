@@ -1,4 +1,5 @@
 import type {
+  ApplicationArtifactKind,
   Ec2AsgGitOpsReleaseEvidence,
   EcsGitOpsReleaseEvidence,
   GitOpsReleaseEvidence,
@@ -8,7 +9,9 @@ import type {
   LambdaGitOpsReleaseEvidence,
   StaticSiteGitOpsReleaseEvidence
 } from "@sketchcatch/types";
+import { applicationArtifactEvidenceV2Schema } from "../artifacts/application-artifact-schemas.js";
 import { maskDeploymentMessage } from "../deployments/log-masking.js";
+import { runtimeConvergenceEvidenceSchema } from "../runtime-convergence/runtime-convergence-schemas.js";
 import type {
   GitHubActionsReadClient,
   GitHubRepositoryRefInput,
@@ -318,7 +321,7 @@ function mapLogLineStageKind(
   return null;
 }
 
-function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
+export function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
   const results: GitOpsReleaseEvidence[] = [];
   for (const marker of [
     /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
@@ -347,6 +350,39 @@ function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
   return results;
 }
 
+function validateArtifactEvidenceVersion(
+  item: Record<string, unknown>,
+  expectedKind: ApplicationArtifactKind,
+  expectedAdapterKind: string,
+  digestWithOptionalPrefix: string,
+  artifactReference: string
+): boolean {
+  if (item.schemaVersion === 1) {
+    return item.artifact === undefined && item.convergence === undefined;
+  }
+  if (item.schemaVersion !== 2 && item.schemaVersion !== 3) return false;
+  const parsed = applicationArtifactEvidenceV2Schema.safeParse(item.artifact);
+  if (!parsed.success) return false;
+  const expectedDigest = digestWithOptionalPrefix.replace(/^sha256:/u, "");
+  const validArtifact = (
+    parsed.data.kind === expectedKind &&
+    parsed.data.digest === expectedDigest &&
+    parsed.data.location.artifactReference === artifactReference
+  );
+  if (!validArtifact || item.schemaVersion === 2) {
+    return validArtifact && item.convergence === undefined;
+  }
+  const convergence = runtimeConvergenceEvidenceSchema.safeParse(item.convergence);
+  return (
+    convergence.success &&
+    convergence.data.adapterKind === expectedAdapterKind &&
+    convergence.data.artifactFingerprint === parsed.data.artifactFingerprint &&
+    convergence.data.artifactDigest === expectedDigest &&
+    ((convergence.data.outcome === "already_active" && convergence.data.fallbackReason === null) ||
+      (convergence.data.outcome === "rolled_out" && convergence.data.fallbackReason !== null))
+  );
+}
+
 function selectReleaseEvidence(
   candidates: readonly GitOpsReleaseEvidence[],
   commitSha: string
@@ -364,7 +400,8 @@ function validateLambdaReleaseEvidence(value: unknown): LambdaGitOpsReleaseEvide
   const allowedKeys = new Set([
     "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "artifactDigest",
     "artifactUri", "functionName", "aliasName", "publishedVersion", "previousVersion",
-    "activeVersion", "deploymentId", "deploymentConfigName", "outputUrl"
+    "activeVersion", "deploymentId", "deploymentConfigName", "outputUrl", "artifact",
+    "convergence"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -380,7 +417,13 @@ function validateLambdaReleaseEvidence(value: unknown): LambdaGitOpsReleaseEvide
   const artifactDigest = String(item.artifactDigest);
   const artifactUri = String(item.artifactUri);
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(
+      item,
+      "lambda_zip",
+      "lambda_alias",
+      artifactDigest,
+      artifactUri
+    ) ||
     item.runtimeTargetKind !== "lambda" ||
     !["succeeded", "rolled_back", "failed"].includes(outcome) ||
     !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
@@ -415,7 +458,7 @@ function validateEc2AsgReleaseEvidence(value: unknown): Ec2AsgGitOpsReleaseEvide
     "artifactUri", "artifactVersionId", "previousArtifactUri", "previousArtifactVersionId",
     "codeDeployApplicationName", "codeDeployDeploymentGroupName", "autoScalingGroupName",
     "deploymentId", "activeDeploymentId", "deploymentConfigName", "targetInstanceCount",
-    "succeededInstanceCount", "outputUrl"
+    "succeededInstanceCount", "outputUrl", "artifact", "convergence"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -435,7 +478,13 @@ function validateEc2AsgReleaseEvidence(value: unknown): Ec2AsgGitOpsReleaseEvide
   const asgNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,254}$/;
   const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(
+      item,
+      "codedeploy_bundle",
+      "ec2_auto_scaling_group",
+      digest,
+      String(item.artifactUri)
+    ) ||
     item.runtimeTargetKind !== "ec2_asg" ||
     !["succeeded", "rolled_back", "failed"].includes(outcome) ||
     (outcome === "succeeded" && item.failureReason !== null) ||
@@ -484,7 +533,7 @@ function validateStaticSiteReleaseEvidence(
     "artifactDigest", "manifestUri", "manifestVersionId", "releasePrefix",
     "previousReleasePrefix", "activeReleasePrefix", "hostingBucketName",
     "cloudFrontDistributionId", "cloudFrontOriginId", "distributionEtag",
-    "invalidationId", "fileCount", "outputUrl"
+    "invalidationId", "fileCount", "outputUrl", "artifact", "convergence"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -501,6 +550,11 @@ function validateStaticSiteReleaseEvidence(
   const activePrefix = String(item.activeReleasePrefix);
   const bucket = String(item.hostingBucketName);
   const outcome = String(item.outcome);
+  const alreadyActive = item.schemaVersion === 3 &&
+    typeof item.convergence === "object" &&
+    item.convergence !== null &&
+    !Array.isArray(item.convergence) &&
+    (item.convergence as Record<string, unknown>).outcome === "already_active";
   const expectedPrefix = `releases/${commitSha}/${digestValue}`;
   const expectedManifestUri =
     `s3://${bucket}/${releasePrefix}/.sketchcatch-release-manifest.json`;
@@ -508,7 +562,13 @@ function validateStaticSiteReleaseEvidence(
   const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
   const invalidationId = item.invalidationId;
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(
+      item,
+      "static_bundle",
+      "static_s3_cloudfront",
+      digest,
+      String(item.manifestUri)
+    ) ||
     item.runtimeTargetKind !== "static_site" ||
     !["succeeded", "failed"].includes(outcome) ||
     (outcome === "succeeded" && item.failureReason !== null) ||
@@ -533,7 +593,7 @@ function validateStaticSiteReleaseEvidence(
     !/^[A-Za-z0-9_=-]{1,128}$/.test(String(item.distributionEtag)) ||
     (invalidationId !== null &&
       (typeof invalidationId !== "string" || !/^I[A-Z0-9]{3,63}$/.test(invalidationId))) ||
-    (outcome === "succeeded" && invalidationId === null) ||
+    (outcome === "succeeded" && invalidationId === null && !alreadyActive) ||
     (["invalidation_failure", "health_check_failure"].includes(String(item.failureReason)) &&
       invalidationId === null) ||
     !Number.isInteger(item.fileCount) ||
@@ -559,7 +619,8 @@ function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | 
   const allowedKeys = new Set([
     "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "imageDigest", "imageUri",
     "clusterName", "serviceName", "containerName", "taskDefinitionArn",
-    "previousTaskDefinitionArn", "restoredTaskDefinitionArn", "outputUrl"
+    "previousTaskDefinitionArn", "restoredTaskDefinitionArn", "outputUrl", "artifact",
+    "convergence"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -568,7 +629,13 @@ function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | 
   ] as const;
   if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(
+      item,
+      "container_image",
+      "ecs_service_fargate",
+      String(item.imageDigest),
+      String(item.imageUri)
+    ) ||
     item.runtimeTargetKind !== "ecs_fargate" ||
     !["succeeded", "rolled_back", "failed"].includes(String(item.outcome)) ||
     !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||

@@ -68,6 +68,8 @@ export const projectDeploymentTargetContract = {
     cloudFrontDomainName: null,
     outputUrl: null
   },
+  runtimeTarget: null,
+  deploymentTargetFingerprint: null,
   rolloutStrategy: "all_at_once",
   createdAt: "2026-07-14T00:00:00.000Z",
   updatedAt: "2026-07-14T00:00:00.000Z"
@@ -76,10 +78,14 @@ export const projectDeploymentTargetContract = {
 export const applicationReleaseContract = {
   id: "87b22033-5f5e-474a-9aa5-47c5e0616d3c",
   projectId: projectDeploymentTargetContract.projectId,
+  artifactId: null,
   deploymentId: null,
   pipelineRunId: "a2b8df3e-d52a-4663-b0ed-7729e7fb9dd1",
   source: "gitops",
   runtimeTargetKind: "ecs_fargate",
+  runtimeAdapterKind: null,
+  deploymentTargetFingerprint: null,
+  convergenceOutcome: null,
   version: "v1.2.3",
   commitSha: confirmedBuildConfig.confirmedCommitSha,
   artifactDigestAlgorithm: "sha256",

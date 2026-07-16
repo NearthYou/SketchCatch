@@ -275,10 +275,7 @@ class FakeProjectExecutionLeaseRepository implements ProjectExecutionLeaseReposi
   readonly events: string[];
   current: ProjectExecutionLeaseRecord | undefined;
 
-  constructor(
-    current?: ProjectExecutionLeaseRecord,
-    events: string[] = []
-  ) {
+  constructor(current?: ProjectExecutionLeaseRecord, events: string[] = []) {
     this.current = current;
     this.events = events;
   }
@@ -384,17 +381,13 @@ class FakeProjectExecutionLeaseRepository implements ProjectExecutionLeaseReposi
     return true;
   }
 
-  private isCurrentFence(input: {
-    projectId: string;
-    holderId: string;
-    fencingVersion: number;
-  }) {
+  private isCurrentFence(input: { projectId: string; holderId: string; fencingVersion: number }) {
     return Boolean(
       this.current &&
-        this.current.status === "active" &&
-        this.current.projectId === input.projectId &&
-        this.current.holderId === input.holderId &&
-        this.current.fencingVersion === input.fencingVersion
+      this.current.status === "active" &&
+      this.current.projectId === input.projectId &&
+      this.current.holderId === input.holderId &&
+      this.current.fencingVersion === input.fencingVersion
     );
   }
 }
@@ -455,9 +448,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     | undefined = {
     revision: 7,
     diagramJson: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
-    terraformFiles: [
-      { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }
-    ]
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }]
   };
 
   async findProjectDraftForPreparation() {
@@ -1362,7 +1353,10 @@ test("POST /api/deployments/:deploymentId/infrastructure-rollback prepares a new
   assert.equal(body.deployment.rollbackOfDeploymentId, sourceId);
   assert.equal(body.deployment.rollbackTargetDeploymentId, targetId);
   assert.equal(body.deployment.currentPlanArtifactId, null);
-  assert.equal(repository.calls.some((call) => call.name === "markDeploymentApplyRunning"), false);
+  assert.equal(
+    repository.calls.some((call) => call.name === "markDeploymentApplyRunning"),
+    false
+  );
 
   await app.close();
 });
@@ -1712,7 +1706,10 @@ test("POST /api/projects/:projectId/deployments/prepare rejects a stale draft", 
 
   assert.equal(response.statusCode, 409);
   assert.match(response.json().message, /stale/i);
-  assert.equal(repository.calls.some((call) => call.name === "createDeployment"), false);
+  assert.equal(
+    repository.calls.some((call) => call.name === "createDeployment"),
+    false
+  );
 
   await app.close();
 });
@@ -2196,6 +2193,10 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
           blockedBy: "missing_approval",
           blockedReason: "Terraform Plan requires user approval before apply"
         }),
+        optimization: {
+          outcome: "execute",
+          reason: "initial_plan"
+        },
         terraform: {
           init: null,
           validate: null,
@@ -2260,6 +2261,10 @@ test("POST plan prepares an ECS project build environment before starting prefli
           targetKind: "ecs_fargate",
           status: "PENDING"
         }),
+        optimization: {
+          outcome: "execute",
+          reason: "initial_plan"
+        },
         terraform: { init: null, validate: null, plan: null, showJson: null }
       };
     }
@@ -2345,6 +2350,10 @@ test("POST /api/deployments/:deploymentId/plan writes a runtime cache status sna
       deployment: createDeploymentRecord(input.deploymentId, {
         status: "PENDING"
       }),
+      optimization: {
+        outcome: "execute",
+        reason: "initial_plan"
+      },
       terraform: {
         init: null,
         validate: null,
@@ -2465,8 +2474,7 @@ test("POST plan and apply reject an active GitOps project lease before changing 
       assert.equal(
         repository.calls.some(
           (call) =>
-            call.name === "markDeploymentPlanRunning" ||
-            call.name === "markDeploymentApplyRunning"
+            call.name === "markDeploymentPlanRunning" || call.name === "markDeploymentApplyRunning"
         ),
         false
       );
@@ -2474,6 +2482,35 @@ test("POST plan and apply reject an active GitOps project lease before changing 
       await app.close();
     });
   }
+});
+
+test("POST /api/deployments/:deploymentId/plan joins an identical Plan already in flight", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    activeStage: "plan"
+  });
+  let duplicatePlanStarted = false;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentPlan: async () => {
+      duplicatePlanStarted = true;
+      throw new Error("a duplicate Plan must not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.activeStage, "plan");
+  assert.equal(duplicatePlanStarted, false);
+
+  await app.close();
 });
 
 test("POST /api/deployments/:deploymentId/approve approves the current plan", async () => {

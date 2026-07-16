@@ -9,6 +9,7 @@ import {
   createGitHubInstallUrl,
   findTargetGitHubRepository,
   SourceRepositoryStateError,
+  type GitHubInstallationConnectionRecord,
   type SourceRepositoryRecord,
   type SourceRepositoryRepository
 } from "./source-repository-service.js";
@@ -82,8 +83,17 @@ test("connecting the same active target is idempotent", async () => {
   } as SourceRepositoryRecord;
   const createdRecords: unknown[] = [];
   const repository = {
-    async findGitHubProviderUserId() {
-      return "github-user-1";
+    async connectGitHubInstallation() {
+      return {} as GitHubInstallationConnectionRecord;
+    },
+    async listActiveGitHubInstallationConnections() {
+      return [];
+    },
+    async findActiveGitHubInstallationConnection() {
+      return {} as GitHubInstallationConnectionRecord;
+    },
+    async markGitHubInstallationDisconnected() {
+      throw new Error("Unexpected markGitHubInstallationDisconnected call");
     },
     async findAccessibleProject() {
       return {} as never;

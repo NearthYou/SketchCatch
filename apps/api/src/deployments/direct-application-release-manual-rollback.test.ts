@@ -71,6 +71,7 @@ test("manual Direct rollback persists the trusted baseline result", async () => 
 function createContext(): DirectApplicationReleaseContext {
   return {
     sourceRepository: {
+      id: "repository-1",
       provider: "github",
       installationId: "installation-1",
       owner: "jh-9999",
@@ -126,10 +127,14 @@ function createRelease(): DirectApplicationReleaseRecord {
   return {
     id: "release-1",
     projectId: "project-1",
+    artifactId: "artifact-1",
     deploymentId: "deployment-1",
     pipelineRunId: null,
     source: "direct",
     runtimeTargetKind: "ecs_fargate",
+    runtimeAdapterKind: "ecs_service_fargate",
+    deploymentTargetFingerprint: "f".repeat(64),
+    convergenceOutcome: "rolled_out",
     version: "sha-a",
     commitSha: "a".repeat(40),
     artifactDigestAlgorithm: "sha256",

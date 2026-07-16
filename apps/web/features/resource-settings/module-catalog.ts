@@ -1,402 +1,423 @@
 import type {
+  DiagramEdge,
   DiagramJson,
   DiagramNode,
-  DiagramVariable,
-  DiagramVariableBinding,
-  ResourceItem
+  DiagramPoint,
+  DiagramVariable
 } from "../../../../packages/types/src";
-import { createDiagramNodeFromPayload } from "../diagram-editor/diagram-utils";
+import {
+  ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
+  architectureBoardKnowledge,
+  type ArchitectureBoardModulePattern
+} from "../architecture-board-compiler/architecture-board-knowledge";
+import { applyCuratedModuleTerraformDefaults } from "./curated-module-deployment-defaults";
+import { materializeCatalogResourceNodes } from "./template-resource-materializer";
 
-export type CuratedModuleProvider = "aws" | "azure" | "gcp";
-export type CuratedModuleCategory =
-  | "compute"
-  | "network"
-  | "storage"
-  | "database"
-  | "security-identity";
-
-type CuratedModuleResource = {
-  readonly resourceItemId: string;
-  readonly resourceName: string;
-  readonly offset: DiagramNode["position"];
-  readonly values: (names: Record<string, string>) => Record<string, unknown>;
-  readonly variableBindings?: readonly {
-    readonly name: string;
-    readonly parameterKey: string;
-  }[] | undefined;
+export type CuratedModuleDefinition = ArchitectureBoardModulePattern & {
+  readonly version: typeof ARCHITECTURE_BOARD_KNOWLEDGE_VERSION;
 };
 
-export type CuratedModuleDefinition = {
-  readonly id: string;
-  readonly name: string;
-  readonly provider: CuratedModuleProvider;
-  readonly category: CuratedModuleCategory;
-  readonly version: string;
-  readonly description: string;
-  readonly resources: readonly CuratedModuleResource[];
-  readonly variables: readonly Omit<DiagramVariable, "bindings" | "id" | "source">[];
-};
-
-export const curatedModules: readonly CuratedModuleDefinition[] = [
-  {
-    id: "aws-network-vpc",
-    name: "VPC network",
-    provider: "aws",
-    category: "network",
-    version: "1.0.0",
-    description: "VPC, public subnet, and internet gateway baseline.",
-    variables: [createTagsVariable()],
-    resources: [
-      {
-        resourceItemId: "aws-vpc",
-        resourceName: "module_vpc",
-        offset: { x: 0, y: 0 },
-        values: () => ({
-          cidrBlock: "10.0.0.0/16",
-          tags: "var.tags"
-        }),
-        variableBindings: [{ name: "tags", parameterKey: "tags" }]
-      },
-      {
-        resourceItemId: "aws-subnet",
-        resourceName: "module_public_subnet",
-        offset: { x: 280, y: 24 },
-        values: (names) => ({
-          cidrBlock: "10.0.1.0/24",
-          vpcId: `aws_vpc.${names.module_vpc}.id`,
-          tags: "var.tags"
-        }),
-        variableBindings: [{ name: "tags", parameterKey: "tags" }]
-      },
-      {
-        resourceItemId: "aws-internet-gateway",
-        resourceName: "module_igw",
-        offset: { x: 520, y: 52 },
-        values: (names) => ({
-          vpcId: `aws_vpc.${names.module_vpc}.id`,
-          tags: "var.tags"
-        }),
-        variableBindings: [{ name: "tags", parameterKey: "tags" }]
-      }
-    ]
-  },
-  {
-    id: "aws-compute-ec2",
-    name: "EC2 app host",
-    provider: "aws",
-    category: "compute",
-    version: "1.0.0",
-    description: "A small EC2 host with a security group boundary.",
-    variables: [createTagsVariable(), { name: "ami_id", type: "string", value: "ami-1234567890abcdef0" }],
-    resources: [
-      {
-        resourceItemId: "aws-vpc",
-        resourceName: "module_compute_vpc",
-        offset: { x: 0, y: 0 },
-        values: () => ({ cidrBlock: "10.20.0.0/16", tags: "var.tags" }),
-        variableBindings: [{ name: "tags", parameterKey: "tags" }]
-      },
-      {
-        resourceItemId: "aws-security-group",
-        resourceName: "module_app_sg",
-        offset: { x: 300, y: 28 },
-        values: (names) => ({
-          description: "Application ingress boundary",
-          name: "module-app-sg",
-          vpcId: `aws_vpc.${names.module_compute_vpc}.id`,
-          tags: "var.tags"
-        }),
-        variableBindings: [{ name: "tags", parameterKey: "tags" }]
-      },
-      {
-        resourceItemId: "aws-ec2-instance",
-        resourceName: "module_app_instance",
-        offset: { x: 560, y: 48 },
-        values: (names) => ({
-          ami: "var.ami_id",
-          instanceType: "t3.micro",
-          vpcSecurityGroupIds: [`aws_security_group.${names.module_app_sg}.id`],
-          tags: "var.tags"
-        }),
-        variableBindings: [
-          { name: "ami_id", parameterKey: "ami" },
-          { name: "tags", parameterKey: "tags" }
-        ]
-      }
-    ]
-  },
-  {
-    id: "aws-storage-s3",
-    name: "S3 storage",
-    provider: "aws",
-    category: "storage",
-    version: "1.0.0",
-    description: "Private S3 bucket baseline with shared tags.",
-    variables: [createTagsVariable(), { name: "bucket_name", type: "string", value: "sketchcatch-module-bucket" }],
-    resources: [
-      {
-        resourceItemId: "aws-s3-bucket",
-        resourceName: "module_bucket",
-        offset: { x: 0, y: 0 },
-        values: () => ({
-          bucket: "var.bucket_name",
-          tags: "var.tags"
-        }),
-        variableBindings: [
-          { name: "bucket_name", parameterKey: "bucket" },
-          { name: "tags", parameterKey: "tags" }
-        ]
-      }
-    ]
-  },
-  {
-    id: "aws-database-table",
-    name: "DynamoDB table",
-    provider: "aws",
-    category: "database",
-    version: "1.0.0",
-    description: "Serverless key-value table starter.",
-    variables: [createTagsVariable(), { name: "table_name", type: "string", value: "sketchcatch-module-table" }],
-    resources: [
-      {
-        resourceItemId: "aws-dynamodb-table",
-        resourceName: "module_table",
-        offset: { x: 0, y: 0 },
-        values: () => ({
-          name: "var.table_name",
-          billingMode: "PAY_PER_REQUEST",
-          hashKey: "id",
-          attribute: [{ name: "id", type: "S" }],
-          tags: "var.tags"
-        }),
-        variableBindings: [
-          { name: "table_name", parameterKey: "name" },
-          { name: "tags", parameterKey: "tags" }
-        ]
-      }
-    ]
-  },
-  {
-    id: "aws-security-boundary",
-    name: "Security boundary",
-    provider: "aws",
-    category: "security-identity",
-    version: "1.0.0",
-    description: "VPC plus security group starter.",
-    variables: [createTagsVariable()],
-    resources: [
-      {
-        resourceItemId: "aws-vpc",
-        resourceName: "module_security_vpc",
-        offset: { x: 0, y: 0 },
-        values: () => ({ cidrBlock: "10.30.0.0/16", tags: "var.tags" }),
-        variableBindings: [{ name: "tags", parameterKey: "tags" }]
-      },
-      {
-        resourceItemId: "aws-security-group",
-        resourceName: "module_security_group",
-        offset: { x: 300, y: 28 },
-        values: (names) => ({
-          description: "Least-privilege starter security group",
-          name: "module-security-group",
-          vpcId: `aws_vpc.${names.module_security_vpc}.id`,
-          tags: "var.tags"
-        }),
-        variableBindings: [{ name: "tags", parameterKey: "tags" }]
-      }
-    ]
-  }
-];
+/**
+ * Runtime catalog backed only by the checked-in knowledge artifact. Template fixtures are read by
+ * the generator, never by this browser materializer.
+ */
+export const curatedModules: readonly CuratedModuleDefinition[] =
+  architectureBoardKnowledge.modulePatterns.map((pattern) => ({
+    ...pattern,
+    version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION
+  }));
 
 export function expandCuratedModuleIntoDiagram(input: {
   readonly diagram: DiagramJson;
   readonly moduleId: string;
-  readonly resources: readonly ResourceItem[];
 }): DiagramJson {
-  const moduleDefinition = curatedModules.find((module) => module.id === input.moduleId);
+  const pattern = architectureBoardKnowledge.modulePatterns.find(({ id }) => id === input.moduleId);
 
-  if (!moduleDefinition || moduleDefinition.provider !== "aws") {
-    return input.diagram;
-  }
+  if (!pattern) return input.diagram;
 
-  const resourceItemsById = new Map(input.resources.map((resource) => [resource.id, resource]));
-  const expandedAt = new Date().toISOString();
-  const basePosition = getNextModulePosition(input.diagram.nodes);
-  const usedNames = getUsedResourceNames(input.diagram.nodes);
-  const names: Record<string, string> = {};
+  return materializeCuratedModulePattern({
+    diagram: input.diagram,
+    pattern
+  });
+}
 
-  for (const moduleResource of moduleDefinition.resources) {
-    names[moduleResource.resourceName] = createUniqueResourceName(moduleResource.resourceName, usedNames);
-  }
+/** Pure fragment materializer. Exported so remapping behavior can be verified with small fixtures. */
+export function materializeCuratedModulePattern(input: {
+  readonly diagram: DiagramJson;
+  readonly pattern: ArchitectureBoardModulePattern;
+  readonly expandedAt?: string | undefined;
+}): DiagramJson {
+  if (input.pattern.nodes.length === 0) return input.diagram;
 
-  const nextNodes: DiagramNode[] = [];
-
-  for (const [index, moduleResource] of moduleDefinition.resources.entries()) {
-    const resourceItem = resourceItemsById.get(moduleResource.resourceItemId);
-
-    if (!resourceItem) {
-      continue;
+  const materializedFragment = materializeCatalogResourceNodes(
+    {
+      nodes: input.pattern.nodes.map((node) => structuredClone(node) as DiagramNode),
+      edges: input.pattern.edges.map((edge) => structuredClone(edge) as DiagramEdge),
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    {
+      currentNodes: input.diagram.nodes,
+      mode: "strict",
+      preserveGeometry: false,
+      workspaceSeedPolicy: "replace-with-palette-defaults"
     }
+  );
+  const sourceNodes = applyCuratedModuleTerraformDefaults(
+    input.pattern.id,
+    materializedFragment.nodes
+  );
+  const sourceEdges = materializedFragment.edges;
 
-    const node = createDiagramNodeFromPayload(
-      { source: "resource-settings-panel", item: resourceItem },
-      {
-        x: basePosition.x + moduleResource.offset.x,
-        y: basePosition.y + moduleResource.offset.y
-      },
-      getNextZIndex(input.diagram.nodes, nextNodes, index),
-      [...input.diagram.nodes, ...nextNodes]
-    );
-    const resourceName = names[moduleResource.resourceName] ?? moduleResource.resourceName;
-    const values = moduleResource.values(names);
+  const expandedAt = input.expandedAt ?? createUniqueExpandedAt(input.diagram);
+  const nodeIds = createIdMap(
+    sourceNodes.map(({ id }) => id),
+    new Set(input.diagram.nodes.map(({ id }) => id)),
+    input.pattern.id,
+    "node"
+  );
+  const edgeIds = createIdMap(
+    sourceEdges.map(({ id }) => id),
+    new Set(input.diagram.edges.map(({ id }) => id)),
+    input.pattern.id,
+    "edge"
+  );
+  const variableIds = createIdMap(
+    input.pattern.variables.map(({ id }) => id),
+    new Set((input.diagram.variables ?? []).map(({ id }) => id)),
+    input.pattern.id,
+    "variable"
+  );
+  const resourceNames = createResourceNameMap(input.diagram.nodes, sourceNodes);
+  const variableNames = createVariableNameMap(
+    input.diagram.variables ?? [],
+    input.pattern.variables
+  );
+  const rewrite = (value: unknown) => rewriteReferences(value, resourceNames, variableNames);
+  const placement = getFragmentPlacement(input.diagram.nodes, sourceNodes);
+  const zIndexDelta = getZIndexDelta(
+    input.diagram.nodes,
+    input.diagram.edges,
+    sourceNodes,
+    sourceEdges
+  );
 
-    nextNodes.push({
-      ...node,
-      metadata: {
-        ...node.metadata,
-        moduleSource: {
-          expandedAt,
-          moduleId: moduleDefinition.id,
-          moduleVersion: moduleDefinition.version
-        }
-      },
-      parameters: node.parameters
+  const nextNodes = sourceNodes.map((sourceNode) => {
+    const clonedNode = structuredClone(sourceNode) as DiagramNode;
+    const parameters = sourceNode.parameters;
+    const parentAreaNodeId = sourceNode.metadata?.parentAreaNodeId;
+    const areaBaseline = sourceNode.metadata?.areaAutoSizeBaseline;
+
+    return {
+      ...clonedNode,
+      id: requireMappedValue(nodeIds, sourceNode.id),
+      position: translatePoint(sourceNode.position, placement),
+      zIndex: sourceNode.zIndex + zIndexDelta,
+      ...(sourceNode.metadata
         ? {
-            ...node.parameters,
-            resourceName,
-            values
+            metadata: {
+              ...clonedNode.metadata,
+              ...(parentAreaNodeId
+                ? { parentAreaNodeId: requireMappedValue(nodeIds, parentAreaNodeId) }
+                : {}),
+              ...(areaBaseline
+                ? {
+                    areaAutoSizeBaseline: {
+                      ...structuredClone(areaBaseline),
+                      position: translatePoint(areaBaseline.position, placement)
+                    }
+                  }
+                : {}),
+              moduleSource: {
+                expandedAt,
+                moduleId: input.pattern.id,
+                moduleVersion: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
+                representativeTemplateId: input.pattern.provenance.representativeTemplateId,
+                referenceTemplateIds: [...input.pattern.provenance.sourceTemplateIds]
+              }
+            }
           }
-        : node.parameters
-    });
-  }
+        : {
+            metadata: {
+              moduleSource: {
+                expandedAt,
+                moduleId: input.pattern.id,
+                moduleVersion: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
+                representativeTemplateId: input.pattern.provenance.representativeTemplateId,
+                referenceTemplateIds: [...input.pattern.provenance.sourceTemplateIds]
+              }
+            }
+          }),
+      ...(parameters
+        ? {
+            parameters: {
+              ...clonedNode.parameters!,
+              resourceName: requireMappedValue(resourceNames, terraformAddress(parameters))
+                .split(".")
+                .at(-1)!,
+              values: rewrite(parameters.values) as Record<string, unknown>
+            }
+          }
+        : {})
+    } satisfies DiagramNode;
+  });
+
+  const nextEdges = sourceEdges.map((sourceEdge) => {
+    const clonedEdge = structuredClone(sourceEdge) as DiagramEdge;
+    return {
+      ...clonedEdge,
+      id: requireMappedValue(edgeIds, sourceEdge.id),
+      sourceNodeId: requireMappedValue(nodeIds, sourceEdge.sourceNodeId),
+      targetNodeId: requireMappedValue(nodeIds, sourceEdge.targetNodeId),
+      ...(sourceEdge.zIndex === undefined ? {} : { zIndex: sourceEdge.zIndex + zIndexDelta }),
+      ...(sourceEdge.route ? { route: translateRoute(sourceEdge.route, placement) } : {})
+    } satisfies DiagramEdge;
+  });
+
+  const nextVariables = input.pattern.variables.map(
+    (sourceVariable) =>
+      ({
+        ...(structuredClone(sourceVariable) as DiagramVariable),
+        id: requireMappedValue(variableIds, sourceVariable.id),
+        name: requireMappedValue(variableNames, sourceVariable.name),
+        value: rewrite(sourceVariable.value),
+        bindings: sourceVariable.bindings.map((binding) => ({
+          ...structuredClone(binding),
+          nodeId: requireMappedValue(nodeIds, binding.nodeId)
+        })),
+        source: "module"
+      }) satisfies DiagramVariable
+  );
 
   return {
     ...input.diagram,
     nodes: [...input.diagram.nodes, ...nextNodes],
-    variables: mergeModuleVariables({
-      currentVariables: input.diagram.variables ?? [],
-      moduleDefinition,
-      nodes: nextNodes
-    })
+    edges: [...input.diagram.edges, ...nextEdges],
+    ...(input.diagram.variables !== undefined || nextVariables.length > 0
+      ? { variables: [...(input.diagram.variables ?? []), ...nextVariables] }
+      : {})
   };
 }
 
-function mergeModuleVariables(input: {
-  readonly currentVariables: readonly DiagramVariable[];
-  readonly moduleDefinition: CuratedModuleDefinition;
-  readonly nodes: readonly DiagramNode[];
-}): DiagramVariable[] {
-  const variablesByName = new Map(input.currentVariables.map((variable) => [variable.name, variable]));
+function createUniqueExpandedAt(diagram: DiagramJson): string {
+  const used = new Set(
+    diagram.nodes.flatMap((node) =>
+      node.metadata?.moduleSource ? [node.metadata.moduleSource.expandedAt] : []
+    )
+  );
+  let timestamp = Date.now();
+  while (used.has(new Date(timestamp).toISOString())) timestamp += 1;
+  return new Date(timestamp).toISOString();
+}
 
-  for (const moduleVariable of input.moduleDefinition.variables) {
-    const bindings = getModuleVariableBindings(input.moduleDefinition, input.nodes, moduleVariable.name);
-    const currentVariable = variablesByName.get(moduleVariable.name);
+function createIdMap(
+  sourceIds: readonly string[],
+  usedIds: Set<string>,
+  patternId: string,
+  kind: "node" | "edge" | "variable"
+): Map<string, string> {
+  const result = new Map<string, string>();
 
-    variablesByName.set(
-      moduleVariable.name,
-      currentVariable
-        ? {
-            ...currentVariable,
-            bindings: mergeVariableBindings(currentVariable.bindings, bindings)
-          }
-        : {
-            ...moduleVariable,
-            bindings,
-            id: createVariableId(moduleVariable.name),
-            source: "module"
-          }
+  for (const sourceId of sourceIds) {
+    result.set(
+      sourceId,
+      createUniqueValue(
+        `${kind}-${sanitizeIdentifier(patternId)}-${sanitizeIdentifier(sourceId)}`,
+        usedIds
+      )
     );
   }
 
-  return Array.from(variablesByName.values());
+  return result;
 }
 
-function getModuleVariableBindings(
-  moduleDefinition: CuratedModuleDefinition,
-  nodes: readonly DiagramNode[],
-  variableName: string
-): DiagramVariableBinding[] {
-  return moduleDefinition.resources.flatMap((resource, index) =>
-    (resource.variableBindings ?? [])
-      .filter((binding) => binding.name === variableName)
-      .map((binding) => ({
-        nodeId: nodes[index]?.id ?? "",
-        parameterKey: binding.parameterKey
+function createResourceNameMap(
+  currentNodes: readonly DiagramNode[],
+  sourceNodes: readonly ArchitectureBoardModulePattern["nodes"][number][]
+): Map<string, string> {
+  const usedNames = new Set(
+    currentNodes.flatMap(({ parameters }) => (parameters ? [parameters.resourceName] : []))
+  );
+  const result = new Map<string, string>();
+
+  for (const { parameters } of sourceNodes) {
+    if (!parameters) continue;
+    const nextName = createUniqueValue(sanitizeTerraformName(parameters.resourceName), usedNames);
+    result.set(
+      terraformAddress(parameters),
+      terraformAddress({ ...parameters, resourceName: nextName })
+    );
+  }
+
+  return result;
+}
+
+function createVariableNameMap(
+  currentVariables: readonly DiagramVariable[],
+  sourceVariables: readonly ArchitectureBoardModulePattern["variables"][number][]
+): Map<string, string> {
+  const usedNames = new Set(currentVariables.map(({ name }) => name));
+  return new Map(
+    sourceVariables.map(({ name }) => [
+      name,
+      createUniqueValue(sanitizeTerraformName(name), usedNames)
+    ])
+  );
+}
+
+function rewriteReferences(
+  value: unknown,
+  resourceNames: ReadonlyMap<string, string>,
+  variableNames: ReadonlyMap<string, string>
+): unknown {
+  if (typeof value === "string") {
+    let result = value;
+    const replacements = [
+      ...[...resourceNames.entries()].map(([from, to]) => ({ from, to })),
+      ...[...variableNames.entries()].map(([from, to]) => ({
+        from: `var.${from}`,
+        to: `var.${to}`
       }))
-      .filter((binding) => binding.nodeId.length > 0)
-  );
-}
+    ].sort((left, right) => right.from.length - left.from.length);
 
-function mergeVariableBindings(
-  currentBindings: readonly DiagramVariableBinding[],
-  nextBindings: readonly DiagramVariableBinding[]
-): DiagramVariableBinding[] {
-  const merged = new Map(currentBindings.map((binding) => [`${binding.nodeId}:${binding.parameterKey}`, binding]));
-
-  for (const binding of nextBindings) {
-    merged.set(`${binding.nodeId}:${binding.parameterKey}`, binding);
-  }
-
-  return Array.from(merged.values());
-}
-
-function createTagsVariable(): Omit<DiagramVariable, "bindings" | "id" | "source"> {
-  return {
-    name: "tags",
-    type: "map(string)",
-    value: {
-      ManagedBy: "SketchCatch",
-      Environment: "practice"
+    for (const { from, to } of replacements) {
+      result = result.replace(
+        new RegExp(`(^|[^A-Za-z0-9_-])(${escapeRegExp(from)})(?=$|[^A-Za-z0-9_-])`, "g"),
+        (_match, prefix: string) => `${prefix}${to}`
+      );
     }
-  };
-}
-
-function getNextModulePosition(nodes: readonly DiagramNode[]): DiagramNode["position"] {
-  if (nodes.length === 0) {
-    return { x: 120, y: 120 };
+    return result;
   }
 
-  const rightMost = Math.max(...nodes.map((node) => node.position.x + node.size.width));
+  if (Array.isArray(value)) {
+    return value.map((entry) => rewriteReferences(entry, resourceNames, variableNames));
+  }
+
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        rewriteReferences(entry, resourceNames, variableNames)
+      ])
+    );
+  }
+
+  return value;
+}
+
+function getFragmentPlacement(
+  currentNodes: readonly DiagramNode[],
+  sourceNodes: readonly ArchitectureBoardModulePattern["nodes"][number][]
+): { readonly x: number; readonly y: number } {
+  const sourceOrigin = {
+    x: Math.min(...sourceNodes.map(({ position }) => position.x)),
+    y: Math.min(...sourceNodes.map(({ position }) => position.y))
+  };
+  const targetOrigin =
+    currentNodes.length === 0
+      ? { x: 120, y: 120 }
+      : {
+          x: Math.max(...currentNodes.map((node) => node.position.x + node.size.width)) + 96,
+          y: 120
+        };
 
   return {
-    x: rightMost + 96,
-    y: 120
+    x: targetOrigin.x - sourceOrigin.x,
+    y: targetOrigin.y - sourceOrigin.y
   };
 }
 
-function getUsedResourceNames(nodes: readonly DiagramNode[]): Set<string> {
-  return new Set(
-    nodes
-      .map((node) => node.parameters?.resourceName)
-      .filter((name): name is string => Boolean(name))
+function getZIndexDelta(
+  currentNodes: readonly DiagramNode[],
+  currentEdges: readonly DiagramEdge[],
+  sourceNodes: readonly ArchitectureBoardModulePattern["nodes"][number][],
+  sourceEdges: ArchitectureBoardModulePattern["edges"]
+): number {
+  const currentTop = Math.max(
+    0,
+    ...currentNodes.map(({ zIndex }) => zIndex),
+    ...currentEdges.flatMap(({ zIndex }) => (zIndex === undefined ? [] : [zIndex]))
   );
+  const sourceBottom = Math.min(
+    ...sourceNodes.map(({ zIndex }) => zIndex),
+    ...sourceEdges.flatMap(({ zIndex }) => (zIndex === undefined ? [] : [zIndex]))
+  );
+  return currentTop + 1 - sourceBottom;
 }
 
-function createUniqueResourceName(baseName: string, usedNames: Set<string>): string {
-  let candidateName = baseName;
+function translateRoute(
+  route: NonNullable<ArchitectureBoardModulePattern["edges"][number]["route"]>,
+  delta: DiagramPoint
+): NonNullable<DiagramEdge["route"]> {
+  return {
+    ...(structuredClone(route) as NonNullable<DiagramEdge["route"]>),
+    svgPath: translateSvgPath(route.svgPath, delta),
+    sourcePoint: translatePoint(route.sourcePoint, delta),
+    targetPoint: translatePoint(route.targetPoint, delta),
+    waypoints: route.waypoints.map((point) => translatePoint(point, delta)),
+    ...(route.labelPosition ? { labelPosition: translatePoint(route.labelPosition, delta) } : {})
+  };
+}
+
+function translateSvgPath(svgPath: string, delta: DiagramPoint): string {
+  let coordinateIndex = 0;
+  return svgPath.replace(/-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi, (raw) => {
+    const offset = coordinateIndex % 2 === 0 ? delta.x : delta.y;
+    coordinateIndex += 1;
+    return String(normalizeNumber(Number(raw) + offset));
+  });
+}
+
+function translatePoint(point: DiagramPoint, delta: DiagramPoint): DiagramPoint {
+  return {
+    x: normalizeNumber(point.x + delta.x),
+    y: normalizeNumber(point.y + delta.y)
+  };
+}
+
+function terraformAddress(parameters: NonNullable<DiagramNode["parameters"]>): string {
+  return `${parameters.terraformBlockType === "data" ? "data." : ""}${parameters.resourceType}.${parameters.resourceName}`;
+}
+
+function requireMappedValue(map: ReadonlyMap<string, string>, key: string): string {
+  const value = map.get(key);
+  if (!value) throw new Error(`Curated Module remap is missing: ${key}`);
+  return value;
+}
+
+function createUniqueValue(baseValue: string, usedValues: Set<string>): string {
+  let candidate = baseValue;
   let suffix = 2;
 
-  while (usedNames.has(candidateName)) {
-    candidateName = `${baseName}_${suffix}`;
+  while (usedValues.has(candidate)) {
+    candidate = `${baseValue}_${suffix}`;
     suffix += 1;
   }
 
-  usedNames.add(candidateName);
-  return candidateName;
+  usedValues.add(candidate);
+  return candidate;
 }
 
-function getNextZIndex(
-  currentNodes: readonly DiagramNode[],
-  nextNodes: readonly DiagramNode[],
-  offset: number
-): number {
-  return Math.max(0, ...currentNodes.map((node) => node.zIndex), ...nextNodes.map((node) => node.zIndex)) + offset + 1;
+function sanitizeIdentifier(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "item";
 }
 
-function createVariableId(name: string): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `var-${name}-${crypto.randomUUID()}`;
-  }
+function sanitizeTerraformName(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || "resource";
+}
 
-  return `var-${name}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeNumber(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }

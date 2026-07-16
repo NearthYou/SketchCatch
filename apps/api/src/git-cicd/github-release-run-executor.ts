@@ -18,6 +18,7 @@ import {
   projectBuildEnvironments,
   projectDeploymentTargets,
   projectExecutionLeases,
+  projects,
   releaseCandidates,
   sourceRepositories
 } from "../db/schema.js";
@@ -26,16 +27,23 @@ import {
 } from "../deployments/aws-codebuild-direct-application-release-gateway.js";
 import type {
   ApplicationReleaseRecord,
-  DirectApplicationArtifact,
+  ApplicationReleaseExecutionRepository,
   DirectApplicationReleaseContext,
   DirectApplicationReleaseGateway
 } from "../deployments/direct-application-release-service.js";
 import {
+  executeApplicationRelease,
+  prepareApplicationRelease
+} from "../deployments/direct-application-release-service.js";
+import { createPostgresApplicationArtifactRegistryRepository } from "../artifacts/postgres-application-artifact-registry.js";
+import {
   acquireProjectExecutionLease,
   createPostgresProjectExecutionLeaseRepository,
+  heartbeatProjectExecutionLease,
   recoverVerifiedTerminalProjectExecutionLease,
   recordProjectExecutionCoordinates,
   releaseProjectExecutionLease,
+  type LeaseFence,
   type ProjectExecutionLeaseRecord,
   type ProjectExecutionLeaseRepository
 } from "../releases/project-execution-lease-service.js";
@@ -55,6 +63,7 @@ import {
 type GitHubReleaseExecutionContext = {
   runId: string;
   projectId: string;
+  userId: string;
   commitSha: string;
   sourceRepository: NonNullable<DirectApplicationReleaseContext["sourceRepository"]>;
   buildEnvironment: NonNullable<DirectApplicationReleaseContext["buildEnvironment"]>;
@@ -74,11 +83,6 @@ type GitHubExecutionFence = {
 
 export type GitHubReleaseExecutionRepository = {
   claim(runId: string, now: Date): Promise<GitHubReleaseExecutionContext | undefined>;
-  createPendingRelease(input: {
-    context: GitHubReleaseExecutionContext;
-    artifact: Awaited<ReturnType<DirectApplicationReleaseGateway["prepareArtifact"]>>;
-    now: Date;
-  }): Promise<void>;
   complete(input: {
     runId: string;
     result: GitHubReleaseCompletion;
@@ -110,6 +114,9 @@ export type GitHubReleaseExecutionRepository = {
     releaseId?: string | null;
     releaseStatus?: string | null;
   }>>;
+  createApplicationReleaseRepository?(
+    context: GitHubReleaseExecutionContext
+  ): ApplicationReleaseExecutionRepository;
 };
 
 export type GitHubReleaseRecoveryResult =
@@ -158,7 +165,9 @@ export function createPostgresGitHubReleaseExecutionRepository(
         .select({
           runId: gitCicdPipelineRuns.id,
           projectId: gitCicdPipelineRuns.projectId,
+          userId: projects.userId,
           commitSha: gitCicdPipelineRuns.commitSha,
+          sourceRepositoryId: sourceRepositories.id,
           sourceRepositoryProvider: sourceRepositories.provider,
           sourceRepositoryInstallationId: sourceRepositories.githubInstallationId,
           sourceRepositoryOwner: sourceRepositories.owner,
@@ -186,6 +195,7 @@ export function createPostgresGitHubReleaseExecutionRepository(
           sourceRepositories,
           eq(sourceRepositories.id, gitCicdPipelineRuns.sourceRepositoryId)
         )
+        .innerJoin(projects, eq(projects.id, gitCicdPipelineRuns.projectId))
         .innerJoin(
           projectBuildEnvironments,
           eq(projectBuildEnvironments.projectId, gitCicdPipelineRuns.projectId)
@@ -244,8 +254,10 @@ export function createPostgresGitHubReleaseExecutionRepository(
       return {
         runId: row.runId,
         projectId: row.projectId,
+        userId: row.userId,
         commitSha: row.commitSha,
         sourceRepository: {
+          id: row.sourceRepositoryId,
           provider: "github",
           installationId: row.sourceRepositoryInstallationId,
           owner: row.sourceRepositoryOwner,
@@ -275,68 +287,6 @@ export function createPostgresGitHubReleaseExecutionRepository(
           region: row.region
         }
       };
-    },
-
-    async createPendingRelease(input) {
-      const candidateId = readArtifactMetadata(input.artifact.metadata, "releaseCandidateId");
-      if (!candidateId) throw new Error("Release candidate ID is missing after preflight");
-      const [candidate] = await db
-        .select()
-        .from(releaseCandidates)
-        .where(
-          and(
-            eq(releaseCandidates.id, candidateId),
-            eq(releaseCandidates.pipelineRunId, input.context.runId),
-            eq(releaseCandidates.projectId, input.context.projectId),
-            eq(releaseCandidates.status, "pending")
-          )
-        );
-      if (!candidate || candidate.expiresAt <= input.now) {
-        throw new Error("Release candidate changed or expired before activation");
-      }
-      const [baseline] = await db
-        .select({ id: applicationReleases.id })
-        .from(applicationReleases)
-        .where(
-          and(
-            eq(applicationReleases.projectId, input.context.projectId),
-            eq(applicationReleases.runtimeTargetKind, "ecs_fargate"),
-            eq(applicationReleases.status, "succeeded")
-          )
-        )
-        .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
-        .limit(1);
-      await db.insert(applicationReleases).values({
-        id: crypto.randomUUID(),
-        projectId: input.context.projectId,
-        deploymentId: null,
-        pipelineRunId: input.context.runId,
-        source: "gitops",
-        runtimeTargetKind: "ecs_fargate",
-        version: `git-${input.context.commitSha.slice(0, 12)}`,
-        commitSha: input.context.commitSha,
-        artifactDigestAlgorithm: "sha256",
-        artifactDigest: candidate.compositeDigest,
-        releaseCandidateId: candidate.id,
-        compositeDigest: {
-          algorithm: "sha256",
-          value: candidate.compositeDigest,
-          apiOciDigest: candidate.apiOciDigest,
-          frontendManifestDigest: candidate.frontendManifestDigest
-        },
-        providerRevision: null,
-        frontendEvidence: null,
-        failureStage: null,
-        baselineReleaseId: baseline?.id ?? null,
-        outputUrl: null,
-        status: "pending",
-        healthEvidence: null,
-        rollbackEvidence: null,
-        startedAt: input.now,
-        completedAt: null,
-        createdAt: input.now,
-        updatedAt: input.now
-      });
     },
 
     async complete(input) {
@@ -372,34 +322,36 @@ export function createPostgresGitHubReleaseExecutionRepository(
           await requireGitHubExecutionFence(transaction as unknown as Database, input.fence, input.now);
         }
         const [release] = await transaction
-          .select({ id: applicationReleases.id })
+          .select({ id: applicationReleases.id, status: applicationReleases.status })
           .from(applicationReleases)
           .where(eq(applicationReleases.pipelineRunId, input.runId))
           .for("update");
         if (!release) throw new Error("GitHub application release was not created");
-        const updated = await transaction
-          .update(applicationReleases)
-          .set({
-            ...values,
-            status: releaseStatus,
-            completedAt: input.now,
-            updatedAt: input.now
-          })
-          .where(
-            and(
-              eq(applicationReleases.id, release.id),
-              inArray(applicationReleases.status, [
-                "pending",
-                "building",
-                "deploying",
-                "partially_failed",
-                "partially_cancelled"
-              ])
+        if (release.status !== releaseStatus) {
+          const updated = await transaction
+            .update(applicationReleases)
+            .set({
+              ...values,
+              status: releaseStatus,
+              completedAt: input.now,
+              updatedAt: input.now
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, release.id),
+                inArray(applicationReleases.status, [
+                  "pending",
+                  "building",
+                  "deploying",
+                  "partially_failed",
+                  "partially_cancelled"
+                ])
+              )
             )
-          )
-          .returning({ id: applicationReleases.id });
-        if (updated.length !== 1) {
-          throw new Error("GitHub application release terminal transition was rejected");
+            .returning({ id: applicationReleases.id });
+          if (updated.length !== 1) {
+            throw new Error("GitHub application release terminal transition was rejected");
+          }
         }
         await transaction
           .update(gitCicdPipelineRuns)
@@ -597,7 +549,281 @@ export function createPostgresGitHubReleaseExecutionRepository(
           releaseId: string | null;
           releaseStatus: string | null;
         }>>;
+    },
+
+    createApplicationReleaseRepository(context) {
+      return createPostgresGitHubApplicationReleaseRepository(db, context);
     }
+  };
+}
+
+function createPostgresGitHubApplicationReleaseRepository(
+  db: Database,
+  context: GitHubReleaseExecutionContext
+): ApplicationReleaseExecutionRepository {
+  const requireContext = async (
+    executionId: string,
+    userId: string
+  ): Promise<DirectApplicationReleaseContext | undefined> => {
+    if (executionId !== context.runId || userId !== context.userId) return undefined;
+    return toDirectApplicationReleaseContext(context);
+  };
+  const findRelease = async (executionId: string): Promise<ApplicationReleaseRecord | undefined> => {
+    const [release] = await db
+      .select()
+      .from(applicationReleases)
+      .where(
+        and(
+          eq(applicationReleases.pipelineRunId, executionId),
+          eq(applicationReleases.source, "gitops")
+        )
+      );
+    return release;
+  };
+  return {
+    artifactRegistry: createPostgresApplicationArtifactRegistryRepository(db),
+    findContext: requireContext,
+    findRelease,
+    async savePreparedRelease(input) {
+      if (
+        input.source !== "gitops" ||
+        input.pipelineRunId !== context.runId ||
+        input.deploymentId !== null ||
+        input.projectId !== context.projectId
+      ) {
+        throw new Error("GitHub application release coordinates do not match the claimed run");
+      }
+      return db.transaction(async (transaction) => {
+        if (input.releaseCandidateId) {
+          const [candidate] = await transaction
+            .select({
+              id: releaseCandidates.id,
+              compositeDigest: releaseCandidates.compositeDigest,
+              expiresAt: releaseCandidates.expiresAt
+            })
+            .from(releaseCandidates)
+            .where(
+              and(
+                eq(releaseCandidates.id, input.releaseCandidateId),
+                eq(releaseCandidates.pipelineRunId, context.runId),
+                eq(releaseCandidates.projectId, context.projectId),
+                eq(releaseCandidates.status, "pending")
+              )
+            )
+            .for("update");
+          if (
+            !candidate ||
+            candidate.expiresAt <= input.updatedAt ||
+            candidate.compositeDigest !== input.compositeDigest?.value
+          ) {
+            throw new Error("Release candidate changed or expired before activation");
+          }
+        }
+        const [baseline] = await transaction
+          .select({ id: applicationReleases.id })
+          .from(applicationReleases)
+          .where(
+            and(
+              eq(applicationReleases.projectId, context.projectId),
+              eq(applicationReleases.runtimeTargetKind, input.runtimeTargetKind),
+              eq(applicationReleases.status, "succeeded")
+            )
+          )
+          .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
+          .limit(1);
+        const [saved] = await transaction
+          .insert(applicationReleases)
+          .values({ ...input, baselineReleaseId: baseline?.id ?? null })
+          .returning();
+        if (!saved || saved.pipelineRunId !== context.runId || saved.source !== "gitops") {
+          throw new Error("GitHub application release was not saved");
+        }
+        return saved;
+      });
+    },
+    async saveCompletedRelease(input) {
+      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
+        const [saved] = await executor
+          .update(applicationReleases)
+          .set({
+            runtimeAdapterKind: input.runtimeAdapterKind,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+            convergenceOutcome: input.convergenceOutcome,
+            providerRevision: input.providerRevision,
+            outputUrl: input.outputUrl,
+            healthEvidence: input.healthEvidence,
+            rollbackEvidence: input.rollbackEvidence,
+            frontendEvidence: input.frontendEvidence ?? null,
+            failureStage: input.failureStage ?? null,
+            status: input.status,
+            completedAt: input.completedAt,
+            updatedAt: input.updatedAt
+          })
+          .where(
+            and(
+              eq(applicationReleases.id, input.releaseId),
+              eq(applicationReleases.pipelineRunId, context.runId),
+              eq(applicationReleases.source, "gitops"),
+              input.status === "rolled_back"
+                ? inArray(applicationReleases.status, ["pending", "succeeded"])
+                : eq(applicationReleases.status, "pending")
+            )
+          )
+          .returning();
+        if (!saved) throw new Error("GitHub application release terminal state was not saved");
+        return saved;
+      });
+    },
+    async saveFailedRelease(input) {
+      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
+        const [saved] = await executor
+          .update(applicationReleases)
+          .set({
+            status: "failed",
+            healthEvidence: { state: "failed" },
+            completedAt: input.completedAt,
+            updatedAt: input.updatedAt
+          })
+          .where(
+            and(
+              eq(applicationReleases.id, input.releaseId),
+              eq(applicationReleases.pipelineRunId, context.runId),
+              eq(applicationReleases.source, "gitops"),
+              eq(applicationReleases.status, "pending")
+            )
+          )
+          .returning();
+        if (!saved) throw new Error("Failed GitHub application release was not saved");
+        return saved;
+      });
+    },
+    async savePartialRelease(input) {
+      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
+        const [saved] = await executor
+          .update(applicationReleases)
+          .set({
+            runtimeAdapterKind: input.runtimeAdapterKind,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+            convergenceOutcome: input.convergenceOutcome,
+            providerRevision: input.providerRevision,
+            outputUrl: input.outputUrl,
+            healthEvidence: input.healthEvidence,
+            frontendEvidence: input.frontendEvidence,
+            failureStage: input.failureStage,
+            status: "partially_failed",
+            completedAt: input.completedAt,
+            updatedAt: input.updatedAt
+          })
+          .where(
+            and(
+              eq(applicationReleases.id, input.releaseId),
+              eq(applicationReleases.pipelineRunId, context.runId),
+              eq(applicationReleases.source, "gitops"),
+              eq(applicationReleases.status, "pending")
+            )
+          )
+          .returning();
+        if (!saved) throw new Error("Partial GitHub application release was not saved");
+        return saved;
+      });
+    },
+    async saveCancelledRelease(input) {
+      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
+        const [saved] = await executor
+          .update(applicationReleases)
+          .set({
+            status: input.status,
+            ...(input.runtimeAdapterKind ? { runtimeAdapterKind: input.runtimeAdapterKind } : {}),
+            ...(input.deploymentTargetFingerprint
+              ? { deploymentTargetFingerprint: input.deploymentTargetFingerprint }
+              : {}),
+            ...(input.convergenceOutcome !== undefined
+              ? { convergenceOutcome: input.convergenceOutcome }
+              : {}),
+            ...(input.providerRevision ? { providerRevision: input.providerRevision } : {}),
+            ...(input.outputUrl ? { outputUrl: input.outputUrl } : {}),
+            ...(input.healthEvidence ? { healthEvidence: input.healthEvidence } : {}),
+            ...(input.rollbackEvidence !== undefined
+              ? { rollbackEvidence: input.rollbackEvidence }
+              : {}),
+            ...(input.frontendEvidence !== undefined
+              ? { frontendEvidence: input.frontendEvidence }
+              : {}),
+            ...(input.failureStage !== undefined ? { failureStage: input.failureStage } : {}),
+            completedAt: input.completedAt,
+            updatedAt: input.updatedAt
+          })
+          .where(
+            and(
+              eq(applicationReleases.id, input.releaseId),
+              eq(applicationReleases.pipelineRunId, context.runId),
+              eq(applicationReleases.source, "gitops"),
+              inArray(applicationReleases.status, ["pending", "partially_cancelled"])
+            )
+          )
+          .returning();
+        if (!saved) throw new Error("Cancelled GitHub application release was not saved");
+        return saved;
+      });
+    },
+    async resetReleaseForRetry(input) {
+      const [saved] = await db
+        .update(applicationReleases)
+        .set({
+          providerRevision: input.providerRevision,
+          status: "pending",
+          convergenceOutcome: null,
+          healthEvidence: null,
+          rollbackEvidence: null,
+          completedAt: null,
+          updatedAt: input.updatedAt
+        })
+        .where(
+          and(
+            eq(applicationReleases.id, input.releaseId),
+            eq(applicationReleases.pipelineRunId, context.runId),
+            eq(applicationReleases.source, "gitops")
+          )
+        )
+        .returning();
+      if (!saved) throw new Error("GitHub application release retry was not saved");
+      return saved;
+    }
+  };
+}
+
+async function saveGitHubReleaseTerminal<T>(
+  db: Database,
+  context: GitHubReleaseExecutionContext,
+  now: Date,
+  fence: LeaseFence | undefined,
+  save: (executor: Database) => Promise<T>
+): Promise<T> {
+  if (!fence) return save(db);
+  if (fence.projectId !== context.projectId || fence.holderId !== context.runId) {
+    throw new Error("GitHub application release fence does not match the claimed run");
+  }
+  return db.transaction(async (transaction) => {
+    await requireGitHubExecutionFence(transaction as unknown as Database, fence, now);
+    return save(transaction as unknown as Database);
+  });
+}
+
+function toDirectApplicationReleaseContext(
+  context: GitHubReleaseExecutionContext
+): DirectApplicationReleaseContext {
+  return {
+    sourceRepository: context.sourceRepository,
+    buildEnvironment: context.buildEnvironment,
+    deployment: {
+      id: context.runId,
+      projectId: context.projectId,
+      scope: "application",
+      source: "gitops",
+      targetKind: "ecs_fargate"
+    },
+    target: context.target,
+    connection: context.connection
   };
 }
 
@@ -605,11 +831,15 @@ export function createGitHubReleaseRunExecutor(options: {
   db?: Database;
   repository?: GitHubReleaseExecutionRepository;
   gateway?: DirectApplicationReleaseGateway;
+  applicationReleaseRepositoryFactory?: (
+    context: GitHubReleaseExecutionContext
+  ) => ApplicationReleaseExecutionRepository;
   executionLeaseRepository?: ProjectExecutionLeaseRepository;
   recoveryController?: GitHubReleaseRecoveryController;
   interruptedCodeBuildController?: GitHubInterruptedCodeBuildController;
   workerDispatcher?: GitHubReleaseWorkerDispatcher;
   dispatchToWorker?: boolean;
+  leaseHeartbeatIntervalMs?: number;
   now?: () => Date;
 } = {}): GitHubReleaseRunExecutor & {
   executeNow(runId: string): Promise<void>;
@@ -624,6 +854,9 @@ export function createGitHubReleaseRunExecutor(options: {
     options.executionLeaseRepository ??
     (defaultDb ? createPostgresProjectExecutionLeaseRepository(defaultDb) : undefined);
   const gateway = options.gateway ?? createAwsCodeBuildDirectApplicationReleaseGateway();
+  const applicationReleaseRepositoryFactory =
+    options.applicationReleaseRepositoryFactory ??
+    repository.createApplicationReleaseRepository?.bind(repository);
   const now = options.now ?? (() => new Date());
   const recoveryController =
     options.recoveryController ??
@@ -651,52 +884,80 @@ export function createGitHubReleaseRunExecutor(options: {
     if (active.has(runId)) return;
     const abortController = new AbortController();
     let projectId: string | undefined;
-    let gatewayContext: DirectApplicationReleaseContext | undefined;
-    let artifact: DirectApplicationArtifact | undefined;
+    let executionFence: GitHubExecutionFence | undefined;
+    let leaseHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
+    let leaseHeartbeatPromise: Promise<void> | undefined;
+    let leaseHeartbeatError: unknown;
     active.set(runId, abortController);
     try {
       const context = await repository.claim(runId, now());
       if (!context) return;
       projectId = context.projectId;
-      gatewayContext = {
-        sourceRepository: context.sourceRepository,
-        buildEnvironment: context.buildEnvironment,
-        deployment: {
-          id: context.runId,
-          projectId: context.projectId,
-          scope: "application",
-          source: "gitops",
-          targetKind: "ecs_fargate"
-        },
-        target: context.target,
-        connection: context.connection
-      };
-      artifact = await gateway.prepareArtifact(gatewayContext, abortController.signal);
-      await repository.createPendingRelease({ context, artifact, now: now() });
-      const result = await gateway.deployArtifact({
-        context: gatewayContext,
-        artifact,
-        abortSignal: abortController.signal
-      });
-      const fence = await requireOwnedGitHubFence(
+      if (!applicationReleaseRepositoryFactory) {
+        throw new Error("GitHub application release repository is not configured");
+      }
+      executionFence = await requireOwnedGitHubFence(
         context.projectId,
         runId,
-        executionLeaseRepository
+        executionLeaseRepository,
+        now()
       );
-      await repository.complete({ runId, result, now: now(), ...(fence ? { fence } : {}) });
-      if (result.status === "succeeded" || result.status === "rolled_back" || result.status === "cancelled") {
-        await gateway
-          .cleanupArtifact?.({
-            context: gatewayContext,
-            artifact,
-            mode: result.status === "succeeded" ? "success" : "terminal_failure"
-          })
-          .catch(() => undefined);
+      if (executionFence && executionLeaseRepository) {
+        await heartbeatCurrentLease();
+        leaseHeartbeatTimer = setInterval(() => {
+          if (leaseHeartbeatPromise || !executionFence) return;
+          leaseHeartbeatPromise = heartbeatCurrentLease()
+            .catch(() => undefined)
+            .finally(() => {
+              leaseHeartbeatPromise = undefined;
+            });
+        }, options.leaseHeartbeatIntervalMs ?? 30_000);
+        leaseHeartbeatTimer.unref?.();
       }
+      const applicationReleaseRepository = applicationReleaseRepositoryFactory(context);
+      const prepared = await prepareApplicationRelease(
+        {
+          executionId: runId,
+          userId: context.userId,
+          abortSignal: abortController.signal,
+          retainProjectLease: true
+        },
+        applicationReleaseRepository,
+        gateway,
+        () => crypto.randomUUID(),
+        now
+      );
+      if (!prepared) {
+        throw new Error("GitHub application release preparation returned no release");
+      }
+      await assertCurrentGitHubLease();
+      const release = await executeApplicationRelease(
+        {
+          executionId: runId,
+          userId: context.userId,
+          abortSignal: abortController.signal,
+          ...(executionFence ? { leaseFence: executionFence } : {})
+        },
+        applicationReleaseRepository,
+        gateway,
+        now
+      );
+      if (!release) {
+        throw new Error("GitHub application release execution returned no release");
+      }
+      await assertCurrentGitHubLease();
+      const result = toGitHubReleaseCompletion(release);
+      await repository.complete({
+        runId,
+        result,
+        now: now(),
+        ...(executionFence ? { fence: executionFence } : {})
+      });
     } catch (error) {
+      if (leaseHeartbeatError) return;
       const cancelled = abortController.signal.aborted;
       const fence = projectId
-        ? await findOwnedGitHubFence(projectId, runId, executionLeaseRepository)
+        ? await findOwnedGitHubFence(projectId, runId, executionLeaseRepository, now())
         : undefined;
       if (projectId && executionLeaseRepository && !fence) {
         return;
@@ -710,19 +971,12 @@ export function createGitHubReleaseRunExecutor(options: {
         now: now(),
         ...(fence ? { fence } : {})
       });
-      if (gatewayContext && artifact) {
-        await gateway
-          .cleanupArtifact?.({
-            context: gatewayContext,
-            artifact,
-            mode: "terminal_failure"
-          })
-          .catch(() => undefined);
-      }
     } finally {
+      if (leaseHeartbeatTimer) clearInterval(leaseHeartbeatTimer);
+      await leaseHeartbeatPromise?.catch(() => undefined);
       if (projectId && executionLeaseRepository) {
         const lease = await executionLeaseRepository.find(projectId).catch(() => undefined);
-        if (lease?.holderId === runId) {
+        if (!leaseHeartbeatError && lease?.holderId === runId && lease.expiresAt > now()) {
           await releaseProjectExecutionLease(
             {
               projectId,
@@ -734,6 +988,30 @@ export function createGitHubReleaseRunExecutor(options: {
         }
       }
       active.delete(runId);
+    }
+
+    async function assertCurrentGitHubLease(): Promise<void> {
+      if (leaseHeartbeatError) throw leaseHeartbeatError;
+      if (executionFence && executionLeaseRepository) {
+        await heartbeatCurrentLease();
+      }
+      if (leaseHeartbeatError) throw leaseHeartbeatError;
+      if (abortController.signal.aborted) {
+        throw abortController.signal.reason instanceof Error
+          ? abortController.signal.reason
+          : new Error("GitHub application release was aborted");
+      }
+    }
+
+    async function heartbeatCurrentLease(): Promise<void> {
+      if (!executionFence || !executionLeaseRepository) return;
+      try {
+        await heartbeatProjectExecutionLease(executionFence, executionLeaseRepository, { now });
+      } catch (error) {
+        leaseHeartbeatError = error;
+        abortController.abort(error);
+        throw error;
+      }
     }
   };
 
@@ -1232,14 +1510,43 @@ function completionValues(result: GitHubReleaseCompletion): {
   };
 }
 
+function toGitHubReleaseCompletion(release: ApplicationReleaseRecord): GitHubReleaseCompletion {
+  if (
+    !["succeeded", "rolled_back", "partially_failed", "cancelled", "partially_cancelled"].includes(
+      release.status
+    ) ||
+    !release.providerRevision ||
+    !release.outputUrl ||
+    !release.healthEvidence
+  ) {
+    throw new Error("Common application release did not return durable terminal evidence");
+  }
+  return {
+    providerRevision: release.providerRevision,
+    outputUrl: release.outputUrl,
+    healthEvidence: release.healthEvidence,
+    rollbackEvidence: release.rollbackEvidence,
+    frontendEvidence: release.frontendEvidence,
+    failureStage: release.failureStage,
+    status: release.status as GitHubReleaseCompletion["status"]
+  };
+}
+
 async function findOwnedGitHubFence(
   projectId: string,
   holderId: string,
-  repository: ProjectExecutionLeaseRepository | undefined
+  repository: ProjectExecutionLeaseRepository | undefined,
+  now: Date
 ): Promise<GitHubExecutionFence | undefined> {
   if (!repository) return undefined;
   const lease = await repository.find(projectId);
-  if (lease?.status !== "active" || lease.holderId !== holderId) return undefined;
+  if (
+    lease?.status !== "active" ||
+    lease.holderId !== holderId ||
+    lease.expiresAt <= now
+  ) {
+    return undefined;
+  }
   return {
     projectId: lease.projectId,
     holderId: lease.holderId,
@@ -1250,9 +1557,10 @@ async function findOwnedGitHubFence(
 async function requireOwnedGitHubFence(
   projectId: string,
   holderId: string,
-  repository: ProjectExecutionLeaseRepository | undefined
+  repository: ProjectExecutionLeaseRepository | undefined,
+  now: Date
 ): Promise<GitHubExecutionFence | undefined> {
-  const fence = await findOwnedGitHubFence(projectId, holderId, repository);
+  const fence = await findOwnedGitHubFence(projectId, holderId, repository, now);
   if (repository && !fence) {
     throw new Error("GitHub release no longer owns its project execution fence");
   }
@@ -1301,14 +1609,6 @@ async function requireGitHubExecutionFence(
     )
     .for("update");
   if (!current) throw new Error("GitHub release execution fence is no longer current");
-}
-
-function readArtifactMetadata(
-  metadata: Record<string, string | number | boolean | null>,
-  key: string
-): string | null {
-  const value = metadata[key];
-  return typeof value === "string" && value.trim() ? value : null;
 }
 
 async function markRunFailed(

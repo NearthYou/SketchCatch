@@ -59,8 +59,8 @@ export function GitHubAccountSettings() {
       <header>
         <DashboardIcon name="github" />
         <div>
-          <h2 id="github-account-settings-title">GitHub 계정 연결</h2>
-          <p>모든 프로젝트에서 사용할 GitHub App 권한을 관리합니다.</p>
+          <h2 id="github-account-settings-title">GitHub App 연결</h2>
+          <p>SketchCatch 로그인 방식과 관계없이 모든 프로젝트에서 사용할 GitHub App 권한을 관리합니다.</p>
         </div>
       </header>
 
@@ -86,7 +86,7 @@ export function GitHubAccountSettings() {
       ) : null}
 
       {installations.length > 0 ? (
-        <div className={styles.githubInstallationList} aria-label="연결된 GitHub 계정">
+        <div className={styles.githubInstallationList} aria-label="연결된 GitHub App installation">
           {installations.map((installation) => (
             <article className={styles.githubInstallationCard} key={installation.installationId}>
               <div className={styles.connectionStatus} data-status="verified">

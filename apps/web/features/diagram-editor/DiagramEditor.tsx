@@ -59,7 +59,6 @@ import {
 import { ParameterInputPanel } from "../parameter-input";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
 import { ResourceSettingsPanel } from "../resource-settings";
-import { defaultResourceCatalogProvider } from "../resource-settings/catalog-provider";
 import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
 import {
   applyTemplateToDiagramWithBackup,
@@ -887,8 +886,7 @@ function DiagramEditorInner({
       commitDiagramUpdate((currentDiagram) =>
         expandCuratedModuleIntoDiagram({
           diagram: currentDiagram,
-          moduleId,
-          resources: defaultResourceCatalogProvider.listResources()
+          moduleId
         })
       );
     },

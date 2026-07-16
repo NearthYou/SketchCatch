@@ -21,11 +21,12 @@ import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
+  WorkspaceAiContextInteraction,
+  WorkspaceTerraformAiContext,
   TerraformSafeFixApplyRequest,
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
+import { EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT } from "./workspace-terraform-ai";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
 import {
@@ -84,7 +85,11 @@ export type ProjectWorkspaceDraftManagerProps = {
   workspaceId?: string | undefined;
 };
 
-export function ProjectWorkspaceDraftManager({
+export function ProjectWorkspaceDraftManager(props: ProjectWorkspaceDraftManagerProps) {
+  return <ProjectWorkspaceDraftManagerState key={props.projectId} {...props} />;
+}
+
+function ProjectWorkspaceDraftManagerState({
   initialRightPanelView,
   localCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
@@ -106,10 +111,12 @@ export function ProjectWorkspaceDraftManager({
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
-    useState<TerraformIssueAiRequest | null>(null);
-  const [terraformPreviewAiRequest, setTerraformPreviewAiRequest] =
-    useState<TerraformPreviewAiRequest | null>(null);
+  const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
+    EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT
+  );
+  const [selectedTerraformIssueKey, setSelectedTerraformIssueKey] = useState<string | null>(null);
+  const [terraformAiInteraction, setTerraformAiInteraction] =
+    useState<WorkspaceAiContextInteraction | null>(null);
   const [terraformSafeFixApplyRequest, setTerraformSafeFixApplyRequest] =
     useState<TerraformSafeFixApplyRequest | null>(null);
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
@@ -120,6 +127,7 @@ export function ProjectWorkspaceDraftManager({
   const [terraformFilesReplacement, setTerraformFilesReplacement] =
     useState<TerraformFilesReplacementRequest | null>(null);
   const terraformFilesReplacementIdRef = useRef(0);
+  const terraformAiInteractionIdRef = useRef(0);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPendingLocalChangesRef = useRef(false);
@@ -349,6 +357,12 @@ export function ProjectWorkspaceDraftManager({
   useEffect(() => {
     let cancelled = false;
     draftReadyRef.current = false;
+    setLoadState("loading");
+    setTerraformAiContext(EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT);
+    setSelectedTerraformIssueKey(null);
+    setTerraformAiInteraction(null);
+    setTerraformSafeFixApplyRequest(null);
+    setTerraformSafeFixApplyResult(null);
 
     async function loadWorkspace() {
       try {
@@ -502,9 +516,20 @@ export function ProjectWorkspaceDraftManager({
     void thumbnailLifecycleRef.current?.retry().catch(() => undefined);
   }, []);
 
-  const requestTerraformIssueAi = useCallback((request: TerraformIssueAiRequest): void => {
-    setTerraformIssueAiRequest(request);
-  }, []);
+  const notifyTerraformAiInteraction = useCallback(
+    (
+      scope: WorkspaceAiContextInteraction["scope"],
+      diagnosticKey?: string | undefined
+    ): void => {
+      terraformAiInteractionIdRef.current += 1;
+      setTerraformAiInteraction({
+        ...(diagnosticKey ? { diagnosticKey } : {}),
+        id: terraformAiInteractionIdRef.current,
+        scope
+      });
+    },
+    []
+  );
 
   const handleTerraformFilesChange = useCallback(
     (files: readonly TerraformSyncFileInput[]): void => {
@@ -599,8 +624,10 @@ export function ProjectWorkspaceDraftManager({
             projectId={projectId}
             repositoryAnalysisSourceRepositoryId={repositoryAnalysisHandoff?.sourceRepositoryId}
             repositoryTemplateId={repositoryTemplateId ?? undefined}
-            terraformIssueRequest={terraformIssueAiRequest}
-            terraformPreviewRequest={terraformPreviewAiRequest}
+            selectedTerraformIssueKey={selectedTerraformIssueKey}
+            onSelectTerraformIssue={setSelectedTerraformIssueKey}
+            terraformAiContext={terraformAiContext}
+            terraformAiInteraction={terraformAiInteraction}
             terraformSafeFixApplyResult={terraformSafeFixApplyResult}
           />
         )}
@@ -619,13 +646,15 @@ export function ProjectWorkspaceDraftManager({
             deploymentAvailability="enabled"
             initialView={initialRightPanelView}
             initialTerraformFiles={initialTerraformFiles}
-            onTerraformIssueAiRequest={requestTerraformIssueAi}
-            onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
+            onSelectTerraformIssue={setSelectedTerraformIssueKey}
+            onTerraformAiContextChange={setTerraformAiContext}
+            onTerraformAiInteraction={notifyTerraformAiInteraction}
             onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
             onTerraformFilesChange={handleTerraformFilesChange}
             onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
             projectId={projectId}
             projectName={projectName}
+            selectedTerraformIssueKey={selectedTerraformIssueKey}
             terraformFilesReplacement={terraformFilesReplacement}
             terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
           />

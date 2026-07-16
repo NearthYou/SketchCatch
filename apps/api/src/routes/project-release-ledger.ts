@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  ApplicationArtifactListResponse,
   ApplicationRelease,
   ApplicationReleaseListResponse,
   ApplicationReleaseResponse,
@@ -14,6 +15,7 @@ import {
   createPostgresProjectReleaseLedgerRepository,
   getApplicationRelease,
   getProjectDeploymentTarget,
+  listApplicationArtifacts,
   listApplicationReleases,
   putProjectDeploymentTarget,
   ReleaseLedgerConflictError,
@@ -23,6 +25,10 @@ import {
   type ProjectDeploymentTargetRecord,
   type ProjectReleaseLedgerRepository
 } from "../releases/project-release-ledger-service.js";
+import {
+  credentialFreeHttpsUrlSchema,
+  runtimeDeploymentTargetSchema
+} from "../runtime-convergence/runtime-convergence-schemas.js";
 
 const projectParamsSchema = z.object({ projectId: z.uuid() }).strict();
 const releaseParamsSchema = projectParamsSchema.extend({ releaseId: z.uuid() }).strict();
@@ -82,7 +88,12 @@ const confirmedBuildConfigSchema = z
     ]),
     artifactOutputPath: nullableRepositoryPathSchema,
     runtimeEntrypoint: z.string().trim().min(1).max(512).nullable(),
-    healthCheckPath: z.string().trim().regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/).max(512).nullable(),
+    healthCheckPath: z
+      .string()
+      .trim()
+      .regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/)
+      .max(512)
+      .nullable(),
     dockerfilePath: nullableRepositoryPathSchema,
     packageManifestPath: nullableRepositoryPathSchema,
     samTemplatePath: nullableRepositoryPathSchema,
@@ -119,7 +130,7 @@ const ecsFargateRuntimeConfigSchema = z
     cloudFrontDistributionId: z.string().trim().min(3).max(32).nullish(),
     cloudFrontDomainName: z.string().trim().min(1).max(253).nullish(),
     logGroupNames: z.array(z.string().trim().min(1).max(512)).max(20).optional(),
-    outputUrl: z.url().max(2_048).nullable()
+    outputUrl: credentialFreeHttpsUrlSchema.nullable()
   })
   .strict();
 const lambdaRuntimeConfigSchema = z
@@ -131,7 +142,7 @@ const lambdaRuntimeConfigSchema = z
     aliasName: z.string().trim().min(1).max(128),
     codeDeployApplicationName: z.string().trim().min(1).max(100),
     codeDeployDeploymentGroupName: z.string().trim().min(1).max(100),
-    outputUrl: z.url().max(2_048)
+    outputUrl: credentialFreeHttpsUrlSchema
   })
   .strict();
 const ec2AsgRuntimeConfigSchema = z
@@ -141,7 +152,7 @@ const ec2AsgRuntimeConfigSchema = z
     codeDeployApplicationName: z.string().trim().min(1).max(100),
     codeDeployDeploymentGroupName: z.string().trim().min(1).max(100),
     autoScalingGroupName: z.string().trim().min(1).max(255),
-    outputUrl: z.url().max(2_048)
+    outputUrl: credentialFreeHttpsUrlSchema
   })
   .strict();
 const staticSiteRuntimeConfigSchema = z
@@ -151,7 +162,7 @@ const staticSiteRuntimeConfigSchema = z
     hostingBucketName: z.string().trim().min(3).max(63),
     cloudFrontDistributionId: z.string().trim().min(3).max(32),
     cloudFrontOriginId: z.string().trim().min(1).max(128),
-    outputUrl: z.url().max(2_048)
+    outputUrl: credentialFreeHttpsUrlSchema
   })
   .strict();
 const deploymentRuntimeConfigSchema = z.discriminatedUnion("runtimeTargetKind", [
@@ -164,10 +175,15 @@ const putTargetBodySchema = z
   .object({
     provider: z.literal("aws"),
     connectionId: z.uuid(),
-    region: z.string().trim().regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/).max(32),
+    region: z
+      .string()
+      .trim()
+      .regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/)
+      .max(32),
     runtimeTargetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]),
     confirmedBuildConfig: confirmedBuildConfigSchema,
     runtimeConfig: deploymentRuntimeConfigSchema.nullable(),
+    runtimeTarget: runtimeDeploymentTargetSchema.nullable().optional(),
     rolloutStrategy: z.literal("all_at_once")
   })
   .strict();
@@ -235,6 +251,21 @@ export async function registerProjectReleaseLedgerRoutes(
     }
   });
 
+  app.get("/projects/:projectId/artifacts", async (request, reply) => {
+    const params = projectParamsSchema.parse(request.params);
+    const context = await createRequestContext(request, options, getClient);
+    try {
+      const artifacts = await listApplicationArtifacts(
+        { projectId: params.projectId, userId: context.userId },
+        context.repository
+      );
+      const response: ApplicationArtifactListResponse = { artifacts };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleReleaseLedgerError(error, reply);
+    }
+  });
+
   app.get("/projects/:projectId/releases/:releaseId", async (request, reply) => {
     const params = releaseParamsSchema.parse(request.params);
     const context = await createRequestContext(request, options, getClient);
@@ -274,6 +305,8 @@ function toProjectDeploymentTarget(row: ProjectDeploymentTargetRecord): ProjectD
     runtimeTargetKind: row.runtimeTargetKind,
     confirmedBuildConfig: row.confirmedBuildConfig,
     runtimeConfig: row.runtimeConfig,
+    runtimeTarget: row.runtimeTarget,
+    deploymentTargetFingerprint: row.deploymentTargetFingerprint,
     rolloutStrategy: row.rolloutStrategy,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()
@@ -284,10 +317,14 @@ function toApplicationRelease(row: ApplicationReleaseRecord): ApplicationRelease
   return {
     id: row.id,
     projectId: row.projectId,
+    artifactId: row.artifactId,
     deploymentId: row.deploymentId,
     pipelineRunId: row.pipelineRunId,
     source: row.source,
     runtimeTargetKind: row.runtimeTargetKind,
+    runtimeAdapterKind: row.runtimeAdapterKind,
+    deploymentTargetFingerprint: row.deploymentTargetFingerprint,
+    convergenceOutcome: row.convergenceOutcome,
     version: row.version,
     commitSha: row.commitSha,
     artifactDigestAlgorithm: row.artifactDigestAlgorithm,

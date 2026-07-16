@@ -1,4 +1,7 @@
-import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
+import {
+  createTerraformParameterCatalogKey,
+  resourceDefinitions
+} from "@sketchcatch/types/resource-definitions";
 import { terraformAwsParameterCatalog as generatedTerraformAwsParameterCatalog } from "./catalog.generated";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "./catalog.generated";
 
@@ -30,7 +33,282 @@ const commonTags = field({
   description: "AWS 콘솔과 비용 추적에서 리소스를 구분하기 위한 key-value 태그입니다."
 });
 
+const blockTypeParameterDefinitions: Record<
+  string,
+  readonly ParameterCatalogDefinition[]
+> = {
+  [createTerraformParameterCatalogKey("data", "aws_iam_policy")]: [
+    core(
+      "arn",
+      "arn",
+      "Policy ARN",
+      "arn:aws:iam::aws:policy/IAMUserChangePassword"
+    ),
+    field({
+      name: "name",
+      terraformName: "name",
+      label: "Policy name"
+    }),
+    field({
+      name: "pathPrefix",
+      terraformName: "path_prefix",
+      label: "Path prefix",
+      placeholder: "/"
+    })
+  ]
+};
+
 const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinition[]> = {
+  aws_api_gateway_integration_response: [
+    ref("restApiId", "rest_api_id", "REST API", ["aws_api_gateway_rest_api"]),
+    ref("resourceId", "resource_id", "API resource", ["aws_api_gateway_resource"]),
+    ref(
+      "httpMethod",
+      "http_method",
+      "HTTP method",
+      ["aws_api_gateway_method"],
+      true,
+      "http_method"
+    ),
+    required("statusCode", "status_code", "Status code", "200")
+  ],
+  aws_api_gateway_method_response: [
+    ref("restApiId", "rest_api_id", "REST API", ["aws_api_gateway_rest_api"]),
+    ref("resourceId", "resource_id", "API resource", ["aws_api_gateway_resource"]),
+    ref(
+      "httpMethod",
+      "http_method",
+      "HTTP method",
+      ["aws_api_gateway_method"],
+      true,
+      "http_method"
+    ),
+    required("statusCode", "status_code", "Status code", "200")
+  ],
+  aws_budgets_budget: [
+    core("name", "name", "Budget name", "monthly-cost"),
+    select("budgetType", "budget_type", "Budget type", ["COST", "USAGE"], true),
+    select("timeUnit", "time_unit", "Time unit", ["MONTHLY", "QUARTERLY", "ANNUALLY"], true),
+    required("limitAmount", "limit_amount", "Limit amount", "100"),
+    required("limitUnit", "limit_unit", "Limit unit", "USD")
+  ],
+  aws_cloudfront_origin_access_identity: [
+    core("comment", "comment", "Comment", "SketchCatch CloudFront access identity")
+  ],
+  aws_docdb_cluster: [
+    core("clusterIdentifier", "cluster_identifier", "Cluster identifier", "sketchcatch-docdb"),
+    core("engine", "engine", "Engine", "docdb"),
+    boolean("skipFinalSnapshot", "skip_final_snapshot", "Skip final snapshot"),
+    commonTags
+  ],
+  aws_dynamodb_global_table: [
+    required("name", "name", "Table name", "sketchcatch-global-table"),
+    nestedBlock(
+      "replica",
+      "replica",
+      "Replica regions",
+      [required("regionName", "region_name", "Region", "us-west-2")],
+      true,
+      true
+    )
+  ],
+  aws_elastic_beanstalk_application: [
+    required("name", "name", "Application name", "sketchcatch-app"),
+    core("description", "description", "Description"),
+    commonTags
+  ],
+  aws_elastic_beanstalk_environment: [
+    required("name", "name", "Environment name", "sketchcatch-env"),
+    ref(
+      "application",
+      "application",
+      "Elastic Beanstalk application",
+      ["aws_elastic_beanstalk_application"],
+      true,
+      "name"
+    ),
+    core("solutionStackName", "solution_stack_name", "Solution stack"),
+    commonTags
+  ],
+  aws_elb: [
+    core("name", "name", "Load balancer name", "sketchcatch-elb"),
+    nestedBlock(
+      "healthCheck",
+      "health_check",
+      "Health check",
+      [
+        number("healthyThreshold", "healthy_threshold", "Healthy threshold", true, "2"),
+        number("interval", "interval", "Interval", true, "30"),
+        required("target", "target", "Target", "HTTP:80/"),
+        number("timeout", "timeout", "Timeout", true, "3"),
+        number("unhealthyThreshold", "unhealthy_threshold", "Unhealthy threshold", true, "2")
+      ],
+      false
+    ),
+    nestedBlock(
+      "listener",
+      "listener",
+      "Listeners",
+      [
+        number("instancePort", "instance_port", "Instance port", true, "80"),
+        select("instanceProtocol", "instance_protocol", "Instance protocol", ["http", "https", "tcp", "ssl"], true),
+        number("lbPort", "lb_port", "Load balancer port", true, "80"),
+        select("lbProtocol", "lb_protocol", "Load balancer protocol", ["http", "https", "tcp", "ssl"], true)
+      ],
+      true,
+      true
+    ),
+    refList("subnets", "subnets", "Subnets", ["aws_subnet"], false),
+    refList("securityGroups", "security_groups", "Security groups", ["aws_security_group"], false),
+    commonTags
+  ],
+  aws_flow_log: [
+    ref("vpcId", "vpc_id", "VPC", ["aws_vpc"]),
+    select("trafficType", "traffic_type", "Traffic type", ["ALL", "ACCEPT", "REJECT"], true),
+    field({
+      name: "logDestination",
+      terraformName: "log_destination",
+      label: "Log destination ARN"
+    }),
+    select("logDestinationType", "log_destination_type", "Destination type", ["cloud-watch-logs", "s3", "kinesis-data-firehose"]),
+    field({ name: "iamRoleArn", terraformName: "iam_role_arn", label: "IAM role ARN" }),
+    commonTags
+  ],
+  aws_fsx_lustre_file_system: [
+    refList("subnetIds", "subnet_ids", "Subnets", ["aws_subnet"], true),
+    number("storageCapacity", "storage_capacity", "Storage capacity (GiB)", false, "1200"),
+    select("deploymentType", "deployment_type", "Deployment type", ["SCRATCH_1", "SCRATCH_2", "PERSISTENT_1", "PERSISTENT_2"]),
+    commonTags
+  ],
+  aws_iam_group: [
+    required("name", "name", "Group name", "sketchcatch-users"),
+    core("path", "path", "Path", "/")
+  ],
+  aws_iam_group_policy_attachment: [
+    ref("group", "group", "IAM group", ["aws_iam_group"], true, "name"),
+    ref("policyArn", "policy_arn", "IAM policy", ["aws_iam_policy"], true, "arn")
+  ],
+  aws_iam_user: [
+    required("name", "name", "User name", "sketchcatch-user"),
+    core("path", "path", "Path", "/"),
+    commonTags
+  ],
+  aws_iam_user_group_membership: [
+    ref("user", "user", "IAM user", ["aws_iam_user"], true, "name"),
+    refList("groups", "groups", "IAM groups", ["aws_iam_group"], true, "name")
+  ],
+  aws_iam_user_login_profile: [
+    ref("user", "user", "IAM user", ["aws_iam_user"], true, "name"),
+    number("passwordLength", "password_length", "Password length", false, "20"),
+    boolean("passwordResetRequired", "password_reset_required", "Password reset required")
+  ],
+  aws_launch_configuration: [
+    core("name", "name", "Launch configuration name", "sketchcatch-launch-config"),
+    required("imageId", "image_id", "AMI ID", "ami-0123456789abcdef0"),
+    required("instanceType", "instance_type", "Instance type", "t3.micro"),
+    refList("securityGroups", "security_groups", "Security groups", ["aws_security_group"], false),
+    boolean("associatePublicIpAddress", "associate_public_ip_address", "Associate public IP")
+  ],
+  aws_main_route_table_association: [
+    ref("vpcId", "vpc_id", "VPC", ["aws_vpc"]),
+    ref("routeTableId", "route_table_id", "Route table", ["aws_route_table"])
+  ],
+  aws_network_interface: [
+    ref("subnetId", "subnet_id", "Subnet", ["aws_subnet"]),
+    refList("securityGroups", "security_groups", "Security groups", ["aws_security_group"], false),
+    list("privateIps", "private_ips", "Private IPs"),
+    core("description", "description", "Description"),
+    commonTags
+  ],
+  aws_organizations_account: [
+    required("name", "name", "Account name", "sketchcatch-account"),
+    required("email", "email", "Account email", "aws-account@example.com"),
+    core("roleName", "role_name", "Role name", "OrganizationAccountAccessRole"),
+    core("parentId", "parent_id", "Parent organization unit ID", "r-abcd"),
+    boolean("closeOnDeletion", "close_on_deletion", "Close on deletion"),
+    commonTags
+  ],
+  aws_s3_bucket_acl: [
+    ref("bucket", "bucket", "S3 bucket", ["aws_s3_bucket"]),
+    select("acl", "acl", "ACL", ["private", "public-read", "authenticated-read"], true)
+  ],
+  aws_s3_bucket_logging: [
+    ref("bucket", "bucket", "Source bucket", ["aws_s3_bucket"]),
+    ref("targetBucket", "target_bucket", "Target bucket", ["aws_s3_bucket"], true, "id"),
+    required("targetPrefix", "target_prefix", "Target prefix", "logs/")
+  ],
+  aws_s3_bucket_notification: [
+    ref("bucket", "bucket", "S3 bucket", ["aws_s3_bucket"]),
+    boolean("eventbridge", "eventbridge", "Enable EventBridge")
+  ],
+  aws_s3_bucket_object: [
+    ref("bucket", "bucket", "S3 bucket", ["aws_s3_bucket"]),
+    required("key", "key", "Object key", "example.txt"),
+    core("content", "content", "Content", "SketchCatch object"),
+    select("acl", "acl", "ACL", ["private", "public-read"])
+  ],
+  aws_s3_bucket_replication_configuration: [
+    ref("bucket", "bucket", "Source bucket", ["aws_s3_bucket"]),
+    ref("role", "role", "Replication IAM role", ["aws_iam_role"], true, "arn"),
+    nestedBlock(
+      "rule",
+      "rule",
+      "Replication rules",
+      [
+        core("id", "id", "Rule ID", "replicate-all"),
+        select("status", "status", "Status", ["Enabled", "Disabled"], true),
+        nestedBlock(
+          "destination",
+          "destination",
+          "Destination",
+          [ref("bucket", "bucket", "Destination bucket", ["aws_s3_bucket"], true, "arn")]
+        )
+      ],
+      true,
+      true
+    )
+  ],
+  aws_ses_email_identity: [
+    required("email", "email", "Email address", "notifications@example.com")
+  ],
+  aws_vpc_peering_connection_accepter: [
+    ref(
+      "vpcPeeringConnectionId",
+      "vpc_peering_connection_id",
+      "VPC peering connection",
+      ["aws_vpc_peering_connection"]
+    ),
+    boolean("autoAccept", "auto_accept", "Auto accept"),
+    commonTags
+  ],
+  aws_waf_ipset: [
+    required("name", "name", "IP set name", "sketchcatch-ip-set"),
+    nestedBlock(
+      "ipSetDescriptors",
+      "ip_set_descriptors",
+      "IP descriptors",
+      [
+        select("type", "type", "Type", ["IPV4", "IPV6"], true),
+        required("value", "value", "CIDR", "192.0.2.0/24")
+      ],
+      false,
+      true
+    )
+  ],
+  aws_waf_rule: [
+    required("name", "name", "Rule name", "sketchcatch-rule"),
+    required("metricName", "metric_name", "Metric name", "SketchCatchRule")
+  ],
+  aws_waf_web_acl: [
+    required("name", "name", "Web ACL name", "sketchcatch-web-acl"),
+    required("metricName", "metric_name", "Metric name", "SketchCatchWebAcl"),
+    nestedBlock(
+      "defaultAction",
+      "default_action",
+      "Default action",
+      [select("type", "type", "Action", ["ALLOW", "BLOCK"], true)]
+    )
+  ],
   aws_amplify_app: [
     required("name", "name", "App name"),
     core("description", "description", "Description"),
@@ -524,6 +802,19 @@ const priorityResourceFallbacks: Record<string, readonly ParameterCatalogDefinit
 } satisfies Record<string, readonly ParameterCatalogDefinition[]>;
 
 const terraformValidateRequiredAdditions = {
+  aws_api_gateway_resource: {
+    removeNames: ["parentId"],
+    definitions: [
+      ref(
+        "parentId",
+        "parent_id",
+        "Parent REST API resource",
+        ["aws_api_gateway_rest_api"],
+        true,
+        "root_resource_id"
+      )
+    ]
+  },
   aws_launch_template: {
     definitions: [
       field({
@@ -959,6 +1250,28 @@ function createResourceParameterCatalog(): ParameterCatalog["resources"] {
     resources[definition.terraform.resourceType] = [...fallback];
   }
 
+  for (const definition of resourceDefinitions) {
+    if (
+      !definition.capabilities.parameterPanel ||
+      definition.terraform.blockType === "resource"
+    ) {
+      continue;
+    }
+
+    const scopedKey = createTerraformParameterCatalogKey(
+      definition.terraform.blockType,
+      definition.terraform.resourceType
+    );
+    const legacyDefinitions = resources[definition.terraform.resourceType];
+    if (!resources[scopedKey] && legacyDefinitions) {
+      resources[scopedKey] = [...legacyDefinitions];
+    }
+  }
+
+  for (const [key, definitions] of Object.entries(blockTypeParameterDefinitions)) {
+    resources[key] = [...definitions];
+  }
+
   applyTerraformValidateRequiredAdditions(resources);
 
   return resources;
@@ -1025,6 +1338,27 @@ function ref(
     name,
     terraformName,
     label,
+    required: requiredField,
+    core: !requiredField,
+    inputKind: "reference-picker",
+    referenceTargetTypes,
+    ...(referenceAttribute === undefined ? {} : { referenceAttribute })
+  });
+}
+
+function refList(
+  name: string,
+  terraformName: string,
+  label: string,
+  referenceTargetTypes: string[],
+  requiredField = true,
+  referenceAttribute?: string
+): ParameterCatalogDefinition {
+  return field({
+    name,
+    terraformName,
+    label,
+    type: "list",
     required: requiredField,
     core: !requiredField,
     inputKind: "reference-picker",

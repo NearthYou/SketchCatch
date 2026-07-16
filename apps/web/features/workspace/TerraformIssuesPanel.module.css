@@ -107,6 +107,28 @@
   box-shadow: inset 3px 0 0 var(--workspace-warning, #ab6400);
 }
 
+.terraformDiagnosticList li[data-selected="true"] {
+  border-color: var(--workspace-text, #171717);
+}
+
+.terraformDiagnosticButton {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 10px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.terraformDiagnosticButton:focus-visible {
+  outline: 2px solid var(--workspace-text, #171717);
+  outline-offset: 4px;
+}
+
 .terraformDiagnosticList strong {
   color: var(--workspace-text, #171717);
   font-size: 13px;

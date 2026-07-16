@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DirectApplicationReleaseGateway } from "../deployments/direct-application-release-service.js";
+import type {
+  ApplicationReleaseExecutionRepository,
+  ApplicationReleaseRecord,
+  DirectApplicationReleaseGateway
+} from "../deployments/direct-application-release-service.js";
 import type {
   ProjectExecutionLeaseRecord,
   ProjectExecutionLeaseRepository
@@ -30,9 +34,151 @@ test("GitHub executor reuses the server preflight gateway and completes the trus
     "prepare",
     "save-candidate",
     "deploy",
+    "save-release",
+    "cleanup:success",
     "complete",
-    "cleanup:success"
   ]);
+});
+
+test("GitHub executor persists the common release target and convergence result", async () => {
+  const events: string[] = [];
+  const repository = createRepository(events);
+  const createBaseRepository = repository.createApplicationReleaseRepository;
+  assert.ok(createBaseRepository);
+  let preparedRelease: ApplicationReleaseRecord | undefined;
+  let completedRelease: ApplicationReleaseRecord | undefined;
+  repository.createApplicationReleaseRepository = (context) => {
+    const base = createBaseRepository(context);
+    return {
+      ...base,
+      async savePreparedRelease(input) {
+        preparedRelease = await base.savePreparedRelease(input);
+        return preparedRelease;
+      },
+      async saveCompletedRelease(input) {
+        completedRelease = await base.saveCompletedRelease(input);
+        return completedRelease;
+      }
+    };
+  };
+  const executor = createGitHubReleaseRunExecutor({
+    repository,
+    gateway: createGateway(events),
+    now: () => new Date("2026-07-15T00:00:00.000Z")
+  });
+
+  await executor.executeNow(runId);
+
+  assert.equal(preparedRelease?.source, "gitops");
+  assert.equal(preparedRelease?.pipelineRunId, runId);
+  assert.equal(preparedRelease?.runtimeAdapterKind, "ecs_service_fargate");
+  assert.match(preparedRelease?.deploymentTargetFingerprint ?? "", /^[a-f0-9]{64}$/u);
+  assert.equal(completedRelease?.convergenceOutcome, "rolled_out");
+  assert.equal(completedRelease?.runtimeAdapterKind, "ecs_service_fargate");
+  assert.equal(
+    completedRelease?.deploymentTargetFingerprint,
+    preparedRelease?.deploymentTargetFingerprint
+  );
+});
+
+test("GitHub executor heartbeats its lease while provider inspection exceeds the original TTL", async () => {
+  const events: string[] = [];
+  const repository = createRepository(events);
+  const gateway = createGateway(events);
+  let currentTime = new Date("2026-07-15T00:00:00.000Z");
+  gateway.inspectCurrentRuntime = async () => {
+    for (let minute = 0; minute < 6; minute += 1) {
+      currentTime = new Date(currentTime.getTime() + 60_000);
+      await new Promise<void>((resolve) => setTimeout(resolve, 3));
+    }
+    throw new Error("provider inspection is temporarily unavailable");
+  };
+  const executionLeaseRepository = createExecutionLeaseRepository(events);
+  const heartbeat = executionLeaseRepository.heartbeat.bind(executionLeaseRepository);
+  let heartbeatCalls = 0;
+  executionLeaseRepository.heartbeat = async (input) => {
+    heartbeatCalls += 1;
+    return heartbeat(input);
+  };
+  const executor = createGitHubReleaseRunExecutor({
+    repository,
+    gateway,
+    executionLeaseRepository,
+    leaseHeartbeatIntervalMs: 1,
+    now: () => currentTime
+  });
+
+  await executor.executeNow(runId);
+
+  assert.ok(heartbeatCalls >= 7);
+  assert.ok(events.includes("complete"));
+  assert.ok(events.includes("lease:released"));
+});
+
+test("GitHub executor aborts and leaves recovery to reconcile a rejected heartbeat", async () => {
+  const events: string[] = [];
+  const repository = createRepository(events);
+  let executionSignal: AbortSignal | undefined;
+  const gateway = createGateway(events, async (_context, signal) => {
+    executionSignal = signal;
+    events.push("prepare");
+    return {
+      commitSha: "a".repeat(40),
+      digest: "b".repeat(64),
+      reference: "deployments/run/release-candidates/candidate/manifest.json",
+      buildRevisionId: "build:1",
+      metadata: {
+        releaseCandidateId: "candidate-1",
+        apiOciDigest: "c".repeat(64),
+        frontendManifestDigest: "d".repeat(64)
+      }
+    };
+  });
+  const executionLeaseRepository = createExecutionLeaseRepository(events);
+  const heartbeat = executionLeaseRepository.heartbeat.bind(executionLeaseRepository);
+  let heartbeatCalls = 0;
+  executionLeaseRepository.heartbeat = async (input) => {
+    heartbeatCalls += 1;
+    return heartbeatCalls === 1 ? heartbeat(input) : undefined;
+  };
+  const executor = createGitHubReleaseRunExecutor({
+    repository,
+    gateway,
+    executionLeaseRepository,
+    leaseHeartbeatIntervalMs: 60_000,
+    now: () => new Date("2026-07-15T00:00:00.000Z")
+  });
+
+  await executor.executeNow(runId);
+
+  assert.equal(heartbeatCalls, 2);
+  assert.equal(executionSignal?.aborted, true);
+  assert.ok(!events.includes("deploy"));
+  assert.ok(!events.includes("complete"));
+  assert.ok(!events.includes("failed"));
+  assert.ok(!events.includes("lease:released"));
+});
+
+test("GitHub executor does not save failure after its owned fence expires", async () => {
+  const events: string[] = [];
+  const repository = createRepository(events);
+  let currentTime = new Date("2026-07-15T00:00:00.000Z");
+  const gateway = createGateway(events, async () => {
+    events.push("prepare");
+    currentTime = new Date("2026-07-15T00:02:00.000Z");
+    throw new Error("preflight failed after the project lease expired");
+  });
+  const executor = createGitHubReleaseRunExecutor({
+    repository,
+    gateway,
+    executionLeaseRepository: createExecutionLeaseRepository(events),
+    leaseHeartbeatIntervalMs: 60_000,
+    now: () => currentTime
+  });
+
+  await executor.executeNow(runId);
+
+  assert.deepEqual(events, ["claim", "prepare"]);
 });
 
 test("GitHub executor propagates cancellation to a running preflight", async () => {
@@ -377,8 +523,10 @@ function createRepository(events: string[]): GitHubReleaseExecutionRepository {
       return {
         runId,
         projectId,
+        userId: "user-1",
         commitSha: "a".repeat(40),
         sourceRepository: {
+          id: "repository-1",
           provider: "github",
           installationId: "installation-1",
           owner: "jh-9999",
@@ -452,14 +600,135 @@ function createRepository(events: string[]): GitHubReleaseExecutionRepository {
         }
       };
     },
-    async createPendingRelease() {
-      events.push("save-candidate");
-    },
     async complete() {
       events.push("complete");
     },
     async fail(input) {
       events.push(input.cancelled ? "cancelled" : "failed");
+    },
+    createApplicationReleaseRepository(context) {
+      return createApplicationReleaseRepository(context, events);
+    }
+  };
+}
+
+function createApplicationReleaseRepository(
+  context: Parameters<
+    NonNullable<GitHubReleaseExecutionRepository["createApplicationReleaseRepository"]>
+  >[0],
+  events: string[]
+): ApplicationReleaseExecutionRepository {
+  let release: ApplicationReleaseRecord | undefined;
+  return {
+    artifactRegistry: {
+      async acquire() { throw new Error("registry is not used for the ECS web candidate"); },
+      async invalidate() {},
+      async renew(input) { return input.claim; },
+      async complete() { throw new Error("registry is not used for the ECS web candidate"); },
+      async fail() {},
+      async recordVerified() { throw new Error("registry is not used for the ECS web candidate"); }
+    },
+    async findContext(executionId, userId) {
+      if (executionId !== context.runId || userId !== context.userId) return undefined;
+      return {
+        sourceRepository: context.sourceRepository,
+        buildEnvironment: context.buildEnvironment,
+        deployment: {
+          id: context.runId,
+          projectId: context.projectId,
+          scope: "application",
+          source: "gitops",
+          targetKind: "ecs_fargate"
+        },
+        target: context.target,
+        connection: context.connection
+      };
+    },
+    async findRelease() {
+      return release;
+    },
+    async savePreparedRelease(input) {
+      release = input;
+      events.push("save-candidate");
+      return input;
+    },
+    async saveCompletedRelease(input) {
+      assert.ok(release);
+      release = {
+        ...release,
+        runtimeAdapterKind: input.runtimeAdapterKind,
+        deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+        convergenceOutcome: input.convergenceOutcome,
+        providerRevision: input.providerRevision,
+        outputUrl: input.outputUrl,
+        healthEvidence: input.healthEvidence,
+        rollbackEvidence: input.rollbackEvidence,
+        frontendEvidence: input.frontendEvidence ?? null,
+        failureStage: input.failureStage ?? null,
+        status: input.status,
+        completedAt: input.completedAt,
+        updatedAt: input.updatedAt
+      };
+      events.push("save-release");
+      return release;
+    },
+    async saveFailedRelease(input) {
+      assert.ok(release);
+      release = {
+        ...release,
+        status: "failed",
+        completedAt: input.completedAt,
+        updatedAt: input.updatedAt
+      };
+      return release;
+    },
+    async savePartialRelease(input) {
+      assert.ok(release);
+      release = {
+        ...release,
+        runtimeAdapterKind: input.runtimeAdapterKind,
+        deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+        convergenceOutcome: input.convergenceOutcome,
+        providerRevision: input.providerRevision,
+        outputUrl: input.outputUrl,
+        healthEvidence: input.healthEvidence,
+        frontendEvidence: input.frontendEvidence,
+        failureStage: input.failureStage,
+        status: "partially_failed",
+        completedAt: input.completedAt,
+        updatedAt: input.updatedAt
+      };
+      return release;
+    },
+    async saveCancelledRelease(input) {
+      assert.ok(release);
+      release = {
+        ...release,
+        status: input.status,
+        runtimeAdapterKind: input.runtimeAdapterKind ?? release.runtimeAdapterKind,
+        deploymentTargetFingerprint:
+          input.deploymentTargetFingerprint ?? release.deploymentTargetFingerprint,
+        convergenceOutcome: input.convergenceOutcome ?? release.convergenceOutcome,
+        providerRevision: input.providerRevision ?? release.providerRevision,
+        outputUrl: input.outputUrl ?? release.outputUrl,
+        healthEvidence: input.healthEvidence ?? release.healthEvidence,
+        rollbackEvidence: input.rollbackEvidence ?? release.rollbackEvidence,
+        frontendEvidence: input.frontendEvidence ?? release.frontendEvidence,
+        failureStage: input.failureStage ?? release.failureStage,
+        completedAt: input.completedAt,
+        updatedAt: input.updatedAt
+      };
+      return release;
+    },
+    async resetReleaseForRetry(input) {
+      assert.ok(release);
+      release = {
+        ...release,
+        providerRevision: input.providerRevision,
+        status: "pending",
+        updatedAt: input.updatedAt
+      };
+      return release;
     }
   };
 }
@@ -500,7 +769,22 @@ function createExecutionLeaseRepository(
     async find() {
       return record;
     },
-    async heartbeat() {
+    async heartbeat(input) {
+      if (
+        !record ||
+        record.status !== "active" ||
+        record.holderId !== input.holderId ||
+        record.fencingVersion !== input.fencingVersion ||
+        record.expiresAt <= input.now
+      ) {
+        return undefined;
+      }
+      record = {
+        ...record,
+        heartbeatAt: input.now,
+        expiresAt: input.expiresAt,
+        updatedAt: input.now
+      };
       return record;
     },
     async setExecutionCoordinates() {
@@ -599,9 +883,16 @@ function createGateway(
         digest: "b".repeat(64),
         reference: "deployments/run/release-candidates/candidate/manifest.json",
         buildRevisionId: "build:1",
-        metadata: { releaseCandidateId: "candidate-1" }
+        metadata: {
+          releaseCandidateId: "candidate-1",
+          apiOciDigest: "c".repeat(64),
+          frontendManifestDigest: "d".repeat(64)
+        }
       };
     }),
+    async verifyArtifact() {
+      throw new Error("registry verification is not used for the ECS web candidate");
+    },
     async deployArtifact() {
       events.push("deploy");
       return {
@@ -609,7 +900,7 @@ function createGateway(
           provider: "aws",
           resourceType: "ecs_task_definition",
           revisionId: "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/demo:2",
-          artifactReference: "manifest.json",
+          artifactReference: "deployments/run/release-candidates/candidate/manifest.json",
           metadata: {}
         },
         outputUrl: "https://d111111abcdef8.cloudfront.net",

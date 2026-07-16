@@ -6,9 +6,12 @@ import { generatedArchitectureBoardKnowledgeArtifact } from "./architecture-boar
 
 export {
   ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
+  ARCHITECTURE_BOARD_MODULE_PATTERN_EXTRACTOR_VERSION,
   type ArchitectureBoardKnowledgeArtifact,
   type ArchitectureBoardKnowledgeCase,
-  type ArchitectureBoardLeaveOneOutResult
+  type ArchitectureBoardLeaveOneOutResult,
+  type ArchitectureBoardModulePattern,
+  type ArchitectureBoardModulePatternLens
 } from "./architecture-board-knowledge-contract";
 
 // This is a checked-in static artifact. Source fixtures are only read by the generator.
@@ -81,6 +84,7 @@ function cloneArchitectureBoardKnowledgeArtifact(
       ...knowledgeCase,
       nodeTypes: [...knowledgeCase.nodeTypes]
     })),
+    modulePatterns: structuredClone(artifact.modulePatterns),
     unavailableTemplateIds: [...artifact.unavailableTemplateIds]
   };
 }

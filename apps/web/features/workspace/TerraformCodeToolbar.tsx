@@ -1,11 +1,8 @@
 import { ArrowLeft, ChevronDown, FileCode2, X } from "lucide-react";
-import { TerraformAgentReviewButton } from "./TerraformAgentReviewButton";
 import styles from "./TerraformCodeToolbar.module.css";
 
 export type TerraformCodeToolbarState = {
   readonly activeFileName: string;
-  readonly canRequestExplanation: boolean;
-  readonly explanationLabel: string;
   readonly fileOptions: readonly string[];
   readonly fileSearchQuery: string;
   readonly inspectedResourceLabel: string;
@@ -15,7 +12,6 @@ export type TerraformCodeToolbarState = {
 
 export type TerraformCodeToolbarActions = {
   readonly closeResourceCode: () => void;
-  readonly requestExplanation: () => void;
   readonly searchFiles: (query: string) => void;
   readonly selectFile: (fileName: string) => void;
   readonly toggleFileMenu: () => void;
@@ -31,36 +27,27 @@ export function TerraformCodeToolbar({
 }) {
   if (state.isResourceCodeMode) {
     return (
-      <>
-        <header className={styles.resourceCodeHeader}>
-          <div className={styles.resourceCodeTitle}>
-            <button
-              aria-label="전체 Terraform 코드로 돌아가기"
-              className={styles.resourceCodeBackButton}
-              onClick={actions.closeResourceCode}
-              type="button"
-            >
-              <ArrowLeft aria-hidden="true" size={18} />
-            </button>
-            <span>{state.inspectedResourceLabel}</span>
-          </div>
+      <header className={styles.resourceCodeHeader}>
+        <div className={styles.resourceCodeTitle}>
           <button
-            aria-label="Resource 코드 닫기"
-            className={styles.resourceCodeCloseButton}
+            aria-label="전체 Terraform 코드로 돌아가기"
+            className={styles.resourceCodeBackButton}
             onClick={actions.closeResourceCode}
             type="button"
           >
-            <X aria-hidden="true" size={18} />
+            <ArrowLeft aria-hidden="true" size={18} />
           </button>
-        </header>
-        <div className={styles.resourceActionBar}>
-          <TerraformAgentReviewButton
-            disabled={!state.canRequestExplanation}
-            onRequest={actions.requestExplanation}
-            title={state.explanationLabel}
-          />
+          <span>{state.inspectedResourceLabel}</span>
         </div>
-      </>
+        <button
+          aria-label="Resource 코드 닫기"
+          className={styles.resourceCodeCloseButton}
+          onClick={actions.closeResourceCode}
+          type="button"
+        >
+          <X aria-hidden="true" size={18} />
+        </button>
+      </header>
     );
   }
 
@@ -113,13 +100,6 @@ export function TerraformCodeToolbar({
             </div>
           ) : null}
         </div>
-      </div>
-      <div className={styles.terraformTopActions}>
-        <TerraformAgentReviewButton
-          disabled={!state.canRequestExplanation}
-          onRequest={actions.requestExplanation}
-          title={state.explanationLabel}
-        />
       </div>
     </header>
   );

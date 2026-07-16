@@ -24,6 +24,10 @@ export class WorkspaceAiChatRequestRegistry {
     }
   }
 
+  isActive(scope: WorkspaceAiChatScope, controller: AbortController): boolean {
+    return this.#controllers.get(scope) === controller && !controller.signal.aborted;
+  }
+
   cancelAll(): void {
     for (const scope of [...this.#controllers.keys()]) {
       this.cancel(scope);

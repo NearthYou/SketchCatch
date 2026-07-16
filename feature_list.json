@@ -560,17 +560,20 @@
         "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-15",
+        "lastVerified": "2026-07-16",
         "commands": [
           "pnpm harness:check",
           "pnpm architecture-board-knowledge:check",
           "pnpm architecture-board-evidence:check",
           "pnpm architecture-board-evidence-review:check",
           "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/workspace-ai-start-client.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/repository/repository-start-client.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-consolidation.test.ts features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-chat-request.test.ts features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-context-bridge.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/workspace-ai-result-presentation.test.ts features/workspace/workspace-ai-workbench-contract.test.ts features/workspace/workspace-ai-workbench-state.test.ts features/workspace/workspace-api-abort.test.ts",
+          "pnpm --dir apps/api exec tsx --test src/services/aiLlmExplanation.test.ts",
           "pnpm lint",
-          "pnpm typecheck"
+          "pnpm typecheck",
+          "pnpm build"
         ],
-        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact now expands bounded geometry candidates, source/requested-original/presentation/semantic selection is explicit, Reverse Engineering forwards scan diagnostics, and visual-only Template variants are fingerprint-gated. Evidence records SHA-256 source/compiled diagrams and creates an eight-entry pending real-Board review queue; captures and human decisions are intentionally not fabricated. The aggregate feature remains in_progress while the separately owned 001 Workspace AI Chat and final human review finish. Root pnpm typecheck is currently blocked by unrelated uncommitted DirectDeploymentScreen code; pnpm test retains three unrelated three-tier Template contract failures in packages/types; pnpm build retains the pre-existing apps/web/.codegraph ENOENT blocker."
+        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. The 001 Workspace AI Workbench is also complete: three isolated modes, immutable proposal source guards, request cancellation identity, fresh-only Terraform approval, conditional transcript scrolling, desktop/mobile accessibility, and legacy chat CSS removal are verified. Workspace AI tests passed 100/100, Terraform provider-chain tests passed 8/8, root harness/lint/typecheck/build passed, and final review reported no findings. Chrome QA covered 375px, 768px, 1024px, and 1920px with no new console error. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue."
       },
       "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
     },
@@ -728,6 +731,107 @@
         "notes": "The owner-parity endpoint regression passed 3/3 after reproducing the expected casing failure, and the pre-change route/recommendation baseline passed 15/15. Live read-only analysis of both audience-live-check owners returned ECS Fargate first at 0.91 and the same current commit SHA. Repository callback/resume/runtime focused tests previously passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
+    },
+    {
+      "id": "DEPLOYMENT-OPTIMIZATION-CONTRACT-434",
+      "priority": 1,
+      "area": "deployment-optimization",
+      "title": "Provider-neutral deployment optimization contract and verified Terraform Plan reuse",
+      "user_visible_behavior": "사용자는 같은 배포 요구를 반복 검증할 때 검증된 pending Terraform Plan을 재사용하고, 실제 no-change Plan은 승인·hash·계정·region·drift 증거를 다시 확인한 뒤 불필요한 Terraform Apply를 생략한다.",
+      "status": "passing",
+      "verification": [
+        "모든 deployable ResourceDefinition은 provider-neutral desired-state 최적화 capability를 자동 상속하고 data source, UNKNOWN, catalog-only definition은 명시적으로 제외한다.",
+        "Terraform bundle, provider lock/identity, target account/region, state lineage/serial이 Plan identity를 구성하며 drift TTL 만료는 새 Plan을 강제한다.",
+        "실제 tfplan과 versioned S3 sidecar, Plan summary, Pre-Deployment 결과가 검증된 pending Plan만 재사용한다.",
+        "동일 Plan 요청은 single-flight로 합치고 cache 검증 실패는 정상 Plan으로 fallback한다.",
+        "실제 no-change Plan만 기존 승인과 hash/account/region/TTL gate를 통과한 뒤 Terraform Apply를 생략한다.",
+        "Plan, Apply, Destroy는 terraform -target 없이 기존 전체 그래프와 사용자 승인 경계를 유지한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-16",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/resource-definitions.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-optimization.test.ts src/deployments/deployment-plan-artifact-storage.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/terraform-runner.test.ts src/deployments/terraform-workspace.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-destroy-service.test.ts",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm test",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused verification passed: ResourceDefinition 9/9, API/deployment/route 83/83, and existing approval/Destroy regressions 22/22. Harness, migration compatibility, lint, typecheck, and all five package builds passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template layout/parent contract failures in packages/types; this change does not modify those Template sources or tests."
+      },
+      "notes": "PR 1 implements only the IaC desired-state layer. PR 2 / issue #433 is tracked separately below; runtime no-op remains in issue #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "APPLICATION-ARTIFACT-REGISTRY-433",
+      "priority": 1,
+      "area": "application-artifact-reuse",
+      "title": "Provider-neutral ApplicationArtifact Registry shared by Direct and GitOps",
+      "user_visible_behavior": "사용자는 같은 Source Repository commit과 정규화된 build 계약으로 만든 application artifact가 사용자 provider storage에 그대로 존재하고 digest·계정·region·project ownership이 다시 검증되면 Direct Deployment와 Git/CI/CD에서 중복 build 없이 재사용한다.",
+      "status": "passing",
+      "verification": [
+        "container image, Lambda zip, CodeDeploy bundle, static bundle, Kubernetes manifest, Helm chart, machine image를 provider-neutral kind로 구분한다.",
+        "repository identity, commit SHA, normalized build config, build contract, target platform, secret-free build input만 canonical fingerprint에 포함하고 orchestrator/capacity 값은 제외한다.",
+        "RDS에는 identity와 provider metadata만 저장하고 실제 사용자 artifact byte는 사용자 ECR/S3 또는 provider storage에 유지한다.",
+        "재사용 전에 provider 존재, exact SHA-256 digest, account, region, namespace/reference, project ownership을 read-only로 검증하며 실패는 정상 build fallback으로 처리한다.",
+        "project-scoped unique claim, heartbeat lease, hashed claim token, composite release FK가 duplicate build와 cross-project reuse를 차단한다.",
+        "Direct와 GitOps release가 같은 registry를 사용하며 release evidence v1은 유지하고 strict v2 artifact extension을 검증한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-16",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/application-artifact-contract.test.ts src/project-release-ledger-contract.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/artifacts/application-artifact-identity.test.ts src/artifacts/application-artifact-registry.test.ts src/artifacts/application-artifact-schemas.test.ts src/artifacts/aws-application-artifact-verifier.test.ts src/db/schema-contract.test.ts src/deployments/direct-application-artifact-reuse.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-application-artifact-registrar.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-artifact.test.ts",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full",
+          "pnpm test:core",
+          "pnpm --filter @sketchcatch/api test",
+          "git diff --check"
+        ],
+        "notes": "Focused PR 2 contracts pass 59/59, including review regressions for malformed and delimiter-obfuscated build inputs, streamed S3 hashing, and failed lease renewal cleanup. Harness, migration compatibility, lint, typecheck, and all five package builds pass. The API suite passes 666/669; the three remaining failures are pre-existing Windows EPERM failures while the tests attempt to create symlinks. test:core separately stops on the three pre-existing three-tier Template scope/position/parent assertions before the API package runs. A transient notification SSE bad-port failure was traced to this host's Windows dynamic port range 1024-15000 overlapping Fetch-blocked ports; the isolated test and the second full API run passed it."
+      },
+      "notes": "Migration 0045 is used because another branch reserved 0044; _journal.json changes with the new entry. The lockfile changes only for the existing-version @aws-sdk/client-ecr dependency. Generated workflows remain valid v1 producers while strict v2 consumers are available. No real credential, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff was executed. PR 3 / issue #435 was not started."
+    },
+    {
+      "id": "RUNTIME-CONVERGENCE-435",
+      "priority": 1,
+      "area": "runtime-convergence",
+      "title": "Provider-verified runtime convergence and no-op deployment",
+      "user_visible_behavior": "사용자는 같은 ApplicationArtifact와 같은 runtime configuration이 실제 provider에서 healthy 상태로 실행 중일 때만 Direct 또는 Git/CI/CD rollout을 생략하고, 조회 실패·불일치·unhealthy 상태에서는 기존 안전한 rollout을 수행한다.",
+      "status": "passing",
+      "verification": [
+        "artifactFingerprint와 project/account/region-scoped deploymentTargetFingerprint를 분리하고 orchestrator, compute, capacity, rollout, health를 독립 모델로 유지한다.",
+        "ECS/Fargate, ECS/EC2 Capacity Provider, 단일 EC2, EC2/ASG, EKS 3종, Kubernetes Deployment, Lambda Alias, Static S3/CloudFront의 10개 adapter를 distinct discriminated union과 registry로 고정한다.",
+        "provider current target, artifact fingerprint와 digest/reference, healthy evidence를 모두 검증한 경우에만 already_active를 반환하고 검증 불가나 mismatch는 rollout fallback으로 처리한다.",
+        "기존 ecs_fargate, lambda, ec2_asg, static_site row와 evidence v1/v2를 계속 읽되 canonical/legacy 좌표 불일치와 stale fingerprint는 provider 접근 전에 거부한다.",
+        "Direct ECS inspector와 GitOps ECS/Lambda/EC2 ASG/Static preflight가 read-only provider evidence를 사용하고 rollback, cleanup, retention 및 기존 Approval/Plan/state gate를 유지한다.",
+        "모든 deployable ResourceDefinition이 runtime convergence 적용 여부를 명시하고 지원 adapter 10종이 누락 없이 coverage test에 고정된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/runtime-convergence.test.ts src/resource-runtime-convergence-coverage.test.ts src/resource-definitions.test.ts src/project-release-ledger-contract.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/runtime-convergence/runtime-convergence-contract.test.ts src/runtime-convergence/runtime-convergence-service.test.ts src/deployments/public-https-health-probe.test.ts src/deployments/aws-direct-runtime-inspector.test.ts src/deployments/direct-runtime-convergence.test.ts src/git-cicd/git-cicd-runtime-convergence-workflows.test.ts src/git-cicd/gitops-runtime-convergence.test.ts src/git-cicd/git-cicd-handoff-runtime-config.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-runtime-target.test.ts src/db/schema-contract.test.ts",
+          "createGitCicdAutomationFiles generated workflow syntax validation: Git Bash bash -n (45 scripts) and Python compile (10 heredocs)",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm test",
+          "pnpm --filter @sketchcatch/api test",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. Generated Bash/Python syntax passes 45/10. Harness, migration compatibility, lint, typecheck, build, and diff checks pass. Root pnpm test remains non-green only on the same three pre-existing three-tier Template assertions (types 40/43); the full API suite passes 710/713 with only the three pre-existing Windows symlink EPERM setup failures."
+      },
+      "notes": "Migration 0046_runtime_convergence.sql and apps/api/drizzle/meta/_journal.json are changed after merged migration 0045. No secret, real credential, live AWS/cloud mutation, Terraform apply/destroy, user artifact upload, or Git handoff was executed."
     }
   ]
 }

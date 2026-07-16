@@ -1,8 +1,12 @@
 import type {
+  AiProvider,
+  AiProviderAttempt,
   AiTerraformErrorCategory,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   CheckFindingCategory,
+  LlmExplanation,
+  LlmExplanationFallbackReason,
   RiskLevel,
   TerraformDiagnostic,
   WellArchitectedPillar
@@ -30,6 +34,7 @@ export type TerraformPreviewPresentation = {
     readonly rawRecommendation: string;
     readonly rawSummary: string;
     readonly resources: readonly string[];
+    readonly providerAttempts: readonly string[];
   };
 };
 
@@ -159,6 +164,39 @@ const ISSUE_COPY = {
   }
 } satisfies Record<AiTerraformErrorCategory, { readonly nextStep: string; readonly summary: string; readonly title: string }>;
 
+export function createWorkspaceAiExplanationBadge(explanation: LlmExplanation): string {
+  switch (explanation.providerMetadata?.provider) {
+    case "bedrock":
+      return "Bedrock 설명";
+    case "amazon_q":
+      return "Amazon Q 설명";
+    case "amazon_transcribe":
+      return "Amazon Transcribe";
+    case "openai":
+      return "OpenAI legacy 설명";
+    case "fallback":
+    case undefined:
+      return "분석 완료";
+  }
+}
+
+export function createAiProviderAttemptPresentation(
+  attempts: readonly AiProviderAttempt[] | undefined
+): readonly string[] {
+  return (attempts ?? []).map((attempt, index) =>
+    [
+      `${index + 1}차`,
+      getAiProviderTechnicalLabel(attempt.provider),
+      getAiProviderAttemptStatusLabel(attempt.status),
+      attempt.fallbackReason === undefined
+        ? undefined
+        : getAiFallbackReasonLabel(attempt.fallbackReason)
+    ]
+      .filter((item): item is string => item !== undefined)
+      .join(" · ")
+  );
+}
+
 export function createTerraformPreviewPresentation(
   preview: AiTerraformPreviewExplanationResult
 ): TerraformPreviewPresentation {
@@ -207,6 +245,9 @@ export function createTerraformPreviewPresentation(
         : {}),
       rawRecommendation: preview.consensusRecommendation,
       rawSummary: preview.summary,
+      providerAttempts: createAiProviderAttemptPresentation(
+        preview.llmExplanation?.providerMetadata?.attempts
+      ),
       resources: preview.detectedResources.map(
         (resource) => `${resource.terraformType}.${resource.label} · ${resource.explanation}`
       )
@@ -225,6 +266,9 @@ export function createTerraformIssuePresentation({
 }): TerraformIssuePresentation {
   const fixPlan = createTerraformIssueFixPlan({ diagnostic, explanation, terraformCode });
   const copy = ISSUE_COPY[explanation.category];
+  const providerAttempts = createAiProviderAttemptPresentation(
+    explanation.llmExplanation?.providerMetadata?.attempts
+  );
 
   return {
     canApply: fixPlan.canApply,
@@ -253,12 +297,82 @@ export function createTerraformIssuePresentation({
       errorType: fixPlan.errorType,
       likelyCause: explanation.likelyCause,
       nextActions: explanation.nextActions,
-      providerLabel: fixPlan.providerLabel,
-      ...(fixPlan.providerNotice ? { providerNotice: fixPlan.providerNotice } : {}),
+      providerLabel: getTerraformIssueProviderLabel(explanation, fixPlan.providerLabel),
+      ...(providerAttempts.length > 0
+        ? { providerNotice: providerAttempts.join(" → ") }
+        : fixPlan.providerNotice
+          ? { providerNotice: fixPlan.providerNotice }
+          : {}),
       rawMessage: diagnostic.message || explanation.rawMessage
     },
     title: copy.title
   };
+}
+
+function getTerraformIssueProviderLabel(
+  explanation: AiTerraformErrorExplanationResult,
+  fallbackLabel: string
+): string {
+  const provider = explanation.llmExplanation?.providerMetadata?.provider;
+
+  if (provider !== undefined) {
+    return getAiProviderTechnicalLabel(provider);
+  }
+
+  return fallbackLabel === "AI 오류 수정" ? "Amazon Q 분석" : "규칙 기반 분석";
+}
+
+function getAiProviderTechnicalLabel(provider: AiProvider): string {
+  switch (provider) {
+    case "amazon_q":
+      return "Amazon Q";
+    case "bedrock":
+      return "Amazon Bedrock";
+    case "amazon_transcribe":
+      return "Amazon Transcribe";
+    case "openai":
+      return "OpenAI";
+    case "fallback":
+      return "규칙 기반 분석";
+  }
+}
+
+function getAiProviderAttemptStatusLabel(status: AiProviderAttempt["status"]): string {
+  switch (status) {
+    case "succeeded":
+      return "성공";
+    case "fallback":
+      return "대체 분석 완료";
+    case "skipped":
+      return "건너뜀";
+    case "failed":
+      return "실패";
+  }
+}
+
+function getAiFallbackReasonLabel(reason: LlmExplanationFallbackReason): string {
+  switch (reason) {
+    case "missing_api_key":
+      return "API 키 미설정";
+    case "provider_not_configured":
+      return "제공자 설정 없음";
+    case "credit_not_confirmed":
+      return "AWS 크레딧 사용 확인 필요";
+    case "daily_limit_exceeded":
+      return "일일 호출 한도 초과";
+    case "timeout":
+      return "응답 시간 초과";
+    case "rate_limited":
+      return "호출 빈도 제한";
+    case "invalid_request":
+      return "요청 형식 확인 필요";
+    case "auth_error":
+      return "인증 설정 확인 필요";
+    case "provider_error":
+      return "제공자 응답 오류";
+    case "invalid_response":
+      return "응답 형식 확인 필요";
+  }
 }
 
 export function formatTerraformReviewContext(label: string): string {

@@ -20,6 +20,7 @@ export type GitCicdWorkflowRenderInput = {
   userAcceptedChangeId?: string | undefined;
   environmentName?: string | undefined;
   awsRegion?: string | undefined;
+  awsAccountId?: string | undefined;
   awsRoleArn?: string | null | undefined;
   tfStateBucket?: string | undefined;
   tfStateKey?: string | undefined;
@@ -33,6 +34,8 @@ export type GitCicdWorkflowRenderInput = {
   runtimeTargetKind?: RuntimeTargetKind | undefined;
   confirmedBuildConfig?: ConfirmedBuildConfig | null | undefined;
   runtimeConfig?: ProjectDeploymentRuntimeConfig | null | undefined;
+  applicationArtifactFingerprint?: string | undefined;
+  deploymentTargetFingerprint?: string | null | undefined;
 };
 
 export type GitCicdGeneratedFile = {

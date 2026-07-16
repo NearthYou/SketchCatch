@@ -1,9 +1,53 @@
 import type { CloudProvider, ResourceType, TerraformBlockType } from "./index.js";
+import type { RuntimeAdapterKind } from "./runtime-convergence.js";
+
+export type ResourceDeploymentOptimizationProfile =
+  | {
+      readonly desiredStateReuse: "verified";
+      readonly artifactReuse: "none";
+      readonly runtimeNoOp: "none";
+      readonly healthVerification: "terraform_plan";
+    }
+  | {
+      readonly desiredStateReuse: "none";
+      readonly artifactReuse: "none";
+      readonly runtimeNoOp: "none";
+      readonly healthVerification: "none";
+    }
+  | {
+      readonly desiredStateReuse: "verified";
+      readonly artifactReuse: "verified";
+      readonly runtimeNoOp: "provider_verified";
+      readonly healthVerification: "provider";
+      readonly runtimeAdapters: readonly RuntimeAdapterKind[];
+    };
+
+export type ResourceDeploymentCapability =
+  | {
+      readonly status: "supported";
+      readonly provisioner: "terraform";
+      readonly executionRole: "managed_resource";
+      readonly optimization: Extract<
+        ResourceDeploymentOptimizationProfile,
+        { readonly desiredStateReuse: "verified" }
+      >;
+    }
+  | {
+      readonly status: "excluded";
+      readonly provisioner: "terraform";
+      readonly executionRole: "managed_resource" | "data_source" | "catalog_resource";
+      readonly reason: "terraform_data_source" | "unmodeled_resource" | "catalog_only";
+      readonly optimization: Extract<
+        ResourceDeploymentOptimizationProfile,
+        { readonly desiredStateReuse: "none" }
+      >;
+    };
 
 export type ResourceCapability = {
   readonly terraformPreview: boolean;
   readonly terraformSync: boolean;
   readonly parameterPanel: boolean;
+  readonly deployment: ResourceDeploymentCapability;
 };
 
 export type ResourceDefinition = {
@@ -27,13 +71,31 @@ type AwsResourceDefinitionInput = {
   readonly terraformSync?: boolean | undefined;
 };
 
-type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terraformResourceType"> & {
+export type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terraformResourceType"> & {
   readonly provider: CloudProvider;
   readonly terraformResourceType: string;
 };
 
 const DEFAULT_RESOURCE_TYPE: ResourceType = "UNKNOWN";
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
+const RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE = {
+  aws_cloudfront_distribution: ["static_s3_cloudfront"],
+  aws_instance: ["ec2_instance"],
+  aws_autoscaling_group: ["ec2_auto_scaling_group", "eks_self_managed_node"],
+  aws_s3_bucket: ["static_s3_cloudfront"],
+  aws_lambda_alias: ["lambda_alias"],
+  aws_ecs_service: ["ecs_service_fargate", "ecs_service_ec2_capacity_provider"],
+  aws_eks_node_group: ["eks_managed_node_group"],
+  aws_eks_fargate_profile: ["eks_fargate_profile"],
+  kubernetes_deployment: ["kubernetes_deployment"]
+} as const satisfies Readonly<Record<string, readonly RuntimeAdapterKind[]>>;
+
+export const runtimeAdapterResourceCoverage = Object.freeze(
+  Object.entries(RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE).flatMap(
+    ([terraformResourceType, adapterKinds]) =>
+      adapterKinds.map((adapterKind) => ({ adapterKind, terraformResourceType }))
+  )
+);
 const DEFAULT_RESOURCE_DEFINITION_ALIASES = [
   ["RDS_READ_REPLICA", "aws-rds-instance"]
 ] as const satisfies readonly (readonly [ResourceType, string])[];
@@ -864,6 +926,13 @@ export const resourceDefinitions = [
     terraformSync: true
   }),
   createAwsResourceDefinition({
+    id: "aws-eks-fargate-profile",
+    resourceType: "EKS_FARGATE_PROFILE",
+    terraformPreview: true,
+    terraformResourceType: "aws_eks_fargate_profile",
+    terraformSync: true
+  }),
+  createAwsResourceDefinition({
     id: "aws-eks-addon",
     resourceType: "EKS_ADDON",
     terraformPreview: true,
@@ -952,7 +1021,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-api-gateway-integration-response",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_api_gateway_integration_response",
@@ -960,7 +1028,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-api-gateway-method-response",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_api_gateway_method_response",
@@ -968,7 +1035,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-budgets-budget",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_budgets_budget",
@@ -976,7 +1042,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-cloudfront-origin-access-identity",
-    parameterPanel: false,
     resourceType: "CLOUDFRONT",
     terraformPreview: true,
     terraformResourceType: "aws_cloudfront_origin_access_identity",
@@ -984,7 +1049,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-docdb-cluster",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_docdb_cluster",
@@ -992,7 +1056,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-dynamodb-global-table",
-    parameterPanel: false,
     resourceType: "DYNAMODB_TABLE",
     terraformPreview: true,
     terraformResourceType: "aws_dynamodb_global_table",
@@ -1000,7 +1063,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-elastic-beanstalk-application",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_elastic_beanstalk_application",
@@ -1008,7 +1070,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-elastic-beanstalk-environment",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_elastic_beanstalk_environment",
@@ -1016,7 +1077,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-elb",
-    parameterPanel: false,
     resourceType: "LOAD_BALANCER",
     terraformPreview: true,
     terraformResourceType: "aws_elb",
@@ -1024,7 +1084,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-flow-log",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_flow_log",
@@ -1032,7 +1091,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-fsx-lustre-file-system",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_fsx_lustre_file_system",
@@ -1040,7 +1098,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-group",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_group",
@@ -1048,7 +1105,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-group-policy-attachment",
-    parameterPanel: false,
     resourceType: "IAM_POLICY",
     terraformPreview: true,
     terraformResourceType: "aws_iam_group_policy_attachment",
@@ -1056,7 +1112,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-user",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_user",
@@ -1064,7 +1119,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-user-group-membership",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_user_group_membership",
@@ -1072,7 +1126,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-user-login-profile",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_user_login_profile",
@@ -1080,7 +1133,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-launch-configuration",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_launch_configuration",
@@ -1088,7 +1140,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-main-route-table-association",
-    parameterPanel: false,
     resourceType: "ROUTE_TABLE_ASSOCIATION",
     terraformPreview: true,
     terraformResourceType: "aws_main_route_table_association",
@@ -1096,7 +1147,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-network-interface",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_network_interface",
@@ -1104,7 +1154,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-organizations-account",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_organizations_account",
@@ -1112,7 +1161,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-acl",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_acl",
@@ -1120,7 +1168,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-logging",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_logging",
@@ -1128,7 +1175,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-notification",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_notification",
@@ -1136,7 +1182,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-object",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_object",
@@ -1144,7 +1189,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-replication-configuration",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_replication_configuration",
@@ -1152,7 +1196,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-ses-email-identity",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_ses_email_identity",
@@ -1160,7 +1203,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-vpc-peering-connection-accepter",
-    parameterPanel: false,
     resourceType: "VPC_PEERING_CONNECTION",
     terraformPreview: true,
     terraformResourceType: "aws_vpc_peering_connection_accepter",
@@ -1168,7 +1210,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-waf-ipset",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_waf_ipset",
@@ -1176,7 +1217,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-waf-rule",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_waf_rule",
@@ -1184,7 +1224,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-waf-web-acl",
-    parameterPanel: false,
     resourceType: "WAF_WEB_ACL",
     terraformPreview: true,
     terraformResourceType: "aws_waf_web_acl",
@@ -1192,7 +1231,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-policy-data",
-    parameterPanel: false,
     resourceType: "IAM_POLICY",
     terraformBlockType: "data",
     terraformPreview: true,
@@ -1224,6 +1262,17 @@ export function getResourceDefinitionByTerraform(
   return resourceDefinitionByTerraformKey.get(
     createTerraformDefinitionKey(blockType, resourceType)
   );
+}
+
+/**
+ * Resource parameter keys stay compatible with the generated catalog while non-resource
+ * Terraform blocks receive their own namespace instead of sharing an incompatible schema.
+ */
+export function createTerraformParameterCatalogKey(
+  blockType: TerraformBlockType,
+  resourceType: string
+): string {
+  return blockType === "resource" ? resourceType : `${blockType}.${resourceType}`;
 }
 
 function createDefaultResourceDefinitionByResourceType(): Map<ResourceType, ResourceDefinition> {
@@ -1293,7 +1342,7 @@ function createAwsResourceDefinition({
   });
 }
 
-function createResourceDefinition({
+export function createResourceDefinition({
   id,
   provider,
   parameterPanel = true,
@@ -1303,7 +1352,7 @@ function createResourceDefinition({
   terraformResourceType,
   terraformSync = false
 }: ResourceDefinitionInput): ResourceDefinition {
-  return {
+  const definition: ResourceDefinition = {
     id,
     provider,
     resourceType,
@@ -1314,9 +1363,139 @@ function createResourceDefinition({
     capabilities: {
       parameterPanel,
       terraformPreview,
-      terraformSync
+      terraformSync,
+      deployment: createResourceDeploymentCapability({
+        resourceType,
+        terraformBlockType,
+        terraformPreview,
+        terraformResourceType
+      })
     }
   };
+
+  assertResourceDeploymentCapability(definition);
+
+  return definition;
+}
+
+export function assertResourceDeploymentCapability(
+  definition: Pick<ResourceDefinition, "id" | "resourceType" | "terraform" | "capabilities">
+): void {
+  const expected = createResourceDeploymentCapability({
+    resourceType: definition.resourceType,
+    terraformBlockType: definition.terraform.blockType,
+    terraformPreview: definition.capabilities.terraformPreview,
+    terraformResourceType: definition.terraform.resourceType
+  });
+
+  if (!hasSameDeploymentCapability(definition.capabilities.deployment, expected)) {
+    throw new Error(
+      `Resource definition ${definition.id} deployment capability does not match its Terraform identity`
+    );
+  }
+}
+
+function createResourceDeploymentCapability(input: {
+  readonly resourceType: ResourceType;
+  readonly terraformBlockType: TerraformBlockType;
+  readonly terraformPreview: boolean;
+  readonly terraformResourceType: string;
+}): ResourceDeploymentCapability {
+  const excludedOptimization = {
+    desiredStateReuse: "none",
+    artifactReuse: "none",
+    runtimeNoOp: "none",
+    healthVerification: "none"
+  } as const;
+
+  if (input.terraformBlockType === "data") {
+    return {
+      status: "excluded",
+      provisioner: "terraform",
+      executionRole: "data_source",
+      reason: "terraform_data_source",
+      optimization: excludedOptimization
+    };
+  }
+
+  if (input.resourceType === DEFAULT_RESOURCE_TYPE) {
+    return {
+      status: "excluded",
+      provisioner: "terraform",
+      executionRole: "managed_resource",
+      reason: "unmodeled_resource",
+      optimization: excludedOptimization
+    };
+  }
+
+  if (!input.terraformPreview) {
+    return {
+      status: "excluded",
+      provisioner: "terraform",
+      executionRole: "catalog_resource",
+      reason: "catalog_only",
+      optimization: excludedOptimization
+    };
+  }
+
+  const runtimeAdapters = RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE[
+    input.terraformResourceType as keyof typeof RUNTIME_ADAPTERS_BY_TERRAFORM_RESOURCE
+  ];
+  if (runtimeAdapters) {
+    return {
+      status: "supported",
+      provisioner: "terraform",
+      executionRole: "managed_resource",
+      optimization: {
+        desiredStateReuse: "verified",
+        artifactReuse: "verified",
+        runtimeNoOp: "provider_verified",
+        healthVerification: "provider",
+        runtimeAdapters
+      }
+    };
+  }
+
+  return {
+    status: "supported",
+    provisioner: "terraform",
+    executionRole: "managed_resource",
+    optimization: {
+      desiredStateReuse: "verified",
+      artifactReuse: "none",
+      runtimeNoOp: "none",
+      healthVerification: "terraform_plan"
+    }
+  };
+}
+
+function hasSameDeploymentCapability(
+  left: ResourceDeploymentCapability,
+  right: ResourceDeploymentCapability
+): boolean {
+  if (
+    left.status !== right.status ||
+    left.provisioner !== right.provisioner ||
+    left.executionRole !== right.executionRole ||
+    left.optimization.desiredStateReuse !== right.optimization.desiredStateReuse ||
+    left.optimization.artifactReuse !== right.optimization.artifactReuse ||
+    left.optimization.runtimeNoOp !== right.optimization.runtimeNoOp ||
+    left.optimization.healthVerification !== right.optimization.healthVerification
+  ) {
+    return false;
+  }
+
+  if (
+    left.optimization.runtimeNoOp === "provider_verified" ||
+    right.optimization.runtimeNoOp === "provider_verified"
+  ) {
+    return left.optimization.runtimeNoOp === "provider_verified" &&
+      right.optimization.runtimeNoOp === "provider_verified" &&
+      left.optimization.runtimeAdapters.join("|") === right.optimization.runtimeAdapters.join("|");
+  }
+
+  return left.status === "supported" ||
+    (right.status === "excluded" && left.reason === right.reason);
 }
 
 function createTerraformDefinitionKey(blockType: TerraformBlockType, resourceType: string): string {

@@ -27,6 +27,10 @@ import {
   projectDeploymentTargets
 } from "../db/schema.js";
 import { resolveApplicationReleaseVersion } from "../releases/application-release-identity.js";
+import {
+  resolveGitOpsDeploymentTargetFingerprint,
+  verifyGitOpsRuntimeConvergence
+} from "./gitops-runtime-convergence.js";
 
 export type LambdaGitOpsReleaseRecord = typeof applicationReleases.$inferSelect;
 
@@ -38,6 +42,7 @@ export type LambdaGitOpsVerificationTarget = {
     region: string;
   };
   runtimeConfig: LambdaRuntimeConfig;
+  deploymentTargetFingerprint?: string | null | undefined;
 };
 
 export type LambdaGitOpsObservedState = {
@@ -45,6 +50,10 @@ export type LambdaGitOpsObservedState = {
   additionalVersionWeightCount: number;
   publishedVersion: string;
   artifactDigest: string;
+  runtimeConvergenceMarker?: string | null | undefined;
+  architecture: string;
+  functionState: string;
+  lastUpdateStatus: string;
   deploymentStatus: string;
   deploymentConfigName: string;
   codeDeployApplicationName: string;
@@ -75,6 +84,7 @@ export type LambdaGitOpsCloudGateway = {
 
 export type LambdaGitOpsReleaseReconcileInput = {
   projectId: string;
+  artifactId?: string | null;
   pipelineRunId: string;
   commitSha: string;
   pipelineStatus: GitCicdPipelineRunStatus;
@@ -131,6 +141,11 @@ export function createLambdaGitOpsReleaseReconciler(options: {
         );
       }
       validateObservedState(input.evidence, observed, target.runtimeConfig);
+      const convergence = verifyGitOpsRuntimeConvergence({
+        evidence: input.evidence,
+        expectedAdapterKind: "lambda_alias",
+        expectedDeploymentTargetFingerprint: target.deploymentTargetFingerprint
+      });
 
       const timestamp = now();
       const status = mapReleaseStatus(input.evidence.outcome);
@@ -148,10 +163,12 @@ export function createLambdaGitOpsReleaseReconciler(options: {
       return options.repository.upsertRelease({
         id: createId(),
         projectId: input.projectId,
+        artifactId: input.artifactId ?? null,
         deploymentId: null,
         pipelineRunId: input.pipelineRunId,
         source: "gitops",
         runtimeTargetKind: "lambda",
+        ...convergence,
         version: resolveApplicationReleaseVersion({ commitSha: input.commitSha }),
         commitSha: input.commitSha.toLowerCase(),
         artifactDigestAlgorithm: "sha256",
@@ -182,7 +199,10 @@ export function createLambdaGitOpsReleaseReconciler(options: {
           aliasVersion: observed.aliasVersion,
           publishedVersion: observed.publishedVersion,
           deploymentStatus: observed.deploymentStatus,
-          verifiedAt: timestamp.toISOString()
+          verifiedAt: timestamp.toISOString(),
+          ...(input.evidence.schemaVersion === 3
+            ? { convergence: input.evidence.convergence }
+            : {})
         },
         rollbackEvidence,
         startedAt: input.startedAt,
@@ -225,6 +245,9 @@ function validateObservedState(
   const succeeded = evidence.outcome === "succeeded";
   const rolledBack = evidence.outcome === "rolled_back";
   const failedAfterHealthCheck = evidence.outcome === "failed";
+  const expectedMarker = evidence.schemaVersion === 3
+    ? `sketchcatch:artifact=${evidence.artifact.artifactFingerprint};target=${evidence.convergence.deploymentTargetFingerprint}`
+    : null;
   const validDeploymentStatus = succeeded || failedAfterHealthCheck
     ? observed.deploymentStatus === "Succeeded"
     : rolledBack && ["Failed", "Stopped"].includes(observed.deploymentStatus);
@@ -238,6 +261,10 @@ function validateObservedState(
     !validAlias ||
     observed.publishedVersion !== evidence.publishedVersion ||
     observed.artifactDigest !== evidence.artifactDigest.slice("sha256:".length) ||
+    (expectedMarker !== null && observed.runtimeConvergenceMarker !== expectedMarker) ||
+    observed.architecture !== "x86_64" ||
+    observed.functionState !== "Active" ||
+    observed.lastUpdateStatus !== "Successful" ||
     observed.additionalVersionWeightCount !== 0 ||
     observed.deploymentConfigName !== "CodeDeployDefault.LambdaAllAtOnce" ||
     observed.codeDeployApplicationName !== runtime.codeDeployApplicationName ||
@@ -278,7 +305,11 @@ export function createPostgresLambdaGitOpsReleaseRepository(
         .select({
           projectId: projectDeploymentTargets.projectId,
           runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+          confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
           runtimeConfig: projectDeploymentTargets.runtimeConfig,
+          runtimeTarget: projectDeploymentTargets.runtimeTarget,
+          deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
+          accountId: awsConnections.accountId,
           roleArn: awsConnections.roleArn,
           externalId: awsConnections.externalId,
           region: awsConnections.region
@@ -297,6 +328,8 @@ export function createPostgresLambdaGitOpsReleaseRepository(
         );
       if (
         !row?.roleArn ||
+        !row.accountId ||
+        !row.confirmedBuildConfig ||
         row.runtimeTargetKind !== "lambda" ||
         row.runtimeConfig?.runtimeTargetKind !== "lambda"
       ) return undefined;
@@ -307,7 +340,16 @@ export function createPostgresLambdaGitOpsReleaseRepository(
           externalId: row.externalId,
           region: row.region
         },
-        runtimeConfig: row.runtimeConfig
+        runtimeConfig: row.runtimeConfig,
+        deploymentTargetFingerprint: resolveGitOpsDeploymentTargetFingerprint({
+          projectId: row.projectId,
+          accountId: row.accountId,
+          region: row.region,
+          runtimeTarget: row.runtimeTarget,
+          runtimeConfig: row.runtimeConfig,
+          healthCheckPath: row.confirmedBuildConfig.healthCheckPath,
+          persistedDeploymentTargetFingerprint: row.deploymentTargetFingerprint
+        })
       };
     },
     async upsertRelease(input) {
@@ -321,6 +363,9 @@ export function createPostgresLambdaGitOpsReleaseRepository(
             version: input.version,
             commitSha: input.commitSha,
             artifactDigest: input.artifactDigest,
+            runtimeAdapterKind: input.runtimeAdapterKind,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+            convergenceOutcome: input.convergenceOutcome,
             providerRevision: input.providerRevision,
             outputUrl: input.outputUrl,
             status: input.status,
@@ -409,6 +454,12 @@ export function createAwsLambdaGitOpsCloudGateway(options: {
               : 0,
           publishedVersion: published.Configuration?.Version ?? "",
           artifactDigest,
+          runtimeConvergenceMarker: published.Configuration?.Description ?? null,
+          architecture: published.Configuration?.Architectures?.length === 1
+            ? (published.Configuration.Architectures[0] ?? "")
+            : "",
+          functionState: published.Configuration?.State ?? "",
+          lastUpdateStatus: published.Configuration?.LastUpdateStatus ?? "",
           deploymentStatus: deploymentInfo?.status ?? "",
           deploymentConfigName:
             deploymentInfo?.deploymentConfigName ??
@@ -424,6 +475,9 @@ export function createAwsLambdaGitOpsCloudGateway(options: {
           !observed.aliasVersion ||
           !observed.publishedVersion ||
           !/^[a-f\d]{64}$/.test(observed.artifactDigest) ||
+          !observed.architecture ||
+          !observed.functionState ||
+          !observed.lastUpdateStatus ||
           !observed.deploymentStatus ||
           observed.codeDeployApplicationName !== input.codeDeployApplicationName ||
           observed.codeDeployDeploymentGroupName !== input.codeDeployDeploymentGroupName

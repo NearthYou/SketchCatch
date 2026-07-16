@@ -21,6 +21,7 @@ test("Full-stack ECS preparation stores a pending artifact before its output URL
     null;
   const context = {
     sourceRepository: {
+      id: "repository-1",
       provider: "github",
       installationId: "installation-1",
       owner: "NearthYou",
@@ -118,6 +119,7 @@ test("Direct application preparation fails before CodeBuild without an output UR
   let prepareCalls = 0;
   const context = {
     sourceRepository: {
+      id: "repository-1",
       provider: "github",
       installationId: "installation-1",
       owner: "NearthYou",
@@ -211,6 +213,7 @@ test("Full-stack ECS output reconciliation uses the prepared coordinates fingerp
     async findContext() {
       return {
         sourceRepository: {
+          id: "repository-1",
           provider: "github",
           installationId: "installation-1",
           owner: "NearthYou",
@@ -287,6 +290,7 @@ test("Direct application preparation rejects a null runtime config without a Typ
   let prepareCalls = 0;
   const context = {
     sourceRepository: {
+      id: "repository-1",
       provider: "github",
       installationId: "installation-1",
       owner: "NearthYou",

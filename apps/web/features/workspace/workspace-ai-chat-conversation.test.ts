@@ -21,11 +21,11 @@ test("AI Chat은 세 개의 독립 대화 범위를 제공한다", () => {
   assert.equal(getWorkspaceAiChatScopeDefinition("errors").inputAvailable, false);
   assert.equal(
     getWorkspaceAiChatScopeDefinition("errors").emptyDescription,
-    "오른쪽 검증 문제에서 ‘오류 분석’을 누르면 원인과 해결 방법을 보여드려요."
+    "검증 오류를 선택해 하나씩 분석하거나 현재 오류를 순서대로 모두 분석할 수 있습니다."
   );
   assert.equal(
     getWorkspaceAiChatScopeDefinition("preview").emptyDescription,
-    "Terraform Preview에서 ‘에이전트 리뷰’를 누르면 구성과 확인할 점을 보여드려요."
+    "현재 선택하거나 살펴보는 Terraform 범위를 AI가 검토합니다."
   );
 });
 

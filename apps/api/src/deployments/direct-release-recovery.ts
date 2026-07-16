@@ -22,6 +22,7 @@ import type {
   TrustedReleaseGateway,
   TrustedReleaseRepository
 } from "../releases/trusted-release-worker-service.js";
+import { resolveAwsDeploymentTargetIdentity } from "../runtime-convergence/deployment-target-identity.js";
 
 type RecoveryCandidate = Omit<TrustedReleaseContext["candidate"], "expiresAt"> & {
   expiresAt: Date;
@@ -184,6 +185,16 @@ export async function recoverInterruptedDirectApplicationRelease(
     }
 
     const context = createTrustedRecoveryContext(data, holderId);
+    const targetIdentity = resolveAwsDeploymentTargetIdentity({
+      projectId: data.context.deployment.projectId,
+      accountId: data.context.connection.accountId,
+      region: data.context.connection.region,
+      runtimeTarget: data.context.target.runtimeTarget,
+      runtimeConfig: data.context.target.runtimeConfig,
+      healthCheckPath: data.context.target.confirmedBuildConfig.healthCheckPath,
+      persistedDeploymentTargetFingerprint:
+        data.context.target.deploymentTargetFingerprint
+    });
     if (!dependencies.gateway.verifyRuntime) {
       throw new Error("Trusted Direct recovery gateway is unavailable");
     }
@@ -212,8 +223,10 @@ export async function recoverInterruptedDirectApplicationRelease(
       projectId: fence.projectId,
       holderId: fence.holderId
     });
+    const rollbackWasAlreadyActive =
+      runtime.currentTaskDefinitionArn === rollbackTaskDefinitionArn;
     const rollbackEvidence =
-      runtime.currentTaskDefinitionArn === rollbackTaskDefinitionArn
+      rollbackWasAlreadyActive
         ? ({
             state: "already_restored",
             taskDefinitionArn: rollbackTaskDefinitionArn
@@ -279,6 +292,9 @@ export async function recoverInterruptedDirectApplicationRelease(
       await dependencies.releaseRepository.saveCancelledRelease({
         releaseId: data.release.id,
         status: "cancelled",
+        runtimeAdapterKind: targetIdentity.adapterKind,
+        deploymentTargetFingerprint: targetIdentity.deploymentTargetFingerprint,
+        convergenceOutcome: rollbackWasAlreadyActive ? "already_active" : "rolled_out",
         providerRevision: restoredProviderRevision,
         outputUrl: context.runtime.outputUrl,
         healthEvidence: restoredHealthEvidence,
@@ -291,6 +307,9 @@ export async function recoverInterruptedDirectApplicationRelease(
     } else {
       await dependencies.releaseRepository.saveCompletedRelease({
         releaseId: data.release.id,
+        runtimeAdapterKind: targetIdentity.adapterKind,
+        deploymentTargetFingerprint: targetIdentity.deploymentTargetFingerprint,
+        convergenceOutcome: rollbackWasAlreadyActive ? "already_active" : "rolled_out",
         providerRevision: restoredProviderRevision,
         outputUrl: context.runtime.outputUrl,
         healthEvidence: restoredHealthEvidence,

@@ -1514,6 +1514,127 @@ test("reports the block header line when a block is not closed", () => {
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
 });
 
+test("syncs Classic ELB health checks and listeners into camelCase values", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "classic-elb",
+        type: "aws_elb",
+        kind: "resource",
+        label: "Classic ELB",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_elb",
+          resourceName: "classic",
+          fileName: "main",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_elb" "classic" {
+  health_check {
+    healthy_threshold   = 2
+    interval            = 30
+    target              = "HTTP:80/"
+    timeout             = 3
+    unhealthy_threshold = 2
+  }
+
+  listener {
+    instance_port     = 80
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.healthCheck, {
+    healthyThreshold: 2,
+    interval: 30,
+    target: "HTTP:80/",
+    timeout: 3,
+    unhealthyThreshold: 2
+  });
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.listener, [{
+    instancePort: 80,
+    instanceProtocol: "http",
+    lbPort: 80,
+    lbProtocol: "http"
+  }]);
+});
+
+test("syncs single nested blocks below top-level and repeated parents as objects", () => {
+  const wafResult = syncTerraformToDiagramJson(
+    makeResourceDiagramJson("aws_waf_web_acl", "web"),
+    `resource "aws_waf_web_acl" "web" {
+  name        = "web"
+  metric_name = "Web"
+
+  default_action {
+    type = "ALLOW"
+  }
+}`
+  );
+  const replicationResult = syncTerraformToDiagramJson(
+    makeResourceDiagramJson("aws_s3_bucket_replication_configuration", "replication"),
+    `resource "aws_s3_bucket_replication_configuration" "replication" {
+  bucket = "source"
+  role   = "arn:aws:iam::123456789012:role/replication"
+
+  rule {
+    id     = "all"
+    status = "Enabled"
+
+    destination {
+      bucket = "arn:aws:s3:::destination"
+    }
+  }
+}`
+  );
+
+  assert.deepEqual(wafResult.diagnostics, []);
+  assert.deepEqual(
+    wafResult.diagramJson.nodes[0]?.parameters?.values.defaultAction,
+    { type: "ALLOW" }
+  );
+  assert.deepEqual(replicationResult.diagnostics, []);
+  assert.deepEqual(replicationResult.diagramJson.nodes[0]?.parameters?.values.rule, [{
+    id: "all",
+    status: "Enabled",
+    destination: { bucket: "arn:aws:s3:::destination" }
+  }]);
+});
+
+function makeResourceDiagramJson(resourceType: string, resourceName: string): DiagramJson {
+  return {
+    nodes: [
+      makeNode({
+        id: resourceName,
+        type: resourceType,
+        kind: "resource",
+        label: resourceName,
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType,
+          resourceName,
+          fileName: "main",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
+
 function makeSingleVpcDiagramJson(): DiagramJson {
   return {
     nodes: [

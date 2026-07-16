@@ -1,6 +1,5 @@
 .terraformTopBar,
-.resourceCodeHeader,
-.resourceActionBar {
+.resourceCodeHeader {
   background: #ffffff;
   border-bottom: 1px solid #dcdee0;
 }
@@ -9,17 +8,10 @@
   align-items: center;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   justify-content: space-between;
   min-height: 64px;
   padding: 9px 12px;
-}
-
-.terraformTopActions {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  min-width: 0;
 }
 
 .terraformFileContext {
@@ -196,21 +188,9 @@
   width: 32px;
 }
 
-.resourceActionBar {
-  align-items: center;
-  display: flex;
-  justify-content: flex-end;
-  min-height: 52px;
-  padding: 8px 12px;
-}
-
 @media (max-width: 520px) {
   .terraformTopBar {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .terraformTopActions {
-    justify-content: space-between;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .terraformFileButton {

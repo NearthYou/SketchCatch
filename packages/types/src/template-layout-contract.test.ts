@@ -28,7 +28,10 @@ const EXPECTED_VIEWPORTS = {
   "three-tier-web-app": { x: 0, y: 0, zoom: 0.46 },
   "ecs-fargate-container-app": { x: 0, y: 0, zoom: 0.6 },
   "eks-container-app": { x: 0, y: 0, zoom: 0.46 }
-} as const satisfies Record<RepositoryTemplateId, { readonly x: number; readonly y: number; readonly zoom: number }>;
+} as const satisfies Record<
+  RepositoryTemplateId,
+  { readonly x: number; readonly y: number; readonly zoom: number }
+>;
 
 const EXPECTED_LAYOUTS = {
   "static-web-hosting": {
@@ -100,7 +103,7 @@ const EXPECTED_LAYOUTS = {
     "target-group": at(1280, 600, "vpc"),
     listener: at(1040, 600, "vpc"),
     "application-group": at(1160, 960, "vpc"),
-    "db-subnet-group": at(2000, 1200, "vpc"),
+    "db-subnet-group": at(1920, 1200, "vpc"),
     database: at(1160, 1200, "vpc")
   },
   "ecs-fargate-container-app": {
@@ -115,14 +118,14 @@ const EXPECTED_LAYOUTS = {
     "alb-security-group": at(560, 280, "vpc", { width: 200, height: 200 }),
     "task-security-group": at(1360, 320, "cluster", { width: 160, height: 160 }),
     "execution-role": at(1880, 200, "global-iam-group"),
-    "execution-policy": at(2000, 200, "global-iam-group"),
+    "execution-policy": at(2040, 200, "global-iam-group"),
     "task-role": at(1880, 320, "global-iam-group"),
     repository: at(1880, 560, "definition-ops-group"),
     "log-group": at(1880, 680, "definition-ops-group"),
     "load-balancer": at(640, 360, "vpc"),
     "target-group": at(1080, 360, "vpc"),
     listener: at(880, 360, "vpc"),
-    task: at(2000, 560, "definition-ops-group"),
+    task: at(2040, 560, "definition-ops-group"),
     service: at(1400, 360, "cluster")
   },
   "eks-container-app": {
@@ -241,11 +244,19 @@ test("six deployable templates keep their semantic graph while adopting the PNG 
     const expectedRouting = EXPECTED_ROUTING[templateId];
 
     assert.equal(createSemanticHash(definition), EXPECTED_SEMANTIC_HASHES[templateId], templateId);
-    assert.deepEqual(Object.keys(expectedLayout).sort(), definition.resources.map((resource) => resource.id).sort(), definition.id);
-    assert.deepEqual(Object.keys(expectedRouting).sort(), definition.relationships
-      .filter((relationship) => relationship.id in expectedRouting)
-      .map((relationship) => relationship.id)
-      .sort(), definition.id);
+    assert.deepEqual(
+      Object.keys(expectedLayout).sort(),
+      definition.resources.map((resource) => resource.id).sort(),
+      definition.id
+    );
+    assert.deepEqual(
+      Object.keys(expectedRouting).sort(),
+      definition.relationships
+        .filter((relationship) => relationship.id in expectedRouting)
+        .map((relationship) => relationship.id)
+        .sort(),
+      definition.id
+    );
 
     for (const resource of definition.resources) {
       const expected = expectedLayout[resource.id];
@@ -293,7 +304,10 @@ test("six deployable templates keep their semantic graph while adopting the PNG 
       );
     }
 
-    const diagram = buildTemplateDiagramJson(templateId, { projectSlug: "layout", shortId: "contract" });
+    const diagram = buildTemplateDiagramJson(templateId, {
+      projectSlug: "layout",
+      shortId: "contract"
+    });
     assert.deepEqual(diagram.viewport, EXPECTED_VIEWPORTS[templateId], `${templateId} viewport`);
   }
 });
@@ -339,6 +353,38 @@ test("all authored template placements stay on the compact 40px grid", () => {
   }
 });
 
+test("ECS Fargate support groups contain their grid-laid resources without overlap", () => {
+  const diagram = buildTemplateDiagramJson("ecs-fargate-container-app", {
+    projectSlug: "layout",
+    shortId: "support-groups"
+  });
+  const nodeByLabel = new Map(diagram.nodes.map((node) => [node.label, node]));
+  const pairs = [
+    ["Definition / Ops", ["ECR Repository", "ECS Task Definition", "Fargate Log Group"]],
+    ["Global IAM", ["ECS Execution Role", "ECS Execution Policy", "ECS Task Role"]]
+  ] as const;
+
+  for (const [parentLabel, childLabels] of pairs) {
+    const parent = nodeByLabel.get(parentLabel);
+    assert.ok(parent);
+    const children = childLabels.map((label) => {
+      const child = nodeByLabel.get(label);
+      assert.ok(child);
+      assert.equal(child.metadata?.parentAreaNodeId, parent.id);
+      assert.ok(child.position.x >= parent.position.x);
+      assert.ok(child.position.y >= parent.position.y);
+      assert.ok(child.position.x + child.size.width <= parent.position.x + parent.size.width);
+      assert.ok(child.position.y + child.size.height <= parent.position.y + parent.size.height);
+      return child;
+    });
+    for (let leftIndex = 0; leftIndex < children.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < children.length; rightIndex += 1) {
+        assert.equal(rectanglesOverlap(children[leftIndex]!, children[rightIndex]!), false);
+      }
+    }
+  }
+});
+
 function at(
   x: number,
   y: number,
@@ -356,6 +402,24 @@ function at(
 
 function route(sourceHandleId: string, targetHandleId: string): EdgeRoutingExpectation {
   return { sourceHandleId, targetHandleId };
+}
+
+function rectanglesOverlap(
+  left: {
+    readonly position: { readonly x: number; readonly y: number };
+    readonly size: { readonly width: number; readonly height: number };
+  },
+  right: {
+    readonly position: { readonly x: number; readonly y: number };
+    readonly size: { readonly width: number; readonly height: number };
+  }
+): boolean {
+  return (
+    left.position.x < right.position.x + right.size.width &&
+    left.position.x + left.size.width > right.position.x &&
+    left.position.y < right.position.y + right.size.height &&
+    left.position.y + left.size.height > right.position.y
+  );
 }
 
 // Grid assertions include the offending field in their message so a layout drift is quick to repair.
