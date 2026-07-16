@@ -333,6 +333,7 @@ for (const marker of [
   "Validate reviewed complete runtime plan",
   "aws_ecs_task_definition.api",
   "aws_ecs_task_definition.worker",
+  'aws_cloudwatch_log_metric_filter.ecs_error[\\"web\\"]',
   '"address": "aws_s3_bucket_cors_configuration.artifact"',
   "expected_head_sha must exactly match the dispatched commit",
   ".resource_changes[]",
@@ -368,6 +369,10 @@ for (const marker of [
 ]) {
   check(workflow.includes(marker), `plan-only workflow is missing ${marker}`);
 }
+check(
+  !workflow.includes('aws_cloudwatch_log_metric_filter.ecs_error[\\\\"web\\\\"]'),
+  "complete runtime plan validation must use jq-compatible resource address escaping"
+);
 const extractTerraformOperations = (workflowText) =>
   workflowText
     .split(/\r?\n/)
