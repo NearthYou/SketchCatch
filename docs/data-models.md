@@ -2211,8 +2211,15 @@ type AiArchitectureDraftResult = {
 Natural Language Diagramming의 `ArchitectureDraft`는 LLM 자유 생성이 아니라 규칙 기반 요구사항 fact 조립으로 만든다. 같은 Requirement Prompt는 같은 `ArchitectureJson`을 반환해야 한다. `LlmExplanation` 문구는 보조 설명이므로 결정성 기준에 포함하지 않는다.
 
 ```ts
+type ArchitectureDraftCandidateExclusion = {
+  candidateId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
 type CreateArchitectureDraftRequest = {
   prompt: string;
+  candidateExclusions?: ArchitectureDraftCandidateExclusion[];
 };
 
 type ArchitectureDraftClarification = {
@@ -2231,8 +2238,21 @@ type ArchitectureDraftProgressStage =
   | "validating_architecture"
   | "building_diagram";
 
+type ArchitectureDraftProgressSnapshot = {
+  sequence: number;
+  stage: ArchitectureDraftProgressStage;
+  confirmedRequirements: string[];
+  pendingQuestions: string[];
+  provisionalArchitectureJson: ArchitectureJson | null;
+  excludableCandidateIds: string[];
+};
+
 type ArchitectureDraftStreamEvent =
-  | { type: "progress"; stage: ArchitectureDraftProgressStage }
+  | {
+      type: "progress";
+      stage: ArchitectureDraftProgressStage;
+      snapshot: ArchitectureDraftProgressSnapshot;
+    }
   | { type: "result"; result: CreateArchitectureDraftResponse }
   | { type: "error"; error: ApiErrorResponse & { statusCode: number } };
 
@@ -2291,7 +2311,9 @@ type ArchitectureIntent = {
 };
 ```
 
-`POST /api/ai/architecture-draft/stream`은 newline-delimited JSON으로 실제 처리 단계와 최종 `CreateArchitectureDraftResponse`를 전달한다. 스트림이 시작된 뒤 발생한 오류도 `error` event의 표준 `ApiErrorResponse`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약은 비스트리밍 호출 호환을 위해 유지한다.
+`POST /api/ai/architecture-draft/stream`은 newline-delimited JSON으로 실제 처리 단계와 최종 `CreateArchitectureDraftResponse`를 전달한다. 각 progress event의 `snapshot`은 증가하는 `sequence`와 현재 전체 상태를 포함하며 이전 progress 상태를 완전히 대체한다. `stage`는 기존 transport 호환을 위해 event와 snapshot 양쪽에 같은 값으로 유지한다. 서버는 요구사항이 사용 가능한 시점부터 기존 결정론적 Architecture Draft 조립 로직으로 `provisionalArchitectureJson`을 만들고, 클라이언트는 대화 원문에서 Resource 후보를 추측하지 않는다.
+
+`candidateExclusions`는 최대 32개이며 `candidateId`, `label`, 지원 `ResourceType`을 포함한다. 서버는 제외된 `resourceType`의 node와 그 node에 연결된 edge를 잠정 graph와 최종 graph에서 제거한다. 잠정 graph 생성, 후보 제외, progress callback은 관찰 경로이므로 실패하더라도 최종 Architecture Draft 생성을 중단하지 않는다. 스트림이 시작된 뒤 발생한 오류는 `error` event의 표준 `ApiErrorResponse`와 `statusCode`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약과 Repository Analysis 권한 경로는 유지한다.
 
 `ArchitectureIntent`는 자유 형식 Requirement Prompt를 표준 설계 의도로 해석한 중간 결과다. 자동 생성 흐름은 `prompt -> interpretRequirement(prompt) -> ArchitectureIntent -> planPracticeArchitecture(intent/resolution) -> ArchitectureJson` 순서로 다룬다. LLM이나 rule fallback은 intent 추출과 설명 보조에 사용할 수 있지만, 실제 보드 리소스 조립은 지원 가능한 `ResourceType`만 사용하는 deterministic planner가 담당한다.
 

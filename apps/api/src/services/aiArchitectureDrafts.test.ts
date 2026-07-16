@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ArchitectureJson } from "@sketchcatch/types";
+import type {
+  ArchitectureDraftCandidateExclusion,
+  ArchitectureDraftProgressSnapshot,
+  ArchitectureJson
+} from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { AiTextProvider } from "./aiLlmExplanation.js";
 import {
@@ -852,7 +856,7 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
 test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture preview when requirements are complete", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;
-  const progressStages: string[] = [];
+  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
   const provider = createFakeAmazonQProvider((request) => {
     requestedPrompt = request.prompt;
     requestedPayload = request.payload;
@@ -924,7 +928,7 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
     {
       provider,
       creditPolicy: confirmedCreditPolicy,
-      onProgress: (stage) => progressStages.push(stage)
+      onProgress: (snapshot) => progressSnapshots.push(snapshot)
     }
   );
 
@@ -969,13 +973,113 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
-  assert.deepEqual(progressStages, [
+  assert.deepEqual(progressSnapshots.map(({ sequence }) => sequence), [1, 2, 3, 4, 5]);
+  assert.deepEqual(progressSnapshots.map(({ stage }) => stage), [
     "preparing_requirements",
     "normalizing_requirements",
     "querying_amazon_q",
     "validating_architecture",
     "building_diagram"
   ]);
+  assert.ok(progressSnapshots.every((snapshot) => snapshot.confirmedRequirements.length > 0));
+  assert.ok(
+    progressSnapshots.some(
+      (snapshot) => (snapshot.provisionalArchitectureJson?.nodes.length ?? 0) > 0
+    )
+  );
+  assert.ok(
+    progressSnapshots.every(
+      (snapshot) =>
+        Array.isArray(snapshot.pendingQuestions)
+        && Array.isArray(snapshot.excludableCandidateIds)
+        && Object.hasOwn(snapshot, "provisionalArchitectureJson")
+    )
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse filters excluded resource types from provisional and final graphs", async () => {
+  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createStaticPortfolioQuestionnairePrompt(),
+      candidateExclusions: [
+        {
+          candidateId: "static-site-bucket",
+          resourceType: "S3",
+          label: "Static Website Bucket"
+        }
+      ]
+    },
+    {
+      provider: createFakeAmazonQProvider(createNormalizedRequirementPlan),
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: (snapshot) => progressSnapshots.push(snapshot)
+    }
+  );
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === "S3"), false);
+  assertGraphHasNoDanglingEdges(response.architectureJson);
+
+  const provisionalSnapshots = progressSnapshots.filter(
+    (snapshot) => snapshot.provisionalArchitectureJson !== null
+  );
+  assert.ok(provisionalSnapshots.length > 0);
+  for (const snapshot of provisionalSnapshots) {
+    assert.equal(
+      snapshot.provisionalArchitectureJson?.nodes.some((node) => node.type === "S3"),
+      false
+    );
+    assert.deepEqual(
+      snapshot.excludableCandidateIds,
+      snapshot.provisionalArchitectureJson?.nodes.map((node) => node.id)
+    );
+    assertGraphHasNoDanglingEdges(snapshot.provisionalArchitectureJson!);
+  }
+});
+
+test("createAmazonQArchitectureDraftResponse keeps progress reporting observational", async () => {
+  let progressCallbackCount = 0;
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticPortfolioQuestionnairePrompt() },
+    {
+      provider: createFakeAmazonQProvider(createNormalizedRequirementPlan),
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: () => {
+        progressCallbackCount += 1;
+        throw new Error("progress consumer failed");
+      }
+    }
+  );
+
+  assert.ok(!("status" in response));
+  assert.equal(progressCallbackCount, 5);
+});
+
+test("createAmazonQArchitectureDraftResponse keeps candidate exclusion failures observational", async () => {
+  const candidateExclusions = new Proxy<ArchitectureDraftCandidateExclusion[]>([], {
+    get(target, property, receiver) {
+      if (property === "length") {
+        throw new Error("candidate exclusions unavailable");
+      }
+      return Reflect.get(target, property, receiver);
+    }
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createStaticPortfolioQuestionnairePrompt(),
+      candidateExclusions
+    },
+    {
+      provider: createFakeAmazonQProvider(createNormalizedRequirementPlan),
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.ok(!("status" in response));
 });
 
 test("createAmazonQArchitectureDraftResponse materializes a compact Amazon Q architecture plan", async () => {
@@ -5510,6 +5614,16 @@ function readDecisionSpace(payload: unknown): {
     answerProfile: { upload?: string };
     preferredPatterns: Array<{ id?: string }>;
   };
+}
+
+function assertGraphHasNoDanglingEdges(architectureJson: ArchitectureJson): void {
+  const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+
+  assert.ok(
+    architectureJson.edges.every(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  );
 }
 
 function sampleRequirementCoverage(nodes: string[] = []): Array<{

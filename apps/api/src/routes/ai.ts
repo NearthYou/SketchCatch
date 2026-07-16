@@ -11,7 +11,7 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   ApiErrorResponse,
-  ArchitectureDraftProgressStage,
+  ArchitectureDraftProgressSnapshot,
   ArchitectureDraftStreamEvent,
   ArchitecturePatchPreviewResponse,
   ArchitectureJson,
@@ -130,6 +130,14 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
+  candidateExclusions: z
+    .array(z.object({
+      candidateId: z.string().trim().min(1),
+      resourceType: resourceTypeSchema,
+      label: z.string().trim().min(1)
+    }))
+    .max(32)
+    .optional(),
   templateId: z.enum(TEMPLATE_IDS).optional(),
   dynamicQuestionAnswers: z
     .array(z.object({
@@ -374,8 +382,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         reply.raw.write(`${JSON.stringify(event)}\n`);
       }
     };
-    const onProgress = (stage: ArchitectureDraftProgressStage): void => {
-      writeEvent({ type: "progress", stage });
+    const onProgress = (snapshot: ArchitectureDraftProgressSnapshot): void => {
+      writeEvent({ type: "progress", stage: snapshot.stage, snapshot });
     };
 
     try {

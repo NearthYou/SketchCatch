@@ -2,6 +2,8 @@ import type {
   AiArchitectureDraftResult,
   AiBillingMode,
   AiProviderMetadata,
+  ArchitectureDraftCandidateExclusion,
+  ArchitectureDraftProgressSnapshot,
   ArchitectureDraftProgressStage,
   ArchitectureDraftClarification,
   ArchitectureJson,
@@ -187,7 +189,7 @@ type AmazonQArchitectureDraftResponse =
 export type CreateArchitectureDraftResponseFactory = (
   request: CreateArchitectureDraftRequest,
   options?: {
-    readonly onProgress?: ((stage: ArchitectureDraftProgressStage) => void) | undefined;
+    readonly onProgress?: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined;
   }
 ) => Promise<CreateArchitectureDraftResponse> | CreateArchitectureDraftResponse;
 
@@ -195,7 +197,7 @@ export type CreateAmazonQArchitectureDraftResponseOptions = {
   readonly provider?: AiTextProvider | undefined;
   readonly requirementNormalizerProvider?: AiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
-  readonly onProgress?: ((stage: ArchitectureDraftProgressStage) => void) | undefined;
+  readonly onProgress?: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined;
 };
 
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
@@ -272,8 +274,9 @@ export async function createAmazonQArchitectureDraftResponse(
   const request = normalizeArchitectureDraftRequest(input);
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
+  const progressReporter = createArchitectureDraftProgressReporter(request, options.onProgress);
 
-  reportArchitectureDraftProgress(options.onProgress, "preparing_requirements");
+  progressReporter.report("preparing_requirements");
 
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
@@ -295,7 +298,7 @@ export async function createAmazonQArchitectureDraftResponse(
     return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
   }
 
-  reportArchitectureDraftProgress(options.onProgress, "normalizing_requirements");
+  progressReporter.report("normalizing_requirements");
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
   const providerNormalizedRequirement = await createNormalizedArchitectureIntentPlan({
     prompt: request.prompt,
@@ -328,7 +331,7 @@ export async function createAmazonQArchitectureDraftResponse(
   try {
     let activePayload = payload;
     let retryUsed = false;
-    reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
+    progressReporter.report("querying_amazon_q");
     let response = await generateArchitectureDraftProviderResponse(provider, {
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
@@ -340,7 +343,7 @@ export async function createAmazonQArchitectureDraftResponse(
       ),
       payload: activePayload
     });
-    reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
+    progressReporter.report("validating_architecture");
     let parsedResponse = applyOperationalPolicyToProviderResponse(
       parseArchitectureDraftProviderResponse(response.text),
       request.prompt,
@@ -364,7 +367,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
-        reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
+        progressReporter.report("querying_amazon_q");
         response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -378,7 +381,7 @@ export async function createAmazonQArchitectureDraftResponse(
           ),
           payload: activePayload
         });
-        reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
+        progressReporter.report("validating_architecture");
         parsedResponse = applyOperationalPolicyToProviderResponse(
           parseArchitectureDraftProviderResponse(response.text),
           request.prompt,
@@ -414,7 +417,7 @@ export async function createAmazonQArchitectureDraftResponse(
 
     if (parsedResponse.status === "plan") {
       try {
-        reportArchitectureDraftProgress(options.onProgress, "building_diagram");
+        progressReporter.report("building_diagram");
         return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
@@ -448,7 +451,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
-        reportArchitectureDraftProgress(options.onProgress, "querying_amazon_q");
+        progressReporter.report("querying_amazon_q");
         response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -462,7 +465,7 @@ export async function createAmazonQArchitectureDraftResponse(
           ),
           payload: activePayload
         });
-        reportArchitectureDraftProgress(options.onProgress, "validating_architecture");
+        progressReporter.report("validating_architecture");
         parsedResponse = parseArchitectureDraftProviderResponse(response.text);
 
         if (parsedResponse.status !== "plan") {
@@ -481,7 +484,7 @@ export async function createAmazonQArchitectureDraftResponse(
           outputCharacters: response.outputCharacters ?? response.text.length
         });
 
-        reportArchitectureDraftProgress(options.onProgress, "building_diagram");
+        progressReporter.report("building_diagram");
         return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
@@ -494,7 +497,7 @@ export async function createAmazonQArchitectureDraftResponse(
       }
     }
 
-    reportArchitectureDraftProgress(options.onProgress, "building_diagram");
+    progressReporter.report("building_diagram");
     return applyArchitectureDraftRequestPolicies(
       createAmazonQDraftResult(parsedResponse, providerMetadata),
       request
@@ -734,15 +737,88 @@ function applyArchitectureParameterCompletenessDefaults(
   };
 }
 
-function reportArchitectureDraftProgress(
-  onProgress: ((stage: ArchitectureDraftProgressStage) => void) | undefined,
-  stage: ArchitectureDraftProgressStage
-): void {
-  try {
-    onProgress?.(stage);
-  } catch {
-    // Progress reporting is observational and must never interrupt Q generation.
-  }
+type ArchitectureDraftProgressReporter = {
+  readonly report: (stage: ArchitectureDraftProgressStage) => void;
+};
+
+function createArchitectureDraftProgressReporter(
+  request: CreateArchitectureDraftRequest,
+  onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
+): ArchitectureDraftProgressReporter {
+  let sequence = 0;
+  let lastProvisionalArchitectureJson: ArchitectureJson | null = null;
+  let excludableCandidateIds: string[] = [];
+  const confirmedRequirements = createConfirmedRequirementSummaries(request);
+  const pendingQuestions = createPendingArchitectureDraftQuestions(request.prompt);
+
+  return {
+    report(stage) {
+      if (onProgress === undefined) {
+        return;
+      }
+
+      if (
+        stage !== "preparing_requirements"
+        && pendingQuestions.length === 0
+        && lastProvisionalArchitectureJson === null
+      ) {
+        try {
+          lastProvisionalArchitectureJson = createArchitectureDraft(request).architectureJson;
+          excludableCandidateIds = lastProvisionalArchitectureJson.nodes.map((node) => node.id);
+        } catch {
+          // A provisional projection is observational and must not interrupt final generation.
+        }
+      }
+
+      sequence += 1;
+      let provisionalArchitectureJson: ArchitectureJson | null = null;
+      try {
+        provisionalArchitectureJson =
+          lastProvisionalArchitectureJson === null
+            ? null
+            : structuredClone(lastProvisionalArchitectureJson);
+      } catch {
+        // Keep emitting the complete non-graph state if a provisional clone cannot be reported.
+      }
+
+      const snapshot: ArchitectureDraftProgressSnapshot = {
+        sequence,
+        stage,
+        confirmedRequirements: [...confirmedRequirements],
+        pendingQuestions: [...pendingQuestions],
+        provisionalArchitectureJson,
+        excludableCandidateIds:
+          provisionalArchitectureJson === null ? [] : [...excludableCandidateIds]
+      };
+
+      try {
+        onProgress(snapshot);
+      } catch {
+        // Progress reporting is observational and must never interrupt Q generation.
+      }
+    }
+  };
+}
+
+function createConfirmedRequirementSummaries(
+  request: CreateArchitectureDraftRequest
+): string[] {
+  const summaries = [
+    ...request.prompt.split(/\r?\n/u),
+    ...(request.dynamicQuestionAnswers ?? []).map(
+      ({ question, answer }) => `${question}: ${answer}`
+    )
+  ]
+    .map((summary) => summary.trim())
+    .filter((summary) => summary.length > 0);
+
+  return [...new Set(summaries)].slice(0, 32);
+}
+
+function createPendingArchitectureDraftQuestions(prompt: string): string[] {
+  const pendingQuestion =
+    findMissingRequiredQuestion(prompt) ?? findConditionalArchitectureQuestion(prompt);
+  return pendingQuestion === null ? [] : [pendingQuestion.question];
 }
 
 function readArchitectureDraftErrorMessage(error: unknown): string {
@@ -1978,10 +2054,47 @@ function applyArchitectureDraftRequestPolicies(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest
 ): AiArchitectureDraftResult {
-  return applyStrictRepositoryEvidencePolicy(
+  const policyDraft = applyStrictRepositoryEvidencePolicy(
     applyFixedTemplateSelection(draft, request.templateId),
     request
   );
+
+  return applyArchitectureDraftCandidateExclusions(
+    policyDraft,
+    request.candidateExclusions
+  );
+}
+
+function applyArchitectureDraftCandidateExclusions(
+  draft: AiArchitectureDraftResult,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): AiArchitectureDraftResult {
+  if (candidateExclusions === undefined) {
+    return draft;
+  }
+
+  try {
+    const excludedResourceTypes = new Set(
+      candidateExclusions.map(({ resourceType }) => resourceType)
+    );
+    if (excludedResourceTypes.size === 0) {
+      return draft;
+    }
+    const nodes = draft.architectureJson.nodes.filter(
+      (node) => !excludedResourceTypes.has(node.type)
+    );
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const edges = draft.architectureJson.edges.filter(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    );
+
+    return {
+      ...draft,
+      architectureJson: { nodes, edges }
+    };
+  } catch {
+    return draft;
+  }
 }
 
 function applyStrictRepositoryEvidencePolicy(

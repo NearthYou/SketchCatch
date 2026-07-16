@@ -2838,8 +2838,15 @@ export type CreateArchitecturePatchPreviewRequest = {
   skipConnection?: boolean | undefined;
 };
 
+export type ArchitectureDraftCandidateExclusion = {
+  candidateId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
   dynamicQuestionAnswers?:
     | readonly {
@@ -2874,6 +2881,15 @@ export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
 
 export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
 
+export type ArchitectureDraftProgressSnapshot = {
+  sequence: number;
+  stage: ArchitectureDraftProgressStage;
+  confirmedRequirements: string[];
+  pendingQuestions: string[];
+  provisionalArchitectureJson: ArchitectureJson | null;
+  excludableCandidateIds: string[];
+};
+
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
   diagramJson?: DiagramJson | undefined;
@@ -2897,6 +2913,7 @@ export type ArchitectureDraftStreamEvent =
   | {
       type: "progress";
       stage: ArchitectureDraftProgressStage;
+      snapshot: ArchitectureDraftProgressSnapshot;
     }
   | {
       type: "result";
