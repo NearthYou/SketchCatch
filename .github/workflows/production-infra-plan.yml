@@ -20,12 +20,13 @@ on:
           - complete
           - runtime-cache-ingress
       operation:
-        description: "Review only, or apply the previously reviewed Runtime Cache ingress change"
+        description: "Review only, or apply a reviewed Runtime Cache ingress or complete runtime change"
         required: true
         type: choice
         options:
           - review-only
           - apply-reviewed-runtime-cache-ingress
+          - apply-reviewed-runtime-complete
       approved_plan_run_id:
         description: "Successful review-only workflow run approved for apply"
         required: false
@@ -37,7 +38,7 @@ on:
         type: string
         default: ""
       confirmation:
-        description: "Review: <group>-review-only. Apply: runtime-cache-ingress-apply-<approved-plan-run-id>"
+        description: "Review: <group>-review-only. Apply: runtime-cache-ingress-apply-<run-id> or runtime-complete-apply-<run-id>"
         required: true
         type: string
 
@@ -117,6 +118,25 @@ jobs:
               fi
               expected_confirmation="runtime-cache-ingress-apply-${APPROVED_PLAN_RUN_ID}"
               ;;
+            apply-reviewed-runtime-complete)
+              if [ "${MANAGEMENT_GROUP}" != "runtime" ] || [ "${RUNTIME_PLAN_SCOPE}" != "complete" ]; then
+                echo "::error::reviewed complete apply is restricted to the runtime complete scope"
+                exit 1
+              fi
+              if ! [[ "${APPROVED_PLAN_RUN_ID}" =~ ^[0-9]+$ ]]; then
+                echo "::error::approved_plan_run_id must identify the approved review-only run"
+                exit 1
+              fi
+              if ! [[ "${EXPECTED_HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]] || [ "${EXPECTED_HEAD_SHA}" != "${GITHUB_SHA}" ]; then
+                echo "::error::expected_head_sha must exactly match the dispatched commit"
+                exit 1
+              fi
+              if [ "${GITHUB_ACTOR}" != "${GITHUB_REPOSITORY_OWNER}" ]; then
+                echo "::error::production infrastructure apply must be dispatched by the repository owner"
+                exit 1
+              fi
+              expected_confirmation="runtime-complete-apply-${APPROVED_PLAN_RUN_ID}"
+              ;;
             *)
               echo "::error::unsupported operation"
               exit 1
@@ -162,18 +182,20 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Validate approved review evidence
-        if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+        if: inputs.operation != 'review-only'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           APPROVED_PLAN_RUN_ID: ${{ inputs.approved_plan_run_id }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
         run: |
           set -euo pipefail
           approved_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${APPROVED_PLAN_RUN_ID}")"
           jq -e '
             .conclusion == "success" and
             .event == "workflow_dispatch" and
-            .name == "Production Infrastructure Plan"
+            .name == "Production Infrastructure Plan" and
+            .head_sha == env.EXPECTED_HEAD_SHA
           ' <<< "${approved_run_json}" > /dev/null
 
       - name: Validate workflow configuration
@@ -372,23 +394,29 @@ jobs:
           fi
 
       - name: Create reviewed apply plan
-        if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+        if: inputs.operation != 'review-only'
         shell: bash
         env:
           TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
+          RUNTIME_PLAN_SCOPE: ${{ inputs.runtime_plan_scope }}
         run: |
           set -euo pipefail
-          terraform -chdir="${TERRAFORM_ROOT}" plan \
-            -input=false \
-            -no-color \
-            -lock-timeout=5m \
-            -out=tfplan \
-            "-var-file=${RUNNER_TEMP}/runtime.tfvars.json" \
-            '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]' \
-            '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]'
+          plan_args=(
+            -input=false
+            -no-color
+            -lock-timeout=5m
+            -out=tfplan
+            "-var-file=${RUNNER_TEMP}/runtime.tfvars.json"
+          )
+          if [ "${RUNTIME_PLAN_SCOPE}" = "runtime-cache-ingress" ]; then
+            plan_args+=(
+              '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]'
+              '-target=aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]'
+            )
+          fi
+          terraform -chdir="${TERRAFORM_ROOT}" plan "${plan_args[@]}"
 
       - name: Validate reviewed apply plan
-        id: reviewed-plan
         if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
         shell: bash
         env:
@@ -439,11 +467,130 @@ jobs:
           ' "${reviewed_plan_json}" > /dev/null
 
           rm -f "${reviewed_plan_json}"
-          echo "artifact-name=production-runtime-cache-ingress-${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate reviewed complete runtime plan
+        if: inputs.operation == 'apply-reviewed-runtime-complete'
+        shell: bash
+        env:
+          TERRAFORM_ROOT: ${{ steps.group.outputs.terraform-root }}
+        run: |
+          set -euo pipefail
+          reviewed_plan_json="${RUNNER_TEMP}/reviewed-plan.json"
+          terraform -chdir="${TERRAFORM_ROOT}" show -json tfplan > "${reviewed_plan_json}"
+
+          jq -e '
+            def is_task_definition_replacement($actions):
+              $actions == ["delete", "create"] or $actions == ["create", "delete"];
+            (
+              [
+                .resource_changes[]
+                | select(
+                    .mode == "managed" and
+                    .change.actions != ["no-op"] and
+                    .address != "aws_ecs_task_definition.api" and
+                    .address != "aws_ecs_task_definition.worker"
+                  )
+                | {address, actions: .change.actions}
+              ]
+              | sort_by(.address)
+              == [
+                {"address": "aws_cloudwatch_log_metric_filter.ecs_error[\\"web\\"]", "actions": ["update"]},
+                {"address": "aws_ecs_service.web", "actions": ["update"]},
+                {"address": "aws_iam_role_policy.ecs_task", "actions": ["update"]},
+                {"address": "aws_iam_role_policy.ecs_worker_execution", "actions": ["update"]},
+                {"address": "aws_lb.ecs", "actions": ["update"]},
+                {"address": "aws_lb_target_group.api", "actions": ["update"]},
+                {"address": "aws_lb_target_group.web", "actions": ["update"]},
+                {"address": "aws_s3_bucket_cors_configuration.artifact", "actions": ["create"]}
+              ]
+            )
+            and (
+              [
+                .resource_changes[]
+                | select(
+                    .address == "aws_ecs_task_definition.api" or
+                    .address == "aws_ecs_task_definition.worker"
+                  )
+                | {address, actions: .change.actions}
+              ]
+              | sort_by(.address)
+              | length == 2
+                and all(.[]; is_task_definition_replacement(.actions))
+            )
+          ' "${reviewed_plan_json}" > /dev/null
+
+          jq -e '
+            def task_container($definitions; $name):
+              ($definitions | fromjson | map(select(.name == $name))) as $containers
+              | if ($containers | length) == 1 then $containers[0] else error("task container is missing or ambiguous") end;
+            def secret_pairs($container):
+              [($container.secrets // [])[] | [.name, .valueFrom]];
+            def has_required_github_app_inputs($container):
+              (($container.environment // []) | any(.name == "GIT_APP_CLIENT_ID")) and
+              (($container.secrets // []) | any(.name == "GIT_APP_CLIENT_SECRET"));
+            [
+              .resource_changes[]
+              | select(.address == "aws_ecs_task_definition.api" or .address == "aws_ecs_task_definition.worker")
+            ] as $task_definitions
+            | ($task_definitions | length) == 2
+              and all($task_definitions[];
+                .address as $address
+                | (if $address == "aws_ecs_task_definition.api" then "api" else "worker" end) as $container_name
+                | task_container(.change.before.container_definitions; $container_name) as $before
+                | task_container(.change.after.container_definitions; $container_name) as $after
+                | (secret_pairs($before)) as $before_secrets
+                | (secret_pairs($after)) as $after_secrets
+                | ($before.image == $after.image)
+                  and has_required_github_app_inputs($after)
+                  and all($before_secrets[]; $after_secrets | index(.) != null)
+              )
+          ' "${reviewed_plan_json}" > /dev/null
+
+          jq -e '
+            def get_secret_values($policy):
+              [
+                ($policy | fromjson).Statement[]?
+                | (.Action | if type == "array" then . else [.] end) as $actions
+                | select($actions | index("secretsmanager:GetSecretValue"))
+                | .Resource
+                | if type == "array" then .[] else . end
+              ] | unique;
+            (
+              .resource_changes[]
+              | select(.address == "aws_ecs_task_definition.worker")
+              | .change.after.container_definitions
+              | fromjson
+              | map(select(.name == "worker"))
+              | .[0].secrets
+              | map(select(.name == "GIT_APP_CLIENT_SECRET"))
+              | .[0].valueFrom
+            ) as $worker_client_secret
+            | (
+                .resource_changes[]
+                | select(.address == "aws_iam_role_policy.ecs_worker_execution")
+                | .change
+              ) as $execution_policy
+            | get_secret_values($execution_policy.before.policy) as $before_values
+            | get_secret_values($execution_policy.after.policy) as $after_values
+            | all($before_values[]; $after_values | index(.) != null)
+              and (($after_values - $before_values) == [$worker_client_secret])
+          ' "${reviewed_plan_json}" > /dev/null
+
+          rm -f "${reviewed_plan_json}"
+
+      - name: Set reviewed plan artifact metadata
+        id: reviewed-plan
+        if: inputs.operation != 'review-only'
+        shell: bash
+        env:
+          RUNTIME_PLAN_SCOPE: ${{ inputs.runtime_plan_scope }}
+        run: |
+          set -euo pipefail
+          echo "artifact-name=production-runtime-${RUNTIME_PLAN_SCOPE}-${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload reviewed plan for approved apply
         id: upload-reviewed-plan
-        if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+        if: inputs.operation != 'review-only'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.reviewed-plan.outputs.artifact-name }}
@@ -452,7 +599,7 @@ jobs:
           retention-days: 1
 
   apply:
-    if: inputs.operation == 'apply-reviewed-runtime-cache-ingress'
+    if: inputs.operation != 'review-only'
     needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -510,7 +657,7 @@ jobs:
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
 
-      - name: Apply reviewed Runtime Cache ingress plan
+      - name: Apply reviewed runtime plan
         shell: bash
         run: |
           set -euo pipefail
@@ -518,17 +665,36 @@ jobs:
 
       - name: Verify applied resources are in Terraform state
         shell: bash
+        env:
+          RUNTIME_PLAN_SCOPE: ${{ inputs.runtime_plan_scope }}
         run: |
           set -euo pipefail
-          terraform -chdir="${TERRAFORM_ROOT}" state show -no-color \
-            'aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]' \
-            > "${RUNNER_TEMP}/runtime-cache-api-ingress.state"
-          terraform -chdir="${TERRAFORM_ROOT}" state show -no-color \
-            'aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]' \
-            > "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
-          grep -q 'from_port.*=.*6379' "${RUNNER_TEMP}/runtime-cache-api-ingress.state"
-          grep -q 'from_port.*=.*6379' "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
-          rm -f "${RUNNER_TEMP}/runtime-cache-api-ingress.state" "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
+          if [ "${RUNTIME_PLAN_SCOPE}" = "runtime-cache-ingress" ]; then
+            terraform -chdir="${TERRAFORM_ROOT}" state show -no-color \
+              'aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_api[0]' \
+              > "${RUNNER_TEMP}/runtime-cache-api-ingress.state"
+            terraform -chdir="${TERRAFORM_ROOT}" state show -no-color \
+              'aws_vpc_security_group_ingress_rule.runtime_cache_from_ecs_worker[0]' \
+              > "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
+            grep -q 'from_port.*=.*6379' "${RUNNER_TEMP}/runtime-cache-api-ingress.state"
+            grep -q 'from_port.*=.*6379' "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
+            rm -f "${RUNNER_TEMP}/runtime-cache-api-ingress.state" "${RUNNER_TEMP}/runtime-cache-worker-ingress.state"
+          else
+            for address in \
+              'aws_cloudwatch_log_metric_filter.ecs_error["web"]' \
+              'aws_ecs_service.web' \
+              'aws_ecs_task_definition.api' \
+              'aws_ecs_task_definition.worker' \
+              'aws_iam_role_policy.ecs_task' \
+              'aws_iam_role_policy.ecs_worker_execution' \
+              'aws_lb.ecs' \
+              'aws_lb_target_group.api' \
+              'aws_lb_target_group.web' \
+              'aws_s3_bucket_cors_configuration.artifact'; do
+              terraform -chdir="${TERRAFORM_ROOT}" state show -no-color "${address}" > "${RUNNER_TEMP}/runtime-complete.state"
+            done
+            rm -f "${RUNNER_TEMP}/runtime-complete.state"
+          fi
 
       - name: Delete reviewed plan artifact
         if: always() && needs.plan.outputs.artifact-id != ''

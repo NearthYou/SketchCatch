@@ -520,6 +520,8 @@ Phase 9부터 SketchCatch 자체 production infrastructure를 Terraform-managed 
 
 `Production Infrastructure Plan` workflow는 `workflow_dispatch`와 GitHub Environment `production-infra-plan` required reviewer를 사용합니다. group별 `<group>-review-only` 문자열, resource-read-only AWS plan role, 선택한 exact state/lock key 권한이 있어야 review-only Plan이 실행됩니다. Runtime Cache 복구 apply는 `runtime-cache-ingress` scope, 성공한 review-only run ID, exact head SHA, `runtime-cache-ingress-apply-<run-id>` 확인 문자열을 모두 검증합니다. 새 binary plan이 API/worker Redis ingress 두 건의 `create`만 포함할 때만 1일 retention artifact로 전달하고, `production` Environment 배포 역할로 해당 plan 파일을 apply한 뒤 artifact를 즉시 삭제합니다. `destroy`, `import`, `-auto-approve`는 허용하지 않습니다. runtime plan은 전체 production tfvars JSON이 없으면 실패합니다.
 
+전체 runtime Apply는 별도 승인 경로다. `apply-reviewed-runtime-complete`는 같은 review-only run ID와 exact head SHA, `runtime-complete-apply-<run-id>` 확인 문자열, repository owner dispatch, `production` Environment 승인을 모두 요구한다. 새 binary plan은 API/worker Task Definition 교체, web 서비스 안정화 값, ALB/Target Group, web metric filter, artifact bucket CORS, `ecs_task`·`ecs_worker_execution` inline policy만 정확히 포함해야 한다. API/worker image, 기존 Secret 연결, worker execution role의 기존 Secret 접근이 달라지거나 영구 리소스 삭제가 있으면 apply 전에 fail-closed로 중단한다.
+
 apply를 승인하기 전에 `GitHubActionsDeployRole`에는 `infra/aws/iam/github-actions-deploy-policy.json`의 최신 정책이 연결되어 있어야 합니다. Runtime Cache 복구 권한은 `production/ecs-foundation/terraform.tfstate`와 그 `.tflock`, 현재 Runtime Cache 보안 그룹의 ingress 생성 및 결과 조회로 제한합니다. 보안 그룹 교체로 ARN이 바뀌면 정책 템플릿과 정적 검증을 함께 갱신하고 별도 IAM 변경 승인을 거쳐야 하며, workflow 자체는 IAM을 변경하지 않습니다.
 
 import는 다음 순서를 지킵니다.
