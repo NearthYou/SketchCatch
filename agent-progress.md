@@ -4,16 +4,21 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- PR 1 / issue #434 and PR 2 / issue #433 are merged into `dev`. PR 3 / issue #435 started from merge commit `13716049532bcedc61d68e094bf829747077b989`, which contains reviewed PR 2 head `efdda2294830c9e8b4f8d863f280cc677daba61d`.
-- Runtime Convergence v1 separates `artifactFingerprint` from project/account/region-scoped `deploymentTargetFingerprint` and models ten distinct ECS, EC2, EKS, Kubernetes, Lambda, and Static adapters.
-- No-op requires read-only provider evidence for the canonical target, provider/account/region boundary, exact artifact fingerprint/digest/reference, and verified healthy state. Missing, mismatched, or unhealthy evidence falls back to rollout.
-- Direct ECS/Fargate and generated GitOps ECS/Lambda/EC2 ASG/Static workflows use the contract. The remaining canonical adapters are isolated ports verified with test doubles and explicit ResourceDefinition coverage.
-- Migration `0046_runtime_convergence.sql` is additive and `_journal.json` is updated after merged revision 0045.
-- Focused runtime/resource/storage/integration regressions pass. Harness, migration compatibility, lint, typecheck, build, generated Bash/Python syntax, and `git diff --check` pass.
-- Clean-state review and the evaluator rubric result are Accept (12/12, no hard fail).
-- Production runtime validation on `dev` preserves GitHub App and Live Observation Secret wiring, rejects cross-account or cross-region ARNs, reconciles ECS task definitions, and checks post-apply worker execution-policy coverage without exposing Secret values.
+- Issue #448 is implemented on `feat/gg/448-ai-draft-progress-visualization`, based on the latest merged `dev` state in merge commit `45d7625e`.
+- Only the new-project first Architecture Draft uses sequenced NDJSON full-state progress snapshots. Existing-project and Repository flows keep their JSON contracts.
+- The right pane shows confirmed requirements, pending questions, a server-owned provisional graph, compact change history, pan/zoom, and server-authorized reversible exclusion. It exposes no Board mutation or apply/edit authority before the final Draft.
+- Cancel, interruption, retry, exclusion/undo, clarification continuation, stale-request rejection, final diff/replacement, and compiler-failure retention preserve the last valid projection. Preparatory continuation snapshots do not blank the graph or synthesize history.
+- Mobile uses `대화` / `진행 중인 초안` tabs at `<=720px`; final preview content is scroll-reachable and the 390px composer avoids the global notification control.
+- Whole-branch review is Ready with no remaining Critical or Important findings. Focused API 65/65 and Web 30/30 pass; harness, lint, typecheck, build, and `git diff --check` pass.
 
 ## Session Record
+
+### 2026-07-17 - Implement live AI Draft progress preview (#448)
+
+- Added shared progress/exclusion contracts, API snapshot streaming, strict NDJSON validation, caller abort propagation, and reverse-proxy no-buffering headers while preserving the existing JSON paths.
+- Added the responsive progress pane, requirement/question summaries, provisional diagram, compact history, exclusion/undo, in-place cancel/retry, final transition diff, mobile pane tabs, and last-good projection retention.
+- Direct browser QA passed at 1440x900, 1024x768, 390x844, and the 720/721 boundary: no horizontal overflow, mobile send/tab/final scrolling, desktop simultaneous panes, pan/zoom, final replacement, and reload non-persistence. The disposable local QA account was soft-deleted and `Board에 적용` was not used.
+- Passed focused API 65/65, focused Web 30/30, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Final independent re-review is Ready.
 
 ### 2026-07-16 - Implement provider-verified Runtime Convergence v1
 
@@ -86,10 +91,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Broken Or Unverified
 
-- `pnpm test` stops in `@sketchcatch/types` at 40/43 on the same three pre-existing three-tier Template security-scope/position/parent assertions. This branch does not modify those Template sources or failing tests.
-- `pnpm --filter @sketchcatch/api test` passes 710/713. The remaining three unchanged filesystem security tests fail during Windows symlink setup with `EPERM`, before their assertions.
-- Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
+- `pnpm test:core` does not terminate in the unchanged `apps/api/src/app.test.ts` logger-stream test. Its 17 assertions pass, then the file remains pending at `await once(stream, "finish")`; the isolated run was stopped after recording the hang. Consequently root `pnpm test` was not continued into sandbox/Terraform suites.
+- The local fallback provider completed candidate-producing stages too quickly for a persistent manual exclusion/undo/retry interaction. Those lifecycles pass focused model/workflow tests; the browser run directly verified the visible progress, cancel control, clarification continuation, final transition, and responsive interactions.
+- No real cloud apply, deployment, Git handoff, user project creation, or persistent QA account remains.
 
 ## Next Action
 
-- Monitor the Ready PR targeting `dev`, resolve any actionable review or branch-owned CI failure, and merge only through normal review.
+- Push and open the issue #448 PR when requested, then resolve only branch-owned review or CI findings before normal merge into `dev`.
