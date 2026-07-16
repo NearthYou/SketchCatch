@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   getDeploymentHistoryEntries,
   getDeploymentStatusPresentation,
+  getLatestCompletedDeploymentStep,
   getRecentDeploymentResultTitle,
   resolveDeploymentHistorySelection
 } from "./deployment-presentation";
@@ -159,5 +160,35 @@ test("an absent run uses a neutral recent result title", () => {
   assert.equal(
     getRecentDeploymentResultTitle({ approvedAt: null, status: "PENDING" }),
     "최근 실행 결과"
+  );
+});
+
+test("the recent result names the most recently completed Deployment step", () => {
+  assert.equal(
+    getLatestCompletedDeploymentStep({
+      approvedAt: null,
+      currentPlanArtifactId: "plan-1",
+      currentPlanOperation: "apply",
+      status: "PENDING"
+    }),
+    "Plan 생성"
+  );
+  assert.equal(
+    getLatestCompletedDeploymentStep({
+      approvedAt: "2026-07-16T00:00:00.000Z",
+      currentPlanArtifactId: "plan-1",
+      currentPlanOperation: "apply",
+      status: "PENDING"
+    }),
+    "Plan 승인"
+  );
+  assert.equal(
+    getLatestCompletedDeploymentStep({
+      approvedAt: "2026-07-16T00:00:00.000Z",
+      currentPlanArtifactId: "plan-1",
+      currentPlanOperation: "apply",
+      status: "SUCCESS"
+    }),
+    "배포 실행"
   );
 });

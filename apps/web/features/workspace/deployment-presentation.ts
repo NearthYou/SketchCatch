@@ -100,6 +100,22 @@ export function getRecentDeploymentResultTitle(
   return "최근 배포 결과";
 }
 
+export function getLatestCompletedDeploymentStep(
+  deployment: Pick<
+    Deployment,
+    "approvedAt" | "currentPlanArtifactId" | "currentPlanOperation" | "status"
+  >
+): string {
+  if (deployment.status === "DESTROYED") return "정리 실행";
+  if (deployment.status === "SUCCESS") return "배포 실행";
+  if (deployment.approvedAt) return "Plan 승인";
+  if (deployment.currentPlanArtifactId) {
+    return deployment.currentPlanOperation === "destroy" ? "Destroy Plan 생성" : "Plan 생성";
+  }
+
+  return "검증 완료";
+}
+
 function compareDeploymentHistoryAscending(
   left: DeploymentHistorySummary,
   right: DeploymentHistorySummary

@@ -102,6 +102,8 @@ test("the recent validation result aligns with settings and does not follow scro
   assert.ok(headingIndex > -1);
   assert.ok(workspaceIndex > headingIndex);
   assert.ok(recentResultIndex > workspaceIndex);
+  assert.match(setupSource, /마지막 완료 단계/);
+  assert.match(directDeploymentSource, /getLatestCompletedDeploymentStep\(selectedDeployment\)/);
   assert.match(
     workspaceStyles,
     /\.deploymentConsoleGrid > \.deploymentStepHeading\s*\{[^}]*grid-column:\s*1 \/ -1;/s

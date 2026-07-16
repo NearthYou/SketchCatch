@@ -84,6 +84,7 @@ import {
 } from "./deployment-console-state";
 import {
   getDeploymentHistoryEntries,
+  getLatestCompletedDeploymentStep,
   getDeploymentStatusPresentation,
   getRecentDeploymentResultTitle,
   resolveDeploymentHistorySelection,
@@ -299,6 +300,7 @@ export function DirectDeploymentScreen({
   const canApply = deploymentActions.canApply;
   const canDestroy = cleanupDeploymentActions.canDestroy;
   const canCancelDeployment = deploymentActions.canCancelDeployment;
+  const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
   const deploymentActionHint = selectedDeployment
     ? getDeploymentActionHint(selectedDeployment)
     : "";
@@ -338,6 +340,9 @@ export function DirectDeploymentScreen({
     : null;
   const recentResultStage = selectedDeployment
     ? (selectedDeployment.failureStage ?? selectedDeployment.activeStage)
+    : null;
+  const recentResultCompletedStep = selectedDeployment
+    ? getLatestCompletedDeploymentStep(selectedDeployment)
     : null;
 
   useEffect(() => {
@@ -1480,9 +1485,13 @@ export function DirectDeploymentScreen({
                     <code>{selectedDeployment.scope}</code>
                   </dd>
                 </div>
-                {recentResultStage ? (
+                <div>
+                  <dt>마지막 완료 단계</dt>
+                  <dd>{recentResultCompletedStep}</dd>
+                </div>
+                {selectedDeployment.status === "FAILED" && recentResultStage ? (
                   <div>
-                    <dt>{selectedDeployment.status === "FAILED" ? "실패 단계" : "실행 단계"}</dt>
+                    <dt>실패 단계</dt>
                     <dd>{formatDeploymentStage(recentResultStage)}</dd>
                   </div>
                 ) : null}

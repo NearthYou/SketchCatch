@@ -138,7 +138,6 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   const validation = getValidationStep(input);
   if (
     input.hasUnsavedBaseline ||
-    (input.preflightState === "idle" && input.deployment?.status !== "SUCCESS") ||
     input.preflightState === "loading" ||
     input.preflightState === "blocked" ||
     input.preflightState === "error" ||

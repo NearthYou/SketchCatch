@@ -191,6 +191,24 @@ test("an approved apply plan advances to Apply", () => {
   assert.equal(flow.steps[2]?.state, "active");
 });
 
+test("a persisted plan resumes at approval after the local preflight state resets", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "plan-1",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[1]?.state, "active");
+});
+
 test("running apply reports a running final step", () => {
   const flow = getDirectDeploymentFlow(
     createInput({

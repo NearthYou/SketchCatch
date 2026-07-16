@@ -50,6 +50,12 @@ Short English-only working log for the current agent context. Older records are 
 - The approved snapshot details stay in the main panel while Cancel and the final Deploy action now appear only above the latest deployment result.
 - Verification: focused three-stage deployment tests passed 14/14; targeted Web lint and Web typecheck passed.
 
+### 2026-07-16 - Restore the most recently completed Deployment step
+
+- A persisted Plan now resumes Direct Deployment at Approval after the panel is reopened, even though the in-memory preflight state has reset.
+- Recent deployment results now show the most recently completed step, including Plan creation, Plan approval, deployment execution, and cleanup execution.
+- Verification: focused deployment console, presentation, and three-stage tests passed 39/39; targeted Web lint and Web typecheck passed.
+
 ### 2026-07-16 - Wire production GitHub App runtime inputs
 
 - Added fail-closed GitHub Environment input validation and runtime tfvars overlay to the production infrastructure plan.
