@@ -55,4 +55,4 @@ Use this file only for compact continuation context. Write it in English.
 ## Production Runtime Plan Review
 
 - Review-only production runtime Plan 29479563543 at `2db0eb33` is blocked: it omits `GIT_APP_CLIENT_SECRET` from the worker task definition and removes the existing Live Observation capability Secret ARN from the execution policy.
-- Branch `fix/sw/production-runtime-plan-drift` adds the worker Secret contract and makes the capability Secret an API requirement. Before rerunning the complete review-only Plan, the owner must retain that existing ARN in `PRODUCTION_INFRA_RUNTIME_TFVARS_JSON`; do not apply or manipulate state.
+- Branch `fix/sw/production-runtime-plan-drift` adds the worker Secret contract and makes the capability Secret an API requirement. The existing ARN is stored as the dedicated `LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN` production-infra-plan Environment Secret and overlaid without replacing `PRODUCTION_INFRA_RUNTIME_TFVARS_JSON`; do not apply or manipulate state.
