@@ -34,6 +34,9 @@ export async function forwardArchitectureDraftProxyRequest(
     const headers = new Headers();
     headers.set("cache-control", "no-cache, no-transform");
     headers.set("content-type", response.headers.get("content-type") ?? "application/json");
+    if (options.backendPath.endsWith("/stream")) {
+      headers.set("x-accel-buffering", "no");
+    }
 
     return new Response(response.body, {
       headers,

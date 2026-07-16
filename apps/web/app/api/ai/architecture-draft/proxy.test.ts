@@ -61,3 +61,24 @@ test("architecture draft proxy는 genuine upstream 연결 실패를 기존 503 J
     message: "Amazon Q API 연결에 실패했습니다. 잠시 후 다시 시도해주세요."
   });
 });
+
+test("architecture draft stream proxy는 reverse proxy buffering을 비활성화한다", async () => {
+  const response = await forwardArchitectureDraftProxyRequest(
+    new Request("http://localhost/api/ai/architecture-draft/stream", {
+      body: JSON.stringify({ prompt: "정적 웹사이트" }),
+      headers: { "content-type": "application/json" },
+      method: "POST"
+    }),
+    {
+      apiOrigin: "http://api.local",
+      backendPath: "/api/ai/architecture-draft/stream",
+      fetcher: async () =>
+        new Response('{"type":"progress"}\n', {
+          headers: { "content-type": "application/x-ndjson" }
+        })
+    }
+  );
+
+  assert.equal(response.headers.get("x-accel-buffering"), "no");
+  assert.equal(response.headers.get("cache-control"), "no-cache, no-transform");
+});
