@@ -44,6 +44,18 @@ _Avoid_: Template candidate list, AI-owned Template selection
 A proposed Practice Architecture that has not yet been accepted, corrected, or saved by the user.
 _Avoid_: AI result, generated diagram, draft infrastructure
 
+**Draft Progress View**:
+A preview shown while AI Architecture Recommendation is forming an Architecture Draft. It separates confirmed requirement evidence from provisional structure and permits viewport navigation plus excluding a provisional candidate; it cannot reposition or connect Resources, edit configuration, modify the Architecture Board, or be accepted or applied. Superseded provisional structure leaves the current projection and remains only as conversation history. An interrupted view retains the last valid projection but is explicitly marked as no longer updating. When the Architecture Draft arrives, the transition identifies material differences before the final draft becomes the current result.
+_Avoid_: Loading preview, incomplete Architecture Draft, interactive Board
+
+**Draft Progress Snapshot**:
+A sequenced, structured intermediate result containing the complete current confirmed requirement evidence and provisional structure for a Draft Progress View. Each snapshot supersedes older snapshots from the same Architecture Draft request.
+_Avoid_: Token stream, partial patch, incomplete Architecture Draft
+
+**Draft Candidate Exclusion**:
+An explicit, reversible user choice to remove one provisional candidate from the Draft Progress View and constrain subsequent Architecture Draft recommendations during the current conversation. It never modifies the Architecture Board or accepts the remaining candidates.
+_Avoid_: Resource deletion, Architecture Draft acceptance, Board mutation
+
 **AI Architecture Recommendation**:
 The service capability that interprets a Requirement Prompt, proposes an Architecture Draft, explains the trade-offs, and lets the user accept it onto the Architecture Board.
 _Avoid_: Chatbot answer, auto-generated diagram, magic design
