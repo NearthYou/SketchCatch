@@ -157,9 +157,20 @@ export function WorkspaceAiStartClient({
               />
             ))}
             {workflow.requestState === "loading" ? (
-              <div className={styles.thinking} role="status">
-                <LoaderCircle aria-hidden="true" size={16} />
-                구조를 계산하는 중
+              <div className={styles.thinking}>
+                <span className={styles.thinkingStatus} role="status">
+                  <LoaderCircle aria-hidden="true" size={16} />
+                  구조를 계산하는 중
+                </span>
+                {existingProject === undefined && workflow.progressStatus === "streaming" ? (
+                  <button
+                    className={styles.cancelStreamButton}
+                    onClick={workflow.cancelDraftProgress}
+                    type="button"
+                  >
+                    생성 중단
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -225,6 +236,13 @@ export function WorkspaceAiStartClient({
           aria-label="Architecture Draft PREVIEW"
           aria-labelledby={existingProject === undefined ? "ai-start-progress-tab" : undefined}
           className={styles.preview}
+          data-view={
+            workflow.previewDiagram !== null && workflow.draft !== null
+              ? "final"
+              : existingProject === undefined && workflow.progressSnapshot !== null
+                ? "progress"
+                : "empty"
+          }
           id="ai-start-progress-pane"
           role={existingProject === undefined ? "tabpanel" : undefined}
         >
@@ -372,6 +390,14 @@ function DraftProgressPreview({ workflow }: { readonly workflow: AiStartWorkflow
         )}
 
         <div className={styles.progressNotices}>
+          {workflow.progressStatus === "streaming" ? (
+            <div className={styles.streamingNotice} role="status">
+              <span>Architecture Draft를 생성하고 있습니다.</span>
+              <button onClick={workflow.cancelDraftProgress} type="button">
+                생성 중단
+              </button>
+            </div>
+          ) : null}
           {workflow.lastExclusion !== null ? (
             <div aria-live="polite" className={styles.exclusionNotice} role="status">
               <span>{workflow.lastExclusion.label} 후보를 제외했습니다.</span>

@@ -213,11 +213,33 @@
   display: flex;
   font-size: 13px;
   gap: 8px;
+  justify-content: space-between;
   padding: 18px 0;
+}
+
+.thinkingStatus {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
 }
 
 .thinking svg {
   animation: ai-spin 900ms linear infinite;
+}
+
+.cancelStreamButton {
+  background: #ffffff;
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 6px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  height: 28px;
+  padding: 0 8px;
+}
+
+.cancelStreamButton:hover {
+  background: #f4f4f5;
 }
 
 .composerDock {
@@ -756,6 +778,7 @@
 }
 
 .exclusionNotice,
+.streamingNotice,
 .interruptedNotice {
   align-items: center;
   display: flex;
@@ -770,6 +793,7 @@
 }
 
 .exclusionNotice button,
+.streamingNotice button,
 .interruptedNotice button {
   align-items: center;
   background: #ffffff;
@@ -785,6 +809,7 @@
 }
 
 .exclusionNotice button:hover,
+.streamingNotice button:hover,
 .interruptedNotice button:hover {
   background: #f4f4f5;
 }
@@ -1074,6 +1099,12 @@
     min-height: 0;
   }
 
+  .workspace[data-progress-enabled="true"] .preview[data-view="final"] {
+    grid-template-rows: auto minmax(320px, 1fr) auto auto;
+    overscroll-behavior: contain;
+    overflow-y: auto;
+  }
+
   .message {
     grid-template-columns: 1fr;
     gap: 7px;
@@ -1094,6 +1125,7 @@
   }
 
   .exclusionNotice,
+  .streamingNotice,
   .interruptedNotice {
     justify-content: space-between;
     text-align: left;
@@ -1136,6 +1168,10 @@
 
   .composerDock {
     padding: 12px;
+  }
+
+  .composerActions {
+    padding-right: 56px;
   }
 
   .previewHeader,

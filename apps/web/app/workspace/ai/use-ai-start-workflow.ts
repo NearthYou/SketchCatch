@@ -78,8 +78,6 @@ type MobilePane = "conversation" | "progress";
 
 type LastProgressExclusion = {
   readonly exclusion: ArchitectureDraftCandidateExclusion;
-  readonly request: CreateArchitectureDraftRequest;
-  readonly serverSnapshot: ArchitectureDraftProgressSnapshot;
 };
 
 type PatchTargetOptions = {
@@ -436,7 +434,7 @@ export function useAiStartWorkflow({
       label: candidate.label?.trim() || candidate.type
     };
     const nextExclusions = [...candidateExclusionsRef.current, exclusion];
-    lastExclusionRef.current = { exclusion, request, serverSnapshot };
+    lastExclusionRef.current = { exclusion };
     setLastExclusion(exclusion);
     candidateExclusionsRef.current = nextExclusions;
     updateVisibleProgress(projectProgressCandidateExclusion(visibleSnapshot, exclusion));
@@ -446,7 +444,9 @@ export function useAiStartWorkflow({
 
   function undoLastExclusion(): void {
     const undo = lastExclusionRef.current;
-    if (undo === null) {
+    const currentRequest = lastDraftRequestRef.current;
+    const currentServerSnapshot = rawProgressSnapshotRef.current;
+    if (undo === null || currentRequest === null) {
       return;
     }
 
@@ -456,11 +456,15 @@ export function useAiStartWorkflow({
         candidate.resourceType !== undo.exclusion.resourceType
     );
     candidateExclusionsRef.current = remainingExclusions;
-    updateVisibleProgress(restoreProgressCandidate(undo.serverSnapshot, remainingExclusions));
+    if (currentServerSnapshot !== null) {
+      updateVisibleProgress(
+        restoreProgressCandidate(currentServerSnapshot, remainingExclusions)
+      );
+    }
     lastExclusionRef.current = null;
     setLastExclusion(null);
     abortActiveDraftRequest();
-    void requestDraft({ ...undo.request, candidateExclusions: remainingExclusions });
+    void requestDraft({ ...currentRequest, candidateExclusions: remainingExclusions });
   }
 
   async function retryDraft(): Promise<void> {
@@ -547,6 +551,15 @@ export function useAiStartWorkflow({
     }
   }
 
+  function cancelDraftProgress(): void {
+    if (existingProjectId !== undefined || activeDraftRequestRef.current === null) {
+      return;
+    }
+
+    abortActiveDraftRequest(true);
+    finishRequest();
+  }
+
   function cancelStart(): void {
     abortActiveDraftRequest(true);
     router.push(existingProjectReturnHref ?? "/workspace/new");
@@ -612,21 +625,22 @@ export function useAiStartWorkflow({
     message = `${result.title} PREVIEW가 준비됐습니다.`
   ): void {
     const currentProgress = progressSnapshotRef.current;
-    if (currentProgress !== null) {
-      const difference = computeDraftProgressDifference(currentProgress, result.architectureJson);
-      setFinalProgressDifference(difference);
-    }
+    const difference =
+      currentProgress === null
+        ? null
+        : computeDraftProgressDifference(currentProgress, result.architectureJson);
+    const proposal = compileArchitectureDraftProposal(result, currentDiagram);
+
+    setFinalProgressDifference(difference);
+    setDraft(result);
+    setCompilationProposal(proposal);
+    setPreviewDiagram(proposal.diagram);
     setProgressSnapshot(null);
     progressSnapshotRef.current = null;
     rawProgressSnapshotRef.current = null;
     setProgressStatus("idle");
     lastExclusionRef.current = null;
     setLastExclusion(null);
-
-    const proposal = compileArchitectureDraftProposal(result, currentDiagram);
-    setDraft(result);
-    setCompilationProposal(proposal);
-    setPreviewDiagram(proposal.diagram);
     setMobilePaneState("progress");
     finishRequest();
     appendAssistantMessage("draft", message);
@@ -687,6 +701,7 @@ export function useAiStartWorkflow({
       composerValue.trim().length > 0 &&
       requestState !== "loading" &&
       !voiceTranscriptNeedsConfirmation,
+    cancelDraftProgress,
     cancelStart,
     composerValue,
     compilationProposal,

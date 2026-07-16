@@ -62,7 +62,15 @@ test("progress preview는 승인된 후보 제외와 undo/retry만 제공하고 
   assert.match(progressSource, /excludeProgressCandidate/);
   assert.match(progressSource, /undoLastExclusion/);
   assert.match(progressSource, /retryDraft/);
+  assert.match(progressSource, /progressStatus === "streaming"/);
+  assert.match(progressSource, /cancelDraftProgress/);
+  assert.match(progressSource, /생성 중단/);
+  assert.match(progressSource, /마지막 초안을 유지합니다/);
   assert.match(progressSource, /대화에 따라 바뀔 수 있어요/);
+  assert.match(
+    source,
+    /existingProject === undefined && workflow\.progressStatus === "streaming"[\s\S]*onClick=\{workflow\.cancelDraftProgress\}/
+  );
   assert.doesNotMatch(progressSource, /Board에 적용|nodesDraggable|nodesConnectable|설정/);
   assert.doesNotMatch(progressSource, />\s*유지\s*</);
 
@@ -70,4 +78,41 @@ test("progress preview는 승인된 후보 제외와 undo/retry만 제공하고 
   assert.match(boardSource, /readonly onExcludeCandidate\?: \(candidateId: string\) => void/);
   assert.match(boardSource, /excludableCandidateIds\.includes\(node\.id\)/);
   assert.match(boardSource, /className=\{styles\.previewExclusionList\}/);
+});
+
+test("390x844 새 프로젝트 final preview는 summary, footer, 적용 버튼까지 스크롤된다", () => {
+  const source = readFileSync(join(currentDir, "workspace-ai-start-client.tsx"), "utf8");
+  const css = readFileSync(join(currentDir, "workspace-ai-start.module.css"), "utf8");
+  const mobileStart = css.indexOf("@media (max-width: 720px)");
+  const narrowMobileStart = css.indexOf("@media (max-width: 420px)", mobileStart);
+  const mobileCss = css.slice(mobileStart, narrowMobileStart);
+
+  assert.match(source, /data-view=\{/);
+  assert.match(source, /\? "final"/);
+  assert.match(source, /ArchitectureBoardCompilationSummary/);
+  assert.match(source, /Board에 적용/);
+  assert.ok(mobileStart >= 0);
+  assert.ok(narrowMobileStart > mobileStart);
+  assert.match(
+    mobileCss,
+    /\.workspace\[data-progress-enabled="true"\] \.preview\[data-view="final"\] \{[^}]*overflow-y: auto;/s
+  );
+  assert.match(
+    mobileCss,
+    /\.workspace\[data-progress-enabled="true"\] \.preview\[data-view="final"\] \{[^}]*grid-template-rows: auto minmax\(320px, 1fr\) auto auto;/s
+  );
+});
+
+test("390px 모바일 composer는 배포 알림 FAB 영역을 피해 send hit target을 유지한다", () => {
+  const source = readFileSync(join(currentDir, "workspace-ai-start-client.tsx"), "utf8");
+  const css = readFileSync(join(currentDir, "workspace-ai-start.module.css"), "utf8");
+  const narrowMobileStart = css.indexOf("@media (max-width: 420px)");
+  const narrowMobileCss = css.slice(narrowMobileStart);
+
+  assert.match(source, /aria-label="요구사항 보내기"/);
+  assert.ok(narrowMobileStart >= 0);
+  assert.match(
+    narrowMobileCss,
+    /\.composerActions \{[^}]*padding-right: 56px;/s
+  );
 });
