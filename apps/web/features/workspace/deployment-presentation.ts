@@ -35,17 +35,42 @@ export function getDeploymentStatusPresentation(
 export function getDeploymentHistoryEntries<T extends DeploymentHistorySummary>(
   deployments: readonly T[]
 ): DeploymentHistoryEntry<T>[] {
-  const ascendingDeployments = [...deployments].sort(compareDeploymentHistoryAscending);
+  const ascendingDeployments = deployments
+    .filter(isSuccessfulDeploymentVersion)
+    .sort(compareDeploymentHistoryAscending);
 
   return ascendingDeployments
     .map((deployment) => ({
       deployment,
-      versionLabel:
-        deployment.status === "SUCCESS" || deployment.status === "DESTROYED"
-          ? createStableDeploymentVersionLabel(deployment)
-          : "배포 시도"
+      versionLabel: createStableDeploymentVersionLabel(deployment)
     }))
     .reverse();
+}
+
+export function resolveDeploymentHistorySelection<T extends DeploymentHistorySummary>(input: {
+  readonly currentSelectionId: string;
+  readonly deployments: readonly T[];
+  readonly previousLatestDeploymentId: string;
+}): { readonly latestDeploymentId: string; readonly selectedDeploymentId: string } {
+  const entries = getDeploymentHistoryEntries(input.deployments);
+  const latestDeploymentId = entries[0]?.deployment.id ?? "";
+  const currentSelectionIsAvailable = entries.some(
+    ({ deployment }) => deployment.id === input.currentSelectionId
+  );
+  const hasNewSuccessfulDeployment =
+    latestDeploymentId !== input.previousLatestDeploymentId;
+
+  return {
+    latestDeploymentId,
+    selectedDeploymentId:
+      !currentSelectionIsAvailable || hasNewSuccessfulDeployment
+        ? latestDeploymentId
+        : input.currentSelectionId
+  };
+}
+
+function isSuccessfulDeploymentVersion(deployment: DeploymentHistorySummary): boolean {
+  return deployment.status === "SUCCESS" || deployment.status === "DESTROYED";
 }
 
 function createStableDeploymentVersionLabel(deployment: DeploymentHistorySummary): string {

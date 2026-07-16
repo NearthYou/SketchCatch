@@ -3,7 +3,8 @@ import { test } from "node:test";
 import {
   getDeploymentHistoryEntries,
   getDeploymentStatusPresentation,
-  getRecentDeploymentResultTitle
+  getRecentDeploymentResultTitle,
+  resolveDeploymentHistorySelection
 } from "./deployment-presentation";
 
 test("infrastructure deployments appear as versioned Deployment History entries", () => {
@@ -32,9 +33,80 @@ test("infrastructure deployments appear as versioned Deployment History entries"
     })),
     [
       { deploymentId: "deployment-2", versionLabel: "v20260716-020000-000-yment2" },
-      { deploymentId: "deployment-failed", versionLabel: "배포 시도" },
       { deploymentId: "deployment-1", versionLabel: "v20260716-010000-000-yment1" }
     ]
+  );
+});
+
+test("Deployment History defaults to the latest successful version and ignores failures", () => {
+  const selection = resolveDeploymentHistorySelection({
+    currentSelectionId: "",
+    deployments: [
+      {
+        id: "deployment-failed",
+        createdAt: "2026-07-16T03:00:00.000Z",
+        status: "FAILED"
+      },
+      {
+        id: "deployment-success-2",
+        createdAt: "2026-07-16T02:00:00.000Z",
+        status: "SUCCESS"
+      },
+      {
+        id: "deployment-success-1",
+        createdAt: "2026-07-16T01:00:00.000Z",
+        status: "DESTROYED"
+      }
+    ],
+    previousLatestDeploymentId: ""
+  });
+
+  assert.deepEqual(selection, {
+    latestDeploymentId: "deployment-success-2",
+    selectedDeploymentId: "deployment-success-2"
+  });
+});
+
+test("Deployment History selects a newly successful deployment but preserves manual browsing", () => {
+  const deployments = [
+    {
+      id: "deployment-success-3",
+      createdAt: "2026-07-16T03:00:00.000Z",
+      status: "SUCCESS" as const
+    },
+    {
+      id: "deployment-success-2",
+      createdAt: "2026-07-16T02:00:00.000Z",
+      status: "SUCCESS" as const
+    },
+    {
+      id: "deployment-success-1",
+      createdAt: "2026-07-16T01:00:00.000Z",
+      status: "DESTROYED" as const
+    }
+  ];
+
+  assert.deepEqual(
+    resolveDeploymentHistorySelection({
+      currentSelectionId: "deployment-success-1",
+      deployments,
+      previousLatestDeploymentId: "deployment-success-2"
+    }),
+    {
+      latestDeploymentId: "deployment-success-3",
+      selectedDeploymentId: "deployment-success-3"
+    }
+  );
+  assert.deepEqual(
+    resolveDeploymentHistorySelection({
+      currentSelectionId: "deployment-success-1",
+      deployments,
+      previousLatestDeploymentId: "deployment-success-3"
+    }),
+    {
+      latestDeploymentId: "deployment-success-3",
+      selectedDeploymentId: "deployment-success-1"
+    }
   );
 });
 

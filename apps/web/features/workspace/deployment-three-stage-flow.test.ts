@@ -81,6 +81,27 @@ test("Direct Deployment omits the removed deployment context and run-details sec
   assert.doesNotMatch(directDeploymentSource, /deployment-run-details|실행 세부정보/);
 });
 
+test("Deployment History selects one successful version and renders only its details", () => {
+  const historyStart = directDeploymentSource.indexOf("const renderDeploymentHistory");
+  const historyEnd = directDeploymentSource.indexOf("const renderHistoryView", historyStart);
+  const historySource = directDeploymentSource.slice(historyStart, historyEnd);
+
+  assert.ok(historyStart > -1);
+  assert.ok(historyEnd > historyStart);
+  assert.match(historySource, /id="deployment-history-version-select"/);
+  assert.match(historySource, /onChange=\{setSelectedHistoryDeploymentId\}/);
+  assert.doesNotMatch(historySource, /deploymentHistoryEntries\.map/);
+  assert.doesNotMatch(historySource, /setSelectedDeploymentId/);
+  assert.match(directDeploymentSource, /listDeploymentLogs\(deploymentId\)/);
+  assert.match(directDeploymentSource, /beginDeploymentHistoryDetailsLoad/);
+  assert.match(directDeploymentSource, /completeDeploymentHistoryDetailsLoad/);
+  assert.match(directDeploymentSource, /failDeploymentHistoryDetailsLoad/);
+  assert.match(directDeploymentSource, /aria-busy="true"/);
+  assert.match(directDeploymentSource, /role="alert"/);
+  assert.match(directDeploymentSource, /historyDeploymentResources/);
+  assert.match(directDeploymentSource, /historyTerraformOutputs/);
+});
+
 function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }

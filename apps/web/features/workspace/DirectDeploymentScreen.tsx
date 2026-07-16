@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { useReducer } from "react";
+import { useReducer, useRef } from "react";
 import type {
   ApplicationRelease,
   AiPreDeploymentAnalysisResult,
@@ -87,8 +87,15 @@ import {
   getDeploymentHistoryEntries,
   getDeploymentStatusPresentation,
   getRecentDeploymentResultTitle,
+  resolveDeploymentHistorySelection,
   type DeploymentStatusTone
 } from "./deployment-presentation";
+import {
+  beginDeploymentHistoryDetailsLoad,
+  completeDeploymentHistoryDetailsLoad,
+  failDeploymentHistoryDetailsLoad,
+  initialDeploymentHistoryDetailsState
+} from "./deployment-history-details";
 import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
 import {
   getSafeDeploymentLinks,
@@ -160,8 +167,8 @@ export function DirectDeploymentScreen({
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [applicationReleases, setApplicationReleases] = useState<ApplicationRelease[]>([]);
-  const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
-  const [deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
+  const [_deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
+  const [_deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputState, dispatchTerraformOutputState] = useReducer(
     reduceDeploymentOutputState,
     initialDeploymentOutputState
@@ -169,6 +176,11 @@ export function DirectDeploymentScreen({
   const [selectedAwsConnectionId, setSelectedAwsConnectionId] = useState("");
   const [selectedScope, setSelectedScope] = useState<DeploymentScope | "auto">("auto");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
+  const [selectedHistoryDeploymentId, setSelectedHistoryDeploymentId] = useState("");
+  const [deploymentHistoryDetails, setDeploymentHistoryDetails] = useState(
+    initialDeploymentHistoryDetailsState
+  );
+  const previousLatestHistoryDeploymentIdRef = useRef("");
   const [queuedApplyPlanDeploymentId, setQueuedApplyPlanDeploymentId] = useState("");
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
@@ -218,9 +230,23 @@ export function DirectDeploymentScreen({
     () => getDeploymentHistoryEntries(deployments),
     [deployments]
   );
+  const deploymentHistoryOptions = useMemo<SelectMenuOption[]>(
+    () =>
+      deploymentHistoryEntries.map(({ deployment, versionLabel }) => ({
+        detail: `${getDeploymentStatusPresentation(deployment.status).label} · ${deployment.scope} · ${formatDate(deployment.createdAt)}`,
+        label: versionLabel,
+        value: deployment.id
+      })),
+    [deploymentHistoryEntries]
+  );
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
+  );
+  const selectedHistoryDeployment = useMemo(
+    () =>
+      deployments.find((deployment) => deployment.id === selectedHistoryDeploymentId) ?? null,
+    [deployments, selectedHistoryDeploymentId]
   );
   const cleanupDeployments = useMemo(
     () => selectDeploymentCleanupTargets(deployments),
@@ -237,6 +263,31 @@ export function DirectDeploymentScreen({
   const deploymentOutputLinks = useMemo(
     () => getSafeDeploymentLinks(terraformOutputs),
     [terraformOutputs]
+  );
+  const hasLoadedSelectedHistoryDetails =
+    deploymentHistoryDetails.deploymentId === selectedHistoryDeploymentId &&
+    deploymentHistoryDetails.requestState === "success";
+  const historyDeploymentLogs = hasLoadedSelectedHistoryDetails
+    ? deploymentHistoryDetails.logs
+    : [];
+  const historyDeploymentResources = hasLoadedSelectedHistoryDetails
+    ? deploymentHistoryDetails.resources
+    : [];
+  const historyTerraformOutputs = hasLoadedSelectedHistoryDetails
+    ? deploymentHistoryDetails.outputs
+    : [];
+  const historyDetailsIsLoading =
+    selectedHistoryDeploymentId.length > 0 &&
+    (deploymentHistoryDetails.deploymentId !== selectedHistoryDeploymentId ||
+      deploymentHistoryDetails.requestState === "loading");
+  const historyDetailsErrorMessage =
+    deploymentHistoryDetails.deploymentId === selectedHistoryDeploymentId &&
+    deploymentHistoryDetails.requestState === "error"
+      ? deploymentHistoryDetails.errorMessage
+      : "";
+  const historyDeploymentOutputLinks = useMemo(
+    () => getSafeDeploymentLinks(historyTerraformOutputs),
+    [historyTerraformOutputs]
   );
   const canStartDeploymentReview = selectedAwsConnectionId.length > 0 && requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
@@ -302,6 +353,20 @@ export function DirectDeploymentScreen({
   useEffect(() => {
     setSelectedDirectStepId(directDeploymentFlow.activeStepId);
   }, [directDeploymentFlow.activeStepId]);
+
+  useEffect(() => {
+    const selection = resolveDeploymentHistorySelection({
+      currentSelectionId: selectedHistoryDeploymentId,
+      deployments,
+      previousLatestDeploymentId: previousLatestHistoryDeploymentIdRef.current
+    });
+
+    previousLatestHistoryDeploymentIdRef.current = selection.latestDeploymentId;
+
+    if (selection.selectedDeploymentId !== selectedHistoryDeploymentId) {
+      setSelectedHistoryDeploymentId(selection.selectedDeploymentId);
+    }
+  }, [deployments, selectedHistoryDeploymentId]);
 
   useEffect(() => {
     if (!queuedApplyPlanDeploymentId || !selectedDeployment) {
@@ -505,6 +570,52 @@ export function DirectDeploymentScreen({
       cancelled = true;
     };
   }, [selectedDeploymentId]);
+
+  useEffect(() => {
+    if (!selectedHistoryDeploymentId) {
+      setDeploymentHistoryDetails(initialDeploymentHistoryDetailsState);
+      return;
+    }
+
+    const deploymentId = selectedHistoryDeploymentId;
+    let cancelled = false;
+    setDeploymentHistoryDetails(beginDeploymentHistoryDetailsLoad(deploymentId));
+
+    void Promise.all([
+      listDeploymentLogs(deploymentId),
+      listDeploymentResources(deploymentId),
+      listTerraformOutputs(deploymentId)
+    ])
+      .then(([logs, resources, outputs]) => {
+        if (!cancelled) {
+          setDeploymentHistoryDetails((current) =>
+            completeDeploymentHistoryDetailsLoad(current, {
+              deploymentId,
+              logs,
+              outputs,
+              resources
+            })
+          );
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setDeploymentHistoryDetails((current) =>
+            failDeploymentHistoryDetailsLoad(current, {
+              deploymentId,
+              errorMessage: getApiErrorMessage(
+                error,
+                "배포 버전 상세를 불러오지 못했습니다."
+              )
+            })
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedHistoryDeploymentId]);
 
   useEffect(() => {
     if (!selectedDeploymentId || selectedDeployment?.status !== "RUNNING") {
@@ -1401,14 +1512,37 @@ export function DirectDeploymentScreen({
     );
   };
 
-  const renderResultsSection = () => (
-    <section className={styles.deploymentSection}>
+  const renderResultsSection = () => {
+    if (historyDetailsIsLoading) {
+      return (
+        <section aria-busy="true" className={styles.deploymentSection}>
+          <h3>리소스와 Output</h3>
+          <p className={styles.deploymentHint} role="status">
+            선택한 배포 버전의 리소스와 Output을 불러오는 중입니다.
+          </p>
+        </section>
+      );
+    }
+
+    if (historyDetailsErrorMessage) {
+      return (
+        <section className={styles.deploymentSection}>
+          <h3>리소스와 Output</h3>
+          <p className={styles.deploymentRecentResultError} role="alert">
+            {historyDetailsErrorMessage}
+          </p>
+        </section>
+      );
+    }
+
+    return (
+      <section className={styles.deploymentSection}>
       <h3>리소스와 Output</h3>
-      {deploymentResources.length === 0 ? (
+      {historyDeploymentResources.length === 0 ? (
         <p className={styles.deploymentHint}>아직 기록된 AWS 리소스가 없습니다.</p>
       ) : (
         <div className={styles.deploymentResultRows}>
-          {deploymentResources.map((resource) => (
+          {historyDeploymentResources.map((resource) => (
             <article className={styles.deploymentResultRow} key={resource.id}>
               <strong>{resource.terraformAddress}</strong>
               <span className={styles.deploymentResultMeta}>{resource.terraformType}</span>
@@ -1419,16 +1553,16 @@ export function DirectDeploymentScreen({
           ))}
         </div>
       )}
-      {terraformOutputs.length === 0 ? (
+      {historyTerraformOutputs.length === 0 ? (
         <p className={styles.deploymentHint}>Terraform output이 없습니다.</p>
       ) : (
         <>
           <DeploymentOutputLinks
-            links={deploymentOutputLinks}
-            scopeKey={selectedDeploymentId || null}
+            links={historyDeploymentOutputLinks}
+            scopeKey={selectedHistoryDeploymentId || null}
           />
           <div className={styles.deploymentResultRows}>
-            {terraformOutputs.map((output) => (
+            {historyTerraformOutputs.map((output) => (
               <article className={styles.deploymentResultRow} key={output.id}>
                 <strong>{output.name}</strong>
                 <span className={styles.deploymentResultMeta}>
@@ -1440,52 +1574,90 @@ export function DirectDeploymentScreen({
           </div>
         </>
       )}
-    </section>
-  );
+      </section>
+    );
+  };
 
-  const renderLogsSection = () => (
-    <section className={styles.deploymentSection}>
-      <h3>전체 로그</h3>
-      <DeploymentLogList logs={deploymentLogs} />
-    </section>
-  );
+  const renderLogsSection = () => {
+    if (historyDetailsIsLoading) {
+      return (
+        <section aria-busy="true" className={styles.deploymentSection}>
+          <h3>전체 로그</h3>
+          <p className={styles.deploymentHint} role="status">
+            선택한 배포 버전의 로그를 불러오는 중입니다.
+          </p>
+        </section>
+      );
+    }
 
-  const renderDeploymentHistory = () => (
-    <section className={styles.deploymentHistorySection} id="deployment-history">
-      <div className={styles.deploymentSectionHeader}>
-        <h3>배포 이력</h3>
-        <small>{deploymentHistoryEntries.length}건</small>
-      </div>
-      {deploymentHistoryEntries.length === 0 ? (
-        <div className={styles.deploymentHistoryEmpty}>
-          <strong>아직 배포 이력이 없습니다.</strong>
-          <p>첫 번째 배포가 완료되면 이곳에 표시됩니다.</p>
+    if (historyDetailsErrorMessage) {
+      return (
+        <section className={styles.deploymentSection}>
+          <h3>전체 로그</h3>
+          <p className={styles.deploymentRecentResultError} role="alert">
+            {historyDetailsErrorMessage}
+          </p>
+        </section>
+      );
+    }
+
+    return (
+      <section className={styles.deploymentSection}>
+        <h3>전체 로그</h3>
+        <DeploymentLogList logs={historyDeploymentLogs} />
+      </section>
+    );
+  };
+
+  const renderDeploymentHistory = () => {
+    const selectedEntry = deploymentHistoryEntries.find(
+      ({ deployment }) => deployment.id === selectedHistoryDeploymentId
+    );
+    const deployment = selectedEntry?.deployment ?? selectedHistoryDeployment;
+    const release = deployment
+      ? sortedApplicationReleases.find((candidate) => candidate.deploymentId === deployment.id)
+      : undefined;
+    const status = deployment
+      ? getDeploymentStatusPresentation(deployment.status)
+      : null;
+    const outputUrl = getSafeReleaseOutputUrl(release?.outputUrl ?? null);
+
+    return (
+      <section className={styles.deploymentHistorySection} id="deployment-history">
+        <div className={styles.deploymentSectionHeader}>
+          <h3>배포 이력</h3>
+          <small>{deploymentHistoryEntries.length}개 성공 버전</small>
         </div>
-      ) : (
-        <div className={styles.deploymentResultRows}>
-          {deploymentHistoryEntries.map(({ deployment, versionLabel }) => {
-            const release = sortedApplicationReleases.find(
-              (candidate) => candidate.deploymentId === deployment.id
-            );
-            const status = getDeploymentStatusPresentation(deployment.status);
-            const outputUrl = getSafeReleaseOutputUrl(release?.outputUrl ?? null);
-            return (
+        {deploymentHistoryEntries.length === 0 ? (
+          <div className={styles.deploymentHistoryEmpty}>
+            <strong>아직 성공한 배포 버전이 없습니다.</strong>
+            <p>첫 번째 배포가 성공하면 이곳에 표시됩니다.</p>
+          </div>
+        ) : (
+          <div className={styles.deploymentResultRows}>
+            <div className={styles.deploymentLabeledField}>
+              <label htmlFor="deployment-history-version-select">배포 버전</label>
+              <SelectMenu
+                ariaLabel="배포 이력 버전 선택"
+                emptyLabel="배포 버전 없음"
+                id="deployment-history-version-select"
+                onChange={setSelectedHistoryDeploymentId}
+                options={deploymentHistoryOptions}
+                tone="workspace"
+                value={selectedHistoryDeploymentId}
+              />
+            </div>
+            {deployment && selectedEntry && status ? (
               <article className={styles.deploymentResultRow} key={deployment.id}>
-                <button
-                  className={styles.deploymentHistoryEntryButton}
-                  onClick={() => setSelectedDeploymentId(deployment.id)}
-                  type="button"
-                >
-                  <strong>{versionLabel}</strong>
-                  <span className={styles.deploymentResultMeta}>
-                    {status.label} · {deployment.scope} · {formatDate(deployment.createdAt)}
-                  </span>
-                  <span className={styles.deploymentResultValue}>
-                    변경 {deployment.planSummary?.createCount ?? 0}개 추가 ·{" "}
-                    {deployment.planSummary?.updateCount ?? 0}개 수정 ·{" "}
-                    {deployment.planSummary?.deleteCount ?? 0}개 삭제
-                  </span>
-                </button>
+                <strong>{selectedEntry.versionLabel}</strong>
+                <span className={styles.deploymentResultMeta}>
+                  {status.label} · {deployment.scope} · {formatDate(deployment.createdAt)}
+                </span>
+                <span className={styles.deploymentResultValue}>
+                  변경 {deployment.planSummary?.createCount ?? 0}개 추가 ·{" "}
+                  {deployment.planSummary?.updateCount ?? 0}개 수정 ·{" "}
+                  {deployment.planSummary?.deleteCount ?? 0}개 삭제
+                </span>
                 {release ? (
                   <span className={styles.deploymentResultValue}>
                     릴리즈 {release.version} · {formatDeploymentSource(release.source)} ·{" "}
@@ -1504,12 +1676,12 @@ export function DirectDeploymentScreen({
                   </a>
                 ) : null}
               </article>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
+            ) : null}
+          </div>
+        )}
+      </section>
+    );
+  };
 
   const renderHistoryView = () => (
     <div className={styles.deploymentHistoryGrid}>
@@ -1518,14 +1690,26 @@ export function DirectDeploymentScreen({
         <details className={styles.deploymentDisclosure}>
           <summary>
             <span>리소스와 Output</span>
-            <small>{deploymentResources.length + terraformOutputs.length}건</small>
+            <small>
+              {historyDetailsIsLoading
+                ? "불러오는 중"
+                : historyDetailsErrorMessage
+                  ? "불러오기 실패"
+                  : `${historyDeploymentResources.length + historyTerraformOutputs.length}건`}
+            </small>
           </summary>
           <div className={styles.deploymentDisclosureBody}>{renderResultsSection()}</div>
         </details>
         <details className={styles.deploymentDisclosure}>
           <summary>
             <span>전체 로그</span>
-            <small>{deploymentLogs.length}줄</small>
+            <small>
+              {historyDetailsIsLoading
+                ? "불러오는 중"
+                : historyDetailsErrorMessage
+                  ? "불러오기 실패"
+                  : `${historyDeploymentLogs.length}줄`}
+            </small>
           </summary>
           <div className={styles.deploymentDisclosureBody}>{renderLogsSection()}</div>
         </details>
