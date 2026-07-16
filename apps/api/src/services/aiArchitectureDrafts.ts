@@ -84,6 +84,28 @@ const PREVIEW_NODE_LAYOUT_SIZES: Partial<Record<ResourceType, LayoutSize>> = {
 };
 const PREVIEW_AREA_RESOURCE_TYPES = new Set<ResourceType>(["VPC", "SUBNET"]);
 const PREVIEW_BOUNDARY_RESOURCE_TYPES = new Set<ResourceType>(["INTERNET_GATEWAY"]);
+const EXCLUDABLE_CANDIDATE_RESOURCE_TYPES = new Set<ResourceType>([
+  "S3",
+  "CLOUDFRONT",
+  "CLOUDWATCH_LOG_GROUP",
+  "CLOUDWATCH_METRIC_ALARM",
+  "CLOUDWATCH_DASHBOARD",
+  "CLOUDTRAIL",
+  "XRAY_GROUP",
+  "XRAY_SAMPLING_RULE",
+  "SNS_TOPIC",
+  "SQS_QUEUE",
+  "EVENTBRIDGE_RULE",
+  "SCHEDULER_SCHEDULE",
+  "CODEBUILD_PROJECT",
+  "CODEDEPLOY_APP",
+  "CODEPIPELINE",
+  "CODESTAR_CONNECTION",
+  "ECR_REPOSITORY",
+  "CONFIG_RULE",
+  "SHIELD_PROTECTION",
+  "GUARDDUTY_DETECTOR"
+]);
 const PREVIEW_PARENT_EDGE_LABELS = new Set(["contains", "hosts"]);
 const TERRAFORM_REFERENCE_ATTRIBUTE_SUFFIXES = ["id", "arn", "name", "execution_arn"] as const;
 const RESOURCE_TYPE_TERRAFORM_NAMES: Partial<Record<ResourceType, string>> = {
@@ -203,16 +225,51 @@ export type CreateAmazonQArchitectureDraftResponseOptions = {
 // 자연어 요청을 보드가 열 수 있는 ArchitectureJson 초안으로 바꾸는 1차 진입점입니다.
 export function createArchitectureDraft(input: string | CreateArchitectureDraftRequest): AiArchitectureDraftResult {
   const request = normalizeArchitectureDraftRequest(input);
+  const candidateDraft = createArchitectureDraftCandidateProjection(request);
 
+  return applyArchitectureDraftCandidateExclusions(
+    candidateDraft,
+    resolveAuthorizedCandidateExclusions(
+      candidateDraft.architectureJson,
+      request.candidateExclusions
+    )
+  );
+}
+
+function createArchitectureDraftCandidateProjection(
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
   const resolution = resolveArchitectureRequirement(request);
   const resourceQuantities = resolveArchitectureResourceQuantities(request.prompt);
   const draft = planPracticeArchitecture(resolution, resourceQuantities);
   const configuredDraft = applyOperatingConditionConfig(draft, resolution.operatingProfile);
 
-  return applyArchitectureDraftRequestPolicies(
+  return applyArchitectureDraftBaseRequestPolicies(
     applyGuardrailMetadata(configuredDraft, request, resolution),
     request
   );
+}
+
+function authorizeArchitectureDraftRequest(
+  request: CreateArchitectureDraftRequest
+): CreateArchitectureDraftRequest {
+  if (request.candidateExclusions === undefined) {
+    return request;
+  }
+
+  try {
+    const candidateDraft = createArchitectureDraftCandidateProjection(request);
+    return {
+      ...request,
+      candidateExclusions:
+        resolveAuthorizedCandidateExclusions(
+          candidateDraft.architectureJson,
+          request.candidateExclusions
+        ) ?? []
+    };
+  } catch {
+    return { ...request, candidateExclusions: [] };
+  }
 }
 
 // GitHub 링크 요청도 결국 가벼운 텍스트 근거를 모아 자연어 초안 생성 흐름을 재사용합니다.
@@ -271,7 +328,9 @@ export async function createAmazonQArchitectureDraftResponse(
   input: string | CreateArchitectureDraftRequest,
   options: CreateAmazonQArchitectureDraftResponseOptions = {}
 ): Promise<CreateArchitectureDraftResponse> {
-  const request = normalizeArchitectureDraftRequest(input);
+  const request = authorizeArchitectureDraftRequest(
+    normalizeArchitectureDraftRequest(input)
+  );
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const provider = options.provider;
   const progressReporter = createArchitectureDraftProgressReporter(request, options.onProgress);
@@ -279,10 +338,12 @@ export async function createAmazonQArchitectureDraftResponse(
   progressReporter.report("preparing_requirements");
 
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
   }
 
   if (provider === undefined) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
     return createFallbackArchitectureDraftResponse(request, "provider_not_configured", creditPolicy.billingMode);
   }
 
@@ -320,6 +381,9 @@ export async function createAmazonQArchitectureDraftResponse(
   const payload = maskSecretsForAi({
     architectureBrief,
     architectureDecisionSpace,
+    ...(request.candidateExclusions === undefined
+      ? {}
+      : { candidateExclusions: request.candidateExclusions }),
     ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
     fixedTemplateSelection,
     prompt: request.prompt,
@@ -339,7 +403,8 @@ export async function createAmazonQArchitectureDraftResponse(
         request.prompt,
         architectureDecisionSpace,
         normalizedRequirement,
-        fixedTemplateSelection
+        fixedTemplateSelection,
+        request.candidateExclusions
       ),
       payload: activePayload
     });
@@ -351,13 +416,21 @@ export async function createAmazonQArchitectureDraftResponse(
     );
 
     if (parsedResponse.status === "preview") {
-      const validationIssues = findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement);
+      const validationIssues = findAmazonQPreviewValidationIssues(
+        request.prompt,
+        parsedResponse,
+        normalizedRequirement,
+        request.candidateExclusions
+      );
 
       if (validationIssues.length > 0) {
         retryUsed = true;
         activePayload = maskSecretsForAi({
           architectureBrief,
           architectureDecisionSpace,
+          ...(request.candidateExclusions === undefined
+            ? {}
+            : { candidateExclusions: request.candidateExclusions }),
           ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
           fixedTemplateSelection,
           prompt: request.prompt,
@@ -376,6 +449,7 @@ export async function createAmazonQArchitectureDraftResponse(
             architectureDecisionSpace,
             normalizedRequirement,
             fixedTemplateSelection,
+            request.candidateExclusions,
             validationIssues,
             parsedResponse.architectureJson
           ),
@@ -390,10 +464,23 @@ export async function createAmazonQArchitectureDraftResponse(
 
         const retryValidationIssues =
           parsedResponse.status === "preview"
-            ? findAmazonQPreviewValidationIssues(request.prompt, parsedResponse, normalizedRequirement)
+            ? findAmazonQPreviewValidationIssues(
+                request.prompt,
+                parsedResponse,
+                normalizedRequirement,
+                request.candidateExclusions
+              )
             : [];
 
         if (parsedResponse.status === "preview" && retryValidationIssues.length > 0) {
+          if (!isUsableCandidateArchitecture(parsedResponse.architectureJson)) {
+            await reportFallbackDraftProgress(progressReporter, options.onProgress);
+            return createFallbackArchitectureDraftResponse(
+              request,
+              "invalid_response",
+              creditPolicy.billingMode
+            );
+          }
           throw createRequirementsUnsatisfiedError(retryValidationIssues);
         }
       }
@@ -407,6 +494,7 @@ export async function createAmazonQArchitectureDraftResponse(
     });
 
     if (parsedResponse.status === "needs_clarification") {
+      progressReporter.reportClarification(parsedResponse.question);
       return {
         status: "needs_clarification",
         question: parsedResponse.question,
@@ -442,6 +530,9 @@ export async function createAmazonQArchitectureDraftResponse(
         activePayload = maskSecretsForAi({
           architectureBrief,
           architectureDecisionSpace,
+          ...(request.candidateExclusions === undefined
+            ? {}
+            : { candidateExclusions: request.candidateExclusions }),
           ...(normalizedRequirement === null ? {} : { normalizedRequirement }),
           fixedTemplateSelection,
           prompt: request.prompt,
@@ -460,6 +551,7 @@ export async function createAmazonQArchitectureDraftResponse(
             architectureDecisionSpace,
             normalizedRequirement,
             fixedTemplateSelection,
+            request.candidateExclusions,
             validationIssues,
             previousPlan
           ),
@@ -739,7 +831,18 @@ function applyArchitectureParameterCompletenessDefaults(
 
 type ArchitectureDraftProgressReporter = {
   readonly report: (stage: ArchitectureDraftProgressStage) => void;
+  readonly reportClarification: (question: string) => void;
 };
+
+async function reportFallbackDraftProgress(
+  progressReporter: ArchitectureDraftProgressReporter,
+  onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
+): Promise<void> {
+  progressReporter.report("building_diagram");
+  if (onProgress !== undefined) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+}
 
 function createArchitectureDraftProgressReporter(
   request: CreateArchitectureDraftRequest,
@@ -749,53 +852,62 @@ function createArchitectureDraftProgressReporter(
   let lastProvisionalArchitectureJson: ArchitectureJson | null = null;
   let excludableCandidateIds: string[] = [];
   const confirmedRequirements = createConfirmedRequirementSummaries(request);
-  const pendingQuestions = createPendingArchitectureDraftQuestions(request.prompt);
+  let pendingQuestions = createPendingArchitectureDraftQuestions(request.prompt);
+
+  function report(stage: ArchitectureDraftProgressStage): void {
+    if (onProgress === undefined) {
+      return;
+    }
+
+    if (
+      stage !== "preparing_requirements"
+      && pendingQuestions.length === 0
+      && lastProvisionalArchitectureJson === null
+    ) {
+      try {
+        lastProvisionalArchitectureJson = createArchitectureDraft(request).architectureJson;
+        excludableCandidateIds = resolveExcludableCandidateIds(
+          lastProvisionalArchitectureJson
+        );
+      } catch {
+        // A provisional projection is observational and must not interrupt final generation.
+      }
+    }
+
+    sequence += 1;
+    let provisionalArchitectureJson: ArchitectureJson | null = null;
+    try {
+      provisionalArchitectureJson =
+        lastProvisionalArchitectureJson === null
+          ? null
+          : structuredClone(lastProvisionalArchitectureJson);
+    } catch {
+      // Keep emitting the complete non-graph state if a provisional clone cannot be reported.
+    }
+
+    const snapshot: ArchitectureDraftProgressSnapshot = {
+      sequence,
+      stage,
+      confirmedRequirements: [...confirmedRequirements],
+      pendingQuestions: [...pendingQuestions],
+      provisionalArchitectureJson,
+      excludableCandidateIds:
+        provisionalArchitectureJson === null ? [] : [...excludableCandidateIds]
+    };
+
+    try {
+      onProgress(snapshot);
+    } catch {
+      // Progress reporting is observational and must never interrupt Q generation.
+    }
+  }
 
   return {
-    report(stage) {
-      if (onProgress === undefined) {
-        return;
-      }
-
-      if (
-        stage !== "preparing_requirements"
-        && pendingQuestions.length === 0
-        && lastProvisionalArchitectureJson === null
-      ) {
-        try {
-          lastProvisionalArchitectureJson = createArchitectureDraft(request).architectureJson;
-          excludableCandidateIds = lastProvisionalArchitectureJson.nodes.map((node) => node.id);
-        } catch {
-          // A provisional projection is observational and must not interrupt final generation.
-        }
-      }
-
-      sequence += 1;
-      let provisionalArchitectureJson: ArchitectureJson | null = null;
-      try {
-        provisionalArchitectureJson =
-          lastProvisionalArchitectureJson === null
-            ? null
-            : structuredClone(lastProvisionalArchitectureJson);
-      } catch {
-        // Keep emitting the complete non-graph state if a provisional clone cannot be reported.
-      }
-
-      const snapshot: ArchitectureDraftProgressSnapshot = {
-        sequence,
-        stage,
-        confirmedRequirements: [...confirmedRequirements],
-        pendingQuestions: [...pendingQuestions],
-        provisionalArchitectureJson,
-        excludableCandidateIds:
-          provisionalArchitectureJson === null ? [] : [...excludableCandidateIds]
-      };
-
-      try {
-        onProgress(snapshot);
-      } catch {
-        // Progress reporting is observational and must never interrupt Q generation.
-      }
+    report,
+    reportClarification(question) {
+      const normalizedQuestion = question.trim();
+      pendingQuestions = normalizedQuestion.length === 0 ? [] : [normalizedQuestion];
+      report("preparing_requirements");
     }
   };
 }
@@ -804,7 +916,7 @@ function createConfirmedRequirementSummaries(
   request: CreateArchitectureDraftRequest
 ): string[] {
   const summaries = [
-    ...request.prompt.split(/\r?\n/u),
+    ...createPromptRequirementSummaries(request.prompt),
     ...(request.dynamicQuestionAnswers ?? []).map(
       ({ question, answer }) => `${question}: ${answer}`
     )
@@ -813,6 +925,36 @@ function createConfirmedRequirementSummaries(
     .filter((summary) => summary.length > 0);
 
   return [...new Set(summaries)].slice(0, 32);
+}
+
+function createPromptRequirementSummaries(prompt: string): string[] {
+  const lines = prompt
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const summaries: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const nextLine = lines[index + 1];
+
+    if (
+      line !== undefined
+      && nextLine !== undefined
+      && /[?？]$/u.test(line)
+      && !/[?？]$/u.test(nextLine)
+    ) {
+      summaries.push(`${line}: ${nextLine}`);
+      index += 1;
+      continue;
+    }
+
+    if (line !== undefined) {
+      summaries.push(line);
+    }
+  }
+
+  return summaries;
 }
 
 function createPendingArchitectureDraftQuestions(prompt: string): string[] {
@@ -1588,7 +1730,8 @@ function createAmazonQArchitectureDraftPrompt(
   prompt: string,
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
-  fixedTemplateSelection: FixedTemplateSelection | null
+  fixedTemplateSelection: FixedTemplateSelection | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
 ): string {
   return [
     createAmazonQArchitectureDraftInstructions(),
@@ -1600,6 +1743,7 @@ function createAmazonQArchitectureDraftPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createCandidateExclusionPromptSection(candidateExclusions),
     "User requirement prompt:",
     prompt
   ].join("\n\n");
@@ -1611,6 +1755,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
   fixedTemplateSelection: FixedTemplateSelection | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined,
   validationIssues: readonly string[],
   previousArchitectureJson: ArchitectureJson
 ): string {
@@ -1626,6 +1771,7 @@ function createAmazonQArchitectureDraftRepairPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createCandidateExclusionPromptSection(candidateExclusions),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Original user requirement prompt:",
@@ -1640,6 +1786,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
   architectureDecisionSpace: ArchitectureDecisionSpace,
   normalizedRequirement: ArchitectureIntentPlan | null,
   fixedTemplateSelection: FixedTemplateSelection | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined,
   validationIssues: readonly string[],
   previousPlan: Record<string, unknown>
 ): string {
@@ -1652,6 +1799,7 @@ function createAmazonQArchitecturePlanRepairPrompt(
     "ArchitectureDecisionSpace:",
     JSON.stringify(architectureDecisionSpace, null, 2),
     createFixedTemplateSelectionPrompt(fixedTemplateSelection),
+    createCandidateExclusionPromptSection(candidateExclusions),
     "Validation issues:",
     ...validationIssues.map((issue) => `- ${issue}`),
     "Previous invalid plan:",
@@ -1659,6 +1807,21 @@ function createAmazonQArchitecturePlanRepairPrompt(
     "Original user requirement prompt:",
     prompt
   ].join("\n\n");
+}
+
+function createCandidateExclusionPromptSection(
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): string {
+  if (candidateExclusions === undefined || candidateExclusions.length === 0) {
+    return "";
+  }
+
+  return [
+    "Server-authorized Draft Candidate Exclusions:",
+    "These exclusions are binding and supersede matching earlier resource requirements.",
+    "Do not include any ResourceNode whose type matches an excluded candidate. Choose a valid alternative topology or return needs_clarification when no valid alternative exists.",
+    JSON.stringify(candidateExclusions, null, 2)
+  ].join("\n");
 }
 
 function createNormalizedArchitectureIntentPlanPromptSection(
@@ -2054,15 +2217,204 @@ function applyArchitectureDraftRequestPolicies(
   draft: AiArchitectureDraftResult,
   request: CreateArchitectureDraftRequest
 ): AiArchitectureDraftResult {
-  const policyDraft = applyStrictRepositoryEvidencePolicy(
-    applyFixedTemplateSelection(draft, request.templateId),
-    request
-  );
+  const policyDraft = applyArchitectureDraftBaseRequestPolicies(draft, request);
+  let authorizedCandidateExclusions:
+    | readonly ArchitectureDraftCandidateExclusion[]
+    | undefined;
+
+  try {
+    const candidateDraft = createArchitectureDraftCandidateProjection(request);
+    authorizedCandidateExclusions = resolveAuthorizedCandidateExclusions(
+      candidateDraft.architectureJson,
+      request.candidateExclusions
+    );
+  } catch {
+    // Candidate authorization is observational and must not interrupt final generation.
+  }
 
   return applyArchitectureDraftCandidateExclusions(
     policyDraft,
-    request.candidateExclusions
+    authorizedCandidateExclusions
   );
+}
+
+function applyArchitectureDraftBaseRequestPolicies(
+  draft: AiArchitectureDraftResult,
+  request: CreateArchitectureDraftRequest
+): AiArchitectureDraftResult {
+  return applyStrictRepositoryEvidencePolicy(
+    applyFixedTemplateSelection(draft, request.templateId),
+    request
+  );
+}
+
+function resolveAuthorizedCandidateExclusions(
+  candidateArchitectureJson: ArchitectureJson,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): readonly ArchitectureDraftCandidateExclusion[] | undefined {
+  if (candidateExclusions === undefined) {
+    return undefined;
+  }
+
+  try {
+    const excludableCandidateIds = new Set(
+      resolveExcludableCandidateIds(candidateArchitectureJson)
+    );
+    const candidateById = new Map(
+      candidateArchitectureJson.nodes.map((node) => [node.id, node] as const)
+    );
+
+    return candidateExclusions.filter((exclusion) => {
+      if (!excludableCandidateIds.has(exclusion.candidateId)) {
+        return false;
+      }
+
+      const candidate = candidateById.get(exclusion.candidateId);
+      return candidate !== undefined
+        && candidate.type === exclusion.resourceType
+        && readArchitectureCandidateLabel(candidate) === exclusion.label;
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveExcludableCandidateIds(
+  architectureJson: ArchitectureJson
+): string[] {
+  return architectureJson.nodes
+    .filter((candidate) => {
+      if (!EXCLUDABLE_CANDIDATE_RESOURCE_TYPES.has(candidate.type)) {
+        return false;
+      }
+
+      const architectureWithoutCandidateType = excludeArchitectureResourceTypes(
+        architectureJson,
+        new Set([candidate.type])
+      );
+      return isUsableCandidateArchitecture(
+        architectureWithoutCandidateType,
+        architectureJson
+      );
+    })
+    .map(({ id }) => id);
+}
+
+function readArchitectureCandidateLabel(
+  candidate: ArchitectureJson["nodes"][number]
+): string {
+  return candidate.label?.trim() || candidate.type;
+}
+
+function excludeArchitectureResourceTypes(
+  architectureJson: ArchitectureJson,
+  excludedResourceTypes: ReadonlySet<ResourceType>
+): ArchitectureJson {
+  const nodes = architectureJson.nodes.filter(
+    (node) => !excludedResourceTypes.has(node.type)
+  );
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = architectureJson.edges.filter(
+    (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+  );
+
+  return { nodes, edges };
+}
+
+function isUsableCandidateArchitecture(
+  architectureJson: ArchitectureJson,
+  sourceArchitectureJson: ArchitectureJson = architectureJson
+): boolean {
+  if (architectureJson.nodes.length === 0) {
+    return false;
+  }
+
+  const nodeIds = new Set(architectureJson.nodes.map(({ id }) => id));
+  if (
+    nodeIds.size !== architectureJson.nodes.length
+    || !architectureJson.edges.every(
+      ({ sourceId, targetId }) => nodeIds.has(sourceId) && nodeIds.has(targetId)
+    )
+  ) {
+    return false;
+  }
+
+  const removedCandidates = sourceArchitectureJson.nodes.filter(
+    ({ id }) => !nodeIds.has(id)
+  );
+  if (removedCandidates.length === 0) {
+    return true;
+  }
+
+  const removedCandidateIds = new Set(removedCandidates.map(({ id }) => id));
+  if (
+    sourceArchitectureJson.edges.some(
+      ({ sourceId, targetId }) => nodeIds.has(sourceId) && removedCandidateIds.has(targetId)
+    )
+  ) {
+    return false;
+  }
+
+  return !architectureJson.nodes.some((node) =>
+    readNestedConfigStringValues(node.config).some((value) =>
+      removedCandidates.some((candidate) =>
+        matchesArchitectureCandidateConfigReference(value, candidate)
+      )
+    )
+  );
+}
+
+function readNestedConfigStringValues(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.trim().length === 0 ? [] : [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(readNestedConfigStringValues);
+  }
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
+
+  return Object.values(value).flatMap(readNestedConfigStringValues);
+}
+
+function matchesArchitectureCandidateConfigReference(
+  rawReferenceValue: string,
+  candidate: ArchitectureJson["nodes"][number]
+): boolean {
+  const referenceValue = normalizeReferenceValue(rawReferenceValue);
+  if (referenceValue === candidate.id) {
+    return true;
+  }
+
+  const configuredTerraformResourceType = candidate.config.terraformResourceType;
+  const terraformResourceType =
+    typeof configuredTerraformResourceType === "string"
+      ? configuredTerraformResourceType
+      : resourceDefinitions.find(
+        (definition) => definition.resourceType === candidate.type
+      )?.terraform.resourceType;
+  if (!terraformResourceType) {
+    return false;
+  }
+
+  const configuredTerraformResourceName = candidate.config.terraformResourceName;
+  const resourceNames = new Set([
+    candidate.id,
+    candidate.id.replace(/-/gu, "_"),
+    ...(typeof configuredTerraformResourceName === "string"
+      ? [configuredTerraformResourceName]
+      : [])
+  ]);
+
+  return [...resourceNames].some((resourceName) => {
+    const resourceAddress = `${terraformResourceType}.${resourceName}`;
+    const dataAddress = `data.${resourceAddress}`;
+    return referenceValue === resourceAddress
+      || referenceValue.startsWith(`${resourceAddress}.`)
+      || referenceValue === dataAddress
+      || referenceValue.startsWith(`${dataAddress}.`);
+  });
 }
 
 function applyArchitectureDraftCandidateExclusions(
@@ -2080,21 +2432,52 @@ function applyArchitectureDraftCandidateExclusions(
     if (excludedResourceTypes.size === 0) {
       return draft;
     }
-    const nodes = draft.architectureJson.nodes.filter(
-      (node) => !excludedResourceTypes.has(node.type)
+    const architectureJson = excludeArchitectureResourceTypes(
+      draft.architectureJson,
+      excludedResourceTypes
     );
-    const nodeIds = new Set(nodes.map((node) => node.id));
-    const edges = draft.architectureJson.edges.filter(
-      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
-    );
+    if (!isUsableCandidateArchitecture(architectureJson, draft.architectureJson)) {
+      return appendCandidateExclusionMetadata(draft, candidateExclusions, false);
+    }
 
-    return {
+    return appendCandidateExclusionMetadata({
       ...draft,
-      architectureJson: { nodes, edges }
-    };
+      architectureJson
+    }, candidateExclusions, true);
   } catch {
     return draft;
   }
+}
+
+function appendCandidateExclusionMetadata(
+  draft: AiArchitectureDraftResult,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[],
+  applied: boolean
+): AiArchitectureDraftResult {
+  const candidates = candidateExclusions.map(
+    ({ candidateId, resourceType, label }) =>
+      `${label.trim() || resourceType} (${resourceType}, ${candidateId})`
+  );
+  if (candidates.length === 0) {
+    return draft;
+  }
+
+  const constraintDescription = candidates.join(", ");
+  const assumption = applied
+    ? `진행 프리뷰에서 승인된 후보 제외 제약을 반영했습니다: ${constraintDescription}`
+    : `후보 제외 제약은 남은 구조를 사용할 수 없게 만들어 적용하지 않았습니다: ${constraintDescription}`;
+  const explanation = applied
+    ? `서버가 발급한 후보 id/type/label을 확인한 뒤 Resource 유형 제외를 적용했습니다: ${constraintDescription}`
+    : `서버가 발급한 후보 제외를 확인했지만 빈 구조 또는 끊어진 참조를 피하기 위해 적용하지 않았습니다: ${constraintDescription}`;
+
+  return {
+    ...draft,
+    metadata: {
+      ...draft.metadata,
+      assumptions: [...new Set([...draft.metadata.assumptions, assumption])],
+      explanations: [...new Set([...draft.metadata.explanations, explanation])]
+    }
+  };
 }
 
 function applyStrictRepositoryEvidencePolicy(
@@ -3218,27 +3601,78 @@ function createAmazonQArchitectureBrief(prompt: string): string {
 function findAmazonQPreviewValidationIssues(
   prompt: string,
   preview: AmazonQArchitectureDraftPreview,
-  normalizedRequirement: ArchitectureIntentPlan | null
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
 ): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const architectureJson = preview.architectureJson;
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const excludedResourceTypes = new Set(
+    (candidateExclusions ?? []).map(({ resourceType }) => resourceType)
+  );
   const issues: string[] = [];
+
+  if (!isUsableCandidateArchitecture(architectureJson)) {
+    issues.push(
+      "The preview must contain at least one usable ResourceNode with unique ids and no dangling edges. Regenerate a non-empty valid topology or return needs_clarification."
+    );
+  }
 
   if (requiresServerlessOnlyArchitecture(normalizedPrompt) && nodeTypes.has("EC2")) {
     issues.push("The user requested serverless or no EC2, but the preview includes EC2. Regenerate without EC2 and use serverless supported resources such as LAMBDA and API_GATEWAY_REST_API when compute is needed.");
   }
 
-  issues.push(...findRequirementCoverageValidationIssues(normalizedPrompt, preview, normalizedRequirement));
+  issues.push(
+    ...findCandidateExclusionValidationIssues(
+      architectureJson,
+      candidateExclusions
+    )
+  );
+  issues.push(
+    ...findRequirementCoverageValidationIssues(
+      normalizedPrompt,
+      preview,
+      normalizedRequirement,
+      excludedResourceTypes
+    )
+  );
   issues.push(...findArchitectureLayoutValidationIssues(architectureJson));
 
   return issues;
 }
 
+function findCandidateExclusionValidationIssues(
+  architectureJson: ArchitectureJson,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
+): string[] {
+  if (candidateExclusions === undefined || candidateExclusions.length === 0) {
+    return [];
+  }
+
+  const includedResourceTypes = new Set(
+    architectureJson.nodes.map(({ type }) => type)
+  );
+  const violatedExclusions = candidateExclusions.filter(({ resourceType }) =>
+    includedResourceTypes.has(resourceType)
+  );
+  if (violatedExclusions.length === 0) {
+    return [];
+  }
+
+  return [
+    `The preview violates the server-authorized candidate exclusion: ${violatedExclusions
+      .map(({ candidateId, resourceType, label }) =>
+        `${label.trim() || resourceType} (${resourceType}, ${candidateId})`
+      )
+      .join(", ")}. Regenerate without those ResourceNode types or return needs_clarification when no valid alternative exists.`
+  ];
+}
+
 function findRequirementCoverageValidationIssues(
   normalizedPrompt: string,
   preview: AmazonQArchitectureDraftPreview,
-  normalizedRequirement: ArchitectureIntentPlan | null
+  normalizedRequirement: ArchitectureIntentPlan | null,
+  excludedResourceTypes: ReadonlySet<ResourceType> = new Set<ResourceType>()
 ): string[] {
   const issues: string[] = [];
   const architectureJson = preview.architectureJson;
@@ -3257,11 +3691,24 @@ function findRequirementCoverageValidationIssues(
     issues.push("Requirement coverage missing: Amazon Q must record the selected pattern and rejected/alternative pattern rationale.");
   }
 
-  issues.push(...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson));
-  issues.push(...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson));
+  issues.push(
+    ...findExplicitResourceTypeValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    )
+  );
+  issues.push(
+    ...findRequestedResourceQuantityValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    )
+  );
   issues.push(...findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson));
   issues.push(
     ...findNormalizedRequirementValidationIssues(normalizedRequirement, architectureJson, {
+      excludedResourceTypes,
       validateSubnetSpread: false,
       validateVisualSpread: false
     })
@@ -3343,6 +3790,7 @@ function findNormalizedRequirementValidationIssues(
   normalizedRequirement: ArchitectureIntentPlan | null,
   architectureJson: ArchitectureJson,
   options: {
+    readonly excludedResourceTypes?: ReadonlySet<ResourceType>;
     readonly validateSubnetSpread?: boolean;
     readonly validateVisualSpread?: boolean;
   } = {}
@@ -3353,8 +3801,10 @@ function findNormalizedRequirementValidationIssues(
 
   const issues: string[] = [];
   const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const excludedResourceTypes = options.excludedResourceTypes ?? new Set<ResourceType>();
   const missingResourceTypes = (normalizedRequirement.requiredResources ?? []).filter(
     (resourceType) =>
+      !excludedResourceTypes.has(resourceType as ResourceType) &&
       !isResourceTypeForbiddenByPlan(normalizedRequirement, resourceType as ResourceType) &&
       !actualResourceTypes.has(resourceType as ResourceType)
   );
@@ -3368,7 +3818,10 @@ function findNormalizedRequirementValidationIssues(
   for (const [resourceType, quantity] of Object.entries(normalizedRequirement.resourceQuantities ?? {})) {
     const requiredResourceType = resourceType as ResourceType;
 
-    if (isResourceTypeForbiddenByPlan(normalizedRequirement, requiredResourceType)) {
+    if (
+      excludedResourceTypes.has(requiredResourceType)
+      || isResourceTypeForbiddenByPlan(normalizedRequirement, requiredResourceType)
+    ) {
       continue;
     }
 
@@ -3943,13 +4396,22 @@ function createAmazonQPlanDraftResult(
     },
     request
   ).architectureJson;
-  const validationIssues = usesStrictEcsRepositoryEvidence(request)
-    ? findStrictRepositoryEvidenceValidationIssues(request, architectureJson)
-    : findMaterializedArchitecturePlanValidationIssues(
-        request.prompt,
-        plan,
-        architectureJson
-      );
+  const validationIssues = [
+    ...(usesStrictEcsRepositoryEvidence(request)
+      ? findStrictRepositoryEvidenceValidationIssues(request, architectureJson)
+      : findMaterializedArchitecturePlanValidationIssues(
+          request.prompt,
+          plan,
+          architectureJson,
+          request.candidateExclusions
+        )),
+    ...(usesStrictEcsRepositoryEvidence(request)
+      ? findCandidateExclusionValidationIssues(
+          architectureJson,
+          request.candidateExclusions
+        )
+      : [])
+  ];
 
   if (validationIssues.length > 0) {
     throw createRequirementsUnsatisfiedError(validationIssues);
@@ -4454,17 +4916,33 @@ function applyArchitecturePlanExclusions(
 function findMaterializedArchitecturePlanValidationIssues(
   prompt: string,
   plan: ArchitectureIntentPlan | null,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  candidateExclusions: readonly ArchitectureDraftCandidateExclusion[] | undefined
 ): string[] {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
   const nodeTypes = new Set(architectureJson.nodes.map((node) => node.type));
+  const excludedResourceTypes = new Set(
+    (candidateExclusions ?? []).map(({ resourceType }) => resourceType)
+  );
   const materializedPatternIds = new Set(plan?.patternIds ?? []);
   const planForbidsEc2Runtime = (plan?.forbiddenCapabilities ?? []).some(
     (capability) => capability.toLowerCase() === "ec2_runtime"
   );
   const issues = [
-    ...findExplicitResourceTypeValidationIssues(normalizedPrompt, architectureJson),
-    ...findRequestedResourceQuantityValidationIssues(normalizedPrompt, architectureJson),
+    ...findCandidateExclusionValidationIssues(
+      architectureJson,
+      candidateExclusions
+    ),
+    ...findExplicitResourceTypeValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    ),
+    ...findRequestedResourceQuantityValidationIssues(
+      normalizedPrompt,
+      architectureJson,
+      excludedResourceTypes
+    ),
     ...(planForbidsEc2Runtime
       ? []
       : findRuntimeTopologyValidationIssues(normalizedPrompt, architectureJson, {
@@ -4472,7 +4950,10 @@ function findMaterializedArchitecturePlanValidationIssues(
         })),
     ...(materializedPatternIds.has("alb-asg-ec2")
       ? []
-      : findNormalizedRequirementValidationIssues(plan, architectureJson, { validateVisualSpread: false })),
+      : findNormalizedRequirementValidationIssues(plan, architectureJson, {
+          excludedResourceTypes,
+          validateVisualSpread: false
+        })),
     ...findOperationalRequirementTopologyValidationIssues(normalizedPrompt, architectureJson),
     ...findCanonicalPatternMaterializationIssues(normalizedPrompt, plan, architectureJson)
   ];
@@ -5291,20 +5772,24 @@ function findRuntimeTopologyValidationIssues(
 
 function findExplicitResourceTypeValidationIssues(
   normalizedPrompt: string,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  excludedResourceTypes: ReadonlySet<ResourceType> = new Set<ResourceType>()
 ): string[] {
   const requestedResourceTypes = findExplicitResourceTypesInPrompt(normalizedPrompt).filter(
     (resourceType) =>
-      !explicitlyForbidsEc2Runtime(normalizedPrompt) ||
-      ![
-        "EC2",
-        "AMI",
-        "IAM_INSTANCE_PROFILE",
-        "LAUNCH_TEMPLATE",
-        "AUTO_SCALING_GROUP",
-        "AUTO_SCALING_POLICY",
-        "ECS_CAPACITY_PROVIDER"
-      ].includes(resourceType)
+      !excludedResourceTypes.has(resourceType)
+      && (
+        !explicitlyForbidsEc2Runtime(normalizedPrompt)
+        || ![
+          "EC2",
+          "AMI",
+          "IAM_INSTANCE_PROFILE",
+          "LAUNCH_TEMPLATE",
+          "AUTO_SCALING_GROUP",
+          "AUTO_SCALING_POLICY",
+          "ECS_CAPACITY_PROVIDER"
+        ].includes(resourceType)
+      )
   );
   const actualResourceTypes = new Set(architectureJson.nodes.map((node) => node.type));
   const missingResourceTypes = requestedResourceTypes.filter((resourceType) => !actualResourceTypes.has(resourceType));
@@ -5320,8 +5805,13 @@ function findExplicitResourceTypeValidationIssues(
 
 function findRequestedResourceQuantityValidationIssues(
   normalizedPrompt: string,
-  architectureJson: ArchitectureJson
+  architectureJson: ArchitectureJson,
+  excludedResourceTypes: ReadonlySet<ResourceType> = new Set<ResourceType>()
 ): string[] {
+  if (excludedResourceTypes.has("EC2")) {
+    return [];
+  }
+
   const requestedQuantities = resolveArchitectureResourceQuantities(normalizedPrompt);
   const ec2NodeCount = architectureJson.nodes.filter((node) => node.type === "EC2").length;
 

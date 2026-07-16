@@ -19,6 +19,7 @@ import type {
 } from "@sketchcatch/types";
 import { AiDraftBoardPreview } from "./ai-draft-board-preview";
 import type { AiStartExistingProject, AiStartMessage } from "./ai-start-model";
+import { getDraftProgressPlaceholder } from "./ai-draft-progress-model";
 import { useAiStartWorkflow } from "./use-ai-start-workflow";
 import { ArchitectureBoardCompilationSummary } from "../../../features/architecture-board-compiler/architecture-board-compilation-summary";
 import styles from "./workspace-ai-start.module.css";
@@ -32,6 +33,9 @@ export function WorkspaceAiStartClient({
 }) {
   const workflow = useAiStartWorkflow({ existingProject });
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const hasProgressView =
+    existingProject === undefined &&
+    (workflow.progressSnapshot !== null || workflow.progressStatus !== "idle");
 
   useEffect(() => {
     const transcript = transcriptRef.current;
@@ -91,7 +95,7 @@ export function WorkspaceAiStartClient({
         </div>
         <span
           className={styles.previewStatus}
-          data-active={workflow.previewDiagram !== null || workflow.progressSnapshot !== null}
+          data-active={workflow.previewDiagram !== null || hasProgressView}
           role="status"
         >
           {getTopStatusLabel(workflow)}
@@ -101,7 +105,7 @@ export function WorkspaceAiStartClient({
       <div
         className={styles.workspace}
         data-has-preview={
-          workflow.previewDiagram !== null || workflow.progressSnapshot !== null
+          workflow.previewDiagram !== null || hasProgressView
         }
         data-mobile-pane={workflow.mobilePane}
         data-progress-enabled={existingProject === undefined}
@@ -239,7 +243,7 @@ export function WorkspaceAiStartClient({
           data-view={
             workflow.previewDiagram !== null && workflow.draft !== null
               ? "final"
-              : existingProject === undefined && workflow.progressSnapshot !== null
+              : hasProgressView
                 ? "progress"
                 : "empty"
           }
@@ -301,7 +305,7 @@ export function WorkspaceAiStartClient({
                 </div>
               </footer>
             </>
-          ) : existingProject === undefined && workflow.progressSnapshot !== null ? (
+          ) : hasProgressView ? (
             <DraftProgressPreview workflow={workflow} />
           ) : (
             <div className={styles.emptyPreview}>
@@ -318,19 +322,16 @@ export function WorkspaceAiStartClient({
 
 function DraftProgressPreview({ workflow }: { readonly workflow: AiStartWorkflow }) {
   const snapshot = workflow.progressSnapshot;
-  if (snapshot === null) {
-    return null;
-  }
-
   const recentHistory = workflow.progressHistory.slice(-6);
-  const excludableCandidateIds = snapshot.excludableCandidateIds;
+  const excludableCandidateIds = snapshot?.excludableCandidateIds ?? [];
+  const progressPlaceholder = getDraftProgressPlaceholder(workflow.progressStatus);
 
   return (
     <div className={styles.progressPreview}>
       <header className={`${styles.previewHeader} ${styles.progressHeader}`}>
         <div>
           <span>진행 중인 초안</span>
-          <h1>{getProgressStageLabel(snapshot.stage)}</h1>
+          <h1>{snapshot === null ? "초안 준비" : getProgressStageLabel(snapshot.stage)}</h1>
         </div>
         <span className={styles.progressState} data-status={workflow.progressStatus}>
           {getProgressStatusLabel(workflow.progressStatus)}
@@ -338,21 +339,28 @@ function DraftProgressPreview({ workflow }: { readonly workflow: AiStartWorkflow
       </header>
 
       <section className={styles.progressContext} aria-label="확정된 요구사항과 남은 질문">
-        <div className={styles.progressRequirements}>
-          <strong>확정된 요구사항</strong>
-          {snapshot.confirmedRequirements.length > 0 ? (
-            <ul>
-              {snapshot.confirmedRequirements.map((requirement) => (
-                <li key={requirement}>{requirement}</li>
-              ))}
-            </ul>
-          ) : (
-            <span>대화에서 요구사항을 확인하고 있습니다.</span>
-          )}
-        </div>
+        {snapshot === null ? (
+          <div className={styles.progressRequirements}>
+            <strong>요구사항 연결 중</strong>
+            <span>첫 진행 정보를 기다리고 있습니다.</span>
+          </div>
+        ) : (
+          <div className={styles.progressRequirements}>
+            <strong>확정된 요구사항</strong>
+            {snapshot.confirmedRequirements.length > 0 ? (
+              <ul>
+                {snapshot.confirmedRequirements.map((requirement) => (
+                  <li key={requirement}>{requirement}</li>
+                ))}
+              </ul>
+            ) : (
+              <span>대화에서 요구사항을 확인하고 있습니다.</span>
+            )}
+          </div>
+        )}
         <div className={styles.pendingQuestions}>
           <span>남은 질문</span>
-          <strong>{snapshot.pendingQuestions.length}개</strong>
+          <strong>{snapshot?.pendingQuestions.length ?? 0}개</strong>
         </div>
       </section>
 
@@ -366,8 +374,8 @@ function DraftProgressPreview({ workflow }: { readonly workflow: AiStartWorkflow
           />
         ) : (
           <div className={styles.progressWaiting} role="status">
-            <LoaderCircle aria-hidden="true" size={18} />
-            Resource 후보를 구조화하고 있습니다.
+            {progressPlaceholder.busy ? <LoaderCircle aria-hidden="true" size={18} /> : null}
+            {progressPlaceholder.message}
           </div>
         )}
       </div>

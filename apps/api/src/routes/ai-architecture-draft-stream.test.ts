@@ -179,6 +179,57 @@ test("POST /api/ai/architecture-draft validates candidate exclusion limits and f
   assert.equal(callCount, 0);
 });
 
+test("POST /api/ai/architecture-draft/stream rejects Repository Analysis authority fields", async (t) => {
+  let callCount = 0;
+  const app = await buildAiRouteApp(() => {
+    callCount += 1;
+    return terminalResult;
+  });
+  t.after(() => app.close());
+
+  const authorityFields = [
+    {
+      repositoryAnalysis: {
+        projectId: "11111111-1111-4111-8111-111111111111",
+        sourceRepositoryId: "22222222-2222-4222-8222-222222222222"
+      }
+    },
+    {
+      repositoryEvidence: {
+        mode: "strict" as const,
+        facts: [
+          {
+            kind: "backend_runtime" as const,
+            value: "ecs_fargate_service",
+            sourcePath: "package.json"
+          }
+        ]
+      }
+    },
+    {
+      repositoryAnalysis: {
+        projectId: "11111111-1111-4111-8111-111111111111",
+        sourceRepositoryId: "22222222-2222-4222-8222-222222222222"
+      },
+      templateFallback: { source: "repository-analysis" }
+    }
+  ];
+
+  for (const authorityField of authorityFields) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ai/architecture-draft/stream",
+      payload: {
+        prompt: "Repository 구조를 추천해 주세요.",
+        ...authorityField
+      }
+    });
+
+    assert.equal(response.statusCode, 400);
+  }
+  assert.equal(callCount, 0);
+});
+
 async function buildAiRouteApp(
   createArchitectureDraftResponse: CreateArchitectureDraftResponseFactory
 ): Promise<FastifyInstance> {

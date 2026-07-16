@@ -6,8 +6,12 @@ import { dirname, join } from "node:path";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
+function readWorkflowSource(): string {
+  return readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+}
+
 test("AI 시작 Draft와 Patch는 Compiler proposal을 같은 preview와 승인 경계로 사용한다", () => {
-  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+  const source = readWorkflowSource();
 
   assert.match(source, /compileArchitectureDraftProposal/);
   assert.doesNotMatch(source, /getDiagramJsonForArchitectureDraft/);
@@ -16,43 +20,41 @@ test("AI 시작 Draft와 Patch는 Compiler proposal을 같은 preview와 승인 
   assert.match(source, /canApprove:[\s\S]*compilationProposal !== null/);
 });
 
-test("새 프로젝트 Draft만 progress stream을 사용하고 기존 프로젝트는 JSON 응답을 유지한다", () => {
-  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+test("새 프로젝트 Draft만 coordinator와 progress stream을 사용하고 기존 프로젝트는 JSON을 유지한다", () => {
+  const source = readWorkflowSource();
 
-  assert.match(source, /createAiArchitectureDraftStream/);
   assert.match(
     source,
     /if \(existingProjectId !== undefined\) \{[\s\S]*createAiArchitectureDraft\(request\)[\s\S]*return;?[\s\S]*\}/
   );
+  assert.match(source, /draftProgressCoordinatorRef\.current\.begin\(request\)/);
   assert.match(
     source,
-    /createAiArchitectureDraftStream\([\s\S]*signal: controller\.signal[\s\S]*onProgress:/
+    /createAiArchitectureDraftStream\(progressRequest\.request,[\s\S]*signal: progressRequest\.signal[\s\S]*onProgress:/
   );
 });
 
-test("Draft progress 요청은 abort와 단조 request identity로 stale event를 차단한다", () => {
-  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+test("hook은 테스트 가능한 coordinator에 stale·제외·undo·final 순서를 위임한다", () => {
+  const source = readWorkflowSource();
 
-  assert.match(source, /useRef<AbortController \| null>/);
-  assert.match(source, /requestIdentityRef = useRef\(0\)/);
-  assert.match(source, /const requestIdentity = \+\+requestIdentityRef\.current/);
-  assert.match(source, /requestIdentity !== requestIdentityRef\.current/);
-  assert.match(source, /controller\.signal\.aborted/);
-  assert.match(source, /rawProgressSnapshotRef/);
-  assert.match(source, /progressSnapshotRef/);
-  assert.match(source, /mobilePaneSelectionRef/);
-  assert.match(source, /shouldRevealProgress[\s\S]*!mobilePaneSelectionRef\.current/);
-  assert.match(source, /progressStatus/);
-  assert.match(source, /progressDiagram/);
-  assert.match(source, /progressHistory/);
-  assert.match(
-    source,
-    /preserveDraftProgressProjection\(\s*progressSnapshotRef\.current,\s*projectedSnapshot\s*\)/
-  );
+  for (const contract of [
+    /draftProgressCoordinatorRef\.current\.receive\(/,
+    /draftProgressCoordinatorRef\.current\.complete\(progressRequest\)/,
+    /draftProgressCoordinatorRef\.current\.interrupt\(progressRequest\)/,
+    /draftProgressCoordinatorRef\.current\.exclude\(candidateId\)/,
+    /draftProgressCoordinatorRef\.current\.undoLastExclusion\(\)/,
+    /draftProgressCoordinatorRef\.current\.retryRequest\(\)/,
+    /draftProgressCoordinatorRef\.current\.finalize\(/
+  ]) {
+    assert.match(source, contract);
+  }
+
+  assert.match(source, /draftProgressCoordinatorRef\.current\.awaitInput\(\)/);
+  assert.match(source, /draftProgressCoordinatorRef\.current\.markInterrupted\(\)/);
 });
 
-test("progress Diagram layout은 snapshot이 바뀔 때만 다시 계산한다", () => {
-  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+test("progress Diagram layout은 snapshot이 바뀌 때만 다시 계산한다", () => {
+  const source = readWorkflowSource();
 
   assert.match(source, /import \{ useEffect, useMemo, useRef, useState \} from "react"/);
   assert.match(
@@ -61,8 +63,8 @@ test("progress Diagram layout은 snapshot이 바뀔 때만 다시 계산한다",
   );
 });
 
-test("새 프로젝트 stream 중단은 마지막 snapshot을 유지하고 화면을 떠나지 않는다", () => {
-  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+test("새 프로젝트 stream 취소는 진행 상태만 중단하고 화면을 떠나지 않는다", () => {
+  const source = readWorkflowSource();
   const cancelProgressStart = source.indexOf("function cancelDraftProgress");
   const cancelStart = source.indexOf("function cancelStart", cancelProgressStart);
   const cancelProgressSource = source.slice(cancelProgressStart, cancelStart);
@@ -70,64 +72,33 @@ test("새 프로젝트 stream 중단은 마지막 snapshot을 유지하고 화�
   assert.ok(cancelProgressStart >= 0);
   assert.ok(cancelStart > cancelProgressStart);
   assert.match(cancelProgressSource, /existingProjectId !== undefined/);
-  assert.match(cancelProgressSource, /activeDraftRequestRef\.current === null/);
+  assert.match(cancelProgressSource, /hasActiveRequest/);
   assert.match(cancelProgressSource, /abortActiveDraftRequest\(true\)/);
   assert.match(cancelProgressSource, /finishRequest\(\)/);
   assert.doesNotMatch(cancelProgressSource, /router\.(?:push|replace)/);
   assert.match(source.slice(cancelStart), /router\.push\(existingProjectReturnHref/);
-  assert.match(source, /cancelDraftProgress,/);
 });
 
-test("후보 제외 undo는 clarification 이후의 최신 request와 snapshot을 사용한다", () => {
-  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
-  const undoStart = source.indexOf("function undoLastExclusion");
-  const undoEnd = source.indexOf("async function retryDraft", undoStart);
-  const undoSource = source.slice(undoStart, undoEnd);
+test("clarification 답변은 질문과 한 줄의 구조화된 요구사항으로 이어 붙인다", () => {
+  const source = readWorkflowSource();
 
-  assert.match(source, /applyProgressCandidateExclusions/);
-  assert.match(source, /excludeProgressCandidate/);
-  assert.match(source, /undoProgressCandidate/);
-  assert.match(source, /candidateExclusions/);
-  assert.match(source, /abortActiveDraftRequest/);
-  assert.match(source, /excludeProgressCandidate:/);
-  assert.ok(undoStart >= 0);
-  assert.ok(undoEnd > undoStart);
-  assert.match(undoSource, /const currentRequest = lastDraftRequestRef\.current/);
-  assert.match(undoSource, /const currentServerSnapshot = rawProgressSnapshotRef\.current/);
   assert.match(
-    undoSource,
-    /restoreProgressCandidate\(currentServerSnapshot, remainingExclusions\)/
-  );
-  assert.match(
-    undoSource,
-    /preserveDraftProgressProjection\(\s*progressSnapshotRef\.current,\s*restoreProgressCandidate\(currentServerSnapshot, remainingExclusions\)\s*\)/
-  );
-  assert.match(undoSource, /\.\.\.currentRequest, candidateExclusions: remainingExclusions/);
-  assert.doesNotMatch(undoSource, /undo\.(?:request|serverSnapshot)/);
-  assert.doesNotMatch(
     source,
-    /readonly request: CreateArchitectureDraftRequest;[\s\S]*readonly serverSnapshot:/
+    /const nextPrompt = `\$\{draftClarification\.prompt\}\\n\\n\$\{draftClarification\.clarification\.question\}: \$\{prompt\}`/
   );
 });
 
-test("Compiler 실패 전에는 last-good progress를 지우거나 final을 publish하지 않는다", () => {
-  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+test("final Compiler는 coordinator 내부에서 성공한 뒤에만 progress를 교체한다", () => {
+  const source = readWorkflowSource();
   const showDraftStart = source.indexOf("function showDraft");
   const showDraftEnd = source.indexOf("function beginRequest", showDraftStart);
   const showDraftSource = source.slice(showDraftStart, showDraftEnd);
-  const differenceIndex = showDraftSource.indexOf("computeDraftProgressDifference");
+  const finalizeIndex = showDraftSource.indexOf("draftProgressCoordinatorRef.current.finalize");
   const compileIndex = showDraftSource.indexOf("compileArchitectureDraftProposal");
-  const clearProgressIndex = showDraftSource.indexOf("setProgressSnapshot(null)");
-  const publishDraftIndex = showDraftSource.indexOf("setDraft(result)");
+  const publishIndex = showDraftSource.indexOf("setDraft(result)");
 
-  assert.ok(showDraftStart >= 0);
-  assert.ok(showDraftEnd > showDraftStart);
-  assert.ok(differenceIndex >= 0);
-  assert.ok(compileIndex > differenceIndex);
-  assert.ok(clearProgressIndex > compileIndex);
-  assert.ok(publishDraftIndex > compileIndex);
-  assert.doesNotMatch(
-    showDraftSource.slice(0, compileIndex),
-    /set(?:FinalProgressDifference|ProgressSnapshot|ProgressStatus|Draft|CompilationProposal|PreviewDiagram)\(/
-  );
+  assert.ok(finalizeIndex >= 0);
+  assert.ok(compileIndex > finalizeIndex);
+  assert.ok(publishIndex > compileIndex);
+  assert.match(showDraftSource, /publishDraftProgressState\(completedProgress\.state\)/);
 });

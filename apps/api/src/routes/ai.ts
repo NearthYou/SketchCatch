@@ -175,6 +175,24 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
   }
 });
 
+const architectureDraftStreamBodySchema = architectureDraftBodySchema.superRefine(
+  (body, context) => {
+    for (const field of [
+      "repositoryAnalysis",
+      "repositoryEvidence",
+      "templateFallback"
+    ] as const) {
+      if (body[field] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          message: `${field} is not accepted by the new-project draft stream`,
+          path: [field]
+        });
+      }
+    }
+  }
+);
+
 export const repositoryTemplateIdSchema = z.enum(REPOSITORY_ANALYSIS_TEMPLATE_IDS) satisfies
   z.ZodType<RepositoryAnalysisTemplateId>;
 
@@ -363,7 +381,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   });
 
   app.post("/ai/architecture-draft/stream", async (request, reply) => {
-    const body = architectureDraftBodySchema.parse(request.body);
+    const body = architectureDraftStreamBodySchema.parse(request.body);
 
     reply.hijack();
     for (const [name, value] of Object.entries(reply.getHeaders())) {

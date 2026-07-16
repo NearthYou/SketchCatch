@@ -9,7 +9,7 @@ Short English-only working log for the current agent context. Older records are 
 - The right pane shows confirmed requirements, pending questions, a server-owned provisional graph, compact change history, pan/zoom, and server-authorized reversible exclusion. It exposes no Board mutation or apply/edit authority before the final Draft.
 - Cancel, interruption, retry, exclusion/undo, clarification continuation, stale-request rejection, final diff/replacement, and compiler-failure retention preserve the last valid projection. Preparatory continuation snapshots do not blank the graph or synthesize history.
 - Mobile uses `대화` / `진행 중인 초안` tabs at `<=720px`; final preview content is scroll-reachable and the 390px composer avoids the global notification control.
-- Whole-branch review is Ready with no remaining Critical or Important findings. Focused API 65/65 and Web 30/30 pass; harness, lint, typecheck, build, and `git diff --check` pass.
+- Final whole-branch review is Ready with no remaining Critical, Important, or Minor findings. Focused API 79/79, focused Web 43/43, and the full Web suite 527/527 pass; harness, lint, typecheck, build, and `git diff --check` pass.
 
 ## Session Record
 
@@ -17,8 +17,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Added shared progress/exclusion contracts, API snapshot streaming, strict NDJSON validation, caller abort propagation, and reverse-proxy no-buffering headers while preserving the existing JSON paths.
 - Added the responsive progress pane, requirement/question summaries, provisional diagram, compact history, exclusion/undo, in-place cancel/retry, final transition diff, mobile pane tabs, and last-good projection retention.
-- Direct browser QA passed at 1440x900, 1024x768, 390x844, and the 720/721 boundary: no horizontal overflow, mobile send/tab/final scrolling, desktop simultaneous panes, pan/zoom, final replacement, and reload non-persistence. The disposable local QA account was soft-deleted and `Board에 적용` was not used.
-- Passed focused API 65/65, focused Web 30/30, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Final independent re-review is Ready.
+- Direct browser QA passed at 1440x900, 1024x768, 390x844, and the 720/721 boundary: no horizontal overflow, mobile send/tab/final scrolling, desktop simultaneous panes, pan/zoom, clarification handoff, server-authorized exclusion and undo, retained retry state, final replacement, and reload non-persistence. The disposable local QA account and its active tokens were removed; `Board에 적용` was not used and no user project was created.
+- Structured clarification answers now remain one confirmed `question: answer` fact, and provider-originated clarification emits a new full snapshot with the pending question before the terminal result.
+- Passed focused API 79/79, focused Web 43/43, full Web 527/527, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Final whole-branch re-review is Ready with no findings.
 
 ### 2026-07-16 - Implement provider-verified Runtime Convergence v1
 
@@ -91,8 +92,7 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Broken Or Unverified
 
-- `pnpm test:core` does not terminate in the unchanged `apps/api/src/app.test.ts` logger-stream test. Its 17 assertions pass, then the file remains pending at `await once(stream, "finish")`; the isolated run was stopped after recording the hang. Consequently root `pnpm test` was not continued into sandbox/Terraform suites.
-- The local fallback provider completed candidate-producing stages too quickly for a persistent manual exclusion/undo/retry interaction. Those lifecycles pass focused model/workflow tests; the browser run directly verified the visible progress, cancel control, clarification continuation, final transition, and responsive interactions.
+- `pnpm test:core` does not terminate in the unchanged `apps/api/src/app.test.ts` logger-stream test. The isolated run passed 17 assertions with zero failures, then remained pending at `await once(stream, "finish")` and was interrupted after 31 seconds. Consequently root `pnpm test` was not continued into sandbox/Terraform suites.
 - No real cloud apply, deployment, Git handoff, user project creation, or persistent QA account remains.
 
 ## Next Action

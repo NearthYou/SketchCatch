@@ -681,6 +681,7 @@ async function readArchitectureDraftStream(
   let buffer = "";
   let result: CreateArchitectureDraftResponse | undefined;
   let terminalSeen = false;
+  let completed = false;
 
   const consumeLine = (line: string): void => {
     const trimmedLine = line.trim();
@@ -723,27 +724,39 @@ async function readArchitectureDraftStream(
     throw createInvalidArchitectureDraftStreamError(requestContext);
   };
 
-  while (true) {
-    const chunk = await reader.read();
-    if (chunk.done) {
-      buffer += decoder.decode();
-      break;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        buffer += decoder.decode();
+        break;
+      }
+
+      buffer += decoder.decode(chunk.value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        consumeLine(line);
+      }
     }
 
-    buffer += decoder.decode(chunk.value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      consumeLine(line);
+    consumeLine(buffer);
+    if (result === undefined) {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
     }
-  }
 
-  consumeLine(buffer);
-  if (result === undefined) {
-    throw createInvalidArchitectureDraftStreamError(requestContext);
+    completed = true;
+    return result;
+  } finally {
+    if (!completed) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Preserve the parse, validation, or abort error that ended consumption.
+      }
+    }
+    reader.releaseLock();
   }
-
-  return result;
 }
 
 function createPublicAiRequestContext(path: string): ApiRequestContext {

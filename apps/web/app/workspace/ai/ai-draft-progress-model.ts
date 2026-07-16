@@ -21,6 +21,129 @@ export type DraftProgressDifference = {
   readonly removed: number;
 };
 
+export type DraftProgressStatus = "idle" | "streaming" | "awaiting_input" | "interrupted";
+export type DraftProgressMobilePane = "conversation" | "progress";
+export type DraftProgressMobileEvent = "snapshot_received" | "awaiting_input";
+
+export type DraftProgressState = {
+  readonly requestSnapshot: ArchitectureDraftProgressSnapshot | null;
+  readonly serverSnapshot: ArchitectureDraftProgressSnapshot | null;
+  readonly visibleSnapshot: ArchitectureDraftProgressSnapshot | null;
+  readonly status: DraftProgressStatus;
+  readonly history: readonly DraftProgressHistoryEntry[];
+};
+
+export function createDraftProgressState(): DraftProgressState {
+  return {
+    requestSnapshot: null,
+    serverSnapshot: null,
+    visibleSnapshot: null,
+    status: "idle",
+    history: []
+  };
+}
+
+export function startDraftProgressRequest(current: DraftProgressState): DraftProgressState {
+  return {
+    ...current,
+    requestSnapshot: null,
+    status: "streaming"
+  };
+}
+
+export function receiveDraftProgressSnapshot(
+  current: DraftProgressState,
+  incoming: ArchitectureDraftProgressSnapshot,
+  exclusions: readonly ArchitectureDraftCandidateExclusion[]
+): DraftProgressState {
+  const requestSnapshot = acceptProgressSnapshot(current.requestSnapshot, incoming);
+  if (requestSnapshot === current.requestSnapshot) {
+    return current;
+  }
+
+  const serverSnapshot = preserveDraftProgressProjection(
+    current.serverSnapshot,
+    requestSnapshot
+  );
+  const visibleSnapshot = applyProgressCandidateExclusions(serverSnapshot, exclusions);
+
+  return {
+    requestSnapshot,
+    serverSnapshot,
+    visibleSnapshot,
+    status: "streaming",
+    history: appendDraftProgressHistory(current, visibleSnapshot)
+  };
+}
+
+export function projectDraftProgressExclusions(
+  current: DraftProgressState,
+  exclusions: readonly ArchitectureDraftCandidateExclusion[]
+): DraftProgressState {
+  if (current.serverSnapshot === null) {
+    return current;
+  }
+
+  const visibleSnapshot = applyProgressCandidateExclusions(current.serverSnapshot, exclusions);
+  return {
+    ...current,
+    visibleSnapshot,
+    history: appendDraftProgressHistory(current, visibleSnapshot)
+  };
+}
+
+export function interruptDraftProgress(current: DraftProgressState): DraftProgressState {
+  return { ...current, status: "interrupted" };
+}
+
+export function awaitDraftProgressInput(current: DraftProgressState): DraftProgressState {
+  return { ...current, status: "awaiting_input" };
+}
+
+export function resolveDraftProgressMobilePane(
+  current: DraftProgressMobilePane,
+  event: DraftProgressMobileEvent,
+  hasUserSelection: boolean
+): DraftProgressMobilePane {
+  if (hasUserSelection) {
+    return current;
+  }
+
+  return event === "awaiting_input" ? "conversation" : "progress";
+}
+
+export function getDraftProgressPlaceholder(status: DraftProgressStatus): {
+  readonly busy: boolean;
+  readonly message: string;
+} {
+  if (status === "streaming") {
+    return { busy: true, message: "Resource 후보를 구조화하고 있습니다." };
+  }
+  if (status === "awaiting_input") {
+    return { busy: false, message: "대화에서 추가 답변을 기다리고 있습니다." };
+  }
+  if (status === "interrupted") {
+    return { busy: false, message: "업데이트가 중단됐습니다. 다시 시도할 수 있습니다." };
+  }
+  return { busy: false, message: "초안 생성을 시작할 준비가 됐습니다." };
+}
+
+export function completeDraftProgress(
+  current: DraftProgressState,
+  finalArchitectureJson: ArchitectureJson
+): {
+  readonly difference: DraftProgressDifference | null;
+  readonly state: DraftProgressState;
+} {
+  return {
+    difference:
+      current.visibleSnapshot === null
+        ? null
+        : computeDraftProgressDifference(current.visibleSnapshot, finalArchitectureJson),
+    state: createDraftProgressState()
+  };
+}
+
 export function acceptProgressSnapshot(
   current: ArchitectureDraftProgressSnapshot | null,
   incoming: ArchitectureDraftProgressSnapshot
@@ -162,4 +285,14 @@ function countNodeIdentities(nodes: readonly ArchitectureNode[]): Map<string, nu
     counts.set(identity, (counts.get(identity) ?? 0) + 1);
   }
   return counts;
+}
+
+function appendDraftProgressHistory(
+  current: DraftProgressState,
+  visibleSnapshot: ArchitectureDraftProgressSnapshot
+): DraftProgressHistoryEntry[] {
+  return [
+    ...current.history,
+    ...createDraftProgressHistory(current.visibleSnapshot, visibleSnapshot)
+  ].slice(-8);
 }

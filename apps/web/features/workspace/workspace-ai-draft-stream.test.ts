@@ -128,6 +128,41 @@ test("AI draft stream은 malformed event와 result 없는 종료를 typed invali
   }
 });
 
+test("AI draft stream은 파싱 실패 시 남은 upstream reader를 취소한다", async () => {
+  const originalFetch = globalThis.fetch;
+  let cancelled = false;
+  const encoder = new TextEncoder();
+
+  globalThis.fetch = async () =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        cancel() {
+          cancelled = true;
+        },
+        start(controller) {
+          controller.enqueue(encoder.encode("{not-json}\n"));
+        }
+      }),
+      {
+        headers: { "content-type": "application/x-ndjson" },
+        status: 200
+      }
+    );
+
+  try {
+    await assert.rejects(
+      createAiArchitectureDraftStream({ prompt: "정적 웹사이트" }),
+      (error: unknown) =>
+        error instanceof ApiClientError &&
+        error.status === 500 &&
+        error.code === "internal_server_error"
+    );
+    assert.equal(cancelled, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("AI draft stream은 full snapshot/result와 단일 terminal 순서를 강제한다", async () => {
   const originalFetch = globalThis.fetch;
   const progressLine = JSON.stringify({ type: "progress", stage: snapshot.stage, snapshot });

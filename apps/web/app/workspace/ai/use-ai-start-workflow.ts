@@ -51,17 +51,15 @@ import {
   type AiStartProjectDraft
 } from "./ai-start-model";
 import {
-  acceptProgressSnapshot,
-  applyProgressCandidateExclusions,
-  computeDraftProgressDifference,
-  createDraftProgressHistory,
   createProgressDiagram,
-  excludeProgressCandidate as projectProgressCandidateExclusion,
-  preserveDraftProgressProjection,
-  undoProgressCandidate as restoreProgressCandidate,
+  resolveDraftProgressMobilePane,
   type DraftProgressDifference,
-  type DraftProgressHistoryEntry
+  type DraftProgressHistoryEntry,
+  type DraftProgressMobilePane,
+  type DraftProgressState,
+  type DraftProgressStatus
 } from "./ai-draft-progress-model";
+import { AiDraftProgressCoordinator } from "./ai-draft-progress-coordinator";
 
 type PendingDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
@@ -74,12 +72,6 @@ type PendingPatchClarification = {
 };
 
 type RequestState = "idle" | "loading" | "error";
-type ProgressStatus = "idle" | "streaming" | "awaiting_input" | "interrupted";
-type MobilePane = "conversation" | "progress";
-
-type LastProgressExclusion = {
-  readonly exclusion: ArchitectureDraftCandidateExclusion;
-};
 
 type PatchTargetOptions = {
   readonly connectionTargetResourceId?: string | undefined;
@@ -100,13 +92,7 @@ export function useAiStartWorkflow({
   const [composerValue, setComposerValue] = useState("");
   const [messages, setMessages] = useState<AiStartMessage[]>([]);
   const messagesRef = useRef<AiStartMessage[]>([]);
-  const activeDraftRequestRef = useRef<AbortController | null>(null);
-  const requestIdentityRef = useRef(0);
-  const rawProgressSnapshotRef = useRef<ArchitectureDraftProgressSnapshot | null>(null);
-  const progressSnapshotRef = useRef<ArchitectureDraftProgressSnapshot | null>(null);
-  const candidateExclusionsRef = useRef<readonly ArchitectureDraftCandidateExclusion[]>([]);
-  const lastDraftRequestRef = useRef<CreateArchitectureDraftRequest | null>(null);
-  const lastExclusionRef = useRef<LastProgressExclusion | null>(null);
+  const draftProgressCoordinatorRef = useRef(new AiDraftProgressCoordinator());
   const mobilePaneSelectionRef = useRef(false);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [compilationProposal, setCompilationProposal] =
@@ -122,13 +108,13 @@ export function useAiStartWorkflow({
   );
   const [progressSnapshot, setProgressSnapshot] =
     useState<ArchitectureDraftProgressSnapshot | null>(null);
-  const [progressStatus, setProgressStatus] = useState<ProgressStatus>("idle");
+  const [progressStatus, setProgressStatus] = useState<DraftProgressStatus>("idle");
   const [progressHistory, setProgressHistory] = useState<DraftProgressHistoryEntry[]>([]);
   const [lastExclusion, setLastExclusion] =
     useState<ArchitectureDraftCandidateExclusion | null>(null);
   const [finalProgressDifference, setFinalProgressDifference] =
     useState<DraftProgressDifference | null>(null);
-  const [mobilePane, setMobilePaneState] = useState<MobilePane>("conversation");
+  const [mobilePane, setMobilePaneState] = useState<DraftProgressMobilePane>("conversation");
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -164,9 +150,7 @@ export function useAiStartWorkflow({
 
   useEffect(() => {
     return () => {
-      requestIdentityRef.current += 1;
-      activeDraftRequestRef.current?.abort();
-      activeDraftRequestRef.current = null;
+      draftProgressCoordinatorRef.current.dispose();
     };
   }, []);
 
@@ -205,7 +189,7 @@ export function useAiStartWorkflow({
     }
 
     if (draftClarification !== null) {
-      const nextPrompt = `${draftClarification.prompt}\n\n${draftClarification.clarification.question}\n${prompt}`;
+      const nextPrompt = `${draftClarification.prompt}\n\n${draftClarification.clarification.question}: ${prompt}`;
       setDraftClarification(null);
       await requestDraft({ prompt: nextPrompt });
       return;
@@ -260,76 +244,47 @@ export function useAiStartWorkflow({
       return;
     }
 
-    const streamRequest = withCurrentCandidateExclusions(request);
-    rememberDraftRequest(streamRequest);
-    candidateExclusionsRef.current = streamRequest.candidateExclusions ?? [];
-    abortActiveDraftRequest();
-    const requestIdentity = ++requestIdentityRef.current;
-    const controller = new AbortController();
-    activeDraftRequestRef.current = controller;
-    rawProgressSnapshotRef.current = null;
-    if (progressSnapshotRef.current === null) {
-      setProgressHistory([]);
-    }
-    setProgressStatus("streaming");
+    const progressRequest = draftProgressCoordinatorRef.current.begin(request);
+    rememberDraftRequest(progressRequest.request);
+    publishDraftProgressState(draftProgressCoordinatorRef.current.state);
 
     try {
-      const response = await createAiArchitectureDraftStream(streamRequest, {
-        signal: controller.signal,
+      const response = await createAiArchitectureDraftStream(progressRequest.request, {
+        signal: progressRequest.signal,
         onProgress: (snapshot) => {
-          if (isInactiveDraftRequest(requestIdentity, controller)) {
-            return;
-          }
-
-          const acceptedSnapshot = acceptProgressSnapshot(
-            rawProgressSnapshotRef.current,
+          const currentProgress = draftProgressCoordinatorRef.current.state;
+          const nextProgress = draftProgressCoordinatorRef.current.receive(
+            progressRequest,
             snapshot
           );
-          if (acceptedSnapshot === rawProgressSnapshotRef.current) {
+          if (nextProgress === null) {
             return;
           }
 
-          rawProgressSnapshotRef.current = acceptedSnapshot;
-          const projectedSnapshot = applyProgressCandidateExclusions(
-            acceptedSnapshot,
-            candidateExclusionsRef.current
-          );
-          const visibleSnapshot = preserveDraftProgressProjection(
-            progressSnapshotRef.current,
-            projectedSnapshot
-          );
           const shouldRevealProgress =
-            progressSnapshotRef.current === null && !mobilePaneSelectionRef.current;
-          updateVisibleProgress(visibleSnapshot);
-          setProgressStatus("streaming");
+            currentProgress.visibleSnapshot === null && !mobilePaneSelectionRef.current;
+          publishDraftProgressState(nextProgress);
           if (shouldRevealProgress) {
-            setMobilePaneState("progress");
+            setMobilePaneState((current) =>
+              resolveDraftProgressMobilePane(current, "snapshot_received", false)
+            );
           }
         }
       });
 
-      if (isInactiveDraftRequest(requestIdentity, controller)) {
+      if (!draftProgressCoordinatorRef.current.isActive(progressRequest)) {
         return;
       }
 
-      activeDraftRequestRef.current = null;
-      handleDraftResponse(streamRequest, response);
+      handleDraftResponse(progressRequest.request, response);
+      draftProgressCoordinatorRef.current.complete(progressRequest);
     } catch (error) {
-      if (requestIdentity !== requestIdentityRef.current) {
+      const interrupted = draftProgressCoordinatorRef.current.interrupt(progressRequest);
+      if (interrupted === null) {
         return;
       }
 
-      if (activeDraftRequestRef.current === controller) {
-        activeDraftRequestRef.current = null;
-      }
-
-      if (controller.signal.aborted) {
-        setProgressStatus("interrupted");
-        finishRequest();
-        return;
-      }
-
-      setProgressStatus("interrupted");
+      publishDraftProgressState(interrupted);
       failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
     }
   }
@@ -340,7 +295,14 @@ export function useAiStartWorkflow({
   ): void {
     if (isArchitectureDraftClarification(response)) {
       setDraftClarification({ clarification: response, prompt: request.prompt });
-      setProgressStatus("awaiting_input");
+      publishDraftProgressState(draftProgressCoordinatorRef.current.awaitInput());
+      setMobilePaneState((current) =>
+        resolveDraftProgressMobilePane(
+          current,
+          "awaiting_input",
+          mobilePaneSelectionRef.current
+        )
+      );
       finishRequest();
       appendAssistantMessage("question", response.question, response.suggestions);
       return;
@@ -349,7 +311,14 @@ export function useAiStartWorkflow({
     const decision = planArchitectureDraftPreview(request, response);
     if (decision.action === "ask_follow_up") {
       setDraftFollowUp(decision.session);
-      setProgressStatus("awaiting_input");
+      publishDraftProgressState(draftProgressCoordinatorRef.current.awaitInput());
+      setMobilePaneState((current) =>
+        resolveDraftProgressMobilePane(
+          current,
+          "awaiting_input",
+          mobilePaneSelectionRef.current
+        )
+      );
       finishRequest();
       appendAssistantMessage("question", decision.session.question, decision.session.suggestions);
       return;
@@ -358,130 +327,54 @@ export function useAiStartWorkflow({
     showDraft(decision.result);
   }
 
-  function withCurrentCandidateExclusions(
-    request: CreateArchitectureDraftRequest
-  ): CreateArchitectureDraftRequest {
-    if (
-      request.candidateExclusions !== undefined ||
-      candidateExclusionsRef.current.length === 0
-    ) {
-      return request;
-    }
-
-    return {
-      ...request,
-      candidateExclusions: candidateExclusionsRef.current
-    };
-  }
-
   function rememberDraftRequest(request: CreateArchitectureDraftRequest): void {
-    lastDraftRequestRef.current = request;
     setLastDraftRequest(request);
   }
 
-  function isInactiveDraftRequest(
-    requestIdentity: number,
-    controller: AbortController
-  ): boolean {
-    return (
-      requestIdentity !== requestIdentityRef.current ||
-      activeDraftRequestRef.current !== controller ||
-      controller.signal.aborted
-    );
-  }
-
   function abortActiveDraftRequest(markInterrupted = false): void {
-    const controller = activeDraftRequestRef.current;
-    if (controller === null) {
-      return;
-    }
-
-    requestIdentityRef.current += 1;
-    activeDraftRequestRef.current = null;
-    controller.abort();
-    if (markInterrupted) {
-      setProgressStatus("interrupted");
+    const hadActiveRequest = draftProgressCoordinatorRef.current.hasActiveRequest;
+    const state = draftProgressCoordinatorRef.current.cancel(markInterrupted);
+    if (hadActiveRequest && markInterrupted) {
+      publishDraftProgressState(state);
     }
   }
 
-  function updateVisibleProgress(snapshot: ArchitectureDraftProgressSnapshot): void {
-    const history = createDraftProgressHistory(progressSnapshotRef.current, snapshot);
-    if (history.length > 0) {
-      setProgressHistory((current) => [...current, ...history].slice(-8));
-    }
-    progressSnapshotRef.current = snapshot;
-    setProgressSnapshot(snapshot);
+  function publishDraftProgressState(nextState: DraftProgressState): void {
+    setProgressSnapshot(nextState.visibleSnapshot);
+    setProgressStatus(nextState.status);
+    setProgressHistory([...nextState.history]);
   }
 
   function excludeCandidateFromProgress(candidateId: string): void {
-    const visibleSnapshot = progressSnapshotRef.current;
-    const serverSnapshot = rawProgressSnapshotRef.current;
-    const request = lastDraftRequestRef.current;
-    if (
-      visibleSnapshot === null ||
-      serverSnapshot === null ||
-      request === null ||
-      !visibleSnapshot.excludableCandidateIds.includes(candidateId)
-    ) {
+    const restart = draftProgressCoordinatorRef.current.exclude(candidateId);
+    if (restart === null) {
       return;
     }
 
-    const candidate = serverSnapshot.provisionalArchitectureJson?.nodes.find(
-      (node) => node.id === candidateId
-    );
-    if (candidate === undefined) {
-      return;
-    }
-
-    const exclusion: ArchitectureDraftCandidateExclusion = {
-      candidateId,
-      resourceType: candidate.type,
-      label: candidate.label?.trim() || candidate.type
-    };
-    const nextExclusions = [...candidateExclusionsRef.current, exclusion];
-    lastExclusionRef.current = { exclusion };
-    setLastExclusion(exclusion);
-    candidateExclusionsRef.current = nextExclusions;
-    updateVisibleProgress(projectProgressCandidateExclusion(visibleSnapshot, exclusion));
-    abortActiveDraftRequest();
-    void requestDraft({ ...request, candidateExclusions: nextExclusions });
+    setLastExclusion(restart.exclusion);
+    publishDraftProgressState(restart.state);
+    void requestDraft(restart.request);
   }
 
   function undoLastExclusion(): void {
-    const undo = lastExclusionRef.current;
-    const currentRequest = lastDraftRequestRef.current;
-    const currentServerSnapshot = rawProgressSnapshotRef.current;
-    if (undo === null || currentRequest === null) {
+    const restart = draftProgressCoordinatorRef.current.undoLastExclusion();
+    if (restart === null) {
       return;
     }
 
-    const remainingExclusions = candidateExclusionsRef.current.filter(
-      (candidate) =>
-        candidate.candidateId !== undo.exclusion.candidateId ||
-        candidate.resourceType !== undo.exclusion.resourceType
-    );
-    candidateExclusionsRef.current = remainingExclusions;
-    if (currentServerSnapshot !== null) {
-      updateVisibleProgress(
-        preserveDraftProgressProjection(
-          progressSnapshotRef.current,
-          restoreProgressCandidate(currentServerSnapshot, remainingExclusions)
-        )
-      );
-    }
-    lastExclusionRef.current = null;
     setLastExclusion(null);
-    abortActiveDraftRequest();
-    void requestDraft({ ...currentRequest, candidateExclusions: remainingExclusions });
+    publishDraftProgressState(restart.state);
+    void requestDraft(restart.request);
   }
 
   async function retryDraft(): Promise<void> {
-    if (lastDraftRequestRef.current !== null) {
-      await requestDraft(lastDraftRequestRef.current);
+    const retryRequest = draftProgressCoordinatorRef.current.retryRequest();
+    if (retryRequest !== null) {
+      await requestDraft(retryRequest);
     }
   }
 
-  function selectMobilePane(pane: MobilePane): void {
+  function selectMobilePane(pane: DraftProgressMobilePane): void {
     mobilePaneSelectionRef.current = true;
     setMobilePaneState(pane);
   }
@@ -560,7 +453,10 @@ export function useAiStartWorkflow({
   }
 
   function cancelDraftProgress(): void {
-    if (existingProjectId !== undefined || activeDraftRequestRef.current === null) {
+    if (
+      existingProjectId !== undefined ||
+      !draftProgressCoordinatorRef.current.hasActiveRequest
+    ) {
       return;
     }
 
@@ -581,7 +477,12 @@ export function useAiStartWorkflow({
 
     if (resolution.action === "show_pending_draft") {
       setDraftFollowUp(null);
-      showDraft(session.pendingDraft);
+      try {
+        showDraft(session.pendingDraft);
+      } catch (error) {
+        publishDraftProgressState(draftProgressCoordinatorRef.current.markInterrupted());
+        failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
+      }
       return;
     }
 
@@ -632,22 +533,17 @@ export function useAiStartWorkflow({
     currentDiagram?: DiagramJson,
     message = `${result.title} PREVIEW가 준비됐습니다.`
   ): void {
-    const currentProgress = progressSnapshotRef.current;
-    const difference =
-      currentProgress === null
-        ? null
-        : computeDraftProgressDifference(currentProgress, result.architectureJson);
-    const proposal = compileArchitectureDraftProposal(result, currentDiagram);
+    const completedProgress = draftProgressCoordinatorRef.current.finalize(
+      result.architectureJson,
+      () => compileArchitectureDraftProposal(result, currentDiagram)
+    );
+    const proposal = completedProgress.value;
 
-    setFinalProgressDifference(difference);
+    setFinalProgressDifference(completedProgress.difference);
     setDraft(result);
     setCompilationProposal(proposal);
     setPreviewDiagram(proposal.diagram);
-    setProgressSnapshot(null);
-    progressSnapshotRef.current = null;
-    rawProgressSnapshotRef.current = null;
-    setProgressStatus("idle");
-    lastExclusionRef.current = null;
+    publishDraftProgressState(completedProgress.state);
     setLastExclusion(null);
     setMobilePaneState("progress");
     finishRequest();
