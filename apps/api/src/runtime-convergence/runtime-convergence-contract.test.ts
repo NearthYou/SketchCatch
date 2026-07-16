@@ -35,6 +35,7 @@ test("runtime target DTO rejects unknown secret-shaped fields", () => {
 test("runtime target DTO rejects unsafe HTTPS health endpoints", () => {
   const target = createTarget("ecs_service_fargate");
   for (const outputUrl of [
+    "not a URL",
     "https://user:password@app.example.com",
     "https://app.example.com:8443",
     "https://app.example.com?token=secret",

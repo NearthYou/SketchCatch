@@ -416,7 +416,11 @@ function assertProviderRevision(revision: RuntimeProviderRevision): void {
   if (!revision.resourceType.trim() || !revision.revisionId.trim()) {
     throw new RuntimeConvergenceVerificationError("provider_revision_unverified", null);
   }
-  for (const key of Object.keys(revision.metadata)) {
+  const metadata: unknown = revision.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    throw new RuntimeConvergenceVerificationError("provider_revision_unverified", null);
+  }
+  for (const key of Object.keys(metadata)) {
     const normalizedKey = key.replace(/[-_]+/gu, "");
     if (/(secret|token|password|credential|privatekey|accesskey|apikey)/iu.test(normalizedKey)) {
       throw new RuntimeConvergenceVerificationError("provider_revision_unverified", null);

@@ -189,6 +189,27 @@ test("provider evidence with secret-shaped keys is never returned for persistenc
   );
 });
 
+test("malformed provider revision metadata fails with a domain verification error", async () => {
+  const current = createState({
+    providerRevision: {
+      provider: "aws",
+      resourceType: "ecs_service",
+      revisionId: "task-definition:42",
+      artifactReference: artifact.reference,
+      metadata: null as never
+    }
+  });
+
+  await assert.rejects(
+    () => createService(createGateway(current)).converge({ scope, target, artifact }),
+    (error: unknown) => {
+      assert.ok(error instanceof RuntimeConvergenceVerificationError);
+      assert.equal(error.reason, "provider_revision_unverified");
+      return true;
+    }
+  );
+});
+
 function createService(gateway: RuntimeProviderGateway) {
   const gateways = createGatewayRecord(() => gateway);
   return createRuntimeConvergenceService({

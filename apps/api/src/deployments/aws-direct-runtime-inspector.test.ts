@@ -42,6 +42,15 @@ test("Direct ECS inspector derives no-op state only from read-only provider evid
   let calls = 0;
   let observedPlatformVersion = "1.4.0";
   let serviceStatus = "ACTIVE";
+  let deploymentConfiguration: {
+    minimumHealthyPercent: number;
+    maximumPercent: number;
+    deploymentCircuitBreaker: { enable: boolean; rollback: boolean };
+  } | undefined = {
+    minimumHealthyPercent: 0,
+    maximumPercent: 100,
+    deploymentCircuitBreaker: { enable: true, rollback: true }
+  };
   const client = {
     async send(command: unknown) {
       calls += 1;
@@ -55,11 +64,7 @@ test("Direct ECS inspector derives no-op state only from read-only provider evid
             pendingCount: 0,
             launchType: "FARGATE",
             deployments: [{ platformVersion: observedPlatformVersion }],
-            deploymentConfiguration: {
-              minimumHealthyPercent: 0,
-              maximumPercent: 100,
-              deploymentCircuitBreaker: { enable: true, rollback: true }
-            }
+            deploymentConfiguration
           }],
           failures: []
         };
@@ -123,6 +128,19 @@ test("Direct ECS inspector derives no-op state only from read-only provider evid
     probeHealth: async () => true
   });
   assert.equal(draining.health.status, "unhealthy");
+
+  serviceStatus = "ACTIVE";
+  deploymentConfiguration = undefined;
+  const missingDeploymentConfiguration = await inspectEcsDirectRuntime({
+    context,
+    target,
+    async assumeRole() {
+      return Object.create(null) as never;
+    },
+    createEcsClient: () => client as unknown as ECSClient,
+    probeHealth: async () => true
+  });
+  assert.equal(missingDeploymentConfiguration.health.status, "unhealthy");
 });
 
 function createContext(): DirectApplicationReleaseContext {

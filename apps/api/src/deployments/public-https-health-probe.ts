@@ -76,6 +76,7 @@ function parseHealthUrl(value: string): URL | null {
 
 async function resolvePublicCandidateAddresses(hostname: string): Promise<ResolvedAddress[]> {
   const addresses = await lookup(hostname, { all: true, verbatim: true });
+  if (!Array.isArray(addresses)) return [];
   return addresses.flatMap(({ address, family }) =>
     family === 4 || family === 6 ? [{ address, family }] : []
   );

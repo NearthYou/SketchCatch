@@ -816,7 +816,7 @@
         "모든 deployable ResourceDefinition이 runtime convergence 적용 여부를 명시하고 지원 adapter 10종이 누락 없이 coverage test에 고정된다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-16",
+        "lastVerified": "2026-07-17",
         "commands": [
           "pnpm --filter @sketchcatch/types exec tsx --test src/runtime-convergence.test.ts src/resource-runtime-convergence-coverage.test.ts src/resource-definitions.test.ts src/project-release-ledger-contract.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test src/runtime-convergence/runtime-convergence-contract.test.ts src/runtime-convergence/runtime-convergence-service.test.ts src/deployments/public-https-health-probe.test.ts src/deployments/aws-direct-runtime-inspector.test.ts src/deployments/direct-runtime-convergence.test.ts src/git-cicd/git-cicd-runtime-convergence-workflows.test.ts src/git-cicd/gitops-runtime-convergence.test.ts src/git-cicd/git-cicd-handoff-runtime-config.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-runtime-target.test.ts src/db/schema-contract.test.ts",
@@ -830,7 +830,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "Focused runtime/resource/API coverage passes 78/78, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, and handoff consistency regressions. Generated Bash/Python syntax passes 45/10. Harness, migration compatibility, lint, typecheck, build, and diff checks pass. Root pnpm test remains non-green only on the same three pre-existing three-tier Template assertions (types 40/43); the full API suite passes 710/713 with only the three pre-existing Windows symlink EPERM setup failures."
+        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. Generated Bash/Python syntax passes 45/10. Harness, migration compatibility, lint, typecheck, build, and diff checks pass. Root pnpm test remains non-green only on the same three pre-existing three-tier Template assertions (types 40/43); the full API suite passes 710/713 with only the three pre-existing Windows symlink EPERM setup failures."
       },
       "notes": "Migration 0046_runtime_convergence.sql and apps/api/drizzle/meta/_journal.json are changed after merged migration 0045. No secret, real credential, live AWS/cloud mutation, Terraform apply/destroy, user artifact upload, or Git handoff was executed."
     }

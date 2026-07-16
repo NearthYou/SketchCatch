@@ -278,9 +278,9 @@ export async function inspectEcsDirectRuntime(input: {
         activeDeployment?.platformVersion === target.capacity.platformVersion) &&
       deploymentConfiguration?.minimumHealthyPercent ===
         target.rollout.minimumHealthyPercent &&
-      deploymentConfiguration.maximumPercent === target.rollout.maximumPercent &&
-      deploymentConfiguration.deploymentCircuitBreaker?.enable === true &&
-      deploymentConfiguration.deploymentCircuitBreaker.rollback ===
+      deploymentConfiguration?.maximumPercent === target.rollout.maximumPercent &&
+      deploymentConfiguration?.deploymentCircuitBreaker?.enable === true &&
+      deploymentConfiguration?.deploymentCircuitBreaker?.rollback ===
         target.rollout.circuitBreakerRollback;
     const healthVerifiedAt = new Date().toISOString();
     const endpointHealthy = await inspectDirectHealthEndpoint(

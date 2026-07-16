@@ -12,9 +12,15 @@ import { isPublicAddress } from "../network/public-address.js";
 const identifierSchema = z.string().trim().min(1).max(512);
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const rolloutQuantitySchema = z.string().trim().regex(/^(?:0|[1-9]\d*)(?:%)?$/u);
-export const credentialFreeHttpsUrlSchema = z.string().url().max(2_048).superRefine(
+export const credentialFreeHttpsUrlSchema = z.url().max(2_048).superRefine(
   (value, context) => {
-    const url = new URL(value);
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      context.addIssue({ code: "custom", message: "Invalid URL format" });
+      return;
+    }
     const hostname = normalizeHostname(url.hostname);
     const family = isIP(hostname);
     if (
