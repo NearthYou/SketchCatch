@@ -71,27 +71,34 @@ test("AI draft stream은 임의 청크 경계와 한 청크의 여러 NDJSON 줄
   }
 });
 
-test("AI draft stream은 terminal error의 실제 statusCode와 요청 문맥을 보존한다", async () => {
+test("AI draft stream은 서버가 보내는 실제 terminal status/code와 요청 문맥을 보존한다", async () => {
   const originalFetch = globalThis.fetch;
-  const event: ArchitectureDraftStreamEvent = {
-    type: "error",
-    error: {
-      statusCode: 429,
-      error: "too_many_requests",
-      message: "잠시 후 다시 시도해주세요."
-    }
-  };
-  globalThis.fetch = async () => createChunkedResponse([`${JSON.stringify(event)}\n`]);
 
   try {
-    await assert.rejects(
-      createAiArchitectureDraftStream({ prompt: "정적 웹사이트" }),
-      (error: unknown) =>
-        error instanceof ApiClientError &&
-        error.status === 429 &&
-        error.code === "too_many_requests" &&
-        error.requestContext?.path === "/api/ai/architecture-draft/stream"
-    );
+    for (const expected of [
+      { statusCode: 422, code: "unprocessable_entity" },
+      { statusCode: 502, code: "bad_gateway" },
+      { statusCode: 503, code: "service_unavailable" }
+    ] as const) {
+      const event: ArchitectureDraftStreamEvent = {
+        type: "error",
+        error: {
+          statusCode: expected.statusCode,
+          error: expected.code,
+          message: "다시 시도해주세요."
+        }
+      };
+      globalThis.fetch = async () => createChunkedResponse([`${JSON.stringify(event)}\n`]);
+
+      await assert.rejects(
+        createAiArchitectureDraftStream({ prompt: "정적 웹사이트" }),
+        (error: unknown) =>
+          error instanceof ApiClientError &&
+          error.status === expected.statusCode &&
+          error.code === expected.code &&
+          error.requestContext?.path === "/api/ai/architecture-draft/stream"
+      );
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -108,6 +115,42 @@ test("AI draft stream은 malformed event와 result 없는 종료를 typed invali
     ]) {
       globalThis.fetch = async () => createChunkedResponse(chunks);
 
+      await assert.rejects(
+        createAiArchitectureDraftStream({ prompt: "정적 웹사이트" }),
+        (error: unknown) =>
+          error instanceof ApiClientError &&
+          error.status === 500 &&
+          error.code === "internal_server_error"
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("AI draft stream은 full snapshot/result와 단일 terminal 순서를 강제한다", async () => {
+  const originalFetch = globalThis.fetch;
+  const progressLine = JSON.stringify({ type: "progress", stage: snapshot.stage, snapshot });
+  const resultLine = JSON.stringify({ type: "result", result });
+  const invalidPayloads = [
+    `${JSON.stringify({ type: "result", result: {} })}\n`,
+    `${JSON.stringify({
+      type: "progress",
+      stage: snapshot.stage,
+      snapshot: { sequence: 1 }
+    })}\n${resultLine}\n`,
+    `${JSON.stringify({
+      type: "progress",
+      stage: "building_diagram",
+      snapshot
+    })}\n${resultLine}\n`,
+    `${resultLine}\n${resultLine}\n`,
+    `${resultLine}\n${progressLine}\n`
+  ];
+
+  try {
+    for (const payload of invalidPayloads) {
+      globalThis.fetch = async () => createChunkedResponse([payload]);
       await assert.rejects(
         createAiArchitectureDraftStream({ prompt: "정적 웹사이트" }),
         (error: unknown) =>

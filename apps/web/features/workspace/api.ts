@@ -12,8 +12,10 @@ import type {
   AnalyzeSourceRepositoryRequest,
   ApiErrorCode,
   ApiErrorResponse,
+  ArchitectureDraftProgressStage,
   ArchitectureDraftProgressSnapshot,
   ArchitectureDraftStreamEvent,
+  ArchitectureJson,
   ArchitecturePatchPreviewResponse,
   ArchitectureSnapshot,
   ApproveDeploymentPlanRequest,
@@ -124,6 +126,10 @@ import type {
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
 import {
+  ARCHITECTURE_DRAFT_PROGRESS_STAGES,
+  RESOURCE_TYPES
+} from "../../../../packages/types/src";
+import {
   ApiClientError,
   apiFetch,
   buildApiUrl,
@@ -132,6 +138,26 @@ import {
 import { readStoredAuthSession } from "../../lib/auth-storage";
 
 const AI_API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api").replace(/\/+$/, "");
+const API_ERROR_CODES = [
+  "bad_request",
+  "unauthorized",
+  "not_found",
+  "conflict",
+  "github_oauth_required",
+  "too_many_requests",
+  "unprocessable_entity",
+  "bad_gateway",
+  "service_unavailable",
+  "internal_server_error",
+  "LIVE_OBSERVATION_DISABLED",
+  "LIVE_OBSERVATION_CACHE_UNAVAILABLE",
+  "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE",
+  "LIVE_OBSERVATION_GONE",
+  "LIVE_OBSERVATION_NOT_FOUND",
+  "LIVE_OBSERVATION_OUTPUT_INVALID",
+  "LIVE_OBSERVATION_RATE_LIMITED"
+] as const satisfies readonly ApiErrorCode[];
+const API_ERROR_CODE_SET = new Set<string>(API_ERROR_CODES);
 
 type AiTerraformErrorExplanationRequest = {
   readonly diagnostic?: TerraformDiagnostic | undefined;
@@ -653,11 +679,16 @@ async function readArchitectureDraftStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let result: CreateArchitectureDraftResponse | undefined;
+  let terminalSeen = false;
 
   const consumeLine = (line: string): void => {
     const trimmedLine = line.trim();
     if (trimmedLine.length === 0) {
       return;
+    }
+
+    if (terminalSeen) {
+      throw createInvalidArchitectureDraftStreamError(requestContext);
     }
 
     let parsedEvent: unknown;
@@ -678,11 +709,13 @@ async function readArchitectureDraftStream(
     }
 
     if (event.type === "result") {
+      terminalSeen = true;
       result = event.result;
       return;
     }
 
     if (event.type === "error") {
+      terminalSeen = true;
       throw new ApiClientError(event.error.statusCode, event.error, requestContext);
     }
 
@@ -770,17 +803,15 @@ function isArchitectureDraftStreamEvent(value: unknown): value is ArchitectureDr
   if (value.type === "progress") {
     return (
       "stage" in value &&
-      typeof value.stage === "string" &&
+      isArchitectureDraftProgressStage(value.stage) &&
       "snapshot" in value &&
-      typeof value.snapshot === "object" &&
-      value.snapshot !== null &&
-      "sequence" in value.snapshot &&
-      typeof value.snapshot.sequence === "number"
+      isArchitectureDraftProgressSnapshot(value.snapshot) &&
+      value.snapshot.stage === value.stage
     );
   }
 
   if (value.type === "result") {
-    return "result" in value && typeof value.result === "object" && value.result !== null;
+    return "result" in value && isCreateArchitectureDraftResponse(value.result);
   }
 
   if (value.type === "error") {
@@ -798,6 +829,140 @@ function isArchitectureDraftStreamEvent(value: unknown): value is ArchitectureDr
   }
 
   return false;
+}
+
+function isArchitectureDraftProgressSnapshot(
+  value: unknown
+): value is ArchitectureDraftProgressSnapshot {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "sequence" in value &&
+    Number.isSafeInteger(value.sequence) &&
+    typeof value.sequence === "number" &&
+    value.sequence > 0 &&
+    "stage" in value &&
+    isArchitectureDraftProgressStage(value.stage) &&
+    "confirmedRequirements" in value &&
+    isStringArray(value.confirmedRequirements) &&
+    "pendingQuestions" in value &&
+    isStringArray(value.pendingQuestions) &&
+    "provisionalArchitectureJson" in value &&
+    (value.provisionalArchitectureJson === null ||
+      isArchitectureJson(value.provisionalArchitectureJson)) &&
+    "excludableCandidateIds" in value &&
+    isStringArray(value.excludableCandidateIds)
+  );
+}
+
+function isCreateArchitectureDraftResponse(
+  value: unknown
+): value is CreateArchitectureDraftResponse {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  if ("status" in value) {
+    return (
+      value.status === "needs_clarification" &&
+      "question" in value &&
+      typeof value.question === "string" &&
+      "suggestions" in value &&
+      isStringArray(value.suggestions) &&
+      "providerMetadata" in value &&
+      typeof value.providerMetadata === "object" &&
+      value.providerMetadata !== null
+    );
+  }
+
+  return (
+    "architectureJson" in value &&
+    isArchitectureJson(value.architectureJson) &&
+    "title" in value &&
+    typeof value.title === "string" &&
+    "metadata" in value &&
+    isArchitectureDraftMetadata(value.metadata)
+  );
+}
+
+function isArchitectureDraftMetadata(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "source" in value &&
+    typeof value.source === "string" &&
+    "confidence" in value &&
+    (value.confidence === "low" || value.confidence === "medium" || value.confidence === "high") &&
+    "assumptions" in value &&
+    isStringArray(value.assumptions) &&
+    "explanations" in value &&
+    isStringArray(value.explanations)
+  );
+}
+
+function isArchitectureJson(value: unknown): value is ArchitectureJson {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("nodes" in value) ||
+    !Array.isArray(value.nodes) ||
+    !("edges" in value) ||
+    !Array.isArray(value.edges)
+  ) {
+    return false;
+  }
+
+  return (
+    value.nodes.every(
+      (node) =>
+        typeof node === "object" &&
+        node !== null &&
+        "id" in node &&
+        typeof node.id === "string" &&
+        "type" in node &&
+        isResourceType(node.type) &&
+        (!("label" in node) || node.label === undefined || typeof node.label === "string") &&
+        "positionX" in node &&
+        typeof node.positionX === "number" &&
+        Number.isFinite(node.positionX) &&
+        "positionY" in node &&
+        typeof node.positionY === "number" &&
+        Number.isFinite(node.positionY) &&
+        "config" in node &&
+        typeof node.config === "object" &&
+        node.config !== null &&
+        !Array.isArray(node.config)
+    ) &&
+    value.edges.every(
+      (edge) =>
+        typeof edge === "object" &&
+        edge !== null &&
+        "id" in edge &&
+        typeof edge.id === "string" &&
+        "sourceId" in edge &&
+        typeof edge.sourceId === "string" &&
+        "targetId" in edge &&
+        typeof edge.targetId === "string" &&
+        (!("label" in edge) || edge.label === undefined || typeof edge.label === "string")
+    )
+  );
+}
+
+function isArchitectureDraftProgressStage(
+  value: unknown
+): value is ArchitectureDraftProgressStage {
+  return (
+    typeof value === "string" &&
+    (ARCHITECTURE_DRAFT_PROGRESS_STAGES as readonly string[]).includes(value)
+  );
+}
+
+function isResourceType(value: unknown): boolean {
+  return typeof value === "string" && (RESOURCE_TYPES as readonly string[]).includes(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
 // API 서버의 JSON 오류를 공용 에러 타입으로 유지해 화면별 메시지 fallback에 덮이지 않게 합니다.
@@ -843,15 +1008,7 @@ function isPublicAiErrorBody(value: unknown): value is ApiErrorResponse {
 }
 
 function isApiErrorCode(value: unknown): value is ApiErrorCode {
-  return (
-    value === "bad_request" ||
-    value === "unauthorized" ||
-    value === "not_found" ||
-    value === "conflict" ||
-    value === "github_oauth_required" ||
-    value === "too_many_requests" ||
-    value === "internal_server_error"
-  );
+  return typeof value === "string" && API_ERROR_CODE_SET.has(value);
 }
 
 export async function createAwsConnectionSetup({
