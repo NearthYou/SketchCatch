@@ -65,6 +65,7 @@ test("changed drafts keep cleanup available beside save and validation", () => {
   assert.ok(approvalStart > validationStart);
   assert.match(validationSource, /startTerraformDestroyPlan/);
   assert.match(validationSource, /저장 후 검증 실행/);
+  assert.doesNotMatch(validationSource, /검증 단계에서는 실제 리소스를 변경하지 않습니다/);
 });
 
 test("idle validation has no cancel button while running deployment can still be cancelled", () => {
@@ -130,6 +131,14 @@ test("deployment actions sit directly above the recent result without a divider"
   assert.match(
     workspaceStyles,
     /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*border:\s*0;[^}]*grid-area:\s*actions;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentValidationActions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentPrimaryButton,[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*auto;/
   );
 });
 

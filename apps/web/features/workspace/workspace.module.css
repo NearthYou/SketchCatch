@@ -10073,3 +10073,42 @@
 .deploymentConsoleGrid > .deploymentStepHeading {
   grid-column: auto;
 }
+
+.deploymentConsoleGrid > .deploymentStepActionBar {
+  justify-items: start;
+}
+
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentValidationActions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: auto;
+}
+
+.deploymentConsoleGrid > .deploymentStepActionBar > button,
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentPrimaryButton,
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentSecondaryButton,
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentDangerButton {
+  flex: 0 0 auto;
+  font-size: 13px;
+  min-height: 42px;
+  min-width: 0;
+  padding: 9px 14px;
+  white-space: nowrap;
+  width: auto;
+}
+
+@media (max-width: 420px) {
+  .deploymentConsoleGrid > .deploymentStepActionBar .deploymentValidationActions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .deploymentConsoleGrid > .deploymentStepActionBar > button,
+  .deploymentConsoleGrid > .deploymentStepActionBar .deploymentPrimaryButton,
+  .deploymentConsoleGrid > .deploymentStepActionBar .deploymentSecondaryButton,
+  .deploymentConsoleGrid > .deploymentStepActionBar .deploymentDangerButton {
+    width: 100%;
+  }
+}

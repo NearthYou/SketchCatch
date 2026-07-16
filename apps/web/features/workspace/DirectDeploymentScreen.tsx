@@ -25,7 +25,6 @@ import {
   ClipboardCheck,
   Clock3,
   Code2,
-  Info,
   ShieldCheck,
   Trash2
 } from "lucide-react";
@@ -1279,10 +1278,6 @@ export function DirectDeploymentScreen({
       if (stepId === "validation") {
         return (
           <div className={styles.deploymentStepActionBar}>
-            <p>
-              <Info size={16} aria-hidden="true" />
-              {selectedStep.disabledReason ?? "검증 단계에서는 실제 리소스를 변경하지 않습니다."}
-            </p>
             {selectedDeployment?.status === "RUNNING" ? (
               <button
                 className={styles.deploymentSecondaryButton}
