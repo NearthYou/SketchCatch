@@ -62,20 +62,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verification: focused API tests passed 3/3; focused Web tests passed 12/12; `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed. Production deployment was not run.
 
 
-### 2026-07-15 - Repair production Live Observation Runtime Cache ingress
-
-- Reproduced the production collector failure with a deterministic public bootstrap request and identified an unowned ECS-to-Runtime-Cache ingress gap, introduced by the earlier ECS cutover and consistent with the observed timeout.
-- Added optional Runtime Cache security-group and port inputs, API/worker Redis ingress rules, and production preconditions that block Live Observation or worker dispatch without the connection.
-- Added static production-infrastructure and Terraform plan regressions, documented CloudFormation-to-runtime ownership and the expected `404` readiness signal, and updated the import manifest without taking ownership of the existing ElastiCache resources.
-- Hardened the review-only workflow to resolve the Runtime Cache stack outputs, verify VPC ownership, preserve Terraform detailed exit codes, and isolate an incident-only `runtime-cache-ingress` plan from unrelated runtime drift.
-- Verification: red/green production structure check, Terraform fmt/validate/test (2/2), harness, lint, typecheck, build, JSON parse, and diff checks pass. No AWS, Terraform apply, deployment, or cost-bearing mutation was performed; Git handoff was approved for the follow-up.
-- Production evidence: full review-only run `29385795235` exposed unrelated drift; targeted run `29385936278` passed with only two ingress creates and no updates or destroys.
-- The first approved apply run `29386749008` failed before mutation on missing state access. Follow-up attempts `29387207829` and `29387371879` failed before rule creation on required EC2 rule-resource and tag-on-create permissions; direct SG/state checks confirmed zero partial resources after each failure.
-- Applied the reviewed deploy-role policy with exact state/lock access, exact Runtime Cache security-group authorization, the required new-rule ARN, and tag-on-create permission restricted by `ec2:CreateAction=AuthorizeSecurityGroupIngress`.
-- Verification after the IAM template fix: policy JSON parse, production infrastructure structure check, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` passed.
-- Final apply run `29387480668` succeeded, created both TCP 6379 rules, verified both Terraform state addresses, and deleted its plan artifact. Direct AWS inspection found exactly the API and worker source rules, the public bootstrap returned `404 LIVE_OBSERVATION_COLLECTOR_NOT_FOUND`, and post-apply run `29387561447` reported no changes.
-- Next: merge PR #423 after required checks pass.
-
 ### 2026-07-15 - Resume pending AWS connection setup after reload
 
 - Reproduced the production settings regression where a pending AWS connection lost its account verification controls after a page reload and exposed only deletion.
@@ -174,3 +160,12 @@ Short English-only working log for the current agent context. Older records are 
 - Amazon Q must return an explicit severity marker for each ordered pillar, failed or invalid provider responses are no longer cached, and 503 messages distinguish authentication, timeout, rate-limit, configuration, invalid-response, and provider failures.
 - The remaining 503 cause was a 2,006-character fenced Amazon Q JSON response truncated before valid JSON completion. Amazon Q output is now bounded to compact six-pillar highlights and a three-sentence conclusion, while useful plain text, partial JSON, and truncated fenced JSON are normalized with deterministic guidance instead of discarded.
 - Verification: focused Web presentation tests passed 9/9, focused provider/validation tests passed 6/6, AWS STS and Q application read checks passed, `pnpm harness:check` passed, and a signed-in Chrome run returned a real Amazon Q review with a labeled summary, six concrete severity-colored criteria, no trailing next step, and no 503.
+
+### 2026-07-16 - Implement provider-neutral Deployment Optimization Contract v1
+
+- Created Epic #432 and ordered subissues #434, #433, and #435; this session implemented only PR 1 / issue #434.
+- Added automatic deployment capability derivation for every shared ResourceDefinition, with explicit exclusions for data sources, UNKNOWN resources, and catalog-only definitions across AWS and Kubernetes.
+- Added canonical Terraform desired-state identity, provider lock and state restoration, verified pending Plan reuse, process single-flight, safe cache fallback, bounded resource-change evidence, and approved no-change Apply skipping without `terraform -target`.
+- Stored strict versioned optimization evidence beside `tfplan` in S3 and kept the existing RDS schema unchanged. No live AWS, Terraform apply/destroy, or user Git/CI/CD handoff was performed.
+- Verification: ResourceDefinition tests passed 9/9; focused API/deployment/route tests passed 79/79; existing approval/Destroy regressions passed 22/22; harness, migration compatibility, lint, typecheck, and all package builds passed. Full `pnpm test` remains non-green only on the three documented pre-existing three-tier Template position/parent assertions in `packages/types`.
+- Next: merge PR 1 into `dev`, then start issue #433 from freshly fetched `origin/dev`; do not stack PR 2 on this branch.

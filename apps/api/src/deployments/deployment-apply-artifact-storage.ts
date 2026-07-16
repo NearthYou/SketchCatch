@@ -13,7 +13,10 @@ import {
   createS3DeploymentTerraformLockFileStorage,
   type DeploymentTerraformLockFileStorage
 } from "./terraform-lock-file-storage.js";
+import { buildDeploymentPlanOptimizationEvidenceObjectKey } from "./deployment-plan-artifact-storage.js";
 import { downloadTerraformArtifactFromS3 } from "./terraform-workspace.js";
+
+const deploymentPlanOptimizationEvidenceMaxBytes = 256 * 1024;
 
 export type UploadDeploymentStateInput = {
   deploymentId: string;
@@ -35,6 +38,10 @@ export type DeploymentApplyArtifactStorage = Partial<DeploymentTerraformLockFile
     objectKey: string;
   }): Promise<Buffer>;
   uploadDeploymentState(input: UploadDeploymentStateInput): Promise<UploadedDeploymentState>;
+  downloadDeploymentPlanOptimizationEvidence?(input: {
+    deploymentId: string;
+    planArtifactId: string;
+  }): Promise<Buffer | undefined>;
 };
 
 export type CreateS3DeploymentApplyArtifactStorageOptions = {
@@ -58,13 +65,32 @@ export function createS3DeploymentApplyArtifactStorage(
     async downloadDeploymentArtifact(input) {
       assertDeploymentPlanArtifactObjectKey(input);
 
-      return downloadTerraformArtifactFromS3(input.objectKey);
+      return downloadTerraformArtifactFromS3(input.objectKey, { bucketName, s3Client });
     },
 
     async downloadDeploymentState(input) {
       assertDeploymentStateObjectKey(input);
 
-      return downloadTerraformArtifactFromS3(input.objectKey);
+      return downloadTerraformArtifactFromS3(input.objectKey, { bucketName, s3Client });
+    },
+
+    async downloadDeploymentPlanOptimizationEvidence(input) {
+      try {
+        return await downloadTerraformArtifactFromS3(
+          buildDeploymentPlanOptimizationEvidenceObjectKey(input),
+          {
+            bucketName,
+            maxBytes: deploymentPlanOptimizationEvidenceMaxBytes,
+            s3Client
+          }
+        );
+      } catch (error) {
+        if (isS3NotFound(error)) {
+          return undefined;
+        }
+
+        throw error;
+      }
     },
 
     async uploadDeploymentState(input) {
@@ -102,4 +128,18 @@ export function createS3DeploymentApplyArtifactStorage(
 
 export function buildDeploymentStateObjectKey(input: { deploymentId: string }): string {
   return `deployments/${input.deploymentId}/state/terraform.tfstate`;
+}
+
+function isS3NotFound(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const value = error as { name?: unknown; $metadata?: { httpStatusCode?: unknown } };
+
+  return (
+    value.name === "NoSuchKey" ||
+    value.name === "NotFound" ||
+    value.$metadata?.httpStatusCode === 404
+  );
 }

@@ -1464,6 +1464,64 @@ export type DeploymentPlanSummary = {
   warnings: DeploymentPlanWarning[];
 };
 
+export const DEPLOYMENT_OPTIMIZATION_CONTRACT_VERSION = 1 as const;
+
+export type DeploymentOptimizationDecision =
+  | {
+      readonly outcome: "execute";
+      readonly reason:
+        | "initial_plan"
+        | "cache_miss"
+        | "desired_state_changed"
+        | "provider_lock_changed"
+        | "target_changed"
+        | "state_changed"
+        | "drift_ttl_expired";
+    }
+  | {
+      readonly outcome: "reuse";
+      readonly reason: "verified_pending_plan" | "concurrent_plan_joined";
+    }
+  | {
+      readonly outcome: "no_change";
+      readonly reason: "terraform_plan_no_changes";
+    }
+  | {
+      readonly outcome: "fallback_execute";
+      readonly reason: "cache_validation_failed";
+    }
+  | {
+      readonly outcome: "unsupported";
+      readonly reason: "resource_not_deployable";
+    };
+
+export type TerraformResourceChangeAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "replace"
+  | "no_change"
+  | "read"
+  | "unknown";
+
+export type TerraformResourceChangeEvidence = {
+  readonly resourceAddress: string;
+  readonly action: TerraformResourceChangeAction;
+};
+
+export type TerraformDesiredStateIdentity = {
+  readonly fingerprint: string;
+  readonly terraformBundleSha256: string;
+  readonly providerLockSha256: string;
+  readonly providerIdentitySha256: string;
+  readonly variableIdentitySha256: string;
+  readonly backendIdentitySha256: string;
+  readonly targetIdentitySha256: string;
+  readonly stateIdentitySha256: string;
+  readonly stateLineageSha256: string | null;
+  readonly stateSerial: number | null;
+};
+
 export type ApproveDeploymentPlanRequest = {
   acknowledgedWarningIds: string[];
 };

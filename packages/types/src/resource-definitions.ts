@@ -1,9 +1,45 @@
 import type { CloudProvider, ResourceType, TerraformBlockType } from "./index.js";
 
+export type ResourceDeploymentOptimizationProfile =
+  | {
+      readonly desiredStateReuse: "verified";
+      readonly artifactReuse: "none";
+      readonly runtimeNoOp: "none";
+      readonly healthVerification: "terraform_plan";
+    }
+  | {
+      readonly desiredStateReuse: "none";
+      readonly artifactReuse: "none";
+      readonly runtimeNoOp: "none";
+      readonly healthVerification: "none";
+    };
+
+export type ResourceDeploymentCapability =
+  | {
+      readonly status: "supported";
+      readonly provisioner: "terraform";
+      readonly executionRole: "managed_resource";
+      readonly optimization: Extract<
+        ResourceDeploymentOptimizationProfile,
+        { readonly desiredStateReuse: "verified" }
+      >;
+    }
+  | {
+      readonly status: "excluded";
+      readonly provisioner: "terraform";
+      readonly executionRole: "managed_resource" | "data_source" | "catalog_resource";
+      readonly reason: "terraform_data_source" | "unmodeled_resource" | "catalog_only";
+      readonly optimization: Extract<
+        ResourceDeploymentOptimizationProfile,
+        { readonly desiredStateReuse: "none" }
+      >;
+    };
+
 export type ResourceCapability = {
   readonly terraformPreview: boolean;
   readonly terraformSync: boolean;
   readonly parameterPanel: boolean;
+  readonly deployment: ResourceDeploymentCapability;
 };
 
 export type ResourceDefinition = {
@@ -27,7 +63,7 @@ type AwsResourceDefinitionInput = {
   readonly terraformSync?: boolean | undefined;
 };
 
-type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terraformResourceType"> & {
+export type ResourceDefinitionInput = Omit<AwsResourceDefinitionInput, "terraformResourceType"> & {
   readonly provider: CloudProvider;
   readonly terraformResourceType: string;
 };
@@ -1293,7 +1329,7 @@ function createAwsResourceDefinition({
   });
 }
 
-function createResourceDefinition({
+export function createResourceDefinition({
   id,
   provider,
   parameterPanel = true,
@@ -1303,7 +1339,7 @@ function createResourceDefinition({
   terraformResourceType,
   terraformSync = false
 }: ResourceDefinitionInput): ResourceDefinition {
-  return {
+  const definition: ResourceDefinition = {
     id,
     provider,
     resourceType,
@@ -1314,9 +1350,109 @@ function createResourceDefinition({
     capabilities: {
       parameterPanel,
       terraformPreview,
-      terraformSync
+      terraformSync,
+      deployment: createResourceDeploymentCapability({
+        resourceType,
+        terraformBlockType,
+        terraformPreview
+      })
     }
   };
+
+  assertResourceDeploymentCapability(definition);
+
+  return definition;
+}
+
+export function assertResourceDeploymentCapability(
+  definition: Pick<ResourceDefinition, "id" | "resourceType" | "terraform" | "capabilities">
+): void {
+  const expected = createResourceDeploymentCapability({
+    resourceType: definition.resourceType,
+    terraformBlockType: definition.terraform.blockType,
+    terraformPreview: definition.capabilities.terraformPreview
+  });
+
+  if (!hasSameDeploymentCapability(definition.capabilities.deployment, expected)) {
+    throw new Error(
+      `Resource definition ${definition.id} deployment capability does not match its Terraform identity`
+    );
+  }
+}
+
+function createResourceDeploymentCapability(input: {
+  readonly resourceType: ResourceType;
+  readonly terraformBlockType: TerraformBlockType;
+  readonly terraformPreview: boolean;
+}): ResourceDeploymentCapability {
+  const excludedOptimization = {
+    desiredStateReuse: "none",
+    artifactReuse: "none",
+    runtimeNoOp: "none",
+    healthVerification: "none"
+  } as const;
+
+  if (input.terraformBlockType === "data") {
+    return {
+      status: "excluded",
+      provisioner: "terraform",
+      executionRole: "data_source",
+      reason: "terraform_data_source",
+      optimization: excludedOptimization
+    };
+  }
+
+  if (input.resourceType === DEFAULT_RESOURCE_TYPE) {
+    return {
+      status: "excluded",
+      provisioner: "terraform",
+      executionRole: "managed_resource",
+      reason: "unmodeled_resource",
+      optimization: excludedOptimization
+    };
+  }
+
+  if (!input.terraformPreview) {
+    return {
+      status: "excluded",
+      provisioner: "terraform",
+      executionRole: "catalog_resource",
+      reason: "catalog_only",
+      optimization: excludedOptimization
+    };
+  }
+
+  return {
+    status: "supported",
+    provisioner: "terraform",
+    executionRole: "managed_resource",
+    optimization: {
+      desiredStateReuse: "verified",
+      artifactReuse: "none",
+      runtimeNoOp: "none",
+      healthVerification: "terraform_plan"
+    }
+  };
+}
+
+function hasSameDeploymentCapability(
+  left: ResourceDeploymentCapability,
+  right: ResourceDeploymentCapability
+): boolean {
+  if (
+    left.status !== right.status ||
+    left.provisioner !== right.provisioner ||
+    left.executionRole !== right.executionRole ||
+    left.optimization.desiredStateReuse !== right.optimization.desiredStateReuse ||
+    left.optimization.artifactReuse !== right.optimization.artifactReuse ||
+    left.optimization.runtimeNoOp !== right.optimization.runtimeNoOp ||
+    left.optimization.healthVerification !== right.optimization.healthVerification
+  ) {
+    return false;
+  }
+
+  return left.status === "supported" ||
+    (right.status === "excluded" && left.reason === right.reason);
 }
 
 function createTerraformDefinitionKey(blockType: TerraformBlockType, resourceType: string): string {

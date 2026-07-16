@@ -732,6 +732,39 @@
         "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
+    },
+    {
+      "id": "DEPLOYMENT-OPTIMIZATION-CONTRACT-434",
+      "priority": 1,
+      "area": "deployment-optimization",
+      "title": "Provider-neutral deployment optimization contract and verified Terraform Plan reuse",
+      "user_visible_behavior": "사용자는 같은 배포 요구를 반복 검증할 때 검증된 pending Terraform Plan을 재사용하고, 실제 no-change Plan은 승인·hash·계정·region·drift 증거를 다시 확인한 뒤 불필요한 Terraform Apply를 생략한다.",
+      "status": "passing",
+      "verification": [
+        "모든 deployable ResourceDefinition은 provider-neutral desired-state 최적화 capability를 자동 상속하고 data source, UNKNOWN, catalog-only definition은 명시적으로 제외한다.",
+        "Terraform bundle, provider lock/identity, target account/region, state lineage/serial이 Plan identity를 구성하며 drift TTL 만료는 새 Plan을 강제한다.",
+        "실제 tfplan과 versioned S3 sidecar, Plan summary, Pre-Deployment 결과가 검증된 pending Plan만 재사용한다.",
+        "동일 Plan 요청은 single-flight로 합치고 cache 검증 실패는 정상 Plan으로 fallback한다.",
+        "실제 no-change Plan만 기존 승인과 hash/account/region/TTL gate를 통과한 뒤 Terraform Apply를 생략한다.",
+        "Plan, Apply, Destroy는 terraform -target 없이 기존 전체 그래프와 사용자 승인 경계를 유지한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-16",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/resource-definitions.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-optimization.test.ts src/deployments/deployment-plan-artifact-storage.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/terraform-runner.test.ts src/deployments/terraform-workspace.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-destroy-service.test.ts",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm test",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused verification passed: ResourceDefinition 9/9, API/deployment/route 79/79, and existing approval/Destroy regressions 22/22. Harness, migration compatibility, lint, typecheck, and all five package builds passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template layout/parent contract failures in packages/types; this change does not modify those Template sources or tests."
+      },
+      "notes": "PR 1 implements only the IaC desired-state layer. Artifact reuse and runtime no-op remain in issues #433 and #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user Git/CI/CD handoff was performed."
     }
   ]
 }
