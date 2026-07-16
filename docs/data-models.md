@@ -2708,28 +2708,56 @@ Git/CI/CD handoff 생성 요청은 `sourceRepositoryId`만 받습니다. reposit
 
 ### GitHub 계정 연결과 프로젝트 repository 선택 경계
 
-GitHub App installation과 repository 접근 권한은 사용자 계정 단위 외부 연결입니다. Dashboard 전역 설정은 GitHub API에서 현재 사용자가 소유한 installation을 조회하며, 이 목록을 `source_repositories`에 저장하지 않습니다.
+SketchCatch 로그인 계정과 GitHub App installation 연결은 별도 인증 경계입니다. 비밀번호, Naver, Kakao, GitHub 중 어떤 방식으로 로그인했는지와 무관하게 현재 SketchCatch `user_id`가 GitHub App 설치 흐름을 시작하고 callback을 완료하면 `github_installation_connections`에 installation 소유 관계를 저장합니다. GitHub OAuth 로그인 이력인 `oauth_accounts`는 GitHub App installation 소유권 판정에 사용하지 않습니다.
+
+`github_installation_connections`는 사용자 계정 단위 외부 연결만 저장하며 프로젝트 repository 선택 결과는 저장하지 않습니다.
+
+| 필드                     | 설명                                                |
+| ------------------------ | --------------------------------------------------- |
+| `id`                     | GitHub installation 연결 식별자                     |
+| `user_id`                | 연결을 시작한 SketchCatch 사용자                    |
+| `github_installation_id` | GitHub App installation id, 전체 사용자에서 unique |
+| `account_id`             | GitHub user 또는 organization id                    |
+| `account_login`          | GitHub account login                                |
+| `account_type`           | GitHub account type                                 |
+| `repository_selection`   | `all`, `selected`, 또는 `null`                      |
+| `html_url`               | GitHub installation 관리 URL                        |
+| `status`                 | `active` 또는 `disconnected`                        |
+| `connected_at`           | 최초 연결 시각                                      |
+| `last_verified_at`       | GitHub App API로 마지막 확인한 시각                 |
+| `disconnected_at`        | installation 접근이 사라진 시각                     |
+
+GitHub setup URL의 `installation_id`는 소유권 증거로 신뢰하지 않습니다. callback 뒤 GitHub App user authorization(PKCE)을 수행하고, 일시적인 user access token으로 `/user/installations`를 조회해 현재 GitHub 사용자가 해당 installation에 접근할 수 있을 때만 연결 row를 생성합니다. user access token, refresh token, code verifier는 RDS에 저장하지 않습니다.
+
+GitHub App user authorization 시작 API DTO는 `CreateGitHubInstallationUserAuthorizationRequest`와 `GitHubInstallationUserAuthorizationUrlResponse`입니다. 요청은 서명된 setup `state`와 `installationId`를 받고, 응답은 `authorizationUrl`과 `expiresAt: IsoDateTimeString`을 반환합니다.
+
+provider callback은 브라우저 redirect이므로 SketchCatch access token header에 의존하지 않고, 서명된 authorization state와 `HttpOnly` PKCE cookie에서 시작 사용자를 복원합니다. 이후 GitHub `/user/installations` 검증까지 통과해야 installation 연결을 저장합니다.
+
+GitHub installation access token과 GitHub App private key는 이 테이블에 저장하지 않습니다. repository 목록과 repository 개수도 요청 시 GitHub API에서 조회하며 RDS에 저장하지 않습니다.
 
 Dashboard 전역 설정은 계정 단위 GitHub App installation을 관리하는 보조 경로입니다. Repository Analysis에서 Architecture Draft를 시작하는 흐름은 전역 설정으로 이동시키지 않고, 추천 Template 선택 화면 안에서 프로젝트 단위 CI/CD 연결을 직접 제공합니다. Web은 분석 UI 상태를 schema version 1, 30분 TTL의 일회성 `sessionStorage` record로 보존하고, API는 target repository와 resume key를 project scope JWT state에 서명합니다. 초기 UI 검증 기간의 callback은 target을 자동 연결하고 단일 `확인`으로 배포 타깃 PUT을 먼저 호출한 뒤 성공하면 GitOps 감시 PUT을 호출합니다. 두 요청이 모두 성공해야 resume record 복귀를 시작합니다. browser record에는 token, GitHub state, 원본 파일 내용 또는 credential을 넣지 않습니다.
 
 초기 제품 검증 기간의 callback은 선택한 추천 Template과 무관하게 `ProjectDeploymentTarget.runtimeTargetKind`를 `ecs_fargate`로 설정합니다. 기존 target이 다른 runtime이면 callback draft를 ECS Fargate로 전환하고, 기존 ECS target의 필수 좌표가 비어 있으면 분석 SHA, Dockerfile과 project slug에서 계산한 기본값으로 보충합니다. 일반 프로젝트 설정 화면은 이 임시 강제 정책을 사용하지 않습니다.
 
 ```ts
+type GitHubRepositorySelection = "all" | "selected";
+type GitHubInstallationConnectionStatus = "active" | "disconnected";
+
 type GitHubInstallationConnection = {
   installationId: string;
   accountLogin: string;
   accountType: string | null;
-  repositorySelection: "all" | "selected" | null;
+  repositorySelection: GitHubRepositorySelection | null;
   repositoryCount: number;
   htmlUrl: string | null;
 };
 ```
 
 - `GitHubInstallationConnection`은 installation ID, 계정 표시 정보, repository 권한 범위와 개수, GitHub 관리 URL만 반환합니다. installation access token과 GitHub App private key는 반환하거나 저장하지 않습니다.
-- account scope callback은 로그인 사용자와 installation 소유권만 검증하고 `SourceRepository`를 생성하거나 변경하지 않습니다.
-- project scope callback은 서명된 target repository만 프로젝트별 `SourceRepository`로 생성하거나 기존 동일 active 연결을 재사용합니다.
+- account scope callback은 서명된 state의 SketchCatch 사용자와 provider가 user access token으로 확인한 installation을 연결하지만 `SourceRepository`를 생성하거나 변경하지 않습니다.
+- project scope callback은 provider가 확인한 installation 소유권과 서명된 target repository를 함께 검증한 뒤 프로젝트별 `SourceRepository`로 생성하거나 기존 동일 active 연결을 재사용합니다.
 - account scope와 project scope의 서명 state는 구분되며 서로 바꿔 사용할 수 없습니다.
-- 전역 GitHub 연결 추가에 별도 RDS row나 DB migration은 필요하지 않습니다.
+- 다른 SketchCatch 사용자에게 이미 연결된 installation은 현재 사용자가 사용할 수 없습니다.
 
 ### Repository Analysis와 AI Handoff
 

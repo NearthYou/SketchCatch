@@ -32,7 +32,8 @@ test("project and GitHub account loading states remain independent", () => {
   assert.match(source, /loadProjectRepository/);
   assert.match(source, /loadGitHubAccountConnection/);
   assert.match(source, /accountErrorMessage/);
-  assert.match(source, /GitHub 계정 연결 상태를 불러오지 못했습니다/);
+  assert.match(source, /GitHub App 연결 상태를 불러오지 못했습니다/);
+  assert.match(source, /로그인 방식과 관계없이/);
 });
 
 test("source repository loads only after authentication", async () => {

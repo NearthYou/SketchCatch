@@ -878,8 +878,8 @@ ECS task definition의 책임은 다음처럼 나눕니다.
 | 구분 | 저장 위치 | 예시 |
 | --- | --- | --- |
 | GitHub Actions vars | 배포 workflow가 image build/push와 service update에 쓰는 비민감 설정 | `AWS_REGION`, `ECR_API_REPOSITORY`, `ECR_WEB_REPOSITORY`, `ECS_CLUSTER_NAME`, `ECS_API_SERVICE_NAME`, `ECS_WEB_SERVICE_NAME`, API/web task family와 container name |
-| ECS environment | task definition에 평문으로 남아도 되는 비민감 runtime 설정 | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `LIVE_OBSERVATION_ENABLED`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, OAuth client ID |
-| Secrets Manager | DB credential 또는 외부 provider secret | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET` |
+| ECS environment | task definition에 평문으로 남아도 되는 비민감 runtime 설정 | `NODE_ENV`, `PORT`, `DATABASE_SSL`, `S3_BUCKET_NAME`, `SKETCHCATCH_PUBLIC_BASE_URL`, `LIVE_OBSERVATION_ENABLED`, `OAUTH_REDIRECT_BASE_URL`, `GIT_APP_ID`, `GIT_APP_SLUG`, `GIT_APP_CLIENT_ID`, OAuth login client ID |
+| Secrets Manager | DB credential 또는 외부 provider secret | `DATABASE_URL`, `GIT_APP_PRIVATE_KEY_BASE64`, `GIT_APP_CLIENT_SECRET`, `OPENAI_API_KEY`, `NAVER_OAUTH_CLIENT_SECRET`, `KAKAO_OAUTH_CLIENT_SECRET`, `GIT_OAUTH_CLIENT_SECRET` |
 | SSM Parameter Store SecureString | 서명 secret 또는 secure runtime endpoint | `AUTH_TOKEN_SECRET`, `CLOUDFORMATION_TEMPLATE_TOKEN_SECRET`, `GIT_APP_STATE_SECRET`, `REDIS_URL` |
 | GitHub Actions secrets | OIDC로 대체할 수 없는 workflow 입력 | application secret 원문은 두지 않음 |
 
@@ -893,6 +893,7 @@ api_secret_arns = {
   NAVER_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/naver-oauth-client-secret-..."
   KAKAO_OAUTH_CLIENT_SECRET            = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/kakao-oauth-client-secret-..."
   GIT_OAUTH_CLIENT_SECRET              = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/git-oauth-client-secret-..."
+  GIT_APP_CLIENT_SECRET                = "arn:aws:secretsmanager:ap-northeast-2:<account-id>:secret:sketchcatch/production/git-app-client-secret-..."
   AUTH_TOKEN_SECRET                    = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/auth-token-secret"
   CLOUDFORMATION_TEMPLATE_TOKEN_SECRET = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/cloudformation-template-token-secret"
   GIT_APP_STATE_SECRET                 = "arn:aws:ssm:ap-northeast-2:<account-id>:parameter/sketchcatch/production/git-app-state-secret"
