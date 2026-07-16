@@ -244,7 +244,14 @@ function NotificationCenterSurface({
         type="button"
       >
         <Bell aria-hidden="true" size={19} />
-        {state.unreadCount > 0 ? <span>{Math.min(state.unreadCount, 99)}</span> : null}
+        {state.unreadCount > 0 ? (
+          <span
+            aria-label={`${state.unreadCount}개 읽지 않은 배포 알림`}
+            className={styles.unreadCountBadge}
+          >
+            {Math.min(state.unreadCount, 99)}
+          </span>
+        ) : null}
       </button>
       {open ? (
         <section className={styles.panel}>

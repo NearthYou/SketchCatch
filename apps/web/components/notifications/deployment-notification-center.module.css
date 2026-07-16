@@ -42,25 +42,21 @@
   outline: none;
 }
 
-.trigger span {
+.unreadCountBadge {
   align-items: center;
-  background: #ef4444;
-  border: 2px solid #fff;
+  background: #fef2f2;
   border-radius: 999px;
-  display: flex;
+  color: #b42318;
+  display: inline-flex;
   font-size: 12px;
-  font-weight: 800;
-  height: 20px;
+  font-weight: 900;
+  height: 16px;
   justify-content: center;
-  min-width: 20px;
+  min-width: 16px;
   padding: 0 4px;
   position: absolute;
-  right: -6px;
-  top: -6px;
-}
-
-.center[data-placement="workspace"] .trigger span {
-  border-color: var(--workspace-surface, #fff);
+  right: -5px;
+  top: -5px;
 }
 
 .panel {

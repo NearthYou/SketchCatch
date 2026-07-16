@@ -107,3 +107,14 @@ test("the notification surface keeps its floating default and docks its Workspac
     /\.center\[data-placement="workspace"\] \.panel\s*\{[\s\S]*?bottom:\s*auto;[\s\S]*?top:\s*44px;[\s\S]*?\}/
   );
 });
+
+test("the unread notification count uses the compact error badge treatment", () => {
+  assert.match(
+    centerSource,
+    /<span[\s\S]*?aria-label=\{`\$\{state\.unreadCount\}개 읽지 않은 배포 알림`\}[\s\S]*?className=\{styles\.unreadCountBadge\}[\s\S]*?>/
+  );
+  assert.match(
+    centerStyles,
+    /\.unreadCountBadge\s*\{[\s\S]*?background:\s*#fef2f2;[\s\S]*?color:\s*#b42318;[\s\S]*?height:\s*16px;[\s\S]*?min-width:\s*16px;[\s\S]*?\}/
+  );
+});
