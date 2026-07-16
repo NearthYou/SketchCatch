@@ -3,7 +3,8 @@ import { test } from "node:test";
 import {
   beginDeploymentHistoryDetailsLoad,
   completeDeploymentHistoryDetailsLoad,
-  failDeploymentHistoryDetailsLoad
+  failDeploymentHistoryDetailsLoad,
+  selectDeploymentLogView
 } from "./deployment-history-details";
 
 test("a stale version response cannot replace the newly selected version", () => {
@@ -33,4 +34,40 @@ test("a selected version detail failure remains separate and visible", () => {
   assert.deepEqual(failed.logs, []);
   assert.deepEqual(failed.resources, []);
   assert.deepEqual(failed.outputs, []);
+});
+
+test("the current deployment logs replace stale history logs while a new run is active", () => {
+  const currentLogs = [{ id: "current-log" }] as never[];
+  const historyLogs = [{ id: "history-log" }] as never[];
+
+  const view = selectDeploymentLogView({
+    currentDeploymentId: "deployment-current",
+    currentLogs,
+    historyDeploymentId: "deployment-history",
+    historyErrorMessage: "history failed",
+    historyIsLoading: true,
+    historyLogs
+  });
+
+  assert.equal(view.source, "current");
+  assert.equal(view.logs, currentLogs);
+  assert.equal(view.errorMessage, "");
+  assert.equal(view.isLoading, false);
+});
+
+test("a selected successful version keeps its history logs", () => {
+  const currentLogs = [{ id: "current-log" }] as never[];
+  const historyLogs = [{ id: "history-log" }] as never[];
+
+  const view = selectDeploymentLogView({
+    currentDeploymentId: "deployment-history",
+    currentLogs,
+    historyDeploymentId: "deployment-history",
+    historyErrorMessage: "",
+    historyIsLoading: false,
+    historyLogs
+  });
+
+  assert.equal(view.source, "history");
+  assert.equal(view.logs, historyLogs);
 });

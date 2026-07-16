@@ -10211,3 +10211,62 @@
     width: 100%;
   }
 }
+
+.deploymentProgress {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: max-content minmax(96px, 1fr) 42px;
+  margin-bottom: -16px;
+  min-width: 0;
+}
+
+.deploymentProgress > strong {
+  color: var(--workspace-text, #171717);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.deploymentProgress > output {
+  color: var(--workspace-text, #171717);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: right;
+}
+
+.deploymentProgressTrack {
+  background: var(--workspace-line-strong, #dcdee0);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.deploymentProgressTrack > span {
+  background: var(--workspace-accent, #171717);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  min-width: 8px;
+  transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (max-width: 640px) {
+  .deploymentProgress {
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) 38px;
+  }
+
+  .deploymentProgress > strong {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deploymentProgressTrack > span {
+    transition: none;
+  }
+}

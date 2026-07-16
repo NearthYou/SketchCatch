@@ -427,7 +427,8 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
         }
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
-      runTerraformInit: async () => {
+      runTerraformInit: async (_workdir, options) => {
+        assert.equal(options?.timeoutMs, expectedTerraformMutationTimeoutMs);
         runnerStages.push("init");
         return createRunnerResult("init");
       },

@@ -323,7 +323,8 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
-      runTerraformInit: async () => {
+      runTerraformInit: async (_workdir, options) => {
+        assert.equal(options?.timeoutMs, expectedTerraformMutationTimeoutMs);
         runnerStages.push("init");
         return createRunnerResult("init");
       },

@@ -32,6 +32,7 @@ import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
+import { createDeploymentTerraformLiveLogWriter } from "./deployment-terraform-live-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
@@ -249,18 +250,22 @@ export async function runDeploymentDestroyPlan(
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
 
-    terraform.init = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env,
-      signal: input.abortSignal
-    });
-    sequence = await appendTerraformOutput({
+    const initLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
       stage: "init",
-      label: "terraform init",
-      result: terraform.init,
       repository
+    });
+    terraform.init = await runTerraformInit(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: initLogWriter.onOutputLine,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await initLogWriter.complete({
+      label: "terraform init",
+      result: terraform.init
     });
 
     if (terraform.init.cancelled) {
@@ -298,20 +303,23 @@ export async function runDeploymentDestroyPlan(
     });
     sequence = lockUpload.sequence;
 
-    terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
-      env: awsCredentials.env,
-      planFileName: defaultPlanFileName,
-      signal: input.abortSignal,
-      timeoutMs: terraformMutationTimeoutMs
-    });
-    sequence = await appendTerraformOutput({
+    const planLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
       stage: "plan",
-      label: "terraform plan -destroy",
-      result: terraform.plan,
       repository
+    });
+    terraform.plan = await runTerraformDestroyPlan(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: planLogWriter.onOutputLine,
+      planFileName: defaultPlanFileName,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await planLogWriter.complete({
+      label: "terraform plan -destroy",
+      result: terraform.plan
     });
 
     if (terraform.plan.cancelled) {
@@ -855,45 +863,6 @@ function resolveDestroyPlanFailureStage(
     : "plan";
 }
 
-async function appendTerraformOutput(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  stage: "init" | "plan";
-  label: string;
-  result: TerraformRunResult;
-  repository: DeploymentRepository;
-}): Promise<number> {
-  let nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: input.sequence,
-    stage: input.stage,
-    output: input.result.stdout,
-    level: "INFO",
-    repository: input.repository
-  });
-
-  nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    stage: input.stage,
-    output: input.result.stderr,
-    level: input.result.exitCode === 0 ? "WARN" : "ERROR",
-    repository: input.repository
-  });
-
-  return appendTerraformDurationLog({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    stage: input.stage,
-    label: input.label,
-    result: input.result,
-    repository: input.repository
-  });
-}
 
 async function appendTerraformErrorOutput(input: {
   deploymentId: string;

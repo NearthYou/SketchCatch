@@ -810,9 +810,18 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
         restoredState = { filePath, content };
       },
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
-      runTerraformInit: async () => {
+      runTerraformInit: async (_workdir, options) => {
+        assert.equal(options?.timeoutMs, terraformMutationTimeoutMs);
         runnerStages.push("init");
-        return createRunnerResult("init");
+        assert.ok(options?.onOutputLine);
+        const initLines = ["init 1", "init 2", "init 3", "init 4", "init 5"];
+
+        for (const line of initLines) {
+          await options.onOutputLine({ line, stream: "stdout" });
+        }
+
+        assert(repository.logs.some((log) => log.message === "init 5"));
+        return createRunnerResult("init", { stdout: `${initLines.join("\n")}\n` });
       },
       runTerraformPlan: async (_workdir, options) => {
         assert.equal(options?.timeoutMs, terraformMutationTimeoutMs);
@@ -899,7 +908,11 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
         message: log.message
       })),
     [
-      { stage: "init", level: "INFO", message: "init ok" },
+      { stage: "init", level: "INFO", message: "init 1" },
+      { stage: "init", level: "INFO", message: "init 2" },
+      { stage: "init", level: "INFO", message: "init 3" },
+      { stage: "init", level: "INFO", message: "init 4" },
+      { stage: "init", level: "INFO", message: "init 5" },
       {
         stage: "plan",
         level: "INFO",

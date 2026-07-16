@@ -94,9 +94,12 @@ import {
   beginDeploymentHistoryDetailsLoad,
   completeDeploymentHistoryDetailsLoad,
   failDeploymentHistoryDetailsLoad,
-  initialDeploymentHistoryDetailsState
+  initialDeploymentHistoryDetailsState,
+  selectDeploymentLogView
 } from "./deployment-history-details";
 import { DeploymentOutputLinks } from "./DeploymentOutputLinks";
+import { DeploymentProgressBar } from "./DeploymentProgressBar";
+import type { DeploymentProgressOperation } from "./deployment-progress";
 import {
   getSafeDeploymentLinks,
   getVisibleDeploymentOutputs,
@@ -165,7 +168,7 @@ export function DirectDeploymentScreen({
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [applicationReleases, setApplicationReleases] = useState<ApplicationRelease[]>([]);
-  const [_deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
+  const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
   const [_deploymentResources, setDeploymentResources] = useState<DeployedResource[]>([]);
   const [terraformOutputState, dispatchTerraformOutputState] = useReducer(
     reduceDeploymentOutputState,
@@ -184,6 +187,10 @@ export function DirectDeploymentScreen({
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [activeProgress, setActiveProgress] = useState<{
+    readonly operation: DeploymentProgressOperation;
+    readonly requestedAtMs: number;
+  } | null>(null);
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("validation");
   const isDeploymentOverlayOpen = true;
@@ -265,7 +272,7 @@ export function DirectDeploymentScreen({
   const hasLoadedSelectedHistoryDetails =
     deploymentHistoryDetails.deploymentId === selectedHistoryDeploymentId &&
     deploymentHistoryDetails.requestState === "success";
-  const historyDeploymentLogs = hasLoadedSelectedHistoryDetails
+  const loadedHistoryDeploymentLogs = hasLoadedSelectedHistoryDetails
     ? deploymentHistoryDetails.logs
     : [];
   const historyDeploymentResources = hasLoadedSelectedHistoryDetails
@@ -283,6 +290,15 @@ export function DirectDeploymentScreen({
     deploymentHistoryDetails.requestState === "error"
       ? deploymentHistoryDetails.errorMessage
       : "";
+  const deploymentLogView = selectDeploymentLogView({
+    currentDeploymentId: selectedDeploymentId,
+    currentLogs: deploymentLogs,
+    historyDeploymentId: selectedHistoryDeploymentId,
+    historyErrorMessage: historyDetailsErrorMessage,
+    historyIsLoading: historyDetailsIsLoading,
+    historyLogs: loadedHistoryDeploymentLogs
+  });
+  const historyDeploymentLogs = deploymentLogView.logs;
   const historyDeploymentOutputLinks = useMemo(
     () => getSafeDeploymentLinks(historyTerraformOutputs),
     [historyTerraformOutputs]
@@ -344,6 +360,13 @@ export function DirectDeploymentScreen({
   const recentResultCompletedStep = selectedDeployment
     ? getLatestCompletedDeploymentStep(selectedDeployment)
     : null;
+  const deploymentProgressIsStarting = Boolean(
+    activeProgress &&
+      (requestState === "loading" ||
+        preDeploymentState === "loading" ||
+        (selectedDeployment?.status === "PENDING" &&
+          !selectedDeployment.currentPlanArtifactId))
+  );
 
   useEffect(() => {
     setSelectedDirectStepId(directDeploymentFlow.activeStepId);
@@ -810,6 +833,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress({ operation: "plan", requestedAtMs: Date.now() });
     setRequestState("loading");
     setErrorMessage("");
     let preparedArtifacts: PreparedWorkspaceDeploymentArtifacts;
@@ -885,6 +909,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress({ operation: "plan", requestedAtMs: Date.now() });
     setQueuedApplyPlanDeploymentId("");
 
     dispatchTerraformOutputState({
@@ -917,6 +942,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress(null);
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: selectedDeployment.id
@@ -945,6 +971,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress({ operation: "apply", requestedAtMs: Date.now() });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: selectedDeployment.id
@@ -977,6 +1004,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress({ operation: "destroy-plan", requestedAtMs: Date.now() });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: targetDeployment.id
@@ -1007,6 +1035,7 @@ export function DirectDeploymentScreen({
       return;
     }
 
+    setActiveProgress({ operation: "destroy", requestedAtMs: Date.now() });
     dispatchTerraformOutputState({
       type: "clear",
       deploymentId: cleanupDeployment.id
@@ -1465,6 +1494,13 @@ export function DirectDeploymentScreen({
         {renderDirectStepActions(selectedStep.id)}
 
         <article className={styles.deploymentStepWorkspace} data-state={selectedStep.state}>
+          <DeploymentProgressBar
+            deployment={selectedDeployment}
+            isStarting={deploymentProgressIsStarting}
+            logs={deploymentLogs}
+            operationHint={activeProgress?.operation ?? null}
+            requestedAtMs={activeProgress?.requestedAtMs ?? null}
+          />
           {renderDirectStepContent(selectedStep.id)}
           {requestError ? (
             <p className={styles.deploymentStageAlert} role="alert">
@@ -1608,7 +1644,7 @@ export function DirectDeploymentScreen({
   };
 
   const renderLogsSection = () => {
-    if (historyDetailsIsLoading) {
+    if (deploymentLogView.isLoading) {
       return (
         <section
           aria-busy="true"
@@ -1622,11 +1658,11 @@ export function DirectDeploymentScreen({
       );
     }
 
-    if (historyDetailsErrorMessage) {
+    if (deploymentLogView.errorMessage) {
       return (
         <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
           <p className={styles.deploymentRecentResultError} role="alert">
-            {historyDetailsErrorMessage}
+            {deploymentLogView.errorMessage}
           </p>
         </section>
       );
@@ -1634,7 +1670,7 @@ export function DirectDeploymentScreen({
 
     return (
       <section aria-label="전체 로그 세부 내용" className={styles.deploymentSection}>
-        <DeploymentLogList logs={historyDeploymentLogs} />
+        <DeploymentLogList logs={deploymentLogView.logs} />
       </section>
     );
   };
@@ -1793,9 +1829,9 @@ export function DirectDeploymentScreen({
           <summary>
             <span>전체 로그</span>
             <small>
-              {historyDetailsIsLoading
+              {deploymentLogView.isLoading
                 ? "불러오는 중"
-                : historyDetailsErrorMessage
+                : deploymentLogView.errorMessage
                   ? "불러오기 실패"
                   : `${historyDeploymentLogs.length}줄`}
             </small>

@@ -474,7 +474,8 @@ function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyP
       cleanup: async () => undefined
     }),
     prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
-    runTerraformInit: async () => {
+    runTerraformInit: async (_workdir, options) => {
+      assert.equal(options?.timeoutMs, terraformMutationTimeoutMs);
       runnerStages.push("init");
       return createRunnerResult("init");
     },

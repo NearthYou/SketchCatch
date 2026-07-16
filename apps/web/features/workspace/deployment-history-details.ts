@@ -22,6 +22,42 @@ export const initialDeploymentHistoryDetailsState: DeploymentHistoryDetailsState
   resources: []
 };
 
+export type DeploymentLogView = {
+  readonly errorMessage: string;
+  readonly isLoading: boolean;
+  readonly logs: DeploymentLog[];
+  readonly source: "current" | "history";
+};
+
+export function selectDeploymentLogView(input: {
+  readonly currentDeploymentId: string;
+  readonly currentLogs: DeploymentLog[];
+  readonly historyDeploymentId: string;
+  readonly historyErrorMessage: string;
+  readonly historyIsLoading: boolean;
+  readonly historyLogs: DeploymentLog[];
+}): DeploymentLogView {
+  const showCurrentDeployment =
+    input.currentDeploymentId.length > 0 &&
+    input.currentDeploymentId !== input.historyDeploymentId;
+
+  if (showCurrentDeployment) {
+    return {
+      errorMessage: "",
+      isLoading: false,
+      logs: input.currentLogs,
+      source: "current"
+    };
+  }
+
+  return {
+    errorMessage: input.historyErrorMessage,
+    isLoading: input.historyIsLoading,
+    logs: input.historyLogs,
+    source: "history"
+  };
+}
+
 export function beginDeploymentHistoryDetailsLoad(
   deploymentId: string
 ): DeploymentHistoryDetailsState {

@@ -24,11 +24,17 @@ export type TerraformRunResult = {
   cancelled?: boolean;
 };
 
+export type TerraformOutputLine = {
+  line: string;
+  stream: "stdout" | "stderr";
+};
+
 export type RunTerraformInitOptions = {
   terraformBinary?: string;
   timeoutMs?: number;
   maxOutputBytes?: number;
   env?: NodeJS.ProcessEnv;
+  onOutputLine?: (output: TerraformOutputLine) => Promise<void> | void;
   signal?: AbortSignal | undefined;
 };
 
@@ -181,6 +187,10 @@ async function runTerraformCommand(
     let cancelled = false;
     let outputLimitExceeded = false;
     let settled = false;
+    let stdoutLineRemainder = "";
+    let stderrLineRemainder = "";
+    let outputLineCallbackChain = Promise.resolve();
+
     let forceKillTimer: NodeJS.Timeout | undefined;
 
     const child = spawn(terraformBinary, args, {
@@ -204,16 +214,61 @@ async function runTerraformCommand(
 
     options.signal?.addEventListener("abort", abortHandler, { once: true });
 
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+
+    function queueOutputLine(stream: TerraformOutputLine["stream"], line: string): void {
+      if (!options.onOutputLine || line.length === 0) {
+        return;
+      }
+
+      outputLineCallbackChain = outputLineCallbackChain
+        .then(() => options.onOutputLine?.({ line, stream }))
+        .then(() => undefined)
+        .catch(() => undefined);
+    }
+
+    function queueOutputChunk(stream: TerraformOutputLine["stream"], chunk: string): void {
+      const combined =
+        stream === "stdout" ? stdoutLineRemainder + chunk : stderrLineRemainder + chunk;
+      const lines = combined.split(/\r?\n/);
+      const remainder = lines.pop() ?? "";
+
+      if (stream === "stdout") {
+        stdoutLineRemainder = remainder;
+      } else {
+        stderrLineRemainder = remainder;
+      }
+
+      for (const line of lines) {
+        queueOutputLine(stream, line);
+      }
+    }
+
+    function flushOutputLineRemainders(): void {
+      queueOutputLine("stdout", stdoutLineRemainder);
+      queueOutputLine("stderr", stderrLineRemainder);
+      stdoutLineRemainder = "";
+      stderrLineRemainder = "";
+    }
+
+    function resolveAfterOutputLines(result: TerraformRunResult): void {
+      flushOutputLineRemainders();
+      void outputLineCallbackChain.then(() => resolve(result));
+    }
+
     function clearProcessListeners(): void {
       clearTimeout(timer);
       clearTimeout(forceKillTimer);
       options.signal?.removeEventListener("abort", abortHandler);
     }
 
-    child.stdout?.on("data", (chunk: Buffer | string) => {
+    child.stdout?.on("data", (chunk: string) => {
       const result = appendTerraformOutputChunk(stdout, stdoutBytes, chunk, maxOutputBytes);
+      const appendedOutput = result.output.slice(stdout.length);
       stdout = result.output;
       stdoutBytes = result.bytes;
+      queueOutputChunk("stdout", appendedOutput);
 
       if (result.limitExceeded && !outputLimitExceeded) {
         outputLimitExceeded = true;
@@ -222,10 +277,12 @@ async function runTerraformCommand(
       }
     });
 
-    child.stderr?.on("data", (chunk: Buffer | string) => {
+    child.stderr?.on("data", (chunk: string) => {
       const result = appendTerraformOutputChunk(stderr, stderrBytes, chunk, maxOutputBytes);
+      const appendedOutput = result.output.slice(stderr.length);
       stderr = result.output;
       stderrBytes = result.bytes;
+      queueOutputChunk("stderr", appendedOutput);
 
       if (result.limitExceeded && !outputLimitExceeded) {
         outputLimitExceeded = true;
@@ -242,7 +299,7 @@ async function runTerraformCommand(
       settled = true;
       clearProcessListeners();
 
-      resolve({
+      resolveAfterOutputLines({
         command: [terraformBinary, ...args],
         exitCode: 127,
         stdout,
@@ -261,7 +318,7 @@ async function runTerraformCommand(
       settled = true;
       clearProcessListeners();
 
-      resolve({
+      resolveAfterOutputLines({
         command: [terraformBinary, ...args],
         exitCode: outputLimitExceeded ? 1 : (code ?? 1),
         stdout,

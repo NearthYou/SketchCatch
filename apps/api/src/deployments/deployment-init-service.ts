@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import {
-  appendDeploymentLogs,
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
@@ -24,14 +23,13 @@ import {
 } from "./terraform-workspace.js";
 import {
   runTerraformInit as defaultRunTerraformInit,
+  terraformMutationTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
-import {
-  appendTerraformDurationLog,
-  runLoggedDeploymentOperation
-} from "./deployment-duration-logs.js";
+import { runLoggedDeploymentOperation } from "./deployment-duration-logs.js";
+import { createDeploymentTerraformLiveLogWriter } from "./deployment-terraform-live-logs.js";
 import { createS3DeploymentPlanArtifactStorage } from "./deployment-plan-artifact-storage.js";
 import {
   type TerraformLockFileCapableStorage,
@@ -153,37 +151,23 @@ export async function runDeploymentInit(
       }
     }
 
-    const terraform = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env,
-      signal: input.abortSignal
-    });
     let sequence = await getNextLogSequence(deployment.id, repository);
-
-    sequence = await appendOutputLines({
-      deploymentId: deployment.id,
-      accessContext: input.accessContext,
-      sequence,
-      output: terraform.stdout,
-      level: "INFO",
-      repository
-    });
-
-    sequence = await appendOutputLines({
-      deploymentId: deployment.id,
-      accessContext: input.accessContext,
-      sequence,
-      output: terraform.stderr,
-      level: terraform.exitCode === 0 ? "WARN" : "ERROR",
-      repository
-    });
-    sequence = await appendTerraformDurationLog({
+    const initLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
       stage: "init",
-      label: "terraform init",
-      result: terraform,
       repository
+    });
+    const terraform = await runTerraformInit(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: initLogWriter.onOutputLine,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await initLogWriter.complete({
+      label: "terraform init",
+      result: terraform
     });
 
     if (terraform.cancelled) {
@@ -275,33 +259,6 @@ async function getNextLogSequence(
   return repository.getNextDeploymentLogSequence(deploymentId);
 }
 
-async function appendOutputLines(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  output: string;
-  level: "INFO" | "WARN" | "ERROR";
-  repository: DeploymentRepository;
-}): Promise<number> {
-  const lines = splitOutputLines(input.output);
-
-  await appendDeploymentLogs(
-    {
-      deploymentId: input.deploymentId,
-      accessContext: input.accessContext,
-      logs: lines.map((line, index) => ({
-        sequence: input.sequence + index,
-        stage: "init",
-        level: input.level,
-        message: line,
-        relatedResourceId: null
-      }))
-    },
-    input.repository
-  );
-
-  return input.sequence + lines.length;
-}
 
 async function prepareAwsCredentialsForInit(input: {
   deploymentId: string;

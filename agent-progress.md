@@ -26,6 +26,34 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-17 - Add compact Direct Deployment execution progress
+
+- Added a thin progress bar directly above Deployment Settings for Terraform Plan, Apply, Destroy Plan, and Destroy runs.
+- Progress uses persisted deployment stages, elapsed stage time, Terraform log activity, Plan resource counts, and per-resource completion logs; it stays below 100% until the server records completion.
+- Removed the requested shine animation. The bar uses only a smooth width transition and respects reduced-motion preferences.
+- Verification: focused progress tests pass 6/6; workspace `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass. Authenticated Chrome confirmed the existing Direct Deployment layout remains intact.
+- No Terraform Plan, Apply, Destroy, deployment mutation, or cloud mutation was executed. The active visual state is covered by unit tests rather than a live cloud run.
+
+### 2026-07-17 - Prevent false Terraform init timeouts during Deployment
+
+- Confirmed in authenticated Chrome that the current Direct Deployment failed at initialization with `Terraform init timed out`.
+- Deployment init, Plan, Apply, Destroy Plan, and Destroy now give `terraform init` the existing 15-minute deployment execution ceiling while preserving cancellation; startup cache warmup and non-deployment commands keep the 60-second default.
+- Regression coverage asserts the init timeout on Plan, Apply, Destroy Plan, and Destroy paths.
+- Verification: focused deployment service tests pass 32/32; workspace `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass.
+
+### 2026-07-17 - Stream Direct Deployment logs while Terraform is running
+
+- Authenticated Chrome reproduced zero visible log lines during Apply followed by 227 lines appearing only after success.
+- Terraform runner output is now framed into complete lines, persisted in small live batches for Init, Plan, Apply, Destroy Plan, and Destroy, and deduplicated against the final buffered output.
+- The log disclosure prefers the current deployment while a newer run differs from the selected successful history version.
+- Verification: focused API live-output and deployment tests pass 33/33; focused Web history, flow, and progress tests pass 24/24. Full workspace checks are recorded before handoff.
+
+### 2026-07-17 - Flush short Terraform output during long-running steps
+
+- Confirmed the live writer withheld stdout until a five-line batch, leaving long-running init/apply phases with zero visible logs until completion.
+- Added a 500ms flush for partial live batches and a focused regression test for fewer-than-five output lines.
+- Verification: focused API Terraform/live-log tests pass 34/34; lint and typecheck pass. The full build was started but stopped after the user requested no further excessive verification.
+
 ### 2026-07-16 - Remove local herry612 project and AWS connection records
 
 - Deleted all 26 local project records owned by `herry612` with their associated SketchCatch artifacts and deployment history; no active AWS resources were tracked by the deleted projects.

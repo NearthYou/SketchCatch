@@ -26,6 +26,7 @@ import {
   appendTerraformDurationLog,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
+import { createDeploymentTerraformLiveLogWriter } from "./deployment-terraform-live-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
   appendDeploymentLogs,
@@ -255,17 +256,22 @@ export async function runDeploymentApply(
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
 
-    terraform.init = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env,
-      signal: input.abortSignal
-    });
-    sequence = await appendTerraformApplyOutput({
+    const initLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
-      label: "terraform init",
-      result: terraform.init,
+      stage: "apply",
       repository
+    });
+    terraform.init = await runTerraformInit(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: initLogWriter.onOutputLine,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await initLogWriter.complete({
+      label: "terraform init",
+      result: terraform.init
     });
 
     if (terraform.init.cancelled) {
@@ -303,19 +309,23 @@ export async function runDeploymentApply(
     sequence = lockUpload.sequence;
 
     if (containsArchiveFileDataSource(terraformSafetyContent)) {
+      const materializeLogWriter = createDeploymentTerraformLiveLogWriter({
+        deploymentId: deployment.id,
+        accessContext: input.accessContext,
+        sequence,
+        stage: "apply",
+        repository
+      });
       const materializeResult = await runTerraformPlan(workspace.workdir, {
         env: awsCredentials.env,
+        onOutputLine: materializeLogWriter.onOutputLine,
         planFileName: materializePlanFileName,
         timeoutMs: terraformMutationTimeoutMs,
         signal: input.abortSignal
       });
-      sequence = await appendTerraformApplyOutput({
-        deploymentId: deployment.id,
-        accessContext: input.accessContext,
-        sequence,
+      sequence = await materializeLogWriter.complete({
         label: "terraform plan for local apply files",
-        result: materializeResult,
-        repository
+        result: materializeResult
       });
 
       if (materializeResult.cancelled) {
@@ -340,19 +350,23 @@ export async function runDeploymentApply(
       }
     }
 
+    const applyLogWriter = createDeploymentTerraformLiveLogWriter({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "apply",
+      repository
+    });
     terraform.apply = await runTerraformApply(workspace.workdir, {
       env: awsCredentials.env,
+      onOutputLine: applyLogWriter.onOutputLine,
       planFileName: defaultPlanFileName,
       timeoutMs: terraformMutationTimeoutMs,
       signal: input.abortSignal
     });
-    sequence = await appendTerraformApplyOutput({
-      deploymentId: deployment.id,
-      accessContext: input.accessContext,
-      sequence,
+    sequence = await applyLogWriter.complete({
       label: "terraform apply tfplan",
-      result: terraform.apply,
-      repository
+      result: terraform.apply
     });
 
     if (terraform.apply.cancelled) {
@@ -944,42 +958,6 @@ async function appendApplyPreconditionFailureLog(input: {
   );
 }
 
-async function appendTerraformApplyOutput(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  label: string;
-  result: TerraformRunResult;
-  repository: DeploymentRepository;
-}): Promise<number> {
-  let nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: input.sequence,
-    output: input.result.stdout,
-    level: "INFO",
-    repository: input.repository
-  });
-
-  nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    output: input.result.stderr,
-    level: input.result.exitCode === 0 ? "WARN" : "ERROR",
-    repository: input.repository
-  });
-
-  return appendTerraformDurationLog({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    stage: "apply",
-    label: input.label,
-    result: input.result,
-    repository: input.repository
-  });
-}
 
 async function appendTerraformApplyStderr(input: {
   deploymentId: string;
