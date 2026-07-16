@@ -38,4 +38,5 @@ Use this file only for compact continuation context. Write it in English.
 ## PR #439 Follow-up Review
 
 - Pending follow-up branch scopes the static Secret checks to their declared Terraform sets, selects the named worker container in the Terraform test, and removes an unnecessary `tolist` conversion.
+- The nullable worker Secret list is normalized with `try(..., [])` so the test remains safe when `secrets` is absent or null.
 - Harness, structure check, Terraform formatting, lint, typecheck, build, and diff check pass. Local Terraform validate/test cannot load the uncached AWS provider 6.54.0; no cloud mutation was performed.

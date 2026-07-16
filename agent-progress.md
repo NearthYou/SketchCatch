@@ -55,3 +55,4 @@ Short English-only working log for the current agent context. Older records are 
 - Scoped runtime Secret contract regexes to their Terraform set literals, so an unrelated later marker cannot satisfy the checks.
 - Made the worker Secret assertion select the named worker container and removed an unnecessary set-to-list conversion.
 - Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
+- Follow-up review handling uses `try(..., [])` for nullable worker container Secret lists, preventing Terraform test evaluation errors before the intended assertion runs.

@@ -341,9 +341,9 @@ run "https_routes_and_enables_worker_dispatch" {
   assert {
     condition = contains(
       flatten([
-        for container in jsondecode(aws_ecs_task_definition.worker.container_definitions) : [
-          for secret in lookup(container, "secrets", []) : secret.name
-        ]
+        for container in jsondecode(aws_ecs_task_definition.worker.container_definitions) : try([
+          for secret in container.secrets : secret.name
+        ], [])
         if container.name == "worker"
       ]),
       "GIT_APP_CLIENT_SECRET"
