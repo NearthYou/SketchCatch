@@ -49,3 +49,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Review-only Plan 29498864502 succeeded with 3 add, 7 change, and only 2 task-definition replacement destroys. Worker Secret wiring and the Live Observation capability Secret preservation were added without exposing Secret values.
 - Verification passed: harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Local Terraform validation/test could not initialize the uncached AWS provider within the timeout.
+
+### 2026-07-16 - Follow up merged PR #439 review
+
+- Scoped runtime Secret contract regexes to their Terraform set literals, so an unrelated later marker cannot satisfy the checks.
+- Made the worker Secret assertion select the named worker container and removed an unnecessary set-to-list conversion.
+- Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
