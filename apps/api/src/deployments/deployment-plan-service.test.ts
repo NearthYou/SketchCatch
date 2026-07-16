@@ -60,12 +60,13 @@ class FakeDeploymentRepository implements DeploymentRepository {
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
   logs: DeploymentLogRecord[] = [];
   throwOnSaveDeploymentPlan = false;
+  readonly accessibleUserIds = new Set([userId]);
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     if (
       !this.project ||
       this.project.id !== candidateProjectId ||
-      this.project.userId !== accessContext.userId
+      !this.accessibleUserIds.has(accessContext.userId)
     ) {
       return undefined;
     }
@@ -104,7 +105,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     if (
       !this.awsConnection ||
       this.awsConnection.id !== candidateAwsConnectionId ||
-      this.awsConnection.userId !== accessContext.userId ||
+      !this.accessibleUserIds.has(accessContext.userId) ||
       this.awsConnection.status !== "verified"
     ) {
       return undefined;
@@ -606,10 +607,10 @@ function createSha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function createAccessContext(): ProjectAccessContext {
+function createAccessContext(candidateUserId = userId): ProjectAccessContext {
   return {
     kind: "user",
-    userId
+    userId: candidateUserId
   };
 }
 
@@ -1166,8 +1167,57 @@ test("runDeploymentPlan falls back to a fresh Plan when optimization evidence is
   assert.equal(repository.savedPlans.length, 1);
 });
 
-test("runDeploymentPlan executes identical concurrent Plan requests only once", async () => {
+test("runDeploymentPlan treats invalid Terraform state identity as a cache miss", async () => {
   const repository = new FakeDeploymentRepository();
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  const runnerStages: string[] = [];
+
+  const result = await runDeploymentPlan(
+    {
+      deploymentId,
+      accessContext: createAccessContext()
+    },
+    repository,
+    {
+      generatePlanArtifactId: () => planArtifactId,
+      planArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      analyzePreDeployment: () => createAnalysis(),
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-invalid-state",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-invalid-state/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      readTerraformLockFile: async () => "",
+      readTerraformStateFile: async () => "{not-json",
+      runTerraformInit: async () => {
+        runnerStages.push("init");
+        return createRunnerResult("init");
+      },
+      runTerraformPlan: async () => {
+        runnerStages.push("plan");
+        return createRunnerResult("plan");
+      },
+      runTerraformShowJson: async () => {
+        runnerStages.push("show-json");
+        return createRunnerResult("show", { stdout: createPlanJson([]) });
+      }
+    }
+  );
+
+  assert.deepEqual(runnerStages, ["init", "plan", "show-json"]);
+  assert.deepEqual(result.optimization, {
+    outcome: "no_change",
+    reason: "terraform_plan_no_changes"
+  });
+});
+
+test("runDeploymentPlan executes concurrent Plan requests for one deployment only once across users", async () => {
+  const repository = new FakeDeploymentRepository();
+  const collaboratorUserId = "66666666-6666-4666-8666-666666666666";
+  repository.accessibleUserIds.add(collaboratorUserId);
   const planArtifactStorage = new FakePlanArtifactStorage();
   let planCalls = 0;
   let notifyPlanStarted: (() => void) | undefined;
@@ -1208,7 +1258,7 @@ test("runDeploymentPlan executes identical concurrent Plan requests only once", 
   );
   await planStarted;
   const second = runDeploymentPlan(
-    { deploymentId, accessContext: createAccessContext() },
+    { deploymentId, accessContext: createAccessContext(collaboratorUserId) },
     repository,
     options
   );

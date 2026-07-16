@@ -72,14 +72,11 @@ export function createTerraformDesiredStateIdentity(
   const providerIdentitySha256 = hashOptimizationValue(
     readProviderIdentities(normalizedLockContent)
   );
-  const sortedTerraformFiles = [...input.terraformFiles].sort((left, right) =>
-    left.fileName.localeCompare(right.fileName)
-  );
   const variableIdentitySha256 = hashOptimizationValue(
-    readTerraformBlockLabels(sortedTerraformFiles, "variable")
+    readTerraformBlockLabels(input.terraformFiles, "variable")
   );
   const backendIdentitySha256 = hashOptimizationValue(
-    readTerraformBlockLabels(sortedTerraformFiles, "backend")
+    readTerraformBlockLabels(input.terraformFiles, "backend")
   );
   const targetIdentitySha256 = hashOptimizationValue({
     projectId: input.projectId,
@@ -147,7 +144,8 @@ export function parseDeploymentPlanOptimizationEvidence(
   content: Buffer | Uint8Array | string
 ): DeploymentPlanOptimizationEvidence {
   try {
-    const parsed: unknown = JSON.parse(toBuffer(content).toString("utf8"));
+    const serialized = typeof content === "string" ? content : toBuffer(content).toString("utf8");
+    const parsed: unknown = JSON.parse(serialized);
     assertOptimizationEvidence(parsed);
     return parsed;
   } catch (error) {
@@ -372,7 +370,7 @@ export function createDeploymentPlanSingleFlight<T>(): DeploymentPlanSingleFligh
 }
 
 export function hashOptimizationValue(value: unknown): string {
-  return createSha256(JSON.stringify(toCanonicalJsonValue(value)));
+  return createSha256(JSON.stringify(toCanonicalJsonValue(value)) ?? "");
 }
 
 class DeploymentPlanOptimizationEvidenceError extends Error {
@@ -599,7 +597,8 @@ function toCanonicalJsonValue(value: unknown): unknown {
 }
 
 function normalizeText(value: Buffer | Uint8Array | string): string {
-  return toBuffer(value).toString("utf8").replace(/\r\n?/gu, "\n").trimEnd();
+  const text = typeof value === "string" ? value : toBuffer(value).toString("utf8");
+  return text.replace(/\r\n?/gu, "\n").trimEnd();
 }
 
 function createSha256(value: Buffer | Uint8Array | string): string {

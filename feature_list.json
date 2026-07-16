@@ -762,7 +762,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "Focused verification passed: ResourceDefinition 9/9, API/deployment/route 79/79, and existing approval/Destroy regressions 22/22. Harness, migration compatibility, lint, typecheck, and all five package builds passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template layout/parent contract failures in packages/types; this change does not modify those Template sources or tests."
+        "notes": "Focused verification passed: ResourceDefinition 9/9, API/deployment/route 83/83, and existing approval/Destroy regressions 22/22. Harness, migration compatibility, lint, typecheck, and all five package builds passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template layout/parent contract failures in packages/types; this change does not modify those Template sources or tests."
       },
       "notes": "PR 1 implements only the IaC desired-state layer. Artifact reuse and runtime no-op remain in issues #433 and #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user Git/CI/CD handoff was performed."
     }

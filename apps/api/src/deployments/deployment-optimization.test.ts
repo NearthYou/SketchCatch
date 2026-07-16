@@ -6,6 +6,7 @@ import {
   createTerraformDesiredStateIdentity,
   createTerraformResourceChangeEvidence,
   evaluatePendingPlanReuse,
+  hashOptimizationValue,
   isTerraformPlanNoChange,
   parseDeploymentPlanOptimizationEvidence
 } from "./deployment-optimization.js";
@@ -116,6 +117,46 @@ test("canonical desired-state identity is stable across Terraform file order", (
   const second = createIdentity({ terraformFiles: [...files].reverse() });
 
   assert.deepEqual(first, second);
+});
+
+test("undefined optimization values have a deterministic hash", () => {
+  assert.equal(
+    hashOptimizationValue(undefined),
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  );
+});
+
+test("string optimization inputs avoid redundant Buffer conversion", (context) => {
+  const evidenceJson = JSON.stringify(createEvidence());
+  const canonicalTerraformBundle = Buffer.from('resource "aws_s3_bucket" "assets" {}\n');
+  const bufferFrom = context.mock.method(Buffer, "from");
+
+  parseDeploymentPlanOptimizationEvidence(evidenceJson);
+  createTerraformDesiredStateIdentity({
+    projectId,
+    canonicalTerraformBundle,
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: 'resource "aws_s3_bucket" "assets" {}\n'
+      }
+    ],
+    providerLockContent: 'provider "registry.terraform.io/hashicorp/aws" {}\n',
+    target: {
+      provider: "aws",
+      accountId: "123456789012",
+      region: "ap-northeast-2"
+    },
+    state: { lineage: null, serial: null }
+  });
+
+  const stringConversions = bufferFrom.mock.calls.filter(
+    (call) => typeof call.arguments[0] === "string"
+  );
+  assert.deepEqual(
+    stringConversions.map((call) => call.arguments[0]),
+    []
+  );
 });
 
 test("account, region, provider lock, state lineage, and state serial participate in Plan identity", () => {

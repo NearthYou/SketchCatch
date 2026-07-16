@@ -9,6 +9,7 @@ Use this file only for compact continuation context. Write it in English.
 - PR 1 implements the provider-neutral Deployment Optimization Contract v1 for all 159 shared ResourceDefinitions and the Terraform Direct Deployment path.
 - Managed Terraform resources inherit verified desired-state optimization; data sources, UNKNOWN resources, and catalog-only definitions carry explicit exclusions.
 - Plan identity, strict S3 sidecar evidence, drift TTL, pending Plan reuse, single-flight execution, bounded evidence, safe cache fallback, and verified no-change Apply skipping are implemented without `terraform -target`.
+- All seven Gemini review threads are addressed by locale-independent canonical ordering, deployment-scoped single-flight after per-caller authorization, allocation-aware string parsing, deterministic undefined hashing, and defensive state identity parsing.
 - Latest `origin/dev` through `2db0eb33` is merged. Its migration `0043_github_installation_connections.sql` and journal entry are base history only and are absent from the PR diff.
 
 ## Changes This Session
@@ -17,15 +18,16 @@ Use this file only for compact continuation context. Write it in English.
 - Added canonical Terraform desired-state identity and strict versioned optimization evidence stored beside `tfplan`.
 - Added safe pending Plan reuse, identical-request single-flight execution, bounded decision evidence, and explicit fallback reasons.
 - Added verified no-change Apply skipping behind the existing approval, artifact, target, and prepared-draft gates.
+- Added review regression coverage for cross-user single-flight, corrupt state fallback, binary file ordering, string parsing, and undefined canonical values.
 - Created Epic #432 and ordered subissues #434, #433, and #435; no PR 2 branch was created.
 
 ## Broken Or Unverified
 
 - Pass: `pnpm harness:check`, `pnpm migration:compatibility:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check origin/dev...HEAD`.
-- Pass: ResourceDefinition contract 9/9, changed Deployment/API/route tests 79/79, and approval/Destroy safety tests 22/22.
+- Pass: ResourceDefinition contract 9/9, changed Deployment/API/route tests 83/83, and approval/Destroy safety tests 22/22.
 - Repository-wide `pnpm test` still stops only on the three pre-existing three-tier Template position/security-scope/parent assertions. PR 1 does not change those Template files.
 - PR 1 adds no DB migration, journal change, lockfile change, live AWS mutation, Terraform apply/destroy, user deployment, or Git/CI/CD handoff.
-- One CI snapshot is taken after this handoff commit is pushed; consult the task response instead of polling from this file.
+- The pre-review PR checks passed. Review-fix checks must pass before PR #437 is merged.
 
 ## Best Next Action
 

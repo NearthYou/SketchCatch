@@ -142,9 +142,16 @@ export async function runDeploymentPlan(
   repository: DeploymentRepository,
   options: RunDeploymentPlanOptions = {}
 ): Promise<RunDeploymentPlanResult> {
+  const deployment = await getDeployment(
+    {
+      deploymentId: input.deploymentId,
+      accessContext: input.accessContext
+    },
+    repository
+  );
   const flight = deploymentPlanSingleFlight.run(
-    `${input.accessContext.userId}:${input.deploymentId}`,
-    () => runDeploymentPlanOnce(input, repository, options)
+    deployment.id,
+    () => runDeploymentPlanOnce(input, repository, options, deployment)
   );
   const result = await flight.promise;
 
@@ -162,7 +169,8 @@ export async function runDeploymentPlan(
 async function runDeploymentPlanOnce(
   input: RunDeploymentPlanInput,
   repository: DeploymentRepository,
-  options: RunDeploymentPlanOptions
+  options: RunDeploymentPlanOptions,
+  deployment: DeploymentRecord
 ): Promise<RunDeploymentPlanResult> {
   const prepareTerraformWorkspace =
     options.prepareTerraformWorkspace ?? defaultPrepareTerraformWorkspace;
@@ -202,13 +210,6 @@ async function runDeploymentPlanOnce(
   };
 
   try {
-    const deployment = await getDeployment(
-      {
-        deploymentId: input.deploymentId,
-        accessContext: input.accessContext
-      },
-      repository
-    );
     deploymentId = deployment.id;
 
     const preparedApplicationRelease =
@@ -1020,33 +1021,26 @@ function parseTerraformStateIdentity(content: Buffer | null): {
     return { lineage: null, serial: null };
   }
 
-  let parsed: unknown;
-
   try {
-    parsed = JSON.parse(content.toString("utf8"));
+    const parsed: unknown = JSON.parse(content.toString("utf8"));
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const state = parsed as { lineage?: unknown; serial?: unknown };
+      return {
+        lineage:
+          typeof state.lineage === "string" && state.lineage.length > 0
+            ? state.lineage
+            : null,
+        serial:
+          Number.isSafeInteger(state.serial) && (state.serial as number) >= 0
+            ? (state.serial as number)
+            : null
+      };
+    }
   } catch {
-    throw new Error("Terraform state identity could not be parsed");
+    return { lineage: null, serial: null };
   }
 
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Terraform state identity is invalid");
-  }
-
-  const state = parsed as { lineage?: unknown; serial?: unknown };
-
-  if (
-    typeof state.lineage !== "string" ||
-    state.lineage.length === 0 ||
-    !Number.isSafeInteger(state.serial) ||
-    (state.serial as number) < 0
-  ) {
-    throw new Error("Terraform state identity fields are invalid");
-  }
-
-  return {
-    lineage: state.lineage,
-    serial: state.serial as number
-  };
+  return { lineage: null, serial: null };
 }
 
 async function uploadDeploymentPlanOptimizationEvidence(input: {

@@ -9,7 +9,7 @@ Short English-only working log for the current agent context. Older records are 
 - Pending Plan reuse requires the actual tfplan, strict versioned S3 evidence, matching Plan summary and target/state identity, and an unexpired drift TTL. Validation failure safely runs a fresh Plan.
 - Approved Terraform no-change Plans skip Apply only after the existing artifact/tfplan/account/region gates and optimization evidence are revalidated.
 - Latest `origin/dev` through `2db0eb33` is merged. Its GitHub installation ownership migration and runtime wiring remain intact and are not owned by this workstream.
-- Focused verification passes: ResourceDefinition 9/9, Deployment/API/route 79/79, and approval/Destroy 22/22. Harness, migration compatibility, lint, typecheck, and build pass.
+- Focused verification passes: ResourceDefinition 9/9, Deployment/API/route 83/83, and approval/Destroy 22/22. Harness, migration compatibility, lint, typecheck, and build pass.
 - Full `pnpm test` remains non-green only on the three documented pre-existing three-tier Template position/security-scope/parent assertions in `packages/types`.
 
 ## Session Record
@@ -28,8 +28,15 @@ Short English-only working log for the current agent context. Older records are 
 - Post-merge verification passes the 9 ResourceDefinition tests, 79 changed Deployment/API/route tests, 22 approval/Destroy safety tests, harness, migration compatibility, lint, typecheck, build, and diff checks.
 - Repository-wide `pnpm test` still stops on the same three pre-existing three-tier Template assertions; PR 1 does not change those Template files.
 
+### 2026-07-16 - Address PR #437 review feedback
+
+- Removed locale-sensitive canonical ordering, made string evidence normalization allocation-aware, and defined deterministic hashing for `undefined` canonical values.
+- Moved project access validation before deployment-scoped single-flight joining so concurrent authorized users share one Plan without bypassing authorization.
+- Invalid or legacy Terraform state identity now produces null identity fields and a safe fresh Plan path instead of aborting optimization validation.
+- Added red/green regression coverage; the changed Deployment/API/route suite now passes 83/83 and the existing approval/Destroy suite passes 22/22.
+
 ## Next Action
 
-- Review and merge Ready PR #437 into `dev` after required checks; the final task response records the single CI snapshot.
+- Push the PR #437 review fixes, resolve the seven addressed review threads, and merge into `dev` after required checks.
 - Merge PR 1 before starting issue #433. Then fetch fresh `origin/dev` and create `feature/sw/433-application-artifact-reuse` with `gh issue develop --base dev`.
 - Do not stack PR 2 on this branch.

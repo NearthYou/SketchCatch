@@ -180,7 +180,9 @@ function createTerraformBundleCanonicalContent(bundle: TerraformArtifactBundle):
     JSON.stringify({
       schemaVersion: bundle.schemaVersion,
       files: [...bundle.files]
-        .sort((left, right) => left.fileName.localeCompare(right.fileName))
+        .sort((left, right) =>
+          left.fileName < right.fileName ? -1 : left.fileName > right.fileName ? 1 : 0
+        )
         .map((file) => ({
           fileName: file.fileName,
           terraformCode: file.terraformCode.replace(/\r\n?/gu, "\n")
