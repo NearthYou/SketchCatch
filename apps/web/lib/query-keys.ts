@@ -1,0 +1,14 @@
+const userRoot = (userId: string) => ["user", userId] as const;
+
+export const queryKeys = {
+  awsConnections: (userId: string) => [...userRoot(userId), "connections", "aws"] as const,
+  costEstimates: (userId: string, period: string, expectedUserCount: number) =>
+    [...userRoot(userId), "costs", "estimate", period, expectedUserCount] as const,
+  costUsage: (userId: string, range: string, connectionId: string) =>
+    [...userRoot(userId), "costs", "usage", range, connectionId] as const,
+  dashboardOverview: (userId: string) => [...userRoot(userId), "dashboard", "overview"] as const,
+  githubInstallations: (userId: string) =>
+    [...userRoot(userId), "connections", "github"] as const,
+  projects: (userId: string) => [...userRoot(userId), "projects", "list"] as const,
+  user: (userId: string) => userRoot(userId)
+} as const;
