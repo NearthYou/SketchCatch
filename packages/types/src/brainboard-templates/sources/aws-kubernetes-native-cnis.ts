@@ -1211,7 +1211,7 @@ export const awsKubernetesNativeCnisSource = defineCapturedBrainboardTemplate({
     },
     "80d3a744-01c0-4e70-91e9-2186f7cdf201": {
       kind: "presentation",
-      catalogId: null,
+      catalogId: "design-internet",
       aliasOf: null,
       style: null
     },

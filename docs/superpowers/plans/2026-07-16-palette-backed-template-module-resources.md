@@ -5,7 +5,7 @@
 ## 1. Contract tests
 
 - Extend `catalog.test.ts` so every Resource identity used by available Templates and Curated Modules resolves to one enabled catalog item with an existing icon asset and deployable shared definition.
-- Extend `module-catalog.test.ts` so expansion produces Palette-backed icons/defaults, removes orphaned `workspace-seed` authority, and preserves authored geometry, relationships, containment and provenance.
+- Extend `module-catalog.test.ts` so expansion produces Palette-backed icons/default tile sizes, removes orphaned `workspace-seed` authority, and preserves authored relative placement, relationships, containment and provenance.
 - Add API schema tests proving `moduleSource` round-trips through project-draft and Terraform request parsing.
 
 ## 2. Shared materialization
@@ -17,13 +17,14 @@
 ## 3. Palette completeness
 
 - Enable every catalog Resource used by shipped Templates/Modules.
+- Add parameter-panel definitions for newly enabled Resource items and audit their required fields against the AWS provider schema.
 - Keep exact AWS asset paths and assert every file exists; do not introduce generic icons or runtime fallback mappings.
 - Regenerate Architecture Board knowledge only if the source contract changes.
 
 ## 4. API and deployment boundary
 
 - Add the shared `moduleSource` shape to both strict API metadata schemas.
-- Add a deterministic deployability check that expands each Module and generates Terraform from it.
+- Add a deterministic Terraform HCL check that expands each Module and generates Terraform from it.
 - Validate all shipped Template Terraform inputs and all generated Module Terraform roots with Terraform CLI when provider initialization is available.
 
 ## 5. Regression and handoff

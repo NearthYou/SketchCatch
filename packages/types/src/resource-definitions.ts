@@ -952,7 +952,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-api-gateway-integration-response",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_api_gateway_integration_response",
@@ -960,7 +959,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-api-gateway-method-response",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_api_gateway_method_response",
@@ -968,7 +966,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-budgets-budget",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_budgets_budget",
@@ -976,7 +973,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-cloudfront-origin-access-identity",
-    parameterPanel: false,
     resourceType: "CLOUDFRONT",
     terraformPreview: true,
     terraformResourceType: "aws_cloudfront_origin_access_identity",
@@ -984,7 +980,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-docdb-cluster",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_docdb_cluster",
@@ -992,7 +987,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-dynamodb-global-table",
-    parameterPanel: false,
     resourceType: "DYNAMODB_TABLE",
     terraformPreview: true,
     terraformResourceType: "aws_dynamodb_global_table",
@@ -1000,7 +994,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-elastic-beanstalk-application",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_elastic_beanstalk_application",
@@ -1008,7 +1001,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-elastic-beanstalk-environment",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_elastic_beanstalk_environment",
@@ -1016,7 +1008,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-elb",
-    parameterPanel: false,
     resourceType: "LOAD_BALANCER",
     terraformPreview: true,
     terraformResourceType: "aws_elb",
@@ -1024,7 +1015,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-flow-log",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_flow_log",
@@ -1032,7 +1022,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-fsx-lustre-file-system",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_fsx_lustre_file_system",
@@ -1040,7 +1029,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-group",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_group",
@@ -1048,7 +1036,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-group-policy-attachment",
-    parameterPanel: false,
     resourceType: "IAM_POLICY",
     terraformPreview: true,
     terraformResourceType: "aws_iam_group_policy_attachment",
@@ -1056,7 +1043,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-user",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_user",
@@ -1064,7 +1050,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-user-group-membership",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_user_group_membership",
@@ -1072,7 +1057,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-user-login-profile",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_iam_user_login_profile",
@@ -1080,7 +1064,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-launch-configuration",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_launch_configuration",
@@ -1088,7 +1071,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-main-route-table-association",
-    parameterPanel: false,
     resourceType: "ROUTE_TABLE_ASSOCIATION",
     terraformPreview: true,
     terraformResourceType: "aws_main_route_table_association",
@@ -1096,7 +1078,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-network-interface",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_network_interface",
@@ -1104,7 +1085,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-organizations-account",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_organizations_account",
@@ -1112,7 +1092,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-acl",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_acl",
@@ -1120,7 +1099,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-logging",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_logging",
@@ -1128,7 +1106,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-notification",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_notification",
@@ -1136,7 +1113,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-object",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_object",
@@ -1144,7 +1120,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-bucket-replication-configuration",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_replication_configuration",
@@ -1152,7 +1127,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-ses-email-identity",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_ses_email_identity",
@@ -1160,7 +1134,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-vpc-peering-connection-accepter",
-    parameterPanel: false,
     resourceType: "VPC_PEERING_CONNECTION",
     terraformPreview: true,
     terraformResourceType: "aws_vpc_peering_connection_accepter",
@@ -1168,7 +1141,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-waf-ipset",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_waf_ipset",
@@ -1176,7 +1148,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-waf-rule",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformPreview: true,
     terraformResourceType: "aws_waf_rule",
@@ -1184,7 +1155,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-waf-web-acl",
-    parameterPanel: false,
     resourceType: "WAF_WEB_ACL",
     terraformPreview: true,
     terraformResourceType: "aws_waf_web_acl",
@@ -1192,7 +1162,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-iam-policy-data",
-    parameterPanel: false,
     resourceType: "IAM_POLICY",
     terraformBlockType: "data",
     terraformPreview: true,
@@ -1224,6 +1193,17 @@ export function getResourceDefinitionByTerraform(
   return resourceDefinitionByTerraformKey.get(
     createTerraformDefinitionKey(blockType, resourceType)
   );
+}
+
+/**
+ * Resource parameter keys stay compatible with the generated catalog while non-resource
+ * Terraform blocks receive their own namespace instead of sharing an incompatible schema.
+ */
+export function createTerraformParameterCatalogKey(
+  blockType: TerraformBlockType,
+  resourceType: string
+): string {
+  return blockType === "resource" ? resourceType : `${blockType}.${resourceType}`;
 }
 
 function createDefaultResourceDefinitionByResourceType(): Map<ResourceType, ResourceDefinition> {

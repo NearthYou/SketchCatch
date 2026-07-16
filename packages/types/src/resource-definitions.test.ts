@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { TerraformBlockType } from "./index.js";
 import {
+  createTerraformParameterCatalogKey,
   getDefaultResourceDefinitionByResourceType,
   getResourceDefinitionById,
   getResourceDefinitionByTerraform,
@@ -58,6 +59,14 @@ test("shared resource definition IDs and Terraform identities remain unique", ()
 
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(new Set(terraformIdentities).size, terraformIdentities.length);
+});
+
+test("parameter catalog keys keep resource keys compatible and namespace data sources", () => {
+  assert.equal(createTerraformParameterCatalogKey("resource", "aws_iam_policy"), "aws_iam_policy");
+  assert.equal(
+    createTerraformParameterCatalogKey("data", "aws_iam_policy"),
+    "data.aws_iam_policy"
+  );
 });
 
 test("classic AWS identities stay distinct from newer Terraform resources", () => {

@@ -5,16 +5,15 @@ import { compileArchitectureBoard } from ".";
 import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
 import { convertDiagramJsonToArchitectureJson } from "../workspace/workspace-ai-diagram-adapter";
 
-test("Module pattern 후보도 현재 edge의 화살표 방향과 각도를 보존한다", () => {
+test("Module 기반 자동 정리 후보도 현재 edge의 화살표 방향과 각도를 보존한다", () => {
   const expanded = expandCuratedModuleIntoDiagram({
     diagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, variables: [] },
     moduleId: "container-runtime"
   });
-  const authoredEdge = expanded.edges.find((edge) => edge.route !== undefined);
-  assert.ok(authoredEdge?.route);
+  const authoredEdge = expanded.edges[0];
+  assert.ok(authoredEdge);
 
   const authoredRoute = {
-    ...authoredEdge.route,
     svgPath: "M -999 -999 L -888 -888",
     sourcePoint: { x: -999, y: -999 },
     targetPoint: { x: -888, y: -888 },
@@ -36,7 +35,8 @@ test("Module pattern 후보도 현재 edge의 화살표 방향과 각도를 보�
     trigger: "board-auto-organize"
   });
 
-  assert.match(proposal.provenance.candidateId, /^compiled:module-pattern:container-runtime:/u);
+  assert.notEqual(proposal.provenance.candidateId, "original");
+  assert.ok(proposal.provenance.modulePatternIds?.includes("container-runtime"));
   const compiledEdge = proposal.diagram.edges.find((edge) => edge.id === authoredEdge.id);
   assert.ok(compiledEdge?.route);
   assert.equal(compiledEdge.route.arrowDirection, "bidirectional");

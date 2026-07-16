@@ -7,7 +7,7 @@ import {
 
 export const generatedArchitectureBoardKnowledgeArtifact = {
   version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
-  hash: "fnv1a-d7dd6f99",
+  hash: "fnv1a-52d6177f",
   cases: [
     {
       "id": "brainboard:brainboard-aws-asg-lb-vpc-subnets",
@@ -814,11 +814,11 @@ export const generatedArchitectureBoardKnowledgeArtifact = {
       ],
       "nodeCount": 8,
       "edgeCount": 2,
-      "areaCount": 1,
+      "areaCount": 3,
       "parentedNodeCount": 7,
-      "maxContainmentDepth": 1,
-      "meanAreaChildDensity": 7,
-      "meanAreaPadding": 187.143,
+      "maxContainmentDepth": 2,
+      "meanAreaChildDensity": 2.333,
+      "meanAreaPadding": 67.143,
       "meanSiblingGap": 82.143,
       "meanVerticalGap": 67.857,
       "meanNodeWidth": 293.75,

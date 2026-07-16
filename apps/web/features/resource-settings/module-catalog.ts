@@ -10,6 +10,8 @@ import {
   architectureBoardKnowledge,
   type ArchitectureBoardModulePattern
 } from "../architecture-board-compiler/architecture-board-knowledge";
+import { applyCuratedModuleTerraformDefaults } from "./curated-module-deployment-defaults";
+import { materializeCatalogResourceNodes } from "./template-resource-materializer";
 
 export type CuratedModuleDefinition = ArchitectureBoardModulePattern & {
   readonly version: typeof ARCHITECTURE_BOARD_KNOWLEDGE_VERSION;
@@ -29,9 +31,7 @@ export function expandCuratedModuleIntoDiagram(input: {
   readonly diagram: DiagramJson;
   readonly moduleId: string;
 }): DiagramJson {
-  const pattern = architectureBoardKnowledge.modulePatterns.find(
-    ({ id }) => id === input.moduleId
-  );
+  const pattern = architectureBoardKnowledge.modulePatterns.find(({ id }) => id === input.moduleId);
 
   if (!pattern) return input.diagram;
 
@@ -49,15 +49,34 @@ export function materializeCuratedModulePattern(input: {
 }): DiagramJson {
   if (input.pattern.nodes.length === 0) return input.diagram;
 
+  const materializedFragment = materializeCatalogResourceNodes(
+    {
+      nodes: input.pattern.nodes.map((node) => structuredClone(node) as DiagramNode),
+      edges: input.pattern.edges.map((edge) => structuredClone(edge) as DiagramEdge),
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    {
+      currentNodes: input.diagram.nodes,
+      mode: "strict",
+      preserveGeometry: false,
+      workspaceSeedPolicy: "replace-with-palette-defaults"
+    }
+  );
+  const sourceNodes = applyCuratedModuleTerraformDefaults(
+    input.pattern.id,
+    materializedFragment.nodes
+  );
+  const sourceEdges = materializedFragment.edges;
+
   const expandedAt = input.expandedAt ?? createUniqueExpandedAt(input.diagram);
   const nodeIds = createIdMap(
-    input.pattern.nodes.map(({ id }) => id),
+    sourceNodes.map(({ id }) => id),
     new Set(input.diagram.nodes.map(({ id }) => id)),
     input.pattern.id,
     "node"
   );
   const edgeIds = createIdMap(
-    input.pattern.edges.map(({ id }) => id),
+    sourceEdges.map(({ id }) => id),
     new Set(input.diagram.edges.map(({ id }) => id)),
     input.pattern.id,
     "edge"
@@ -68,21 +87,21 @@ export function materializeCuratedModulePattern(input: {
     input.pattern.id,
     "variable"
   );
-  const resourceNames = createResourceNameMap(input.diagram.nodes, input.pattern.nodes);
+  const resourceNames = createResourceNameMap(input.diagram.nodes, sourceNodes);
   const variableNames = createVariableNameMap(
     input.diagram.variables ?? [],
     input.pattern.variables
   );
   const rewrite = (value: unknown) => rewriteReferences(value, resourceNames, variableNames);
-  const placement = getFragmentPlacement(input.diagram.nodes, input.pattern.nodes);
+  const placement = getFragmentPlacement(input.diagram.nodes, sourceNodes);
   const zIndexDelta = getZIndexDelta(
     input.diagram.nodes,
     input.diagram.edges,
-    input.pattern.nodes,
-    input.pattern.edges
+    sourceNodes,
+    sourceEdges
   );
 
-  const nextNodes = input.pattern.nodes.map((sourceNode) => {
+  const nextNodes = sourceNodes.map((sourceNode) => {
     const clonedNode = structuredClone(sourceNode) as DiagramNode;
     const parameters = sourceNode.parameters;
     const parentAreaNodeId = sourceNode.metadata?.parentAreaNodeId;
@@ -132,10 +151,9 @@ export function materializeCuratedModulePattern(input: {
         ? {
             parameters: {
               ...clonedNode.parameters!,
-              resourceName: requireMappedValue(
-                resourceNames,
-                terraformAddress(parameters)
-              ).split(".").at(-1)!,
+              resourceName: requireMappedValue(resourceNames, terraformAddress(parameters))
+                .split(".")
+                .at(-1)!,
               values: rewrite(parameters.values) as Record<string, unknown>
             }
           }
@@ -143,23 +161,17 @@ export function materializeCuratedModulePattern(input: {
     } satisfies DiagramNode;
   });
 
-  const nextEdges = input.pattern.edges.map(
-    (sourceEdge) => {
-      const clonedEdge = structuredClone(sourceEdge) as DiagramEdge;
-      return {
-        ...clonedEdge,
-        id: requireMappedValue(edgeIds, sourceEdge.id),
-        sourceNodeId: requireMappedValue(nodeIds, sourceEdge.sourceNodeId),
-        targetNodeId: requireMappedValue(nodeIds, sourceEdge.targetNodeId),
-        ...(sourceEdge.zIndex === undefined
-          ? {}
-          : { zIndex: sourceEdge.zIndex + zIndexDelta }),
-        ...(sourceEdge.route
-          ? { route: translateRoute(sourceEdge.route, placement) }
-          : {})
-      } satisfies DiagramEdge;
-    }
-  );
+  const nextEdges = sourceEdges.map((sourceEdge) => {
+    const clonedEdge = structuredClone(sourceEdge) as DiagramEdge;
+    return {
+      ...clonedEdge,
+      id: requireMappedValue(edgeIds, sourceEdge.id),
+      sourceNodeId: requireMappedValue(nodeIds, sourceEdge.sourceNodeId),
+      targetNodeId: requireMappedValue(nodeIds, sourceEdge.targetNodeId),
+      ...(sourceEdge.zIndex === undefined ? {} : { zIndex: sourceEdge.zIndex + zIndexDelta }),
+      ...(sourceEdge.route ? { route: translateRoute(sourceEdge.route, placement) } : {})
+    } satisfies DiagramEdge;
+  });
 
   const nextVariables = input.pattern.variables.map(
     (sourceVariable) =>
@@ -342,9 +354,7 @@ function translateRoute(
     sourcePoint: translatePoint(route.sourcePoint, delta),
     targetPoint: translatePoint(route.targetPoint, delta),
     waypoints: route.waypoints.map((point) => translatePoint(point, delta)),
-    ...(route.labelPosition
-      ? { labelPosition: translatePoint(route.labelPosition, delta) }
-      : {})
+    ...(route.labelPosition ? { labelPosition: translatePoint(route.labelPosition, delta) } : {})
   };
 }
 
@@ -364,9 +374,7 @@ function translatePoint(point: DiagramPoint, delta: DiagramPoint): DiagramPoint 
   };
 }
 
-function terraformAddress(
-  parameters: NonNullable<DiagramNode["parameters"]>
-): string {
+function terraformAddress(parameters: NonNullable<DiagramNode["parameters"]>): string {
   return `${parameters.terraformBlockType === "data" ? "data." : ""}${parameters.resourceType}.${parameters.resourceName}`;
 }
 

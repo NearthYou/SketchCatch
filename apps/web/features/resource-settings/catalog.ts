@@ -9,7 +9,6 @@ const size = RESOURCE_NODE_DEFAULT_SIZE;
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
 const securityGroupAreaSize = subnetAreaSize;
-const autoscalingGroupAreaSize = { width: 200, height: 130 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 const serviceIconPath = "/Architecture-Service-Icons_07312025";
@@ -198,6 +197,20 @@ const designCatalogItems: ResourceItem[] = [
     }
   },
   {
+    id: "design-aws-account",
+    name: "AWS Account",
+    cloudProvider: "aws",
+    area: "containers",
+    category: "Board Containers",
+    iconUrl: `${groupIconPath}/AWS-Account_32.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_aws_account",
+      label: "AWS Account",
+      size: { width: 200, height: 130 }
+    }
+  },
+  {
     id: "aws-region",
     name: "Region",
     cloudProvider: "aws",
@@ -262,7 +275,7 @@ const terraformResourcePresentations = [
     name: "Route Table",
     area: "network",
     category: "Network",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-Route-53_Route-Table_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
     label: "Route Table",
     size
   },
@@ -271,7 +284,7 @@ const terraformResourcePresentations = [
     name: "Route Table Association",
     area: "network",
     category: "Network",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_AWS-Cloud-WAN_Transit-Gateway-Route-Table-Attachment_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
     label: "Route Table Association",
     size
   },
@@ -343,7 +356,7 @@ const terraformResourcePresentations = [
     name: "Security Group",
     area: "security-identity",
     category: "Security",
-    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Network-Firewall_64.svg`,
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Firewall_48_Light.svg`,
     label: "Security Group",
     size: securityGroupAreaSize
   },
@@ -367,7 +380,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-policy-data",
-    enabled: false,
     name: "IAM Policy Data Source",
     area: "security-identity",
     category: "IAM",
@@ -535,7 +547,7 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2-Auto-Scaling_64.svg`,
     label: "Auto Scaling Group",
-    size: autoscalingGroupAreaSize
+    size
   },
   {
     definitionId: "aws-autoscaling-policy",
@@ -641,7 +653,7 @@ const terraformResourcePresentations = [
     name: "S3 Bucket Versioning",
     area: "storage",
     category: "Storage",
-    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Object-Lock_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
     label: "S3 Versioning",
     size
   },
@@ -1394,7 +1406,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-api-gateway-integration-response",
-    enabled: false,
     name: "API Gateway Integration Response",
     area: "application",
     category: "API Gateway REST",
@@ -1404,7 +1415,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-api-gateway-method-response",
-    enabled: false,
     name: "API Gateway Method Response",
     area: "application",
     category: "API Gateway REST",
@@ -1414,7 +1424,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-budgets-budget",
-    enabled: false,
     name: "AWS Budget",
     area: "tools",
     category: "Cloud Financial Management",
@@ -1424,7 +1433,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-cloudfront-origin-access-identity",
-    enabled: false,
     name: "CloudFront Origin Access Identity",
     area: "network",
     category: "Edge / CDN",
@@ -1434,7 +1442,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-docdb-cluster",
-    enabled: false,
     name: "DocumentDB Cluster",
     area: "database",
     category: "DocumentDB",
@@ -1444,7 +1451,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-dynamodb-global-table",
-    enabled: false,
     name: "DynamoDB Global Table",
     area: "database",
     category: "DynamoDB",
@@ -1454,7 +1460,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-elastic-beanstalk-application",
-    enabled: false,
     name: "Elastic Beanstalk Application",
     area: "compute",
     category: "Elastic Beanstalk",
@@ -1464,7 +1469,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-elastic-beanstalk-environment",
-    enabled: false,
     name: "Elastic Beanstalk Environment",
     area: "compute",
     category: "Elastic Beanstalk",
@@ -1474,7 +1478,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-elb",
-    enabled: false,
     name: "Classic Load Balancer",
     area: "network",
     category: "Load Balancing",
@@ -1484,7 +1487,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-flow-log",
-    enabled: false,
     name: "VPC Flow Log",
     area: "network",
     category: "VPC Core",
@@ -1494,7 +1496,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-fsx-lustre-file-system",
-    enabled: false,
     name: "FSx for Lustre File System",
     area: "storage",
     category: "FSx",
@@ -1504,17 +1505,15 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-group",
-    enabled: false,
     name: "IAM Group",
     area: "security-identity",
     category: "IAM",
-    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Users_48_Light.svg`,
     label: "IAM Group",
     size
   },
   {
     definitionId: "aws-iam-group-policy-attachment",
-    enabled: false,
     name: "IAM Group Policy Attachment",
     area: "security-identity",
     category: "IAM",
@@ -1524,37 +1523,33 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-iam-user",
-    enabled: false,
     name: "IAM User",
     area: "security-identity",
     category: "IAM",
-    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Authenticated-User_48_Light.svg`,
     label: "IAM User",
     size
   },
   {
     definitionId: "aws-iam-user-group-membership",
-    enabled: false,
     name: "IAM User Group Membership",
     area: "security-identity",
     category: "IAM",
-    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
     label: "User Group Membership",
     size
   },
   {
     definitionId: "aws-iam-user-login-profile",
-    enabled: false,
     name: "IAM User Login Profile",
     area: "security-identity",
     category: "IAM",
-    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Identity-and-Access-Management_64.svg`,
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Authenticated-User_48_Light.svg`,
     label: "User Login Profile",
     size
   },
   {
     definitionId: "aws-launch-configuration",
-    enabled: false,
     name: "EC2 Launch Configuration",
     area: "compute",
     category: "EC2 Launch & Scaling",
@@ -1564,17 +1559,15 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-main-route-table-association",
-    enabled: false,
     name: "Main Route Table Association",
     area: "network",
     category: "Routing & Gateways",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_AWS-Cloud-WAN_Transit-Gateway-Route-Table-Attachment_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
     label: "Main Route Association",
     size
   },
   {
     definitionId: "aws-network-interface",
-    enabled: false,
     name: "Elastic Network Interface",
     area: "network",
     category: "VPC Core",
@@ -1584,7 +1577,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-organizations-account",
-    enabled: false,
     name: "AWS Organizations Account",
     area: "tools",
     category: "Organizations",
@@ -1594,7 +1586,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-acl",
-    enabled: false,
     name: "S3 Bucket ACL",
     area: "storage",
     category: "S3 Controls",
@@ -1604,7 +1595,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-logging",
-    enabled: false,
     name: "S3 Bucket Logging",
     area: "storage",
     category: "S3 Controls",
@@ -1614,7 +1604,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-notification",
-    enabled: false,
     name: "S3 Bucket Notification",
     area: "storage",
     category: "S3 Controls",
@@ -1624,7 +1613,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-object",
-    enabled: false,
     name: "S3 Bucket Object",
     area: "storage",
     category: "S3 Core",
@@ -1634,7 +1622,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-s3-bucket-replication-configuration",
-    enabled: false,
     name: "S3 Bucket Replication Configuration",
     area: "storage",
     category: "S3 Controls",
@@ -1644,7 +1631,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-ses-email-identity",
-    enabled: false,
     name: "SES Email Identity",
     area: "application",
     category: "Messaging",
@@ -1654,7 +1640,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-vpc-peering-connection-accepter",
-    enabled: false,
     name: "VPC Peering Connection Accepter",
     area: "network",
     category: "VPC Core",
@@ -1664,7 +1649,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-waf-ipset",
-    enabled: false,
     name: "WAF IP Set (Classic)",
     area: "security-identity",
     category: "Web Protection",
@@ -1674,7 +1658,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-waf-rule",
-    enabled: false,
     name: "WAF Rule (Classic)",
     area: "security-identity",
     category: "Web Protection",
@@ -1684,7 +1667,6 @@ const terraformResourcePresentations = [
   },
   {
     definitionId: "aws-waf-web-acl",
-    enabled: false,
     name: "WAF Web ACL (Classic)",
     area: "security-identity",
     category: "Web Protection",

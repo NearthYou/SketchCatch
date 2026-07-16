@@ -88,7 +88,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
         width: 60,
         height: 60
       },
-      parentSourceNodeId: "0f0bd504-1e5b-4eb7-b82b-c34e5673d088",
+      parentSourceNodeId: "abd36fbe-31bb-4fe3-b43e-9e77644f51b5",
       zIndex: 3,
       rawTransform: "translate(90, -160), rotate(0 30 30)",
       rotation: 0,
@@ -106,7 +106,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
         width: 155,
         height: 60
       },
-      parentSourceNodeId: "0f0bd504-1e5b-4eb7-b82b-c34e5673d088",
+      parentSourceNodeId: "abd36fbe-31bb-4fe3-b43e-9e77644f51b5",
       zIndex: 4,
       rawTransform: "translate(10, -240), rotate(0 77.5 30)",
       rotation: 0,
@@ -124,7 +124,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
         width: 60,
         height: 60
       },
-      parentSourceNodeId: "0f0bd504-1e5b-4eb7-b82b-c34e5673d088",
+      parentSourceNodeId: "6e055294-83c2-4d44-beac-e292b11dcb50",
       zIndex: 5,
       rawTransform: "translate(90, 80), rotate(0 30 30)",
       rotation: 0,
@@ -142,7 +142,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
         width: 60,
         height: 60
       },
-      parentSourceNodeId: "0f0bd504-1e5b-4eb7-b82b-c34e5673d088",
+      parentSourceNodeId: "abd36fbe-31bb-4fe3-b43e-9e77644f51b5",
       zIndex: 6,
       rawTransform: "translate(360, -160), rotate(0 30 30)",
       rotation: 0,
@@ -160,7 +160,7 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
         width: 135,
         height: 60
       },
-      parentSourceNodeId: "0f0bd504-1e5b-4eb7-b82b-c34e5673d088",
+      parentSourceNodeId: "6e055294-83c2-4d44-beac-e292b11dcb50",
       zIndex: 7,
       rawTransform: "translate(340, 40), rotate(0 67.5 30)",
       rotation: 0,
@@ -308,13 +308,13 @@ export const crossAccountAwsS3Source = defineCapturedBrainboardTemplate({
     },
     "abd36fbe-31bb-4fe3-b43e-9e77644f51b5": {
       kind: "presentation",
-      catalogId: null,
+      catalogId: "design-aws-account",
       aliasOf: null,
       style: null
     },
     "6e055294-83c2-4d44-beac-e292b11dcb50": {
       kind: "presentation",
-      catalogId: null,
+      catalogId: "design-aws-account",
       aliasOf: null,
       style: null
     },

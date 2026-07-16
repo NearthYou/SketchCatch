@@ -8,6 +8,7 @@ import type {
   DiagramNode,
   ResourceNodeParameters
 } from "../../../../packages/types/src";
+import { createTerraformParameterCatalogKey } from "@sketchcatch/types/resource-definitions";
 
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
@@ -163,7 +164,12 @@ export function ParameterInputPanel({
   }
 
   const parameters = mergeNodeParameters(selectedNode, parameterCatalog);
-  const catalogDefinitions = parameterCatalog.resources[parameters.resourceType] ?? [];
+  const catalogDefinitions = parameterCatalog.resources[
+    createTerraformParameterCatalogKey(
+      parameters.terraformBlockType ?? "resource",
+      parameters.resourceType
+    )
+  ] ?? [];
   const requiredDefinitions = getRequiredDefinitions(catalogDefinitions);
   const optionalDefinitions = getOptionalDefinitions(catalogDefinitions);
   const activeOptionalDefinitions = getActiveOptionalDefinitions(

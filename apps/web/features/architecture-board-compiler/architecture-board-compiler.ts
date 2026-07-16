@@ -79,12 +79,10 @@ const AREA_RESOURCE_TYPES = new Set([
   "aws_region",
   "aws_availability_zone",
   "aws_vpc",
-  "aws_subnet",
-  "aws_autoscaling_group"
+  "aws_subnet"
 ]);
 
 const PRESENTATION_AREA_RESOURCE_TYPES = new Set([
-  "aws_autoscaling_group",
   "aws_eks_cluster",
   "aws_ecs_cluster",
   "aws_rds_cluster",
@@ -899,7 +897,6 @@ function containmentSpecificity(node: ArchitectureJson["nodes"][number] | undefi
   const type = getTerraformResourceType(node);
   if (type === "aws_subnet") return 6;
   if (type === "aws_availability_zone") return 5;
-  if (type === "aws_autoscaling_group") return 4;
   if (type === "aws_eks_cluster" || type === "aws_ecs_cluster") return 4;
   if (type === "aws_vpc") return 3;
   if (type === "aws_region") return 2;
@@ -1036,8 +1033,7 @@ function isPresentationAreaNode(node: ArchitectureJson["nodes"][number] | undefi
     node.config["presentationArea"] === true ||
     AREA_RESOURCE_TYPES.has(getTerraformResourceType(node)) ||
     node.type === "VPC" ||
-    node.type === "SUBNET" ||
-    node.type === "AUTO_SCALING_GROUP"
+    node.type === "SUBNET"
   );
 }
 

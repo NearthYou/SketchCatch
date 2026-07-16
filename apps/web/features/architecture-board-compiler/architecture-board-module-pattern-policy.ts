@@ -1,4 +1,5 @@
 import type { DiagramEdge, DiagramJson, DiagramNode, DiagramPoint } from "@sketchcatch/types";
+import { isAreaNode } from "../diagram-editor/area-nodes";
 import type {
   ArchitectureBoardKnowledgeArtifact,
   ArchitectureBoardModulePattern
@@ -532,7 +533,9 @@ function applyPatternGeometry(diagram: DiagramJson, matches: readonly MutableMat
       nodeGeometryById.set(nodeId, {
         ...structuredClone(currentNode),
         position: translatePoint(patternNode.position, offsetX, offsetY),
-        size: structuredClone(patternNode.size),
+        // Pattern examples own container geometry, while ordinary Resource tiles keep the
+        // current Palette contract instead of regressing to an old captured icon size.
+        size: structuredClone(isAreaNode(currentNode) ? patternNode.size : currentNode.size),
         zIndex: patternNode.zIndex,
         ...(patternNode.rotation === undefined ? {} : { rotation: patternNode.rotation })
       });

@@ -344,10 +344,14 @@ test("Compiler roundtrip matcher는 presentation Area를 걷어내도 Resource c
 });
 
 test("network pattern Compiler proposal은 containment만 숨기고 semantic Area edge는 보존한다", () => {
-  const currentDiagram = expandCuratedModuleIntoDiagram({
+  const expanded = expandCuratedModuleIntoDiagram({
     diagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, variables: [] },
     moduleId: "network-foundation"
   });
+  const currentDiagram: DiagramJson = {
+    ...expanded,
+    presentation: { geometryPolicy: "source-exact" }
+  };
   const architecture = convertDiagramJsonToArchitectureJson(currentDiagram);
 
   const proposal = compileArchitectureBoard({
@@ -609,6 +613,59 @@ test("Compiler는 hosted EKS Cluster를 presentation Area로 만들고 Terraform
   assert.ok(
     proposal.diagnostics.some(({ code }) => code === "compiler.inferred_terraform_relationship")
   );
+});
+
+test("Compiler는 연결된 ASG도 일반 Resource tile로 유지한다", () => {
+  const asgArchitecture: ArchitectureJson = {
+    nodes: [
+      {
+        id: "asg",
+        type: "AUTO_SCALING_GROUP",
+        label: "Web ASG",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceType: "aws_autoscaling_group",
+          terraformResourceName: "web",
+          minSize: 1,
+          maxSize: 2
+        }
+      },
+      {
+        id: "scale-out",
+        type: "AUTO_SCALING_POLICY",
+        label: "Scale out",
+        positionX: 120,
+        positionY: 0,
+        config: {
+          terraformResourceType: "aws_autoscaling_policy",
+          terraformResourceName: "scale_out",
+          autoscalingGroupName: "${aws_autoscaling_group.web.name}"
+        }
+      }
+    ],
+    edges: []
+  };
+  const currentDiagram: DiagramJson = {
+    ...convertArchitectureJsonToDiagramJson(asgArchitecture),
+    presentation: { geometryPolicy: "source-exact" }
+  };
+  const proposal = compileArchitectureBoard({
+    architecture: asgArchitecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+  const asgArchitectureNode = proposal.architecture.nodes.find((node) => node.id === "asg");
+  const policyArchitectureNode = proposal.architecture.nodes.find(
+    (node) => node.id === "scale-out"
+  );
+  const asgDiagramNode = proposal.diagram.nodes.find((node) => node.id === "asg");
+
+  assert.equal(proposal.provenance.candidateId.startsWith("compiled:"), true);
+  assert.notEqual(asgArchitectureNode?.config["presentationArea"], true);
+  assert.notEqual(policyArchitectureNode?.config["parentAreaNodeId"], "asg");
+  assert.notEqual(asgDiagramNode?.metadata?.presentationArea, true);
+  assert.ok((asgDiagramNode?.zIndex ?? 0) >= 100);
 });
 
 test("Compiler는 중복 Resource와 dangling 관계를 optional repair proposal 및 diagnostic으로 남긴다", () => {

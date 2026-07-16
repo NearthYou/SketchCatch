@@ -13,9 +13,11 @@ const designAreaNodeTypes = new Set([
   "aws_region",
   "aws_availability_zone",
   "design_region",
+  "design-aws-account",
   "design_az",
   "design_group",
   "sketchcatch_region",
+  "sketchcatch_aws_account",
   "sketchcatch_az",
   "sketchcatch_group"
 ]);
@@ -34,9 +36,11 @@ const designAreaNodeIconByType: Record<string, string> = {
   "aws-availability-zone": `${groupIconPath}/AWS-Cloud_32.svg`,
   "aws-region": `${groupIconPath}/Region_32.svg`,
   design_az: `${groupIconPath}/AWS-Cloud_32.svg`,
+  "design-aws-account": `${groupIconPath}/AWS-Account_32.svg`,
   design_group: `${groupIconPath}/Auto-Scaling-group_32.svg`,
   design_region: `${groupIconPath}/Region_32.svg`,
   sketchcatch_az: `${groupIconPath}/AWS-Cloud_32.svg`,
+  sketchcatch_aws_account: `${groupIconPath}/AWS-Account_32.svg`,
   sketchcatch_group: `${groupIconPath}/Auto-Scaling-group_32.svg`,
   sketchcatch_region: `${groupIconPath}/Region_32.svg`
 };
