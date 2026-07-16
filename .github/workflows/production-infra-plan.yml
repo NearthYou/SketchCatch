@@ -565,51 +565,6 @@ jobs:
               )
           ' "${reviewed_plan_json}" > /dev/null
 
-          jq -e --slurpfile current_state "${current_state_json}" '
-            def get_secret_values($policy):
-              [
-                ($policy | fromjson).Statement[]?
-                | (.Action | if type == "array" then . else [.] end) as $actions
-                | select($actions | index("secretsmanager:GetSecretValue"))
-                | .Resource
-                | if type == "array" then .[] else . end
-              ] | unique;
-            def state_worker_execution_policy:
-              [
-                $current_state[0].resources[]
-                | select(
-                    .mode == "managed" and
-                    .type == "aws_iam_role_policy" and
-                    .name == "ecs_worker_execution"
-                  )
-                | .instances[]?
-                | .attributes.policy
-              ] as $policies
-              | if ($policies | length) == 1 and ($policies[0] | type) == "string"
-                then $policies[0]
-                else error("Terraform state worker execution policy is missing or ambiguous")
-                end;
-            (
-              .resource_changes[]
-              | select(.address == "aws_ecs_task_definition.worker")
-              | .change.after.container_definitions
-              | fromjson
-              | map(select(.name == "worker"))
-              | .[0].secrets
-              | map(select(.name == "GIT_APP_CLIENT_SECRET"))
-              | .[0].valueFrom
-            ) as $worker_client_secret
-            | (
-                .resource_changes[]
-                | select(.address == "aws_iam_role_policy.ecs_worker_execution")
-                | .change
-              ) as $execution_policy
-            | get_secret_values(state_worker_execution_policy) as $before_values
-            | get_secret_values($execution_policy.after.policy) as $after_values
-            | ($after_values | contains($before_values))
-              and (($after_values - $before_values) == [$worker_client_secret])
-          ' "${reviewed_plan_json}" > /dev/null
-
           rm -f "${reviewed_plan_json}" "${current_state_json}"
 
       - name: Set reviewed plan artifact metadata
@@ -696,6 +651,56 @@ jobs:
         run: |
           set -euo pipefail
           terraform -chdir="${TERRAFORM_ROOT}" apply -input=false -no-color tfplan
+
+      - name: Verify applied worker Secret execution access
+        if: inputs.runtime_plan_scope == 'complete'
+        shell: bash
+        run: |
+          set -euo pipefail
+          applied_state_json="${RUNNER_TEMP}/applied-runtime-state.json"
+          terraform -chdir="${TERRAFORM_ROOT}" state pull > "${applied_state_json}"
+
+          jq -e '
+            def task_container($definitions; $name):
+              ($definitions | fromjson | map(select(.name == $name))) as $containers
+              | if ($containers | length) == 1 then $containers[0] else error("task container is missing or ambiguous") end;
+            def get_secret_values($policy):
+              [
+                ($policy | fromjson).Statement[]?
+                | (.Action | if type == "array" then . else [.] end) as $actions
+                | select($actions | index("secretsmanager:GetSecretValue"))
+                | .Resource
+                | if type == "array" then .[] else . end
+              ] | unique;
+            (
+              .resources[]
+              | select(
+                  .mode == "managed" and
+                  .type == "aws_ecs_task_definition" and
+                  .name == "worker"
+                )
+              | .instances[]?
+              | .attributes.container_definitions
+              | task_container(.; "worker")
+              | [(.secrets // [])[] | .valueFrom]
+              | unique
+            ) as $worker_secret_values
+            | (
+                .resources[]
+                | select(
+                    .mode == "managed" and
+                    .type == "aws_iam_role_policy" and
+                    .name == "ecs_worker_execution"
+                  )
+                | .instances[]?
+                | .attributes.policy
+                | get_secret_values(.)
+              ) as $execution_secret_values
+            | ($worker_secret_values | length) > 0
+              and ($execution_secret_values | contains($worker_secret_values))
+          ' "${applied_state_json}" > /dev/null
+
+          rm -f "${applied_state_json}"
 
       - name: Verify applied resources are in Terraform state
         shell: bash
