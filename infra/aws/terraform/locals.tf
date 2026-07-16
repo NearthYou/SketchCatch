@@ -112,6 +112,7 @@ locals {
   worker_secret_names = toset([
     "CLOUDFORMATION_TEMPLATE_TOKEN_SECRET",
     "DATABASE_URL",
+    "GIT_APP_CLIENT_SECRET",
     "REDIS_URL"
   ])
 

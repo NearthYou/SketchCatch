@@ -28,3 +28,9 @@ Use this file only for compact continuation context. Write it in English.
 
 1. Review and merge the Ready PR into `dev` after CI.
 2. Keep PR 3 / issue #435 blocked until PR 2 is merged.
+3. Merge the production runtime drift-review PR after a current review-only Plan passes, then execute the explicitly approved full-runtime Apply only from that merged revision. Do not use a targeted apply.
+
+## Production Runtime Plan Review
+
+- Review-only production runtime Plan 29498864502 at `c8b107d3` succeeded with 3 add, 7 change, and 2 task-definition replacement destroys. It injects the GitHub App Secret into API and worker and preserves the Live Observation capability Secret; no Secret value was recorded.
+- Branch `fix/sw/production-runtime-plan-drift` stores the existing capability ARN as a dedicated production-infra-plan Environment Secret and overlays it into the runtime tfvars without replacing `PRODUCTION_INFRA_RUNTIME_TFVARS_JSON`.

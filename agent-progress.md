@@ -11,6 +11,9 @@ Short English-only working log for the current agent context. Older records are 
 - Migration `0045_application_artifact_registry.sql` intentionally avoids the `0044` number reserved by another branch; `_journal.json` is updated.
 - Focused PR 2 tests pass 59/59, including review regressions for malformed/secret-shaped inputs, streamed S3 hashing, and failed lease renewal cleanup. Harness, migration compatibility, lint, typecheck, and build pass.
 - Clean-state review passes; the evaluator rubric result is Accept (12/12, no hard fail).
+- Branch `fix/sw/production-runtime-plan-drift` overlays GitHub App runtime inputs without replacing unrelated runtime tfvars; the Live Observation capability Secret ARN is retained through its dedicated Environment Secret.
+- The workflow rejects malformed GitHub App inputs and Secret ARNs from another AWS region or account.
+- `scripts/check-production-infra.mjs` guards the GitHub App and Live Observation runtime wiring markers.
 
 ## Session Record
 
@@ -40,3 +43,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Review and merge the Ready PR from `feature/sw/433-application-artifact-reuse` into `dev` after required CI.
 - Start PR 3 / issue #435 only after PR 2 is merged.
+- Merge the production runtime drift-review PR after its refreshed review-only Plan passes, then use the approved full-runtime Apply workflow for the exact merged revision.
+
+### 2026-07-16 - Production runtime plan drift review
+
+- Review-only Plan 29498864502 succeeded with 3 add, 7 change, and only 2 task-definition replacement destroys. Worker Secret wiring and the Live Observation capability Secret preservation were added without exposing Secret values.
+- Verification passed: harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Local Terraform validation/test could not initialize the uncached AWS provider within the timeout.

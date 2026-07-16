@@ -221,7 +221,7 @@ resource "aws_ecs_task_definition" "worker" {
   lifecycle {
     precondition {
       condition     = var.environment != "production" || length(setsubtract(local.worker_secret_names, toset(keys(local.worker_secret_arns)))) == 0
-      error_message = "Worker task definition requires DATABASE_URL, REDIS_URL, and CLOUDFORMATION_TEMPLATE_TOKEN_SECRET secret ARNs."
+      error_message = "Worker task definition requires DATABASE_URL, REDIS_URL, CLOUDFORMATION_TEMPLATE_TOKEN_SECRET, and GIT_APP_CLIENT_SECRET secret ARNs."
     }
 
     precondition {

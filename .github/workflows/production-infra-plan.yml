@@ -201,6 +201,7 @@ jobs:
           RUNTIME_TFVARS_JSON: ${{ secrets.PRODUCTION_INFRA_RUNTIME_TFVARS_JSON }}
           GIT_APP_CLIENT_ID: ${{ vars.GIT_APP_CLIENT_ID }}
           GIT_APP_CLIENT_SECRET_ARN: ${{ secrets.GIT_APP_CLIENT_SECRET_ARN }}
+          LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN: ${{ secrets.LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN }}
         run: |
           set -euo pipefail
 
@@ -219,15 +220,26 @@ jobs:
             exit 1
           fi
 
+          if [ -z "${LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN:-}" ]; then
+            echo "::error::LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN is required in the production-infra-plan environment"
+            exit 1
+          fi
+
           if [[ ! "${GIT_APP_CLIENT_SECRET_ARN}" =~ ^arn:aws[a-zA-Z-]*:secretsmanager:[^:]+:[0-9]{12}:secret:sketchcatch/production/git-app-client-secret-[A-Za-z0-9]+$ ]]; then
             echo "::error::GIT_APP_CLIENT_SECRET_ARN must be the production GitHub App client secret ARN"
             exit 1
           fi
 
+          if [[ ! "${LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN}" =~ ^arn:aws[a-zA-Z-]*:ssm:[^:]+:[0-9]{12}:parameter/sketchcatch/production/live-observation-capability-current-secret$ ]]; then
+            echo "::error::LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN must be the production Live Observation capability SSM parameter ARN"
+            exit 1
+          fi
+
           IFS=':' read -r _ _ _ secret_region secret_account _ <<< "${GIT_APP_CLIENT_SECRET_ARN}"
+          IFS=':' read -r _ _ _ live_secret_region live_secret_account _ <<< "${LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN}"
           current_account="$(aws sts get-caller-identity --query Account --output text)"
-          if [ "${secret_region}" != "${AWS_REGION}" ] || [ "${secret_account}" != "${current_account}" ]; then
-            echo "::error::GIT_APP_CLIENT_SECRET_ARN must use AWS_REGION and the current AWS account"
+          if [ "${secret_region}" != "${AWS_REGION}" ] || [ "${secret_account}" != "${current_account}" ] || [ "${live_secret_region}" != "${AWS_REGION}" ] || [ "${live_secret_account}" != "${current_account}" ]; then
+            echo "::error::runtime Secret ARNs must use AWS_REGION and the current AWS account"
             exit 1
           fi
 
@@ -238,12 +250,14 @@ jobs:
           jq -c \
             --arg client_id "${GIT_APP_CLIENT_ID}" \
             --arg client_secret_arn "${GIT_APP_CLIENT_SECRET_ARN}" \
+            --arg live_observation_capability_current_secret_arn "${LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET_ARN}" \
             '
               if (.api_secret_arns | type) != "object" then
                 error("api_secret_arns must be an object")
               else
                 .git_app_client_id = $client_id
                 | .api_secret_arns["GIT_APP_CLIENT_SECRET"] = $client_secret_arn
+                | .api_secret_arns["LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"] = $live_observation_capability_current_secret_arn
               end
             ' \
             "${RUNNER_TEMP}/runtime.tfvars.json" \
