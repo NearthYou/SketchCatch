@@ -4,39 +4,39 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- PR 1 / issue #434 adds provider-neutral deployment optimization capability to all shared ResourceDefinitions: 136 managed Terraform resources are supported, while data sources, UNKNOWN resources, and catalog-only definitions have explicit exclusions.
-- Terraform Plan identity now includes the canonical bundle, provider lock/identity, non-secret variable identity, target account/region, state lineage/serial, and optimization contract version.
-- Pending Plan reuse requires the actual tfplan, strict versioned S3 evidence, matching Plan summary and target/state identity, and an unexpired drift TTL. Validation failure safely runs a fresh Plan.
-- Approved Terraform no-change Plans skip Apply only after the existing artifact/tfplan/account/region gates and optimization evidence are revalidated.
-- Latest `origin/dev` through `2db0eb33` is merged. Its GitHub installation ownership migration and runtime wiring remain intact and are not owned by this workstream.
-- Focused verification passes: ResourceDefinition 9/9, Deployment/API/route 83/83, and approval/Destroy 22/22. Harness, migration compatibility, lint, typecheck, and build pass.
-- Full `pnpm test` remains non-green only on the three documented pre-existing three-tier Template position/security-scope/parent assertions in `packages/types`.
+- PR 1 / issue #434 is merged into `dev` at the PR 2 base `207a979f`.
+- PR 2 / issue #433 implements a provider-neutral `ApplicationArtifact` Registry shared by Direct Deployment and GitOps while keeping `ApplicationRelease` as a separate ledger.
+- Canonical identity includes repository, commit, normalized build config, build contract, target platform, and secret-free build inputs. Provider verification checks the actual ECR/S3 artifact before reuse.
+- Project-scoped active uniqueness, hashed claim tokens, renewable leases, and the composite release foreign key prevent duplicate builds and cross-project reuse.
+- Migration `0045_application_artifact_registry.sql` intentionally avoids the `0044` number reserved by another branch; `_journal.json` is updated.
+- Focused PR 2 tests pass 59/59, including review regressions for malformed/secret-shaped inputs, streamed S3 hashing, and failed lease renewal cleanup. Harness, migration compatibility, lint, typecheck, and build pass.
+- Clean-state review passes; the evaluator rubric result is Accept (12/12, no hard fail).
 
 ## Session Record
 
-### 2026-07-16 - Implement provider-neutral Deployment Optimization Contract v1
+### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
-- Created Epic #432 and ordered subissues #434, #433, and #435; this session implemented only PR 1 / issue #434.
-- Added canonical desired-state reuse, provider lock and state restoration, single-flight Plan execution, safe cache fallback, bounded resource-change evidence, duration/cache decision logs, and verified no-change Apply skipping without `terraform -target`.
-- Stored strict optimization evidence beside `tfplan` in S3 without adding a PR 1 database migration.
-- No live AWS, Terraform apply/destroy, user deployment, or Git/CI/CD handoff was performed.
+- Added all seven artifact kinds, strict v2 evidence DTOs, canonical identity, persistent Postgres claims, read-only AWS verification, and project-scoped artifact listing.
+- Direct preparation reuses a verified artifact without CodeBuild; GitOps registers its already-built artifact and links verified releases while preserving v1 evidence fallback.
+- RDS stores identity/metadata only. User artifact bytes stay in the user's ECR/S3 or provider storage; Redis is not a source of truth.
+- Review hardening added locale-independent ordering, path normalization, whitespace-preserving build inputs, full identity checks, exact GitOps references, runtime namespace checks, lease heartbeats, and provider-computed S3 digest verification.
+- No real credentials, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff were performed. PR 3 / issue #435 was not started.
 
-### 2026-07-16 - Integrate latest dev
+### 2026-07-16 - Address PR #438 review feedback
 
-- Merged `origin/dev` at `2db0eb33`, preserving its GitHub installation ownership, production runtime inputs, migration `0043`, and journal entry.
-- Resolved only progress/history record conflicts; product contract files merged automatically.
-- Post-merge verification passes the 9 ResourceDefinition tests, 79 changed Deployment/API/route tests, 22 approval/Destroy safety tests, harness, migration compatibility, lint, typecheck, build, and diff checks.
-- Repository-wide `pnpm test` still stops on the same three pre-existing three-tier Template assertions; PR 1 does not change those Template files.
+- Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
+- Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
+- Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
+- No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
 
-### 2026-07-16 - Address PR #437 review feedback
+## Broken Or Unverified
 
-- Removed locale-sensitive canonical ordering, made string evidence normalization allocation-aware, and defined deterministic hashing for `undefined` canonical values.
-- Moved project access validation before deployment-scoped single-flight joining so concurrent authorized users share one Plan without bypassing authorization.
-- Invalid or legacy Terraform state identity now produces null identity fields and a safe fresh Plan path instead of aborting optimization validation.
-- Added red/green regression coverage; the changed Deployment/API/route suite now passes 83/83 and the existing approval/Destroy suite passes 22/22.
+- `pnpm --filter @sketchcatch/api test` passes 666/669; three unchanged filesystem security tests cannot create symlinks on this Windows host and fail with `EPERM`.
+- `pnpm test:core` stops on three pre-existing three-tier Template security-scope/position/parent assertions; PR 2 changes none of those Template files.
+- A first API run hit a transient Fetch `bad port` in the unchanged notification SSE test because the host dynamic TCP range overlaps blocked ports. The isolated test and the second full API run passed it.
+- Generated workflows remain v1 evidence producers; the parser and registrar accept both v1 and strict v2. No live provider acceptance test was run by design.
 
 ## Next Action
 
-- Push the PR #437 review fixes, resolve the seven addressed review threads, and merge into `dev` after required checks.
-- Merge PR 1 before starting issue #433. Then fetch fresh `origin/dev` and create `feature/sw/433-application-artifact-reuse` with `gh issue develop --base dev`.
-- Do not stack PR 2 on this branch.
+- Review and merge the Ready PR from `feature/sw/433-application-artifact-reuse` into `dev` after required CI.
+- Start PR 3 / issue #435 only after PR 2 is merged.

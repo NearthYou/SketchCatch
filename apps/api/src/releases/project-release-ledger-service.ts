@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type {
+  ApplicationArtifact,
   ApplicationReleaseProviderRevision,
   ApplicationReleaseStatus,
   ConfirmedBuildConfig,
@@ -11,7 +12,9 @@ import type {
   RuntimeTargetKind
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
+import { applicationArtifactKindForRuntime } from "../artifacts/application-artifact-runtime.js";
 import {
+  applicationArtifacts,
   applicationReleases,
   awsConnections,
   deployments,
@@ -19,6 +22,7 @@ import {
   projectDeploymentTargets,
   projects
 } from "../db/schema.js";
+import { toAvailableArtifact } from "../artifacts/postgres-application-artifact-registry.js";
 import {
   resolveApplicationReleaseVersion,
   type ApplicationReleaseVersionEvidence
@@ -67,6 +71,11 @@ export type ProjectReleaseLedgerRepository = {
   createApplicationRelease(
     input: CreateApplicationReleaseRecordInput
   ): Promise<ApplicationReleaseRecord>;
+  findAvailableApplicationArtifact(
+    projectId: string,
+    artifactId: string
+  ): Promise<ApplicationArtifact | undefined>;
+  listProjectApplicationArtifacts(projectId: string): Promise<ApplicationArtifact[]>;
   listProjectApplicationReleases(projectId: string): Promise<ApplicationReleaseRecord[]>;
   findProjectApplicationRelease(
     projectId: string,
@@ -193,6 +202,33 @@ export function createPostgresProjectReleaseLedgerRepository(
         return written;
       });
     },
+    async findAvailableApplicationArtifact(projectId, artifactId) {
+      const [artifact] = await db
+        .select()
+        .from(applicationArtifacts)
+        .where(
+          and(
+            eq(applicationArtifacts.id, artifactId),
+            eq(applicationArtifacts.projectId, projectId),
+            eq(applicationArtifacts.status, "available")
+          )
+        );
+      return artifact ? toAvailableArtifact(artifact) : undefined;
+    },
+    async listProjectApplicationArtifacts(projectId) {
+      const artifacts = await db
+        .select()
+        .from(applicationArtifacts)
+        .where(
+          and(
+            eq(applicationArtifacts.projectId, projectId),
+            eq(applicationArtifacts.status, "available")
+          )
+        )
+        .orderBy(desc(applicationArtifacts.createdAt), desc(applicationArtifacts.id))
+        .limit(100);
+      return artifacts.map(toAvailableArtifact);
+    },
     async listProjectApplicationReleases(projectId) {
       return db
         .select()
@@ -282,6 +318,14 @@ export async function listApplicationReleases(
   return repository.listProjectApplicationReleases(input.projectId);
 }
 
+export async function listApplicationArtifacts(
+  input: { projectId: string; userId: string },
+  repository: ProjectReleaseLedgerRepository
+): Promise<ApplicationArtifact[]> {
+  await requireAccessibleProject(input, repository);
+  return repository.listProjectApplicationArtifacts(input.projectId);
+}
+
 export async function getApplicationRelease(
   input: { projectId: string; releaseId: string; userId: string },
   repository: ProjectReleaseLedgerRepository
@@ -298,6 +342,7 @@ export async function getApplicationRelease(
 export type RecordApplicationReleaseInput = {
   projectId: string;
   userId: string;
+  artifactId: string | null;
   deploymentId: string | null;
   pipelineRunId: string | null;
   source: DeploymentSource;
@@ -331,6 +376,22 @@ export async function recordApplicationRelease(
   if (!/^[0-9a-f]{64}$/.test(input.artifactDigest)) {
     throw new ReleaseLedgerValidationError("A lowercase SHA-256 artifact digest is required.");
   }
+  if (input.artifactId) {
+    const artifact = await repository.findAvailableApplicationArtifact(
+      input.projectId,
+      input.artifactId
+    );
+    if (
+      !artifact ||
+      artifact.digest !== input.artifactDigest ||
+      artifact.commitSha !== input.versionEvidence.commitSha.toLowerCase() ||
+      artifact.kind !== applicationArtifactKindForRuntime(input.runtimeTargetKind)
+    ) {
+      throw new ReleaseLedgerConflictError(
+        "Application release artifact must be available in the same project."
+      );
+    }
+  }
   validateReleaseEvidence(input, target.provider);
 
   let version: string;
@@ -346,6 +407,7 @@ export async function recordApplicationRelease(
   return repository.createApplicationRelease({
     id: generateId(),
     projectId: input.projectId,
+    artifactId: input.artifactId,
     deploymentId: input.deploymentId,
     pipelineRunId: input.pipelineRunId,
     source: input.source,

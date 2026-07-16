@@ -4,35 +4,27 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Currently Verified
 
-- Epic #432 sequences three non-stacked PRs: PR 1 / issue #434, PR 2 / issue #433, and PR 3 / issue #435.
-- Ready PR #437 (`Feat: 전체 배포 리소스 최적화 계약 구현`) targets `dev` from `feature/sw/434-deployment-optimization-contract`.
-- PR 1 implements the provider-neutral Deployment Optimization Contract v1 for all 159 shared ResourceDefinitions and the Terraform Direct Deployment path.
-- Managed Terraform resources inherit verified desired-state optimization; data sources, UNKNOWN resources, and catalog-only definitions carry explicit exclusions.
-- Plan identity, strict S3 sidecar evidence, drift TTL, pending Plan reuse, single-flight execution, bounded evidence, safe cache fallback, and verified no-change Apply skipping are implemented without `terraform -target`.
-- All seven Gemini review threads are addressed by locale-independent canonical ordering, deployment-scoped single-flight after per-caller authorization, allocation-aware string parsing, deterministic undefined hashing, and defensive state identity parsing.
-- Latest `origin/dev` through `2db0eb33` is merged. Its migration `0043_github_installation_connections.sql` and journal entry are base history only and are absent from the PR diff.
+- Epic #432 remains ordered as merged PR 1 / issue #434, current PR 2 / issue #433, then PR 3 / issue #435.
+- `feature/sw/433-application-artifact-reuse` is based on merged PR 1 commit `207a979f` and implements only PR 2.
+- Direct Deployment and GitOps share a provider-neutral `ApplicationArtifact` Registry with canonical fingerprinting, provider revalidation, persistent build claims, and project isolation.
+- PR #438 review hardening rejects malformed or delimiter-obfuscated build inputs, streams S3 digest verification, and releases failed renewal heartbeats immediately.
+- `ApplicationRelease.artifactId` is nullable for legacy/v1 fallback, while a composite project foreign key blocks cross-project links.
+- Migration `0045_application_artifact_registry.sql` avoids `0044`, which another branch reserved. `_journal.json` changes.
 
 ## Changes This Session
 
-- Added provider-neutral deployment capability derivation and validation to shared ResourceDefinitions.
-- Added canonical Terraform desired-state identity and strict versioned optimization evidence stored beside `tfplan`.
-- Added safe pending Plan reuse, identical-request single-flight execution, bounded decision evidence, and explicit fallback reasons.
-- Added verified no-change Apply skipping behind the existing approval, artifact, target, and prepared-draft gates.
-- Added review regression coverage for cross-user single-flight, corrupt state fallback, binary file ordering, string parsing, and undefined canonical values.
-- Created Epic #432 and ordered subissues #434, #433, and #435; no PR 2 branch was created.
+- Added all seven artifact kinds, canonical identity, strict v2 evidence, the Postgres Registry/lease boundary, read-only AWS verification, and the authenticated project artifact list.
+- Integrated verified reuse with Direct Deployment and GitOps while preserving v1 release evidence and legacy releases.
+- Updated product, data model, architecture, deployment, harness, and continuation documentation. PR 3 was not started.
 
 ## Broken Or Unverified
 
-- Pass: `pnpm harness:check`, `pnpm migration:compatibility:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check origin/dev...HEAD`.
-- Pass: ResourceDefinition contract 9/9, changed Deployment/API/route tests 83/83, and approval/Destroy safety tests 22/22.
-- Repository-wide `pnpm test` still stops only on the three pre-existing three-tier Template position/security-scope/parent assertions. PR 1 does not change those Template files.
-- PR 1 adds no DB migration, journal change, lockfile change, live AWS mutation, Terraform apply/destroy, user deployment, or Git/CI/CD handoff.
-- The pre-review PR checks passed. Review-fix checks must pass before PR #437 is merged.
+- Pass: focused PR 2 tests 59/59, `pnpm harness:check`, migration compatibility, lint, typecheck, and build.
+- API full suite: 666/669; only three Windows symlink-creation tests fail with `EPERM`.
+- Workspace `test:core` stops on three pre-existing three-tier Template contract failures unrelated to PR 2.
+- No real credential, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff was executed.
 
 ## Best Next Action
 
-1. Review and merge Ready PR #437 into `dev` after required checks.
-2. Do not start PR 2 from the current branch and do not create its branch before PR 1 is merged.
-3. When the user says `다음 PR 진행`, confirm PR #437 is merged, fetch fresh `origin/dev`, then run:
-   `gh issue develop 433 --repo NearthYou/SketchCatch --name feature/sw/433-application-artifact-reuse --base dev`
-4. Create a new isolated worktree for issue #433 and implement only Application Artifact Reuse. PR 3 remains blocked until PR 2 is merged.
+1. Review and merge the Ready PR into `dev` after CI.
+2. Keep PR 3 / issue #435 blocked until PR 2 is merged.
