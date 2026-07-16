@@ -30,6 +30,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Next Action
 
-- Push the verified PR 1 branch and open a Ready PR to `dev`; check CI once after the final handoff commit is pushed.
+- Review and merge Ready PR #437 into `dev` after required checks; the final task response records the single CI snapshot.
 - Merge PR 1 before starting issue #433. Then fetch fresh `origin/dev` and create `feature/sw/433-application-artifact-reuse` with `gh issue develop --base dev`.
 - Do not stack PR 2 on this branch.
