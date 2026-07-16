@@ -55,6 +55,7 @@ import {
   type ProjectAccessContext
 } from "./deployment-service.js";
 import {
+  cleanupPreparedTerraformWorkspace,
   createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
@@ -199,6 +200,7 @@ async function runDeploymentPlanOnce(
   const now = options.now ?? (() => new Date());
 
   let workspace: PreparedTerraformWorkspace | undefined;
+  let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   let deploymentId: string | undefined;
   let failureRecorded = false;
   let optimization: DeploymentOptimizationDecision;
@@ -238,13 +240,15 @@ async function runDeploymentPlanOnce(
     const currentPlanArtifactPromise = deployment.currentPlanArtifactId
       ? repository.findDeploymentPlanArtifactById(deployment.currentPlanArtifactId)
       : Promise.resolve(undefined);
-    const workspacePromise = artifactPromise.then((artifact) =>
-      prepareTerraformWorkspace({
+    workspacePromise = artifactPromise.then(async (artifact) => {
+      const preparedWorkspace = await prepareTerraformWorkspace({
         objectKey: artifact.objectKey,
         fileName: artifact.fileName,
         contentType: artifact.contentType
-      })
-    );
+      });
+      workspace = preparedWorkspace;
+      return preparedWorkspace;
+    });
     const [artifact, awsConnection, architecture, preparedWorkspace, currentPlanArtifact] =
       await Promise.all([
         artifactPromise,
@@ -720,7 +724,7 @@ async function runDeploymentPlanOnce(
 
     throw error;
   } finally {
-    await workspace?.cleanup();
+    await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
   }
 }
 

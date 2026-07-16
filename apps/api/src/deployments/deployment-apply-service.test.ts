@@ -560,6 +560,41 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   );
 });
 
+test("runDeploymentApply cleans a full-stack workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentApply(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-terraform-apply",
+              mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
+});
+
 test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", async () => {
   const repository = new FakeDeploymentRepository();
   const existingStateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
@@ -756,6 +791,46 @@ test("application scope releases the approved artifact without Terraform init or
     outputs: []
   });
   assert.equal(applyArtifactStorage.uploadedStates.length, 0);
+});
+
+test("application scope cleans its prepared workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentApply(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          readTerraformArtifactFile: async () => terraformArtifactContent,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-application-release",
+              mainFilePath: "C:/tmp/sketchcatch-application-release/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
 });
 
 test("runDeploymentApply materializes archive data files before applying an approved plan", async () => {
