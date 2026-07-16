@@ -565,7 +565,7 @@ jobs:
               )
           ' "${reviewed_plan_json}" > /dev/null
 
-          jq -e '
+          jq -e --slurpfile current_state "${current_state_json}" '
             def get_secret_values($policy):
               [
                 ($policy | fromjson).Statement[]?
@@ -574,6 +574,21 @@ jobs:
                 | .Resource
                 | if type == "array" then .[] else . end
               ] | unique;
+            def state_worker_execution_policy:
+              [
+                $current_state[0].resources[]
+                | select(
+                    .mode == "managed" and
+                    .type == "aws_iam_role_policy" and
+                    .name == "ecs_worker_execution"
+                  )
+                | .instances[]?
+                | .attributes.policy
+              ] as $policies
+              | if ($policies | length) == 1 and ($policies[0] | type) == "string"
+                then $policies[0]
+                else error("Terraform state worker execution policy is missing or ambiguous")
+                end;
             (
               .resource_changes[]
               | select(.address == "aws_ecs_task_definition.worker")
@@ -589,7 +604,7 @@ jobs:
                 | select(.address == "aws_iam_role_policy.ecs_worker_execution")
                 | .change
               ) as $execution_policy
-            | get_secret_values($execution_policy.before.policy) as $before_values
+            | get_secret_values(state_worker_execution_policy) as $before_values
             | get_secret_values($execution_policy.after.policy) as $after_values
             | ($after_values | contains($before_values))
               and (($after_values - $before_values) == [$worker_client_secret])
