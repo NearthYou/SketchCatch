@@ -258,7 +258,6 @@ export const TerraformCodePanel = forwardRef<
     readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
     readonly onDirtyChange: (isDirty: boolean) => void;
     readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
-    readonly onOpenIssues: () => void;
     readonly onTerraformAiCodeContextChange: (
       context: WorkspaceTerraformAiCodeContext
     ) => void;
@@ -280,7 +279,6 @@ export const TerraformCodePanel = forwardRef<
     onDiagnosticsChange,
     onDirtyChange,
     onExternalSaveComplete,
-    onOpenIssues,
     onTerraformAiCodeContextChange,
     onTerraformAiInteraction,
     onTerraformFilesChange,
@@ -365,10 +363,6 @@ export const TerraformCodePanel = forwardRef<
     [activeFileName, terraformFiles]
   );
   const hasTerraformCode = combinedTerraformCode.trim().length > 0;
-  const errorDiagnostics = useMemo(
-    () => diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
-    [diagnostics]
-  );
   const currentDiagramFingerprint = useMemo(
     () => toTerraformRefreshFingerprint(context.diagram),
     [context.diagram]
@@ -1534,10 +1528,6 @@ export const TerraformCodePanel = forwardRef<
     }
   }
 
-  function handleSeeMore(): void {
-    onOpenIssues();
-  }
-
   function selectTerraformFile(fileName: string): void {
     setTerraformFiles((currentFiles) =>
       currentFiles.some((file) => file.fileName === fileName)
@@ -1578,9 +1568,7 @@ export const TerraformCodePanel = forwardRef<
       />
 
       <TerraformCodeStatus
-        onOpenIssues={handleSeeMore}
         state={{
-          errorCount: errorDiagnostics.length,
           isSynced: isTerraformPreviewSynced,
           previewSummary: previewSnapshotSummary,
           saveBanner,

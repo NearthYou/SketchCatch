@@ -1812,48 +1812,6 @@
   outline-offset: 3px;
 }
 
-.terraformIssueBanner {
-  align-items: center;
-  background: #fff7ed;
-  border-top: 1px solid #fed7aa;
-  color: #9a3412;
-  display: flex;
-  font-size: 12px;
-  font-weight: 850;
-  gap: 8px;
-  justify-content: space-between;
-  line-height: 1.25;
-  min-height: 32px;
-  padding: 7px 10px;
-}
-
-.terraformIssueBanner span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terraformIssueBanner button {
-  background: #ffffff;
-  border: 1px solid #fdba74;
-  border-radius: 6px;
-  color: #9a3412;
-  cursor: pointer;
-  flex: 0 0 auto;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 900;
-  min-height: 26px;
-  padding: 0 8px;
-}
-
-.terraformIssueBanner button:hover,
-.terraformIssueBanner button:focus-visible {
-  background: #ffedd5;
-  outline: none;
-}
-
 .terraformDiagnostics {
   background: #ffffff;
   border-top: 1px solid #dce3ee;

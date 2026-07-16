@@ -137,7 +137,6 @@ export function WorkspaceRightPanel({
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
   const terraformSplitRef = useRef<HTMLDivElement | null>(null);
   const terraformViewRef = useRef<HTMLDivElement | null>(null);
-  const terraformIssuesPaneRef = useRef<HTMLDivElement | null>(null);
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
@@ -490,15 +489,6 @@ export function WorkspaceRightPanel({
     },
     [activeView, onTerraformAiInteraction, requestTerraformLeave]
   );
-
-  const focusTerraformIssuesPane = useCallback((): void => {
-    context.setRightPanelOpen(true);
-    setActiveView("terraform");
-    onTerraformAiInteraction("errors");
-    window.requestAnimationFrame(() => {
-      terraformIssuesPaneRef.current?.focus({ preventScroll: true });
-    });
-  }, [context, onTerraformAiInteraction]);
 
   const startTerraformSplitResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -1028,7 +1018,6 @@ export function WorkspaceRightPanel({
                 onDiagnosticsChange={handleTerraformDiagnosticsChange}
                 onDirtyChange={handleTerraformDirtyChange}
                 onExternalSaveComplete={handleTerraformExternalSaveComplete}
-                onOpenIssues={focusTerraformIssuesPane}
                 onTerraformAiCodeContextChange={setTerraformAiCodeContext}
                 onTerraformAiInteraction={() => onTerraformAiInteraction("preview")}
                 onTerraformFilesChange={onTerraformFilesChange}
@@ -1047,7 +1036,7 @@ export function WorkspaceRightPanel({
               role="separator"
               tabIndex={0}
             />
-            <div className={styles.terraformIssuesPane} ref={terraformIssuesPaneRef} tabIndex={-1}>
+            <div className={styles.terraformIssuesPane}>
               <WorkspaceIssuesPanel
                 architectureDiagnostics={architectureDiagnostics}
                 onFocusArchitectureResource={(diagnostic) => {
