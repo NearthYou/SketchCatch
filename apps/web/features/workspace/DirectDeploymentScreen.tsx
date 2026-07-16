@@ -135,7 +135,6 @@ export type DirectDeploymentScreenProps = {
   readonly deploymentAvailability: DeploymentAvailability;
   readonly diagramJson: DiagramJson;
   readonly hasUnsavedDeploymentBaseline: boolean;
-  readonly onCancel?: (() => void) | undefined;
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
@@ -154,7 +153,6 @@ export function DirectDeploymentScreen({
   deploymentAvailability,
   diagramJson,
   hasUnsavedDeploymentBaseline,
-  onCancel,
   onConfirmationStateChange,
   onOpenFindingTerraformSource,
   onPrepareDeploymentArtifacts,
@@ -1147,22 +1145,21 @@ export function DirectDeploymentScreen({
                 <Info size={16} aria-hidden="true" />
                 {selectedStep.disabledReason ?? "검증 단계에서는 실제 리소스를 변경하지 않습니다."}
               </p>
-              {shouldShowDeploymentValidationActions({
-                deploymentStatus: selectedDeployment?.status ?? null,
-                hasUnsavedBaseline: hasCurrentDeploymentChanges,
-                preflightState: directPreflightState
-              }) ? (
+              {selectedDeployment?.status === "RUNNING" ? (
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  disabled={!canCancelDeployment}
+                  onClick={cancelSelectedDeployment}
+                  type="button"
+                >
+                  실행 취소
+                </button>
+              ) : shouldShowDeploymentValidationActions({
+                  deploymentStatus: selectedDeployment?.status ?? null,
+                  hasUnsavedBaseline: hasCurrentDeploymentChanges,
+                  preflightState: directPreflightState
+                }) ? (
                 <div className={styles.deploymentValidationActions}>
-                  {onCancel ? (
-                    <button
-                      className={styles.deploymentSecondaryButton}
-                      disabled={validationIsBusy}
-                      onClick={onCancel}
-                      type="button"
-                    >
-                      취소
-                    </button>
-                  ) : null}
                   {cleanupActionTargets.map(({ actions, deployment }) =>
                     actions.shouldShowDestroyPlanButton ? (
                       <button

@@ -4,6 +4,7 @@ import { test } from "node:test";
 
 const managerSource = read("ProjectWorkspaceDraftManager.tsx");
 const directDeploymentSource = read("DirectDeploymentScreen.tsx");
+const deploymentShellSource = read("DeploymentConsoleShell.tsx");
 const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const projectBarSource = read("../diagram-editor/WorkspaceProjectBar.tsx");
 
@@ -55,6 +56,22 @@ test("changed drafts keep cleanup available beside save and validation", () => {
   assert.ok(approvalStart > validationStart);
   assert.match(validationSource, /startTerraformDestroyPlan/);
   assert.match(validationSource, /저장 후 검증 실행/);
+});
+
+test("idle validation has no cancel button while running deployment can still be cancelled", () => {
+  const validationStart = directDeploymentSource.indexOf('if (stepId === "validation")');
+  const approvalStart = directDeploymentSource.indexOf('if (stepId === "approval")');
+  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+
+  assert.doesNotMatch(validationSource, /onClick=\{onCancel\}/);
+  assert.doesNotMatch(validationSource, />\s*취소\s*</);
+  assert.match(validationSource, /selectedDeployment\?\.status === "RUNNING"/);
+  assert.match(validationSource, /onClick=\{cancelSelectedDeployment\}/);
+  assert.match(validationSource, />\s*실행 취소\s*</);
+  assert.match(directDeploymentSource, /setShowApplyConfirmation\(false\)/);
+  assert.match(directDeploymentSource, /setShowDestroyConfirmation\(false\)/);
+  assert.match(directDeploymentSource, /confirmationDismissRequestId/);
+  assert.match(deploymentShellSource, /confirmationDismissRequestId/);
 });
 
 test("reload restores the persisted ProjectDraft revision instead of assuming changes", () => {
