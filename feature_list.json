@@ -560,17 +560,23 @@
         "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-15",
+        "lastVerified": "2026-07-16",
         "commands": [
           "pnpm harness:check",
           "pnpm architecture-board-knowledge:check",
           "pnpm architecture-board-evidence:check",
           "pnpm architecture-board-evidence-review:check",
           "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/workspace-ai-start-client.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/repository/repository-start-client.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm --dir apps/api exec tsx --test --test-name-pattern \"Terraform (오류 설명 API|에이전트 리뷰 API)\" src/app.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/services/aiLlmExplanationProvider.test.ts",
+          "pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-result-presentation.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/services/aiLlmExplanationValidation.test.ts src/app.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-result-presentation.test.ts",
           "pnpm lint",
-          "pnpm typecheck"
+          "pnpm typecheck",
+          "pnpm build"
         ],
-        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact now expands bounded geometry candidates, source/requested-original/presentation/semantic selection is explicit, Reverse Engineering forwards scan diagnostics, and visual-only Template variants are fingerprint-gated. Evidence records SHA-256 source/compiled diagrams and creates an eight-entry pending real-Board review queue; captures and human decisions are intentionally not fabricated. The aggregate feature remains in_progress while the separately owned 001 Workspace AI Chat and final human review finish. Root pnpm typecheck is currently blocked by unrelated uncommitted DirectDeploymentScreen code; pnpm test retains three unrelated three-tier Template contract failures in packages/types; pnpm build retains the pre-existing apps/web/.codegraph ENOENT blocker."
+        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. Workspace AI Chat resolves Terraform diagnostics against the named source file, restricts automatic unexpected-token fixes to brace-preserving cases, avoids unsafe synthesized deletions, removes external-provider latency from issue resolution, and keeps long Error Analysis results inside an always-scrollable transcript without redundant checks or a trailing next-step section. Expanded error technical details are grouped into readable facts, cause, raw error, numbered resolution steps, and vertical code comparison without provider metadata. Successful analyses are stored per project as collapsible `error.type(line)` history entries so prior full results remain available after tab changes or reloads while safe-fix actions stay limited to the current result. Terraform Agent Review now starts from the AI Chat footer, uses the latest full Terraform snapshot, requires Amazon Q Business, narrates progress, rebuilds the summary from the clearest strengths and highest-priority problems, translates raw Terraform terms into plain Korean, and shows all six ordered Well-Architected criteria as problem/action or strength/evidence with explicit normal/review/serious styling. Failed responses are not cached, useful partial or truncated Amazon Q output is recovered, 503 messages preserve the actionable failure category, pillar text is no longer cut at 120 characters or displayed when it lacks a complete Korean sentence ending, and judgment/evidence text is split into separate blocks even without provider pipe separators. PR #429 review follow-up now gates local persistence until the current project has hydrated, safely handles optional provider metadata and mixed-type conclusion aliases, and avoids duplicated Korean resource wording. Focused API/Web regressions, harness checks, and signed-in Chrome verification pass. The aggregate feature remains in_progress until the pending real-Board human review is completed."
       },
       "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
     },

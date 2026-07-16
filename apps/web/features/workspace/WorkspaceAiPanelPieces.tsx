@@ -9,7 +9,7 @@ import type {
   LlmExplanation
 } from "@sketchcatch/types";
 import type { ReactNode } from "react";
-import { ArrowRight, Code2, ListChecks } from "lucide-react";
+import { Code2, ListChecks } from "lucide-react";
 import { SelectMenu } from "../../components/ui/SelectMenu";
 import {
   createTerraformPreviewPresentation,
@@ -268,37 +268,17 @@ export function WorkspaceAiTerraformPreviewResult({
     <div className={styles.aiStructuredResult}>
       <section className={styles.aiResultLead}>
         <h3>검토 요약</h3>
-        <p>{result.summary}</p>
+        <ul className={styles.aiReviewSummaryList}>
+          {result.summaryItems.map((item) => (
+            <li data-tone={item.tone} key={item.id}>
+              <strong>{item.label}</strong>
+              <p>{item.text}</p>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <WorkspaceAiResultChecks checks={result.checks} />
-
-      <WorkspaceAiResultNextStep>{result.nextStep}</WorkspaceAiResultNextStep>
-
-      <WorkspaceAiTechnicalDetails>
-        <dl className={styles.aiTechnicalMeta}>
-          <div>
-            <dt>원문 요약</dt>
-            <dd>{result.technical.rawSummary}</dd>
-          </div>
-          <div>
-            <dt>원문 권장 사항</dt>
-            <dd>{result.technical.rawRecommendation}</dd>
-          </div>
-          {result.technical.provider ? (
-            <div>
-              <dt>응답 제공자</dt>
-              <dd>{result.technical.provider}</dd>
-            </div>
-          ) : null}
-        </dl>
-        {result.technical.resources.length > 0 ? (
-          <WorkspaceAiTechnicalList title="감지한 리소스" items={result.technical.resources} />
-        ) : null}
-        {result.technical.findings.length > 0 ? (
-          <WorkspaceAiTechnicalList title="점검 원문" items={result.technical.findings} />
-        ) : null}
-      </WorkspaceAiTechnicalDetails>
     </div>
   );
 }
@@ -329,8 +309,24 @@ export function WorkspaceAiResultChecks({
                   <span>{getWorkspaceAiResultSeverityLabel(item.severity)}</span>
                 ) : null}
               </div>
-              <p>{item.summary}</p>
-              {item.action && item.action !== item.summary ? <p>{item.action}</p> : null}
+              <dl className={styles.aiResultCheckDetails}>
+                <div>
+                  <dt>
+                    {item.severity === "high" || item.severity === "medium"
+                      ? "문제"
+                      : item.severity === "low"
+                        ? "잘된 점"
+                        : "내용"}
+                  </dt>
+                  <dd>{item.summary}</dd>
+                </div>
+                {item.action && item.action !== item.summary ? (
+                  <div>
+                    <dt>{item.severity === "low" ? "확인된 설정" : "필요한 조치"}</dt>
+                    <dd>{item.action}</dd>
+                  </div>
+                ) : null}
+              </dl>
             </div>
           </li>
         ))}
@@ -339,24 +335,24 @@ export function WorkspaceAiResultChecks({
   );
 }
 
-export function WorkspaceAiResultNextStep({ children }: { readonly children: ReactNode }) {
+export function WorkspaceAiTechnicalDetails({
+  children,
+  isOpen,
+  onOpenChange
+}: {
+  readonly children: ReactNode;
+  readonly isOpen: boolean;
+  readonly onOpenChange: (isOpen: boolean) => void;
+}) {
   return (
-    <section className={`${styles.aiResultSection} ${styles.aiResultNextStep}`}>
-      <div className={styles.aiResultSectionTitle}>
-        <ArrowRight aria-hidden="true" size={16} />
-        <h4>다음 단계</h4>
-      </div>
-      <p>{children}</p>
-    </section>
-  );
-}
-
-export function WorkspaceAiTechnicalDetails({ children }: { readonly children: ReactNode }) {
-  return (
-    <details className={styles.aiTechnicalDetails}>
+    <details
+      className={styles.aiTechnicalDetails}
+      onToggle={(event) => onOpenChange(event.currentTarget.open)}
+      open={isOpen}
+    >
       <summary>
         <Code2 aria-hidden="true" size={16} />
-        기술 정보 보기
+        {isOpen ? "원문 분석 접기" : "원문 분석 다시 보기"}
       </summary>
       <div className={styles.aiTechnicalDetailsBody}>{children}</div>
     </details>
@@ -373,11 +369,11 @@ export function WorkspaceAiTechnicalList({
   return (
     <div className={styles.aiTechnicalList}>
       <strong>{title}</strong>
-      <ul>
+      <ol>
         {items.map((item, index) => (
           <li key={`${title}-${index}-${item}`}>{item}</li>
         ))}
-      </ul>
+      </ol>
     </div>
   );
 }

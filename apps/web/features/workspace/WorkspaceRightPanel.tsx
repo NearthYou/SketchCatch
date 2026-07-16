@@ -66,11 +66,11 @@ import {
   type TerraformIssueRecord
 } from "./terraform-issues-state";
 import { replaceArchitectureDiagnostics } from "./architecture-diagnostics-state";
-import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
-  TerraformSafeFixApplyRequest,
-  TerraformSafeFixApplyResult
+import {
+  selectTerraformIssueCodeContext,
+  type TerraformIssueAiRequest,
+  type TerraformSafeFixApplyRequest,
+  type TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { DeploymentAvailability } from "./deployment-availability";
@@ -84,7 +84,6 @@ export type WorkspaceRightPanelProps = {
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
   readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
-  readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
@@ -115,7 +114,6 @@ export function WorkspaceRightPanel({
   initialTerraformFiles,
   terraformFilesReplacement,
   onTerraformIssueAiRequest,
-  onTerraformPreviewAiRequest,
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
@@ -238,7 +236,10 @@ export function WorkspaceRightPanel({
       onTerraformIssueAiRequest({
         id: Date.now(),
         issue,
-        terraformCode: terraformPanelRef.current?.getCurrentTerraformCode() ?? ""
+        terraformCode: selectTerraformIssueCodeContext(
+          terraformPanelRef.current?.getTerraformFiles() ?? [],
+          issue.diagnostic
+        )
       });
     },
     [onTerraformIssueAiRequest, openTerraformIssueSourceLocation]
@@ -950,7 +951,6 @@ export function WorkspaceRightPanel({
                 onOpenIssues={focusTerraformIssuesPane}
                 onTerraformFilesChange={onTerraformFilesChange}
                 onTerraformFilesReplacementApplied={onTerraformFilesReplacementApplied}
-                onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}
               />
             </div>
             <div

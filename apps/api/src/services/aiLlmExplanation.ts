@@ -7,7 +7,6 @@ import type {
   AiProvider,
   AiProviderMetadata,
   AiProviderService,
-  LlmCodeSuggestion,
   LlmExplanation,
   LlmExplanationFallbackReason,
   LlmExplanationTarget
@@ -773,11 +772,7 @@ async function tryProvider(input: {
       provider: input.provider.provider,
       text: response.text
     });
-    const explanation = completeAmazonQTerraformCodeSuggestion({
-      explanation: parsedExplanation,
-      input: input.input,
-      provider: input.provider.provider
-    });
+    const explanation = parsedExplanation;
     const explanationWithMetadata = withProviderMetadata(explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
@@ -790,16 +785,23 @@ async function tryProvider(input: {
       outputCharacters: response.outputCharacters ?? response.text.length
     });
 
-    input.cache.set(cacheKey, {
-      explanation: explanationWithMetadata
-    });
+    if (!explanationWithMetadata.fallbackUsed) {
+      input.cache.set(cacheKey, {
+        explanation: explanationWithMetadata
+      });
+    }
 
     return explanationWithMetadata;
   } catch (error) {
-    return createFallbackExplanationWithMetadata(
+    return createFallbackExplanationWithProviderMetadata(
       input.input,
       classifyProviderError(error),
-      input.creditPolicy.billingMode
+      input.creditPolicy.billingMode,
+      {
+        provider: input.provider.provider,
+        service: input.provider.service,
+        model: input.provider.model
+      }
     );
   }
 }
@@ -832,8 +834,15 @@ function createDefaultProviderPrompt(target: LlmExplanationTarget, payload: unkn
           "For Terraform preview explanations, review the Terraform code and deterministic preview result as IaC evidence.",
           "Use the AWS Well-Architected Framework pillars to evaluate the preview: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
           "Return exactly six highlights, in this order: operational excellence, security, reliability, performance efficiency, cost optimization, sustainability.",
+          'Start every highlight with exactly one severity marker: "[보통]", "[확인 필요]", or "[심각]".',
+          'Use "[심각]" for an immediate material risk, "[확인 필요]" for missing evidence or a recommended correction, and "[보통]" when no issue is identified.',
+          'Format every highlight exactly as: "[등급] 기준 | 판단: concrete issue or confirmed strength | 확인: exact setting, value, or action".',
+          "Keep each highlight within 110 Korean characters as complete plain Korean sentences: explain impact first, then one exact setting and action or evidence; avoid unexplained Terraform terms and vague fragments.",
+          "Return one nextActions item within 80 Korean characters and keep summary within 30 Korean characters.",
           "Each highlight must name the pillar in Korean and include both an observation and a recommendation.",
-          "Set wellArchitectedConclusion to an overall Korean evaluation that synthesizes the six pillar reviews.",
+          "Write wellArchitectedConclusion as exactly 3 complete Korean sentences and 200 to 380 Korean characters.",
+          "Use specific Terraform evidence to explain what is configured well and what is missing or risky, weaving strengths and problems naturally into a single paragraph without headings or bullet points.",
+          "Only claim a strength or problem when the payload supports it. If evidence is absent, say that it cannot be verified instead of claiming the setting is absent.",
           "Do not include codeSuggestion for Terraform preview explanations."
         ]
       : [];
@@ -841,7 +850,7 @@ function createDefaultProviderPrompt(target: LlmExplanationTarget, payload: unkn
   return [
     "Return JSON only. Do not wrap the response in markdown.",
     "The JSON shape must be:",
-    '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
+    '{"target":"TARGET","summary":"brief result label","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":"detailed paragraph or null"}',
     "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale, and wellArchitectedConclusion must stay null.",
     "For Terraform preview explanations, highlights must contain the six Well-Architected pillar reviews and wellArchitectedConclusion must contain the overall evaluation. For other cases, keep codeSuggestion null.",
     `TARGET must be "${target}".`,
@@ -867,12 +876,20 @@ function createAmazonQProviderPrompt(target: LlmExplanationTarget, payload: unkn
         ? [
             "Review the Terraform preview using the six AWS Well-Architected pillars.",
             "Return exactly six highlights and an overall wellArchitectedConclusion.",
+            'Start every highlight with exactly one severity marker: "[보통]", "[확인 필요]", or "[심각]".',
+            'Use "[심각]" for an immediate material risk, "[확인 필요]" for missing evidence or a recommended correction, and "[보통]" when no issue is identified.',
+            'Format every highlight exactly as: "[등급] 기준 | 판단: concrete issue or confirmed strength | 확인: exact setting, value, or action".',
+            "Keep each highlight within 110 Korean characters as complete plain Korean sentences: explain impact first, then one exact setting and action or evidence; avoid unexplained Terraform terms and vague fragments.",
+            "Return one nextActions item within 80 Korean characters and keep summary within 30 Korean characters.",
+            "Write wellArchitectedConclusion as exactly 3 complete Korean sentences and 200 to 380 Korean characters.",
+            "Use specific Terraform evidence to explain what is configured well and what is missing or risky, weaving strengths and problems naturally into a single paragraph without headings or bullet points.",
+            "Only claim a strength or problem when the payload supports it; describe unavailable evidence as not verifiable.",
             "Do not include codeSuggestion."
           ]
         : ["Use the deterministic payload as source of truth."];
   const header = [
     "Return Korean JSON only, no markdown.",
-    '{"target":"TARGET","summary":"short","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
+    '{"target":"TARGET","summary":"brief label","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":"detailed paragraph or null"}',
     `TARGET="${target}".`,
     ...targetInstructions,
     "Payload:"
@@ -947,11 +964,10 @@ function compactPayloadForAmazonQ(target: LlmExplanationTarget, payload: unknown
   if (target === "terraform_preview_explanation") {
     return {
       target,
-      summary: trimProviderPayloadValue(payload.summary, 220),
-      findings: trimProviderPayloadArray(payload.findings, 6, 140),
-      checklist: trimProviderPayloadArray(payload.checklist, 6, 140),
-      wellArchitectedGuidance: trimProviderPayloadArray(payload.wellArchitectedGuidance, 6, 160),
-      consensusRecommendation: trimProviderPayloadValue(payload.consensusRecommendation, 220)
+      terraformEvidence: trimProviderPayloadValue(payload.terraformEvidence, 600),
+      resourceTypes: trimProviderPayloadArray(payload.resourceTypes, 12, 60),
+      findings: trimProviderPayloadArray(payload.findings, 4, 90),
+      summary: trimProviderPayloadValue(payload.summary, 100)
     };
   }
 
@@ -1005,85 +1021,110 @@ function parseProviderExplanationText(input: {
     return createAmazonQTerraformPlainTextExplanation(input.text, input.fallback);
   }
 
+  if (input.provider === "amazon_q" && input.input.target === "terraform_preview_explanation") {
+    return createAmazonQTerraformPreviewPlainTextExplanation(input.text, input.fallback);
+  }
+
   return parsed;
 }
 
-function completeAmazonQTerraformCodeSuggestion(input: {
-  readonly explanation: LlmExplanation;
-  readonly input: LlmExplanationInput;
-  readonly provider: AiProvider;
-}): LlmExplanation {
+function createAmazonQTerraformPreviewPlainTextExplanation(
+  text: string,
+  fallback: LlmExplanation
+): LlmExplanation {
+  const jsonLikeResponse = /^\s*(?:```(?:json)?\s*)?\{/iu.test(text);
+  const looseConclusion = jsonLikeResponse ? extractLooseAmazonQConclusion(text) : "";
+  const items = jsonLikeResponse
+    ? extractLooseAmazonQHighlights(text)
+    : normalizeProviderTextItems(text);
+  const firstItem = items[0] ?? "";
+
   if (
-    input.provider !== "amazon_q" ||
-    input.input.target !== "terraform_error_explanation" ||
-    input.explanation.fallbackUsed ||
-    input.explanation.codeSuggestion !== undefined
+    (firstItem.length === 0 && looseConclusion.length < 80) ||
+    (!jsonLikeResponse &&
+      firstItem.startsWith("[") &&
+      !/^\[(?:보통|확인 필요|심각)\]/u.test(firstItem))
   ) {
-    return input.explanation;
+    return fallback;
   }
 
-  const codeSuggestion = createStandaloneTerraformLineDeletionSuggestion(input.input);
+  const providerText = [looseConclusion, ...items].filter(Boolean).join(" ");
 
-  if (codeSuggestion === undefined) {
-    return input.explanation;
+  if (providerText.length < 80 || isUnhelpfulProviderText(providerText)) {
+    return fallback;
+  }
+
+  const highlights =
+    items.length >= 6
+      ? items.slice(0, 6).map((item) => trimProviderText(item, 360))
+      : fallback.highlights.slice(0, 6);
+  const reviewFragments = [
+    looseConclusion,
+    ...items.map(stripAmazonQReviewHeading),
+    ...fallback.highlights.map(stripAmazonQReviewHeading)
+  ].filter((item) => item.length > 0);
+  let conclusion = "";
+
+  for (const fragment of reviewFragments) {
+    if (conclusion.includes(fragment)) {
+      continue;
+    }
+
+    conclusion = `${conclusion} ${fragment}`.trim();
+
+    if (conclusion.length >= TERRAFORM_REVIEW_CONCLUSION_TARGET_LENGTH) {
+      break;
+    }
   }
 
   return {
-    ...input.explanation,
-    codeSuggestion
+    target: "terraform_preview_explanation",
+    summary: "Amazon Q가 Terraform 구성을 검토했습니다.",
+    highlights,
+    nextActions: fallback.nextActions.slice(0, 5),
+    wellArchitectedConclusion: conclusion,
+    fallbackUsed: false
   };
 }
 
-function createStandaloneTerraformLineDeletionSuggestion(
-  input: Extract<LlmExplanationInput, { readonly target: "terraform_error_explanation" }>
-): LlmCodeSuggestion | undefined {
-  const diagnostic = input.result.diagnosticExplanation;
-  const lineNumber = diagnostic?.line;
+const TERRAFORM_REVIEW_CONCLUSION_TARGET_LENGTH = 200;
 
-  if (
-    diagnostic === undefined ||
-    lineNumber === undefined ||
-    !isStandaloneTerraformSyntaxError(diagnostic.errorType) ||
-    input.terraformCodeContext === undefined ||
-    input.terraformCodeContext.trim().length === 0
-  ) {
-    return undefined;
-  }
-
-  const line = extractLine(input.terraformCodeContext, lineNumber);
-
-  if (line === undefined || line.trim().length === 0 || isLikelyTerraformBlockOrAttribute(line)) {
-    return undefined;
-  }
-
-  const lineBreak = input.terraformCodeContext.includes("\r\n") ? "\r\n" : "\n";
-  const currentCode = input.terraformCodeContext.includes(`${line}${lineBreak}`) ? `${line}${lineBreak}` : line;
-  const fileName = diagnostic.sourceFileName ?? "Terraform 파일";
-
-  return {
-    currentCode,
-    suggestedCode: "",
-    rationale: `${fileName} ${lineNumber}번째 줄의 \`${line.trim()}\` 코드는 Terraform block header나 attribute가 아니므로 삭제해야 합니다.`
-  };
+function extractLooseAmazonQHighlights(value: string): string[] {
+  return Array.from(
+    value.matchAll(/"(\[(?:보통|확인 필요|심각)\]\s*(?:\\.|[^"\\])*)"/gu),
+    (match) => decodeLooseAmazonQString(match[1] ?? "")
+  ).filter((item) => item.length > 0);
 }
 
-function isStandaloneTerraformSyntaxError(errorType: string): boolean {
-  return errorType === "terraform.sync.block_header" || errorType === "terraform.unexpected_token";
-}
-
-function extractLine(value: string, lineNumber: number): string | undefined {
-  return value.split(/\r?\n/)[lineNumber - 1];
-}
-
-function isLikelyTerraformBlockOrAttribute(line: string): boolean {
-  const trimmed = line.trim();
-
-  return (
-    trimmed.startsWith("#") ||
-    trimmed.startsWith("//") ||
-    trimmed.endsWith("{") ||
-    /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)
+function extractLooseAmazonQConclusion(value: string): string {
+  const match = value.match(
+    /"wellArchitectedConclusion"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/u
   );
+
+  return decodeLooseAmazonQString(match?.[1] ?? "");
+}
+
+function decodeLooseAmazonQString(value: string): string {
+  if (value.length === 0) {
+    return "";
+  }
+
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    return value
+      .replace(/\\n/gu, " ")
+      .replace(/\\"/gu, '"')
+      .replace(/\\\\/gu, "\\")
+      .trim();
+  }
+}
+
+function stripAmazonQReviewHeading(value: string): string {
+  return value
+    .replace(/^\[(?:보통|확인 필요|심각)\]\s*/u, "")
+    .replace(/^[^:：]{1,24}[:：]\s*/u, "")
+    .trim();
 }
 
 function createAmazonQTerraformPlainTextExplanation(
@@ -1311,7 +1352,10 @@ function classifyProviderError(error: unknown): LlmExplanationFallbackReason {
     return "rate_limited";
   }
 
-  if (error instanceof Error && /auth|credential|accessdenied/i.test(error.name)) {
+  if (
+    error instanceof Error &&
+    /auth|credential|accessdenied|expired|token|unauthorized|unrecognizedclient/i.test(error.name)
+  ) {
     return "auth_error";
   }
 

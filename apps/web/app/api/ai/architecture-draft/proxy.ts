@@ -32,6 +32,11 @@ export async function forwardArchitectureDraftProxyRequest(
     const headers = new Headers();
     headers.set("cache-control", "no-cache, no-transform");
     headers.set("content-type", response.headers.get("content-type") ?? "application/json");
+    const requestId = response.headers.get("x-request-id");
+
+    if (requestId) {
+      headers.set("x-request-id", requestId);
+    }
 
     return new Response(response.body, {
       headers,

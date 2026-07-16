@@ -303,6 +303,21 @@ function createRuleCodeSuggestion(
     }
   }
 
+  if (errorType === "terraform.unexpected_token") {
+    const closingBraceIndex = currentCode.lastIndexOf("}");
+    const unexpectedSuffix = currentCode.slice(closingBraceIndex + 1).trim();
+
+    if (closingBraceIndex >= 0 && unexpectedSuffix.length > 0) {
+      return {
+        currentCode,
+        suggestedCode: currentCode.slice(0, closingBraceIndex + 1),
+        rationale:
+          "The unexpected code after the closing Terraform block can be removed while preserving the closing brace.",
+        source: "rule"
+      };
+    }
+  }
+
   return undefined;
 }
 
