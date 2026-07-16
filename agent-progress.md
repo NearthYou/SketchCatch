@@ -25,6 +25,12 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-16 - Address PR #429 review feedback
+
+- Prevented SSR hydration and project switches from overwriting persisted AI Chat messages, active scope, or Terraform issue history before the current project's browser state is restored.
+- Made Amazon Q metadata access consistently optional, selected the valid snake_case review conclusion when the camelCase field has an invalid type, and removed duplicated Korean resource wording after Terraform address sanitization.
+- Verification: focused API tests passed 27/27, focused Web tests passed 19/19, and `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` passed.
+
 ### 2026-07-16 - Keep Terraform error analysis scrollable and focused
 
 - Added the same always-visible thin transcript scrollbar used by Agent Review to the Error Analysis tab, keeping long results inside the AI Chat panel.
@@ -139,14 +145,6 @@ Short English-only working log for the current agent context. Older records are 
 - Promoted repository-generated `aws_ecs_task_definition` Fargate Task nodes to real Terraform resource nodes on new conversion and saved draft restore, preserving deployable parameters while stripping diagram-only config from Terraform values.
 - Confirmed ECS Task Definition remains enabled in the manual resource palette with parameter panel, Terraform Preview, and Terraform Sync capabilities.
 - Verification: focused DiagramNodeView, workspace draft restore, resource catalog, workspace adapter, and flow mapper tests passed; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
-
-### 2026-07-14 - Repository analysis template ranking and layout preservation
-
-- Updated repository analysis so every available board template can be used as a ranking candidate pool while the user-facing recommendation list is capped at the top three choices.
-- Preserved authored template layouts for selected repository-analysis templates and routed non-built-in templates through direct template board creation so their saved positions are not moved.
-- Added an `audience-live-check` style regression proving ECS Fargate ranks ahead of 3-tier for a single containerized Node/React app with no persistent database.
-- Chrome verification: controlled Chrome reached the repository analysis route but redirected to login because the launched automation profile was unauthenticated; existing user Chrome exposed no debug port for attachment.
-- Verification: repository recommendation API test passed 10/10; public repository recommendation web test passed 8/8; `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` passed.
 
 ### 2026-07-15 - Restore CI/CD pull request creation in the deployment console
 

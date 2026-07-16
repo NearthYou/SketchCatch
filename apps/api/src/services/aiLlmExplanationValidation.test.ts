@@ -56,3 +56,31 @@ test("Terraform 기준별 리뷰는 조치 문장을 글자 수 중간에서 자
 
   assert.equal(parsed.highlights[0], longHighlight);
 });
+
+test("잘못된 camelCase 결론 대신 유효한 snake_case 결론을 사용한다", () => {
+  const fallback: LlmExplanation = {
+    target: "terraform_preview_explanation",
+    summary: "fallback",
+    highlights: ["fallback"],
+    nextActions: ["retry"],
+    fallbackUsed: true,
+    fallbackReason: "invalid_response"
+  };
+  const conclusion = "Terraform 구성의 장점과 위험을 근거와 함께 검토했습니다.";
+  const parsed = parseLlmExplanationText(
+    JSON.stringify({
+      target: "terraform_preview_explanation",
+      summary: "Amazon Q 검토 완료",
+      highlights: ["운영 검토를 완료했습니다."],
+      nextActions: ["설정을 확인하세요."],
+      fallbackUsed: false,
+      codeSuggestion: null,
+      wellArchitectedConclusion: 42,
+      well_architected_conclusion: conclusion
+    }),
+    fallback
+  );
+
+  assert.equal(parsed.fallbackUsed, false);
+  assert.equal(parsed.wellArchitectedConclusion, conclusion);
+});

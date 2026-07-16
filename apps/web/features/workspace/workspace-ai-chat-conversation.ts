@@ -92,6 +92,13 @@ export function isWorkspaceAiChatScope(value: unknown): value is WorkspaceAiChat
   return typeof value === "string" && workspaceAiChatScopes.includes(value as WorkspaceAiChatScope);
 }
 
+export function isWorkspaceAiChatStorageHydrated(
+  hydratedProjectId: string | null,
+  projectId: string
+): boolean {
+  return hydratedProjectId === projectId;
+}
+
 export function createWorkspaceAiChatActiveScopeStorageKey(projectId: string): string {
   return `${WORKSPACE_AI_CHAT_STORAGE_KEY_PREFIX}.${projectId}.${ACTIVE_SCOPE_STORAGE_KEY_SUFFIX}`;
 }

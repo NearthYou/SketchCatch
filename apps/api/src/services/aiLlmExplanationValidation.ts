@@ -282,9 +282,11 @@ function normalizeLlmExplanationCandidate(value: unknown, fallback: LlmExplanati
     value.codeSuggestion ?? value.code_suggestion ?? value.fixSuggestion ?? value.fix_suggestion
   );
   const wellArchitectedConclusion =
-    typeof (value.wellArchitectedConclusion ?? value.well_architected_conclusion) === "string"
-      ? (value.wellArchitectedConclusion ?? value.well_architected_conclusion)
-      : undefined;
+    typeof value.wellArchitectedConclusion === "string"
+      ? value.wellArchitectedConclusion
+      : typeof value.well_architected_conclusion === "string"
+        ? value.well_architected_conclusion
+        : undefined;
 
   return {
     target,

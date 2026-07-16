@@ -37,6 +37,7 @@ import {
   createWorkspaceAiChatComposerStates,
   getAdjacentWorkspaceAiChatScope,
   getWorkspaceAiChatScopeDefinition,
+  isWorkspaceAiChatStorageHydrated,
   readStoredActiveChatScope,
   shouldShowWorkspaceAiChatMessage,
   storeActiveChatScope,
@@ -238,9 +239,7 @@ export function WorkspaceAiChatDock({
   terraformSafeFixApplyResult
 }: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
-  const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>(() =>
-    readStoredActiveChatScope(projectId)
-  );
+  const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>("draft");
   const [composerStates, setComposerStates] = useState<
     Record<WorkspaceAiChatScope, WorkspaceAiChatComposerState>
   >(() => createWorkspaceAiChatComposerStates());
@@ -248,7 +247,7 @@ export function WorkspaceAiChatDock({
   const [isVoiceInputSupported, setVoiceInputSupported] = useState(true);
   const [isMobileChatSurface, setMobileChatSurface] = useState(false);
   const [messages, setMessages] = useState<WorkspaceAiChatMessage[]>(() =>
-    readStoredChatMessages(projectId)
+    createInitialChatMessages()
   );
   const [selectedSuggestionLabelsByMessageId, setSelectedSuggestionLabelsByMessageId] = useState<
     Record<string, readonly string[]>
@@ -281,7 +280,8 @@ export function WorkspaceAiChatDock({
     useState<TerraformIssueResolutionState | null>(null);
   const [terraformIssueHistory, setTerraformIssueHistory] = useState<
     readonly TerraformIssueHistoryEntry[]
-  >(() => readStoredTerraformIssueHistory(projectId));
+  >([]);
+  const [hydratedStorageProjectId, setHydratedStorageProjectId] = useState<string | null>(null);
   const [openTerraformIssueRequestIds, setOpenTerraformIssueRequestIds] = useState<
     readonly number[]
   >([]);
@@ -313,7 +313,6 @@ export function WorkspaceAiChatDock({
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const voiceInputBaseRef = useRef<VoiceInputBase>({ scope: "draft", value: "" });
   const voiceNoSpeechTimerRef = useRef<number | null>(null);
-  const loadedProjectIdRef = useRef(projectId);
   const latestTerraformIssueRequestIdRef = useRef<number | null>(null);
   const latestTerraformPreviewRequestIdRef = useRef<number | null>(null);
   const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
@@ -375,20 +374,20 @@ export function WorkspaceAiChatDock({
   }, []);
 
   useEffect(() => {
-    if (loadedProjectIdRef.current !== projectId) {
+    if (!isWorkspaceAiChatStorageHydrated(hydratedStorageProjectId, projectId)) {
       return;
     }
 
     storeChatMessages(projectId, messages);
-  }, [messages, projectId]);
+  }, [hydratedStorageProjectId, messages, projectId]);
 
   useEffect(() => {
-    if (loadedProjectIdRef.current !== projectId) {
+    if (!isWorkspaceAiChatStorageHydrated(hydratedStorageProjectId, projectId)) {
       return;
     }
 
     storeTerraformIssueHistory(projectId, terraformIssueHistory);
-  }, [projectId, terraformIssueHistory]);
+  }, [hydratedStorageProjectId, projectId, terraformIssueHistory]);
 
   useEffect(() => {
     if (!terraformIssueResolution?.explanation || terraformIssueResolution.state === "loading") {
@@ -406,8 +405,12 @@ export function WorkspaceAiChatDock({
   }, [terraformIssueResolution]);
 
   useEffect(() => {
+    if (!isWorkspaceAiChatStorageHydrated(hydratedStorageProjectId, projectId)) {
+      return;
+    }
+
     storeActiveChatScope(projectId, activeChatTab);
-  }, [activeChatTab, projectId]);
+  }, [activeChatTab, hydratedStorageProjectId, projectId]);
 
   useEffect(() => {
     requestRegistryRef.current.cancelAll();
@@ -428,7 +431,7 @@ export function WorkspaceAiChatDock({
     setPatchPreviewSourceFingerprint(null);
     setDraftSourceRevision(null);
     setPatchPreviewSourceRevision(null);
-    loadedProjectIdRef.current = projectId;
+    setHydratedStorageProjectId(projectId);
   }, [projectId]);
 
   useEffect(() => {

@@ -515,8 +515,11 @@ function splitReviewSentences(value: string): string[] {
 
 function sanitizeReviewDetail(value: string): string {
   const normalized = value
-    .replace(/\b(?:data|module|resource)\.[A-Za-z0-9_.-]+/gu, "해당 리소스")
-    .replace(/\b(?:aws|azurerm|google)_[A-Za-z0-9_]+(?:\.[A-Za-z0-9_.-]+)?/gu, "해당 리소스")
+    .replace(/\b(?:data|module|resource)\.[A-Za-z0-9_.-]+(?:\s+리소스)?/gu, "해당 리소스")
+    .replace(
+      /\b(?:aws|azurerm|google)_[A-Za-z0-9_]+(?:\.[A-Za-z0-9_.-]+)?(?:\s+리소스)?/gu,
+      "해당 리소스"
+    )
     .replace(/resource 블록/gu, "Terraform 설정")
     .replace(/\s+/gu, " ")
     .trim();

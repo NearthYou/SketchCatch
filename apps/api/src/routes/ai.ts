@@ -146,7 +146,7 @@ function requireAmazonQTerraformReview(explanation: LlmExplanation): LlmExplanat
   if (
     explanation.fallbackUsed ||
     explanation.providerMetadata?.provider !== "amazon_q" ||
-    explanation.providerMetadata.service !== "amazon_q_business" ||
+    explanation.providerMetadata?.service !== "amazon_q_business" ||
     conclusion.length < TERRAFORM_REVIEW_CONCLUSION_MIN_LENGTH
   ) {
     throw new AmazonQTerraformReviewUnavailableError(
