@@ -1073,6 +1073,26 @@ export function DirectDeploymentScreen({
         : requestState === "error"
           ? errorMessage
           : "";
+    const selectedStepHeading =
+      selectedStep.id === "validation"
+        ? {
+            description:
+              "배포 전에 설정을 저장하고 Terraform Plan과 안전 검사를 실행합니다.",
+            label: "1단계",
+            title: "배포 검증"
+          }
+        : selectedStep.id === "approval"
+          ? {
+              description: "범위, 변경량, 차단 사유와 비용 경고를 확인한 뒤 Plan을 승인합니다.",
+              label: "2단계",
+              title: "승인"
+            }
+          : {
+              description:
+                "승인된 스냅샷을 실행하고 상태, 릴리즈 버전, Output URL을 확인합니다.",
+              label: "3단계",
+              title: "배포"
+            };
 
     function renderDirectStepContent(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
@@ -1088,11 +1108,6 @@ export function DirectDeploymentScreen({
 
         return (
           <>
-            <div className={styles.deploymentStepHeading}>
-              <span>1단계</span>
-              <h3>배포 검증</h3>
-              <p>배포 전에 설정을 저장하고 Terraform Plan과 안전 검사를 실행합니다.</p>
-            </div>
             <section className={styles.deploymentSettingsCard}>
               <h3>배포 설정</h3>
               <div className={styles.deploymentStageSettings}>
@@ -1205,11 +1220,6 @@ export function DirectDeploymentScreen({
       if (stepId === "approval") {
         return (
           <>
-            <div className={styles.deploymentStepHeading}>
-              <span>2단계</span>
-              <h3>승인</h3>
-              <p>범위, 변경량, 차단 사유와 비용 경고를 확인한 뒤 Plan을 승인합니다.</p>
-            </div>
             <div className={styles.deploymentStepSummary}>
               <InfoRow label="범위" value={selectedDeployment?.scope ?? "확인 필요"} />
               <InfoRow
@@ -1256,11 +1266,6 @@ export function DirectDeploymentScreen({
 
       return (
         <>
-          <div className={styles.deploymentStepHeading}>
-            <span>3단계</span>
-            <h3>배포</h3>
-            <p>승인된 스냅샷을 실행하고 상태, 릴리즈 버전, Output URL을 확인합니다.</p>
-          </div>
           <div className={styles.deploymentStepSummary}>
             <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
             <InfoRow label="범위" value={selectedDeployment?.scope ?? "대기"} />
@@ -1442,6 +1447,12 @@ export function DirectDeploymentScreen({
             })}
           </ol>
         </nav>
+
+        <div className={styles.deploymentStepHeading}>
+          <span>{selectedStepHeading.label}</span>
+          <h3>{selectedStepHeading.title}</h3>
+          <p>{selectedStepHeading.description}</p>
+        </div>
 
         <article className={styles.deploymentStepWorkspace} data-state={selectedStep.state}>
           {renderDirectStepContent(selectedStep.id)}

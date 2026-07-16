@@ -7,6 +7,7 @@ const directDeploymentSource = read("DirectDeploymentScreen.tsx");
 const deploymentShellSource = read("DeploymentConsoleShell.tsx");
 const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const projectBarSource = read("../diagram-editor/WorkspaceProjectBar.tsx");
+const workspaceStyles = read("workspace.module.css");
 
 test("the main board opens deployment immediately without saving", () => {
   const callbackStart = managerSource.indexOf("const saveAndOpenDeployment");
@@ -72,6 +73,27 @@ test("idle validation has no cancel button while running deployment can still be
   assert.match(directDeploymentSource, /setShowDestroyConfirmation\(false\)/);
   assert.match(directDeploymentSource, /confirmationDismissRequestId/);
   assert.match(deploymentShellSource, /confirmationDismissRequestId/);
+});
+
+test("the recent validation result aligns with settings and does not follow scrolling", () => {
+  const setupStart = directDeploymentSource.indexOf("const renderSetupSection");
+  const historyStart = directDeploymentSource.indexOf("const renderResultsSection", setupStart);
+  const setupSource = directDeploymentSource.slice(setupStart, historyStart);
+  const headingIndex = setupSource.indexOf("styles.deploymentStepHeading");
+  const workspaceIndex = setupSource.indexOf("styles.deploymentStepWorkspace", headingIndex);
+  const recentResultIndex = setupSource.indexOf("styles.deploymentRecentResultCard", workspaceIndex);
+
+  assert.ok(headingIndex > -1);
+  assert.ok(workspaceIndex > headingIndex);
+  assert.ok(recentResultIndex > workspaceIndex);
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepHeading\s*\{[^}]*grid-column:\s*1 \/ -1;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentRecentResultCard\s*\{[^}]*position:\s*static;/s
+  );
 });
 
 test("reload restores the persisted ProjectDraft revision instead of assuming changes", () => {

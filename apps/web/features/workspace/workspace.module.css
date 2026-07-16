@@ -6505,6 +6505,10 @@
   gap: 8px;
 }
 
+.deploymentConsoleGrid > .deploymentStepHeading {
+  grid-column: 1 / -1;
+}
+
 .deploymentStepHeading > span {
   font-size: 14px;
   font-weight: 600;
@@ -6701,8 +6705,7 @@
   align-self: start;
   display: grid;
   gap: 20px;
-  position: sticky;
-  top: 24px;
+  position: static;
 }
 
 .deploymentRecentResultFacts {
