@@ -46,6 +46,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_codepipeline: new Set(["action", "artifactStore", "encryptionKey", "stage"]),
   aws_db_parameter_group: new Set(["parameter"]),
   aws_dynamodb_table: new Set(["attribute"]),
+  aws_dynamodb_global_table: new Set(["replica"]),
   aws_eks_cluster: new Set(["vpcConfig"]),
   aws_eks_node_group: new Set(["scalingConfig"]),
   aws_ecs_cluster: new Set(["setting"]),
@@ -54,6 +55,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
     "loadBalancer",
     "networkConfiguration"
   ]),
+  aws_elb: new Set(["healthCheck", "listener"]),
   aws_ecr_repository: new Set(["imageScanningConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
@@ -70,9 +72,12 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_s3_bucket_server_side_encryption_configuration: new Set(["rule"]),
   aws_s3_bucket_website_configuration: new Set(["errorDocument", "indexDocument", "routingRule"]),
   aws_s3_bucket_lifecycle_configuration: new Set(["rule"]),
+  aws_s3_bucket_replication_configuration: new Set(["rule"]),
   aws_s3_bucket_versioning: new Set(["versioningConfiguration"]),
   aws_scheduler_schedule: new Set(["flexibleTimeWindow", "target"]),
   aws_security_group: new Set(["egress", "ingress"]),
+  aws_waf_ipset: new Set(["ipSetDescriptors"]),
+  aws_waf_web_acl: new Set(["defaultAction"]),
   aws_wafv2_web_acl: new Set(["defaultAction", "visibilityConfig"]),
   kubernetes_namespace: new Set(["metadata"]),
   kubernetes_deployment: new Set(["metadata", "spec"]),
@@ -83,11 +88,15 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<stri
   "aws_autoscaling_policy.targetTrackingConfiguration": new Set(["predefinedMetricSpecification"]),
   "aws_cloudfront_distribution.origin": new Set(["customOriginConfig", "s3OriginConfig"]),
   "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"]),
+  "aws_s3_bucket_replication_configuration.rule": new Set(["destination"]),
   "kubernetes_deployment.spec": new Set(["selector"])
 };
 
-const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
-  aws_lb_target_group: new Set(["healthCheck"])
+const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
+  aws_elb: new Set(["healthCheck"]),
+  aws_lb_target_group: new Set(["healthCheck"]),
+  aws_waf_web_acl: new Set(["defaultAction"]),
+  "aws_s3_bucket_replication_configuration.rule": new Set(["destination"])
 };
 
 const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
@@ -128,9 +137,13 @@ export function isTerraformNestedBlockAttribute(
 
 export function isTerraformSingleNestedBlockAttribute(
   resourceType: string,
-  attributeName: string
+  attributeName: string,
+  parentPath: readonly string[] = []
 ): boolean {
-  return TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES[resourceType]?.has(toCamelCase(attributeName)) === true;
+  const pathKey = [resourceType, ...parentPath.map(toCamelCase)].join(".");
+
+  return TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH[pathKey]
+    ?.has(toCamelCase(attributeName)) === true;
 }
 
 export function isGenericTerraformNestedBlock(attributeName: string): boolean {

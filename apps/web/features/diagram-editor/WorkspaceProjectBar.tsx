@@ -12,6 +12,7 @@ import {
   Save
 } from "lucide-react";
 
+import { WorkspaceDeploymentNotificationCenterSlot } from "../../components/notifications/DeploymentNotificationCenter";
 import { ProductBrand } from "../../components/ui/ProductBrand";
 import styles from "./diagram-editor.module.css";
 import { getSaveStatusTone, isSaveInProgress } from "./workspace-project-save-status";
@@ -89,6 +90,8 @@ export function WorkspaceProjectBar({
             <Save aria-hidden="true" size={17} />
           </button>
         ) : null}
+
+        <WorkspaceDeploymentNotificationCenterSlot />
 
         {actions.onSaveAndDeploy ? (
           <button

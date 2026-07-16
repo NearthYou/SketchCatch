@@ -1,4 +1,5 @@
 import type {
+  DiagramEdge,
   DiagramJson,
   DiagramNode,
   DiagramNodeParameters,
@@ -12,12 +13,19 @@ import { arrangeTemplateTopology } from "./template-topology-layout";
 
 export type TemplatePresentationMode = "authored" | "compact";
 
+export type CatalogNodeMaterializationOptions = {
+  readonly mode: "strict" | "tolerant";
+  readonly preserveGeometry?: boolean | undefined;
+  readonly currentNodes?: readonly DiagramNode[] | undefined;
+  readonly workspaceSeedPolicy?: "preserve" | "replace-with-palette-defaults" | undefined;
+};
+
 // Deployable templates keep their reviewed Board-capture geometry; legacy fixtures may still opt into compact auto-layout.
 export function materializeTemplateDiagram(
   diagram: DiagramJson,
   presentationMode: TemplatePresentationMode = "compact"
 ): DiagramJson {
-  const materialized = materializeCatalogResourceNodes(diagram, "strict");
+  const materialized = materializeCatalogResourceNodes(diagram, { mode: "strict" });
   const preservesAuthoredGeometry = diagram.presentation?.geometryPolicy === "source-exact";
 
   return presentationMode === "authored" || preservesAuthoredGeometry
@@ -26,26 +34,33 @@ export function materializeTemplateDiagram(
 }
 
 export function hydrateCatalogResourceNodes(diagram: DiagramJson): DiagramJson {
-  return materializeCatalogResourceNodes(diagram, "tolerant");
+  return materializeCatalogResourceNodes(diagram, { mode: "tolerant" });
 }
 
-function materializeCatalogResourceNodes(
+/**
+ * Materializes only the supplied Diagram nodes through the real Resource Palette factory.
+ * `currentNodes` participates in default-name selection but is never returned or modified.
+ */
+export function materializeCatalogResourceNodes(
   diagram: DiagramJson,
-  mode: "strict" | "tolerant"
+  options: CatalogNodeMaterializationOptions
 ): DiagramJson {
   // Exact Catalog ids keep presentation-only Region/AZ nodes separate from normal manual-drag resource behavior.
   const nodes: DiagramNode[] = [];
-  const preservesAuthoredGeometry = diagram.presentation?.geometryPolicy === "source-exact";
+  const materializationContextNodes: DiagramNode[] = [...(options.currentNodes ?? [])];
+  const preservesAuthoredGeometry =
+    options.preserveGeometry ?? diagram.presentation?.geometryPolicy === "source-exact";
+
+  const appendNode = (node: DiagramNode): void => {
+    nodes.push(node);
+    materializationContextNodes.push(node);
+  };
 
   for (const templateNode of diagram.nodes) {
     const presentationCatalogItemId = templateNode.metadata?.presentationCatalogItemId;
 
-    if (
-      templateNode.kind === "design" &&
-      !presentationCatalogItemId &&
-      !templateNode.parameters
-    ) {
-      nodes.push(cloneUnresolvedPresentationNode(templateNode));
+    if (templateNode.kind === "design" && !presentationCatalogItemId && !templateNode.parameters) {
+      appendNode(cloneUnresolvedPresentationNode(templateNode));
       continue;
     }
 
@@ -53,19 +68,19 @@ function materializeCatalogResourceNodes(
       const presentationItem = findCatalogItemById(presentationCatalogItemId);
 
       if (!presentationItem) {
-        if (mode === "strict") {
+        if (options.mode === "strict") {
           throw new Error(`Missing presentation catalog resource: ${presentationCatalogItemId}`);
         }
 
-        nodes.push(templateNode);
+        appendNode(templateNode);
         continue;
       }
 
-      nodes.push(
+      appendNode(
         materializeCatalogPresentationNode(
           templateNode,
           presentationItem,
-          nodes,
+          materializationContextNodes,
           preservesAuthoredGeometry
         )
       );
@@ -77,25 +92,32 @@ function materializeCatalogResourceNodes(
     const resourceItem = findCatalogResourceItem(terraformBlockType, resourceType);
 
     if (!resourceItem) {
-      if (mode === "strict") {
+      if (options.mode === "strict") {
         throw new Error(`Missing catalog resource: ${terraformBlockType}/${resourceType}`);
       }
 
-      nodes.push(templateNode);
+      appendNode(templateNode);
       continue;
     }
 
-    nodes.push(
+    appendNode(
       materializeCatalogResourceNode(
         templateNode,
         resourceItem,
-        nodes,
-        preservesAuthoredGeometry
+        materializationContextNodes,
+        preservesAuthoredGeometry,
+        options.workspaceSeedPolicy ?? "preserve"
       )
     );
   }
 
-  return { ...diagram, nodes };
+  const geometryChangedNodeIds = getGeometryChangedNodeIds(diagram.nodes, nodes);
+
+  return {
+    ...diagram,
+    nodes,
+    edges: invalidateAuthoredEdgeGeometry(diagram.edges, geometryChangedNodeIds)
+  };
 }
 
 // Presentation lookup uses the panel's stable id so duplicate Terraform-like Region/AZ identities are impossible.
@@ -118,7 +140,8 @@ function materializeCatalogResourceNode(
   templateNode: DiagramNode,
   resourceItem: ResourceItem,
   currentNodes: readonly DiagramNode[],
-  preservesAuthoredGeometry: boolean
+  preservesAuthoredGeometry: boolean,
+  workspaceSeedPolicy: NonNullable<CatalogNodeMaterializationOptions["workspaceSeedPolicy"]>
 ): DiagramNode {
   const paletteNode = createDiagramNodeFromPayload(
     { source: "resource-settings-panel", item: resourceItem },
@@ -126,11 +149,15 @@ function materializeCatalogResourceNode(
     templateNode.zIndex,
     currentNodes
   );
-  const parameters = mergeTemplateParameters(paletteNode.parameters, templateNode.parameters);
+  const parameters = mergeTemplateParameters(
+    paletteNode.parameters,
+    templateNode.parameters,
+    workspaceSeedPolicy
+  );
   const materializedNode: DiagramNode = {
     ...paletteNode,
     id: templateNode.id,
-    label: templateNode.label,
+    label: getAuthoredOrPaletteLabel(templateNode, paletteNode),
     locked: templateNode.locked,
     metadata: templateNode.metadata ? { ...templateNode.metadata } : undefined,
     parameters,
@@ -140,15 +167,12 @@ function materializeCatalogResourceNode(
     ...(templateNode.rotation === undefined ? {} : { rotation: templateNode.rotation })
   };
 
-  return {
-    ...materializedNode,
-    size: getMaterializedSize(
-      templateNode,
-      paletteNode,
-      materializedNode,
-      preservesAuthoredGeometry
-    )
-  };
+  return applyMaterializedGeometry(
+    templateNode,
+    paletteNode,
+    materializedNode,
+    preservesAuthoredGeometry
+  );
 }
 
 // Reuse the real panel icon and type while stripping parameters that manual Region/AZ drag normally creates.
@@ -169,7 +193,7 @@ function materializeCatalogPresentationNode(
     ...parameterlessPaletteNode,
     id: templateNode.id,
     kind: "design",
-    label: templateNode.label,
+    label: getAuthoredOrPaletteLabel(templateNode, paletteNode),
     locked: templateNode.locked,
     metadata: templateNode.metadata ? { ...templateNode.metadata } : undefined,
     position: { ...templateNode.position },
@@ -178,41 +202,62 @@ function materializeCatalogPresentationNode(
     ...(templateNode.rotation === undefined ? {} : { rotation: templateNode.rotation })
   };
 
-  return {
-    ...materializedNode,
-    size: getMaterializedSize(
-      templateNode,
-      paletteNode,
-      materializedNode,
-      preservesAuthoredGeometry
-    )
-  };
+  return applyMaterializedGeometry(
+    templateNode,
+    paletteNode,
+    materializedNode,
+    preservesAuthoredGeometry
+  );
 }
 
 function mergeTemplateParameters(
   paletteParameters: DiagramNodeParameters | undefined,
-  templateParameters: DiagramNodeParameters | undefined
+  templateParameters: DiagramNodeParameters | undefined,
+  workspaceSeedPolicy: NonNullable<CatalogNodeMaterializationOptions["workspaceSeedPolicy"]>
 ): DiagramNodeParameters | undefined {
-  if (templateParameters?.terraformSourceAuthority === "workspace-seed") {
+  if (
+    templateParameters?.terraformSourceAuthority === "workspace-seed" &&
+    workspaceSeedPolicy === "preserve"
+  ) {
     return cloneParameters(templateParameters);
   }
 
+  const materializedTemplateParameters =
+    templateParameters?.terraformSourceAuthority === "workspace-seed"
+      ? omitWorkspaceSeedAuthority(templateParameters)
+      : templateParameters;
+
   if (!paletteParameters) {
-    return templateParameters ? cloneParameters(templateParameters) : undefined;
+    return materializedTemplateParameters
+      ? cloneParameters(materializedTemplateParameters)
+      : undefined;
   }
 
-  if (!templateParameters) {
+  if (!materializedTemplateParameters) {
     return cloneParameters(paletteParameters);
   }
 
   return {
     ...paletteParameters,
-    ...templateParameters,
+    ...materializedTemplateParameters,
     values: {
       ...cloneParameterValue(paletteParameters.values),
-      ...cloneParameterValue(templateParameters.values)
+      ...cloneParameterValue(materializedTemplateParameters.values)
     }
   };
+}
+
+function omitWorkspaceSeedAuthority(parameters: DiagramNodeParameters): DiagramNodeParameters {
+  const { terraformSourceAuthority: _terraformSourceAuthority, ...materialized } = parameters;
+
+  return {
+    ...materialized,
+    values: cloneParameterValue(parameters.values)
+  };
+}
+
+function getAuthoredOrPaletteLabel(authoredNode: DiagramNode, paletteNode: DiagramNode): string {
+  return authoredNode.label.trim().length > 0 ? authoredNode.label : paletteNode.label;
 }
 
 function cloneUnresolvedPresentationNode(node: DiagramNode): DiagramNode {
@@ -232,18 +277,94 @@ function cloneParameters(parameters: DiagramNodeParameters): DiagramNodeParamete
   };
 }
 
+function applyMaterializedGeometry(
+  templateNode: DiagramNode,
+  paletteNode: DiagramNode,
+  materializedNode: DiagramNode,
+  preservesAuthoredGeometry: boolean
+): DiagramNode {
+  const size = getMaterializedSize(
+    templateNode,
+    paletteNode,
+    materializedNode,
+    preservesAuthoredGeometry
+  );
+  const position =
+    !isAreaNode(materializedNode) &&
+    (size.width !== templateNode.size.width || size.height !== templateNode.size.height)
+      ? {
+          x: templateNode.position.x + (templateNode.size.width - size.width) / 2,
+          y: templateNode.position.y + (templateNode.size.height - size.height) / 2
+        }
+      : { ...templateNode.position };
+
+  return {
+    ...materializedNode,
+    position,
+    size
+  };
+}
+
+function getGeometryChangedNodeIds(
+  authoredNodes: readonly DiagramNode[],
+  materializedNodes: readonly DiagramNode[]
+): ReadonlySet<string> {
+  const authoredNodeById = new Map(authoredNodes.map((node) => [node.id, node]));
+  const changedNodeIds = new Set<string>();
+
+  for (const materializedNode of materializedNodes) {
+    const authoredNode = authoredNodeById.get(materializedNode.id);
+
+    if (
+      !authoredNode ||
+      authoredNode.position.x !== materializedNode.position.x ||
+      authoredNode.position.y !== materializedNode.position.y ||
+      authoredNode.size.width !== materializedNode.size.width ||
+      authoredNode.size.height !== materializedNode.size.height
+    ) {
+      changedNodeIds.add(materializedNode.id);
+    }
+  }
+
+  return changedNodeIds;
+}
+
+function invalidateAuthoredEdgeGeometry(
+  edges: readonly DiagramEdge[],
+  geometryChangedNodeIds: ReadonlySet<string>
+): DiagramEdge[] {
+  if (geometryChangedNodeIds.size === 0) return [...edges];
+
+  return edges.map((edge) => {
+    if (
+      !geometryChangedNodeIds.has(edge.sourceNodeId) &&
+      !geometryChangedNodeIds.has(edge.targetNodeId)
+    ) {
+      return edge;
+    }
+
+    const {
+      route: _route,
+      sourceHandleId: _sourceHandleId,
+      targetHandleId: _targetHandleId,
+      ...edgeWithoutAuthoredGeometry
+    } = edge;
+    return edgeWithoutAuthoredGeometry;
+  });
+}
+
 function getMaterializedSize(
   templateNode: DiagramNode,
   paletteNode: DiagramNode,
   materializedNode: DiagramNode,
   preservesAuthoredGeometry: boolean
 ): DiagramNode["size"] {
-  if (preservesAuthoredGeometry) {
-    return { ...templateNode.size };
-  }
-
   if (!isAreaNode(materializedNode)) {
     return { ...paletteNode.size };
+  }
+
+  if (preservesAuthoredGeometry) {
+    return { ...templateNode.size };
   }
 
   const templateExceedsPaletteArea =

@@ -158,6 +158,32 @@ test("save project draft body preserves empty source labels and workspace-seed a
   assert.equal(parsed.diagramJson.nodes[0]?.parameters?.terraformSourceAuthority, "workspace-seed");
 });
 
+test("save project draft body preserves Curated Module provenance metadata", () => {
+  const moduleSource = {
+    moduleId: "network-foundation",
+    moduleVersion: "architecture-board-knowledge/v1",
+    expandedAt: "2026-07-16T01:02:03.000Z",
+    representativeTemplateId: "repository:three-tier-web-app",
+    referenceTemplateIds: [
+      "brainboard:brainboard-aws-network-landing-zone",
+      "repository:three-tier-web-app"
+    ]
+  };
+  const parsed = saveProjectDraftBodySchema.parse({
+    diagramJson: {
+      ...validDiagram,
+      nodes: [
+        {
+          ...validDiagram.nodes[0]!,
+          metadata: { moduleSource }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(parsed.diagramJson.nodes[0]?.metadata?.moduleSource, moduleSource);
+});
+
 test("save project draft body rejects non-finite node rotation", () => {
   const result = saveProjectDraftBodySchema.safeParse({
     diagramJson: {

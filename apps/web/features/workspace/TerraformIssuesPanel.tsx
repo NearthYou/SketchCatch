@@ -4,16 +4,17 @@ import { formatTerraformDiagnosticSeverity } from "./terraform-diagnostic-presen
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
 import { getTerraformSafeFix } from "./terraform-safe-fixes";
-import { TerraformIssueAnalysisButton } from "./TerraformIssueAnalysisButton";
 import styles from "./TerraformIssuesPanel.module.css";
 
 // Terraform 검증 결과를 위치, 심각도, 수정 가능 여부와 함께 보여줍니다.
 export function TerraformIssuesPanel({
   issues,
-  onResolveWithAi
+  onSelectIssue,
+  selectedIssueKey
 }: {
   readonly issues: readonly TerraformIssueRecord[];
-  readonly onResolveWithAi: (issue: TerraformIssueRecord) => void;
+  readonly onSelectIssue: (issue: TerraformIssueRecord) => void;
+  readonly selectedIssueKey: string | null;
 }) {
   const diagnostics = issues.map((issue) => issue.diagnostic);
   const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
@@ -46,17 +47,26 @@ export function TerraformIssuesPanel({
         ) : (
           <ol className={styles.terraformDiagnosticList}>
             {issues.map((issue, index) => (
-              <li key={`${issue.diagnosticKey}-${index}`} data-severity={issue.diagnostic.severity}>
-                <div className={styles.terraformDiagnosticItemHeader}>
-                  <strong>{formatTerraformDiagnosticTitle(issue.diagnostic)}</strong>
-                  <span className={styles.terraformDiagnosticSeverity}>
-                    {formatTerraformDiagnosticSeverity(issue.diagnostic.severity)}
+              <li
+                key={`${issue.diagnosticKey}-${index}`}
+                data-selected={selectedIssueKey === issue.diagnosticKey}
+                data-severity={issue.diagnostic.severity}
+              >
+                <button
+                  aria-pressed={selectedIssueKey === issue.diagnosticKey}
+                  className={styles.terraformDiagnosticButton}
+                  onClick={() => onSelectIssue(issue)}
+                  type="button"
+                >
+                  <div className={styles.terraformDiagnosticItemHeader}>
+                    <strong>{formatTerraformDiagnosticTitle(issue.diagnostic)}</strong>
+                    <span className={styles.terraformDiagnosticSeverity}>
+                      {formatTerraformDiagnosticSeverity(issue.diagnostic.severity)}
+                    </span>
+                  </div>
+                  <span className={styles.terraformDiagnosticMessage}>
+                    {issue.diagnostic.message}
                   </span>
-                </div>
-                <span className={styles.terraformDiagnosticMessage}>
-                  {issue.diagnostic.message}
-                </span>
-                <div className={styles.terraformDiagnosticFooter}>
                   <div className={styles.terraformDiagnosticMeta}>
                     {formatTerraformDiagnosticLocation(issue.diagnostic) ? (
                       <span>{formatTerraformDiagnosticLocation(issue.diagnostic)}</span>
@@ -70,8 +80,7 @@ export function TerraformIssuesPanel({
                         : "수동 수정 필요"}
                     </span>
                   </div>
-                  <TerraformIssueAnalysisButton onAnalyze={() => onResolveWithAi(issue)} />
-                </div>
+                </button>
               </li>
             ))}
           </ol>

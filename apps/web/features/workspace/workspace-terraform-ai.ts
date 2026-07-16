@@ -1,10 +1,55 @@
 import type {
   AiTerraformCodeFrameLine,
   AiTerraformErrorExplanationResult,
-  TerraformDiagnostic
+  TerraformDiagnostic,
+  TerraformSyncFileInput
 } from "@sketchcatch/types";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
 import { applyTerraformSafeFix, getTerraformSafeFix } from "./terraform-safe-fixes";
+
+const TERRAFORM_ISSUE_ANALYSES_STORAGE_PREFIX = "sketchcatch:terraform-issue-analyses";
+const MAX_STORED_TERRAFORM_ISSUE_ANALYSES = 120;
+
+export type TerraformPreviewAiScope = {
+  readonly key: string;
+  readonly label: string;
+  readonly terraformCode: string;
+};
+
+export type WorkspaceTerraformAiCodeContext = {
+  readonly combinedTerraformCode: string;
+  readonly files: readonly TerraformSyncFileInput[];
+  readonly fingerprint: string;
+  readonly reviewScope: TerraformPreviewAiScope;
+};
+
+export type WorkspaceTerraformAiContext = WorkspaceTerraformAiCodeContext & {
+  readonly issues: readonly TerraformIssueRecord[];
+};
+
+export type WorkspaceAiContextInteraction = {
+  readonly diagnosticKey?: string | undefined;
+  readonly id: number;
+  readonly scope: "draft" | "errors" | "preview";
+};
+
+export const EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT: WorkspaceTerraformAiContext = {
+  combinedTerraformCode: "",
+  files: [],
+  fingerprint: createWorkspaceTerraformFingerprint([]),
+  issues: [],
+  reviewScope: {
+    key: "empty",
+    label: "현재 Terraform 코드",
+    terraformCode: ""
+  }
+};
+
+export type StoredTerraformIssueAnalysis = {
+  readonly diagnosticKey: string;
+  readonly explanation: AiTerraformErrorExplanationResult;
+  readonly terraformFingerprint: string;
+};
 
 export type TerraformIssueAiRequest = {
   readonly id: number;
@@ -19,7 +64,13 @@ export type TerraformPreviewAiRequest = {
 };
 
 export type TerraformSafeFixApplyRequest = {
+  readonly expectedTerraformFingerprint: string;
   readonly id: number;
+  readonly fixes: readonly TerraformSafeFixApplyItem[];
+  readonly mode: "all" | "single";
+};
+
+export type TerraformSafeFixApplyItem = {
   readonly codePreview?: TerraformIssueCodePreview | undefined;
   readonly diagnostic: TerraformDiagnostic;
 };
@@ -30,54 +81,120 @@ export type TerraformSafeFixApplyResult = {
   readonly message: string;
 };
 
-type TerraformPreviewReviewFile = {
-  readonly fileName: string;
-  readonly terraformCode: string;
-};
-
-export function createTerraformPreviewAiRequest(
-  files: readonly TerraformPreviewReviewFile[],
-  id = Date.now()
-): TerraformPreviewAiRequest | null {
-  const reviewFiles = files
-    .map((file) => ({ fileName: file.fileName, terraformCode: file.terraformCode.trim() }))
-    .filter((file) => file.terraformCode.length > 0);
-
-  if (reviewFiles.length === 0) {
-    return null;
-  }
-
-  return {
-    id,
-    label:
-      reviewFiles.length === 1
-        ? `현재 파일 · ${reviewFiles[0]?.fileName ?? "Terraform"}`
-        : `전체 Terraform · ${reviewFiles.length}개 파일`,
-    terraformCode: reviewFiles.map((file) => file.terraformCode).join("\n\n")
-  };
+export function createWorkspaceTerraformFingerprint(
+  files: readonly TerraformSyncFileInput[]
+): string {
+  return JSON.stringify(
+    [...files]
+      .map(({ fileName, terraformCode }) => ({ fileName, terraformCode }))
+      .sort((left, right) => left.fileName.localeCompare(right.fileName))
+  );
 }
 
-type TerraformIssueCodeContextFile = {
-  readonly fileName: string;
-  readonly code: string;
-};
-
-export function selectTerraformIssueCodeContext(
-  files: readonly TerraformIssueCodeContextFile[],
-  diagnostic: TerraformDiagnostic
-): string {
+export function resolveTerraformIssueCode({
+  combinedTerraformCode,
+  diagnostic,
+  files
+}: {
+  readonly combinedTerraformCode: string;
+  readonly diagnostic: TerraformDiagnostic;
+  readonly files: readonly TerraformSyncFileInput[];
+}): string {
   if (diagnostic.sourceFileName) {
     const sourceFile = files.find((file) => file.fileName === diagnostic.sourceFileName);
 
     if (sourceFile) {
-      return sourceFile.code;
+      return sourceFile.terraformCode;
     }
   }
 
-  return files
-    .map((file) => file.code.trim())
-    .filter(Boolean)
-    .join("\n\n");
+  if (files.length === 1 && files[0]) {
+    return files[0].terraformCode;
+  }
+
+  return combinedTerraformCode;
+}
+
+export function createTerraformIssueAnalysesStorageKey(projectId: string): string {
+  return `${TERRAFORM_ISSUE_ANALYSES_STORAGE_PREFIX}:${projectId}`;
+}
+
+export function readStoredTerraformIssueAnalyses(
+  storage: Pick<Storage, "getItem">,
+  projectId: string
+): StoredTerraformIssueAnalysis[] {
+  try {
+    const payload = storage.getItem(createTerraformIssueAnalysesStorageKey(projectId));
+
+    if (!payload) {
+      return [];
+    }
+
+    const parsed: unknown = JSON.parse(payload);
+    return Array.isArray(parsed) && parsed.every(isStoredTerraformIssueAnalysis) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function storeTerraformIssueAnalyses(
+  storage: Pick<Storage, "removeItem" | "setItem">,
+  projectId: string,
+  analyses: readonly StoredTerraformIssueAnalysis[]
+): void {
+  const storageKey = createTerraformIssueAnalysesStorageKey(projectId);
+
+  try {
+    if (analyses.length === 0) {
+      storage.removeItem(storageKey);
+      return;
+    }
+
+    storage.setItem(
+      storageKey,
+      JSON.stringify(analyses.slice(-MAX_STORED_TERRAFORM_ISSUE_ANALYSES))
+    );
+  } catch {
+    // 분석 결과 복구가 막혀도 현재 session의 AI 작업은 계속합니다.
+  }
+}
+
+function isStoredTerraformIssueAnalysis(value: unknown): value is StoredTerraformIssueAnalysis {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.diagnosticKey === "string" &&
+    typeof value.terraformFingerprint === "string" &&
+    isTerraformErrorExplanation(value.explanation)
+  );
+}
+
+function isTerraformErrorExplanation(value: unknown): value is AiTerraformErrorExplanationResult {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.stage === "string" &&
+    typeof value.category === "string" &&
+    typeof value.severity === "string" &&
+    typeof value.rawMessage === "string" &&
+    typeof value.summary === "string" &&
+    typeof value.likelyCause === "string" &&
+    isStringArray(value.nextActions) &&
+    Array.isArray(value.wellArchitectedGuidance) &&
+    typeof value.consensusRecommendation === "string"
+  );
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 export type TerraformIssueFixPlan = {
@@ -264,7 +381,10 @@ function createAmazonQTerraformIssueCodePreview({
   }
 
   if (codeSuggestion === undefined) {
-    return undefined;
+    return createAmazonQTerraformLineDeletionPreview({
+      diagnostic,
+      terraformCode
+    });
   }
 
   if (!terraformCode.includes(codeSuggestion.currentCode)) {
@@ -278,6 +398,53 @@ function createAmazonQTerraformIssueCodePreview({
     sourceLine: diagnostic.line ?? 1,
     source: "amazon_q"
   };
+}
+
+function createAmazonQTerraformLineDeletionPreview({
+  diagnostic,
+  terraformCode
+}: {
+  readonly diagnostic: TerraformDiagnostic;
+  readonly terraformCode: string;
+}): TerraformIssueCodePreview | undefined {
+  if (
+    diagnostic.line === undefined ||
+    !isStandaloneTerraformSyntaxDiagnostic(diagnostic)
+  ) {
+    return undefined;
+  }
+
+  const line = extractTerraformLine(terraformCode, diagnostic.line);
+
+  if (line === undefined || line.trim().length === 0 || isLikelyTerraformBlockOrAttribute(line)) {
+    return undefined;
+  }
+
+  const lineBreak = terraformCode.includes("\r\n") ? "\r\n" : "\n";
+  const currentCode = terraformCode.includes(`${line}${lineBreak}`) ? `${line}${lineBreak}` : line;
+
+  return {
+    currentCode,
+    nextCode: "",
+    rationale: `${formatTerraformDiagnosticLocation(diagnostic)}의 \`${line.trim()}\` 줄은 Terraform block header나 attribute가 아니므로 삭제해야 합니다.`,
+    sourceLine: diagnostic.line,
+    source: "amazon_q"
+  };
+}
+
+function isStandaloneTerraformSyntaxDiagnostic(diagnostic: TerraformDiagnostic): boolean {
+  return diagnostic.code === "terraform.sync.block_header" || diagnostic.code === "terraform.unexpected_token";
+}
+
+function isLikelyTerraformBlockOrAttribute(line: string): boolean {
+  const trimmed = line.trim();
+
+  return (
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("//") ||
+    trimmed.endsWith("{") ||
+    /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)
+  );
 }
 
 function extractTerraformLine(code: string, lineNumber: number): string | undefined {

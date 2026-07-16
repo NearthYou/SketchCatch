@@ -3,12 +3,18 @@ import test from "node:test";
 import type { ArchitectureJson, DiagramJson, DiagramNode } from "@sketchcatch/types";
 import {
   ARCHITECTURE_BOARD_COMPILER_VERSION,
+  applyArchitectureBoardModulePatternKnowledge,
   architectureBoardKnowledge,
   compileArchitectureBoard,
+  createArchitectureBoardModulePatternResourceParentMap,
   createArchitectureBoardKnowledgeArtifact,
   evaluateArchitectureBoardKnowledgeLeaveOneOut
 } from ".";
-import { convertArchitectureJsonToDiagramJson } from "../workspace/workspace-ai-diagram-adapter";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "../workspace/workspace-ai-diagram-adapter";
+import { expandCuratedModuleIntoDiagram } from "../resource-settings/module-catalog";
 
 const architecture: ArchitectureJson = {
   nodes: [
@@ -150,6 +156,227 @@ test("Compiler는 유사 Template의 spacing profile을 실제 geometry 후보�
   );
 });
 
+test("Compiler는 presentation node가 없는 실제 artifact graph도 pattern 후보와 provenance에 포함한다", () => {
+  const pattern = architectureBoardKnowledge.modulePatterns.find(
+    ({ id }) => id === "static-web-delivery"
+  );
+  assert.ok(pattern);
+  const resourceNodeIds = new Set(
+    pattern.nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
+  );
+  const currentDiagram: DiagramJson = {
+    nodes: pattern.nodes
+      .filter(({ kind }) => kind === "resource")
+      .map((node) => {
+        const cloned = structuredClone(node) as DiagramNode;
+        const parentId = cloned.metadata?.parentAreaNodeId;
+        return {
+          ...cloned,
+          position: { x: 0, y: 0 },
+          ...(parentId && !resourceNodeIds.has(parentId)
+            ? { metadata: { ...cloned.metadata, parentAreaNodeId: undefined } }
+            : {})
+        };
+      }),
+    edges: structuredClone(
+      pattern.edges.filter(
+        ({ sourceNodeId, targetNodeId }) =>
+          resourceNodeIds.has(sourceNodeId) && resourceNodeIds.has(targetNodeId)
+      )
+    ) as DiagramJson["edges"],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const proposal = compileArchitectureBoard({
+    architecture: convertDiagramJsonToArchitectureJson(currentDiagram),
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+
+  assert.ok(
+    proposal.provenance.candidateIds?.some((id) => id.includes(`module-pattern:${pattern.id}`))
+  );
+  assert.ok(proposal.provenance.modulePatternIds?.includes(pattern.id));
+  assert.ok(
+    proposal.provenance.modulePatternRepresentativeTemplateIds?.includes(
+      pattern.provenance.representativeTemplateId
+    )
+  );
+  assert.deepEqual(
+    proposal.provenance.modulePatternSourceTemplateIds,
+    [...pattern.provenance.sourceTemplateIds].sort()
+  );
+  assert.ok(
+    pattern.provenance.sourceTemplateIds.every((templateId) =>
+      proposal.provenance.referenceTemplateIds.includes(templateId)
+    )
+  );
+});
+
+test("Compiler는 조립된 모든 Curated Module을 같은 pattern knowledge로 인식한다", () => {
+  for (const pattern of architectureBoardKnowledge.modulePatterns) {
+    const currentDiagram = expandCuratedModuleIntoDiagram({
+      diagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, variables: [] },
+      moduleId: pattern.id
+    });
+    const architecture = convertDiagramJsonToArchitectureJson(currentDiagram);
+
+    const proposal = compileArchitectureBoard({
+      architecture,
+      currentDiagram,
+      trigger: "board-auto-organize"
+    });
+
+    assert.ok(
+      proposal.provenance.modulePatternIds?.includes(pattern.id),
+      `${pattern.id} must be recognized after the compiler roundtrip`
+    );
+    assert.equal(proposal.architecture.edges.length, architecture.edges.length, pattern.id);
+    assert.ok(
+      proposal.diagram.edges.every(
+        ({ sourceNodeId, targetNodeId }) =>
+          proposal.diagram.nodes.some(({ id }) => id === sourceNodeId) &&
+          proposal.diagram.nodes.some(({ id }) => id === targetNodeId)
+      ),
+      `${pattern.id} must keep valid edge endpoints`
+    );
+  }
+});
+
+test("Compiler roundtrip은 반복 조립한 Module instance를 서로 섞지 않고 모두 인식한다", () => {
+  let currentDiagram: DiagramJson = {
+    nodes: [],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    variables: []
+  };
+  for (let round = 0; round < 2; round += 1) {
+    for (const pattern of architectureBoardKnowledge.modulePatterns) {
+      currentDiagram = expandCuratedModuleIntoDiagram({
+        diagram: currentDiagram,
+        moduleId: pattern.id
+      });
+    }
+  }
+
+  const architecture = convertDiagramJsonToArchitectureJson(currentDiagram);
+  const roundtripDiagram = convertArchitectureJsonToDiagramJson(architecture);
+  const moduleExpansionByNodeId = Object.fromEntries(
+    currentDiagram.nodes.flatMap((node) => {
+      const source = node.metadata?.moduleSource;
+      return source
+        ? [
+            [
+              node.id,
+              { moduleId: source.moduleId, expansionId: source.expandedAt }
+            ] as const
+          ]
+        : [];
+    })
+  );
+  const result = applyArchitectureBoardModulePatternKnowledge(
+    roundtripDiagram,
+    architectureBoardKnowledge,
+    {
+      projection: "compiler-roundtrip",
+      semanticEdgeLabelsById: Object.fromEntries(
+        architecture.edges.map(({ id, label }) => [id, label])
+      ),
+      moduleExpansionByNodeId,
+      resourceParentByNodeId: createArchitectureBoardModulePatternResourceParentMap(
+        currentDiagram.nodes
+      )
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result.matches.length, architectureBoardKnowledge.modulePatterns.length * 2);
+  for (const match of result.matches) {
+    const sources = new Set(
+      Object.values(match.nodeIdByPatternNodeId).map((nodeId) => {
+        const source = moduleExpansionByNodeId[nodeId];
+        assert.ok(source);
+        assert.equal(source.moduleId, match.patternId);
+        return `${source.moduleId}:${source.expansionId}`;
+      })
+    );
+    assert.equal(sources.size, 1, `${match.patternId} must stay inside one Module instance`);
+  }
+});
+
+test("Compiler roundtrip matcher는 presentation Area를 걷어내도 Resource containment를 요구한다", () => {
+  const pattern = architectureBoardKnowledge.modulePatterns.find(
+    ({ id }) => id === "relational-data-layer"
+  );
+  assert.ok(pattern);
+  const resourceNodeIds = new Set(
+    pattern.nodes.filter(({ kind }) => kind === "resource").map(({ id }) => id)
+  );
+  const scattered: DiagramJson = {
+    nodes: pattern.nodes
+      .filter(({ kind }) => kind === "resource")
+      .map((node) => {
+        const cloned = structuredClone(node) as DiagramNode;
+        return {
+          ...cloned,
+          metadata: { ...cloned.metadata, parentAreaNodeId: undefined }
+        };
+      }),
+    edges: structuredClone(
+      pattern.edges.filter(
+        ({ sourceNodeId, targetNodeId, label }) =>
+          resourceNodeIds.has(sourceNodeId) &&
+          resourceNodeIds.has(targetNodeId) &&
+          label !== "contains" &&
+          label !== "hosts"
+      )
+    ) as DiagramJson["edges"],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    variables: []
+  };
+  const result = applyArchitectureBoardModulePatternKnowledge(
+    scattered,
+    architectureBoardKnowledge,
+    { projection: "compiler-roundtrip" }
+  );
+
+  assert.equal(result?.matchedPatternIds.includes(pattern.id) ?? false, false);
+});
+
+test("network pattern Compiler proposal은 containment만 숨기고 semantic Area edge는 보존한다", () => {
+  const expanded = expandCuratedModuleIntoDiagram({
+    diagram: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, variables: [] },
+    moduleId: "network-foundation"
+  });
+  const currentDiagram: DiagramJson = {
+    ...expanded,
+    presentation: { geometryPolicy: "source-exact" }
+  };
+  const architecture = convertDiagramJsonToArchitectureJson(currentDiagram);
+
+  const proposal = compileArchitectureBoard({
+    architecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+
+  assert.equal(architecture.edges.length, 17);
+  assert.equal(proposal.architecture.edges.length, 17);
+  assert.equal(proposal.diagram.edges.length, 11);
+  const visibleEdgeIds = new Set(proposal.diagram.edges.map(({ id }) => id));
+  assert.ok(
+    [...visibleEdgeIds].some((id) => id.endsWith("vpc-igw")),
+    "VPC to Internet Gateway route must remain visible"
+  );
+  assert.ok(
+    [...visibleEdgeIds].some((id) => id.endsWith("public-nat")),
+    "Subnet to NAT egress must remain visible"
+  );
+  assert.ok(proposal.architecture.edges.some(({ label }) => label === "routes"));
+  assert.ok(proposal.architecture.edges.some(({ label }) => label === "egress"));
+  assert.ok(proposal.provenance.modulePatternIds?.includes("network-foundation"));
+});
+
 test("Compiler는 승인된 semantic operation과 외부 충돌 신호를 하나의 proposal로 설명한다", () => {
   const proposal = compileArchitectureBoard({
     architecture: {
@@ -216,9 +443,21 @@ test("Compiler는 승인된 semantic operation과 외부 충돌 신호를 하나
     "vpc"
   );
   assert.ok(proposal.diagram.nodes.some((node) => node.id === "platform-group"));
-  assert.ok(proposal.changes.some(({ action, kind, targetIds }) => action === "add" && kind === "resource" && targetIds.includes("vpc")));
-  assert.ok(proposal.changes.some(({ action, kind, targetIds }) => action === "add" && kind === "presentation" && targetIds.includes("platform-group")));
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:provider-limit"));
+  assert.ok(
+    proposal.changes.some(
+      ({ action, kind, targetIds }) =>
+        action === "add" && kind === "resource" && targetIds.includes("vpc")
+    )
+  );
+  assert.ok(
+    proposal.changes.some(
+      ({ action, kind, targetIds }) =>
+        action === "add" && kind === "presentation" && targetIds.includes("platform-group")
+    )
+  );
+  assert.ok(
+    proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:provider-limit")
+  );
   assert.ok(proposal.quality.after.semanticDiagnosticPenalty >= 321);
 });
 
@@ -261,7 +500,8 @@ test("semantic operation이 있으면 진짜 원본을 보존하되 요청된 gr
   assert.ok(proposal.architecture.nodes.some((node) => node.id === "vpc"));
   assert.ok(
     proposal.changes.some(
-      ({ action, kind, targetIds }) => action === "add" && kind === "resource" && targetIds.includes("vpc")
+      ({ action, kind, targetIds }) =>
+        action === "add" && kind === "resource" && targetIds.includes("vpc")
     )
   );
 });
@@ -359,15 +599,73 @@ test("Compiler는 hosted EKS Cluster를 presentation Area로 만들고 Terraform
   const nodeGroup = proposal.architecture.nodes.find((node) => node.id === "node-group");
   const referenceChange = proposal.changes.find(
     ({ kind, action, after }) =>
-      kind === "relationship" && action === "add" &&
-      typeof after === "object" && after !== null && (after as { label?: unknown }).label === "references"
+      kind === "relationship" &&
+      action === "add" &&
+      typeof after === "object" &&
+      after !== null &&
+      (after as { label?: unknown }).label === "references"
   );
 
   assert.equal(cluster?.config["presentationArea"], true);
   assert.equal(nodeGroup?.config["parentAreaNodeId"], "cluster");
   assert.ok(referenceChange);
   assert.ok(proposal.changes.some(({ kind }) => kind === "presentation"));
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.inferred_terraform_relationship"));
+  assert.ok(
+    proposal.diagnostics.some(({ code }) => code === "compiler.inferred_terraform_relationship")
+  );
+});
+
+test("Compiler는 연결된 ASG도 일반 Resource tile로 유지한다", () => {
+  const asgArchitecture: ArchitectureJson = {
+    nodes: [
+      {
+        id: "asg",
+        type: "AUTO_SCALING_GROUP",
+        label: "Web ASG",
+        positionX: 0,
+        positionY: 0,
+        config: {
+          terraformResourceType: "aws_autoscaling_group",
+          terraformResourceName: "web",
+          minSize: 1,
+          maxSize: 2
+        }
+      },
+      {
+        id: "scale-out",
+        type: "AUTO_SCALING_POLICY",
+        label: "Scale out",
+        positionX: 120,
+        positionY: 0,
+        config: {
+          terraformResourceType: "aws_autoscaling_policy",
+          terraformResourceName: "scale_out",
+          autoscalingGroupName: "${aws_autoscaling_group.web.name}"
+        }
+      }
+    ],
+    edges: []
+  };
+  const currentDiagram: DiagramJson = {
+    ...convertArchitectureJsonToDiagramJson(asgArchitecture),
+    presentation: { geometryPolicy: "source-exact" }
+  };
+  const proposal = compileArchitectureBoard({
+    architecture: asgArchitecture,
+    currentDiagram,
+    trigger: "board-auto-organize"
+  });
+  const asgArchitectureNode = proposal.architecture.nodes.find((node) => node.id === "asg");
+  const policyArchitectureNode = proposal.architecture.nodes.find(
+    (node) => node.id === "scale-out"
+  );
+  const asgDiagramNode = proposal.diagram.nodes.find((node) => node.id === "asg");
+
+  assert.equal(proposal.provenance.candidateId.startsWith("compiled:"), true);
+  assert.notEqual(asgArchitectureNode?.config["presentationArea"], true);
+  assert.notEqual(policyArchitectureNode?.config["parentAreaNodeId"], "asg");
+  assert.notEqual(asgDiagramNode?.metadata?.presentationArea, true);
+  assert.ok((asgDiagramNode?.zIndex ?? 0) >= 100);
 });
 
 test("Compiler는 중복 Resource와 dangling 관계를 optional repair proposal 및 diagnostic으로 남긴다", () => {
@@ -382,20 +680,13 @@ test("Compiler는 중복 Resource와 dangling 관계를 optional repair proposal
     trigger: "reverse-engineering"
   });
 
-  assert.deepEqual(
-    proposal.architecture.nodes.map((node) => node.id).sort(),
-    ["api", "api__2"]
-  );
+  assert.deepEqual(proposal.architecture.nodes.map((node) => node.id).sort(), ["api", "api__2"]);
   assert.equal(proposal.architecture.edges.length, 0);
   assert.ok(
-    proposal.changes.some(
-      ({ kind, action }) => kind === "resource" && action === "modify"
-    )
+    proposal.changes.some(({ kind, action }) => kind === "resource" && action === "modify")
   );
   assert.ok(
-    proposal.changes.some(
-      ({ kind, action }) => kind === "relationship" && action === "remove"
-    )
+    proposal.changes.some(({ kind, action }) => kind === "relationship" && action === "remove")
   );
   assert.ok(
     proposal.diagnostics.some(({ code }) => code === "compiler.duplicate_resource_id_normalized")
@@ -527,9 +818,7 @@ test("source-exact 자동 정리는 잠긴 Resource의 위치·크기·z-index�
   const currentDiagram: DiagramJson = {
     ...structuredClone(source),
     nodes: source.nodes.map((node) =>
-      node.id === "api"
-        ? { ...node, ...lockedGeometry, locked: true }
-        : structuredClone(node)
+      node.id === "api" ? { ...node, ...lockedGeometry, locked: true } : structuredClone(node)
     ),
     presentation: { geometryPolicy: "source-exact" }
   };
@@ -775,7 +1064,9 @@ test("숨긴 Area 내부 edge도 proposal diff와 compilation distance에 기록
         }
       }
     ],
-    edges: [{ id: "instance-subnet", sourceId: "instance", targetId: "subnet", label: "references" }]
+    edges: [
+      { id: "instance-subnet", sourceId: "instance", targetId: "subnet", label: "references" }
+    ]
   };
   const initialDiagram = convertArchitectureJsonToDiagramJson(containedArchitecture);
   const currentDiagram: DiagramJson = {
@@ -801,7 +1092,8 @@ test("숨긴 Area 내부 edge도 proposal diff와 compilation distance에 기록
   assert.ok(!proposal.diagram.edges.some((edge) => edge.id === "instance-subnet"));
   assert.ok(
     proposal.changes.some(
-      ({ action, id, kind }) => action === "remove" && kind === "edge-routing" && id.endsWith("instance-subnet")
+      ({ action, id, kind }) =>
+        action === "remove" && kind === "edge-routing" && id.endsWith("instance-subnet")
     )
   );
 });
@@ -826,8 +1118,6 @@ test("동일 관계의 object key 순서만 달라도 relationship 변경으로 
   });
 
   assert.ok(
-    !proposal.changes.some(
-      ({ action, kind }) => kind === "relationship" && action === "modify"
-    )
+    !proposal.changes.some(({ action, kind }) => kind === "relationship" && action === "modify")
   );
 });
