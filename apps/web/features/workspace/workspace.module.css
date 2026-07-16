@@ -5117,6 +5117,82 @@
   }
 }
 
+/* Direct Deployment action rail */
+.deploymentConsoleGrid {
+  grid-template-areas:
+    "steps steps"
+    "heading actions"
+    "workspace result";
+  grid-template-rows: auto auto auto;
+  row-gap: 20px;
+}
+
+.deploymentStepNavigation {
+  grid-area: steps;
+}
+
+.deploymentConsoleGrid > .deploymentStepHeading {
+  grid-area: heading;
+  grid-column: auto;
+}
+
+.deploymentConsoleGrid > .deploymentStepWorkspace {
+  grid-area: workspace;
+}
+
+.deploymentConsoleGrid > .deploymentRecentResultCard {
+  grid-area: result;
+}
+
+.deploymentConsoleGrid > .deploymentStepActionBar {
+  align-self: end;
+  background: transparent;
+  border: 0;
+  display: grid;
+  gap: 10px;
+  grid-area: actions;
+  margin: 0;
+  padding: 0;
+}
+
+.deploymentConsoleGrid > .deploymentStepActionBar > p {
+  color: var(--workspace-muted, #60646c);
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.deploymentConsoleGrid > .deploymentStepActionBar > button,
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentValidationActions,
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentPrimaryButton,
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentSecondaryButton,
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentDangerButton {
+  margin: 0;
+  width: 100%;
+}
+
+.deploymentConsoleGrid > .deploymentStepActionBar .deploymentValidationActions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 1199px) {
+  .deploymentConsoleGrid {
+    grid-template-areas:
+      "steps"
+      "heading"
+      "workspace"
+      "actions"
+      "result";
+  }
+
+  .deploymentConsoleGrid > .deploymentStepActionBar {
+    align-self: stretch;
+  }
+}
+
 .rightPanelShell {
   background: var(--workspace-surface, #ffffff);
   color: var(--workspace-text, #171717);
@@ -9987,4 +10063,13 @@
     margin-left: 0;
     padding-left: 0;
   }
+}
+
+.deploymentConsoleGrid {
+  grid-template-rows: auto auto auto;
+  row-gap: 20px;
+}
+
+.deploymentConsoleGrid > .deploymentStepHeading {
+  grid-column: auto;
 }

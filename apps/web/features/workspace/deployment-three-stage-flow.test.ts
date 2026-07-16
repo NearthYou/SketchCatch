@@ -49,10 +49,18 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
 });
 
 test("changed drafts keep cleanup available beside save and validation", () => {
-  const validationStart = directDeploymentSource.indexOf('if (stepId === "validation")');
-  const approvalStart = directDeploymentSource.indexOf('if (stepId === "approval")');
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const validationStart = directDeploymentSource.indexOf(
+    'if (stepId === "validation")',
+    actionsStart
+  );
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    validationStart
+  );
   const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
 
+  assert.ok(actionsStart > -1);
   assert.ok(validationStart > -1);
   assert.ok(approvalStart > validationStart);
   assert.match(validationSource, /startTerraformDestroyPlan/);
@@ -60,8 +68,15 @@ test("changed drafts keep cleanup available beside save and validation", () => {
 });
 
 test("idle validation has no cancel button while running deployment can still be cancelled", () => {
-  const validationStart = directDeploymentSource.indexOf('if (stepId === "validation")');
-  const approvalStart = directDeploymentSource.indexOf('if (stepId === "approval")');
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const validationStart = directDeploymentSource.indexOf(
+    'if (stepId === "validation")',
+    actionsStart
+  );
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    validationStart
+  );
   const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
 
   assert.doesNotMatch(validationSource, /onClick=\{onCancel\}/);
@@ -93,6 +108,28 @@ test("the recent validation result aligns with settings and does not follow scro
   assert.match(
     workspaceStyles,
     /\.deploymentRecentResultCard\s*\{[^}]*position:\s*static;/s
+  );
+});
+
+test("deployment actions sit directly above the recent result without a divider", () => {
+  const setupStart = directDeploymentSource.indexOf("const renderSetupSection");
+  const historyStart = directDeploymentSource.indexOf("const renderResultsSection", setupStart);
+  const setupSource = directDeploymentSource.slice(setupStart, historyStart);
+  const headingIndex = setupSource.lastIndexOf("styles.deploymentStepHeading");
+  const actionsIndex = setupSource.lastIndexOf("renderDirectStepActions(selectedStep.id)");
+  const workspaceIndex = setupSource.lastIndexOf("styles.deploymentStepWorkspace");
+  const recentResultIndex = setupSource.lastIndexOf("styles.deploymentRecentResultCard");
+
+  assert.ok(actionsIndex > headingIndex);
+  assert.ok(workspaceIndex > actionsIndex);
+  assert.ok(recentResultIndex > workspaceIndex);
+  assert.match(
+    workspaceStyles,
+    /"heading actions"\s*"workspace result"/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*border:\s*0;[^}]*grid-area:\s*actions;/s
   );
 });
 

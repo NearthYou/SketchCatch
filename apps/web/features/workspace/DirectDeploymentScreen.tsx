@@ -1073,6 +1073,7 @@ export function DirectDeploymentScreen({
         : requestState === "error"
           ? errorMessage
           : "";
+    const validationIsBusy = requestState === "loading" || preDeploymentState === "loading";
     const selectedStepHeading =
       selectedStep.id === "validation"
         ? {
@@ -1096,7 +1097,6 @@ export function DirectDeploymentScreen({
 
     function renderDirectStepContent(stepId: DirectDeploymentStepId) {
       if (stepId === "validation") {
-        const validationIsBusy = requestState === "loading" || preDeploymentState === "loading";
         const settingsStatus = hasCurrentDeploymentChanges
           ? { label: "변경사항 있음", tone: "warning" as const }
           : { label: "변경사항 없음", tone: "success" as const };
@@ -1155,64 +1155,6 @@ export function DirectDeploymentScreen({
                 onOpenFindingTerraformSource={onOpenFindingTerraformSource}
               />
             ) : null}
-            <div className={styles.deploymentStepActionBar}>
-              <p>
-                <Info size={16} aria-hidden="true" />
-                {selectedStep.disabledReason ?? "검증 단계에서는 실제 리소스를 변경하지 않습니다."}
-              </p>
-              {selectedDeployment?.status === "RUNNING" ? (
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  disabled={!canCancelDeployment}
-                  onClick={cancelSelectedDeployment}
-                  type="button"
-                >
-                  실행 취소
-                </button>
-              ) : shouldShowDeploymentValidationActions({
-                  deploymentStatus: selectedDeployment?.status ?? null,
-                  hasUnsavedBaseline: hasCurrentDeploymentChanges,
-                  preflightState: directPreflightState
-                }) ? (
-                <div className={styles.deploymentValidationActions}>
-                  {cleanupActionTargets.map(({ actions, deployment }) =>
-                    actions.shouldShowDestroyPlanButton ? (
-                      <button
-                        className={styles.deploymentSecondaryButton}
-                        disabled={!actions.canRunDestroyPlan}
-                        key={deployment.id}
-                        onClick={() => void startTerraformDestroyPlan(deployment)}
-                        type="button"
-                      >
-                        <Trash2 size={16} aria-hidden="true" />
-                        {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
-                      </button>
-                    ) : null
-                  )}
-                  <button
-                    aria-busy={validationIsBusy}
-                    className={styles.deploymentPrimaryButton}
-                    disabled={!canRunDeploymentReviewStep}
-                    onClick={() => void runDeploymentReviewStep()}
-                    type="button"
-                  >
-                    <DeploymentBaselineIcon size={16} aria-hidden="true" />
-                    {validationIsBusy ? "저장 및 검증 실행 중" : "저장 후 검증 실행"}
-                  </button>
-                </div>
-              ) : !hasCurrentPlan ? (
-                <button
-                  aria-busy={requestState === "loading"}
-                  className={styles.deploymentPrimaryButton}
-                  disabled={!canRunPlan}
-                  onClick={() => void startTerraformPlan()}
-                  type="button"
-                >
-                  <DashboardIcon name="rocket" />
-                  {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
-                </button>
-              ) : null}
-            </div>
           </>
         );
       }
@@ -1248,18 +1190,6 @@ export function DirectDeploymentScreen({
                 />
               </div>
             </details>
-            <div className={styles.deploymentStepActionBar}>
-              <p>{selectedStep.disabledReason ?? "승인된 스냅샷만 실행할 수 있습니다."}</p>
-              <button
-                className={styles.deploymentPrimaryButton}
-                disabled={!canApprovePlan}
-                onClick={() => void approveCurrentPlan()}
-                type="button"
-              >
-                <ShieldCheck size={16} aria-hidden="true" />
-                {requestState === "loading" ? "승인 처리 중" : "Plan 승인"}
-              </button>
-            </div>
           </>
         );
       }
@@ -1341,8 +1271,18 @@ export function DirectDeploymentScreen({
               </div>
             </div>
           ) : null}
+        </>
+      );
+    }
+
+    function renderDirectStepActions(stepId: DirectDeploymentStepId) {
+      if (stepId === "validation") {
+        return (
           <div className={styles.deploymentStepActionBar}>
-            <p>{selectedStep.disabledReason ?? deploymentActionHint}</p>
+            <p>
+              <Info size={16} aria-hidden="true" />
+              {selectedStep.disabledReason ?? "검증 단계에서는 실제 리소스를 변경하지 않습니다."}
+            </p>
             {selectedDeployment?.status === "RUNNING" ? (
               <button
                 className={styles.deploymentSecondaryButton}
@@ -1352,59 +1292,134 @@ export function DirectDeploymentScreen({
               >
                 실행 취소
               </button>
-            ) : (
+            ) : shouldShowDeploymentValidationActions({
+                deploymentStatus: selectedDeployment?.status ?? null,
+                hasUnsavedBaseline: hasCurrentDeploymentChanges,
+                preflightState: directPreflightState
+              }) ? (
               <div className={styles.deploymentValidationActions}>
-                {cleanupActionTargets.flatMap(({ actions, deployment }) => {
-                  const buttons: ReactNode[] = [];
-
-                  if (actions.shouldShowDestroyPlanButton) {
-                    buttons.push(
-                      <button
-                        className={styles.deploymentSecondaryButton}
-                        disabled={!actions.canRunDestroyPlan}
-                        key={`${deployment.id}:plan`}
-                        onClick={() => void startTerraformDestroyPlan(deployment)}
-                        type="button"
-                      >
-                        {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
-                      </button>
-                    );
-                  }
-
-                  if (actions.shouldShowDestroyButton) {
-                    buttons.push(
-                      <button
-                        className={styles.deploymentDangerButton}
-                        disabled={!actions.canDestroy}
-                        key={`${deployment.id}:destroy`}
-                        onClick={() => {
-                          setSelectedDeploymentId(deployment.id);
-                          setShowDestroyConfirmation(true);
-                        }}
-                        type="button"
-                      >
-                        {getCleanupExecutionActionLabel(deployment, cleanupDeployments.length)}
-                      </button>
-                    );
-                  }
-
-                  return buttons;
-                })}
-                {!shouldShowDestroyPlanButton && !shouldShowDestroyButton ? (
-                  <button
-                    className={styles.deploymentPrimaryButton}
-                    disabled={!canApply}
-                    onClick={() => setShowApplyConfirmation(true)}
-                    type="button"
-                  >
-                    <DashboardIcon name="rocket" />
-                    배포 실행 검토
-                  </button>
-                ) : null}
+                {cleanupActionTargets.map(({ actions, deployment }) =>
+                  actions.shouldShowDestroyPlanButton ? (
+                    <button
+                      className={styles.deploymentSecondaryButton}
+                      disabled={!actions.canRunDestroyPlan}
+                      key={deployment.id}
+                      onClick={() => void startTerraformDestroyPlan(deployment)}
+                      type="button"
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                      {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
+                    </button>
+                  ) : null
+                )}
+                <button
+                  aria-busy={validationIsBusy}
+                  className={styles.deploymentPrimaryButton}
+                  disabled={!canRunDeploymentReviewStep}
+                  onClick={() => void runDeploymentReviewStep()}
+                  type="button"
+                >
+                  <DeploymentBaselineIcon size={16} aria-hidden="true" />
+                  {validationIsBusy ? "저장 및 검증 실행 중" : "저장 후 검증 실행"}
+                </button>
               </div>
-            )}
+            ) : !hasCurrentPlan ? (
+              <button
+                aria-busy={requestState === "loading"}
+                className={styles.deploymentPrimaryButton}
+                disabled={!canRunPlan}
+                onClick={() => void startTerraformPlan()}
+                type="button"
+              >
+                <DashboardIcon name="rocket" />
+                {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
+              </button>
+            ) : null}
           </div>
-        </>
+        );
+      }
+
+      if (stepId === "approval") {
+        return (
+          <div className={styles.deploymentStepActionBar}>
+            <p>{selectedStep.disabledReason ?? "승인된 스냅샷만 실행할 수 있습니다."}</p>
+            <button
+              className={styles.deploymentPrimaryButton}
+              disabled={!canApprovePlan}
+              onClick={() => void approveCurrentPlan()}
+              type="button"
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              {requestState === "loading" ? "승인 처리 중" : "Plan 승인"}
+            </button>
+          </div>
+        );
+      }
+
+      return (
+        <div className={styles.deploymentStepActionBar}>
+          <p>{selectedStep.disabledReason ?? deploymentActionHint}</p>
+          {selectedDeployment?.status === "RUNNING" ? (
+            <button
+              className={styles.deploymentSecondaryButton}
+              disabled={!canCancelDeployment}
+              onClick={cancelSelectedDeployment}
+              type="button"
+            >
+              실행 취소
+            </button>
+          ) : (
+            <div className={styles.deploymentValidationActions}>
+              {cleanupActionTargets.flatMap(({ actions, deployment }) => {
+                const buttons: ReactNode[] = [];
+
+                if (actions.shouldShowDestroyPlanButton) {
+                  buttons.push(
+                    <button
+                      className={styles.deploymentSecondaryButton}
+                      disabled={!actions.canRunDestroyPlan}
+                      key={`${deployment.id}:plan`}
+                      onClick={() => void startTerraformDestroyPlan(deployment)}
+                      type="button"
+                    >
+                      {getCleanupPlanActionLabel(deployment, cleanupDeployments.length)}
+                    </button>
+                  );
+                }
+
+                if (actions.shouldShowDestroyButton) {
+                  buttons.push(
+                    <button
+                      className={styles.deploymentDangerButton}
+                      disabled={!actions.canDestroy}
+                      key={`${deployment.id}:destroy`}
+                      onClick={() => {
+                        setSelectedDeploymentId(deployment.id);
+                        setShowDestroyConfirmation(true);
+                      }}
+                      type="button"
+                    >
+                      {getCleanupExecutionActionLabel(deployment, cleanupDeployments.length)}
+                    </button>
+                  );
+                }
+
+                return buttons;
+              })}
+              {!shouldShowDestroyPlanButton && !shouldShowDestroyButton ? (
+                <button
+                  className={styles.deploymentPrimaryButton}
+                  disabled={!canApply}
+                  onClick={() => setShowApplyConfirmation(true)}
+                  type="button"
+                >
+                  <DashboardIcon name="rocket" />
+                  배포 실행 검토
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
       );
     }
 
@@ -1453,6 +1468,8 @@ export function DirectDeploymentScreen({
           <h3>{selectedStepHeading.title}</h3>
           <p>{selectedStepHeading.description}</p>
         </div>
+
+        {renderDirectStepActions(selectedStep.id)}
 
         <article className={styles.deploymentStepWorkspace} data-state={selectedStep.state}>
           {renderDirectStepContent(selectedStep.id)}
