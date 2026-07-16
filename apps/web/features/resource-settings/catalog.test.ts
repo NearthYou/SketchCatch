@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  createTerraformParameterCatalogKey,
   getResourceDefinitionById,
   getResourceDefinitionByTerraform,
   resourceDefinitions
 } from "@sketchcatch/types/resource-definitions";
 import { terraformAwsParameterCatalog as generatedTerraformAwsParameterCatalog } from "../parameter-input/catalog.generated";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
+import { capturedBrainboardPaletteResourceIds } from "./captured-brainboard-palette-resource-ids";
 import { resourceCatalog } from "./catalog";
 
 const publicDirectoryPath = fileURLToPath(new URL("../../public", import.meta.url));
+const brainboardCaptureDirectoryPath = fileURLToPath(
+  new URL("../../../../docs/gg/feat-infrastructure-template/brainboard-captures/", import.meta.url)
+);
+const BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT = 87;
 
 const terraformDefinitionKeys = new Set(
   resourceDefinitions.map(
@@ -43,11 +49,6 @@ const requestedMissingCatalogItems = [
     type: "aws_acm_certificate",
     iconUrl:
       "/Architecture-Service-Icons_07312025/Arch_Security-Identity-Compliance/64/Arch_AWS-Certificate-Manager_64.svg"
-  },
-  {
-    id: "aws-rds-read-replica",
-    type: "aws_db_instance",
-    iconUrl: "/Architecture-Service-Icons_07312025/Arch_Database/64/Arch_Amazon-RDS_64.svg"
   },
   {
     id: "aws-rds-cluster",
@@ -117,12 +118,23 @@ const requestedMissingCatalogItems = [
   }
 ] as const;
 
+const legacySchemaLessPaletteItemIds = [
+  "aws-cognito-user-pool",
+  "aws-cognito-user-pool-client",
+  "aws-caller-identity",
+  "aws-ssm-parameter",
+  "aws-ec2-managed-prefix-list",
+  "aws-s3-website-configuration",
+  "aws-codestarconnections-connection",
+  "aws-step-functions-state-machine"
+] as const;
+
 test("resourceCatalog sizes area defaults below the Region hierarchy root", () => {
   assert.deepEqual(getResourceSize("aws_region"), { width: 260, height: 180 });
   assert.deepEqual(getResourceSize("aws_vpc"), { width: 240, height: 160 });
   assert.deepEqual(getResourceSize("aws_availability_zone"), { width: 220, height: 150 });
   assert.deepEqual(getResourceSize("design_group"), { width: 200, height: 130 });
-  assert.deepEqual(getResourceSize("aws_autoscaling_group"), { width: 200, height: 130 });
+  assert.deepEqual(getResourceSize("aws_autoscaling_group"), { width: 48, height: 48 });
   assert.deepEqual(getResourceSize("aws_subnet"), { width: 180, height: 120 });
   assert.deepEqual(getResourceSize("aws_security_group"), { width: 180, height: 120 });
 });
@@ -140,7 +152,7 @@ test("resourceCatalog exposes Region and AZ as board resource area items", () =>
   });
 });
 
-test("resourceCatalog exposes User / Client and Internet as board-only design items", () => {
+test("resourceCatalog exposes the reusable flow Design items with their real icons", () => {
   assert.deepEqual(getCatalogDefaults("design-user-client"), {
     type: "sketchcatch_user_client",
     label: "User / Client",
@@ -150,6 +162,16 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
     type: "sketchcatch_internet",
     label: "Internet",
     size: { width: 48, height: 48 }
+  });
+  assert.deepEqual(getCatalogDefaults("design-source-repository"), {
+    type: "sketchcatch_source_repository",
+    label: "Source Repository",
+    size: { width: 48, height: 48 }
+  });
+  assert.deepEqual(getCatalogDefaults("design-aws-account"), {
+    type: "sketchcatch_aws_account",
+    label: "AWS Account",
+    size: { width: 200, height: 130 }
   });
 
   assert.equal(
@@ -162,6 +184,16 @@ test("resourceCatalog exposes User / Client and Internet as board-only design it
     existsSync(
       `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Internet_48_Light.svg`
     ),
+    true
+  );
+  assert.equal(
+    existsSync(
+      `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg`
+    ),
+    true
+  );
+  assert.equal(
+    existsSync(`${publicDirectoryPath}/Architecture-Group-Icons_07312025/AWS-Account_32.svg`),
     true
   );
 });
@@ -220,13 +252,62 @@ test("resourceCatalog displays every shared Terraform resource definition", () =
 });
 
 test("resource parameter panel capability matches the parameter catalog", () => {
-  const parameterCatalogResourceTypes = Object.keys(terraformParameterCatalog.resources).sort();
-  const capabilityResourceTypes = resourceDefinitions
+  const capabilityKeys = new Set(resourceDefinitions
     .filter((definition) => definition.capabilities.parameterPanel)
-    .map((definition) => definition.terraform.resourceType)
-    .sort();
+    .map((definition) =>
+      createTerraformParameterCatalogKey(
+        definition.terraform.blockType,
+        definition.terraform.resourceType
+      )
+    ));
 
-  assert.deepEqual(capabilityResourceTypes, parameterCatalogResourceTypes);
+  for (const key of capabilityKeys) {
+    assert.ok(terraformParameterCatalog.resources[key]?.length, key);
+  }
+
+  for (const key of Object.keys(terraformParameterCatalog.resources)) {
+    assert.equal(
+      capabilityKeys.has(key) || Object.hasOwn(generatedTerraformAwsParameterCatalog.resources, key),
+      true,
+      key
+    );
+  }
+});
+
+test("legacy schema-less Terraform items remain enabled in the manual palette", () => {
+  for (const id of legacySchemaLessPaletteItemIds) {
+    const resource = resourceCatalog.find((candidate) => candidate.id === id);
+    const definition = getResourceDefinitionById(id);
+
+    assert.ok(resource, id);
+    assert.ok(definition, id);
+    assert.equal(definition.capabilities.parameterPanel, false, id);
+    assert.equal(resource.enabled, true, id);
+  }
+});
+
+test("every configurable Terraform definition remains enabled in the manual palette", () => {
+  for (const definition of resourceDefinitions.filter(
+    (candidate) => candidate.capabilities.parameterPanel
+  )) {
+    const resource = resourceCatalog.find((candidate) => candidate.id === definition.id);
+
+    assert.ok(resource, definition.id);
+    assert.equal(resource.enabled, true, definition.id);
+  }
+});
+
+test("ECS Task Definition is available as a deployable manual palette resource", () => {
+  const definition = getResourceDefinitionById("aws-ecs-task-definition");
+  const resource = resourceCatalog.find((item) => item.id === "aws-ecs-task-definition");
+
+  assert.ok(definition);
+  assert.ok(resource);
+  assert.equal(resource.enabled, true);
+  assert.equal(resource.nodeDefaults.type, "aws_ecs_task_definition");
+  assert.equal(definition.capabilities.parameterPanel, true);
+  assert.equal(definition.capabilities.terraformPreview, true);
+  assert.equal(definition.capabilities.terraformSync, true);
 });
 
 test("Autoscaling Policy is available through the shared definition and resource catalog", () => {
@@ -244,7 +325,18 @@ test("Autoscaling Policy is available through the shared definition and resource
     capabilities: {
       parameterPanel: true,
       terraformPreview: true,
-      terraformSync: true
+      terraformSync: true,
+      deployment: {
+        status: "supported",
+        provisioner: "terraform",
+        executionRole: "managed_resource",
+        optimization: {
+          desiredStateReuse: "verified",
+          artifactReuse: "none",
+          runtimeNoOp: "none",
+          healthVerification: "terraform_plan"
+        }
+      }
     }
   });
   assert.equal(resource?.category, "EC2 Launch & Scaling");
@@ -342,6 +434,100 @@ test("resourceCatalog exposes requested missing resources with public icon asset
     assert.equal(resource.iconUrl, expected.iconUrl, expected.id);
     assert.equal(existsSync(`${publicDirectoryPath}${expected.iconUrl}`), true, expected.iconUrl);
   }
+});
+
+test("committed Brainboard captures have exactly one shared and catalog match for all 87 identities", () => {
+  const capturedIdentities = readCapturedTerraformIdentities();
+
+  assert.equal(capturedIdentities.length, BRAINBOARD_CAPTURE_TERRAFORM_IDENTITY_COUNT);
+
+  for (const { blockType, resourceType } of capturedIdentities) {
+    const key = `${blockType}/${resourceType}`;
+    const sharedMatches = resourceDefinitions.filter(
+      (definition) =>
+        definition.terraform.blockType === blockType &&
+        definition.terraform.resourceType === resourceType
+    );
+    const catalogMatches = resourceCatalog.filter(
+      (resource) => createCatalogResourceKey(resource) === key
+    );
+
+    assert.equal(sharedMatches.length, 1, `shared:${key}`);
+    assert.equal(catalogMatches.length, 1, `catalog:${key}`);
+    assert.equal(catalogMatches[0]?.id, sharedMatches[0]?.id, key);
+    assert.equal(catalogMatches[0]?.nodeDefaults.type, resourceType, key);
+    assert.equal(
+      catalogMatches[0]?.nodeDefaults.terraformBlockType ?? "resource",
+      blockType,
+      key
+    );
+    assert.ok(catalogMatches[0]?.iconUrl, `Missing icon for ${key}`);
+    assert.equal(
+      existsSync(`${publicDirectoryPath}${catalogMatches[0]?.iconUrl}`),
+      true,
+      catalogMatches[0]?.iconUrl
+    );
+  }
+});
+
+test("captured Brainboard resources are configurable from the manual Palette", () => {
+  assert.equal(capturedBrainboardPaletteResourceIds.length, 31);
+
+  assert.equal(getTerraformCatalogItems().every((resource) => resource.enabled), true);
+
+  for (const id of capturedBrainboardPaletteResourceIds) {
+    const resource = resourceCatalog.find((candidate) => candidate.id === id);
+    const definition = getResourceDefinitionById(id);
+
+    assert.ok(resource, id);
+    assert.ok(definition, id);
+    assert.equal(resource.enabled, true, id);
+    assert.equal(definition.capabilities.parameterPanel, true, id);
+    assert.ok(
+      terraformParameterCatalog.resources[
+        createTerraformParameterCatalogKey(
+          definition.terraform.blockType,
+          definition.terraform.resourceType
+        )
+      ]?.length,
+      `${id} has no parameter catalog`
+    );
+    assert.equal(definition.capabilities.terraformPreview, true, id);
+    assert.equal(definition.capabilities.terraformSync, true, id);
+    assert.ok(resource.iconUrl, id);
+    assert.equal(existsSync(`${publicDirectoryPath}${resource.iconUrl}`), true, resource.iconUrl);
+  }
+});
+
+test("IAM Policy data source uses its own block-type-aware parameter schema", () => {
+  const parameters = terraformParameterCatalog.resources[
+    createTerraformParameterCatalogKey("data", "aws_iam_policy")
+  ];
+
+  assert.ok(parameters);
+  assert.deepEqual(
+    parameters.map(({ name }) => name),
+    ["arn", "name", "pathPrefix"]
+  );
+  assert.equal(parameters.some(({ name }) => name === "policy"), false);
+});
+
+test("resourceCatalog IDs and Terraform identities remain unique", () => {
+  const ids = resourceCatalog.map((resource) => resource.id);
+  const terraformIdentities = getTerraformCatalogItems().map(createCatalogResourceKey);
+
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(new Set(terraformIdentities).size, terraformIdentities.length);
+});
+
+test("resourceCatalog does not alias classic AWS resources to newer identities", () => {
+  assertDistinctCatalogIdentities("aws-elb", "aws-lb");
+  assertDistinctCatalogIdentities(
+    "aws-cloudfront-origin-access-identity",
+    "aws-cloudfront-origin-access-control"
+  );
+  assertDistinctCatalogIdentities("aws-s3-bucket-object", "aws-s3-object");
+  assertDistinctCatalogIdentities("aws-waf-web-acl", "aws-wafv2-web-acl");
 });
 
 test("resourceCatalog assigns readable subcategories inside each large resource area", () => {
@@ -539,6 +725,15 @@ function assertCatalogCategory(resourceId: string, expectedCategory: string) {
   assert.equal(resource.category, expectedCategory, resourceId);
 }
 
+function assertDistinctCatalogIdentities(firstId: string, secondId: string) {
+  const first = resourceCatalog.find((resource) => resource.id === firstId);
+  const second = resourceCatalog.find((resource) => resource.id === secondId);
+
+  assert.ok(first, firstId);
+  assert.ok(second, secondId);
+  assert.notEqual(createCatalogResourceKey(first), createCatalogResourceKey(second));
+}
+
 function getTerraformCatalogItems() {
   return resourceCatalog.filter((resource) => terraformDefinitionKeys.has(createCatalogResourceKey(resource)));
 }
@@ -594,4 +789,53 @@ function collectParameterTerraformPaths(
 
 function createCatalogResourceKey(resource: (typeof resourceCatalog)[number]): string {
   return `${resource.nodeDefaults.terraformBlockType ?? "resource"}/${resource.nodeDefaults.type}`;
+}
+
+function readCapturedTerraformIdentities(): Array<{
+  readonly blockType: "data" | "resource";
+  readonly resourceType: string;
+}> {
+  const identityKeys = new Set<string>();
+
+  for (const fileName of readdirSync(brainboardCaptureDirectoryPath).sort()) {
+    if (!fileName.endsWith(".json")) {
+      continue;
+    }
+
+    const capture = JSON.parse(
+      readFileSync(`${brainboardCaptureDirectoryPath}/${fileName}`, "utf8")
+    ) as {
+      readonly terraform?: {
+        readonly resourceAddresses?: readonly string[] | undefined;
+      } | null;
+    };
+
+    for (const address of capture.terraform?.resourceAddresses ?? []) {
+      identityKeys.add(createTerraformIdentityKeyFromAddress(address));
+    }
+  }
+
+  return [...identityKeys].sort().map((key) => {
+    const separatorIndex = key.indexOf("/");
+    const blockType = key.slice(0, separatorIndex);
+
+    assert.ok(blockType === "data" || blockType === "resource", key);
+
+    return {
+      blockType,
+      resourceType: key.slice(separatorIndex + 1)
+    };
+  });
+}
+
+function createTerraformIdentityKeyFromAddress(address: string): string {
+  const segments = address.split(".");
+
+  if (segments[0] === "data") {
+    assert.ok(segments[1], `Invalid Terraform data address: ${address}`);
+    return `data/${segments[1]}`;
+  }
+
+  assert.ok(segments[0], `Invalid Terraform resource address: ${address}`);
+  return `resource/${segments[0]}`;
 }

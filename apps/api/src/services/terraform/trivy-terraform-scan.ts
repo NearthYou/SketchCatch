@@ -1,15 +1,37 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { CheckFinding, TerraformSyncFileInput } from "@sketchcatch/types";
+import type { RuntimeCache, RuntimeCacheJsonValue } from "../../runtime-cache/index.js";
 
 const execFileAsync = promisify(execFile);
 const TRIVY_SCAN_TIMEOUT_MS = 30_000;
 const TRIVY_SCAN_MAX_BUFFER_BYTES = 20 * 1024 * 1024;
+const TRIVY_IGNORE_FILE_NAME = ".sketchcatch-trivyignore";
+const DEFAULT_TRIVY_RESULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_TRIVY_RESULT_CACHE_MAX_ENTRIES = 100;
+const TRIVY_PROCESS_CACHE_IDENTITY = randomUUID();
+const detectedTrivyVersions = new Map<string, string>();
+
+// Product policy keeps these AWS ALB and Auto Scaling checks out of the Trivy result.
+export const disabledTrivyTerraformRuleIds = [
+  "AWS-0047",
+  "AWS-0009",
+  "AWS-0052",
+  "AWS-0053",
+  "AWS-0054",
+  "AWS-0008",
+  "AWS-0122",
+  "AWS-0129",
+  "AWS-0130"
+] as const;
 
 export type TerraformSecurityScannerInput = {
+  readonly artifactSha256?: string | undefined;
   readonly terraformFiles: readonly TerraformSyncFileInput[];
 };
 
@@ -17,9 +39,26 @@ export type TerraformSecurityScanner = (
   input: TerraformSecurityScannerInput
 ) => Promise<CheckFinding[]>;
 
+export type CreateCachedTerraformSecurityScannerOptions = {
+  readonly scan: TerraformSecurityScanner;
+  readonly cacheKeySalt?: string | (() => string) | undefined;
+  readonly cacheTtlMs?: number | undefined;
+  readonly maxCachedResults?: number | undefined;
+  readonly now?: (() => number) | undefined;
+  readonly runtimeCache?: RuntimeCache | undefined;
+};
+
+type CachedTerraformSecurityFindings = {
+  readonly expiresAt: number;
+  readonly findings: CheckFinding[];
+};
+
+const TRIVY_WARMUP_TERRAFORM = 'terraform { required_version = ">= 1.0" }\n';
+
 export type TrivyTerraformScanOptions = {
   readonly cacheDir?: string | undefined;
   readonly onScanError?: ((error: unknown) => void) | undefined;
+  readonly runtimeCache?: RuntimeCache | undefined;
   readonly trivyBinaryPath?: string | undefined;
 };
 
@@ -63,6 +102,8 @@ type TrivyMisconfiguration = {
 };
 
 type TrivyFindingText = {
+  readonly category?: CheckFinding["category"] | undefined;
+  readonly riskFamily?: string | undefined;
   readonly title: string;
   readonly description: string;
   readonly recommendation: string;
@@ -71,14 +112,240 @@ type TrivyFindingText = {
 export function createConfiguredTerraformSecurityScanner(
   options: TrivyTerraformScanOptions = {}
 ): TerraformSecurityScanner {
+  const cachedScan = createCachedTerraformSecurityScanner({
+    scan: (input) => scanTerraformWithTrivy(input, options),
+    cacheKeySalt: () => createConfiguredScannerCacheKeySalt(options),
+    runtimeCache: options.runtimeCache
+  });
+
   return async (input) => {
     try {
-      return await scanTerraformWithTrivy(input, options);
+      return await cachedScan(input);
     } catch (error) {
       options.onScanError?.(error);
       return [];
     }
   };
+}
+
+export function createCachedTerraformSecurityScanner(
+  options: CreateCachedTerraformSecurityScannerOptions
+): TerraformSecurityScanner {
+  const cacheTtlMs = options.cacheTtlMs ?? DEFAULT_TRIVY_RESULT_CACHE_TTL_MS;
+  const maxCachedResults =
+    options.maxCachedResults ?? DEFAULT_TRIVY_RESULT_CACHE_MAX_ENTRIES;
+  const now = options.now ?? Date.now;
+  const cachedResults = new Map<string, CachedTerraformSecurityFindings>();
+  const scansInFlight = new Map<string, Promise<CheckFinding[]>>();
+
+  return async (input) => {
+    const cacheKeySalt =
+      typeof options.cacheKeySalt === "function"
+        ? options.cacheKeySalt()
+        : options.cacheKeySalt;
+    const cacheKey = createTerraformSecurityScanCacheKey(input, cacheKeySalt);
+    const cachedResult = cachedResults.get(cacheKey);
+
+    if (cachedResult && cachedResult.expiresAt > now()) {
+      cachedResults.delete(cacheKey);
+      cachedResults.set(cacheKey, cachedResult);
+      return structuredClone(cachedResult.findings);
+    }
+
+    cachedResults.delete(cacheKey);
+    const existingScan = scansInFlight.get(cacheKey);
+    if (existingScan) {
+      return structuredClone(await existingScan);
+    }
+
+    const scan = loadAndCacheFindings(input, cacheKey);
+    scansInFlight.set(cacheKey, scan);
+    try {
+      return structuredClone(await scan);
+    } finally {
+      if (scansInFlight.get(cacheKey) === scan) {
+        scansInFlight.delete(cacheKey);
+      }
+    }
+  };
+
+  async function loadAndCacheFindings(
+    input: TerraformSecurityScannerInput,
+    cacheKey: string
+  ): Promise<CheckFinding[]> {
+    const runtimeCachedFindings = await readRuntimeCachedFindings(
+      options.runtimeCache,
+      cacheKey
+    );
+
+    if (runtimeCachedFindings) {
+      cacheFindings(cacheKey, runtimeCachedFindings);
+      return runtimeCachedFindings;
+    }
+
+    const findings = await options.scan(input);
+    cacheFindings(cacheKey, findings);
+    await writeRuntimeCachedFindings(options.runtimeCache, cacheKey, findings, cacheTtlMs);
+    return findings;
+  }
+
+  function cacheFindings(cacheKey: string, findings: readonly CheckFinding[]): void {
+    cachedResults.set(cacheKey, {
+      expiresAt: now() + cacheTtlMs,
+      findings: structuredClone([...findings])
+    });
+
+    while (cachedResults.size > maxCachedResults) {
+      const oldestCacheKey = cachedResults.keys().next().value as string | undefined;
+      if (oldestCacheKey === undefined) break;
+      cachedResults.delete(oldestCacheKey);
+    }
+  }
+}
+
+async function readRuntimeCachedFindings(
+  runtimeCache: RuntimeCache | undefined,
+  cacheKey: string
+): Promise<CheckFinding[] | null> {
+  if (!runtimeCache) {
+    return null;
+  }
+
+  try {
+    const value = await runtimeCache.get<{ findings?: unknown }>({
+      namespace: "trivy-terraform-scan",
+      key: cacheKey
+    });
+
+    return value && Array.isArray(value.findings)
+      ? structuredClone(value.findings as CheckFinding[])
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeRuntimeCachedFindings(
+  runtimeCache: RuntimeCache | undefined,
+  cacheKey: string,
+  findings: readonly CheckFinding[],
+  ttlMs: number
+): Promise<void> {
+  if (!runtimeCache) {
+    return;
+  }
+
+  try {
+    const value = JSON.parse(JSON.stringify({ findings })) as RuntimeCacheJsonValue;
+    await runtimeCache.set(
+      {
+        namespace: "trivy-terraform-scan",
+        key: cacheKey
+      },
+      value,
+      { ttlMs }
+    );
+  } catch {
+    // Runtime Cache is an optimization; Trivy findings remain the source result.
+  }
+}
+
+function createTerraformSecurityScanCacheKey(
+  input: TerraformSecurityScannerInput,
+  cacheKeySalt = ""
+): string {
+  const hash = createHash("sha256");
+  hash.update("sketchcatch-trivy-terraform-scan:v1\0");
+  hash.update(cacheKeySalt);
+
+  if (input.artifactSha256) {
+    hash.update("\0artifact-sha256\0");
+    hash.update(input.artifactSha256);
+    return hash.digest("hex");
+  }
+
+  const normalizedFiles = [...input.terraformFiles].sort((left, right) =>
+    left.fileName.localeCompare(right.fileName)
+  );
+  for (const file of normalizedFiles) {
+    if (file.terraformCode.trim().length === 0) {
+      continue;
+    }
+
+    hash.update("\0file\0");
+    hash.update(file.fileName);
+    hash.update("\0content\0");
+    hash.update(file.terraformCode);
+  }
+
+  return hash.digest("hex");
+}
+
+function createConfiguredScannerCacheKeySalt(options: TrivyTerraformScanOptions): string {
+  const cacheDir = options.cacheDir ?? process.env.TRIVY_CACHE_DIR ?? "";
+  const trivyBinaryPath = options.trivyBinaryPath ?? process.env.TRIVY_BIN ?? "trivy";
+
+  return JSON.stringify({
+    cacheDir,
+    disabledRuleIds: disabledTrivyTerraformRuleIds,
+    policyDigest: readTrivyPolicyDigest(cacheDir),
+    trivyBinaryPath,
+    trivyVersion: resolveTrivyVersion(trivyBinaryPath)
+  });
+}
+
+function resolveTrivyVersion(trivyBinaryPath: string): string {
+  if (process.env.TRIVY_VERSION) return process.env.TRIVY_VERSION;
+  const cached = detectedTrivyVersions.get(trivyBinaryPath);
+  if (cached) return cached;
+
+  try {
+    const output = execFileSync(trivyBinaryPath, ["--version"], {
+      encoding: "utf8",
+      timeout: 2_000,
+      windowsHide: true
+    });
+    const version = output.match(/(?:Version:\s*)?v?(\d+\.\d+\.\d+)/i)?.[1];
+    if (version) {
+      detectedTrivyVersions.set(trivyBinaryPath, version);
+      return version;
+    }
+  } catch {
+    // An unavailable binary cannot safely share a cross-process result cache.
+  }
+
+  return `process:${TRIVY_PROCESS_CACHE_IDENTITY}`;
+}
+
+function readTrivyPolicyDigest(cacheDir: string): string {
+  if (cacheDir.trim().length === 0) {
+    return process.env.TRIVY_CHECKS_BUNDLE_DIGEST ?? "unknown";
+  }
+
+  try {
+    const metadata = JSON.parse(
+      readFileSync(path.join(cacheDir, "policy", "metadata.json"), "utf8")
+    ) as { Digest?: unknown };
+
+    return typeof metadata.Digest === "string" && metadata.Digest.length > 0
+      ? metadata.Digest
+      : "unknown";
+  } catch {
+    return process.env.TRIVY_CHECKS_BUNDLE_DIGEST ?? "unknown";
+  }
+}
+
+export async function warmTrivyCheckBundle(
+  scan: TerraformSecurityScanner = (input) => scanTerraformWithTrivy(input)
+): Promise<void> {
+  await scan({
+    terraformFiles: [
+      {
+        fileName: "trivy-warmup.tf",
+        terraformCode: TRIVY_WARMUP_TERRAFORM
+      }
+    ]
+  });
 }
 
 export async function scanTerraformWithTrivy(
@@ -95,7 +362,8 @@ export async function scanTerraformWithTrivy(
 
   try {
     const writtenFiles = await writeTerraformFiles(tempDirectory, terraformFiles);
-    const trivyOutput = await runTrivyConfigScan(tempDirectory, options);
+    const ignoreFilePath = await writeTrivyIgnoreFile(tempDirectory);
+    const trivyOutput = await runTrivyConfigScan(tempDirectory, ignoreFilePath, options);
 
     return parseTrivyTerraformFindings(trivyOutput, {
       tempDirectory,
@@ -126,7 +394,7 @@ export function parseTrivyTerraformFindings(
     }
   }
 
-  return findings;
+  return groupTrivyFindings(findings);
 }
 
 async function writeTerraformFiles(
@@ -155,8 +423,22 @@ async function writeTerraformFiles(
   return writtenFiles;
 }
 
+async function writeTrivyIgnoreFile(tempDirectory: string): Promise<string> {
+  const ignoreFilePath = path.join(tempDirectory, TRIVY_IGNORE_FILE_NAME);
+  await writeFile(ignoreFilePath, createTrivyIgnoreFileContents(), "utf8");
+  return ignoreFilePath;
+}
+
+export function createTrivyIgnoreFileContents(): string {
+  return [
+    ...disabledTrivyTerraformRuleIds,
+    ...disabledTrivyTerraformRuleIds.map((ruleId) => `AVD-${ruleId}`)
+  ].join("\n");
+}
+
 async function runTrivyConfigScan(
   tempDirectory: string,
+  ignoreFilePath: string,
   options: TrivyTerraformScanOptions
 ): Promise<string> {
   const cacheDir = options.cacheDir ?? process.env.TRIVY_CACHE_DIR;
@@ -170,6 +452,8 @@ async function runTrivyConfigScan(
     "0",
     "--misconfig-scanners",
     "terraform",
+    "--ignorefile",
+    ignoreFilePath,
     "--severity",
     "MEDIUM,HIGH,CRITICAL",
     "."
@@ -208,7 +492,7 @@ function createFindingFromTrivyMisconfiguration(
     id: sanitizeFindingId(
       `trivy:${ruleId}:${originalFileName ?? targetPath ?? "terraform"}:${resourceAddress ?? "resource"}:${line ?? "line"}`
     ),
-    category: inferTrivyFindingCategory(misconfiguration),
+    category: text.category ?? inferTrivyFindingCategory(misconfiguration),
     severity: toRiskSeverity(misconfiguration.Severity),
     ...(resourceAddress ? { resourceId: resourceAddress } : {}),
     ...(originalFileName && line
@@ -218,6 +502,12 @@ function createFindingFromTrivyMisconfiguration(
             line,
             ...(resourceAddress ? { resourceAddress } : {})
           }
+        }
+      : {}),
+    ...(text.riskFamily
+      ? {
+          riskFamily: text.riskFamily,
+          trivyRuleIds: [ruleId]
         }
       : {}),
     title: text.title,
@@ -231,6 +521,34 @@ function createKoreanTrivyFindingText(
   misconfiguration: TrivyMisconfiguration
 ): TrivyFindingText {
   const haystack = createTrivyMisconfigurationHaystack(ruleId, misconfiguration);
+  const normalizedRuleId = ruleId.toUpperCase().replace(/^AVD-/, "");
+
+  const s3PublicAccessText = getS3PublicAccessRuleText(normalizedRuleId);
+  if (s3PublicAccessText) return s3PublicAccessText;
+
+  if (normalizedRuleId === "AWS-0090") {
+    return {
+      category: "availability",
+      riskFamily: "S3_VERSIONING",
+      title: "S3 버킷 버전 관리를 활성화해야 합니다.",
+      description:
+        "버전 관리가 없으면 객체를 실수로 덮어쓰거나 삭제했을 때 이전 데이터를 복구하기 어렵습니다.",
+      recommendation:
+        "`aws_s3_bucket_versioning` 리소스에서 `versioning_configuration.status = \"Enabled\"`를 설정하세요."
+    };
+  }
+
+  if (normalizedRuleId === "AWS-0132") {
+    return {
+      category: "security",
+      riskFamily: "S3_KMS_ENCRYPTION",
+      title: "S3 버킷 암호화에 고객 관리형 KMS 키를 사용해야 합니다.",
+      description:
+        "고객 관리형 KMS 키를 사용하면 키 정책, 접근 제어, 감사와 키 수명주기를 직접 관리할 수 있습니다.",
+      recommendation:
+        "`aws_s3_bucket_server_side_encryption_configuration`에서 SSE-KMS와 고객 관리형 `kms_master_key_id`를 설정하세요."
+    };
+  }
 
   if (hasAny(haystack, ["metadata service", "imds", "http_tokens", "session token"])) {
     return {
@@ -282,16 +600,6 @@ function createKoreanTrivyFindingText(
     };
   }
 
-  if (hasAny(haystack, ["s3", "bucket policy", "acl", "public access"])) {
-    return {
-      title: "S3 버킷은 공개 접근을 허용하면 안 됩니다.",
-      description:
-        "공개 ACL이나 과도한 bucket policy는 업로드 파일, Terraform 산출물, 사용자 데이터를 익명 사용자에게 노출할 수 있습니다.",
-      recommendation:
-        "공개 ACL과 Principal \"*\" 허용 정책을 제거하고 S3 Block Public Access를 활성화하세요."
-    };
-  }
-
   if (hasAny(haystack, ["iam", "wildcard", "privilege", "permission"])) {
     return {
       title: "IAM 권한 범위가 과도하게 넓을 수 있습니다.",
@@ -309,6 +617,90 @@ function createKoreanTrivyFindingText(
     recommendation:
       "해당 Terraform 리소스의 설정을 검토하고 Trivy 권장 사항에 맞게 수정한 뒤 배포 전 검사를 다시 실행하세요."
   };
+}
+
+function groupTrivyFindings(findings: readonly CheckFinding[]): CheckFinding[] {
+  const grouped = new Map<string, CheckFinding>();
+
+  for (const finding of findings) {
+    if (!finding.riskFamily) {
+      grouped.set(finding.id, finding);
+      continue;
+    }
+
+    const resourceAddress =
+      finding.sourceLocation?.resourceAddress ?? finding.resourceId ?? "global";
+    const key = `${resourceAddress}|${finding.riskFamily}`;
+    const existing = grouped.get(key);
+
+    if (!existing) {
+      grouped.set(key, {
+        ...finding,
+        id: sanitizeFindingId(
+          `trivy:${finding.riskFamily}:${finding.sourceLocation?.fileName ?? "terraform"}:${resourceAddress}:${finding.sourceLocation?.line ?? "line"}`
+        ),
+        trivyRuleIds: [...(finding.trivyRuleIds ?? [])]
+      });
+      continue;
+    }
+
+    grouped.set(key, {
+      ...existing,
+      title: joinUniqueFindingText(existing.title, finding.title),
+      description: joinUniqueFindingText(existing.description, finding.description),
+      recommendation: joinUniqueFindingText(existing.recommendation, finding.recommendation),
+      severity: maxRiskSeverity(existing.severity, finding.severity),
+      trivyRuleIds: Array.from(
+        new Set([...(existing.trivyRuleIds ?? []), ...(finding.trivyRuleIds ?? [])])
+      )
+    });
+  }
+
+  return [...grouped.values()];
+}
+
+function getS3PublicAccessRuleText(ruleId: string): TrivyFindingText | undefined {
+  const rules: Record<string, Omit<TrivyFindingText, "category" | "riskFamily">> = {
+    "AWS-0086": {
+      title: "S3 공개 ACL 업로드를 차단해야 합니다. (AWS-0086)",
+      description: "block_public_acls가 꺼져 있으면 공개 ACL이 지정된 PUT 요청을 허용할 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 block_public_acls를 true로 설정하세요."
+    },
+    "AWS-0087": {
+      title: "S3 공개 bucket policy 생성을 차단해야 합니다. (AWS-0087)",
+      description: "block_public_policy가 꺼져 있으면 공개 bucket policy가 새로 적용될 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 block_public_policy를 true로 설정하세요."
+    },
+    "AWS-0091": {
+      title: "S3 공개 ACL을 무시하도록 설정해야 합니다. (AWS-0091)",
+      description: "ignore_public_acls가 꺼져 있으면 기존 공개 ACL이 접근 권한에 반영될 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 ignore_public_acls를 true로 설정하세요."
+    },
+    "AWS-0093": {
+      title: "S3 공개 bucket policy의 접근 범위를 제한해야 합니다. (AWS-0093)",
+      description: "restrict_public_buckets가 꺼져 있으면 공개 policy가 있는 bucket에 광범위한 접근이 가능할 수 있습니다.",
+      recommendation: "aws_s3_bucket_public_access_block의 restrict_public_buckets를 true로 설정하세요."
+    }
+  };
+  const text = rules[ruleId];
+  return text ? { ...text, category: "security", riskFamily: "S3_PUBLIC_ACCESS" } : undefined;
+}
+
+function joinUniqueFindingText(left: string, right: string): string {
+  return left === right ? left : `${left}\n${right}`;
+}
+
+function maxRiskSeverity(
+  left: CheckFinding["severity"],
+  right: CheckFinding["severity"]
+): CheckFinding["severity"] {
+  const rank: Record<CheckFinding["severity"], number> = {
+    low: 0,
+    medium: 1,
+    high: 2
+  };
+
+  return rank[right] > rank[left] ? right : left;
 }
 
 function createTrivyMisconfigurationHaystack(

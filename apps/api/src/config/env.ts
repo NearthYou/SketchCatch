@@ -1,6 +1,11 @@
 ﻿import "./load-env.js";
+import {
+  createLiveObservationCapability,
+  type LiveObservationCapabilityKeyring
+} from "../live-observations/live-observation-capability.js";
 
 export type RuntimeEnv = {
+  aiArchitectureRequirementNormalizer?: string | undefined;
   aiBillingMode?: string | undefined;
   aiDailyCallLimit?: string | undefined;
   aiRateLimitPerMinute?: string | undefined;
@@ -8,6 +13,7 @@ export type RuntimeEnv = {
   amazonQCreditConfirmed?: string | undefined;
   amazonQEnabled?: string | undefined;
   amazonQRegion?: string | undefined;
+  amazonQRetrievalApplicationId?: string | undefined;
   amazonQUserId?: string | undefined;
   awsRegion: string;
   authTokenSecret: string | undefined;
@@ -28,24 +34,39 @@ export type RuntimeEnv = {
   githubOauthClientId: string | undefined;
   githubOauthClientSecret: string | undefined;
   githubAppId?: string | undefined;
+  githubAppClientId?: string | undefined;
+  githubAppClientSecret?: string | undefined;
   githubAppSlug?: string | undefined;
   githubAppPrivateKeyBase64?: string | undefined;
   githubAppCallbackUrl?: string | undefined;
   githubAppStateSecret?: string | undefined;
   kakaoOauthClientId: string | undefined;
   kakaoOauthClientSecret: string | undefined;
+  liveObservationCapabilityCurrentKid?: string | undefined;
+  liveObservationCapabilityCurrentSecret?: string | undefined;
+  liveObservationCapabilityPreviousKid?: string | undefined;
+  liveObservationCapabilityPreviousSecret?: string | undefined;
+  liveObservationCapabilityPreviousStoppedIssuingAt?: string | undefined;
   liveObservationEnabled?: string | undefined;
   naverOauthClientId: string | undefined;
   naverOauthClientSecret: string | undefined;
   nodeEnv?: string | undefined;
   oauthRedirectBaseUrl: string | undefined;
+  projectAssetStorageBackend?: string | undefined;
+  projectAssetStorageRoot?: string | undefined;
   redisUrl?: string | undefined;
   s3BucketName: string | undefined;
   sketchcatchAwsCallerPrincipalArn: string | undefined;
+  sketchcatchAwsCallerPrincipalArns?: string | undefined;
   sketchcatchPublicBaseUrl: string | undefined;
   transcribeCreditConfirmed?: string | undefined;
   transcribeLanguageCode?: string | undefined;
   transcribeMediaBucket?: string | undefined;
+  webPushSubscriptionEncryptionKey?: string | undefined;
+  webPushSubscriptionKeyId?: string | undefined;
+  webPushVapidPrivateKey?: string | undefined;
+  webPushVapidPublicKey?: string | undefined;
+  webPushVapidSubject?: string | undefined;
 };
 
 const AUTH_TOKEN_SECRET_PLACEHOLDER = "replace-with-a-local-secret-of-at-least-32-characters";
@@ -57,6 +78,7 @@ const staticAwsCredentialEnvKeys = [
 
 export function getRuntimeEnv(): RuntimeEnv {
   return {
+    aiArchitectureRequirementNormalizer: process.env.AI_ARCHITECTURE_REQUIREMENT_NORMALIZER,
     aiBillingMode: process.env.AI_BILLING_MODE,
     aiDailyCallLimit: process.env.AI_DAILY_CALL_LIMIT,
     aiRateLimitPerMinute: process.env.AI_RATE_LIMIT_PER_MINUTE,
@@ -64,6 +86,7 @@ export function getRuntimeEnv(): RuntimeEnv {
     amazonQCreditConfirmed: process.env.AMAZON_Q_CREDIT_CONFIRMED,
     amazonQEnabled: process.env.AMAZON_Q_ENABLED,
     amazonQRegion: process.env.AMAZON_Q_REGION,
+    amazonQRetrievalApplicationId: process.env.AMAZON_Q_RETRIEVAL_APPLICATION_ID,
     amazonQUserId: process.env.AMAZON_Q_USER_ID,
     awsRegion: process.env.AWS_REGION ?? "ap-northeast-2",
     authTokenSecret: process.env.AUTH_TOKEN_SECRET,
@@ -84,24 +107,78 @@ export function getRuntimeEnv(): RuntimeEnv {
     githubOauthClientId: process.env.GIT_OAUTH_CLIENT_ID,
     githubOauthClientSecret: process.env.GIT_OAUTH_CLIENT_SECRET,
     githubAppId: process.env.GIT_APP_ID,
+    githubAppClientId: process.env.GIT_APP_CLIENT_ID,
+    githubAppClientSecret: process.env.GIT_APP_CLIENT_SECRET,
     githubAppSlug: process.env.GIT_APP_SLUG,
     githubAppPrivateKeyBase64: process.env.GIT_APP_PRIVATE_KEY_BASE64,
     githubAppCallbackUrl: process.env.GIT_APP_CALLBACK_URL,
     githubAppStateSecret: process.env.GIT_APP_STATE_SECRET,
     kakaoOauthClientId: process.env.KAKAO_OAUTH_CLIENT_ID,
     kakaoOauthClientSecret: process.env.KAKAO_OAUTH_CLIENT_SECRET,
+    liveObservationCapabilityCurrentKid:
+      process.env.LIVE_OBSERVATION_CAPABILITY_CURRENT_KID,
+    liveObservationCapabilityCurrentSecret:
+      process.env.LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET,
+    liveObservationCapabilityPreviousKid:
+      process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_KID,
+    liveObservationCapabilityPreviousSecret:
+      process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_SECRET,
+    liveObservationCapabilityPreviousStoppedIssuingAt:
+      process.env.LIVE_OBSERVATION_CAPABILITY_PREVIOUS_STOPPED_ISSUING_AT,
     liveObservationEnabled: process.env.LIVE_OBSERVATION_ENABLED,
     naverOauthClientId: process.env.NAVER_OAUTH_CLIENT_ID,
     naverOauthClientSecret: process.env.NAVER_OAUTH_CLIENT_SECRET,
     nodeEnv: process.env.NODE_ENV,
     oauthRedirectBaseUrl: process.env.OAUTH_REDIRECT_BASE_URL,
+    projectAssetStorageBackend: process.env.PROJECT_ASSET_STORAGE_BACKEND,
+    projectAssetStorageRoot: process.env.PROJECT_ASSET_STORAGE_ROOT,
     redisUrl: process.env.REDIS_URL,
     s3BucketName: process.env.S3_BUCKET_NAME,
     sketchcatchAwsCallerPrincipalArn: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARN,
+    sketchcatchAwsCallerPrincipalArns: process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARNS,
     sketchcatchPublicBaseUrl: process.env.SKETCHCATCH_PUBLIC_BASE_URL,
     transcribeCreditConfirmed: process.env.TRANSCRIBE_CREDIT_CONFIRMED,
     transcribeLanguageCode: process.env.TRANSCRIBE_LANGUAGE_CODE,
-    transcribeMediaBucket: process.env.TRANSCRIBE_MEDIA_BUCKET
+    transcribeMediaBucket: process.env.TRANSCRIBE_MEDIA_BUCKET,
+    webPushSubscriptionEncryptionKey: process.env.WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY,
+    webPushSubscriptionKeyId: process.env.WEB_PUSH_SUBSCRIPTION_KEY_ID,
+    webPushVapidPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY,
+    webPushVapidPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
+    webPushVapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT
+  };
+}
+
+export type WebPushRuntimeConfig = {
+  subscriptionEncryptionKey: string;
+  subscriptionKeyId: string;
+  vapidPrivateKey: string;
+  vapidPublicKey: string;
+  vapidSubject: string;
+};
+
+export function getWebPushRuntimeConfig(
+  env: RuntimeEnv = getRuntimeEnv()
+): WebPushRuntimeConfig | null {
+  const values = [
+    env.webPushSubscriptionEncryptionKey,
+    env.webPushVapidPrivateKey,
+    env.webPushVapidPublicKey,
+    env.webPushVapidSubject
+  ];
+  if (values.every((value) => !value?.trim())) return null;
+  if (values.some((value) => !value?.trim())) {
+    throw new Error("Web Push configuration must be complete");
+  }
+  const subscriptionKeyId = env.webPushSubscriptionKeyId?.trim() || "v1";
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(subscriptionKeyId)) {
+    throw new Error("WEB_PUSH_SUBSCRIPTION_KEY_ID is invalid");
+  }
+  return {
+    subscriptionEncryptionKey: env.webPushSubscriptionEncryptionKey!.trim(),
+    subscriptionKeyId,
+    vapidPrivateKey: env.webPushVapidPrivateKey!.trim(),
+    vapidPublicKey: env.webPushVapidPublicKey!.trim(),
+    vapidSubject: env.webPushVapidSubject!.trim()
   };
 }
 
@@ -109,6 +186,49 @@ export type DeploymentWorkerMode = "in_process" | "ecs";
 
 export function isLiveObservationEnabled(env: RuntimeEnv = getRuntimeEnv()): boolean {
   return env.liveObservationEnabled?.trim().toLowerCase() === "true";
+}
+
+export function requireLiveObservationCapabilityKeyring(
+  env: RuntimeEnv = getRuntimeEnv()
+): LiveObservationCapabilityKeyring {
+  try {
+    const currentKid = requireCapabilityValue(env.liveObservationCapabilityCurrentKid);
+    const currentSecret = requireCapabilityValue(env.liveObservationCapabilityCurrentSecret);
+    const previousValues = [
+      env.liveObservationCapabilityPreviousKid,
+      env.liveObservationCapabilityPreviousSecret,
+      env.liveObservationCapabilityPreviousStoppedIssuingAt
+    ];
+    const configuredPreviousValues = previousValues.map(isConfiguredCapabilityValue);
+    const hasPrevious = configuredPreviousValues.some(Boolean);
+
+    if (hasPrevious && !configuredPreviousValues.every(Boolean)) {
+      throw capabilityConfigurationError();
+    }
+
+    const keyring: LiveObservationCapabilityKeyring = {
+      current: {
+        kid: currentKid,
+        secret: currentSecret
+      },
+      ...(hasPrevious
+        ? {
+            previous: {
+              kid: requireCapabilityValue(env.liveObservationCapabilityPreviousKid),
+              secret: requireCapabilityValue(env.liveObservationCapabilityPreviousSecret),
+              stoppedIssuingAt: requireCapabilityValue(
+                env.liveObservationCapabilityPreviousStoppedIssuingAt
+              )
+            }
+          }
+        : {})
+    };
+
+    createLiveObservationCapability({ keyring });
+    return keyring;
+  } catch {
+    throw capabilityConfigurationError();
+  }
 }
 
 export type EcsWorkerDispatcherConfig = {
@@ -223,6 +343,35 @@ export function requireGitHubAppStateSecret(): string {
   return stateSecret;
 }
 
+export function requireGitHubAppUserAuthorizationConfig(
+  env: RuntimeEnv = getRuntimeEnv()
+): { clientId: string; clientSecret: string; callbackUrl: string } {
+  const clientId = env.githubAppClientId?.trim();
+  const clientSecret = env.githubAppClientSecret?.trim();
+  const setupCallbackUrl = env.githubAppCallbackUrl?.trim();
+
+  if (!clientId) {
+    throw new Error("GIT_APP_CLIENT_ID is required");
+  }
+  if (!clientSecret) {
+    throw new Error("GIT_APP_CLIENT_SECRET is required");
+  }
+  if (!setupCallbackUrl) {
+    throw new Error("GIT_APP_CALLBACK_URL is required");
+  }
+
+  let callbackUrl: string;
+  try {
+    callbackUrl = new URL(
+      "/api/source-repositories/github/user-authorization/callback",
+      setupCallbackUrl
+    ).toString();
+  } catch {
+    throw new Error("GIT_APP_CALLBACK_URL must be a valid absolute URL");
+  }
+  return { clientId, clientSecret, callbackUrl };
+}
+
 export function requireDatabaseUrl(): string {
   const databaseUrl = process.env.DATABASE_URL;
 
@@ -271,6 +420,25 @@ export function requireSketchCatchAwsCallerPrincipalArn(): string {
   return callerPrincipalArn;
 }
 
+export function requireSketchCatchAwsCallerPrincipalArns(): readonly [string, ...string[]] {
+  const configuredPrincipalArns = process.env.SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARNS
+    ?.split(",")
+    .map((callerPrincipalArn) => callerPrincipalArn.trim())
+    .filter(Boolean);
+  const callerPrincipalArns = [
+    requireSketchCatchAwsCallerPrincipalArn(),
+    ...(configuredPrincipalArns ?? [])
+  ].filter((callerPrincipalArn, index, values) => values.indexOf(callerPrincipalArn) === index);
+
+  for (const callerPrincipalArn of callerPrincipalArns) {
+    if (!/^arn:aws:iam::\d{12}:role\/[\w+=,.@/-]+$/.test(callerPrincipalArn)) {
+      throw new Error("SKETCHCATCH_AWS_CALLER_PRINCIPAL_ARNS must contain only IAM Role ARNs");
+    }
+  }
+
+  return callerPrincipalArns as [string, ...string[]];
+}
+
 export function assertNoStaticAwsCredentialsForApiServer(
   env: NodeJS.ProcessEnv = process.env
 ): void {
@@ -297,6 +465,22 @@ function requireNonEmptyEnv(value: string | undefined, name: string): string {
   }
 
   return trimmedValue;
+}
+
+function isConfiguredCapabilityValue(value: string | undefined): value is string {
+  return value !== undefined && value.length > 0;
+}
+
+function requireCapabilityValue(value: string | undefined): string {
+  if (!isConfiguredCapabilityValue(value)) {
+    throw capabilityConfigurationError();
+  }
+
+  return value;
+}
+
+function capabilityConfigurationError(): Error {
+  return new Error("Invalid Live Observation capability configuration");
 }
 
 function parseCommaSeparatedEnv(value: string | undefined, name: string): string[] {

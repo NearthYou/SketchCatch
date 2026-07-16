@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Cloud, GitBranch } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getWorkspaceHref } from "../../components/dashboard/api-project-card";
+import { ProductState } from "../../components/ui/ProductState";
 import { getApiErrorMessage } from "../../lib/api-client";
 import {
   type DashboardOverviewData,
@@ -25,8 +26,10 @@ type DashboardOverviewState =
   | { readonly message: string; readonly status: "error" }
   | { readonly data: DashboardOverviewData; readonly status: "empty" | "ready" };
 
+// 프로젝트, 비용, 연결, 배포 상태를 한 번에 모아 Dashboard 행동으로 연결합니다.
 export function DashboardOverview() {
   const [state, setState] = useState<DashboardOverviewState>({ status: "loading" });
+  const [reloadCount, setReloadCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +59,7 @@ export function DashboardOverview() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadCount]);
 
   if (state.status === "loading") {
     return <DashboardOverviewLoading />;
@@ -64,10 +67,20 @@ export function DashboardOverview() {
 
   if (state.status === "error") {
     return (
-      <section className="dashboardStateBand" aria-label="Dashboard 오류">
-        <span>데이터를 불러오지 못했습니다.</span>
-        <p role="alert">{state.message}</p>
-      </section>
+      <ProductState
+        action={
+          <button
+            className="dashboardSecondaryButton"
+            onClick={() => setReloadCount((count) => count + 1)}
+            type="button"
+          >
+            다시 시도
+          </button>
+        }
+        description={state.message}
+        kind="error"
+        title="Dashboard를 불러오지 못했습니다"
+      />
     );
   }
 
@@ -78,17 +91,14 @@ export function DashboardOverview() {
   const { data } = state;
   const verifiedAwsConnectionCount =
     data.awsConnections?.filter((connection) => connection.status === "verified").length ?? null;
-  const fallbackEstimateCount =
-    data.costEstimate?.projects.filter((item) => item.costEstimate?.fallbackUsed).length ?? null;
-  const latestDeployment = data.recentDeployments[0]?.deployment ?? null;
+  const latestDeploymentItem = data.recentDeployments[0] ?? null;
+  const latestDeployment = latestDeploymentItem?.deployment ?? null;
 
   return (
     <div className="dashboardOverview">
-      <header className="dashboardPageHeader">
+      <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div>
-          <p className="dashboardEyebrow">Operations overview</p>
           <h1>작업 현황</h1>
-          <p>Practice Architecture와 Deployment 상태를 한곳에서 확인합니다.</p>
         </div>
       </header>
 
@@ -104,23 +114,22 @@ export function DashboardOverview() {
       ) : null}
 
       <section className="dashboardMetricStrip" aria-label="Dashboard 핵심 지표">
-        <DashboardMetric label="프로젝트" value={`${data.projects.length}개`} detail="전체 프로젝트" />
+        <DashboardMetric
+          href="/dashboard/projects"
+          label="프로젝트"
+          value={`${data.projects.length}개`}
+        />
         <DashboardMetric
           label="최근 Deployment"
           value={latestDeployment ? getDeploymentStatusLabel(latestDeployment.status) : "없음"}
           detail={latestDeployment ? formatDateTime(latestDeployment.updatedAt) : "실행 기록 없음"}
+          href={latestDeploymentItem ? getWorkspaceHref(latestDeploymentItem.project) : undefined}
           tone={latestDeployment ? getDeploymentTone(latestDeployment.status) : "neutral"}
         />
         <DashboardMetric
           label="월 예상 비용"
           value={formatMoney(data.costEstimate?.totalMonthlyEstimate ?? null)}
-          detail={
-            fallbackEstimateCount === null
-              ? "불러오지 못함"
-              : fallbackEstimateCount > 0
-                ? `fallback 추정 ${fallbackEstimateCount}개 프로젝트`
-                : "지원 가능한 가격 근거 사용"
-          }
+          href="/dashboard/costs"
         />
         <DashboardMetric
           label="연결 상태"
@@ -129,7 +138,7 @@ export function DashboardOverview() {
               ? "확인 불가"
               : `AWS ${verifiedAwsConnectionCount} · Git ${data.connectedRepositoryCount ?? 0}`
           }
-          detail="검증된 Role과 활성 Repository"
+          href="/dashboard/settings"
         />
       </section>
 
@@ -137,7 +146,6 @@ export function DashboardOverview() {
         <section className="dashboardSection" aria-labelledby="recent-projects-title">
           <div className="dashboardSectionHeader">
             <div>
-              <p>Recently updated</p>
               <h2 id="recent-projects-title">최근 프로젝트</h2>
             </div>
             <Link href="/dashboard/projects">
@@ -154,7 +162,6 @@ export function DashboardOverview() {
         <section className="dashboardSection" aria-labelledby="recent-deployments-title">
           <div className="dashboardSectionHeader">
             <div>
-              <p>Deployment activity</p>
               <h2 id="recent-deployments-title">최근 Deployment</h2>
             </div>
           </div>
@@ -183,33 +190,6 @@ export function DashboardOverview() {
           )}
         </section>
       </div>
-
-      <section className="dashboardConnectionBand" aria-labelledby="connections-title">
-        <div>
-          <p>Connections</p>
-          <h2 id="connections-title">외부 연결</h2>
-        </div>
-        <div className="dashboardConnectionItem">
-          <Cloud aria-hidden="true" size={20} />
-          <div>
-            <strong>AWS Role</strong>
-            <span>
-              {verifiedAwsConnectionCount === null
-                ? "상태를 확인하지 못했습니다."
-                : `검증된 연결 ${verifiedAwsConnectionCount}개`}
-            </span>
-          </div>
-          <Link href="/dashboard/settings">설정</Link>
-        </div>
-        <div className="dashboardConnectionItem">
-          <GitBranch aria-hidden="true" size={20} />
-          <div>
-            <strong>Source Repository</strong>
-            <span>활성 연결 {data.connectedRepositoryCount ?? 0}개</span>
-          </div>
-          <Link href="/dashboard/projects">프로젝트별 설정</Link>
-        </div>
-      </section>
     </div>
   );
 }

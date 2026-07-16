@@ -5,7 +5,7 @@
   padding: 16px;
   background: #fafafa;
   color: #171717;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 256px minmax(0, 1fr);
 }
 
 .dashboardSidebar {
@@ -25,7 +25,7 @@
 
 .dashboardSidebarHeader {
   display: flex;
-  min-height: 68px;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
@@ -36,7 +36,7 @@
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   color: #171717;
   font-size: 18px;
   font-weight: 700;
@@ -50,7 +50,7 @@
   height: 24px;
   flex: 0 0 auto;
   object-fit: contain;
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 }
 
 .dashboardNavigation {
@@ -129,8 +129,8 @@
 }
 
 .dashboardAccountText span {
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .dashboardLogoutButton,
@@ -168,7 +168,7 @@
   z-index: 20;
   top: 16px;
   display: flex;
-  min-height: 68px;
+  min-height: 64px;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -191,12 +191,6 @@
   min-width: 0;
   align-items: baseline;
   gap: 9px;
-}
-
-.dashboardTopbarTitle span {
-  color: #777b84;
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .dashboardTopbarTitle strong {
@@ -363,10 +357,6 @@
   .dashboardTopbar {
     min-height: 64px;
     padding: 0 16px;
-  }
-
-  .dashboardTopbarTitle > div > span {
-    display: none;
   }
 
   .dashboardPrimaryAction,

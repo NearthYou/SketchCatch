@@ -6,12 +6,17 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent
 } from "react";
-import type {
-  CheckFinding,
-  TerraformDiagnostic,
-  TerraformSourceLocation,
-  TerraformSyncFileInput
+import {
+  type ArchitectureDiagnostic,
+  type CheckFinding,
+  type TerraformDiagnostic,
+  type TerraformSourceLocation,
+  type TerraformSyncFileInput
 } from "@sketchcatch/types";
+import {
+  createArchitectureRuleInputFingerprint,
+  evaluateArchitectureDependencies
+} from "@sketchcatch/types/architecture-dependency-rules";
 import { createPortal } from "react-dom";
 import {
   Activity,
@@ -30,18 +35,22 @@ import {
 import { ResourceWorkspacePanel } from "./ResourceWorkspacePanel";
 import {
   TerraformCodePanel,
+  type TerraformFilesReplacementRequest,
   type PreparedTerraformArtifactSource,
   type TerraformCodePanelHandle
 } from "./TerraformCodePanel";
-import { TerraformIssuesPanel } from "./TerraformIssuesPanel";
+import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
   saveWorkspaceTerraformArtifact,
+  type PreparedWorkspaceDeploymentArtifacts,
   type SavedWorkspaceTerraformArtifact
 } from "./workspace-deployment-artifacts";
+import { requireSavedProjectDraftRevision } from "./project-deployment-preparation";
+import { DeploymentPreparationError } from "./deployment-preparation-error";
 import {
   createTerraformLeaveSaveStartFeedback,
   resolveTerraformLeaveSaveCompletion,
@@ -56,23 +65,42 @@ import {
   storeTerraformIssues,
   type TerraformIssueRecord
 } from "./terraform-issues-state";
+import { replaceArchitectureDiagnostics } from "./architecture-diagnostics-state";
 import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
+  WorkspaceTerraformAiCodeContext,
+  WorkspaceTerraformAiContext,
   TerraformSafeFixApplyRequest,
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
+import {
+  createWorkspaceTerraformFingerprint,
+  EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT
+} from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
+import type { DeploymentAvailability } from "./deployment-availability";
 import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly deploymentAvailability: DeploymentAvailability;
+  readonly deploymentOpenRequestId?: number | undefined;
   readonly initialView?: WorkspaceRightPanelView | undefined;
-  readonly onTerraformIssueAiRequest: (request: TerraformIssueAiRequest) => void;
-  readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
+  readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
+  readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
+  readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
+  readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
+  readonly onTerraformAiInteraction: (
+    scope: "draft" | "errors" | "preview",
+    diagnosticKey?: string | undefined
+  ) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
   readonly projectName: string;
+  readonly onTerraformFilesChange?:
+    | ((files: readonly TerraformSyncFileInput[]) => void)
+    | undefined;
+  readonly onTerraformFilesReplacementApplied?: ((id: number) => void) | undefined;
+  readonly selectedTerraformIssueKey: string | null;
   readonly terraformSafeFixApplyRequest: TerraformSafeFixApplyRequest | null;
 };
 
@@ -90,24 +118,31 @@ const TERRAFORM_SPLIT_KEYBOARD_STEP = 4;
 // 오른쪽 패널은 작업 중 필요한 모드만 노출하고, Reverse는 새 프로젝트 시작 흐름에서만 진입하게 둡니다.
 export function WorkspaceRightPanel({
   context,
+  deploymentAvailability,
+  deploymentOpenRequestId = 0,
   initialView,
-  onTerraformIssueAiRequest,
-  onTerraformPreviewAiRequest,
+  initialTerraformFiles,
+  terraformFilesReplacement,
+  onSelectTerraformIssue,
+  onTerraformAiContextChange,
+  onTerraformAiInteraction,
   onTerraformSafeFixApplyResult,
   projectId,
   projectName,
+  onTerraformFilesChange,
+  onTerraformFilesReplacementApplied,
+  selectedTerraformIssueKey,
   terraformSafeFixApplyRequest
 }: WorkspaceRightPanelProps) {
   const terraformPanelRef = useRef<TerraformCodePanelHandle | null>(null);
   const terraformSplitRef = useRef<HTMLDivElement | null>(null);
   const terraformViewRef = useRef<HTMLDivElement | null>(null);
-  const terraformIssuesPaneRef = useRef<HTMLDivElement | null>(null);
   const pendingTerraformLeaveActionRef = useRef<PendingTerraformLeaveAction | null>(null);
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(
-    initialView === "deployment" ? "resource" : initialView ?? "resource"
+    initialView === "deployment" ? "resource" : (initialView ?? "resource")
   );
   const [resourceWorkspaceView, setResourceWorkspaceView] = useState<ResourceWorkspaceView>(
     defaultResourceWorkspaceView
@@ -126,7 +161,19 @@ export function WorkspaceRightPanel({
     DEFAULT_TERRAFORM_CODE_PANE_RATIO
   );
   const [terraformIssues, setTerraformIssues] = useState<TerraformIssueRecord[]>([]);
-  const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<string | null>(null);
+  const [terraformAiCodeContext, setTerraformAiCodeContext] =
+    useState<WorkspaceTerraformAiCodeContext>(() => ({
+      combinedTerraformCode: EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT.combinedTerraformCode,
+      files: EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT.files,
+      fingerprint: EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT.fingerprint,
+      reviewScope: EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT.reviewScope
+    }));
+  const [architectureDiagnostics, setArchitectureDiagnostics] = useState<ArchitectureDiagnostic[]>(
+    []
+  );
+  const [loadedTerraformIssuesProjectId, setLoadedTerraformIssuesProjectId] = useState<
+    string | null
+  >(null);
   const [pendingTerraformIssueFixSourceLocation, setPendingTerraformIssueFixSourceLocation] =
     useState<TerraformSourceLocation | null>(null);
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
@@ -134,6 +181,12 @@ export function WorkspaceRightPanel({
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
     initialView === "deployment"
   );
+
+  useEffect(() => {
+    if (deploymentOpenRequestId > 0) {
+      setIsDeploymentConsoleOpen(true);
+    }
+  }, [deploymentOpenRequestId]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
@@ -141,7 +194,18 @@ export function WorkspaceRightPanel({
     () => terraformIssues.map((issue) => issue.diagnostic),
     [terraformIssues]
   );
-  const hasTerraformIssueErrors = terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const architectureInputFingerprint = useMemo(
+    () => createArchitectureRuleInputFingerprint(context.diagram),
+    [context.diagram]
+  );
+  const contextualArchitectureDiagram = useMemo(
+    () => context.diagram,
+    [architectureInputFingerprint]
+  );
+  const hasIssueErrors =
+    terraformDiagnostics.some((diagnostic) => diagnostic.severity === "error") ||
+    architectureDiagnostics.some((diagnostic) => diagnostic.severity === "error");
+  const issueCount = terraformDiagnostics.length + architectureDiagnostics.length;
   const currentDeploymentBaselineFingerprint = useMemo(
     () => toDeploymentBaselineFingerprint(context.diagram),
     [context.diagram]
@@ -163,34 +227,65 @@ export function WorkspaceRightPanel({
     }
   }, []);
 
-  const handleTerraformDiagnosticsChange = useCallback((diagnostics: TerraformDiagnostic[]): void => {
-    latestTerraformDiagnosticsRef.current = diagnostics;
-    const validatedAt = new Date().toISOString();
-    setTerraformIssues((currentIssues) => {
-      return mergeTerraformValidationDiagnostics(
-        currentIssues,
-        diagnostics,
-        validatedAt
-      );
+  const handleTerraformDiagnosticsChange = useCallback(
+    (diagnostics: TerraformDiagnostic[]): void => {
+      latestTerraformDiagnosticsRef.current = diagnostics;
+      const validatedAt = new Date().toISOString();
+      setTerraformIssues((currentIssues) => {
+        return mergeTerraformValidationDiagnostics(currentIssues, diagnostics, validatedAt);
+      });
+    },
+    []
+  );
+
+  const openTerraformIssueSourceLocation = useCallback(
+    (sourceLocation: TerraformSourceLocation): void => {
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+      setPendingTerraformIssueFixSourceLocation(sourceLocation);
+    },
+    [context]
+  );
+
+  const handleTerraformIssueSelection = useCallback(
+    (issue: TerraformIssueRecord): void => {
+      const sourceLocation = getTerraformIssueSourceLocation(issue);
+      openTerraformIssueSourceLocation(sourceLocation);
+      onSelectTerraformIssue(issue.diagnosticKey);
+      onTerraformAiInteraction("errors", issue.diagnosticKey);
+    },
+    [onSelectTerraformIssue, onTerraformAiInteraction, openTerraformIssueSourceLocation]
+  );
+
+  const handleResourceWorkspaceViewChange = useCallback(
+    (nextView: ResourceWorkspaceView): void => {
+      setResourceWorkspaceView(nextView);
+      onTerraformAiInteraction("draft");
+    },
+    [onTerraformAiInteraction]
+  );
+
+  useEffect(() => {
+    onTerraformAiContextChange({
+      ...terraformAiCodeContext,
+      issues: terraformIssues
     });
-  }, []);
+  }, [onTerraformAiContextChange, terraformAiCodeContext, terraformIssues]);
 
-  const openTerraformIssueSourceLocation = useCallback((sourceLocation: TerraformSourceLocation): void => {
-    context.setRightPanelOpen(true);
-    setActiveView("terraform");
-    setPendingTerraformIssueFixSourceLocation(sourceLocation);
-  }, [context]);
+  useEffect(() => {
+    if (
+      selectedTerraformIssueKey !== null &&
+      terraformIssues.some((issue) => issue.diagnosticKey === selectedTerraformIssueKey)
+    ) {
+      return;
+    }
 
-  const handleTerraformIssueAiClick = useCallback((issue: TerraformIssueRecord): void => {
-    const sourceLocation = getTerraformIssueSourceLocation(issue);
-    openTerraformIssueSourceLocation(sourceLocation);
-
-    onTerraformIssueAiRequest({
-      id: Date.now(),
-      issue,
-      terraformCode: terraformPanelRef.current?.getCurrentTerraformCode() ?? ""
-    });
-  }, [onTerraformIssueAiRequest, openTerraformIssueSourceLocation]);
+    const nextIssue =
+      terraformIssues.find((issue) => issue.diagnostic.severity === "error") ??
+      terraformIssues[0] ??
+      null;
+    onSelectTerraformIssue(nextIssue?.diagnosticKey ?? null);
+  }, [onSelectTerraformIssue, selectedTerraformIssueKey, terraformIssues]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -206,6 +301,28 @@ export function WorkspaceRightPanel({
   useEffect(() => {
     setPreDeploymentCheckState(initialPreDeploymentCheckState);
   }, [projectId]);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setArchitectureDiagnostics((currentDiagnostics) =>
+        replaceArchitectureDiagnostics(
+          currentDiagnostics,
+          evaluateArchitectureDependencies(contextualArchitectureDiagram, "contextual")
+        )
+      );
+    }, 300);
+
+    return () => window.clearTimeout(timerId);
+  }, [architectureInputFingerprint, contextualArchitectureDiagram]);
+
+  const handleArchitectureDiagnosticsChange = useCallback(
+    (diagnostics: ArchitectureDiagnostic[]): void => {
+      setArchitectureDiagnostics((currentDiagnostics) =>
+        replaceArchitectureDiagnostics(currentDiagnostics, diagnostics)
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     if (loadedTerraformIssuesProjectId !== projectId || typeof window === "undefined") {
@@ -226,10 +343,43 @@ export function WorkspaceRightPanel({
       return;
     }
 
+    if (!context.isRightPanelOpen || activeView !== "terraform" || !terraformPanelRef.current) {
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+      return;
+    }
+
     latestTerraformSafeFixApplyRequestIdRef.current = request.id;
 
     async function applySafeFix(): Promise<void> {
-      const result = await terraformPanelRef.current?.applyTerraformSafeFix(request.diagnostic, request.codePreview);
+      const panel = terraformPanelRef.current;
+
+      if (!panel) {
+        onTerraformSafeFixApplyResult({
+          requestId: request.id,
+          applied: false,
+          message: "Terraform 패널이 준비되지 않아 적용하지 못했습니다."
+        });
+        return;
+      }
+
+      const currentFingerprint = createWorkspaceTerraformFingerprint(
+        panel.getTerraformFiles().map((file) => ({
+          fileName: file.fileName,
+          terraformCode: file.code
+        }))
+      );
+
+      if (currentFingerprint !== request.expectedTerraformFingerprint) {
+        onTerraformSafeFixApplyResult({
+          requestId: request.id,
+          applied: false,
+          message: "Terraform 코드가 변경되어 수정안을 적용하지 않았습니다. 다시 분석하세요."
+        });
+        return;
+      }
+
+      const result = await panel.applyTerraformSafeFixes(request.fixes);
 
       if (result?.applied) {
         const sourceLocation = getTerraformIssueFixSourceLocation(request);
@@ -244,7 +394,13 @@ export function WorkspaceRightPanel({
     }
 
     void applySafeFix();
-  }, [onTerraformSafeFixApplyResult, openTerraformIssueSourceLocation, terraformSafeFixApplyRequest]);
+  }, [
+    activeView,
+    context,
+    onTerraformSafeFixApplyResult,
+    openTerraformIssueSourceLocation,
+    terraformSafeFixApplyRequest
+  ]);
 
   useEffect(() => {
     if (
@@ -259,17 +415,20 @@ export function WorkspaceRightPanel({
     setPendingTerraformIssueFixSourceLocation(null);
   }, [activeView, context.isRightPanelOpen, pendingTerraformIssueFixSourceLocation]);
 
-  const requestTerraformLeave = useCallback((action: PendingTerraformLeaveAction): boolean => {
-    if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {
-      return true;
-    }
+  const requestTerraformLeave = useCallback(
+    (action: PendingTerraformLeaveAction): boolean => {
+      if (!hasUnsavedTerraformChanges || skipTerraformLeaveGuardRef.current) {
+        return true;
+      }
 
-    pendingTerraformLeaveActionRef.current = action;
-    setTerraformLeaveSaveState("idle");
-    setTerraformLeaveSaveMessage("");
-    setShowTerraformLeaveDialog(true);
-    return false;
-  }, [hasUnsavedTerraformChanges]);
+      pendingTerraformLeaveActionRef.current = action;
+      setTerraformLeaveSaveState("idle");
+      setTerraformLeaveSaveMessage("");
+      setShowTerraformLeaveDialog(true);
+      return false;
+    },
+    [hasUnsavedTerraformChanges]
+  );
 
   const runPendingTerraformLeaveAction = useCallback((): void => {
     const pendingAction = pendingTerraformLeaveActionRef.current;
@@ -284,6 +443,9 @@ export function WorkspaceRightPanel({
     try {
       if (pendingAction.kind === "view") {
         setActiveView(pendingAction.view);
+        onTerraformAiInteraction(
+          pendingAction.view === "terraform" ? "preview" : "draft"
+        );
         return;
       }
 
@@ -303,99 +465,102 @@ export function WorkspaceRightPanel({
         skipTerraformLeaveGuardRef.current = false;
       }, 0);
     }
-  }, [context]);
+  }, [context, onTerraformAiInteraction]);
 
-  const requestView = useCallback((nextView: WorkspaceRightPanelView): void => {
-    if (nextView === activeView) {
-      return;
-    }
-
-    if (nextView === "terraform") {
-      setActiveView("terraform");
-      return;
-    }
-
-    if (!requestTerraformLeave({ kind: "view", view: nextView })) {
-      return;
-    }
-
-    setActiveView(nextView);
-  }, [activeView, requestTerraformLeave]);
-
-  const focusTerraformIssuesPane = useCallback((): void => {
-    context.setRightPanelOpen(true);
-    setActiveView("terraform");
-    window.requestAnimationFrame(() => {
-      terraformIssuesPaneRef.current?.focus({ preventScroll: true });
-    });
-  }, [context]);
-
-  const startTerraformSplitResize = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
-    const splitElement = terraformSplitRef.current;
-
-    if (!splitElement) {
-      return;
-    }
-
-    event.preventDefault();
-    const splitBounds = splitElement.getBoundingClientRect();
-
-    if (splitBounds.height <= 0) {
-      return;
-    }
-
-    const resizeHandle = event.currentTarget;
-    const pointerId = event.pointerId;
-
-    resizeHandle.setPointerCapture(pointerId);
-
-    const updateTerraformCodePaneRatio = (clientY: number): void => {
-      const nextRatio = ((clientY - splitBounds.top) / splitBounds.height) * 100;
-      setTerraformCodePaneRatio(clampTerraformCodePaneRatio(nextRatio));
-    };
-
-    const handlePointerMove = (pointerEvent: PointerEvent): void => {
-      updateTerraformCodePaneRatio(pointerEvent.clientY);
-    };
-
-    const stopTerraformSplitResize = (): void => {
-      if (resizeHandle.hasPointerCapture(pointerId)) {
-        resizeHandle.releasePointerCapture(pointerId);
+  const requestView = useCallback(
+    (nextView: WorkspaceRightPanelView): void => {
+      if (nextView === activeView) {
+        onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
+        return;
       }
 
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopTerraformSplitResize);
-      window.removeEventListener("pointercancel", stopTerraformSplitResize);
-    };
-
-    updateTerraformCodePaneRatio(event.clientY);
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopTerraformSplitResize);
-    window.addEventListener("pointercancel", stopTerraformSplitResize);
-  }, []);
-
-  const handleTerraformSplitKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
-      return;
-    }
-
-    event.preventDefault();
-    setTerraformCodePaneRatio((currentRatio) => {
-      if (event.key === "Home") {
-        return MIN_TERRAFORM_CODE_PANE_RATIO;
+      if (nextView === "terraform") {
+        setActiveView("terraform");
+        onTerraformAiInteraction("preview");
+        return;
       }
 
-      if (event.key === "End") {
-        return MAX_TERRAFORM_CODE_PANE_RATIO;
+      if (!requestTerraformLeave({ kind: "view", view: nextView })) {
+        return;
       }
 
-      const delta = event.key === "ArrowUp"
-        ? -TERRAFORM_SPLIT_KEYBOARD_STEP
-        : TERRAFORM_SPLIT_KEYBOARD_STEP;
+      setActiveView(nextView);
+      onTerraformAiInteraction("draft");
+    },
+    [activeView, onTerraformAiInteraction, requestTerraformLeave]
+  );
 
-      return clampTerraformCodePaneRatio(currentRatio + delta);
-    });
-  }, []);
+  const startTerraformSplitResize = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>): void => {
+      const splitElement = terraformSplitRef.current;
+
+      if (!splitElement) {
+        return;
+      }
+
+      event.preventDefault();
+      const splitBounds = splitElement.getBoundingClientRect();
+
+      if (splitBounds.height <= 0) {
+        return;
+      }
+
+      const resizeHandle = event.currentTarget;
+      const pointerId = event.pointerId;
+
+      resizeHandle.setPointerCapture(pointerId);
+
+      const updateTerraformCodePaneRatio = (clientY: number): void => {
+        const nextRatio = ((clientY - splitBounds.top) / splitBounds.height) * 100;
+        setTerraformCodePaneRatio(clampTerraformCodePaneRatio(nextRatio));
+      };
+
+      const handlePointerMove = (pointerEvent: PointerEvent): void => {
+        updateTerraformCodePaneRatio(pointerEvent.clientY);
+      };
+
+      const stopTerraformSplitResize = (): void => {
+        if (resizeHandle.hasPointerCapture(pointerId)) {
+          resizeHandle.releasePointerCapture(pointerId);
+        }
+
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", stopTerraformSplitResize);
+        window.removeEventListener("pointercancel", stopTerraformSplitResize);
+      };
+
+      updateTerraformCodePaneRatio(event.clientY);
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", stopTerraformSplitResize);
+      window.addEventListener("pointercancel", stopTerraformSplitResize);
+    },
+    []
+  );
+
+  const handleTerraformSplitKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+      if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) {
+        return;
+      }
+
+      event.preventDefault();
+      setTerraformCodePaneRatio((currentRatio) => {
+        if (event.key === "Home") {
+          return MIN_TERRAFORM_CODE_PANE_RATIO;
+        }
+
+        if (event.key === "End") {
+          return MAX_TERRAFORM_CODE_PANE_RATIO;
+        }
+
+        const delta =
+          event.key === "ArrowUp" ? -TERRAFORM_SPLIT_KEYBOARD_STEP : TERRAFORM_SPLIT_KEYBOARD_STEP;
+
+        return clampTerraformCodePaneRatio(currentRatio + delta);
+      });
+    },
+    []
+  );
 
   const openDeploymentConsole = useCallback((): void => {
     if (!requestTerraformLeave({ kind: "deployment-console" })) {
@@ -409,10 +574,13 @@ export function WorkspaceRightPanel({
     setIsLiveObservationOpen(true);
   }, []);
 
-  const applyTerraformLeaveSaveFeedback = useCallback((feedback: TerraformLeaveSaveFeedback): void => {
-    setTerraformLeaveSaveState(feedback.state);
-    setTerraformLeaveSaveMessage(feedback.message);
-  }, []);
+  const applyTerraformLeaveSaveFeedback = useCallback(
+    (feedback: TerraformLeaveSaveFeedback): void => {
+      setTerraformLeaveSaveState(feedback.state);
+      setTerraformLeaveSaveMessage(feedback.message);
+    },
+    []
+  );
 
   const resetTerraformLeaveSaveFeedback = useCallback((): void => {
     setTerraformLeaveSaveState("idle");
@@ -493,6 +661,7 @@ export function WorkspaceRightPanel({
     if (nextView === "terraform") {
       context.setRightPanelOpen(true);
       setActiveView("terraform");
+      onTerraformAiInteraction("preview");
       return;
     }
 
@@ -502,6 +671,7 @@ export function WorkspaceRightPanel({
 
     context.setRightPanelOpen(true);
     setActiveView(nextView);
+    onTerraformAiInteraction("draft");
   }
 
   function requestRightPanelClose(): void {
@@ -525,49 +695,82 @@ export function WorkspaceRightPanel({
     [projectId]
   );
 
-  const prepareDeploymentArtifacts = useCallback(async (): Promise<SavedWorkspaceTerraformArtifact> => {
-    const preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+  const prepareDeploymentArtifacts = useCallback(async (): Promise<
+    PreparedWorkspaceDeploymentArtifacts
+  > => {
+    let preparedSource: PreparedTerraformArtifactSource | undefined;
+
+    try {
+      preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
+    }
 
     if (!preparedSource) {
-      throw new Error("Terraform 패널을 준비하지 못했습니다.");
+      throw new DeploymentPreparationError({
+        cause: new Error("Terraform panel did not provide deployment artifacts"),
+        stage: "terraform_prepare"
+      });
+    }
+
+    let saveResult: unknown;
+
+    try {
+      saveResult = await context.saveDiagramNow?.();
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
+    }
+
+    let preparedDraftRevision: number;
+
+    try {
+      preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
     }
 
     const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
-    setLastSavedDeploymentBaselineFingerprint(toDeploymentBaselineFingerprint(preparedSource.diagramJson));
+    setHasUnsavedTerraformChanges(false);
+    setLastSavedDeploymentBaselineFingerprint(
+      toDeploymentBaselineFingerprint(preparedSource.diagramJson)
+    );
     setIsDeploymentBaselineDirty(false);
 
-    return savedArtifacts;
-  }, [savePreparedTerraformArtifact]);
+    return {
+      ...savedArtifacts,
+      diagramJson: preparedSource.diagramJson,
+      preparedDraftRevision,
+      terraformFiles: preparedSource.terraformFiles
+    };
+  }, [context, savePreparedTerraformArtifact]);
 
-  const validateTerraformForPreDeployment = useCallback(async (): Promise<TerraformDiagnostic[]> => {
+  const validateTerraformForPreDeployment = useCallback(async (): Promise<
+    TerraformDiagnostic[]
+  > => {
     return terraformPanelRef.current?.validateCurrentTerraform() ?? terraformDiagnostics;
   }, [terraformDiagnostics]);
 
-  const getTerraformFilesForPreDeployment = useCallback((): readonly TerraformSyncFileInput[] => {
-    return (terraformPanelRef.current?.getTerraformFiles() ?? []).map((file) => ({
-      fileName: file.fileName,
-      terraformCode: file.code
-    }));
-  }, []);
+  const openPreDeploymentFindingTerraformSource = useCallback(
+    (finding: CheckFinding): TerraformSourceLocation | null => {
+      const sourceLocation = getPreDeploymentFindingTerraformSourceLocation({
+        diagramJson: context.diagram,
+        files: terraformPanelRef.current?.getTerraformFiles() ?? [],
+        finding
+      });
 
-  const openPreDeploymentFindingTerraformSource = useCallback((finding: CheckFinding): TerraformSourceLocation | null => {
-    const sourceLocation = getPreDeploymentFindingTerraformSourceLocation({
-      diagramJson: context.diagram,
-      files: terraformPanelRef.current?.getTerraformFiles() ?? [],
-      finding
-    });
+      if (!sourceLocation) {
+        return null;
+      }
 
-    if (!sourceLocation) {
-      return null;
-    }
+      context.setRightPanelOpen(true);
+      setActiveView("terraform");
+      terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
 
-    context.setRightPanelOpen(true);
-    setActiveView("terraform");
-    terraformPanelRef.current?.openTerraformSourceLocation(sourceLocation);
-
-    return sourceLocation;
-  }, [context]);
+      return sourceLocation;
+    },
+    [context]
+  );
 
   useEffect(() => {
     if (!hasUnsavedTerraformChanges) {
@@ -594,10 +797,6 @@ export function WorkspaceRightPanel({
       }
 
       if (isTerraformEditorNavigationTarget(target)) {
-        return;
-      }
-
-      if (isTerraformIssueAiResolutionTarget(target)) {
         return;
       }
 
@@ -633,32 +832,33 @@ export function WorkspaceRightPanel({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [hasUnsavedTerraformChanges]);
 
-  const deploymentConsoleContent = isDeploymentConsoleOpen && canRenderDeploymentPortal ? (
-    <DeploymentPanel
-      currentNodeCount={context.nodes.length}
-      diagramJson={context.diagram}
-      fullScreenOnly
-      hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
-      initialExpanded
-      onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
-      onGetTerraformFiles={getTerraformFilesForPreDeployment}
-      onOpenFindingTerraformSource={(finding) => {
-        const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
+  const deploymentConsoleContent =
+    isDeploymentConsoleOpen && canRenderDeploymentPortal ? (
+      <DeploymentPanel
+        deploymentAvailability={deploymentAvailability}
+        diagramJson={context.diagram}
+        fullScreenOnly
+        hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+        initialExpanded
+        onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
+        onOpenLiveObservation={openLiveObservation}
+        onOpenFindingTerraformSource={(finding) => {
+          const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
 
-        if (sourceLocation) {
-          setIsDeploymentConsoleOpen(false);
-        }
+          if (sourceLocation) {
+            setIsDeploymentConsoleOpen(false);
+          }
 
-        return sourceLocation;
-      }}
-      onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
-      onPreDeploymentCheckStateChange={setPreDeploymentCheckState}
-      onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
-      preDeploymentCheckState={preDeploymentCheckState}
-      projectId={projectId}
-      projectName={projectName}
-    />
-  ) : null;
+          return sourceLocation;
+        }}
+        onPrepareDeploymentArtifacts={prepareDeploymentArtifacts}
+        onPreDeploymentCheckStateChange={setPreDeploymentCheckState}
+        onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
+        preDeploymentCheckState={preDeploymentCheckState}
+        projectId={projectId}
+        projectName={projectName}
+      />
+    ) : null;
   const deploymentConsole = deploymentConsoleContent
     ? createPortal(deploymentConsoleContent, document.body)
     : null;
@@ -666,7 +866,6 @@ export function WorkspaceRightPanel({
     <LiveObservationModal
       onClose={() => setIsLiveObservationOpen(false)}
       projectId={projectId}
-      projectName={projectName}
     />
   ) : null;
   const terraformSplitStyle = {
@@ -701,12 +900,13 @@ export function WorkspaceRightPanel({
             type="button"
           >
             <Code2 size={18} aria-hidden="true" />
-            <span className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}>
-              {terraformDiagnostics.length}
+            <span className={hasIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}>
+              {issueCount}
             </span>
           </button>
           <button
             className={styles.collapsedPanelButton}
+            data-deployment-console-trigger
             onClick={openDeploymentConsole}
             title="Deploy"
             type="button"
@@ -716,7 +916,7 @@ export function WorkspaceRightPanel({
           <button
             className={styles.collapsedPanelButton}
             onClick={openLiveObservation}
-            title="시뮬레이션"
+            title="Live Observation"
             type="button"
           >
             <Activity size={18} aria-hidden="true" />
@@ -742,10 +942,16 @@ export function WorkspaceRightPanel({
           </button>
         </div>
         <div className={styles.rightPanelModeBar} role="group" aria-label="Panel mode">
-          <div className={styles.panelModeIconGroup} role="group" aria-label="Configurator and code">
+          <div
+            className={styles.panelModeIconGroup}
+            role="group"
+            aria-label="Configurator and code"
+          >
             <button
               aria-pressed={activeView === "resource"}
-              className={activeView === "resource" ? styles.panelModeButtonActive : styles.panelModeButton}
+              className={
+                activeView === "resource" ? styles.panelModeButtonActive : styles.panelModeButton
+              }
               onClick={() => requestView("resource")}
               title="Resources"
               type="button"
@@ -754,7 +960,9 @@ export function WorkspaceRightPanel({
             </button>
             <button
               aria-pressed={activeView === "terraform"}
-              className={activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton}
+              className={
+                activeView === "terraform" ? styles.panelModeButtonActive : styles.panelModeButton
+              }
               data-terraform-editor-navigation
               onClick={() => requestView("terraform")}
               title="Terraform code"
@@ -762,41 +970,36 @@ export function WorkspaceRightPanel({
             >
               <Code2 size={16} aria-hidden="true" />
               <span
-                className={hasTerraformIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
-                aria-label={`${terraformDiagnostics.length} issues`}
+                className={hasIssueErrors ? styles.panelIssueBadgeError : styles.panelIssueBadge}
+                aria-label={`${issueCount} issues`}
               >
-                {terraformDiagnostics.length}
+                {issueCount}
               </span>
             </button>
           </div>
           <button
             className={styles.panelModeTextButton}
-            onClick={openDeploymentConsole}
-            title="Open deployment console"
-            type="button"
-          >
-            <Rocket size={14} aria-hidden="true" />
-            <span>Deploy</span>
-          </button>
-          <button
-            className={styles.panelModeTextButton}
             onClick={openLiveObservation}
-            title="실시간 트래픽 및 ASG 관측"
+            title="Live Observation"
             type="button"
           >
             <Activity size={14} aria-hidden="true" />
-            <span>시뮬레이션</span>
+            <span>Live Observation</span>
           </button>
         </div>
 
         <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
           <ResourceWorkspacePanel
             context={context}
-            onViewChange={setResourceWorkspaceView}
+            onViewChange={handleResourceWorkspaceViewChange}
             view={resourceWorkspaceView}
           />
         </div>
-        <div ref={terraformViewRef} className={styles.rightPanelView} hidden={activeView !== "terraform"}>
+        <div
+          ref={terraformViewRef}
+          className={styles.rightPanelView}
+          hidden={activeView !== "terraform"}
+        >
           <div
             className={styles.terraformSplitLayout}
             ref={terraformSplitRef}
@@ -806,14 +1009,19 @@ export function WorkspaceRightPanel({
               <TerraformCodePanel
                 ref={terraformPanelRef}
                 context={context}
+                initialTerraformFiles={initialTerraformFiles}
+                externalTerraformFilesReplacement={terraformFilesReplacement}
                 externalDiscardRequestId={terraformDiscardRequestId}
                 externalSaveRequestId={terraformSaveRequestId}
                 isVisible={activeView === "terraform"}
+                onArchitectureDiagnosticsChange={handleArchitectureDiagnosticsChange}
                 onDiagnosticsChange={handleTerraformDiagnosticsChange}
                 onDirtyChange={handleTerraformDirtyChange}
                 onExternalSaveComplete={handleTerraformExternalSaveComplete}
-                onOpenIssues={focusTerraformIssuesPane}
-                onTerraformPreviewAiRequest={onTerraformPreviewAiRequest}
+                onTerraformAiCodeContextChange={setTerraformAiCodeContext}
+                onTerraformAiInteraction={() => onTerraformAiInteraction("preview")}
+                onTerraformFilesChange={onTerraformFilesChange}
+                onTerraformFilesReplacementApplied={onTerraformFilesReplacementApplied}
               />
             </div>
             <div
@@ -828,12 +1036,17 @@ export function WorkspaceRightPanel({
               role="separator"
               tabIndex={0}
             />
-            <div
-              className={styles.terraformIssuesPane}
-              ref={terraformIssuesPaneRef}
-              tabIndex={-1}
-            >
-              <TerraformIssuesPanel issues={terraformIssues} onResolveWithAi={handleTerraformIssueAiClick} />
+            <div className={styles.terraformIssuesPane}>
+              <WorkspaceIssuesPanel
+                architectureDiagnostics={architectureDiagnostics}
+                onFocusArchitectureResource={(diagnostic) => {
+                  context.selectResourceNode(diagnostic.resourceNodeId);
+                  setActiveView("resource");
+                }}
+                onSelectTerraformIssue={handleTerraformIssueSelection}
+                selectedTerraformIssueKey={selectedTerraformIssueKey}
+                terraformIssues={terraformIssues}
+              />
             </div>
           </div>
         </div>
@@ -885,33 +1098,35 @@ function isInsideTerraformLeaveDialog(target: Node): boolean {
 }
 
 function isTerraformLeaveGuardIgnoredTarget(target: Node): boolean {
-  return target instanceof Element && Boolean(target.closest("[data-terraform-leave-guard-ignore]"));
+  return (
+    target instanceof Element && Boolean(target.closest("[data-terraform-leave-guard-ignore]"))
+  );
 }
 
 function isTerraformEditorNavigationTarget(target: Node): boolean {
   return target instanceof Element && Boolean(target.closest("[data-terraform-editor-navigation]"));
 }
 
-function isTerraformIssueAiResolutionTarget(target: Node): boolean {
-  return target instanceof Element && Boolean(target.closest("[data-terraform-issue-ai-resolution]"));
-}
-
 function getTerraformIssueFixSourceLocation(
   request: TerraformSafeFixApplyRequest
 ): TerraformSourceLocation {
+  const fix = request.fixes[0];
+
   return {
-    fileName: request.diagnostic.sourceFileName ?? "main.tf",
-    line: request.codePreview?.sourceLine ?? request.diagnostic.line ?? 1,
-    ...(request.diagnostic.resourceAddress ? { resourceAddress: request.diagnostic.resourceAddress } : {})
+    fileName: fix?.diagnostic.sourceFileName ?? "main.tf",
+    line: fix?.codePreview?.sourceLine ?? fix?.diagnostic.line ?? 1,
+    ...(fix?.diagnostic.resourceAddress
+      ? { resourceAddress: fix.diagnostic.resourceAddress }
+      : {})
   };
 }
 
-function getTerraformIssueSourceLocation(
-  issue: TerraformIssueRecord
-): TerraformSourceLocation {
+function getTerraformIssueSourceLocation(issue: TerraformIssueRecord): TerraformSourceLocation {
   return {
     fileName: issue.diagnostic.sourceFileName ?? "main.tf",
     line: issue.diagnostic.line ?? 1,
-    ...(issue.diagnostic.resourceAddress ? { resourceAddress: issue.diagnostic.resourceAddress } : {})
+    ...(issue.diagnostic.resourceAddress
+      ? { resourceAddress: issue.diagnostic.resourceAddress }
+      : {})
   };
 }

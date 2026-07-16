@@ -2,10 +2,12 @@
 
 import { Eye, EyeOff, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useRef,
   useState
 } from "react";
 import {
@@ -18,27 +20,25 @@ import {
   type SignupRequest
 } from "@sketchcatch/types";
 import { useAuth } from "../../components/auth/auth-provider";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
 import { getCapsLockWarningMessage, isCapsLockActive } from "../../features/auth/caps-lock";
+import {
+  createAvailabilityRequestCoordinator,
+  INITIAL_AVAILABILITY_STATE,
+  runAvailabilityCheck,
+  type AvailabilityState,
+  type AvailabilityStatus
+} from "../../features/auth/signup-availability";
+import {
+  getSignupReadiness,
+  getSignupRequirementMessage
+} from "../../features/auth/signup-readiness";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { requestSignupAvailability } from "../../lib/auth-api";
 import { LEGAL_DOCUMENTS, type LegalDocument, type LegalDocumentKey } from "./legal-documents";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-type AvailabilityStatus = "idle" | "checking" | "available" | "duplicate" | "error";
-
-type AvailabilityState = {
-  status: AvailabilityStatus;
-  value: string | null;
-  message: string | null;
-};
-
-const INITIAL_AVAILABILITY_STATE: AvailabilityState = {
-  status: "idle",
-  value: null,
-  message: null
-};
 
 export function SignupForm() {
   const router = useRouter();
@@ -65,6 +65,8 @@ export function SignupForm() {
   const [usernameAvailability, setUsernameAvailability] = useState<AvailabilityState>(
     INITIAL_AVAILABILITY_STATE
   );
+  const emailAvailabilityRequest = useRef(createAvailabilityRequestCoordinator()).current;
+  const usernameAvailabilityRequest = useRef(createAvailabilityRequestCoordinator()).current;
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -72,109 +74,83 @@ export function SignupForm() {
     }
   }, [router, status]);
 
-  useEffect(() => {
-    if (!activeLegalDocumentKey) {
-      return;
-    }
+  useEffect(
+    () => () => {
+      emailAvailabilityRequest.cancel();
+      usernameAvailabilityRequest.cancel();
+    },
+    [emailAvailabilityRequest, usernameAvailabilityRequest]
+  );
 
-    function handleKeyDown(event: KeyboardEvent): void {
-      if (event.key === "Escape") {
-        setActiveLegalDocumentKey(null);
-      }
-    }
+  function handleUsernameChange(value: string): void {
+    usernameAvailabilityRequest.cancel();
+    setUsername(value);
+    setUsernameAvailability(INITIAL_AVAILABILITY_STATE);
+  }
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeLegalDocumentKey]);
+  function handleEmailChange(value: string): void {
+    emailAvailabilityRequest.cancel();
+    setEmail(value);
+    setEmailAvailability(INITIAL_AVAILABILITY_STATE);
+  }
 
   async function handleUsernameAvailabilityCheck(): Promise<void> {
     const normalizedUsername = normalizeUsername(username);
-
-    if (!normalizedUsername) {
-      setUsernameAvailability({
-        status: "error",
-        value: null,
-        message: "아이디를 입력해주세요."
-      });
-      return;
-    }
-
-    if (!isValidUsername(normalizedUsername)) {
-      setUsernameAvailability({
-        status: "error",
-        value: normalizedUsername,
-        message: "아이디는 3~30자 영문, 숫자, -, _만 사용할 수 있습니다."
-      });
-      return;
-    }
-
-    setUsernameAvailability({
-      status: "checking",
-      value: normalizedUsername,
-      message: "아이디 중복을 확인하는 중입니다."
+    await runAvailabilityCheck({
+      availableMessage: "사용 가능한 아이디입니다.",
+      checkingMessage: "아이디 중복을 확인하는 중입니다.",
+      coordinator: usernameAvailabilityRequest,
+      duplicateMessage: "이미 사용 중인 아이디입니다.",
+      emptyMessage: "아이디를 입력해주세요.",
+      errorMessage: (error) => getApiErrorMessage(error, "아이디 중복 확인에 실패했습니다."),
+      invalidMessage: "아이디는 3~30자 영문, 숫자, -, _만 사용할 수 있습니다.",
+      isValid: isValidUsername,
+      normalizedValue: normalizedUsername,
+      onStateChange: setUsernameAvailability,
+      request: async (signal) =>
+        (await requestSignupAvailability({ username: normalizedUsername }, { signal }))
+          .usernameAvailable === true
     });
+  }
 
-    try {
-      const response = await requestSignupAvailability({ username: normalizedUsername });
-      const isAvailable = response.usernameAvailable === true;
-
-      setUsernameAvailability({
-        status: isAvailable ? "available" : "duplicate",
-        value: normalizedUsername,
-        message: isAvailable ? "사용 가능한 아이디입니다." : "이미 사용 중인 아이디입니다."
-      });
-    } catch (error) {
-      setUsernameAvailability({
-        status: "error",
-        value: normalizedUsername,
-        message: getApiErrorMessage(error, "아이디 중복 확인에 실패했습니다.")
-      });
+  function handleUsernameAvailabilityBlur(): void {
+    const normalizedUsername = normalizeUsername(username);
+    if (
+      !isValidUsername(normalizedUsername) ||
+      hasCurrentAvailabilityResult(usernameAvailability, normalizedUsername)
+    ) {
+      return;
     }
+    void handleUsernameAvailabilityCheck();
   }
 
   async function handleEmailAvailabilityCheck(): Promise<void> {
     const normalizedEmail = normalizeEmail(email);
-
-    if (!normalizedEmail) {
-      setEmailAvailability({
-        status: "error",
-        value: null,
-        message: "이메일을 입력해주세요."
-      });
-      return;
-    }
-
-    if (!EMAIL_PATTERN.test(normalizedEmail)) {
-      setEmailAvailability({
-        status: "error",
-        value: normalizedEmail,
-        message: "이메일 형식을 확인해주세요."
-      });
-      return;
-    }
-
-    setEmailAvailability({
-      status: "checking",
-      value: normalizedEmail,
-      message: "이메일 중복을 확인하는 중입니다."
+    await runAvailabilityCheck({
+      availableMessage: "사용 가능한 이메일입니다.",
+      checkingMessage: "이메일 중복을 확인하는 중입니다.",
+      coordinator: emailAvailabilityRequest,
+      duplicateMessage: "이미 사용 중인 이메일입니다.",
+      emptyMessage: "이메일을 입력해주세요.",
+      errorMessage: (error) => getApiErrorMessage(error, "이메일 중복 확인에 실패했습니다."),
+      invalidMessage: "이메일 형식을 확인해주세요.",
+      isValid: (value) => EMAIL_PATTERN.test(value),
+      normalizedValue: normalizedEmail,
+      onStateChange: setEmailAvailability,
+      request: async (signal) =>
+        (await requestSignupAvailability({ email: normalizedEmail }, { signal })).emailAvailable === true
     });
+  }
 
-    try {
-      const response = await requestSignupAvailability({ email: normalizedEmail });
-      const isAvailable = response.emailAvailable === true;
-
-      setEmailAvailability({
-        status: isAvailable ? "available" : "duplicate",
-        value: normalizedEmail,
-        message: isAvailable ? "사용 가능한 이메일입니다." : "이미 사용 중인 이메일입니다."
-      });
-    } catch (error) {
-      setEmailAvailability({
-        status: "error",
-        value: normalizedEmail,
-        message: getApiErrorMessage(error, "이메일 중복 확인에 실패했습니다.")
-      });
+  function handleEmailAvailabilityBlur(): void {
+    const normalizedEmail = normalizeEmail(email);
+    if (
+      !EMAIL_PATTERN.test(normalizedEmail) ||
+      hasCurrentAvailabilityResult(emailAvailability, normalizedEmail)
+    ) {
+      return;
     }
+    void handleEmailAvailabilityCheck();
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -245,25 +221,35 @@ export function SignupForm() {
     : null;
   const passwordCapsLockWarning = getCapsLockWarningMessage(isPasswordCapsLockOn);
   const passwordConfirmCapsLockWarning = getCapsLockWarningMessage(isPasswordConfirmCapsLockOn);
-  const passwordValidationMessages = getPasswordValidationMessages(password);
+  const passwordValidationMessage = getPasswordValidationMessage(password);
   const passwordConfirmMismatchMessage = getPasswordConfirmMismatchMessage(
     password,
     passwordConfirm
   );
+  const passwordFeedbackMessage =
+    passwordCapsLockWarning || passwordValidationMessage || PASSWORD_POLICY_HELP_TEXT;
+  const passwordConfirmFeedbackMessage =
+    passwordConfirmCapsLockWarning || passwordConfirmMismatchMessage;
   const currentNormalizedUsername = normalizeUsername(username);
   const currentNormalizedEmail = normalizeEmail(email);
   const currentNormalizedNickname = nickname.trim();
-  const isSignupReady =
-    currentNormalizedNickname.length > 0 &&
-    currentNormalizedUsername.length > 0 &&
-    currentNormalizedEmail.length > 0 &&
-    isCurrentValueAvailable(usernameAvailability, currentNormalizedUsername) &&
-    isCurrentValueAvailable(emailAvailability, currentNormalizedEmail) &&
-    getPasswordPolicyErrorMessage(password) === null &&
-    passwordConfirm.length > 0 &&
-    password === passwordConfirm &&
-    termsAccepted &&
-    privacyAccepted;
+  const signupReadiness = getSignupReadiness({
+    emailAvailable: isCurrentValueAvailable(emailAvailability, currentNormalizedEmail),
+    emailEntered: currentNormalizedEmail.length > 0,
+    nicknameEntered: currentNormalizedNickname.length > 0,
+    passwordConfirmed: passwordConfirm.length > 0 && password === passwordConfirm,
+    passwordValid: getPasswordPolicyErrorMessage(password) === null,
+    privacyAccepted,
+    termsAccepted,
+    usernameAvailable: isCurrentValueAvailable(usernameAvailability, currentNormalizedUsername),
+    usernameEntered: currentNormalizedUsername.length > 0
+  });
+  const allRequiredAgreementsAccepted = termsAccepted && privacyAccepted;
+
+  function handleAllRequiredAgreementsChange(isAccepted: boolean): void {
+    setTermsAccepted(isAccepted);
+    setPrivacyAccepted(isAccepted);
+  }
 
   function handlePasswordKeyEvent(event: ReactKeyboardEvent<HTMLInputElement>): void {
     setIsPasswordCapsLockOn(isCapsLockActive(event));
@@ -275,7 +261,7 @@ export function SignupForm() {
 
   return (
     <>
-      <form className="authForm" onSubmit={handleSubmit}>
+      <form className="authForm authSignupForm" onSubmit={handleSubmit}>
         <label>
           이름
           <input
@@ -298,10 +284,8 @@ export function SignupForm() {
               maxLength={30}
               minLength={3}
               name="username"
-              onChange={(event) => {
-                setUsername(event.target.value);
-                setUsernameAvailability(INITIAL_AVAILABILITY_STATE);
-              }}
+              onBlur={handleUsernameAvailabilityBlur}
+              onChange={(event) => handleUsernameChange(event.target.value)}
               placeholder="아이디를 입력하세요."
               required
               type="text"
@@ -316,21 +300,19 @@ export function SignupForm() {
               type="button"
             >
               <Search aria-hidden="true" size={16} />
-              중복 확인
+              아이디 중복 확인
             </button>
           </div>
-          <AvailabilityMessage state={usernameAvailability} />
+          <div className="authFieldFeedback">
+            <AvailabilityMessage state={usernameAvailability} />
+          </div>
         </div>
         <div className="authField">
           <label htmlFor="signup-password">비밀번호</label>
           <div className="authPasswordField">
             <input
-              aria-describedby={
-                passwordCapsLockWarning
-                  ? "signup-password-help signup-password-requirements signup-password-caps-lock"
-                  : "signup-password-help signup-password-requirements"
-              }
-              aria-invalid={passwordValidationMessages.length > 0}
+              aria-describedby="signup-password-help"
+              aria-invalid={Boolean(passwordValidationMessage)}
               autoComplete="new-password"
               disabled={isSubmitting}
               id="signup-password"
@@ -362,35 +344,28 @@ export function SignupForm() {
               )}
             </button>
           </div>
-          <span className="authHelpText" id="signup-password-help">
-            {PASSWORD_POLICY_HELP_TEXT}
-          </span>
-          <PasswordValidationMessages
-            id="signup-password-requirements"
-            messages={passwordValidationMessages}
-          />
-          {passwordCapsLockWarning ? (
+          <div className="authFieldFeedback">
             <span
-              className="authHelpText authWarningText"
-              id="signup-password-caps-lock"
-              role="alert"
+              className={`authHelpText${
+                passwordCapsLockWarning
+                  ? " authWarningText"
+                  : passwordValidationMessage
+                    ? " authErrorText"
+                    : ""
+              }`}
+              id="signup-password-help"
+              role={passwordCapsLockWarning || passwordValidationMessage ? "alert" : undefined}
             >
-              {passwordCapsLockWarning}
+              {passwordFeedbackMessage}
             </span>
-          ) : null}
+          </div>
         </div>
         <div className="authField">
           <label htmlFor="signup-password-confirm">비밀번호 확인</label>
           <div className="authPasswordField">
             <input
               aria-describedby={
-                passwordConfirmCapsLockWarning && passwordConfirmMismatchMessage
-                  ? "signup-password-confirm-mismatch signup-password-confirm-caps-lock"
-                  : passwordConfirmCapsLockWarning
-                    ? "signup-password-confirm-caps-lock"
-                    : passwordConfirmMismatchMessage
-                      ? "signup-password-confirm-mismatch"
-                      : undefined
+                passwordConfirmFeedbackMessage ? "signup-password-confirm-feedback" : undefined
               }
               aria-invalid={Boolean(passwordConfirmMismatchMessage)}
               autoComplete="new-password"
@@ -424,24 +399,19 @@ export function SignupForm() {
               )}
             </button>
           </div>
-          {passwordConfirmMismatchMessage ? (
-            <span
-              className="authHelpText authErrorText"
-              id="signup-password-confirm-mismatch"
-              role="alert"
-            >
-              {passwordConfirmMismatchMessage}
-            </span>
-          ) : null}
-          {passwordConfirmCapsLockWarning ? (
-            <span
-              className="authHelpText authWarningText"
-              id="signup-password-confirm-caps-lock"
-              role="alert"
-            >
-              {passwordConfirmCapsLockWarning}
-            </span>
-          ) : null}
+          <div className="authFieldFeedback">
+            {passwordConfirmFeedbackMessage ? (
+              <span
+                className={`authHelpText${
+                  passwordConfirmCapsLockWarning ? " authWarningText" : " authErrorText"
+                }`}
+                id="signup-password-confirm-feedback"
+                role="alert"
+              >
+                {passwordConfirmFeedbackMessage}
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="authField">
           <label htmlFor="signup-email">이메일</label>
@@ -451,10 +421,8 @@ export function SignupForm() {
               disabled={isSubmitting}
               id="signup-email"
               name="email"
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setEmailAvailability(INITIAL_AVAILABILITY_STATE);
-              }}
+              onBlur={handleEmailAvailabilityBlur}
+              onChange={(event) => handleEmailChange(event.target.value)}
               placeholder="user@example.com"
               required
               type="email"
@@ -467,12 +435,24 @@ export function SignupForm() {
               type="button"
             >
               <Search aria-hidden="true" size={16} />
-              중복 확인
+              이메일 중복 확인
             </button>
           </div>
-          <AvailabilityMessage state={emailAvailability} />
+          <div className="authFieldFeedback">
+            <AvailabilityMessage state={emailAvailability} />
+          </div>
         </div>
         <div className="authConsentGroup fullField">
+          <label className="authCheckboxLabel authConsentAll">
+            <input
+              checked={allRequiredAgreementsAccepted}
+              disabled={isSubmitting}
+              name="allRequiredAgreementsAccepted"
+              onChange={(event) => handleAllRequiredAgreementsChange(event.target.checked)}
+              type="checkbox"
+            />
+            <span>필수 약관 전체 동의</span>
+          </label>
           <div className="authConsentRow">
             <label className="authCheckboxLabel">
               <input
@@ -490,7 +470,7 @@ export function SignupForm() {
               onClick={() => setActiveLegalDocumentKey("terms")}
               type="button"
             >
-              보기
+              서비스 이용약관 보기
             </button>
           </div>
           <div className="authConsentRow">
@@ -510,7 +490,7 @@ export function SignupForm() {
               onClick={() => setActiveLegalDocumentKey("privacy")}
               type="button"
             >
-              보기
+              개인정보 수집 및 이용 내용 보기
             </button>
           </div>
         </div>
@@ -519,10 +499,15 @@ export function SignupForm() {
             {errorMessage}
           </p>
         ) : null}
+        {!errorMessage && signupReadiness.unmetRequirements[0] ? (
+          <p className="authSignupReadiness fullField" role="status">
+            {getSignupRequirementMessage(signupReadiness.unmetRequirements[0])}
+          </p>
+        ) : null}
         <button
           aria-busy={isSubmitting}
           className="authSubmit fullField"
-          disabled={isSubmitting || !isSignupReady}
+          disabled={isSubmitting || !signupReadiness.isReady}
           type="submit"
         >
           {isSubmitting ? "가입 중" : "회원가입"}
@@ -538,22 +523,6 @@ export function SignupForm() {
   );
 }
 
-function PasswordValidationMessages({ id, messages }: { id: string; messages: string[] }) {
-  if (messages.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="authInlineMessageStack" id={id} aria-live="polite">
-      {messages.map((message) => (
-        <span className="authHelpText authErrorText" key={message} role="alert">
-          {message}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function LegalDocumentDialog({
   document,
   onClose
@@ -561,7 +530,29 @@ function LegalDocumentDialog({
   document: LegalDocument;
   onClose: () => void;
 }) {
-  return (
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+
+    if (!overlay || !dialog || !closeButton) return;
+
+    return setupModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: window.document,
+      onClose: () => onCloseRef.current(),
+      overlay
+    });
+  }, []);
+
+  return createPortal(
     <div
       className="authLegalOverlay"
       onMouseDown={(event) => {
@@ -569,12 +560,14 @@ function LegalDocumentDialog({
           onClose();
         }
       }}
+      ref={overlayRef}
       role="presentation"
     >
       <section
         aria-labelledby="auth-legal-dialog-title"
         aria-modal="true"
         className="authLegalDialog"
+        ref={dialogRef}
         role="dialog"
       >
         <header className="authLegalHeader">
@@ -586,6 +579,7 @@ function LegalDocumentDialog({
             aria-label="닫기"
             className="authLegalCloseButton"
             onClick={onClose}
+            ref={closeButtonRef}
             title="닫기"
             type="button"
           >
@@ -616,7 +610,8 @@ function LegalDocumentDialog({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    window.document.body
   );
 }
 
@@ -647,22 +642,20 @@ function getAvailabilityClassSuffix(status: AvailabilityStatus): "Success" | "Er
   return "Neutral";
 }
 
-function getPasswordValidationMessages(password: string): string[] {
+function getPasswordValidationMessage(password: string): string | null {
   if (password.length === 0) {
-    return [];
+    return null;
   }
 
-  const messages: string[] = [];
-
   if (password.length < PASSWORD_MIN_LENGTH) {
-    messages.push("10자 이상 입력해주세요.");
+    return "10자 이상 입력해주세요.";
   }
 
   if (getPasswordPolicyCategoryCount(password) < PASSWORD_REQUIRED_CATEGORY_COUNT) {
-    messages.push("조건을 충족하지 못했습니다. 다시 입력해주세요.");
+    return "영문 대문자/소문자/숫자/특수문자 중 3가지를 포함해주세요.";
   }
 
-  return messages;
+  return null;
 }
 
 function getPasswordConfirmMismatchMessage(
@@ -678,6 +671,10 @@ function getPasswordConfirmMismatchMessage(
 
 function isCurrentValueAvailable(state: AvailabilityState, value: string): boolean {
   return state.status === "available" && state.value === value;
+}
+
+function hasCurrentAvailabilityResult(state: AvailabilityState, value: string): boolean {
+  return state.value === value && state.status !== "error";
 }
 
 function normalizeUsername(value: string): string {

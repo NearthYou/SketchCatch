@@ -11,20 +11,40 @@ const diagramEditorCssSource = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
 );
+const normalizedDiagramEditorCssSource = diagramEditorCssSource.replace(/\r\n?/gu, "\n");
+
+test("diagram node view is a memoized custom node renderer", () => {
+  assert.match(diagramNodeViewSource, /import \{[^}]*memo[^}]*\} from "react"/);
+  assert.match(diagramNodeViewSource, /export const DiagramNodeView = memo\(/);
+});
+
+test("diagram node view uses React's default memo comparison and retains its zoom subscription", () => {
+  const rendererStart = diagramNodeViewSource.indexOf("export const DiagramNodeView = memo(function DiagramNodeView(");
+  const rendererEnd = diagramNodeViewSource.indexOf("\nfunction getKeyboardResizeDelta", rendererStart);
+
+  assert.notEqual(rendererStart, -1);
+  assert.notEqual(rendererEnd, -1);
+
+  const rendererSource = diagramNodeViewSource.slice(rendererStart, rendererEnd);
+
+  assert.match(rendererSource, /useStore\(\(state\) => getBoardZoomLevel\(state\.transform\[2\]\)\)/);
+  assert.match(rendererSource, /\n\}\);\s*$/);
+});
 
 test("diagram node view renders source and target handles matching edge mapper ids", () => {
   assert.match(diagramNodeViewSource, /id=\{`source-\$\{handle\.id\}`\}/);
   assert.match(diagramNodeViewSource, /type="source"/);
   assert.match(diagramNodeViewSource, /id=\{`target-\$\{handle\.id\}`\}/);
   assert.match(diagramNodeViewSource, /type="target"/);
+  assert.doesNotMatch(diagramNodeViewSource, /CONNECTION_SOURCE_POSITIONS/);
   assert.match(
     diagramNodeViewSource,
-    /const CONNECTION_SOURCE_POSITIONS: ReadonlySet<Position> = new Set\(\[\s*Position\.Top,\s*Position\.Right,\s*Position\.Bottom\s*\]\);/s
+    /const canStartFromHandle =\s*canConnect &&\s*!data\.isConnectionActive;/
   );
-  assert.match(diagramNodeViewSource, /const canStartFromHandle =\s*canConnect &&/);
-  assert.match(diagramNodeViewSource, /CONNECTION_SOURCE_POSITIONS\.has\(handle\.position\)/);
-  assert.match(diagramNodeViewSource, /const canEndAtHandle =\s*data\.isValidConnectionTarget &&/);
-  assert.match(diagramNodeViewSource, /handle\.position === Position\.Left/);
+  assert.match(
+    diagramNodeViewSource,
+    /const canEndAtHandle =\s*data\.isValidConnectionTarget;/
+  );
 });
 
 test("ports stay quiet by default but expose a stable, forgiving connection target", () => {
@@ -119,8 +139,11 @@ test("selected node toolbar clears the outward connection source hit target", ()
 test("diagram node view renders resource and icon design nodes with icon-only geometry", () => {
   assert.match(
     diagramNodeViewSource,
-    /usesIconTileLayout = isResourceNode \|\| \(node\.kind === "design" && !isArea && Boolean\(node\.iconUrl\)\)/
+    /usesIconTileLayout = isResourceNode \|\| \(node\.kind === "design" && !isArea && Boolean\(displayIconUrl\)\)/
   );
+  assert.match(diagramNodeViewSource, /const displayIconUrl = node\.iconUrl \?\? getDesignNodeFallbackIconUrl\(node\);/);
+  assert.match(diagramNodeViewSource, /aws_ecs_task_definition:[\s\S]*Res_Amazon-Elastic-Container-Service_Task_48\.svg/);
+  assert.match(diagramNodeViewSource, /github_actions:[\s\S]*Res_Git-Repository_48_Light\.svg/);
   assert.match(
     diagramNodeViewSource,
     /usesIconTileLayout \? styles\.nodeShellResource : styles\.nodeShellDesign/
@@ -169,7 +192,7 @@ test("diagram node view renders bounded two-line labels on a transparent backgro
   assert.match(labelBlock, /-webkit-line-clamp:\s*2;/);
 });
 
-test("resource nodes have no white tile and resize the icon with the node geometry", () => {
+test("resource and design icon nodes share one 48px visual icon size", () => {
   assert.match(
     diagramEditorCssSource,
     /\.nodeShellResource\s*\{[^}]*background:\s*transparent;[^}]*border-width:\s*0;/s
@@ -180,7 +203,7 @@ test("resource nodes have no white tile and resize the icon with the node geomet
   );
   assert.match(
     diagramEditorCssSource,
-    /\.resourceNodeIcon\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*100%;[^}]*max-width:\s*100%;[^}]*width:\s*100%;/s
+    /\.resourceNodeIcon\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*48px;[^}]*max-width:\s*48px;[^}]*width:\s*100%;/s
   );
   assert.match(
     diagramEditorCssSource,
@@ -206,7 +229,7 @@ test("resource labels stay four pixels below the icon and metadata is not render
   assert.doesNotMatch(diagramNodeViewSource, /className=\{styles\.resourceNodeMeta\}/);
   assert.match(
     diagramEditorCssSource,
-    /\.resourceNodeLabel\s*\{[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*top:\s*calc\(100% \+ 4px\);[^}]*transform:\s*translateX\(-50%\);/s
+    /\.resourceNodeLabel\s*\{[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*top:\s*calc\(50% \+ 28px\);[^}]*transform:\s*translateX\(-50%\);/s
   );
 });
 
@@ -259,10 +282,38 @@ test("manual resize handles expose corners and the full four sides", () => {
     diagramEditorCssSource,
     /\.manualResizeHandleLeft,\s*\.manualResizeHandleRight\s*\{[^}]*height:\s*calc\(100% - 24px\);/s
   );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleTop,\s*\.manualResizeHandle\.manualResizeHandleBottom\s*\{[^}]*cursor:\s*ns-resize;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleLeft,\s*\.manualResizeHandle\.manualResizeHandleRight\s*\{[^}]*cursor:\s*ew-resize;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleTopLeft,\s*\.manualResizeHandle\.manualResizeHandleBottomRight\s*\{[^}]*cursor:\s*nwse-resize;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\.manualResizeHandleTopRight,\s*\.manualResizeHandle\.manualResizeHandleBottomLeft\s*\{[^}]*cursor:\s*nesw-resize;/s
+  );
   assert.match(diagramNodeViewSource, /onKeyDown=\{\(event\) => handleResizeKeyDown\(event, handle\.position\)\}/);
   assert.match(
     diagramNodeViewSource,
-    /selected && !node\.locked && !data\.isPreview && !data\.isConnectionActive/
+    /const canResize =\s*!node\.locked &&\s*!data\.isPreview &&\s*!data\.isConnectionActive &&\s*\(node\.rotation \?\? 0\) === 0;/
+  );
+  assert.match(
+    diagramNodeViewSource,
+    /\{canResize \? \([\s\S]*?tabIndex=\{selected \? 0 : -1\}/
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.manualResizeHandle\s*\{[^}]*opacity:\s*0;[^}]*pointer-events:\s*none;/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.canvasPanel\s+:global\(\.react-flow__node:hover\)\s+\.manualResizeHandle:not\(\.manualResizeHandleSide\),\s*\.nodeShellSelected\s*~\s*\.manualResizeHandle\s*\{[^}]*opacity:\s*1;[^}]*pointer-events:\s*all;/s
   );
   assert.match(
     diagramEditorCssSource,
@@ -287,6 +338,38 @@ test("manual resize handles expose corners and the full four sides", () => {
   assert.match(
     diagramEditorCssSource,
     /\.nodeShellSelected ~ \.connectionHandleSource:global\(\.react-flow__handle-bottom\)\s*\{[^}]*bottom:\s*calc\(-18px \* var\(--board-control-scale\)\);/s
+  );
+  assert.match(
+    diagramEditorCssSource,
+    /\.nodeShellSelected ~ \.connectionHandleSource:global\(\.react-flow__handle-left\)\s*\{[^}]*left:\s*calc\(-18px \* var\(--board-control-scale\)\);/s
+  );
+});
+
+test("node rotation stays on a centered inner frame while the toolbar remains unrotated", () => {
+  const toolbarIndex = diagramNodeViewSource.indexOf("<NodeToolbar");
+  const rotationFrameIndex = diagramNodeViewSource.indexOf(
+    "className={styles.nodeRotationFrame}"
+  );
+  const rotationFrameBlock = getCssBlock(".nodeRotationFrame");
+
+  assert.notEqual(toolbarIndex, -1);
+  assert.notEqual(rotationFrameIndex, -1);
+  assert.ok(toolbarIndex < rotationFrameIndex);
+  assert.match(
+    diagramNodeViewSource,
+    /const nodeRotationStyle =\s*node\.rotation === undefined \|\| node\.rotation === 0\s*\? undefined\s*:\s*\{\s*transform: `rotate\(\$\{node\.rotation\}deg\)`,\s*transformOrigin: "center"\s*\};/s
+  );
+  assert.match(
+    diagramNodeViewSource,
+    /<div className=\{styles\.nodeRotationFrame\} style=\{nodeRotationStyle\}>[\s\S]*?<div\s+className=\{\[/
+  );
+  assert.match(rotationFrameBlock, /height:\s*100%;/);
+  assert.match(rotationFrameBlock, /position:\s*relative;/);
+  assert.match(rotationFrameBlock, /width:\s*100%;/);
+  assert.doesNotMatch(rotationFrameBlock, /translate/);
+  assert.match(
+    diagramNodeViewSource,
+    /\[id, node\.rotation, node\.size\.height, node\.size\.width, updateNodeInternals\]/
   );
 });
 
@@ -340,7 +423,7 @@ test("hides Terraform data source implementation labels", () => {
 });
 
 test("uses one presentation seam and keeps resource labels uppercase", () => {
-  assert.match(diagramNodeViewSource, /getResourceNodePresentation\(node\)/);
+  assert.match(diagramNodeViewSource, /getResourceNodePresentation\(\{ \.\.\.node, iconUrl: displayIconUrl \}\)/);
   assert.match(diagramNodeViewSource, /getAreaNodeLabel\(node\)/);
   assert.doesNotMatch(diagramNodeViewSource, /parameters\?\.resourceName\?\.trim/);
 });
@@ -393,22 +476,19 @@ test("reduced motion overrides are ordered after label and connection transition
   assert.ok(reducedMotionIndex > diagramEditorCssSource.indexOf(".edgeHalo {"));
 });
 
-test("resource and area metadata visibility follows the 50 and 75 percent LOD", () => {
-  const compactRule = getCssRuleContaining(".nodeShellZoomMedium .resourceNodeLabel,");
-  const revealRule = getCssRuleContaining(".nodeShellZoomMedium:hover .resourceNodeLabel,");
+test("resource labels scale while area metadata hides at the 50 and 75 percent LOD", () => {
+  const areaMetadataRule = getCssRuleContaining(".nodeShellZoomMedium .areaNodeHeaderMeta,");
+  const resourceLabelRule = getCssRuleContaining(".nodeShellZoomMedium .resourceNodeLabel,");
 
-  assert.match(compactRule, /\.nodeShellZoomFar \.resourceNodeLabel/);
-  assert.match(compactRule, /\.nodeShellZoomMedium \.areaNodeHeaderMeta/);
-  assert.match(compactRule, /\.nodeShellZoomFar \.areaNodeHeaderMeta/);
-  assert.match(compactRule, /opacity:\s*0;/);
-  assert.match(compactRule, /visibility:\s*hidden;/);
+  assert.match(areaMetadataRule, /\.nodeShellZoomFar \.areaNodeHeaderMeta/);
+  assert.match(areaMetadataRule, /opacity:\s*0;/);
+  assert.match(areaMetadataRule, /visibility:\s*hidden;/);
 
-  assert.match(revealRule, /\.nodeShellZoomMedium\.nodeShellSelected \.resourceNodeLabel/);
-  assert.match(revealRule, /\.nodeShellZoomFar\.nodeShellSelected \.resourceNodeLabel/);
-  assert.match(revealRule, /react-flow__node:focus-visible/);
-  assert.match(revealRule, /opacity:\s*1;/);
-  assert.match(revealRule, /visibility:\s*visible;/);
-  assert.doesNotMatch(revealRule, /\.nodeShellZoomFar:hover/);
+  assert.match(resourceLabelRule, /\.nodeShellZoomFar \.resourceNodeLabel/);
+  assert.match(resourceLabelRule, /scale\(var\(--board-lod-label-scale\)\)/);
+  assert.match(resourceLabelRule, /transform-origin:\s*top center;/);
+  assert.doesNotMatch(resourceLabelRule, /opacity:\s*0;/);
+  assert.doesNotMatch(resourceLabelRule, /visibility:\s*hidden;/);
 
   assert.match(
     diagramEditorCssSource,
@@ -448,14 +528,24 @@ test("diagram node view applies computed area border style through CSS variables
   );
 });
 
-test("Area placement feedback uses a restrained purple target state without a reference badge", () => {
+test("Security Group scopes use border-only presentation without area fill", () => {
+  const scopeBlock = getCssBlock(".nodeShellArea.nodeShellSecurityGroupScope");
+
+  assert.match(diagramNodeViewSource, /isSecurityGroupScopeNode/);
+  assert.match(diagramNodeViewSource, /styles\.nodeShellSecurityGroupScope/);
+  assert.doesNotMatch(scopeBlock, /--area-body-background:/);
+  assert.match(scopeBlock, /--area-border-width:\s*2px;/);
+  assert.match(getCssBlock(".nodeShellArea"), /--area-body-background:\s*transparent;/);
+});
+
+test("Area placement feedback uses border-only target state without a reference badge", () => {
   const targetBlock = getCssBlock(".nodeShellArea.nodeShellAreaDropTarget");
 
   assert.match(diagramNodeViewSource, /data\.isAreaDropTarget \? styles\.nodeShellAreaDropTarget/);
   assert.doesNotMatch(diagramNodeViewSource, /styles\.referenceTargetBadge/);
   assert.match(targetBlock, /--area-border-color:\s*#6f4cf6;/);
-  assert.match(targetBlock, /background:\s*rgba\(111, 76, 246, 0\.08\);/);
-  assert.match(targetBlock, /inset 0 0 0 999px rgba\(111, 76, 246, 0\.04\)/);
+  assert.match(targetBlock, /background:\s*transparent;/);
+  assert.doesNotMatch(targetBlock, /inset 0 0 0 999px/);
   assert.match(targetBlock, /0 0 0 4px rgba\(111, 76, 246, 0\.14\)/);
 });
 
@@ -474,15 +564,15 @@ function getCssBlock(selector: string): string {
 }
 
 function getCssRuleContaining(selector: string): string {
-  const selectorStart = diagramEditorCssSource.indexOf(selector);
+  const selectorStart = normalizedDiagramEditorCssSource.indexOf(selector);
 
   assert.notEqual(selectorStart, -1);
 
-  const blockStart = diagramEditorCssSource.indexOf("{", selectorStart);
-  const blockEnd = diagramEditorCssSource.indexOf("}", blockStart);
+  const blockStart = normalizedDiagramEditorCssSource.indexOf("{", selectorStart);
+  const blockEnd = normalizedDiagramEditorCssSource.indexOf("}", blockStart);
 
   assert.notEqual(blockStart, -1);
   assert.notEqual(blockEnd, -1);
 
-  return diagramEditorCssSource.slice(selectorStart, blockEnd + 1);
+  return normalizedDiagramEditorCssSource.slice(selectorStart, blockEnd + 1);
 }

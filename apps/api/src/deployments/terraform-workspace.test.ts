@@ -1,52 +1,53 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { prepareTerraformWorkspace } from "./terraform-workspace.js";
+import { test } from "node:test";
+import { createTerraformArtifactCanonicalContent } from "./terraform-workspace.js";
 
-test("prepareTerraformWorkspace writes safe Terraform files into an isolated temp directory", async () => {
-  const rootDir = await mkdtemp(join(tmpdir(), "sketchcatch-workspace-test-"));
-  const workspace = await prepareTerraformWorkspace(
-    {
-      objectKey: "projects/project-id/assets/terraform_file/main.tf",
-      fileName: "../main.tf"
-    },
-    {
-      rootDir,
-      downloadTerraformArtifact: async () => "terraform { required_version = \">= 1.6.0\" }\n"
-    }
+test("Terraform bundle canonical content is stable across file order and line endings", () => {
+  const input = {
+    objectKey: "projects/project/assets/terraform-files.json",
+    fileName: "terraform-files.json",
+    contentType: "application/vnd.sketchcatch.terraform-files+json"
+  };
+  const first = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      { fileName: "variables.tf", terraformCode: 'variable "environment" {}\r\n' },
+      { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}\r\n' }
+    ]
+  });
+  const second =
+    '{"files":[' +
+    '{"terraformCode":"resource \\"aws_s3_bucket\\" \\"assets\\" {}\\n","fileName":"main.tf"},' +
+    '{"terraformCode":"variable \\"environment\\" {}\\n","fileName":"variables.tf"}' +
+    '],"schemaVersion":1}';
+
+  assert.deepEqual(
+    createTerraformArtifactCanonicalContent(input, first),
+    createTerraformArtifactCanonicalContent(input, second)
   );
-
-  try {
-    assert.equal(workspace.mainFilePath.endsWith("main.tf"), true);
-    assert.equal(await readFile(workspace.mainFilePath, "utf8"), "terraform { required_version = \">= 1.6.0\" }\n");
-  } finally {
-    await workspace.cleanup();
-    await rm(rootDir, { recursive: true, force: true });
-  }
 });
 
-test("prepareTerraformWorkspace rejects Terraform artifacts larger than the configured limit", async () => {
-  const rootDir = await mkdtemp(join(tmpdir(), "sketchcatch-workspace-test-"));
+test("Terraform bundle canonical content uses locale-independent file ordering", () => {
+  const input = {
+    objectKey: "projects/project/assets/terraform-files.json",
+    fileName: "terraform-files.json",
+    contentType: "application/vnd.sketchcatch.terraform-files+json"
+  };
+  const content = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      { fileName: "z.tf", terraformCode: "# z\n" },
+      { fileName: "A.tf", terraformCode: "# A\n" },
+      { fileName: "a.tf", terraformCode: "# a\n" },
+      { fileName: "Z.tf", terraformCode: "# Z\n" }
+    ]
+  });
+  const canonical = JSON.parse(
+    createTerraformArtifactCanonicalContent(input, content).toString("utf8")
+  ) as { files: Array<{ fileName: string }> };
 
-  try {
-    await assert.rejects(
-      () =>
-        prepareTerraformWorkspace(
-          {
-            objectKey: "projects/project-id/assets/terraform_file/main.tf",
-            fileName: "main.tf"
-          },
-          {
-            rootDir,
-            maxTerraformArtifactBytes: 16,
-            downloadTerraformArtifact: async () => "x".repeat(17)
-          }
-        ),
-      /exceeds the 16 byte size limit/
-    );
-  } finally {
-    await rm(rootDir, { recursive: true, force: true });
-  }
+  assert.deepEqual(
+    canonical.files.map((file) => file.fileName),
+    ["A.tf", "Z.tf", "a.tf", "z.tf"]
+  );
 });

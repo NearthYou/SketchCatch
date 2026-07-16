@@ -1374,8 +1374,13 @@ export const terraformAwsParameterCatalog = {
         "description": "Launch Template에 사용할 AMI data source입니다.",
         "inputKind": "reference-picker",
         "referenceTargetTypes": [
-          "aws_ami"
-        ]
+          "aws_ami",
+          "aws_ssm_parameter"
+        ],
+        "referenceAttributesByTargetType": {
+          "aws_ami": "id",
+          "aws_ssm_parameter": "value"
+        }
       },
       {
         "name": "instanceType",

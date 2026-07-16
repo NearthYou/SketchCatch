@@ -9,7 +9,6 @@ const size = RESOURCE_NODE_DEFAULT_SIZE;
 const vpcAreaSize = { width: 240, height: 160 };
 const subnetAreaSize = { width: 180, height: 120 };
 const securityGroupAreaSize = subnetAreaSize;
-const autoscalingGroupAreaSize = { width: 200, height: 130 };
 
 const groupIconPath = "/Architecture-Group-Icons_07312025";
 const serviceIconPath = "/Architecture-Service-Icons_07312025";
@@ -19,6 +18,7 @@ type TerraformResourcePresentation = {
   readonly area: ResourceArea;
   readonly category: string;
   readonly definitionId: string;
+  readonly enabled?: boolean | undefined;
   readonly iconUrl: string;
   readonly label: string;
   readonly name: string;
@@ -30,6 +30,7 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-acm-certificate": "Certificates",
   "aws-acm-certificate-validation": "Certificates",
   "aws-api-gateway-deployment": "API Gateway REST",
+  "aws-api-gateway-authorizer": "API Gateway REST",
   "aws-api-gateway-integration": "API Gateway REST",
   "aws-api-gateway-method": "API Gateway REST",
   "aws-api-gateway-resource": "API Gateway REST",
@@ -41,6 +42,8 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-api-gateway-websocket-api": "API Gateway v2",
   "aws-autoscaling-group": "EC2 Launch & Scaling",
   "aws-autoscaling-policy": "EC2 Launch & Scaling",
+  "aws-appautoscaling-target": "ECS",
+  "aws-appautoscaling-policy": "ECS",
   "aws-cloudfront-cache-policy": "Edge / CDN",
   "aws-cloudfront-distribution": "Edge / CDN",
   "aws-cloudfront-origin-access-control": "Edge / CDN",
@@ -80,7 +83,12 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-eip": "EC2 Core",
   "aws-eks-addon": "EKS",
   "aws-eks-cluster": "EKS",
+  "aws-eks-fargate-profile": "EKS",
   "aws-eks-node-group": "EKS",
+  "aws-amplify-app": "Frontend / Web Mobile",
+  "kubernetes-namespace": "Kubernetes",
+  "kubernetes-deployment": "Kubernetes",
+  "kubernetes-service": "Kubernetes",
   "aws-elasticache-parameter-group": "ElastiCache",
   "aws-elasticache-redis": "ElastiCache",
   "aws-elasticache-subnet-group": "ElastiCache",
@@ -112,7 +120,6 @@ const resourceCategoryOverrides: Record<string, string> = {
   "aws-rds-cluster": "RDS Cluster",
   "aws-rds-cluster-instance": "RDS Cluster",
   "aws-rds-instance": "RDS Instances",
-  "aws-rds-read-replica": "RDS Instances",
   "aws-route": "Routing & Gateways",
   "aws-route-table": "Routing & Gateways",
   "aws-route-table-association": "Routing & Gateways",
@@ -174,6 +181,34 @@ const designCatalogItems: ResourceItem[] = [
       type: "sketchcatch_internet",
       label: "Internet",
       size
+    }
+  },
+  {
+    id: "design-source-repository",
+    name: "Source Repository",
+    cloudProvider: "aws",
+    area: "other",
+    category: "Flow",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_source_repository",
+      label: "Source Repository",
+      size
+    }
+  },
+  {
+    id: "design-aws-account",
+    name: "AWS Account",
+    cloudProvider: "aws",
+    area: "containers",
+    category: "Board Containers",
+    iconUrl: `${groupIconPath}/AWS-Account_32.svg`,
+    enabled: true,
+    nodeDefaults: {
+      type: "sketchcatch_aws_account",
+      label: "AWS Account",
+      size: { width: 200, height: 130 }
     }
   },
   {
@@ -241,7 +276,7 @@ const terraformResourcePresentations = [
     name: "Route Table",
     area: "network",
     category: "Network",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-Route-53_Route-Table_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
     label: "Route Table",
     size
   },
@@ -250,7 +285,7 @@ const terraformResourcePresentations = [
     name: "Route Table Association",
     area: "network",
     category: "Network",
-    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_AWS-Cloud-WAN_Transit-Gateway-Route-Table-Attachment_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
     label: "Route Table Association",
     size
   },
@@ -322,7 +357,7 @@ const terraformResourcePresentations = [
     name: "Security Group",
     area: "security-identity",
     category: "Security",
-    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-Network-Firewall_64.svg`,
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Firewall_48_Light.svg`,
     label: "Security Group",
     size: securityGroupAreaSize
   },
@@ -342,6 +377,15 @@ const terraformResourcePresentations = [
     category: "Security",
     iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Role_48.svg`,
     label: "IAM Role",
+    size
+  },
+  {
+    definitionId: "aws-iam-policy-data",
+    name: "IAM Policy Data Source",
+    area: "security-identity",
+    category: "IAM",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
+    label: "IAM Policy Data",
     size
   },
   {
@@ -417,6 +461,15 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-amplify-app",
+    name: "Amplify App",
+    area: "application",
+    category: "Frontend / Web Mobile",
+    iconUrl: `${serviceIconPath}/Arch_Front-End-Web-Mobile/64/Arch_AWS-Amplify_64.svg`,
+    label: "Amplify App",
+    size
+  },
+  {
     definitionId: "aws-ec2-instance",
     name: "EC2 Instance",
     area: "compute",
@@ -453,6 +506,15 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-ec2-managed-prefix-list",
+    name: "EC2 Managed Prefix List",
+    area: "network",
+    category: "Terraform Data Sources",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-Virtual-Private-Cloud_64.svg`,
+    label: "Managed Prefix List",
+    size
+  },
+  {
     definitionId: "aws-key-pair",
     name: "Key Pair",
     area: "compute",
@@ -486,7 +548,7 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${serviceIconPath}/Arch_Compute/64/Arch_Amazon-EC2-Auto-Scaling_64.svg`,
     label: "Auto Scaling Group",
-    size: autoscalingGroupAreaSize
+    size
   },
   {
     definitionId: "aws-autoscaling-policy",
@@ -495,6 +557,24 @@ const terraformResourcePresentations = [
     category: "Compute",
     iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
     label: "Autoscaling Policy",
+    size
+  },
+  {
+    definitionId: "aws-appautoscaling-target",
+    name: "Application Auto Scaling Target",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
+    label: "Scaling Target",
+    size
+  },
+  {
+    definitionId: "aws-appautoscaling-policy",
+    name: "Application Auto Scaling Policy",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
+    label: "Scaling Policy",
     size
   },
   {
@@ -574,7 +654,7 @@ const terraformResourcePresentations = [
     name: "S3 Bucket Versioning",
     area: "storage",
     category: "Storage",
-    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Object-Lock_48.svg`,
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
     label: "S3 Versioning",
     size
   },
@@ -612,15 +692,6 @@ const terraformResourcePresentations = [
     category: "Database",
     iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
     label: "RDS Instance",
-    size
-  },
-  {
-    definitionId: "aws-rds-read-replica",
-    name: "RDS Read Replica",
-    area: "database",
-    category: "Database",
-    iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-RDS_64.svg`,
-    label: "RDS Replica",
     size
   },
   {
@@ -738,6 +809,15 @@ const terraformResourcePresentations = [
     category: "Serverless / Application",
     iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
     label: "REST API",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-authorizer",
+    name: "API Gateway Authorizer",
+    area: "application",
+    category: "Serverless / Application",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-API-Gateway_64.svg`,
+    label: "API Authorizer",
     size
   },
   {
@@ -1218,12 +1298,48 @@ const terraformResourcePresentations = [
     size
   },
   {
+    definitionId: "aws-eks-fargate-profile",
+    name: "EKS Fargate Profile",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Fargate Profile",
+    size
+  },
+  {
     definitionId: "aws-eks-addon",
     name: "EKS Add-on",
     area: "containers",
     category: "Containers",
     iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
     label: "EKS Add-on",
+    size
+  },
+  {
+    definitionId: "kubernetes-namespace",
+    name: "Kubernetes Namespace",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Namespace",
+    size
+  },
+  {
+    definitionId: "kubernetes-deployment",
+    name: "Kubernetes Deployment",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Deployment",
+    size
+  },
+  {
+    definitionId: "kubernetes-service",
+    name: "Kubernetes Service",
+    area: "containers",
+    category: "Containers",
+    iconUrl: `${serviceIconPath}/Arch_Containers/64/Arch_Amazon-Elastic-Kubernetes-Service_64.svg`,
+    label: "Service",
     size
   },
   {
@@ -1297,6 +1413,276 @@ const terraformResourcePresentations = [
     iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_Amazon-GuardDuty_64.svg`,
     label: "GuardDuty",
     size
+  },
+  {
+    definitionId: "aws-api-gateway-integration-response",
+    name: "API Gateway Integration Response",
+    area: "application",
+    category: "API Gateway REST",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "Integration Response",
+    size
+  },
+  {
+    definitionId: "aws-api-gateway-method-response",
+    name: "API Gateway Method Response",
+    area: "application",
+    category: "API Gateway REST",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-API-Gateway_Endpoint_48.svg`,
+    label: "Method Response",
+    size
+  },
+  {
+    definitionId: "aws-budgets-budget",
+    name: "AWS Budget",
+    area: "tools",
+    category: "Cloud Financial Management",
+    iconUrl: `${serviceIconPath}/Arch_Cloud-Financial-Management/64/Arch_AWS-Budgets_64.svg`,
+    label: "AWS Budget",
+    size
+  },
+  {
+    definitionId: "aws-cloudfront-origin-access-identity",
+    name: "CloudFront Origin Access Identity",
+    area: "network",
+    category: "Edge / CDN",
+    iconUrl: `${serviceIconPath}/Arch_Networking-Content-Delivery/64/Arch_Amazon-CloudFront_64.svg`,
+    label: "Origin Access Identity",
+    size
+  },
+  {
+    definitionId: "aws-docdb-cluster",
+    name: "DocumentDB Cluster",
+    area: "database",
+    category: "DocumentDB",
+    iconUrl: `${serviceIconPath}/Arch_Database/64/Arch_Amazon-DocumentDB_64.svg`,
+    label: "DocumentDB Cluster",
+    size
+  },
+  {
+    definitionId: "aws-dynamodb-global-table",
+    name: "DynamoDB Global Table",
+    area: "database",
+    category: "DynamoDB",
+    iconUrl: `${resourceIconPath}/Res_Database/Res_Amazon-DynamoDB_Table_48.svg`,
+    label: "Global Table",
+    size
+  },
+  {
+    definitionId: "aws-elastic-beanstalk-application",
+    name: "Elastic Beanstalk Application",
+    area: "compute",
+    category: "Elastic Beanstalk",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_AWS-Elastic-Beanstalk_Application_48.svg`,
+    label: "Beanstalk Application",
+    size
+  },
+  {
+    definitionId: "aws-elastic-beanstalk-environment",
+    name: "Elastic Beanstalk Environment",
+    area: "compute",
+    category: "Elastic Beanstalk",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_AWS-Elastic-Beanstalk_Deployment_48.svg`,
+    label: "Beanstalk Environment",
+    size
+  },
+  {
+    definitionId: "aws-elb",
+    name: "Classic Load Balancer",
+    area: "network",
+    category: "Load Balancing",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Elastic-Load-Balancing_Classic-Load-Balancer_48.svg`,
+    label: "Classic Load Balancer",
+    size
+  },
+  {
+    definitionId: "aws-flow-log",
+    name: "VPC Flow Log",
+    area: "network",
+    category: "VPC Core",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Flow-Logs_48.svg`,
+    label: "VPC Flow Log",
+    size
+  },
+  {
+    definitionId: "aws-fsx-lustre-file-system",
+    name: "FSx for Lustre File System",
+    area: "storage",
+    category: "FSx",
+    iconUrl: `${serviceIconPath}/Arch_Storage/64/Arch_Amazon-FSx-for-Lustre_64.svg`,
+    label: "FSx for Lustre",
+    size
+  },
+  {
+    definitionId: "aws-iam-group",
+    name: "IAM Group",
+    area: "security-identity",
+    category: "IAM",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Users_48_Light.svg`,
+    label: "IAM Group",
+    size
+  },
+  {
+    definitionId: "aws-iam-group-policy-attachment",
+    name: "IAM Group Policy Attachment",
+    area: "security-identity",
+    category: "IAM",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
+    label: "Group Policy Attachment",
+    size
+  },
+  {
+    definitionId: "aws-iam-user",
+    name: "IAM User",
+    area: "security-identity",
+    category: "IAM",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Authenticated-User_48_Light.svg`,
+    label: "IAM User",
+    size
+  },
+  {
+    definitionId: "aws-iam-user-group-membership",
+    name: "IAM User Group Membership",
+    area: "security-identity",
+    category: "IAM",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-Identity-Access-Management_Permissions_48.svg`,
+    label: "User Group Membership",
+    size
+  },
+  {
+    definitionId: "aws-iam-user-login-profile",
+    name: "IAM User Login Profile",
+    area: "security-identity",
+    category: "IAM",
+    iconUrl: `${resourceIconPath}/Res_General-Icons/Res_48_Light/Res_Authenticated-User_48_Light.svg`,
+    label: "User Login Profile",
+    size
+  },
+  {
+    definitionId: "aws-launch-configuration",
+    name: "EC2 Launch Configuration",
+    area: "compute",
+    category: "EC2 Launch & Scaling",
+    iconUrl: `${resourceIconPath}/Res_Compute/Res_Amazon-EC2_Auto-Scaling_48.svg`,
+    label: "Launch Configuration",
+    size
+  },
+  {
+    definitionId: "aws-main-route-table-association",
+    name: "Main Route Table Association",
+    area: "network",
+    category: "Routing & Gateways",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Router_48.svg`,
+    label: "Main Route Association",
+    size
+  },
+  {
+    definitionId: "aws-network-interface",
+    name: "Elastic Network Interface",
+    area: "network",
+    category: "VPC Core",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Elastic-Network-Interface_48.svg`,
+    label: "Network Interface",
+    size
+  },
+  {
+    definitionId: "aws-organizations-account",
+    name: "AWS Organizations Account",
+    area: "tools",
+    category: "Organizations",
+    iconUrl: `${resourceIconPath}/Res_Management-Governance/Res_AWS-Organizations_Account_48.svg`,
+    label: "Organizations Account",
+    size
+  },
+  {
+    definitionId: "aws-s3-bucket-acl",
+    name: "S3 Bucket ACL",
+    area: "storage",
+    category: "S3 Controls",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
+    label: "S3 Bucket ACL",
+    size
+  },
+  {
+    definitionId: "aws-s3-bucket-logging",
+    name: "S3 Bucket Logging",
+    area: "storage",
+    category: "S3 Controls",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
+    label: "S3 Bucket Logging",
+    size
+  },
+  {
+    definitionId: "aws-s3-bucket-notification",
+    name: "S3 Bucket Notification",
+    area: "storage",
+    category: "S3 Controls",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Bucket_48.svg`,
+    label: "S3 Notification",
+    size
+  },
+  {
+    definitionId: "aws-s3-bucket-object",
+    name: "S3 Bucket Object",
+    area: "storage",
+    category: "S3 Core",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_Object_48.svg`,
+    label: "S3 Bucket Object",
+    size
+  },
+  {
+    definitionId: "aws-s3-bucket-replication-configuration",
+    name: "S3 Bucket Replication Configuration",
+    area: "storage",
+    category: "S3 Controls",
+    iconUrl: `${resourceIconPath}/Res_Storage/Res_Amazon-Simple-Storage-Service_S3-Replication_48.svg`,
+    label: "S3 Replication",
+    size
+  },
+  {
+    definitionId: "aws-ses-email-identity",
+    name: "SES Email Identity",
+    area: "application",
+    category: "Messaging",
+    iconUrl: `${resourceIconPath}/Res_Business-Applications/Res_Amazon-Simple-Email-Service_Email_48.svg`,
+    label: "SES Email Identity",
+    size
+  },
+  {
+    definitionId: "aws-vpc-peering-connection-accepter",
+    name: "VPC Peering Connection Accepter",
+    area: "network",
+    category: "VPC Core",
+    iconUrl: `${resourceIconPath}/Res_Networking-Content-Delivery/Res_Amazon-VPC_Peering-Connection_48.svg`,
+    label: "Peering Accepter",
+    size
+  },
+  {
+    definitionId: "aws-waf-ipset",
+    name: "WAF IP Set (Classic)",
+    area: "security-identity",
+    category: "Web Protection",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-WAF_Filtering-Rule_48.svg`,
+    label: "WAF IP Set",
+    size
+  },
+  {
+    definitionId: "aws-waf-rule",
+    name: "WAF Rule (Classic)",
+    area: "security-identity",
+    category: "Web Protection",
+    iconUrl: `${resourceIconPath}/Res_Security-Identity-Compliance/Res_AWS-WAF_Rule_48.svg`,
+    label: "WAF Rule",
+    size
+  },
+  {
+    definitionId: "aws-waf-web-acl",
+    name: "WAF Web ACL (Classic)",
+    area: "security-identity",
+    category: "Web Protection",
+    iconUrl: `${serviceIconPath}/Arch_Security-Identity-Compliance/64/Arch_AWS-WAF_64.svg`,
+    label: "WAF Web ACL (Classic)",
+    size
   }
 ] as const satisfies readonly TerraformResourcePresentation[];
 
@@ -1315,7 +1701,7 @@ function createTerraformResourceItem(presentation: TerraformResourcePresentation
     area: presentation.area,
     category: resourceCategoryOverrides[definition.id] ?? presentation.category,
     iconUrl: presentation.iconUrl,
-    enabled: true,
+    enabled: presentation.enabled ?? true,
     nodeDefaults: {
       ...(definition.terraform.blockType !== "resource"
         ? { terraformBlockType: definition.terraform.blockType }

@@ -10,19 +10,37 @@ import {
   isAwsAvailabilityZoneCode
 } from "./aws-availability-zone-options";
 
-const regionNodeTypes = new Set(["sketchcatch_region", "design_region"]);
-const availabilityZoneNodeTypes = new Set(["sketchcatch_az", "design_az"]);
+const regionNodeTypes = new Set([
+  "region",
+  "aws-region",
+  "aws_region",
+  "sketchcatch_region",
+  "design_region"
+]);
+const availabilityZoneNodeTypes = new Set([
+  "aws-availability-zone",
+  "aws_availability_zone",
+  "sketchcatch_az",
+  "design_az"
+]);
 type LegacyRegionMetadata = {
   awsRegion?: unknown;
 };
 
 export function isRegionAreaNode(node: DiagramNode): boolean {
-  return isRegionResourceNode(node) || (node.kind === "design" && regionNodeTypes.has(node.type));
+  return (
+    isRegionResourceNode(node) ||
+    (node.kind === "design" &&
+      (regionNodeTypes.has(node.type) ||
+        node.metadata?.presentationCatalogItemId === "aws-region"))
+  );
 }
 
 export function isAvailabilityZoneAreaNode(node: DiagramNode): boolean {
   return isAvailabilityZoneResourceNode(node) || (
-    node.kind === "design" && availabilityZoneNodeTypes.has(node.type)
+    node.kind === "design" &&
+    (availabilityZoneNodeTypes.has(node.type) ||
+      node.metadata?.presentationCatalogItemId === "aws-availability-zone")
   );
 }
 

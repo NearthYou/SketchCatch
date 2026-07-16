@@ -26,14 +26,20 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "diagram_kind",
   "diagramLabel",
   "diagram_label",
+  "diagramRenderAsResource",
+  "diagram_render_as_resource",
   "diagramTextColor",
   "diagram_text_color",
   "diagramType",
   "diagram_type",
   "diagramWidth",
   "diagram_width",
+  "managedByAutoScalingGroup",
+  "managed_by_auto_scaling_group",
   "originResourceId",
   "origin_resource_id",
+  "parentAreaNodeId",
+  "parent_area_node_id",
   "publicAccessBlock",
   "public_access_block",
   "servicePurpose",
@@ -43,10 +49,19 @@ const NON_RENDERABLE_TERRAFORM_CONFIG_KEYS = new Set([
   "terraformResourceName",
   "terraform_resource_name",
   "terraformResourceType",
-  "terraform_resource_type"
+  "terraform_resource_type",
+  "terraformBlockType",
+  "terraform_block_type",
+  "templateId",
+  "template_id",
+  "templateResourceId",
+  "template_resource_id",
+  "tier"
 ]);
 
-export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson): InfrastructureGraph {
+export function buildInfrastructureGraphFromDiagramJson(
+  diagramJson: DiagramJson
+): InfrastructureGraph {
   const nodeById = new Map(diagramJson.nodes.map((node) => [node.id, node]));
   const nodes = diagramJson.nodes.flatMap((node) => {
     const graphNode = toInfrastructureGraphNode(node, nodeById);
@@ -58,7 +73,11 @@ export function buildInfrastructureGraphFromDiagramJson(diagramJson: DiagramJson
   return {
     nodes,
     edges: diagramJson.edges.flatMap((edge): InfrastructureGraphEdge[] => {
-      if (!nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) {
+      if (
+        edge.metadata?.presentationRole === "summary" ||
+        !nodeIds.has(edge.sourceNodeId) ||
+        !nodeIds.has(edge.targetNodeId)
+      ) {
         return [];
       }
 
@@ -79,6 +98,10 @@ function toInfrastructureGraphNode(
   nodeById: ReadonlyMap<string, DiagramNode>
 ): InfrastructureGraphNode | null {
   if (node.kind !== "resource" || !node.parameters) {
+    return null;
+  }
+
+  if (node.parameters.values?.["sketchcatchReferenceTerraform"] === true) {
     return null;
   }
 

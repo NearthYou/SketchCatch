@@ -1,12 +1,21 @@
+ARG TRIVY_VERSION=0.72.0
+
 FROM node:24-alpine AS base
 WORKDIR /repo
 RUN corepack enable
 
 FROM base AS deps
-COPY . .
-RUN pnpm install --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY packages/types/package.json ./packages/types/package.json
+RUN pnpm install --frozen-lockfile --filter @sketchcatch/api...
 
 FROM deps AS build
+COPY tsconfig.base.json ./
+COPY apps/api/src ./apps/api/src
+COPY apps/api/drizzle ./apps/api/drizzle
+COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
+COPY packages/types/src ./packages/types/src
 RUN pnpm --filter @sketchcatch/api build
 
 FROM alpine:3.22 AS terraform
@@ -20,7 +29,7 @@ RUN apk add --no-cache ca-certificates curl unzip \
   && terraform -version
 
 FROM alpine:3.22 AS trivy
-ARG TRIVY_VERSION=0.72.0
+ARG TRIVY_VERSION
 ARG TRIVY_ARCH=64bit
 RUN apk add --no-cache ca-certificates curl tar \
   && curl --fail --show-error --silent --location \
@@ -31,9 +40,12 @@ RUN apk add --no-cache ca-certificates curl tar \
   && trivy --version
 
 FROM node:24-alpine AS runner
+ARG TRIVY_VERSION
 WORKDIR /app
 ENV NODE_ENV=production
 ENV TRIVY_CACHE_DIR=/var/cache/sketchcatch/trivy
+ENV TRIVY_SKIP_CHECK_UPDATE=true
+ENV TRIVY_VERSION=${TRIVY_VERSION}
 COPY --from=terraform /usr/local/bin/terraform /usr/local/bin/terraform
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=build /repo/apps/api/dist ./dist

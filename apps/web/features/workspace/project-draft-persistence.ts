@@ -1,4 +1,4 @@
-import type { DiagramJson, ProjectDraft } from "../../../../packages/types/src";
+import type { DiagramJson, ProjectDraft, TerraformSyncFileInput } from "../../../../packages/types/src";
 
 const DATABASE_NAME = "sketchcatch-drafts";
 const DATABASE_VERSION = 1;
@@ -22,6 +22,7 @@ export type LocalProjectDraft = {
   workspaceId: string;
   projectId: string;
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
   revision: number;
   draftSavedAt: string;
   serverSavedAt?: string | undefined;
@@ -30,6 +31,7 @@ export type LocalProjectDraft = {
 
 export type InitialDiagramChoice = {
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
   source: "server" | "local" | "empty";
 };
 
@@ -53,12 +55,14 @@ export function createLocalProjectDraft({
   workspaceId,
   projectId,
   diagramJson,
+  terraformFiles,
   previousDraft,
   savedAt
 }: {
   workspaceId: string;
   projectId: string;
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
   previousDraft?: LocalProjectDraft | null | undefined;
   savedAt: string;
 }): LocalProjectDraft {
@@ -67,6 +71,7 @@ export function createLocalProjectDraft({
     workspaceId,
     projectId,
     diagramJson,
+    ...(terraformFiles ? { terraformFiles } : {}),
     revision: (previousDraft?.revision ?? 0) + 1,
     draftSavedAt: savedAt,
     serverSavedAt: previousDraft?.serverSavedAt,
@@ -81,6 +86,7 @@ export function markDraftServerSaved(
   return {
     ...localDraft,
     diagramJson: serverDraft.diagramJson,
+    ...(serverDraft.terraformFiles ? { terraformFiles: serverDraft.terraformFiles } : {}),
     revision: serverDraft.revision,
     serverSavedAt: serverDraft.serverSavedAt,
     dirty: false
@@ -100,12 +106,14 @@ export function chooseInitialDiagram({
     if (isLocalDraftNewerThanServerDraft(localDraft, serverDraft)) {
       return {
         diagramJson: localDraft.diagramJson,
+        ...(localDraft.terraformFiles ? { terraformFiles: localDraft.terraformFiles } : {}),
         source: "local"
       };
     }
 
     return {
       diagramJson: serverDraft.diagramJson,
+      ...(serverDraft.terraformFiles ? { terraformFiles: serverDraft.terraformFiles } : {}),
       source: "server"
     };
   }
@@ -113,6 +121,7 @@ export function chooseInitialDiagram({
   if (serverDraft) {
     return {
       diagramJson: serverDraft.diagramJson,
+      ...(serverDraft.terraformFiles ? { terraformFiles: serverDraft.terraformFiles } : {}),
       source: "server"
     };
   }
@@ -120,6 +129,7 @@ export function chooseInitialDiagram({
   if (localDraft) {
     return {
       diagramJson: localDraft.diagramJson,
+      ...(localDraft.terraformFiles ? { terraformFiles: localDraft.terraformFiles } : {}),
       source: "local"
     };
   }

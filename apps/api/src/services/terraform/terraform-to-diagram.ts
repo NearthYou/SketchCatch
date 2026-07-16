@@ -14,18 +14,27 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
-import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
+import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
+import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
+import {
+  isGenericTerraformNestedBlock,
+  isTerraformNestedBlockAttribute,
+  isTerraformSingleNestedBlockAttribute
+} from "./terraform-nested-blocks.js";
 
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*$/;
 const PROVIDER_BLOCK_HEADER_PATTERN = /^\s*provider\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
+const TERRAFORM_BLOCK_HEADER_PATTERN = /^\s*terraform\s*\{\s*(?:\}\s*)?$/;
 const TOP_LEVEL_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\b.*\{\s*$/;
 const NESTED_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*\{\s*$/;
 const ATTRIBUTE_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*(.*)$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
 const REFERENCE_PATTERN =
-  /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$|^module\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$|^data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*$/;
+  /^(?:var|local|each|count|path|terraform)\.[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$|^module\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$|^data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+const DEPENDENCY_ADDRESS_PATTERN =
+  /^(?:(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|module\.[A-Za-z0-9_-]+)$/;
 const TERRAFORM_UTILITY_BLOCK_KEYS = new Set(["resource/random_password", "resource/terraform_data"]);
 type ParsedBlock = {
   blockType: TerraformBlockType;
@@ -36,12 +45,13 @@ type ParsedBlock = {
   line: number;
   sourceFileName: string;
   values: Record<string, unknown>;
+  opaque?: boolean | undefined;
 };
 
 type ParseResult = {
   blocks: ParsedBlock[];
   diagnostics: TerraformDiagnostic[];
-  ignoredProviderBlockCount: number;
+  ignoredConfigurationBlockCount: number;
 };
 
 type BodyLine = {
@@ -66,21 +76,31 @@ type AvailabilityZoneProposalPlan = {
   parentAreaNodeIdByBlockKey: Map<string, string>;
 };
 
+// Sync safe Terraform values while keeping structural changes explicit and presentation-neutral.
 export function syncTerraformToDiagramJson(
   diagramJson: DiagramJson,
   input: TerraformSyncInput
 ): TerraformSyncToDiagramResponse {
   const parseResult = parseTerraformInput(input);
+  const preservedResourceAddressSet = new Set(
+    parseResult.blocks
+      .filter((block) => block.opaque || isKnownTerraformUtilityBlock(block.identity))
+      .map((block) => block.address)
+  );
+  const getPreservedResourceAddresses = (): string[] => Array.from(preservedResourceAddressSet);
 
-  if (parseResult.diagnostics.length > 0) {
+  if (parseResult.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return {
       diagramJson,
       diagnostics: parseResult.diagnostics,
+      preservedResourceAddresses: getPreservedResourceAddresses(),
       proposals: []
     };
   }
 
-  const syncBlocks = parseResult.blocks.filter((block) => !isKnownTerraformUtilityBlock(block.identity));
+  const syncBlocks = parseResult.blocks.filter(
+    (block) => !block.opaque && !isKnownTerraformUtilityBlock(block.identity)
+  );
   const ignoredUtilityBlockCount = parseResult.blocks.length - syncBlocks.length;
 
   if (syncBlocks.length === 0) {
@@ -92,10 +112,15 @@ export function syncTerraformToDiagramJson(
       };
     }
 
-    if (parseResult.ignoredProviderBlockCount > 0 || ignoredUtilityBlockCount > 0) {
+    if (
+      parseResult.ignoredConfigurationBlockCount > 0 ||
+      ignoredUtilityBlockCount > 0 ||
+      parseResult.diagnostics.length > 0
+    ) {
       return {
         diagramJson,
-        diagnostics: [],
+        diagnostics: parseResult.diagnostics,
+        preservedResourceAddresses: getPreservedResourceAddresses(),
         proposals: []
       };
     }
@@ -119,17 +144,19 @@ export function syncTerraformToDiagramJson(
     return {
       diagramJson,
       diagnostics: nodeMapResult.diagnostics,
+      preservedResourceAddresses: getPreservedResourceAddresses(),
       proposals: []
     };
   }
 
   const nodeByIdentityKey = nodeMapResult.nodeByIdentityKey;
   const blockByIdentityKey = new Map(
-    syncBlocks.map((block) => [createTerraformBlockIdentityKey(block.identity), block])
+    parseResult.blocks.map((block) => [createTerraformBlockIdentityKey(block.identity), block])
   );
   const availabilityZoneProposalPlan = createAvailabilityZoneProposalPlan(
     diagramJson.nodes,
-    syncBlocks
+    syncBlocks,
+    nodeByIdentityKey
   );
   const diagnostics: TerraformDiagnostic[] = [];
   const valuesByNodeId = new Map<string, Record<string, unknown>>();
@@ -144,8 +171,9 @@ export function syncTerraformToDiagramJson(
       if (isProposalSupportedBlock(block.identity)) {
         terraformOnlyBlocks.push(block);
       } else {
+        preservedResourceAddressSet.add(block.address);
         diagnostics.push({
-          severity: "error",
+          severity: "warning",
           code: "terraform.sync.unsupported_resource",
           line: block.line,
           sourceFileName: block.sourceFileName,
@@ -168,10 +196,11 @@ export function syncTerraformToDiagramJson(
     }
   }
 
-  if (diagnostics.length > 0) {
+  if (diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return {
       diagramJson,
       diagnostics,
+      preservedResourceAddresses: getPreservedResourceAddresses(),
       proposals: []
     };
   }
@@ -210,7 +239,8 @@ export function syncTerraformToDiagramJson(
       edges: diagramJson.edges.map((edge) => ({ ...edge })),
       viewport: { ...diagramJson.viewport }
     },
-    diagnostics: [],
+    diagnostics: [...parseResult.diagnostics, ...diagnostics],
+    preservedResourceAddresses: getPreservedResourceAddresses(),
     proposals
   };
 }
@@ -344,9 +374,11 @@ function createChangeProposals(
   return proposals;
 }
 
+// Preserve authored presentation AZ hierarchy while still grouping genuinely Terraform-only children.
 function createAvailabilityZoneProposalPlan(
   nodes: readonly DiagramNode[],
-  blocks: readonly ParsedBlock[]
+  blocks: readonly ParsedBlock[],
+  nodeByIdentityKey: ReadonlyMap<string, DiagramNode>
 ): AvailabilityZoneProposalPlan {
   const usedNodeIds = new Set(nodes.map((node) => node.id));
   const azNodeIdByValue = createExistingAvailabilityZoneNodeIdByValue(nodes);
@@ -354,6 +386,13 @@ function createAvailabilityZoneProposalPlan(
   const parentAreaNodeIdByBlockKey = new Map<string, string>();
 
   for (const block of blocks) {
+    const blockKey = createTerraformBlockIdentityKey(block.identity);
+    const matchedNode = nodeByIdentityKey.get(blockKey);
+
+    if (matchedNode?.metadata?.parentAreaNodeId) {
+      continue;
+    }
+
     const availabilityZone = getBlockAvailabilityZone(block);
 
     if (!availabilityZone) {
@@ -372,7 +411,7 @@ function createAvailabilityZoneProposalPlan(
       );
     }
 
-    parentAreaNodeIdByBlockKey.set(createTerraformBlockIdentityKey(block.identity), azNodeId);
+    parentAreaNodeIdByBlockKey.set(blockKey, azNodeId);
   }
 
   return {
@@ -587,7 +626,7 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
   const blocks: ParsedBlock[] = [];
   const diagnostics: TerraformDiagnostic[] = [];
   const identityKeys = new Set<string>();
-  let ignoredProviderBlockCount = 0;
+  let ignoredConfigurationBlockCount = 0;
 
   for (const file of files) {
     const parseResult = parseTerraformBlocks(file.fileName, file.terraformCode);
@@ -616,10 +655,10 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
         sourceFileName: diagnostic.sourceFileName ?? file.fileName
       }))
     );
-    ignoredProviderBlockCount += parseResult.ignoredProviderBlockCount;
+    ignoredConfigurationBlockCount += parseResult.ignoredConfigurationBlockCount;
   }
 
-  return { blocks, diagnostics, ignoredProviderBlockCount };
+  return { blocks, diagnostics, ignoredConfigurationBlockCount };
 }
 
 function isTerraformSyncInputBlank(input: TerraformSyncInput): boolean {
@@ -635,7 +674,7 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
   const lines = splitTerraformLines(terraformCode);
   const blocks: ParsedBlock[] = [];
   const diagnostics: TerraformDiagnostic[] = [];
-  let ignoredProviderBlockCount = 0;
+  let ignoredConfigurationBlockCount = 0;
 
   for (let index = 0; index < lines.length; index += 1) {
     const lineText = lines[index] ?? "";
@@ -646,10 +685,28 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
       continue;
     }
 
+    if (TERRAFORM_BLOCK_HEADER_PATTERN.test(codeLine)) {
+      ignoredConfigurationBlockCount += 1;
+
+      if (!isInlineEmptyBlock(codeLine)) {
+        const bodyResult = collectBlockBody(lines, index + 1, index + 1, "terraform");
+        diagnostics.push(...bodyResult.diagnostics);
+
+        if (!bodyResult.closed) {
+          index = lines.length;
+          continue;
+        }
+
+        index = bodyResult.endIndex;
+      }
+
+      continue;
+    }
+
     const providerHeaderMatch = PROVIDER_BLOCK_HEADER_PATTERN.exec(codeLine);
 
     if (providerHeaderMatch) {
-      ignoredProviderBlockCount += 1;
+      ignoredConfigurationBlockCount += 1;
 
       if (!isInlineEmptyBlock(codeLine)) {
         const bodyResult = collectBlockBody(lines, index + 1, index + 1, "provider");
@@ -670,13 +727,33 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
 
     if (!headerMatch) {
       const topLevelBlockMatch = TOP_LEVEL_BLOCK_PATTERN.exec(codeLine);
+      const topLevelBlockType = topLevelBlockMatch?.[1];
+
+      if (topLevelBlockType && topLevelBlockType !== "resource" && topLevelBlockType !== "data") {
+        const bodyResult = collectBlockBody(lines, index + 1, index + 1, topLevelBlockType);
+        diagnostics.push(...bodyResult.diagnostics);
+
+        if (!bodyResult.closed) {
+          index = lines.length;
+          continue;
+        }
+
+        if (!isSilentlyPreservedTerraformBlockType(topLevelBlockType)) {
+          diagnostics.push({
+            severity: "warning",
+            code: "terraform.sync.unsupported_block",
+            line: index + 1,
+            message: `${topLevelBlockType} block은 Diagram으로 동기화하지 않고 Terraform 원문으로 보존합니다.`
+          });
+        }
+        ignoredConfigurationBlockCount += 1;
+        index = bodyResult.endIndex;
+        continue;
+      }
 
       diagnostics.push({
         severity: "error",
-        code:
-          topLevelBlockMatch && topLevelBlockMatch[1] !== "resource" && topLevelBlockMatch[1] !== "data"
-            ? "terraform.sync.unsupported_block"
-            : "terraform.sync.block_header",
+        code: "terraform.sync.block_header",
         line: index + 1,
         message: "block header는 resource/data \"type\" \"name\" { 형식이어야 합니다."
       });
@@ -729,7 +806,28 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
       address,
       resourceType
     );
-    diagnostics.push(...valuesResult.diagnostics);
+    diagnostics.push(...valuesResult.diagnostics.map((diagnostic) =>
+      isOpaqueTerraformSyncDiagnostic(diagnostic)
+        ? { ...diagnostic, severity: "warning" as const }
+        : diagnostic
+    ));
+
+    if (valuesResult.diagnostics.some(isOpaqueTerraformSyncDiagnostic)) {
+      blocks.push({
+        blockType,
+        resourceType,
+        resourceName,
+        address,
+        identity,
+        line: index + 1,
+        sourceFileName,
+        values: {},
+        opaque: true
+      });
+      ignoredConfigurationBlockCount += 1;
+      index = bodyResult.endIndex;
+      continue;
+    }
 
     blocks.push({
       blockType,
@@ -745,7 +843,7 @@ function parseTerraformBlocks(sourceFileName: string, terraformCode: string): Pa
     index = bodyResult.endIndex;
   }
 
-  return { blocks, diagnostics, ignoredProviderBlockCount };
+  return { blocks, diagnostics, ignoredConfigurationBlockCount };
 }
 
 function splitTerraformLines(terraformCode: string): string[] {
@@ -821,7 +919,8 @@ function collectBlockBody(
 function parseAttributes(
   bodyLines: BodyLine[],
   resourceAddress: string,
-  resourceType?: string
+  resourceType?: string,
+  parentPath: readonly string[] = []
 ): { values: Record<string, unknown>; diagnostics: TerraformDiagnostic[] } {
   const values: Record<string, unknown> = {};
   const diagnostics: TerraformDiagnostic[] = [];
@@ -853,7 +952,12 @@ function parseAttributes(
       diagnostics.push(...nestedBlock.diagnostics);
       index = nestedBlock.endIndex;
 
-      if (!resourceType || !isTerraformNestedBlockAttribute(resourceType, nestedBlockName)) {
+      const isSupportedNestedBlock = resourceType && (
+        isTerraformNestedBlockAttribute(resourceType, nestedBlockName, parentPath) ||
+        (parentPath.length > 0 && isGenericTerraformNestedBlock(nestedBlockName))
+      );
+
+      if (!isSupportedNestedBlock) {
         diagnostics.push({
           severity: "error",
           code: "terraform.sync.nested_block",
@@ -868,9 +972,19 @@ function parseAttributes(
         continue;
       }
 
-      const nestedValues = parseAttributes(nestedBlock.bodyLines, resourceAddress, resourceType);
+      const nestedValues = parseAttributes(
+        nestedBlock.bodyLines,
+        resourceAddress,
+        resourceType,
+        [...parentPath, nestedBlockName]
+      );
       diagnostics.push(...nestedValues.diagnostics);
-      appendNestedBlockValue(values, nestedBlockName, nestedValues.values);
+      appendNestedBlockValue(
+        values,
+        nestedBlockName,
+        nestedValues.values,
+        isTerraformSingleNestedBlockAttribute(resourceType, nestedBlockName, parentPath)
+      );
       continue;
     }
 
@@ -920,7 +1034,12 @@ function parseAttributes(
     }
 
     const valueText = valueLines.join("\n");
-    const parsedValue = parseAttributeValue(valueText, bodyLine.line, resourceAddress);
+    const parsedValue = parseAttributeValue(
+      valueText,
+      bodyLine.line,
+      resourceAddress,
+      terraformName === "depends_on"
+    );
 
     if (parsedValue.diagnostic) {
       diagnostics.push(parsedValue.diagnostic);
@@ -931,6 +1050,12 @@ function parseAttributes(
   }
 
   return { values, diagnostics };
+}
+
+function isOpaqueTerraformSyncDiagnostic(diagnostic: TerraformDiagnostic): boolean {
+  return diagnostic.code === "terraform.sync.unsupported_expression" ||
+    diagnostic.code === "terraform.sync.trailing_tokens" ||
+    diagnostic.code === "terraform.sync.nested_block";
 }
 
 function collectNestedBlockBody(
@@ -1003,9 +1128,16 @@ function collectNestedBlockBody(
 function appendNestedBlockValue(
   values: Record<string, unknown>,
   terraformName: string,
-  nestedValue: Record<string, unknown>
+  nestedValue: Record<string, unknown>,
+  singleBlock: boolean
 ): void {
   const name = toCamelCase(terraformName);
+
+  if (singleBlock) {
+    values[name] = nestedValue;
+    return;
+  }
+
   const currentValue = values[name];
 
   if (Array.isArray(currentValue)) {
@@ -1027,9 +1159,16 @@ function isNestedBlockOpening(lineText: string): boolean {
 function parseAttributeValue(
   valueText: string,
   line: number,
-  resourceAddress: string
+  resourceAddress: string,
+  allowDependencyAddress = false
 ): { value?: unknown; diagnostic?: TerraformDiagnostic } {
-  const parser = new HclValueParser(valueText);
+  const trimmedValueText = valueText.trim();
+
+  if (isSupportedTerraformFunctionExpression(trimmedValueText)) {
+    return { value: trimmedValueText };
+  }
+
+  const parser = new HclValueParser(valueText, allowDependencyAddress);
   const value = parser.parseValue();
 
   if (value.status === "unsupported") {
@@ -1081,7 +1220,10 @@ type ValueParseResult =
 class HclValueParser {
   private index = 0;
 
-  constructor(private readonly source: string) {}
+  constructor(
+    private readonly source: string,
+    private readonly allowDependencyAddress = false
+  ) {}
 
   parseValue(): ValueParseResult {
     this.skipWhitespace();
@@ -1139,10 +1281,6 @@ class HclValueParser {
       if (char === "\"") {
         this.index += 1;
         const rawString = this.source.slice(start, this.index);
-
-        if (rawString.includes("${")) {
-          return { status: "unsupported" };
-        }
 
         try {
           return { status: "ok", value: JSON.parse(rawString) };
@@ -1275,7 +1413,10 @@ class HclValueParser {
       return { status: "ok", value: Number(literal) };
     }
 
-    if (REFERENCE_PATTERN.test(literal)) {
+    if (
+      REFERENCE_PATTERN.test(literal) ||
+      (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal))
+    ) {
       return { status: "ok", value: literal };
     }
 

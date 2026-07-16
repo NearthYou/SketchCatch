@@ -16,6 +16,32 @@ Template은 Resource만 던지는 것이 아니라, 사용자가 바로 IaC Prev
 - domain, certificate, 기존 VPC처럼 사용자 소유 정보가 필요한 값은 optional로 두고, 없으면 기본 배포 경로가 동작해야 한다.
 - 기본값만으로도 Terraform plan/apply가 가능한 상태를 목표로 한다.
 
+## 구현·표현에 대한 확정 규칙
+
+### 보드에 표시하는 노드의 정확한 이름
+
+이 문서에서 말하는 두 종류의 노드를 구분한다.
+
+1. **카탈로그 Resource 노드**: Architecture Board에 표시되는 정식 AWS/Kubernetes Resource다. 기존 Resource catalog의 `ResourceDefinition`, icon, label, style, parameter 계약을 통해 생성한다. 예를 들어 `VPC`, `ECS Cluster`, `Internet Gateway`처럼 사용자가 이해할 수 있는 실제 리소스 이름을 표시한다.
+2. **Raw Terraform Detail 노드**: Terraform `resource`/`data` block 주소와 내부 설정을 표현하는 구현용 단위다. `aws_s3_bucket.static_web_hosting_workspace`나 일반 `AWS` tile처럼 Terraform logical name을 그대로 표시하는 노드가 여기에 해당한다. 이 노드는 IaC Preview 내부에서만 허용하고 Architecture Board에는 표시하지 않는다.
+
+따라서 첫 번째 그림처럼 Terraform logical name을 보드의 노드 이름으로 노출하거나, 카탈로그에 없는 리소스를 임시 `AWS` 노드로 만들어 연결하는 방식은 사용하지 않는다. 두 번째 그림처럼 기존에 등록된 Resource catalog의 실제 리소스 노드를 끌어다 연결하는 방식만 허용한다.
+
+### 카탈로그에 리소스가 없을 때
+
+필요한 리소스가 기존 catalog에 없으면 Template 구현을 멈추고, 먼저 해당 리소스를 정식 Resource로 등록한다. `ResourceDefinition`, provider identity, icon/label/style, parameter, Terraform Preview/Sync, 필요한 Check Finding과 테스트를 추가한 뒤 Template에서 재사용한다. 임시 노드, 일반 `AWS` fallback tile, `*_workspace` 가시 label을 추가해 진행하지 않는다.
+
+### AWS Role 등록 선행 순서
+
+실제 구현과 배포 검증의 순서는 다음으로 고정한다.
+
+1. 기존 AWS 계정의 Role과 trust policy를 확인한다.
+2. 재사용 가능한 Role이 있으면 그것을 연결하고, 없을 때만 필요한 Role을 등록한다. 중복 Role과 임시 Role은 만들지 않는다.
+3. SketchCatch의 verified AWS connection에서 STS `AssumeRole`과 `GetCallerIdentity`를 확인한다.
+4. 위 연결 검증이 통과한 뒤에만 Template 코드 수정과 Chrome live plan/apply/destroy 검증을 진행한다.
+
+Role 연결 검증 전에는 실제 AWS 리소스 생성이나 Template 구현 완료를 주장하지 않는다.
+
 ---
 
 ## Static Web Hosting Pattern

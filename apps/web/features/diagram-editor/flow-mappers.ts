@@ -1,14 +1,21 @@
 import { MarkerType, Position } from "@xyflow/react";
 import type { CSSProperties } from "react";
-import type { DiagramEdge, DiagramNode } from "../../../../packages/types/src";
+import type {
+  DiagramEdge,
+  DiagramGeometryPolicy,
+  DiagramNode
+} from "../../../../packages/types/src";
 
-import {
-  getEdgeStrokeWidth,
-  normalizeEdgeKind
-} from "./diagram-utils";
+import { getEdgeStrokeWidth, normalizeEdgeKind } from "./diagram-utils";
 import { BOARD_DEFAULT_EDGE_COLOR } from "./constants";
-import { getAreaNodeLabel, isAreaNode } from "./area-nodes";
+import { getAreaNodeLabel, isAreaNode, isContainmentAreaNode } from "./area-nodes";
+import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
 import { getResourceNodeDisplayLabel } from "./resource-node-display-label";
+import {
+  doesOrthogonalRouteCrossResource,
+  getObstacleSafeEdgeHandles,
+  type ObstacleSafeEdgeHandles
+} from "./obstacle-safe-edge-routing";
 import type {
   DiagramFlowEdge,
   DiagramFlowNode,
@@ -18,10 +25,27 @@ import type {
 } from "./types";
 
 type FlowMapperOptions = {
+  readonly cachedNodesById?: ReadonlyMap<string, DiagramFlowNode> | undefined;
   readonly activeConnectionSourceNodeId?: string | null | undefined;
   readonly edges?: readonly DiagramEdge[] | undefined;
+  readonly geometryPolicy?: DiagramGeometryPolicy | undefined;
   readonly isPreview?: boolean;
   readonly previewAnnotations?: DiagramPreviewAnnotations | undefined;
+  readonly staleAuthoredRouteNodeIds?: ReadonlySet<string> | undefined;
+};
+
+type FlowNodeRenderState = {
+  readonly areaDepth: number;
+  readonly isAreaDropTarget: boolean;
+  readonly isConnectionActive: boolean;
+  readonly isDimmed: boolean;
+  readonly isPreview: boolean;
+  readonly isValidConnectionTarget: boolean;
+  readonly node: DiagramNode;
+  readonly previewState: DiagramPreviewState | undefined;
+  readonly selected: boolean;
+  readonly selectedNodeCount: number;
+  readonly zIndex: number;
 };
 
 const CONTAINMENT_EDGE_LABELS = new Set(["contains", "hosts"]);
@@ -47,7 +71,9 @@ const EDGE_STYLE_LABEL_PATTERNS: ReadonlyArray<{
     style: { animated: false, color: "#6b7280", lineStyle: "solid", width: "thin" }
   },
   {
-    patterns: [/\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u],
+    patterns: [
+      /\b(async|event|queue|stream|notification|pub\/?sub|publish|subscribe|sns|sqs|message|logs?|monitor(?:s|ing)?|metric|alarm)\b/u
+    ],
     style: { animated: false, color: "#476582", lineStyle: "dashed", width: "medium" }
   }
 ];
@@ -69,7 +95,9 @@ export function toFlowNodes(
   return nodes.map((node) => {
     const selected = !isPreview && selectedNodeIdSet.has(node.id);
     const isArea = isAreaNode(node);
-    const areaClassName = selected ? "diagramAreaFlowNode diagramAreaFlowNodeInteractive" : "diagramAreaFlowNode";
+    const areaClassName = selected
+      ? "diagramAreaFlowNode diagramAreaFlowNodeInteractive"
+      : "diagramAreaFlowNode";
     const previewState = previewAnnotations?.nodeStates[node.id];
     const isDimmed = !isPreview && shouldDimUnselectedNodes && !selected;
     const isAreaDropTarget = !isPreview && isArea && node.id === activeAreaDropTargetNodeId;
@@ -81,36 +109,54 @@ export function toFlowNodes(
       nodeById,
       isPreview
     );
+    const renderState: FlowNodeRenderState = {
+      areaDepth: isArea ? getAreaAncestorDepth(node, nodeById) : 0,
+      isAreaDropTarget,
+      isConnectionActive,
+      isDimmed,
+      isPreview,
+      isValidConnectionTarget,
+      node,
+      previewState,
+      selected,
+      selectedNodeCount: isPreview ? 0 : selectedNodeIds.length,
+      zIndex: getFlowNodeZIndex(node, nodeById, options.geometryPolicy)
+    };
+    const cached = options.cachedNodesById?.get(node.id);
+
+    if (canReuseFlowNode(cached, renderState, handlers)) {
+      return cached;
+    }
 
     return {
       id: node.id,
       ariaLabel: getFlowNodeAriaLabel(node, {
-        isDimmed,
-        isPreview,
-        isAreaDropTarget,
-        previewState,
-        selected
+        isDimmed: renderState.isDimmed,
+        isPreview: renderState.isPreview,
+        isAreaDropTarget: renderState.isAreaDropTarget,
+        previewState: renderState.previewState,
+        selected: renderState.selected
       }),
       ...(isArea ? { className: areaClassName } : {}),
       type: "diagramNode",
       position: { ...node.position },
       data: {
-        areaDepth: isArea ? getAreaAncestorDepth(node, nodeById) : 0,
+        areaDepth: renderState.areaDepth,
         node,
-        selectedNodeCount: isPreview ? 0 : selectedNodeIds.length,
-        isDimmed,
-        isConnectionActive,
-        isValidConnectionTarget,
-        isPreview,
-        previewState,
-        isAreaDropTarget,
+        selectedNodeCount: renderState.selectedNodeCount,
+        isDimmed: renderState.isDimmed,
+        isConnectionActive: renderState.isConnectionActive,
+        isValidConnectionTarget: renderState.isValidConnectionTarget,
+        isPreview: renderState.isPreview,
+        previewState: renderState.previewState,
+        isAreaDropTarget: renderState.isAreaDropTarget,
         ...handlers
       },
-      selected,
-      draggable: !isPreview && !node.locked,
-      selectable: !isPreview,
-      connectable: !isPreview && !node.locked,
-      deletable: !isPreview,
+      selected: renderState.selected,
+      draggable: !renderState.isPreview && !node.locked,
+      selectable: !renderState.isPreview,
+      connectable: !renderState.isPreview && !node.locked,
+      deletable: !renderState.isPreview,
       width: node.size.width,
       height: node.size.height,
       initialWidth: node.size.width,
@@ -122,13 +168,52 @@ export function toFlowNodes(
       style: {
         width: node.size.width,
         height: node.size.height,
-        ...(isArea && !node.locked && !selected ? { pointerEvents: "none" } : {})
+        ...(isArea && !node.locked && !renderState.selected ? { pointerEvents: "none" } : {})
       },
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      zIndex: getFlowNodeZIndex(node, nodeById)
+      zIndex: renderState.zIndex
     };
   });
+}
+
+function canReuseFlowNode(
+  cached: DiagramFlowNode | undefined,
+  state: FlowNodeRenderState,
+  handlers: DiagramFlowNodeHandlers
+): cached is DiagramFlowNode {
+  if (!cached) {
+    return false;
+  }
+
+  const data = cached.data;
+  const canEdit = !state.isPreview && !state.node.locked;
+
+  return (
+    data.node === state.node &&
+    data.areaDepth === state.areaDepth &&
+    data.selectedNodeCount === state.selectedNodeCount &&
+    data.isDimmed === state.isDimmed &&
+    data.isConnectionActive === state.isConnectionActive &&
+    data.isValidConnectionTarget === state.isValidConnectionTarget &&
+    data.isPreview === state.isPreview &&
+    data.previewState === state.previewState &&
+    data.isAreaDropTarget === state.isAreaDropTarget &&
+    data.onBringForward === handlers.onBringForward &&
+    data.onSendBackward === handlers.onSendBackward &&
+    data.onTextColorChange === handlers.onTextColorChange &&
+    data.onBorderColorChange === handlers.onBorderColorChange &&
+    data.onToggleLock === handlers.onToggleLock &&
+    data.onResizeStart === handlers.onResizeStart &&
+    data.onResize === handlers.onResize &&
+    data.onResizeEnd === handlers.onResizeEnd &&
+    cached.selected === state.selected &&
+    cached.draggable === canEdit &&
+    cached.selectable === !state.isPreview &&
+    cached.connectable === canEdit &&
+    cached.deletable === !state.isPreview &&
+    cached.zIndex === state.zIndex
+  );
 }
 
 // 보드의 관계 데이터를 React Flow가 그릴 수 있는 연결선으로 바꿉니다.
@@ -143,59 +228,111 @@ export function toFlowEdges(
   const previewAnnotations = options.previewAnnotations;
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
-  return edges.filter((edge) => !isContainmentEdge(edge)).map((edge) => {
-    const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
-    const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
-    const color = edgeStyle.color ?? BOARD_DEFAULT_EDGE_COLOR;
-    const fullLabel = edge.label?.trim() || undefined;
-    const visibleLabel = getVisibleEdgeLabel(fullLabel);
-    const previewState = previewAnnotations?.edgeStates[edge.id];
-    const markerColor = getFlowEdgeMarkerColor(color, isPreview);
-    const flowEdge: DiagramFlowEdge = {
-      id: edge.id,
-      ariaLabel: getFlowEdgeAriaLabel(edge, fullLabel, selected, isPreview, previewState),
-      source: edge.sourceNodeId,
-      target: edge.targetNodeId,
-      ...(edge.sourceHandleId ? { sourceHandle: toReactFlowHandleId(edge.sourceHandleId, "source") } : {}),
-      ...(edge.targetHandleId ? { targetHandle: toReactFlowHandleId(edge.targetHandleId, "target") } : {}),
-      type: "diagramEdge",
-      data: {
-        edge,
-        isAnimated: !isPreview && edgeStyle.animated === true,
-        pathKind: normalizeEdgeKind(edge.type),
-        previewState
-      },
-      selected,
-      animated: false,
-      ...(visibleLabel ? { label: visibleLabel } : {}),
-      labelBgBorderRadius: 5,
-      labelBgPadding: [8, 3],
-      labelBgStyle: {
-        fill: "#f8fbff",
-        stroke: "#9fb2c8",
-        strokeWidth: 1
-      },
-      labelStyle: {
-        fill: "#172033",
-        fontFamily: "var(--workspace-font)",
-        fontSize: 12,
-        fontWeight: 600
-      },
-      selectable: !isPreview,
-      deletable: !isPreview,
-      interactionWidth: 18,
-      zIndex: getFlowEdgeZIndex(edge, nodeById, selected),
-      markerEnd: {
+  return edges
+    .filter(
+      (edge) => edge.metadata?.presentationRole !== "detail" && !isContainmentEdge(edge, nodeById)
+    )
+    .map((edge, edgeIndex) => {
+      const selected = !isPreview && selectedEdgeIdSet.has(edge.id);
+      const edgeStyle = getResolvedDiagramEdgeStyle(edge, nodeById);
+      const color = edgeStyle.color ?? BOARD_DEFAULT_EDGE_COLOR;
+      const fullLabel = edge.label?.trim() || undefined;
+      const visibleLabel = getVisibleEdgeLabel(fullLabel);
+      const previewState = previewAnnotations?.edgeStates[edge.id];
+      const markerColor = getFlowEdgeMarkerColor(color, isPreview);
+      const marker = {
         type: MarkerType.ArrowClosed,
         color: markerColor,
         ...getEdgeMarkerGeometry(edgeStyle.width),
-        markerUnits: "userSpaceOnUse"
-      },
-      style: getFlowEdgeStyle(edge, isPreview, nodeById)
-    };
+        markerUnits: "userSpaceOnUse" as const
+      };
+      const arrowDirection = edge.route?.arrowDirection ?? "source-to-target";
+      const hasStartMarker = Boolean(
+        edge.route &&
+          (arrowDirection === "target-to-source" || arrowDirection === "bidirectional")
+      );
+      const hasEndMarker =
+        !edge.route ||
+        arrowDirection === "source-to-target" ||
+        arrowDirection === "bidirectional";
+      const sourceNode = nodeById.get(edge.sourceNodeId);
+      const targetNode = nodeById.get(edge.targetNodeId);
+      const storedHandles = getStoredLogicalHandles(edge);
+      const renderedHandles = edge.route
+        ? storedHandles
+        : sourceNode &&
+            targetNode &&
+            (!storedHandles ||
+              doesOrthogonalRouteCrossResource(sourceNode, targetNode, storedHandles, nodes))
+          ? getObstacleSafeEdgeHandles(sourceNode, targetNode, nodes)
+          : storedHandles;
+      const flowEdge: DiagramFlowEdge = {
+        id: edge.id,
+        ariaLabel: getFlowEdgeAriaLabel(edge, fullLabel, selected, isPreview, previewState),
+        source: edge.sourceNodeId,
+        target: edge.targetNodeId,
+        ...(renderedHandles?.sourceHandleId
+          ? { sourceHandle: toReactFlowHandleId(renderedHandles.sourceHandleId, "source") }
+          : {}),
+        ...(renderedHandles?.targetHandleId
+          ? { targetHandle: toReactFlowHandleId(renderedHandles.targetHandleId, "target") }
+          : {}),
+        type: "diagramEdge",
+        data: {
+          ...(edge.route ? { authoredRoute: edge.route } : {}),
+          edge,
+          isAnimated: !isPreview && edgeStyle.animated === true,
+          isAuthoredRouteStale: Boolean(
+            edge.route &&
+              (options.staleAuthoredRouteNodeIds?.has(edge.sourceNodeId) ||
+                options.staleAuthoredRouteNodeIds?.has(edge.targetNodeId))
+          ),
+          pathKind: normalizeEdgeKind(edge.type),
+          previewState
+        },
+        selected,
+        animated: false,
+        ...(visibleLabel ? { label: visibleLabel } : {}),
+        labelBgBorderRadius: 5,
+        labelBgPadding: [8, 3],
+        labelBgStyle: {
+          fill: "#f8fbff",
+          stroke: "#9fb2c8",
+          strokeWidth: 1
+        },
+        labelStyle: {
+          fill: "#172033",
+          fontFamily: "var(--workspace-font)",
+          fontSize: 12,
+          fontWeight: 600
+        },
+        selectable: !isPreview,
+        deletable: !isPreview,
+        interactionWidth: 18,
+        zIndex: getFlowEdgeZIndex(edge, nodeById, selected, options.geometryPolicy, edgeIndex),
+        ...(hasStartMarker ? { markerStart: marker } : {}),
+        ...(hasEndMarker ? { markerEnd: marker } : {}),
+        style: getFlowEdgeStyle(edge, isPreview, nodeById)
+      };
 
-    return flowEdge;
-  });
+      return flowEdge;
+    });
+}
+
+function getStoredLogicalHandles(edge: DiagramEdge): ObstacleSafeEdgeHandles | undefined {
+  if (!edge.sourceHandleId || !edge.targetHandleId) {
+    return undefined;
+  }
+
+  return {
+    sourceHandleId: toLogicalHandleId(edge.sourceHandleId),
+    targetHandleId: toLogicalHandleId(edge.targetHandleId)
+  };
+}
+
+function toLogicalHandleId(handleId: string): string {
+  const side = handleId.match(/(?:source-|target-|handle-)?(left|top|right|bottom)$/u)?.[1];
+  return side ? `handle-${side}` : handleId;
 }
 
 function isValidConnectionTargetNode(
@@ -206,19 +343,13 @@ function isValidConnectionTargetNode(
   nodeById: ReadonlyMap<string, DiagramNode>,
   isPreview: boolean
 ): boolean {
-  if (!isConnectionActive || isPreview || !sourceNodeId || sourceNodeId === node.id || node.locked) {
+  if (!isConnectionActive || isPreview || !sourceNodeId) {
     return false;
   }
 
   const sourceNode = nodeById.get(sourceNodeId);
 
-  if (!sourceNode || sourceNode.locked) {
-    return false;
-  }
-
-  return !edges.some(
-    (edge) => edge.sourceNodeId === sourceNodeId && edge.targetNodeId === node.id
-  );
+  return isAwsDiagramConnectionAllowed({ sourceNode, targetNode: node, edges });
 }
 
 function getFlowNodeAriaLabel(
@@ -288,13 +419,24 @@ function getVisibleEdgeLabel(label: string | undefined): string | undefined {
     return label;
   }
 
-  return `${characters.slice(0, EDGE_LABEL_MAX_CHARACTERS - 1).join("").trimEnd()}…`;
+  return `${characters
+    .slice(0, EDGE_LABEL_MAX_CHARACTERS - 1)
+    .join("")
+    .trimEnd()}…`;
 }
 
-function isContainmentEdge(edge: DiagramEdge): boolean {
+/** contains/hosts label만으로 SG 같은 visual scope 관계를 숨기지 않습니다. */
+function isContainmentEdge(edge: DiagramEdge, nodeById: ReadonlyMap<string, DiagramNode>): boolean {
   const normalizedLabel = edge.label?.trim().toLowerCase();
 
-  return normalizedLabel != null && CONTAINMENT_EDGE_LABELS.has(normalizedLabel);
+  if (normalizedLabel == null || !CONTAINMENT_EDGE_LABELS.has(normalizedLabel)) {
+    return false;
+  }
+
+  const sourceNode = nodeById.get(edge.sourceNodeId);
+
+  // 노드 정보 없이 사용하는 legacy 호출은 이전 필터 동작을 보존합니다.
+  return sourceNode ? isContainmentAreaNode(sourceNode) : true;
 }
 
 function getFlowEdgeStyle(
@@ -326,7 +468,9 @@ function getFlowEdgeMarkerColor(color: string, isPreview: boolean): string {
     return color;
   }
 
-  const alphaHex = Math.round(opacity * 255).toString(16).padStart(2, "0");
+  const alphaHex = Math.round(opacity * 255)
+    .toString(16)
+    .padStart(2, "0");
 
   return `#${hexMatch[1]}${alphaHex}`;
 }
@@ -380,7 +524,9 @@ function isNonDefaultDiagramEdgeStyle(style: NonNullable<DiagramEdge["style"]>):
   );
 }
 
-function getDiagramEdgeStyleFromLabel(label: string | undefined): NonNullable<DiagramEdge["style"]> {
+function getDiagramEdgeStyleFromLabel(
+  label: string | undefined
+): NonNullable<DiagramEdge["style"]> {
   const normalizedLabel = label?.trim().toLowerCase() ?? "";
 
   for (const entry of EDGE_STYLE_LABEL_PATTERNS) {
@@ -404,7 +550,10 @@ function getDiagramEdgeStyleFromEndpoints(
   const sourceType = getNodeResourceType(nodeById.get(edge.sourceNodeId));
   const targetType = getNodeResourceType(nodeById.get(edge.targetNodeId));
 
-  if (isConfigurationDependencyResourceType(sourceType) || isConfigurationDependencyResourceType(targetType)) {
+  if (
+    isConfigurationDependencyResourceType(sourceType) ||
+    isConfigurationDependencyResourceType(targetType)
+  ) {
     return { animated: false, color: "#6b7280", lineStyle: "solid", width: "thin" };
   }
 
@@ -460,7 +609,15 @@ const AREA_Z_BASE = 0;
 const RESOURCE_Z_BASE = 100_000;
 const AUTHORED_Z_INDEX_MAX = 20;
 
-function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
+function getFlowNodeZIndex(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>,
+  geometryPolicy?: DiagramGeometryPolicy
+): number {
+  if (geometryPolicy === "source-exact") {
+    return Number.isFinite(node.zIndex) ? node.zIndex : 0;
+  }
+
   const depth = getAreaAncestorDepth(node, nodeById);
   const authoredZIndex = Number.isFinite(node.zIndex)
     ? Math.max(0, Math.min(AUTHORED_Z_INDEX_MAX, node.zIndex))
@@ -473,8 +630,16 @@ function getFlowNodeZIndex(node: DiagramNode, nodeById: ReadonlyMap<string, Diag
 function getFlowEdgeZIndex(
   edge: DiagramEdge,
   nodeById: ReadonlyMap<string, DiagramNode>,
-  selected: boolean
+  selected: boolean,
+  geometryPolicy?: DiagramGeometryPolicy,
+  edgeIndex = 0
 ): number {
+  if (geometryPolicy === "source-exact") {
+    return typeof edge.zIndex === "number" && Number.isFinite(edge.zIndex)
+      ? edge.zIndex
+      : edgeIndex;
+  }
+
   const sourceNode = nodeById.get(edge.sourceNodeId);
   const targetNode = nodeById.get(edge.targetNodeId);
 
@@ -486,16 +651,19 @@ function getFlowEdgeZIndex(
     getFlowNodeZIndex(sourceNode, nodeById),
     getFlowNodeZIndex(targetNode, nodeById)
   );
-  const hasAreaEndpoint = isAreaNode(sourceNode) || isAreaNode(targetNode);
+  const hasOnlyAreaEndpoints = isAreaNode(sourceNode) && isAreaNode(targetNode);
 
   if (selected) {
     return endpointZIndex + 16;
   }
 
-  return endpointZIndex + (hasAreaEndpoint ? 8 : -8);
+  return endpointZIndex + (hasOnlyAreaEndpoints ? 8 : -8);
 }
 
-function getAreaAncestorDepth(node: DiagramNode, nodeById: ReadonlyMap<string, DiagramNode>): number {
+function getAreaAncestorDepth(
+  node: DiagramNode,
+  nodeById: ReadonlyMap<string, DiagramNode>
+): number {
   let depth = 0;
   let parentAreaNodeId = node.metadata?.parentAreaNodeId;
   const visitedNodeIds = new Set<string>([node.id]);

@@ -1,4 +1,34 @@
-import type { Deployment, DeploymentLog, GitCicdHandoff } from "@sketchcatch/types";
+import type {
+  Deployment,
+  DeploymentLiveProfile,
+  DeploymentLog,
+  DiagramJson,
+  GitCicdHandoff
+} from "@sketchcatch/types";
+
+const practiceLiveApplyResourceTypes = new Set([
+  "aws_vpc",
+  "aws_subnet",
+  "aws_internet_gateway",
+  "aws_route_table",
+  "aws_route_table_association",
+  "aws_security_group",
+  "aws_security_group_rule",
+  "aws_instance",
+  "aws_s3_bucket"
+]);
+
+export function getRecommendedDeploymentLiveProfile(
+  diagramJson: DiagramJson
+): DeploymentLiveProfile {
+  const hasExtendedTemplateResources = diagramJson.nodes.some((node) => {
+    const resourceType = node.parameters?.resourceType ?? node.type;
+
+    return node.kind === "resource" && !practiceLiveApplyResourceTypes.has(resourceType);
+  });
+
+  return hasExtendedTemplateResources ? "demo_web_service_with_rds" : "practice";
+}
 
 type DeploymentRequestState = "idle" | "loading" | "error";
 export type DeploymentPanelMode = "setup" | "records";
@@ -47,7 +77,7 @@ export function getDeploymentActionState(
   const canStartFreshApplyPlan = Boolean(deployment && !hasCurrentPlan && !isDestroyPlan);
   const canShowApplyPlanAction = Boolean(
     deployment &&
-      (isApplyPlan || canStartFreshApplyPlan) &&
+      canStartFreshApplyPlan &&
       deployment.status !== "RUNNING" &&
       deployment.status !== "SUCCESS" &&
       deployment.status !== "DESTROYED" &&
@@ -63,8 +93,7 @@ export function getDeploymentActionState(
   const canShowDestroyPlanAction = Boolean(
     deployment &&
       isDestroyable &&
-      deployment.status !== "RUNNING" &&
-      !(isDestroyPlan && isPlanApproved)
+      deployment.status !== "RUNNING"
   );
 
   const canRunApplyPlan = canShowApplyPlanAction && !isLoading;
@@ -264,6 +293,8 @@ function isCleanupDestroyCandidate(deployment: Deployment): boolean {
 
   return (
     deployment.status === "FAILED" &&
-    (deployment.failureStage === "apply" || deployment.failureStage === "destroy")
+    (deployment.failureStage === "plan" ||
+      deployment.failureStage === "apply" ||
+      deployment.failureStage === "destroy")
   );
 }

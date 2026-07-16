@@ -23,7 +23,8 @@ const oauthStartParamsSchema = z.object({
 
 const oauthStartQuerySchema = z
   .object({
-    rememberMe: z.enum(["true", "false"]).optional()
+    rememberMe: z.enum(["true", "false"]).optional(),
+    returnTo: z.string().trim().max(2048).optional()
   })
   .passthrough();
 
@@ -47,6 +48,7 @@ type OAuthRouteOptions = {
   startRateLimiter?: RateLimiter;
 };
 
+// OAuth 시작과 callback을 등록하고 로그인 전 내부 route 복귀를 보존합니다.
 export async function registerOAuthRoutes(
   app: FastifyInstance,
   options: OAuthRouteOptions = {}
@@ -86,6 +88,7 @@ export async function registerOAuthRoutes(
 
     setOAuthStateCookie(reply, {
       provider,
+      returnTo: getSafeOAuthReturnPath(startQuery.returnTo),
       state,
       persistent: startQuery.rememberMe === "true"
     });
@@ -146,7 +149,7 @@ export async function registerOAuthRoutes(
       });
       clearOAuthStateCookie(reply);
 
-      return reply.redirect("/mypage");
+      return reply.redirect(storedState.returnTo ?? "/dashboard");
     } catch (error) {
       return redirectToLoginWithOAuthError(reply, getOAuthCallbackError(error));
     }
@@ -197,4 +200,18 @@ function getOAuthCallbackError(error: unknown): string {
   }
 
   return OAUTH_SESSION_FAILED;
+}
+
+// 외부 주소나 protocol-relative 주소를 OAuth 성공 redirect로 사용할 수 없게 막습니다.
+function getSafeOAuthReturnPath(value: string | undefined): string | undefined {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return undefined;
+
+  try {
+    const destination = new URL(value, "https://sketchcatch.local");
+    return destination.origin === "https://sketchcatch.local"
+      ? `${destination.pathname}${destination.search}${destination.hash}`
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }

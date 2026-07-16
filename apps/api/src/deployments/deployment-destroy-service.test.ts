@@ -264,6 +264,8 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   downloadedPlanObjectKey: string | undefined;
   downloadedStateObjectKey: string | undefined;
 
+  constructor(private readonly downloadedPlan: Buffer = planBuffer) {}
+
   async downloadDeploymentArtifact(input: {
     deploymentId: string;
     planArtifactId: string;
@@ -271,7 +273,7 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   }) {
     this.downloadedPlanObjectKey = input.objectKey;
 
-    return planBuffer;
+    return this.downloadedPlan;
   }
 
   async downloadDeploymentState(input: { deploymentId: string; objectKey: string }) {
@@ -287,8 +289,13 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   }
 }
 
-test("runDeploymentDestroy applies the approved destroy plan and clears deployment results", async () => {
+test("runDeploymentDestroy retries an approved cleanup after plan failure and clears results", async () => {
   const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    status: "FAILED",
+    failureStage: "plan",
+    errorSummary: "Terraform destroy plan timed out"
+  });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const runnerStages: string[] = [];
   let writtenState: { filePath: string; content: Buffer } | undefined;
@@ -312,6 +319,7 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-destroy",
         mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
@@ -333,16 +341,16 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
   assert.deepEqual(runnerStages, ["init", "destroy"]);
   assert.equal(applyArtifactStorage.downloadedPlanObjectKey, createDestroyPlanArtifactRecord().objectKey);
   assert.equal(applyArtifactStorage.downloadedStateObjectKey, stateObjectKey);
-  assert.equal(writtenState?.filePath.endsWith("\\terraform.tfstate"), true);
+  assert.equal(writtenState?.filePath.endsWith("terraform.tfstate"), true);
   assert.deepEqual(writtenState?.content, Buffer.from('{"version":4}'));
-  assert.equal(writtenPlanFile?.filePath.endsWith("\\tfplan"), true);
+  assert.equal(writtenPlanFile?.filePath.endsWith("tfplan"), true);
   assert.deepEqual(writtenPlanFile?.content, planBuffer);
   assert.equal(result.deployment.status, "DESTROYED");
   assert.equal(result.deployment.stateObjectKey, null);
   assert.equal(result.deployment.currentPlanArtifactId, null);
   assert.equal(result.deployment.approvedPlanArtifactId, null);
   assert.deepEqual(repository.completedDestroyInput, {
-    resultWarningSummary: null
+    resultWarningSummary: "Deployment was destroyed after a failed deployment cleanup."
   });
   assert.deepEqual(
     repository.logs
@@ -365,6 +373,182 @@ test("runDeploymentDestroy applies the approved destroy plan and clears deployme
   );
 });
 
+test("runDeploymentDestroy cleans a full-stack workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("destroy plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroy(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-terraform-destroy",
+              mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /destroy plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
+});
+
+test("application cleanup restores its release without Terraform state or destroy apply", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applicationPlanBuffer = Buffer.from(JSON.stringify({
+    schemaVersion: 1,
+    kind: "application_release_cleanup_plan",
+    deploymentId,
+    projectId,
+    releaseId: "88888888-8888-4888-8888-888888888888",
+    runtimeTargetKind: "ecs_fargate",
+    currentRevision: "task-definition/api:42",
+    previousRevision: "task-definition/api:41"
+  }));
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate",
+    stateObjectKey: null,
+    approvedTfplanHash: createSha256(applicationPlanBuffer)
+  });
+  let cleanupCalls = 0;
+
+  const result = await runDeploymentDestroy(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(applicationPlanBuffer),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-application-cleanup",
+        mainFilePath: "C:/tmp/sketchcatch-application-cleanup/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      executeApplicationCleanup: async ({ cleanupPlan }) => {
+        assert.deepEqual(cleanupPlan, {
+          releaseId: "88888888-8888-4888-8888-888888888888",
+          runtimeTargetKind: "ecs_fargate",
+          currentRevision: "task-definition/api:42",
+          previousRevision: "task-definition/api:41"
+        });
+        cleanupCalls += 1;
+      },
+      runTerraformInit: async () => {
+        throw new Error("application cleanup must not run Terraform init");
+      },
+      runTerraformApply: async () => {
+        throw new Error("application cleanup must not run Terraform apply");
+      }
+    }
+  );
+
+  assert.equal(cleanupCalls, 1);
+  assert.equal(result.deployment.status, "DESTROYED");
+  assert.equal(result.terraform.init, null);
+  assert.equal(result.terraform.destroy, null);
+});
+
+test("application cleanup cleans its prepared workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate",
+    stateObjectKey: null
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("cleanup plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroy(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          readTerraformArtifactFile: async () => terraformArtifactContent,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-application-cleanup",
+              mainFilePath: "C:/tmp/sketchcatch-application-cleanup/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /cleanup plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
+});
+
+test("application cleanup rejects a deployment without a runtime target kind", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applicationPlanBuffer = Buffer.from(
+    JSON.stringify({
+      schemaVersion: 1,
+      kind: "application_release_cleanup_plan",
+      deploymentId,
+      projectId,
+      releaseId: "88888888-8888-4888-8888-888888888888",
+      runtimeTargetKind: null,
+      currentRevision: "task-definition/api:42",
+      previousRevision: "task-definition/api:41"
+    })
+  );
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    scope: "application",
+    targetKind: null,
+    stateObjectKey: null,
+    approvedTfplanHash: createSha256(applicationPlanBuffer)
+  });
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroy(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage: new FakeApplyArtifactStorage(applicationPlanBuffer),
+          readTerraformArtifactFile: async () => terraformArtifactContent,
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-application-cleanup",
+            mainFilePath: "C:/tmp/sketchcatch-application-cleanup/main.tf",
+            terraformFiles: [],
+            cleanup: async () => undefined
+          }),
+          executeApplicationCleanup: async () => {
+            throw new Error("application cleanup must not run without a target kind");
+          }
+        }
+      ),
+    /Deployment target kind is missing/
+  );
+});
+
 test("runDeploymentDestroy reports Terraform apply timeouts without marking duration as completed", async () => {
   const repository = new FakeDeploymentRepository();
 
@@ -382,6 +566,7 @@ test("runDeploymentDestroy reports Terraform apply timeouts without marking dura
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-destroy",
         mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+        terraformFiles: [],
         cleanup: async () => undefined
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
@@ -424,6 +609,12 @@ function createApprovedDestroyDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
+    preparedDraftRevision: null,
+    preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
     stateObjectKey,
     resultWarningSummary: null,
@@ -450,6 +641,7 @@ function createApprovedDestroyDeploymentRecord(
     approvedTfplanHash: tfplanSha256,
     approvedAwsAccountId: "123456789012",
     approvedAwsRegion: "ap-northeast-2",
+    approvedPreparedSnapshotHash: null,
     startedAt: fixedNow,
     completedAt: fixedNow,
     failedAt: null,

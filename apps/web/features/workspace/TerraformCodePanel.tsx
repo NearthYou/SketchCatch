@@ -1,24 +1,41 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, UIEvent } from "react";
-import type { DiagramJson, TerraformDiagnostic, TerraformSourceLocation, TerraformSyncFileInput } from "@sketchcatch/types";
+import type {
+  ArchitectureDiagnostic,
+  DiagramJson,
+  TerraformDiagnostic,
+  TerraformSourceLocation,
+  TerraformSyncFileInput
+} from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../lib/api-client";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import { TerraformCodeEditorSurface } from "./TerraformCodeEditorSurface";
 import { TerraformCodeStatus } from "./TerraformCodeStatus";
 import { TerraformCodeToolbar } from "./TerraformCodeToolbar";
-import {
-  generateTerraformCode,
-  syncTerraformToDiagram,
-  validateTerraformCode
-} from "./api";
+import { generateTerraformCode, syncTerraformToDiagram, validateTerraformCode } from "./api";
 import {
   combineTerraformFiles,
   compareTerraformFileNames,
+  createTerraformDiagramRequestGuard,
+  createTerraformFilesForRefresh,
   createTerraformFilesFromGeneratedCode,
   findTerraformBlockForNode,
   getDiagramTerraformAddresses,
+  getEffectivePreservedTerraformAddresses,
+  getTerraformAddressesRemovedFromDiagram,
   getTerraformFileCode,
   getTerraformFileOptions,
+  hasAuthoritativeTerraformSource,
+  markTerraformSourceAuthoritative,
   parseTerraformFiles,
   removeTerraformBlocksByAddress,
   toTerraformRefreshFingerprint,
@@ -26,18 +43,26 @@ import {
   type TerraformVirtualFile
 } from "./terraform-panel-utils";
 import { createTerraformDiagnosticLineNumbers } from "./terraform-diagnostic-line-highlights";
+import { applyTerraformEditorIndentation } from "./terraform-editor-indentation";
+import { createTerraformHighlightedLines } from "./terraform-code-highlighting";
 import {
-  createTerraformHighlightedLines
-} from "./terraform-code-highlighting";
-import { applyAllTerraformSyncProposals } from "./terraform-sync-proposals";
+  applyAllTerraformSyncProposals,
+  rewriteTerraformReferencesForSyncProposals
+} from "./terraform-sync-proposals";
 import {
-  applyTerraformCodeReplacement,
-  applyTerraformSafeFix,
-  type TerraformCodeReplacementPreview,
+  applyTerraformSafeFixesAtomically,
+  type TerraformSafeFixBatchResult,
   type TerraformSafeFixResult
 } from "./terraform-safe-fixes";
-import { combineTerraformDiagnostics, createTerraformDiagnosticKey } from "./terraform-issues-state";
-import type { TerraformPreviewAiRequest } from "./workspace-terraform-ai";
+import {
+  combineTerraformDiagnostics,
+  createTerraformDiagnosticKey
+} from "./terraform-issues-state";
+import {
+  createWorkspaceTerraformFingerprint,
+  type TerraformSafeFixApplyItem,
+  type WorkspaceTerraformAiCodeContext
+} from "./workspace-terraform-ai";
 import type { RequestState } from "./workspace-right-panel.types";
 import styles from "./workspace.module.css";
 
@@ -45,21 +70,23 @@ const TERRAFORM_EDITOR_LINE_HEIGHT = 19.2;
 const TERRAFORM_EDITOR_VERTICAL_PADDING = 12;
 
 type TerraformPreviewExplanationScope = {
-  readonly code: string;
   readonly key: string;
   readonly label: string;
+  readonly terraformCode: string;
 };
 
 function createTerraformPreviewExplanationScope({
   activeFileName,
   displayedTerraformCode,
   highlightedBlock,
-  inspectedBlock
+  inspectedBlock,
+  selectedBlock
 }: {
   readonly activeFileName: string;
   readonly displayedTerraformCode: string;
   readonly highlightedBlock: { readonly address: string; readonly code: string } | null;
   readonly inspectedBlock: { readonly address: string; readonly code: string } | null;
+  readonly selectedBlock: { readonly address: string; readonly code: string } | null;
 }): TerraformPreviewExplanationScope {
   if (inspectedBlock) {
     return createTerraformPreviewExplanationScopeValue(
@@ -75,7 +102,17 @@ function createTerraformPreviewExplanationScope({
     );
   }
 
-  return createTerraformPreviewExplanationScopeValue(displayedTerraformCode, `현재 파일 · ${activeFileName}`);
+  if (selectedBlock) {
+    return createTerraformPreviewExplanationScopeValue(
+      selectedBlock.code,
+      `선택 코드 · ${selectedBlock.address}`
+    );
+  }
+
+  return createTerraformPreviewExplanationScopeValue(
+    displayedTerraformCode,
+    `현재 파일 · ${activeFileName}`
+  );
 }
 
 function createTerraformPreviewExplanationScopeValue(
@@ -85,9 +122,9 @@ function createTerraformPreviewExplanationScopeValue(
   const trimmedCode = code.trim();
 
   return {
-    code: trimmedCode,
     key: JSON.stringify({ code: trimmedCode, label }),
-    label
+    label,
+    terraformCode: trimmedCode
   };
 }
 
@@ -113,7 +150,10 @@ function getTerraformLineStartOffset(code: string, line: number): number {
   return code.length;
 }
 
-function clampTerraformEditorScrollTop(targetScrollTop: number, textarea: HTMLTextAreaElement): number {
+function clampTerraformEditorScrollTop(
+  targetScrollTop: number,
+  textarea: HTMLTextAreaElement
+): number {
   return Math.min(
     Math.max(0, textarea.scrollHeight - textarea.clientHeight),
     Math.max(0, targetScrollTop)
@@ -177,13 +217,17 @@ function addTerraformDiagnosticSource(
 export type PreparedTerraformArtifactSource = {
   readonly diagramJson: DiagramJson;
   readonly terraformCode: string;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
 };
 
 export type TerraformCodePanelHandle = {
   readonly applyTerraformSafeFix: (
     diagnostic: TerraformDiagnostic,
-    codePreview?: TerraformCodeReplacementPreview | undefined
+    codePreview?: TerraformSafeFixApplyItem["codePreview"]
   ) => Promise<TerraformSafeFixResult>;
+  readonly applyTerraformSafeFixes: (
+    fixes: readonly TerraformSafeFixApplyItem[]
+  ) => Promise<TerraformSafeFixBatchResult>;
   readonly getCurrentTerraformCode: () => string;
   readonly getTerraformFiles: () => readonly TerraformVirtualFile[];
   readonly openTerraformSourceLocation: (sourceLocation: TerraformSourceLocation) => void;
@@ -191,71 +235,141 @@ export type TerraformCodePanelHandle = {
   readonly validateCurrentTerraform: () => Promise<TerraformDiagnostic[]>;
 };
 
+export type TerraformFilesReplacementRequest = {
+  readonly diagramFingerprint: string;
+  readonly files: readonly TerraformSyncFileInput[];
+  readonly id: number;
+};
+
 // Terraform 생성, 검증, 저장 상태를 관리하고 화면 전용 컴포넌트에 결과만 전달합니다.
-export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
-  readonly context: DiagramEditorPanelContext;
-  readonly externalDiscardRequestId: number;
-  readonly externalSaveRequestId: number;
-  readonly isVisible: boolean;
-  readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
-  readonly onDirtyChange: (isDirty: boolean) => void;
-  readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
-  readonly onOpenIssues: () => void;
-  readonly onTerraformPreviewAiRequest: (request: TerraformPreviewAiRequest) => void;
-}>(function TerraformCodePanel({
-  context,
-  externalDiscardRequestId,
-  externalSaveRequestId,
-  isVisible,
-  onDiagnosticsChange,
-  onDirtyChange,
-  onExternalSaveComplete,
-  onOpenIssues,
-  onTerraformPreviewAiRequest
-}, ref) {
+export const TerraformCodePanel = forwardRef<
+  TerraformCodePanelHandle,
+  {
+    readonly context: DiagramEditorPanelContext;
+    readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
+    readonly externalTerraformFilesReplacement?:
+      | TerraformFilesReplacementRequest
+      | null
+      | undefined;
+    readonly externalDiscardRequestId: number;
+    readonly externalSaveRequestId: number;
+    readonly isVisible: boolean;
+    readonly onArchitectureDiagnosticsChange: (diagnostics: ArchitectureDiagnostic[]) => void;
+    readonly onDiagnosticsChange: (diagnostics: TerraformDiagnostic[]) => void;
+    readonly onDirtyChange: (isDirty: boolean) => void;
+    readonly onExternalSaveComplete: (saved: boolean, requestId: number) => void;
+    readonly onTerraformAiCodeContextChange: (
+      context: WorkspaceTerraformAiCodeContext
+    ) => void;
+    readonly onTerraformAiInteraction: () => void;
+    readonly onTerraformFilesChange?:
+      | ((files: readonly TerraformSyncFileInput[]) => void)
+      | undefined;
+    readonly onTerraformFilesReplacementApplied?: ((id: number) => void) | undefined;
+  }
+>(function TerraformCodePanel(
+  {
+    context,
+    initialTerraformFiles,
+    externalTerraformFilesReplacement,
+    externalDiscardRequestId,
+    externalSaveRequestId,
+    isVisible,
+    onArchitectureDiagnosticsChange,
+    onDiagnosticsChange,
+    onDirtyChange,
+    onExternalSaveComplete,
+    onTerraformAiCodeContextChange,
+    onTerraformAiInteraction,
+    onTerraformFilesChange,
+    onTerraformFilesReplacementApplied
+  },
+  ref
+) {
+  const initialTerraformFingerprint =
+    initialTerraformFiles?.length && hasAuthoritativeTerraformSource(context.diagram)
+      ? toTerraformRefreshFingerprint(context.diagram)
+      : "";
   const [terraformFiles, setTerraformFiles] = useState<TerraformVirtualFile[]>(() =>
-    createTerraformFilesFromGeneratedCode(context.diagram, "")
+    initialTerraformFiles && initialTerraformFiles.length > 0
+      ? initialTerraformFiles.map((file) => ({ fileName: file.fileName, code: file.terraformCode }))
+      : createTerraformFilesFromGeneratedCode(context.diagram, "")
   );
-  const [activeFileName, setActiveFileName] = useState("main.tf");
+  const terraformBaselineFilesRef = useRef<TerraformVirtualFile[]>(
+    terraformFiles.map((file) => ({ ...file }))
+  );
+  const [activeFileName, setActiveFileName] = useState(() =>
+    terraformFiles.some(({ fileName }) => fileName === "main.tf")
+      ? "main.tf"
+      : (terraformFiles[0]?.fileName ?? "main.tf")
+  );
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const [fileSearchQuery, setFileSearchQuery] = useState("");
   const [diagnostics, setDiagnostics] = useState<TerraformDiagnostic[]>([]);
-  const [pendingSourceLocation, setPendingSourceLocation] = useState<TerraformSourceLocation | null>(null);
+  const [pendingSourceLocation, setPendingSourceLocation] =
+    useState<TerraformSourceLocation | null>(null);
   const [activeSourceHighlightLine, setActiveSourceHighlightLine] = useState<number | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [statusMessage, setStatusMessage] = useState("main.tf");
-  const [isTerraformPreviewStale, setIsTerraformPreviewStale] = useState(true);
+  const [isTerraformPreviewStale, setIsTerraformPreviewStale] = useState(
+    initialTerraformFingerprint.length === 0
+  );
   const [hasLocalEdits, setHasLocalEdits] = useState(false);
   const [saveBanner, setSaveBanner] = useState<TerraformSaveBanner | null>(null);
   const [codeScrollTop, setCodeScrollTop] = useState(0);
   const [codeScrollLeft, setCodeScrollLeft] = useState(0);
+  const handleTerraformFocusAiInteraction = useCallback((): void => {
+    if (pendingSourceLocation !== null) {
+      return;
+    }
+
+    onTerraformAiInteraction();
+  }, [onTerraformAiInteraction, pendingSourceLocation]);
   const codeRequestIdRef = useRef(0);
   const codeVersionRef = useRef(0);
   const isPreparingTerraformArtifactRef = useRef(false);
-  const latestDiagramFingerprintRef = useRef("");
-  const latestSuccessfulTerraformPreviewFingerprintRef = useRef("");
-  const latestDiagramResourceAddressesRef = useRef<Set<string> | null>(null);
+  const latestDiagramFingerprintRef = useRef(initialTerraformFingerprint);
+  const diagramRequestGuardRef = useRef(
+    createTerraformDiagramRequestGuard(toTerraformRefreshFingerprint(context.diagram))
+  );
+  const latestSuccessfulTerraformPreviewFingerprintRef = useRef(initialTerraformFingerprint);
+  const latestDiagramResourceAddressesRef = useRef<Set<string> | null>(
+    initialTerraformFingerprint ? getDiagramTerraformAddresses(context.diagram) : null
+  );
   const latestExternalDiscardRequestIdRef = useRef(externalDiscardRequestId);
   const latestExternalSaveRequestIdRef = useRef(externalSaveRequestId);
+  const latestExternalTerraformFilesReplacementIdRef = useRef<number | null>(null);
   const latestTerraformRefreshRequestIdRef = useRef(context.terraformRefreshRequestId);
+  const classifiedPreservedResourceAddressesRef = useRef(new Set<string>());
+  const initialTerraformSourceClassifiedRef = useRef(!initialTerraformFiles?.length);
   const lineNumberRef = useRef<HTMLOListElement | null>(null);
   const lastScrolledNodeIdRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const combinedTerraformCode = useMemo(() => combineTerraformFiles(terraformFiles), [terraformFiles]);
+  useLayoutEffect(
+    () => () => {
+      codeRequestIdRef.current += 1;
+      codeVersionRef.current += 1;
+    },
+    []
+  );
+
+  const combinedTerraformCode = useMemo(
+    () => combineTerraformFiles(terraformFiles),
+    [terraformFiles]
+  );
   const activeFileCode = useMemo(
     () => getTerraformFileCode(terraformFiles, activeFileName),
     [activeFileName, terraformFiles]
   );
   const hasTerraformCode = combinedTerraformCode.trim().length > 0;
-  const errorDiagnostics = useMemo(
-    () => diagnostics.filter((diagnostic) => diagnostic.severity === "error"),
-    [diagnostics]
-  );
   const currentDiagramFingerprint = useMemo(
     () => toTerraformRefreshFingerprint(context.diagram),
     [context.diagram]
   );
+  useLayoutEffect(() => {
+    diagramRequestGuardRef.current.update(currentDiagramFingerprint);
+  }, [context.diagram, currentDiagramFingerprint]);
   const currentDiagramResourceAddresses = useMemo(
     () => getDiagramTerraformAddresses(context.diagram),
     [context.diagram]
@@ -313,12 +427,37 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         activeFileName,
         displayedTerraformCode,
         highlightedBlock,
-        inspectedBlock
+        inspectedBlock,
+        selectedBlock
       }),
-    [activeFileName, displayedTerraformCode, highlightedBlock, inspectedBlock]
+    [activeFileName, displayedTerraformCode, highlightedBlock, inspectedBlock, selectedBlock]
   );
+  const terraformAiFiles = useMemo(
+    () => toTerraformValidationFiles(terraformFiles),
+    [terraformFiles]
+  );
+  const terraformAiCodeContext = useMemo<WorkspaceTerraformAiCodeContext>(
+    () => ({
+      combinedTerraformCode,
+      files: terraformAiFiles,
+      fingerprint: createWorkspaceTerraformFingerprint(terraformAiFiles),
+      reviewScope: {
+        key: terraformPreviewExplanationScope.key,
+        label: terraformPreviewExplanationScope.label,
+        terraformCode: terraformPreviewExplanationScope.terraformCode
+      }
+    }),
+    [combinedTerraformCode, terraformAiFiles, terraformPreviewExplanationScope]
+  );
+  useEffect(() => {
+    onTerraformAiCodeContextChange(terraformAiCodeContext);
+  }, [onTerraformAiCodeContextChange, terraformAiCodeContext]);
   const lineNumbers = useMemo(
-    () => Array.from({ length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) }, (_, index) => index + 1),
+    () =>
+      Array.from(
+        { length: Math.max(1, displayedTerraformCode.split(/\r\n|\r|\n/).length) },
+        (_, index) => index + 1
+      ),
     [displayedTerraformCode]
   );
   const highlightedBlockStyle = highlightedBlock
@@ -335,12 +474,15 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         }
       : null;
 
-  const openTerraformSourceLocation = useCallback((sourceLocation: TerraformSourceLocation): void => {
-    context.closeInspectedNode();
-    setActiveFileName(sourceLocation.fileName);
-    setPendingSourceLocation(sourceLocation);
-    setStatusMessage(`${sourceLocation.fileName}:${sourceLocation.line}`);
-  }, [context]);
+  const openTerraformSourceLocation = useCallback(
+    (sourceLocation: TerraformSourceLocation): void => {
+      context.closeInspectedNode();
+      setActiveFileName(sourceLocation.fileName);
+      setPendingSourceLocation(sourceLocation);
+      setStatusMessage(`${sourceLocation.fileName}:${sourceLocation.line}`);
+    },
+    [context]
+  );
   const diagnosticLineNumbers = useMemo(
     () =>
       createTerraformDiagnosticLineNumbers(diagnostics, {
@@ -376,35 +518,100 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
   }, []);
 
-  function requestTerraformPreviewExplanation(): void {
-    if (!terraformPreviewExplanationScope.code) {
-      return;
-    }
-
-    onTerraformPreviewAiRequest({
-      id: Date.now(),
-      label: terraformPreviewExplanationScope.label,
-      terraformCode: terraformPreviewExplanationScope.code
-    });
-  }
-
   const refreshTerraformCode = useCallback(
-    async (diagramFingerprint: string) => {
+    async (diagramFingerprint: string, preserveExistingSource = true) => {
       const requestId = codeRequestIdRef.current + 1;
+      const requestCodeVersion = codeVersionRef.current;
+      const requestDiagram = diagramRequestGuardRef.current.capture();
+      const requestDiagramRevision = context.getDiagramRevision();
+
+      if (requestDiagram.fingerprint !== diagramFingerprint) {
+        return;
+      }
+
       codeRequestIdRef.current = requestId;
 
       setRequestState("loading");
 
       try {
-        const generatedCode = await generateTerraformCode(context.diagram);
+        let nextClassifiedPreservedResourceAddresses =
+          classifiedPreservedResourceAddressesRef.current;
+        let shouldCommitInitialSourceClassification = false;
 
-        if (requestId !== codeRequestIdRef.current) {
+        if (!initialTerraformSourceClassifiedRef.current) {
+          const classification = await syncTerraformToDiagram({
+            diagramJson: context.diagram,
+            terraformCode: combinedTerraformCode,
+            terraformFiles: toTerraformValidationFiles(terraformFiles)
+          });
+
+          if (
+            requestId !== codeRequestIdRef.current ||
+            requestCodeVersion !== codeVersionRef.current ||
+            requestDiagramRevision !== context.getDiagramRevision() ||
+            !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+          ) {
+            if (requestId === codeRequestIdRef.current) {
+              setRequestState("idle");
+            }
+            return;
+          }
+
+          nextClassifiedPreservedResourceAddresses = new Set(
+            classification.preservedResourceAddresses ?? []
+          );
+          shouldCommitInitialSourceClassification = true;
+        }
+
+        const generated = await generateTerraformCode(context.diagram);
+
+        if (
+          requestId !== codeRequestIdRef.current ||
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          if (requestId === codeRequestIdRef.current) {
+            setRequestState("idle");
+          }
           return;
         }
 
-        const nextFiles = createTerraformFilesFromGeneratedCode(context.diagram, generatedCode);
+        onArchitectureDiagnosticsChange(generated.architectureDiagnostics);
+        const generatedFiles = createTerraformFilesFromGeneratedCode(
+          context.diagram,
+          generated.terraformCode
+        );
+        const effectivePreservedAddresses = getEffectivePreservedTerraformAddresses(
+          context.diagram,
+          nextClassifiedPreservedResourceAddresses
+        );
+        const nextFiles = createTerraformFilesForRefresh({
+          baselineFiles: terraformBaselineFilesRef.current,
+          currentFiles: terraformFiles,
+          generatedFiles,
+          preserveExistingSource,
+          preservedResourceAddresses: effectivePreservedAddresses
+        });
+        if (
+          requestId !== codeRequestIdRef.current ||
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          return;
+        }
+
+        if (shouldCommitInitialSourceClassification) {
+          classifiedPreservedResourceAddressesRef.current =
+            nextClassifiedPreservedResourceAddresses;
+          initialTerraformSourceClassifiedRef.current = true;
+        }
         codeVersionRef.current += 1;
+        terraformBaselineFilesRef.current = nextFiles.map((file) => ({ ...file }));
         setTerraformFiles(nextFiles);
+        context.commitTerraformSourceAuthority();
+        onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
         setActiveFileName((currentFileName) =>
           nextFiles.some((file) => file.fileName === currentFileName) ? currentFileName : "main.tf"
         );
@@ -419,7 +626,15 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         setRequestState("idle");
         onDirtyChange(false);
       } catch {
-        if (requestId !== codeRequestIdRef.current) {
+        if (
+          requestId !== codeRequestIdRef.current ||
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          if (requestId === codeRequestIdRef.current) {
+            setRequestState("idle");
+          }
           return;
         }
 
@@ -429,7 +644,17 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
         setRequestState("error");
       }
     },
-    [context.diagram, onDiagnosticsChange, onDirtyChange]
+    [
+      combinedTerraformCode,
+      context.commitTerraformSourceAuthority,
+      context.diagram,
+      context.getDiagramRevision,
+      onArchitectureDiagnosticsChange,
+      onDiagnosticsChange,
+      onDirtyChange,
+      onTerraformFilesChange,
+      terraformFiles
+    ]
   );
 
   const runTerraformModuleValidation = useCallback(async (): Promise<TerraformDiagnostic[]> => {
@@ -448,12 +673,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     });
 
     if (requestCodeVersion !== codeVersionRef.current) {
-      const staleDiagnostics = [createStaleTerraformValidationDiagnostic()];
-
-      setDiagnostics(staleDiagnostics);
-      onDiagnosticsChange(staleDiagnostics);
-      setStatusMessage("검증 재시도 필요");
-      return staleDiagnostics;
+      return [createStaleTerraformValidationDiagnostic()];
     }
 
     setDiagnostics(validationDiagnostics);
@@ -466,88 +686,183 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
 
     setStatusMessage(validationDiagnostics.length === 0 ? "검증 완료" : "진단 확인 필요");
     return validationDiagnostics;
-  }, [
-    combinedTerraformCode,
-    onDiagnosticsChange,
-    terraformFiles
-  ]);
+  }, [combinedTerraformCode, onDiagnosticsChange, terraformFiles]);
 
-  const syncTerraformCodeToDiagram = useCallback(async (): Promise<PreparedTerraformArtifactSource | null> => {
-    const requestCodeVersion = codeVersionRef.current;
-    const validationDiagnostics = combinedTerraformCode.trim()
-      ? await runTerraformModuleValidation()
-      : [];
+  const syncTerraformCodeToDiagram =
+    useCallback(async (): Promise<PreparedTerraformArtifactSource | null> => {
+      const requestCodeVersion = codeVersionRef.current;
+      const requestDiagram = diagramRequestGuardRef.current.capture();
+      const requestDiagramRevision = context.getDiagramRevision();
+      const validationDiagnostics = combinedTerraformCode.trim()
+        ? await runTerraformModuleValidation()
+        : [];
 
-    if (requestCodeVersion !== codeVersionRef.current) {
-      return null;
-    }
+      if (
+        requestCodeVersion !== codeVersionRef.current ||
+        requestDiagramRevision !== context.getDiagramRevision() ||
+        !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+      ) {
+        return null;
+      }
 
-    if (!combinedTerraformCode.trim()) {
-      setDiagnostics([]);
-      onDiagnosticsChange([]);
-    }
+      if (!combinedTerraformCode.trim()) {
+        setDiagnostics([]);
+        onDiagnosticsChange([]);
+      }
 
-    const validationError = validationDiagnostics.find(
-      (diagnostic) => diagnostic.severity === "error"
-    );
+      const validationError = validationDiagnostics.find(
+        (diagnostic) => diagnostic.severity === "error"
+      );
 
-    if (validationError) {
+      if (validationError) {
+        setSaveBanner(null);
+        setStatusMessage("저장 실패");
+        return null;
+      }
+
+      setStatusMessage("Terraform 변경사항 저장 중");
+
+      let syncResult = await syncTerraformToDiagram({
+        diagramJson: context.diagram,
+        terraformCode: combinedTerraformCode,
+        terraformFiles: toTerraformValidationFiles(terraformFiles)
+      });
+
+      if (
+        requestCodeVersion !== codeVersionRef.current ||
+        requestDiagramRevision !== context.getDiagramRevision() ||
+        !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+      ) {
+        return null;
+      }
+
+      let nextClassifiedPreservedResourceAddresses = new Set(
+        syncResult.preservedResourceAddresses ?? []
+      );
+
+      const rewrittenTerraformFiles = rewriteTerraformReferencesForSyncProposals(
+        terraformFiles,
+        syncResult.proposals ?? []
+      );
+      const didRewriteTerraformReferences = rewrittenTerraformFiles.some(
+        (file, index) => file !== terraformFiles[index]
+      );
+      let savedTerraformCode = combinedTerraformCode;
+      let savedValidationDiagnostics = validationDiagnostics;
+
+      if (didRewriteTerraformReferences) {
+        savedTerraformCode = combineTerraformFiles(rewrittenTerraformFiles);
+        savedValidationDiagnostics = await validateTerraformVirtualFiles({
+          combinedTerraformCode: savedTerraformCode,
+          files: rewrittenTerraformFiles
+        });
+
+        if (
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          return null;
+        }
+
+        const rewrittenValidationError = savedValidationDiagnostics.find(
+          (diagnostic) => diagnostic.severity === "error"
+        );
+
+        if (rewrittenValidationError) {
+          setDiagnostics(savedValidationDiagnostics);
+          onDiagnosticsChange(savedValidationDiagnostics);
+          setSaveBanner(null);
+          setStatusMessage("저장 실패");
+          return null;
+        }
+
+        syncResult = await syncTerraformToDiagram({
+          diagramJson: context.diagram,
+          terraformCode: savedTerraformCode,
+          terraformFiles: toTerraformValidationFiles(rewrittenTerraformFiles)
+        });
+
+        if (
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          return null;
+        }
+
+        nextClassifiedPreservedResourceAddresses = new Set(
+          syncResult.preservedResourceAddresses ?? []
+        );
+      }
+
+      const nextDiagnostics = combineTerraformDiagnostics(
+        savedValidationDiagnostics,
+        syncResult.diagnostics
+      );
+
+      setDiagnostics(nextDiagnostics);
+      onDiagnosticsChange(nextDiagnostics);
+
+      const syncError = nextDiagnostics.find((diagnostic) => diagnostic.severity === "error");
+
+      if (syncError) {
+        setSaveBanner(null);
+        setStatusMessage("저장 실패");
+        return null;
+      }
+
+      const nextDiagramJson =
+        syncResult.proposals && syncResult.proposals.length > 0
+          ? applyAllTerraformSyncProposals(syncResult.diagramJson, syncResult.proposals)
+          : syncResult.diagramJson;
+
+      const savedTerraformFiles = didRewriteTerraformReferences
+        ? rewrittenTerraformFiles
+        : terraformFiles;
+      const authoritativeDiagramJson = markTerraformSourceAuthoritative(nextDiagramJson);
+
+      if (
+        requestCodeVersion !== codeVersionRef.current ||
+        requestDiagramRevision !== context.getDiagramRevision() ||
+        !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+      ) {
+        return null;
+      }
+
+      if (didRewriteTerraformReferences) {
+        codeVersionRef.current += 1;
+        setTerraformFiles(rewrittenTerraformFiles);
+      }
+
+      classifiedPreservedResourceAddressesRef.current = nextClassifiedPreservedResourceAddresses;
+      initialTerraformSourceClassifiedRef.current = true;
+      context.applyDiagramJson(authoritativeDiagramJson);
+      onTerraformFilesChange?.(toTerraformValidationFiles(savedTerraformFiles));
+      terraformBaselineFilesRef.current = savedTerraformFiles.map((file) => ({ ...file }));
+      latestSuccessfulTerraformPreviewFingerprintRef.current =
+        toTerraformRefreshFingerprint(authoritativeDiagramJson);
+      latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(authoritativeDiagramJson);
+      setHasLocalEdits(false);
       setSaveBanner(null);
-      setStatusMessage("저장 실패");
-      return null;
-    }
+      setIsTerraformPreviewStale(false);
+      setStatusMessage("저장됨");
+      onDirtyChange(false);
 
-    setStatusMessage("Terraform 변경사항 저장 중");
-
-    const syncResult = await syncTerraformToDiagram({
-      diagramJson: context.diagram,
-      terraformCode: combinedTerraformCode,
-      terraformFiles: toTerraformValidationFiles(terraformFiles)
-    });
-
-    if (requestCodeVersion !== codeVersionRef.current) {
-      return null;
-    }
-
-    const nextDiagnostics = combineTerraformDiagnostics(validationDiagnostics, syncResult.diagnostics);
-
-    setDiagnostics(nextDiagnostics);
-    onDiagnosticsChange(nextDiagnostics);
-
-    const syncError = nextDiagnostics.find((diagnostic) => diagnostic.severity === "error");
-
-    if (syncError) {
-      setSaveBanner(null);
-      setStatusMessage("저장 실패");
-      return null;
-    }
-
-    const nextDiagramJson =
-      syncResult.proposals && syncResult.proposals.length > 0
-        ? applyAllTerraformSyncProposals(syncResult.diagramJson, syncResult.proposals)
-        : syncResult.diagramJson;
-
-    context.applyDiagramJson(nextDiagramJson);
-    latestSuccessfulTerraformPreviewFingerprintRef.current = toTerraformRefreshFingerprint(nextDiagramJson);
-    latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(nextDiagramJson);
-    setHasLocalEdits(false);
-    setSaveBanner(null);
-    setIsTerraformPreviewStale(false);
-    setStatusMessage("저장됨");
-    onDirtyChange(false);
-
-    return {
-      diagramJson: nextDiagramJson,
-      terraformCode: combinedTerraformCode
-    };
-  }, [
-    combinedTerraformCode,
-    context,
-    onDiagnosticsChange,
-    onDirtyChange,
-    runTerraformModuleValidation,
-    terraformFiles
-  ]);
+      return {
+        diagramJson: authoritativeDiagramJson,
+        terraformCode: savedTerraformCode,
+        terraformFiles: toTerraformValidationFiles(savedTerraformFiles)
+      };
+    }, [
+      combinedTerraformCode,
+      context,
+      onDiagnosticsChange,
+      onDirtyChange,
+      onTerraformFilesChange,
+      runTerraformModuleValidation,
+      terraformFiles
+    ]);
 
   const saveCodeToDiagram = useCallback(async (): Promise<boolean> => {
     if (requestState === "loading") {
@@ -584,201 +899,332 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       setRequestState("error");
       throw error;
     }
-  }, [
-    hasTerraformCode,
-    onDiagnosticsChange,
-    requestState,
-    runTerraformModuleValidation
-  ]);
+  }, [hasTerraformCode, onDiagnosticsChange, requestState, runTerraformModuleValidation]);
 
-  const applyTerraformSafeFixToCode = useCallback(async (
-    diagnostic: TerraformDiagnostic,
-    codePreview?: TerraformCodeReplacementPreview | undefined
-  ): Promise<TerraformSafeFixResult> => {
-    if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
-      return {
-        applied: false,
-        code: combinedTerraformCode,
-        message: "Terraform 요청을 처리하는 중입니다."
-      };
-    }
+  const applyTerraformSafeFixesToCode = useCallback(
+    async (
+      fixes: readonly TerraformSafeFixApplyItem[]
+    ): Promise<TerraformSafeFixBatchResult> => {
+      if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
+        return {
+          applied: false,
+          files: terraformFiles,
+          message: "Terraform 요청을 처리하는 중입니다."
+        };
+      }
 
-    const targetFileName = diagnostic.sourceFileName ?? activeFileName;
-    const targetFile = terraformFiles.find((file) => file.fileName === targetFileName);
-
-    if (!targetFile) {
-      return {
-        applied: false,
-        code: combinedTerraformCode,
-        message: "진단이 가리키는 Terraform 파일을 찾지 못했습니다."
-      };
-    }
-
-    const fixResult =
-      codePreview === undefined || codePreview.source === "safe_fix"
-        ? applyTerraformSafeFix({
-            code: targetFile.code,
-            diagnostic
-          })
-        : applyTerraformCodeReplacement({
-            code: targetFile.code,
-            preview: codePreview
-          });
-
-    if (!fixResult.applied) {
-      return fixResult;
-    }
-
-    const nextFiles = terraformFiles.map((file) =>
-      file.fileName === targetFile.fileName ? { ...file, code: fixResult.code } : file
-    );
-    const nextCombinedTerraformCode = combineTerraformFiles(nextFiles);
-    const originalDiagnosticKey = createTerraformDiagnosticKey(diagnostic);
-
-    codeVersionRef.current += 1;
-    setRequestState("loading");
-    setTerraformFiles(nextFiles);
-    setActiveFileName(targetFile.fileName);
-    setHasLocalEdits(true);
-    setSaveBanner({ kind: "dirty" });
-    setStatusMessage("AI 수정안 적용 중");
-
-    try {
-      const validationDiagnostics = await validateTerraformVirtualFiles({
-        combinedTerraformCode: nextCombinedTerraformCode,
-        files: nextFiles
+      const preflightResult = applyTerraformSafeFixesAtomically({
+        files: terraformFiles,
+        fixes
       });
 
-      setDiagnostics(validationDiagnostics);
-      onDiagnosticsChange(validationDiagnostics);
+      if (!preflightResult.applied) {
+        return preflightResult;
+      }
 
-      const stillHasOriginalDiagnostic = validationDiagnostics.some(
-        (nextDiagnostic) => createTerraformDiagnosticKey(nextDiagnostic) === originalDiagnosticKey
+      const nextFiles = preflightResult.files.map((file) => ({ ...file }));
+      const nextCombinedTerraformCode = combineTerraformFiles(nextFiles);
+      const originalDiagnosticKeys = new Set(
+        fixes.map(({ diagnostic }) => createTerraformDiagnosticKey(diagnostic))
       );
 
-      if (hasBlockingTerraformDiagnostic(validationDiagnostics) && stillHasOriginalDiagnostic) {
-        setRequestState("idle");
-        setStatusMessage("재검증 필요");
-        return {
-          applied: false,
-          code: nextCombinedTerraformCode,
-          message: "수정안은 적용됐지만 같은 Terraform 진단이 남아 있습니다."
-        };
-      }
-
-      if (hasBlockingTerraformDiagnostic(validationDiagnostics)) {
-        setRequestState("idle");
-        setStatusMessage("재검증 필요");
-        return {
-          applied: true,
-          code: nextCombinedTerraformCode,
-          message: "AI 수정안을 적용했습니다. 남아 있는 Terraform 이슈를 Issues 탭에서 확인하세요."
-        };
-      }
-
-      const syncResult = await syncTerraformToDiagram({
-        diagramJson: context.diagram,
-        terraformCode: nextCombinedTerraformCode,
-        terraformFiles: toTerraformValidationFiles(nextFiles)
-      });
-
-      const nextDiagnostics = combineTerraformDiagnostics(validationDiagnostics, syncResult.diagnostics);
-
-      setDiagnostics(nextDiagnostics);
-      onDiagnosticsChange(nextDiagnostics);
-
-      const syncError = nextDiagnostics.find((nextDiagnostic) => nextDiagnostic.severity === "error");
-
-      if (syncError) {
-        setRequestState("idle");
-        setStatusMessage("재검증 필요");
-        return {
-          applied: false,
-          code: nextCombinedTerraformCode,
-          message: "수정안은 적용됐지만 다이어그램 동기화 진단이 남아 있습니다."
-        };
-      }
-
-      const nextDiagramJson =
-        syncResult.proposals && syncResult.proposals.length > 0
-          ? applyAllTerraformSyncProposals(syncResult.diagramJson, syncResult.proposals)
-          : syncResult.diagramJson;
-
-      context.applyDiagramJson(nextDiagramJson);
-      latestDiagramFingerprintRef.current = toTerraformRefreshFingerprint(nextDiagramJson);
-      setHasLocalEdits(false);
-      setSaveBanner(null);
-      setRequestState("idle");
-      setStatusMessage("AI 수정안 저장됨");
-      onDirtyChange(false);
-
-      return {
-        applied: true,
-        code: nextCombinedTerraformCode,
-        message: "AI 수정안을 적용하고 재검증/저장/다이어그램 동기화를 완료했습니다."
-      };
-    } catch (error) {
-      setRequestState("error");
-      setStatusMessage("AI 수정안 적용 실패");
-      return {
-        applied: false,
-        code: nextCombinedTerraformCode,
-        message: getApiErrorMessage(error, "AI 수정안 적용 중 오류가 발생했습니다.")
-      };
-    }
-  }, [
-    activeFileName,
-    combinedTerraformCode,
-    context,
-    onDiagnosticsChange,
-    onDirtyChange,
-    requestState,
-    terraformFiles
-  ]);
-
-  useImperativeHandle(ref, () => ({
-    applyTerraformSafeFix: applyTerraformSafeFixToCode,
-    getCurrentTerraformCode: () => combinedTerraformCode,
-    getTerraformFiles: () => terraformFiles,
-    openTerraformSourceLocation,
-    prepareTerraformArtifact: async () => {
-      if (!hasTerraformCode) {
-        throw new Error("저장할 Terraform 코드가 없습니다.");
-      }
-
-      if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
-        throw new Error("Terraform 요청을 처리하는 중입니다.");
-      }
-
-      isPreparingTerraformArtifactRef.current = true;
+      codeVersionRef.current += 1;
+      const requestCodeVersion = codeVersionRef.current;
+      const requestDiagram = diagramRequestGuardRef.current.capture();
+      const requestDiagramRevision = context.getDiagramRevision();
       setRequestState("loading");
+      setTerraformFiles(nextFiles);
+      setHasLocalEdits(true);
+      setSaveBanner({ kind: "dirty" });
+      setStatusMessage("AI 수정안 적용 중");
 
       try {
-        const preparedSource = await syncTerraformCodeToDiagram();
+        const validationDiagnostics = await validateTerraformVirtualFiles({
+          combinedTerraformCode: nextCombinedTerraformCode,
+          files: nextFiles
+        });
 
-        if (!preparedSource) {
-          throw new Error("Terraform 코드 검증 또는 그래프 반영에 실패했습니다.");
+        if (
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          setRequestState("idle");
+          return {
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 이후 Terraform 코드가 변경되어 후속 검증 결과를 반영하지 않았습니다."
+          };
         }
 
+        setDiagnostics(validationDiagnostics);
+        onDiagnosticsChange(validationDiagnostics);
+
+        const stillHasOriginalDiagnostic = validationDiagnostics.some((nextDiagnostic) =>
+          originalDiagnosticKeys.has(createTerraformDiagnosticKey(nextDiagnostic))
+        );
+
+        if (hasBlockingTerraformDiagnostic(validationDiagnostics) && stillHasOriginalDiagnostic) {
+          setRequestState("idle");
+          setStatusMessage("재검증 필요");
+          return {
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 같은 Terraform 진단이 남아 있습니다."
+          };
+        }
+
+        if (hasBlockingTerraformDiagnostic(validationDiagnostics)) {
+          setRequestState("idle");
+          setStatusMessage("재검증 필요");
+          return {
+            applied: true,
+            files: nextFiles,
+            message:
+              "AI 수정안을 적용했습니다. 남아 있는 Terraform 이슈를 Issues 탭에서 확인하세요."
+          };
+        }
+
+        const syncResult = await syncTerraformToDiagram({
+          diagramJson: context.diagram,
+          terraformCode: nextCombinedTerraformCode,
+          terraformFiles: toTerraformValidationFiles(nextFiles)
+        });
+
+        if (
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          setRequestState("idle");
+          return {
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 이후 Terraform 코드가 변경되어 동기화 결과를 반영하지 않았습니다."
+          };
+        }
+
+        const nextDiagnostics = combineTerraformDiagnostics(
+          validationDiagnostics,
+          syncResult.diagnostics
+        );
+
+        setDiagnostics(nextDiagnostics);
+        onDiagnosticsChange(nextDiagnostics);
+
+        const syncError = nextDiagnostics.find(
+          (nextDiagnostic) => nextDiagnostic.severity === "error"
+        );
+
+        if (syncError) {
+          setRequestState("idle");
+          setStatusMessage("재검증 필요");
+          return {
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 다이어그램 동기화 진단이 남아 있습니다."
+          };
+        }
+
+        const nextDiagramJson =
+          syncResult.proposals && syncResult.proposals.length > 0
+            ? applyAllTerraformSyncProposals(syncResult.diagramJson, syncResult.proposals)
+            : syncResult.diagramJson;
+        const authoritativeDiagramJson = markTerraformSourceAuthoritative(nextDiagramJson);
+
+        if (
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          setRequestState("idle");
+          return {
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 다이어그램이 변경되어 동기화 결과를 반영하지 않았습니다."
+          };
+        }
+
+        classifiedPreservedResourceAddressesRef.current = new Set(
+          syncResult.preservedResourceAddresses ?? []
+        );
+        initialTerraformSourceClassifiedRef.current = true;
+        context.applyDiagramJson(authoritativeDiagramJson);
+        onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
+        terraformBaselineFilesRef.current = nextFiles.map((file) => ({ ...file }));
+        latestSuccessfulTerraformPreviewFingerprintRef.current =
+          toTerraformRefreshFingerprint(authoritativeDiagramJson);
+        latestDiagramFingerprintRef.current =
+          toTerraformRefreshFingerprint(authoritativeDiagramJson);
+        setHasLocalEdits(false);
+        setSaveBanner(null);
+        setIsTerraformPreviewStale(false);
         setRequestState("idle");
-        return preparedSource;
+        setStatusMessage("AI 수정안 저장됨");
+        onDirtyChange(false);
+
+        return {
+          applied: true,
+          files: nextFiles,
+          message: "AI 수정안을 적용하고 재검증/저장/다이어그램 동기화를 완료했습니다."
+        };
       } catch (error) {
+        if (
+          requestCodeVersion !== codeVersionRef.current ||
+          requestDiagramRevision !== context.getDiagramRevision() ||
+          !diagramRequestGuardRef.current.isCurrent(requestDiagram)
+        ) {
+          setRequestState("idle");
+          return {
+            applied: true,
+            files: nextFiles,
+            message: "수정안은 적용됐지만 이후 코드 변경 때문에 후속 처리 결과를 반영하지 않았습니다."
+          };
+        }
         setRequestState("error");
-        throw error;
-      } finally {
-        isPreparingTerraformArtifactRef.current = false;
+        setStatusMessage("수정 후 재검증 필요");
+        return {
+          applied: true,
+          files: nextFiles,
+          message: getApiErrorMessage(
+            error,
+            "수정안은 적용됐지만 재검증 또는 다이어그램 동기화를 완료하지 못했습니다."
+          )
+        };
       }
     },
-    validateCurrentTerraform
-  }), [
-    applyTerraformSafeFixToCode,
-    combinedTerraformCode,
-    hasTerraformCode,
-    openTerraformSourceLocation,
-    requestState,
-    syncTerraformCodeToDiagram,
-    terraformFiles,
-    validateCurrentTerraform
+    [
+      context,
+      onDiagnosticsChange,
+      onDirtyChange,
+      onTerraformFilesChange,
+      requestState,
+      terraformFiles
+    ]
+  );
+
+  const applyTerraformSafeFixToCode = useCallback(
+    async (
+      diagnostic: TerraformDiagnostic,
+      codePreview?: TerraformSafeFixApplyItem["codePreview"]
+    ): Promise<TerraformSafeFixResult> => {
+      const result = await applyTerraformSafeFixesToCode([{ codePreview, diagnostic }]);
+
+      return {
+        applied: result.applied,
+        code: combineTerraformFiles(result.files),
+        message: result.message
+      };
+    },
+    [applyTerraformSafeFixesToCode]
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      applyTerraformSafeFix: applyTerraformSafeFixToCode,
+      applyTerraformSafeFixes: applyTerraformSafeFixesToCode,
+      getCurrentTerraformCode: () => combinedTerraformCode,
+      getTerraformFiles: () => terraformFiles,
+      openTerraformSourceLocation,
+      prepareTerraformArtifact: async () => {
+        if (!hasTerraformCode) {
+          throw new Error("저장할 Terraform 코드가 없습니다.");
+        }
+
+        if (requestState === "loading" || isPreparingTerraformArtifactRef.current) {
+          throw new Error("Terraform 요청을 처리하는 중입니다.");
+        }
+
+        isPreparingTerraformArtifactRef.current = true;
+        setRequestState("loading");
+
+        try {
+          const preparedSource = await syncTerraformCodeToDiagram();
+
+          if (!preparedSource) {
+            throw new Error("Terraform 코드 검증 또는 그래프 반영에 실패했습니다.");
+          }
+
+          setRequestState("idle");
+          return preparedSource;
+        } catch (error) {
+          setRequestState("error");
+          throw error;
+        } finally {
+          isPreparingTerraformArtifactRef.current = false;
+        }
+      },
+      validateCurrentTerraform
+    }),
+    [
+      applyTerraformSafeFixToCode,
+      applyTerraformSafeFixesToCode,
+      combinedTerraformCode,
+      hasTerraformCode,
+      openTerraformSourceLocation,
+      requestState,
+      syncTerraformCodeToDiagram,
+      terraformFiles,
+      validateCurrentTerraform
+    ]
+  );
+
+  useLayoutEffect(() => {
+    const replacement = externalTerraformFilesReplacement;
+
+    if (
+      !replacement ||
+      latestExternalTerraformFilesReplacementIdRef.current === replacement.id ||
+      currentDiagramFingerprint !== replacement.diagramFingerprint
+    ) {
+      return;
+    }
+
+    latestExternalTerraformFilesReplacementIdRef.current = replacement.id;
+    codeRequestIdRef.current += 1;
+    codeVersionRef.current += 1;
+    const nextFiles =
+      replacement.files.length > 0
+        ? replacement.files.map((file) => ({
+            fileName: file.fileName,
+            code: file.terraformCode
+          }))
+        : createTerraformFilesFromGeneratedCode(context.diagram, "");
+    const hasSourceSeed = replacement.files.length > 0;
+
+    terraformBaselineFilesRef.current = nextFiles.map((file) => ({ ...file }));
+    classifiedPreservedResourceAddressesRef.current = new Set();
+    initialTerraformSourceClassifiedRef.current = !hasSourceSeed;
+    latestDiagramResourceAddressesRef.current = getDiagramTerraformAddresses(context.diagram);
+    latestDiagramFingerprintRef.current = hasSourceSeed ? replacement.diagramFingerprint : "";
+    latestSuccessfulTerraformPreviewFingerprintRef.current = hasSourceSeed
+      ? replacement.diagramFingerprint
+      : "";
+    setTerraformFiles(nextFiles);
+    setActiveFileName(
+      nextFiles.some(({ fileName }) => fileName === "main.tf")
+        ? "main.tf"
+        : (nextFiles[0]?.fileName ?? "main.tf")
+    );
+    setDiagnostics([]);
+    onDiagnosticsChange([]);
+    setHasLocalEdits(false);
+    setSaveBanner(null);
+    setIsTerraformPreviewStale(!hasSourceSeed);
+    setStatusMessage(hasSourceSeed ? "원본 Terraform seed 적용됨" : "Terraform Preview 생성 대기");
+    setRequestState("idle");
+    onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
+    onDirtyChange(false);
+    onTerraformFilesReplacementApplied?.(replacement.id);
+  }, [
+    context.diagram,
+    currentDiagramFingerprint,
+    externalTerraformFilesReplacement,
+    onDiagnosticsChange,
+    onDirtyChange,
+    onTerraformFilesChange,
+    onTerraformFilesReplacementApplied
   ]);
 
   useEffect(() => {
@@ -796,7 +1242,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     latestExternalDiscardRequestIdRef.current = externalDiscardRequestId;
-    void refreshTerraformCode(currentDiagramFingerprint);
+    classifiedPreservedResourceAddressesRef.current = new Set();
+    initialTerraformSourceClassifiedRef.current = true;
+    void refreshTerraformCode(currentDiagramFingerprint, false);
   }, [currentDiagramFingerprint, externalDiscardRequestId, refreshTerraformCode]);
 
   useEffect(() => {
@@ -812,12 +1260,17 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     const previousAddresses = latestDiagramResourceAddressesRef.current;
     latestDiagramResourceAddressesRef.current = currentDiagramResourceAddresses;
 
-    if (!previousAddresses || !hasLocalEdits) {
+    if (!previousAddresses) {
       return;
     }
 
-    const deletedAddresses = Array.from(previousAddresses).filter(
-      (address) => !currentDiagramResourceAddresses.has(address)
+    const deletedAddresses = getTerraformAddressesRemovedFromDiagram(
+      previousAddresses,
+      currentDiagramResourceAddresses,
+      getEffectivePreservedTerraformAddresses(
+        context.diagram,
+        classifiedPreservedResourceAddressesRef.current
+      )
     );
 
     if (deletedAddresses.length === 0) {
@@ -836,8 +1289,9 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     setTerraformFiles(nextFiles);
     setDiagnostics([]);
     onDiagnosticsChange([]);
-    setHasLocalEdits(hasRemainingTerraformCode);
-    setSaveBanner(hasRemainingTerraformCode ? { kind: "dirty" } : null);
+    const nextHasLocalEdits = hasLocalEdits && hasRemainingTerraformCode;
+    setHasLocalEdits(nextHasLocalEdits);
+    setSaveBanner(nextHasLocalEdits ? { kind: "dirty" } : null);
     setStatusMessage("다이어그램 삭제 반영됨");
     if (!hasRemainingTerraformCode) {
       latestSuccessfulTerraformPreviewFingerprintRef.current = currentDiagramFingerprint;
@@ -880,39 +1334,41 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     onDirtyChange(hasLocalEdits);
   }, [hasLocalEdits, onDirtyChange]);
 
-  const scrollTerraformEditorToLine = useCallback((
-    line: number,
-    options: { readonly shouldFocus?: boolean } = {}
-  ): boolean => {
-    const textarea = textareaRef.current;
+  const scrollTerraformEditorToLine = useCallback(
+    (line: number, options: { readonly shouldFocus?: boolean } = {}): boolean => {
+      const textarea = textareaRef.current;
 
-    if (!textarea) {
-      return false;
-    }
+      if (!textarea) {
+        return false;
+      }
 
-    const code = textarea.value;
-    const lineCount = code.split(/\r\n|\r|\n/).length;
-    const targetLine = Math.max(1, Math.min(line, lineCount));
-    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
-    const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
-    const cursorOffset = getTerraformLineStartOffset(code, targetLine);
+      const code = textarea.value;
+      const lineCount = code.split(/\r\n|\r|\n/).length;
+      const targetLine = Math.max(1, Math.min(line, lineCount));
+      const lineHeight =
+        Number.parseFloat(window.getComputedStyle(textarea).lineHeight) ||
+        TERRAFORM_EDITOR_LINE_HEIGHT;
+      const targetScrollTop = Math.max(0, (targetLine - 2) * lineHeight);
+      const cursorOffset = getTerraformLineStartOffset(code, targetLine);
 
-    if (options.shouldFocus) {
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(cursorOffset, cursorOffset);
-    }
+      if (options.shouldFocus) {
+        textarea.focus({ preventScroll: true });
+        textarea.setSelectionRange(cursorOffset, cursorOffset);
+      }
 
-    textarea.scrollTop = targetScrollTop;
-    textarea.scrollLeft = 0;
-    setCodeScrollTop(textarea.scrollTop);
-    setCodeScrollLeft(textarea.scrollLeft);
+      textarea.scrollTop = targetScrollTop;
+      textarea.scrollLeft = 0;
+      setCodeScrollTop(textarea.scrollTop);
+      setCodeScrollLeft(textarea.scrollLeft);
 
-    if (lineNumberRef.current) {
-      lineNumberRef.current.scrollTop = textarea.scrollTop;
-    }
+      if (lineNumberRef.current) {
+        lineNumberRef.current.scrollTop = textarea.scrollTop;
+      }
 
-    return true;
-  }, []);
+      return true;
+    },
+    []
+  );
 
   useEffect(() => {
     if (!isVisible || isResourceCodeMode || !selectedBlock || !textareaRef.current) {
@@ -931,9 +1387,12 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
     }
 
     const textarea = textareaRef.current;
-    const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight) || TERRAFORM_EDITOR_LINE_HEIGHT;
+    const lineHeight =
+      Number.parseFloat(window.getComputedStyle(textarea).lineHeight) ||
+      TERRAFORM_EDITOR_LINE_HEIGHT;
     const blockTop = TERRAFORM_EDITOR_VERTICAL_PADDING + (selectedBlock.startLine - 1) * lineHeight;
-    const blockHeight = Math.max(1, selectedBlock.endLine - selectedBlock.startLine + 1) * lineHeight;
+    const blockHeight =
+      Math.max(1, selectedBlock.endLine - selectedBlock.startLine + 1) * lineHeight;
     const targetScrollTop = blockTop + blockHeight / 2 - textarea.clientHeight / 2;
     textarea.scrollTop = clampTerraformEditorScrollTop(targetScrollTop, textarea);
     setCodeScrollTop(textarea.scrollTop);
@@ -1036,14 +1495,37 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }
 
   function handleCodeKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
+    if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      const textarea = event.currentTarget;
+      const indentation = applyTerraformEditorIndentation({
+        code: textarea.value,
+        outdent: event.shiftKey,
+        selectionEnd: textarea.selectionEnd,
+        selectionStart: textarea.selectionStart
+      });
+
+      handleCodeChange(indentation.code);
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.setSelectionRange(
+          indentation.selectionStart,
+          indentation.selectionEnd
+        );
+      });
+      return;
+    }
+
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
-      void saveCodeToDiagram();
+      void saveCodeToDiagram().then(async (saved) => {
+        if (saved) {
+          await context.saveDiagramNow?.();
+        }
+      }).catch(() => {
+        setRequestState("error");
+        setStatusMessage("프로젝트 저장 실패");
+      });
     }
-  }
-
-  function handleSeeMore(): void {
-    onOpenIssues();
   }
 
   function selectTerraformFile(fileName: string): void {
@@ -1062,20 +1544,20 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
   }
 
   return (
-    <div className={styles.terraformPanel}>
+    <div
+      className={styles.terraformPanel}
+      onFocusCapture={handleTerraformFocusAiInteraction}
+      onPointerDown={onTerraformAiInteraction}
+    >
       <TerraformCodeToolbar
         actions={{
           closeResourceCode: context.closeInspectedNode,
-          requestExplanation: requestTerraformPreviewExplanation,
           searchFiles: setFileSearchQuery,
           selectFile: selectTerraformFile,
           toggleFileMenu: () => setIsFileMenuOpen((isOpen) => !isOpen)
         }}
         state={{
           activeFileName,
-          canRequestExplanation:
-            terraformPreviewExplanationScope.code.length > 0 && requestState !== "loading",
-          explanationLabel: terraformPreviewExplanationScope.label,
           fileOptions: filteredTerraformFileOptions,
           fileSearchQuery,
           inspectedResourceLabel:
@@ -1086,9 +1568,7 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
       />
 
       <TerraformCodeStatus
-        onOpenIssues={handleSeeMore}
         state={{
-          errorCount: errorDiagnostics.length,
           isSynced: isTerraformPreviewSynced,
           previewSummary: previewSnapshotSummary,
           saveBanner,
@@ -1114,7 +1594,6 @@ export const TerraformCodePanel = forwardRef<TerraformCodePanelHandle, {
           syntaxHighlightStyle: terraformSyntaxHighlightStyle
         }}
       />
-
     </div>
   );
 });

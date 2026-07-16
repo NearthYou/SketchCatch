@@ -1,8 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
+import {
+  buildTemplateDiagramJson,
+  type DiagramJson,
+  type DiagramNode
+} from "@sketchcatch/types";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import { syncTerraformToDiagramJson } from "./terraform-to-diagram.js";
+import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 
 test("updates values for a matching generated resource block", () => {
   const diagramJson: DiagramJson = {
@@ -118,6 +123,87 @@ test("updates data block values", () => {
       }
     ]
   });
+});
+
+test("syncs generated ECS dependency addresses without requiring an attribute suffix", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "service-1",
+        type: "aws_ecs_service",
+        kind: "resource",
+        label: "service",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_service",
+          resourceName: "app",
+          fileName: "main",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_ecs_service" "app" {
+  depends_on = [
+    aws_lb_listener.http,
+  ]
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.dependsOn, [
+    "aws_lb_listener.http"
+  ]);
+});
+
+test("syncs generated Application Auto Scaling nested metric specifications", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "policy-1",
+        type: "aws_appautoscaling_policy",
+        kind: "resource",
+        label: "scaling policy",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_appautoscaling_policy",
+          resourceName: "cpu",
+          fileName: "main",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_appautoscaling_policy" "cpu" {
+  target_tracking_scaling_policy_configuration {
+    target_value = 60
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(
+    result.diagramJson.nodes[0]?.parameters?.values.targetTrackingScalingPolicyConfiguration,
+    [{
+      targetValue: 60,
+      predefinedMetricSpecification: [{
+        predefinedMetricType: "ECSServiceAverageCPUUtilization"
+      }]
+    }]
+  );
 });
 
 test("updates values from CRLF Terraform input", () => {
@@ -253,6 +339,7 @@ test("rejects unknown AWS Terraform-only blocks without shared terraformSync def
   assert.equal(result.proposals?.length, 0);
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.unsupported_resource");
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_unmodeled_service.example");
+  assert.deepEqual(result.preservedResourceAddresses, ["aws_unmodeled_service.example"]);
 });
 
 test("ignores Terraform utility blocks while syncing supported resources", () => {
@@ -276,6 +363,10 @@ resource "aws_vpc" "main" {
   );
 
   assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.preservedResourceAddresses, [
+    "random_password.db_password",
+    "terraform_data.build"
+  ]);
   assert.equal(result.proposals?.length, 1);
   assert.equal(result.proposals?.[0]?.kind, "create_candidate");
   assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_vpc");
@@ -410,6 +501,86 @@ resource "aws_vpc" "main" {
   assert.equal(result.proposals?.length, 1);
   assert.equal(result.proposals?.[0]?.kind, "create_candidate");
   assert.equal(result.proposals?.[0]?.identity.resourceType, "aws_vpc");
+});
+
+test("ignores generated Terraform configuration blocks while syncing resource files", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+  const result = syncTerraformToDiagramJson(diagramJson, {
+    terraformCode: "",
+    terraformFiles: [
+      {
+        fileName: "providers.tf",
+        terraformCode: `terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}`
+      },
+      {
+        fileName: "main.tf",
+        terraformCode: `resource "aws_vpc" "main" {
+  cidr_block = "10.9.0.0/16"
+}`
+      }
+    ]
+  });
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+  assert.equal(result.diagramJson.nodes[0]?.parameters?.values.cidrBlock, "10.9.0.0/16");
+});
+
+test("ignores generated output blocks without sync warnings", () => {
+  const diagramJson = makeSingleVpcDiagramJson();
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.9.0.0/16"
+}
+
+output "vpc_id" {
+  value = aws_vpc.main.id
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+});
+
+test("generated Template Terraform keeps presentation AZ parents unchanged when synced", () => {
+  // Real Template round-trips must not turn visual AZ containers into deployable Resources.
+  for (const templateId of [
+    "three-tier-web-app",
+    "ecs-fargate-container-app",
+    "eks-container-app"
+  ] as const) {
+    const diagramJson = buildTemplateDiagramJson(templateId, {
+      projectSlug: "round-trip",
+      shortId: "presentation"
+    });
+    const originalParentByNodeId = new Map(
+      diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId])
+    );
+    const result = syncTerraformToDiagramJson(
+      diagramJson,
+      generateTerraformFromDiagramJson(diagramJson)
+    );
+    const availabilityZoneProposals = (result.proposals ?? []).filter(
+      (proposal) =>
+        proposal.kind === "create_candidate" &&
+        proposal.identity.resourceType === "aws_availability_zone"
+    );
+
+    assert.deepEqual(availabilityZoneProposals, [], `${templateId} AZ proposals`);
+    assert.deepEqual(
+      new Map(result.diagramJson.nodes.map((node) => [node.id, node.metadata?.parentAreaNodeId])),
+      originalParentByNodeId,
+      `${templateId} parent hierarchy`
+    );
+  }
 });
 
 test("creates AZ area proposal before Subnet and EBS proposals that use availability_zone", () => {
@@ -617,6 +788,60 @@ test("updates matched child metadata when Terraform availability_zone creates a 
   assert.equal(
     result.diagramJson.nodes.find((node) => node.id === "subnet-1")?.metadata?.parentAreaNodeId,
     "terraform-az-ap-northeast-2a"
+  );
+});
+
+test("preserves an existing VPC parent when syncing Subnet availability_zone", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "vpc-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "main",
+          values: { cidrBlock: "10.0.0.0/16" }
+        }
+      }),
+      makeNode({
+        id: "subnet-1",
+        type: "aws_subnet",
+        kind: "resource",
+        label: "public",
+        metadata: { parentAreaNodeId: "vpc-1" },
+        parameters: {
+          resourceType: "aws_subnet",
+          resourceName: "public",
+          fileName: "main",
+          values: { vpcId: "aws_vpc.main.id" }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "public" {
+  vpc_id = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+  availability_zone = "ap-northeast-2a"
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.proposals, []);
+  assert.equal(
+    result.diagramJson.nodes.find((node) => node.id === "subnet-1")?.metadata?.parentAreaNodeId,
+    "vpc-1"
   );
 });
 
@@ -1288,6 +1513,127 @@ test("reports the block header line when a block is not closed", () => {
   assert.equal(result.diagnostics[0]?.line, 1);
   assert.equal(result.diagnostics[0]?.resourceAddress, "aws_vpc.main");
 });
+
+test("syncs Classic ELB health checks and listeners into camelCase values", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "classic-elb",
+        type: "aws_elb",
+        kind: "resource",
+        label: "Classic ELB",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_elb",
+          resourceName: "classic",
+          fileName: "main",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_elb" "classic" {
+  health_check {
+    healthy_threshold   = 2
+    interval            = 30
+    target              = "HTTP:80/"
+    timeout             = 3
+    unhealthy_threshold = 2
+  }
+
+  listener {
+    instance_port     = 80
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.healthCheck, {
+    healthyThreshold: 2,
+    interval: 30,
+    target: "HTTP:80/",
+    timeout: 3,
+    unhealthyThreshold: 2
+  });
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.listener, [{
+    instancePort: 80,
+    instanceProtocol: "http",
+    lbPort: 80,
+    lbProtocol: "http"
+  }]);
+});
+
+test("syncs single nested blocks below top-level and repeated parents as objects", () => {
+  const wafResult = syncTerraformToDiagramJson(
+    makeResourceDiagramJson("aws_waf_web_acl", "web"),
+    `resource "aws_waf_web_acl" "web" {
+  name        = "web"
+  metric_name = "Web"
+
+  default_action {
+    type = "ALLOW"
+  }
+}`
+  );
+  const replicationResult = syncTerraformToDiagramJson(
+    makeResourceDiagramJson("aws_s3_bucket_replication_configuration", "replication"),
+    `resource "aws_s3_bucket_replication_configuration" "replication" {
+  bucket = "source"
+  role   = "arn:aws:iam::123456789012:role/replication"
+
+  rule {
+    id     = "all"
+    status = "Enabled"
+
+    destination {
+      bucket = "arn:aws:s3:::destination"
+    }
+  }
+}`
+  );
+
+  assert.deepEqual(wafResult.diagnostics, []);
+  assert.deepEqual(
+    wafResult.diagramJson.nodes[0]?.parameters?.values.defaultAction,
+    { type: "ALLOW" }
+  );
+  assert.deepEqual(replicationResult.diagnostics, []);
+  assert.deepEqual(replicationResult.diagramJson.nodes[0]?.parameters?.values.rule, [{
+    id: "all",
+    status: "Enabled",
+    destination: { bucket: "arn:aws:s3:::destination" }
+  }]);
+});
+
+function makeResourceDiagramJson(resourceType: string, resourceName: string): DiagramJson {
+  return {
+    nodes: [
+      makeNode({
+        id: resourceName,
+        type: resourceType,
+        kind: "resource",
+        label: resourceName,
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType,
+          resourceName,
+          fileName: "main",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+}
 
 function makeSingleVpcDiagramJson(): DiagramJson {
   return {

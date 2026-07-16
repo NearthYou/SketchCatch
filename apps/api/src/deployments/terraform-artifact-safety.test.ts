@@ -77,6 +77,153 @@ test("assertTerraformArtifactIsSafe accepts the MVP AWS resource subset", () => 
   );
 });
 
+test("practice safety accepts generated NAT gateway networking resources for planning", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `resource "aws_eip" "nat" {
+        domain = "vpc"
+      }
+
+      resource "aws_nat_gateway" "nat" {
+        allocation_id = aws_eip.nat.id
+        subnet_id     = aws_subnet.public.id
+      }`,
+      { liveProfile: "practice", resourceValidationMode: "plan" }
+    )
+  );
+});
+
+test("practice live apply safety accepts every Terraform resource in the Repository ECS diagram", () => {
+  const resourceTypes = [
+    "aws_cloudfront_distribution",
+    "aws_cloudfront_origin_access_control",
+    "aws_cloudwatch_log_group",
+    "aws_ecr_repository",
+    "aws_ecs_cluster",
+    "aws_ecs_service",
+    "aws_ecs_task_definition",
+    "aws_eip",
+    "aws_iam_role",
+    "aws_iam_role_policy_attachment",
+    "aws_internet_gateway",
+    "aws_lb",
+    "aws_lb_listener",
+    "aws_lb_target_group",
+    "aws_nat_gateway",
+    "aws_route_table",
+    "aws_route_table_association",
+    "aws_s3_bucket",
+    "aws_s3_bucket_policy",
+    "aws_s3_bucket_public_access_block",
+    "aws_s3_object",
+    "aws_security_group",
+    "aws_subnet",
+    "aws_vpc"
+  ];
+  const terraformCode = resourceTypes
+    .map((resourceType, index) => `resource "${resourceType}" "diagram_${index}" {}`)
+    .join("\n");
+
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(terraformCode, { liveProfile: "practice" })
+  );
+});
+
+test("practice live apply safety still rejects resources outside the approved profile", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`resource "aws_db_instance" "database" {}`, {
+        liveProfile: "practice"
+      }),
+    /Terraform resource "aws_db_instance" is not allowed before live deployment/
+  );
+});
+
+test("practice safety accepts the ECS Fargate runtime resources used by project deployment", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `resource "aws_cloudwatch_log_group" "app" {}
+      resource "aws_iam_role_policy_attachment" "task_execution" {}
+      resource "aws_ecs_cluster" "app" {}
+      resource "aws_ecs_task_definition" "app" {}
+      resource "aws_ecs_service" "app" {}
+      resource "aws_lb" "app" {}
+      resource "aws_lb_listener" "http" {}
+      resource "aws_lb_target_group" "app" {}
+      resource "aws_cloudfront_distribution" "app" {}`,
+      { liveProfile: "practice" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts approved Kubernetes template resources", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          aws = {
+            source = "hashicorp/aws"
+            version = "~> 6.0"
+          }
+          kubernetes = {
+            source = "hashicorp/kubernetes"
+            version = "~> 2.0"
+          }
+        }
+      }
+
+      provider "aws" {
+        region = "ap-northeast-2"
+      }
+
+      provider "kubernetes" {}
+
+      resource "kubernetes_namespace" "app" {
+        metadata {
+          name = "app"
+        }
+      }
+      resource "kubernetes_service" "app" {
+        metadata {
+          name = "app"
+        }
+      }`,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts generated Lambda archives and EKS auth data", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `terraform {
+        required_providers {
+          aws = {
+            source = "hashicorp/aws"
+            version = "~> 5.0"
+          }
+          archive = {
+            source = "hashicorp/archive"
+            version = "~> 2.0"
+          }
+        }
+      }
+
+      data "archive_file" "handler" {
+        type                    = "zip"
+        source_content          = "export const handler = async () => ({ statusCode: 200 })"
+        source_content_filename = "index.mjs"
+        output_path             = "\${path.module}/handler.zip"
+      }
+
+      data "aws_eks_cluster_auth" "sketchcatch" {
+        name = "practice-cluster"
+      }`,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects Terraform module blocks", () => {
   assert.throws(
     () =>
@@ -119,14 +266,239 @@ test("assertTerraformArtifactIsSafe accepts supported AWS AMI data sources", () 
   );
 });
 
+test("assertTerraformArtifactIsSafe accepts the CloudFront origin-facing managed prefix list", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      data "aws_ec2_managed_prefix_list" "cloudfront_origin_facing" {
+        name = "com.amazonaws.global.cloudfront.origin-facing"
+      }
+    `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts AI-generated CI/CD resource types", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      provider "aws" {
+        region = "ap-northeast-2"
+      }
+
+      resource "aws_iam_role" "codebuild_service_role" {
+        name = "sketchcatch-codebuild-service-role"
+        assume_role_policy = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Principal = {
+              Service = "codebuild.amazonaws.com"
+            }
+            Action = "sts:AssumeRole"
+          }]
+        })
+      }
+
+      resource "aws_codebuild_project" "build" {
+        name = "sketchcatch-build"
+        service_role = aws_iam_role.codebuild_service_role.arn
+
+        artifacts {
+          type = "NO_ARTIFACTS"
+        }
+
+        environment {
+          compute_type = "BUILD_GENERAL1_SMALL"
+          image = "aws/codebuild/standard:7.0"
+          type = "LINUX_CONTAINER"
+        }
+
+        source {
+          type = "NO_SOURCE"
+          buildspec = "version: 0.2"
+        }
+      }
+
+      resource "aws_codedeploy_app" "app" {
+        name = "sketchcatch-app"
+        compute_platform = "Server"
+      }
+
+      resource "aws_iam_role" "codedeploy_service_role" {
+        name = "sketchcatch-codedeploy-service-role"
+        assume_role_policy = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Principal = {
+              Service = "codedeploy.amazonaws.com"
+            }
+            Action = "sts:AssumeRole"
+          }]
+        })
+      }
+
+      resource "aws_codedeploy_deployment_group" "group" {
+        app_name = aws_codedeploy_app.app.name
+        deployment_group_name = "sketchcatch-deployment-group"
+        service_role_arn = aws_iam_role.codedeploy_service_role.arn
+      }
+
+      resource "aws_codestarconnections_connection" "github" {
+        name = "sketchcatch-github"
+        provider_type = "GitHub"
+      }
+
+      resource "aws_s3_bucket" "codepipeline_artifacts" {
+        bucket = "sketchcatch-pipeline-artifacts-example"
+      }
+
+      resource "aws_iam_role" "codepipeline_service_role" {
+        name = "sketchcatch-codepipeline-service-role"
+        assume_role_policy = jsonencode({
+          Version = "2012-10-17"
+          Statement = [{
+            Effect = "Allow"
+            Principal = {
+              Service = "codepipeline.amazonaws.com"
+            }
+            Action = "sts:AssumeRole"
+          }]
+        })
+      }
+
+      resource "aws_codepipeline" "pipeline" {
+        name = "sketchcatch-pipeline"
+        role_arn = aws_iam_role.codepipeline_service_role.arn
+
+        artifact_store {
+          location = aws_s3_bucket.codepipeline_artifacts.bucket
+          type = "S3"
+        }
+
+        stage {
+          name = "Source"
+
+          action {
+            category = "Source"
+            name = "Source"
+            owner = "AWS"
+            provider = "CodeStarSourceConnection"
+            version = "1"
+            output_artifacts = ["source_output"]
+
+            configuration = {
+              BranchName = "main"
+              ConnectionArn = aws_codestarconnections_connection.github.arn
+              FullRepositoryId = "example-org/example-repo"
+            }
+          }
+        }
+
+        stage {
+          name = "Build"
+
+          action {
+            category = "Build"
+            name = "Build"
+            owner = "AWS"
+            provider = "CodeBuild"
+            version = "1"
+            input_artifacts = ["source_output"]
+            output_artifacts = ["build_output"]
+
+            configuration = {
+              ProjectName = aws_codebuild_project.build.name
+            }
+          }
+        }
+      }
+
+      data "aws_caller_identity" "current" {}
+
+      data "aws_ssm_parameter" "ami" {
+        name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+      }
+    `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts inline archive data for Lambda artifacts", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(`
+      data "archive_file" "handler" {
+        type                    = "zip"
+        output_path             = "\${path.module}/lambda-handler.zip"
+        source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+        source_content_filename = "index.js"
+      }
+    `)
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source files before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "env" {
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source files with comments in the header", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data/* keep header readable */"archive_file"/* resource label follows */"env"{
+          type        = "zip"
+          output_path = "./env.zip"
+          source_file = "../.env"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive source directories before live deployment", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "workspace" {
+          type       = "zip"
+          output_path = "./workspace.zip"
+          source_dir = "../"
+        }
+      `),
+    /archive_file must use inline source_content/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects archive output paths outside the workspace", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(`
+        data "archive_file" "handler" {
+          type                    = "zip"
+          output_path             = "../handler.zip"
+          source_content          = "exports.handler = async () => ({ statusCode: 200 })"
+          source_content_filename = "index.js"
+        }
+      `),
+    /archive_file output_path must stay in the Terraform workspace/
+  );
+});
+
 test("assertTerraformArtifactIsSafe rejects unsupported data sources before live deployment", () => {
   assert.throws(
     () =>
       assertTerraformArtifactIsSafe(`
-        data "aws_caller_identity" "current" {
+        data "aws_region" "current" {
         }
       `),
-    /data source "aws_caller_identity" is not allowed/
+    /data source "aws_region" is not allowed/
   );
 });
 
@@ -300,7 +672,58 @@ test("assertTerraformArtifactIsSafe rejects local file functions inside interpol
           user_data     = "\${templatefile("/etc/passwd", {})}"
         }
       `),
-    /function "templatefile" is not allowed/
+    /templatefile is allowed only for base64encoded user_data/
+  );
+});
+
+test("assertTerraformArtifactIsSafe accepts a module-local tftpl for demo launch template user data", () => {
+  assert.doesNotThrow(() =>
+    assertTerraformArtifactIsSafe(
+      `
+        resource "aws_launch_template" "traffic" {
+          image_id      = "ami-1234567890abcdef0"
+          instance_type = "t3.micro"
+          user_data = base64encode(templatefile("\${path.module}/user-data.sh.tftpl", {
+            traffic_api_bundle_url_json = jsonencode("https://example.test/api.tar.gz")
+          }))
+        }
+      `,
+      { liveProfile: "demo_web_service_with_rds" }
+    )
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects traversing tftpl paths", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        `
+          resource "aws_launch_template" "traffic" {
+            image_id      = "ami-1234567890abcdef0"
+            instance_type = "t3.micro"
+            user_data     = base64encode(templatefile("\${path.module}/../user-data.sh.tftpl", {}))
+          }
+        `,
+        { liveProfile: "demo_web_service_with_rds" }
+      ),
+    /templatefile must use a static module-local \.tftpl basename/
+  );
+});
+
+test("assertTerraformArtifactIsSafe rejects nested tftpl paths", () => {
+  assert.throws(
+    () =>
+      assertTerraformArtifactIsSafe(
+        `
+          resource "aws_launch_template" "traffic" {
+            image_id      = "ami-1234567890abcdef0"
+            instance_type = "t3.micro"
+            user_data     = base64encode(templatefile("\${path.module}/scripts/user-data.sh.tftpl", {}))
+          }
+        `,
+        { liveProfile: "demo_web_service_with_rds" }
+      ),
+    /templatefile must use a static module-local \.tftpl basename/
   );
 });
 
@@ -586,7 +1009,6 @@ function createLiveObservationScalingTerraform(): string {
       autoscaling_group_name    = aws_autoscaling_group.api.name
       policy_type               = "StepScaling"
       adjustment_type           = "ChangeInCapacity"
-      cooldown                  = 180
       estimated_instance_warmup = 60
 
       step_adjustment {

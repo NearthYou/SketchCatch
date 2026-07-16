@@ -1,192 +1,297 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, Save, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { GitHubRepositoryCandidate } from "@sketchcatch/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { GitHubRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
+import { ProductBrand } from "../../../../components/ui/ProductBrand";
 import {
   connectGitHubSourceRepository,
-  createGitHubSourceRepositoryInstallUrl,
+  createGitHubInstallationUserAuthorization,
   listGitHubInstallationRepositories
 } from "../../../../features/workspace/api";
 import { getApiErrorMessage } from "../../../../lib/api-client";
+import {
+  ProjectCicdMonitoringSettingsClient,
+  type ProjectCicdMonitoringSettingsHandle
+} from "../../../projects/[projectId]/settings/project-cicd-monitoring-settings-client";
+import {
+  ProjectDeploymentTargetSettingsClient,
+  type ProjectDeploymentTargetSettingsHandle
+} from "../../../projects/[projectId]/settings/project-deployment-target-settings-client";
+import {
+  readRepositoryAnalysisResume,
+  type RepositoryAnalysisResumeState
+} from "../../../workspace/repository/repository-analysis-resume";
+import {
+  createCallbackEcsDefaults,
+  saveCallbackSettings,
+  selectCallbackTarget
+} from "./github-callback-state";
+import styles from "./github-callback.module.css";
 
 type CallbackState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
+  | { readonly status: "loading" | "connecting" }
+  | { readonly message: string; readonly status: "error" }
   | {
-      status: "ready";
-      installationId: string;
-      state: string;
-      projectId: string;
-      repositories: GitHubRepositoryCandidate[];
-    }
-  | { status: "saving"; projectId: string };
+      readonly projectId: string;
+      readonly repository: SourceRepository;
+      readonly resume: RepositoryAnalysisResumeState;
+      readonly resumeKey: string;
+      readonly status: "configuring";
+    };
 
+// GitHub App callback은 분석했던 Repository만 연결하고 두 필수 설정을 저장한 뒤 분석 화면으로 돌아갑니다.
 export default function GitHubIntegrationCallbackPage() {
   const router = useRouter();
+  const deploymentTargetRef = useRef<ProjectDeploymentTargetSettingsHandle>(null);
+  const gitOpsMonitoringRef = useRef<ProjectCicdMonitoringSettingsHandle>(null);
   const [callbackState, setCallbackState] = useState<CallbackState>({ status: "loading" });
-  const selectableRepositories = useMemo(
-    () =>
-      callbackState.status === "ready"
-        ? callbackState.repositories.filter((repository) => !repository.archived)
-        : [],
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [confirmationMessage, setConfirmationMessage] = useState("");
+  const ecsDefaults = useMemo(
+    () => callbackState.status === "configuring"
+      ? createCallbackEcsDefaults(callbackState.resume)
+      : null,
     [callbackState]
   );
+  const monitoringDefaults = useMemo(
+    () => callbackState.status === "configuring"
+      ? createCallbackMonitoringDefaults(callbackState.resume, ecsDefaults?.sourceRoot ?? ".")
+      : undefined,
+    [callbackState, ecsDefaults?.sourceRoot]
+  );
 
+  // setup URL의 installation_id를 바로 신뢰하지 않고 GitHub 사용자 권한으로 먼저 검증합니다.
   useEffect(() => {
     let cancelled = false;
 
-    async function loadRepositories(): Promise<void> {
+    async function connectTargetRepository(): Promise<void> {
       const searchParams = new URLSearchParams(window.location.search);
       const installationId = searchParams.get("installation_id")?.trim();
       const state = searchParams.get("state")?.trim();
+      const authorization = searchParams.get("authorization")?.trim();
 
       if (!installationId || !state) {
         setCallbackState({
           status: "error",
-          message:
-            "GitHub 연결 정보가 없습니다. SketchCatch의 GitHub 연결 버튼에서 다시 시작해주세요."
+          message: "GitHub 연결 정보가 없습니다. Repository 시작 화면에서 다시 연결해주세요."
         });
         return;
       }
 
       try {
-        const result = await listGitHubInstallationRepositories({
-          installationId,
-          state
-        });
-
-        if (cancelled) {
+        if (authorization !== "verified") {
+          const result = await createGitHubInstallationUserAuthorization({
+            installationId,
+            state
+          });
+          if (!cancelled) {
+            window.location.assign(result.authorizationUrl);
+          }
           return;
         }
 
-        setCallbackState({
-          status: "ready",
-          installationId,
-          state,
+        const result = await listGitHubInstallationRepositories({ installationId, state });
+        if (cancelled) return;
+        if (result.scope === "account") {
+          router.replace("/dashboard/settings?github=connected");
+          return;
+        }
+        if (!result.targetRepository || !result.resumeKey) {
+          throw new Error("분석한 Repository 복귀 정보가 GitHub 연결에 포함되지 않았습니다.");
+        }
+
+        const target = selectCallbackTarget(result.repositories, result.targetRepository);
+        if (!target || target.archived) {
+          throw new Error(
+            "분석한 Repository에 대한 GitHub App 권한이 없습니다. GitHub 설정에서 해당 Repository 접근 권한을 추가해주세요."
+          );
+        }
+        const repositoryUrl = getRepositoryUrl(target);
+        const resume = readRepositoryAnalysisResume(window.sessionStorage, {
+          resumeKey: result.resumeKey,
           projectId: result.projectId,
-          repositories: result.repositories
+          repositoryUrl
+        });
+        if (!resume) {
+          throw new Error("이전 Repository 분석 정보가 만료되었거나 현재 연결 대상과 일치하지 않습니다.");
+        }
+
+        setCallbackState({ status: "connecting" });
+        const connected = await connectGitHubSourceRepository({
+          githubRepositoryId: target.githubRepositoryId,
+          installationId,
+          projectId: result.projectId,
+          state
+        });
+        if (cancelled) return;
+
+        window.history.replaceState(null, "", window.location.pathname);
+        setCallbackState({
+          status: "configuring",
+          projectId: result.projectId,
+          repository: connected,
+          resume,
+          resumeKey: result.resumeKey
         });
       } catch (error) {
-        if (!cancelled) {
-          setCallbackState({
-            status: "error",
-            message: getApiErrorMessage(error, "GitHub repository 목록을 불러오지 못했습니다.")
-          });
-        }
+        if (cancelled) return;
+        setCallbackState({
+          status: "error",
+          message: getCallbackErrorMessage(error)
+        });
       }
     }
 
-    void loadRepositories();
-
+    void connectTargetRepository();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
 
-  async function selectRepository(repository: GitHubRepositoryCandidate): Promise<void> {
-    if (callbackState.status !== "ready") {
-      return;
-    }
+  function returnToRepositoryAnalysis(): void {
+    if (callbackState.status !== "configuring") return;
 
-    setCallbackState({
-      status: "saving",
-      projectId: callbackState.projectId
+    const params = new URLSearchParams({
+      projectId: callbackState.projectId,
+      projectName: callbackState.resume.projectName,
+      resumeKey: callbackState.resumeKey
     });
-
-    try {
-      const connectedRepository = await connectGitHubSourceRepository({
-        projectId: callbackState.projectId,
-        installationId: callbackState.installationId,
-        githubRepositoryId: repository.githubRepositoryId,
-        state: callbackState.state
-      });
-
-      router.replace(`/workspace?projectId=${encodeURIComponent(connectedRepository.projectId)}`);
-    } catch (error) {
-      setCallbackState({
-        status: "error",
-        message: getApiErrorMessage(error, "GitHub repository를 프로젝트에 연결하지 못했습니다.")
-      });
-    }
+    router.replace(`/workspace/repository?${params.toString()}`);
   }
 
-  async function startGitHubInstallationFromCallback(): Promise<void> {
-    if (callbackState.status !== "ready") {
+  async function saveSettingsAndReturn(): Promise<void> {
+    if (callbackState.status !== "configuring" || isSavingSettings) return;
+    if (!deploymentTargetRef.current || !gitOpsMonitoringRef.current) {
+      setConfirmationMessage("설정을 불러온 뒤 다시 확인해주세요.");
       return;
     }
 
-    try {
-      const { installUrl } = await createGitHubSourceRepositoryInstallUrl(
-        callbackState.projectId
-      );
+    setIsSavingSettings(true);
+    setConfirmationMessage("");
+    const saved = await saveCallbackSettings({
+      saveDeploymentTarget: deploymentTargetRef.current.save,
+      saveGitOpsMonitoring: gitOpsMonitoringRef.current.save
+    });
+    setIsSavingSettings(false);
 
-      window.location.assign(installUrl);
-    } catch (error) {
-      setCallbackState({
-        status: "error",
-        message: getApiErrorMessage(error, "GitHub App 설치 화면을 열지 못했습니다.")
-      });
+    if (!saved) {
+      setConfirmationMessage("두 설정을 모두 저장하지 못했습니다. 표시된 항목을 확인해주세요.");
+      return;
     }
+
+    returnToRepositoryAnalysis();
   }
 
   return (
-    <main style={pageStyle}>
-      <section style={panelStyle}>
-        <header style={headerStyle}>
-          <p style={eyebrowStyle}>GitHub App</p>
-          <h1 style={titleStyle}>Repository 연결</h1>
+    <main className={styles.page}>
+      <header className={styles.topbar}>
+        <ProductBrand />
+        <Link href="/workspace/new">
+          <ArrowLeft aria-hidden="true" size={16} />
+          새 프로젝트
+        </Link>
+      </header>
+
+      <section aria-labelledby="github-callback-title" className={styles.content}>
+        <header className={styles.heading}>
+          <span>GitHub App</span>
+          <h1 id="github-callback-title">필수 배포 설정</h1>
+          <p>분석한 Repository를 연결했습니다. 설정을 확인한 뒤 보드 생성 흐름으로 돌아갑니다.</p>
         </header>
 
-        {callbackState.status === "loading" ? (
-          <p style={mutedStyle}>GitHub repository 목록을 불러오는 중입니다.</p>
-        ) : null}
-
-        {callbackState.status === "saving" ? (
-          <p style={mutedStyle}>선택한 repository를 프로젝트에 연결하는 중입니다.</p>
+        {callbackState.status === "loading" || callbackState.status === "connecting" ? (
+          <div aria-live="polite" className={styles.progress} role="status">
+            <LoaderCircle aria-hidden="true" size={18} />
+            <div>
+              <strong>{callbackState.status === "loading" ? "GitHub 권한을 확인하는 중" : "분석한 Repository 연결 중"}</strong>
+              <span>연결 대상을 확인하고 있으므로 Repository를 다시 선택하거나 분석하지 않습니다.</span>
+            </div>
+          </div>
         ) : null}
 
         {callbackState.status === "error" ? (
-          <div style={errorStyle}>{callbackState.message}</div>
+          <div className={styles.errorState} role="alert">
+            <TriangleAlert aria-hidden="true" size={18} />
+            <div><strong>연결을 완료하지 못했습니다</strong><span>{callbackState.message}</span></div>
+            <Link href="/dashboard/settings">GitHub 권한 설정</Link>
+          </div>
         ) : null}
 
-        {callbackState.status === "ready" ? (
+        {callbackState.status === "configuring" ? (
           <>
-            <p style={mutedStyle}>
-              설치된 repository 중 프로젝트에 연결할 repository 1개를 선택하세요.
-            </p>
-            <div style={listStyle}>
-              {callbackState.repositories.map((repository) => (
-                <button
-                  disabled={repository.archived}
-                  key={repository.githubRepositoryId}
-                  onClick={() => void selectRepository(repository)}
-                  style={{
-                    ...repoButtonStyle,
-                    ...(repository.archived ? disabledRepoButtonStyle : {})
-                  }}
-                  type="button"
-                >
-                  <span style={repoNameStyle}>{repository.fullName}</span>
-                  <span style={repoMetaStyle}>
-                    {repository.defaultBranch} / {repository.visibility}
-                    {repository.archived ? " / archived" : ""}
-                  </span>
-                </button>
-              ))}
+            <div className={styles.connectedRepository}>
+              <Check aria-hidden="true" size={18} />
+              <div>
+                <strong>{callbackState.repository.owner}/{callbackState.repository.name}</strong>
+                <span>{callbackState.resume.defaultBranch} · {callbackState.resume.publicAnalysis.repositoryRevision.slice(0, 12)}</span>
+              </div>
             </div>
-            {selectableRepositories.length === 0 ? (
-              <p style={mutedStyle}>선택 가능한 repository가 없습니다.</p>
-            ) : null}
-            <div style={actionRowStyle}>
+
+            <div className={styles.settingsStack}>
+              <ProjectDeploymentTargetSettingsClient
+                ecsDefaults={ecsDefaults}
+                onDirty={() => setConfirmationMessage("")}
+                preferEcsDefaults
+                projectId={callbackState.projectId}
+                ref={deploymentTargetRef}
+                showSaveButton={false}
+              />
+              <ProjectCicdMonitoringSettingsClient
+                initialDraft={monitoringDefaults}
+                onDirty={() => setConfirmationMessage("")}
+                projectId={callbackState.projectId}
+                ref={gitOpsMonitoringRef}
+                showSaveButton={false}
+              />
+            </div>
+
+            <section
+              aria-labelledby="callback-completion-title"
+              className={styles.completionPanel}
+            >
+              <div className={styles.completionCopy}>
+                <span aria-hidden="true" className={styles.completionIcon}>
+                  <Save size={19} strokeWidth={2.2} />
+                </span>
+                <div className={styles.completionText}>
+                  <strong id="callback-completion-title">설정을 저장하고 다음 단계로 이동합니다</strong>
+                  <p>배포 타깃과 GitOps 감시 설정을 함께 저장한 뒤 보드 선택 화면으로 돌아갑니다.</p>
+                </div>
+              </div>
+
+              {confirmationMessage ? (
+                <p className={styles.completionError} role="alert">
+                  <TriangleAlert aria-hidden="true" size={17} />
+                  <span>{confirmationMessage}</span>
+                </p>
+              ) : null}
+
               <button
-                onClick={() => void startGitHubInstallationFromCallback()}
-                style={installButtonStyle}
+                className={styles.completionButton}
+                disabled={isSavingSettings}
+                onClick={saveSettingsAndReturn}
                 type="button"
               >
-                GitHub App 설치/권한 추가
+                {isSavingSettings ? (
+                  <>
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className={styles.buttonSpinner}
+                      size={17}
+                    />
+                    <span>설정 저장 중</span>
+                  </>
+                ) : (
+                  <>
+                    <span>설정 저장 후 계속</span>
+                    <ArrowRight aria-hidden="true" size={17} />
+                  </>
+                )}
               </button>
-            </div>
+            </section>
           </>
         ) : null}
       </section>
@@ -194,108 +299,28 @@ export default function GitHubIntegrationCallbackPage() {
   );
 }
 
-const pageStyle = {
-  alignItems: "flex-start",
-  background: "#f6f8fb",
-  color: "#172033",
-  display: "flex",
-  minHeight: "100vh",
-  padding: "48px 20px"
-} as const;
+function getRepositoryUrl(repository: GitHubRepositoryCandidate): string {
+  return repository.repositoryUrl ?? `https://github.com/${repository.owner}/${repository.name}`;
+}
 
-const panelStyle = {
-  margin: "0 auto",
-  maxWidth: "720px",
-  width: "100%"
-} as const;
+function getCallbackErrorMessage(error: unknown): string {
+  if (error instanceof Error && /[가-힣]/u.test(error.message)) {
+    return error.message;
+  }
 
-const headerStyle = {
-  marginBottom: "20px"
-} as const;
+  return getApiErrorMessage(error, "분석한 Repository를 연결하지 못했습니다.");
+}
 
-const eyebrowStyle = {
-  color: "#2563eb",
-  fontSize: "12px",
-  fontWeight: 800,
-  margin: "0 0 6px",
-  textTransform: "uppercase"
-} as const;
-
-const titleStyle = {
-  fontSize: "28px",
-  lineHeight: 1.15,
-  margin: 0
-} as const;
-
-const mutedStyle = {
-  color: "#526071",
-  fontSize: "14px",
-  lineHeight: 1.6,
-  margin: "0 0 16px"
-} as const;
-
-const listStyle = {
-  display: "grid",
-  gap: "10px"
-} as const;
-
-const repoButtonStyle = {
-  alignItems: "flex-start",
-  background: "#ffffff",
-  border: "1px solid #d9e1ec",
-  borderRadius: "8px",
-  color: "#172033",
-  cursor: "pointer",
-  display: "flex",
-  flexDirection: "column",
-  gap: "4px",
-  minHeight: "68px",
-  padding: "14px 16px",
-  textAlign: "left",
-  width: "100%"
-} as const;
-
-const disabledRepoButtonStyle = {
-  cursor: "not-allowed",
-  opacity: 0.54
-} as const;
-
-const repoNameStyle = {
-  fontSize: "15px",
-  fontWeight: 800,
-  overflowWrap: "anywhere"
-} as const;
-
-const repoMetaStyle = {
-  color: "#64748b",
-  fontSize: "13px",
-  overflowWrap: "anywhere"
-} as const;
-
-const errorStyle = {
-  background: "#fff1f2",
-  border: "1px solid #fecdd3",
-  borderRadius: "8px",
-  color: "#9f1239",
-  fontSize: "14px",
-  lineHeight: 1.5,
-  padding: "14px 16px"
-} as const;
-
-const actionRowStyle = {
-  display: "flex",
-  justifyContent: "flex-end",
-  marginTop: "16px"
-} as const;
-
-const installButtonStyle = {
-  background: "#2563eb",
-  border: "1px solid #2563eb",
-  borderRadius: "8px",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontSize: "14px",
-  fontWeight: 800,
-  minHeight: "40px",
-  padding: "8px 14px"
-} as const;
+function createCallbackMonitoringDefaults(
+  resume: RepositoryAnalysisResumeState,
+  sourceRoot: string
+) {
+  return {
+    enabled: true,
+    monitorBranch: resume.defaultBranch,
+    appPath: sourceRoot === "."
+      ? { mode: "repository_root" as const, path: "." }
+      : { mode: "subdirectory" as const, path: sourceRoot },
+    infraPath: { mode: "repository_root" as const, path: "." }
+  };
+}

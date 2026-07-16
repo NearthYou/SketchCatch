@@ -2,6 +2,8 @@ import type {
   CostProjectUsage,
   CostResourceUsage,
   CostServiceUsage,
+  CostUsageMonthlyComparison,
+  CostUsageMonthlyPoint,
   CostUsageTrendPoint
 } from "@sketchcatch/types";
 
@@ -89,6 +91,92 @@ export function createScopedCostUsageDailyTrend(input: {
   }));
 }
 
+export function createScopedCostUsageMonthlyTrend(input: {
+  readonly monthlyTrend: readonly CostUsageMonthlyPoint[];
+  readonly selectedProject: CostProjectUsage | null;
+  readonly totalCostAmount: number;
+}): CostUsageMonthlyPoint[] {
+  if (input.selectedProject === null) {
+    return [...input.monthlyTrend];
+  }
+
+  if (input.selectedProject.monthlyTrend.length > 0) {
+    return [...input.selectedProject.monthlyTrend];
+  }
+
+  return input.monthlyTrend.map((point) => ({
+    ...point,
+    amount: scaleCostUsageAmount(
+      point.amount,
+      input.totalCostAmount,
+      input.selectedProject?.amount ?? 0
+    ),
+    isEstimated: true
+  }));
+}
+
+export function createScopedCostUsageMonthlyComparison(input: {
+  readonly generatedAt: string;
+  readonly monthlyComparison: CostUsageMonthlyComparison;
+  readonly selectedProject: CostProjectUsage | null;
+  readonly totalCostAmount: number;
+}): CostUsageMonthlyComparison {
+  if (input.selectedProject === null) {
+    return input.monthlyComparison;
+  }
+
+  if (input.selectedProject.monthlyTrend.length > 0) {
+    return createMonthlyComparisonFromTrend(
+      input.selectedProject.monthlyTrend,
+      new Date(input.generatedAt)
+    );
+  }
+
+  const scaleMoney = (amount: number) => ({
+    amount: scaleCostUsageAmount(
+      amount,
+      input.totalCostAmount,
+      input.selectedProject?.amount ?? 0
+    ),
+    currency: "USD" as const
+  });
+
+  return {
+    currentMonthForecast: scaleMoney(input.monthlyComparison.currentMonthForecast.amount),
+    currentMonthToDate: scaleMoney(input.monthlyComparison.currentMonthToDate.amount),
+    forecastChangeAmount: scaleMoney(input.monthlyComparison.forecastChangeAmount.amount),
+    forecastChangePercentage: input.monthlyComparison.forecastChangePercentage,
+    previousMonthActual: scaleMoney(input.monthlyComparison.previousMonthActual.amount)
+  };
+}
+
+function createMonthlyComparisonFromTrend(
+  monthlyTrend: readonly CostUsageMonthlyPoint[],
+  generatedAt: Date
+): CostUsageMonthlyComparison {
+  const previousMonthActual = monthlyTrend.at(-2)?.amount ?? 0;
+  const currentMonthToDate = monthlyTrend.at(-1)?.amount ?? 0;
+  const daysInMonth = new Date(Date.UTC(
+    generatedAt.getUTCFullYear(),
+    generatedAt.getUTCMonth() + 1,
+    0
+  )).getUTCDate();
+  const currentMonthForecast = roundUsd(
+    currentMonthToDate / Math.max(generatedAt.getUTCDate(), 1) * daysInMonth
+  );
+  const forecastChangeAmount = roundUsd(currentMonthForecast - previousMonthActual);
+
+  return {
+    currentMonthForecast: { amount: currentMonthForecast, currency: "USD" },
+    currentMonthToDate: { amount: currentMonthToDate, currency: "USD" },
+    forecastChangeAmount: { amount: forecastChangeAmount, currency: "USD" },
+    forecastChangePercentage: previousMonthActual <= 0
+      ? null
+      : roundPercent(forecastChangeAmount / previousMonthActual * 100),
+    previousMonthActual: { amount: previousMonthActual, currency: "USD" }
+  };
+}
+
 export function selectCostUsageResourceCosts(
   resourceCosts: readonly CostResourceUsage[],
   selectedProject: CostProjectUsage | null
@@ -170,6 +258,18 @@ function createServiceCostsFromEntries(entries: readonly [string, number][]): Co
 
 function roundUsd(amount: number): number {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
+function scaleCostUsageAmount(
+  amount: number,
+  accountTotalAmount: number,
+  selectedTotalAmount: number
+): number {
+  if (accountTotalAmount <= 0 || selectedTotalAmount <= 0) {
+    return 0;
+  }
+
+  return roundUsd(amount * selectedTotalAmount / accountTotalAmount);
 }
 
 function roundPercent(value: number): number {

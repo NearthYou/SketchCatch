@@ -1,10 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  CircleDollarSign,
   FolderKanban,
   LayoutDashboard,
   LogOut,
@@ -12,19 +10,23 @@ import {
   Plus,
   Settings,
   Shapes,
+  WalletCards,
   X
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../auth/auth-provider";
+import { ProductBrand } from "../ui/ProductBrand";
+import { ProductState } from "../ui/ProductState";
 
 const DASHBOARD_NAV_ITEMS = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
-  { href: "/dashboard/projects", icon: FolderKanban, label: "Projects" },
-  { href: "/dashboard/costs", icon: CircleDollarSign, label: "Cost Analysis" },
-  { href: "/dashboard/templates", icon: Shapes, label: "Templates" },
-  { href: "/dashboard/settings", icon: Settings, label: "Settings" }
+  { href: "/dashboard", icon: LayoutDashboard, label: "작업 현황" },
+  { href: "/dashboard/projects", icon: FolderKanban, label: "내 프로젝트" },
+  { href: "/dashboard/templates", icon: Shapes, label: "템플릿" },
+  { href: "/dashboard/costs", icon: WalletCards, label: "비용 관리" },
+  { href: "/dashboard/settings", icon: Settings, label: "설정" }
 ] as const;
 
+// 인증된 Dashboard 화면의 공통 탐색 영역과 세션 상태를 책임집니다.
 export function DashboardShell({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -45,6 +47,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
     }
   }, [router, status]);
 
+  // 로그아웃을 마친 뒤 인증 화면으로 되돌립니다.
   async function handleLogout(): Promise<void> {
     await logout();
     router.replace("/login");
@@ -52,10 +55,18 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
 
   if (status !== "authenticated") {
     return (
-      <main className="dashboardSessionState" aria-live="polite">
-        <Image alt="SketchCatch" height={48} priority src="/sketchcatch-logo.png" width={32} />
-        <strong>SketchCatch</strong>
-        <p>{status === "loading" ? "세션을 확인하고 있습니다." : "로그인 화면으로 이동합니다."}</p>
+      <main className="dashboardSessionState">
+        <ProductBrand />
+        <ProductState
+          compact
+          description={
+            status === "loading"
+              ? "프로젝트와 배포 기록을 안전하게 불러오고 있습니다."
+              : "로그인이 필요한 화면입니다. 로그인 화면으로 이동합니다."
+          }
+          kind={status === "loading" ? "loading" : "waiting"}
+          title={status === "loading" ? "세션 확인 중" : "로그인 필요"}
+        />
       </main>
     );
   }
@@ -67,10 +78,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
         className={isMobileMenuOpen ? "dashboardSidebar dashboardSidebarOpen" : "dashboardSidebar"}
       >
         <div className="dashboardSidebarHeader">
-          <Link className="dashboardBrand" href="/dashboard" aria-label="SketchCatch Dashboard">
-            <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
-            <span>SketchCatch</span>
-          </Link>
+          <ProductBrand />
           <button
             aria-label="Dashboard 메뉴 닫기"
             className="dashboardMobileClose"
@@ -143,13 +151,12 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
               <Menu aria-hidden="true" size={20} />
             </button>
             <div>
-              <span>Dashboard</span>
               <strong>{pageTitle}</strong>
             </div>
           </div>
 
           {shouldShowCreateAction ? (
-            <Link className="dashboardPrimaryAction" href="/workspace/new">
+            <Link className="dashboardPrimaryAction" href="/workspace/new?fresh=1">
               <Plus aria-hidden="true" size={17} />
               <span>새 프로젝트</span>
             </Link>
@@ -162,6 +169,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
   );
 }
 
+// 현재 route와 가장 가까운 Dashboard 메뉴를 선택 상태로 표시합니다.
 function isDashboardNavItemActive(pathname: string, href: string): boolean {
   if (href === "/dashboard") {
     return pathname === href;
@@ -170,13 +178,18 @@ function isDashboardNavItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+// route 이름을 사용자가 이해할 수 있는 짧은 화면 제목으로 바꿉니다.
 function getDashboardPageTitle(pathname: string): string {
   if (pathname.startsWith("/dashboard/projects/")) {
-    return pathname.endsWith("/settings") ? "Project Settings" : "Project Detail";
+    return pathname.endsWith("/repository")
+      ? "소스 저장소"
+      : pathname.endsWith("/settings")
+        ? "프로젝트 설정"
+        : "프로젝트 상세";
   }
 
   return (
     DASHBOARD_NAV_ITEMS.find((item) => isDashboardNavItemActive(pathname, item.href))?.label ??
-    "Overview"
+    "작업 현황"
   );
 }

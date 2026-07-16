@@ -1,6 +1,5 @@
 import { z } from "zod";
 import type {
-  DeploymentPlanSummary,
   GitCicdAwsRoleDiffApplyResponse,
   GitCicdGitHubOAuthStartResponse,
   GitCicdHandoff,
@@ -8,6 +7,15 @@ import type {
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
+  GitCicdMonitoringConfig,
+  GitCicdMonitoringConfigResponse,
+  GitCicdPipelineLog,
+  GitCicdPipelineLogListResponse,
+  GitCicdPipelineProjectRefreshResponse,
+  GitCicdPipelineRun,
+  GitCicdPipelineRunListResponse,
+  GitCicdPipelineRunRefreshResponse,
+  GitCicdPipelineRunResponse,
   GitCicdRepositorySettingsApplyResponse
 } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
@@ -52,6 +60,55 @@ import {
   createGitHubRepositorySettingsOAuthStart
 } from "../git-cicd/github-oauth-repository-settings.js";
 import type { GitCicdPipelineStatusProvider } from "../git-cicd/github-actions-pipeline-status-provider.js";
+import {
+  createAwsEcsGitOpsCloudGateway,
+  createEcsGitOpsReleaseReconciler,
+  createPostgresEcsGitOpsReleaseRepository,
+  type EcsGitOpsReleaseReconciler
+} from "../git-cicd/ecs-gitops-release-reconciler.js";
+import {
+  createAwsLambdaGitOpsCloudGateway,
+  createLambdaGitOpsReleaseReconciler,
+  createPostgresLambdaGitOpsReleaseRepository,
+  LambdaGitOpsReleaseVerificationError
+} from "../git-cicd/lambda-gitops-release-reconciler.js";
+import {
+  createAwsEc2AsgGitOpsCloudGateway,
+  createEc2AsgGitOpsReleaseReconciler,
+  createPostgresEc2AsgGitOpsReleaseRepository
+} from "../git-cicd/ec2-asg-gitops-release-reconciler.js";
+import {
+  createAwsStaticSiteGitOpsCloudGateway,
+  createPostgresStaticSiteGitOpsReleaseRepository,
+  createStaticSiteGitOpsReleaseReconciler
+} from "../git-cicd/static-site-gitops-release-reconciler.js";
+import {
+  createGitOpsReleaseReconciler,
+  type GitOpsReleaseReconciler
+} from "../git-cicd/gitops-release-reconciler.js";
+import { createPostgresGitOpsApplicationArtifactRegistrar } from "../git-cicd/gitops-application-artifact-registrar.js";
+import {
+  createGitCicdPipelineRunService,
+  createPostgresGitCicdPipelinePersistenceRepository,
+  GitCicdPipelineRunInvalidCursorError,
+  GitCicdPipelineRunRefreshUnavailableError,
+  type GitCicdPipelinePersistenceRepository,
+  type PersistedPipelineLog,
+  type PipelineRunWithStages
+} from "../git-cicd/git-cicd-pipeline-run-service.js";
+import type { GitCicdRunProvider } from "../git-cicd/github-actions-run-provider.js";
+import { normalizeNonSensitiveHttpUrl } from "../git-cicd/non-sensitive-http-url.js";
+import {
+  createGitHubMonitoringProviderFromEnv,
+  createPostgresGitCicdMonitoringRepository,
+  getGitCicdMonitoringConfig,
+  GitCicdMonitoringNotFoundError,
+  GitCicdMonitoringValidationError,
+  updateGitCicdMonitoringConfig,
+  type GitCicdMonitoringConfigRecord,
+  type GitCicdMonitoringProvider,
+  type GitCicdMonitoringRepository
+} from "../git-cicd/git-cicd-monitoring-service.js";
 import { createRuntimeCacheFromEnv, type RuntimeCache } from "../runtime-cache/index.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -78,6 +135,20 @@ const projectHandoffParamsSchema = z.object({
   projectId: z.uuid()
 });
 
+const pipelineRunProjectParamsSchema = z.object({ projectId: z.uuid() }).strict();
+const pipelineRunParamsSchema = z.object({ pipelineRunId: z.uuid() }).strict();
+const pipelineRunListQuerySchema = z
+  .object({
+    cursor: z.string().trim().min(1).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20)
+  })
+  .strict();
+const pipelineLogQuerySchema = z
+  .object({
+    sinceSequence: z.coerce.number().int().min(0).default(0)
+  })
+  .strict();
+
 const handoffParamsSchema = z.object({
   handoffId: z.uuid()
 });
@@ -91,74 +162,42 @@ const githubOAuthCallbackQuerySchema = z
   .passthrough();
 
 const branchSchema = z.string().trim().min(1).max(255);
-const terraformSourceLocationSchema = z
+
+const monitoringParamsSchema = z
   .object({
-    fileName: z.string().trim().min(1).max(255),
-    line: z.number().int().min(1),
-    column: z.number().int().min(1).optional(),
-    resourceAddress: z.string().trim().min(1).max(255).optional(),
-    terraformBlockType: z.string().trim().min(1).max(64).optional(),
-    terraformBlockName: z.string().trim().min(1).max(128).optional()
+    projectId: z.uuid(),
+    sourceRepositoryId: z.string().trim().min(1).max(128)
   })
   .strict();
-const deploymentPlanSummarySchema = z
+
+const monitoredPathSchema = z
   .object({
-    createCount: z.number().int().min(0),
-    updateCount: z.number().int().min(0),
-    deleteCount: z.number().int().min(0),
-    replaceCount: z.number().int().min(0),
-    blocked: z.boolean(),
-    warnings: z.array(
-      z
-        .object({
-          id: z.string().trim().min(1).max(128),
-          level: z.enum(["low", "medium", "high"]),
-          category: z
-            .enum([
-              "cost",
-              "security",
-              "configuration",
-              "permission",
-              "network",
-              "performance",
-              "availability"
-            ])
-            .optional(),
-          source: z.enum([
-            "pre_deployment_check",
-            "terraform_plan",
-            "cost_risk",
-            "approval_snapshot"
-          ]),
-          code: z.enum([
-            "PUBLIC_RDS",
-            "PUBLIC_SSH",
-            "PUBLIC_S3",
-            "IAM_WILDCARD",
-            "DESTRUCTIVE_CHANGE",
-            "UNSUPPORTED_RESOURCE",
-            "TRIVY_MISCONFIGURATION",
-            "UNKNOWN_TERRAFORM_ACTION",
-            "MISSING_APPROVAL"
-          ]),
-          message: z.string().trim().min(1).max(500),
-          relatedFindingId: z.string().trim().min(1).max(128).optional(),
-          relatedResourceId: z.string().trim().min(1).max(128).optional(),
-          sourceLocation: terraformSourceLocationSchema.optional(),
-          requiresAcknowledgement: z.boolean(),
-          blocksApproval: z.boolean()
-        })
-        .strict()
-    )
+    mode: z.enum(["repository_root", "subdirectory"]),
+    path: z.string().trim().max(1024)
   })
   .strict();
+
+const updateMonitoringBodySchema = z
+  .object({
+    enabled: z.boolean(),
+    monitorBranch: branchSchema,
+    appPath: monitoredPathSchema,
+    infraPath: monitoredPathSchema,
+    userAcceptedChangeId: z.string().trim().min(1).max(128)
+  })
+  .strict();
+
+const nonSensitiveHttpUrlSchema = z.string().refine(
+  (value) => normalizeNonSensitiveHttpUrl(value) !== null,
+  { message: "Must be an absolute HTTP(S) URL without credentials, query, or fragment" }
+);
 
 const createGitCicdHandoffBodySchema = z
   .object({
     architectureId: z.uuid(),
     terraformArtifactId: z.uuid(),
     handoffKind: z.enum(["terraform_iac", "static_site"]).default("terraform_iac"),
-    sourceDeploymentId: z.uuid().nullable().optional(),
+    sourceDeploymentId: z.uuid(),
     deploymentMode: gitCicdDeploymentModeSchema.default("infra_and_app"),
     sourceRepositoryId: z.string().trim().min(1).max(128),
     targetBranch: branchSchema.optional(),
@@ -171,10 +210,8 @@ const createGitCicdHandoffBodySchema = z
     awsRoleArn: z.string().trim().min(1).max(2048).nullable().optional(),
     tfStateBucket: z.string().trim().min(3).max(63).optional(),
     releaseBucket: z.string().trim().min(3).max(63).optional(),
-    staticSiteUrl: z.string().url().nullable().optional(),
-    apiBaseUrl: z.string().url().nullable().optional(),
-    approveAwsRoleDiff: z.boolean().optional(),
-    planSummary: deploymentPlanSummarySchema.optional(),
+    staticSiteUrl: nonSensitiveHttpUrlSchema.nullable().optional(),
+    apiBaseUrl: nonSensitiveHttpUrlSchema.nullable().optional(),
     userAcceptedChangeId: z.string().trim().min(1).max(128)
   })
   .strict();
@@ -202,6 +239,14 @@ type GitCicdHandoffRouteOptions = {
   createGitCicdHandoffRepository?: (
     db: DatabaseClient["db"]
   ) => GitCicdHandoffRepository;
+  createGitCicdMonitoringRepository?: (
+    db: DatabaseClient["db"]
+  ) => GitCicdMonitoringRepository;
+  createGitCicdPipelinePersistenceRepository?: (
+    db: DatabaseClient["db"]
+  ) => GitCicdPipelinePersistenceRepository;
+  gitCicdRunProvider?: GitCicdRunProvider;
+  gitCicdMonitoringProvider?: GitCicdMonitoringProvider;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
   gitCicdRepositorySettingsApplier?: GitCicdRepositorySettingsApplier;
@@ -210,6 +255,8 @@ type GitCicdHandoffRouteOptions = {
   ) => GitCicdRepositorySettingsApplier;
   githubOAuthFetch?: typeof fetch;
   awsRoleDiffGateway?: AwsRoleDiffGateway;
+  gitOpsReleaseReconciler?: GitOpsReleaseReconciler;
+  ecsGitOpsReleaseReconciler?: EcsGitOpsReleaseReconciler;
   runtimeCache?: RuntimeCache;
 };
 
@@ -219,53 +266,11 @@ type GitCicdHandoffRequestContext = {
   provider: GitCicdHandoffProvider;
 };
 
-type GitCicdHandoffBody = z.infer<typeof createGitCicdHandoffBodySchema>;
-
-function toDeploymentPlanSummary(
-  planSummary: GitCicdHandoffBody["planSummary"]
-): DeploymentPlanSummary | undefined {
-  if (!planSummary) {
-    return undefined;
-  }
-
-  return {
-    ...planSummary,
-    warnings: planSummary.warnings.map((warning) => ({
-      id: warning.id,
-      level: warning.level,
-      ...(warning.category !== undefined ? { category: warning.category } : {}),
-      source: warning.source,
-      code: warning.code,
-      message: warning.message,
-      ...(warning.relatedFindingId !== undefined ? { relatedFindingId: warning.relatedFindingId } : {}),
-      ...(warning.relatedResourceId !== undefined
-        ? { relatedResourceId: warning.relatedResourceId }
-        : {}),
-      ...(warning.sourceLocation !== undefined
-        ? {
-            sourceLocation: {
-              fileName: warning.sourceLocation.fileName,
-              line: warning.sourceLocation.line,
-              ...(warning.sourceLocation.column !== undefined
-                ? { column: warning.sourceLocation.column }
-                : {}),
-              ...(warning.sourceLocation.resourceAddress !== undefined
-                ? { resourceAddress: warning.sourceLocation.resourceAddress }
-                : {}),
-              ...(warning.sourceLocation.terraformBlockType !== undefined
-                ? { terraformBlockType: warning.sourceLocation.terraformBlockType }
-                : {}),
-              ...(warning.sourceLocation.terraformBlockName !== undefined
-                ? { terraformBlockName: warning.sourceLocation.terraformBlockName }
-                : {})
-            }
-          }
-        : {}),
-      requiresAcknowledgement: warning.requiresAcknowledgement,
-      blocksApproval: warning.blocksApproval
-    }))
-  };
-}
+type GitCicdPipelineRunRequestContext = {
+  accessContext: ProjectAccessContext;
+  handoffRepository: GitCicdHandoffRepository;
+  service: ReturnType<typeof createGitCicdPipelineRunService>;
+};
 
 export async function registerGitCicdHandoffRoutes(
   app: FastifyInstance,
@@ -273,6 +278,188 @@ export async function registerGitCicdHandoffRoutes(
 ): Promise<void> {
   const getGitCicdDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
   const runtimeCache = options?.runtimeCache ?? createRuntimeCacheFromEnv();
+
+  app.get(
+    "/projects/:projectId/source-repositories/:sourceRepositoryId/cicd-monitoring",
+    async (request, reply) => {
+      const params = monitoringParamsSchema.parse(request.params);
+      const client = getGitCicdDatabaseClient();
+      const accessContext = {
+        kind: "user",
+        userId: await requireActiveUserId(request, () => client)
+      } as const;
+      const repository =
+        options?.createGitCicdMonitoringRepository?.(client.db) ??
+        createPostgresGitCicdMonitoringRepository(client.db);
+
+      try {
+        const config = await getGitCicdMonitoringConfig(
+          { ...params, accessContext },
+          repository
+        );
+        const response: GitCicdMonitoringConfigResponse = {
+          config: toGitCicdMonitoringConfig(config)
+        };
+        return reply.status(200).send(response);
+      } catch (error) {
+        return handleGitCicdMonitoringError(error, reply);
+      }
+    }
+  );
+
+  app.put(
+    "/projects/:projectId/source-repositories/:sourceRepositoryId/cicd-monitoring",
+    async (request, reply) => {
+      const params = monitoringParamsSchema.parse(request.params);
+      const body = updateMonitoringBodySchema.parse(request.body);
+      const client = getGitCicdDatabaseClient();
+      const accessContext = {
+        kind: "user",
+        userId: await requireActiveUserId(request, () => client)
+      } as const;
+      const repository =
+        options?.createGitCicdMonitoringRepository?.(client.db) ??
+        createPostgresGitCicdMonitoringRepository(client.db);
+      const providerSource =
+        options?.gitCicdMonitoringProvider ?? createGitHubMonitoringProviderFromEnv;
+
+      try {
+        const config = await updateGitCicdMonitoringConfig(
+          { ...params, ...body, accessContext },
+          repository,
+          providerSource
+        );
+        const response: GitCicdMonitoringConfigResponse = {
+          config: toGitCicdMonitoringConfig(config)
+        };
+        return reply.status(200).send(response);
+      } catch (error) {
+        return handleGitCicdMonitoringError(error, reply);
+      }
+    }
+  );
+
+  app.get("/projects/:projectId/git-cicd-pipeline-runs", async (request, reply) => {
+    const params = pipelineRunProjectParamsSchema.parse(request.params);
+    const query = pipelineRunListQuerySchema.parse(request.query);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      await requirePipelineProjectAccess(params.projectId, context);
+      const page = await context.service.listProjectPipelineRuns({
+        projectId: params.projectId,
+        limit: query.limit,
+        ...(query.cursor ? { cursor: query.cursor } : {})
+      });
+      const response: GitCicdPipelineRunListResponse = {
+        runs: page.runs.map(toGitCicdPipelineRun),
+        nextCursor: page.nextCursor
+      };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/projects/:projectId/git-cicd-pipeline-runs/refresh", async (request, reply) => {
+    const params = pipelineRunProjectParamsSchema.parse(request.params);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      await requirePipelineProjectAccess(params.projectId, context);
+      const result = await context.service.refreshProjectMonitoringTargets({
+        projectId: params.projectId
+      });
+      const response: GitCicdPipelineProjectRefreshResponse = {
+        runs: result.runs.map(toGitCicdPipelineRun),
+        targets: result.targets,
+        stale: result.stale
+      };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.get("/git-cicd-pipeline-runs/:pipelineRunId", async (request, reply) => {
+    const params = pipelineRunParamsSchema.parse(request.params);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const run = await requireAccessiblePipelineRun(params.pipelineRunId, context);
+      const response: GitCicdPipelineRunResponse = { run: toGitCicdPipelineRun(run) };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.get("/git-cicd-pipeline-runs/:pipelineRunId/logs", async (request, reply) => {
+    const params = pipelineRunParamsSchema.parse(request.params);
+    const query = pipelineLogQuerySchema.parse(request.query);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      await requireAccessiblePipelineRun(params.pipelineRunId, context);
+      const logs = await context.service.listPipelineLogs({
+        pipelineRunId: params.pipelineRunId,
+        sinceSequence: query.sinceSequence
+      });
+      const response: GitCicdPipelineLogListResponse = {
+        logs: logs.map(toGitCicdPipelineLog),
+        nextSequence: logs.at(-1)?.sequence ?? query.sinceSequence
+      };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
+
+  app.post("/git-cicd-pipeline-runs/:pipelineRunId/refresh", async (request, reply) => {
+    const params = pipelineRunParamsSchema.parse(request.params);
+    const context = await getGitCicdPipelineRunRequestContext(
+      request,
+      options,
+      getGitCicdDatabaseClient
+    );
+
+    try {
+      const result = await context.service.refreshPipelineRun({
+        pipelineRunId: params.pipelineRunId,
+        authorizeProject: async (projectId) =>
+          Boolean(
+            await context.handoffRepository.findAccessibleProject(
+              projectId,
+              context.accessContext
+            )
+          )
+      });
+      const response: GitCicdPipelineRunRefreshResponse = {
+        run: toGitCicdPipelineRun(result.run),
+        stale: result.stale,
+        errorMessage: result.errorMessage
+      };
+      return reply.status(200).send(response);
+    } catch (error) {
+      return handleGitCicdHandoffError(error, reply);
+    }
+  });
 
   app.post("/projects/:projectId/git-cicd-handoffs", async (request, reply) => {
     const params = projectHandoffParamsSchema.parse(request.params);
@@ -306,8 +493,6 @@ export async function registerGitCicdHandoffRoutes(
           releaseBucket: body.releaseBucket,
           staticSiteUrl: body.staticSiteUrl,
           apiBaseUrl: body.apiBaseUrl,
-          approveAwsRoleDiff: body.approveAwsRoleDiff,
-          planSummary: toDeploymentPlanSummary(body.planSummary),
           userAcceptedChangeId: body.userAcceptedChangeId
         },
         repository,
@@ -741,6 +926,128 @@ function shouldRefreshGitHubPipelineStatus(handoff: GitCicdHandoffRecord): boole
   );
 }
 
+const unconfiguredGitCicdRunProvider: GitCicdRunProvider = {
+  async listSnapshots() {
+    throw new Error("Git/CI/CD Pipeline Run provider is not configured");
+  },
+  async listCommitFiles() {
+    throw new Error("Git/CI/CD Pipeline Run provider is not configured");
+  }
+};
+
+async function getGitCicdPipelineRunRequestContext(
+  request: FastifyRequest,
+  options: GitCicdHandoffRouteOptions | undefined,
+  getGitCicdDatabaseClient: () => DatabaseClient
+): Promise<GitCicdPipelineRunRequestContext> {
+  const client = getGitCicdDatabaseClient();
+  const accessContext: ProjectAccessContext = {
+    kind: "user",
+    userId: await requireActiveUserId(request, () => client)
+  };
+  const pipelineRepository =
+    options?.createGitCicdPipelinePersistenceRepository?.(client.db) ??
+    createPostgresGitCicdPipelinePersistenceRepository(client.db);
+  const releaseReconciler =
+    options?.gitOpsReleaseReconciler ??
+    (options?.ecsGitOpsReleaseReconciler
+      ? {
+          reconcile(input) {
+            if (input.evidence.runtimeTargetKind !== "ecs_fargate") {
+              throw new LambdaGitOpsReleaseVerificationError(
+                "Lambda release reconciler is not configured"
+              );
+            }
+            return options.ecsGitOpsReleaseReconciler!.reconcile({
+              ...input,
+              evidence: input.evidence
+            });
+          }
+        } satisfies GitOpsReleaseReconciler
+      : undefined) ??
+    (options?.createGitCicdPipelinePersistenceRepository
+      ? undefined
+      : createGitOpsReleaseReconciler({
+          ecs: createEcsGitOpsReleaseReconciler({
+            repository: createPostgresEcsGitOpsReleaseRepository(client.db),
+            gateway: createAwsEcsGitOpsCloudGateway()
+          }),
+          lambda: createLambdaGitOpsReleaseReconciler({
+            repository: createPostgresLambdaGitOpsReleaseRepository(client.db),
+            gateway: createAwsLambdaGitOpsCloudGateway()
+          }),
+          ec2Asg: createEc2AsgGitOpsReleaseReconciler({
+            repository: createPostgresEc2AsgGitOpsReleaseRepository(client.db),
+            gateway: createAwsEc2AsgGitOpsCloudGateway()
+          }),
+          staticSite: createStaticSiteGitOpsReleaseReconciler({
+            repository: createPostgresStaticSiteGitOpsReleaseRepository(client.db),
+            gateway: createAwsStaticSiteGitOpsCloudGateway()
+          }),
+          artifactRegistrar: createPostgresGitOpsApplicationArtifactRegistrar(client.db)
+        }));
+  return {
+    accessContext,
+    handoffRepository:
+      options?.createGitCicdHandoffRepository?.(client.db) ??
+      createPostgresGitCicdHandoffRepository(client.db),
+    service: createGitCicdPipelineRunService({
+      repository: pipelineRepository,
+      provider: options?.gitCicdRunProvider ?? unconfiguredGitCicdRunProvider,
+      releaseReconciler
+    })
+  };
+}
+
+async function requirePipelineProjectAccess(
+  projectId: string,
+  context: GitCicdPipelineRunRequestContext
+): Promise<void> {
+  const project = await context.handoffRepository.findAccessibleProject(
+    projectId,
+    context.accessContext
+  );
+  if (!project) throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
+}
+
+async function requireAccessiblePipelineRun(
+  pipelineRunId: string,
+  context: GitCicdPipelineRunRequestContext
+): Promise<PipelineRunWithStages> {
+  const run = await context.service.getPipelineRun({ pipelineRunId });
+  if (!run) throw new GitCicdHandoffNotFoundError("Pipeline Run not found");
+  await requirePipelineProjectAccess(run.projectId, context);
+  return run;
+}
+
+function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
+  return {
+    ...row,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    finishedAt: row.finishedAt?.toISOString() ?? null,
+    lastRefreshedAt: row.lastRefreshedAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    release: row.release
+      ? {
+          ...row.release,
+          startedAt: row.release.startedAt?.toISOString() ?? null,
+          completedAt: row.release.completedAt?.toISOString() ?? null,
+          createdAt: row.release.createdAt.toISOString(),
+          updatedAt: row.release.updatedAt.toISOString()
+        }
+      : null,
+    stages: row.stages.map((stage) => ({
+      ...stage,
+      startedAt: stage.startedAt?.toISOString() ?? null,
+      finishedAt: stage.finishedAt?.toISOString() ?? null
+    }))
+  };
+}
+
+function toGitCicdPipelineLog(row: PersistedPipelineLog): GitCicdPipelineLog {
+  return { ...row, createdAt: row.createdAt.toISOString() };
+}
+
 async function getGitCicdHandoffRequestContext(
   request: FastifyRequest,
   options: GitCicdHandoffRouteOptions | undefined,
@@ -762,6 +1069,20 @@ async function getGitCicdHandoffRequestContext(
 }
 
 function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
+  if (error instanceof GitCicdPipelineRunInvalidCursorError) {
+    return reply.status(400).send({
+      error: "bad_request",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdPipelineRunRefreshUnavailableError) {
+    return reply.status(404).send({
+      error: "not_found",
+      message: error.message
+    });
+  }
+
   if (error instanceof GitCicdHandoffNotFoundError) {
     return reply.status(404).send({
       error: "not_found",
@@ -812,4 +1133,37 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   }
 
   throw error;
+}
+
+function handleGitCicdMonitoringError(error: unknown, reply: FastifyReply) {
+  if (error instanceof GitCicdMonitoringNotFoundError) {
+    return reply.status(404).send({
+      error: "not_found",
+      message: error.message
+    });
+  }
+  if (error instanceof GitCicdMonitoringValidationError) {
+    return reply.status(error.code === "GITHUB_PERMISSION_REQUIRED" ? 403 : 422).send({
+      error: "validation_failed",
+      code: error.code,
+      message: error.message
+    });
+  }
+  throw error;
+}
+
+function toGitCicdMonitoringConfig(
+  row: GitCicdMonitoringConfigRecord
+): GitCicdMonitoringConfig {
+  return {
+    sourceRepositoryId: row.sourceRepositoryId,
+    enabled: row.enabled,
+    monitorBranch: row.monitorBranch,
+    appPath: row.appPath,
+    infraPath: row.infraPath,
+    validationStatus: row.validationStatus,
+    validationMessage: row.validationMessage,
+    validatedAt: row.validatedAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt.toISOString()
+  };
 }

@@ -13,6 +13,8 @@ import type {
   CostServiceUsage,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
+  CostUsageMonthlyComparison,
+  CostUsageMonthlyPoint,
   CostUsageTrendPoint,
   CostWasteResourceInsight,
   MoneyEstimate,
@@ -141,20 +143,30 @@ export function createAwsCostUsageAnalysisProvider(
       credentials,
       region: input.awsConnection.region
     });
-    const [dailyTrend, serviceCosts, taggedProjectCosts] = await Promise.all([
+    const [
+      dailyTrend,
+      monthlyTrend,
+      serviceCosts,
+      taggedProjectCosts,
+      taggedProjectMonthlyTrends
+    ] = await Promise.all([
       fetchDailyCostTrend(costExplorer, rangeDates),
+      fetchMonthlyCostTrend(costExplorer, now),
       fetchServiceCosts(costExplorer, rangeDates),
-      fetchTaggedProjectCosts(costExplorer, rangeDates)
+      fetchTaggedProjectCosts(costExplorer, rangeDates),
+      fetchTaggedProjectMonthlyTrends(costExplorer, now)
     ]);
     const totalCostAmount = roundUsd(
       dailyTrend.reduce((sum, point) => sum + point.amount, 0) ||
         serviceCosts.reduce((sum, item) => sum + item.amount, 0)
     );
     const projectCosts = createProjectUsageCosts({
+      accountMonthlyTrend: monthlyTrend,
       deployedResources: input.deployedResources,
       deployments: input.deployments,
       projects: input.projects,
       taggedProjectCosts,
+      taggedProjectMonthlyTrends,
       totalCostAmount
     });
     const resourceCosts = createResourceUsageCosts({
@@ -185,6 +197,8 @@ export function createAwsCostUsageAnalysisProvider(
       ),
       generatedAt: now.toISOString(),
       metricSeries: createMetricSeries(metricSnapshots),
+      monthlyComparison: createMonthlyComparison(monthlyTrend, now),
+      monthlyTrend,
       projectCosts,
       resourceCosts,
       range: input.range,
@@ -205,6 +219,7 @@ export function createSampleCostUsageAnalysis(
   const now = input.now ?? new Date();
   const rangeDates = createCostRangeDates(input.range, now);
   const dailyTrend = createSampleDailyTrend(rangeDates);
+  const monthlyTrend = createSampleMonthlyTrend(now);
   const totalCostAmount = roundUsd(dailyTrend.reduce((sum, point) => sum + point.amount, 0));
   const serviceCosts = createServiceCosts([
     ["Amazon Relational Database Service", totalCostAmount * 0.42],
@@ -214,6 +229,7 @@ export function createSampleCostUsageAnalysis(
   ]);
   const taggedProjectCosts = new Map<string, number>();
   const projectCosts = createProjectUsageCosts({
+    accountMonthlyTrend: monthlyTrend,
     deployedResources: input.deployedResources,
     deployments: input.deployments,
     projects: input.projects,
@@ -242,6 +258,8 @@ export function createSampleCostUsageAnalysis(
     ),
     generatedAt: now.toISOString(),
     metricSeries: createSampleMetricSeries(rangeDates),
+    monthlyComparison: createMonthlyComparison(monthlyTrend, now),
+    monthlyTrend,
     projectCosts,
     resourceCosts,
     range: input.range,
@@ -275,6 +293,13 @@ function scopeCostUsageAnalysisResponseToProject(
     (resource) => resource.projectId === projectId
   );
   const resourceCostIds = new Set(resourceCosts.map((resource) => resource.id));
+  const monthlyTrend = projectCost?.monthlyTrend.length
+    ? projectCost.monthlyTrend
+    : scaleCostUsageMonthlyTrend(
+        response.monthlyTrend,
+        response.totalCost.amount,
+        selectedTotalAmount
+      );
 
   return {
     ...response,
@@ -293,6 +318,8 @@ function scopeCostUsageAnalysisResponseToProject(
     metricSeries: response.metricSeries.filter((series) =>
       [...resourceCostIds].some((resourceId) => series.id.startsWith(`${resourceId}-`))
     ),
+    monthlyComparison: createMonthlyComparison(monthlyTrend, new Date(response.generatedAt)),
+    monthlyTrend,
     projectCosts: projectCost === undefined ? [] : [projectCost],
     recommendations: response.recommendations.filter(
       (recommendation) => recommendation.projectId === projectId
@@ -373,21 +400,39 @@ function scaleCostUsageAmount(
 }
 
 export function createProjectUsageCosts(input: {
+  readonly accountMonthlyTrend?: readonly CostUsageMonthlyPoint[] | undefined;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
   readonly taggedProjectCosts: ReadonlyMap<string, number>;
+  readonly taggedProjectMonthlyTrends?: ReadonlyMap<string, readonly CostUsageMonthlyPoint[]> | undefined;
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
-  if (input.taggedProjectCosts.size > 0) {
-    const taggedProjectUsageCosts = createTaggedProjectUsageCosts(input);
+  const taggedProjectUsageCosts = input.taggedProjectCosts.size > 0
+    ? createTaggedProjectUsageCosts(input)
+    : [];
+  const taggedProjectIds = new Set(
+    taggedProjectUsageCosts.flatMap((row) => row.projectId === null ? [] : [row.projectId])
+  );
+  const taggedAmount = taggedProjectUsageCosts.reduce((sum, row) => sum + row.amount, 0);
+  const approximateProjectUsageCosts = createApproximateProjectUsageCosts({
+    ...input,
+    accountTotalAmountForMonthlyTrend: input.totalCostAmount,
+    projects: input.projects.filter((project) => !taggedProjectIds.has(project.id)),
+    totalCostAmount: Math.max(0, roundUsd(input.totalCostAmount - taggedAmount))
+  });
 
-    if (taggedProjectUsageCosts.length > 0) {
-      return taggedProjectUsageCosts;
-    }
-  }
+  const projectRows = [...taggedProjectUsageCosts, ...approximateProjectUsageCosts]
+    .map((row) => ({
+      ...row,
+      percentage: calculatePercentage(row.amount, input.totalCostAmount)
+    }));
 
-  return createApproximateProjectUsageCosts(input);
+  return reconcileProjectMonthlyTrends({
+    accountMonthlyTrend: input.accountMonthlyTrend ?? [],
+    projectRows,
+    taggedProjectMonthlyTrends: input.taggedProjectMonthlyTrends ?? new Map()
+  }).sort(compareCostProjectUsageRows);
 }
 
 export function createWasteInsightsFromMetricSnapshots(
@@ -496,8 +541,10 @@ export function createResourceUsageCosts(input: {
 }
 
 function createTaggedProjectUsageCosts(input: {
+  readonly accountMonthlyTrend?: readonly CostUsageMonthlyPoint[] | undefined;
   readonly projects: readonly Project[];
   readonly taggedProjectCosts: ReadonlyMap<string, number>;
+  readonly taggedProjectMonthlyTrends?: ReadonlyMap<string, readonly CostUsageMonthlyPoint[]> | undefined;
   readonly totalCostAmount: number;
 }): CostProjectUsage[] {
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
@@ -518,6 +565,11 @@ function createTaggedProjectUsageCosts(input: {
       projectId: project?.id ?? projectId,
       projectName: project?.name ?? `태그 프로젝트 ${projectId}`,
       resourceCount: 0,
+      monthlyTrend: createAllocatedMonthlyTrend({
+        accountMonthlyTrend: input.accountMonthlyTrend ?? [],
+        accountTotalAmount: input.totalCostAmount || totalTaggedCost,
+        projectAmount: amount
+      }),
       source: "cost_explorer_tag" as const
     };
   });
@@ -526,6 +578,8 @@ function createTaggedProjectUsageCosts(input: {
 }
 
 function createApproximateProjectUsageCosts(input: {
+  readonly accountTotalAmountForMonthlyTrend?: number | undefined;
+  readonly accountMonthlyTrend?: readonly CostUsageMonthlyPoint[] | undefined;
   readonly deployedResources: readonly CostUsageDeployedResource[];
   readonly deployments: readonly CostUsageDeployment[];
   readonly projects: readonly Project[];
@@ -589,6 +643,11 @@ function createApproximateProjectUsageCosts(input: {
         projectId: project.id,
         projectName: project.name,
         resourceCount,
+        monthlyTrend: createAllocatedMonthlyTrend({
+          accountMonthlyTrend: input.accountMonthlyTrend ?? [],
+          accountTotalAmount: input.accountTotalAmountForMonthlyTrend ?? input.totalCostAmount,
+          projectAmount: amount
+        }),
         source: "deployed_resource_estimate" as const
       };
     })
@@ -756,6 +815,76 @@ async function fetchTaggedProjectCosts(
   }
 
   return projectCosts;
+}
+
+async function fetchTaggedProjectMonthlyTrends(
+  client: CostExplorerClient,
+  now: Date
+): Promise<Map<string, CostUsageMonthlyPoint[]>> {
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const output = await client.send(
+    new GetCostAndUsageCommand({
+      Granularity: "MONTHLY",
+      GroupBy: [
+        {
+          Key: projectTagKey,
+          Type: "TAG"
+        }
+      ],
+      Metrics: ["UnblendedCost"],
+      TimePeriod: {
+        End: toIsoDate(addUtcDays(
+          new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())),
+          1
+        )),
+        Start: toIsoDate(addUtcMonths(currentMonth, -5))
+      }
+    })
+  );
+
+  return createCostExplorerProjectMonthlyTrends(output, now);
+}
+
+export function createCostExplorerProjectMonthlyTrends(
+  output: Pick<GetCostAndUsageCommandOutput, "ResultsByTime">,
+  now: Date
+): Map<string, CostUsageMonthlyPoint[]> {
+  const amountsByProject = new Map<string, Map<string, number>>();
+
+  for (const result of output.ResultsByTime ?? []) {
+    const month = result.TimePeriod?.Start?.slice(0, 7) ?? "";
+
+    for (const group of result.Groups ?? []) {
+      const projectId = parseCostExplorerTagValue(group.Keys?.[0] ?? "");
+      const amount = Number(group.Metrics?.UnblendedCost?.Amount ?? 0);
+
+      if (month.length === 0 || projectId.length === 0) {
+        continue;
+      }
+
+      const amountsByMonth = amountsByProject.get(projectId) ?? new Map<string, number>();
+      amountsByMonth.set(month, roundUsd((amountsByMonth.get(month) ?? 0) + amount));
+      amountsByProject.set(projectId, amountsByMonth);
+    }
+  }
+
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  return new Map(
+    [...amountsByProject.entries()].map(([projectId, amountsByMonth]) => [
+      projectId,
+      Array.from({ length: 6 }, (_, index) => {
+        const month = toIsoMonth(addUtcMonths(currentMonth, index - 5));
+
+        return {
+          amount: amountsByMonth.get(month) ?? 0,
+          isEstimated: !amountsByMonth.has(month),
+          isPartial: index === 5,
+          month
+        };
+      })
+    ])
+  );
 }
 
 function parseGroupedCostAmount(output: GetCostAndUsageCommandOutput): Array<[string, number]> {
@@ -1012,6 +1141,218 @@ function createSampleDailyTrend(rangeDates: CostRangeDates): CostUsageTrendPoint
   });
 }
 
+async function fetchMonthlyCostTrend(
+  client: CostExplorerClient,
+  now: Date
+): Promise<CostUsageMonthlyPoint[]> {
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const output = await client.send(
+    new GetCostAndUsageCommand({
+      Granularity: "MONTHLY",
+      Metrics: ["UnblendedCost"],
+      TimePeriod: {
+        End: toIsoDate(addUtcDays(
+          new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())),
+          1
+        )),
+        Start: toIsoDate(addUtcMonths(currentMonth, -5))
+      }
+    })
+  );
+
+  return createCostExplorerMonthlyTrend(output, now);
+}
+
+export function createCostExplorerMonthlyTrend(
+  output: Pick<GetCostAndUsageCommandOutput, "ResultsByTime">,
+  now: Date
+): CostUsageMonthlyPoint[] {
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const amountsByMonth = new Map(
+    (output.ResultsByTime ?? []).map((result) => [
+      result.TimePeriod?.Start?.slice(0, 7) ?? "",
+      roundUsd(Number(result.Total?.UnblendedCost?.Amount ?? 0))
+    ])
+  );
+
+  return Array.from({ length: 6 }, (_, index) => {
+    const month = toIsoMonth(addUtcMonths(currentMonth, index - 5));
+
+    return {
+      amount: amountsByMonth.get(month) ?? 0,
+      isEstimated: false,
+      isPartial: index === 5,
+      month
+    };
+  });
+}
+
+function createSampleMonthlyTrend(now: Date): CostUsageMonthlyPoint[] {
+  const currentMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  return Array.from({ length: 6 }, (_, index) => {
+    const monthDate = addUtcMonths(currentMonth, index - 5);
+    const isPartial = index === 5;
+
+    return {
+      amount: isPartial ? roundUsd(now.getUTCDate() * 5.5) : roundUsd(132 + index * 4.8),
+      isEstimated: true,
+      isPartial,
+      month: toIsoMonth(monthDate)
+    };
+  });
+}
+
+function createMonthlyComparison(
+  monthlyTrend: readonly CostUsageMonthlyPoint[],
+  now: Date
+): CostUsageMonthlyComparison {
+  const previousMonthActual = monthlyTrend.at(-2)?.amount ?? 0;
+  const currentMonthToDate = monthlyTrend.at(-1)?.amount ?? 0;
+  const daysInMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  const currentMonthForecast = roundUsd(
+    (currentMonthToDate / Math.max(now.getUTCDate(), 1)) * daysInMonth
+  );
+  const forecastChangeAmount = roundUsd(currentMonthForecast - previousMonthActual);
+
+  return {
+    currentMonthForecast: createMoneyEstimate(currentMonthForecast),
+    currentMonthToDate: createMoneyEstimate(currentMonthToDate),
+    forecastChangeAmount: createMoneyEstimate(forecastChangeAmount),
+    forecastChangePercentage: previousMonthActual <= 0
+      ? null
+      : Math.round((forecastChangeAmount / previousMonthActual) * 1000) / 10,
+    previousMonthActual: createMoneyEstimate(previousMonthActual)
+  };
+}
+
+function scaleCostUsageMonthlyTrend(
+  monthlyTrend: readonly CostUsageMonthlyPoint[],
+  accountTotalAmount: number,
+  selectedTotalAmount: number
+): CostUsageMonthlyPoint[] {
+  return monthlyTrend.map((point) => ({
+    ...point,
+    amount: scaleCostUsageAmount(point.amount, accountTotalAmount, selectedTotalAmount),
+    isEstimated: true
+  }));
+}
+
+function createAllocatedMonthlyTrend(input: {
+  readonly accountMonthlyTrend: readonly CostUsageMonthlyPoint[];
+  readonly accountTotalAmount: number;
+  readonly projectAmount: number;
+}): CostUsageMonthlyPoint[] {
+  return input.accountMonthlyTrend.map((point) => ({
+    ...point,
+    amount: scaleCostUsageAmount(
+      point.amount,
+      input.accountTotalAmount,
+      input.projectAmount
+    ),
+    isEstimated: true
+  }));
+}
+
+function mergeTaggedMonthlyTrend(
+  allocatedTrend: readonly CostUsageMonthlyPoint[],
+  taggedTrend: readonly CostUsageMonthlyPoint[] | undefined
+): CostUsageMonthlyPoint[] {
+  if (taggedTrend === undefined) {
+    return [...allocatedTrend];
+  }
+
+  const allocatedByMonth = new Map(allocatedTrend.map((point) => [point.month, point]));
+
+  return taggedTrend.map((point) =>
+    point.isEstimated ? allocatedByMonth.get(point.month) ?? point : point
+  );
+}
+
+function reconcileProjectMonthlyTrends(input: {
+  readonly accountMonthlyTrend: readonly CostUsageMonthlyPoint[];
+  readonly projectRows: readonly CostProjectUsage[];
+  readonly taggedProjectMonthlyTrends: ReadonlyMap<string, readonly CostUsageMonthlyPoint[]>;
+}): CostProjectUsage[] {
+  if (input.accountMonthlyTrend.length === 0) {
+    return input.projectRows.map((row) => ({
+      ...row,
+      monthlyTrend: mergeTaggedMonthlyTrend(
+        row.monthlyTrend,
+        row.projectId === null
+          ? undefined
+          : input.taggedProjectMonthlyTrends.get(row.projectId)
+      )
+    }));
+  }
+
+  const monthlyTrendByProjectId = new Map<string | null, CostUsageMonthlyPoint[]>();
+
+  for (const accountPoint of input.accountMonthlyTrend) {
+    const exactPointByProjectId = new Map(
+      input.projectRows.flatMap((row) => {
+        if (row.projectId === null) return [];
+        const taggedPoint = input.taggedProjectMonthlyTrends
+          .get(row.projectId)
+          ?.find((point) => point.month === accountPoint.month && !point.isEstimated);
+
+        return taggedPoint === undefined ? [] : [[row.projectId, taggedPoint] as const];
+      })
+    );
+    const exactAmount = [...exactPointByProjectId.values()].reduce(
+      (sum, point) => sum + point.amount,
+      0
+    );
+    const estimatedRows = input.projectRows.filter(
+      (row) => row.projectId === null || !exactPointByProjectId.has(row.projectId)
+    );
+    const totalWeight = estimatedRows.reduce((sum, row) => sum + Math.max(row.amount, 0), 0);
+    const remainingAmount = Math.max(0, roundUsd(accountPoint.amount - exactAmount));
+    let allocatedAmount = 0;
+
+    for (const row of input.projectRows) {
+      const exactPoint = row.projectId === null
+        ? undefined
+        : exactPointByProjectId.get(row.projectId);
+      let point: CostUsageMonthlyPoint;
+
+      if (exactPoint !== undefined) {
+        point = exactPoint;
+      } else {
+        const estimatedIndex = estimatedRows.findIndex((estimatedRow) => estimatedRow === row);
+        const amount = estimatedIndex === estimatedRows.length - 1
+          ? roundUsd(remainingAmount - allocatedAmount)
+          : roundUsd(
+              remainingAmount * (
+                totalWeight > 0
+                  ? Math.max(row.amount, 0) / totalWeight
+                  : 1 / Math.max(estimatedRows.length, 1)
+              )
+            );
+        allocatedAmount = roundUsd(allocatedAmount + amount);
+        point = {
+          amount,
+          isEstimated: true,
+          isPartial: accountPoint.isPartial,
+          month: accountPoint.month
+        };
+      }
+
+      monthlyTrendByProjectId.set(row.projectId, [
+        ...(monthlyTrendByProjectId.get(row.projectId) ?? []),
+        point
+      ]);
+    }
+  }
+
+  return input.projectRows.map((row) => ({
+    ...row,
+    monthlyTrend: monthlyTrendByProjectId.get(row.projectId) ?? []
+  }));
+}
+
 function createSampleMetricSeries(rangeDates: CostRangeDates): CostMetricSeries[] {
   const start = new Date(`${rangeDates.startDate}T00:00:00.000Z`);
   const points = Array.from({ length: Math.min(rangeDates.dailyPointCount, 14) }, (_, index) => ({
@@ -1118,6 +1459,14 @@ function parseCostExplorerTagValue(value: string): string {
   }
 
   return value.trim();
+}
+
+function addUtcMonths(date: Date, monthCount: number): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + monthCount, 1));
+}
+
+function toIsoMonth(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function parseLoadBalancerDimension(resourceId: string): string {

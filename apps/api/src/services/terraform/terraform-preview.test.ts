@@ -4,8 +4,10 @@ import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import { TerraformDiagramValidationError } from "./diagram-to-terraform.js";
 import {
   getTerraformNestedBlockAttributes,
-  isTerraformNestedBlockAttribute
+  isTerraformNestedBlockAttribute,
+  isTerraformSingleNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
+import { createTerraformDiagnostics } from "./terraform-diagnostics.js";
 import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 
 test("generates Terraform code from resource nodes", () => {
@@ -827,8 +829,11 @@ test("omits AI semantic metadata that is not accepted by the Terraform provider"
             applicationPurpose: "content_board",
             instanceType: "t3.micro",
             servicePurpose: "content_board",
+            templateId: "ecs-fargate-container-app",
+            template_id: "legacy-template-id",
             terraformResourceName: "app_server",
-            terraformResourceType: "aws_instance"
+            terraformResourceType: "aws_instance",
+            tier: "private_app"
           }
         }
       })
@@ -850,7 +855,7 @@ test("omits AI semantic metadata that is not accepted by the Terraform provider"
   assert.doesNotMatch(terraformCode, /resource "aws_s3_bucket_public_access_block"/);
   assert.doesNotMatch(
     terraformCode,
-    /bucket_purpose|public_access_block\s*=|service_purpose|origin_resource_id|application_purpose|terraform_resource_name|terraform_resource_type/
+    /bucket_purpose|public_access_block\s*=|service_purpose|origin_resource_id|application_purpose|template_id|terraform_resource_name|terraform_resource_type|tier\s*=/
   );
 });
 
@@ -939,16 +944,138 @@ test("renders AWS nested block lists as Terraform blocks with snake_case attribu
   assert.doesNotMatch(terraformCode, /cidrBlock|gatewayId|cidrBlocks|fromPort|toPort/);
 });
 
+test("renders Kubernetes workload nested blocks and provider references", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "namespace-1",
+        type: "kubernetes_namespace",
+        kind: "resource",
+        label: "sketchcatch",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "kubernetes_namespace",
+          resourceName: "sketchcatch",
+          fileName: "workload",
+          values: { metadata: { name: "sketchcatch" } }
+        }
+      }),
+      makeNode({
+        id: "deployment-1",
+        type: "kubernetes_deployment",
+        kind: "resource",
+        label: "web",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "kubernetes_deployment",
+          resourceName: "web",
+          fileName: "workload",
+          values: {
+            metadata: { name: "web", namespace: "kubernetes_namespace.sketchcatch.id" },
+            spec: {
+              replicas: 1,
+              selector: { matchLabels: { app: "web" } },
+              template: {
+                metadata: { labels: { app: "web" } },
+                spec: {
+                  container: [{ name: "web", image: "nginx:stable", port: [{ containerPort: 80 }] }]
+                }
+              }
+            }
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /resource "kubernetes_namespace" "sketchcatch"/);
+  assert.match(terraformCode, /resource "kubernetes_deployment" "web"/);
+  assert.match(terraformCode, /namespace = kubernetes_namespace\.sketchcatch\.id/);
+  assert.match(terraformCode, /selector \{/);
+  assert.match(terraformCode, /template \{/);
+  assert.match(terraformCode, /container \{/);
+  assert.match(terraformCode, /container_port = 80/);
+});
+
+test("renders Launch Template instance profiles and dependency addresses with Terraform syntax", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "launch-template-1",
+        type: "aws_launch_template",
+        kind: "resource",
+        label: "api",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_launch_template",
+          resourceName: "api",
+          fileName: "compute",
+          values: {
+            imageId: "data.aws_ami.al2023.id",
+            instanceType: "t3.micro",
+            iamInstanceProfile: {
+              name: "aws_iam_instance_profile.api_agent.name"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "bucket-policy-1",
+        type: "aws_s3_bucket_policy",
+        kind: "resource",
+        label: "site",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket_policy",
+          resourceName: "site",
+          fileName: "site",
+          values: {
+            bucket: "aws_s3_bucket.site.id",
+            dependsOn: [
+              "aws_s3_bucket_public_access_block.site",
+              "kubernetes_namespace.sketchcatch"
+            ],
+            policy: "{}"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(
+    terraformCode,
+    /iam_instance_profile \{[\s\S]*name = aws_iam_instance_profile\.api_agent\.name[\s\S]*\}/
+  );
+  assert.doesNotMatch(terraformCode, /iam_instance_profile\s*=/);
+  assert.match(
+    terraformCode,
+    /depends_on = \[[\s\S]*aws_s3_bucket_public_access_block\.site,[\s\S]*\]/
+  );
+  assert.doesNotMatch(terraformCode, /"aws_s3_bucket_public_access_block\.site"/);
+  assert.match(terraformCode, /kubernetes_namespace\.sketchcatch,/);
+  assert.doesNotMatch(terraformCode, /"kubernetes_namespace\.sketchcatch"/);
+});
+
 test("tracks curated nested block parameters as canonical camelCase keys", () => {
   const expectedNestedBlockAttributes: Record<string, string[]> = {
     aws_ami: ["filter"],
     aws_api_gateway_rest_api: ["endpointConfiguration"],
+    aws_appautoscaling_policy: ["targetTrackingScalingPolicyConfiguration"],
     aws_autoscaling_group: ["launchTemplate", "tag"],
     aws_db_parameter_group: ["parameter"],
     aws_dynamodb_table: ["attribute"],
     aws_cloudfront_cache_policy: ["parametersInCacheKeyAndForwardedToOrigin"],
     aws_cloudfront_distribution: [
       "defaultCacheBehavior",
+      "orderedCacheBehavior",
       "origin",
       "restrictions",
       "viewerCertificate"
@@ -962,7 +1089,16 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_instance: ["rootBlockDevice"],
     aws_eks_cluster: ["vpcConfig"],
     aws_eks_node_group: ["scalingConfig"],
+    aws_ecs_cluster: ["setting"],
+    aws_ecs_service: ["deploymentCircuitBreaker", "loadBalancer", "networkConfiguration"],
     aws_lambda_function: ["environment"],
+    aws_launch_template: [
+      "iamInstanceProfile",
+      "metadataOptions",
+      "monitoring",
+      "networkInterfaces",
+      "tagSpecifications"
+    ],
     aws_route_table: ["route"],
     aws_s3_bucket_server_side_encryption_configuration: ["rule"],
     aws_s3_bucket_lifecycle_configuration: ["rule"],
@@ -1122,6 +1258,335 @@ test("renders route table association references with Terraform snake_case attri
   assert.match(terraformCode, /subnet_id = aws_subnet\.public\.id/);
   assert.match(terraformCode, /route_table_id = aws_route_table\.public\.id/);
   assert.doesNotMatch(terraformCode, /subnetId|routeTableId/);
+});
+
+test("renders deployable Terraform defaults for AI-generated CI/CD resources", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "codebuild-role",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "CodeBuild Role",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_iam_role",
+          resourceName: "codebuild_service_role",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-codebuild-service-role",
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "codebuild.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            })
+          }
+        }
+      }),
+      makeNode({
+        id: "codebuild",
+        type: "aws_codebuild_project",
+        kind: "resource",
+        label: "CodeBuild Project",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codebuild_project",
+          resourceName: "build",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-build",
+            serviceRole: "aws_iam_role.codebuild_service_role.arn",
+            artifacts: { type: "NO_ARTIFACTS" },
+            environment: {
+              computeType: "BUILD_GENERAL1_SMALL",
+              image: "aws/codebuild/standard:7.0",
+              type: "LINUX_CONTAINER"
+            },
+            source: {
+              type: "NO_SOURCE",
+              buildspec: "version: 0.2\nphases:\n  build:\n    commands:\n      - echo \"SketchCatch build placeholder\""
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "codestar",
+        type: "aws_codestarconnections_connection",
+        kind: "resource",
+        label: "CodeStar Connection",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codestarconnections_connection",
+          resourceName: "github",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-github",
+            providerType: "GitHub"
+          }
+        }
+      }),
+      makeNode({
+        id: "artifact-bucket",
+        type: "aws_s3_bucket",
+        kind: "resource",
+        label: "Pipeline Artifacts",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "codepipeline_artifacts",
+          fileName: "cicd",
+          values: {
+            bucket: "sketchcatch-pipeline-artifacts-example"
+          }
+        }
+      }),
+      makeNode({
+        id: "pipeline-role",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "CodePipeline Role",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_iam_role",
+          resourceName: "codepipeline_service_role",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-codepipeline-service-role",
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "codepipeline.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            })
+          }
+        }
+      }),
+      makeNode({
+        id: "pipeline",
+        type: "aws_codepipeline",
+        kind: "resource",
+        label: "CodePipeline",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codepipeline",
+          resourceName: "pipeline",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-pipeline",
+            roleArn: "aws_iam_role.codepipeline_service_role.arn",
+            artifactStore: {
+              location: "aws_s3_bucket.codepipeline_artifacts.bucket",
+              type: "S3"
+            },
+            stage: [
+              {
+                name: "Source",
+                action: [
+                  {
+                    category: "Source",
+                    configuration: {
+                      BranchName: "main",
+                      ConnectionArn: "aws_codestarconnections_connection.github.arn",
+                      FullRepositoryId: "example-org/example-repo"
+                    },
+                    name: "Source",
+                    outputArtifacts: ["source_output"],
+                    owner: "AWS",
+                    provider: "CodeStarSourceConnection",
+                    version: "1"
+                  }
+                ]
+              },
+              {
+                name: "Build",
+                action: [
+                  {
+                    category: "Build",
+                    configuration: {
+                      ProjectName: "aws_codebuild_project.build.name"
+                    },
+                    inputArtifacts: ["source_output"],
+                    name: "Build",
+                    outputArtifacts: ["build_output"],
+                    owner: "AWS",
+                    provider: "CodeBuild",
+                    version: "1"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }),
+      makeNode({
+        id: "codedeploy-role",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "CodeDeploy Role",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_iam_role",
+          resourceName: "codedeploy_service_role",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-codedeploy-service-role",
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "codedeploy.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            })
+          }
+        }
+      }),
+      makeNode({
+        id: "codedeploy-app",
+        type: "aws_codedeploy_app",
+        kind: "resource",
+        label: "CodeDeploy App",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codedeploy_app",
+          resourceName: "codedeploy_app",
+          fileName: "cicd",
+          values: {
+            name: "sketchcatch-app",
+            computePlatform: "Server"
+          }
+        }
+      }),
+      makeNode({
+        id: "codedeploy-group",
+        type: "aws_codedeploy_deployment_group",
+        kind: "resource",
+        label: "CodeDeploy Deployment Group",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_codedeploy_deployment_group",
+          resourceName: "codedeploy_group",
+          fileName: "cicd",
+          values: {
+            appName: "aws_codedeploy_app.codedeploy_app.name",
+            deploymentGroupName: "sketchcatch-deployment-group",
+            serviceRoleArn: "aws_iam_role.codedeploy_service_role.arn",
+            deploymentStyle: {
+              deploymentOption: "WITHOUT_TRAFFIC_CONTROL",
+              deploymentType: "IN_PLACE"
+            }
+          }
+        }
+      }),
+      makeNode({
+        id: "caller",
+        type: "aws_caller_identity",
+        kind: "resource",
+        label: "Caller",
+        parameters: {
+          terraformBlockType: "data",
+          resourceType: "aws_caller_identity",
+          resourceName: "current",
+          fileName: "cicd",
+          values: {}
+        }
+      }),
+      makeNode({
+        id: "ssm",
+        type: "aws_ssm_parameter",
+        kind: "resource",
+        label: "SSM Parameter",
+        parameters: {
+          terraformBlockType: "data",
+          resourceType: "aws_ssm_parameter",
+          resourceName: "ami",
+          fileName: "cicd",
+          values: {
+            name: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /resource "aws_codebuild_project" "build" \{/);
+  assert.match(terraformCode, /resource "aws_codepipeline" "pipeline" \{/);
+  assert.match(terraformCode, /resource "aws_codedeploy_deployment_group" "codedeploy_group" \{/);
+  assert.match(terraformCode, /resource "aws_codestarconnections_connection" "github" \{/);
+  assert.match(terraformCode, /data "aws_caller_identity" "current" \{/);
+  assert.match(terraformCode, /data "aws_ssm_parameter" "ami" \{/);
+  assert.equal(
+    createTerraformDiagnostics(terraformCode).filter((diagnostic) => diagnostic.severity === "error").length,
+    0
+  );
+});
+
+test("renders Classic ELB health checks and listeners as nested blocks", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "classic-elb",
+        type: "aws_elb",
+        kind: "resource",
+        label: "Classic ELB",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_elb",
+          resourceName: "classic",
+          fileName: "main",
+          values: {
+            healthCheck: {
+              healthyThreshold: 2,
+              interval: 30,
+              target: "HTTP:80/",
+              timeout: 3,
+              unhealthyThreshold: 2
+            },
+            listener: [{
+              instancePort: 80,
+              instanceProtocol: "http",
+              lbPort: 80,
+              lbProtocol: "http"
+            }]
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /health_check \{[\s\S]*healthy_threshold = 2[\s\S]*\}/);
+  assert.match(terraformCode, /listener \{[\s\S]*instance_port = 80[\s\S]*lb_protocol = "http"[\s\S]*\}/);
+  assert.doesNotMatch(terraformCode, /health_check\s*=|listener\s*=/);
+  assert.equal(isTerraformSingleNestedBlockAttribute("aws_elb", "healthCheck"), true);
+  assert.equal(isTerraformSingleNestedBlockAttribute("aws_elb", "listener"), false);
+  assert.equal(isTerraformSingleNestedBlockAttribute("aws_waf_web_acl", "defaultAction"), true);
+  assert.equal(
+    isTerraformSingleNestedBlockAttribute(
+      "aws_s3_bucket_replication_configuration",
+      "destination",
+      ["rule"]
+    ),
+    true
+  );
 });
 
 function makeNode(

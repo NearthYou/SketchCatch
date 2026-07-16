@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   AlertCircle,
   Check,
@@ -9,15 +8,19 @@ import {
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Rocket,
   Save
 } from "lucide-react";
 
+import { WorkspaceDeploymentNotificationCenterSlot } from "../../components/notifications/DeploymentNotificationCenter";
+import { ProductBrand } from "../../components/ui/ProductBrand";
 import styles from "./diagram-editor.module.css";
 import { getSaveStatusTone, isSaveInProgress } from "./workspace-project-save-status";
 
 type WorkspaceProjectBarProps = {
   readonly actions: {
     readonly onSave?: (() => Promise<unknown>) | undefined;
+    readonly onSaveAndDeploy?: (() => void) | undefined;
     readonly onToggleLeftPanel: () => void;
     readonly onToggleRightPanel: () => void;
   };
@@ -49,25 +52,12 @@ export function WorkspaceProjectBar({
     void actions.onSave?.();
   }
 
+  function handleSaveAndDeploy(): void {
+    actions.onSaveAndDeploy?.();
+  }
   return (
     <header className={styles.projectBar}>
-      <a
-        aria-label="대시보드로 이동"
-        className={styles.projectBarBrand}
-        href={workspace.dashboardHref}
-        title="대시보드"
-      >
-        <Image
-          alt=""
-          aria-hidden="true"
-          className={styles.projectBarLogo}
-          height={28}
-          priority
-          src="/sketchcatch-logo.png"
-          width={19}
-        />
-        <span>SketchCatch</span>
-      </a>
+      <ProductBrand href={workspace.dashboardHref} />
 
       <div className={styles.projectBarContext}>
         <strong title={workspace.projectName}>{workspace.projectName}</strong>
@@ -98,6 +88,19 @@ export function WorkspaceProjectBar({
             type="button"
           >
             <Save aria-hidden="true" size={17} />
+          </button>
+        ) : null}
+
+        <WorkspaceDeploymentNotificationCenterSlot />
+
+        {actions.onSaveAndDeploy ? (
+          <button
+            className={styles.projectBarPrimaryAction}
+            onClick={handleSaveAndDeploy}
+            type="button"
+          >
+            <Rocket aria-hidden="true" size={16} />
+            <span>배포</span>
           </button>
         ) : null}
 

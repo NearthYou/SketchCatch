@@ -207,13 +207,14 @@ export function validateParameters(
   currentNodeId: string,
   catalog: ParameterCatalog
 ): ParameterValidationResult {
+  // Validate Terraform metadata separately from the friendly label shown on the Board and resource list.
   const metadataErrors: ParameterValidationResult["metadataErrors"] = {};
   const parameterErrors: Record<string, string> = {};
   const trimmedResourceName = params.resourceName.trim();
   const trimmedFileName = params.fileName.trim();
 
   if (!trimmedResourceName) {
-    metadataErrors.resourceName = "Resource name은 필수입니다.";
+    metadataErrors.resourceName = "Terraform resource name은 필수입니다.";
   } else if (!terraformLocalNamePattern.test(trimmedResourceName)) {
     metadataErrors.resourceName = "영문자 또는 _로 시작하고 영문자, 숫자, _만 사용할 수 있습니다.";
   } else if (hasDuplicateResourceName(params, nodes, currentNodeId, catalog)) {
@@ -295,7 +296,7 @@ export function buildReferenceOptions(
     }
 
     const referencePrefix = params.terraformBlockType === "data" ? "data." : "";
-    const reference = `${referencePrefix}${params.resourceType}.${params.resourceName}.${getReferenceAttribute(definition)}`;
+    const reference = `${referencePrefix}${params.resourceType}.${params.resourceName}.${getReferenceAttribute(definition, params.resourceType)}`;
 
     options.push({
       label: `${node.label || params.resourceName} (${reference})`,
@@ -558,6 +559,7 @@ function hasDuplicateResourceName(
   currentNodeId: string,
   catalog: ParameterCatalog
 ) {
+  // Terraform identity namespace includes block type as well as resource type and local name.
   return nodes.some((node) => {
     if (node.id === currentNodeId || node.kind !== "resource") {
       return false;
@@ -566,13 +568,25 @@ function hasDuplicateResourceName(
     const otherParams = mergeNodeParameters(node, catalog);
 
     return (
+      (otherParams.terraformBlockType ?? "resource") === (params.terraformBlockType ?? "resource") &&
       otherParams.resourceType === params.resourceType &&
       otherParams.resourceName.trim() === params.resourceName.trim()
     );
   });
 }
 
-export function getReferenceAttribute(definition: ParameterCatalogDefinition) {
+export function getReferenceAttribute(
+  definition: ParameterCatalogDefinition,
+  targetResourceType?: string
+) {
+  const targetSpecificAttribute = targetResourceType
+    ? definition.referenceAttributesByTargetType?.[targetResourceType]
+    : undefined;
+
+  if (targetSpecificAttribute) {
+    return targetSpecificAttribute;
+  }
+
   if (definition.referenceAttribute) {
     return definition.referenceAttribute;
   }

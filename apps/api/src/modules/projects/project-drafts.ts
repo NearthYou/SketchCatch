@@ -1,9 +1,10 @@
-import type { ProjectDraft, DiagramJson } from "@sketchcatch/types";
+import type { ProjectDraft, DiagramJson, TerraformSyncFileInput } from "@sketchcatch/types";
 
 export type ProjectDraftRow = {
   id: string;
   projectId: string;
   diagramJson: DiagramJson;
+  terraformFiles: TerraformSyncFileInput[] | null;
   revision: number;
   serverSavedAt: Date;
   createdAt: Date;
@@ -19,6 +20,7 @@ export function toProjectDraft(row: ProjectDraftRow): ProjectDraft {
     id: row.id,
     projectId: row.projectId,
     diagramJson: row.diagramJson,
+    ...(row.terraformFiles ? { terraformFiles: row.terraformFiles } : {}),
     revision: row.revision,
     serverSavedAt: row.serverSavedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),

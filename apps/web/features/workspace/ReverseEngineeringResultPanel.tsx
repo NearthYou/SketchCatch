@@ -1,4 +1,5 @@
 import type {
+  ArchitectureBoardCompilationProposal,
   DiscoveredResource,
   ReverseEngineeringScanLogLine,
   ReverseEngineeringScanResponse,
@@ -7,6 +8,10 @@ import type {
 import type { ReactNode } from "react";
 import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
+import {
+  createReverseEngineeringCompilationReview,
+  formatCompilationScore
+} from "./reverse-engineering-compilation-review";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import { ReverseEngineeringResourceParametersPanel } from "./ReverseEngineeringResourceParametersPanel";
 import styles from "./reverse-engineering.module.css";
@@ -17,6 +22,7 @@ export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
   readonly applyState: ReverseEngineeringApplyState;
   readonly boardCandidates: readonly ReverseEngineeringBoardCandidate[];
+  readonly compilation: ArchitectureBoardCompilationProposal;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
@@ -33,6 +39,7 @@ export function ReverseEngineeringResultPanel({
   applyMessage,
   applyState,
   boardCandidates,
+  compilation,
   comparison,
   createProjectOnApply,
   hasCurrentBoardResources,
@@ -55,6 +62,7 @@ export function ReverseEngineeringResultPanel({
   );
   const selectedCandidate = getSelectedBoardCandidate({ candidates: boardCandidates, selectedCandidateId });
   const primaryApplyLabel = getPrimaryApplyLabel({ createProjectOnApply, hasCurrentBoardResources });
+  const compilationReview = createReverseEngineeringCompilationReview(compilation);
 
   return (
     <>
@@ -107,6 +115,46 @@ export function ReverseEngineeringResultPanel({
             {applyMessage}
           </p>
         ) : null}
+      </section>
+
+      <section className={styles.compilationReview} aria-label="보드 정리 검토">
+        <div className={styles.compilationReviewHeader}>
+          <h3>보드 정리 검토</h3>
+          <strong>{compilationReview.changeCount}개 변경 제안</strong>
+        </div>
+        <div className={styles.compilationStats}>
+          <span>
+            정리 점수 ↓
+            <strong>
+              {formatCompilationScore(compilationReview.quality.before.score)} → {" "}
+              {formatCompilationScore(compilationReview.quality.after.score)}
+            </strong>
+          </span>
+          <span>
+            변경 거리
+            <strong>{formatCompilationScore(compilationReview.quality.compilationDistance)}</strong>
+          </span>
+        </div>
+        {compilationReview.diagnostics.length > 0 ? (
+          <ul className={styles.compilationDiagnostics}>
+            {compilationReview.diagnostics.map((diagnostic) => (
+              <li key={diagnostic.code} data-level={diagnostic.level}>
+                <strong>{diagnostic.summary}</strong>
+                <span>{diagnostic.message}</span>
+              </li>
+            ))}
+            {compilationReview.hiddenDiagnosticCount > 0 ? (
+              <li className={styles.compilationDiagnosticRemainder}>
+                진단 {compilationReview.hiddenDiagnosticCount}개 더 있음
+              </li>
+            ) : null}
+          </ul>
+        ) : (
+          <p className={styles.compilationHint}>확인할 진단이 없습니다.</p>
+        )}
+        <p className={styles.compilationProvenance}>
+          근거: {compilationReview.referenceTemplateIds.join(" · ") || "일반 배치 규칙"}
+        </p>
       </section>
 
       <ReverseEngineeringDetailGroup title="부분 실패">

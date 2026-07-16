@@ -5,14 +5,26 @@ import { ArrowRight, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   filterBoardTemplates,
+  getBoardTemplateRelationshipCount,
+  getBoardTemplateResourceCount,
+  isBoardTemplateAvailable,
   listBoardTemplateTags,
+  type AvailableBoardTemplate,
   type BoardTemplate,
   type BoardTemplateSort
 } from "../../features/resource-settings/template-library";
+import { BoardThumbnailImage } from "../architecture-board/BoardThumbnailImage";
+import { SelectMenu, type SelectMenuOption } from "../ui/SelectMenu";
 import styles from "./TemplateGallery.module.css";
 
+const TEMPLATE_SORT_OPTIONS: readonly SelectMenuOption[] = [
+  { label: "추천순", value: "recommended" },
+  { label: "이름순", value: "name" },
+  { label: "Resource 많은 순", value: "resources" }
+];
+
 export type TemplateGalleryProps = {
-  readonly actionHref?: ((template: BoardTemplate) => string) | undefined;
+  readonly actionHref?: ((template: AvailableBoardTemplate) => string) | undefined;
   readonly actionLabel: string;
   readonly onSelect?: ((templateId: string) => void) | undefined;
   readonly selectedTemplateId?: string | null | undefined;
@@ -31,6 +43,13 @@ export function TemplateGallery({
   const [sort, setSort] = useState<BoardTemplateSort>("recommended");
   const [tag, setTag] = useState("all");
   const tags = useMemo(() => listBoardTemplateTags(templates), [templates]);
+  const tagOptions = useMemo<readonly SelectMenuOption[]>(
+    () => [
+      { label: "전체", value: "all" },
+      ...tags.map((templateTag) => ({ label: templateTag, value: templateTag }))
+    ],
+    [tags]
+  );
   const visibleTemplates = useMemo(
     () => filterBoardTemplates(templates, { query, sort, tag }),
     [query, sort, tag, templates]
@@ -49,26 +68,30 @@ export function TemplateGallery({
             value={query}
           />
         </label>
-        <label className={styles.selectField}>
+        <div className={styles.selectField}>
           <span>Tag</span>
-          <select onChange={(event) => setTag(event.currentTarget.value)} value={tag}>
-            <option value="all">전체</option>
-            {tags.map((templateTag) => (
-              <option key={templateTag} value={templateTag}>{templateTag}</option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.selectField}>
+          <SelectMenu
+            ariaLabel="Template Tag 선택"
+            emptyLabel="Tag 선택"
+            onChange={setTag}
+            options={tagOptions}
+            size="large"
+            tone="surface"
+            value={tag}
+          />
+        </div>
+        <div className={styles.selectField}>
           <span>정렬</span>
-          <select
-            onChange={(event) => setSort(event.currentTarget.value as BoardTemplateSort)}
+          <SelectMenu
+            ariaLabel="Template 정렬 선택"
+            emptyLabel="정렬 선택"
+            onChange={(value) => setSort(value as BoardTemplateSort)}
+            options={TEMPLATE_SORT_OPTIONS}
+            size="large"
+            tone="surface"
             value={sort}
-          >
-            <option value="recommended">추천순</option>
-            <option value="name">이름순</option>
-            <option value="resources">Resource 많은 순</option>
-          </select>
-        </label>
+          />
+        </div>
       </div>
 
       {visibleTemplates.length === 0 ? (
@@ -79,11 +102,25 @@ export function TemplateGallery({
       ) : (
         <div className={styles.grid}>
           {visibleTemplates.map((template) => {
-            const selected = template.id === selectedTemplateId;
+            const available = isBoardTemplateAvailable(template);
+            const selected = available && template.id === selectedTemplateId;
 
             return (
-              <article className={selected ? styles.cardSelected : styles.card} key={template.id}>
-                <TemplateDiagramPreview template={template} />
+              <article
+                className={
+                  available
+                    ? selected
+                      ? styles.cardSelected
+                      : styles.card
+                    : styles.cardUnavailable
+                }
+                key={template.id}
+              >
+                <BoardThumbnailImage
+                  className={styles.preview}
+                  alt={`${template.title} Architecture 미리보기`}
+                  src={template.thumbnailSrc ?? null}
+                />
                 <div className={styles.cardBody}>
                   <div className={styles.cardHeading}>
                     <div>
@@ -91,16 +128,32 @@ export function TemplateGallery({
                       <p>{template.description}</p>
                     </div>
                     <dl>
-                      <div><dt>Resource</dt><dd>{template.diagramJson.nodes.length}</dd></div>
-                      <div><dt>관계</dt><dd>{template.diagramJson.edges.length}</dd></div>
+                      <div>
+                        <dt>Resource</dt>
+                        <dd>{available ? getBoardTemplateResourceCount(template) : "—"}</dd>
+                      </div>
+                      <div>
+                        <dt>관계</dt>
+                        <dd>{available ? getBoardTemplateRelationshipCount(template) : "—"}</dd>
+                      </div>
                     </dl>
                   </div>
                   <div className={styles.tags}>
-                    {template.tags.map((templateTag) => <span key={templateTag}>{templateTag}</span>)}
+                    {template.tags.map((templateTag) => (
+                      <span key={templateTag}>{templateTag}</span>
+                    ))}
                   </div>
-                  {actionHref ? (
+                  {!available ? (
+                    <div className={styles.unavailableAction}>
+                      <span>{template.unavailableReason}</span>
+                      <button aria-disabled="true" disabled type="button">
+                        미리보기만 제공
+                      </button>
+                    </div>
+                  ) : actionHref ? (
                     <Link className={styles.action} href={actionHref(template)}>
-                      {actionLabel}<ArrowRight aria-hidden="true" size={15} />
+                      {actionLabel}
+                      <ArrowRight aria-hidden="true" size={15} />
                     </Link>
                   ) : (
                     <button
@@ -120,60 +173,4 @@ export function TemplateGallery({
       )}
     </section>
   );
-}
-
-// Template의 실제 node 위치를 간단한 Architecture 미리보기로 축소해 보여줍니다.
-function TemplateDiagramPreview({ template }: { readonly template: BoardTemplate }) {
-  const bounds = getTemplateBounds(template);
-
-  return (
-    <div className={styles.preview} aria-label={`${template.title} Architecture 미리보기`}>
-      <svg aria-hidden="true" viewBox="0 0 100 60">
-        {template.diagramJson.edges.map((edge) => {
-          const source = template.diagramJson.nodes.find((node) => node.id === edge.sourceNodeId);
-          const target = template.diagramJson.nodes.find((node) => node.id === edge.targetNodeId);
-          if (!source || !target) return null;
-          const sourcePoint = toPreviewPoint(source.position, bounds);
-          const targetPoint = toPreviewPoint(target.position, bounds);
-          return <line key={edge.id} x1={sourcePoint.x} y1={sourcePoint.y} x2={targetPoint.x} y2={targetPoint.y} />;
-        })}
-      </svg>
-      {template.diagramJson.nodes.map((node) => {
-        const point = toPreviewPoint(node.position, bounds);
-        return (
-          <span
-            className={node.kind === "design" ? styles.previewArea : styles.previewNode}
-            key={node.id}
-            style={{ left: `${point.x}%`, top: `${point.y / 0.6}%` }}
-            title={node.label}
-          >
-            {node.label}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-type TemplateBounds = { readonly minX: number; readonly minY: number; readonly width: number; readonly height: number };
-
-// node 좌표를 미리보기 안의 0~100 범위로 바꾸기 위한 전체 경계를 계산합니다.
-function getTemplateBounds(template: BoardTemplate): TemplateBounds {
-  const positions = template.diagramJson.nodes.map((node) => node.position);
-  const minX = Math.min(...positions.map((position) => position.x));
-  const minY = Math.min(...positions.map((position) => position.y));
-  const maxX = Math.max(...positions.map((position) => position.x));
-  const maxY = Math.max(...positions.map((position) => position.y));
-  return { minX, minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
-}
-
-// Board 좌표 하나를 미리보기 여백 안의 위치로 바꿉니다.
-function toPreviewPoint(
-  position: { readonly x: number; readonly y: number },
-  bounds: TemplateBounds
-): { readonly x: number; readonly y: number } {
-  return {
-    x: 12 + ((position.x - bounds.minX) / bounds.width) * 76,
-    y: 10 + ((position.y - bounds.minY) / bounds.height) * 40
-  };
 }

@@ -1,19 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiagramJson } from "../../../../packages/types/src";
+import type {
+  DiagramJson,
+  TerraformSyncFileInput
+} from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
+import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
+import { listSourceRepositories } from "./api";
+import { buildBoardTemplateDiagram } from "../resource-settings/template-library";
+import {
+  resolveRepositoryAnalysisTemplate,
+  type RepositoryAnalysisHandoffLocation
+} from "./repository-template-handoff";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
+import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
+  WorkspaceAiContextInteraction,
+  WorkspaceTerraformAiContext,
   TerraformSafeFixApplyRequest,
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
+import { EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT } from "./workspace-terraform-ai";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { shouldFlushProjectDraftBeforePageExit } from "./project-draft-page-exit";
 import {
@@ -21,6 +34,10 @@ import {
   type ProjectDraftRepository
 } from "./project-draft-repository";
 import { runProjectDraftServerSaveFlight } from "./project-draft-save-flight";
+import {
+  createProjectBoardThumbnailLifecycle,
+  type ProjectBoardThumbnailLifecycleState
+} from "./project-board-thumbnail-lifecycle";
 import {
   getProjectSaveStatus,
   type ProjectLocalSaveState,
@@ -33,7 +50,6 @@ import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
 const SERVER_CHECKPOINT_INTERVAL_MS = 5 * 60 * 1000;
-const SERVER_SAVE_TOAST_VISIBLE_MS = 3200;
 
 type LoadState = "loading" | "ready" | "error";
 export type FlushDraftReason = "manual" | "checkpoint" | "external";
@@ -64,11 +80,16 @@ export type ProjectWorkspaceDraftManagerProps = {
   projectId: string;
   projectName?: string | undefined;
   repository?: ProjectDraftRepository | undefined;
+  repositoryAnalysisHandoff?: RepositoryAnalysisHandoffLocation | undefined;
   serverCheckpointIntervalMs?: number | undefined;
   workspaceId?: string | undefined;
 };
 
-export function ProjectWorkspaceDraftManager({
+export function ProjectWorkspaceDraftManager(props: ProjectWorkspaceDraftManagerProps) {
+  return <ProjectWorkspaceDraftManagerState key={props.projectId} {...props} />;
+}
+
+function ProjectWorkspaceDraftManagerState({
   initialRightPanelView,
   localCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
@@ -76,25 +97,37 @@ export function ProjectWorkspaceDraftManager({
   projectId,
   projectName = "Project workspace",
   repository = defaultProjectDraftRepository,
+  repositoryAnalysisHandoff,
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
   workspaceId
 }: ProjectWorkspaceDraftManagerProps) {
   const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
+  const [repositoryTemplateId, setRepositoryTemplateId] = useState<string | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
-  const [serverSaveToastVisible, setServerSaveToastVisible] = useState(false);
+  const [thumbnailLifecycleState, setThumbnailLifecycleState] =
+    useState<ProjectBoardThumbnailLifecycleState>("idle");
+  const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
-    useState<TerraformIssueAiRequest | null>(null);
-  const [terraformPreviewAiRequest, setTerraformPreviewAiRequest] =
-    useState<TerraformPreviewAiRequest | null>(null);
+  const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
+    EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT
+  );
+  const [selectedTerraformIssueKey, setSelectedTerraformIssueKey] = useState<string | null>(null);
+  const [terraformAiInteraction, setTerraformAiInteraction] =
+    useState<WorkspaceAiContextInteraction | null>(null);
   const [terraformSafeFixApplyRequest, setTerraformSafeFixApplyRequest] =
     useState<TerraformSafeFixApplyRequest | null>(null);
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
     useState<TerraformSafeFixApplyResult | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
+  const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>([]);
+  const [initialTerraformFiles, setInitialTerraformFiles] = useState<TerraformSyncFileInput[]>([]);
+  const [terraformFilesReplacement, setTerraformFilesReplacement] =
+    useState<TerraformFilesReplacementRequest | null>(null);
+  const terraformFilesReplacementIdRef = useRef(0);
+  const terraformAiInteractionIdRef = useRef(0);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasPendingLocalChangesRef = useRef(false);
@@ -103,11 +136,35 @@ export function ProjectWorkspaceDraftManager({
   const serverDirtyRef = useRef(false);
   const serverSavingRef = useRef(false);
   const serverSavePromiseRef = useRef<Promise<FlushDraftToServerResult> | null>(null);
-  const serverSaveToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const boardElementRef = useRef<HTMLElement | null>(null);
+  const thumbnailLifecycleRef = useRef<ReturnType<
+    typeof createProjectBoardThumbnailLifecycle
+  > | null>(null);
   const onDraftPersistenceReadyRef =
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+
+  useEffect(() => {
+    const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
+      projectId,
+      onStateChange: setThumbnailLifecycleState
+    });
+    thumbnailLifecycleRef.current = thumbnailLifecycle;
+    setThumbnailLifecycleState("idle");
+
+    if (boardElementRef.current) {
+      thumbnailLifecycle.setBoardElement(boardElementRef.current);
+    }
+
+    return () => {
+      if (thumbnailLifecycleRef.current === thumbnailLifecycle) {
+        thumbnailLifecycleRef.current = null;
+      }
+
+      thumbnailLifecycle.dispose();
+    };
+  }, [projectId]);
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -120,22 +177,6 @@ export function ProjectWorkspaceDraftManager({
     }
   }, []);
 
-  const clearServerSaveToastTimer = useCallback(() => {
-    if (serverSaveToastTimerRef.current) {
-      clearTimeout(serverSaveToastTimerRef.current);
-      serverSaveToastTimerRef.current = null;
-    }
-  }, []);
-
-  const showServerSaveToast = useCallback(() => {
-    clearServerSaveToastTimer();
-    setServerSaveToastVisible(true);
-    serverSaveToastTimerRef.current = setTimeout(() => {
-      setServerSaveToastVisible(false);
-      serverSaveToastTimerRef.current = null;
-    }, SERVER_SAVE_TOAST_VISIBLE_MS);
-  }, [clearServerSaveToastTimer]);
-
   const persistLocalDraftNow = useCallback(async (): Promise<LocalDraftPersistResult> => {
     const changeVersion = draftChangeVersionRef.current;
     const result = await repository.saveLocal({
@@ -143,6 +184,7 @@ export function ProjectWorkspaceDraftManager({
       localCacheWorkspaceId,
       projectId,
       diagramJson: latestDiagramRef.current,
+      terraformFiles: latestTerraformFilesRef.current,
       previousLocalDraft: localDraftRef.current
     });
     const current = draftChangeVersionRef.current === changeVersion;
@@ -223,6 +265,7 @@ export function ProjectWorkspaceDraftManager({
               localCacheWorkspaceId,
               projectId,
               diagramJson: latestDiagramRef.current,
+              terraformFiles: latestTerraformFilesRef.current,
               previousLocalDraft: baseLocalDraft,
               shouldSyncLocalDraft: () => draftChangeVersionRef.current === serverSaveVersion
             });
@@ -233,7 +276,16 @@ export function ProjectWorkspaceDraftManager({
                 serverDirtyRef.current = false;
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
-                showServerSaveToast();
+                const thumbnailLifecycle = thumbnailLifecycleRef.current;
+
+                if (thumbnailLifecycle) {
+                  try {
+                    await thumbnailLifecycle.requestSavedRevision(result.serverDraft.revision);
+                  } catch {
+                    // The server draft remains saved; the compact failure control owns retry.
+                  }
+                }
+
                 return result;
               }
 
@@ -257,7 +309,9 @@ export function ProjectWorkspaceDraftManager({
             setServerSaveState("server-dirty");
             return result;
           } catch (error) {
-            setServerSaveState(draftChangeVersionRef.current === serverSaveVersion ? "server-failed" : "server-dirty");
+            setServerSaveState(
+              draftChangeVersionRef.current === serverSaveVersion ? "server-failed" : "server-dirty"
+            );
             return {
               ok: false,
               error,
@@ -277,14 +331,9 @@ export function ProjectWorkspaceDraftManager({
       projectId,
       repository,
       setCurrentLocalDraft,
-      showServerSaveToast,
       workspaceId
     ]
   );
-
-  useEffect(() => {
-    return clearServerSaveToastTimer;
-  }, [clearServerSaveToastTimer]);
 
   const flushDraftBeforePageExit = useCallback(() => {
     if (
@@ -301,17 +350,49 @@ export function ProjectWorkspaceDraftManager({
     void flushDraftToServer("external");
   }, [flushDraftToServer]);
 
+  const saveAndOpenDeployment = useCallback((): void => {
+    setDeploymentOpenRequestId((requestId) => requestId + 1);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     draftReadyRef.current = false;
+    setLoadState("loading");
+    setTerraformAiContext(EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT);
+    setSelectedTerraformIssueKey(null);
+    setTerraformAiInteraction(null);
+    setTerraformSafeFixApplyRequest(null);
+    setTerraformSafeFixApplyResult(null);
 
     async function loadWorkspace() {
       try {
+        let fallbackDiagram = EMPTY_DIAGRAM;
+        let verifiedRepositoryTemplateId: string | null = null;
+
+        if (repositoryAnalysisHandoff) {
+          const sourceRepositories = await listSourceRepositories(projectId);
+          const template = resolveRepositoryAnalysisTemplate(
+            sourceRepositories,
+            repositoryAnalysisHandoff
+          );
+          const templateDiagram = buildBoardTemplateDiagram(template.id, {
+            projectSlug: projectName,
+            shortId: "workspace"
+          });
+
+          if (!templateDiagram) {
+            throw new Error("REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE");
+          }
+
+          fallbackDiagram = templateDiagram;
+          verifiedRepositoryTemplateId = template.id;
+        }
+
         const loadedDraft = await repository.load({
           workspaceId,
           localCacheWorkspaceId,
           projectId,
-          fallbackDiagram: EMPTY_DIAGRAM
+          fallbackDiagram
         });
 
         if (cancelled) {
@@ -320,21 +401,31 @@ export function ProjectWorkspaceDraftManager({
 
         const nextDiagram = restoreSavedDiagram(loadedDraft.diagramJson, EMPTY_DIAGRAM);
         latestDiagramRef.current = nextDiagram;
+        latestTerraformFilesRef.current = loadedDraft.terraformFiles ?? [];
         hasPendingLocalChangesRef.current = false;
         serverDirtyRef.current = loadedDraft.source === "local";
         draftChangeVersionRef.current = 0;
         setInitialDiagram(nextDiagram);
+        setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
+        setRepositoryTemplateId(verifiedRepositoryTemplateId);
         setCurrentLocalDraft(loadedDraft.localDraft);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
+
+        if (loadedDraft.source === "server" && loadedDraft.serverDraft) {
+          void thumbnailLifecycleRef.current
+            ?.requestInitialServerRevision(loadedDraft.serverDraft.revision)
+            .catch(() => undefined);
+        }
+
         draftReadyRef.current = true;
         setLoadState("ready");
-      } catch {
+      } catch (error) {
         if (cancelled) {
           return;
         }
 
-        setErrorMessage("프로젝트 draft를 DB에서 불러오지 못했습니다.");
+        setErrorMessage(getApiErrorMessage(error, "프로젝트 draft를 DB에서 불러오지 못했습니다."));
         setLoadState("error");
       }
     }
@@ -346,7 +437,16 @@ export function ProjectWorkspaceDraftManager({
       draftReadyRef.current = false;
       clearLocalSaveTimer();
     };
-  }, [clearLocalSaveTimer, localCacheWorkspaceId, projectId, repository, setCurrentLocalDraft, workspaceId]);
+  }, [
+    clearLocalSaveTimer,
+    localCacheWorkspaceId,
+    projectId,
+    projectName,
+    repository,
+    repositoryAnalysisHandoff,
+    setCurrentLocalDraft,
+    workspaceId
+  ]);
 
   useEffect(() => {
     function handleVisibilityChange() {
@@ -407,18 +507,88 @@ export function ProjectWorkspaceDraftManager({
     [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]
   );
 
-  const requestTerraformIssueAi = useCallback((request: TerraformIssueAiRequest): void => {
-    setTerraformIssueAiRequest(request);
+  const handleBoardReady = useCallback((element: HTMLElement): void => {
+    boardElementRef.current = element;
+    thumbnailLifecycleRef.current?.setBoardElement(element);
   }, []);
 
-  const requestTerraformSafeFixApply = useCallback((
-    request: TerraformSafeFixApplyRequest
-  ): void => {
-    setTerraformSafeFixApplyRequest(request);
+  const retryThumbnailCapture = useCallback((): void => {
+    void thumbnailLifecycleRef.current?.retry().catch(() => undefined);
   }, []);
+
+  const notifyTerraformAiInteraction = useCallback(
+    (
+      scope: WorkspaceAiContextInteraction["scope"],
+      diagnosticKey?: string | undefined
+    ): void => {
+      terraformAiInteractionIdRef.current += 1;
+      setTerraformAiInteraction({
+        ...(diagnosticKey ? { diagnosticKey } : {}),
+        id: terraformAiInteractionIdRef.current,
+        scope
+      });
+    },
+    []
+  );
+
+  const handleTerraformFilesChange = useCallback(
+    (files: readonly TerraformSyncFileInput[]): void => {
+      latestTerraformFilesRef.current = files.map((file) => ({ ...file }));
+      setInitialTerraformFiles(files.map((file) => ({ ...file })));
+      draftChangeVersionRef.current += 1;
+      hasPendingLocalChangesRef.current = true;
+      serverDirtyRef.current = true;
+      setLocalSaveState("local-pending");
+      setServerSaveState("server-dirty");
+      clearLocalSaveTimer();
+      localSaveTimerRef.current = setTimeout(() => {
+        void persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));
+      }, localSaveDebounceMs);
+    },
+    [clearLocalSaveTimer, localSaveDebounceMs, persistLocalDraftNow]
+  );
+
+  const handleTemplateWorkspaceApply = useCallback(
+    ({
+      diagramJson,
+      terraformFiles
+    }: {
+      readonly diagramJson: DiagramJson;
+      readonly terraformFiles: readonly TerraformSyncFileInput[];
+    }): void => {
+      const files = terraformFiles.map((file) => ({ ...file }));
+      latestDiagramRef.current = diagramJson;
+      handleTerraformFilesChange(files);
+      terraformFilesReplacementIdRef.current += 1;
+      setTerraformFilesReplacement({
+        diagramFingerprint: toTerraformRefreshFingerprint(diagramJson),
+        files,
+        id: terraformFilesReplacementIdRef.current
+      });
+    },
+    [handleTerraformFilesChange]
+  );
+
+  const handleTerraformFilesReplacementApplied = useCallback((replacementId: number): void => {
+    setTerraformFilesReplacement((currentReplacement) =>
+      currentReplacement?.id === replacementId ? null : currentReplacement
+    );
+  }, []);
+
+  const requestTerraformSafeFixApply = useCallback(
+    (request: TerraformSafeFixApplyRequest): void => {
+      setTerraformSafeFixApplyRequest(request);
+    },
+    []
+  );
 
   if (loadState === "loading") {
-    return <WorkspaceNotice title="Project loading" body="DB에 저장된 프로젝트 draft를 불러오는 중입니다." />;
+    return (
+      <WorkspaceNotice
+        title="Project loading"
+        body="DB에 저장된 프로젝트 draft를 불러오는 중입니다."
+      />
+    );
   }
 
   if (loadState === "error" || !initialDiagram) {
@@ -433,40 +603,64 @@ export function ProjectWorkspaceDraftManager({
   return (
     <>
       <DiagramEditor
+        draftStatusPanel={
+          thumbnailLifecycleState === "failed" ? (
+            <div className={styles.draftStatusPanel} role="status">
+              <span className={styles.thumbnailFailureText}>미리보기 저장 실패</span>
+              <button
+                className={styles.thumbnailRetryButton}
+                onClick={retryThumbnailCapture}
+                type="button"
+              >
+                다시 시도
+              </button>
+            </div>
+          ) : undefined
+        }
         floatingPanel={(context) => (
           <WorkspaceAiChatDock
             context={context}
             onApplyTerraformIssueFix={requestTerraformSafeFixApply}
             projectId={projectId}
-            terraformIssueRequest={terraformIssueAiRequest}
-            terraformPreviewRequest={terraformPreviewAiRequest}
+            repositoryAnalysisSourceRepositoryId={repositoryAnalysisHandoff?.sourceRepositoryId}
+            repositoryTemplateId={repositoryTemplateId ?? undefined}
+            selectedTerraformIssueKey={selectedTerraformIssueKey}
+            onSelectTerraformIssue={setSelectedTerraformIssueKey}
+            terraformAiContext={terraformAiContext}
+            terraformAiInteraction={terraformAiInteraction}
             terraformSafeFixApplyResult={terraformSafeFixApplyResult}
           />
         )}
         initialDiagram={initialDiagram}
+        onBoardReady={handleBoardReady}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
+        onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
+        onSaveAndDeployRequest={saveAndOpenDeployment}
         projectName={projectName}
         workspaceUserName={workspaceUserName}
         rightPanel={(context) => (
           <WorkspaceRightPanel
             context={context}
+            deploymentOpenRequestId={deploymentOpenRequestId}
+            deploymentAvailability="enabled"
             initialView={initialRightPanelView}
-            onTerraformIssueAiRequest={requestTerraformIssueAi}
-            onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
+            initialTerraformFiles={initialTerraformFiles}
+            onSelectTerraformIssue={setSelectedTerraformIssueKey}
+            onTerraformAiContextChange={setTerraformAiContext}
+            onTerraformAiInteraction={notifyTerraformAiInteraction}
             onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
+            onTerraformFilesChange={handleTerraformFilesChange}
+            onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
             projectId={projectId}
             projectName={projectName}
+            selectedTerraformIssueKey={selectedTerraformIssueKey}
+            terraformFilesReplacement={terraformFilesReplacement}
             terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
           />
         )}
         saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
       />
-      {serverSaveToastVisible ? (
-        <div className={styles.serverSaveToast} role="status" aria-live="polite">
-          저장되었습니다.
-        </div>
-      ) : null}
     </>
   );
 }

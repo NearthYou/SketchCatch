@@ -52,3 +52,55 @@ test("maskDeploymentMessage masks deployment credential key variants", () => {
   assert.equal(maskedMessage.includes("oauth-client-secret"), false);
   assert.equal(maskedMessage.includes("-----BEGIN PRIVATE KEY-----not-real"), false);
 });
+
+test("maskDeploymentMessage masks Authorization Bearer and Basic credentials", () => {
+  const message = [
+    "request started path=/api/deployments",
+    "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+    "authorization=Basic dXNlcjpwYXNzd29yZA==",
+    '{"Authorization":"Bearer opaque-json-credential"}'
+  ].join("\n");
+
+  const maskedMessage = maskDeploymentMessage(message);
+
+  assert.match(maskedMessage, /request started path=\/api\/deployments/);
+  assert.equal(maskedMessage.includes("eyJhbGciOiJIUzI1NiJ9"), false);
+  assert.equal(maskedMessage.includes("dXNlcjpwYXNzd29yZA=="), false);
+  assert.equal(maskedMessage.includes("opaque-json-credential"), false);
+});
+
+test("maskDeploymentMessage masks standalone JWTs and GitHub token families", () => {
+  const message = [
+    "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature",
+    `classic ghp_${"a".repeat(36)}`,
+    `fine-grained github_pat_${"b".repeat(82)}`
+  ].join("\n");
+
+  const maskedMessage = maskDeploymentMessage(message);
+
+  assert.equal(maskedMessage.includes("eyJhbGciOiJIUzI1NiJ9"), false);
+  assert.equal(maskedMessage.includes("ghp_"), false);
+  assert.equal(maskedMessage.includes("github_pat_"), false);
+});
+
+test("maskDeploymentMessage masks multiline PEM blocks and preserves normal developer logs", () => {
+  const message = [
+    "deploying api commit=abc123 status=running",
+    "-----BEGIN PRIVATE KEY-----",
+    "cHJpdmF0ZS1rZXktYm9keQ==",
+    "-----END PRIVATE KEY-----",
+    "request completed status=200 durationMs=42"
+  ].join("\n");
+
+  const maskedMessage = maskDeploymentMessage(message);
+
+  assert.equal(maskedMessage.includes("cHJpdmF0ZS1rZXktYm9keQ=="), false);
+  assert.match(maskedMessage, /deploying api commit=abc123 status=running/);
+  assert.match(maskedMessage, /request completed status=200 durationMs=42/);
+});
+
+test("maskDeploymentMessage leaves ordinary developer diagnostics unchanged", () => {
+  const message = "GET /api/projects status=200 token bucket remaining=19";
+
+  assert.equal(maskDeploymentMessage(message), message);
+});

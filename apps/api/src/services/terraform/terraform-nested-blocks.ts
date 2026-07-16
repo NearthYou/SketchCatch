@@ -1,6 +1,7 @@
 const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_ami: new Set(["filter"]),
   aws_api_gateway_rest_api: new Set(["endpointConfiguration"]),
+  aws_appautoscaling_policy: new Set(["targetTrackingScalingPolicyConfiguration"]),
   aws_autoscaling_group: new Set(["launchTemplate", "tag"]),
   aws_autoscaling_policy: new Set(["stepAdjustment", "targetTrackingConfiguration"]),
   aws_codebuild_project: new Set([
@@ -31,6 +32,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_cloudfront_cache_policy: new Set(["parametersInCacheKeyAndForwardedToOrigin"]),
   aws_cloudfront_distribution: new Set([
     "defaultCacheBehavior",
+    "orderedCacheBehavior",
     "origin",
     "restrictions",
     "viewerCertificate"
@@ -44,22 +46,73 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_codepipeline: new Set(["action", "artifactStore", "encryptionKey", "stage"]),
   aws_db_parameter_group: new Set(["parameter"]),
   aws_dynamodb_table: new Set(["attribute"]),
+  aws_dynamodb_global_table: new Set(["replica"]),
   aws_eks_cluster: new Set(["vpcConfig"]),
   aws_eks_node_group: new Set(["scalingConfig"]),
+  aws_ecs_cluster: new Set(["setting"]),
+  aws_ecs_service: new Set([
+    "deploymentCircuitBreaker",
+    "loadBalancer",
+    "networkConfiguration"
+  ]),
+  aws_elb: new Set(["healthCheck", "listener"]),
+  aws_ecr_repository: new Set(["imageScanningConfiguration"]),
   aws_instance: new Set(["rootBlockDevice"]),
   aws_lambda_function: new Set(["environment"]),
+  aws_launch_template: new Set([
+    "iamInstanceProfile",
+    "metadataOptions",
+    "monitoring",
+    "networkInterfaces",
+    "tagSpecifications"
+  ]),
   aws_lb_listener: new Set(["defaultAction", "forward"]),
   aws_lb_target_group: new Set(["healthCheck", "stickiness"]),
-  aws_launch_template: new Set(["metadataOptions", "tagSpecifications"]),
   aws_route_table: new Set(["route"]),
   aws_s3_bucket_server_side_encryption_configuration: new Set(["rule"]),
   aws_s3_bucket_website_configuration: new Set(["errorDocument", "indexDocument", "routingRule"]),
   aws_s3_bucket_lifecycle_configuration: new Set(["rule"]),
+  aws_s3_bucket_replication_configuration: new Set(["rule"]),
   aws_s3_bucket_versioning: new Set(["versioningConfiguration"]),
   aws_scheduler_schedule: new Set(["flexibleTimeWindow", "target"]),
   aws_security_group: new Set(["egress", "ingress"]),
-  aws_wafv2_web_acl: new Set(["defaultAction", "visibilityConfig"])
+  aws_waf_ipset: new Set(["ipSetDescriptors"]),
+  aws_waf_web_acl: new Set(["defaultAction"]),
+  aws_wafv2_web_acl: new Set(["defaultAction", "visibilityConfig"]),
+  kubernetes_namespace: new Set(["metadata"]),
+  kubernetes_deployment: new Set(["metadata", "spec"]),
+  kubernetes_service: new Set(["metadata", "spec"])
 };
+
+const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
+  "aws_autoscaling_policy.targetTrackingConfiguration": new Set(["predefinedMetricSpecification"]),
+  "aws_cloudfront_distribution.origin": new Set(["customOriginConfig", "s3OriginConfig"]),
+  "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"]),
+  "aws_s3_bucket_replication_configuration.rule": new Set(["destination"]),
+  "kubernetes_deployment.spec": new Set(["selector"])
+};
+
+const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
+  aws_elb: new Set(["healthCheck"]),
+  aws_lb_target_group: new Set(["healthCheck"]),
+  aws_waf_web_acl: new Set(["defaultAction"]),
+  "aws_s3_bucket_replication_configuration.rule": new Set(["destination"])
+};
+
+const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
+  "container",
+  "cookies",
+  "customOriginConfig",
+  "forwardedValues",
+  "geoRestriction",
+  "loadBalancer",
+  "metadata",
+  "networkConfiguration",
+  "port",
+  "predefinedMetricSpecification",
+  "spec",
+  "template"
+]);
 
 export function getTerraformNestedBlockAttributes(
   resourceType: string
@@ -69,9 +122,32 @@ export function getTerraformNestedBlockAttributes(
 
 export function isTerraformNestedBlockAttribute(
   resourceType: string,
-  attributeName: string
+  attributeName: string,
+  parentPath: readonly string[] = []
 ): boolean {
+  if (parentPath.length > 0) {
+    const pathKey = `${resourceType}.${parentPath.map(toCamelCase).join(".")}`;
+    if (TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH[pathKey]?.has(toCamelCase(attributeName))) {
+      return true;
+    }
+  }
+
   return getTerraformNestedBlockAttributes(resourceType)?.has(toCamelCase(attributeName)) === true;
+}
+
+export function isTerraformSingleNestedBlockAttribute(
+  resourceType: string,
+  attributeName: string,
+  parentPath: readonly string[] = []
+): boolean {
+  const pathKey = [resourceType, ...parentPath.map(toCamelCase)].join(".");
+
+  return TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH[pathKey]
+    ?.has(toCamelCase(attributeName)) === true;
+}
+
+export function isGenericTerraformNestedBlock(attributeName: string): boolean {
+  return GENERIC_TERRAFORM_NESTED_BLOCKS.has(toCamelCase(attributeName));
 }
 
 function toCamelCase(value: string): string {

@@ -29,7 +29,10 @@ import type {
   TerraformArtifactRecord,
   TerraformOutputRecord
 } from "./deployment-service.js";
-import type { TerraformRunResult } from "./terraform-runner.js";
+import {
+  terraformMutationTimeoutMs,
+  type TerraformRunResult
+} from "./terraform-runner.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -329,7 +332,7 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(result.deployment.blockedBy, null);
   assert.equal(result.deployment.blockedReason, null);
   assert.equal(applyArtifactStorage.downloadedStateObjectKey, stateObjectKey);
-  assert.equal(writtenState?.filePath.endsWith("\\terraform.tfstate"), true);
+  assert.equal(writtenState?.filePath.endsWith("terraform.tfstate"), true);
   assert.deepEqual(writtenState?.content, Buffer.from('{"version":4}'));
   assert.deepEqual(runnerStages, ["init", "destroy-plan", "show-json"]);
   assert.equal(planArtifactStorage.uploads[0]?.planArtifactId, planArtifactId);
@@ -357,7 +360,67 @@ test("runDeploymentDestroyPlan restores state and stores a destroy plan artifact
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });
 
-test("runDeploymentDestroyPlan only allows success or cleanup-capable failed deployments", async () => {
+test("application cleanup creates an approved rollback manifest without Terraform state", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate",
+    stateObjectKey: null
+  });
+  const planArtifactStorage = new FakePlanArtifactStorage();
+  let manifest = "";
+
+  const result = await runDeploymentDestroyPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      ...createDestroyPlanOptions([]),
+      planArtifactStorage,
+      generatePlanArtifactId: () => planArtifactId,
+      prepareApplicationCleanupPlan: async () => ({
+        releaseId: "55555555-5555-4555-8555-555555555555",
+        runtimeTargetKind: "ecs_fargate",
+        currentRevision: "task-definition/api:42",
+        previousRevision: "task-definition/api:41"
+      }),
+      writeApplicationCleanupPlanFile: async (_filePath, content) => {
+        manifest = content;
+      },
+      runTerraformInit: async () => {
+        throw new Error("application cleanup must not run Terraform init");
+      }
+    }
+  );
+
+  assert.equal(result.deployment.currentPlanArtifactId, planArtifactId);
+  assert.equal(repository.savedPlans[0]?.planArtifact.operation, "destroy");
+  assert.match(manifest, /application_release_cleanup_plan/);
+  assert.match(manifest, /task-definition\/api:41/);
+});
+
+test("application cleanup planning rejects a deployment without a runtime target kind", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    scope: "application",
+    targetKind: null,
+    stateObjectKey: null
+  });
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroyPlan(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          ...createDestroyPlanOptions([]),
+          planArtifactStorage: new FakePlanArtifactStorage()
+        }
+      ),
+    /Deployment target kind is missing/
+  );
+});
+
+test("runDeploymentDestroyPlan rejects deployments without cleanup state", async () => {
   const rejectedStatuses: Array<{
     status: DeploymentStatus;
     failureStage: DeploymentRecord["failureStage"];
@@ -365,8 +428,7 @@ test("runDeploymentDestroyPlan only allows success or cleanup-capable failed dep
     { status: "PENDING", failureStage: null },
     { status: "RUNNING", failureStage: null },
     { status: "CANCELLED", failureStage: null },
-    { status: "DESTROYED", failureStage: null },
-    { status: "FAILED", failureStage: "plan" }
+    { status: "DESTROYED", failureStage: null }
   ];
 
   for (const rejected of rejectedStatuses) {
@@ -392,12 +454,40 @@ test("runDeploymentDestroyPlan only allows success or cleanup-capable failed dep
   }
 });
 
+test("failed cleanup planning preserves the original apply failure stage for retry", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    status: "FAILED",
+    failureStage: "apply",
+    errorSummary: "Original apply failure",
+    stateObjectKey
+  });
+
+  const result = await runDeploymentDestroyPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      ...createDestroyPlanOptions([]),
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      writeTerraformStateFile: async () => undefined,
+      runTerraformDestroyPlan: async () =>
+        createRunnerResult("plan", { exitCode: 1, stderr: "Invalid destroy plan" })
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "apply");
+  assert.match(result.deployment.errorSummary ?? "", /Invalid destroy plan/);
+});
+
 function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyPlanOptions {
   return {
     readTerraformArtifactFile: async () => terraformArtifactContent,
     prepareTerraformWorkspace: async () => ({
       workdir: "C:/tmp/sketchcatch-terraform-destroy-plan",
       mainFilePath: "C:/tmp/sketchcatch-terraform-destroy-plan/main.tf",
+      terraformFiles: [],
       cleanup: async () => undefined
     }),
     prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
@@ -405,7 +495,8 @@ function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyP
       runnerStages.push("init");
       return createRunnerResult("init");
     },
-    runTerraformDestroyPlan: async () => {
+    runTerraformDestroyPlan: async (_workdir, options) => {
+      assert.equal(options?.timeoutMs, terraformMutationTimeoutMs);
       runnerStages.push("destroy-plan");
       return createRunnerResult("plan");
     },
@@ -439,6 +530,12 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
+    preparedDraftRevision: null,
+    preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
     stateObjectKey,
     resultWarningSummary: null,
@@ -458,6 +555,7 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    approvedPreparedSnapshotHash: null,
     startedAt: null,
     completedAt: fixedNow,
     failedAt: null,

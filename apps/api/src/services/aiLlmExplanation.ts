@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import type {
   AiBillingMode,
   AiProvider,
+  AiProviderAttempt,
   AiProviderMetadata,
   AiProviderService,
   LlmCodeSuggestion,
@@ -43,6 +44,8 @@ const DEFAULT_AI_DAILY_CALL_LIMIT = 50;
 const DEFAULT_AI_WINDOW_CALL_LIMIT = 10;
 const DEFAULT_AI_WINDOW_MS = 60_000;
 const AMAZON_Q_USER_MESSAGE_MAX_LENGTH = 2_048;
+
+export type AiTextProviderTarget = LlmExplanationTarget | "architecture_requirement_normalization";
 
 export type OpenAiParseRequest = {
   readonly model: string;
@@ -200,7 +203,7 @@ function classifyOpenAiError(error: unknown): LlmExplanationFallbackReason {
 }
 
 export type AiTextProviderRequest = {
-  readonly target: LlmExplanationTarget;
+  readonly target: AiTextProviderTarget;
   readonly instructions: string;
   readonly prompt: string;
   readonly payload: unknown;
@@ -217,6 +220,18 @@ export type AiTextProvider = {
   readonly model?: string | undefined;
   readonly generate: (request: AiTextProviderRequest) => Promise<AiTextProviderResponse>;
 };
+
+export type AiTextProviderFor<
+  Provider extends AiTextProvider["provider"],
+  Service extends AiTextProvider["service"]
+> = Omit<AiTextProvider, "provider" | "service"> & {
+  readonly provider: Provider;
+  readonly service: Service;
+};
+
+export type BedrockTextProvider = AiTextProviderFor<"bedrock", "bedrock_runtime">;
+export type AmazonQTextProvider = AiTextProviderFor<"amazon_q", "amazon_q_business">;
+export type OpenAiTextProvider = AiTextProviderFor<"openai", "openai_responses">;
 
 export type AiCreditPolicy = {
   readonly bedrock: boolean;
@@ -238,18 +253,18 @@ export type AiProviderRegions = {
 };
 
 export type CreateAiProviderBackedLlmExplanationOptions = {
-  readonly bedrockProvider?: AiTextProvider | undefined;
-  readonly amazonQProvider?: AiTextProvider | undefined;
-  readonly openAiProvider?: AiTextProvider | undefined;
+  readonly bedrockProvider?: BedrockTextProvider | undefined;
+  readonly amazonQProvider?: AmazonQTextProvider | undefined;
+  readonly openAiProvider?: OpenAiTextProvider | undefined;
   readonly fallbackProvider?: CreateLlmExplanation | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
   readonly limits?: AiProviderLimits | undefined;
 };
 
 export type CreateConfiguredAiExplanationOptions = {
-  readonly bedrockProvider?: AiTextProvider | undefined;
-  readonly amazonQProvider?: AiTextProvider | undefined;
-  readonly openAiProvider?: AiTextProvider | undefined;
+  readonly bedrockProvider?: BedrockTextProvider | undefined;
+  readonly amazonQProvider?: AmazonQTextProvider | undefined;
+  readonly openAiProvider?: OpenAiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
   readonly limits?: AiProviderLimits | undefined;
 };
@@ -307,46 +322,109 @@ export function createAiProviderBackedLlmExplanation(
   const callWindows = new Map<AiProvider, ProviderCallWindow>();
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const limits = options.limits ?? readAiProviderLimitsFromEnv();
+  const amazonQProvider = isExpectedTextProvider(
+    options.amazonQProvider,
+    "amazon_q",
+    "amazon_q_business"
+  )
+    ? options.amazonQProvider
+    : undefined;
+  const bedrockProvider = isExpectedTextProvider(
+    options.bedrockProvider,
+    "bedrock",
+    "bedrock_runtime"
+  )
+    ? options.bedrockProvider
+    : undefined;
+  const openAiProvider = isExpectedTextProvider(
+    options.openAiProvider,
+    "openai",
+    "openai_responses"
+  )
+    ? options.openAiProvider
+    : undefined;
 
   return async (input) => {
-    let primaryProviderFallback: LlmExplanation | null = null;
-
     if (isAmazonQPrimaryTarget(input.target)) {
-      if (options.amazonQProvider === undefined) {
-        return createFallbackExplanationWithProviderMetadata(
-          input,
-          resolveAmazonQUnavailableFallbackReason(creditPolicy),
-          creditPolicy.billingMode,
-          {
+      const attempts: AiProviderAttempt[] = [];
+
+      if (amazonQProvider === undefined) {
+        attempts.push(
+          createProviderAttempt({
             provider: "amazon_q",
-            service: "amazon_q_business"
-          }
+            service: "amazon_q_business",
+            status: "skipped",
+            fallbackReason:
+              options.amazonQProvider === undefined
+                ? resolveProviderUnavailableFallbackReason("amazon_q", creditPolicy)
+                : "provider_not_configured"
+          })
         );
-      }
+      } else {
+        const qResult = await tryProvider({
+          provider: amazonQProvider,
+          input,
+          cache,
+          callWindows,
+          creditPolicy,
+          limits,
+          attempts
+        });
 
-      const qResult = await tryProvider({
-        provider: options.amazonQProvider,
-        input,
-        cache,
-        callWindows,
-        creditPolicy,
-        limits
-      });
-
-      if (qResult !== null) {
-        if (
-          input.target === "terraform_error_explanation" &&
-          shouldTrySecondaryProviderAfterAmazonQ(qResult)
-        ) {
-          primaryProviderFallback = qResult;
-        } else {
-          return qResult;
+        if (qResult !== null && !qResult.fallbackUsed) {
+          return withProviderAttempts(qResult, attempts);
         }
       }
+
+      if (bedrockProvider === undefined) {
+        attempts.push(
+          createProviderAttempt({
+            provider: "bedrock",
+            service: "bedrock_runtime",
+            status: "skipped",
+            fallbackReason:
+              options.bedrockProvider === undefined
+                ? resolveProviderUnavailableFallbackReason("bedrock", creditPolicy)
+                : "provider_not_configured"
+          })
+        );
+      } else {
+        const bedrockResult = await tryProvider({
+          provider: bedrockProvider,
+          input,
+          cache,
+          callWindows,
+          creditPolicy,
+          limits,
+          attempts
+        });
+
+        if (bedrockResult !== null && !bedrockResult.fallbackUsed) {
+          return withProviderAttempts(bedrockResult, attempts);
+        }
+      }
+
+      const fallbackExplanation = createFallbackExplanationWithMetadata(
+        input,
+        resolveProviderChainFallbackReason(
+          attempts,
+          resolveFallbackReasonForMissingProvider(input.target, creditPolicy)
+        ),
+        creditPolicy.billingMode
+      );
+      attempts.push(
+        createProviderAttempt({
+          provider: "fallback",
+          service: "rule_fallback",
+          status: "succeeded"
+        })
+      );
+
+      return withProviderAttempts(fallbackExplanation, attempts);
     }
 
     const bedrockResult = await tryProvider({
-      provider: options.bedrockProvider,
+      provider: bedrockProvider,
       input,
       cache,
       callWindows,
@@ -355,15 +433,11 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (bedrockResult !== null) {
-      if (bedrockResult.fallbackUsed && primaryProviderFallback !== null) {
-        return primaryProviderFallback;
-      }
-
       return bedrockResult;
     }
 
     const openAiResult = await tryProvider({
-      provider: options.openAiProvider,
+      provider: openAiProvider,
       input,
       cache,
       callWindows,
@@ -372,10 +446,6 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (openAiResult !== null) {
-      if (openAiResult.fallbackUsed && primaryProviderFallback !== null) {
-        return primaryProviderFallback;
-      }
-
       return openAiResult;
     }
 
@@ -387,15 +457,22 @@ export function createAiProviderBackedLlmExplanation(
   };
 }
 
-function shouldTrySecondaryProviderAfterAmazonQ(explanation: LlmExplanation): boolean {
-  return explanation.fallbackUsed && explanation.fallbackReason === "invalid_response";
-}
-
 function isAmazonQPrimaryTarget(target: LlmExplanationTarget): boolean {
   return target === "terraform_error_explanation" || target === "terraform_preview_explanation";
 }
 
-function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): AiTextProvider {
+function isExpectedTextProvider<
+  Provider extends AiTextProvider["provider"],
+  Service extends AiTextProvider["service"]
+>(
+  provider: AiTextProvider | undefined,
+  expectedProvider: Provider,
+  expectedService: Service
+): provider is AiTextProviderFor<Provider, Service> {
+  return provider?.provider === expectedProvider && provider.service === expectedService;
+}
+
+export function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): BedrockTextProvider {
   const client = new BedrockRuntimeClient({ region: input.region });
 
   return {
@@ -428,7 +505,7 @@ function createBedrockTextProvider(input: { readonly region: string; readonly mo
   };
 }
 
-export function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AiTextProvider | undefined {
+export function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AmazonQTextProvider | undefined {
   if (process.env.AMAZON_Q_ENABLED !== "true") {
     return undefined;
   }
@@ -456,7 +533,7 @@ export function createAmazonQBusinessTextProvider(input: {
   readonly userId?: string | undefined;
   readonly region: string;
   readonly client?: AmazonQBusinessChatClient | undefined;
-}): AiTextProvider {
+}): AmazonQTextProvider {
   const client = input.client ?? createDefaultAmazonQBusinessChatClient(input.region);
 
   return {
@@ -464,6 +541,10 @@ export function createAmazonQBusinessTextProvider(input: {
     service: "amazon_q_business",
     model: input.applicationId,
     generate: async (request) => {
+      if (request.target === "architecture_draft") {
+        throw new Error("Architecture Drafts must use the Anonymous Q retrieval provider");
+      }
+
       const command = new ChatSyncCommand({
         applicationId: input.applicationId,
         ...(input.userId ? { userId: input.userId } : {}),
@@ -478,6 +559,204 @@ export function createAmazonQBusinessTextProvider(input: {
       };
     }
   };
+}
+
+export function createAmazonQArchitecturePlanPrompt(
+  payload: unknown,
+  maxLength = AMAZON_Q_USER_MESSAGE_MAX_LENGTH
+): string {
+  const input = createAmazonQArchitecturePlanInput(payload);
+  const header = [
+    "Create a compact architecture plan from the normalized requirements.",
+    "Return JSON only. Preserve explicit resource, quantity, exclusion, and topology constraints.",
+    "Use only ResourceType values listed in supportedResourceTypes.",
+    '{"status":"plan","title":"short","requiredResources":["EC2"],"resourceQuantities":{"EC2":1},"runtimeTopology":{"trafficEntry":"LOAD_BALANCER","compute":"EC2","computeCount":1,"placement":"private_subnets","spreadAcrossPrivateSubnets":false,"autoScaling":false},"assumptions":[],"explanations":[]}',
+    "Planning input:"
+  ].join("\n");
+  const inputBudget = Math.max(200, maxLength - header.length - 1);
+  const compactInput = fitAmazonQArchitecturePlanInput(input, inputBudget);
+
+  return trimProviderPrompt(
+    `${header}\n${JSON.stringify(compactInput)}`,
+    maxLength
+  );
+}
+
+function createAmazonQArchitecturePlanInput(payload: unknown): Record<string, unknown> {
+  if (!isRecord(payload)) {
+    return {};
+  }
+
+  const decisionSpace = isRecord(payload.architectureDecisionSpace)
+    ? payload.architectureDecisionSpace
+    : undefined;
+  const preferredPatterns = Array.isArray(decisionSpace?.preferredPatterns)
+    ? decisionSpace.preferredPatterns.flatMap((pattern) => {
+        if (!isRecord(pattern) || typeof pattern.id !== "string") {
+          return [];
+        }
+
+        return [pattern.id];
+      })
+    : [];
+
+  return {
+    ...(isRecord(payload.normalizedRequirement)
+      ? { normalizedRequirement: compactAmazonQNormalizedRequirement(payload.normalizedRequirement) }
+      : {}),
+    ...(Array.isArray(payload.validationIssues)
+      ? { validationIssues: payload.validationIssues.slice(0, 8) }
+      : {}),
+    ...(isRecord(payload.previousPlan)
+      ? { previousPlan: payload.previousPlan }
+      : {}),
+    ...(isRecord(decisionSpace?.answerProfile)
+      ? { answerProfile: decisionSpace.answerProfile }
+      : {}),
+    ...(preferredPatterns.length === 0 ? {} : { preferredPatterns }),
+    ...(Array.isArray(payload.supportedResourceTypes)
+      ? { supportedResourceTypes: payload.supportedResourceTypes }
+      : {}),
+    ...(typeof payload.prompt === "string"
+      ? { userRequirement: trimProviderPrompt(payload.prompt, 320) }
+      : {})
+  };
+}
+
+function fitAmazonQArchitecturePlanInput(
+  input: Record<string, unknown>,
+  budget: number
+): Record<string, unknown> {
+  const candidates: Record<string, unknown>[] = [
+    input,
+    omitRecordKey(input, "userRequirement"),
+    omitRecordKey(omitRecordKey(input, "userRequirement"), "answerProfile"),
+    omitRecordKey(omitRecordKey(omitRecordKey(input, "userRequirement"), "answerProfile"), "preferredPatterns")
+  ];
+
+  for (const candidate of candidates) {
+    if (JSON.stringify(candidate).length <= budget) {
+      return candidate;
+    }
+  }
+
+  const normalizedRequirement = isRecord(input.normalizedRequirement)
+    ? createHardConstraintAmazonQRequirement(input.normalizedRequirement)
+    : {};
+  const baseInput: Record<string, unknown> = {
+    normalizedRequirement,
+    ...(isRecord(input.answerProfile) ? { answerProfile: input.answerProfile } : {})
+  };
+  const compactBaseInput = JSON.stringify(baseInput).length <= budget
+    ? baseInput
+    : { normalizedRequirement };
+  const supportedResourceTypes = Array.isArray(input.supportedResourceTypes)
+    ? input.supportedResourceTypes.filter((value): value is string => typeof value === "string")
+    : [];
+  let fittedInput = { ...compactBaseInput, supportedResourceTypes: [] as string[] };
+
+  for (const resourceType of supportedResourceTypes) {
+    const candidate = {
+      ...compactBaseInput,
+      supportedResourceTypes: [...fittedInput.supportedResourceTypes, resourceType]
+    };
+
+    if (JSON.stringify(candidate).length > budget) {
+      break;
+    }
+
+    fittedInput = candidate;
+  }
+
+  return fittedInput;
+}
+
+function compactAmazonQNormalizedRequirement(input: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...copyCompactTextField(input, "intent", 80),
+    ...copyCompactTextField(input, "region", 80),
+    ...copyCompactTextArrayField(input, "patternIds", 6, 40),
+    ...copyCompactTextArrayField(input, "requiredResources", 24, 80),
+    ...copyCompactNumberRecordField(input, "resourceQuantities", 24, 80),
+    ...copyCompactTextArrayField(input, "forbiddenCapabilities", 12, 80),
+    ...(isRecord(input.runtimeTopology) ? { runtimeTopology: input.runtimeTopology } : {}),
+    ...copyCompactTextField(input, "database", 80),
+    ...copyCompactTextField(input, "availability", 80),
+    ...copyCompactTextArrayField(input, "amazonQBrief", 4, 160)
+  };
+}
+
+function createHardConstraintAmazonQRequirement(input: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...copyCompactTextField(input, "region", 48),
+    ...copyCompactTextArrayField(input, "requiredResources", 12, 48),
+    ...copyCompactNumberRecordField(input, "resourceQuantities", 12, 48),
+    ...copyCompactTextArrayField(input, "forbiddenCapabilities", 8, 48),
+    ...(isRecord(input.runtimeTopology) ? { runtimeTopology: input.runtimeTopology } : {}),
+    ...copyCompactTextField(input, "database", 48),
+    ...copyCompactTextField(input, "availability", 48)
+  };
+}
+
+function copyCompactTextField(
+  input: Record<string, unknown>,
+  key: string,
+  maxLength: number
+): Record<string, string> {
+  const value = input[key];
+
+  return typeof value === "string" && value.trim().length > 0
+    ? { [key]: value.trim().slice(0, maxLength) }
+    : {};
+}
+
+function copyCompactTextArrayField(
+  input: Record<string, unknown>,
+  key: string,
+  maxItems: number,
+  maxLength: number
+): Record<string, string[]> {
+  const value = input[key];
+
+  if (!Array.isArray(value)) {
+    return {};
+  }
+
+  const items = value
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim().slice(0, maxLength))
+    .filter((item) => item.length > 0)
+    .slice(0, maxItems);
+
+  return items.length === 0 ? {} : { [key]: items };
+}
+
+function copyCompactNumberRecordField(
+  input: Record<string, unknown>,
+  key: string,
+  maxItems: number,
+  maxKeyLength: number
+): Record<string, Record<string, number>> {
+  const value = input[key];
+
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]))
+    .slice(0, maxItems)
+    .map(([entryKey, entryValue]) => [entryKey.slice(0, maxKeyLength), entryValue] as const);
+
+  return entries.length === 0 ? {} : { [key]: Object.fromEntries(entries) };
+}
+
+function omitRecordKey(input: Record<string, unknown>, key: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(input).filter(([entryKey]) => entryKey !== key));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function createDefaultAmazonQBusinessChatClient(region: string): AmazonQBusinessChatClient {
@@ -495,6 +774,7 @@ async function tryProvider(input: {
   readonly callWindows: Map<AiProvider, ProviderCallWindow>;
   readonly creditPolicy: AiCreditPolicy;
   readonly limits: AiProviderLimits;
+  readonly attempts?: AiProviderAttempt[] | undefined;
 }): Promise<LlmExplanation | null> {
   if (input.provider === undefined) {
     return null;
@@ -503,6 +783,8 @@ async function tryProvider(input: {
   const creditFallbackReason = getCreditFallbackReason(input.provider.provider, input.creditPolicy);
 
   if (creditFallbackReason !== null) {
+    recordProviderAttempt(input.attempts, input.provider, "skipped", creditFallbackReason);
+
     if (
       isAmazonQPrimaryTarget(input.input.target) &&
       input.provider.provider === "amazon_q"
@@ -536,7 +818,7 @@ async function tryProvider(input: {
   const cached = input.cache.get(cacheKey);
 
   if (cached !== undefined) {
-    return withProviderMetadata(cached.explanation, {
+    const cachedExplanation = withProviderMetadata(cached.explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
       model: input.provider.model,
@@ -546,11 +828,20 @@ async function tryProvider(input: {
       billingMode: input.creditPolicy.billingMode,
       payload
     });
+    recordProviderAttempt(
+      input.attempts,
+      input.provider,
+      cachedExplanation.fallbackUsed ? "fallback" : "succeeded",
+      cachedExplanation.fallbackReason
+    );
+
+    return cachedExplanation;
   }
 
   const rateLimitReason = reserveProviderCall(input.provider.provider, input.callWindows, input.limits);
 
   if (rateLimitReason !== null) {
+    recordProviderAttempt(input.attempts, input.provider, "skipped", rateLimitReason);
     return createFallbackExplanationWithMetadata(input.input, rateLimitReason, input.creditPolicy.billingMode);
   }
 
@@ -563,12 +854,7 @@ async function tryProvider(input: {
       payload
     });
     const fallback = createFallbackExplanation(input.input, "invalid_response");
-    const parsedExplanation = parseProviderExplanationText({
-      fallback,
-      input: input.input,
-      provider: input.provider.provider,
-      text: response.text
-    });
+    const parsedExplanation = parseLlmExplanationText(response.text, fallback);
     const explanation = completeAmazonQTerraformCodeSuggestion({
       explanation: parsedExplanation,
       input: input.input,
@@ -589,15 +875,54 @@ async function tryProvider(input: {
     input.cache.set(cacheKey, {
       explanation: explanationWithMetadata
     });
+    recordProviderAttempt(
+      input.attempts,
+      input.provider,
+      explanationWithMetadata.fallbackUsed ? "fallback" : "succeeded",
+      explanationWithMetadata.fallbackReason
+    );
 
     return explanationWithMetadata;
   } catch (error) {
+    const fallbackReason = classifyProviderError(error);
+    recordProviderAttempt(input.attempts, input.provider, "failed", fallbackReason);
+
     return createFallbackExplanationWithMetadata(
       input.input,
-      classifyProviderError(error),
+      fallbackReason,
       input.creditPolicy.billingMode
     );
   }
+}
+
+function recordProviderAttempt(
+  attempts: AiProviderAttempt[] | undefined,
+  provider: AiTextProvider,
+  status: AiProviderAttempt["status"],
+  fallbackReason?: LlmExplanationFallbackReason | undefined
+): void {
+  attempts?.push(
+    createProviderAttempt({
+      provider: provider.provider,
+      service: provider.service,
+      status,
+      fallbackReason
+    })
+  );
+}
+
+function createProviderAttempt(input: {
+  readonly provider: AiProvider;
+  readonly service: AiProviderService;
+  readonly status: AiProviderAttempt["status"];
+  readonly fallbackReason?: LlmExplanationFallbackReason | undefined;
+}): AiProviderAttempt {
+  return {
+    provider: input.provider,
+    service: input.service,
+    status: input.status,
+    ...(input.fallbackReason === undefined ? {} : { fallbackReason: input.fallbackReason })
+  };
 }
 
 function createProviderPrompt(provider: AiProvider, target: LlmExplanationTarget, payload: unknown): string {
@@ -785,25 +1110,6 @@ function trimProviderPrompt(value: string, maxLength: number): string {
   return value.slice(0, Math.max(0, maxLength - 1)).trimEnd();
 }
 
-function parseProviderExplanationText(input: {
-  readonly fallback: LlmExplanation;
-  readonly input: LlmExplanationInput;
-  readonly provider: AiProvider;
-  readonly text: string;
-}): LlmExplanation {
-  const parsed = parseLlmExplanationText(input.text, input.fallback);
-
-  if (!parsed.fallbackUsed || parsed.fallbackReason !== "invalid_response") {
-    return parsed;
-  }
-
-  if (input.provider === "amazon_q" && input.input.target === "terraform_error_explanation") {
-    return createAmazonQTerraformPlainTextExplanation(input.text, input.fallback);
-  }
-
-  return parsed;
-}
-
 function completeAmazonQTerraformCodeSuggestion(input: {
   readonly explanation: LlmExplanation;
   readonly input: LlmExplanationInput;
@@ -882,52 +1188,6 @@ function isLikelyTerraformBlockOrAttribute(line: string): boolean {
   );
 }
 
-function createAmazonQTerraformPlainTextExplanation(
-  text: string,
-  fallback: LlmExplanation
-): LlmExplanation {
-  const items = normalizeProviderTextItems(text);
-  const summary = items[0] ?? "";
-
-  if (summary.length === 0 || isUnhelpfulProviderText(summary)) {
-    return fallback;
-  }
-
-  return {
-    target: "terraform_error_explanation",
-    summary: trimProviderText(summary, 300),
-    highlights: items.slice(1, 4).map((item) => trimProviderText(item, 120)),
-    nextActions: fallback.nextActions.slice(0, 5),
-    fallbackUsed: false
-  };
-}
-
-function isUnhelpfulProviderText(value: string): boolean {
-  const normalized = value.toLowerCase();
-
-  return (
-    normalized.includes("could not find relevant information") ||
-    normalized.includes("cannot find relevant information") ||
-    normalized.includes("sorry, i could not") ||
-    normalized.includes("not enough information")
-  );
-}
-
-function normalizeProviderTextItems(text: string): string[] {
-  return text
-    .split(/\r?\n+/)
-    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
-    .filter((line) => line.length > 0 && !/^```/.test(line));
-}
-
-function trimProviderText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-
-  return value.slice(0, maxLength).trim();
-}
-
 function createFallbackExplanationWithMetadata(
   input: LlmExplanationInput,
   fallbackReason: LlmExplanationFallbackReason,
@@ -988,6 +1248,23 @@ function withProviderMetadata(
   };
 }
 
+function withProviderAttempts(
+  explanation: LlmExplanation,
+  attempts: readonly AiProviderAttempt[]
+): LlmExplanation {
+  if (explanation.providerMetadata === undefined) {
+    return explanation;
+  }
+
+  return {
+    ...explanation,
+    providerMetadata: {
+      ...explanation.providerMetadata,
+      attempts: attempts.map((attempt) => ({ ...attempt }))
+    }
+  };
+}
+
 function createProviderMetadata(input: {
   readonly provider: AiProvider;
   readonly service: AiProviderService;
@@ -1032,14 +1309,26 @@ function getCreditFallbackReason(provider: AiProvider, creditPolicy: AiCreditPol
   return null;
 }
 
-function resolveAmazonQUnavailableFallbackReason(
+function resolveProviderUnavailableFallbackReason(
+  provider: Extract<AiProvider, "amazon_q" | "bedrock">,
   creditPolicy: AiCreditPolicy
 ): LlmExplanationFallbackReason {
-  if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
-    return "credit_not_confirmed";
+  return getCreditFallbackReason(provider, creditPolicy) ?? "provider_not_configured";
+}
+
+function resolveProviderChainFallbackReason(
+  attempts: readonly AiProviderAttempt[],
+  defaultReason: LlmExplanationFallbackReason
+): LlmExplanationFallbackReason {
+  for (let index = attempts.length - 1; index >= 0; index -= 1) {
+    const fallbackReason = attempts[index]?.fallbackReason;
+
+    if (fallbackReason !== undefined) {
+      return fallbackReason;
+    }
   }
 
-  return "provider_not_configured";
+  return defaultReason;
 }
 
 function reserveProviderCall(

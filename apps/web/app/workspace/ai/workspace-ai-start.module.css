@@ -3,7 +3,7 @@
   --ai-canvas-soft: #fafafa;
   --ai-ink: #171717;
   --ai-body: #60646c;
-  --ai-muted: #999999;
+  --ai-muted: #60646c;
   --ai-line: #e7e8eb;
   --ai-line-strong: #d5d7dc;
   background: var(--ai-canvas);
@@ -64,7 +64,7 @@
 .emptyPreview > span,
 .message > span {
   color: var(--ai-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1.4;
@@ -106,6 +106,7 @@
   border-right: 1px solid var(--ai-line);
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -114,9 +115,31 @@
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
   padding: 36px 28px 24px;
+  scrollbar-color: #c8cbd1 transparent;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.transcript::-webkit-scrollbar {
+  width: 10px;
+}
+
+.transcript::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.transcript::-webkit-scrollbar-thumb {
+  background: #c8cbd1;
+  border: 3px solid var(--ai-canvas);
+  border-radius: 999px;
+}
+
+.transcript::-webkit-scrollbar-thumb:hover {
+  background: #aeb3bb;
 }
 
 .message {
@@ -190,6 +213,46 @@
   padding: 16px 20px 20px;
 }
 
+.voiceConfirmation {
+  align-items: center;
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+}
+
+.voiceConfirmation div {
+  display: grid;
+  gap: 2px;
+}
+
+.voiceConfirmation strong {
+  font-size: 13px;
+}
+
+.voiceConfirmation span {
+  color: var(--ai-body);
+  font-size: 12px;
+  word-break: keep-all;
+}
+
+.voiceConfirmation button {
+  align-items: center;
+  background: #000000;
+  border-radius: 8px;
+  color: #ffffff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+}
+
 .composer {
   border: 1px solid var(--ai-line-strong);
   border-radius: 12px;
@@ -254,7 +317,7 @@
 .preview {
   background: var(--ai-canvas-soft);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-width: 0;
   overflow: hidden;
 }
@@ -289,7 +352,7 @@
 
 .previewHeader dt {
   color: var(--ai-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -326,7 +389,7 @@
 .previewCanvas :global(.react-flow__edge-text) {
   fill: #60646c;
   font-family: "Pretendard", "Noto Sans KR", sans-serif;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -359,7 +422,7 @@
 }
 
 .previewAreaHeader strong {
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -367,7 +430,7 @@
 
 .previewAreaHeader span {
   color: var(--ai-muted);
-  font-size: 9px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -391,7 +454,7 @@
 }
 
 .previewResourceNode strong {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.25;
   max-width: 100%;
   overflow: hidden;
@@ -402,7 +465,7 @@
 
 .previewResourceNode small {
   color: var(--ai-muted);
-  font-size: 8px;
+  font-size: 12px;
   line-height: 1.2;
   max-width: 100%;
   overflow: hidden;
@@ -469,6 +532,39 @@
   color: var(--ai-body);
   font-size: 12px;
   max-width: min(480px, 48vw);
+}
+
+.draftEvidence {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.draftSource {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.draftSource span,
+.draftSource strong,
+.draftSource em {
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 999px;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 24px;
+  padding: 0 8px;
+}
+
+.draftSource strong {
+  border-color: #171717;
+}
+
+.draftSource em {
+  color: #8a4b08;
 }
 
 .metadataDisclosure summary {
@@ -616,6 +712,11 @@
 
   .metadataDisclosure {
     max-width: none;
+  }
+
+  .draftEvidence {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .previewActions > button {

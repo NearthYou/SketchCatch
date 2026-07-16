@@ -1,0 +1,388 @@
+.page {
+  min-height: 100dvh;
+  padding: 16px;
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
+}
+
+.topbar {
+  display: flex;
+  width: min(100%, 1200px);
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 auto;
+  border-radius: var(--radius-frame);
+  padding: 0 20px;
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
+}
+
+.topbar > a:last-child,
+.errorState a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-link);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.content {
+  display: grid;
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding: 72px 0 96px;
+  gap: 20px;
+}
+
+.connectedRepository,
+.requiredSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-card);
+  padding: 16px 18px;
+  background: var(--color-canvas);
+}
+
+.connectedRepository > div {
+  display: grid;
+  gap: 3px;
+}
+
+.connectedRepository strong {
+  font-size: 14px;
+}
+
+.connectedRepository span {
+  color: var(--color-body);
+  font-size: 12px;
+}
+
+.requiredSummary {
+  justify-content: space-between;
+}
+
+.requiredSummary span {
+  color: var(--color-body);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.requiredSummary span[data-saved="true"] {
+  color: var(--color-success);
+}
+
+.settingsStack {
+  display: grid;
+  gap: 20px;
+}
+
+.completionPanel {
+  display: grid;
+  align-items: center;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-card);
+  margin-top: 12px;
+  padding: 24px;
+  background: var(--color-canvas);
+  box-shadow: var(--shadow-card);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 24px;
+}
+
+.completionCopy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.completionIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-control);
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+}
+
+.completionText {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.completionText strong {
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.completionText p {
+  margin: 0;
+  color: var(--color-body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.completionError {
+  display: flex;
+  align-items: flex-start;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--color-error) 28%, white);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  background: var(--color-error-surface);
+  color: var(--color-error);
+  gap: 8px;
+}
+
+.completionError svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.completionError span {
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.completionButton {
+  display: inline-flex;
+  min-width: 224px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-control);
+  padding: 0 20px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  gap: 8px;
+  transition:
+    background-color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.completionButton:hover:not(:disabled) {
+  background: var(--color-surface-dark-elevated);
+  transform: translateY(-2px);
+}
+
+.completionButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.completionButton:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.completionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.buttonSpinner {
+  animation: spin 800ms linear infinite;
+}
+
+.heading {
+  display: grid;
+  gap: 7px;
+}
+
+.heading span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.heading h1,
+.heading p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.heading h1 {
+  font-size: 34px;
+  line-height: 1.2;
+}
+
+.heading p {
+  color: var(--color-body);
+  font-size: 14px;
+}
+
+.progress,
+.errorState,
+.emptyState {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-card);
+  padding: 18px;
+  background: var(--color-canvas);
+}
+
+.progress svg {
+  animation: spin 800ms linear infinite;
+}
+
+.progress div,
+.errorState div,
+.emptyState {
+  display: grid;
+  gap: 4px;
+}
+
+.progress strong,
+.errorState strong,
+.emptyState strong {
+  font-size: 14px;
+}
+
+.progress span,
+.errorState span,
+.emptyState span {
+  color: var(--color-body);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.errorState {
+  border-left: 3px solid var(--color-error);
+}
+
+.errorState a {
+  margin-left: auto;
+}
+
+.listHeader {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.listHeader > span {
+  color: var(--color-body);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.listHeader button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  padding: 0 11px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.repositoryList {
+  display: grid;
+  gap: 8px;
+}
+
+.repositoryList > button {
+  display: grid;
+  min-height: 72px;
+  align-items: center;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-control);
+  padding: 12px 14px;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  cursor: pointer;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  font: inherit;
+  text-align: left;
+}
+
+.repositoryList > button:hover,
+.repositoryList > button:focus-visible {
+  border-color: var(--color-primary);
+}
+
+.repositoryList > button:focus-visible,
+.listHeader button:focus-visible,
+.topbar a:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.repositoryList > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.repositoryList > button > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.repositoryList strong,
+.repositoryList small {
+  overflow-wrap: anywhere;
+}
+
+.repositoryList strong {
+  font-size: 14px;
+}
+
+.repositoryList small {
+  color: var(--color-body);
+  font-size: 12px;
+}
+
+.repositoryList b {
+  font-size: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .page { padding: 8px; }
+  .topbar { min-height: 56px; padding: 0 12px; }
+  .content { padding: 48px 8px 72px; }
+  .heading h1 { font-size: 30px; }
+  .errorState { flex-wrap: wrap; }
+  .errorState a { width: 100%; margin-left: 30px; }
+  .requiredSummary { align-items: flex-start; flex-direction: column; }
+  .repositoryList > button { min-height: 68px; }
+  .completionPanel { grid-template-columns: minmax(0, 1fr); padding: 20px; }
+  .completionButton { width: 100%; min-width: 0; grid-column: 1; grid-row: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress svg,
+  .buttonSpinner { animation: none; }
+  .completionButton { transition: none; }
+}

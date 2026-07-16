@@ -1,53 +1,95 @@
 # Agent Progress
 
-Short English-only working log for the current agent context. Older records are archived under docs/agent-history/.
+Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
 ## Current Verified State
 
-
-- Active branch: `fix/sw/330-container-alarm-debounce`, issue #330.
-
-- Release `v2.0.0` uses main SHA `44cdc976da8a03fca2d0aad69a0f3d45d51d4e8a`.
-- Route53 points to the direct-path ECS ALB. Public `/`, `/health`, and `/health/db` return 200; protected `/api/projects` returns 401.
-- API and web are active at desired/running 1 with Application Auto Scaling min 1 and max 2.
-- The legacy ECS service is absent from `list-services`, its task definition is inactive, and its target group is deleted.
-- The old EC2 instance, old ALB, and legacy CloudFormation ALB stack are deleted.
-- Cold rollback retains encrypted AMI `ami-0a65f0b7656bf2221`, encrypted snapshot `snap-04862810b1ed8a101`, and the verified SHA-pinned S3 Docker archive.
-- RDS is encrypted and available with deletion protection and seven-day backups; it remains Single-AZ for cost control.
-- Production username/password signup and login are healthy after rotating the invalid one-character auth token secret; OAuth client ID injection is pending this hotfix deployment.
-- Container log alarms keep ALARM notifications while suppressing repetitive OK notifications, require two consecutive error periods, and exclude stale Next.js Server Action requests from the web metric.
+- PR 1 / issue #434 and PR 2 / issue #433 are merged into `dev`. PR 3 / issue #435 started from merge commit `13716049532bcedc61d68e094bf829747077b989`, which contains reviewed PR 2 head `efdda2294830c9e8b4f8d863f280cc677daba61d`.
+- Runtime Convergence v1 separates `artifactFingerprint` from project/account/region-scoped `deploymentTargetFingerprint` and models ten distinct ECS, EC2, EKS, Kubernetes, Lambda, and Static adapters.
+- No-op requires read-only provider evidence for the canonical target, provider/account/region boundary, exact artifact fingerprint/digest/reference, and verified healthy state. Missing, mismatched, or unhealthy evidence falls back to rollout.
+- Direct ECS/Fargate and generated GitOps ECS/Lambda/EC2 ASG/Static workflows use the contract. The remaining canonical adapters are isolated ports verified with test doubles and explicit ResourceDefinition coverage.
+- Migration `0046_runtime_convergence.sql` is additive and `_journal.json` is updated after merged revision 0045.
+- Focused runtime/resource/storage/integration regressions pass. Harness, migration compatibility, lint, typecheck, build, generated Bash/Python syntax, and `git diff --check` pass.
+- Clean-state review and the evaluator rubric result are Accept (12/12, no hard fail).
+- Production runtime validation on `dev` preserves GitHub App and Live Observation Secret wiring, rejects cross-account or cross-region ARNs, reconciles ECS task definitions, and checks post-apply worker execution-policy coverage without exposing Secret values.
 
 ## Session Record
 
+### 2026-07-16 - Implement provider-verified Runtime Convergence v1
 
-### 2026-07-11 - Retire warm rollback and complete cost-first ECS operations
+- Added provider-neutral shared targets, strict Zod DTOs, canonical target identity, nullable RDS release evidence, and legacy target reconstruction with fail-closed canonical/legacy consistency checks.
+- Added a ten-adapter registry with current-state reads, provider/target and artifact comparison, rollout, health, rollback evidence, already-active decisions, and secret-shaped evidence rejection.
+- Added adversarial regressions for cross-provider revisions, pre-provider stale target rejection, inactive ECS services, non-Fargate GitOps observations, unhealthy Lambda versions, GitOps region drift, v3 rollback evidence, and divergent handoff targets.
+- Integrated Direct releases with read-only ECS/Fargate inspection, a DNS-pinned public HTTPS health probe, safe rollout fallback, and persisted convergence outcomes.
+- Extended generated GitOps workflows and v3 evidence for ECS, Lambda, EC2 ASG, and Static S3/CloudFront. Mutations are skipped only after provider preflight and independently rechecked by reconcilers.
+- Kept static artifact bytes target-independent by storing convergence markers on the CloudFront origin rather than in the artifact manifest.
+- Added explicit coverage for all ten runtime adapters across deployable ResourceDefinitions and documented the contract, safety boundaries, compatibility behavior, and operational flow.
+- No real credentials, live AWS mutation, Terraform apply/destroy, user artifact upload, or user Git/CI/CD handoff was performed.
 
-- Deployed and released the main SHA, aligned API/web/worker images, and verified the one-off worker migration command.
-- Sanitized the retired EC2 host before creating an encrypted cold rollback AMI; removed the duplicate unencrypted AMI and snapshot.
-- Deleted the EC2 instance, old ALB stack, legacy ECS service/task registration, target group, and port 80 rules.
-- Added API/web autoscaling min 1 and max 2, circuit-breaker-preserving service ownership, low-cost alarms, and confirmed SNS delivery.
-- Replaced EC2 migrations with approved ECS one-off worker migrations, pre-migration snapshots, a compatibility guard, and three-snapshot retention.
-- Removed retired deployment/HTTPS workflows and reduced the GitHub deploy role to ECR, ECS, worker, scoped snapshot, and SNS permissions.
-- Added a disabled-by-default cold rollback Terraform root with scoped RDS/Redis access and documented restore procedures.
+### 2026-07-17 - Address PR #446 review feedback
 
-### 2026-07-11 - Integrate latest dev into Live Observation PR
+- Kept missing ECS deployment configuration fail-closed, made every nested access explicit, and guarded unexpected DNS lookup result shapes before address processing.
+- Converted malformed health URLs into Zod validation errors and malformed provider revision metadata into `provider_revision_unverified` rather than native runtime errors.
+- Review regressions pass with the full focused runtime/resource/API set at 79/79. Harness, migration compatibility, lint, typecheck, build, and diff checks pass.
 
-- Merged the latest `origin/dev` UI rebuild and ECS production changes into PR #328 while preserving Live Observation and Board behavior.
-- Kept the ECS deployment workflow and removed the retired EC2 deployment workflow.
-- Reconciled the new Workspace shell, Board viewport behavior, Resource panel extraction, and Live Observation styles.
+### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
-## Verification
+- Added all seven artifact kinds, strict v2 evidence DTOs, canonical identity, persistent Postgres claims, read-only AWS verification, and project-scoped artifact listing.
+- Direct preparation reuses a verified artifact without CodeBuild; GitOps registers its already-built artifact and links verified releases while preserving v1 evidence fallback.
+- RDS stores identity/metadata only. User artifact bytes stay in the user's ECR/S3 or provider storage; Redis is not a source of truth.
+- Review hardening added locale-independent ordering, path normalization, whitespace-preserving build inputs, full identity checks, exact GitOps references, runtime namespace checks, lease heartbeats, and provider-computed S3 digest verification.
+- No real credentials, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff were performed.
 
+### 2026-07-16 - Address PR #438 review feedback
 
+- Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
+- Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
+- Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
+- No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
 
-## Risk
+### 2026-07-16 - Production runtime plan drift review
 
-- Full-suite failures outside the Live Observation change set still block branch integration.
-- A one-task baseline has no steady multi-AZ application redundancy; autoscaling is cost-first and reacts to CPU load, not AZ failure.
-- RDS is Single-AZ. Deletion protection, seven-day backups, pre-migration snapshots, and the restore runbook reduce but do not remove outage risk.
-- External customer execution roles may still need the worker task principal added to their trust policy.
-- Cold rollback has a longer RTO than the retired warm path and has static validation but no post-sanitization restore drill.
+- Review-only Plan 29498864502 succeeded with 3 add, 7 change, and only 2 task-definition replacement destroys. Worker Secret wiring and the Live Observation capability Secret preservation were added without exposing Secret values.
+- Verification passed: harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Local Terraform validation/test could not initialize the uncached AWS provider within the timeout.
+
+### 2026-07-16 - Follow up merged PR #439 review
+
+- Scoped runtime Secret contract regexes to their Terraform set literals, selected the named worker container, and used `try(..., [])` for nullable Secret lists so unrelated markers cannot satisfy the checks.
+- Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
+
+### 2026-07-16 - Complete runtime Apply validator repair
+
+- Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for valid and invalid forms.
+- Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed.
+
+### 2026-07-16 - Complete runtime deployment reconciliation
+
+- Complete runtime Apply validation compares planned API and worker Secret references with Terraform state and verifies that the worker execution policy retains every existing secret reference.
+- The API ECS service reconciles task definition changes while retaining autoscaling ownership of desired count.
+- Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed.
+
+### 2026-07-16 - Complete runtime policy and post-apply verification
+
+- Complete runtime Apply validation reads the existing worker execution inline policy from state when Plan JSON masks prior policy data, then verifies every worker Task Definition Secret reference after Apply.
+- Synthetic jq checks passed when prior permissions were retained and failed when a prior permission or Secret reference was removed; no Secret value was emitted.
+
+### 2026-07-17 - Complete runtime post-apply task definition verification
+
+- Plan JSON also masks the desired task definition payload, so the complete Apply guard verifies GitHub App runtime inputs in the applied API and worker task definitions from Terraform state.
+- Synthetic jq checks passed with both required inputs and failed when the worker Client ID environment entry was removed.
+
+### 2026-07-17 - Complete runtime partial-apply resume guard
+
+- The first approved Apply partially completed the reviewed runtime plan, then stopped because the deploy role lacked ELB tag readback and task-definition deregistration authorization.
+- The deploy-policy source now grants only those two missing actions, and the complete runtime guard accepts either the original full reviewed envelope or the exact residual envelope. No state operation, import, or unreviewed apply was used.
+- Harness, production infrastructure structure check, Terraform formatting, lint, typecheck, and build pass. Local Terraform validate/test remain blocked by the uncached AWS provider package.
+
+## Broken Or Unverified
+
+- `pnpm test` stops in `@sketchcatch/types` at 40/43 on the same three pre-existing three-tier Template security-scope/position/parent assertions. This branch does not modify those Template sources or failing tests.
+- `pnpm --filter @sketchcatch/api test` passes 710/713. The remaining three unchanged filesystem security tests fail during Windows symlink setup with `EPERM`, before their assertions.
+- Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
 
 ## Next Action
 
-- Review and commit the Live Observation reliability fixes, then update PR #328.
+- Monitor the Ready PR targeting `dev`, resolve any actionable review or branch-owned CI failure, and merge only through normal review.

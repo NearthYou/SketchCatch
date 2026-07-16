@@ -1,6 +1,9 @@
+import type { DiagramJson } from "../../../../packages/types/src";
+
 const BOARD_MIN_ZOOM = 0.25;
 const BOARD_MAX_ZOOM = 2;
 const BOARD_LABEL_PERSISTENT_ZOOM = 0.75;
+const SOURCE_VIEWBOX_HARD_MIN_ZOOM = 0.01;
 
 export type BoardBounds = {
   readonly height: number;
@@ -69,6 +72,57 @@ export function getCenteredBoardViewport(
     x: viewportX + viewportWidth / 2 - centerX * zoom,
     y: viewportY + viewportHeight / 2 - centerY * zoom,
     zoom
+  };
+}
+
+export function getSourceViewBoxViewport(
+  sourceViewBox: BoardBounds,
+  frame: BoardViewportFrame
+): CenteredBoardViewport {
+  const frameWidth = getPositiveFiniteDimension(frame.width);
+  const frameHeight = getPositiveFiniteDimension(frame.height);
+  const sourceWidth = getPositiveFiniteDimension(sourceViewBox.width);
+  const sourceHeight = getPositiveFiniteDimension(sourceViewBox.height);
+  const fittedZoom = Math.min(frameWidth / sourceWidth, frameHeight / sourceHeight);
+  const zoom = Math.min(BOARD_MAX_ZOOM, fittedZoom);
+
+  return getCenteredBoardViewport(sourceViewBox, frame, zoom);
+}
+
+export function getSourceViewBoxMinimumZoom(
+  sourceViewBox: BoardBounds,
+  frame: BoardViewportFrame
+): number {
+  return Math.min(
+    BOARD_MIN_ZOOM,
+    Math.max(
+      SOURCE_VIEWBOX_HARD_MIN_ZOOM,
+      getSourceViewBoxViewport(sourceViewBox, frame).zoom
+    )
+  );
+}
+
+export function applyInitialSourceViewBoxViewport(
+  diagram: DiagramJson,
+  frame: BoardViewportFrame
+): DiagramJson {
+  const presentation = diagram.presentation;
+
+  if (
+    presentation?.geometryPolicy !== "source-exact" ||
+    presentation.initialViewportPending !== true ||
+    !presentation.sourceViewBox
+  ) {
+    return diagram;
+  }
+
+  return {
+    ...diagram,
+    viewport: getSourceViewBoxViewport(presentation.sourceViewBox, frame),
+    presentation: {
+      ...presentation,
+      initialViewportPending: false
+    }
   };
 }
 

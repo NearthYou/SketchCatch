@@ -221,12 +221,17 @@ resource "aws_ecs_task_definition" "worker" {
   lifecycle {
     precondition {
       condition     = var.environment != "production" || length(setsubtract(local.worker_secret_names, toset(keys(local.worker_secret_arns)))) == 0
-      error_message = "Worker task definition requires DATABASE_URL, REDIS_URL, and CLOUDFORMATION_TEMPLATE_TOKEN_SECRET secret ARNs."
+      error_message = "Worker task definition requires DATABASE_URL, REDIS_URL, CLOUDFORMATION_TEMPLATE_TOKEN_SECRET, and GIT_APP_CLIENT_SECRET secret ARNs."
     }
 
     precondition {
       condition     = !var.enable_ecs_worker_dispatch || var.worker_rds_security_group_id != ""
       error_message = "worker_rds_security_group_id is required before ECS worker dispatch can be enabled."
+    }
+
+    precondition {
+      condition     = !var.enable_ecs_worker_dispatch || var.runtime_cache_security_group_id != ""
+      error_message = "runtime_cache_security_group_id is required before ECS worker dispatch can be enabled."
     }
   }
 }
@@ -282,6 +287,11 @@ resource "aws_ecs_task_definition" "api" {
     precondition {
       condition     = var.environment != "production" || length(setsubtract(local.ecs_api_secret_names, toset(keys(var.api_secret_arns)))) == 0
       error_message = "Production API task definitions require all approved api_secret_arns entries."
+    }
+
+    precondition {
+      condition     = !var.live_observation_enabled || var.runtime_cache_security_group_id != ""
+      error_message = "runtime_cache_security_group_id is required when Live Observation is enabled."
     }
   }
 }
@@ -364,7 +374,7 @@ resource "aws_ecs_service" "api" {
   ]
 
   lifecycle {
-    ignore_changes = [desired_count, task_definition]
+    ignore_changes = [desired_count]
   }
 }
 
@@ -376,7 +386,7 @@ resource "aws_ecs_service" "web" {
   launch_type                        = "FARGATE"
   deployment_minimum_healthy_percent = 100
   deployment_maximum_percent         = 200
-  health_check_grace_period_seconds  = 60
+  health_check_grace_period_seconds  = 30
   wait_for_steady_state              = true
 
   deployment_circuit_breaker {

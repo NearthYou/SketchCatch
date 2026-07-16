@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TEMPLATE_IDS } from "@sketchcatch/types";
 import type {
   AiArchitectureDraftResult,
   AiTerraformErrorExplanationResult,
@@ -13,35 +14,47 @@ import type {
   ArchitectureJson,
   CreateArchitectureDraftRequest,
   DiagramJson,
-  DesignSimulationResult,
   TerraformDiagnostic
 } from "@sketchcatch/types";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Mic, Send, Sparkles, Trash2, X } from "lucide-react";
+import { listBoardTemplates } from "../resource-settings/template-library";
+import { Mic, Send } from "lucide-react";
 import { getApiErrorMessage } from "../../lib/api-client";
+import { compileArchitectureDraftProposal } from "../architecture-board-compiler";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
   createAiArchitecturePatchPreview,
   createAiArchitectureDraft,
   runAiTerraformPreviewExplanation,
-  runAiTerraformErrorExplanation,
-  runAiDesignSimulation
+  runAiTerraformErrorExplanation
 } from "./api";
-import {
-  convertDiagramJsonToArchitectureJson,
-  getDiagramJsonForArchitectureDraft
-} from "./workspace-ai-diagram-adapter";
+import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 import {
   createWorkspaceAiBoardSnapshot,
   isWorkspaceAiResultStale
 } from "./workspace-ai-panel-state";
 import {
-  WorkspaceAiDesignSimulationResult,
-  WorkspaceAiExplanation,
-  WorkspaceAiTerraformPreviewResult,
-  WorkspaceAiRequestMessage
-} from "./WorkspaceAiPanelPieces";
-import type { AiRequestState } from "./WorkspaceAiPanelPieces";
+  createWorkspaceAiChatComposerStates,
+  getAdjacentWorkspaceAiChatScope,
+  getWorkspaceAiChatScopeDefinition,
+  readStoredActiveChatScope,
+  shouldShowWorkspaceAiChatMessage,
+  storeActiveChatScope,
+  workspaceAiChatScopes,
+  type WorkspaceAiChatComposerState,
+  type WorkspaceAiChatScope
+} from "./workspace-ai-chat-conversation";
+import {
+  isWorkspaceAiTranscriptNearBottom,
+  removeWorkspaceAiSelectionEntries
+} from "./workspace-ai-workbench-state";
+import {
+  WorkspaceAiWorkbenchExplanation,
+  WorkspaceAiWorkbenchRequestMessage,
+  WorkspaceAiWorkbenchTerraformIssueResult,
+  WorkspaceAiWorkbenchTerraformPreviewResult,
+  type AiRequestState
+} from "./WorkspaceAiWorkbenchResults";
 import {
   planArchitectureDraftPreview,
   resolveArchitectureDraftFollowUpAnswer,
@@ -63,21 +76,38 @@ import {
 } from "./workspace-ai-patch-preview";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import {
-  createTerraformIssueChatSummary,
   createTerraformIssueFixPlan,
-  type TerraformIssueAiRequest,
-  type TerraformPreviewAiRequest,
+  readStoredTerraformIssueAnalyses,
+  resolveTerraformIssueCode,
+  storeTerraformIssueAnalyses,
+  type StoredTerraformIssueAnalysis,
+  type TerraformPreviewAiScope,
+  type TerraformIssueCodePreview,
   type TerraformSafeFixApplyRequest,
-  type TerraformSafeFixApplyResult
+  type TerraformSafeFixApplyResult,
+  type WorkspaceAiContextInteraction,
+  type WorkspaceTerraformAiContext
 } from "./workspace-terraform-ai";
-import styles from "./workspace.module.css";
+import { formatTerraformReviewContext } from "./workspace-ai-result-presentation";
+import { getWorkspaceAiChatDockStatus } from "./workspace-ai-chat-status";
+import {
+  isWorkspaceAiChatAbortError,
+  WorkspaceAiChatRequestRegistry
+} from "./workspace-ai-chat-request";
+import { WorkspaceAiChatLauncher } from "./WorkspaceAiChatLauncher";
+import { WorkspaceAiWorkbench } from "./WorkspaceAiWorkbench";
+import styles from "./workspace-ai-workbench.module.css";
 
 export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
   readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
+  readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly projectId: string;
-  readonly terraformIssueRequest: TerraformIssueAiRequest | null;
-  readonly terraformPreviewRequest: TerraformPreviewAiRequest | null;
+  readonly repositoryAnalysisSourceRepositoryId?: string | undefined;
+  readonly repositoryTemplateId?: string | undefined;
+  readonly selectedTerraformIssueKey: string | null;
+  readonly terraformAiContext: WorkspaceTerraformAiContext;
+  readonly terraformAiInteraction: WorkspaceAiContextInteraction | null;
   readonly terraformSafeFixApplyResult: TerraformSafeFixApplyResult | null;
 };
 
@@ -88,12 +118,9 @@ type WorkspaceAiChatMessageKind =
   | "patch"
   | "question"
   | "preview"
-  | "simulation"
   | "status"
   | "terraform_issue";
 type WorkspaceAiChatSelectionMode = "single" | "multiple";
-type WorkspaceAiChatScope = "draft" | "errors" | "preview" | "simulation";
-
 type WorkspaceAiChatMessage = {
   readonly id: string;
   readonly content: string;
@@ -116,32 +143,70 @@ type PendingArchitectureDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
 };
 
-type TerraformIssueResolutionState = {
+type TerraformIssueAnalysisState = {
   readonly explanation: AiTerraformErrorExplanationResult | null;
   readonly message: string;
-  readonly request: TerraformIssueAiRequest;
   readonly state: AiRequestState;
+  readonly terraformFingerprint: string;
 };
 
 type TerraformPreviewExplanationState = {
   readonly explanation: AiTerraformPreviewExplanationResult | null;
   readonly message: string;
-  readonly request: TerraformPreviewAiRequest;
+  readonly reviewScope: TerraformPreviewAiScope;
   readonly state: AiRequestState;
+  readonly terraformFingerprint: string;
+};
+
+type TerraformIssueBatchProgress = {
+  readonly completed: number;
+  readonly total: number;
+};
+
+type PendingTerraformFixApply = {
+  readonly diagnosticKeys: readonly string[];
+  readonly requestId: number;
+};
+
+type LastPatchPreviewRequest = {
+  readonly connectionTargetResourceId?: string | undefined;
+  readonly instruction: string;
+  readonly selectedTargetResourceId?: string | undefined;
+  readonly skipConnection?: boolean | undefined;
+};
+
+type VoiceInputBase = {
+  readonly scope: WorkspaceAiChatScope;
+  readonly value: string;
+};
+
+type WorkspaceAiProposalSource = {
+  readonly fingerprint: string;
+  readonly revision: number;
+};
+
+type PendingArchitectureDraftFollowUp = {
+  readonly proposalSource: WorkspaceAiProposalSource;
+  readonly session: ArchitectureDraftFollowUpSession;
+};
+
+type SelectedTerraformFixPlan = {
+  readonly canApply: boolean;
+  readonly codePreview: TerraformIssueCodePreview | null;
+  readonly reason: string;
 };
 
 const MAX_CHAT_MESSAGES = 80;
 const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
 const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
-const DESIGN_SIMULATION_DEFAULTS = {
-  budgetLevel: "normal",
-  expectedUserCount: 1000,
-  period: "month",
-  region: "ap-northeast-2",
-  trafficLevel: "normal"
-} as const;
+const REQUEST_CANCELLED_MESSAGE = "요청을 중지했습니다.";
 const VOICE_NO_SPEECH_TIMEOUT_MS = 8000;
+const WORKBENCH_SCOPE_DEFINITIONS = workspaceAiChatScopes.map((scope) => ({
+  inputAvailable: getWorkspaceAiChatScopeDefinition(scope).inputAvailable,
+  label: getWorkspaceAiChatScopeDefinition(scope).label,
+  scope
+}));
 
 type BrowserSpeechRecognitionAlternative = {
   readonly transcript: string;
@@ -182,20 +247,29 @@ type SpeechRecognitionWindow = Window & {
   readonly webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
 };
 
+// Repository Analysis에서 넘긴 Template을 표시하고 이후 AI Draft 요청에 유지합니다.
 export function WorkspaceAiChatDock({
   context,
   onApplyTerraformIssueFix,
+  onSelectTerraformIssue,
   projectId,
-  terraformIssueRequest,
-  terraformPreviewRequest,
+  repositoryAnalysisSourceRepositoryId,
+  repositoryTemplateId,
+  selectedTerraformIssueKey,
+  terraformAiContext,
+  terraformAiInteraction,
   terraformSafeFixApplyResult
 }: WorkspaceAiChatDockProps) {
   const [isOpen, setOpen] = useState(false);
-  const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>("draft");
-  const [composerValue, setComposerValue] = useState("");
-  const [isVoiceListening, setVoiceListening] = useState(false);
+  const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>(() =>
+    readStoredActiveChatScope(projectId)
+  );
+  const [composerStates, setComposerStates] = useState<
+    Record<WorkspaceAiChatScope, WorkspaceAiChatComposerState>
+  >(() => createWorkspaceAiChatComposerStates());
+  const [voiceListeningScope, setVoiceListeningScope] = useState<WorkspaceAiChatScope | null>(null);
   const [isVoiceInputSupported, setVoiceInputSupported] = useState(true);
-  const [voiceStatusMessage, setVoiceStatusMessage] = useState("");
+  const [isMobileChatSurface, setMobileChatSurface] = useState(false);
   const [messages, setMessages] = useState<WorkspaceAiChatMessage[]>(() =>
     readStoredChatMessages(projectId)
   );
@@ -203,66 +277,355 @@ export function WorkspaceAiChatDock({
     Record<string, readonly string[]>
   >({});
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
-  const [patchPreviewModel, setPatchPreviewModel] =
-    useState<WorkspaceAiPatchPreviewModel | null>(null);
+  const [patchPreviewModel, setPatchPreviewModel] = useState<WorkspaceAiPatchPreviewModel | null>(
+    null
+  );
   const [patchClarification, setPatchClarification] =
     useState<ArchitecturePatchClarification | null>(null);
   const [draftClarification, setDraftClarification] =
     useState<PendingArchitectureDraftClarification | null>(null);
   const [draftFollowUpSession, setDraftFollowUpSession] =
-    useState<ArchitectureDraftFollowUpSession | null>(null);
+    useState<PendingArchitectureDraftFollowUp | null>(null);
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
     null
   );
-  const [designSimulation, setDesignSimulation] = useState<DesignSimulationResult | null>(null);
+  const [lastPatchPreviewRequest, setLastPatchPreviewRequest] =
+    useState<LastPatchPreviewRequest | null>(null);
+  const [draftSourceFingerprint, setDraftSourceFingerprint] = useState<string | null>(null);
+  const [patchPreviewSourceFingerprint, setPatchPreviewSourceFingerprint] = useState<string | null>(
+    null
+  );
+  const [draftSourceRevision, setDraftSourceRevision] = useState<number | null>(null);
+  const [patchPreviewSourceRevision, setPatchPreviewSourceRevision] = useState<number | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<TerraformPreviewExplanationState | null>(null);
-  const [terraformIssueResolution, setTerraformIssueResolution] =
-    useState<TerraformIssueResolutionState | null>(null);
+  const [terraformIssueAnalyses, setTerraformIssueAnalyses] = useState<
+    Record<string, TerraformIssueAnalysisState>
+  >(() => readBrowserTerraformIssueAnalyses(projectId));
+  const [terraformIssueBatchProgress, setTerraformIssueBatchProgress] =
+    useState<TerraformIssueBatchProgress | null>(null);
+  const [terraformFixUnavailableReasons, setTerraformFixUnavailableReasons] = useState<
+    Record<string, string>
+  >({});
   const [applyingTerraformFixRequestId, setApplyingTerraformFixRequestId] = useState<number | null>(
     null
   );
-  const [completedTerraformFixRequestIds, setCompletedTerraformFixRequestIds] = useState<
-    readonly number[]
+  const [completedTerraformFixIssueKeys, setCompletedTerraformFixIssueKeys] = useState<
+    readonly string[]
   >([]);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
-  const [simulationState, setSimulationState] = useState<AiRequestState>("idle");
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
-  const [simulationErrorMessage, setSimulationErrorMessage] = useState("");
-  const [simulationFingerprint, setSimulationFingerprint] = useState<string | null>(null);
+  const repositoryTemplate = useMemo(
+    () =>
+      repositoryTemplateId
+        ? (listBoardTemplates().find((template) => template.id === repositoryTemplateId) ?? null)
+        : null,
+    [repositoryTemplateId]
+  );
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const launcherButtonRef = useRef<HTMLButtonElement | null>(null);
+  const chatDialogRef = useRef<HTMLElement | null>(null);
+  const tabButtonRefs = useRef<Record<WorkspaceAiChatScope, HTMLButtonElement | null>>({
+    draft: null,
+    errors: null,
+    preview: null
+  });
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const transcriptScrollFrameRef = useRef<number | null>(null);
+  const transcriptShouldFollowRef = useRef(true);
+  const transcriptScrollContextRef = useRef({ isOpen: false, scope: activeChatTab });
+  const wasChatOpenRef = useRef(false);
   const speechRecognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const voiceInputBaseRef = useRef("");
+  const voiceInputBaseRef = useRef<VoiceInputBase>({ scope: "draft", value: "" });
   const voiceNoSpeechTimerRef = useRef<number | null>(null);
   const loadedProjectIdRef = useRef(projectId);
-  const latestTerraformIssueRequestIdRef = useRef<number | null>(null);
-  const latestTerraformPreviewRequestIdRef = useRef<number | null>(null);
+  const terraformAiContextRef = useRef(terraformAiContext);
+  const latestTerraformAiInteractionIdRef = useRef<number | null>(null);
+  const latestTerraformFingerprintRef = useRef(terraformAiContext.fingerprint);
+  const latestTerraformPreviewRequestIdRef = useRef(0);
+  const nextTerraformActionRequestIdRef = useRef(0);
+  const pendingTerraformFixApplyRef = useRef<PendingTerraformFixApply | null>(null);
   const latestTerraformSafeFixResultRequestIdRef = useRef<number | null>(null);
-  const dismissedTerraformIssueRequestIdRef = useRef<number | null>(null);
+  const requestRegistryRef = useRef(new WorkspaceAiChatRequestRegistry());
+  terraformAiContextRef.current = terraformAiContext;
   const boardSnapshot = useMemo(
     () => createWorkspaceAiBoardSnapshot(context.diagram),
     [context.diagram]
   );
-  const hasStaleDesignSimulation =
-    designSimulation !== null &&
-    isWorkspaceAiResultStale(simulationFingerprint, boardSnapshot.fingerprint);
+  const currentBoardRevision = context.getDiagramRevision();
   const draftSafetyWarnings = useMemo(
     () => createDraftSafetyWarnings(draft, boardSnapshot.hasResources),
     [boardSnapshot.hasResources, draft]
   );
+  const activeComposer = composerStates[activeChatTab];
+  const activeScopeDefinition = getWorkspaceAiChatScopeDefinition(activeChatTab);
+  const isVoiceListening = voiceListeningScope === activeChatTab;
+  const draftIsStale =
+    draft !== null &&
+    (isWorkspaceAiResultStale(draftSourceFingerprint, boardSnapshot.fingerprint) ||
+      (draftSourceRevision !== null && draftSourceRevision !== currentBoardRevision));
+  const patchPreviewIsStale =
+    patchPreviewModel !== null &&
+    (isWorkspaceAiResultStale(patchPreviewSourceFingerprint, boardSnapshot.fingerprint) ||
+      (patchPreviewSourceRevision !== null && patchPreviewSourceRevision !== currentBoardRevision));
+  const currentTerraformErrorIssues = useMemo(
+    () => terraformAiContext.issues.filter((issue) => issue.diagnostic.severity === "error"),
+    [terraformAiContext.issues]
+  );
+  const selectedTerraformIssue = useMemo(
+    () =>
+      terraformAiContext.issues.find(
+        (issue) => issue.diagnosticKey === selectedTerraformIssueKey
+      ) ??
+      currentTerraformErrorIssues[0] ??
+      terraformAiContext.issues[0] ??
+      null,
+    [currentTerraformErrorIssues, selectedTerraformIssueKey, terraformAiContext.issues]
+  );
+  const selectedTerraformIssueAnalysis = selectedTerraformIssue
+    ? (terraformIssueAnalyses[selectedTerraformIssue.diagnosticKey] ?? null)
+    : null;
+  const selectedTerraformIssueCode = selectedTerraformIssue
+    ? resolveTerraformIssueCode({
+        combinedTerraformCode: terraformAiContext.combinedTerraformCode,
+        diagnostic: selectedTerraformIssue.diagnostic,
+        files: terraformAiContext.files
+      })
+    : "";
+  const selectedTerraformIssueAnalysisIsStale =
+    selectedTerraformIssueAnalysis !== null &&
+    selectedTerraformIssueAnalysis.terraformFingerprint !== terraformAiContext.fingerprint;
+  const selectedTerraformFixPlan = useMemo<SelectedTerraformFixPlan>(() => {
+    if (selectedTerraformIssue === null) {
+      return {
+        canApply: false,
+        codePreview: null,
+        reason: "수정할 Terraform 오류가 없습니다."
+      };
+    }
+
+    if (selectedTerraformIssueAnalysis?.state === "loading") {
+      return {
+        canApply: false,
+        codePreview: null,
+        reason: "오류 분석이 끝난 뒤 수정안을 적용할 수 있습니다."
+      };
+    }
+
+    if (selectedTerraformIssueAnalysis?.state === "error") {
+      return {
+        canApply: false,
+        codePreview: null,
+        reason: "오류 분석에 실패했습니다. 다시 분석한 뒤 수정안을 적용하세요."
+      };
+    }
+
+    if (!selectedTerraformIssueAnalysis?.explanation) {
+      return {
+        canApply: false,
+        codePreview: null,
+        reason: "이 오류를 먼저 분석해야 수정안을 적용할 수 있습니다."
+      };
+    }
+
+    if (selectedTerraformIssueAnalysisIsStale || selectedTerraformIssue.isStale) {
+      return {
+        canApply: false,
+        codePreview: null,
+        reason: "Terraform 코드가 변경되었습니다. 재검증한 뒤 이 오류를 다시 분석하세요."
+      };
+    }
+
+    const sourceResolutionProblem = getTerraformIssueSourceResolutionProblem(
+      selectedTerraformIssue.diagnostic,
+      terraformAiContext
+    );
+
+    if (sourceResolutionProblem) {
+      return {
+        canApply: false,
+        codePreview: null,
+        reason: sourceResolutionProblem
+      };
+    }
+
+    const fixPlan = createTerraformIssueFixPlan({
+      diagnostic: selectedTerraformIssue.diagnostic,
+      explanation: selectedTerraformIssueAnalysis.explanation,
+      terraformCode: selectedTerraformIssueCode
+    });
+
+    if (!fixPlan.canApply || !fixPlan.codePreview) {
+      return {
+        canApply: false,
+        codePreview: null,
+        reason: "자동 적용 가능한 안전한 수정안이 없습니다. 안내에 따라 직접 수정하세요."
+      };
+    }
+
+    return {
+      canApply: true,
+      codePreview: fixPlan.codePreview,
+      reason: ""
+    };
+  }, [
+    selectedTerraformIssue,
+    selectedTerraformIssueAnalysis,
+    selectedTerraformIssueAnalysisIsStale,
+    selectedTerraformIssueCode,
+    terraformAiContext
+  ]);
+  const terraformPreviewExplanationIsStale =
+    terraformPreviewExplanation !== null &&
+    (terraformPreviewExplanation.terraformFingerprint !== terraformAiContext.fingerprint ||
+      terraformPreviewExplanation.reviewScope.key !== terraformAiContext.reviewScope.key ||
+      terraformPreviewExplanation.reviewScope.terraformCode !==
+        terraformAiContext.reviewScope.terraformCode);
+  const isTerraformIssueAnalysisRunning =
+    terraformIssueBatchProgress !== null ||
+    Object.values(terraformIssueAnalyses).some((analysis) => analysis.state === "loading");
+  const terraformApplyAllPlan = useMemo(() => {
+    if (currentTerraformErrorIssues.length === 0) {
+      return {
+        canApply: false,
+        diagnosticKeys: [] as string[],
+        fixes: [] as TerraformSafeFixApplyRequest["fixes"],
+        reason: "적용할 Terraform 오류가 없습니다."
+      };
+    }
+
+    const fixes: TerraformSafeFixApplyRequest["fixes"][number][] = [];
+    const diagnosticKeys: string[] = [];
+
+    for (const issue of currentTerraformErrorIssues) {
+      const analysis = terraformIssueAnalyses[issue.diagnosticKey];
+
+      if (analysis?.state !== "idle" || !analysis.explanation) {
+        return {
+          canApply: false,
+          diagnosticKeys: [],
+          fixes: [],
+          reason:
+            analysis?.state === "error"
+              ? "실패한 오류 분석이 있습니다. 모든 오류를 다시 분석하세요."
+              : "모든 오류를 먼저 분석해야 합니다."
+        };
+      }
+
+      if (analysis.terraformFingerprint !== terraformAiContext.fingerprint || issue.isStale) {
+        return {
+          canApply: false,
+          diagnosticKeys: [],
+          fixes: [],
+          reason: "Terraform 코드가 변경되었습니다. 재검증한 뒤 모든 오류를 다시 분석하세요."
+        };
+      }
+
+      const sourceResolutionProblem = getTerraformIssueSourceResolutionProblem(
+        issue.diagnostic,
+        terraformAiContext
+      );
+
+      if (sourceResolutionProblem) {
+        return {
+          canApply: false,
+          diagnosticKeys: [],
+          fixes: [],
+          reason: sourceResolutionProblem
+        };
+      }
+
+      const terraformCode = resolveTerraformIssueCode({
+        combinedTerraformCode: terraformAiContext.combinedTerraformCode,
+        diagnostic: issue.diagnostic,
+        files: terraformAiContext.files
+      });
+      const fixPlan = createTerraformIssueFixPlan({
+        diagnostic: issue.diagnostic,
+        explanation: analysis.explanation,
+        terraformCode
+      });
+
+      if (fixPlan.canApply && fixPlan.codePreview) {
+        diagnosticKeys.push(issue.diagnosticKey);
+        fixes.push({ codePreview: fixPlan.codePreview, diagnostic: issue.diagnostic });
+      }
+    }
+
+    return fixes.length > 0
+      ? { canApply: true, diagnosticKeys, fixes, reason: "" }
+      : {
+          canApply: false,
+          diagnosticKeys: [],
+          fixes: [],
+          reason: "분석된 오류 중 자동 적용 가능한 안전한 수정안이 없습니다."
+        };
+  }, [currentTerraformErrorIssues, terraformAiContext, terraformIssueAnalyses]);
+
   const visibleMessages = useMemo(
     () => messages.filter((message) => getChatMessageScope(message) === activeChatTab),
     [activeChatTab, messages]
   );
-  const lastVisibleMessageId = visibleMessages.at(-1)?.id ?? null;
+  const displayedMessages = visibleMessages.filter(shouldShowWorkspaceAiChatMessage);
+  const lastVisibleMessageId = displayedMessages.at(-1)?.id ?? null;
   const hasActiveChatHistory =
-    visibleMessages.length > 0 ||
+    displayedMessages.length > 0 ||
     (activeChatTab === "draft" && draft !== null) ||
-    (activeChatTab === "errors" && terraformIssueResolution !== null) ||
-    (activeChatTab === "preview" && terraformPreviewExplanation !== null) ||
-    (activeChatTab === "simulation" && designSimulation !== null);
+    (activeChatTab === "errors" && Object.keys(terraformIssueAnalyses).length > 0) ||
+    (activeChatTab === "preview" && terraformPreviewExplanation !== null);
+  const activeRequestState: AiRequestState =
+    activeChatTab === "draft"
+      ? draftState
+      : activeChatTab === "errors"
+        ? isTerraformIssueAnalysisRunning
+          ? "loading"
+          : selectedTerraformIssueAnalysis?.state === "error" ||
+              Object.values(terraformIssueAnalyses).some((analysis) => analysis.state === "error")
+            ? "error"
+            : "idle"
+        : (terraformPreviewExplanation?.state ?? "idle");
+  const activeHasPendingApproval =
+    (activeChatTab === "draft" && (draft !== null || patchPreviewModel !== null)) ||
+    (activeChatTab === "errors" &&
+      ((selectedTerraformFixPlan.canApply &&
+        selectedTerraformIssue !== null &&
+        !completedTerraformFixIssueKeys.includes(selectedTerraformIssue.diagnosticKey)) ||
+        terraformApplyAllPlan.canApply));
+  const activeProposalIsStale =
+    (activeChatTab === "draft" && (draftIsStale || patchPreviewIsStale)) ||
+    (activeChatTab === "errors" &&
+      (selectedTerraformIssue?.isStale === true || selectedTerraformIssueAnalysisIsStale)) ||
+    (activeChatTab === "preview" && terraformPreviewExplanationIsStale);
+  const chatDockStatus = getWorkspaceAiChatDockStatus({
+    hasPendingApproval: activeHasPendingApproval,
+    isStale: activeProposalIsStale,
+    requestState: activeRequestState
+  });
+  const isChatBusy = activeRequestState === "loading";
+  const isSelectedTerraformFixCompleted =
+    selectedTerraformIssue !== null &&
+    completedTerraformFixIssueKeys.includes(selectedTerraformIssue.diagnosticKey);
+  const isSelectedTerraformFixApplying =
+    selectedTerraformIssue !== null &&
+    applyingTerraformFixRequestId !== null &&
+    pendingTerraformFixApplyRef.current?.diagnosticKeys.includes(
+      selectedTerraformIssue.diagnosticKey
+    ) === true;
+  const showSelectedTerraformApproval =
+    selectedTerraformFixPlan.canApply ||
+    isSelectedTerraformFixApplying ||
+    isSelectedTerraformFixCompleted;
+  const showTerraformApplyAllApproval =
+    terraformApplyAllPlan.canApply ||
+    (applyingTerraformFixRequestId !== null &&
+      (pendingTerraformFixApplyRef.current?.diagnosticKeys.length ?? 0) > 1);
+
+  const closeChatDock = useCallback(() => {
+    setOpen(false);
+    window.requestAnimationFrame(() => {
+      launcherButtonRef.current?.focus();
+    });
+  }, []);
 
   useEffect(() => {
     if (loadedProjectIdRef.current !== projectId) {
@@ -273,20 +636,188 @@ export function WorkspaceAiChatDock({
   }, [messages, projectId]);
 
   useEffect(() => {
+    if (loadedProjectIdRef.current !== projectId || typeof window === "undefined") {
+      return;
+    }
+
+    const storedAnalyses: StoredTerraformIssueAnalysis[] = Object.entries(
+      terraformIssueAnalyses
+    ).flatMap(([diagnosticKey, analysis]) =>
+      analysis.explanation
+        ? [
+            {
+              diagnosticKey,
+              explanation: analysis.explanation,
+              terraformFingerprint: analysis.terraformFingerprint
+            }
+          ]
+        : []
+    );
+    storeTerraformIssueAnalyses(window.localStorage, projectId, storedAnalyses);
+  }, [projectId, terraformIssueAnalyses]);
+
+  useEffect(() => {
+    if (loadedProjectIdRef.current !== projectId) {
+      return;
+    }
+
+    storeActiveChatScope(projectId, activeChatTab);
+  }, [activeChatTab, projectId]);
+
+  useEffect(() => {
+    requestRegistryRef.current.cancelAll();
     setMessages(readStoredChatMessages(projectId));
+    setActiveChatTab(readStoredActiveChatScope(projectId));
+    setComposerStates(createWorkspaceAiChatComposerStates());
+    setVoiceListeningScope(null);
     setSelectedSuggestionLabelsByMessageId({});
-    setCompletedTerraformFixRequestIds([]);
+    setTerraformIssueAnalyses(readBrowserTerraformIssueAnalyses(projectId));
+    setTerraformIssueBatchProgress(null);
+    setTerraformFixUnavailableReasons({});
+    setTerraformPreviewExplanation(null);
+    setApplyingTerraformFixRequestId(null);
+    setCompletedTerraformFixIssueKeys([]);
+    pendingTerraformFixApplyRef.current = null;
+    latestTerraformAiInteractionIdRef.current = terraformAiInteraction?.id ?? null;
+    latestTerraformPreviewRequestIdRef.current += 1;
+    setDraft(null);
+    setPatchPreviewModel(null);
+    setPatchClarification(null);
+    setDraftClarification(null);
+    setDraftFollowUpSession(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     loadedProjectIdRef.current = projectId;
   }, [projectId]);
 
   useEffect(() => {
+    if (
+      terraformAiInteraction === null ||
+      latestTerraformAiInteractionIdRef.current === terraformAiInteraction.id
+    ) {
+      return;
+    }
+
+    latestTerraformAiInteractionIdRef.current = terraformAiInteraction.id;
+    setActiveChatTab(terraformAiInteraction.scope);
+
+    if (terraformAiInteraction.diagnosticKey) {
+      onSelectTerraformIssue(terraformAiInteraction.diagnosticKey);
+    }
+  }, [onSelectTerraformIssue, terraformAiInteraction]);
+
+  useEffect(() => {
+    if (latestTerraformFingerprintRef.current === terraformAiContext.fingerprint) {
+      return;
+    }
+
+    latestTerraformFingerprintRef.current = terraformAiContext.fingerprint;
+    setCompletedTerraformFixIssueKeys([]);
+    setTerraformFixUnavailableReasons({});
+
+    if (!requestRegistryRef.current.cancel("errors")) {
+      return;
+    }
+
+    setTerraformIssueBatchProgress(null);
+    setTerraformIssueAnalyses((currentAnalyses) =>
+      Object.fromEntries(
+        Object.entries(currentAnalyses).map(([diagnosticKey, analysis]) => [
+          diagnosticKey,
+          analysis.state === "loading"
+            ? {
+                ...analysis,
+                message: "Terraform 코드가 변경되어 분석을 중지했습니다. 다시 분석하세요.",
+                state: "idle" as const
+              }
+            : analysis
+        ])
+      )
+    );
+  }, [terraformAiContext.fingerprint]);
+
+  useEffect(() => {
     if (!isOpen) {
+      wasChatOpenRef.current = false;
       return undefined;
     }
 
+    const shouldMoveInitialFocus = !wasChatOpenRef.current;
+    wasChatOpenRef.current = true;
+    const focusFrame = shouldMoveInitialFocus
+      ? window.requestAnimationFrame(() => {
+          if (activeScopeDefinition.inputAvailable) {
+            composerTextareaRef.current?.focus();
+            return;
+          }
+
+          tabButtonRefs.current[activeChatTab]?.focus();
+        })
+      : null;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Tab" && isMobileChatSurface && chatDialogRef.current) {
+        trapFocusWithin(chatDialogRef.current, event);
+        return;
+      }
+
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      closeChatDock();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      if (focusFrame !== null) {
+        window.cancelAnimationFrame(focusFrame);
+      }
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    activeChatTab,
+    activeScopeDefinition.inputAvailable,
+    closeChatDock,
+    isMobileChatSurface,
+    isOpen
+  ]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 768px)");
+    const update = () => setMobileChatSurface(query.matches);
+
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    const previousScrollContext = transcriptScrollContextRef.current;
+    const shouldForceTranscriptScroll =
+      isOpen &&
+      (!previousScrollContext.isOpen || previousScrollContext.scope !== activeChatTab);
+
+    transcriptScrollContextRef.current = { isOpen, scope: activeChatTab };
+
+    if (!isOpen) {
+      transcriptShouldFollowRef.current = true;
+      return undefined;
+    }
+
+    if (!shouldForceTranscriptScroll && !transcriptShouldFollowRef.current) {
+      return undefined;
+    }
+
+    transcriptShouldFollowRef.current = true;
     scrollChatTranscriptToBottom();
     transcriptScrollFrameRef.current = window.requestAnimationFrame(() => {
-      scrollChatTranscriptToBottom();
+      if (transcriptShouldFollowRef.current) {
+        scrollChatTranscriptToBottom();
+      }
       transcriptScrollFrameRef.current = null;
     });
 
@@ -298,13 +829,14 @@ export function WorkspaceAiChatDock({
     };
   }, [
     activeChatTab,
-    designSimulation,
     draft,
     draftState,
     isOpen,
     lastVisibleMessageId,
     patchPreviewModel,
-    simulationState,
+    terraformIssueAnalyses,
+    terraformIssueBatchProgress,
+    terraformPreviewExplanation,
     visibleMessages.length
   ]);
 
@@ -321,171 +853,43 @@ export function WorkspaceAiChatDock({
     });
   }
 
-  useEffect(() => {
-    if (!terraformIssueRequest) {
+  function handleTranscriptScroll(): void {
+    const transcript = transcriptRef.current;
+
+    if (transcript === null) {
       return;
     }
 
-    const request = terraformIssueRequest;
-
-    if (latestTerraformIssueRequestIdRef.current === request.id) {
-      return;
-    }
-
-    latestTerraformIssueRequestIdRef.current = request.id;
-    dismissedTerraformIssueRequestIdRef.current = null;
-    setOpen(true);
-    setActiveChatTab("errors");
-    setTerraformIssueResolution({
-      explanation: null,
-      message: "",
-      request,
-      state: "loading"
+    transcriptShouldFollowRef.current = isWorkspaceAiTranscriptNearBottom({
+      clientHeight: transcript.clientHeight,
+      scrollHeight: transcript.scrollHeight,
+      scrollTop: transcript.scrollTop
     });
-    appendAssistantMessage(
-      "terraform_issue",
-      `Terraform 이슈를 분석합니다: ${formatTerraformDiagnosticTitle(request.issue.diagnostic)}`,
-      [],
-      "single",
-      "errors"
-    );
-
-    async function explainIssue(): Promise<void> {
-      const { diagnostic } = request.issue;
-
-      try {
-        const explanation = await runAiTerraformErrorExplanation({
-          diagnostic,
-          rawMessage: formatTerraformIssueRawMessage(diagnostic),
-          relatedResourceId: diagnostic.resourceAddress,
-          stage: "validate",
-          terraformCodeContext: request.terraformCode
-        });
-
-        if (dismissedTerraformIssueRequestIdRef.current === request.id) {
-          return;
-        }
-
-        setTerraformIssueResolution({
-          explanation,
-          message: "",
-          request,
-          state: "idle"
-        });
-        appendAssistantMessage(
-          "terraform_issue",
-          `Terraform 이슈 원인: ${createTerraformIssueChatSummary(explanation)}`,
-          [],
-          "single",
-          "errors"
-        );
-      } catch (error) {
-        const message = getApiErrorMessage(error, "Terraform 이슈 AI 해결 가이드를 불러오지 못했습니다.");
-
-        if (dismissedTerraformIssueRequestIdRef.current === request.id) {
-          return;
-        }
-
-        setTerraformIssueResolution({
-          explanation: null,
-          message,
-          request,
-          state: "error"
-        });
-        appendAssistantMessage("error", message, [], "single", "errors");
-      }
-    }
-
-    void explainIssue();
-  }, [terraformIssueRequest]);
-
-  useEffect(() => {
-    if (!terraformPreviewRequest) {
-      return;
-    }
-
-    const request = terraformPreviewRequest;
-
-    if (latestTerraformPreviewRequestIdRef.current === request.id) {
-      return;
-    }
-
-    latestTerraformPreviewRequestIdRef.current = request.id;
-    setOpen(true);
-    setActiveChatTab("preview");
-    setTerraformPreviewExplanation({
-      explanation: null,
-      message: "",
-      request,
-      state: "loading"
-    });
-    appendAssistantMessage(
-      "preview",
-      `Preview 설명을 요청했습니다. ${request.label}`,
-      [],
-      "single",
-      "preview"
-    );
-
-    async function explainPreview(): Promise<void> {
-      try {
-        const explanation = await runAiTerraformPreviewExplanation(request.terraformCode);
-
-        if (latestTerraformPreviewRequestIdRef.current !== request.id) {
-          return;
-        }
-
-        setTerraformPreviewExplanation({
-          explanation,
-          message: "",
-          request,
-          state: "idle"
-        });
-        appendAssistantMessage(
-          "preview",
-          `Preview 설명 완료: ${explanation.summary}`,
-          [],
-          "single",
-          "preview"
-        );
-      } catch (error) {
-        const message = getApiErrorMessage(error, "Terraform Preview 설명 중 오류가 발생했습니다.");
-
-        if (latestTerraformPreviewRequestIdRef.current !== request.id) {
-          return;
-        }
-
-        setTerraformPreviewExplanation({
-          explanation: null,
-          message,
-          request,
-          state: "error"
-        });
-        appendAssistantMessage("error", message, [], "single", "preview");
-      }
-    }
-
-    void explainPreview();
-  }, [terraformPreviewRequest]);
+  }
 
   useEffect(() => {
     if (!terraformSafeFixApplyResult) {
       return;
     }
 
-    if (latestTerraformSafeFixResultRequestIdRef.current === terraformSafeFixApplyResult.requestId) {
+    if (
+      latestTerraformSafeFixResultRequestIdRef.current === terraformSafeFixApplyResult.requestId
+    ) {
       return;
     }
 
     latestTerraformSafeFixResultRequestIdRef.current = terraformSafeFixApplyResult.requestId;
+    const pendingApply = pendingTerraformFixApplyRef.current;
     setApplyingTerraformFixRequestId(null);
+    pendingTerraformFixApplyRef.current = null;
 
-    if (terraformSafeFixApplyResult.applied) {
-      setCompletedTerraformFixRequestIds((currentRequestIds) =>
-        currentRequestIds.includes(terraformSafeFixApplyResult.requestId)
-          ? currentRequestIds
-          : [...currentRequestIds, terraformSafeFixApplyResult.requestId]
-      );
+    if (
+      terraformSafeFixApplyResult.applied &&
+      pendingApply?.requestId === terraformSafeFixApplyResult.requestId
+    ) {
+      setCompletedTerraformFixIssueKeys((currentIssueKeys) => [
+        ...new Set([...currentIssueKeys, ...pendingApply.diagnosticKeys])
+      ]);
     }
 
     appendAssistantMessage(
@@ -503,6 +907,7 @@ export function WorkspaceAiChatDock({
     return () => {
       clearVoiceNoSpeechTimer();
       releaseSpeechRecognition("abort");
+      requestRegistryRef.current.cancelAll();
     };
   }, []);
 
@@ -513,33 +918,395 @@ export function WorkspaceAiChatDock({
     selectionMode: WorkspaceAiChatSelectionMode = "single",
     scope: WorkspaceAiChatScope = activeChatTab
   ): void {
-    setMessages((currentMessages) => trimChatMessages([
-      ...currentMessages,
-      createChatMessage("assistant", kind, content, suggestions, selectionMode, scope)
-    ]));
+    setMessages((currentMessages) =>
+      trimChatMessages([
+        ...currentMessages,
+        createChatMessage("assistant", kind, content, suggestions, selectionMode, scope)
+      ])
+    );
+  }
+
+  function setComposerValue(value: string, scope: WorkspaceAiChatScope = activeChatTab): void {
+    setComposerStates((currentStates) => ({
+      ...currentStates,
+      [scope]: {
+        ...currentStates[scope],
+        value
+      }
+    }));
+  }
+
+  function setVoiceStatusMessage(
+    voiceStatusMessage: string | ((currentMessage: string) => string),
+    scope: WorkspaceAiChatScope = activeChatTab
+  ): void {
+    setComposerStates((currentStates) => ({
+      ...currentStates,
+      [scope]: {
+        ...currentStates[scope],
+        voiceStatusMessage:
+          typeof voiceStatusMessage === "function"
+            ? voiceStatusMessage(currentStates[scope].voiceStatusMessage)
+            : voiceStatusMessage
+      }
+    }));
+  }
+
+  function setVoiceListening(
+    isListening: boolean,
+    scope: WorkspaceAiChatScope = activeChatTab
+  ): void {
+    setVoiceListeningScope((currentScope) =>
+      isListening ? scope : currentScope === scope ? null : currentScope
+    );
+  }
+
+  function createProposalSource(): WorkspaceAiProposalSource {
+    return {
+      fingerprint: boardSnapshot.fingerprint,
+      revision: context.getDiagramRevision()
+    };
+  }
+
+  function selectChatTab(scope: WorkspaceAiChatScope): void {
+    if (scope === activeChatTab) {
+      return;
+    }
+
+    stopVoiceRecognition();
+    setActiveChatTab(scope);
+  }
+
+  function handleChatTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>): void {
+    let nextScope: WorkspaceAiChatScope | null = null;
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextScope = getAdjacentWorkspaceAiChatScope(activeChatTab, -1);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextScope = getAdjacentWorkspaceAiChatScope(activeChatTab, 1);
+    } else if (event.key === "Home") {
+      nextScope = workspaceAiChatScopes[0] ?? "draft";
+    } else if (event.key === "End") {
+      nextScope = workspaceAiChatScopes.at(-1) ?? "preview";
+    }
+
+    if (nextScope === null) {
+      return;
+    }
+
+    event.preventDefault();
+    selectChatTab(nextScope);
+    window.requestAnimationFrame(() => {
+      tabButtonRefs.current[nextScope]?.focus();
+    });
+  }
+
+  function createTerraformActionRequestId(): number {
+    nextTerraformActionRequestIdRef.current += 1;
+    return Date.now() * 1000 + nextTerraformActionRequestIdRef.current;
+  }
+
+  async function runTerraformAgentReview(): Promise<void> {
+    const currentContext = terraformAiContextRef.current;
+    const reviewScope = { ...currentContext.reviewScope };
+
+    if (reviewScope.terraformCode.trim().length === 0) {
+      setTerraformPreviewExplanation({
+        explanation: null,
+        message: "검토할 Terraform 코드가 없습니다.",
+        reviewScope,
+        state: "error",
+        terraformFingerprint: currentContext.fingerprint
+      });
+      return;
+    }
+
+    latestTerraformPreviewRequestIdRef.current += 1;
+    const requestId = latestTerraformPreviewRequestIdRef.current;
+    const controller = requestRegistryRef.current.begin("preview");
+    setTerraformPreviewExplanation({
+      explanation: null,
+      message: "",
+      reviewScope,
+      state: "loading",
+      terraformFingerprint: currentContext.fingerprint
+    });
+
+    try {
+      const explanation = await runAiTerraformPreviewExplanation(reviewScope.terraformCode, {
+        signal: controller.signal
+      });
+
+      if (latestTerraformPreviewRequestIdRef.current !== requestId || controller.signal.aborted) {
+        return;
+      }
+
+      setTerraformPreviewExplanation({
+        explanation,
+        message: "",
+        reviewScope,
+        state: "idle",
+        terraformFingerprint: currentContext.fingerprint
+      });
+    } catch (error) {
+      if (
+        isWorkspaceAiChatAbortError(error) ||
+        latestTerraformPreviewRequestIdRef.current !== requestId
+      ) {
+        return;
+      }
+
+      setTerraformPreviewExplanation({
+        explanation: null,
+        message: getApiErrorMessage(error, "에이전트 리뷰 중 오류가 발생했습니다."),
+        reviewScope,
+        state: "error",
+        terraformFingerprint: currentContext.fingerprint
+      });
+    } finally {
+      requestRegistryRef.current.complete("preview", controller);
+    }
+  }
+
+  async function analyzeSelectedTerraformIssue(): Promise<void> {
+    if (selectedTerraformIssue === null) {
+      return;
+    }
+
+    const contextSnapshot = terraformAiContextRef.current;
+    const controller = requestRegistryRef.current.begin("errors");
+    setTerraformIssueBatchProgress(null);
+
+    try {
+      await analyzeTerraformIssue(selectedTerraformIssue, contextSnapshot, controller);
+    } finally {
+      requestRegistryRef.current.complete("errors", controller);
+    }
+  }
+
+  async function analyzeAllTerraformIssues(): Promise<void> {
+    const issues = terraformAiContextRef.current.issues.filter(
+      (issue) => issue.diagnostic.severity === "error"
+    );
+
+    if (issues.length === 0) {
+      return;
+    }
+
+    const contextSnapshot = terraformAiContextRef.current;
+    const controller = requestRegistryRef.current.begin("errors");
+    setTerraformIssueBatchProgress({ completed: 0, total: issues.length });
+
+    try {
+      for (let index = 0; index < issues.length; index += 1) {
+        if (controller.signal.aborted) {
+          break;
+        }
+
+        const issue = issues[index];
+
+        if (!issue) {
+          continue;
+        }
+
+        const outcome = await analyzeTerraformIssue(issue, contextSnapshot, controller);
+
+        if (outcome === "aborted" || outcome === "stale") {
+          break;
+        }
+
+        setTerraformIssueBatchProgress({ completed: index + 1, total: issues.length });
+      }
+    } finally {
+      setTerraformIssueBatchProgress(null);
+      requestRegistryRef.current.complete("errors", controller);
+    }
+  }
+
+  async function analyzeTerraformIssue(
+    issue: WorkspaceTerraformAiContext["issues"][number],
+    contextSnapshot: WorkspaceTerraformAiContext,
+    controller: AbortController
+  ): Promise<"aborted" | "completed" | "failed" | "stale"> {
+    const previousAnalysis = terraformIssueAnalyses[issue.diagnosticKey];
+    setTerraformIssueAnalyses((currentAnalyses) => ({
+      ...currentAnalyses,
+      [issue.diagnosticKey]: {
+        explanation: currentAnalyses[issue.diagnosticKey]?.explanation ?? null,
+        message: "",
+        state: "loading",
+        terraformFingerprint:
+          currentAnalyses[issue.diagnosticKey]?.terraformFingerprint ?? contextSnapshot.fingerprint
+      }
+    }));
+    setTerraformFixUnavailableReasons((currentReasons) => {
+      if (!(issue.diagnosticKey in currentReasons)) {
+        return currentReasons;
+      }
+
+      const nextReasons = { ...currentReasons };
+      delete nextReasons[issue.diagnosticKey];
+      return nextReasons;
+    });
+
+    const terraformCode = resolveTerraformIssueCode({
+      combinedTerraformCode: contextSnapshot.combinedTerraformCode,
+      diagnostic: issue.diagnostic,
+      files: contextSnapshot.files
+    });
+
+    try {
+      const explanation = await runAiTerraformErrorExplanation(
+        {
+          diagnostic: issue.diagnostic,
+          rawMessage: formatTerraformIssueRawMessage(issue.diagnostic),
+          relatedResourceId: issue.diagnostic.resourceAddress,
+          stage: "validate",
+          terraformCodeContext: terraformCode
+        },
+        { signal: controller.signal }
+      );
+
+      if (controller.signal.aborted) {
+        return "aborted";
+      }
+
+      if (terraformAiContextRef.current.fingerprint !== contextSnapshot.fingerprint) {
+        setTerraformIssueAnalyses((currentAnalyses) => ({
+          ...currentAnalyses,
+          [issue.diagnosticKey]: {
+            explanation:
+              currentAnalyses[issue.diagnosticKey]?.explanation ??
+              previousAnalysis?.explanation ??
+              null,
+            message: "Terraform 코드가 변경되어 분석 결과를 저장하지 않았습니다. 다시 분석하세요.",
+            state: "idle",
+            terraformFingerprint:
+              currentAnalyses[issue.diagnosticKey]?.terraformFingerprint ??
+              previousAnalysis?.terraformFingerprint ??
+              contextSnapshot.fingerprint
+          }
+        }));
+        return "stale";
+      }
+
+      setTerraformIssueAnalyses((currentAnalyses) => ({
+        ...currentAnalyses,
+        [issue.diagnosticKey]: {
+          explanation,
+          message: "",
+          state: "idle",
+          terraformFingerprint: contextSnapshot.fingerprint
+        }
+      }));
+      return "completed";
+    } catch (error) {
+      if (isWorkspaceAiChatAbortError(error) || controller.signal.aborted) {
+        setTerraformIssueAnalyses((currentAnalyses) => ({
+          ...currentAnalyses,
+          [issue.diagnosticKey]: {
+            explanation: currentAnalyses[issue.diagnosticKey]?.explanation ?? null,
+            message: REQUEST_CANCELLED_MESSAGE,
+            state: "idle",
+            terraformFingerprint:
+              currentAnalyses[issue.diagnosticKey]?.terraformFingerprint ??
+              contextSnapshot.fingerprint
+          }
+        }));
+        return "aborted";
+      }
+
+      const message = getApiErrorMessage(
+        error,
+        "Terraform 이슈 AI 해결 가이드를 불러오지 못했습니다."
+      );
+      setTerraformIssueAnalyses((currentAnalyses) => ({
+        ...currentAnalyses,
+        [issue.diagnosticKey]: {
+          explanation: currentAnalyses[issue.diagnosticKey]?.explanation ?? null,
+          message,
+          state: "error",
+          terraformFingerprint:
+            currentAnalyses[issue.diagnosticKey]?.terraformFingerprint ??
+            contextSnapshot.fingerprint
+        }
+      }));
+      return "failed";
+    }
+  }
+
+  function applySelectedTerraformIssueFix(): void {
+    if (selectedTerraformIssue === null) {
+      return;
+    }
+
+    const diagnosticKey = selectedTerraformIssue.diagnosticKey;
+
+    if (!selectedTerraformFixPlan.canApply || !selectedTerraformFixPlan.codePreview) {
+      setTerraformFixUnavailableReasons((currentReasons) => ({
+        ...currentReasons,
+        [diagnosticKey]: selectedTerraformFixPlan.reason
+      }));
+      return;
+    }
+
+    const requestId = createTerraformActionRequestId();
+    setTerraformFixUnavailableReasons((currentReasons) => ({
+      ...currentReasons,
+      [diagnosticKey]: ""
+    }));
+    setApplyingTerraformFixRequestId(requestId);
+    pendingTerraformFixApplyRef.current = { diagnosticKeys: [diagnosticKey], requestId };
+    onApplyTerraformIssueFix({
+      expectedTerraformFingerprint: terraformAiContext.fingerprint,
+      fixes: [
+        {
+          codePreview: selectedTerraformFixPlan.codePreview,
+          diagnostic: selectedTerraformIssue.diagnostic
+        }
+      ],
+      id: requestId,
+      mode: "single"
+    });
+  }
+
+  function applyAllTerraformIssueFixes(): void {
+    if (!terraformApplyAllPlan.canApply) {
+      return;
+    }
+
+    const requestId = createTerraformActionRequestId();
+    setApplyingTerraformFixRequestId(requestId);
+    pendingTerraformFixApplyRef.current = {
+      diagnosticKeys: terraformApplyAllPlan.diagnosticKeys,
+      requestId
+    };
+    onApplyTerraformIssueFix({
+      expectedTerraformFingerprint: terraformAiContext.fingerprint,
+      fixes: terraformApplyAllPlan.fixes,
+      id: requestId,
+      mode: "all"
+    });
   }
 
   async function submitChatPrompt(event?: FormEvent<HTMLFormElement>): Promise<void> {
     event?.preventDefault();
 
-    await submitUserMessage(composerTextareaRef.current?.value ?? composerValue);
+    await submitUserMessage(activeComposer.value);
   }
 
   function clearActiveChatHistory(): void {
-    setSelectedSuggestionLabelsByMessageId({});
+    requestRegistryRef.current.cancel(activeChatTab);
+    const activeMessageIds = new Set(
+      messages
+        .filter((message) => getChatMessageScope(message) === activeChatTab)
+        .map((message) => message.id)
+    );
+    setSelectedSuggestionLabelsByMessageId((currentSelections) =>
+      removeWorkspaceAiSelectionEntries(currentSelections, activeMessageIds)
+    );
     stopVoiceRecognition();
     setVoiceStatusMessage("");
-
-    if (activeChatTab === "simulation") {
-      setMessages((currentMessages) =>
-        currentMessages.filter((message) => getChatMessageScope(message) !== "simulation")
-      );
-      setDesignSimulation(null);
-      setSimulationFingerprint(null);
-      setSimulationErrorMessage("");
-      setSimulationState("idle");
-      return;
-    }
 
     if (activeChatTab === "preview") {
       setMessages((currentMessages) =>
@@ -553,9 +1320,12 @@ export function WorkspaceAiChatDock({
       setMessages((currentMessages) =>
         currentMessages.filter((message) => getChatMessageScope(message) !== "errors")
       );
-      setTerraformIssueResolution(null);
+      setTerraformIssueAnalyses({});
+      setTerraformIssueBatchProgress(null);
+      setTerraformFixUnavailableReasons({});
       setApplyingTerraformFixRequestId(null);
-      setCompletedTerraformFixRequestIds([]);
+      setCompletedTerraformFixIssueKeys([]);
+      pendingTerraformFixApplyRef.current = null;
       return;
     }
 
@@ -565,13 +1335,17 @@ export function WorkspaceAiChatDock({
     ]);
     setComposerValue("");
     setDraft(null);
+    setPatchPreviewModel(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
+    setLastDraftRequest(null);
+    setLastPatchPreviewRequest(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setDraftErrorMessage("");
     setDraftState("idle");
-    setTerraformIssueResolution(null);
-    setApplyingTerraformFixRequestId(null);
-    setCompletedTerraformFixRequestIds([]);
     context.setPreviewDiagram(null);
   }
 
@@ -581,11 +1355,18 @@ export function WorkspaceAiChatDock({
   ): Promise<void> {
     const trimmedPrompt = value.trim();
 
-    if (trimmedPrompt.length === 0 || draftState === "loading") {
+    if (!activeScopeDefinition.inputAvailable || trimmedPrompt.length === 0 || isChatBusy) {
       return;
     }
 
-    const userMessage = createChatMessage("user", "status", trimmedPrompt, [], "single", "draft");
+    const userMessage = createChatMessage(
+      "user",
+      "status",
+      trimmedPrompt,
+      [],
+      "single",
+      activeChatTab
+    );
     const messagesWithSelection = suggestionSelection
       ? markChatMessageSuggestionsSelected(messages, suggestionSelection)
       : messages;
@@ -631,11 +1412,7 @@ export function WorkspaceAiChatDock({
           })
         : null;
 
-    if (
-      draft !== null &&
-      context.previewDiagram !== null &&
-      pendingPreviewAction === "patch"
-    ) {
+    if (draft !== null && context.previewDiagram !== null && pendingPreviewAction === "patch") {
       await createPatchPreviewFromPrompt(trimmedPrompt, {
         baseArchitectureJson: convertDiagramJsonToArchitectureJson(context.previewDiagram),
         baseDiagram: context.previewDiagram
@@ -688,7 +1465,10 @@ export function WorkspaceAiChatDock({
     const selectedCandidate = findPatchClarificationCandidate(patchClarification, trimmedPrompt);
 
     if (!selectedCandidate) {
-      const selectedSuggestion = findPatchClarificationSuggestion(patchClarification, trimmedPrompt);
+      const selectedSuggestion = findPatchClarificationSuggestion(
+        patchClarification,
+        trimmedPrompt
+      );
 
       if (selectedSuggestion) {
         const originalInstruction = patchClarification.intent.instruction;
@@ -766,28 +1546,48 @@ export function WorkspaceAiChatDock({
       readonly skipConnection?: boolean | undefined;
     } = {}
   ): Promise<void> {
+    const proposalSource = createProposalSource();
+    const controller = requestRegistryRef.current.begin("draft");
+
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setPatchClarification(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
+    setLastPatchPreviewRequest({
+      connectionTargetResourceId: options.connectionTargetResourceId,
+      instruction,
+      selectedTargetResourceId: options.selectedTargetResourceId,
+      skipConnection: options.skipConnection
+    });
     context.setPreviewDiagram(null);
 
     try {
       const baseArchitectureJson = options.baseArchitectureJson ?? boardSnapshot.architectureJson;
-      const response = await createAiArchitecturePatchPreview({
-        architectureJson: baseArchitectureJson,
-        instruction,
-        ...(options.selectedTargetResourceId !== undefined
-          ? { selectedTargetResourceId: options.selectedTargetResourceId }
-          : {}),
-        ...(options.connectionTargetResourceId !== undefined
-          ? { connectionTargetResourceId: options.connectionTargetResourceId }
-          : {}),
-        ...(options.skipConnection === true ? { skipConnection: true } : {})
-      });
+      const response = await createAiArchitecturePatchPreview(
+        {
+          architectureJson: baseArchitectureJson,
+          instruction,
+          ...(options.selectedTargetResourceId !== undefined
+            ? { selectedTargetResourceId: options.selectedTargetResourceId }
+            : {}),
+          ...(options.connectionTargetResourceId !== undefined
+            ? { connectionTargetResourceId: options.connectionTargetResourceId }
+            : {}),
+          ...(options.skipConnection === true ? { skipConnection: true } : {})
+        },
+        { signal: controller.signal }
+      );
+
+      if (!requestRegistryRef.current.isActive("draft", controller)) {
+        return;
+      }
 
       if (response.status === "needs_clarification") {
         setPatchClarification(response);
@@ -800,20 +1600,36 @@ export function WorkspaceAiChatDock({
         return;
       }
 
-      showPatchPreview(response, options.baseDiagram);
+      showPatchPreview(response, options.baseDiagram, proposalSource);
     } catch (error) {
+      if (
+        controller.signal.aborted ||
+        !requestRegistryRef.current.isActive("draft", controller) ||
+        isWorkspaceAiChatAbortError(error)
+      ) {
+        return;
+      }
+
       const message = getApiErrorMessage(error, "수정 미리보기 생성 중 오류가 발생했습니다.");
 
       setDraftState("error");
       setDraftErrorMessage(message);
       appendAssistantMessage("error", message);
+    } finally {
+      requestRegistryRef.current.complete("draft", controller);
     }
   }
 
-  function showPatchPreview(preview: ArchitecturePatchPreview, baseDiagram = context.diagram): void {
+  function showPatchPreview(
+    preview: ArchitecturePatchPreview,
+    baseDiagram = context.diagram,
+    proposalSource: WorkspaceAiProposalSource = createProposalSource()
+  ): void {
     const model = createWorkspaceAiPatchPreviewModel(baseDiagram, preview);
 
     setPatchPreviewModel(model);
+    setPatchPreviewSourceFingerprint(proposalSource.fingerprint);
+    setPatchPreviewSourceRevision(proposalSource.revision);
     context.setPreviewDiagram(model.visualPreviewDiagram, model.annotations);
     setDraftState("idle");
     appendAssistantMessage("patch", createPatchPreviewSummary(preview));
@@ -825,15 +1641,15 @@ export function WorkspaceAiChatDock({
     }
 
     const resolution = resolveArchitectureDraftFollowUpAnswer(
-      draftFollowUpSession,
+      draftFollowUpSession.session,
       trimmedPrompt
     );
 
     if (resolution.action === "show_pending_draft") {
-      const pendingDraft = draftFollowUpSession.pendingDraft;
+      const pendingDraft = draftFollowUpSession.session.pendingDraft;
 
       setDraftFollowUpSession(null);
-      showDraftPreview(pendingDraft);
+      showDraftPreview(pendingDraft, draftFollowUpSession.proposalSource);
       return;
     }
 
@@ -846,7 +1662,9 @@ export function WorkspaceAiChatDock({
     appendAssistantMessage("question", resolution.question, resolution.suggestions);
   }
 
-  async function createDraftFromConversation(conversation: readonly WorkspaceAiChatMessage[]): Promise<void> {
+  async function createDraftFromConversation(
+    conversation: readonly WorkspaceAiChatMessage[]
+  ): Promise<void> {
     const requirementPrompt = createRequirementPromptFromMessages(conversation);
 
     if (requirementPrompt.length === 0) {
@@ -862,7 +1680,9 @@ export function WorkspaceAiChatDock({
     });
   }
 
-  async function createDraftFromRequest(draftRequest: CreateArchitectureDraftRequest): Promise<void> {
+  async function createDraftFromRequest(
+    draftRequest: CreateArchitectureDraftRequest
+  ): Promise<void> {
     const prompt = draftRequest.prompt.trim();
 
     if (prompt.length === 0) {
@@ -875,20 +1695,47 @@ export function WorkspaceAiChatDock({
 
     const normalizedDraftRequest: CreateArchitectureDraftRequest = {
       ...draftRequest,
-      prompt
+      prompt,
+      ...(repositoryTemplate && isBuiltInTemplateId(repositoryTemplate.id)
+        ? {
+            templateId: repositoryTemplate.id,
+            ...(repositoryAnalysisSourceRepositoryId
+              ? {
+                  repositoryAnalysis: {
+                    projectId,
+                    sourceRepositoryId: repositoryAnalysisSourceRepositoryId
+                  }
+                }
+              : {})
+          }
+        : draftRequest.templateId
+          ? { templateId: draftRequest.templateId }
+          : {})
     };
+    const proposalSource = createProposalSource();
+    const controller = requestRegistryRef.current.begin("draft");
 
     setDraftState("loading");
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setPatchClarification(null);
     setDraftFollowUpSession(null);
     setLastDraftRequest(normalizedDraftRequest);
     context.setPreviewDiagram(null);
 
     try {
-      const result = await createAiArchitectureDraft(normalizedDraftRequest);
+      const result = await createAiArchitectureDraft(normalizedDraftRequest, {
+        signal: controller.signal
+      });
+
+      if (!requestRegistryRef.current.isActive("draft", controller)) {
+        return;
+      }
 
       if (isArchitectureDraftClarification(result)) {
         setDraftClarification({
@@ -902,7 +1749,10 @@ export function WorkspaceAiChatDock({
 
       const previewDecision = planArchitectureDraftPreview(normalizedDraftRequest, result);
       if (previewDecision.action === "ask_follow_up") {
-        setDraftFollowUpSession(previewDecision.session);
+        setDraftFollowUpSession({
+          proposalSource,
+          session: previewDecision.session
+        });
         setDraftState("idle");
         appendAssistantMessage(
           "question",
@@ -912,29 +1762,36 @@ export function WorkspaceAiChatDock({
         return;
       }
 
-      showDraftPreview(previewDecision.result);
+      showDraftPreview(previewDecision.result, proposalSource);
     } catch (error) {
+      if (
+        controller.signal.aborted ||
+        !requestRegistryRef.current.isActive("draft", controller) ||
+        isWorkspaceAiChatAbortError(error)
+      ) {
+        return;
+      }
+
       const message = getApiErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다.");
 
       setDraftState("error");
       setDraftErrorMessage(message);
       appendAssistantMessage("error", message);
+    } finally {
+      requestRegistryRef.current.complete("draft", controller);
     }
   }
 
-  function closeChatDock(): void {
-    dismissedTerraformIssueRequestIdRef.current =
-      terraformIssueResolution?.request.id ?? terraformIssueRequest?.id ?? null;
-    setOpen(false);
-    setTerraformIssueResolution(null);
-    setApplyingTerraformFixRequestId(null);
-  }
-
-  function showDraftPreview(result: AiArchitectureDraftResult): void {
-    const previewDiagram = getDiagramJsonForArchitectureDraft(result);
+  function showDraftPreview(
+    result: AiArchitectureDraftResult,
+    proposalSource: WorkspaceAiProposalSource = createProposalSource()
+  ): void {
+    const previewDiagram = compileArchitectureDraftProposal(result, context.diagram).diagram;
 
     setDraft(result);
     setDraftClarification(null);
+    setDraftSourceFingerprint(proposalSource.fingerprint);
+    setDraftSourceRevision(proposalSource.revision);
     context.setPreviewDiagram(previewDiagram);
     setDraftState("idle");
     appendAssistantMessage(
@@ -944,11 +1801,17 @@ export function WorkspaceAiChatDock({
   }
 
   function applyDraftToBoard(): void {
-    if (draft === null) {
+    if (draft === null || draftIsStale) {
+      if (draftIsStale) {
+        appendAssistantMessage(
+          "status",
+          "보드 기준이 바뀌어 이 제안은 적용하지 않았습니다. 최신 기준으로 다시 생성하세요."
+        );
+      }
       return;
     }
 
-    context.applyDiagramJson(getDiagramJsonForArchitectureDraft(draft));
+    context.applyDiagramJson(compileArchitectureDraftProposal(draft, context.diagram).diagram);
     context.requestTerraformRefresh();
     requestImmediateDiagramSave();
     setDraft(null);
@@ -956,13 +1819,19 @@ export function WorkspaceAiChatDock({
     setPatchClarification(null);
     setDraftClarification(null);
     setDraftFollowUpSession(null);
-    setDesignSimulation(null);
-    setSimulationFingerprint(null);
+    setDraftSourceFingerprint(null);
+    setDraftSourceRevision(null);
     appendAssistantMessage("status", "생성했습니다. 현재 보드가 AI 초안으로 전체 교체되었습니다.");
   }
 
   function applyPatchPreviewToBoard(): void {
-    if (patchPreviewModel === null) {
+    if (patchPreviewModel === null || patchPreviewIsStale) {
+      if (patchPreviewIsStale) {
+        appendAssistantMessage(
+          "status",
+          "보드 기준이 바뀌어 이 수정안은 적용하지 않았습니다. 최신 기준으로 다시 생성하세요."
+        );
+      }
       return;
     }
 
@@ -971,8 +1840,8 @@ export function WorkspaceAiChatDock({
     requestImmediateDiagramSave();
     setPatchPreviewModel(null);
     setPatchClarification(null);
-    setDesignSimulation(null);
-    setSimulationFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setPatchPreviewSourceRevision(null);
     appendAssistantMessage("status", "수정 사항을 보드에 적용했습니다.");
   }
 
@@ -984,12 +1853,52 @@ export function WorkspaceAiChatDock({
     }
   }
 
+  function cancelActiveRequest(): void {
+    if (!requestRegistryRef.current.cancel(activeChatTab)) {
+      return;
+    }
+
+    if (activeChatTab === "draft") {
+      setDraftState("idle");
+      setDraftErrorMessage("");
+    } else if (activeChatTab === "errors") {
+      setTerraformIssueBatchProgress(null);
+      setTerraformIssueAnalyses((currentAnalyses) =>
+        Object.fromEntries(
+          Object.entries(currentAnalyses).map(([diagnosticKey, analysis]) => [
+            diagnosticKey,
+            analysis.state === "loading"
+              ? { ...analysis, message: REQUEST_CANCELLED_MESSAGE, state: "idle" as const }
+              : analysis
+          ])
+        )
+      );
+    } else {
+      latestTerraformPreviewRequestIdRef.current += 1;
+      setTerraformPreviewExplanation((currentExplanation) =>
+        currentExplanation?.state === "loading"
+          ? {
+              ...currentExplanation,
+              message: REQUEST_CANCELLED_MESSAGE,
+              state: "idle"
+            }
+          : currentExplanation
+      );
+    }
+
+    appendAssistantMessage("status", REQUEST_CANCELLED_MESSAGE, [], "single", activeChatTab);
+  }
+
   function cancelDraftPreview(): void {
     context.setPreviewDiagram(null);
     setDraft(null);
     setPatchPreviewModel(null);
     setPatchClarification(null);
     setDraftFollowUpSession(null);
+    setDraftSourceFingerprint(null);
+    setPatchPreviewSourceFingerprint(null);
+    setDraftSourceRevision(null);
+    setPatchPreviewSourceRevision(null);
     setDraftErrorMessage("");
     setDraftState("idle");
     appendAssistantMessage("status", "초안 미리보기를 취소했습니다.");
@@ -999,6 +1908,8 @@ export function WorkspaceAiChatDock({
     context.setPreviewDiagram(null);
     setPatchPreviewModel(null);
     setPatchClarification(null);
+    setPatchPreviewSourceFingerprint(null);
+    setPatchPreviewSourceRevision(null);
     setDraftErrorMessage("");
     setDraftState("idle");
     appendAssistantMessage("status", "수정 미리보기를 취소했습니다.");
@@ -1010,7 +1921,29 @@ export function WorkspaceAiChatDock({
       return;
     }
 
-    await createDraftFromConversation(messages);
+    await createDraftFromConversation(
+      messages.filter((message) => getChatMessageScope(message) === "draft")
+    );
+  }
+
+  async function regeneratePatchPreview(): Promise<void> {
+    if (lastPatchPreviewRequest === null) {
+      appendAssistantMessage(
+        "question",
+        "다시 생성할 수정 요청이 없습니다. 원하는 변경을 다시 입력해주세요."
+      );
+      return;
+    }
+
+    await createPatchPreviewFromPrompt(lastPatchPreviewRequest.instruction, {
+      ...(lastPatchPreviewRequest.connectionTargetResourceId !== undefined
+        ? { connectionTargetResourceId: lastPatchPreviewRequest.connectionTargetResourceId }
+        : {}),
+      ...(lastPatchPreviewRequest.selectedTargetResourceId !== undefined
+        ? { selectedTargetResourceId: lastPatchPreviewRequest.selectedTargetResourceId }
+        : {}),
+      ...(lastPatchPreviewRequest.skipConnection === true ? { skipConnection: true } : {})
+    });
   }
 
   function toggleSuggestionSelection(messageId: string, suggestion: string): void {
@@ -1040,50 +1973,6 @@ export function WorkspaceAiChatDock({
     });
   }
 
-  async function runDesignSimulation(): Promise<void> {
-    setActiveChatTab("simulation");
-
-    if (context.isPreviewActive) {
-      setSimulationState("error");
-      setSimulationErrorMessage("AI 초안 미리보기 중에는 현재 보드 시뮬레이션을 실행할 수 없습니다.");
-      appendAssistantMessage(
-        "question",
-        "질문: 먼저 초안을 생성하거나 취소한 뒤 현재 보드 시뮬레이션을 실행할까요?"
-      );
-      return;
-    }
-
-    if (!boardSnapshot.hasResources) {
-      setSimulationState("error");
-      setSimulationErrorMessage("아키텍처 보드에 리소스가 있어야 실행할 수 있습니다.");
-      appendAssistantMessage(
-        "question",
-        "질문: 아직 보드에 리소스가 없습니다. 먼저 만들고 싶은 서비스를 알려주면 초안을 생성해볼게요."
-      );
-      return;
-    }
-
-    setSimulationState("loading");
-    setSimulationErrorMessage("");
-
-    try {
-      const result = await runAiDesignSimulation({
-        architectureJson: boardSnapshot.architectureJson,
-        ...DESIGN_SIMULATION_DEFAULTS
-      });
-      setDesignSimulation(result);
-      setSimulationFingerprint(boardSnapshot.fingerprint);
-      setSimulationState("idle");
-      appendAssistantMessage("simulation", createSimulationResultMessage(result));
-    } catch (error) {
-      const message = getApiErrorMessage(error, "설계 시뮬레이션 중 오류가 발생했습니다.");
-
-      setSimulationState("error");
-      setSimulationErrorMessage(message);
-      appendAssistantMessage("error", message);
-    }
-  }
-
   function handleComposerKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>): void {
     if (event.nativeEvent.isComposing) {
       return;
@@ -1107,16 +1996,24 @@ export function WorkspaceAiChatDock({
   }
 
   function startVoiceRecognition(): void {
+    if (!activeScopeDefinition.inputAvailable) {
+      return;
+    }
+
+    const voiceScope = activeChatTab;
     const SpeechRecognitionConstructor = getBrowserSpeechRecognitionConstructor();
 
     if (SpeechRecognitionConstructor === undefined) {
       setVoiceInputSupported(false);
-      setVoiceStatusMessage("이 브라우저는 음성 인식을 지원하지 않습니다.");
+      setVoiceStatusMessage("이 브라우저는 음성 인식을 지원하지 않습니다.", voiceScope);
       return;
     }
 
     if (!window.isSecureContext) {
-      setVoiceStatusMessage("음성 인식은 HTTPS 또는 localhost 주소에서만 사용할 수 있습니다.");
+      setVoiceStatusMessage(
+        "음성 인식은 HTTPS 또는 localhost 주소에서만 사용할 수 있습니다.",
+        voiceScope
+      );
       return;
     }
 
@@ -1124,7 +2021,7 @@ export function WorkspaceAiChatDock({
     releaseSpeechRecognition("abort");
 
     const recognition = new SpeechRecognitionConstructor();
-    voiceInputBaseRef.current = composerValue;
+    voiceInputBaseRef.current = { scope: voiceScope, value: activeComposer.value };
     recognition.lang = "ko-KR";
     recognition.continuous = false;
     recognition.interimResults = true;
@@ -1133,7 +2030,11 @@ export function WorkspaceAiChatDock({
       const transcript = getSpeechRecognitionTranscript(event);
 
       if (transcript.length > 0) {
-        setComposerValue(mergeVoiceTranscript(voiceInputBaseRef.current, transcript));
+        const voiceInputBase = voiceInputBaseRef.current;
+        setComposerValue(
+          mergeVoiceTranscript(voiceInputBase.value, transcript),
+          voiceInputBase.scope
+        );
       }
     };
     recognition.onspeechstart = () => {
@@ -1141,41 +2042,44 @@ export function WorkspaceAiChatDock({
     };
     recognition.onerror = (event) => {
       clearVoiceNoSpeechTimer();
-      setVoiceListening(false);
+      setVoiceListening(false, voiceScope);
       speechRecognitionRef.current = null;
-      setVoiceStatusMessage(getVoiceRecognitionErrorMessage(event.error));
+      setVoiceStatusMessage(getVoiceRecognitionErrorMessage(event.error), voiceScope);
     };
     recognition.onend = () => {
       clearVoiceNoSpeechTimer();
-      setVoiceListening(false);
+      setVoiceListening(false, voiceScope);
       speechRecognitionRef.current = null;
-      setVoiceStatusMessage((currentMessage) =>
-        currentMessage === "음성 인식 중입니다." ? "" : currentMessage
+      setVoiceStatusMessage(
+        (currentMessage) => (currentMessage === "음성 인식 중입니다." ? "" : currentMessage),
+        voiceScope
       );
     };
 
     try {
       speechRecognitionRef.current = recognition;
-      setVoiceListening(true);
-      setVoiceStatusMessage("음성 인식 중입니다.");
+      setVoiceListening(true, voiceScope);
+      setVoiceStatusMessage("음성 인식 중입니다.", voiceScope);
       recognition.start();
       voiceNoSpeechTimerRef.current = window.setTimeout(() => {
         releaseSpeechRecognition("abort");
-        setVoiceListening(false);
-        setVoiceStatusMessage("8초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.");
+        setVoiceListening(false, voiceScope);
+        setVoiceStatusMessage("8초 동안 음성이 들리지 않아 음성 인식을 중지했습니다.", voiceScope);
       }, VOICE_NO_SPEECH_TIMEOUT_MS);
     } catch {
       speechRecognitionRef.current = null;
-      setVoiceListening(false);
-      setVoiceStatusMessage("음성 인식을 시작하지 못했습니다.");
+      setVoiceListening(false, voiceScope);
+      setVoiceStatusMessage("음성 인식을 시작하지 못했습니다.", voiceScope);
     }
   }
 
   function stopVoiceRecognition(): void {
+    const voiceScope = voiceListeningScope ?? activeChatTab;
+
     clearVoiceNoSpeechTimer();
     releaseSpeechRecognition("stop");
-    setVoiceListening(false);
-    setVoiceStatusMessage("");
+    setVoiceListening(false, voiceScope);
+    setVoiceStatusMessage("", voiceScope);
   }
 
   function releaseSpeechRecognition(action: "abort" | "stop"): void {
@@ -1201,393 +2105,467 @@ export function WorkspaceAiChatDock({
 
   if (!isOpen) {
     return (
-      <button
-        aria-label="AI 채팅 열기"
-        className={styles.aiChatLauncher}
-        data-right-panel-open={context.isRightPanelOpen}
-        data-terraform-leave-guard-ignore
-        onClick={() => setOpen(true)}
-        title="AI 채팅"
-        type="button"
-      >
-        <Sparkles size={22} aria-hidden="true" />
-      </button>
+      <WorkspaceAiChatLauncher
+        isRightPanelOpen={context.isRightPanelOpen}
+        onOpen={() => setOpen(true)}
+        ref={launcherButtonRef}
+      />
     );
   }
 
   return (
-    <div
-      className={styles.aiChatOverlay}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          closeChatDock();
-        }
-      }}
-    >
-      <section
-      aria-label="AI 채팅"
-        className={styles.aiChatDock}
-        data-chat-tab={activeChatTab}
-        data-right-panel-open={context.isRightPanelOpen}
-        data-terraform-leave-guard-ignore
-      >
-      <header className={styles.aiChatHeader}>
-        <div>
-          <span>자연어 다이어그램</span>
-          <h2>AI 채팅</h2>
-        </div>
-        <button
-          aria-label="AI 채팅 닫기"
-          className={styles.aiChatCloseButton}
-          onClick={closeChatDock}
-          title="닫기"
-          type="button"
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-      </header>
-
-      <div className={styles.aiChatTabBar} aria-label="AI 채팅 기능">
-        <div className={styles.aiChatTabs} role="tablist" aria-label="AI 기능">
-          <button
-            aria-selected={activeChatTab === "draft"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("draft")}
-            role="tab"
-            type="button"
-          >
-            초안 제안
-          </button>
-          <button
-            aria-selected={activeChatTab === "errors"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("errors")}
-            role="tab"
-            type="button"
-          >
-            AI 오류
-          </button>
-          <button
-            aria-selected={activeChatTab === "preview"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("preview")}
-            role="tab"
-            type="button"
-          >
-            Preview 설명
-          </button>
-          <button
-            aria-selected={activeChatTab === "simulation"}
-            className={styles.aiChatTabButton}
-            onClick={() => setActiveChatTab("simulation")}
-            role="tab"
-            type="button"
-          >
-            시뮬레이션
-          </button>
-        </div>
-        <button
-          className={styles.aiChatClearButton}
-          disabled={!hasActiveChatHistory}
-          onClick={clearActiveChatHistory}
-          type="button"
-        >
-          <Trash2 size={14} aria-hidden="true" />
-          내역 지우기
-        </button>
-      </div>
-
-      <div className={styles.aiChatTranscript} ref={transcriptRef}>
-        {activeChatTab === "simulation" ? (
-          <div className={styles.aiChatSimulationIntro}>
-            <strong>현재 보드 기준으로 흐름, 병목, 장애, 예상 비용을 봅니다.</strong>
-            <button
-              className={styles.aiPrimaryButton}
-              disabled={simulationState === "loading" || context.isPreviewActive}
-              onClick={() => void runDesignSimulation()}
-              type="button"
-            >
-              <Sparkles size={14} aria-hidden="true" />
-              {simulationState === "loading" ? "계산 중" : "시뮬레이션 실행"}
-            </button>
-          </div>
-        ) : null}
-
-        {visibleMessages.map((message) => {
-          const isMultiSelect = message.selectionMode === "multiple";
-          const submittedSuggestions = message.selectedSuggestions ?? [];
-          const hasSubmittedSuggestion = submittedSuggestions.length > 0;
-          const selectedSuggestions = hasSubmittedSuggestion
-            ? submittedSuggestions
-            : selectedSuggestionLabelsByMessageId[message.id] ?? [];
-
-          return (
-            <article
-              className={
-                message.role === "user" ? styles.aiChatUserMessage : styles.aiChatAssistantMessage
-              }
-              data-kind={message.kind}
-              key={message.id}
-            >
-              <span>{message.role === "user" ? "나" : message.kind === "question" ? "질문" : "AI"}</span>
-              <p>{message.content}</p>
-              {message.role === "assistant" && message.suggestions && message.suggestions.length > 0 ? (
-                <div className={styles.aiChatSuggestions} aria-label="추천 답안">
-                  {message.suggestions.map((suggestion) => {
-                    const isSelected = selectedSuggestions.includes(suggestion);
-                    const isSuggestionDisabled = draftState === "loading" || hasSubmittedSuggestion;
-                    const suggestionButtonClassName = isSelected
-                      ? `${styles.aiChatSuggestionButton} ${styles.aiChatSuggestionButtonSelected}`
-                      : styles.aiChatSuggestionButton;
-
-                    return (
-                      <button
-                        aria-pressed={isMultiSelect ? isSelected : undefined}
-                        className={suggestionButtonClassName}
-                        disabled={isSuggestionDisabled}
-                        key={suggestion}
-                        onClick={
-                          isMultiSelect
-                            ? () => toggleSuggestionSelection(message.id, suggestion)
-                            : () =>
-                                void submitUserMessage(suggestion, {
-                                  messageId: message.id,
-                                  suggestions: [suggestion]
-                                })
-                        }
-                        type="button"
-                      >
-                        {suggestion}
-                      </button>
-                    );
-                  })}
-                  {isMultiSelect ? (
-                    <button
-                      className={styles.aiChatSelectionSubmitButton}
-                      disabled={
-                        draftState === "loading" ||
-                        hasSubmittedSuggestion ||
-                        selectedSuggestions.length === 0
-                      }
-                      onClick={() => void submitSelectedSuggestions(message)}
-                      type="button"
-                    >
-                      선택 완료
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </article>
-          );
-        })}
-
-        {activeChatTab === "draft" ? (
-          <WorkspaceAiRequestMessage state={draftState} message={draftErrorMessage} />
-        ) : null}
-        {activeChatTab === "simulation" ? (
-          <WorkspaceAiRequestMessage state={simulationState} message={simulationErrorMessage} />
-        ) : null}
-
-        {activeChatTab === "preview" && terraformPreviewExplanation !== null ? (
-          <article className={styles.aiChatDraftCard}>
-            <div className={styles.aiResultHeader}>
-              <h3>Preview 설명</h3>
-              <span>{terraformPreviewExplanation.request.label}</span>
-            </div>
-            {terraformPreviewExplanation.state === "loading" ? (
-              <WorkspaceAiRequestMessage state="loading" message="" />
-            ) : null}
-            {terraformPreviewExplanation.state === "error" ? (
-              <WorkspaceAiRequestMessage state="error" message={terraformPreviewExplanation.message} />
-            ) : null}
-            {terraformPreviewExplanation.explanation ? (
-              <WorkspaceAiTerraformPreviewResult preview={terraformPreviewExplanation.explanation} />
-            ) : null}
-          </article>
-        ) : null}
-
-        {activeChatTab === "errors" && terraformIssueResolution !== null ? (
-          <article className={styles.aiChatDraftCard}>
-            <div className={styles.aiResultHeader}>
-              <h3>{formatTerraformDiagnosticTitle(terraformIssueResolution.request.issue.diagnostic)}</h3>
-              <span>Terraform Issue</span>
-            </div>
-            <p className={styles.terraformIssueRawMessage}>
-              {terraformIssueResolution.request.issue.diagnostic.message}
-            </p>
-            {terraformIssueResolution.request.issue.isStale ? (
-              <p className={styles.aiStaleNotice}>Terraform 코드가 편집되어 재검증이 필요합니다.</p>
-            ) : null}
-            {terraformIssueResolution.state === "loading" ? (
-              <WorkspaceAiRequestMessage state="loading" message="" />
-            ) : null}
-            {terraformIssueResolution.state === "error" ? (
-              <WorkspaceAiRequestMessage state="error" message={terraformIssueResolution.message} />
-            ) : null}
-            {terraformIssueResolution.explanation ? (
-              <TerraformIssueExplanationCard
-                diagnostic={terraformIssueResolution.request.issue.diagnostic}
-                explanation={terraformIssueResolution.explanation}
-                terraformCode={terraformIssueResolution.request.terraformCode}
+    <WorkspaceAiWorkbench
+      activeScope={activeChatTab}
+      footer={
+        activeScopeDefinition.inputAvailable ? (
+          <form className={styles.composer} onSubmit={(event) => void submitChatPrompt(event)}>
+            <label className={styles.composerInput}>
+              <span>설계 요구사항</span>
+              <textarea
+                aria-label="AI 채팅 입력"
+                onChange={(event) => setComposerValue(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
+                placeholder="새 설계 또는 변경할 내용을 입력하세요"
+                ref={composerTextareaRef}
+                rows={1}
+                value={activeComposer.value}
               />
-            ) : null}
-            <div className={styles.aiActionRow}>
-              {terraformIssueResolution.explanation
-                ? (() => {
-                    const fixPlan = createTerraformIssueFixPlan({
-                      diagnostic: terraformIssueResolution.request.issue.diagnostic,
-                      explanation: terraformIssueResolution.explanation,
-                      terraformCode: terraformIssueResolution.request.terraformCode
-                    });
-                    const hasCompletedTerraformFix = completedTerraformFixRequestIds.includes(
-                      terraformIssueResolution.request.id
-                    );
-
-                    return (
-                      <>
-                        {fixPlan.canApply ? (
-                          <button
-                            className={styles.aiPrimaryButton}
-                            disabled={hasCompletedTerraformFix || applyingTerraformFixRequestId === terraformIssueResolution.request.id}
-                            onClick={() => {
-                              const applyRequest = {
-                                codePreview: fixPlan.codePreview,
-                                diagnostic: terraformIssueResolution.request.issue.diagnostic,
-                                id: terraformIssueResolution.request.id
-                              };
-
-                              setApplyingTerraformFixRequestId(applyRequest.id);
-                              onApplyTerraformIssueFix(applyRequest);
-                            }}
-                            type="button"
-                          >
-                            {hasCompletedTerraformFix
-                              ? "수정완료"
-                              : applyingTerraformFixRequestId === terraformIssueResolution.request.id
-                                ? "수정 중"
-                                : "수정"}
-                          </button>
-                        ) : null}
-                        <button className={styles.aiSecondaryButton} disabled type="button">
-                          {fixPlan.canApply ? "자동 수정 가능" : "자동 수정안 없음"}
-                        </button>
-                      </>
-                    );
-                  })()
-                : null}
-            </div>
-          </article>
-        ) : null}
-
-        {activeChatTab === "draft" && draft !== null ? (
-          <article className={styles.aiChatDraftCard}>
-            <div className={styles.aiResultHeader}>
-              <h3>{draft.title}</h3>
-              <span>{draft.architectureJson.nodes.length}개 리소스</span>
-            </div>
-            <WorkspaceAiExplanation explanation={draft.llmExplanation} />
-            <div className={styles.aiActionRow}>
+            </label>
+            <div className={styles.composerControls}>
               <button
-                className={styles.aiPrimaryButton}
-                onClick={applyDraftToBoard}
+                aria-label={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
+                aria-pressed={isVoiceListening}
+                className={styles.voiceButton}
+                data-listening={isVoiceListening}
+                disabled={!isVoiceInputSupported || isChatBusy}
+                onClick={toggleVoiceRecognition}
+                title={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
                 type="button"
               >
-                생성
-              </button>
-              <button className={styles.aiSecondaryButton} onClick={cancelDraftPreview} type="button">
-                취소
+                <Mic size={17} aria-hidden="true" />
               </button>
               <button
-                className={styles.aiSecondaryButton}
-                disabled={draftState === "loading"}
+                className={styles.sendButton}
+                disabled={activeComposer.value.trim().length === 0 || isChatBusy}
+                type="submit"
+              >
+                <Send size={16} aria-hidden="true" />
+                보내기
+              </button>
+            </div>
+            {activeComposer.voiceStatusMessage.length > 0 ? (
+              <p className={styles.voiceStatus} role="status">
+                {activeComposer.voiceStatusMessage}
+              </p>
+            ) : null}
+          </form>
+        ) : null
+      }
+      hasHistory={hasActiveChatHistory}
+      isBusy={isChatBusy}
+      isMobileSurface={isMobileChatSurface}
+      isRightPanelOpen={context.isRightPanelOpen}
+      onCancelRequest={cancelActiveRequest}
+      onClear={clearActiveChatHistory}
+      onClose={closeChatDock}
+      onScopeButtonRef={(scope, element) => {
+        tabButtonRefs.current[scope] = element;
+      }}
+      onScopeChange={selectChatTab}
+      onScopeKeyDown={handleChatTabKeyDown}
+      onTranscriptScroll={handleTranscriptScroll}
+      scopeDefinitions={WORKBENCH_SCOPE_DEFINITIONS}
+      status={chatDockStatus}
+      surfaceRef={chatDialogRef}
+      transcriptRef={transcriptRef}
+    >
+      {repositoryTemplate ? (
+        <aside className={styles.templateContext} role="status">
+          <span>Repository Analysis Template</span>
+          <strong>{repositoryTemplate.title}</strong>
+          <code>{repositoryTemplate.id}</code>
+          <p>AI는 이 Template을 바꾸지 않고 부족한 요구사항만 보완합니다.</p>
+        </aside>
+      ) : null}
+      {!hasActiveChatHistory ? (
+        <div className={`${styles.message} ${styles.assistantMessage}`} data-kind="question">
+          <span className={styles.messageLabel}>안내</span>
+          <p>{activeScopeDefinition.emptyDescription}</p>
+        </div>
+      ) : null}
+      {displayedMessages.map((message) => {
+        const isMultiSelect = message.selectionMode === "multiple";
+        const submittedSuggestions = message.selectedSuggestions ?? [];
+        const hasSubmittedSuggestion = submittedSuggestions.length > 0;
+        const selectedSuggestions = hasSubmittedSuggestion
+          ? submittedSuggestions
+          : (selectedSuggestionLabelsByMessageId[message.id] ?? []);
+
+        return (
+          <div
+            className={`${styles.message} ${
+              message.role === "user" ? styles.userMessage : styles.assistantMessage
+            }`}
+            data-kind={message.kind}
+            key={message.id}
+          >
+            <span className={styles.messageLabel}>
+              {message.role === "user" ? "나" : message.kind === "question" ? "질문" : "AI"}
+            </span>
+            <p>{message.content}</p>
+            {message.role === "assistant" &&
+            message.suggestions &&
+            message.suggestions.length > 0 ? (
+              <div className={styles.choiceGroup} aria-label="추천 답안">
+                {message.suggestions.map((suggestion) => {
+                  const isSelected = selectedSuggestions.includes(suggestion);
+                  const isSuggestionDisabled = isChatBusy || hasSubmittedSuggestion;
+                  const suggestionButtonClassName = isSelected
+                    ? `${styles.choiceButton} ${styles.choiceButtonSelected}`
+                    : styles.choiceButton;
+
+                  return (
+                    <button
+                      aria-pressed={isMultiSelect ? isSelected : undefined}
+                      className={suggestionButtonClassName}
+                      disabled={isSuggestionDisabled}
+                      key={suggestion}
+                      onClick={
+                        isMultiSelect
+                          ? () => toggleSuggestionSelection(message.id, suggestion)
+                          : () =>
+                              void submitUserMessage(suggestion, {
+                                messageId: message.id,
+                                suggestions: [suggestion]
+                              })
+                      }
+                      type="button"
+                    >
+                      {suggestion}
+                    </button>
+                  );
+                })}
+                {isMultiSelect ? (
+                  <button
+                    className={styles.choiceSubmit}
+                    disabled={
+                      isChatBusy || hasSubmittedSuggestion || selectedSuggestions.length === 0
+                    }
+                    onClick={() => void submitSelectedSuggestions(message)}
+                    type="button"
+                  >
+                    선택 완료
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+
+      {activeChatTab === "draft" ? (
+        <WorkspaceAiWorkbenchRequestMessage state={draftState} message={draftErrorMessage} />
+      ) : null}
+
+      {activeChatTab === "preview" ? (
+        <section className={styles.artifact} aria-labelledby="workspace-ai-review-title">
+          <header className={styles.artifactHeader}>
+            <div>
+              <span>Terraform</span>
+              <h3 id="workspace-ai-review-title">에이전트 리뷰</h3>
+            </div>
+            <p className={styles.artifactContext} aria-label="현재 검토 범위">
+              {formatTerraformReviewContext(terraformAiContext.reviewScope.label)}
+            </p>
+          </header>
+          <div className={styles.taskActions}>
+            <button
+              className={styles.primaryAction}
+              disabled={
+                terraformPreviewExplanation?.state === "loading" ||
+                terraformAiContext.reviewScope.terraformCode.trim().length === 0
+              }
+              onClick={() => void runTerraformAgentReview()}
+              type="button"
+            >에이전트 리뷰</button>
+          </div>
+          {terraformPreviewExplanationIsStale ? (
+            <p className={styles.staleNotice} role="status">
+              검토 대상 또는 Terraform 코드가 변경되었습니다. 최신 대상을 다시 검토하세요.
+            </p>
+          ) : null}
+          {terraformPreviewExplanation?.state === "error" ||
+          (terraformPreviewExplanation?.message &&
+            terraformPreviewExplanation.state !== "loading") ? (
+            <WorkspaceAiWorkbenchRequestMessage
+              state={terraformPreviewExplanation.state}
+              message={terraformPreviewExplanation.message}
+            />
+          ) : null}
+          {terraformPreviewExplanation?.explanation ? (
+            <div className={styles.artifactBody}>
+              <p className={styles.artifactContext} aria-label="검토 결과 범위">
+                {formatTerraformReviewContext(terraformPreviewExplanation.reviewScope.label)}
+              </p>
+              <WorkspaceAiWorkbenchTerraformPreviewResult
+                preview={terraformPreviewExplanation.explanation}
+              />
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {activeChatTab === "errors" ? (
+        <>
+          <section className={styles.artifact} aria-labelledby="workspace-ai-error-actions-title">
+            <header className={styles.artifactHeader}>
+              <div>
+                <span>Terraform</span>
+                <h3 id="workspace-ai-error-actions-title">오류 분석</h3>
+              </div>
+            </header>
+            <label className={styles.issueSelect}>
+              <span>분석할 오류</span>
+              <select
+                disabled={terraformAiContext.issues.length === 0}
+                onChange={(event) => onSelectTerraformIssue(event.target.value || null)}
+                value={selectedTerraformIssue?.diagnosticKey ?? ""}
+              >
+                {terraformAiContext.issues.length === 0 ? (
+                  <option value="">오류 없음</option>
+                ) : null}
+                {terraformAiContext.issues.map((issue) => (
+                  <option key={issue.diagnosticKey} value={issue.diagnosticKey}>
+                    {formatTerraformDiagnosticTitle(issue.diagnostic)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className={styles.taskActions}>
+              <button
+                className={styles.primaryAction}
+                disabled={selectedTerraformIssue === null || isTerraformIssueAnalysisRunning}
+                onClick={() => void analyzeSelectedTerraformIssue()}
+                type="button"
+              >선택 오류 분석</button>
+              <button
+                className={styles.secondaryAction}
+                disabled={
+                  currentTerraformErrorIssues.length === 0 || isTerraformIssueAnalysisRunning
+                }
+                onClick={() => void analyzeAllTerraformIssues()}
+                type="button"
+              >모두 분석</button>
+            </div>
+            {terraformIssueBatchProgress ? (
+              <p aria-live="polite" className={styles.progress} role="status">
+                {terraformIssueBatchProgress.total}개 중 {terraformIssueBatchProgress.completed}개
+                분석 완료
+              </p>
+            ) : null}
+            {showTerraformApplyAllApproval ? (
+              <div className={styles.approvalTray}>
+                <div>
+                  <strong>안전 수정 일괄 적용</strong>
+                  <p>분석이 끝난 오류 중 자동 적용 가능한 변경만 Terraform 코드에 반영합니다.</p>
+                </div>
+                <div className={styles.approvalActions}>
+                  <button
+                    className={styles.secondaryAction}
+                    disabled={
+                      !terraformApplyAllPlan.canApply ||
+                      isTerraformIssueAnalysisRunning ||
+                      applyingTerraformFixRequestId !== null
+                    }
+                    onClick={applyAllTerraformIssueFixes}
+                    type="button"
+                  >적용 가능한 항목 모두 수정</button>
+                </div>
+              </div>
+            ) : (
+              <p className={styles.hint}>{terraformApplyAllPlan.reason}</p>
+            )}
+          </section>
+
+          {selectedTerraformIssue ? (
+            <section className={styles.artifact} aria-labelledby="workspace-ai-selected-error-title">
+              <header className={styles.artifactHeader}>
+                <div>
+                  <span>분석 대상</span>
+                  <h3 id="workspace-ai-selected-error-title">
+                    {formatTerraformDiagnosticTitle(selectedTerraformIssue.diagnostic)}
+                  </h3>
+                </div>
+              </header>
+              {selectedTerraformIssue.isStale || selectedTerraformIssueAnalysisIsStale ? (
+                <p className={styles.staleNotice} role="status">
+                  Terraform 코드가 변경되어 재검증 또는 재분석이 필요합니다.
+                </p>
+              ) : null}
+              {selectedTerraformIssueAnalysis?.message &&
+              selectedTerraformIssueAnalysis.state !== "loading" ? (
+                <WorkspaceAiWorkbenchRequestMessage
+                  state={selectedTerraformIssueAnalysis.state}
+                  message={selectedTerraformIssueAnalysis.message}
+                />
+              ) : null}
+              {selectedTerraformIssueAnalysis?.explanation ? (
+                <div className={styles.artifactBody}>
+                  <WorkspaceAiWorkbenchTerraformIssueResult
+                    diagnostic={selectedTerraformIssue.diagnostic}
+                    explanation={selectedTerraformIssueAnalysis.explanation}
+                    terraformCode={selectedTerraformIssueCode}
+                  />
+                </div>
+              ) : null}
+              {terraformFixUnavailableReasons[selectedTerraformIssue.diagnosticKey] ||
+              !selectedTerraformFixPlan.canApply ? (
+                <p className={styles.fixUnavailable} role="status">
+                  {terraformFixUnavailableReasons[selectedTerraformIssue.diagnosticKey] ||
+                    selectedTerraformFixPlan.reason}
+                </p>
+              ) : null}
+              {showSelectedTerraformApproval ? (
+                <div className={styles.approvalTray}>
+                  <div>
+                    <strong>Terraform 변경 승인</strong>
+                    <p>분석 결과의 수정안을 확인한 뒤 선택한 오류에만 적용합니다.</p>
+                  </div>
+                  <div className={styles.approvalActions}>
+                    <button
+                      className={styles.primaryAction}
+                      disabled={
+                        !selectedTerraformFixPlan.canApply ||
+                        applyingTerraformFixRequestId !== null ||
+                        isSelectedTerraformFixCompleted
+                      }
+                      onClick={applySelectedTerraformIssueFix}
+                      type="button"
+                    >
+                      {isSelectedTerraformFixCompleted
+                        ? "수정 완료"
+                        : applyingTerraformFixRequestId !== null
+                          ? "적용 중"
+                          : "수정안 적용"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+        </>
+      ) : null}
+
+      {activeChatTab === "draft" && draft !== null ? (
+        <section className={styles.artifact} aria-labelledby="workspace-ai-draft-result-title">
+          <header className={styles.artifactHeader}>
+            <div>
+              <span>설계 제안</span>
+              <h3 id="workspace-ai-draft-result-title">{draft.title}</h3>
+            </div>
+            <p>{draft.architectureJson.nodes.length}개 리소스</p>
+          </header>
+          <div className={styles.artifactBody}>
+            <WorkspaceAiWorkbenchExplanation explanation={draft.llmExplanation} />
+          </div>
+          {draftSafetyWarnings.length > 0 ? (
+            <div className={styles.notice} role="status">
+              {draftSafetyWarnings.map((warning) => (
+                <p key={`${warning.code}-${warning.message}`}>{warning.message}</p>
+              ))}
+            </div>
+          ) : null}
+          {draftIsStale ? (
+            <div className={styles.staleNotice} role="status">
+              <p>보드가 변경되어 이 제안은 적용할 수 없습니다. 최신 기준으로 다시 생성하세요.</p>
+            </div>
+          ) : null}
+          <div className={styles.approvalTray}>
+            <div>
+              <strong>Board 변경 승인</strong>
+              <p>미리보기를 확인한 뒤 현재 Board를 이 설계 제안으로 교체합니다.</p>
+            </div>
+            <div className={styles.approvalActions}>
+              <button
+                className={styles.primaryAction}
+                disabled={draftIsStale}
+                onClick={applyDraftToBoard}
+                type="button"
+              >Board에 적용</button>
+              <button
+                className={styles.secondaryAction}
+                onClick={cancelDraftPreview}
+                type="button"
+              >취소</button>
+              <button
+                className={styles.secondaryAction}
+                disabled={isChatBusy}
                 onClick={() => void regenerateDraft()}
                 type="button"
               >
-                다시 생성
+                {draftIsStale ? "최신 기준으로 다시 생성" : "다시 생성"}
               </button>
             </div>
-            {draftSafetyWarnings.length > 0 ? (
-              <div className={styles.aiSafetyNotice} role="status">
-                {draftSafetyWarnings.map((warning) => (
-                  <p key={`${warning.code}-${warning.message}`}>{warning.message}</p>
-                ))}
-              </div>
-            ) : null}
-          </article>
-        ) : null}
+          </div>
+        </section>
+      ) : null}
 
-        {patchPreviewModel !== null ? (
-          <article className={styles.aiChatDraftCard}>
-            <div className={styles.aiResultHeader}>
-              <h3>수정 미리보기</h3>
-              <span>{patchPreviewModel.preview.changes.length}개 변경</span>
+      {activeChatTab === "draft" && patchPreviewModel !== null ? (
+        <section className={styles.artifact} aria-labelledby="workspace-ai-patch-result-title">
+          <header className={styles.artifactHeader}>
+            <div>
+              <span>생성된 변경</span>
+              <h3 id="workspace-ai-patch-result-title">수정 미리보기</h3>
             </div>
-            <WorkspaceAiExplanation explanation={patchPreviewModel.preview.llmExplanation} />
-            <div className={styles.aiSafetyNotice} role="status">
+            <p>{patchPreviewModel.preview.changes.length}개 변경</p>
+          </header>
+          <div className={styles.artifactBody}>
+            <WorkspaceAiWorkbenchExplanation explanation={patchPreviewModel.preview.llmExplanation} />
+            <ul className={styles.changeList} aria-label="생성된 변경 사항">
               {patchPreviewModel.preview.changes.map((change) => (
-                <p key={`${change.action}-${change.resourceId ?? change.resourceType ?? change.summary}`}>
+                <li
+                  key={`${change.action}-${change.resourceId ?? change.resourceType ?? change.summary}`}
+                >
                   {change.summary}
-                </p>
+                </li>
               ))}
+            </ul>
+          </div>
+          {patchPreviewIsStale ? (
+            <div className={styles.staleNotice} role="status">
+              <p>보드가 변경되어 이 수정안은 적용할 수 없습니다. 최신 기준으로 다시 생성하세요.</p>
             </div>
-            <div className={styles.aiActionRow}>
-              <button className={styles.aiPrimaryButton} onClick={applyPatchPreviewToBoard} type="button">
-                적용
-              </button>
-              <button className={styles.aiSecondaryButton} onClick={cancelPatchPreview} type="button">
-                취소
-              </button>
+          ) : null}
+          <div className={styles.approvalTray}>
+            <div>
+              <strong>Board 변경 승인</strong>
+              <p>미리보기의 변경 사항만 현재 Board에 반영합니다.</p>
             </div>
-          </article>
-        ) : null}
-
-        {activeChatTab === "simulation" && hasStaleDesignSimulation ? (
-          <p className={styles.aiStaleNotice}>보드 변경됨 · 다시 실행 필요</p>
-        ) : null}
-        {activeChatTab === "simulation" && designSimulation !== null ? (
-          <WorkspaceAiDesignSimulationResult simulation={designSimulation} />
-        ) : null}
-      </div>
-
-      <form className={styles.aiChatComposer} onSubmit={(event) => void submitChatPrompt(event)}>
-        <label className={styles.aiChatInput}>
-          <textarea
-            aria-label="AI 채팅 입력"
-            onChange={(event) => setComposerValue(event.target.value)}
-            onKeyDown={handleComposerKeyDown}
-            ref={composerTextareaRef}
-            rows={2}
-            value={composerValue}
-          />
-        </label>
-        <button
-          aria-label={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
-          aria-pressed={isVoiceListening}
-          className={styles.aiChatVoiceButton}
-          data-listening={isVoiceListening}
-          disabled={!isVoiceInputSupported || draftState === "loading"}
-          onClick={toggleVoiceRecognition}
-          title={isVoiceListening ? "음성 인식 중지" : "음성 인식 시작"}
-          type="button"
-        >
-          <Mic size={17} aria-hidden="true" />
-        </button>
-        <button
-          className={styles.aiChatSendButton}
-          disabled={composerValue.trim().length === 0 || draftState === "loading"}
-          type="submit"
-        >
-          <Send size={16} aria-hidden="true" />
-          보내기
-        </button>
-        {voiceStatusMessage.length > 0 ? (
-          <p className={styles.aiChatVoiceStatus} role="status">
-            {voiceStatusMessage}
-          </p>
-        ) : null}
-      </form>
-      </section>
-    </div>
+            <div className={styles.approvalActions}>
+              <button
+                className={styles.primaryAction}
+                disabled={patchPreviewIsStale}
+                onClick={applyPatchPreviewToBoard}
+                type="button"
+              >Board에 적용</button>
+              <button
+                className={styles.secondaryAction}
+                onClick={cancelPatchPreview}
+                type="button"
+              >취소</button>
+              {patchPreviewIsStale ? (
+                <button
+                  className={styles.secondaryAction}
+                  disabled={isChatBusy}
+                  onClick={() => void regeneratePatchPreview()}
+                  type="button"
+                >최신 기준으로 다시 생성</button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+    </WorkspaceAiWorkbench>
   );
 }
 
@@ -1595,91 +2573,83 @@ export function createWorkspaceAiChatStorageKey(projectId: string): string {
   return `${STORAGE_KEY_PREFIX}.${projectId}`;
 }
 
-function TerraformIssueExplanationCard({
-  diagnostic,
-  explanation,
-  terraformCode
-}: {
-  readonly diagnostic: TerraformDiagnostic;
-  readonly explanation: AiTerraformErrorExplanationResult;
-  readonly terraformCode: string;
-}) {
-  const fixPlan = createTerraformIssueFixPlan({ diagnostic, explanation, terraformCode });
+function readBrowserTerraformIssueAnalyses(
+  projectId: string
+): Record<string, TerraformIssueAnalysisState> {
+  if (typeof window === "undefined") {
+    return {};
+  }
 
-  return (
-    <div>
-      <section className={styles.terraformIssueFixPlan}>
-        <div className={styles.terraformIssueFixPlanHeader}>
-          <strong>수정 계획</strong>
-          <span>{fixPlan.providerLabel}</span>
-        </div>
-        <p>{fixPlan.summary}</p>
-        {fixPlan.providerNotice ? (
-          <p className={styles.terraformIssueFixPlanNotice}>{fixPlan.providerNotice}</p>
-        ) : null}
-        <dl className={styles.terraformIssueGuidanceList}>
-          <div>
-            <dt>오류 위치</dt>
-            <dd>{fixPlan.location}</dd>
-          </div>
-          <div>
-            <dt>오류 유형</dt>
-            <dd>{fixPlan.errorType}</dd>
-          </div>
-          <div>
-            <dt>어떤 오류인가</dt>
-            <dd>{fixPlan.plainExplanation}</dd>
-          </div>
-          <div>
-            <dt>어떻게 고칠까</dt>
-            <dd>{fixPlan.fixExplanation}</dd>
-          </div>
-        </dl>
-        {fixPlan.codeFrame.length > 0 ? (
-          <div className={styles.terraformIssueCodeFrame}>
-            <strong>오류 주변 코드</strong>
-            <pre>
-              <code>
-                {fixPlan.codeFrame
-                  .map((line) => {
-                    const marker = line.isErrorLine ? ">" : " ";
-                    return `${marker} ${String(line.lineNumber).padStart(3, " ")} | ${line.text}`;
-                  })
-                  .join("\n")}
-              </code>
-            </pre>
-          </div>
-        ) : null}
-        {fixPlan.codePreview ? (
-          <div className={styles.terraformIssueCodePreview}>
-            <section>
-              <strong>현재 코드</strong>
-              <pre>
-                <code>{fixPlan.codePreview.currentCode}</code>
-              </pre>
-            </section>
-            <section>
-              <strong>수정할 코드</strong>
-              <pre>
-                <code>{formatTerraformIssuePreviewCode(fixPlan.codePreview.nextCode)}</code>
-              </pre>
-            </section>
-          </div>
-        ) : null}
-      </section>
-      <dl className={styles.terraformIssueGuidanceList}>
-        <div>
-          <dt>원인</dt>
-          <dd>{explanation.likelyCause}</dd>
-        </div>
-      </dl>
-      <ul className={styles.terraformIssueActions}>
-        {explanation.nextActions.map((action) => (
-          <li key={action}>{action}</li>
-        ))}
-      </ul>
-    </div>
+  try {
+    return Object.fromEntries(
+      readStoredTerraformIssueAnalyses(window.localStorage, projectId).map((analysis) => [
+        analysis.diagnosticKey,
+        {
+          explanation: analysis.explanation,
+          message: "",
+          state: "idle" as const,
+          terraformFingerprint: analysis.terraformFingerprint
+        }
+      ])
+    );
+  } catch {
+    return {};
+  }
+}
+
+function getTerraformIssueSourceResolutionProblem(
+  diagnostic: TerraformDiagnostic,
+  terraformContext: WorkspaceTerraformAiContext
+): string {
+  if (
+    diagnostic.sourceFileName &&
+    !terraformContext.files.some((file) => file.fileName === diagnostic.sourceFileName)
+  ) {
+    return `오류 원본 파일(${diagnostic.sourceFileName})을 현재 Terraform 파일에서 찾을 수 없습니다. 재검증한 뒤 다시 분석하세요.`;
+  }
+
+  if (!diagnostic.sourceFileName && terraformContext.files.length > 1) {
+    return "오류가 발생한 Terraform 파일을 특정할 수 없습니다. 재검증한 뒤 다시 분석하세요.";
+  }
+
+  return "";
+}
+
+function trapFocusWithin(container: HTMLElement, event: KeyboardEvent): void {
+  const focusableElements = [
+    ...container.querySelectorAll<HTMLElement>(
+      "button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), a[href], summary, [tabindex]:not([tabindex='-1'])"
+    )
+  ].filter(
+    (element) =>
+      element.tabIndex >= 0 &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      !element.hidden &&
+      element.closest("[inert]") === null &&
+      element.getClientRects().length > 0
   );
+  const first = focusableElements[0];
+  const last = focusableElements.at(-1);
+
+  if (!first || !last) {
+    event.preventDefault();
+    container.focus();
+    return;
+  }
+
+  if (!container.contains(document.activeElement)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+    return;
+  }
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function createInitialChatMessages(): WorkspaceAiChatMessage[] {
@@ -1741,11 +2711,17 @@ function isAddResourceConnectionClarification(
 function isServicePurposePatchClarification(
   clarification: ArchitecturePatchClarification
 ): boolean {
-  return clarification.intent.requestedAction === "manual_review" && clarification.candidates.length === 0;
+  return (
+    clarification.intent.requestedAction === "manual_review" &&
+    clarification.candidates.length === 0
+  );
 }
 
 function isSkipConnectionSuggestion(suggestion: string): boolean {
-  return normalizePatchClarificationAnswer(suggestion) === normalizePatchClarificationAnswer("연결하지 않기");
+  return (
+    normalizePatchClarificationAnswer(suggestion) ===
+    normalizePatchClarificationAnswer("연결하지 않기")
+  );
 }
 
 function isNoResourceAdditionSuggestion(suggestion: string): boolean {
@@ -1774,7 +2750,9 @@ function normalizePatchClarificationAnswer(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function formatPatchCandidateSuggestion(candidate: ArchitecturePatchClarificationCandidate): string {
+function formatPatchCandidateSuggestion(
+  candidate: ArchitecturePatchClarificationCandidate
+): string {
   return `${candidate.label} (${candidate.resourceType})`;
 }
 
@@ -1797,9 +2775,7 @@ function createPatchPreviewSummary(preview: ArchitecturePatchPreview): string {
   return changeSummary ?? "수정 미리보기를 만들었습니다. 적용할까요?";
 }
 
-function createRequirementPromptFromMessages(
-  messages: readonly WorkspaceAiChatMessage[]
-): string {
+function createRequirementPromptFromMessages(messages: readonly WorkspaceAiChatMessage[]): string {
   return createLatestUserRequirementPrompt(messages);
 }
 
@@ -1893,14 +2869,6 @@ function formatTerraformIssueRawMessage(diagnostic: TerraformDiagnostic): string
   return `${diagnostic.code ?? "terraform.unknown"}\n${formatTerraformDiagnosticTitle(diagnostic)}\n${diagnostic.message}`;
 }
 
-function createSimulationResultMessage(result: DesignSimulationResult): string {
-  const costHeadline = result.costEstimate?.reviewMessages[0];
-
-  return costHeadline === undefined
-    ? `현재 보드 시뮬레이션 결과: ${result.summary}`
-    : `현재 보드 시뮬레이션 결과: ${result.summary} ${costHeadline}`;
-}
-
 function createDraftSafetyWarnings(
   draft: AiArchitectureDraftResult | null,
   boardHasResources: boolean
@@ -1912,7 +2880,8 @@ function createDraftSafetyWarnings(
   return [
     {
       code: "board_replacement_required",
-      message: "생성을 누르면 현재 보드가 AI 초안으로 전체 교체됩니다. 이번 버전은 패치 적용이 아니라 전체 교체입니다."
+      message:
+        "생성을 누르면 현재 보드가 AI 초안으로 전체 교체됩니다. 이번 버전은 패치 적용이 아니라 전체 교체입니다."
     }
   ];
 }
@@ -1928,7 +2897,9 @@ function readStoredChatMessages(projectId: string): WorkspaceAiChatMessage[] {
 
     if (Array.isArray(parsedValue)) {
       const storedMessages = parsedValue.filter(isWorkspaceAiChatMessage);
-      return storedMessages.length > 0 ? trimChatMessages(storedMessages) : createInitialChatMessages();
+      return storedMessages.length > 0
+        ? trimChatMessages(storedMessages)
+        : createInitialChatMessages();
     }
   } catch {
     // Ignore malformed local chat history and start fresh.
@@ -1950,10 +2921,6 @@ function storeChatMessages(projectId: string, messages: readonly WorkspaceAiChat
   } catch {
     // Chat history is helpful UI state, not a blocking persistence contract.
   }
-}
-
-function formatTerraformIssuePreviewCode(code: string): string {
-  return code.length > 0 ? code : "(이 코드 조각 삭제)";
 }
 
 function createChatMessage(
@@ -1985,21 +2952,12 @@ function createChatMessage(
 }
 
 function getChatMessageScope(message: WorkspaceAiChatMessage): WorkspaceAiChatScope {
-  if (
-    message.scope === "draft" ||
-    message.scope === "errors" ||
-    message.scope === "preview" ||
-    message.scope === "simulation"
-  ) {
+  if (message.scope === "draft" || message.scope === "errors" || message.scope === "preview") {
     return message.scope;
   }
 
   if (message.kind === "preview") {
     return "preview";
-  }
-
-  if (message.kind === "simulation") {
-    return "simulation";
   }
 
   if (message.kind === "terraform_issue") {
@@ -2067,8 +3025,7 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
     (candidate.scope === undefined ||
       candidate.scope === "draft" ||
       candidate.scope === "errors" ||
-      candidate.scope === "preview" ||
-      candidate.scope === "simulation") &&
+      candidate.scope === "preview") &&
     (candidate.selectionMode === undefined ||
       candidate.selectionMode === "single" ||
       candidate.selectionMode === "multiple") &&
@@ -2083,8 +3040,11 @@ function isWorkspaceAiChatMessage(value: unknown): value is WorkspaceAiChatMessa
       candidate.kind === "patch" ||
       candidate.kind === "preview" ||
       candidate.kind === "question" ||
-      candidate.kind === "simulation" ||
       candidate.kind === "status" ||
       candidate.kind === "terraform_issue")
   );
+}
+
+function isBuiltInTemplateId(templateId: string): templateId is (typeof TEMPLATE_IDS)[number] {
+  return (TEMPLATE_IDS as readonly string[]).includes(templateId);
 }

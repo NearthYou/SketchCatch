@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AwsConnection, DeploymentPlanSummary } from "@sketchcatch/types";
@@ -20,6 +23,12 @@ import {
   type SaveDeploymentPlanInput,
   type TerraformArtifactRecord
 } from "./deployment-service.js";
+import {
+  createTerraformArtifactCanonicalContent,
+  prepareTerraformWorkspace
+} from "./terraform-workspace.js";
+import { TerraformArtifactSafetyError } from "./terraform-artifact-safety.js";
+import { createFilesystemProjectAssetStorage } from "../projects/filesystem-project-asset-storage.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const architectureId = "22222222-2222-4222-8222-222222222222";
@@ -325,6 +334,7 @@ test("approveDeploymentPlan stores the approved artifact plan and AWS snapshot",
     approvedTfplanHash: tfplanHash,
     approvedAwsAccountId: "123456789012",
     approvedAwsRegion: "ap-northeast-2",
+    approvedPreparedSnapshotHash: null,
     planSummary: {
       ...createPlanSummary(),
       blocked: false
@@ -332,6 +342,186 @@ test("approveDeploymentPlan stores the approved artifact plan and AWS snapshot",
     status: "PENDING",
     preserveFailureDetails: false
   });
+});
+
+test("approveDeploymentPlan reads local Terraform artifacts from project asset storage", async () => {
+  const repository = new FakeDeploymentRepository();
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "sketchcatch-approval-assets-"));
+  const assetRoot = join(await realpath(temporaryRoot), "project-assets");
+  const projectAssetStorage = createFilesystemProjectAssetStorage({ rootDirectory: assetRoot });
+  const terraformArtifact = repository.terraformArtifact;
+  assert.ok(terraformArtifact);
+
+  try {
+    await projectAssetStorage.putObject({
+      objectKey: terraformArtifact.objectKey,
+      contentType: terraformArtifact.contentType,
+      body: artifactContent
+    });
+
+    const deployment = await approveDeploymentPlan(
+      {
+        deploymentId,
+        accessContext: createAccessContext()
+      },
+      repository,
+      {
+        projectAssetStorage,
+        now: () => fixedNow
+      }
+    );
+
+    assert.equal(deployment.approvedPlanArtifactId, planArtifactId);
+    assert.equal(deployment.approvedTerraformArtifactHash, artifactHash);
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
+});
+
+test("approveDeploymentPlan accepts the same multi-file artifact used by plan", async () => {
+  const repository = new FakeDeploymentRepository();
+  const rootDir = await mkdtemp(join(tmpdir(), "sketchcatch-approval-test-"));
+  const bundle = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      { fileName: "providers.tf", terraformCode: 'terraform { required_version = ">= 1.6.0" }\n' },
+      { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}\n' }
+    ]
+  });
+  const workspace = await prepareTerraformWorkspace(
+    {
+      objectKey: "projects/project-id/assets/terraform_file/terraform-files.json",
+      fileName: "terraform-files.json",
+      contentType: "application/vnd.sketchcatch.terraform-files+json"
+    },
+    {
+      rootDir,
+      downloadTerraformArtifact: async () => bundle
+    }
+  );
+
+  try {
+    repository.terraformArtifact = createTerraformArtifactRecord({
+      fileName: "terraform-files.json",
+      contentType: "application/vnd.sketchcatch.terraform-files+json"
+    });
+    repository.planArtifact = createPlanArtifactRecord({
+      terraformArtifactSha256: createSha256(await readFile(workspace.mainFilePath, "utf8"))
+    });
+
+    const deployment = await approveDeploymentPlan(
+      {
+        deploymentId,
+        accessContext: createAccessContext()
+      },
+      repository,
+      {
+        downloadTerraformArtifact: async () => bundle,
+        now: () => fixedNow
+      }
+    );
+
+    assert.equal(deployment.approvedPlanArtifactId, planArtifactId);
+    assert.equal(
+      deployment.approvedTerraformArtifactHash,
+      repository.planArtifact.terraformArtifactSha256
+    );
+  } finally {
+    await workspace.cleanup();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("approveDeploymentPlan rejects unsafe Terraform inside a multi-file artifact", async () => {
+  const repository = new FakeDeploymentRepository();
+  const artifactInput = {
+    objectKey: "projects/project-id/assets/terraform_file/terraform-files.json",
+    fileName: "terraform-files.json",
+    contentType: "application/vnd.sketchcatch.terraform-files+json"
+  };
+  const unsafeBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      { fileName: "providers.tf", terraformCode: "terraform {}\n" },
+      {
+        fileName: "main.tf",
+        terraformCode: 'module "untrusted" { source = "https://example.invalid/module.zip" }\n'
+      }
+    ]
+  });
+  repository.terraformArtifact = createTerraformArtifactRecord({
+    fileName: artifactInput.fileName,
+    contentType: artifactInput.contentType
+  });
+  repository.planArtifact = createPlanArtifactRecord({
+    terraformArtifactSha256: createSha256(
+      createTerraformArtifactCanonicalContent(artifactInput, unsafeBundle).toString("utf8")
+    )
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => unsafeBundle,
+          now: () => fixedNow
+        }
+      ),
+    TerraformArtifactSafetyError
+  );
+});
+
+test("approveDeploymentPlan rejects drift inside a multi-file artifact", async () => {
+  const repository = new FakeDeploymentRepository();
+  const artifactInput = {
+    objectKey: "projects/project-id/assets/terraform_file/terraform-files.json",
+    fileName: "terraform-files.json",
+    contentType: "application/vnd.sketchcatch.terraform-files+json"
+  };
+  const plannedBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      { fileName: "providers.tf", terraformCode: "terraform {}\n" },
+      { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}\n' }
+    ]
+  });
+  const changedBundle = JSON.stringify({
+    schemaVersion: 1,
+    files: [
+      { fileName: "providers.tf", terraformCode: "terraform {}\n" },
+      { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "changed" {}\n' }
+    ]
+  });
+  repository.terraformArtifact = createTerraformArtifactRecord({
+    fileName: artifactInput.fileName,
+    contentType: artifactInput.contentType
+  });
+  repository.planArtifact = createPlanArtifactRecord({
+    terraformArtifactSha256: createSha256(
+      createTerraformArtifactCanonicalContent(artifactInput, plannedBundle).toString("utf8")
+    )
+  });
+
+  await assert.rejects(
+    () =>
+      approveDeploymentPlan(
+        {
+          deploymentId,
+          accessContext: createAccessContext()
+        },
+        repository,
+        {
+          downloadTerraformArtifact: async () => changedBundle,
+          now: () => fixedNow
+        }
+      ),
+    /Terraform artifact changed after plan/
+  );
 });
 
 test("approveDeploymentPlan preserves failed cleanup state for destroy approvals", async () => {
@@ -382,6 +572,7 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
     approvedTfplanHash: tfplanHash,
     approvedAwsAccountId: "123456789012",
     approvedAwsRegion: "ap-northeast-2",
+    approvedPreparedSnapshotHash: null,
     planSummary: {
       createCount: 0,
       updateCount: 0,
@@ -395,7 +586,7 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
   });
 });
 
-test("approveDeploymentPlan allows safety warnings that used to block approval", async () => {
+test("approveDeploymentPlan allows plans with legacy blocking safety warnings", async () => {
   const repository = new FakeDeploymentRepository();
   const warning = createBlockingWarning();
   repository.deployment = createDeploymentRecord(undefined, {
@@ -421,7 +612,8 @@ test("approveDeploymentPlan allows safety warnings that used to block approval",
     }
   );
 
-  assert.equal(deployment.approvedByUserId, userId);
+  assert.equal(repository.approvals.length, 1);
+  assert.equal(deployment.approvedAt, fixedNow);
 });
 
 test("approveDeploymentPlan allows acknowledgement-only warnings without acknowledgement ids", async () => {
@@ -465,13 +657,13 @@ test("approveDeploymentPlan rejects unsafe Terraform artifacts before approval",
         repository,
         {
           downloadTerraformArtifact: async () => `
-            data "aws_caller_identity" "current" {
+            data "aws_region" "current" {
             }
           `,
           now: () => fixedNow
         }
       ),
-    /data source "aws_caller_identity" is not allowed/
+    /data source "aws_region" is not allowed/
   );
 
   assert.equal(repository.approvals.length, 0);
@@ -610,6 +802,32 @@ test("assertDeploymentApplyPreconditions rejects AWS region drift before apply",
   );
 });
 
+test("assertDeploymentApplyPreconditions rejects prepared draft drift after approval", () => {
+  assert.throws(
+    () =>
+      assertDeploymentApplyPreconditions({
+        deployment: createApprovedDeploymentRecord({
+          preparedDraftRevision: 7,
+          preparedSnapshotHash: "c".repeat(64),
+          approvedPreparedSnapshotHash: "d".repeat(64)
+        }),
+        currentPlanArtifact: createPlanArtifactRecord(),
+        currentTerraformArtifactHash: artifactHash,
+        currentTfplanHash: tfplanHash,
+        currentAwsConnection: createVerifiedAwsConnection()
+      }),
+    (error) => {
+      assert.equal(error instanceof DeploymentApplyPreconditionError, true);
+      assert.equal(
+        (error as DeploymentApplyPreconditionError).reason,
+        "approval_snapshot"
+      );
+      assert.match((error as Error).message, /project draft changed after approval/i);
+      return true;
+    }
+  );
+});
+
 test("assertDeploymentApplyPreconditions rejects missing approval snapshot fields", () => {
   const requiredSnapshotFields: Array<keyof DeploymentRecord> = [
     "approvedAt",
@@ -668,6 +886,12 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
+    preparedDraftRevision: null,
+    preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -687,6 +911,7 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    approvedPreparedSnapshotHash: null,
     startedAt: null,
     completedAt: null,
     failedAt: null,

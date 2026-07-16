@@ -2,7 +2,9 @@ import Link from "next/link";
 import type { ProjectSummary } from "./dashboard-data";
 import { formatUsd, getProjectHref } from "./dashboard-data";
 import { DashboardIcon } from "./dashboard-icons";
+import { ProjectArchitectureThumbnail } from "./project-architecture-thumbnail";
 
+// 요약 Project 카드도 임의 그림 대신 저장 시 캡처한 실제 Board image를 사용합니다.
 export function ProjectCard({
   project,
   timestampLabel,
@@ -20,14 +22,7 @@ export function ProjectCard({
       className={variant === "wide" ? "projectCard projectCardWide projectCardLink" : "projectCard projectCardLink"}
       href={href}
     >
-      <div className="projectPreview" aria-hidden="true">
-        <span className="projectPreviewFrame" />
-        <span className="projectPreviewNode projectPreviewNodeVpc">VPC</span>
-        <span className="projectPreviewNode projectPreviewNodeApp">APP</span>
-        <span className="projectPreviewNode projectPreviewNodeData">DB</span>
-        <span className="projectPreviewLine projectPreviewLineOne" />
-        <span className="projectPreviewLine projectPreviewLineTwo" />
-      </div>
+      <ProjectArchitectureThumbnail projectId={project.id} projectName={project.title} />
 
       <div className="projectCardBody">
         <div className="projectCardTitle">

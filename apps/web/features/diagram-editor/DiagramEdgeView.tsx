@@ -4,6 +4,7 @@ import { EdgeText } from "@xyflow/react";
 import type { EdgeProps } from "@xyflow/react";
 import type { CSSProperties } from "react";
 
+import { resolveAuthoredEdgePath } from "./authored-edge-path";
 import { BOARD_DEFAULT_EDGE_COLOR } from "./constants";
 import { getDiagramEdgePatchBadgePosition } from "./diagram-edge-patch-badge";
 import { getDiagramEdgePath } from "./diagram-edge-path";
@@ -25,6 +26,7 @@ export function DiagramEdgeView({
   labelBgStyle,
   labelStyle,
   markerEnd,
+  markerStart,
   selected,
   source,
   sourcePosition,
@@ -36,14 +38,22 @@ export function DiagramEdgeView({
   targetX,
   targetY
 }: EdgeProps<DiagramFlowEdge>) {
-  const [path, labelX, labelY] = getDiagramEdgePath(data?.pathKind ?? "smoothstep", {
-    sourcePosition,
-    sourceX,
-    sourceY,
-    targetPosition,
-    targetX,
-    targetY
-  });
+  const resolvedPath = data?.authoredRoute
+    ? resolveAuthoredEdgePath(data.authoredRoute, {
+        isStale: data.isAuthoredRouteStale,
+        sourceX,
+        sourceY,
+        targetX,
+        targetY
+      })
+    : resolveLegacyEdgePath(data?.pathKind ?? "smoothstep", {
+        sourcePosition,
+        sourceX,
+        sourceY,
+        targetPosition,
+        targetX,
+        targetY
+      });
   const semanticStrokeWidth = getNumericStrokeWidth(style?.strokeWidth);
   const semanticStroke = typeof style?.stroke === "string" ? style.stroke : BOARD_DEFAULT_EDGE_COLOR;
   const patchState = data?.previewState;
@@ -55,13 +65,13 @@ export function DiagramEdgeView({
   const patchBadgePosition = patchState
     ? getDiagramEdgePatchBadgePosition({
         hasLabel: Boolean(label),
-        labelX,
-        labelY,
+        labelX: resolvedPath.labelX,
+        labelY: resolvedPath.labelY,
         patchState,
-        sourceX,
-        sourceY,
-        targetX,
-        targetY
+        sourceX: resolvedPath.sourceX,
+        sourceY: resolvedPath.sourceY,
+        targetX: resolvedPath.targetX,
+        targetY: resolvedPath.targetY
       })
     : null;
   const haloStyle = {
@@ -75,22 +85,23 @@ export function DiagramEdgeView({
       <path
         aria-hidden="true"
         className={`${styles.edgeHalo} ${selected ? styles.edgeHaloSelected : ""}`}
-        d={path}
+        d={resolvedPath.path}
         fill="none"
         style={haloStyle}
       />
       <path
         className={`react-flow__edge-path ${styles.edgeSemanticPath}`}
-        d={path}
+        d={resolvedPath.path}
         fill="none"
         markerEnd={markerEnd}
+        markerStart={markerStart}
         style={style}
       />
       {data?.isAnimated ? (
         <path
           aria-hidden="true"
           className={styles.edgeMotionPath}
-          d={path}
+          d={resolvedPath.path}
           fill="none"
           stroke={semanticStroke}
           strokeWidth={semanticStrokeWidth}
@@ -98,7 +109,7 @@ export function DiagramEdgeView({
       ) : null}
       <path
         className={`react-flow__edge-interaction ${styles.edgeInteractionPath}`}
-        d={path}
+        d={resolvedPath.path}
         fill="none"
         stroke="transparent"
         strokeWidth={interactionWidth}
@@ -112,8 +123,8 @@ export function DiagramEdgeView({
           {...(labelBgStyle ? { labelBgStyle } : {})}
           labelShowBg
           {...(labelStyle ? { labelStyle } : {})}
-          x={labelX}
-          y={labelY}
+          x={resolvedPath.labelX}
+          y={resolvedPath.labelY}
         />
       ) : null}
       {patchBadge && patchState && patchBadgeAccessibleLabel && patchBadgePosition ? (
@@ -133,6 +144,23 @@ export function DiagramEdgeView({
       ) : null}
     </>
   );
+}
+
+function resolveLegacyEdgePath(
+  kind: NonNullable<DiagramFlowEdge["data"]>["pathKind"],
+  input: Parameters<typeof getDiagramEdgePath>[1]
+) {
+  const [path, labelX, labelY] = getDiagramEdgePath(kind, input);
+
+  return {
+    path,
+    labelX,
+    labelY,
+    sourceX: input.sourceX,
+    sourceY: input.sourceY,
+    targetX: input.targetX,
+    targetY: input.targetY
+  };
 }
 
 function getEdgeAccessibleName(label: unknown, source: string, target: string): string {

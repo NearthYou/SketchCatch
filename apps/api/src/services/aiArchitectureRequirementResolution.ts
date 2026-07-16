@@ -17,9 +17,17 @@ export type ArchitectureRequirementResolution = {
   readonly servicePurpose: ArchitectureServicePurpose;
   readonly capabilities: ArchitectureCapability[];
   readonly requirementFacts: ArchitectureRequirementFact[];
+  readonly explicitResourceDefinitions: ExplicitResourceDefinition[];
   readonly explicitResourceTypes: ResourceType[];
   readonly operatingProfile: ArchitectureDraftOperatingProfile;
   readonly guardrailWarnings: ArchitectureGuardrailWarning[];
+};
+
+export type ExplicitResourceDefinition = {
+  readonly id: string;
+  readonly resourceType: ResourceType;
+  readonly terraformBlockType: "resource" | "data";
+  readonly terraformResourceType: string;
 };
 
 export class AmbiguousArchitecturePromptError extends Error {
@@ -306,7 +314,8 @@ export function resolveArchitectureRequirement(
   const unsupportedRequirementMatches = findUnsupportedRequirementMatches(request.prompt);
   const intent = interpretRequirement(request.prompt, unsupportedRequirementMatches);
   const requirementFacts = createRequirementFacts(request.prompt, unsupportedRequirementMatches);
-  const explicitResourceTypes = findExplicitResourceTypes(request.prompt);
+  const explicitResourceDefinitions = findExplicitResourceDefinitions(request.prompt);
+  const explicitResourceTypes = getExplicitResourceTypes(explicitResourceDefinitions);
   const hasPromptSignal = requirementFacts.length > 0 || explicitResourceTypes.length > 0;
   const unsupportedWarnings = createUnsupportedRequirementWarnings(unsupportedRequirementMatches);
   const servicePurpose = intent.servicePurpose;
@@ -324,6 +333,7 @@ export function resolveArchitectureRequirement(
       intent,
       servicePurpose,
       capabilities,
+      explicitResourceDefinitions,
       requirementFacts,
       explicitResourceTypes,
       operatingProfile: createOperatingProfile(request.prompt, requirementFacts),
@@ -418,6 +428,7 @@ function createRequirementFacts(
 
   addKoreanRequirementFacts(normalizedPrompt, facts);
   addPurposeRequirementFacts(normalizedPrompt, facts);
+  applyNeutralFileRequirementConstraints(normalizedPrompt, facts);
 
   for (const rule of unsupportedRequirementMatches) {
     for (const fact of rule.substitution?.facts ?? []) {
@@ -536,7 +547,9 @@ function inferServicePurpose(
   requirementFacts: readonly ArchitectureRequirementFact[]
 ): ArchitectureServicePurpose {
   const normalizedPrompt = normalizePrompt(prompt);
-  const promptPurpose = inferPromptServicePurpose(normalizedPrompt);
+  const promptPurpose = hasNeutralFileRequirement(normalizedPrompt)
+    ? undefined
+    : inferPromptServicePurpose(normalizedPrompt);
   const factSet = new Set(requirementFacts);
 
   if (promptPurpose !== undefined) {
@@ -565,6 +578,10 @@ function inferServicePurpose(
 function inferPromptServicePurpose(normalizedPrompt: string): ArchitectureServicePurpose | undefined {
   if (includesAny(normalizedPrompt, ["예약", "신청", "접수", "상담", "booking", "reservation"])) {
     return "reservation_service";
+  }
+
+  if (/(파일\s*업로드|이미지만|이미지\s*업로드|profile\s+image|post\s+image|upload|file upload)/iu.test(normalizedPrompt)) {
+    return "file_upload_service";
   }
 
   if (
@@ -785,6 +802,33 @@ function addDerivedRequirementFacts(facts: Set<ArchitectureRequirementFact>): vo
   }
 }
 
+function applyNeutralFileRequirementConstraints(
+  normalizedPrompt: string,
+  facts: Set<ArchitectureRequirementFact>
+): void {
+  if (!hasNeutralFileRequirement(normalizedPrompt)) {
+    return;
+  }
+
+  facts.delete("file_upload");
+
+  if (!hasExplicitObjectStorageRequirement(normalizedPrompt)) {
+    facts.delete("object_storage");
+  }
+}
+
+function hasNeutralFileRequirement(normalizedPrompt: string): boolean {
+  return /(?:file\s*(?:upload|handling|storage)?\s*:\s*(?:optional|any|not\s+related)|files?\s+(?:optional|any|not\s+related)|\uD30C\uC77C\uC740\s*\uC544\uBB34\uAC70\uB098|\uD30C\uC77C[\s\S]{0,40}(?:ec2|runtime|\uB7F0\uD0C0\uC784)[\s\S]{0,40}(?:\uC0C1\uAD00|\uAD00\uACC4)\s*(?:\uC5C6|\uC801\uC74C))/iu.test(
+    normalizedPrompt
+  );
+}
+
+function hasExplicitObjectStorageRequirement(normalizedPrompt: string): boolean {
+  return /\b(?:s3|bucket|object\s+storage)\b|\uBC84\uD0B7|\uC624\uBE0C\uC81D\uD2B8\s*\uC2A4\uD1A0\uB9AC\uC9C0/iu.test(
+    normalizedPrompt
+  );
+}
+
 function sortRequirementFacts(facts: ReadonlySet<ArchitectureRequirementFact>): ArchitectureRequirementFact[] {
   const factOrder: readonly ArchitectureRequirementFact[] = [
     "web_frontend",
@@ -810,13 +854,35 @@ function createOperatingProfile(
 ): ArchitectureDraftOperatingProfile {
   const normalizedPrompt = normalizePrompt(prompt);
   const factSet = new Set(requirementFacts);
-  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔", "최소", "간단", "작게"];
+  const hasQuestionnaireGrowthSignal =
+    /(중간\s*규모|일\s*1,?000명?|동시\s*50명?|이벤트성\s*급증|급변동|예측\s*불가|event\s+spike|bursty)/iu.test(
+      normalizedPrompt
+    );
+  const explicitNonLowBudgetKeywords = [
+    "10-50만원",
+    "50-200만원",
+    "200만원 이상",
+    "적당한 성능",
+    "고성능",
+    "엔터프라이즈",
+    "normal budget",
+    "high budget",
+    "enterprise"
+  ];
+  const lowBudgetKeywords = ["저렴", "낮은 예산", "비용 낮", "low budget", "연습용", "소수", "처음엔", "최소 비용", "작게"];
   const growthKeywords = ["방문자 증가", "홍보", "공개 서비스", "트래픽", "growth", "여러 사람", "많은 사용자"];
   const highSecurityKeywords = ["보호", "보안", "개인정보", "로그인", "회원", "계정", "private", "암호화"];
+  const budgetLevel =
+    explicitNonLowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) ||
+    /월\s*예산[\s\S]{0,40}(10-50|50-200|200만원|고성능|엔터프라이즈)/u.test(normalizedPrompt)
+      ? "normal"
+      : lowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+        ? "low"
+        : "normal";
 
   return {
-    budgetLevel: lowBudgetKeywords.some((keyword) => normalizedPrompt.includes(keyword)) ? "low" : "normal",
-    trafficLevel: growthKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase()))
+    budgetLevel,
+    trafficLevel: growthKeywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) || hasQuestionnaireGrowthSignal
       ? "normal"
       : "small",
     securityPriority:
@@ -966,8 +1032,12 @@ function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequireme
 }
 
 export function findExplicitResourceTypes(prompt: string): ResourceType[] {
+  return getExplicitResourceTypes(findExplicitResourceDefinitions(prompt));
+}
+
+function findExplicitResourceDefinitions(prompt: string): ExplicitResourceDefinition[] {
   const normalizedPrompt = normalizePrompt(prompt);
-  const resourceTypes = new Set<ResourceType>();
+  const definitions = new Map<string, ExplicitResourceDefinition>();
 
   for (const definition of resourceDefinitions) {
     if (definition.resourceType === "UNKNOWN") {
@@ -981,11 +1051,22 @@ export function findExplicitResourceTypes(prompt: string): ResourceType[] {
           !hasNegatedResourceAlias(normalizedPrompt, alias)
       )
     ) {
-      resourceTypes.add(definition.resourceType);
+      definitions.set(definition.id, {
+        id: definition.id,
+        resourceType: definition.resourceType,
+        terraformBlockType: definition.terraform.blockType,
+        terraformResourceType: definition.terraform.resourceType
+      });
     }
   }
 
-  return Array.from(resourceTypes);
+  return Array.from(definitions.values());
+}
+
+function getExplicitResourceTypes(
+  explicitResourceDefinitions: readonly ExplicitResourceDefinition[]
+): ResourceType[] {
+  return Array.from(new Set(explicitResourceDefinitions.map((definition) => definition.resourceType)));
 }
 
 function isCoveredBySupportedExplicitResource(
@@ -1033,9 +1114,73 @@ function createResourceAliases(definition: (typeof resourceDefinitions)[number])
     definition.resourceType.replaceAll("_", " "),
     definition.id.replace(/^aws-/, "").replaceAll("-", " "),
     definition.terraform.resourceType.replace(/^aws_/, "").replaceAll("_", " "),
-    definition.terraform.resourceType
+    definition.terraform.resourceType,
+    ...createResourceServiceAliases(definition)
   ].map((alias) => normalizePrompt(alias));
 }
+
+function createResourceServiceAliases(definition: (typeof resourceDefinitions)[number]): string[] {
+  const aliases: string[] = [];
+  const normalizedResourceType = definition.resourceType.toLowerCase();
+  const normalizedId = definition.id.toLowerCase();
+  const normalizedTerraformType = definition.terraform.resourceType.toLowerCase();
+
+  for (const serviceAlias of SUPPORTED_RESOURCE_SERVICE_ALIASES) {
+    if (
+      normalizedResourceType.includes(serviceAlias.token) ||
+      normalizedId.includes(serviceAlias.token) ||
+      normalizedTerraformType.includes(serviceAlias.token)
+    ) {
+      aliases.push(serviceAlias.alias);
+    }
+  }
+
+  if (normalizedId.includes("ecs") || normalizedTerraformType.includes("ecs")) {
+    aliases.push("fargate");
+  }
+
+  return aliases;
+}
+
+const SUPPORTED_RESOURCE_SERVICE_ALIASES = [
+  { token: "acm", alias: "acm" },
+  { token: "api_gateway", alias: "api gateway" },
+  { token: "apigateway", alias: "api gateway" },
+  { token: "autoscaling", alias: "auto scaling" },
+  { token: "cloudfront", alias: "cloudfront" },
+  { token: "cloudtrail", alias: "cloudtrail" },
+  { token: "cloudwatch", alias: "cloudwatch" },
+  { token: "codebuild", alias: "codebuild" },
+  { token: "codedeploy", alias: "codedeploy" },
+  { token: "codepipeline", alias: "codepipeline" },
+  { token: "codestar", alias: "codestar" },
+  { token: "cognito", alias: "cognito" },
+  { token: "config", alias: "aws config" },
+  { token: "dynamodb", alias: "dynamodb" },
+  { token: "ecr", alias: "ecr" },
+  { token: "ecs", alias: "ecs" },
+  { token: "efs", alias: "efs" },
+  { token: "eks", alias: "eks" },
+  { token: "elasticache", alias: "elasticache" },
+  { token: "eventbridge", alias: "eventbridge" },
+  { token: "guardduty", alias: "guardduty" },
+  { token: "iam", alias: "iam" },
+  { token: "kms", alias: "kms" },
+  { token: "lambda", alias: "lambda" },
+  { token: "rds", alias: "rds" },
+  { token: "route53", alias: "route 53" },
+  { token: "s3", alias: "s3" },
+  { token: "scheduler", alias: "scheduler" },
+  { token: "secretsmanager", alias: "secrets manager" },
+  { token: "sfn", alias: "step functions" },
+  { token: "shield", alias: "shield" },
+  { token: "sns", alias: "sns" },
+  { token: "sqs", alias: "sqs" },
+  { token: "ssm", alias: "ssm" },
+  { token: "vpc", alias: "vpc" },
+  { token: "waf", alias: "waf" },
+  { token: "xray", alias: "x-ray" }
+] as const;
 
 function includesResourceAlias(normalizedPrompt: string, alias: string): boolean {
   if (alias.length < 3) {

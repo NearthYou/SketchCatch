@@ -1,9 +1,11 @@
 import type { ArchitectureJson, DiagramJson, DiagramNode, ResourceItem } from "@sketchcatch/types";
+import { getTemplateDefinitionById } from "@sketchcatch/types";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { getResourceNodeVisualBounds } from "../diagram-editor/resource-node-visual-footprint";
 import type { DiagramPreviewAnnotations } from "../diagram-editor/types";
 import { resourceCatalog } from "../resource-settings/catalog";
-import { convertArchitectureJsonToDiagramJson } from "./workspace-ai-diagram-adapter";
+import { createPlannedDiagramJson } from "./workspace-ai-diagram-adapter";
 
 export type WorkspaceDiagramFixtureViewState = {
   readonly selectedNodeIds?: readonly string[];
@@ -33,7 +35,11 @@ export function getWorkspaceDiagramFixtureViewState(
 
 const workspaceDiagramFixtureFactories: Readonly<Record<string, () => DiagramJson>> = {
   "area-matrix": createAreaMatrixFixture,
-  conventions: () => convertArchitectureJsonToDiagramJson(conventionArchitectureJson),
+  "automatic-layout-vpc": () =>
+    createPlannedDiagramJson({ architectureJson: automaticLayoutVpcArchitectureJson }),
+  conventions: () => createPlannedDiagramJson({ architectureJson: conventionArchitectureJson }),
+  "ecs-fargate-authored": () =>
+    createPlannedDiagramJson({ architectureJson: createPartialEcsFargateArchitectureJson() }),
   "edge-matrix": createEdgeMatrixFixture,
   "edge-state-matrix": createEdgeStateMatrixFixture,
   "resource-gallery": createResourceGalleryFixture,
@@ -41,6 +47,55 @@ const workspaceDiagramFixtureFactories: Readonly<Record<string, () => DiagramJso
   "state-default-matrix": createStateMatrixFixture,
   "state-matrix": createStateMatrixFixture
 };
+
+function createPartialEcsFargateArchitectureJson(): ArchitectureJson {
+  const templateId = "ecs-fargate-container-app" as const;
+  const definition = getTemplateDefinitionById(templateId);
+  const omittedResourceIds = new Set(["repository", "log-group"]);
+  const includedResources = definition.resources.filter(
+    (resource) => !omittedResourceIds.has(resource.id)
+  );
+  const includedResourceIds = new Set(includedResources.map((resource) => resource.id));
+
+  return {
+    nodes: includedResources.map((resource) => {
+      const resourceDefinition = getResourceDefinitionByTerraform(
+        resource.terraformBlockType,
+        resource.terraformResourceType
+      );
+
+      if (!resourceDefinition) {
+        throw new Error(`Missing fixture resource definition: ${resource.terraformResourceType}`);
+      }
+
+      return {
+        id: `fixed-template-${templateId}-${resource.id}`,
+        type: resourceDefinition.resourceType,
+        label: resource.label,
+        positionX: 9_000,
+        positionY: 9_000,
+        config: {
+          templateId,
+          templateResourceId: resource.id,
+          terraformBlockType: resource.terraformBlockType,
+          terraformResourceType: resource.terraformResourceType
+        }
+      };
+    }),
+    edges: definition.relationships
+      .filter(
+        (relationship) =>
+          includedResourceIds.has(relationship.sourceResourceId) &&
+          includedResourceIds.has(relationship.targetResourceId)
+      )
+      .map((relationship) => ({
+        id: `fixed-template-${templateId}-${relationship.id}`,
+        sourceId: `fixed-template-${templateId}-${relationship.sourceResourceId}`,
+        targetId: `fixed-template-${templateId}-${relationship.targetResourceId}`,
+        label: relationship.label
+      }))
+  };
+}
 
 const workspaceDiagramFixtureViewStateFactories: Readonly<
   Record<string, (() => WorkspaceDiagramFixtureViewState) | undefined>
@@ -86,40 +141,36 @@ function createResourceGalleryFixture(): DiagramJson {
     Math.max(...resourceVisualBounds.map((bounds) => bounds.width), 1) +
     RESOURCE_GALLERY_COLUMN_GAP;
   const resourceCellHeight =
-    Math.max(...resourceVisualBounds.map((bounds) => bounds.height), 1) +
-    RESOURCE_GALLERY_ROW_GAP;
+    Math.max(...resourceVisualBounds.map((bounds) => bounds.height), 1) + RESOURCE_GALLERY_ROW_GAP;
   const resourceRows = Math.ceil(resourceNodes.length / RESOURCE_GALLERY_COLUMNS);
   const areaStartY = RESOURCE_GALLERY_INSET + resourceRows * resourceCellHeight;
   const areaCellWidth =
     Math.max(...areaNodes.map((node) => node.size.width), 1) + RESOURCE_GALLERY_COLUMN_GAP;
   const areaCellHeight =
     Math.max(...areaNodes.map((node) => node.size.height), 1) + RESOURCE_GALLERY_ROW_GAP;
-  const positionedResourceNodes = resourceNodes
-    .map((node, index) => {
-      const visualBounds = getResourceNodeVisualBounds(node);
+  const positionedResourceNodes = resourceNodes.map((node, index) => {
+    const visualBounds = getResourceNodeVisualBounds(node);
 
-      return {
-        ...node,
-        position: {
-          x:
-            RESOURCE_GALLERY_INSET +
-            (index % RESOURCE_GALLERY_COLUMNS) * resourceCellWidth -
-            visualBounds.x,
-          y:
-            RESOURCE_GALLERY_INSET +
-            Math.floor(index / RESOURCE_GALLERY_COLUMNS) * resourceCellHeight -
-            visualBounds.y
-        },
-        zIndex: index
-      };
-    });
+    return {
+      ...node,
+      position: {
+        x:
+          RESOURCE_GALLERY_INSET +
+          (index % RESOURCE_GALLERY_COLUMNS) * resourceCellWidth -
+          visualBounds.x,
+        y:
+          RESOURCE_GALLERY_INSET +
+          Math.floor(index / RESOURCE_GALLERY_COLUMNS) * resourceCellHeight -
+          visualBounds.y
+      },
+      zIndex: index
+    };
+  });
   const positionedAreaNodes = areaNodes.map((node, index) => ({
     ...node,
     position: {
       x: RESOURCE_GALLERY_INSET + (index % RESOURCE_GALLERY_AREA_COLUMNS) * areaCellWidth,
-      y:
-        areaStartY +
-        Math.floor(index / RESOURCE_GALLERY_AREA_COLUMNS) * areaCellHeight
+      y: areaStartY + Math.floor(index / RESOURCE_GALLERY_AREA_COLUMNS) * areaCellHeight
     },
     zIndex: positionedResourceNodes.length + index
   }));
@@ -170,9 +221,8 @@ function createAreaMatrixFixture(): DiagramJson {
     }),
     createCatalogFixtureNode(getCatalogItem("aws-autoscaling-group"), "area-autoscaling-group", {
       parentAreaNodeId: "area-subnet",
-      position: { x: 720, y: 280 },
-      size: { width: 460, height: 300 },
-      style: { borderColor: "#9a6700", borderStyle: "dashed" },
+      position: { x: 920, y: 400 },
+      style: { borderColor: "#d97706", borderStyle: "dashed" },
       zIndex: 5
     })
   ];
@@ -188,7 +238,10 @@ function createResourceStressMatrixFixture(): DiagramJson {
   const s3Item = getCatalogItem("aws-s3-bucket");
   const stressNodes = [
     {
-      ...createCatalogFixtureNode(getCatalogItem("aws-cloudfront-distribution"), "stress-service-icon"),
+      ...createCatalogFixtureNode(
+        getCatalogItem("aws-cloudfront-distribution"),
+        "stress-service-icon"
+      ),
       label: "SERVERLESS EVENT ROUTER WITH CROSS ACCOUNT FAILOVER"
     },
     {
@@ -217,7 +270,7 @@ function createResourceStressMatrixFixture(): DiagramJson {
     })),
     ...[
       ["aws-api-gateway-rest-api", "GLOBAL CUSTOMER API AUTHORIZATION GATEWAY"],
-      ["aws-rds-read-replica", "CROSS REGION DATABASE READ REPLICA"],
+      ["aws-rds-instance", "CROSS REGION DATABASE READ REPLICA"],
       ["aws-sqs-queue", "EVENT DRIVEN ORDER PROCESSING QUEUE"],
       ["aws-sns-topic", "MULTI ACCOUNT AUDIT NOTIFICATION TOPIC"],
       ["aws-ecs-cluster", "PRIVATE CONTAINER ORCHESTRATION CLUSTER"],
@@ -303,25 +356,45 @@ function createEdgeStateMatrixFixture(): DiagramJson {
     {
       id: "default",
       label: undefined,
-      style: { animated: false, color: "#59687d", lineStyle: "solid" as const, width: "thin" as const },
+      style: {
+        animated: false,
+        color: "#59687d",
+        lineStyle: "solid" as const,
+        width: "thin" as const
+      },
       type: "straight" as const
     },
     {
       id: "added",
       label: "added edge",
-      style: { animated: false, color: "#287d3c", lineStyle: "solid" as const, width: "medium" as const },
+      style: {
+        animated: false,
+        color: "#287d3c",
+        lineStyle: "solid" as const,
+        width: "medium" as const
+      },
       type: "smoothstep" as const
     },
     {
       id: "modified",
       label: "modified relationship with a bounded long label",
-      style: { animated: false, color: "#9a6700", lineStyle: "dashed" as const, width: "medium" as const },
+      style: {
+        animated: false,
+        color: "#9a6700",
+        lineStyle: "dashed" as const,
+        width: "medium" as const
+      },
       type: "step" as const
     },
     {
       id: "deleted",
       label: "deleted edge",
-      style: { animated: false, color: "#b42318", lineStyle: "dotted" as const, width: "thick" as const },
+      style: {
+        animated: false,
+        color: "#b42318",
+        lineStyle: "dotted" as const,
+        width: "thick" as const
+      },
       type: "default" as const
     }
   ];
@@ -674,5 +747,254 @@ const conventionArchitectureJson: ArchitectureJson = {
       targetId: "lambda-function",
       label: "monitors errors"
     }
+  ]
+};
+
+const automaticLayoutVpcArchitectureJson: ArchitectureJson = {
+  nodes: [
+    {
+      id: "browser",
+      type: "UNKNOWN",
+      label: "Customer Browser",
+      positionX: 2200,
+      positionY: 80,
+      config: {
+        diagramKind: "design",
+        diagramType: "actor_browser",
+        diagramWidth: 160,
+        diagramHeight: 96
+      }
+    },
+    {
+      id: "cloudfront",
+      type: "CLOUDFRONT",
+      label: "CloudFront",
+      positionX: 2100,
+      positionY: 120,
+      config: {}
+    },
+    {
+      id: "vpc",
+      type: "VPC",
+      label: "Application VPC",
+      positionX: 80,
+      positionY: 600,
+      config: { cidrBlock: "10.42.0.0/16" }
+    },
+    {
+      id: "public-a",
+      type: "SUBNET",
+      label: "Public Subnet A",
+      positionX: 160,
+      positionY: 700,
+      config: {}
+    },
+    {
+      id: "public-b",
+      type: "SUBNET",
+      label: "Public Subnet B",
+      positionX: 220,
+      positionY: 760,
+      config: {}
+    },
+    {
+      id: "private-a",
+      type: "SUBNET",
+      label: "Private Subnet A",
+      positionX: 280,
+      positionY: 820,
+      config: {}
+    },
+    {
+      id: "private-b",
+      type: "SUBNET",
+      label: "Private Subnet B",
+      positionX: 340,
+      positionY: 880,
+      config: {}
+    },
+    {
+      id: "database-a",
+      type: "SUBNET",
+      label: "Database Subnet A",
+      positionX: 400,
+      positionY: 940,
+      config: {}
+    },
+    {
+      id: "database-b",
+      type: "SUBNET",
+      label: "Database Subnet B",
+      positionX: 460,
+      positionY: 1000,
+      config: {}
+    },
+    {
+      id: "load-balancer",
+      type: "LOAD_BALANCER",
+      label: "Application Load Balancer",
+      positionX: 1880,
+      positionY: 1400,
+      config: {}
+    },
+    {
+      id: "service-a",
+      type: "ECS_SERVICE",
+      label: "Fargate Service A",
+      positionX: 1900,
+      positionY: 1500,
+      config: { desiredCount: 2, launchType: "FARGATE" }
+    },
+    {
+      id: "service-b",
+      type: "ECS_SERVICE",
+      label: "Fargate Service B",
+      positionX: 120,
+      positionY: 1580,
+      config: { desiredCount: 2, launchType: "FARGATE" }
+    },
+    {
+      id: "db-primary",
+      type: "RDS",
+      label: "PostgreSQL Primary",
+      positionX: 1740,
+      positionY: 560,
+      config: { engine: "postgres", multiAz: true, publiclyAccessible: false }
+    },
+    {
+      id: "db-replica",
+      type: "RDS_READ_REPLICA",
+      label: "PostgreSQL Read Replica",
+      positionX: 120,
+      positionY: 1100,
+      config: { replicateSourceDb: "aws_db_instance.postgresql_primary.identifier" }
+    },
+    {
+      id: "pipeline",
+      type: "CODEPIPELINE",
+      label: "Delivery Pipeline",
+      positionX: 2360,
+      positionY: 1700,
+      config: {}
+    },
+    {
+      id: "registry",
+      type: "ECR_REPOSITORY",
+      label: "Container Registry",
+      positionX: 1940,
+      positionY: 1760,
+      config: {}
+    },
+    {
+      id: "runtime-role",
+      type: "IAM_ROLE",
+      label: "Fargate Runtime Role",
+      positionX: 2280,
+      positionY: 1600,
+      config: {}
+    },
+    {
+      id: "logs",
+      type: "CLOUDWATCH_LOG_GROUP",
+      label: "Application Logs",
+      positionX: 80,
+      positionY: 1660,
+      config: {}
+    },
+    {
+      id: "alarm",
+      type: "CLOUDWATCH_METRIC_ALARM",
+      label: "Service CPU Alarm",
+      positionX: 1740,
+      positionY: 560,
+      config: { metricName: "CPUUtilization" }
+    }
+  ],
+  edges: [
+    ...["public-a", "public-b", "private-a", "private-b", "database-a", "database-b"].map(
+      (targetId) => ({
+        id: `vpc-contains-${targetId}`,
+        sourceId: "vpc",
+        targetId,
+        label: "contains"
+      })
+    ),
+    {
+      id: "public-a-contains-alb",
+      sourceId: "public-a",
+      targetId: "load-balancer",
+      label: "contains"
+    },
+    {
+      id: "private-a-contains-service",
+      sourceId: "private-a",
+      targetId: "service-a",
+      label: "contains"
+    },
+    {
+      id: "private-b-contains-service",
+      sourceId: "private-b",
+      targetId: "service-b",
+      label: "contains"
+    },
+    {
+      id: "database-a-contains-primary",
+      sourceId: "database-a",
+      targetId: "db-primary",
+      label: "contains"
+    },
+    {
+      id: "database-b-contains-replica",
+      sourceId: "database-b",
+      targetId: "db-replica",
+      label: "contains"
+    },
+    { id: "browser-cloudfront", sourceId: "browser", targetId: "cloudfront", label: "HTTPS" },
+    {
+      id: "cloudfront-alb",
+      sourceId: "cloudfront",
+      targetId: "load-balancer",
+      label: "API traffic"
+    },
+    {
+      id: "alb-service-a",
+      sourceId: "load-balancer",
+      targetId: "service-a",
+      label: "routes requests"
+    },
+    {
+      id: "alb-service-b",
+      sourceId: "load-balancer",
+      targetId: "service-b",
+      label: "routes requests"
+    },
+    { id: "service-a-db", sourceId: "service-a", targetId: "db-primary", label: "reads/writes" },
+    { id: "service-b-db", sourceId: "service-b", targetId: "db-replica", label: "reads" },
+    {
+      id: "pipeline-registry",
+      sourceId: "pipeline",
+      targetId: "registry",
+      label: "publishes image"
+    },
+    {
+      id: "registry-service-a",
+      sourceId: "registry",
+      targetId: "service-a",
+      label: "deploys image"
+    },
+    {
+      id: "registry-service-b",
+      sourceId: "registry",
+      targetId: "service-b",
+      label: "deploys image"
+    },
+    {
+      id: "role-service",
+      sourceId: "runtime-role",
+      targetId: "service-a",
+      label: "grants runtime access"
+    },
+    { id: "service-logs", sourceId: "service-a", targetId: "logs", label: "writes logs" },
+    { id: "alarm-service", sourceId: "alarm", targetId: "service-a", label: "monitors CPU" }
   ]
 };

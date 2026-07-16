@@ -6,9 +6,11 @@ import type {
   DeploymentStatus
 } from "@sketchcatch/types";
 import {
-  defaultTerraformArtifactMaxBytes,
-  downloadTerraformArtifactFromS3
+  createTerraformArtifactCanonicalContent,
+  createTerraformArtifactSafetyContent
 } from "./terraform-workspace.js";
+import { createProjectAssetStorage } from "../projects/project-asset-storage-factory.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 import {
   DeploymentConflictError,
@@ -28,6 +30,7 @@ export type ApproveDeploymentPlanInput = {
 
 export type ApproveDeploymentPlanOptions = {
   downloadTerraformArtifact?: (objectKey: string) => Promise<Buffer | Uint8Array | string>;
+  projectAssetStorage?: ProjectAssetStorage;
   now?: () => Date;
 };
 
@@ -70,7 +73,7 @@ export async function approveDeploymentPlan(
   const downloadTerraformArtifact =
     options.downloadTerraformArtifact ??
     ((objectKey: string) =>
-      downloadTerraformArtifactFromS3(objectKey, { maxBytes: defaultTerraformArtifactMaxBytes }));
+      (options.projectAssetStorage ?? createProjectAssetStorage()).getObject({ objectKey }));
   const now = options.now ?? (() => new Date());
   const deployment = await getDeployment(input, repository);
 
@@ -118,11 +121,29 @@ export async function approveDeploymentPlan(
     throw new DeploymentConflictError("AWS connection changed after plan");
   }
 
-  const terraformArtifactContent = await downloadTerraformArtifact(terraformArtifact.objectKey);
+  const downloadedTerraformArtifact = await downloadTerraformArtifact(terraformArtifact.objectKey);
+  const terraformArtifactContent = createTerraformArtifactCanonicalContent(
+    {
+      objectKey: terraformArtifact.objectKey,
+      fileName: terraformArtifact.fileName,
+      contentType: terraformArtifact.contentType
+    },
+    downloadedTerraformArtifact
+  );
 
-  assertTerraformArtifactIsSafe(terraformArtifactContent, {
-    liveProfile: deployment.liveProfile
-  });
+  assertTerraformArtifactIsSafe(
+    createTerraformArtifactSafetyContent(
+      {
+        objectKey: terraformArtifact.objectKey,
+        fileName: terraformArtifact.fileName,
+        contentType: terraformArtifact.contentType
+      },
+      downloadedTerraformArtifact
+    ),
+    {
+      liveProfile: deployment.liveProfile
+    }
+  );
 
   const terraformArtifactHash = createSha256(terraformArtifactContent);
   const plannedTerraformArtifactSha256 = currentPlanArtifact.terraformArtifactSha256;
@@ -144,6 +165,7 @@ export async function approveDeploymentPlan(
     approvedTfplanHash: currentPlanArtifact.sha256,
     approvedAwsAccountId: currentPlanArtifact.accountId,
     approvedAwsRegion: currentPlanArtifact.region,
+    approvedPreparedSnapshotHash: deployment.preparedSnapshotHash ?? null,
     planSummary: {
       ...deployment.planSummary,
       blocked: false
@@ -166,6 +188,7 @@ export function assertDeploymentApplyPreconditions(
   const deployment = input.deployment;
 
   assertDeploymentApprovalSnapshot(deployment, "apply");
+  assertPreparedSnapshotMatchesApproval(deployment, "apply");
 
   if (input.currentPlanArtifact.operation !== "apply") {
     throw new DeploymentApplyPreconditionError(
@@ -238,6 +261,7 @@ export function assertDeploymentDestroyPreconditions(
   const deployment = input.deployment;
 
   assertDeploymentApprovalSnapshot(deployment, "destroy");
+  assertPreparedSnapshotMatchesApproval(deployment, "destroy");
 
   if (input.currentPlanArtifact.operation !== "destroy") {
     throw new DeploymentConflictError("Terraform destroy plan is required before destroy");
@@ -247,7 +271,9 @@ export function assertDeploymentDestroyPreconditions(
     input.sourceStatus !== "SUCCESS" &&
     !(
       input.sourceStatus === "FAILED" &&
-      (input.sourceFailureStage === "apply" || input.sourceFailureStage === "destroy")
+      (input.sourceFailureStage === "plan" ||
+        input.sourceFailureStage === "apply" ||
+        input.sourceFailureStage === "destroy")
     )
   ) {
     throw new DeploymentConflictError("Deployment cannot be destroyed in this state");
@@ -257,7 +283,7 @@ export function assertDeploymentDestroyPreconditions(
     throw new DeploymentConflictError("Blocked deployment cannot be destroyed");
   }
 
-  if (!deployment.stateObjectKey) {
+  if (deployment.scope !== "application" && !deployment.stateObjectKey) {
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
@@ -364,7 +390,33 @@ function getMissingApprovalSnapshotFields(deployment: DeploymentRecord): string[
     ["approvedAwsRegion", deployment.approvedAwsRegion]
   ];
 
+  if (deployment.preparedSnapshotHash) {
+    snapshotFields.push([
+      "approvedPreparedSnapshotHash",
+      deployment.approvedPreparedSnapshotHash
+    ]);
+  }
+
   return snapshotFields.filter(([, value]) => !value).map(([field]) => field);
+}
+
+function assertPreparedSnapshotMatchesApproval(
+  deployment: DeploymentRecord,
+  operation: "apply" | "destroy"
+): void {
+  if (
+    deployment.preparedSnapshotHash === null ||
+    deployment.approvedPreparedSnapshotHash === deployment.preparedSnapshotHash
+  ) {
+    return;
+  }
+
+  const message = `Prepared project draft changed after approval before ${operation}`;
+  if (operation === "apply") {
+    throw new DeploymentApplyPreconditionError("approval_snapshot", message);
+  }
+
+  throw new DeploymentConflictError(message);
 }
 
 async function requireDeploymentAwsConnection(

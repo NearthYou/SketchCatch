@@ -17,10 +17,9 @@ import {
   saveProjectDraft
 } from "../../../features/workspace/api";
 import { useBrowserVoiceInput } from "../../../features/workspace/use-browser-voice-input";
-import {
-  convertDiagramJsonToArchitectureJson,
-  getDiagramJsonForArchitectureDraft
-} from "../../../features/workspace/workspace-ai-diagram-adapter";
+import { compileArchitectureDraftProposal } from "../../../features/architecture-board-compiler";
+import type { ArchitectureBoardCompilationProposal } from "../../../features/architecture-board-compiler";
+import { convertDiagramJsonToArchitectureJson } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import {
   planArchitectureDraftPreview,
   resolveArchitectureDraftFollowUpAnswer,
@@ -43,6 +42,7 @@ import {
   readAiStartProjectDraft,
   storeApprovedAiStartMessages,
   trimAiStartMessages,
+  type AiStartExistingProject,
   type AiStartMessage,
   type AiStartProjectDraft
 } from "./ai-start-model";
@@ -65,13 +65,22 @@ type PatchTargetOptions = {
   readonly skipConnection?: boolean | undefined;
 };
 
-export function useAiStartWorkflow() {
+export function useAiStartWorkflow({
+  existingProject
+}: {
+  readonly existingProject?: AiStartExistingProject | undefined;
+} = {}) {
   const router = useRouter();
+  const existingProjectId = existingProject?.projectId;
+  const existingProjectName = existingProject?.projectName;
+  const existingProjectReturnHref = existingProject?.returnHref;
   const [projectDraft, setProjectDraft] = useState<AiStartProjectDraft | null>(null);
   const [composerValue, setComposerValue] = useState("");
   const [messages, setMessages] = useState<AiStartMessage[]>([]);
   const messagesRef = useRef<AiStartMessage[]>([]);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
+  const [compilationProposal, setCompilationProposal] =
+    useState<ArchitectureBoardCompilationProposal | null>(null);
   const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
   const [draftClarification, setDraftClarification] =
     useState<PendingDraftClarification | null>(null);
@@ -84,10 +93,20 @@ export function useAiStartWorkflow() {
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
-  const voiceInput = useBrowserVoiceInput({ onChange: setComposerValue, value: composerValue });
+  const [voiceTranscriptNeedsConfirmation, setVoiceTranscriptNeedsConfirmation] = useState(false);
+  const voiceInput = useBrowserVoiceInput({
+    onChange: handleVoiceTranscriptChange,
+    value: composerValue
+  });
 
   useEffect(() => {
-    const storedDraft = readAiStartProjectDraft();
+    const storedDraft = existingProjectId && existingProjectName
+      ? {
+          projectName: existingProjectName,
+          startMode: "ai" as const,
+          updatedAt: new Date().toISOString()
+        }
+      : readAiStartProjectDraft();
 
     if (storedDraft === null) {
       router.replace("/workspace/new");
@@ -102,17 +121,22 @@ export function useAiStartWorkflow() {
         `${storedDraft.projectName}에 필요한 구조를 알려주세요.`
       )
     ]);
-  }, [router]);
+  }, [existingProjectId, existingProjectName, router]);
 
   async function submitPrompt(value = composerValue): Promise<void> {
     const prompt = value.trim();
 
-    if (prompt.length === 0 || requestState === "loading") {
+    if (
+      prompt.length === 0 ||
+      requestState === "loading" ||
+      voiceTranscriptNeedsConfirmation
+    ) {
       return;
     }
 
     appendMessage(createAiStartMessage("user", "status", prompt));
     setComposerValue("");
+    setVoiceTranscriptNeedsConfirmation(false);
 
     if (patchClarification !== null) {
       await answerPatchClarification(prompt, patchClarification);
@@ -143,6 +167,24 @@ export function useAiStartWorkflow() {
     }
 
     await requestDraft({ prompt });
+  }
+
+  function handleVoiceTranscriptChange(transcript: string): void {
+    setComposerValue(transcript);
+    setVoiceTranscriptNeedsConfirmation(transcript.trim().length > 0);
+  }
+
+  function confirmVoiceTranscript(): void {
+    if (composerValue.trim().length > 0) {
+      setVoiceTranscriptNeedsConfirmation(false);
+    }
+  }
+
+  function updateComposerValue(value: string): void {
+    setComposerValue(value);
+    if (value.trim().length === 0) {
+      setVoiceTranscriptNeedsConfirmation(false);
+    }
   }
 
   async function requestDraft(request: CreateArchitectureDraftRequest): Promise<void> {
@@ -199,24 +241,21 @@ export function useAiStartWorkflow() {
       }
 
       const nextDraft = createDraftFromPatch(response, draft);
-      setDraft(nextDraft);
-      setPreviewDiagram(getDiagramJsonForArchitectureDraft(nextDraft));
-      finishRequest();
-      appendAssistantMessage("draft", createPatchSummary(response));
+      showDraft(nextDraft, baseDiagram, createPatchSummary(response));
     } catch (error) {
       failRequest(getApiErrorMessage(error, "수정 PREVIEW를 만들지 못했습니다."));
     }
   }
 
   async function approveDraft(): Promise<void> {
-    if (projectDraft === null || draft === null || previewDiagram === null) {
+    if (projectDraft === null || draft === null || compilationProposal === null) {
       return;
     }
 
     beginRequest(false);
 
     try {
-      let projectId = createdProjectId;
+      let projectId = existingProjectId ?? createdProjectId;
 
       if (projectId === null) {
         const project = await createProject({ name: projectDraft.projectName });
@@ -227,9 +266,11 @@ export function useAiStartWorkflow() {
       const approvedMessages = appendMessage(
         createAiStartMessage("assistant", "status", `${draft.title}을 Board에 적용했습니다.`)
       );
-      await saveProjectDraft({ diagramJson: previewDiagram, projectId });
+      await saveProjectDraft({ diagramJson: compilationProposal.diagram, projectId });
       storeApprovedAiStartMessages(projectId, approvedMessages);
-      clearAiStartProjectDraft();
+      if (!existingProjectId) {
+        clearAiStartProjectDraft();
+      }
       router.push(
         `/workspace?${new URLSearchParams({
           projectId,
@@ -248,7 +289,7 @@ export function useAiStartWorkflow() {
   }
 
   function cancelStart(): void {
-    router.push("/workspace/new");
+    router.push(existingProjectReturnHref ?? "/workspace/new");
   }
 
   async function answerDraftFollowUp(
@@ -305,11 +346,17 @@ export function useAiStartWorkflow() {
     );
   }
 
-  function showDraft(result: AiArchitectureDraftResult): void {
+  function showDraft(
+    result: AiArchitectureDraftResult,
+    currentDiagram?: DiagramJson,
+    message = `${result.title} PREVIEW가 준비됐습니다.`
+  ): void {
+    const proposal = compileArchitectureDraftProposal(result, currentDiagram);
     setDraft(result);
-    setPreviewDiagram(getDiagramJsonForArchitectureDraft(result));
+    setCompilationProposal(proposal);
+    setPreviewDiagram(proposal.diagram);
     finishRequest();
-    appendAssistantMessage("draft", `${result.title} PREVIEW가 준비됐습니다.`);
+    appendAssistantMessage("draft", message);
   }
 
   function beginRequest(clearPreview = true): void {
@@ -320,6 +367,7 @@ export function useAiStartWorkflow() {
     setDraftFollowUp(null);
     if (clearPreview) {
       setDraft(null);
+      setCompilationProposal(null);
       setPreviewDiagram(null);
     }
   }
@@ -357,10 +405,16 @@ export function useAiStartWorkflow() {
 
   return {
     approveDraft,
-    canApprove: draft !== null && previewDiagram !== null && requestState !== "loading",
-    canSubmit: composerValue.trim().length > 0 && requestState !== "loading",
+    canApprove:
+      draft !== null && compilationProposal !== null && previewDiagram !== null && requestState !== "loading",
+    canSubmit:
+      composerValue.trim().length > 0 &&
+      requestState !== "loading" &&
+      !voiceTranscriptNeedsConfirmation,
     cancelStart,
     composerValue,
+    compilationProposal,
+    confirmVoiceTranscript,
     draft,
     errorMessage,
     messages,
@@ -368,8 +422,9 @@ export function useAiStartWorkflow() {
     projectDraft,
     regenerateDraft,
     requestState,
-    setComposerValue,
+    setComposerValue: updateComposerValue,
     submitPrompt,
-    voiceInput
+    voiceInput,
+    voiceTranscriptNeedsConfirmation
   };
 }

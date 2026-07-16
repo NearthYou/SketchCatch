@@ -1,4 +1,5 @@
 import type { DiagramJson } from "@sketchcatch/types";
+import { sanitizeSavedRepositoryGeneratedDiagramLayout } from "./workspace-ai-diagram-adapter";
 
 /** 저장된 Board는 사용자 이름, 위치, ID를 고치지 않고 그대로 복원합니다. */
 export function restoreSavedDiagram(
@@ -12,17 +13,24 @@ export function restoreSavedDiagram(
   const hasNodes = Array.isArray(savedDiagram.nodes);
   const hasEdges = Array.isArray(savedDiagram.edges);
   const hasViewport = isDiagramViewport(savedDiagram.viewport);
+  const restoredEdges = hasEdges
+    ? savedDiagram.edges.filter((edge) => edge.metadata?.managedBy !== "parameter-reference")
+    : fallbackDiagram.edges;
 
   if (hasNodes && hasEdges && hasViewport) {
-    return savedDiagram;
+    return sanitizeSavedRepositoryGeneratedDiagramLayout(
+      restoredEdges.length === savedDiagram.edges.length
+        ? savedDiagram
+        : { ...savedDiagram, edges: restoredEdges }
+    );
   }
 
-  return {
+  return sanitizeSavedRepositoryGeneratedDiagramLayout({
     ...savedDiagram,
-    edges: hasEdges ? savedDiagram.edges : fallbackDiagram.edges,
+    edges: restoredEdges,
     nodes: hasNodes ? savedDiagram.nodes : fallbackDiagram.nodes,
     viewport: hasViewport ? savedDiagram.viewport : fallbackDiagram.viewport
-  };
+  });
 }
 
 function isDiagramViewport(value: unknown): value is DiagramJson["viewport"] {

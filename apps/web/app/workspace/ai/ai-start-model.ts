@@ -7,7 +7,6 @@ import type {
   DiagramJson
 } from "@sketchcatch/types";
 import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
-import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;
@@ -16,6 +15,12 @@ export type AiStartProjectDraft = {
   readonly projectName: string;
   readonly startMode: "ai";
   readonly updatedAt: string;
+};
+
+export type AiStartExistingProject = {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly returnHref: string;
 };
 
 export type AiStartMessage = {
@@ -134,7 +139,7 @@ export function createDraftFromPatch(
   preview: ArchitecturePatchPreview,
   previousDraft: AiArchitectureDraftResult | null
 ): AiArchitectureDraftResult {
-  const nextDraft: AiArchitectureDraftResult = {
+  return {
     architectureJson: preview.proposedArchitectureJson,
     title: previousDraft?.title ?? "Practice Architecture",
     metadata: previousDraft?.metadata ?? {
@@ -145,11 +150,6 @@ export function createDraftFromPatch(
       source: "prompt"
     },
     ...(preview.llmExplanation ? { llmExplanation: preview.llmExplanation } : {})
-  };
-
-  return {
-    ...nextDraft,
-    diagramJson: getDiagramJsonForArchitectureDraft(nextDraft)
   };
 }
 

@@ -1,10 +1,27 @@
 import { createHash } from "node:crypto";
 import type { DeploymentLiveProfile } from "@sketchcatch/types";
-import { getLiveApplySupportedResourceTypes } from "./deployment-plan-summary.js";
+import {
+  getLiveApplySupportedResourceTypes,
+  getTerraformPlanSupportedResourceTypes
+} from "./deployment-plan-summary.js";
 
 const allowedTopLevelBlocks = new Set(["terraform", "provider", "resource", "data", "variable", "output", "locals"]);
-const liveApplySupportedDataSourceTypes = new Set(["aws_ami"]);
-const allowedProviderSources = new Set(["hashicorp/aws", "registry.terraform.io/hashicorp/aws"]);
+const liveApplySupportedDataSourceTypes = new Set([
+  "archive_file",
+  "aws_ami",
+  "aws_ec2_managed_prefix_list",
+  "aws_eks_cluster_auth",
+  "aws_caller_identity",
+  "aws_ssm_parameter"
+]);
+const allowedProviderSources = new Set([
+  "hashicorp/aws",
+  "registry.terraform.io/hashicorp/aws",
+  "hashicorp/archive",
+  "registry.terraform.io/hashicorp/archive",
+  "hashicorp/kubernetes",
+  "registry.terraform.io/hashicorp/kubernetes"
+]);
 const allowedAwsProviderRegion = "ap-northeast-2";
 const allowedAwsProviderAttributes = new Set(["alias", "region"]);
 const disallowedTerraformFunctions = new Set([
@@ -17,8 +34,7 @@ const disallowedTerraformFunctions = new Set([
   "filesha1",
   "filesha256",
   "filesha512",
-  "pathexpand",
-  "templatefile"
+  "pathexpand"
 ]);
 const restrictedNestedBlocks = new Set([
   "backend",
@@ -50,6 +66,7 @@ type HclBlock = {
 
 export type TerraformArtifactSafetyOptions = {
   liveProfile?: DeploymentLiveProfile | undefined;
+  resourceValidationMode?: "live_apply" | "plan" | undefined;
 };
 
 export class TerraformArtifactSafetyError extends Error {
@@ -57,6 +74,20 @@ export class TerraformArtifactSafetyError extends Error {
     super(message);
     this.name = "TerraformArtifactSafetyError";
   }
+}
+
+export function containsArchiveFileDataSource(
+  terraformCode: Buffer | Uint8Array | string
+): boolean {
+  const source = Buffer.isBuffer(terraformCode)
+    ? terraformCode.toString("utf8")
+    : terraformCode instanceof Uint8Array
+      ? Buffer.from(terraformCode).toString("utf8")
+      : terraformCode;
+
+  return extractDataSourceBlocks(stripHclComments(source)).some(
+    (dataSource) => dataSource.type === "archive_file"
+  );
 }
 
 export const managedDemoUserDataMarker = "sketchcatch-demo-managed-user-data:v1";
@@ -81,8 +112,13 @@ export function assertTerraformArtifactIsSafe(
   validateProviderSourceAttributes(tokens);
   validateDisallowedTerraformFunctionCalls(tokens);
   validateDisallowedStringInterpolations(tokens);
+  validateTemplateFileCalls(code);
+  validateArchiveDataSourceAttributes(code);
   const liveProfile = options.liveProfile ?? "practice";
-  const supportedResourceTypes = getLiveApplySupportedResourceTypes(liveProfile);
+  const supportedResourceTypes =
+    options.resourceValidationMode === "plan"
+      ? getTerraformPlanSupportedResourceTypes()
+      : getLiveApplySupportedResourceTypes(liveProfile);
 
   validateDeploymentResourceAttributes(code, liveProfile);
 
@@ -176,7 +212,7 @@ function validateTopLevelBlock(block: HclBlock, supportedResourceTypes: Readonly
     );
   }
 
-  if (block.type === "provider" && block.labels[0] !== "aws") {
+  if (block.type === "provider" && block.labels[0] !== "aws" && block.labels[0] !== "kubernetes") {
     throw new TerraformArtifactSafetyError(
       `Terraform provider "${block.labels[0] ?? ""}" is not allowed before live deployment at line ${block.line}`
     );
@@ -219,7 +255,13 @@ function validateRequiredProviderAssignment(
     return;
   }
 
-  if (providerName.value !== "aws" && providerName.value !== "source" && providerName.value !== "version") {
+  if (
+    providerName.value !== "aws" &&
+    providerName.value !== "archive" &&
+    providerName.value !== "kubernetes" &&
+    providerName.value !== "source" &&
+    providerName.value !== "version"
+  ) {
     throw new TerraformArtifactSafetyError(
       `Terraform required provider "${providerName.value}" is not allowed before live deployment at line ${providerName.line}`
     );
@@ -335,6 +377,67 @@ function validateDisallowedStringInterpolations(tokens: HclToken[]): void {
           `Terraform function "${functionName}" is not allowed before live deployment at line ${token.line}`
         );
       }
+    }
+  }
+}
+
+function validateTemplateFileCalls(source: string): void {
+  const code = stripHclComments(source);
+  const calls = Array.from(code.matchAll(/\btemplatefile\s*\(/g));
+
+  if (calls.length === 0) {
+    return;
+  }
+
+  const allowedUsages = Array.from(
+    code.matchAll(/\buser_data\s*=\s*base64encode\s*\(\s*templatefile\s*\(/g)
+  );
+
+  if (allowedUsages.length !== calls.length) {
+    const line = countLineAtOffset(code, calls[0]?.index ?? 0);
+    throw new TerraformArtifactSafetyError(
+      `Terraform templatefile is allowed only for base64encoded user_data before live deployment at line ${line}`
+    );
+  }
+
+  for (const call of calls) {
+    const callIndex = call.index ?? 0;
+    const firstArgument = /^\btemplatefile\s*\(\s*"([^"]*)"/.exec(code.slice(callIndex))?.[1];
+
+    if (!firstArgument || !/^\$\{path\.module\}\/[A-Za-z0-9][A-Za-z0-9._-]*\.tftpl$/.test(firstArgument)) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform templatefile must use a static module-local .tftpl basename before live deployment at line ${countLineAtOffset(code, callIndex)}`
+      );
+    }
+  }
+}
+
+function validateArchiveDataSourceAttributes(source: string): void {
+  for (const dataSource of extractDataSourceBlocks(stripHclComments(source))) {
+    if (dataSource.type !== "archive_file") {
+      continue;
+    }
+
+    const body = stripHclComments(dataSource.body);
+    const outputPath = findLiteralStringAttribute(body, "output_path");
+    const sourceContentFilename = findLiteralStringAttribute(
+      body,
+      "source_content_filename"
+    );
+    const usesInlineContent = /\bsource_content\s*=\s*"/.test(body);
+    const usesFileSystemSource =
+      /\b(?:source_file|source_dir)\s*=/.test(body) || /\bsource\s*\{/.test(body);
+
+    if (!usesInlineContent || usesFileSystemSource || !sourceContentFilename) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform archive_file must use inline source_content before live deployment at line ${dataSource.line}`
+      );
+    }
+
+    if (!outputPath || !isSafeArchiveOutputPath(outputPath)) {
+      throw new TerraformArtifactSafetyError(
+        `Terraform archive_file output_path must stay in the Terraform workspace before live deployment at line ${dataSource.line}`
+      );
     }
   }
 }
@@ -455,7 +558,7 @@ function validateBoundedLiveObservationAutoScalingPolicy(
       "autoscaling_group_name",
       "aws_autoscaling_group.api.name"
     ) &&
-    findNumericAttribute(body, "cooldown") === 180 &&
+    findNumericAttribute(body, "cooldown") === null &&
     findNumericAttribute(body, "estimated_instance_warmup") === 60 &&
     stepAdjustments.length === 1 &&
     findNumericAttribute(stepAdjustment, "metric_interval_lower_bound") === 0 &&
@@ -509,6 +612,18 @@ function hasLiteralStringAttribute(
   return pattern.test(body);
 }
 
+function findLiteralStringAttribute(body: string, attributeName: string): string | null {
+  const pattern = new RegExp(`\\b${escapeRegExp(attributeName)}\\s*=\\s*"([^"]*)"`);
+  return pattern.exec(body)?.[1] ?? null;
+}
+
+function isSafeArchiveOutputPath(outputPath: string): boolean {
+  return (
+    (outputPath.startsWith("./") || outputPath.startsWith("${path.module}/")) &&
+    !outputPath.split("/").includes("..")
+  );
+}
+
 function hasReferenceAttribute(
   body: string,
   attributeName: string,
@@ -531,6 +646,14 @@ function validateManagedDemoUserData(
     throw new TerraformArtifactSafetyError(
       `Terraform ${resourceLabel} ${argumentName} is not allowed for ${liveProfile} live deployment at line ${line}`
     );
+  }
+
+  if (
+    resourceLabel === "launch template" &&
+    argumentName === "user_data" &&
+    /\buser_data\s*=\s*base64encode\s*\(\s*templatefile\s*\(\s*"\$\{path\.module\}\/[A-Za-z0-9][A-Za-z0-9._-]*\.tftpl"\s*,/.test(body)
+  ) {
+    return;
   }
 
   const match = new RegExp(`\\b${argumentName}\\s*=\\s*"([A-Za-z0-9+/=]+)"`).exec(body);
@@ -660,6 +783,31 @@ function extractResourceBlocks(source: string): TerraformResourceBlock[] {
   return resources;
 }
 
+function extractDataSourceBlocks(source: string): TerraformResourceBlock[] {
+  const dataSources: TerraformResourceBlock[] = [];
+  const headerPattern = /\bdata\s+"([^"]+)"\s+"([^"]+)"\s*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = headerPattern.exec(source)) !== null) {
+    const openBraceIndex = match.index + match[0].length - 1;
+    const closeBraceIndex = findMatchingCloseBrace(source, openBraceIndex);
+
+    if (closeBraceIndex === -1) {
+      continue;
+    }
+
+    dataSources.push({
+      type: match[1]!,
+      name: match[2]!,
+      body: source.slice(openBraceIndex + 1, closeBraceIndex),
+      line: countLineAtOffset(source, match.index)
+    });
+    headerPattern.lastIndex = closeBraceIndex + 1;
+  }
+
+  return dataSources;
+}
+
 function extractNamedBlocks(source: string, blockName: string): Array<{ body: string }> {
   const blocks: Array<{ body: string }> = [];
   const headerPattern = new RegExp(`\\b${blockName}\\s*\\{`, "g");
@@ -744,6 +892,7 @@ function stripHclComments(source: string): string {
     }
 
     if (char === "/" && nextChar === "*") {
+      result += " ";
       index = skipBlockComment(source, index, 1).index;
       continue;
     }

@@ -1,3 +1,8 @@
+import {
+  SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG,
+  type SupportedArchitectureResourceCatalogItem
+} from "./aiArchitectureResourceCatalog.js";
+
 export const AWS_ARCHITECTURE_REFERENCE_PACK_VERSION = "aws-reference-pack-2026-07-07" as const;
 
 export const AWS_ARCHITECTURE_REFERENCE_SOURCE_URLS = [
@@ -23,12 +28,14 @@ export function createAwsArchitectureReferenceKnowledgePayload(): {
   readonly size: "compact";
   readonly sourceUrls: readonly string[];
   readonly guidance: readonly string[];
+  readonly generatedResourceCatalog: readonly SupportedArchitectureResourceCatalogItem[];
 } {
   return {
     version: AWS_ARCHITECTURE_REFERENCE_PACK_VERSION,
     size: "compact",
     sourceUrls: AWS_ARCHITECTURE_REFERENCE_SOURCE_URLS,
-    guidance: AWS_ARCHITECTURE_REFERENCE_GUIDANCE_LINES
+    guidance: AWS_ARCHITECTURE_REFERENCE_GUIDANCE_LINES,
+    generatedResourceCatalog: SUPPORTED_ARCHITECTURE_RESOURCE_CATALOG
   };
 }
 
@@ -37,6 +44,7 @@ export function createAwsArchitectureReferenceKnowledgePrompt(): string {
     "Persistent AWS/Terraform reference knowledge pack:",
     `Version: ${AWS_ARCHITECTURE_REFERENCE_PACK_VERSION}`,
     "Sources: AWS Solutions Library, aws-samples Terraform HCL examples, AWS Terraform Best Practices sample repo, AWS Prescriptive Guidance for Terraform AWS provider best practices.",
+    "The generated resource catalog is supplied in referenceKnowledge.generatedResourceCatalog and supportedResourceCatalog; use it as the source of truth for ResourceNode.type and Terraform resource/data metadata.",
     "Compact guidance:",
     ...AWS_ARCHITECTURE_REFERENCE_GUIDANCE_LINES.map((line) => `- ${line}`)
   ].join("\n");

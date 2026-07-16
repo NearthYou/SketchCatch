@@ -19,11 +19,10 @@
 
 .dashboardEyebrow,
 .dashboardPanelKicker,
-.dashboardSectionHeader > div > p,
-.dashboardConnectionBand > div:first-child > p {
+.dashboardSectionHeader > div > p {
   margin: 0;
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.5;
   text-transform: uppercase;
@@ -58,7 +57,7 @@
   border-radius: 8px;
   padding: 0 12px;
   background: #ffffff;
-  color: #777b84;
+  color: #60646c;
   box-shadow: var(--shadow-ring);
   grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
@@ -94,8 +93,7 @@
 
 .dashboardPartialWarning,
 .dashboardInformationBand,
-.dashboardMessage,
-.costErrorMessage {
+.dashboardMessage {
   margin: 0;
   border: 1px solid #f5d7a1;
   border-radius: 8px;
@@ -141,12 +139,25 @@
   border-right: 1px solid #f0f0f3;
 }
 
+.dashboardMetricLink {
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background-color var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.dashboardMetricLink:hover {
+  background: #f7f8fa;
+  transform: translateY(-2px);
+}
+
 .dashboardMetric:last-child {
   border-right: 0;
 }
 
 .dashboardMetric > span {
-  color: #777b84;
+  color: #60646c;
   font-size: 12px;
   font-weight: 600;
 }
@@ -173,8 +184,8 @@
 
 .dashboardMetric p {
   margin: 0;
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -212,8 +223,7 @@
 }
 
 .dashboardSectionHeader h2,
-.dashboardPanelHeader h2,
-.integrationHeader h2 {
+.dashboardPanelHeader h2 {
   margin: 4px 0 0;
   font-size: 17px;
   line-height: 1.4;
@@ -278,8 +288,8 @@ a.dashboardActivityRow:hover {
 .dashboardProjectRow time,
 .dashboardActivityRow span {
   overflow: hidden;
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -312,55 +322,11 @@ a.dashboardActivityRow:hover {
 .projectListEmpty {
   margin: 0;
   padding: 28px 0;
-  color: #777b84;
+  color: #60646c;
   font-size: 13px;
   line-height: 1.6;
 }
 
-.dashboardConnectionBand {
-  display: grid;
-  align-items: center;
-  border-radius: 12px;
-  padding: 20px;
-  background: #ffffff;
-  box-shadow: var(--shadow-card);
-  grid-template-columns: 180px repeat(2, minmax(0, 1fr));
-}
-
-.dashboardConnectionBand h2 {
-  margin: 4px 0 0;
-  font-size: 17px;
-}
-
-.dashboardConnectionItem {
-  display: grid;
-  min-width: 0;
-  align-items: center;
-  padding: 4px 24px;
-  border-left: 1px solid #f0f0f3;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px;
-}
-
-.dashboardConnectionItem > div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.dashboardConnectionItem strong {
-  font-size: 13px;
-}
-
-.dashboardConnectionItem span {
-  overflow: hidden;
-  color: #777b84;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dashboardConnectionItem > a,
 .dashboardBackLink {
   display: inline-flex;
   align-items: center;
@@ -462,8 +428,8 @@ a.dashboardActivityRow:hover {
 }
 
 .dashboardFactStrip dt {
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .dashboardFactStrip dd {
@@ -479,24 +445,36 @@ a.dashboardActivityRow:hover {
   display: flex;
   align-items: end;
   gap: 12px;
-  padding: 18px 0;
-  border-bottom: 1px solid #f0f0f3;
+  padding: 4px 0 18px;
+  border-bottom: 1px solid var(--color-hairline);
 }
 
-.settingsField,
-.costField {
+.dashboardPageHeaderCompact h1,
+.dashboardSectionHeader > div > h2:only-child {
+  margin-top: 0;
+}
+
+.settingsField.projectSortField {
+  min-width: 176px;
+}
+
+.settingsField.projectDeploymentFilterField {
+  min-width: 120px;
+}
+
+.settingsField {
   display: grid;
   min-width: 0;
   gap: 7px;
-  color: #55585f;
+  color: var(--color-body);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .dashboardCardGrid {
   display: grid;
   margin-top: 20px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -526,12 +504,74 @@ a.dashboardActivityRow:hover {
   grid-template-columns: minmax(140px, 42%) minmax(0, 1fr);
 }
 
+.projectCardCompact .projectCardContentLink {
+  grid-template-columns: 1fr;
+}
+
 .projectCardContentLink {
   display: grid;
   min-width: 0;
   color: inherit;
   grid-template-columns: minmax(120px, 40%) minmax(0, 1fr);
   text-decoration: none;
+}
+
+.projectPreview {
+  position: relative;
+  min-width: 0;
+  height: auto;
+  overflow: hidden;
+  border-bottom: 1px solid #f0f0f3;
+  background-color: #f8fafc;
+  background-image:
+    linear-gradient(rgba(93, 104, 120, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(93, 104, 120, 0.07) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.projectCardWide .projectPreview {
+  height: 100%;
+  min-height: 148px;
+  border-right: 1px solid #f0f0f3;
+  border-bottom: 0;
+}
+
+.projectArchitecturePreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.projectArchitectureSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.projectArchitectureEdge {
+  stroke: #8f98a6;
+  stroke-linecap: round;
+}
+
+.projectArchitectureNodeBox {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: #aeb7c4;
+  stroke-width: 1.5;
+}
+
+.projectArchitectureNodeFrame {
+  fill: rgba(237, 241, 247, 0.58);
+  stroke: #a8b2c0;
+  stroke-width: 1.4;
+}
+
+.projectArchitectureNodeAccent {
+  fill: #d9e0e9;
+}
+
+.projectArchitectureEmptyBoard {
+  position: absolute;
+  inset: 0;
 }
 
 .projectCardBody {
@@ -569,27 +609,43 @@ a.dashboardActivityRow:hover {
 }
 
 .projectStatusBadge,
-.dashboardCountBadge,
-.costStatus {
+.dashboardCountBadge {
   width: fit-content;
   border: 1px solid #dcdee0;
   border-radius: 999px;
   padding: 4px 7px;
   color: #55585f;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .projectCardMeta {
-  margin-top: auto;
-  color: #777b84;
-  font-size: 11px;
+  min-width: 0;
+  margin-top: 2px;
+  color: #60646c;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .projectCardMeta span {
-  display: inline-flex;
+  display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+}
+
+.projectCardMeta .dashboardIcon {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+}
+
+.projectCardTimestamp {
+  min-width: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projectCardWithActions {
@@ -623,27 +679,49 @@ a.dashboardActivityRow:hover {
   top: 40px;
   right: 0;
   display: grid;
-  width: 190px;
+  width: 176px;
   border: 1px solid #dcdee0;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 6px;
   background: #ffffff;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16px 36px rgba(23, 23, 23, 0.16);
 }
 
 .projectCardActionMenuItem,
 .projectCardActionMenuStatus {
   display: flex;
-  min-height: 38px;
+  width: 100%;
+  min-height: 40px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 0 10px;
   background: transparent;
   color: #171717;
+  font: inherit;
   font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
   text-decoration: none;
+}
+
+.projectCardActionMenuItem {
+  cursor: pointer;
+  text-align: left;
+}
+
+.projectCardActionMenuItem .dashboardIcon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.projectCardActionMenuItem span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projectCardActionMenuItem:hover {
@@ -652,6 +730,11 @@ a.dashboardActivityRow:hover {
 
 .projectCardActionMenuItemDanger {
   color: #b42318;
+}
+
+.projectCardActionMenuItemDanger:hover,
+.projectCardActionMenuItemDanger:focus-visible {
+  background: #fff3f1;
 }
 
 .projectDeleteDialogOverlay {
@@ -705,8 +788,8 @@ a.dashboardActivityRow:hover {
 }
 
 .projectDeleteDialogFacts dt {
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .projectDeleteDialogFacts dd {
@@ -753,36 +836,6 @@ a.dashboardActivityRow:hover {
   color: #171717;
 }
 
-.settingsTabs,
-.costTabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid #dcdee0;
-}
-
-.settingsTab,
-.costTabButton {
-  display: inline-flex;
-  min-height: 40px;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 0 14px;
-  background: transparent;
-  color: #777b84;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.settingsTabActive,
-.settingsTab[aria-selected="true"],
-.costTabButton[aria-selected="true"] {
-  border-bottom-color: #171717;
-  color: #171717;
-}
-
-.settingsGrid,
 .settingsInfoGrid {
   display: grid;
   margin-top: 20px;
@@ -800,8 +853,8 @@ a.dashboardActivityRow:hover {
 }
 
 .settingsInfoGrid span {
-  color: #777b84;
-  font-size: 11px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .settingsInfoGrid strong {
@@ -854,8 +907,8 @@ a.dashboardActivityRow:hover {
 .dashboardTemplateCard > div:nth-child(2) > p,
 .templateCardHeader span {
   margin: 0;
-  color: #777b84;
-  font-size: 10px;
+  color: #60646c;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -889,8 +942,8 @@ a.dashboardActivityRow:hover {
 }
 
 .dashboardTemplateCard dt {
-  color: #777b84;
-  font-size: 10px;
+  color: #60646c;
+  font-size: 12px;
 }
 
 .dashboardTemplateCard dd {
@@ -927,17 +980,6 @@ a.dashboardActivityRow:hover {
   .templateGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .dashboardConnectionBand {
-    grid-template-columns: 150px minmax(0, 1fr);
-  }
-
-  .dashboardConnectionItem:last-child {
-    grid-column: 2;
-    border-top: 1px solid #f0f0f3;
-    padding-top: 16px;
-    margin-top: 12px;
-  }
 }
 
 @media (max-width: 760px) {
@@ -957,27 +999,9 @@ a.dashboardActivityRow:hover {
     grid-template-columns: 1fr;
   }
 
-  .dashboardConnectionBand {
-    grid-template-columns: 1fr;
-  }
-
-  .dashboardConnectionBand > div:first-child {
-    padding-bottom: 16px;
-  }
-
-  .dashboardConnectionItem,
-  .dashboardConnectionItem:last-child {
-    grid-column: auto;
-    border-top: 1px solid #f0f0f3;
-    border-left: 0;
-    margin: 0;
-    padding: 16px 0;
-  }
-
   .dashboardCardGrid,
   .dashboardTemplateGrid,
   .templateGrid,
-  .settingsGrid,
   .settingsInfoGrid {
     grid-template-columns: 1fr;
   }

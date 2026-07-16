@@ -1,0 +1,87 @@
+.result {
+  display: grid;
+  gap: 18px;
+}
+
+.summary {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.summary article,
+.unit,
+.evidence {
+  background: var(--dashboard-design-canvas-soft);
+  border: 1px solid var(--dashboard-design-hairline);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.summary span,
+.unit span,
+.evidence span {
+  color: var(--dashboard-design-body);
+  font-size: 0.78rem;
+}
+
+.summary strong,
+.unit strong,
+.evidence strong {
+  overflow-wrap: anywhere;
+}
+
+.section {
+  display: grid;
+  gap: 10px;
+}
+
+.section h3 {
+  font-size: 0.92rem;
+  margin: 0;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.units,
+.evidenceGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  background: var(--dashboard-design-surface-strong);
+  border-radius: 999px;
+  color: var(--dashboard-design-body);
+  font-size: 0.76rem;
+  padding: 5px 10px;
+}
+
+.action {
+  justify-self: start;
+}
+
+@media (max-width: 760px) {
+  .summary,
+  .units,
+  .evidenceGrid {
+    grid-template-columns: 1fr;
+  }
+}

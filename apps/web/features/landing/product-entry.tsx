@@ -1,21 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useState } from "react";
 import { useAuth } from "../../components/auth/auth-provider";
 import { LandingProductSections } from "./landing-product-sections";
 import { LandingWorkflowSection } from "./landing-workflow-section";
-import { LandingWorkspacePreview } from "./landing-workspace-preview";
 import styles from "./product-entry.module.css";
 
 const FLOW_STEPS = [
-  "Requirement Input",
-  "Architecture Board",
-  "IaC Preview",
-  "Pre-Deployment Check",
-  "Deployment Paths"
+  "요구사항 입력",
+  "설계 초안 생성",
+  "아키텍처 확정",
+  "Terraform 미리보기",
+  "비용·보안 검토",
+  "배포 방식 선택",
+  "승인 후 배포"
 ] as const;
 
 // 로그인 전 사용자가 제품을 둘러보고 로그인이나 회원가입으로 들어가는 첫 화면입니다.
@@ -29,6 +31,33 @@ export function ProductEntry() {
       router.replace("/dashboard");
     }
   }, [router, status]);
+
+  const handleSectionNavigation = (
+    event: MouseEvent<HTMLAnchorElement>,
+    targetId: string,
+    hash: `#${string}`,
+    alignment: "center" | "title" = "title"
+  ) => {
+    const target = document.getElementById(targetId);
+
+    if (!target) return;
+
+    event.preventDefault();
+    setIsMenuOpen(false);
+    const headerBottom = document
+      .querySelector<HTMLElement>('header[aria-label="주요 메뉴"]')
+      ?.getBoundingClientRect().bottom ?? 96;
+    const targetRect = target.getBoundingClientRect();
+    const targetTop = alignment === "center"
+      ? window.scrollY + targetRect.top + targetRect.height / 2 - (headerBottom + window.innerHeight) / 2
+      : window.scrollY + targetRect.top - headerBottom - 64;
+
+    window.scrollTo({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      top: Math.max(0, targetTop)
+    });
+    window.history.replaceState(null, "", hash);
+  };
 
   if (status !== "unauthenticated") {
     return (
@@ -47,6 +76,7 @@ export function ProductEntry() {
 
       <header className={styles.siteHeader} aria-label="주요 메뉴">
         <a className={styles.brand} href="#top" aria-label="SketchCatch 홈">
+          <Image alt="" className={styles.brandMark} height={24} priority src="/sketchcatch-logo.png" width={16} />
           <span>SketchCatch</span>
         </a>
 
@@ -54,21 +84,42 @@ export function ProductEntry() {
           className={isMenuOpen ? `${styles.siteNav} ${styles.siteNavOpen}` : styles.siteNav}
           aria-label="페이지 이동"
         >
-          <a href="#workflow" onClick={() => setIsMenuOpen(false)}>작동 방식</a>
-          <a href="#workspace" onClick={() => setIsMenuOpen(false)}>워크스페이스</a>
-          <a href="#reverse" onClick={() => setIsMenuOpen(false)}>Reverse Engineering</a>
-          <a href="#deployment" onClick={() => setIsMenuOpen(false)}>배포 경로</a>
+          <a
+            href="#workflow"
+            onClick={(event) => handleSectionNavigation(event, "workflow", "#workflow", "center")}
+          >
+            Workflow
+          </a>
+          <a
+            href="#workspace"
+            onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
+          >
+            Workspace
+          </a>
+          <a
+            href="#reverse"
+            onClick={(event) => handleSectionNavigation(event, "reverse-content", "#reverse", "center")}
+          >
+            Reverse Engineering
+          </a>
+          <a
+            href="#deployment"
+            onClick={(event) => handleSectionNavigation(event, "deployment-content", "#deployment", "center")}
+          >
+            Deployment
+          </a>
         </nav>
 
         <div className={styles.headerActions}>
-          <a className={`${styles.button} ${styles.buttonSecondary} ${styles.desktopAction}`} href="#workspace">
+          <a
+            className={`${styles.button} ${styles.buttonSecondary} ${styles.desktopAction}`}
+            href="#workspace"
+            onClick={(event) => handleSectionNavigation(event, "workspace-title", "#workspace")}
+          >
             제품 둘러보기
           </a>
           <Link className={`${styles.button} ${styles.buttonSecondary}`} href="/login">
             로그인
-          </Link>
-          <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
-            시작하기
           </Link>
           <button
             aria-expanded={isMenuOpen}
@@ -85,33 +136,17 @@ export function ProductEntry() {
       <main id="landing-main">
         <section className={styles.hero} id="top" aria-labelledby="hero-title">
           <div className={`${styles.container} ${styles.heroCopy}`}>
-            <p className={styles.eyebrow}>
-              <span className={styles.eyebrowDot} aria-hidden="true" />
-              AWS-first · provider-neutral
-            </p>
             <h1 id="hero-title">SketchCatch</h1>
             <p className={styles.heroDescription}>
-              Practice Architecture를 눈으로 설계하고, IaC Preview와 비용·보안 위험을 확인한 뒤
-              배포하세요. 복잡한 Resource 관계를 Architecture Board 한 장에서 시작할 수 있습니다.
+              서비스를 설명하면 아키텍처와 Terraform을 만들고, 비용·보안 검토부터 배포까지 한곳에서 이어집니다.
             </p>
-            <ul className={styles.heroInputs} aria-label="지원하는 시작 방식">
-              <li>Text</li>
-              <li>Voice</li>
-              <li>Source Repository</li>
-              <li>Existing cloud</li>
-            </ul>
             <div className={styles.heroActions}>
-              <a className={`${styles.button} ${styles.buttonPrimary}`} href="#workspace">
-                Architecture Board 체험
+              <Link className={`${styles.button} ${styles.buttonPrimary}`} href="/signup">
+                설계 시작
                 <span className={styles.buttonIcon} aria-hidden="true">→</span>
-              </a>
-              <a className={`${styles.button} ${styles.buttonSecondary}`} href="#workflow">
-                흐름 먼저 보기
-              </a>
+              </Link>
             </div>
           </div>
-
-          <LandingWorkspacePreview />
         </section>
 
         <section className={styles.flowStrip} id="workflow" aria-label="SketchCatch 작업 흐름">
@@ -119,7 +154,7 @@ export function ProductEntry() {
             {FLOW_STEPS.map((step, index) => (
               <li key={step}>
                 <span className={styles.flowNumber}>{String(index + 1).padStart(2, "0")}</span>
-                {step}
+                <span className={styles.flowLabel}>{step}</span>
               </li>
             ))}
           </ol>

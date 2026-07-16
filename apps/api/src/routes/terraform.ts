@@ -1,10 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { diagramNodeModuleSourceSchema } from "./diagram-node-module-source-schema.js";
 import type {
   ApiErrorResponse,
+  DiagramBounds,
   DiagramEdgeMetadata,
+  DiagramEdgeRoute,
   DiagramJson,
   DiagramNodeMetadata,
+  DiagramPoint,
+  DiagramPresentation,
+  DiagramVariable,
+  DiagramVariableBinding,
   TerraformGenerateResponse,
   TerraformSyncToDiagramResponse,
   TerraformValidateRequest,
@@ -19,29 +26,76 @@ import {
 import { generateTerraformFromDiagramJson } from "../services/terraform/terraform-preview.js";
 import { syncTerraformToDiagramJson } from "../services/terraform/terraform-to-diagram.js";
 import { createTerraformValidationDiagnostics } from "../services/terraform/terraform-diagnostics.js";
+import { evaluateArchitectureDependencies } from "@sketchcatch/types/architecture-dependency-rules";
 
 const terraformValidationMaxCharacters = 1024 * 1024;
 const terraformValidationMaxFileCount = 64;
 const terraformValidationMaxFileNameLength = 120;
 
-const terraformValidateBodySchema = z.object({
-  terraformCode: z.string().max(terraformValidationMaxCharacters),
-  terraformFiles: z
-    .array(
-      z.object({
-        fileName: z.string().min(1).max(terraformValidationMaxFileNameLength),
-        terraformCode: z.string().max(terraformValidationMaxCharacters)
-      })
-    )
-    .max(terraformValidationMaxFileCount)
-    .optional()
-}).strict();
+const terraformValidateBodySchema = z
+  .object({
+    terraformCode: z.string().max(terraformValidationMaxCharacters),
+    terraformFiles: z
+      .array(
+        z.object({
+          fileName: z.string().min(1).max(terraformValidationMaxFileNameLength),
+          terraformCode: z.string().max(terraformValidationMaxCharacters)
+        })
+      )
+      .max(terraformValidationMaxFileCount)
+      .optional()
+  })
+  .strict();
 
 const terraformBlockTypeSchema = z.enum(["resource", "data"]);
 const terraformIdentifierSchema = z.string().min(1).regex(TERRAFORM_IDENTIFIER_PATTERN);
 
+const diagramPointSchema: z.ZodType<DiagramPoint> = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite()
+  })
+  .strict();
+
+const diagramBoundsSchema: z.ZodType<DiagramBounds> = z
+  .object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().finite().positive(),
+    height: z.number().finite().positive()
+  })
+  .strict();
+
+const diagramPresentationSchema: z.ZodType<DiagramPresentation> = z
+  .object({
+    geometryPolicy: z.enum(["catalog-normalized", "source-exact"]),
+    sourceViewBox: diagramBoundsSchema.optional(),
+    initialViewportPending: z.boolean().optional(),
+    terraformSourceFingerprint: z.string().min(1).optional()
+  })
+  .strict();
+
+const diagramVariableBindingSchema: z.ZodType<DiagramVariableBinding> = z
+  .object({
+    nodeId: z.string().min(1),
+    parameterKey: z.string().min(1)
+  })
+  .strict();
+
+const diagramVariableSchema: z.ZodType<DiagramVariable> = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    type: z.string().min(1),
+    value: z.unknown(),
+    bindings: z.array(diagramVariableBindingSchema),
+    source: z.enum(["module", "user"])
+  })
+  .strict();
+
 const diagramNodeParametersSchema = z.object({
   terraformBlockType: terraformBlockTypeSchema.optional(),
+  terraformSourceAuthority: z.literal("workspace-seed").optional(),
   resourceType: terraformIdentifierSchema,
   resourceName: terraformIdentifierSchema,
   fileName: z.string().min(1),
@@ -49,14 +103,48 @@ const diagramNodeParametersSchema = z.object({
   invalid: z.boolean().optional()
 });
 
-const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z.object({
-  parentAreaNodeId: z.string().min(1).optional()
-}).strict();
+const diagramNodeMetadataSchema: z.ZodType<DiagramNodeMetadata> = z
+  .object({
+    parentAreaNodeId: z.string().min(1).optional(),
+    areaAutoSizeBaseline: z
+      .object({
+        position: z.object({
+          x: z.number().finite(),
+          y: z.number().finite()
+        }),
+        size: z.object({
+          width: z.number().finite().positive(),
+          height: z.number().finite().positive()
+        })
+      })
+      .optional(),
+    presentationArea: z.boolean().optional(),
+    presentationCatalogItemId: z.string().min(1).optional(),
+    moduleSource: diagramNodeModuleSourceSchema.optional()
+  })
+  .strict();
 
-const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z.object({
-  managedBy: z.literal("parameter-reference"),
-  parameterPath: z.string().min(1)
-}).strict();
+const diagramEdgeMetadataSchema: z.ZodType<DiagramEdgeMetadata> = z
+  .object({
+    managedBy: z.literal("parameter-reference").optional(),
+    parameterPath: z.string().min(1).optional(),
+    presentationRole: z.enum(["primary", "detail", "summary"]).optional()
+  })
+  .strict();
+
+const diagramEdgeRouteSchema: z.ZodType<DiagramEdgeRoute> = z
+  .object({
+    svgPath: z.string().min(1),
+    sourcePoint: diagramPointSchema,
+    targetPoint: diagramPointSchema,
+    waypoints: z.array(diagramPointSchema),
+    labelPosition: diagramPointSchema.optional(),
+    arrowDirection: z
+      .enum(["source-to-target", "target-to-source", "bidirectional", "none"])
+      .optional(),
+    arrowAngle: z.number().finite().optional()
+  })
+  .strict();
 
 const diagramNodeSchema = z.object({
   id: z.string().min(1),
@@ -74,10 +162,11 @@ const diagramNodeSchema = z.object({
       height: z.number()
     })
     .default({ width: 160, height: 96 }),
-  label: z.string().min(1),
+  label: z.string(),
   iconUrl: z.string().min(1).optional(),
   locked: z.boolean().default(false),
   zIndex: z.number().int().default(0),
+  rotation: z.number().finite().optional(),
   style: z
     .object({
       textColor: z.string().min(1).optional(),
@@ -105,7 +194,9 @@ const diagramEdgeSchema = z.object({
       animated: z.boolean().optional()
     })
     .optional(),
-  metadata: diagramEdgeMetadataSchema.optional()
+  metadata: diagramEdgeMetadataSchema.optional(),
+  route: diagramEdgeRouteSchema.optional(),
+  zIndex: z.number().finite().optional()
 });
 
 const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
@@ -115,7 +206,9 @@ const diagramJsonSchema: z.ZodType<DiagramJson> = z.object({
     x: z.number(),
     y: z.number(),
     zoom: z.number()
-  })
+  }),
+  variables: z.array(diagramVariableSchema).optional(),
+  presentation: diagramPresentationSchema.optional()
 });
 
 const terraformGenerateBodySchema = z.object({
@@ -150,29 +243,33 @@ export async function registerTerraformRoutes(
   const validateTerraformPreviewCode =
     options.validateTerraformPreviewCode ?? validateTerraformPreviewCodeDefault;
 
-  app.post("/terraform/generate", async (request, reply): Promise<TerraformGenerateResponse | void> => {
-    await requireActiveUserId(request, getTerraformDatabaseClient);
+  app.post(
+    "/terraform/generate",
+    async (request, reply): Promise<TerraformGenerateResponse | void> => {
+      await requireActiveUserId(request, getTerraformDatabaseClient);
 
-    const body = terraformGenerateBodySchema.parse(request.body);
+      const body = terraformGenerateBodySchema.parse(request.body);
 
-    try {
-      return {
-        terraformCode: generateTerraformFromDiagramJson(body.diagramJson)
-      };
-    } catch (error) {
-      if (error instanceof TerraformDiagramValidationError) {
-        const response: ApiErrorResponse = {
-          error: "bad_request",
-          message: error.message
+      try {
+        return {
+          terraformCode: generateTerraformFromDiagramJson(body.diagramJson),
+          architectureDiagnostics: evaluateArchitectureDependencies(body.diagramJson, "preview")
         };
+      } catch (error) {
+        if (error instanceof TerraformDiagramValidationError) {
+          const response: ApiErrorResponse = {
+            error: "bad_request",
+            message: error.message
+          };
 
-        reply.status(400).send(response);
-        return;
+          reply.status(400).send(response);
+          return;
+        }
+
+        throw error;
       }
-
-      throw error;
     }
-  });
+  );
 
   app.post("/terraform/validate", async (request): Promise<TerraformValidateResponse> => {
     await requireActiveUserId(request, getTerraformDatabaseClient);

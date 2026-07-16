@@ -25,7 +25,6 @@ import {
 } from "./api";
 import {
   createReverseEngineeringBoardApplication,
-  createReverseEngineeringBoardComparison,
   type ReverseEngineeringBoardApplicationMode
 } from "./reverse-engineering-board-application";
 import {
@@ -34,6 +33,7 @@ import {
   type ReverseEngineeringBoardCandidate
 } from "./reverse-engineering-board-candidates";
 import {
+  getNextReverseEngineeringResourceSelections,
   REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION,
   REVERSE_ENGINEERING_RESOURCE_SELECTIONS
 } from "./reverse-engineering-resource-types";
@@ -153,16 +153,18 @@ export function ReverseEngineeringPanel({
       : null;
   // 후보 미리보기를 띄워도 원래 보드 기준이 흔들리지 않게 별도로 보관합니다.
   const previewSourceDiagram = previewBaseDiagram ?? context.diagram;
-  const comparison = useMemo(() => {
+  const selectedCandidateApplication = useMemo(() => {
     if (!selectedCandidateResult) {
       return null;
     }
 
-    return createReverseEngineeringBoardComparison({
+    return createReverseEngineeringBoardApplication({
       currentDiagram: previewSourceDiagram,
+      mode: "replace",
       result: selectedCandidateResult
     });
   }, [previewSourceDiagram, selectedCandidateResult]);
+  const comparison = selectedCandidateApplication?.comparison ?? null;
   const hasDeletedSourceScan = useMemo(
     () =>
       hasDeletedReverseEngineeringSourceScan(
@@ -212,7 +214,7 @@ export function ReverseEngineeringPanel({
   // 사용자가 가져올 AWS 리소스 종류를 켜고 끕니다.
   function toggleResourceType(resourceType: ReverseEngineeringResourceSelection): void {
     setSelectedResourceTypes((currentResourceTypes) =>
-      getNextSelectedResourceTypes(currentResourceTypes, resourceType)
+      getNextReverseEngineeringResourceSelections(currentResourceTypes, resourceType)
     );
   }
 
@@ -470,11 +472,12 @@ export function ReverseEngineeringPanel({
           />
         )}
 
-        {selectedCandidateResponse?.result && comparison && selectedCandidate ? (
+        {selectedCandidateResponse?.result && comparison && selectedCandidate && selectedCandidateApplication ? (
           <ReverseEngineeringResultPanel
             applyMessage={applyMessage}
             applyState={applyState}
             boardCandidates={boardCandidates}
+            compilation={selectedCandidateApplication.compilation}
             comparison={comparison}
             createProjectOnApply={createProjectOnApply}
             hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}
@@ -597,29 +600,6 @@ function createWorkspaceProjectUrl(project: Project, startMode: "reverse"): stri
   });
 
   return `/workspace?${params.toString()}`;
-}
-
-// `ALL`과 개별 리소스가 동시에 선택되지 않게 해서 scan 요청 의미를 분명하게 합니다.
-function getNextSelectedResourceTypes(
-  currentResourceTypes: ReverseEngineeringResourceSelection[],
-  resourceType: ReverseEngineeringResourceSelection
-): ReverseEngineeringResourceSelection[] {
-  if (resourceType === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION) {
-    return currentResourceTypes.includes(REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION)
-      ? []
-      : [REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION];
-  }
-
-  if (currentResourceTypes.includes(resourceType)) {
-    return currentResourceTypes.filter((currentResourceType) => currentResourceType !== resourceType);
-  }
-
-  return [
-    ...currentResourceTypes.filter(
-      (currentResourceType) => currentResourceType !== REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
-    ),
-    resourceType
-  ];
 }
 
 // 사용자가 적용한 보드에도 Reverse Engineering 출처를 남겨 삭제 안내와 추적이 가능하게 합니다.

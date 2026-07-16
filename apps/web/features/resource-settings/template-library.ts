@@ -1,14 +1,59 @@
-import type { DiagramJson } from "../../../../packages/types/src";
+import {
+  adaptBrainboardTemplateSource,
+  brainboardTemplateRegistry,
+  isTerraformDeployableNode,
+  type DiagramJson,
+  type TerraformSyncFileInput
+} from "../../../../packages/types/src";
+import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
+import {
+  findApprovedTemplateReviewDecision,
+  resolveApprovedTemplateReviewVariant,
+  reviewArchitectureBoardTemplate,
+  type ArchitectureBoardCompilationProposal,
+  type TemplateReviewDecision
+} from "../architecture-board-compiler";
+import {
+  buildTemplateDiagramJson,
+  templateDefinitions,
+  type TemplateId
+} from "../../../../packages/types/src/template-definitions";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
+import { materializeTemplateDiagram } from "./template-resource-materializer";
+import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
+import { getBrainboardTemplateThumbnailAsset } from "./brainboard-template-thumbnail-manifest";
 
 export const TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY = "sketchcatch.templateOverwriteBackups";
 
-export type BoardTemplate = {
+type BoardTemplateMetadata = {
   readonly id: string;
   readonly title: string;
   readonly description: string;
   readonly tags: readonly string[];
+  readonly thumbnailSrc?: string | undefined;
+};
+
+export type AvailableBoardTemplate = BoardTemplateMetadata & {
+  readonly availability: "available";
+  readonly diagramJson: DiagramJson;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
+};
+
+export type UnavailableBoardTemplate = BoardTemplateMetadata & {
+  readonly availability: "unavailable";
+  readonly unavailableReason: string;
+};
+
+export type BoardTemplate = AvailableBoardTemplate | UnavailableBoardTemplate;
+
+export type AvailableBoardTemplateReview = {
+  readonly templateId: string;
+  readonly sourceDiagram: DiagramJson;
+  readonly proposal: ArchitectureBoardCompilationProposal;
+};
+
+type RawBoardTemplate = BoardTemplateMetadata & {
   readonly diagramJson: DiagramJson;
 };
 
@@ -32,18 +77,20 @@ type TemplateStorage = Pick<Storage, "getItem" | "setItem">;
 
 const MAX_TEMPLATE_BACKUPS = 10;
 const TEMPLATE_AREA_DEFAULT_SIZE = { height: 112, width: 112 } as const;
+const REPOSITORY_ANALYSIS_TEMPLATE_DEFINITION_IDS = new Map<string, TemplateId>([
+  ["template-static-website", "static-web-hosting"],
+  ["template-api-db", "three-tier-web-app"],
+  ["template-3tier", "three-tier-web-app"]
+]);
 
 const LIVE_OBSERVATION_MANAGED_USER_DATA_BASE64 =
   "IyEvYmluL2Jhc2gKIyBza2V0Y2hjYXRjaC1kZW1vLW1hbmFnZWQtdXNlci1kYXRhOnYxCiMgc2tldGNoY2F0Y2gtZGVtby1tYW5hZ2VkLXVzZXItZGF0YS1zaGEyNTY6NTMzYmZhNTUzZDgwN2FlYzdkYzYwOTQxNTg1ZmIxMTU3NzkzYjMxYmY3ZmEwY2FiZTQ2N2MxYmMwMDk5YWQ0NApzZXQgLWV1byBwaXBlZmFpbApkbmYgaW5zdGFsbCAteSBweXRob24zCmNhdCA+L29wdC9za2V0Y2hjYXRjaC1kZW1vLWFwaS5weSA8PCdQWScKZnJvbSBodHRwLnNlcnZlciBpbXBvcnQgQmFzZUhUVFBSZXF1ZXN0SGFuZGxlciwgVGhyZWFkaW5nSFRUUFNlcnZlcgppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHRpbWUKCmNsYXNzIEhhbmRsZXIoQmFzZUhUVFBSZXF1ZXN0SGFuZGxlcik6CiAgICBkZWYgc2VuZF9qc29uKHNlbGYsIHN0YXR1cywgcGF5bG9hZCwgY29ycz1GYWxzZSk6CiAgICAgICAgYm9keSA9IGpzb24uZHVtcHMocGF5bG9hZCkuZW5jb2RlKCJ1dGYtOCIpCiAgICAgICAgc2VsZi5zZW5kX3Jlc3BvbnNlKHN0YXR1cykKICAgICAgICBpZiBjb3JzOgogICAgICAgICAgICBzZWxmLnNlbmRfaGVhZGVyKCJBY2Nlc3MtQ29udHJvbC1BbGxvdy1PcmlnaW4iLCAiKiIpCiAgICAgICAgICAgIHNlbGYuc2VuZF9oZWFkZXIoIkFjY2Vzcy1Db250cm9sLUFsbG93LUhlYWRlcnMiLCAiQ29udGVudC1UeXBlIikKICAgICAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQWNjZXNzLUNvbnRyb2wtQWxsb3ctTWV0aG9kcyIsICJPUFRJT05TLCBQT1NUIikKICAgICAgICBzZWxmLnNlbmRfaGVhZGVyKCJDb250ZW50LVR5cGUiLCAiYXBwbGljYXRpb24vanNvbiIpCiAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQ29udGVudC1MZW5ndGgiLCBzdHIobGVuKGJvZHkpKSkKICAgICAgICBzZWxmLmVuZF9oZWFkZXJzKCkKICAgICAgICBzZWxmLndmaWxlLndyaXRlKGJvZHkpCgogICAgZGVmIGRvX09QVElPTlMoc2VsZik6CiAgICAgICAgaWYgc2VsZi5wYXRoLnN0YXJ0c3dpdGgoIi9hcGkvdHJhZmZpYyIpOgogICAgICAgICAgICBzZWxmLnNlbmRfanNvbigyMDAsIHsib2siOiBUcnVlfSwgY29ycz1UcnVlKQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBkb19HRVQoc2VsZik6CiAgICAgICAgaWYgc2VsZi5wYXRoLnN0YXJ0c3dpdGgoIi9hcGkvaGVhbHRoIik6CiAgICAgICAgICAgIHNlbGYuc2VuZF9qc29uKDIwMCwgewogICAgICAgICAgICAgICAgIm9rIjogVHJ1ZSwKICAgICAgICAgICAgICAgICJpbnN0YW5jZSI6IG9zLnVuYW1lKCkubm9kZW5hbWUsCiAgICAgICAgICAgICAgICAicGF0aCI6IHNlbGYucGF0aCwKICAgICAgICAgICAgICAgICJ0aW1lIjogaW50KHRpbWUudGltZSgpKQogICAgICAgICAgICB9KQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBkb19QT1NUKHNlbGYpOgogICAgICAgIGlmIHNlbGYucGF0aC5zdGFydHN3aXRoKCIvYXBpL3RyYWZmaWMiKToKICAgICAgICAgICAgc2VsZi5zZW5kX2pzb24oMjAwLCB7CiAgICAgICAgICAgICAgICAib2siOiBUcnVlLAogICAgICAgICAgICAgICAgImluc3RhbmNlIjogb3MudW5hbWUoKS5ub2RlbmFtZSwKICAgICAgICAgICAgICAgICJyZWNlaXZlZEF0IjogaW50KHRpbWUudGltZSgpICogMTAwMCkKICAgICAgICAgICAgfSwgY29ycz1UcnVlKQogICAgICAgICAgICByZXR1cm4KICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoNDA0KQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKVGhyZWFkaW5nSFRUUFNlcnZlcigoIjAuMC4wLjAiLCA4MDgwKSwgSGFuZGxlcikuc2VydmVfZm9yZXZlcigpClBZCmNhdCA+L2V0Yy9zeXN0ZW1kL3N5c3RlbS9za2V0Y2hjYXRjaC1kZW1vLWFwaS5zZXJ2aWNlIDw8J1VOSVQnCltVbml0XQpEZXNjcmlwdGlvbj1Ta2V0Y2hDYXRjaCBkZW1vIEFQSQpBZnRlcj1uZXR3b3JrLW9ubGluZS50YXJnZXQKCltTZXJ2aWNlXQpFeGVjU3RhcnQ9L3Vzci9iaW4vcHl0aG9uMyAvb3B0L3NrZXRjaGNhdGNoLWRlbW8tYXBpLnB5ClJlc3RhcnQ9YWx3YXlzClVzZXI9cm9vdAoKW0luc3RhbGxdCldhbnRlZEJ5PW11bHRpLXVzZXIudGFyZ2V0ClVOSVQKc3lzdGVtY3RsIGRhZW1vbi1yZWxvYWQKc3lzdGVtY3RsIGVuYWJsZSAtLW5vdyBza2V0Y2hjYXRjaC1kZW1vLWFwaS5zZXJ2aWNlCg==";
 
 const LIVE_OBSERVATION_AUDIENCE_HTML = [
   '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
-  '<title>SketchCatch Live Observation</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:16px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}',
-  'main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}button{width:100%;padding:18px;border:0;border-radius:8px;color:#fff;background:#000;font-size:18px;font-weight:700}</style></head>',
-  '<body><main><h1>실시간 트래픽 보내기</h1><p>성공한 Traffic API 요청만 Live Observation에 집계합니다.</p><button id="send-traffic">트래픽 1건 보내기</button><p id="status"></p><p id="count">이 브라우저의 Traffic 성공 0건</p></main>',
-  '<script>const q=new URLSearchParams(location.search),token=q.get("observation"),collector=(q.get("collector")||"").replace(/\\/$/,""),button=document.getElementById("send-traffic"),status=document.getElementById("status"),count=document.getElementById("count");let successes=0;',
-  'button.onclick=async()=>{button.disabled=true;try{const response=await fetch("http://${aws_lb.demo.dns_name}/api/traffic",{method:"POST"});if(!response.ok)throw new Error("Traffic API 요청에 실패했습니다.");successes+=1;count.textContent="이 브라우저의 Traffic 성공 "+successes+"건";',
-  'const receipt=await fetch(collector+"/api/live-observations/public/"+encodeURIComponent(token)+"/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({eventId:crypto.randomUUID()})});if(!receipt.ok)throw new Error("Traffic 요청은 성공했지만 실시간 집계에 실패했습니다.");status.textContent="요청이 Live Observation에 반영되었습니다."}catch(error){status.textContent=error instanceof Error?error.message:"요청에 실패했습니다."}finally{button.disabled=false}};</script></body></html>'
+  "<title>SketchCatch Service</title><style>body{max-width:680px;margin:0 auto;padding:56px 24px;font:16px/1.6 Pretendard,sans-serif;color:#172033;background:#fafafa}",
+  "main{padding:32px;border:1px solid #dcdee0;border-radius:16px;background:#fff}</style></head>",
+  "<body><main><h1>서비스가 준비되었습니다.</h1><p>공개 요청은 SketchCatch에서 발급한 QR 페이지를 사용해주세요.</p></main></body></html>",
 ].join("");
 
 const LIVE_OBSERVATION_BUCKET_POLICY = JSON.stringify({
@@ -59,7 +106,7 @@ const LIVE_OBSERVATION_BUCKET_POLICY = JSON.stringify({
   Version: "2012-10-17"
 });
 
-const boardTemplates: readonly BoardTemplate[] = [
+const legacyBoardTemplates: readonly RawBoardTemplate[] = [
   {
     id: "template-static-website",
     title: "S3 정적 웹사이트",
@@ -220,7 +267,8 @@ const boardTemplates: readonly BoardTemplate[] = [
   {
     id: "template-live-observation",
     title: "실시간 트래픽 · ASG 관측",
-    description: "관객 트래픽이 ALB와 ASG 스케일 아웃으로 이어지는 Live Observation 데모 구조입니다.",
+    description:
+      "관객 트래픽이 ALB와 ASG 스케일 아웃으로 이어지는 Live Observation 데모 구조입니다.",
     tags: ["Live Observation", "ALB", "ASG", "CloudWatch"],
     diagramJson: {
       nodes: [
@@ -325,12 +373,14 @@ const boardTemplates: readonly BoardTemplate[] = [
           type: "aws_security_group",
           values: {
             egress: [{ cidrBlocks: ["0.0.0.0/0"], fromPort: 0, protocol: "-1", toPort: 0 }],
-            ingress: [{
-              fromPort: 8080,
-              protocol: "tcp",
-              securityGroups: ["aws_security_group.alb.id"],
-              toPort: 8080
-            }],
+            ingress: [
+              {
+                fromPort: 8080,
+                protocol: "tcp",
+                securityGroups: ["aws_security_group.alb.id"],
+                toPort: 8080
+              }
+            ],
             namePrefix: "sc-lo-api-",
             vpcId: "aws_vpc.demo.id"
           }
@@ -411,6 +461,61 @@ const boardTemplates: readonly BoardTemplate[] = [
           }
         }),
         createTerraformTemplateNode({
+          id: "template-live-log-group",
+          label: "CloudWatch Agent Logs",
+          position: { x: 1060, y: 40 },
+          resourceName: "traffic",
+          type: "aws_cloudwatch_log_group",
+          values: {
+            name: "/sketchcatch/demo/sc-lo/traffic",
+            retentionInDays: 1,
+            tags: { SketchCatchDemo: "true" }
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-role",
+          label: "EC2 Agent IAM Role",
+          position: { x: 1060, y: 140 },
+          resourceName: "api_agent",
+          type: "aws_iam_role",
+          values: {
+            assumeRolePolicy: JSON.stringify({
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "ec2.amazonaws.com" },
+                  Action: "sts:AssumeRole"
+                }
+              ]
+            }),
+            namePrefix: "sc-lo-api-agent-",
+            tags: { SketchCatchDemo: "true" }
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-policy",
+          label: "CloudWatch Agent Policy",
+          position: { x: 1240, y: 140 },
+          resourceName: "cloudwatch_agent",
+          type: "aws_iam_role_policy_attachment",
+          values: {
+            policyArn: "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+            role: "aws_iam_role.api_agent.name"
+          }
+        }),
+        createTerraformTemplateNode({
+          id: "template-live-agent-profile",
+          label: "Instance Profile",
+          position: { x: 1240, y: 240 },
+          resourceName: "api_agent",
+          type: "aws_iam_instance_profile",
+          values: {
+            namePrefix: "sc-lo-api-agent-",
+            role: "aws_iam_role.api_agent.name"
+          }
+        }),
+        createTerraformTemplateNode({
           id: "template-live-alb",
           label: "Application Load Balancer",
           position: { x: 620, y: 280 },
@@ -469,6 +574,7 @@ const boardTemplates: readonly BoardTemplate[] = [
           values: {
             imageId: "data.aws_ami.al2023.id",
             instanceType: "t3.micro",
+            iamInstanceProfile: { name: "aws_iam_instance_profile.api_agent.name" },
             metadataOptions: { httpEndpoint: "enabled", httpTokens: "required" },
             namePrefix: "sc-lo-api-",
             tagSpecifications: {
@@ -540,27 +646,258 @@ const boardTemplates: readonly BoardTemplate[] = [
         })
       ],
       edges: [
-        createTemplateEdge("template-live-site-flow", "template-live-site-config", "template-live-alb", "audience traffic"),
-        createTemplateEdge("template-live-alb-target", "template-live-alb", "template-live-target-group", "routes"),
-        createTemplateEdge("template-live-target-asg", "template-live-target-group", "template-live-asg", "targets"),
-        createTemplateEdge("template-live-launch-asg", "template-live-launch-template", "template-live-asg", "launches"),
-        createTemplateEdge("template-live-alarm-policy", "template-live-alarm", "template-live-policy", "triggers"),
-        createTemplateEdge("template-live-policy-asg", "template-live-policy", "template-live-asg", "+1 instance")
+        createTemplateEdge(
+          "template-live-site-flow",
+          "template-live-site-config",
+          "template-live-alb",
+          "audience traffic"
+        ),
+        createTemplateEdge(
+          "template-live-alb-target",
+          "template-live-alb",
+          "template-live-target-group",
+          "routes"
+        ),
+        createTemplateEdge(
+          "template-live-target-asg",
+          "template-live-target-group",
+          "template-live-asg",
+          "targets"
+        ),
+        createTemplateEdge(
+          "template-live-role-policy",
+          "template-live-agent-role",
+          "template-live-agent-policy",
+          "grants"
+        ),
+        createTemplateEdge(
+          "template-live-role-profile",
+          "template-live-agent-role",
+          "template-live-agent-profile",
+          "assumes"
+        ),
+        createTemplateEdge(
+          "template-live-profile-launch",
+          "template-live-agent-profile",
+          "template-live-launch-template",
+          "profile"
+        ),
+        createTemplateEdge(
+          "template-live-agent-logs",
+          "template-live-launch-template",
+          "template-live-log-group",
+          "agent metrics"
+        ),
+        createTemplateEdge(
+          "template-live-launch-asg",
+          "template-live-launch-template",
+          "template-live-asg",
+          "launches"
+        ),
+        createTemplateEdge(
+          "template-live-alarm-policy",
+          "template-live-alarm",
+          "template-live-policy",
+          "triggers"
+        ),
+        createTemplateEdge(
+          "template-live-policy-asg",
+          "template-live-policy",
+          "template-live-asg",
+          "+1 instance"
+        )
       ],
       viewport: { x: 0, y: 0, zoom: 0.62 }
     }
   }
 ];
 
-// 페이지와 보드 모달이 같은 템플릿 목록을 쓰도록 한 곳에서 목록을 제공합니다.
+const repositoryBoardTemplates: readonly AvailableBoardTemplate[] = templateDefinitions.map(
+  (definition) => ({
+    availability: "available",
+    id: definition.id,
+    title: definition.title,
+    description: definition.description,
+    tags: definition.tags,
+    thumbnailSrc: getTemplateThumbnailAsset(definition.id).src,
+    terraformFiles: [],
+    diagramJson: buildTemplateDiagramJson(definition.id, {
+      projectSlug: "sketchcatch",
+      shortId: definition.id
+    })
+  })
+);
+
+const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTemplateRegistry
+  .filter((entry): entry is Extract<(typeof brainboardTemplateRegistry)[number], { status: "available" }> =>
+    entry.status === "available"
+  )
+  .map((entry) => {
+    const evidence = entry.source;
+    const descriptions: Readonly<Record<string, string>> = {
+      "[Training] AWS onboarding": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
+      "AWS Kubernetes cluster with native CNIs": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
+      "AWS VPC with subnet and security groups on 2 AZs": "여러 서비스와 인스턴스, 데이터베이스를 호스팅할 수 있는 기본 네트워크 구성입니다. 하나의 리전에 있는 두 가용 영역과 VPC, 서브넷, 보안 그룹으로 구성하며 필요에 따라 가용 영역을 추가할 수 있습니다.",
+      "AWS serverless architecture with CDN": "S3와 API Gateway, CloudFront를 사용해 정적 콘텐츠를 제공하는 서버리스 아키텍처입니다.",
+      "AWS EC2 instance inside VPC & Subnet": "VPC와 서브넷 내부에 EC2 인스턴스를 배치하는 기본 구성입니다.",
+      "AWS ASG and LB with VPC & subnets": "VPC와 서브넷 위에 로드 밸런서와 오토 스케일링 그룹을 구성해 애플리케이션 트래픽을 분산하고 인스턴스 수를 자동 조정합니다.",
+      "AWS Jenkins architecture on EC2": "EC2에서 Jenkins를 실행하고 네트워크와 보안 그룹을 함께 구성하는 CI/CD 시작 구조입니다.",
+      "AWS REST API for DocumentDB": "API Gateway와 Lambda를 통해 DocumentDB 데이터에 접근하는 REST API 구조입니다.",
+      "AWS network landing zone": "여러 AWS 계정과 네트워크를 확장하기 위한 기본 랜딩 존 구조입니다.",
+      "AWS 3-tier web app with a database": "DNS 영역, 방화벽, 로드 밸런서와 데이터베이스를 포함한 3계층 웹 애플리케이션 구조입니다. 필요에 따라 라우트와 라우트 테이블 연결을 추가할 수 있습니다.",
+      "AWS Bastion": "프라이빗 네트워크의 인스턴스에 안전하게 접속하기 위한 Bastion 호스트 구성입니다.",
+      "AWS instance and DB with multiple networks": "여러 네트워크에 걸쳐 애플리케이션 인스턴스와 데이터베이스를 배치하는 구조입니다.",
+      "AWS load balancer with target group": "로드 밸런서와 대상 그룹을 연결해 애플리케이션 트래픽을 대상 인스턴스로 전달합니다.",
+      "AWS S3 API Gateway integration": "API Gateway와 S3를 연결해 객체를 API로 제공하는 서버리스 구조입니다.",
+      "AWS costs monitoring": "AWS 비용과 사용량을 추적하기 위한 예산 및 모니터링 구성입니다.",
+      "AWS ECS with Fargate": "서버를 직접 관리하지 않고 ECS Fargate에서 컨테이너 워크로드를 실행합니다.",
+      "AWS multi-account management": "여러 AWS 계정을 중앙에서 관리하기 위한 조직 및 계정 구성입니다.",
+      "AWS Elastic Beanstalk": "Elastic Beanstalk 애플리케이션과 환경을 구성해 애플리케이션 배포를 단순화합니다.",
+      "AWS RDS": "관리형 RDS 데이터베이스 인스턴스와 네트워크 구성을 시작합니다.",
+      "AWS FSX architecture": "FSx for Lustre 파일 시스템을 생성하고 네트워크에 연결합니다.",
+      "Cross account AWS S3": "서로 다른 AWS 계정 간에 S3 버킷을 공유하고 접근하도록 구성합니다.",
+      "AWS IAM users creation": "IAM 사용자와 그룹, 정책 연결 및 로그인 프로필을 구성합니다.",
+      "AWS Dashcam Video Processing Pipeline": "대시캠 영상 수집과 저장, 처리를 위한 AWS 서비스 구성을 시작합니다.",
+      "AWS secure S3 bucket": "퍼블릭 접근을 차단하고 암호화와 버전 관리를 적용한 보안 S3 버킷 구성입니다."
+    };
+    const metadata = {
+      description: descriptions[evidence.title] ?? "AWS 리소스를 조합한 인프라 구성 템플릿입니다.",
+      id: entry.id,
+      tags: ["AWS"],
+      thumbnailSrc: getBrainboardTemplateThumbnailAsset(entry.id).src,
+      title: evidence.title
+    } as const;
+
+    const adapted = adaptBrainboardTemplateSource(entry.source);
+    return {
+      ...metadata,
+      availability: "available",
+      diagramJson: adapted.diagramJson,
+      terraformFiles: adapted.terraformFiles
+    };
+  });
+
+const boardTemplates: readonly BoardTemplate[] = [
+  ...repositoryBoardTemplates,
+  ...brainboardBoardTemplates
+];
+
+// 페이지와 보드 모달은 실제 Board 캡처로 검토한 authored geometry를 같은 목록에서 사용한다.
 export function listBoardTemplates(): readonly BoardTemplate[] {
-  return boardTemplates.map((template) => ({
+  return boardTemplates.map(cloneBoardTemplate);
+}
+
+// 여섯 개 SketchCatch authored Template만 검증하는 기존 배포·레이아웃 계약용 목록입니다.
+export function listRepositoryBoardTemplates(): readonly AvailableBoardTemplate[] {
+  return repositoryBoardTemplates.map(cloneAvailableBoardTemplate);
+}
+
+export function isBoardTemplateAvailable(
+  template: BoardTemplate
+): template is AvailableBoardTemplate {
+  return template.availability === "available";
+}
+
+export function reviewAvailableBoardTemplate(
+  template: AvailableBoardTemplate
+): AvailableBoardTemplateReview {
+  // Authoring source를 기준으로 proposal을 만들고, 승인된 visual-only variant만 별도 registry에서 소비합니다.
+  const sourceDiagram = cloneDiagramJson(template.diagramJson);
+
+  return {
+    templateId: template.id,
+    sourceDiagram,
+    proposal: reviewArchitectureBoardTemplate(sourceDiagram)
+  };
+}
+
+// Resource kind와 Terraform parameters가 모두 있는 실제 배포 Resource만 셉니다.
+export function getBoardTemplateResourceCount(template: BoardTemplate): number {
+  if (!isBoardTemplateAvailable(template)) return 0;
+  return template.diagramJson.nodes.filter(isTerraformDeployableNode).length;
+}
+
+// 양쪽 끝이 배포 Resource인 semantic relationship만 Gallery 숫자에 포함합니다.
+export function getBoardTemplateRelationshipCount(template: BoardTemplate): number {
+  if (!isBoardTemplateAvailable(template)) return 0;
+  const deployableNodeIds = new Set(
+    template.diagramJson.nodes.filter(isTerraformDeployableNode).map((node) => node.id)
+  );
+
+  return template.diagramJson.edges.filter(
+    (edge) => deployableNodeIds.has(edge.sourceNodeId) && deployableNodeIds.has(edge.targetNodeId)
+  ).length;
+}
+
+// Live Observation과 기존 저장 Draft 검증은 배포 Template 카탈로그와 분리된 레거시 fixture를 사용합니다.
+export function listLegacyBoardTemplates(): readonly AvailableBoardTemplate[] {
+  return legacyBoardTemplates.map((template) => ({
     ...template,
-    diagramJson: cloneDiagramJson(template.diagramJson)
+    availability: "available",
+    diagramJson: materializeTemplateDiagram(cloneDiagramJson(template.diagramJson)),
+    terraformFiles: []
   }));
 }
 
-// Template 목록에서 검색어와 tag를 적용하고 사용자가 고른 순서로 정렬합니다.
+export function buildBoardTemplateDiagram(
+  templateId: string | undefined,
+  input: { readonly projectSlug: string; readonly shortId: string }
+): DiagramJson | undefined {
+  // New Boards must retain the reviewed layout instead of re-running the generic topology arranger.
+  const definitionId = resolveTemplateDefinitionId(templateId);
+  const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
+  if (definition) {
+    return materializeTemplateDiagram(
+      resolveApprovedBoardTemplateDiagram(
+        definition.id,
+        buildTemplateDiagramJson(definition.id, input)
+      ),
+      "authored"
+    );
+  }
+
+  const brainboardTemplate = brainboardBoardTemplates.find(
+    (candidate): candidate is AvailableBoardTemplate =>
+      candidate.id === templateId && candidate.availability === "available"
+  );
+  return brainboardTemplate
+    ? materializeTemplateDiagram(
+        resolveApprovedBoardTemplateDiagram(
+          brainboardTemplate.id,
+          cloneDiagramJson(brainboardTemplate.diagramJson)
+        ),
+        "authored"
+      )
+    : undefined;
+}
+
+/**
+ * One gallery/start seam for approved compiled variants. No registry entry, stale source, or
+ * semantic approval always falls back to the authored source diagram.
+ */
+export function resolveApprovedBoardTemplateDiagram(
+  templateId: string,
+  sourceDiagram: DiagramJson,
+  decision: TemplateReviewDecision | undefined = findApprovedTemplateReviewDecision(templateId)
+): DiagramJson {
+  return resolveApprovedTemplateReviewVariant(
+    { id: templateId, diagramJson: sourceDiagram },
+    decision
+  ).diagram;
+}
+
+function resolveTemplateDefinitionId(templateId: string | undefined): TemplateId | undefined {
+  if (!templateId) {
+    return undefined;
+  }
+
+  return (
+    REPOSITORY_ANALYSIS_TEMPLATE_DEFINITION_IDS.get(templateId) ??
+    templateDefinitions.find((candidate) => candidate.id === templateId)?.id
+  );
+}
+
+// Template 목록에서 이름·설명·태그와 보드에 포함된 Resource identity를 검색합니다.
 export function filterBoardTemplates(
   templates: readonly BoardTemplate[],
   filter: BoardTemplateFilter
@@ -568,7 +905,12 @@ export function filterBoardTemplates(
   const query = filter.query.trim().toLocaleLowerCase("ko-KR");
   const filteredTemplates = templates.filter((template) => {
     const matchesTag = filter.tag === "all" || template.tags.includes(filter.tag);
-    const searchableText = [template.title, template.description, ...template.tags]
+    const searchableText = [
+      template.title,
+      template.description,
+      ...template.tags,
+      ...getBoardTemplateResourceSearchTerms(template)
+    ]
       .join(" ")
       .toLocaleLowerCase("ko-KR");
 
@@ -576,16 +918,41 @@ export function filterBoardTemplates(
   });
 
   if (filter.sort === "name") {
-    return [...filteredTemplates].sort((left, right) => left.title.localeCompare(right.title, "ko-KR"));
+    return [...filteredTemplates].sort((left, right) =>
+      left.title.localeCompare(right.title, "ko-KR")
+    );
   }
 
   if (filter.sort === "resources") {
     return [...filteredTemplates].sort(
-      (left, right) => right.diagramJson.nodes.length - left.diagramJson.nodes.length
+      (left, right) => getBoardTemplateResourceCount(right) - getBoardTemplateResourceCount(left)
     );
   }
 
   return filteredTemplates;
+}
+
+function getBoardTemplateResourceSearchTerms(template: BoardTemplate): readonly string[] {
+  if (!isBoardTemplateAvailable(template)) return [];
+
+  return template.diagramJson.nodes.flatMap((node) => {
+    const parameters = node.parameters;
+    const resourceDefinition = parameters
+      ? getResourceDefinitionByTerraform(
+          parameters.terraformBlockType ?? "resource",
+          parameters.resourceType
+        )
+      : undefined;
+
+    return [
+      node.label,
+      node.type,
+      parameters?.resourceType,
+      parameters?.resourceName,
+      resourceDefinition?.id,
+      resourceDefinition?.resourceType
+    ].filter((term): term is string => Boolean(term));
+  });
 }
 
 // Template 필터에 보여줄 tag를 중복 없이 이름순으로 만듭니다.
@@ -605,7 +972,7 @@ export function applyTemplateToDiagramWithBackup({
   readonly currentDiagram: DiagramJson;
   readonly nowIso: string;
   readonly storage: TemplateStorage;
-  readonly template: BoardTemplate;
+  readonly template: AvailableBoardTemplate;
 }): DiagramJson {
   const backups = readTemplateOverwriteBackups(storage);
   const backup: TemplateOverwriteBackup = {
@@ -624,8 +991,30 @@ export function applyTemplateToDiagramWithBackup({
   return cloneDiagramJson(template.diagramJson);
 }
 
+function cloneBoardTemplate(template: BoardTemplate): BoardTemplate {
+  if (!isBoardTemplateAvailable(template)) {
+    return { ...template, tags: [...template.tags] };
+  }
+
+  return cloneAvailableBoardTemplate(template);
+}
+
+function cloneAvailableBoardTemplate(template: AvailableBoardTemplate): AvailableBoardTemplate {
+  return {
+    ...template,
+    diagramJson: materializeTemplateDiagram(
+      resolveApprovedBoardTemplateDiagram(template.id, cloneDiagramJson(template.diagramJson)),
+      "authored"
+    ),
+    tags: [...template.tags],
+    terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
+  };
+}
+
 // localStorage에 저장된 템플릿 덮어쓰기 백업을 읽습니다.
-export function readTemplateOverwriteBackups(storage: TemplateStorage): readonly TemplateOverwriteBackup[] {
+export function readTemplateOverwriteBackups(
+  storage: TemplateStorage
+): readonly TemplateOverwriteBackup[] {
   const rawValue = storage.getItem(TEMPLATE_OVERWRITE_BACKUP_STORAGE_KEY);
 
   if (!rawValue) {
@@ -722,14 +1111,18 @@ function createTemplateEdge(
   return { id, label, sourceNodeId, targetNodeId, type: "smoothstep" };
 }
 
+// Optional node fields stay absent while nested mutable values receive independent copies.
 function cloneDiagramJson(diagramJson: DiagramJson): DiagramJson {
   return {
     ...diagramJson,
-    edges: diagramJson.edges.map((edge) => ({ ...edge, style: edge.style ? { ...edge.style } : undefined })),
+    edges: diagramJson.edges.map((edge) => ({
+      ...edge,
+      style: edge.style ? { ...edge.style } : undefined
+    })),
     nodes: diagramJson.nodes.map((node) => ({
       ...node,
       metadata: node.metadata ? { ...node.metadata } : undefined,
-      parameters: node.parameters ? { ...node.parameters } : undefined,
+      ...(node.parameters ? { parameters: { ...node.parameters } } : {}),
       position: { ...node.position },
       size: { ...node.size },
       style: node.style ? { ...node.style } : undefined
@@ -760,5 +1153,7 @@ function isDiagramJson(value: unknown): value is DiagramJson {
   }
 
   const candidate = value as Partial<DiagramJson>;
-  return Array.isArray(candidate.nodes) && Array.isArray(candidate.edges) && Boolean(candidate.viewport);
+  return (
+    Array.isArray(candidate.nodes) && Array.isArray(candidate.edges) && Boolean(candidate.viewport)
+  );
 }

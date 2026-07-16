@@ -26,20 +26,53 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
   "aws_route_table_association",
   "aws_security_group",
   "aws_security_group_rule",
+  "aws_cloudfront_distribution",
+  "aws_cloudfront_origin_access_control",
+  "aws_cloudwatch_log_group",
+  "aws_ecr_repository",
+  "aws_ecs_cluster",
+  "aws_ecs_service",
+  "aws_ecs_task_definition",
+  "aws_eip",
   "aws_instance",
+  "aws_nat_gateway",
   "aws_s3_bucket",
-  "aws_s3_bucket_public_access_block"
+  "aws_s3_bucket_policy",
+  "aws_s3_bucket_public_access_block",
+  "aws_s3_object",
+  "aws_codebuild_project",
+  "aws_codedeploy_app",
+  "aws_codedeploy_deployment_group",
+  "aws_codepipeline",
+  "aws_codestarconnections_connection",
+  "aws_iam_role",
+  "aws_iam_role_policy_attachment",
+  "aws_lb",
+  "aws_lb_listener",
+  "aws_lb_target_group"
 ]);
 
 const demoWebServiceLiveApplySupportedResourceTypes = new Set([
   ...practiceLiveApplySupportedResourceTypes,
+  "aws_appautoscaling_policy",
+  "aws_appautoscaling_target",
   "aws_autoscaling_group",
   "aws_autoscaling_policy",
   "aws_cloudwatch_metric_alarm",
+  "aws_cloudwatch_log_group",
+  "aws_ecr_repository",
+  "aws_ecs_cluster",
+  "aws_ecs_service",
+  "aws_ecs_task_definition",
+  "aws_eip",
+  "aws_iam_instance_profile",
+  "aws_iam_role",
+  "aws_iam_role_policy_attachment",
   "aws_launch_template",
   "aws_lb",
   "aws_lb_listener",
   "aws_lb_target_group",
+  "aws_nat_gateway",
   "aws_s3_bucket_policy",
   "aws_s3_bucket_website_configuration",
   "aws_s3_object"
@@ -48,7 +81,50 @@ const demoWebServiceLiveApplySupportedResourceTypes = new Set([
 const demoWebServiceWithRdsLiveApplySupportedResourceTypes = new Set([
   ...demoWebServiceLiveApplySupportedResourceTypes,
   "aws_db_instance",
-  "aws_db_subnet_group"
+  "aws_db_subnet_group",
+  "aws_s3_bucket",
+  "aws_s3_bucket_public_access_block",
+  "aws_s3_bucket_policy",
+  "aws_cloudfront_origin_access_control",
+  "aws_cloudfront_distribution",
+  "aws_api_gateway_rest_api",
+  "aws_api_gateway_authorizer",
+  "aws_api_gateway_resource",
+  "aws_api_gateway_method",
+  "aws_api_gateway_integration",
+  "aws_api_gateway_deployment",
+  "aws_api_gateway_stage",
+  "aws_lambda_function",
+  "aws_lambda_permission",
+  "aws_cloudwatch_log_group",
+  "aws_iam_role",
+  "aws_iam_role_policy",
+  "aws_iam_role_policy_attachment",
+  "aws_dynamodb_table",
+  "aws_amplify_app",
+  "aws_cognito_user_pool",
+  "aws_cognito_user_pool_client",
+  "aws_vpc",
+  "aws_subnet",
+  "aws_internet_gateway",
+  "aws_nat_gateway",
+  "aws_eip",
+  "aws_security_group",
+  "aws_launch_template",
+  "aws_lb",
+  "aws_autoscaling_group",
+  "aws_ecs_cluster",
+  "aws_ecs_task_definition",
+  "aws_ecs_service",
+  "aws_eks_cluster",
+  "aws_eks_node_group",
+  "kubernetes_namespace",
+  "kubernetes_deployment",
+  "kubernetes_service"
+]);
+
+const terraformPlanSupportedResourceTypes = new Set([
+  ...demoWebServiceWithRdsLiveApplySupportedResourceTypes
 ]);
 
 export function getLiveApplySupportedResourceTypes(
@@ -63,6 +139,10 @@ export function getLiveApplySupportedResourceTypes(
   }
 
   return practiceLiveApplySupportedResourceTypes;
+}
+
+export function getTerraformPlanSupportedResourceTypes(): ReadonlySet<string> {
+  return terraformPlanSupportedResourceTypes;
 }
 
 export class DeploymentPlanSummaryParseError extends Error {

@@ -3,7 +3,8 @@ import type {
   ArchitectureSource,
   DiagramJson,
   ProjectAssetUploadResponse,
-  TerraformArtifact
+  TerraformArtifact,
+  TerraformSyncFileInput
 } from "@sketchcatch/types";
 import {
   abortProjectAssetUpload,
@@ -13,6 +14,7 @@ import {
   uploadProjectAsset,
   validateTerraformCode
 } from "./api";
+import { DeploymentPreparationError } from "./deployment-preparation-error";
 import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 const TERRAFORM_ARTIFACT_CONTENT_TYPE = "text/plain";
@@ -27,6 +29,12 @@ export type SavedWorkspaceTerraformArtifact = {
   readonly terraformArtifact: TerraformArtifact;
 };
 
+export type PreparedWorkspaceDeploymentArtifacts = SavedWorkspaceTerraformArtifact & {
+  readonly preparedDraftRevision: number;
+  readonly diagramJson: DiagramJson;
+  readonly terraformFiles: readonly TerraformSyncFileInput[];
+};
+
 export async function saveWorkspaceArchitectureSnapshot({
   diagramJson,
   projectId,
@@ -36,11 +44,17 @@ export async function saveWorkspaceArchitectureSnapshot({
   readonly projectId: string;
   readonly source?: ArchitectureSource | string;
 }): Promise<SavedWorkspaceArchitectureSnapshot> {
-  const architecture = await createArchitectureSnapshot({
-    projectId,
-    source,
-    architectureJson: convertDiagramJsonToArchitectureJson(diagramJson)
-  });
+  let architecture: ArchitectureSnapshot;
+
+  try {
+    architecture = await createArchitectureSnapshot({
+      projectId,
+      source,
+      architectureJson: convertDiagramJsonToArchitectureJson(diagramJson)
+    });
+  } catch (cause) {
+    throw new DeploymentPreparationError({ cause, stage: "architecture_snapshot" });
+  }
 
   return { architecture };
 }
@@ -61,20 +75,32 @@ export async function saveWorkspaceTerraformArtifact({
   readonly terraformCode: string;
 }): Promise<SavedWorkspaceTerraformArtifact> {
   if (!terraformCode.trim()) {
-    throw new Error("저장할 Terraform 코드가 없습니다.");
+    throw new DeploymentPreparationError({
+      cause: new Error("Terraform code is empty"),
+      stage: "terraform_prepare"
+    });
   }
 
   if (!skipValidation) {
-    const validationResult = await validateTerraformCode({
-      terraformCode
-    });
+    let validationResult;
+
+    try {
+      validationResult = await validateTerraformCode({
+        terraformCode
+      });
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
+    }
+
     const validationError = validationResult.diagnostics.find(
       (diagnostic) => diagnostic.severity === "error"
     );
 
     if (validationError) {
-      const line = validationError.line ? `${validationError.line}번째 줄: ` : "";
-      throw new Error(`Terraform 검증 실패: ${line}${validationError.message}`);
+      throw new DeploymentPreparationError({
+        cause: validationError,
+        stage: "terraform_prepare"
+      });
     }
   }
 
@@ -87,33 +113,50 @@ export async function saveWorkspaceTerraformArtifact({
   let uploadResponse: ProjectAssetUploadResponse | undefined;
 
   try {
-    uploadResponse = await createProjectAssetUpload({
-      projectId,
-      architectureId: architecture.id,
-      assetType: "terraform_file",
-      fileName,
-      contentType: TERRAFORM_ARTIFACT_CONTENT_TYPE,
-      byteSize
-    });
+    try {
+      uploadResponse = await createProjectAssetUpload({
+        projectId,
+        architectureId: architecture.id,
+        assetType: "terraform_file",
+        fileName,
+        contentType: TERRAFORM_ARTIFACT_CONTENT_TYPE,
+        byteSize
+      });
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "asset_upload_request" });
+    }
 
-    await uploadProjectAsset(uploadResponse.upload, terraformCode);
+    try {
+      await uploadProjectAsset(uploadResponse.upload, terraformCode);
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "asset_upload" });
+    }
 
-    const confirmedAsset = await confirmProjectAssetUpload({
-      projectId,
-      assetId: uploadResponse.asset.id
-    });
+    let confirmedAsset: TerraformArtifact;
+
+    try {
+      confirmedAsset = (await confirmProjectAssetUpload({
+        projectId,
+        assetId: uploadResponse.asset.id
+      })) as TerraformArtifact;
+    } catch (cause) {
+      throw new DeploymentPreparationError({ cause, stage: "asset_upload_confirm" });
+    }
 
     if (
       confirmedAsset.assetType !== "terraform_file" ||
       typeof confirmedAsset.architectureId !== "string" ||
       confirmedAsset.uploadStatus !== "uploaded"
     ) {
-      throw new Error("저장된 Terraform artifact가 Architecture snapshot과 연결되지 않았습니다.");
+      throw new DeploymentPreparationError({
+        cause: new Error("Confirmed asset does not match the prepared Terraform artifact"),
+        stage: "asset_upload_confirm"
+      });
     }
 
     return {
       architecture,
-      terraformArtifact: confirmedAsset as TerraformArtifact
+      terraformArtifact: confirmedAsset
     };
   } catch (error) {
     if (uploadResponse) {

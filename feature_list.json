@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-11",
+  "lastUpdated": "2026-07-15",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -8,7 +8,53 @@
     "passingRequiresEvidence": true,
     "blockedRequiresReason": true
   },
+  "currentTestPolicy": {
+    "name": "essential-protection-line",
+    "effectiveDate": "2026-07-15",
+    "entrypoint": "pnpm test",
+    "retainedTestFiles": 52,
+    "removedTestFiles": 338,
+    "historicalEvidenceNotice": "Feature evidence commands dated before this policy are audit records and may reference removed dedicated tests. Use the current entrypoint for the maintained regression suite.",
+    "knownUnprotectedAreas": [
+      "AI Architecture",
+      "GitOps runtime reconcilers",
+      "Reverse Engineering",
+      "Cost",
+      "Live Observation outside capability-token and HTTPS transport security",
+      "notifications outside Web Push subscription encryption",
+      "detailed diagram editing",
+      "Templates",
+      "presentation behavior"
+    ]
+  },
   "features": [
+    {
+      "id": "TEST-PROTECTION-LINE-001",
+      "priority": 1,
+      "area": "quality",
+      "title": "Essential automated test protection line",
+      "user_visible_behavior": "기본 테스트 명령은 인증, 소유권, 프로젝트 저장, Terraform 생성과 안전 게이트, 승인된 배포와 정리 경로만 필수 보호선으로 검증한다.",
+      "status": "passing",
+      "verification": [
+        "유지 대상 52개 테스트 파일만 저장소에 남는다.",
+        "pnpm test가 API, Web, shared types, sandbox evidence, Terraform routing 보호선을 모두 실행한다.",
+        "삭제된 전용 테스트가 담당하던 기능은 자동 검증되지 않는 영역으로 명시된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm test",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "git diff --check"
+        ],
+        "notes": "Retained 52 test files and removed 338 from the original 390-file suite. The 47-file baseline passed 518 checks after the dev merge. Five reviewed security files were then restored and passed 54/57 focused checks; three filesystem symlink setup cases were blocked by Windows EPERM before assertions. API lint and typecheck pass."
+      },
+      "notes": "Broader feature-specific suites require an explicit future protection-line decision before being restored."
+    },
     {
       "id": "HARNESS-001",
       "priority": 1,
@@ -214,6 +260,576 @@
         "notes": "Production Route53 targets the direct-path ECS ALB; API/web run at autoscaling min 1 and max 2, worker RunTask is active, auth runtime preflight covers token and OAuth configuration, and container log alarms require two consecutive error periods without repetitive OK notifications."
       },
       "notes": "Warm EC2/ALB/nginx and the legacy ECS service/target group are retired. Cold rollback retains a sanitized encrypted AMI, verified Docker archive, disabled Terraform root, and runbook."
+    },
+    {
+      "id": "DEPLOYMENT-SAFETY-TRIVY-001",
+      "priority": 1,
+      "area": "deployment-safety",
+      "title": "Accurate and responsive Terraform pre-deployment safety gate",
+      "user_visible_behavior": "배포 전 검사는 정확히 그룹화된 Trivy 근거를 표시하고, 핵심 규칙은 즉시 반환하며, 심층검사와 AI 설명은 비동기로 갱신한다.",
+      "status": "passing",
+      "verification": [
+        "S3 finding은 rule ID별 정확한 한국어 설명과 resourceAddress/riskFamily 그룹을 사용한다.",
+        "동일 Terraform 검사는 5분 cache와 single-flight를 사용하고 Plan에서 재사용된다.",
+        "Public S3, 공개 SSH, Public RDS, IAM wildcard는 Trivy 시작 전에 deterministic gate로 검사된다.",
+        "UI가 핵심 검사, 심층검사 진행, 병합 완료 상태를 구분하고 high finding이 있어도 Plan 생성과 승인을 허용하며, 생성된 Plan은 재생성 대신 승인 단계로 진행한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-12",
+        "commands": [
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm test",
+          "targeted API, scanner, Plan, and Workspace tests"
+        ],
+        "notes": "Focused deployment-safety, approval, Apply, Destroy, Plan, and Workspace tests pass. High findings remain visible but do not block Plan approval, and an existing unapproved apply Plan advances to approval instead of exposing regeneration. Deployment History keeps Destroy Plan regeneration available beside approval, then beside Destroy execution after approval. Lint, typecheck, and build pass. The full web suite still has four unrelated baseline failures in diagram toolbar CSS, dashboard projects route expectations, a missing personal docs inventory file, and a stale resource catalog count."
+      },
+      "notes": "No cloud apply, destroy, or external deployment mutation was performed."
+    },
+    {
+      "id": "LIVE-OBSERVATION-V2-001",
+      "priority": 1,
+      "area": "live-observation",
+      "title": "Server-verified Live Observation v2",
+      "user_visible_behavior": "검증된 Deployment를 선택해 15분 관측 세션을 시작하고, 실제 요청·CloudWatch·capacity 증거와 scale-out 진행을 안전한 시네마틱 화면에서 확인한다.",
+      "status": "blocked",
+      "verification": [
+        "v2 manifest, capability, Store, collector, IAM, CloudFront, AWS adapter 계약이 provider-neutral core seam 뒤에서 연결된다.",
+        "기능 flag는 Redis/Chromium/approved AWS sandbox gate가 모두 통과할 때까지 false다.",
+        "credential 원문·hash·URL이 RDS, S3, Redis, 로그, localStorage, sessionStorage에 남지 않는다.",
+        "in-memory와 Redis Store adapter가 같은 원자 동작 contract suite를 통과한다.",
+        "desktop/mobile/reduced-motion 브라우저 흐름이 실제 snapshot 값과 lifecycle cleanup을 검증한다.",
+        "실제 AWS apply/destroy는 별도 명시 승인이 있을 때만 수행한다."
+      ],
+      "notes": "Implementation and automated verification merged in PR #382. External acceptance is deferred to issue #378 because the in-app browser blocks localhost and the current environment has no reachable AWS STS credentials. The feature flag remains false until credentialed Chromium and an approved AWS sandbox provide evidence."
+    },
+    {
+      "id": "PROJECT-RELEASE-LEDGER-001",
+      "priority": 1,
+      "area": "deployment-domain",
+      "title": "Project deployment target and shared release ledger",
+      "user_visible_behavior": "개발자는 프로젝트의 단일 배포 타깃을 설정하고 Direct/GitOps 릴리즈의 version, SHA, digest, provider revision, Output URL을 한 이력에서 확인한다.",
+      "status": "passing",
+      "verification": [
+        "프로젝트당 배포 타깃 row가 하나만 존재하고 소유하지 않은 connection 변경을 차단한다.",
+        "Direct와 GitOps 릴리즈가 같은 API와 History UI 계약을 사용한다.",
+        "SemVer tag, manifest version, SHA fallback과 artifact digest가 결정적으로 계산된다.",
+        "provider revision drift와 legacy Deployment backfill 호환이 테스트된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts src/routes/deployments.test.ts src/releases/application-release-identity.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/db/project-release-ledger-schema.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "node scripts/check-db-migration-compatibility.mjs",
+          "PostgreSQL 16 temporary container: apply apps/api/drizzle/0000..0035 with psql ON_ERROR_STOP=1",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Project target, shared release ledger, authorization, structured build evidence, migration/backfill, History UI, and legacy Deployment adapters passed. API full suite has three unrelated Windows symlink fixture setup failures (EPERM); all #371-focused tests pass."
+      },
+      "notes": "Implemented in issue #371 on branch feature/sw/371-project-deployment-release-ledger. No cloud mutation was performed."
+    },
+    {
+      "id": "DIRECT-DEPLOYMENT-THREE-STAGE-001",
+      "priority": 1,
+      "area": "deployment-ux",
+      "title": "Revision-locked three-stage Direct Deployment",
+      "user_visible_behavior": "개발자는 Board와 Terraform을 한 번에 저장하고 검증, 승인, 배포 세 단계만 거쳐 프로젝트를 배포한다.",
+      "status": "passing",
+      "verification": [
+        "Ctrl+S와 Command+S가 diagram과 Terraform draft를 같은 server revision으로 저장한다.",
+        "prepare가 최신 saved revision만 받아 immutable Deployment를 만들고 stale revision을 거부한다.",
+        "approval snapshot과 execute snapshot이 다르면 실행이 차단된다.",
+        "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-service.test.ts src/deployments/deployment-approval-service.test.ts src/routes/deployments.test.ts src/db/deployment-preparation-schema.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "pnpm --filter @sketchcatch/api test",
+          "node scripts/check-db-migration-compatibility.mjs",
+          "PostgreSQL 16 temporary container: apply apps/api/drizzle/0000..0036 with psql ON_ERROR_STOP=1",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
+        ],
+        "notes": "Focused deployment contracts, Web 1,145/1,145, migration compatibility, PostgreSQL migrations, harness, lint, typecheck, and build passed. API passed 1,456/1,459; the only failures are three unchanged Windows symlink fixture setup EPERM errors."
+      },
+      "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
+    },
+    {
+      "id": "ECS-FARGATE-GITOPS-RELEASE-001",
+      "priority": 1,
+      "area": "gitops-release",
+      "title": "Repository-confirmed ECS/Fargate GitOps release",
+      "user_visible_behavior": "개발자는 확인한 Docker build 설정으로 immutable ECR image를 만들고 ECS/Fargate 즉시 교체 단계, 마스킹 로그, 릴리즈 증거를 확인한다.",
+      "status": "passing",
+      "verification": [
+        "미확인 또는 모호한 Docker build config는 GitOps handoff와 workflow 실행을 차단한다.",
+        "ApplicationRelease가 version, commit SHA, image digest, ECS task revision, Output URL을 기록한다.",
+        "ECS minimum healthy 0, maximum 100, circuit breaker rollback 계약이 workflow와 provider 재조회에서 검증된다.",
+        "CI/CD 화면이 build, publish, deploy, health 단계와 마스킹된 증분 로그를 표시한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/ecs-gitops-release-reconciler.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/routes/git-cicd-handoffs.test.ts",
+          "pnpm exec tsx .\\app\\projects\\[projectId]\\settings\\project-deployment-target-state.test.ts (from apps/web)",
+          "pnpm test",
+          "pnpm migration:compatibility:check",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
+        ],
+        "notes": "Focused API 87/87 and target-state 6/6 passed. Full Web tests passed; API passed 1,468/1,471 with only three unchanged Windows symlink fixture EPERM failures. Migration compatibility, harness, lint, typecheck, and build passed."
+      },
+      "notes": "Implemented in issue #373 on feature/sw/373-ecs-gitops-release. No cloud mutation was performed; sandbox deployment and rollback evidence remain assigned to issue #378."
+    },
+    {
+      "id": "LAMBDA-GITOPS-RELEASE-001",
+      "priority": 1,
+      "area": "gitops-release",
+      "title": "Repository-confirmed Lambda AllAtOnce GitOps release",
+      "user_visible_behavior": "Developers publish an immutable Lambda artifact from confirmed SAM evidence, promote it through an alias with CodeDeploy AllAtOnce, and inspect verified release evidence.",
+      "status": "passing",
+      "verification": [
+        "GitOps handoff rejects missing, ambiguous, or stale SAM build evidence.",
+        "ApplicationRelease records the commit, artifact digest, Lambda version, alias revision, deployment result, and Output URL.",
+        "CodeDeployDefault.LambdaAllAtOnce and automatic failure rollback are verified in both workflow and provider re-query.",
+        "CI/CD stages expose masked build, publish, deploy, rollback, and health evidence without demo-only fallbacks."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/db/project-release-ledger-schema.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/lambda-gitops-release-reconciler.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/releases/project-release-ledger-service.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/project-release-ledger.test.ts",
+          "pnpm exec tsx .\\app\\projects\\[projectId]\\settings\\project-deployment-target-state.test.ts (from apps/web)",
+          "pnpm test",
+          "pnpm migration:compatibility:check",
+          "PostgreSQL 16 temporary container: apply migrations 0000..0038 with runtime migrator",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Focused API 100/100 and target-state 8/8 passed. Full Web tests passed; API passed 1,481/1,484 with only three unchanged Windows symlink fixture EPERM failures. Migration compatibility, PostgreSQL migrations, lint, typecheck, and build passed."
+      },
+      "notes": "Implemented in issue #374 on feature/sw/374-lambda-gitops-release. No AWS mutation was performed; sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378."
+    },
+    {
+      "id": "EC2-ASG-GITOPS-RELEASE-001",
+      "priority": 1,
+      "area": "gitops-release",
+      "title": "Repository-confirmed EC2/ASG CodeDeploy AllAtOnce GitOps release",
+      "user_visible_behavior": "Developers publish a versioned S3 bundle from confirmed AppSpec evidence, deploy it to the configured Auto Scaling group with CodeDeploy AllAtOnce, and inspect verified instance and rollback evidence.",
+      "status": "passing",
+      "verification": [
+        "GitOps handoff rejects missing, ambiguous, or stale AppSpec build evidence.",
+        "ApplicationRelease records the commit, bundle digest and version, CodeDeploy revision, instance result, and Output URL.",
+        "CodeDeployDefault.AllAtOnce, the configured Auto Scaling group, all target instance success, and rollback policy are verified by provider re-query.",
+        "A failed deployment or health check restores the previous verified bundle and records masked rollback evidence."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/ec2-asg-gitops-release-reconciler.test.ts",
+          "pnpm test",
+          "pnpm migration:compatibility:check",
+          "pnpm --filter api db:migrate (temporary PostgreSQL 16, migrations 0000-0039)",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Focused workflow/provider/reconciler tests passed 31/31. Full Web and other workspace tests passed; API had only three unchanged Windows symlink fixture EPERM setup failures. PostgreSQL 16 migrations, compatibility, lint, typecheck, build, and harness passed."
+      },
+      "notes": "Sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378; no AWS mutation is authorized in this workstream."
+    },
+    {
+      "id": "STATIC-GITOPS-COMMON-LOGS-001",
+      "priority": 1,
+      "area": "gitops-release",
+      "title": "Repository-confirmed static S3 and CloudFront GitOps release with common logs",
+      "user_visible_behavior": "Developers publish a confirmed static output to an immutable S3 prefix, switch the configured CloudFront origin path, and inspect common stages, logs, release evidence, and rollback state.",
+      "status": "passing",
+      "verification": [
+        "Repository analysis and GitOps handoff reject missing, ambiguous, or stale static output evidence.",
+        "ApplicationRelease records the manifest digest, versioned release prefix, CloudFront revision, invalidation, rollback pointer, and Output URL.",
+        "ECS, Lambda, EC2, and Static runs share the same stage, incremental masked log, and release UI contract.",
+        "Branch and monitored paths are edited only in project settings; the CI/CD console contains execution information only."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter api exec tsx --test src/db/project-release-ledger-schema.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/source-repositories/repository-analysis.test.ts src/source-repositories/repository-analysis-failure.test.ts src/routes/git-cicd-handoffs.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/static-site-gitops-release-reconciler.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-cicd-console-layout.test.ts features/workspace/workspace-right-panel-layout.test.ts",
+          "pnpm --dir apps/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
+          "generated static workflow run blocks validated with Git for Windows bash -n",
+          "pnpm migration:compatibility:check",
+          "pnpm --filter api db:migrate (temporary PostgreSQL 16, migrations 0000-0040)",
+          "pnpm test",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Focused API contracts passed 107/107, source repository route regression passed 17/17, target state passed 10/10, and CI/CD layout passed 103/103. Static workflow bash syntax, PostgreSQL 16 migrations, compatibility, lint, typecheck, build, and harness passed. Full Web and other workspace tests passed; API had only three unchanged Windows symlink fixture EPERM setup failures."
+      },
+      "notes": "Sandbox deployment, rollback, and cleanup evidence remain assigned to issue #378; no AWS mutation is authorized in this workstream."
+    },
+    {
+      "id": "DURABLE-DEPLOYMENT-NOTIFICATIONS-001",
+      "priority": 1,
+      "area": "deployment-notifications",
+      "title": "Durable deployment Inbox, SSE, and Web Push",
+      "user_visible_behavior": "개발자는 Direct와 GitOps 배포의 성공, 실패, 취소 알림을 세션을 넘어 유지되는 Inbox와 명시적으로 허용한 Web Push에서 확인한다.",
+      "status": "passing",
+      "verification": [
+        "Direct Deployment와 GitOps Pipeline Run terminal event가 같은 transaction의 idempotent Inbox/outbox row를 만든다.",
+        "읽음 상태와 90일 retention은 RDS가 source of truth다.",
+        "인증 SSE와 Service Worker Web Push가 같은 notification ID와 안전한 프로젝트 경로를 전달한다.",
+        "subscription endpoint와 key는 암호화되고 Push outbound DNS는 public address에만 고정된다.",
+        "권한 거부, 만료, 영구 실패, bounded retry, 사용자 소유권이 테스트된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter api exec tsx --test src/notifications/*.test.ts src/routes/notifications.test.ts src/db/notification-schema.test.ts src/live-observations/live-observation-https-transport.test.ts",
+          "pnpm --filter web exec tsx --test features/notifications/*.test.ts features/workspace/deployment-cicd-console-layout.test.ts",
+          "pnpm migration:compatibility:check",
+          "pnpm --filter api db:migrate:runtime (temporary PostgreSQL 16, migrations 0000-0041)",
+          "PostgreSQL terminal trigger integration: Direct/GitOps idempotency, owner, retention, and duplicate-source assertions",
+          "terraform -chdir=infra/aws/terraform fmt -check -recursive",
+          "terraform -chdir=infra/aws/terraform test",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm test",
+          "pnpm harness:check"
+        ],
+        "notes": "Notification-focused tests, migration compatibility, clean PostgreSQL migrations and trigger integration, Terraform tests, lint, typecheck, and build passed. Full Web and other workspace tests passed; API passed 1,525/1,528 with only the three unchanged Windows symlink fixture EPERM setup failures."
+      },
+      "notes": "No Web Push provider call, cloud mutation, GitHub mutation, or production database migration was performed. Sandbox browser delivery evidence remains assigned to issue #378."
+    },
+    {
+      "id": "PROJECT-DEPLOYMENT-SANDBOX-E2E-001",
+      "priority": 1,
+      "area": "deployment-acceptance",
+      "title": "Project deployment non-production sandbox E2E",
+      "user_visible_behavior": "운영자는 승인된 non-production 환경에서 Direct 3개 scope와 GitOps 4개 runtime, 실제 관측·알림·rollback·cleanup을 하나의 상관관계 검증 report로 확인한다.",
+      "status": "blocked",
+      "blockedReason": "Static, Lambda, and EC2/ASG GitOps acceptance, persisted pipeline correlation, Web Push delivery, and rollback evidence remain incomplete and must resume on the dedicated Issue #378 branch.",
+      "verification": [
+        "preflight가 STS identity를 직접 확인하고 production AWS/API/GitHub target을 거부한다.",
+        "Direct 3개 scope와 GitOps 4개 runtime의 실제 완료 증거가 모두 존재한다.",
+        "commit, CI log hash, release identity, Output URL, QR 요청, CloudWatch, Inbox/Web Push가 서로 연결된다.",
+        "각 GitOps runtime의 의도한 실패가 이전 검증 revision으로 rollback된다.",
+        "Destroy 후 ECR, S3, CodeBuild, CloudWatch 임시 artifact가 남지 않는다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm test:sandbox-e2e",
+          "pnpm sandbox:e2e plan",
+          "pnpm sandbox:e2e preflight",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-destroy-service.test.ts src/deployments/deployment-safety-gate.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-actions.test.ts features/workspace/deployment-availability.test.ts features/workspace/deployment-console-state.test.ts features/workspace/deployment-three-stage-flow.test.ts features/workspace/deployment-panel-apply-confirmation.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "Code implementation is complete: the exact Direct/GitOps matrix is represented by a fail-closed three-stage orchestration contract with cleanup-on-failure and verification-gated success; standalone SAM/CodeDeploy detection, Static application-local lockfile selection, source-root installs, provider status persistence, and runtime-aware cleanup are implemented. Direct ECS evidence remains verified. ECS GitOps Infra run 29334708442 and App run 29334822683 succeeded for SHA 3a12e55c13e7be1a769cfbe920b112516d8c14ce, digest 20ec77dba90b910f1a37fd1f9194b0ff4829f789d6548abf3b21262df04632e1, task definition revision 7, HTTPS 200, and desired/running 1/1. Project refresh returned stale=false with all seven stages succeeded, 1,161 masked logs, and a persisted matching ApplicationRelease. External ID rotation accepted the new value and rejected the old value. Destroy run 29337235499 succeeded; direct queries show zero cost-bearing issue resources, buckets, OIDC provider, task definitions, and task roles. QR, Static, Lambda, EC2/ASG, Web Push delivery, and rollback real-environment acceptance remain pending, so the feature stays in_progress. The maintained protection line covers sandbox preflight, deployment safety/apply/destroy, deployment routes, and Web deployment controls; removed feature-specific commands remain historical evidence only."
+      },
+      "notes": "Issue #378 on test/sw/378-deployment-sandbox-e2e. Production mutation is denied by default."
+    },
+    {
+      "id": "ARCHITECTURE-BOARD-COMPILER-409",
+      "priority": 1,
+      "area": "ai-architecture-board",
+      "title": "Architecture Board Compiler and Workspace AI Chat",
+      "user_visible_behavior": "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 같은 Compiler 제안·diff·승인 경계를 통해 읽기 쉬운 Architecture Board를 만든다.",
+      "status": "in_progress",
+      "verification": [
+        "29개 사용 가능한 Template 사례와 1개 실패 evidence로 versioned knowledge artifact를 검증한다.",
+        "사례 기반 spacing 후보는 baseline보다 겹침·경계 이탈·edge 관통/교차·역방향·support lane 침범을 늘리지 않는다.",
+        "동일한 입력은 동일한 Compiler proposal, diff, diagnostic, quality 결과를 반환한다.",
+        "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 동일한 Compiler Interface를 사용한다.",
+        "Template variant는 source fingerprint와 visual-only approval 범위가 일치할 때만 authored source 위에 적용된다.",
+        "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
+        "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-16",
+        "commands": [
+          "pnpm harness:check",
+          "pnpm architecture-board-knowledge:check",
+          "pnpm architecture-board-evidence:check",
+          "pnpm architecture-board-evidence-review:check",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/workspace-ai-start-client.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/repository/repository-start-client.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-consolidation.test.ts features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-chat-request.test.ts features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-context-bridge.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/workspace-ai-result-presentation.test.ts features/workspace/workspace-ai-workbench-contract.test.ts features/workspace/workspace-ai-workbench-state.test.ts features/workspace/workspace-api-abort.test.ts",
+          "pnpm --dir apps/api exec tsx --test src/services/aiLlmExplanation.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build"
+        ],
+        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. The 001 Workspace AI Workbench is also complete: three isolated modes, immutable proposal source guards, request cancellation identity, fresh-only Terraform approval, conditional transcript scrolling, desktop/mobile accessibility, and legacy chat CSS removal are verified. Workspace AI tests passed 100/100, Terraform provider-chain tests passed 8/8, root harness/lint/typecheck/build passed, and final review reported no findings. Chrome QA covered 375px, 768px, 1024px, and 1920px with no new console error. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue."
+      },
+      "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
+    },
+    {
+      "id": "AWS-TEMPLATE-LAYOUT-001",
+      "priority": 2,
+      "area": "template-board",
+      "title": "PNG-aligned AWS Template Board presentation",
+      "user_visible_behavior": "여섯 AWS Template가 실제 Resource Catalog의 Resource와 Design 항목을 사용하고, 40px grid 위의 촘촘한 행·열과 Region/AZ/Group 계층으로 Board에서 읽기 쉽게 표시한다.",
+      "status": "passing",
+      "verification": [
+        "각 Template의 Resource ID, type, count, Terraform value, relationship ID/source/target/label은 semantic hash로 보존한다.",
+        "103개 deployable Resource와 28개 parameterless Design node가 active Resource Catalog 항목으로 materialize된다.",
+        "Design node/edge는 별도 presentation graph에 있고 Terraform 및 Architecture semantic graph에 포함되지 않는다.",
+        "여섯 Template마다 40px-grid position, parent, size, presentation area, viewport, edge handle/routing 계약을 고정한다.",
+        "여섯 Template마다 실제 로그인된 Board에서 12개 시각·구조 QA 항목을 통과한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-13",
+        "commands": [
+          "/Users/lgg/.nvm/versions/node/v24.18.0/bin/node apps/web/node_modules/tsx/dist/cli.mjs --test packages/types/src/template-definitions.test.ts packages/types/src/template-layout-contract.test.ts packages/types/src/template-presentation-contract.test.ts apps/web/features/resource-settings/catalog.test.ts apps/web/features/resource-settings/template-resource-materializer.test.ts apps/web/features/resource-settings/template-sibling-collision-integration.test.ts apps/web/features/resource-settings/template-sibling-collision-layout.test.ts apps/web/features/diagram-editor/area-nodes.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern='buildBoardTemplateDiagram|listBoardTemplates exposes|applyTemplateToDiagramWithBackup' features/resource-settings/template-library.test.ts",
+          "pnpm typecheck",
+          "pnpm lint",
+          "pnpm harness:check",
+          "authenticated Chrome visual QA through /workspace/new?mode=template&templateId=<templateId>"
+        ],
+        "notes": "60 focused tests, 4 direct regressions, and 72/72 live Board checks passed. Evidence and created project IDs are recorded in docs/gg/feat-infrastructure-template/017_AWS템플릿Design실화면QA_gg.md. pnpm build is separately blocked by a pre-existing ignored .codegraph symlink ENOENT."
+      },
+      "notes": "Presentation-only work. No Terraform execution, AWS mutation, or approval-flow change was made."
+    },
+    {
+      "id": "AI-DIAGRAM-AUTO-LAYOUT-001",
+      "priority": 1,
+      "area": "ai-architecture-board",
+      "title": "Deterministic provider-neutral AI diagram auto-layout",
+      "user_visible_behavior": "AI가 만든 신규 Practice Architecture가 포함 관계, 주 흐름, 반복 구조, 지원 레인을 기준으로 읽기 쉽게 자동 배치되고 기존 수동 Board와 Template 좌표는 보호된다.",
+      "status": "passing",
+      "verification": [
+        "핵심 배치 엔진이 provider-neutral role을 사용하고 AWS 분류와 Area 최소 크기는 첫 Provider Adapter 매핑에 격리된다.",
+        "node/Area 겹침, parent 경계, edge 교차·관통, Area 제목 관통, 역방향 edge, canvas 면적·공백·세로 비율, 반복 정렬, 주 흐름 연속성을 구조 지표로 검증한다.",
+        "기존 Board의 위치와 잠금, 명시적 Template 위치를 보호하고 저장된 Area는 신규 자식을 담는 데 필요한 크기만 확장한다.",
+        "대형 VPC와 Serverless fixture가 실제 Workspace 화면에서 렌더링되고 CI/CD·IAM·Observability가 별도 지원 레인으로 보인다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --dir apps/web exec tsx --test features/workspace/automatic-diagram-layout.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/workspace-ai-patch-preview.test.ts features/workspace/workspace-diagram-fixtures.test.ts",
+          "pnpm --dir apps/web lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "authenticated Chrome visual QA through /workspace?diagramFixture=conventions and /workspace?diagramFixture=automatic-layout-vpc"
+        ],
+        "notes": "All 60 focused tests passed. The full Web suite passed 1,123/1,124 and retains one unrelated Windows Korean day-period locale failure. Workspace visual QA covered 11-node Serverless and 18-resource VPC/ALB/Fargate/Data/CI-CD/Observability fixtures. The live AI generation endpoint returned 503, so manual patch UI behavior is supported by integration tests rather than claimed as live-screen verified."
+      },
+      "notes": "No runtime dependency, Terraform execution, cloud mutation, commit, push, or PR was created."
+    },
+    {
+      "id": "PRODUCTION-ECS-DEPLOYMENT-SPEED-001",
+      "priority": 1,
+      "area": "production-deployment",
+      "title": "Measured production ECS deployment acceleration",
+      "user_visible_behavior": "운영자는 API와 web image를 ECR remote cache로 병렬 빌드하고 immutable digest로 배포하며, 실제 production 실행에서 단계별 소요 시간과 rollback 기준을 확인한다.",
+      "status": "passing",
+      "verification": [
+        "API와 web image가 분리된 job에서 ECR registry cache를 사용해 병렬 build/push된다.",
+        "cache tag는 ECS에 배포되지 않고 검증된 release digest만 task definition에 반영된다.",
+        "생성된 사용자 ECS/Fargate CodeBuild workflow도 ECR remote cache와 release digest 검증을 유지한다.",
+        "production preflight, 실제 ECS 배포, post-deploy health smoke, read-only Terraform plan이 성공한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-14",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts src/routes/git-cicd-handoffs.test.ts",
+          "terraform -chdir=infra/aws/terraform fmt -check -recursive",
+          "terraform -chdir=infra/aws/terraform test",
+          "node scripts/check-production-infra.mjs",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/smoke/ecs-ops-preflight.ps1 -PreflightOnly",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check",
+          "GitHub Actions Deploy Production ECS run 29333857003",
+          "GitHub Actions Production Infrastructure Plan run 29334381609",
+          "HTTPS GET https://sketchcatch.net/, /health, /health/db"
+        ],
+        "notes": "Production completed in 6m09s versus the 7m51s median baseline. Warm image build-push critical path was 7s versus 81s. API/web stabilization was 3m13s/2m56s, all health endpoints returned 200, and the read-only runtime plan reported no infrastructure changes. The full workspace test attempt timed out after 15 minutes; focused changed-path tests and all required build checks passed."
+      },
+      "notes": "The 5m30s total stretch target remains unmet; validation and API stabilization are the next measured bottlenecks."
+    },
+    {
+      "id": "REPOSITORY-ECS-REFERENCE-LAYOUT-001",
+      "priority": 1,
+      "area": "repository-analysis-board",
+      "title": "Reference-aligned Repository ECS Architecture Board layout",
+      "user_visible_behavior": "whiskend/audience-live-check Repository Analysis에서 ECS Fargate Container App을 선택하고 frontend 포함 질문에 예라고 답하면, 사용자가 승인한 Architecture Draft가 기준 Architecture Board와 동일한 통합 배치로 생성된다.",
+      "status": "passing",
+      "verification": [
+        "선택한 ECS Fargate Template의 작성 좌표와 크기를 그대로 보존한다.",
+        "CloudFront, S3, NAT, private subnet, ECR, CloudWatch, GitHub Actions와 Fargate runtime을 기준 Board 좌표에 배치한다.",
+        "Global IAM과 Definition / Ops만 실제 Group 컨테이너로 생성한다.",
+        "저장된 사용자의 수동 Board 위치는 복구 과정에서 다시 자동 배치하지 않는다.",
+        "Repository Analysis 공개 인터페이스에서 동일 입력이 동일한 DiagramJson을 만든다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern \"approved Repository ECS reference layout\" features/workspace/workspace-ai-diagram-adapter.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/workspace-draft-restore.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Chrome에서 기준 Board 배치와 Global IAM/Definition / Ops의 Area / Group 표현을 확인했다. 독립 standards/spec review는 최종 finding 없이 종료됐다."
+      },
+      "notes": "No cloud, GitHub, or deployment mutation is authorized by this layout-only workstream."
+    },
+    {
+      "id": "REPOSITORY-ANALYSIS-DRAFT-FLOW-001",
+      "priority": 1,
+      "area": "repository-analysis-draft",
+      "title": "Korean repository recommendations with required inline CI/CD connection",
+      "user_visible_behavior": "Repository Analysis 추천에서 GitHub CI/CD를 연결하면 분석한 Repository가 자동 연결되고, callback 확인 버튼이 배포 타깃과 GitOps 설정을 모두 저장한 뒤 재분석 없이 기존 상태로 돌아가 Architecture Board 생성을 계속한다.",
+      "status": "passing",
+      "verification": [
+        "AI와 deterministic 추천 후보가 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공한다.",
+        "추가 질문, 선택지, 이유가 한국어로 표시되고 알려진 구형 영문 질문도 한국어로 정규화된다.",
+        "CI/CD 인계 checkbox와 전역 설정 이동을 제거하고 같은 화면에서 분석 Repository에 고정된 GitHub App 설치를 시작한다.",
+        "CI/CD 연결 없이 확인하면 이동을 중단하고 확인 버튼 위에 작은 빨간 안내 문구를 표시한다.",
+        "GitHub callback은 Repository 재선택 없이 서명된 target만 자동 연결하며, 두 개별 저장 버튼 대신 하단 확인 버튼이 두 API를 순서대로 저장한 뒤 복귀한다.",
+        "Callback 완료 액션 바는 두 저장 결과를 설명하고 48px CTA, 저장 중 상태, 인라인 오류, 모바일 전체 너비를 제공한다.",
+        "nullable runtimeConfig와 잘못된 Repository URL은 TypeError 대신 제어된 배포 또는 Source Repository 오류로 차단한다.",
+        "30분짜리 일회성 browser resume state는 project와 active Repository가 일치할 때만 소비되며 API 재분석 없이 추천 상태를 복원한다.",
+        "어떤 추천 Template을 선택해도 callback 배포 타깃은 ECS Fargate이며 project slug, commit SHA, Dockerfile evidence로 필수 좌표를 채운다.",
+        "whiskend/audience-live-check의 명확한 컨테이너 근거는 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-15",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-app-state.test.ts src/source-repositories/github-target-connection.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-start-client.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
+          "pnpm --filter @sketchcatch/types exec tsx --test --test-name-pattern='ECS Fargate Board uses project-scoped runtime names' src/template-definitions.test.ts",
+          "live POST /api/ai/source-repository-analysis for https://github.com/whiskend/audience-live-check",
+          "authenticated in-app Browser verification of Repository Analysis recommendation and required inline CI/CD gate",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
+        ],
+        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
+      },
+      "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
+    },
+    {
+      "id": "DEPLOYMENT-OPTIMIZATION-CONTRACT-434",
+      "priority": 1,
+      "area": "deployment-optimization",
+      "title": "Provider-neutral deployment optimization contract and verified Terraform Plan reuse",
+      "user_visible_behavior": "사용자는 같은 배포 요구를 반복 검증할 때 검증된 pending Terraform Plan을 재사용하고, 실제 no-change Plan은 승인·hash·계정·region·drift 증거를 다시 확인한 뒤 불필요한 Terraform Apply를 생략한다.",
+      "status": "passing",
+      "verification": [
+        "모든 deployable ResourceDefinition은 provider-neutral desired-state 최적화 capability를 자동 상속하고 data source, UNKNOWN, catalog-only definition은 명시적으로 제외한다.",
+        "Terraform bundle, provider lock/identity, target account/region, state lineage/serial이 Plan identity를 구성하며 drift TTL 만료는 새 Plan을 강제한다.",
+        "실제 tfplan과 versioned S3 sidecar, Plan summary, Pre-Deployment 결과가 검증된 pending Plan만 재사용한다.",
+        "동일 Plan 요청은 single-flight로 합치고 cache 검증 실패는 정상 Plan으로 fallback한다.",
+        "실제 no-change Plan만 기존 승인과 hash/account/region/TTL gate를 통과한 뒤 Terraform Apply를 생략한다.",
+        "Plan, Apply, Destroy는 terraform -target 없이 기존 전체 그래프와 사용자 승인 경계를 유지한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-16",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/resource-definitions.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-optimization.test.ts src/deployments/deployment-plan-artifact-storage.test.ts src/deployments/deployment-plan-service.test.ts src/deployments/deployment-apply-service.test.ts src/deployments/terraform-runner.test.ts src/deployments/terraform-workspace.test.ts src/routes/deployments.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-approval-service.test.ts src/deployments/deployment-destroy-plan-service.test.ts src/deployments/deployment-destroy-service.test.ts",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm test",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused verification passed: ResourceDefinition 9/9, API/deployment/route 83/83, and existing approval/Destroy regressions 22/22. Harness, migration compatibility, lint, typecheck, and all five package builds passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template layout/parent contract failures in packages/types; this change does not modify those Template sources or tests."
+      },
+      "notes": "PR 1 implements only the IaC desired-state layer. PR 2 / issue #433 is tracked separately below; runtime no-op remains in issue #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "APPLICATION-ARTIFACT-REGISTRY-433",
+      "priority": 1,
+      "area": "application-artifact-reuse",
+      "title": "Provider-neutral ApplicationArtifact Registry shared by Direct and GitOps",
+      "user_visible_behavior": "사용자는 같은 Source Repository commit과 정규화된 build 계약으로 만든 application artifact가 사용자 provider storage에 그대로 존재하고 digest·계정·region·project ownership이 다시 검증되면 Direct Deployment와 Git/CI/CD에서 중복 build 없이 재사용한다.",
+      "status": "passing",
+      "verification": [
+        "container image, Lambda zip, CodeDeploy bundle, static bundle, Kubernetes manifest, Helm chart, machine image를 provider-neutral kind로 구분한다.",
+        "repository identity, commit SHA, normalized build config, build contract, target platform, secret-free build input만 canonical fingerprint에 포함하고 orchestrator/capacity 값은 제외한다.",
+        "RDS에는 identity와 provider metadata만 저장하고 실제 사용자 artifact byte는 사용자 ECR/S3 또는 provider storage에 유지한다.",
+        "재사용 전에 provider 존재, exact SHA-256 digest, account, region, namespace/reference, project ownership을 read-only로 검증하며 실패는 정상 build fallback으로 처리한다.",
+        "project-scoped unique claim, heartbeat lease, hashed claim token, composite release FK가 duplicate build와 cross-project reuse를 차단한다.",
+        "Direct와 GitOps release가 같은 registry를 사용하며 release evidence v1은 유지하고 strict v2 artifact extension을 검증한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-16",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/application-artifact-contract.test.ts src/project-release-ledger-contract.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/artifacts/application-artifact-identity.test.ts src/artifacts/application-artifact-registry.test.ts src/artifacts/application-artifact-schemas.test.ts src/artifacts/aws-application-artifact-verifier.test.ts src/db/schema-contract.test.ts src/deployments/direct-application-artifact-reuse.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-application-artifact-registrar.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-artifact.test.ts",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full",
+          "pnpm test:core",
+          "pnpm --filter @sketchcatch/api test",
+          "git diff --check"
+        ],
+        "notes": "Focused PR 2 contracts pass 59/59, including review regressions for malformed and delimiter-obfuscated build inputs, streamed S3 hashing, and failed lease renewal cleanup. Harness, migration compatibility, lint, typecheck, and all five package builds pass. The API suite passes 666/669; the three remaining failures are pre-existing Windows EPERM failures while the tests attempt to create symlinks. test:core separately stops on the three pre-existing three-tier Template scope/position/parent assertions before the API package runs. A transient notification SSE bad-port failure was traced to this host's Windows dynamic port range 1024-15000 overlapping Fetch-blocked ports; the isolated test and the second full API run passed it."
+      },
+      "notes": "Migration 0045 is used because another branch reserved 0044; _journal.json changes with the new entry. The lockfile changes only for the existing-version @aws-sdk/client-ecr dependency. Generated workflows remain valid v1 producers while strict v2 consumers are available. No real credential, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff was executed. PR 3 / issue #435 was not started."
+    },
+    {
+      "id": "RUNTIME-CONVERGENCE-435",
+      "priority": 1,
+      "area": "runtime-convergence",
+      "title": "Provider-verified runtime convergence and no-op deployment",
+      "user_visible_behavior": "사용자는 같은 ApplicationArtifact와 같은 runtime configuration이 실제 provider에서 healthy 상태로 실행 중일 때만 Direct 또는 Git/CI/CD rollout을 생략하고, 조회 실패·불일치·unhealthy 상태에서는 기존 안전한 rollout을 수행한다.",
+      "status": "passing",
+      "verification": [
+        "artifactFingerprint와 project/account/region-scoped deploymentTargetFingerprint를 분리하고 orchestrator, compute, capacity, rollout, health를 독립 모델로 유지한다.",
+        "ECS/Fargate, ECS/EC2 Capacity Provider, 단일 EC2, EC2/ASG, EKS 3종, Kubernetes Deployment, Lambda Alias, Static S3/CloudFront의 10개 adapter를 distinct discriminated union과 registry로 고정한다.",
+        "provider current target, artifact fingerprint와 digest/reference, healthy evidence를 모두 검증한 경우에만 already_active를 반환하고 검증 불가나 mismatch는 rollout fallback으로 처리한다.",
+        "기존 ecs_fargate, lambda, ec2_asg, static_site row와 evidence v1/v2를 계속 읽되 canonical/legacy 좌표 불일치와 stale fingerprint는 provider 접근 전에 거부한다.",
+        "Direct ECS inspector와 GitOps ECS/Lambda/EC2 ASG/Static preflight가 read-only provider evidence를 사용하고 rollback, cleanup, retention 및 기존 Approval/Plan/state gate를 유지한다.",
+        "모든 deployable ResourceDefinition이 runtime convergence 적용 여부를 명시하고 지원 adapter 10종이 누락 없이 coverage test에 고정된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/runtime-convergence.test.ts src/resource-runtime-convergence-coverage.test.ts src/resource-definitions.test.ts src/project-release-ledger-contract.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/runtime-convergence/runtime-convergence-contract.test.ts src/runtime-convergence/runtime-convergence-service.test.ts src/deployments/public-https-health-probe.test.ts src/deployments/aws-direct-runtime-inspector.test.ts src/deployments/direct-runtime-convergence.test.ts src/git-cicd/git-cicd-runtime-convergence-workflows.test.ts src/git-cicd/gitops-runtime-convergence.test.ts src/git-cicd/git-cicd-handoff-runtime-config.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-runtime-target.test.ts src/db/schema-contract.test.ts",
+          "createGitCicdAutomationFiles generated workflow syntax validation: Git Bash bash -n (45 scripts) and Python compile (10 heredocs)",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm test",
+          "pnpm --filter @sketchcatch/api test",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused runtime/resource/API coverage passes 79/79, including provider/account/region, pre-provider target, ECS capacity/status, Lambda health, rollback, handoff consistency, malformed URL, and provider revision metadata regressions. Generated Bash/Python syntax passes 45/10. Harness, migration compatibility, lint, typecheck, build, and diff checks pass. Root pnpm test remains non-green only on the same three pre-existing three-tier Template assertions (types 40/43); the full API suite passes 710/713 with only the three pre-existing Windows symlink EPERM setup failures."
+      },
+      "notes": "Migration 0046_runtime_convergence.sql and apps/api/drizzle/meta/_journal.json are changed after merged migration 0045. No secret, real credential, live AWS/cloud mutation, Terraform apply/destroy, user artifact upload, or Git handoff was executed."
     }
   ]
 }

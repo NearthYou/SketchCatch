@@ -5,9 +5,21 @@ import type {
   GitCicdPipelineDetailStatus,
   GitHubRepositoryCandidate
 } from "@sketchcatch/types";
+import {
+  isIgnoredRepositoryEvidencePath,
+  isRepositoryEvidenceContentPath
+} from "./repository-evidence-path.js";
+import { maskDeploymentMessage } from "../deployments/log-masking.js";
 
 const githubApiBaseUrl = "https://api.github.com";
 const githubJwtTtlSeconds = 9 * 60;
+const githubRequestTimeoutMs = 15_000;
+const maxRepositoryTreeEntries = 20_000;
+const maxRepositoryEvidenceFiles = 64;
+const maxRepositoryEvidenceFileBytes = 256 * 1024;
+const maxRepositoryEvidenceTotalBytes = 2 * 1024 * 1024;
+const githubActionsRunPageSize = 100;
+export const maxGitHubActionsRunPages = 2;
 
 export type GitHubAppClientOptions = {
   appId: string;
@@ -53,6 +65,55 @@ export type GitHubRepositorySettingsResult = {
   variables: string[];
 };
 
+export type GitHubRepositoryRefInput = {
+  installationId: string;
+  owner: string;
+  name: string;
+  branch: string;
+};
+
+export type GitHubRepositoryInput = Omit<GitHubRepositoryRefInput, "branch">;
+
+export type GitHubWorkflowRunReadInput = GitHubRepositoryRefInput & {
+  commitSha?: string;
+};
+
+export type GitHubWorkflowRunSummary = {
+  id: number;
+  runAttempt: number;
+  event: string;
+  updatedAt: string | null;
+  createdAt: string | null;
+  commitSha: string;
+  commitMessage: string;
+  branch: string;
+  workflowName: string;
+  runUrl: string;
+  status: string;
+  conclusion: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type GitHubWorkflowJobSummary = {
+  id: number;
+  name: string;
+  runUrl: string;
+  status: string;
+  conclusion: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  steps: GitHubWorkflowStepSummary[];
+};
+
+export type GitHubWorkflowStepSummary = {
+  name: string;
+  status: string;
+  conclusion: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
 export type GitHubActionsPipelineStatus = {
   status: GitCicdHandoffStatus;
   pipelineRunUrl: string | null;
@@ -68,19 +129,112 @@ export type GitHubActionsPipelineStatus = {
 
 export type GitHubAppInstallation = {
   installationId: string;
+  accountId: string;
   accountLogin: string;
   accountType: string | null;
   repositorySelection: "all" | "selected" | null;
   htmlUrl: string | null;
 };
 
+export type GitHubReadRepositoryEvidenceInput = {
+  readonly installationId: string;
+  readonly expectedRepositoryId: string;
+  readonly owner: string;
+  readonly name: string;
+};
+
+export type GitHubRepositoryEvidenceFile = {
+  readonly path: string;
+  readonly content: string;
+};
+
+export type GitHubRepositoryEvidenceSnapshot = {
+  readonly revision: string;
+  readonly treePaths: readonly string[];
+  readonly files: readonly GitHubRepositoryEvidenceFile[];
+};
+
+export type GitHubRepositoryEvidenceReader = {
+  readRepositoryEvidence(
+    input: GitHubReadRepositoryEvidenceInput
+  ): Promise<GitHubRepositoryEvidenceSnapshot>;
+};
+
+export class GitHubApiRequestError extends Error {
+  readonly name = "GitHubApiRequestError";
+
+  // GitHub 오류 상태를 route 계층이 기존 방식으로 매핑할 수 있게 보존한다.
+  constructor(
+    readonly statusCode: number,
+    readonly responseBody: string
+  ) {
+    super(`GitHub API request failed: ${statusCode}`);
+  }
+}
+
+export class GitHubRepositoryTreeTruncatedError extends Error {
+  readonly name = "GitHubRepositoryTreeTruncatedError";
+
+  // 일부 tree만으로 잘못된 Template을 고르지 않도록 분석을 중단한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_TREE_TRUNCATED");
+  }
+}
+
+export class GitHubRepositoryFileEncodingError extends Error {
+  readonly name = "GitHubRepositoryFileEncodingError";
+
+  // 해석할 수 없는 파일을 근거로 쓰지 않도록 문제 경로를 함께 남긴다.
+  constructor(readonly path: string) {
+    super("GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED");
+  }
+}
+
+export class GitHubRepositoryArchivedError extends Error {
+  readonly name = "GitHubRepositoryArchivedError";
+
+  // 연결 뒤 archived로 바뀐 Repository를 현재 분석에서 차단한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_ARCHIVED");
+  }
+}
+
+export class GitHubRepositoryIdentityMismatchError extends Error {
+  readonly name = "GitHubRepositoryIdentityMismatchError";
+
+  // 같은 owner/name 경로가 다른 Repository로 재사용된 경우 연결된 대상을 보호한다.
+  constructor() {
+    super("GIT_APP_REPOSITORY_IDENTITY_MISMATCH");
+  }
+}
+
+export class GitHubRepositoryEvidenceLimitError extends Error {
+  readonly name = "GitHubRepositoryEvidenceLimitError";
+
+  // 분석 상한 초과 원인을 보존해 호출 수와 메모리 고갈을 구분한다.
+  constructor(
+    readonly reason: "tree_entries" | "file_count" | "file_size" | "total_size",
+    readonly limit: number,
+    readonly actual: number,
+    readonly path: string | null = null
+  ) {
+    super("GIT_APP_REPOSITORY_EVIDENCE_LIMIT_EXCEEDED");
+  }
+}
+
 export type GitHubAppClient = {
   listInstallations(): Promise<GitHubAppInstallation[]>;
   listInstallationRepositories(installationId: string): Promise<GitHubRepositoryCandidate[]>;
-  createPullRequest(input: GitHubAppCreatePullRequestInput): Promise<GitHubAppCreatePullRequestResult>;
+  createPullRequest(
+    input: GitHubAppCreatePullRequestInput
+  ): Promise<GitHubAppCreatePullRequestResult>;
   applyRepositorySettings(
     input: GitHubRepositorySettingsInput
   ): Promise<GitHubRepositorySettingsResult>;
+  validateRepositoryBranch(input: GitHubRepositoryRefInput): Promise<boolean>;
+  validateRepositoryDirectory(
+    input: GitHubRepositoryRefInput & { path: string }
+  ): Promise<"directory" | "file" | "missing">;
   getLatestWorkflowRunForHeadSha(input: {
     installationId: string;
     owner: string;
@@ -122,6 +276,7 @@ type GitHubInstallationApiResponse = {
   readonly repository_selection?: unknown;
   readonly html_url?: unknown;
   readonly account?: {
+    readonly id?: unknown;
     readonly login?: unknown;
     readonly type?: unknown;
   };
@@ -135,6 +290,15 @@ type GitHubRefResponse = {
 
 type GitHubTreeResponse = {
   readonly sha?: unknown;
+};
+
+type GitHubRecursiveTreeResponse = {
+  readonly sha?: unknown;
+  readonly truncated?: unknown;
+  readonly tree?: Array<{
+    readonly path?: unknown;
+    readonly type?: unknown;
+  }>;
 };
 
 type GitHubCommitResponse = {
@@ -172,15 +336,54 @@ type GitHubWorkflowRunsResponse = {
 };
 
 type GitHubWorkflowRunApiResponse = {
+  readonly id?: unknown;
+  readonly run_attempt?: unknown;
+  readonly event?: unknown;
+  readonly head_sha?: unknown;
+  readonly head_branch?: unknown;
   readonly html_url?: unknown;
   readonly name?: unknown;
   readonly status?: unknown;
   readonly conclusion?: unknown;
   readonly created_at?: unknown;
+  readonly run_started_at?: unknown;
   readonly updated_at?: unknown;
+  readonly head_commit?: { readonly message?: unknown };
 };
 
-export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAppClient {
+export type GitHubActionsReadClient = {
+  listBranchWorkflowRuns(input: GitHubWorkflowRunReadInput): Promise<GitHubWorkflowRunSummary[]>;
+  listCommitFiles(input: GitHubRepositoryRefInput & { commitSha: string }): Promise<string[]>;
+  listWorkflowJobs(
+    input: GitHubRepositoryInput & { runId: number }
+  ): Promise<GitHubWorkflowJobSummary[]>;
+  readWorkflowJobLog(input: GitHubRepositoryInput & { jobId: number }): Promise<string>;
+};
+
+type GitHubCommitFilesResponse = { readonly files?: Array<{ readonly filename?: unknown }> };
+type GitHubWorkflowJobsResponse = { readonly jobs?: GitHubWorkflowJobApiResponse[] };
+type GitHubWorkflowJobApiResponse = {
+  readonly id?: unknown;
+  readonly name?: unknown;
+  readonly html_url?: unknown;
+  readonly status?: unknown;
+  readonly conclusion?: unknown;
+  readonly started_at?: unknown;
+  readonly completed_at?: unknown;
+  readonly steps?: GitHubWorkflowStepApiResponse[];
+};
+type GitHubWorkflowStepApiResponse = {
+  readonly name?: unknown;
+  readonly status?: unknown;
+  readonly conclusion?: unknown;
+  readonly started_at?: unknown;
+  readonly completed_at?: unknown;
+};
+
+// GitHub App 인증을 재사용해 repository 연결과 정적 evidence 조회 기능을 제공한다.
+export function createGitHubAppClient(
+  options: GitHubAppClientOptions
+): GitHubAppClient & GitHubRepositoryEvidenceReader & GitHubActionsReadClient {
   const fetchImpl = options.fetch ?? fetch;
   const now = options.now ?? (() => new Date());
   const keyPromise = importPKCS8(toPkcs8PrivateKey(options.privateKey), "RS256");
@@ -228,6 +431,101 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
   }
 
   return {
+    async listBranchWorkflowRuns(input) {
+      const runs: GitHubWorkflowRunSummary[] = [];
+      for (let page = 1; page <= maxGitHubActionsRunPages; page += 1) {
+        const params = new URLSearchParams({
+          branch: input.branch,
+          per_page: String(githubActionsRunPageSize),
+          page: String(page)
+        });
+        if (input.commitSha) params.set("head_sha", input.commitSha);
+        const response = await requestWithInstallationToken<GitHubWorkflowRunsResponse>(
+          input.installationId,
+          createRepositoryPath(input, `/actions/runs?${params.toString()}`)
+        );
+        const pageRuns = response.workflow_runs ?? [];
+        runs.push(...pageRuns.map(toWorkflowRunSummary));
+        if (pageRuns.length < githubActionsRunPageSize) break;
+      }
+      return runs;
+    },
+
+    async listCommitFiles(input) {
+      const files: string[] = [];
+      for (let page = 1; ; page += 1) {
+        const response = await requestWithInstallationToken<GitHubCommitFilesResponse>(
+          input.installationId,
+          createRepositoryPath(
+            input,
+            `/commits/${encodeURIComponent(input.commitSha)}?per_page=100&page=${page}`
+          )
+        );
+        const pageFiles = response.files ?? [];
+        files.push(
+          ...pageFiles.flatMap((file) =>
+            typeof file.filename === "string" && file.filename ? [file.filename] : []
+          )
+        );
+        if (pageFiles.length < 100) break;
+      }
+      return files;
+    },
+
+    async listWorkflowJobs(input) {
+      const jobs: GitHubWorkflowJobSummary[] = [];
+      for (let page = 1; ; page += 1) {
+        const response = await requestWithInstallationToken<GitHubWorkflowJobsResponse>(
+          input.installationId,
+          createRepositoryPath(input, `/actions/runs/${input.runId}/jobs?per_page=100&page=${page}`)
+        );
+        const pageJobs = response.jobs ?? [];
+        jobs.push(...pageJobs.map(toWorkflowJobSummary));
+        if (pageJobs.length < 100) break;
+      }
+      return jobs;
+    },
+
+    async readWorkflowJobLog(input) {
+      const text = await requestGitHubText(
+        fetchImpl,
+        createRepositoryPath(input, `/actions/jobs/${input.jobId}/logs`),
+        await createInstallationToken(input.installationId)
+      );
+      return maskDeploymentMessage(text);
+    },
+
+    async validateRepositoryBranch(input) {
+      try {
+        await requestWithInstallationToken<Record<string, unknown>>(
+          input.installationId,
+          createRepositoryPath(input, `/git/ref/heads/${encodeURIComponent(input.branch)}`)
+        );
+        return true;
+      } catch (error) {
+        if (isHttpStatus(error, 404)) {
+          return false;
+        }
+        throw error;
+      }
+    },
+
+    async validateRepositoryDirectory(input) {
+      const suffix = input.path === "." ? "/contents" : `/contents/${encodePath(input.path)}`;
+      try {
+        const contents = await requestWithInstallationToken<unknown>(
+          input.installationId,
+          `${createRepositoryPath(input, suffix)}?ref=${encodeURIComponent(input.branch)}`
+        );
+        return Array.isArray(contents) ? "directory" : "file";
+      } catch (error) {
+        if (isHttpStatus(error, 404)) {
+          return "missing";
+        }
+        throw error;
+      }
+    },
+
     async listInstallations() {
       const installations: GitHubAppInstallation[] = [];
 
@@ -273,11 +571,116 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
       return repositories.sort((left, right) => left.fullName.localeCompare(right.fullName));
     },
 
-    async createPullRequest(input) {
-      const targetSha = await getOrCreateTargetBranchSha(
-        input,
-        requestWithInstallationToken
+    // branch를 commit SHA로 고정한 뒤 tree와 허용된 텍스트 설정 파일만 읽는다.
+    async readRepositoryEvidence(input) {
+      const installationToken = await createInstallationToken(input.installationId);
+
+      // 한 분석 안에서는 installation token을 재사용해 GitHub rate budget을 보호한다.
+      const requestWithEvidenceToken = <T>(
+        _installationId: string,
+        path: string,
+        init: Omit<GitHubRequestInit, "token" | "authScheme"> = {}
+      ): Promise<T> =>
+        requestGitHub<T>(fetchImpl, path, {
+          ...init,
+          token: installationToken,
+          authScheme: "token"
+        });
+      const repository = await requestWithEvidenceToken<GitHubRepositoryApiResponse>(
+        input.installationId,
+        createRepositoryPath(input, "")
       );
+      const repositoryId = String(readRequiredNumber(repository.id, "repository id"));
+
+      if (repositoryId !== input.expectedRepositoryId) {
+        throw new GitHubRepositoryIdentityMismatchError();
+      }
+
+      if (repository.archived === true) {
+        throw new GitHubRepositoryArchivedError();
+      }
+
+      const defaultBranch = readRequiredString(
+        repository.default_branch,
+        "repository default branch"
+      );
+      const commit = await requestWithEvidenceToken<GitHubCommitResponse>(
+        input.installationId,
+        createRepositoryPath(input, `/commits/${encodeURIComponent(defaultBranch)}`)
+      );
+      const revision = readRequiredString(commit.sha, "repository commit sha");
+      const tree = await requestWithEvidenceToken<GitHubRecursiveTreeResponse>(
+        input.installationId,
+        createRepositoryPath(input, `/git/trees/${encodeURIComponent(revision)}?recursive=1`)
+      );
+
+      if (tree.truncated === true) {
+        throw new GitHubRepositoryTreeTruncatedError();
+      }
+
+      const treePaths = readRepositoryTreePaths(tree);
+
+      if (treePaths.length > maxRepositoryTreeEntries) {
+        throw new GitHubRepositoryEvidenceLimitError(
+          "tree_entries",
+          maxRepositoryTreeEntries,
+          treePaths.length
+        );
+      }
+
+      const evidencePaths = treePaths.filter(
+        (path) => !isIgnoredRepositoryEvidencePath(path) && isRepositoryEvidenceContentPath(path)
+      );
+
+      if (evidencePaths.length > maxRepositoryEvidenceFiles) {
+        throw new GitHubRepositoryEvidenceLimitError(
+          "file_count",
+          maxRepositoryEvidenceFiles,
+          evidencePaths.length
+        );
+      }
+
+      const files: GitHubRepositoryEvidenceFile[] = [];
+      let totalBytes = 0;
+
+      for (const path of evidencePaths) {
+        const contents = await getRepositoryContent(
+          input,
+          path,
+          revision,
+          requestWithEvidenceToken
+        );
+
+        if (contents) {
+          const decoded = decodeRepositoryEvidenceFile(path, contents);
+
+          totalBytes += decoded.byteLength;
+
+          if (totalBytes > maxRepositoryEvidenceTotalBytes) {
+            throw new GitHubRepositoryEvidenceLimitError(
+              "total_size",
+              maxRepositoryEvidenceTotalBytes,
+              totalBytes,
+              path
+            );
+          }
+
+          files.push({
+            path,
+            content: decoded.content
+          });
+        }
+      }
+
+      return {
+        revision,
+        treePaths,
+        files
+      };
+    },
+
+    async createPullRequest(input) {
+      const targetSha = await getOrCreateTargetBranchSha(input, requestWithInstallationToken);
 
       await createSourceBranchIfNeeded(input, targetSha, requestWithInstallationToken);
 
@@ -370,7 +773,10 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
     async getLatestWorkflowRunForHeadSha(input) {
       const response = await requestWithInstallationToken<GitHubWorkflowRunsResponse>(
         input.installationId,
-        createRepositoryPath(input, `/actions/runs?per_page=10&head_sha=${encodeURIComponent(input.headSha)}`)
+        createRepositoryPath(
+          input,
+          `/actions/runs?per_page=10&head_sha=${encodeURIComponent(input.headSha)}`
+        )
       );
       const [latestRun] = [...(response.workflow_runs ?? [])].sort(compareWorkflowRunsDesc);
 
@@ -456,6 +862,49 @@ export function createGitHubAppClient(options: GitHubAppClientOptions): GitHubAp
   };
 }
 
+function toWorkflowRunSummary(run: GitHubWorkflowRunApiResponse): GitHubWorkflowRunSummary {
+  const status = readRequiredString(run.status, "workflow run status");
+  return {
+    id: readRequiredNumber(run.id, "workflow run id"),
+    runAttempt: readOptionalNumber(run.run_attempt) ?? 1,
+    event: readRequiredString(run.event, "workflow run event"),
+    updatedAt: readDateString(run.updated_at),
+    createdAt: readDateString(run.created_at),
+    commitSha: readRequiredString(run.head_sha, "workflow run commit sha"),
+    commitMessage: readRequiredString(run.head_commit?.message, "workflow run commit message"),
+    branch: readRequiredString(run.head_branch, "workflow run branch"),
+    workflowName: readRequiredString(run.name, "workflow run name"),
+    runUrl: readRequiredString(run.html_url, "workflow run url"),
+    status,
+    conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
+    startedAt: readDateString(run.run_started_at) ?? readDateString(run.created_at),
+    finishedAt: status === "completed" ? readDateString(run.updated_at) : null
+  };
+}
+
+function toWorkflowJobSummary(job: GitHubWorkflowJobApiResponse): GitHubWorkflowJobSummary {
+  return {
+    id: readRequiredNumber(job.id, "workflow job id"),
+    name: readRequiredString(job.name, "workflow job name"),
+    runUrl: readRequiredString(job.html_url, "workflow job url"),
+    status: readRequiredString(job.status, "workflow job status"),
+    conclusion: typeof job.conclusion === "string" ? job.conclusion : null,
+    startedAt: readDateString(job.started_at),
+    finishedAt: readDateString(job.completed_at),
+    steps: (job.steps ?? []).map(toWorkflowStepSummary)
+  };
+}
+
+function toWorkflowStepSummary(step: GitHubWorkflowStepApiResponse): GitHubWorkflowStepSummary {
+  return {
+    name: readRequiredString(step.name, "workflow step name"),
+    status: readRequiredString(step.status, "workflow step status"),
+    conclusion: typeof step.conclusion === "string" ? step.conclusion : null,
+    startedAt: readDateString(step.started_at),
+    finishedAt: readDateString(step.completed_at)
+  };
+}
+
 function toPkcs8PrivateKey(privateKey: string): string {
   const key = createPrivateKey(privateKey);
   const exported = key.export({
@@ -477,6 +926,7 @@ type GitHubRequestInit = {
   body?: Record<string, unknown>;
 };
 
+// GitHub HTTP 실패를 상태 코드가 있는 typed error로 통일한다.
 async function requestGitHub<T>(
   fetchImpl: typeof fetch,
   path: string,
@@ -484,6 +934,7 @@ async function requestGitHub<T>(
 ): Promise<T> {
   const requestInit: RequestInit = {
     method: init.method ?? "GET",
+    signal: AbortSignal.timeout(githubRequestTimeoutMs),
     headers: {
       Accept: "application/vnd.github+json",
       "Content-Type": "application/json",
@@ -502,14 +953,7 @@ async function requestGitHub<T>(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    const error = new Error(`GitHub API request failed: ${response.status}`) as Error & {
-      statusCode?: number;
-      responseBody?: string;
-    };
-
-    error.statusCode = response.status;
-    error.responseBody = body.slice(0, 500);
-    throw error;
+    throw new GitHubApiRequestError(response.status, body.slice(0, 500));
   }
 
   if (response.status === 204) {
@@ -519,6 +963,62 @@ async function requestGitHub<T>(
   return response.json() as Promise<T>;
 }
 
+async function requestGitHubText(
+  fetchImpl: typeof fetch,
+  path: string,
+  token: string
+): Promise<string> {
+  const response = await fetchImpl(`${githubApiBaseUrl}${path}`, {
+    method: "GET",
+    signal: AbortSignal.timeout(githubRequestTimeoutMs),
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `token ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new GitHubApiRequestError(response.status, body.slice(0, 500));
+  }
+  return response.text();
+}
+
+// recursive tree에서 실제 파일 경로만 골라 항상 같은 순서로 반환한다.
+function readRepositoryTreePaths(tree: GitHubRecursiveTreeResponse): string[] {
+  return (tree.tree ?? [])
+    .flatMap((entry) =>
+      entry.type === "blob" && typeof entry.path === "string" && entry.path ? [entry.path] : []
+    )
+    .sort();
+}
+
+// GitHub content API의 base64 텍스트만 UTF-8 evidence로 변환한다.
+function decodeRepositoryEvidenceFile(
+  path: string,
+  contents: GitHubContentsResponse
+): { content: string; byteLength: number } {
+  if (contents.encoding !== "base64" || typeof contents.content !== "string") {
+    throw new GitHubRepositoryFileEncodingError(path);
+  }
+
+  const contentBuffer = Buffer.from(contents.content.replace(/\s/g, ""), "base64");
+
+  if (contentBuffer.byteLength > maxRepositoryEvidenceFileBytes) {
+    throw new GitHubRepositoryEvidenceLimitError(
+      "file_size",
+      maxRepositoryEvidenceFileBytes,
+      contentBuffer.byteLength,
+      path
+    );
+  }
+
+  return {
+    content: contentBuffer.toString("utf8"),
+    byteLength: contentBuffer.byteLength
+  };
+}
+
 function toGitHubAppInstallation(
   installation: GitHubInstallationApiResponse
 ): GitHubAppInstallation {
@@ -526,6 +1026,7 @@ function toGitHubAppInstallation(
 
   return {
     installationId: String(readRequiredNumber(installation.id, "installation id")),
+    accountId: String(readRequiredNumber(installation.account?.id, "installation account id")),
     accountLogin: readRequiredString(installation.account?.login, "installation account login"),
     accountType:
       typeof installation.account?.type === "string" && installation.account.type
@@ -776,15 +1277,18 @@ function compareWorkflowRunsDesc(
   left: GitHubWorkflowRunApiResponse,
   right: GitHubWorkflowRunApiResponse
 ): number {
-  const leftTime = Date.parse(readDateString(left.updated_at) ?? readDateString(left.created_at) ?? "");
-  const rightTime = Date.parse(readDateString(right.updated_at) ?? readDateString(right.created_at) ?? "");
+  const leftTime = Date.parse(
+    readDateString(left.updated_at) ?? readDateString(left.created_at) ?? ""
+  );
+  const rightTime = Date.parse(
+    readDateString(right.updated_at) ?? readDateString(right.created_at) ?? ""
+  );
 
   return (Number.isNaN(rightTime) ? 0 : rightTime) - (Number.isNaN(leftTime) ? 0 : leftTime);
 }
 
 function mapWorkflowRunStatus(run: GitHubWorkflowRunApiResponse): GitHubActionsPipelineStatus {
-  const pipelineRunUrl =
-    typeof run.html_url === "string" && run.html_url ? run.html_url : null;
+  const pipelineRunUrl = typeof run.html_url === "string" && run.html_url ? run.html_url : null;
   const status = typeof run.status === "string" ? run.status : "";
   const conclusion = typeof run.conclusion === "string" ? run.conclusion : "";
 
@@ -829,9 +1333,7 @@ function findLatestWorkflowRunByName(
   runs: readonly GitHubWorkflowRunApiResponse[],
   name: string
 ): GitHubWorkflowRunApiResponse | undefined {
-  return [...runs]
-    .filter((run) => run.name === name)
-    .sort(compareWorkflowRunsDesc)[0];
+  return [...runs].filter((run) => run.name === name).sort(compareWorkflowRunsDesc)[0];
 }
 
 function mapWorkflowRunDetailStatus(
@@ -925,6 +1427,10 @@ function readRequiredNumber(value: unknown, label: string): number {
   }
 
   return value;
+}
+
+function readOptionalNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function readDateString(value: unknown): string | null {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiagramJson } from "../../../../packages/types/src";
+import type { DiagramJson, TerraformSyncFileInput } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
 import { DiagramEditor, type DiagramPreviewAnnotations } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
@@ -18,14 +18,17 @@ import {
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
+import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type {
-  TerraformIssueAiRequest,
-  TerraformPreviewAiRequest,
+  WorkspaceAiContextInteraction,
+  WorkspaceTerraformAiContext,
   TerraformSafeFixApplyRequest,
   TerraformSafeFixApplyResult
 } from "./workspace-terraform-ai";
+import { EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT } from "./workspace-terraform-ai";
 import styles from "./workspace.module.css";
 
 const LOCAL_PROJECT_ID = "local-sketchcatch-project";
@@ -72,15 +75,23 @@ export function WorkspaceDraftManager({
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [terraformIssueAiRequest, setTerraformIssueAiRequest] =
-    useState<TerraformIssueAiRequest | null>(null);
-  const [terraformPreviewAiRequest, setTerraformPreviewAiRequest] =
-    useState<TerraformPreviewAiRequest | null>(null);
+  const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
+    EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT
+  );
+  const [selectedTerraformIssueKey, setSelectedTerraformIssueKey] = useState<string | null>(null);
+  const [terraformAiInteraction, setTerraformAiInteraction] =
+    useState<WorkspaceAiContextInteraction | null>(null);
   const [terraformSafeFixApplyRequest, setTerraformSafeFixApplyRequest] =
     useState<TerraformSafeFixApplyRequest | null>(null);
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
     useState<TerraformSafeFixApplyResult | null>(null);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
+  const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>([]);
+  const [initialTerraformFiles, setInitialTerraformFiles] = useState<TerraformSyncFileInput[]>([]);
+  const [terraformFilesReplacement, setTerraformFilesReplacement] =
+    useState<TerraformFilesReplacementRequest | null>(null);
+  const terraformFilesReplacementIdRef = useRef(0);
+  const terraformAiInteractionIdRef = useRef(0);
   const localDraftRef = useRef<LocalProjectDraft | null>(null);
   const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUnsavedChangesRef = useRef(false);
@@ -109,6 +120,7 @@ export function WorkspaceDraftManager({
       workspaceId,
       projectId: LOCAL_PROJECT_ID,
       diagramJson: latestDiagramRef.current,
+      terraformFiles: latestTerraformFilesRef.current,
       previousDraft: localDraftRef.current,
       savedAt: new Date().toISOString()
     });
@@ -149,11 +161,13 @@ export function WorkspaceDraftManager({
 
           const nextDiagram = cloneDiagram(initialDiagramOverride);
           latestDiagramRef.current = nextDiagram;
+          latestTerraformFilesRef.current = [];
           hasUnsavedChangesRef.current = false;
           draftChangeVersionRef.current = 0;
           setWorkspaceId(nextWorkspaceId);
           setProjectName(nextProjectName);
           setInitialDiagram(nextDiagram);
+          setInitialTerraformFiles([]);
           setCurrentLocalDraft(null);
           setSaveState("idle");
           setLoadState("ready");
@@ -162,7 +176,8 @@ export function WorkspaceDraftManager({
 
         const metadata = await readWorkspaceClientMetadata();
         const nextWorkspaceId = metadata?.workspaceId ?? createWorkspaceId();
-        const nextProjectName = initialProjectName ?? normalizeProjectName(metadata?.activeProjectName);
+        const nextProjectName =
+          initialProjectName ?? normalizeProjectName(metadata?.activeProjectName);
         const nextCloudPlatform = isWorkspaceCloudPlatform(metadata?.cloudPlatform)
           ? metadata.cloudPlatform
           : "aws";
@@ -183,11 +198,13 @@ export function WorkspaceDraftManager({
 
         const nextDiagram = restoreSavedDiagram(storedLocalDraft?.diagramJson, EMPTY_DIAGRAM);
         latestDiagramRef.current = nextDiagram;
+        latestTerraformFilesRef.current = storedLocalDraft?.terraformFiles ?? [];
         hasUnsavedChangesRef.current = false;
         draftChangeVersionRef.current = 0;
         setWorkspaceId(nextWorkspaceId);
         setProjectName(nextProjectName);
         setInitialDiagram(nextDiagram);
+        setInitialTerraformFiles(storedLocalDraft?.terraformFiles ?? []);
         setCurrentLocalDraft(storedLocalDraft);
         setSaveState(storedLocalDraft ? "local-saved" : "idle");
         setLoadState("ready");
@@ -238,11 +255,71 @@ export function WorkspaceDraftManager({
     [clearLocalSaveTimer, persistLocalDraftNow, workspaceId]
   );
 
-  const requestTerraformSafeFixApply = useCallback((
-    request: TerraformSafeFixApplyRequest
-  ): void => {
-    setTerraformSafeFixApplyRequest(request);
+  const handleTerraformFilesChange = useCallback(
+    (files: readonly TerraformSyncFileInput[]): void => {
+      if (!workspaceId) return;
+
+      latestTerraformFilesRef.current = files.map((file) => ({ ...file }));
+      setInitialTerraformFiles(files.map((file) => ({ ...file })));
+      draftChangeVersionRef.current += 1;
+      hasUnsavedChangesRef.current = true;
+      setSaveState("local-pending");
+      clearLocalSaveTimer();
+      localSaveTimerRef.current = setTimeout(() => {
+        void persistLocalDraftNow().catch(() => setSaveState("failed"));
+      }, LOCAL_SAVE_DEBOUNCE_MS);
+    },
+    [clearLocalSaveTimer, persistLocalDraftNow, workspaceId]
+  );
+
+  const handleTemplateWorkspaceApply = useCallback(
+    ({
+      diagramJson,
+      terraformFiles
+    }: {
+      readonly diagramJson: DiagramJson;
+      readonly terraformFiles: readonly TerraformSyncFileInput[];
+    }): void => {
+      const files = terraformFiles.map((file) => ({ ...file }));
+      latestDiagramRef.current = diagramJson;
+      handleTerraformFilesChange(files);
+      terraformFilesReplacementIdRef.current += 1;
+      setTerraformFilesReplacement({
+        diagramFingerprint: toTerraformRefreshFingerprint(diagramJson),
+        files,
+        id: terraformFilesReplacementIdRef.current
+      });
+    },
+    [handleTerraformFilesChange]
+  );
+
+  const handleTerraformFilesReplacementApplied = useCallback((replacementId: number): void => {
+    setTerraformFilesReplacement((currentReplacement) =>
+      currentReplacement?.id === replacementId ? null : currentReplacement
+    );
   }, []);
+
+  const requestTerraformSafeFixApply = useCallback(
+    (request: TerraformSafeFixApplyRequest): void => {
+      setTerraformSafeFixApplyRequest(request);
+    },
+    []
+  );
+
+  const notifyTerraformAiInteraction = useCallback(
+    (
+      scope: WorkspaceAiContextInteraction["scope"],
+      diagnosticKey?: string | undefined
+    ): void => {
+      terraformAiInteractionIdRef.current += 1;
+      setTerraformAiInteraction({
+        ...(diagnosticKey ? { diagnosticKey } : {}),
+        id: terraformAiInteractionIdRef.current,
+        scope
+      });
+    },
+    []
+  );
 
   if (loadState === "loading") {
     return <WorkspaceNotice title="Workspace loading" body="로컬 저장 정보를 불러오는 중입니다." />;
@@ -263,9 +340,11 @@ export function WorkspaceDraftManager({
         <WorkspaceAiChatDock
           context={context}
           onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+          onSelectTerraformIssue={setSelectedTerraformIssueKey}
           projectId={LOCAL_PROJECT_ID}
-          terraformIssueRequest={terraformIssueAiRequest}
-          terraformPreviewRequest={terraformPreviewAiRequest}
+          selectedTerraformIssueKey={selectedTerraformIssueKey}
+          terraformAiContext={terraformAiContext}
+          terraformAiInteraction={terraformAiInteraction}
           terraformSafeFixApplyResult={terraformSafeFixApplyResult}
         />
       )}
@@ -278,17 +357,25 @@ export function WorkspaceDraftManager({
       initialSelectedNodeIds={initialSelectedNodeIds}
       onDiagramChange={handleDiagramChange}
       onDiagramSaveRequest={saveCurrentDraftLocally}
+      onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
       projectName={projectName}
       workspaceUserName={workspaceUserName}
       rightPanel={(context) => (
         <WorkspaceRightPanel
           context={context}
+          deploymentAvailability="project_required"
+          initialTerraformFiles={initialTerraformFiles}
           initialView={initialRightPanelView}
-          onTerraformIssueAiRequest={setTerraformIssueAiRequest}
-          onTerraformPreviewAiRequest={setTerraformPreviewAiRequest}
+          onSelectTerraformIssue={setSelectedTerraformIssueKey}
+          onTerraformAiContextChange={setTerraformAiContext}
+          onTerraformAiInteraction={notifyTerraformAiInteraction}
           onTerraformSafeFixApplyResult={setTerraformSafeFixApplyResult}
+          onTerraformFilesChange={handleTerraformFilesChange}
+          onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
           projectId={LOCAL_PROJECT_ID}
           projectName={projectName}
+          selectedTerraformIssueKey={selectedTerraformIssueKey}
+          terraformFilesReplacement={terraformFilesReplacement}
           terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
         />
       )}

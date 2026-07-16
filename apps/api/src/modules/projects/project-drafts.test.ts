@@ -31,6 +31,9 @@ test("toProjectDraft serializes date fields as ISO strings", () => {
     id: "draft-1",
     projectId: "project-1",
     diagramJson,
+    terraformFiles: [
+      { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"main\" {}" }
+    ],
     revision: 3,
     serverSavedAt,
     createdAt,
@@ -41,6 +44,9 @@ test("toProjectDraft serializes date fields as ISO strings", () => {
     id: "draft-1",
     projectId: "project-1",
     diagramJson,
+    terraformFiles: [
+      { fileName: "main.tf", terraformCode: "resource \"aws_vpc\" \"main\" {}" }
+    ],
     revision: 3,
     serverSavedAt: "2026-06-24T03:04:05.000Z",
     createdAt: "2026-06-24T01:02:03.000Z",

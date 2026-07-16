@@ -3,6 +3,12 @@ node_modules
 dist
 .turbo
 .release
+.local-data
+**/.terraform
+coverage
+*.tsbuildinfo
+**/*.test.ts
+**/*.test.tsx
 .git
 .env
 .env.*

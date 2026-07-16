@@ -1,5 +1,5 @@
 import type { TerraformDiagnostic } from "@sketchcatch/types";
-import { AlertCircle, GitBranch, Sparkles } from "lucide-react";
+import { AlertCircle, GitBranch } from "lucide-react";
 import { formatTerraformDiagnosticSeverity } from "./terraform-diagnostic-presentation";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
 import type { TerraformIssueRecord } from "./terraform-issues-state";
@@ -9,14 +9,17 @@ import styles from "./TerraformIssuesPanel.module.css";
 // Terraform 검증 결과를 위치, 심각도, 수정 가능 여부와 함께 보여줍니다.
 export function TerraformIssuesPanel({
   issues,
-  onResolveWithAi
+  onSelectIssue,
+  selectedIssueKey
 }: {
   readonly issues: readonly TerraformIssueRecord[];
-  readonly onResolveWithAi: (issue: TerraformIssueRecord) => void;
+  readonly onSelectIssue: (issue: TerraformIssueRecord) => void;
+  readonly selectedIssueKey: string | null;
 }) {
   const diagnostics = issues.map((issue) => issue.diagnostic);
   const hasErrorDiagnostics = diagnostics.some((diagnostic) => diagnostic.severity === "error");
-  const firstErrorDiagnostic = diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
+  const firstErrorDiagnostic =
+    diagnostics.find((diagnostic) => diagnostic.severity === "error") ?? null;
 
   return (
     <div className={styles.issuesPanel}>
@@ -28,10 +31,13 @@ export function TerraformIssuesPanel({
             <GitBranch size={15} aria-hidden="true" />
           )}
           <div>
-            <span>Terraform diagnostics</span>
             <h3>검증 문제</h3>
           </div>
-          <span className={hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount}>
+          <span
+            className={
+              hasErrorDiagnostics ? styles.terraformIssueCountError : styles.terraformIssueCount
+            }
+          >
             {diagnostics.length}
           </span>
         </div>
@@ -41,29 +47,39 @@ export function TerraformIssuesPanel({
         ) : (
           <ol className={styles.terraformDiagnosticList}>
             {issues.map((issue, index) => (
-              <li key={`${issue.diagnosticKey}-${index}`} data-severity={issue.diagnostic.severity}>
-                <div className={styles.terraformDiagnosticItemHeader}>
-                  <strong>{formatTerraformDiagnosticTitle(issue.diagnostic)}</strong>
-                  <span className={styles.terraformDiagnosticSeverity}>
-                    {formatTerraformDiagnosticSeverity(issue.diagnostic.severity)}
-                  </span>
-                </div>
-                <span>{issue.diagnostic.message}</span>
-                <div className={styles.terraformDiagnosticMeta}>
-                  {formatTerraformDiagnosticLocation(issue.diagnostic) ? (
-                    <span>{formatTerraformDiagnosticLocation(issue.diagnostic)}</span>
-                  ) : null}
-                  {issue.isStale ? <span className={styles.terraformDiagnosticStale}>재검증 필요</span> : null}
-                  <span>{getTerraformSafeFix(issue.diagnostic).applicable ? "자동 적용 가능" : "수동 수정 필요"}</span>
-                </div>
+              <li
+                key={`${issue.diagnosticKey}-${index}`}
+                data-selected={selectedIssueKey === issue.diagnosticKey}
+                data-severity={issue.diagnostic.severity}
+              >
                 <button
-                  className={styles.terraformDiagnosticAiButton}
-                  data-terraform-issue-ai-resolution
-                  onClick={() => onResolveWithAi(issue)}
+                  aria-pressed={selectedIssueKey === issue.diagnosticKey}
+                  className={styles.terraformDiagnosticButton}
+                  onClick={() => onSelectIssue(issue)}
                   type="button"
                 >
-                  <Sparkles aria-hidden="true" size={14} />
-                  AI로 해결
+                  <div className={styles.terraformDiagnosticItemHeader}>
+                    <strong>{formatTerraformDiagnosticTitle(issue.diagnostic)}</strong>
+                    <span className={styles.terraformDiagnosticSeverity}>
+                      {formatTerraformDiagnosticSeverity(issue.diagnostic.severity)}
+                    </span>
+                  </div>
+                  <span className={styles.terraformDiagnosticMessage}>
+                    {issue.diagnostic.message}
+                  </span>
+                  <div className={styles.terraformDiagnosticMeta}>
+                    {formatTerraformDiagnosticLocation(issue.diagnostic) ? (
+                      <span>{formatTerraformDiagnosticLocation(issue.diagnostic)}</span>
+                    ) : null}
+                    {issue.isStale ? (
+                      <span className={styles.terraformDiagnosticStale}>재검증 필요</span>
+                    ) : null}
+                    <span>
+                      {getTerraformSafeFix(issue.diagnostic).applicable
+                        ? "자동 적용 가능"
+                        : "수동 수정 필요"}
+                    </span>
+                  </div>
                 </button>
               </li>
             ))}

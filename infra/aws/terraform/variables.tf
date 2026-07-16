@@ -147,6 +147,28 @@ variable "worker_rds_port" {
   default     = 5432
 }
 
+variable "runtime_cache_security_group_id" {
+  description = "Existing internal Runtime Cache security group that receives Redis ingress from the ECS API and worker security groups."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.runtime_cache_security_group_id == "" || can(regex("^sg-[0-9a-f]+$", var.runtime_cache_security_group_id))
+    error_message = "runtime_cache_security_group_id must be empty or a valid security group ID."
+  }
+}
+
+variable "runtime_cache_port" {
+  description = "Redis port opened on the internal Runtime Cache security group."
+  type        = number
+  default     = 6379
+
+  validation {
+    condition     = var.runtime_cache_port >= 1024 && var.runtime_cache_port <= 65535
+    error_message = "runtime_cache_port must be between 1024 and 65535."
+  }
+}
+
 variable "ecs_task_cpu" {
   description = "API Fargate task CPU units, retained from the shared task sizing for migration safety. Cost-bearing."
   type        = number
@@ -260,6 +282,20 @@ variable "artifact_bucket_name" {
   type        = string
 }
 
+variable "artifact_bucket_additional_cors_origins" {
+  description = "Additional browser origins allowed to use presigned artifact uploads. The production public base URL is always included."
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+
+  validation {
+    condition = alltrue([
+      for origin in var.artifact_bucket_additional_cors_origins :
+      can(regex("^https?://[^/]+$", origin))
+    ])
+    error_message = "Artifact bucket CORS origins must be HTTP(S) origins without paths or trailing slashes."
+  }
+}
+
 variable "rds_endpoint" {
   description = "RDS endpoint value exposed to the API runtime for diagnostics/config parity."
   type        = string
@@ -306,12 +342,16 @@ variable "api_environment" {
       "CLOUDFORMATION_TEMPLATE_TOKEN_SECRET",
       "DATABASE_URL",
       "GIT_APP_PRIVATE_KEY_BASE64",
+      "GIT_APP_CLIENT_SECRET",
       "GIT_APP_STATE_SECRET",
       "GIT_OAUTH_CLIENT_SECRET",
       "KAKAO_OAUTH_CLIENT_SECRET",
+      "LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET",
       "NAVER_OAUTH_CLIENT_SECRET",
       "OPENAI_API_KEY",
-      "REDIS_URL"
+      "REDIS_URL",
+      "WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY",
+      "WEB_PUSH_VAPID_PRIVATE_KEY"
     ]))) == 0
     error_message = "Sensitive API values must be provided through api_secret_arns, not api_environment."
   }
@@ -336,12 +376,16 @@ variable "api_secret_arns" {
       "CLOUDFORMATION_TEMPLATE_TOKEN_SECRET",
       "DATABASE_URL",
       "GIT_APP_PRIVATE_KEY_BASE64",
+      "GIT_APP_CLIENT_SECRET",
       "GIT_APP_STATE_SECRET",
       "GIT_OAUTH_CLIENT_SECRET",
       "KAKAO_OAUTH_CLIENT_SECRET",
+      "LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET",
       "NAVER_OAUTH_CLIENT_SECRET",
       "OPENAI_API_KEY",
-      "REDIS_URL"
+      "REDIS_URL",
+      "WEB_PUSH_SUBSCRIPTION_ENCRYPTION_KEY",
+      "WEB_PUSH_VAPID_PRIVATE_KEY"
     ]))) == 0
     error_message = "api_secret_arns may only contain the approved ECS API secret environment names."
   }
@@ -442,6 +486,18 @@ variable "amazon_q_application_id" {
   default     = ""
 }
 
+variable "amazon_q_retrieval_application_id" {
+  description = "Anonymous Amazon Q application ID used to retrieve verified architecture patterns."
+  type        = string
+  default     = ""
+}
+
+variable "ai_architecture_requirement_normalizer" {
+  description = "Optional Architecture Draft requirement normalizer provider."
+  type        = string
+  default     = "openai"
+}
+
 variable "amazon_q_user_id" {
   description = "Amazon Q user ID runtime config."
   type        = string
@@ -456,6 +512,12 @@ variable "git_oauth_client_id" {
 
 variable "git_app_id" {
   description = "GitHub App ID."
+  type        = string
+  default     = ""
+}
+
+variable "git_app_client_id" {
+  description = "GitHub App OAuth client ID used for provider-verified installation ownership."
   type        = string
   default     = ""
 }

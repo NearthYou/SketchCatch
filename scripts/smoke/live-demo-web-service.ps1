@@ -7,6 +7,8 @@ param(
   [string]$AwsConnectionId = $env:AWS_CONNECTION_ID,
   [string]$SmokeAccountId = $env:SMOKE_ACCOUNT_ID,
   [string]$AwsRegion = $(if ($env:AWS_REGION) { $env:AWS_REGION } else { "ap-northeast-2" }),
+  [ValidateSet("infrastructure", "application", "full_stack")]
+  [string]$DeploymentScope = $(if ($env:DEPLOYMENT_SCOPE) { $env:DEPLOYMENT_SCOPE } else { "full_stack" }),
   [string]$ReportPath = $env:SMOKE_REPORT_PATH,
   [int]$PollTimeoutSeconds = 1200,
   [int]$PollIntervalSeconds = 5,
@@ -77,7 +79,29 @@ function Invoke-SketchCatchApi {
     $invokeParams.Body = "{}"
   }
 
-  Invoke-RestMethod @invokeParams
+  for ($attempt = 0; $attempt -lt 2; $attempt++) {
+    try {
+      return Invoke-RestMethod @invokeParams
+    } catch {
+      $statusCode = if ($_.Exception.Response) {
+        [int]$_.Exception.Response.StatusCode
+      } else {
+        0
+      }
+      $canRefresh = -not $NoAuth -and
+        $attempt -eq 0 -and
+        $statusCode -eq 401 -and
+        $SmokeEmail -and
+        $SmokePassword
+
+      if (-not $canRefresh) {
+        throw
+      }
+
+      Get-SmokeAccessToken -Force
+      $headers.Authorization = "Bearer $script:AccessToken"
+    }
+  }
 }
 
 function Resolve-ProjectAssetUpload {
@@ -113,8 +137,14 @@ function Resolve-ProjectAssetUpload {
 }
 
 function Get-SmokeAccessToken {
-  if ($script:AccessToken) {
+  param([switch]$Force)
+
+  if ($script:AccessToken -and -not $Force) {
     return
+  }
+
+  if ($Force) {
+    $script:AccessToken = $null
   }
 
   if (-not $SmokeEmail -or -not $SmokePassword) {
@@ -161,18 +191,47 @@ function Get-SmokeAccessToken {
 }
 
 function New-ManagedDemoUserDataBase64 {
+  param(
+    [string]$LogGroupName = "/sketchcatch/demo/live-observation/traffic"
+  )
+
   $hashPrefix = "sketchcatch-demo-managed-user-data-sha256:"
   $template = @'
 #!/bin/bash
 # sketchcatch-demo-managed-user-data:v1
 # sketchcatch-demo-managed-user-data-sha256:
 set -euo pipefail
-dnf install -y python3
+dnf install -y python3 amazon-cloudwatch-agent
+mkdir -p /var/log/sketchcatch-demo-api
 cat >/opt/sketchcatch-demo-api.py <<'PY'
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import socket
 import time
+
+STATSD_ADDRESS = ("127.0.0.1", 8125)
+STATSD_SOCKET = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+TRAFFIC_LOG_PATH = "/var/log/sketchcatch-demo-api/traffic.log"
+
+def record_traffic(path):
+    now = int(time.time() * 1000)
+    try:
+        STATSD_SOCKET.sendto(b"traffic.requests:1|c", STATSD_ADDRESS)
+    except OSError:
+        pass
+
+    event = {
+        "event": "traffic",
+        "instance": os.uname().nodename,
+        "path": path,
+        "receivedAt": now
+    }
+    try:
+        with open(TRAFFIC_LOG_PATH, "a", encoding="utf-8") as log:
+            log.write(json.dumps(event, separators=(",", ":")) + "\n")
+    except OSError:
+        pass
 
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, status, payload, cors=False):
@@ -208,6 +267,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path.startswith("/api/traffic"):
+            record_traffic(self.path)
             self.send_json(200, {
                 "ok": True,
                 "instance": os.uname().nodename,
@@ -219,10 +279,51 @@ class Handler(BaseHTTPRequestHandler):
 
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
 PY
+cat >/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'JSON'
+{
+  "agent": {
+    "metrics_collection_interval": 10,
+    "run_as_user": "root"
+  },
+  "metrics": {
+    "namespace": "SketchCatch/Demo",
+    "append_dimensions": {
+      "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "metrics_collected": {
+      "statsd": {
+        "service_address": ":8125",
+        "metrics_collection_interval": 10,
+        "metrics_aggregation_interval": 10
+      }
+    }
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/sketchcatch-demo-api/traffic.log",
+            "log_group_name": "__TRAFFIC_LOG_GROUP__",
+            "log_stream_name": "{instance_id}/traffic",
+            "timezone": "UTC"
+          }
+        ]
+      }
+    }
+  }
+}
+JSON
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config \
+  -m ec2 \
+  -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 cat >/etc/systemd/system/sketchcatch-demo-api.service <<'UNIT'
 [Unit]
 Description=SketchCatch demo API
-After=network-online.target
+After=network-online.target amazon-cloudwatch-agent.service
 
 [Service]
 ExecStart=/usr/bin/python3 /opt/sketchcatch-demo-api.py
@@ -235,6 +336,7 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now sketchcatch-demo-api.service
 '@
+  $template = $template.Replace("__TRAFFIC_LOG_GROUP__", $LogGroupName)
   $normalized = ($template -replace "`r`n", "`n") -replace "`r", "`n"
   $sha256 = [System.Security.Cryptography.SHA256]::Create()
   try {
@@ -323,7 +425,8 @@ function New-DemoTerraformWithAlbAsg {
     [string]$Prefix
   )
 
-  $userDataBase64 = New-ManagedDemoUserDataBase64
+  $logGroupName = "/sketchcatch/demo/$Prefix/traffic"
+  $userDataBase64 = New-ManagedDemoUserDataBase64 -LogGroupName $logGroupName
   $audienceHtmlBase64 = New-DemoAudienceHtmlBase64
 
 @"
@@ -535,11 +638,62 @@ data "aws_ami" "al2023" {
   }
 }
 
+resource "aws_cloudwatch_log_group" "traffic" {
+  name              = "$logGroupName"
+  retention_in_days = 1
+
+  tags = {
+    Name = "$Prefix-traffic"
+    SketchCatchDemo = "true"
+  }
+}
+
+resource "aws_iam_role" "api_agent" {
+  name = "$Prefix-api-agent"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "$Prefix-api-agent"
+    SketchCatchDemo = "true"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent" {
+  role       = aws_iam_role.api_agent.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
+
+resource "aws_iam_instance_profile" "api_agent" {
+  name = "$Prefix-api-agent"
+  role = aws_iam_role.api_agent.name
+}
+
 resource "aws_launch_template" "api" {
   name_prefix   = "$Prefix-api-"
   image_id      = data.aws_ami.al2023.id
   instance_type = "t3.micro"
   user_data = "$userDataBase64"
+
+  depends_on = [
+    aws_cloudwatch_log_group.traffic,
+    aws_iam_role_policy_attachment.cloudwatch_agent
+  ]
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.api_agent.name
+  }
 
   vpc_security_group_ids = [aws_security_group.api.id]
 
@@ -577,6 +731,7 @@ resource "aws_lb_target_group" "api" {
   port     = 8080
   protocol = "HTTP"
   vpc_id   = aws_vpc.demo.id
+  deregistration_delay = 10
 
   health_check {
     path                = "/api/health"
@@ -626,7 +781,6 @@ resource "aws_autoscaling_policy" "scale_out" {
   autoscaling_group_name    = aws_autoscaling_group.api.name
   policy_type               = "StepScaling"
   adjustment_type           = "ChangeInCapacity"
-  cooldown                  = 180
   estimated_instance_warmup = 60
 
   step_adjustment {
@@ -685,6 +839,14 @@ output "target_group_arn_suffix" {
 
 output "scale_out_threshold" {
   value = aws_cloudwatch_metric_alarm.scale_out.threshold
+}
+
+output "cloudwatch_agent_log_group_name" {
+  value = aws_cloudwatch_log_group.traffic.name
+}
+
+output "cloudwatch_agent_metric_namespace" {
+  value = "SketchCatch/Demo"
 }
 "@
 }
@@ -1043,6 +1205,9 @@ $deploymentResponse = Invoke-SketchCatchApi -Method POST -Path "/projects/$($pro
   terraformArtifactId = $terraformAsset.id
   awsConnectionId = $AwsConnectionId
   liveProfile = "demo_web_service"
+  scope = $DeploymentScope
+  targetKind = "ec2_asg"
+  source = "direct"
 }
 $deployment = $deploymentResponse.deployment
 
@@ -1108,6 +1273,7 @@ if (-not $SkipDestroy) {
 }
 
 $report = [ordered]@{
+  deploymentScope = $DeploymentScope
   bucketName = $bucketName
   deploymentId = $deployment.id
   staticSiteUrl = $staticSiteUrl

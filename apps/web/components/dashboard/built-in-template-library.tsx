@@ -9,17 +9,11 @@ export function BuiltInTemplateLibrary() {
 
   return (
     <div className="dashboardRouteStack">
-      <header className="dashboardPageHeader">
+      <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div>
-          <p className="dashboardEyebrow">Template library</p>
-          <h1>Templates</h1>
-          <p>Architecture Board에서 사용할 수 있는 내장 Practice Architecture입니다.</p>
+          <h1>템플릿</h1>
         </div>
       </header>
-
-      <p className="dashboardInformationBand" role="status">
-        사용자 Template 저장은 아직 연결되지 않았습니다. 아래 목록은 코드에 포함된 내장 Template입니다.
-      </p>
 
       <TemplateGallery
         actionHref={(template) => `/workspace/new?mode=template&templateId=${encodeURIComponent(template.id)}`}

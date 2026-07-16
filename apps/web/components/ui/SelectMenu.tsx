@@ -16,7 +16,7 @@ export type SelectMenuOption = {
 };
 
 export type SelectMenuSize = "compact" | "regular" | "large";
-export type SelectMenuTone = "board" | "default" | "dashboard" | "workspace";
+export type SelectMenuTone = "board" | "default" | "dashboard" | "surface" | "workspace";
 
 type SelectMenuProps = {
   readonly ariaLabel: string;
@@ -156,6 +156,7 @@ export function SelectMenu({
         id={id}
         onClick={() => (isOpen ? closeMenu() : openMenu())}
         ref={triggerButtonRef}
+        title={triggerLabel}
         type="button"
       >
         <span className={styles.selectMenuValue}>{triggerLabel}</span>
@@ -204,7 +205,7 @@ export function SelectMenu({
 }
 
 function getSelectMenuTriggerLabel(option: SelectMenuOption): string {
-  return option.detail ? `${option.label} | ${option.detail}` : option.label;
+  return option.label;
 }
 
 function getInitialSelectMenuOptionIndex(
@@ -248,13 +249,17 @@ function getSizeClassName(size: SelectMenuSize): "compact" | "regular" | "large"
 
 function getToneClassName(
   tone: SelectMenuTone
-): "boardTone" | "defaultTone" | "dashboardTone" | "workspaceTone" {
+): "boardTone" | "defaultTone" | "dashboardTone" | "surfaceTone" | "workspaceTone" {
   if (tone === "board") {
     return "boardTone";
   }
 
   if (tone === "dashboard") {
     return "dashboardTone";
+  }
+
+  if (tone === "surface") {
+    return "surfaceTone";
   }
 
   if (tone === "workspace") {

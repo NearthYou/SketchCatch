@@ -1,5 +1,19 @@
 // allow: SIZE_OK - shared package root contract; splitting needs a separate repo-wide migration.
+import { AVAILABLE_BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
+import type { AvailableBrainboardTemplateId } from "./brainboard-templates/ids.ts";
+import { TEMPLATE_IDS } from "./template-definitions.ts";
+import type { TemplateId } from "./template-definitions.ts";
+import type {
+  RuntimeAdapterKind,
+  RuntimeConvergenceEvidence,
+  RuntimeConvergenceOutcome,
+  RuntimeDeploymentTarget
+} from "./runtime-convergence.js";
+
 export type IsoDateTimeString = string;
+
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { readonly [key: string]: JsonValue };
 
 export type ApiErrorCode =
   | "bad_request"
@@ -8,7 +22,11 @@ export type ApiErrorCode =
   | "conflict"
   | "github_oauth_required"
   | "too_many_requests"
+  | "unprocessable_entity"
+  | "bad_gateway"
+  | "service_unavailable"
   | "internal_server_error"
+  | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
   | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
   | "LIVE_OBSERVATION_GONE"
@@ -79,6 +97,7 @@ export const RESOURCE_TYPES = [
   "ACM_CERTIFICATE_VALIDATION",
   "COGNITO_USER_POOL",
   "COGNITO_USER_POOL_CLIENT",
+  "AMPLIFY_APP",
   "DB_SUBNET_GROUP",
   "SECRETS_MANAGER_SECRET",
   "VPC_ENDPOINT",
@@ -90,7 +109,10 @@ export const RESOURCE_TYPES = [
   "CLOUDTRAIL",
   "XRAY_GROUP",
   "XRAY_SAMPLING_RULE",
+  "AWS_CALLER_IDENTITY",
+  "SSM_PARAMETER",
   "API_GATEWAY_REST_API",
+  "API_GATEWAY_AUTHORIZER",
   "API_GATEWAY_WEBSOCKET_API",
   "API_GATEWAY_RESOURCE",
   "API_GATEWAY_METHOD",
@@ -109,15 +131,26 @@ export const RESOURCE_TYPES = [
   "EVENTBRIDGE_PERMISSION",
   "SCHEDULER_SCHEDULE",
   "STEP_FUNCTIONS_STATE_MACHINE",
+  "CODEBUILD_PROJECT",
+  "CODEDEPLOY_APP",
+  "CODEDEPLOY_DEPLOYMENT_GROUP",
+  "CODEPIPELINE",
+  "CODESTAR_CONNECTION",
   "ECR_REPOSITORY",
   "ECR_LIFECYCLE_POLICY",
   "ECS_CLUSTER",
   "ECS_SERVICE",
+  "APPLICATION_AUTO_SCALING_TARGET",
+  "APPLICATION_AUTO_SCALING_POLICY",
   "ECS_TASK_DEFINITION",
   "ECS_CAPACITY_PROVIDER",
   "EKS_CLUSTER",
   "EKS_NODE_GROUP",
+  "EKS_FARGATE_PROFILE",
   "EKS_ADDON",
+  "KUBERNETES_NAMESPACE",
+  "KUBERNETES_DEPLOYMENT",
+  "KUBERNETES_SERVICE",
   "CONFIG_CONFIGURATION_RECORDER",
   "CONFIG_DELIVERY_CHANNEL",
   "CONFIG_RULE",
@@ -130,7 +163,7 @@ export type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 export type ReverseEngineeringResourceSelection = "ALL" | ResourceType;
 
-export type CloudProvider = "aws";
+export type CloudProvider = "aws" | "kubernetes";
 
 export type TerraformBlockType = "resource" | "data";
 
@@ -441,6 +474,14 @@ export type TerraformArtifact = ProjectAsset & {
   uploadStatus: "uploaded";
 };
 
+export type TerraformArtifactBundle = {
+  schemaVersion: 1;
+  files: Array<{
+    fileName: string;
+    terraformCode: string;
+  }>;
+};
+
 export type SourceRepositoryProvider = "internal" | "github";
 
 export type SourceRepositoryStatus = "active" | "inactive";
@@ -458,6 +499,7 @@ export type SourceRepository = {
   repositoryUrl: string | null;
   visibility: "public" | "private" | "internal" | null;
   archived: boolean;
+  analysis: SourceRepositoryAnalysis | null;
   disconnectedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -470,6 +512,16 @@ export type SourceRepositoryListResponse = {
 export type GitHubAppInstallUrlResponse = {
   installUrl: string;
   expiresAt: IsoDateTimeString;
+};
+
+export type GitHubProjectConnectionTarget = {
+  owner: string;
+  name: string;
+};
+
+export type CreateGitHubProjectInstallUrlRequest = {
+  repositoryUrl: string;
+  resumeKey: string;
 };
 
 export type GitHubAppExistingInstallationCallbackUrlResponse = {
@@ -488,15 +540,77 @@ export type GitHubRepositoryCandidate = {
   archived: boolean;
 };
 
+export const REPOSITORY_ANALYSIS_TEMPLATE_IDS = [
+  ...TEMPLATE_IDS,
+  ...AVAILABLE_BRAINBOARD_TEMPLATE_IDS
+] as const;
+
+export type RepositoryAnalysisTemplateId = TemplateId | AvailableBrainboardTemplateId;
+
+export type RepositoryAnalysisEvidenceFile = {
+  path: string;
+  found: boolean;
+};
+
+export type AnalyzeSourceRepositoryRequest = {
+  repositoryUrl: string;
+  defaultBranch?: string | undefined;
+};
+
+export type SourceRepositoryAnalysisResult = {
+  repositoryUrl: string;
+  repositoryRevision: string;
+  defaultBranch: string;
+  availableBranches: string[];
+  evidenceFiles: RepositoryAnalysisEvidenceFile[];
+  detectedSignals: string[];
+  recommendedTemplateId: RepositoryAnalysisTemplateId | null;
+  recommendationReason: string;
+  aiHandoff?: RepositoryAnalysisAiHandoff | undefined;
+};
+
+export type CreateGitHubArchitectureDraftRequest = AnalyzeSourceRepositoryRequest & {
+  selectedTemplateId: RepositoryAnalysisTemplateId;
+};
+
 export type ListGitHubInstallationRepositoriesRequest = {
   installationId: string;
   state: string;
 };
 
-export type ListGitHubInstallationRepositoriesResponse = {
-  projectId: string;
-  repositories: GitHubRepositoryCandidate[];
+export type CreateGitHubInstallationUserAuthorizationRequest =
+  ListGitHubInstallationRepositoriesRequest;
+
+export type GitHubInstallationUserAuthorizationUrlResponse = {
+  authorizationUrl: string;
+  expiresAt: IsoDateTimeString;
 };
+
+export type GitHubRepositorySelection = "all" | "selected";
+export type GitHubInstallationConnectionStatus = "active" | "disconnected";
+
+export type GitHubInstallationConnection = {
+  installationId: string;
+  accountLogin: string;
+  accountType: string | null;
+  repositorySelection: GitHubRepositorySelection | null;
+  repositoryCount: number;
+  htmlUrl: string | null;
+};
+
+export type ListGitHubInstallationsResponse = {
+  installations: GitHubInstallationConnection[];
+};
+
+export type ListGitHubInstallationRepositoriesResponse =
+  | { scope: "account" }
+  | {
+      scope: "project";
+      projectId: string;
+      repositories: GitHubRepositoryCandidate[];
+      targetRepository: GitHubProjectConnectionTarget | null;
+      resumeKey: string | null;
+    };
 
 export type GitHubInstalledRepositoryCandidate = GitHubRepositoryCandidate & {
   installationId: string;
@@ -522,6 +636,276 @@ export type ConnectGitHubSourceRepositoryRequest = {
 
 export type SourceRepositoryResponse = {
   repository: SourceRepository;
+};
+
+export const REPOSITORY_EVIDENCE_KINDS = [
+  "repository_tree",
+  "package_json",
+  "lockfile",
+  "dockerfile",
+  "framework_config",
+  "static_output",
+  "readme"
+] as const;
+
+export type RepositoryEvidenceKind = (typeof REPOSITORY_EVIDENCE_KINDS)[number];
+
+export type RepositoryApplicationUnitKind = "frontend" | "backend" | "fullstack" | "unknown";
+
+export type RepositoryAnalysisEvidence = {
+  readonly kind: RepositoryEvidenceKind;
+  readonly path: string;
+  readonly applicationUnitId: string | null;
+  readonly signals: readonly string[];
+};
+
+export const REPOSITORY_ARCHITECTURE_FACT_KINDS = [
+  "frontend_delivery",
+  "backend_runtime",
+  "container_registry",
+  "traffic_entry",
+  "observability",
+  "ci_cd",
+  "health_check",
+  "transport_security",
+  "runtime_scale",
+  "excluded_capability",
+  "infrastructure_definition"
+] as const;
+
+export type RepositoryArchitectureFactKind = (typeof REPOSITORY_ARCHITECTURE_FACT_KINDS)[number];
+
+export type RepositoryArchitectureFact = {
+  readonly kind: RepositoryArchitectureFactKind;
+  readonly value: string;
+  readonly sourcePath: string;
+};
+
+export type RepositoryApplicationUnit = {
+  readonly id: string;
+  readonly rootPath: string;
+  readonly kind: RepositoryApplicationUnitKind;
+  readonly frameworks: readonly string[];
+  readonly evidencePaths: readonly string[];
+};
+
+export const REPOSITORY_DEPLOYMENT_TYPES = ["ec2_vm", "container", "serverless"] as const;
+
+export type RepositoryDeploymentType = (typeof REPOSITORY_DEPLOYMENT_TYPES)[number];
+
+export type RepositoryAnalysisQuestionOption = {
+  readonly value: string;
+  readonly label: string;
+};
+
+export type RepositoryAnalysisQuestion = {
+  readonly id: string;
+  readonly prompt: string;
+  readonly answerType: "single_select" | "boolean" | "free_text";
+  readonly options?: readonly RepositoryAnalysisQuestionOption[] | undefined;
+  readonly required: boolean;
+  readonly reason: string;
+};
+
+export type RepositoryAnalysisAnswer = {
+  readonly questionId: string;
+  readonly value: string | boolean;
+};
+
+export type RepositoryTemplateRecommendationCandidate = {
+  readonly templateId: RepositoryAnalysisTemplateId;
+  readonly displayTitle: string;
+  readonly confidence: number;
+  readonly reasons: readonly string[];
+  readonly tradeoffs: readonly string[];
+  readonly questions?: readonly RepositoryAnalysisQuestion[] | undefined;
+};
+
+export type RepositoryTemplateRecommendationResult = {
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly usesCiCd: boolean;
+  readonly candidates: readonly RepositoryTemplateRecommendationCandidate[];
+  readonly rankingSource?: "ai" | "deterministic" | undefined;
+  readonly fallbackReason?: "not_configured" | "provider_error" | "invalid_response" | undefined;
+};
+
+export type RecommendRepositoryTemplateRequest = {
+  readonly deploymentType: RepositoryDeploymentType;
+  readonly usesCiCd: boolean;
+  readonly answers: readonly RepositoryAnalysisAnswer[];
+};
+
+export type RecommendRepositoryTemplateResponse = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly recommendation: RepositoryTemplateRecommendationResult;
+};
+
+type RepositoryAnalysisAiHandoffBase = {
+  readonly applicationUnits: readonly RepositoryApplicationUnit[];
+  readonly evidence: readonly RepositoryAnalysisEvidence[];
+  readonly architectureFacts?: readonly RepositoryArchitectureFact[] | undefined;
+  readonly missingEvidence: readonly RepositoryEvidenceKind[];
+  readonly deploymentTypeDefault?: RepositoryDeploymentType | null | undefined;
+  readonly usesCiCdDefault?: boolean | null | undefined;
+  readonly questions?: readonly RepositoryAnalysisQuestion[] | undefined;
+  readonly recommendation?: RepositoryTemplateRecommendationResult | undefined;
+};
+
+export type RepositoryAnalysisAiHandoff =
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selected";
+      readonly templateId: RepositoryAnalysisTemplateId;
+      readonly selectionReasons: readonly string[];
+    })
+  | (RepositoryAnalysisAiHandoffBase & {
+      readonly status: "template_selection_failed";
+      readonly templateId: null;
+      readonly mismatchReasons: readonly string[];
+    });
+
+export type AnalyzeSourceRepositoryResponse = {
+  readonly sourceRepositoryId: string;
+  readonly repositoryRevision: string;
+  readonly analyzedAt: IsoDateTimeString;
+  readonly aiHandoff: RepositoryAnalysisAiHandoff;
+};
+
+export type SourceRepositoryAnalysis = Omit<AnalyzeSourceRepositoryResponse, "sourceRepositoryId">;
+
+export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
+
+export type GitCicdMonitoredPath = {
+  mode: "repository_root" | "subdirectory";
+  path: string;
+};
+
+export type GitCicdMonitoringConfig = {
+  sourceRepositoryId: string;
+  enabled: boolean;
+  monitorBranch: string;
+  appPath: GitCicdMonitoredPath;
+  infraPath: GitCicdMonitoredPath;
+  validationStatus: GitCicdMonitoringValidationStatus;
+  validationMessage: string | null;
+  validatedAt: IsoDateTimeString | null;
+  updatedAt: IsoDateTimeString;
+};
+
+export type GitCicdPipelineRunStatus =
+  | "detected"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
+
+export type GitCicdPipelineStageKind =
+  | "detect"
+  | "app_build"
+  | "artifact_publish"
+  | "infra_plan"
+  | "infra_apply"
+  | "app_deploy"
+  | "verify";
+
+export type GitCicdPipelineStageStatus =
+  | "not_started"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+export type GitCicdPipelineStage = {
+  id: string;
+  pipelineRunId: string;
+  kind: GitCicdPipelineStageKind;
+  status: GitCicdPipelineStageStatus;
+  runUrl: string | null;
+  startedAt: IsoDateTimeString | null;
+  finishedAt: IsoDateTimeString | null;
+};
+
+export type GitCicdPipelineRun = {
+  id: string;
+  projectId: string;
+  sourceRepositoryId: string;
+  handoffId: string | null;
+  commitSha: string;
+  commitMessage: string;
+  branch: string;
+  changeScope: GitCicdPipelineChangeScope;
+  status: GitCicdPipelineRunStatus;
+  statusMessage: string | null;
+  pipelineRunUrl: string | null;
+  appUrl: string | null;
+  apiUrl: string | null;
+  startedAt: IsoDateTimeString | null;
+  finishedAt: IsoDateTimeString | null;
+  upstreamOrderingToken: string;
+  logRevision: string;
+  lastRefreshedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  stages: GitCicdPipelineStage[];
+  release?: ApplicationRelease | null;
+};
+
+export type GitCicdPipelineLog = {
+  id: string;
+  pipelineRunId: string;
+  stageId: string | null;
+  sequence: number;
+  level: "info" | "warning" | "error";
+  message: string;
+  createdAt: IsoDateTimeString;
+};
+
+export type UpdateGitCicdMonitoringConfigRequest = {
+  enabled: boolean;
+  monitorBranch: string;
+  appPath: GitCicdMonitoredPath;
+  infraPath: GitCicdMonitoredPath;
+  userAcceptedChangeId: string;
+};
+
+export type GitCicdMonitoringConfigResponse = {
+  config: GitCicdMonitoringConfig;
+};
+
+export type GitCicdPipelineRunListResponse = {
+  runs: GitCicdPipelineRun[];
+  nextCursor: string | null;
+};
+
+export type GitCicdPipelineRunResponse = {
+  run: GitCicdPipelineRun;
+};
+
+export type GitCicdPipelineRunRefreshResponse = {
+  run: GitCicdPipelineRun;
+  stale: boolean;
+  errorMessage: string | null;
+};
+
+export type GitCicdPipelineRefreshTargetResult = {
+  sourceRepositoryId: string;
+  stale: boolean;
+  errorMessage: string | null;
+};
+
+export type GitCicdPipelineProjectRefreshResponse = {
+  runs: GitCicdPipelineRun[];
+  targets: GitCicdPipelineRefreshTargetResult[];
+  stale: boolean;
+};
+
+export type GitCicdPipelineLogListResponse = {
+  logs: GitCicdPipelineLog[];
+  nextSequence: number;
 };
 
 export type GitCicdHandoffStatus =
@@ -612,7 +996,7 @@ export type CreateGitCicdHandoffRequest = {
   architectureId: string;
   terraformArtifactId: string;
   handoffKind?: GitCicdHandoffKind | undefined;
-  sourceDeploymentId?: string | null | undefined;
+  sourceDeploymentId: string;
   deploymentMode?: GitCicdDeploymentMode | undefined;
   sourceRepositoryId: string;
   targetBranch?: string | undefined;
@@ -627,8 +1011,6 @@ export type CreateGitCicdHandoffRequest = {
   releaseBucket?: string | undefined;
   staticSiteUrl?: string | null | undefined;
   apiBaseUrl?: string | null | undefined;
-  approveAwsRoleDiff?: boolean | undefined;
-  planSummary?: DeploymentPlanSummary | undefined;
   userAcceptedChangeId: string;
 };
 
@@ -674,6 +1056,470 @@ export type GitCicdHandoffPipelineStatusResponse = {
   pipelineStatus: GitCicdHandoffPipelineStatus;
 };
 
+export type DeploymentTargetProvider = "aws";
+export type RuntimeTargetKind = "ecs_fargate" | "lambda" | "ec2_asg" | "static_site";
+export type DeploymentRolloutStrategy = "all_at_once";
+export type DeploymentScope = "infrastructure" | "application" | "full_stack";
+export type DeploymentSource = "direct" | "gitops";
+export type DeploymentConsolePhase = "validation" | "approval" | "deployment";
+
+export type BuildEvidenceKind =
+  | "dockerfile"
+  | "package_manifest"
+  | "sam_template"
+  | "appspec"
+  | "static_output";
+
+export type BuildEvidence = {
+  kind: BuildEvidenceKind;
+  path: string;
+};
+
+export type BuildInstallPreset =
+  | "none"
+  | "pnpm_frozen_lockfile"
+  | "npm_ci"
+  | "yarn_frozen_lockfile";
+
+export type BuildExecutionPreset =
+  | "docker_build"
+  | "pnpm_build"
+  | "npm_build"
+  | "yarn_build"
+  | "sam_build"
+  | "codedeploy_bundle"
+  | "static_export";
+
+export type ConfirmedBuildConfig = {
+  sourceRoot: string;
+  evidence: BuildEvidence[];
+  installPreset: BuildInstallPreset;
+  buildPreset: BuildExecutionPreset;
+  artifactOutputPath: string | null;
+  runtimeEntrypoint: string | null;
+  healthCheckPath: string | null;
+  dockerfilePath: string | null;
+  packageManifestPath: string | null;
+  samTemplatePath: string | null;
+  appSpecPath: string | null;
+  staticOutputPath: string | null;
+  exactSemVerTag: string | null;
+  manifestVersion: string | null;
+  confirmedCommitSha: string;
+  confirmedAt: IsoDateTimeString;
+};
+
+export const APPLICATION_ARTIFACT_CONTRACT_VERSION = "application-artifact/v1" as const;
+
+export const APPLICATION_ARTIFACT_KINDS = [
+  "container_image",
+  "lambda_zip",
+  "codedeploy_bundle",
+  "static_bundle",
+  "kubernetes_manifest",
+  "helm_chart",
+  "machine_image"
+] as const;
+
+export type ApplicationArtifactKind = (typeof APPLICATION_ARTIFACT_KINDS)[number];
+export type ApplicationArtifactStatus = "building" | "available" | "invalid" | "failed";
+
+export type ApplicationArtifactProviderLocation = {
+  provider: CloudProvider;
+  accountId: string;
+  region: string;
+  storageNamespace: string;
+  artifactReference: string;
+  ownershipScope: string;
+};
+
+export type ApplicationArtifactFingerprintInput = {
+  repository: {
+    provider: SourceRepositoryProvider;
+    owner: string;
+    name: string;
+  };
+  commitSha: string;
+  kind: ApplicationArtifactKind;
+  confirmedBuildConfig: ConfirmedBuildConfig;
+  buildContractVersion: string;
+  targetOs: string;
+  targetArchitecture: string;
+  buildInputs: Record<string, string | number | boolean | null>;
+};
+
+export type ApplicationArtifactIdentity = {
+  artifactFingerprint: string;
+  repositoryIdentity: string;
+  commitSha: string;
+  kind: ApplicationArtifactKind;
+  buildConfigSha256: string;
+  buildContractVersion: string;
+  targetOs: string;
+  targetArchitecture: string;
+  buildInputIdentitySha256: string;
+};
+
+export type ApplicationArtifact = ApplicationArtifactIdentity & {
+  id: string;
+  projectId: string;
+  sourceRepositoryId: string | null;
+  digestAlgorithm: "sha256";
+  digest: string;
+  location: ApplicationArtifactProviderLocation;
+  status: "available";
+  verifiedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ApplicationArtifactEvidenceV2 = {
+  kind: ApplicationArtifactKind;
+  artifactFingerprint: string;
+  buildContractVersion: string;
+  digestAlgorithm: "sha256";
+  digest: string;
+  location: ApplicationArtifactProviderLocation;
+};
+
+export type ApplicationArtifactListResponse = {
+  artifacts: ApplicationArtifact[];
+};
+
+export type EcsGitOpsReleaseEvidenceV1 = {
+  schemaVersion: 1;
+  runtimeTargetKind: "ecs_fargate";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  commitSha: string;
+  imageDigest: string;
+  imageUri: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  taskDefinitionArn: string;
+  previousTaskDefinitionArn: string;
+  restoredTaskDefinitionArn?: string | undefined;
+  outputUrl: string;
+};
+
+export type EcsGitOpsReleaseEvidenceV2 = Omit<EcsGitOpsReleaseEvidenceV1, "schemaVersion"> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type EcsGitOpsReleaseEvidenceV3 = Omit<EcsGitOpsReleaseEvidenceV2, "schemaVersion"> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type EcsGitOpsReleaseEvidence =
+  | EcsGitOpsReleaseEvidenceV1
+  | EcsGitOpsReleaseEvidenceV2
+  | EcsGitOpsReleaseEvidenceV3;
+
+export type LambdaGitOpsReleaseEvidenceV1 = {
+  schemaVersion: 1;
+  runtimeTargetKind: "lambda";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  commitSha: string;
+  artifactDigest: string;
+  artifactUri: string;
+  functionName: string;
+  aliasName: string;
+  publishedVersion: string;
+  previousVersion: string;
+  activeVersion: string;
+  deploymentId: string;
+  deploymentConfigName: "CodeDeployDefault.LambdaAllAtOnce";
+  outputUrl: string;
+};
+
+export type LambdaGitOpsReleaseEvidenceV2 = Omit<
+  LambdaGitOpsReleaseEvidenceV1,
+  "schemaVersion"
+> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type LambdaGitOpsReleaseEvidenceV3 = Omit<
+  LambdaGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type LambdaGitOpsReleaseEvidence =
+  | LambdaGitOpsReleaseEvidenceV1
+  | LambdaGitOpsReleaseEvidenceV2
+  | LambdaGitOpsReleaseEvidenceV3;
+
+export type Ec2AsgGitOpsReleaseEvidenceV1 = {
+  schemaVersion: 1;
+  runtimeTargetKind: "ec2_asg";
+  outcome: "succeeded" | "rolled_back" | "failed";
+  failureReason: "codedeploy_failure" | "instance_failure" | "health_check_failure" | null;
+  commitSha: string;
+  artifactDigest: string;
+  artifactUri: string;
+  artifactVersionId: string;
+  previousArtifactUri: string;
+  previousArtifactVersionId: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  deploymentId: string;
+  activeDeploymentId: string;
+  deploymentConfigName: "CodeDeployDefault.AllAtOnce";
+  targetInstanceCount: number;
+  succeededInstanceCount: number;
+  outputUrl: string;
+};
+
+export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<
+  Ec2AsgGitOpsReleaseEvidenceV1,
+  "schemaVersion"
+> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<
+  Ec2AsgGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type Ec2AsgGitOpsReleaseEvidence =
+  | Ec2AsgGitOpsReleaseEvidenceV1
+  | Ec2AsgGitOpsReleaseEvidenceV2
+  | Ec2AsgGitOpsReleaseEvidenceV3;
+
+export type StaticSiteGitOpsReleaseEvidenceV1 = {
+  schemaVersion: 1;
+  runtimeTargetKind: "static_site";
+  outcome: "succeeded" | "failed";
+  failureReason:
+    | "distribution_update_failure"
+    | "invalidation_failure"
+    | "health_check_failure"
+    | null;
+  commitSha: string;
+  artifactDigest: string;
+  manifestUri: string;
+  manifestVersionId: string;
+  releasePrefix: string;
+  previousReleasePrefix: string;
+  activeReleasePrefix: string;
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
+  distributionEtag: string;
+  invalidationId: string | null;
+  fileCount: number;
+  outputUrl: string;
+};
+
+export type StaticSiteGitOpsReleaseEvidenceV2 = Omit<
+  StaticSiteGitOpsReleaseEvidenceV1,
+  "schemaVersion"
+> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type StaticSiteGitOpsReleaseEvidenceV3 = Omit<
+  StaticSiteGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type StaticSiteGitOpsReleaseEvidence =
+  | StaticSiteGitOpsReleaseEvidenceV1
+  | StaticSiteGitOpsReleaseEvidenceV2
+  | StaticSiteGitOpsReleaseEvidenceV3;
+
+export type GitOpsReleaseEvidence =
+  | EcsGitOpsReleaseEvidence
+  | LambdaGitOpsReleaseEvidence
+  | Ec2AsgGitOpsReleaseEvidence
+  | StaticSiteGitOpsReleaseEvidence;
+
+export type EcsFargateRuntimeConfig = {
+  runtimeTargetKind: "ecs_fargate";
+  codeBuildProjectName: string;
+  ecrRepositoryName: string;
+  clusterName: string;
+  serviceName: string;
+  containerName: string;
+  outputUrl: string | null;
+};
+
+export type LambdaRuntimeConfig = {
+  runtimeTargetKind: "lambda";
+  codeBuildProjectName?: string | undefined;
+  functionLogicalId: string;
+  functionName: string;
+  aliasName: string;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  outputUrl: string;
+};
+
+export type Ec2AsgRuntimeConfig = {
+  runtimeTargetKind: "ec2_asg";
+  codeBuildProjectName?: string | undefined;
+  codeDeployApplicationName: string;
+  codeDeployDeploymentGroupName: string;
+  autoScalingGroupName: string;
+  outputUrl: string;
+};
+
+export type StaticSiteRuntimeConfig = {
+  runtimeTargetKind: "static_site";
+  codeBuildProjectName?: string | undefined;
+  hostingBucketName: string;
+  cloudFrontDistributionId: string;
+  cloudFrontOriginId: string;
+  outputUrl: string;
+};
+
+export type ProjectDeploymentRuntimeConfig =
+  | EcsFargateRuntimeConfig
+  | LambdaRuntimeConfig
+  | Ec2AsgRuntimeConfig
+  | StaticSiteRuntimeConfig;
+
+export type ProjectDeploymentTarget = {
+  projectId: string;
+  provider: DeploymentTargetProvider;
+  connectionId: string;
+  region: string;
+  runtimeTargetKind: RuntimeTargetKind;
+  confirmedBuildConfig: ConfirmedBuildConfig | null;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget?: RuntimeDeploymentTarget | null | undefined;
+  deploymentTargetFingerprint?: string | null | undefined;
+  rolloutStrategy: DeploymentRolloutStrategy;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type PutProjectDeploymentTargetRequest = Omit<
+  ProjectDeploymentTarget,
+  | "projectId"
+  | "confirmedBuildConfig"
+  | "runtimeConfig"
+  | "runtimeTarget"
+  | "deploymentTargetFingerprint"
+  | "createdAt"
+  | "updatedAt"
+> & {
+  confirmedBuildConfig: ConfirmedBuildConfig;
+  runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget?: RuntimeDeploymentTarget | null | undefined;
+};
+
+export type ProjectDeploymentTargetResponse = {
+  target: ProjectDeploymentTarget | null;
+};
+
+export type ApplicationReleaseStatus =
+  | "pending"
+  | "building"
+  | "deploying"
+  | "succeeded"
+  | "failed"
+  | "rolled_back"
+  | "cancelled";
+
+export type ApplicationReleaseProviderRevision = {
+  provider: DeploymentTargetProvider;
+  resourceType: string;
+  revisionId: string;
+  artifactReference: string | null;
+  metadata: Record<string, string | number | boolean | null>;
+};
+
+export type ApplicationRelease = {
+  id: string;
+  projectId: string;
+  artifactId: string | null;
+  deploymentId: string | null;
+  pipelineRunId: string | null;
+  source: DeploymentSource;
+  runtimeTargetKind: RuntimeTargetKind;
+  runtimeAdapterKind: RuntimeAdapterKind | null;
+  deploymentTargetFingerprint: string | null;
+  convergenceOutcome: RuntimeConvergenceOutcome | null;
+  version: string;
+  commitSha: string;
+  artifactDigestAlgorithm: "sha256";
+  artifactDigest: string;
+  providerRevision: ApplicationReleaseProviderRevision | null;
+  outputUrl: string | null;
+  status: ApplicationReleaseStatus;
+  healthEvidence: JsonValue | null;
+  rollbackEvidence: JsonValue | null;
+  startedAt: IsoDateTimeString | null;
+  completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ApplicationReleaseResponse = {
+  release: ApplicationRelease;
+};
+
+export type ApplicationReleaseListResponse = {
+  releases: ApplicationRelease[];
+};
+
+export type DeploymentNotificationSource = "direct_deployment" | "gitops_pipeline";
+export type DeploymentNotificationStatus = "succeeded" | "failed" | "cancelled";
+
+export type DeploymentNotification = {
+  id: string;
+  projectId: string;
+  source: DeploymentNotificationSource;
+  sourceId: string;
+  status: DeploymentNotificationStatus;
+  title: string;
+  body: string;
+  actionUrl: string;
+  readAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+};
+
+export type DeploymentNotificationListResponse = {
+  notifications: DeploymentNotification[];
+  unreadCount: number;
+};
+
+export type WebPushPublicConfigResponse = {
+  enabled: boolean;
+  vapidPublicKey: string | null;
+};
+
+export type WebPushSubscriptionInput = {
+  endpoint: string;
+  expirationTime: number | null;
+  keys: {
+    auth: string;
+    p256dh: string;
+  };
+};
+
+export type WebPushSubscriptionResponse = {
+  subscriptionId: string;
+  expiresAt: IsoDateTimeString | null;
+};
+
 export type GitCicdGitHubOAuthStartResponse = {
   authorizationUrl: string;
   expiresAt: IsoDateTimeString;
@@ -712,6 +1558,14 @@ export type Deployment = DeploymentBlock & {
   terraformArtifactId: string;
   awsConnectionId: string | null;
   liveProfile: DeploymentLiveProfile;
+  scope: DeploymentScope;
+  targetKind: RuntimeTargetKind | null;
+  source: DeploymentSource;
+  releaseId: string | null;
+  consolePhase?: DeploymentConsolePhase | undefined;
+  preparedDraftRevision?: number | null | undefined;
+  preparedSnapshotHash?: string | null | undefined;
+  approvedPreparedSnapshotHash?: string | null | undefined;
   currentPlanArtifactId: string | null;
   currentPlanOperation: "apply" | "destroy" | null;
   stateObjectKey: string | null;
@@ -796,6 +1650,64 @@ export type DeploymentPlanSummary = {
   warnings: DeploymentPlanWarning[];
 };
 
+export const DEPLOYMENT_OPTIMIZATION_CONTRACT_VERSION = 1 as const;
+
+export type DeploymentOptimizationDecision =
+  | {
+      readonly outcome: "execute";
+      readonly reason:
+        | "initial_plan"
+        | "cache_miss"
+        | "desired_state_changed"
+        | "provider_lock_changed"
+        | "target_changed"
+        | "state_changed"
+        | "drift_ttl_expired";
+    }
+  | {
+      readonly outcome: "reuse";
+      readonly reason: "verified_pending_plan" | "concurrent_plan_joined";
+    }
+  | {
+      readonly outcome: "no_change";
+      readonly reason: "terraform_plan_no_changes";
+    }
+  | {
+      readonly outcome: "fallback_execute";
+      readonly reason: "cache_validation_failed";
+    }
+  | {
+      readonly outcome: "unsupported";
+      readonly reason: "resource_not_deployable";
+    };
+
+export type TerraformResourceChangeAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "replace"
+  | "no_change"
+  | "read"
+  | "unknown";
+
+export type TerraformResourceChangeEvidence = {
+  readonly resourceAddress: string;
+  readonly action: TerraformResourceChangeAction;
+};
+
+export type TerraformDesiredStateIdentity = {
+  readonly fingerprint: string;
+  readonly terraformBundleSha256: string;
+  readonly providerLockSha256: string;
+  readonly providerIdentitySha256: string;
+  readonly variableIdentitySha256: string;
+  readonly backendIdentitySha256: string;
+  readonly targetIdentitySha256: string;
+  readonly stateIdentitySha256: string;
+  readonly stateLineageSha256: string | null;
+  readonly stateSerial: number | null;
+};
+
 export type ApproveDeploymentPlanRequest = {
   acknowledgedWarningIds: string[];
 };
@@ -843,6 +1755,89 @@ export type DeploymentPlanArtifact = {
 export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
 };
+
+export { AVAILABLE_BRAINBOARD_TEMPLATE_IDS, BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
+export type { AvailableBrainboardTemplateId, BrainboardTemplateId } from "./brainboard-templates/ids.ts";
+export {
+  BRAINBOARD_TEMPLATE_AUTHOR,
+  BRAINBOARD_TEMPLATE_PROVIDER,
+  brainboardTemplateManifest
+} from "./brainboard-templates/manifest.ts";
+export type { BrainboardTemplateManifestEntry } from "./brainboard-templates/manifest.ts";
+export { adaptBrainboardTemplateSource } from "./brainboard-templates/adapter.ts";
+export type { AdaptedBrainboardTemplate } from "./brainboard-templates/adapter.ts";
+export type {
+  BrainboardFailedCaptureAttempt,
+  BrainboardFailedCaptureEvidence,
+  BrainboardFailedCaptureOrigin,
+  BrainboardSourceArrowDirection,
+  BrainboardSourceEdge,
+  BrainboardSourceNode,
+  BrainboardSourcePoint,
+  BrainboardSourcePresentationNode,
+  BrainboardSourceResourceAddressMapping,
+  BrainboardSourceResourceNode,
+  BrainboardSourceSize,
+  BrainboardSourceValue,
+  BrainboardSourceViewport,
+  BrainboardTemplateCaptureStatus,
+  BrainboardTemplateEvidence,
+  BrainboardTemplateOrigin,
+  BrainboardTemplateSource,
+  BrainboardTerraformFile,
+  BrainboardTerraformWorkspaceOmission,
+  BrainboardTerraformWorkspaceSeed
+} from "./brainboard-templates/source-types.ts";
+export { validateBrainboardTemplateSource } from "./brainboard-templates/validate-source.ts";
+export type {
+  BrainboardSourceValidationError,
+  BrainboardSourceValidationErrorCode,
+  BrainboardSourceValidationResult
+} from "./brainboard-templates/validate-source.ts";
+export {
+  brainboardFailedCaptureEvidence,
+  brainboardTemplateEvidence,
+  brainboardTemplateRegistry
+} from "./brainboard-templates/registry.ts";
+export type { BrainboardTemplateRegistryEntry } from "./brainboard-templates/registry.ts";
+export {
+  awsKubernetesNativeCnisSource,
+  brainboardTemplateSources,
+  trainingAwsOnboardingSource
+} from "./brainboard-templates/sources/index.ts";
+export { defineCapturedBrainboardTemplate } from "./brainboard-templates/sources/define-source.ts";
+export type {
+  BrainboardCapturedNode,
+  BrainboardPresentationNodeBinding,
+  BrainboardResourceNodeBinding,
+  BrainboardSourceNodeBinding,
+  CapturedBrainboardTemplateDefinition
+} from "./brainboard-templates/sources/define-source.ts";
+
+export {
+  buildTemplateDiagramJson,
+  createEcsFargateRuntimeNames,
+  getTemplateDefinitionById,
+  REPOSITORY_TEMPLATE_IDS,
+  TEMPLATE_IDS,
+  templateDefinitions
+} from "./template-definitions.ts";
+export type {
+  BuildTemplateDiagramInput,
+  EcsFargateRuntimeNames,
+  RepositoryTemplateId,
+  TemplateDefinition,
+  TemplateId,
+  TemplateParameterDefinition,
+  TemplateProvider,
+  TemplateRelationship,
+  TemplateResourceDefinition
+} from "./template-definitions.ts";
+
+export {
+  createTerraformProviderFiles,
+  isTerraformDeployableNode
+} from "./terraform-provider-files.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"
@@ -999,19 +1994,118 @@ export type CreateDeploymentRequest = {
   terraformArtifactId: string;
   awsConnectionId: string;
   liveProfile?: DeploymentLiveProfile | undefined;
+  scope?: DeploymentScope | undefined;
+  targetKind?: RuntimeTargetKind | null | undefined;
+  source?: DeploymentSource | undefined;
+};
+
+export type PrepareDeploymentRequest = {
+  architectureId: string;
+  terraformArtifactId: string;
+  awsConnectionId: string;
+  draftRevision: number;
+  scope: DeploymentScope | "auto";
 };
 
 export type DeploymentLiveProfile = "practice" | "demo_web_service" | "demo_web_service_with_rds";
 
+export type DeploymentLiveObservationAwsAdapterV1 = {
+  kind: "aws-live-observation";
+  version: 1;
+  payload: {
+    cloudFrontDistributionId: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    autoScalingGroupName: string;
+  };
+};
+
+export type DeploymentLiveObservationAwsAdapterV2 = {
+  kind: "aws-live-observation";
+  version: 2;
+  payload: {
+    trafficHostname: string;
+    loadBalancerDnsName: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    logGroupNames?: string[] | undefined;
+    capacityTarget:
+      | {
+          kind: "asg";
+          autoScalingGroupName: string;
+        }
+      | {
+          kind: "ecs_fargate";
+          clusterName: string;
+          serviceName: string;
+          maxCapacity: number;
+        };
+  };
+};
+
+export type DeploymentLiveObservationManifestV2 = {
+  schemaVersion: 2;
+  provider: "aws";
+  provenance: {
+    deploymentId: string;
+    terraformArtifactSha256: string;
+    awsConnectionId: string;
+    region: string;
+    verifiedAt: IsoDateTimeString;
+  };
+  endpoints: {
+    audienceBaseUrl: string;
+    trafficUrl: string;
+  };
+  pressure: {
+    metric: "requests_per_target_per_minute";
+    target: 60;
+    windowSeconds: 60;
+  };
+  adapter: {
+    kind: "aws-live-observation";
+  } & (DeploymentLiveObservationAwsAdapterV1 | DeploymentLiveObservationAwsAdapterV2);
+};
+
+export type DeploymentLiveObservationManifestStatus = "valid" | "manifest_invalid";
+
+export type DeploymentLiveObservationManifestRecord = {
+  deploymentId: string;
+  schemaVersion: 2;
+  status: DeploymentLiveObservationManifestStatus;
+  manifest: DeploymentLiveObservationManifestV2 | null;
+  invalidReason: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
 export type LiveObservationStatus = "active" | "stopped" | "expired";
 
-export type LiveObservationPressureLevel =
-  | "normal"
-  | "warning"
-  | "high"
-  | "critical";
+export type LiveObservationPressureLevel = "normal" | "warning" | "high" | "critical";
 
-export type LiveObservationAwsState = "available" | "delayed" | "unavailable";
+export type LiveObservationProviderState = "available" | "delayed" | "unavailable";
+
+/** @deprecated Use LiveObservationProviderState. */
+export type LiveObservationAwsState = LiveObservationProviderState;
+
+export type LiveObservationProviderSnapshot = {
+  requests: number | null;
+  errorRate: number | null;
+  p95LatencyMs: number | null;
+  availability: number | null;
+  capacity: {
+    desired: number | null;
+    running: number | null;
+    healthy: number | null;
+    max: number | null;
+  };
+  logs: Array<{
+    timestamp: IsoDateTimeString;
+    message: string;
+  }>;
+  observedAt: IsoDateTimeString | null;
+  state: LiveObservationProviderState;
+};
 
 export type LiveObservationSession = {
   id: string;
@@ -1035,7 +2129,7 @@ export type LiveObservationSnapshot = {
     observedAt: IsoDateTimeString;
   };
   cloudWatch: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     requestCountPerTarget: number | null;
     periodSeconds: 60;
     observedAt: IsoDateTimeString | null;
@@ -1043,7 +2137,7 @@ export type LiveObservationSnapshot = {
     errorCode: string | null;
   };
   capacity: {
-    state: LiveObservationAwsState;
+    state: LiveObservationProviderState;
     desiredCapacity: number | null;
     currentInstanceCount: number | null;
     inServiceInstanceCount: number | null;
@@ -1086,6 +2180,42 @@ export type CollectLiveObservationEventResponse = {
   acceptedEventCount: number;
 };
 
+export type LiveObservationV2Session = {
+  id: string;
+  deploymentId: string;
+  status: LiveObservationStatus;
+  audienceUrl: string;
+  createdAt: IsoDateTimeString;
+  expiresAt: IsoDateTimeString;
+};
+
+export type LiveObservationV2Snapshot = {
+  observationId: string;
+  status: LiveObservationStatus;
+  live: {
+    acceptedEventCount: number;
+    rollingRequestsPerSecond: number;
+    projectedRequestsPerMinute: number;
+    pressurePercent: number;
+    pressureLevel: LiveObservationPressureLevel;
+    observedAt: IsoDateTimeString;
+  };
+  latestObservation: {
+    observedAt: IsoDateTimeString;
+    payload: LiveObservationProviderSnapshot;
+  } | null;
+  terminalAt: IsoDateTimeString | null;
+};
+
+export type CreateLiveObservationV2Response = {
+  session: LiveObservationV2Session;
+  snapshot: LiveObservationV2Snapshot;
+};
+
+export type LiveObservationV2SnapshotResponse = {
+  snapshot: LiveObservationV2Snapshot;
+};
+
 export type DeploymentResponse = {
   deployment: Deployment;
 };
@@ -1104,9 +2234,12 @@ export type RecentSuccessfulDeploymentProjectListResponse = {
   items: RecentSuccessfulDeploymentProject[];
 };
 
+export type CostProjectDeploymentState = "deployed" | "not_deployed";
+
 export type CostProjectEstimate = {
   project: Project;
   costEstimate: CostEstimateResult | null;
+  deploymentState: CostProjectDeploymentState;
 };
 
 export type CostProjectEstimateListResponse = {
@@ -1129,6 +2262,21 @@ export type CostUsageTrendPoint = {
   amount: number;
 };
 
+export type CostUsageMonthlyPoint = {
+  month: string;
+  amount: number;
+  isPartial: boolean;
+  isEstimated: boolean;
+};
+
+export type CostUsageMonthlyComparison = {
+  previousMonthActual: MoneyEstimate;
+  currentMonthToDate: MoneyEstimate;
+  currentMonthForecast: MoneyEstimate;
+  forecastChangeAmount: MoneyEstimate;
+  forecastChangePercentage: number | null;
+};
+
 export type CostServiceUsage = {
   service: string;
   amount: number;
@@ -1142,6 +2290,7 @@ export type CostProjectUsage = {
   percentage: number;
   source: CostProjectUsageSource;
   resourceCount: number;
+  monthlyTrend: CostUsageMonthlyPoint[];
 };
 
 export type CostResourceUsageSource =
@@ -1214,6 +2363,8 @@ export type CostUsageAnalysisResponse = {
   totalCost: MoneyEstimate;
   forecastMonthEndCost: MoneyEstimate;
   dailyTrend: CostUsageTrendPoint[];
+  monthlyTrend: CostUsageMonthlyPoint[];
+  monthlyComparison: CostUsageMonthlyComparison;
   serviceCosts: CostServiceUsage[];
   projectCosts: CostProjectUsage[];
   resourceCosts: CostResourceUsage[];
@@ -1393,6 +2544,15 @@ export type AiProviderService =
   | "openai_responses"
   | "rule_fallback";
 
+export type AiProviderAttemptStatus = "succeeded" | "fallback" | "skipped" | "failed";
+
+export type AiProviderAttempt = {
+  provider: AiProvider;
+  service: AiProviderService;
+  status: AiProviderAttemptStatus;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+};
+
 export type AiBillingMode = "aws_credit_only" | "standard" | "disabled";
 
 export type AiEstimatedUsage = {
@@ -1411,6 +2571,7 @@ export type AiProviderMetadata = {
   cacheKey: string;
   estimatedUsage: AiEstimatedUsage;
   billingMode: AiBillingMode;
+  attempts?: AiProviderAttempt[] | undefined;
   generatedAt: IsoDateTimeString;
 };
 
@@ -1603,6 +2764,39 @@ export type ArchitecturePatchPreviewChange = {
   summary: string;
 };
 
+export type ArchitecturePatchPlanAction = "modify_resource" | "remove_resource" | "add_resource";
+
+export type ArchitecturePatchPlanOperationType =
+  | "set_value"
+  | "increase_one_step"
+  | "decrease_one_step"
+  | "enable"
+  | "disable"
+  | "rename";
+
+export type ArchitecturePatchPlanStatus = "planned" | "needs_clarification" | "unsupported";
+
+export type ArchitecturePatchPlanOperation = {
+  op: ArchitecturePatchPlanOperationType;
+  path: string;
+  value: string | number | boolean | null;
+};
+
+export type ArchitecturePatchPlan = {
+  status: ArchitecturePatchPlanStatus;
+  action: ArchitecturePatchPlanAction | null;
+  target: {
+    resourceType: ResourceType | null;
+    resourceId: string | null;
+    label: string | null;
+  };
+  candidateResourceIds: string[];
+  operations: ArchitecturePatchPlanOperation[];
+  preserve: string[];
+  clarificationQuestion: string | null;
+  confidence: number;
+};
+
 export type ArchitecturePatchClarificationCandidate = {
   resourceId: string;
   resourceType: ResourceType;
@@ -1615,6 +2809,7 @@ export type ArchitecturePatchClarification = {
   question: string;
   candidates: ArchitecturePatchClarificationCandidate[];
   suggestions?: string[] | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1627,6 +2822,7 @@ export type ArchitecturePatchPreview = {
   requiresUserAcceptance: true;
   userAcceptedChange: UserAcceptedChange | null;
   llmExplanation?: LlmExplanation | undefined;
+  patchPlan?: ArchitecturePatchPlan | undefined;
   providerMetadata: AiProviderMetadata;
 };
 
@@ -1644,7 +2840,39 @@ export type CreateArchitecturePatchPreviewRequest = {
 
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  templateId?: TemplateId | undefined;
+  dynamicQuestionAnswers?:
+    | readonly {
+        questionId: string;
+        question: string;
+        answer: string;
+      }[]
+    | undefined;
+  templateFallback?: Record<string, unknown> | undefined;
+  repositoryEvidence?:
+    | {
+        mode: "strict";
+        facts: readonly RepositoryArchitectureFact[];
+        repositoryName?: string | undefined;
+      }
+    | undefined;
+  repositoryAnalysis?:
+    | {
+        projectId: string;
+        sourceRepositoryId: string;
+      }
+    | undefined;
 };
+
+export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
+  "preparing_requirements",
+  "normalizing_requirements",
+  "querying_amazon_q",
+  "validating_architecture",
+  "building_diagram"
+] as const;
+
+export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -1664,6 +2892,22 @@ export type ArchitectureDraftClarification = {
 export type CreateArchitectureDraftResponse =
   | AiArchitectureDraftResult
   | ArchitectureDraftClarification;
+
+export type ArchitectureDraftStreamEvent =
+  | {
+      type: "progress";
+      stage: ArchitectureDraftProgressStage;
+    }
+  | {
+      type: "result";
+      result: CreateArchitectureDraftResponse;
+    }
+  | {
+      type: "error";
+      error: ApiErrorResponse & {
+        statusCode: number;
+      };
+    };
 
 export type MoneyEstimate = {
   amount: number;
@@ -1748,6 +2992,8 @@ export type CheckFinding = {
   severity: RiskLevel;
   resourceId?: string | undefined;
   sourceLocation?: TerraformSourceLocation | undefined;
+  riskFamily?: string | undefined;
+  trivyRuleIds?: string[] | undefined;
   aiSafetyExplanation?: AiSafetyExplanation | undefined;
   title: string;
   description: string;
@@ -1836,7 +3082,20 @@ export type AiPreDeploymentAnalysisResult = {
   findings: CheckFinding[];
   checklist: ChecklistItem[];
   suggestions: ArchitectureSuggestion[];
+  deepScan?:
+    | {
+        status: "not_required" | "running" | "complete" | "failed";
+        scanId?: string | undefined;
+        message?: string | undefined;
+      }
+    | undefined;
   llmExplanation?: LlmExplanation | undefined;
+};
+
+export type AiPreDeploymentDeepScanResponse = {
+  status: "running" | "complete" | "failed";
+  analysis?: AiPreDeploymentAnalysisResult | undefined;
+  message?: string | undefined;
 };
 
 export type AiPreDeploymentCheckRequest = {
@@ -2012,11 +3271,36 @@ export type AwsRegionCode =
 
 export type DiagramNodeMetadata = {
   parentAreaNodeId?: string | undefined;
+  areaAutoSizeBaseline?:
+    | {
+        position: {
+          x: number;
+          y: number;
+        };
+        size: {
+          width: number;
+          height: number;
+        };
+      }
+    | undefined;
+  /** Limits a resource's area-frame rendering to an authored presentation, not every catalog use. */
+  presentationArea?: boolean | undefined;
+  /** Lets Web materialization reuse an exact Resource Panel item for a parameterless Template Design node. */
+  presentationCatalogItemId?: string | undefined;
+  liveObservationRole?:
+    | "traffic-source"
+    | "traffic-hop"
+    | "capacity-controller"
+    | "capacity-unit"
+    | "support"
+    | undefined;
   moduleSource?:
     | {
         moduleId: string;
         moduleVersion: string;
         expandedAt: IsoDateTimeString;
+        representativeTemplateId?: string | undefined;
+        referenceTemplateIds?: string[] | undefined;
       }
     | undefined;
   reverseEngineering?:
@@ -2030,6 +3314,8 @@ export type DiagramNodeMetadata = {
 
 export type DiagramNodeParameters = {
   terraformBlockType?: TerraformBlockType | undefined;
+  /** Exact Terraform files, rather than palette defaults, are authoritative for this node. */
+  terraformSourceAuthority?: "workspace-seed" | undefined;
   resourceType: string;
   resourceName: string;
   fileName: string;
@@ -2047,6 +3333,7 @@ export type DiagramNode = {
   iconUrl?: string | undefined;
   locked: boolean;
   zIndex: number;
+  rotation?: number | undefined;
   style?: DiagramNodeStyle | undefined;
   metadata?: DiagramNodeMetadata | undefined;
   parameters?: DiagramNodeParameters | undefined;
@@ -2060,8 +3347,36 @@ export type DiagramEdgeStyle = {
 };
 
 export type DiagramEdgeMetadata = {
-  managedBy: "parameter-reference";
-  parameterPath: string;
+  managedBy?: "parameter-reference" | undefined;
+  parameterPath?: string | undefined;
+  /** Controls Board presentation without removing the underlying IaC relationship. */
+  presentationRole?: "primary" | "detail" | "summary" | undefined;
+};
+
+export type DiagramPoint = {
+  x: number;
+  y: number;
+};
+
+export type DiagramBounds = DiagramPoint & {
+  width: number;
+  height: number;
+};
+
+export type DiagramEdgeArrowDirection =
+  | "source-to-target"
+  | "target-to-source"
+  | "bidirectional"
+  | "none";
+
+export type DiagramEdgeRoute = {
+  svgPath: string;
+  sourcePoint: DiagramPoint;
+  targetPoint: DiagramPoint;
+  waypoints: DiagramPoint[];
+  labelPosition?: DiagramPoint | undefined;
+  arrowDirection?: DiagramEdgeArrowDirection | undefined;
+  arrowAngle?: number | undefined;
 };
 
 export type DiagramEdge = {
@@ -2074,6 +3389,8 @@ export type DiagramEdge = {
   type?: string | undefined;
   style?: DiagramEdgeStyle | undefined;
   metadata?: DiagramEdgeMetadata | undefined;
+  route?: DiagramEdgeRoute | undefined;
+  zIndex?: number | undefined;
 };
 
 export type DiagramViewport = {
@@ -2098,17 +3415,197 @@ export type DiagramVariable = {
   source: DiagramVariableSource;
 };
 
+export type DiagramGeometryPolicy = "catalog-normalized" | "source-exact";
+
+export type DiagramPresentation = {
+  geometryPolicy: DiagramGeometryPolicy;
+  sourceViewBox?: DiagramBounds | undefined;
+  initialViewportPending?: boolean | undefined;
+  terraformSourceFingerprint?: string | undefined;
+};
+
 export type DiagramJson = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
   viewport: DiagramViewport;
   variables?: DiagramVariable[] | undefined;
+  presentation?: DiagramPresentation | undefined;
+};
+
+export type ArchitectureBoardCompilationTrigger =
+  | "ai-draft"
+  | "board-auto-organize"
+  | "reverse-engineering"
+  | "template-review";
+
+export type ArchitectureBoardCompilationChangeKind =
+  | "resource"
+  | "relationship"
+  | "configuration"
+  | "containment"
+  | "presentation"
+  | "geometry"
+  | "edge-routing";
+
+export type ArchitectureBoardCompilationChangeAction = "add" | "remove" | "modify";
+
+export type ArchitectureBoardCompilationChange = {
+  id: string;
+  kind: ArchitectureBoardCompilationChangeKind;
+  action: ArchitectureBoardCompilationChangeAction;
+  targetIds: string[];
+  before: unknown | null;
+  after: unknown | null;
+  summary: string;
+  cost: number;
+};
+
+export type ArchitectureBoardCompilationDiagnosticLevel = "info" | "warning" | "error";
+
+export type ArchitectureBoardCompilationDiagnostic = {
+  code: string;
+  level: ArchitectureBoardCompilationDiagnosticLevel;
+  summary: string;
+  message: string;
+  relatedChangeIds: string[];
+  relatedResourceIds: string[];
+  penalty: number;
+};
+
+/**
+ * External evidence may influence a Compiler proposal without becoming a hard gate.
+ * The caller supplies facts; the Compiler returns them as ranked diagnostics for the
+ * user-accepted change boundary.
+ */
+export type ArchitectureBoardCompilationContextSignal = {
+  id: string;
+  kind: "requirement" | "deployment" | "provider" | "terraform";
+  level: ArchitectureBoardCompilationDiagnosticLevel;
+  summary: string;
+  message: string;
+  relatedResourceIds?: string[] | undefined;
+  penalty?: number | undefined;
+};
+
+/**
+ * Explicit semantic mutations are optional Compiler inputs. They let an upstream
+ * requirement/repository/reverse-engineering adapter authorize resource and graph
+ * repairs while keeping actual Board application user-accepted.
+ */
+export type ArchitectureBoardCompilationSemanticOperation =
+  | {
+      id: string;
+      kind: "resource-add";
+      node: ArchitectureNode;
+    }
+  | {
+      id: string;
+      kind: "resource-remove";
+      targetId: string;
+    }
+  | {
+      id: string;
+      kind: "resource-replace";
+      targetId: string;
+      node: ArchitectureNode;
+    }
+  | {
+      id: string;
+      kind: "relationship-add";
+      edge: ArchitectureEdge;
+    }
+  | {
+      id: string;
+      kind: "relationship-remove";
+      targetId: string;
+    }
+  | {
+      id: string;
+      kind: "relationship-replace";
+      targetId: string;
+      edge: ArchitectureEdge;
+    }
+  | {
+      id: string;
+      kind: "configuration-merge";
+      targetId: string;
+      values: ResourceConfig;
+    }
+  | {
+      id: string;
+      kind: "configuration-replace";
+      targetId: string;
+      values: ResourceConfig;
+    }
+  | {
+      id: string;
+      kind: "containment-set";
+      targetId: string;
+      parentAreaNodeId?: string | undefined;
+    }
+  | {
+      id: string;
+      kind: "presentation-add";
+      node: DiagramNode;
+    }
+  | {
+      id: string;
+      kind: "presentation-remove";
+      targetId: string;
+    };
+
+export type ArchitectureBoardCompilationSemanticContext = {
+  operations?: ArchitectureBoardCompilationSemanticOperation[] | undefined;
+  signals?: ArchitectureBoardCompilationContextSignal[] | undefined;
+};
+
+export type ArchitectureBoardCompilationQuality = {
+  score: number;
+  visualPenalty: number;
+  structuralPenalty: number;
+  semanticDiagnosticPenalty: number;
+  metrics: Record<string, number>;
+};
+
+export type ArchitectureBoardCompilationInput = {
+  architecture: ArchitectureJson;
+  currentDiagram?: DiagramJson | undefined;
+  semanticContext?: ArchitectureBoardCompilationSemanticContext | undefined;
+  trigger: ArchitectureBoardCompilationTrigger;
+};
+
+export type ArchitectureBoardCompilationProposal = {
+  architecture: ArchitectureJson;
+  diagram: DiagramJson;
+  changes: ArchitectureBoardCompilationChange[];
+  diagnostics: ArchitectureBoardCompilationDiagnostic[];
+  quality: {
+    before: ArchitectureBoardCompilationQuality;
+    after: ArchitectureBoardCompilationQuality;
+    compilationDistance: number;
+  };
+  provenance: {
+    compilerVersion: string;
+    candidateId: string;
+    /** Every candidate generated for this proposal, including the retained original baseline. */
+    candidateIds?: string[] | undefined;
+    /** Knowledge-derived spacing profiles added to the geometry candidate search. */
+    layoutProfileIds?: string[] | undefined;
+    /** Complete Template graph patterns that produced geometry candidates. */
+    modulePatternIds?: string[] | undefined;
+    /** Representative Templates selected by the matched pattern extractor. */
+    modulePatternRepresentativeTemplateIds?: string[] | undefined;
+    /** Every source Template supporting the matched pattern candidates. */
+    modulePatternSourceTemplateIds?: string[] | undefined;
+    referenceTemplateIds: string[];
+  };
 };
 
 export type ProjectDraft = {
   id: string;
   projectId: string;
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
   revision: number;
   serverSavedAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
@@ -2117,6 +3614,7 @@ export type ProjectDraft = {
 
 export type SaveProjectDraftRequest = {
   diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type ProjectDraftResponse = {
@@ -2129,6 +3627,7 @@ export type TerraformGenerateRequest = {
 
 export type TerraformGenerateResponse = {
   terraformCode: string;
+  architectureDiagnostics: ArchitectureDiagnostic[];
 };
 
 export type ResourceArea =
@@ -2192,6 +3691,7 @@ export type ResourceParameterDefinition = {
   options?: string[] | undefined;
   referenceTargetTypes?: string[] | undefined;
   referenceAttribute?: string | undefined;
+  referenceAttributesByTargetType?: Record<string, string> | undefined;
 };
 
 export type TerraformResourceParameterCatalog = {
@@ -2213,6 +3713,28 @@ export type TerraformDiagnostic = {
   sourceFileName?: string | undefined;
   resourceAddress?: string | undefined;
   nodeId?: string | undefined;
+};
+
+export type ArchitectureValidationMode = "contextual" | "preview" | "pre_deployment";
+
+export type ArchitectureDiagnosticSeverity = "info" | "warning" | "error";
+
+export type ArchitectureDiagnosticRemediation = {
+  label: string;
+  action: "focus-resource" | "open-parameter" | "open-guidance";
+  parameterPath?: string | undefined;
+};
+
+export type ArchitectureDiagnostic = {
+  source: "architecture-rule";
+  code: string;
+  severity: ArchitectureDiagnosticSeverity;
+  ruleId: string;
+  resourceNodeId: string;
+  relatedNodeIds: readonly string[];
+  summary: string;
+  message: string;
+  remediation: readonly ArchitectureDiagnosticRemediation[];
 };
 
 export type TerraformValidateRequest = {
@@ -2265,5 +3787,8 @@ export type TerraformDiagramChangeProposal =
 export type TerraformSyncToDiagramResponse = {
   diagramJson: DiagramJson;
   diagnostics: TerraformDiagnostic[];
+  preservedResourceAddresses?: string[] | undefined;
   proposals?: TerraformDiagramChangeProposal[] | undefined;
 };
+
+export * from "./runtime-convergence.ts";

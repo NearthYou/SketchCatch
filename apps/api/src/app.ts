@@ -1,4 +1,8 @@
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest
+} from "fastify";
 import { ZodError } from "zod";
 import type { ApiErrorCode } from "@sketchcatch/types";
 import { startRefreshTokenCleanupJob } from "./auth/cleanup.js";
@@ -11,21 +15,40 @@ import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingE
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
-import { registerProjectRoutes, type ProjectAssetStorage } from "./routes/projects.js";
+import { registerProjectRoutes } from "./routes/projects.js";
+import {
+  registerProjectReleaseLedgerRoutes,
+  type ProjectReleaseLedgerRouteOptions
+} from "./routes/project-release-ledger.js";
+import type { ProjectAssetStorage } from "./projects/project-asset-storage.js";
 import {
   registerSourceRepositoryRoutes,
   type SourceRepositoryRouteOptions
 } from "./routes/source-repositories.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
-import { registerLiveObservationRoutes } from "./routes/live-observations.js";
+import { registerLiveObservationV2Routes } from "./routes/live-observations-v2.js";
+import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-observation-public-collector.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
 import { registerCostRoutes } from "./routes/costs.js";
+import {
+  registerNotificationRoutes,
+  type NotificationRouteOptions
+} from "./routes/notifications.js";
 import {
   createDelegatingGitCicdHandoffProvider,
   createGitHubGitCicdHandoffProvider
 } from "./git-cicd/git-cicd-handoff-service.js";
 import { createGitHubAppGitProvider } from "./git-cicd/github-app-git-provider.js";
 import { createGitHubActionsPipelineStatusProvider } from "./git-cicd/github-actions-pipeline-status-provider.js";
+import { createGitHubActionsRunProvider } from "./git-cicd/github-actions-run-provider.js";
+import {
+  getRuntimeEnv,
+  isLiveObservationEnabled,
+  requireGitHubAppConfig,
+  requireLiveObservationCapabilityKeyring,
+  type RuntimeEnv
+} from "./config/env.js";
+import { createGitHubAppClient } from "./source-repositories/github-app-client.js";
 import {
   registerTerraformRoutes,
   type TerraformRouteOptions
@@ -44,10 +67,50 @@ import {
   createRuntimeCacheFromEnv,
   type RuntimeCache
 } from "./runtime-cache/index.js";
+import {
+  createLiveObservationV2Runtime,
+  type LiveObservationV2Runtime
+} from "./live-observations/live-observation-v2-runtime.js";
+import { createDeploymentNotificationRuntime } from "./notifications/notification-runtime.js";
+import { startNotificationOutboxJob } from "./notifications/notification-outbox-job.js";
 
 const allowedCorsOrigins = new Set(["http://localhost:3000", "http://127.0.0.1:3000"]);
-const corsAllowedMethods = "GET,POST,PUT,DELETE,OPTIONS";
+const corsAllowedMethods = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
 const fallbackCorsAllowedHeaders = "content-type,authorization";
+const sensitiveHeaderRedactionPaths = [
+  "headers.authorization",
+  "headers.cookie",
+  "headers[\"set-cookie\"]",
+  "req.headers.authorization",
+  "req.headers.cookie",
+  "req.headers[\"set-cookie\"]",
+  "request.headers.authorization",
+  "request.headers.cookie",
+  "request.headers[\"set-cookie\"]",
+  "res.headers.authorization",
+  "res.headers.cookie",
+  "res.headers[\"set-cookie\"]",
+  "response.headers.authorization",
+  "response.headers.cookie",
+  "response.headers[\"set-cookie\"]"
+];
+
+export function createApiLoggerOptions(options: {
+  nodeEnv?: string | undefined;
+  stream?: { write(message: string): void } | undefined;
+} = {}) {
+  if ((options.nodeEnv ?? process.env.NODE_ENV) === "test") {
+    return false;
+  }
+
+  return {
+    redact: {
+      censor: "[REDACTED]",
+      paths: [...sensitiveHeaderRedactionPaths]
+    },
+    ...(options.stream === undefined ? {} : { stream: options.stream })
+  };
+}
 
 export type BuildAppOptions = {
   getDatabaseClient?: () => DatabaseClient;
@@ -64,11 +127,23 @@ export type BuildAppOptions = {
   passwordResetRequestIpRateLimiter?: RateLimiter;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
-    "createSourceRepositoryRepository" | "githubAppClient" | "githubAppSlug" | "githubAppStateSecret"
+    | "createSourceRepositoryRepository"
+    | "githubAppClient"
+    | "githubAppSlug"
+    | "githubAppStateSecret"
+    | "githubRepositoryEvidenceReader"
+    | "sourceRepositoryAnalysisRateLimiter"
   >;
   runtimeCache?: RuntimeCache;
+  runtimeEnv?: RuntimeEnv;
+  liveObservationV2Runtime?: LiveObservationV2Runtime;
+  notificationRoutes?: Pick<
+    NotificationRouteOptions,
+    "createService" | "pushConfig" | "requireUserId"
+  >;
   validateTerraformPreviewCode?: TerraformRouteOptions["validateTerraformPreviewCode"];
   reverseEngineeringServiceOptions?: ReverseEngineeringRouteOptions["serviceOptions"];
 };
@@ -76,6 +151,11 @@ export type BuildAppOptions = {
 // 테스트와 서버가 같은 앱을 쓰되, LLM 호출 계층은 옵션으로만 주입합니다.
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const getAppDatabaseClient = options.getDatabaseClient ?? getDatabaseClient;
+  const runtimeEnv = options.runtimeEnv ?? getRuntimeEnv();
+  const liveObservationEnabled = isLiveObservationEnabled(runtimeEnv);
+  const liveObservationKeyring = liveObservationEnabled
+    ? requireLiveObservationCapabilityKeyring(runtimeEnv)
+    : undefined;
   const oauthStartRateLimiter =
     options.oauthStartRateLimiter ??
     createInMemoryRateLimiter({
@@ -101,16 +181,34 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       windowMs: 60 * 60 * 1000
     });
   const app = Fastify({
-    logger: process.env.NODE_ENV !== "test",
-    trustProxy: true
+    logger: createApiLoggerOptions(),
+    trustProxy: 1
   });
   const runtimeCache =
     options.runtimeCache ??
     createRuntimeCacheFromEnv({
+      env: runtimeEnv,
       onDegraded: (error) => {
         app.log.warn({ error }, "Runtime Cache degraded; continuing with fallback state");
       }
     });
+  const liveObservationV2Runtime = liveObservationEnabled
+    ? options.liveObservationV2Runtime ??
+      createLiveObservationV2Runtime({
+        getDatabaseClient: getAppDatabaseClient,
+        keyring: liveObservationKeyring!,
+        runtimeCache,
+        runtimeEnv
+      })
+    : undefined;
+  const notificationRuntime = createDeploymentNotificationRuntime({
+    getDatabaseClient: getAppDatabaseClient,
+    runtimeEnv,
+    onDispatchError: ({ outboxId, code }) => {
+      app.log.warn({ outboxId, code }, "Web Push delivery will be retried");
+    }
+  });
+  const githubAppClient = createLazyGitHubAppClient();
   const stopRefreshTokenCleanupJob =
     process.env.NODE_ENV === "test"
       ? undefined
@@ -119,9 +217,18 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
             app.log.error({ error }, "Failed to clean stale refresh tokens");
           }
         });
+  const stopNotificationOutboxJob =
+    process.env.NODE_ENV === "test" || !notificationRuntime.pushEnabled
+      ? undefined
+      : startNotificationOutboxJob(notificationRuntime.createService, {
+          onError: (error) => {
+            app.log.error({ error }, "Notification outbox dispatch failed");
+          }
+        });
 
   app.addHook("onClose", async () => {
     stopRefreshTokenCleanupJob?.();
+    stopNotificationOutboxJob?.();
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -153,6 +260,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.addHook("onRequest", async (request, reply) => {
+    reply.header("x-request-id", request.id);
     setCorsHeaders(request, reply);
 
     if (request.method === "OPTIONS") {
@@ -165,7 +273,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   });
 
   app.register(registerHealthRoutes);
-  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache));
+  app.register(registerAiRoutes, createAiRouteOptions(options, runtimeCache, getAppDatabaseClient));
   app.register(registerAuthRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -184,6 +292,21 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     projectAssetStorage: options.projectAssetStorage,
     projectDeletionStorage: options.projectDeletionStorage
   });
+  app.register(registerProjectReleaseLedgerRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectReleaseLedgerRoutes
+  });
+  app.register(registerNotificationRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    createService:
+      options.notificationRoutes?.createService ?? notificationRuntime.createService,
+    pushConfig: options.notificationRoutes?.pushConfig ?? notificationRuntime.pushConfig,
+    ...(options.notificationRoutes?.requireUserId
+      ? { requireUserId: options.notificationRoutes.requireUserId }
+      : {})
+  });
   app.register(registerSourceRepositoryRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -192,20 +315,42 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerDeploymentRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
+    projectAssetStorage: options.projectAssetStorage,
     runtimeCache
   });
-  app.register(registerLiveObservationRoutes, {
-    prefix: "/api",
-    getDatabaseClient: getAppDatabaseClient,
-    runtimeCache
-  });
+  app.register(
+    registerLiveObservationV2Routes,
+    liveObservationV2Runtime
+      ? {
+          prefix: "/api",
+          enabled: true,
+          liveObservationService: liveObservationV2Runtime.liveObservationService,
+          prepareDeploymentManifest: liveObservationV2Runtime.prepareDeploymentManifest,
+          requireDeploymentAccess: liveObservationV2Runtime.requireDeploymentAccess,
+          refreshObservation: liveObservationV2Runtime.refreshObservation
+        }
+      : {
+          prefix: "/api",
+          enabled: false
+        }
+  );
+  if (liveObservationV2Runtime) {
+    app.register(registerLiveObservationPublicCollectorRoutes, {
+      prefix: "/api",
+      collector: liveObservationV2Runtime.collector,
+      enabled: true
+    });
+  }
   app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
     gitCicdHandoffProvider: createDelegatingGitCicdHandoffProvider({
-      githubProvider: createGitHubGitCicdHandoffProvider(createGitHubAppGitProvider())
+      githubProvider: createGitHubGitCicdHandoffProvider(
+        createGitHubAppGitProvider({ githubAppClient })
+      )
     }),
-    gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider(),
+    gitCicdPipelineStatusProvider: createGitHubActionsPipelineStatusProvider({ githubAppClient }),
+    gitCicdRunProvider: createGitHubActionsRunProvider(githubAppClient),
     runtimeCache
   });
   app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
@@ -226,25 +371,37 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   return app;
 }
 
+type SharedGitHubAppClient = ReturnType<typeof createGitHubAppClient>;
+
+function createLazyGitHubAppClient(): SharedGitHubAppClient {
+  let client: SharedGitHubAppClient | undefined;
+  const getClient = () => {
+    if (!client) {
+      const config = requireGitHubAppConfig();
+      client = createGitHubAppClient({ appId: config.appId, privateKey: config.privateKey });
+    }
+    return client;
+  };
+  return new Proxy({} as SharedGitHubAppClient, {
+    get(_target, property) {
+      return Reflect.get(getClient(), property);
+    }
+  });
+}
+
 // AI route 옵션은 undefined 필드를 넘기지 않게 분리해 exact optional 타입을 지킵니다.
 function createAiRouteOptions(
   options: BuildAppOptions,
-  runtimeCache: RuntimeCache
+  runtimeCache: RuntimeCache,
+  getDatabaseClient: () => DatabaseClient
 ): AiRouteOptions & { readonly prefix: "/api" } {
-  if (
-    options.analyzePreDeploymentCheck === undefined &&
-    options.createArchitectureDraftResponse === undefined &&
-    options.createLlmExplanation === undefined &&
-    options.createSafetyFindingExplanation === undefined &&
-    options.safetyExplanationTimeoutMs === undefined &&
-    options.pricingRateProvider === undefined
-  ) {
-    return { prefix: "/api", runtimeCache };
-  }
-
   return {
     prefix: "/api",
     runtimeCache,
+    getDatabaseClient,
+    ...(options.sourceRepositoryRoutes?.createSourceRepositoryRepository
+      ? { createSourceRepositoryRepository: options.sourceRepositoryRoutes.createSourceRepositoryRepository }
+      : {}),
     ...(options.analyzePreDeploymentCheck !== undefined
       ? { analyzePreDeploymentCheck: options.analyzePreDeploymentCheck }
       : {}),
@@ -294,8 +451,16 @@ function createTerraformRouteOptions(
 
 function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
   const origin = firstHeaderValue(request.headers.origin);
+  const configuredPublicBaseUrl = process.env.SKETCHCATCH_PUBLIC_BASE_URL?.trim();
+  const configuredPublicOrigin =
+    configuredPublicBaseUrl && URL.canParse(configuredPublicBaseUrl)
+      ? new URL(configuredPublicBaseUrl).origin
+      : undefined;
 
-  if (origin === undefined || !allowedCorsOrigins.has(origin)) {
+  if (
+    origin === undefined ||
+    (!allowedCorsOrigins.has(origin) && origin !== configuredPublicOrigin)
+  ) {
     return;
   }
 
@@ -304,6 +469,7 @@ function setCorsHeaders(request: FastifyRequest, reply: FastifyReply): void {
     fallbackCorsAllowedHeaders;
 
   reply.header("Access-Control-Allow-Origin", origin);
+  reply.header("Access-Control-Allow-Credentials", "true");
   reply.header("Access-Control-Allow-Methods", corsAllowedMethods);
   reply.header("Access-Control-Allow-Headers", requestedHeaders);
   reply.header("Vary", "Origin");
@@ -342,11 +508,24 @@ function getErrorMessage(error: unknown): string {
 }
 
 function getResponseErrorMessage(statusCode: number, error: unknown): string {
+  if (hasExposedMessage(error)) {
+    return getErrorMessage(error);
+  }
+
   if (statusCode >= 500 && process.env.NODE_ENV === "production") {
     return "Internal server error";
   }
 
   return getErrorMessage(error);
+}
+
+function hasExposedMessage(error: unknown): error is { readonly exposeMessage: true } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "exposeMessage" in error &&
+    error.exposeMessage === true
+  );
 }
 
 function hasStatusCode(error: unknown): error is { readonly statusCode: number } {

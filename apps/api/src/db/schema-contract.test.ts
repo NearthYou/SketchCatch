@@ -1,11 +1,21 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import {
+  createTableRelationsHelpers,
+  extractTablesRelationalConfig
+} from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
+import * as databaseSchema from "./schema.js";
 import {
   architectures,
+  applicationArtifacts,
+  applicationReleases,
   awsConnectionStatusEnum,
   awsConnections,
   deploymentFailureStageEnum,
+  deploymentLiveObservationManifests,
+  deploymentLiveObservationManifestStatusEnum,
   deploymentLiveProfileEnum,
   deploymentLogs,
   deploymentPlanArtifacts,
@@ -16,15 +26,206 @@ import {
   gitCicdHandoffStatusEnum,
   gitCicdHandoffKindEnum,
   gitCicdHandoffs,
+  gitCicdMonitoringConfigs,
+  gitCicdPipelineLogs,
+  gitCicdPipelineRuns,
+  gitCicdPipelineStages,
   gitCicdRepositoryProviderEnum,
   projectAssets,
+  projectDeploymentTargets,
   projectDrafts,
   projects,
   reverseEngineeringScanLogs,
   reverseEngineeringScanStatusEnum,
   reverseEngineeringScans,
+  sourceRepositories,
   users
 } from "./schema.js";
+
+test("ApplicationArtifact Registry is project-scoped metadata with persistent build leases", () => {
+  const artifactConfig = getTableConfig(applicationArtifacts);
+  const releaseConfig = getTableConfig(applicationReleases);
+
+  assert.deepEqual(
+    artifactConfig.columns.map((column) => column.name),
+    [
+      "id",
+      "project_id",
+      "source_repository_id",
+      "kind",
+      "artifact_fingerprint",
+      "repository_identity",
+      "commit_sha",
+      "build_config_sha256",
+      "build_contract_version",
+      "target_os",
+      "target_architecture",
+      "build_input_identity_sha256",
+      "digest_algorithm",
+      "digest",
+      "provider",
+      "provider_account_id",
+      "provider_region",
+      "storage_namespace",
+      "artifact_reference",
+      "ownership_scope",
+      "status",
+      "claim_token_sha256",
+      "claim_expires_at",
+      "failure_reason",
+      "verified_at",
+      "created_at",
+      "updated_at"
+    ]
+  );
+  assert.equal(findColumn(artifactConfig.columns, "bytes"), undefined);
+  assert.equal(findColumn(artifactConfig.columns, "claim_token"), undefined);
+  assert(
+    hasUniqueIndex(
+      artifactConfig.indexes,
+      "application_artifacts_project_fingerprint_active_unique",
+      ["project_id", "artifact_fingerprint"]
+    )
+  );
+  assert(hasForeignKey(artifactConfig.foreignKeys, "project_id", projects, "id"));
+  assert(
+    hasForeignKey(
+      artifactConfig.foreignKeys,
+      "source_repository_id",
+      sourceRepositories,
+      "id"
+    )
+  );
+  assert(findColumn(releaseConfig.columns, "artifact_id"));
+  assert(
+    releaseConfig.foreignKeys.some((candidate) => {
+      const reference = candidate.reference();
+      return (
+        reference.columns.map((column) => column.name).join(",") ===
+          "artifact_id,project_id" &&
+        reference.foreignTable === applicationArtifacts &&
+        reference.foreignColumns.map((column) => column.name).join(",") === "id,project_id"
+      );
+    })
+  );
+});
+
+test("ApplicationArtifact Registry migration is additive and reserves coordinated revision 0045", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0045_application_artifact_registry.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /CREATE TABLE "application_artifacts"/);
+  assert.match(migration, /ADD COLUMN "artifact_id" varchar\(36\)/);
+  assert.match(migration, /UNIQUE.*"project_id".*"artifact_fingerprint"/s);
+  assert.match(migration, /FOREIGN KEY \("artifact_id","project_id"\)/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
+});
+
+test("Runtime convergence storage is additive and preserves legacy release rows", () => {
+  const targetConfig = getTableConfig(projectDeploymentTargets);
+  const releaseConfig = getTableConfig(applicationReleases);
+
+  assert(findColumn(targetConfig.columns, "runtime_target"));
+  assert(findColumn(targetConfig.columns, "deployment_target_fingerprint"));
+  assert(findColumn(releaseConfig.columns, "runtime_adapter_kind"));
+  assert(findColumn(releaseConfig.columns, "deployment_target_fingerprint"));
+  assert(findColumn(releaseConfig.columns, "convergence_outcome"));
+
+  const migrationUrl = new URL(
+    "../../drizzle/0046_runtime_convergence.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /ALTER TABLE "project_deployment_targets" ADD COLUMN "runtime_target" jsonb/);
+  assert.match(
+    migration,
+    /ALTER TABLE "project_deployment_targets" ADD COLUMN "deployment_target_fingerprint" varchar\(64\)/
+  );
+  assert.match(migration, /ALTER TABLE "application_releases" ADD COLUMN "runtime_adapter_kind" varchar\(64\)/);
+  assert.match(migration, /ALTER TABLE "application_releases" ADD COLUMN "convergence_outcome" varchar\(32\)/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
+});
+
+test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
+  assert.ok(gitCicdMonitoringConfigs.sourceRepositoryId);
+  assert.ok(gitCicdMonitoringConfigs.validationStatus);
+  assert.ok(gitCicdPipelineRuns.commitSha);
+  assert.ok(gitCicdPipelineRuns.upstreamOrderingToken);
+  assert.ok(gitCicdPipelineRuns.logRevision);
+  assert.ok(gitCicdPipelineStages.pipelineRunId);
+  assert.ok(gitCicdPipelineLogs.sequence);
+
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineRuns).indexes, "git_cicd_pipeline_runs_repository_commit_unique", [
+      "source_repository_id",
+      "commit_sha"
+    ])
+  );
+  const pageIndex = getTableConfig(gitCicdPipelineRuns).indexes.find(
+    (candidate) => candidate.config.name === "git_cicd_pipeline_runs_project_created_id_idx"
+  );
+  assert.ok(pageIndex);
+  assert.deepEqual(pageIndex.config.columns.map(getColumnName), [
+    "project_id",
+    "created_at",
+    "id"
+  ]);
+  assert.deepEqual(
+    pageIndex.config.columns.map((column) =>
+      typeof column === "object" && column !== null && "indexConfig" in column
+        ? (column as { indexConfig: { order: string } }).indexConfig.order
+        : undefined
+    ),
+    ["asc", "desc", "desc"]
+  );
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineStages).indexes, "git_cicd_pipeline_stages_run_kind_unique", [
+      "pipeline_run_id",
+      "kind"
+    ])
+  );
+  assert(
+    hasUniqueIndex(getTableConfig(gitCicdPipelineLogs).indexes, "git_cicd_pipeline_logs_run_sequence_unique", [
+      "pipeline_run_id",
+      "sequence"
+    ])
+  );
+});
+
+test("Pipeline Run revision migration adds deterministic concurrency and log reset columns", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0033_git_cicd_pipeline_upstream_revision.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+  assert.match(migration, /ADD COLUMN "upstream_ordering_token" text/);
+  assert.match(migration, /ADD COLUMN "log_revision" text/);
+  assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM|TRUNCATE/i);
+});
+
+test("Git/CI/CD monitoring migration safely backfills active repositories", () => {
+  const migrationUrl = new URL("../../drizzle/0032_git_cicd_monitoring_runs.sql", import.meta.url);
+
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /INSERT INTO "git_cicd_monitoring_configs"/);
+  assert.match(migration, /WHERE "status" = 'active'/);
+  assert.match(migration, /'required'/);
+  assert.match(migration, /'\{"mode":"repository_root","path":"\."\}'::jsonb/);
+  assert.doesNotMatch(migration, /(?:INSERT INTO|UPDATE|DELETE FROM) "git_cicd_handoffs"/);
+  assert.match(
+    migration,
+    /CREATE INDEX "git_cicd_pipeline_runs_project_created_id_idx" ON "git_cicd_pipeline_runs" USING btree \("project_id","created_at" DESC,"id" DESC\)/
+  );
+});
 
 test("deployment status enum uses a domain-specific database name", () => {
   assert.equal(deploymentStatusEnum.enumName, "deployment_status");
@@ -115,6 +316,113 @@ test("deployments store the explicit live deployment profile", () => {
     "demo_web_service_with_rds"
   ]);
   assert(findColumn(config.columns, "live_profile"));
+});
+
+test("deployment Live Observation manifests are one-to-one schema v2 records without secrets", () => {
+  const config = getTableConfig(deploymentLiveObservationManifests);
+  const deploymentId = config.columns.find((column) => column.name === "deployment_id");
+  const schemaVersion = config.columns.find((column) => column.name === "schema_version");
+  const status = config.columns.find((column) => column.name === "status");
+  const manifest = config.columns.find((column) => column.name === "manifest");
+  const invalidReason = config.columns.find((column) => column.name === "invalid_reason");
+  const createdAt = config.columns.find((column) => column.name === "created_at");
+  const updatedAt = config.columns.find((column) => column.name === "updated_at");
+
+  assert.equal(
+    deploymentLiveObservationManifestStatusEnum.enumName,
+    "deployment_live_observation_manifest_status"
+  );
+  assert.deepEqual(deploymentLiveObservationManifestStatusEnum.enumValues, [
+    "valid",
+    "manifest_invalid"
+  ]);
+  assert.deepEqual(
+    config.columns.map((column) => column.name),
+    [
+      "deployment_id",
+      "schema_version",
+      "status",
+      "manifest",
+      "invalid_reason",
+      "created_at",
+      "updated_at"
+    ]
+  );
+  assert.equal(deploymentId?.primary, true);
+  assert.equal(deploymentId?.notNull, true);
+  assert.equal(schemaVersion?.columnType, "PgInteger");
+  assert.equal(schemaVersion?.notNull, true);
+  assert.equal(status?.notNull, true);
+  assert.equal(manifest?.columnType, "PgJsonb");
+  assert.equal(manifest?.notNull, false);
+  assert.equal(invalidReason?.notNull, false);
+  assert.equal(createdAt?.notNull, true);
+  assert.equal(updatedAt?.notNull, true);
+  assert.equal((createdAt as { withTimezone?: boolean } | undefined)?.withTimezone, true);
+  assert.equal((updatedAt as { withTimezone?: boolean } | undefined)?.withTimezone, true);
+  assert(
+    config.checks.some(
+      (constraint) =>
+        constraint.name ===
+        "deployment_live_observation_manifests_schema_version_check"
+    )
+  );
+  assert(
+    config.checks.some(
+      (constraint) =>
+        constraint.name ===
+        "deployment_live_observation_manifests_status_payload_check"
+    )
+  );
+
+  const deploymentForeignKey = config.foreignKeys.find((foreignKey) => {
+    const reference = foreignKey.reference();
+
+    return (
+      reference.columns.some((column) => column.name === "deployment_id") &&
+      reference.foreignTable === deployments &&
+      reference.foreignColumns.some((column) => column.name === "id")
+    );
+  });
+  assert.ok(deploymentForeignKey);
+  assert.equal(deploymentForeignKey.onDelete, "cascade");
+});
+
+test("Live Observation manifest invariant migration rejects inconsistent status payloads", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0034_live_observation_manifest_invariants.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /status_payload_check/);
+  assert.match(migration, /"status" = 'valid'/);
+  assert.match(migration, /"manifest" IS NOT NULL/);
+  assert.match(migration, /"invalid_reason" IS NULL/);
+  assert.match(migration, /"status" = 'manifest_invalid'/);
+  assert.match(migration, /"manifest" IS NULL/);
+  assert.match(migration, /length\(btrim\("invalid_reason"\)\) > 0/);
+  assert.match(migration, /NOT VALID/);
+  assert.match(migration, /VALIDATE CONSTRAINT/);
+  assert.doesNotMatch(migration, /DROP TABLE|DELETE FROM|TRUNCATE/i);
+});
+
+test("deployments and Live Observation manifests expose inverse one-to-one relations", () => {
+  const relationalConfig = extractTablesRelationalConfig(
+    databaseSchema,
+    createTableRelationsHelpers
+  ).tables;
+
+  assert.equal(
+    relationalConfig.deployments?.relations.liveObservationManifest?.referencedTableName,
+    "deployment_live_observation_manifests"
+  );
+  assert.equal(
+    relationalConfig.deploymentLiveObservationManifests?.relations.deployment
+      ?.referencedTableName,
+    "deployments"
+  );
 });
 
 test("AWS connections store generated external ids without raw credentials", () => {

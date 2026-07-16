@@ -34,7 +34,8 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 - 음성 요구사항은 Amazon Transcribe 기반 Voice Requirement Input으로 받고, 사용자가 확인한 뒤 Requirement Prompt로 확정한다.
 - 다이어그램과 Terraform이 같은 설계 데이터를 바라보게 한다.
 - AI, Bedrock, Amazon Q Assistance는 Architecture Draft, 설명, 리뷰, 수정 제안을 보강한다.
-- 배포 전 비용, 보안, 설정 위험을 보여주고 High Security Risk는 Deployment Safety Gate에서 차단한다.
+- Architecture Board Compiler는 AI Draft, 현재 Board, Reverse Engineering 결과를 Template 사례에 근거해 Resource 의미와 시각 배치까지 다시 구성하는 제안을 만들며, 틀리거나 IaC 유효성을 위반한 변경도 diff와 진단으로 드러낸 뒤 사용자 승인을 받는다.
+- 배포 전 비용, 보안, 설정 위험을 보여주되 High Security Risk도 사용자 검토 정보로 유지하며 Terraform Plan 승인은 허용한다.
 - 사용자가 승인한 Terraform Plan만 Direct Deployment Path로 실제 클라우드에 반영한다.
 - 팀 운영 배포는 Source Repository와 Git/CI/CD Integration으로 넘긴다.
 - Reverse Engineering은 기존 클라우드 Resource를 Provider Adapter로 스캔해 Practice Architecture와 IaC Preview/import 제안으로 전환한다.
@@ -58,6 +59,7 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Requirement Input | 텍스트와 Voice Requirement Input을 Requirement Prompt로 정규화한다. |
 | AI Architecture Recommendation | Requirement Prompt를 Architecture Draft로 변환하고 수락 전 설명을 제공한다. |
 | 다이어그램 편집 | Architecture Board에서 Resource와 관계를 직접 수정한다. |
+| Board 자동 정리 | Architecture Board Compiler가 Resource·관계·설정·소속·배치를 함께 재구성한 제안을 비교·승인·되돌릴 수 있게 한다. |
 | Terraform 생성 | 다이어그램 기반 설계를 IaC Preview로 변환한다. |
 | Pre-Deployment Check | 비용, 보안, 설정 위험을 설명하고 수정 방향을 제안한다. |
 | Direct Deployment Path | sandbox/practice 실행에서 Plan, 승인, Apply, 로그, Outputs, Auto Cleanup까지 연결한다. |
@@ -78,10 +80,14 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | --- | --- |
 | 실제 AWS Direct Deployment | Plan, 승인, Apply, 로그, Outputs, Destroy/Cleanup까지 연결한다. |
 | Git/CI/CD 운영 경로 | Terraform commit/PR, pipeline template, Plan 결과, 실행 상태를 연결한다. |
+| Application Artifact 재사용 | Direct Deployment와 Git/CI/CD가 같은 provider-neutral Registry를 사용하되 provider의 실제 artifact와 project ownership을 다시 검증한 경우에만 build를 재사용한다. |
+| Runtime Convergence | 동일한 Application Artifact와 runtime configuration이 provider에서 healthy 상태로 실제 실행 중인 경우에만 rollout을 생략한다. DB나 Runtime Cache 기록만으로 성공 처리하지 않으며 provider 조회 실패·불일치·unhealthy 상태는 안전한 rollout으로 fallback한다. ECS Service(Fargate/EC2 Capacity Provider), 단일 EC2, EC2+ASG, EKS(Managed/Self-managed/Fargate), Kubernetes Deployment, Lambda Alias/Version, Static S3/CloudFront는 독립 Adapter 경계를 유지한다. |
 | 리버스 엔지니어링 | Provider Adapter로 기존 cloud Resource를 가져와 Architecture Board와 IaC Preview/import 제안으로 복원한다. MVP는 AWS-first로 시작한다. |
 | 비용 분석 | Practice Architecture, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다. |
 | Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
 | Runtime Cache | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍을 보조한다. |
+
+Repository Analysis에서 Git/CI/CD 연결을 시작하면 GitHub App callback은 이미 분석한 Repository만 자동으로 연결한다. 사용자는 Repository를 다시 고르거나 다시 분석하지 않는다. 초기 UI 검증 기간에는 callback의 개별 저장 버튼을 숨기고 하단 `확인`이 배포 타깃과 GitOps 감시 설정을 순서대로 저장한 뒤 기존 추천·질문 상태에 돌아가 Board 생성을 계속한다. callback 화면의 배포 타깃 초안은 어떤 추천 Template을 선택해도 ECS Fargate로 통일하고 분석 commit SHA와 Dockerfile 근거, 프로젝트 이름으로 안전한 기본값을 채운다. 이 설정 저장은 실제 cloud 배포나 Git 변경을 실행하지 않는다.
 | Deployment 관측 | Live event, CloudWatch measured, Auto Scaling actual을 서로 다른 근거로 표시하고 AWS 조회 실패 시 sample 값을 만들지 않는다. |
 
 ## AWS-first 실행 범위와 Representative Use Journey
@@ -160,7 +166,7 @@ MVP에서 하지 않는다.
 | 음성 입력 오인식 | 의도와 다른 Requirement Prompt 생성 | Transcribe 결과 확인, 사용자 수정 후 확정 |
 | Terraform 생성 오류 | Plan/Apply 실패 | 정적 diagnostics, `terraform validate`, Golden Path 테스트 |
 | AWS 비용 사고 | 원치 않는 비용 발생 | 리소스 whitelist, 비용 경고, Destroy/Cleanup 필수 |
-| 보안 위험 설정 | 공개 SSH, Public DB 등 | Pre-Deployment Check, High 위험 차단 또는 별도 승인 |
+| 보안 위험 설정 | 공개 SSH, Public DB 등 | Pre-Deployment Check, High 위험 강조 표시, 사용자 Plan 승인 기록 |
 | Git/CI/CD 권한 오남용 | 운영 배포 경로 사고 | PR 기반 handoff, pipeline status tracking, 승인 gate |
 | Reverse Engineering 오해석 | 기존 cloud state와 Practice Architecture 불일치 | Provider Adapter 범위 명시, import suggestion은 사용자 확인 후 적용 |
 | 로그/응답 secret 노출 | credential 유출 | 로그 마스킹, shared type secret 배제 |
@@ -182,6 +188,9 @@ MVP에서 하지 않는다.
 - 실행 기록은 **Deployment History**
 - 빠른 검증/샌드박스 실행 경로는 **Direct Deployment Path**
 - 팀 운영 배포 경로는 **Git/CI/CD Deployment Path**
+- 재사용 가능한 application build identity는 **Application Artifact**, 해당 artifact를 runtime에 반영한 이력은 **Application Release**
+- application byte identity는 **artifactFingerprint**, orchestrator·compute·capacity·rollout을 포함한 실행 목표 identity는 **deploymentTargetFingerprint**
+- provider의 current state 조회, desired target 비교, rollout, health 확인, rollback evidence, already-active 판정을 캡슐화하는 경계는 **Runtime Convergence Adapter**
 - 기존 클라우드 상태 복원은 **Reverse Engineering**
 - 내부 Redis 기반 상태/cache 계층은 **Runtime Cache**
 - 성공한 Deployment의 제한된 실시간 관측 세션은 **Live Observation**

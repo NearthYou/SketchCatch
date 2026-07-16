@@ -4,6 +4,7 @@ import type {
   TerraformValidateRequest
 } from "@sketchcatch/types";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
+import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
 import { isTerraformNestedBlockAttribute } from "./terraform-nested-blocks.js";
 
 const BLOCK_HEADER_PATTERN =
@@ -16,9 +17,9 @@ const ATTRIBUTE_DOUBLE_EQUALS_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*==/;
 const ATTRIBUTE_LIKE_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s+\S+/;
 const NESTED_BLOCK_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*\{\s*$/;
 const QUOTED_REFERENCE_PATTERN =
-  /"((?:aws_[A-Za-z0-9_]+|data\.aws_[A-Za-z0-9_]+)\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)"/g;
+  /"((?:(?:aws|kubernetes)_[A-Za-z0-9_]+|data\.(?:aws|kubernetes)_[A-Za-z0-9_]+)\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)"/g;
 const TERRAFORM_REFERENCE_PATTERN =
-  /\b(?:data\.aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+|aws_[A-Za-z0-9_]+\.[A-Za-z0-9_]+)(?:\.[A-Za-z0-9_]+)*\b/g;
+  /\b(?:data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_-]+)*\b/g;
 const TRAILING_ATTRIBUTE_COMMA_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=.+,\s*$/;
 const HEREDOC_MARKER_PATTERN = /<<-?\s*([A-Za-z_][A-Za-z0-9_]*)/g;
 const STRING_LITERAL_PATTERN = /^"(?:[^"\\]|\\.)*"$/s;
@@ -303,7 +304,7 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
       trimmedLine.endsWith("{")
     ) {
       diagnostics.push({
-        severity: "error",
+        severity: "warning",
         code: "terraform.unsupported_block",
         line: index + 1,
         message: "Terraform editor 검증은 resource/data block만 지원합니다."
@@ -379,15 +380,6 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
 
       addresses.add(address);
 
-      if (isInlineEmptyBlock(codeLine) || isEmptyBlock(lines, index)) {
-        diagnostics.push({
-          severity: "warning",
-          code: "terraform.empty_block",
-          line: index + 1,
-          resourceAddress: address,
-          message: `${address} block에 attribute가 없습니다.`
-        });
-      }
     }
 
     depth = Math.max(0, depth + getBraceDelta(codeLine));
@@ -397,7 +389,11 @@ function checkBlocks(terraformCode: string): TerraformDiagnostic[] {
 }
 
 function isSupportedTopLevelBlockType(blockType: string | undefined): boolean {
-  return blockType === "resource" || blockType === "data" || blockType === "provider";
+  return blockType === "resource" ||
+    blockType === "data" ||
+    blockType === "provider" ||
+    blockType === "terraform" ||
+    isSilentlyPreservedTerraformBlockType(blockType);
 }
 
 function checkBodySyntax(terraformCode: string): TerraformDiagnostic[] {
@@ -556,7 +552,7 @@ function checkUndefinedReferences(terraformCode: string): TerraformDiagnostic[] 
 
       reportedReferences.add(referenceAddress);
       diagnostics.push({
-        severity: "error",
+        severity: "warning",
         code: "terraform.undefined_reference",
         line: index + 1,
         resourceAddress: referenceAddress,
@@ -678,30 +674,6 @@ function checkTrailingAttributeCommas(terraformCode: string): TerraformDiagnosti
   });
 
   return diagnostics;
-}
-
-function isEmptyBlock(lines: string[], headerIndex: number): boolean {
-  for (let index = headerIndex + 1; index < lines.length; index += 1) {
-    const lineText = lines[index];
-
-    if (lineText === undefined) {
-      continue;
-    }
-
-    const trimmedLine = stripLineComment(lineText).trim();
-
-    if (!trimmedLine) {
-      continue;
-    }
-
-    return trimmedLine === "}";
-  }
-
-  return false;
-}
-
-function isInlineEmptyBlock(lineText: string): boolean {
-  return /\{\s*\}\s*$/.test(stripLineComment(lineText));
 }
 
 function checkQuotedReferences(terraformCode: string): TerraformDiagnostic[] {

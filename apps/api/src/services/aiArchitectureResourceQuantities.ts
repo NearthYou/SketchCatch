@@ -27,6 +27,19 @@ const KOREAN_COUNT_WORDS = new Map<string, number>([
   ["열", 10]
 ]);
 
+const ENGLISH_COUNT_WORDS = new Map<string, number>([
+  ["one", 1],
+  ["two", 2],
+  ["three", 3],
+  ["four", 4],
+  ["five", 5],
+  ["six", 6],
+  ["seven", 7],
+  ["eight", 8],
+  ["nine", 9],
+  ["ten", 10]
+]);
+
 export function resolveArchitectureResourceQuantities(prompt: string): ArchitectureResourceQuantities {
   const normalizedPrompt = prompt.normalize("NFKC").toLowerCase();
 
@@ -38,11 +51,21 @@ export function resolveArchitectureResourceQuantities(prompt: string): Architect
 
 function findRequestedResourceCount(normalizedPrompt: string, keywords: readonly string[]): number {
   const keywordPattern = keywords.map(escapeRegExp).join("|");
-  const countPattern = `\\d{1,2}|${Array.from(KOREAN_COUNT_WORDS.keys()).join("|")}`;
-  const countSuffixPattern = `\\s*(?:개|대|정도|쯤|가량|필요|있어|있는|$)`;
+  const countPattern = `\\d{1,2}|${[
+    ...KOREAN_COUNT_WORDS.keys(),
+    ...ENGLISH_COUNT_WORDS.keys()
+  ].join("|")}`;
+  const unitPattern = "(?:개|대|instances?|servers?|buckets?)";
+  const optionalParticlePattern = "(?:은|는|이|가|을|를|로|으로|:)?";
   const countNearKeywordPatterns = [
-    new RegExp(`(?:${keywordPattern})[^\\n]{0,16}(?:한\\s+)?(${countPattern})(?=${countSuffixPattern})`, "u"),
-    new RegExp(`(${countPattern})(?=${countSuffixPattern})\\s*(?:있는|짜리|의)?\\s*(?:${keywordPattern})`, "u")
+    new RegExp(
+      `(?:${keywordPattern})\\s*${optionalParticlePattern}\\s*(?:한\\s+)?(${countPattern})\\s*${unitPattern}?`,
+      "u"
+    ),
+    new RegExp(
+      `(?<![\\p{L}\\p{N}])(${countPattern})\\s*${unitPattern}?\\s*(?:있는|짜리|의)?\\s*(?:${keywordPattern})`,
+      "u"
+    )
   ];
 
   for (const pattern of countNearKeywordPatterns) {
@@ -68,7 +91,7 @@ function parseCountToken(token: string | undefined): number | null {
     return numericCount;
   }
 
-  return KOREAN_COUNT_WORDS.get(token) ?? null;
+  return KOREAN_COUNT_WORDS.get(token) ?? ENGLISH_COUNT_WORDS.get(token) ?? null;
 }
 
 function clampResourceCount(count: number): number {

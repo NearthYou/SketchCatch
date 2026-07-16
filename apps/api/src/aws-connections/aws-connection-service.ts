@@ -24,6 +24,49 @@ export const recommendedAwsConnectionRoleName = "SketchCatchTerraformExecutionRo
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
 const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
 const awsConnectionRoleNameSuffixLength = 8;
+const terraformFargateServiceActions = [
+  "ecs:*",
+  "ecr:*",
+  "elasticloadbalancing:*",
+  "cloudfront:*",
+  "logs:*"
+] as const;
+const directReleaseCodeBuildActions = [
+  "codebuild:BatchGetProjects",
+  "codebuild:StartBuild",
+  "codebuild:BatchGetBuilds",
+  "codebuild:StopBuild"
+] as const;
+const directReleaseCodeBuildResourcePatterns = [
+  "arn:aws:codebuild:ap-northeast-2:*:project/sketchcatch-*",
+  "arn:aws:codebuild:ap-northeast-2:*:build/sketchcatch-*:*"
+] as const;
+const terraformFargateIamActions = [
+  "iam:CreateRole",
+  "iam:DeleteRole",
+  "iam:GetRole",
+  "iam:UpdateAssumeRolePolicy",
+  "iam:TagRole",
+  "iam:UntagRole",
+  "iam:ListRoleTags",
+  "iam:ListRolePolicies",
+  "iam:ListAttachedRolePolicies",
+  "iam:ListInstanceProfilesForRole",
+  "iam:AttachRolePolicy",
+  "iam:DetachRolePolicy",
+  "iam:CreateServiceLinkedRole"
+] as const;
+const terraformPassRoleResourcePattern = "arn:aws:iam::*:role/*";
+const terraformPassRoleServices = [
+  "autoscaling.amazonaws.com",
+  "codebuild.amazonaws.com",
+  "codedeploy.amazonaws.com",
+  "codepipeline.amazonaws.com",
+  "ec2.amazonaws.com",
+  "ecs-tasks.amazonaws.com",
+  "eks.amazonaws.com",
+  "lambda.amazonaws.com"
+] as const;
 
 export type AwsConnectionRetentionPolicy = {
   maxUnverifiedConnectionsPerUser: number;
@@ -38,7 +81,7 @@ export type AwsConnectionRecord = typeof awsConnections.$inferSelect;
 export type CreateAwsConnectionInput = {
   accessContext: ProjectAccessContext;
   region: string;
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
 };
 
 export type CreateAwsConnectionRecordInput = {
@@ -111,7 +154,7 @@ export type VerifyAwsConnectionOptions = {
 export type GetAwsConnectionCloudFormationTemplateInput = {
   connectionId: string;
   accessContext: ProjectAccessContext;
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
 };
 
 export type GetAwsConnectionCloudFormationTemplateOptions = {
@@ -277,7 +320,9 @@ export async function listAwsConnections(
 ): Promise<AwsConnection[]> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
 
-  return awsConnectionRows.map(toAwsConnection);
+  return awsConnectionRows
+    .filter((awsConnection) => awsConnection.status === "verified")
+    .map(toAwsConnection);
 }
 
 export async function createAwsConnection(
@@ -285,6 +330,8 @@ export async function createAwsConnection(
   repository: AwsConnectionRepository,
   options: CreateAwsConnectionOptions = {}
 ): Promise<CreateAwsConnectionResponse> {
+  const callerPrincipalArns = requireCallerPrincipalArns(input.callerPrincipalArns);
+  const primaryCallerPrincipalArn = callerPrincipalArns[0];
   const generateId = options.generateId ?? randomUUID;
   const id = generateId();
   const externalId = options.generateExternalId?.() ?? createAwsExternalId(id);
@@ -297,7 +344,7 @@ export async function createAwsConnection(
     status: "pending"
   });
   const trustPolicyTemplate = createTrustPolicyTemplate({
-    callerPrincipalArn: input.callerPrincipalArn,
+    callerPrincipalArns,
     externalId
   });
   const permissionSetup = createInitialPermissionSetup();
@@ -305,11 +352,11 @@ export async function createAwsConnection(
 
   return {
     awsConnection: toAwsConnection(awsConnection),
-    callerPrincipalArn: input.callerPrincipalArn,
+    callerPrincipalArn: primaryCallerPrincipalArn,
     recommendedRoleName: roleName,
     roleSetup: {
       roleName,
-      trustedPrincipalArn: input.callerPrincipalArn,
+      trustedPrincipalArn: primaryCallerPrincipalArn,
       externalId,
       trustPolicy: trustPolicyTemplate,
       permissionSetup
@@ -614,7 +661,7 @@ export async function getAwsConnectionCloudFormationTemplate(
   const stackName = createAwsConnectionStackName(awsConnection.id);
   const templateBody = createAwsConnectionCloudFormationTemplateBody({
     roleName,
-    callerPrincipalArn: input.callerPrincipalArn,
+    callerPrincipalArns: requireCallerPrincipalArns(input.callerPrincipalArns),
     externalId: awsConnection.externalId
   });
   const inlineTemplateResponse: AwsConnectionCloudFormationTemplateResponse = {
@@ -671,7 +718,7 @@ export async function getAwsConnectionCloudFormationTemplate(
 }
 
 function createTrustPolicyTemplate(input: {
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
   externalId: string;
 }): Record<string, unknown> {
   return {
@@ -680,7 +727,7 @@ function createTrustPolicyTemplate(input: {
       {
         Effect: "Allow",
         Principal: {
-          AWS: input.callerPrincipalArn
+          AWS: [...input.callerPrincipalArns]
         },
         Action: "sts:AssumeRole",
         Condition: {
@@ -717,6 +764,31 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
+        Action: terraformFargateServiceActions,
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: directReleaseCodeBuildActions,
+        Resource: directReleaseCodeBuildResourcePatterns
+      },
+      {
+        Effect: "Allow",
+        Action: terraformFargateIamActions,
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: "iam:PassRole",
+        Resource: terraformPassRoleResourcePattern,
+        Condition: {
+          StringEquals: {
+            "iam:PassedToService": terraformPassRoleServices
+          }
+        }
+      },
+      {
+        Effect: "Allow",
         Action: [
           "ce:GetCostAndUsage",
           "ce:GetDimensionValues",
@@ -725,8 +797,11 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
           "ec2:DescribeInstances",
           "elasticloadbalancing:DescribeLoadBalancers",
           "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth",
           "cloudwatch:GetMetricData",
-          "cloudwatch:GetMetricStatistics"
+          "cloudwatch:GetMetricStatistics",
+          "ecs:DescribeServices",
+          "logs:FilterLogEvents"
         ],
         Resource: "*"
       }
@@ -849,11 +924,13 @@ function createAwsConnectionStackName(connectionId: string): string {
 
 function createAwsConnectionCloudFormationTemplateBody(input: {
   roleName: string;
-  callerPrincipalArn: string;
+  callerPrincipalArns: readonly string[];
   externalId: string;
 }): string {
   const roleName = yamlDoubleQuote(input.roleName);
-  const callerPrincipalArn = yamlDoubleQuote(input.callerPrincipalArn);
+  const callerPrincipalArns = input.callerPrincipalArns.map(
+    (callerPrincipalArn) => `                - ${yamlDoubleQuote(callerPrincipalArn)}`
+  );
   const externalId = yamlDoubleQuote(input.externalId);
 
   return [
@@ -869,7 +946,8 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "        Statement:",
     "          - Effect: Allow",
     "            Principal:",
-    `              AWS: ${callerPrincipalArn}`,
+    "              AWS:",
+    ...callerPrincipalArns,
     "            Action: sts:AssumeRole",
     "            Condition:",
     "              StringEquals:",
@@ -896,6 +974,27 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '            Resource: "*"',
     "          - Effect: Allow",
     "            Action:",
+    ...terraformFargateServiceActions.map((action) => `              - ${action}`),
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
+    ...directReleaseCodeBuildActions.map((action) => `              - ${action}`),
+    "            Resource:",
+    '              - !Sub "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/sketchcatch-*"',
+    '              - !Sub "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:build/sketchcatch-*:*"',
+    "          - Effect: Allow",
+    "            Action:",
+    ...terraformFargateIamActions.map((action) => `              - ${action}`),
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action: iam:PassRole",
+    '            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"',
+    "            Condition:",
+    "              StringEquals:",
+    "                iam:PassedToService:",
+    ...terraformPassRoleServices.map((service) => `                  - ${service}`),
+    "          - Effect: Allow",
+    "            Action:",
     "              - ce:GetCostAndUsage",
     "              - ce:GetDimensionValues",
     "              - autoscaling:DescribeAutoScalingGroups",
@@ -903,8 +1002,11 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "              - ec2:DescribeInstances",
     "              - elasticloadbalancing:DescribeLoadBalancers",
     "              - elasticloadbalancing:DescribeTargetGroups",
+    "              - elasticloadbalancing:DescribeTargetHealth",
     "              - cloudwatch:GetMetricData",
     "              - cloudwatch:GetMetricStatistics",
+    "              - ecs:DescribeServices",
+    "              - logs:FilterLogEvents",
     '            Resource: "*"',
     "Outputs:",
     "  RoleArn:",
@@ -912,6 +1014,18 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "    Value: !GetAtt SketchCatchTerraformExecutionRole.Arn",
     ""
   ].join("\n");
+}
+
+function requireCallerPrincipalArns(callerPrincipalArns: readonly string[]): readonly [string, ...string[]] {
+  const uniqueCallerPrincipalArns = [...new Set(callerPrincipalArns)];
+
+  if (uniqueCallerPrincipalArns.length === 0) {
+    throw new AwsConnectionCloudFormationTemplateError(
+      "At least one SketchCatch AWS caller principal ARN is required"
+    );
+  }
+
+  return uniqueCallerPrincipalArns as [string, ...string[]];
 }
 
 function createAwsConnectionLaunchStackUrl(input: {

@@ -81,6 +81,10 @@ type DeploymentResponse = {
     architectureId: string;
     terraformArtifactId: string;
     awsConnectionId: string | null;
+    consolePhase: "validation" | "approval" | "deployment";
+    preparedDraftRevision: number | null;
+    preparedSnapshotHash: string | null;
+    approvedPreparedSnapshotHash: string | null;
     currentPlanArtifactId: string | null;
     currentPlanOperation: "apply" | "destroy" | null;
     stateObjectKey: string | null;
@@ -288,6 +292,27 @@ class FakeDeploymentRepository implements DeploymentRepository {
   logs: DeploymentLogRecord[] = [];
   resources: DeployedResourceRecord[] = [];
   outputs: TerraformOutputRecord[] = [];
+  projectDraft:
+    | {
+        revision: number;
+        diagramJson: { nodes: []; edges: []; viewport: { x: number; y: number; zoom: number } };
+        terraformFiles: Array<{ fileName: string; terraformCode: string }>;
+      }
+    | undefined = {
+    revision: 7,
+    diagramJson: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
+    terraformFiles: [
+      { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }
+    ]
+  };
+
+  async findProjectDraftForPreparation() {
+    return this.projectDraft;
+  }
+
+  async findProjectTargetForPreparation() {
+    return undefined;
+  }
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     this.calls.push({
@@ -1076,6 +1101,12 @@ function createDeploymentRecord(
     terraformArtifactId,
     awsConnectionId,
     liveProfile: "practice",
+    scope: "infrastructure",
+    targetKind: null,
+    source: "direct",
+    releaseId: null,
+    preparedDraftRevision: null,
+    preparedSnapshotHash: null,
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -1095,6 +1126,7 @@ function createDeploymentRecord(
     approvedTfplanHash: null,
     approvedAwsAccountId: null,
     approvedAwsRegion: null,
+    approvedPreparedSnapshotHash: null,
     startedAt: null,
     completedAt: null,
     failedAt: null,
@@ -1380,10 +1412,71 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
         terraformArtifactId,
         awsConnectionId,
         liveProfile: "practice",
+        scope: "infrastructure",
+        targetKind: null,
+        source: "direct",
+        preparedDraftRevision: null,
+        preparedSnapshotHash: null,
         status: "PENDING"
       }
     }
   ]);
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/deployments/prepare locks the saved draft revision", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.consolePhase, "validation");
+  assert.equal(body.deployment.preparedDraftRevision, 7);
+  assert.match(body.deployment.preparedSnapshotHash ?? "", /^[0-9a-f]{64}$/);
+  const createCall = repository.calls.find((call) => call.name === "createDeployment");
+  assert.equal(createCall?.name, "createDeployment");
+  if (createCall?.name === "createDeployment") {
+    assert.equal(createCall.input.preparedDraftRevision, 7);
+    assert.equal(createCall.input.preparedSnapshotHash, body.deployment.preparedSnapshotHash);
+  }
+
+  await app.close();
+});
+
+test("POST /api/projects/:projectId/deployments/prepare rejects a stale draft", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 6,
+      scope: "auto"
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.json().message, /stale/i);
+  assert.equal(repository.calls.some((call) => call.name === "createDeployment"), false);
 
   await app.close();
 });
@@ -1865,6 +1958,10 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
           blockedBy: "missing_approval",
           blockedReason: "Terraform Plan requires user approval before apply"
         }),
+        optimization: {
+          outcome: "execute",
+          reason: "initial_plan"
+        },
         terraform: {
           init: null,
           validate: null,
@@ -1917,6 +2014,10 @@ test("POST /api/deployments/:deploymentId/plan writes a runtime cache status sna
       deployment: createDeploymentRecord(input.deploymentId, {
         status: "PENDING"
       }),
+      optimization: {
+        outcome: "execute",
+        reason: "initial_plan"
+      },
       terraform: {
         init: null,
         validate: null,
@@ -1974,6 +2075,35 @@ test("POST /api/deployments/:deploymentId/plan rejects a deployment that is alre
   });
   assert.equal(planStarted, false);
   assert.equal(repository.deployment.status, "RUNNING");
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/plan joins an identical Plan already in flight", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    activeStage: "plan"
+  });
+  let duplicatePlanStarted = false;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentPlan: async () => {
+      duplicatePlanStarted = true;
+      throw new Error("a duplicate Plan must not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.activeStage, "plan");
+  assert.equal(duplicatePlanStarted, false);
 
   await app.close();
 });
@@ -2057,7 +2187,7 @@ test("POST /api/deployments/:deploymentId/approve approves the current plan", as
   await app.close();
 });
 
-test("POST /api/deployments/:deploymentId/apply starts Terraform apply in the background", async () => {
+test("POST /api/deployments/:deploymentId/execute starts Terraform apply through the same safety path", async () => {
   const repository = new FakeDeploymentRepository();
   const applyCalls: RunDeploymentApplyInput[] = [];
   repository.deployment = createDeploymentRecord(deploymentId, {
@@ -2105,7 +2235,7 @@ test("POST /api/deployments/:deploymentId/apply starts Terraform apply in the ba
 
   const response = await app.inject({
     method: "POST",
-    url: `/api/deployments/${deploymentId}/apply`,
+    url: `/api/deployments/${deploymentId}/execute`,
     headers: await authHeaders(),
     payload: {}
   });

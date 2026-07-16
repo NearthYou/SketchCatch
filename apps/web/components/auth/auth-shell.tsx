@@ -1,17 +1,21 @@
-import Image from "next/image";
-import Link from "next/link";
 import type { ReactNode } from "react";
+import { ProductBrand } from "../ui/ProductBrand";
 
 type AuthShellProps = {
+  readonly brandPlacement?: "panel" | "topbar";
+  readonly centered?: boolean;
   readonly children: ReactNode;
   readonly description?: string;
-  readonly eyebrow: string;
+  readonly eyebrow?: string;
   readonly footer?: ReactNode;
   readonly title: string;
   readonly wide?: boolean;
 };
 
+// 로그인과 가입 화면이 같은 제품 frame과 제목 구조를 사용하게 합니다.
 export function AuthShell({
+  brandPlacement = "topbar",
+  centered = false,
   children,
   description,
   eyebrow,
@@ -20,20 +24,31 @@ export function AuthShell({
   wide = false
 }: AuthShellProps) {
   const headingId = "auth-page-title";
+  const pageClassName = [
+    "authPage",
+    wide ? "authPageWide" : "",
+    centered ? "authPageCentered" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <main className={wide ? "authPage authPageWide" : "authPage"}>
-      <header className="authTopbar">
-        <Link className="authBrand" href="/" aria-label="SketchCatch 홈">
-          <Image alt="" height={24} priority src="/sketchcatch-logo.png" width={16} />
-          <span>SketchCatch</span>
-        </Link>
-      </header>
+    <main className={pageClassName}>
+      {brandPlacement === "topbar" ? (
+        <header className="authTopbar">
+          <ProductBrand href="/" />
+        </header>
+      ) : null}
 
       <div className="authLayout">
         <section className="authPanel" aria-labelledby={headingId}>
+          {brandPlacement === "panel" ? (
+            <div className="authPanelBrand">
+              <ProductBrand href="/" />
+            </div>
+          ) : null}
           <div className="authIntro">
-            <p className="authEyebrow">{eyebrow}</p>
+            {eyebrow ? <p className="authEyebrow">{eyebrow}</p> : null}
             <h1 id={headingId}>{title}</h1>
             {description ? <p>{description}</p> : null}
           </div>

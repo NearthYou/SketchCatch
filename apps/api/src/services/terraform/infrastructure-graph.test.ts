@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import type { DiagramNode } from "@sketchcatch/types";
+import {
+  buildTemplateDiagramJson,
+  templateDefinitions,
+  type DiagramNode
+} from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
@@ -19,7 +23,11 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
           resourceName: "main",
           fileName: "network",
           values: {
-            cidrBlock: "10.0.0.0/16"
+            cidrBlock: "10.0.0.0/16",
+            diagramRenderAsResource: true,
+            parentAreaNodeId: "aws-cloud",
+            templateResourceId: "vpc",
+            terraformBlockType: "resource"
           }
         }
       })
@@ -44,6 +52,80 @@ test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes
       }
     }
   ]);
+});
+
+test("Template presentation nodes and edges stay outside the Terraform infrastructure graph", () => {
+  // Terraform planning must see the same deployable graph that existed before Design presentation was added.
+  for (const definition of templateDefinitions) {
+    const graph = buildInfrastructureGraphFromDiagramJson(
+      buildTemplateDiagramJson(definition.id, {
+        projectSlug: "terraform",
+        shortId: "presentation"
+      })
+    );
+
+    assert.equal(graph.nodes.length, definition.resources.length, `${definition.id} resources`);
+    assert.equal(
+      graph.edges.length,
+      definition.relationships.length,
+      `${definition.id} relationships`
+    );
+    assert.equal(
+      graph.nodes.some((node) => node.id.includes("-presentation-")),
+      false,
+      definition.id
+    );
+    assert.equal(
+      graph.edges.some((edge) => edge.id.includes("-presentation-")),
+      false,
+      definition.id
+    );
+  }
+});
+
+test("summary presentation edges stay outside the Terraform infrastructure graph", () => {
+  const source = makeNode({
+    id: "service",
+    type: "aws_ecs_service",
+    kind: "resource",
+    label: "service",
+    parameters: {
+      resourceType: "aws_ecs_service",
+      resourceName: "service",
+      fileName: "compute",
+      values: {}
+    }
+  });
+  const target = makeNode({
+    id: "database",
+    type: "aws_db_instance",
+    kind: "resource",
+    label: "database",
+    parameters: {
+      resourceType: "aws_db_instance",
+      resourceName: "database",
+      fileName: "data",
+      values: {}
+    }
+  });
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [source, target],
+    edges: [
+      { id: "dependency", sourceNodeId: source.id, targetNodeId: target.id },
+      {
+        id: "summary",
+        sourceNodeId: source.id,
+        targetNodeId: target.id,
+        metadata: { presentationRole: "summary" }
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(
+    graph.edges.map((edge) => edge.id),
+    ["dependency"]
+  );
 });
 
 test("buildInfrastructureGraphFromDiagramJson keeps provider-specific Terraform resource identity", () => {
@@ -72,6 +154,51 @@ test("buildInfrastructureGraphFromDiagramJson keeps provider-specific Terraform 
   assert.equal(graph.nodes[0]?.iac.terraformBlockType, "resource");
   assert.equal(graph.nodes[0]?.iac.resourceType, "aws_instance");
   assert.ok(!("type" in (graph.nodes[0] ?? {})));
+});
+
+test("buildInfrastructureGraphFromDiagramJson omits ASG fleet visualization instances", () => {
+  const graph = buildInfrastructureGraphFromDiagramJson({
+    nodes: [
+      makeNode({
+        id: "asg-1",
+        type: "aws_autoscaling_group",
+        kind: "resource",
+        label: "app fleet",
+        parameters: {
+          resourceType: "aws_autoscaling_group",
+          resourceName: "app",
+          fileName: "compute",
+          values: {
+            minSize: 2,
+            desiredCapacity: 2,
+            maxSize: 4
+          }
+        }
+      }),
+      makeNode({
+        id: "instance-1",
+        type: "aws_instance",
+        kind: "resource",
+        label: "fleet instance 1",
+        parameters: {
+          resourceType: "aws_instance",
+          resourceName: "fleet_instance_1",
+          fileName: "compute",
+          values: {
+            managedByAutoScalingGroup: "asg-1",
+            sketchcatchReferenceTerraform: true
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  });
+
+  assert.deepEqual(
+    graph.nodes.map((node) => node.iac.resourceType),
+    ["aws_autoscaling_group"]
+  );
 });
 
 test("buildInfrastructureGraphFromDiagramJson keeps invalid nodes for preview skeleton stability", () => {
@@ -354,16 +481,19 @@ test("buildInfrastructureGraphFromDiagramJson inherits availability_zone from di
 
   const graph = buildInfrastructureGraphFromDiagramJson(diagramJson);
 
-  assert.deepEqual(graph.nodes.map((node) => node.config), [
-    {
-      cidrBlock: "10.0.1.0/24",
-      availabilityZone: "ap-northeast-2a"
-    },
-    {
-      size: 20,
-      availabilityZone: "ap-northeast-2a"
-    }
-  ]);
+  assert.deepEqual(
+    graph.nodes.map((node) => node.config),
+    [
+      {
+        cidrBlock: "10.0.1.0/24",
+        availabilityZone: "ap-northeast-2a"
+      },
+      {
+        size: 20,
+        availabilityZone: "ap-northeast-2a"
+      }
+    ]
+  );
   assert.deepEqual(subnetValues, {
     cidrBlock: "10.0.1.0/24"
   });

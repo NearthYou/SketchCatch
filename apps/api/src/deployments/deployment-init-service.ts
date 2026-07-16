@@ -18,6 +18,7 @@ import {
 } from "../aws-connections/aws-connection-test-service.js";
 import type { AwsConnection, DeploymentStatus } from "@sketchcatch/types";
 import {
+  createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
 } from "./terraform-workspace.js";
@@ -76,7 +77,9 @@ export async function runDeploymentInit(
         awsConnection,
         options.awsStsGateway ?? createAwsSdkStsGateway()
       ));
-  const initArtifactStorage = options.initArtifactStorage ?? createS3DeploymentPlanArtifactStorage();
+  let initArtifactStorage = options.initArtifactStorage;
+  const getInitArtifactStorage = () =>
+    (initArtifactStorage ??= createS3DeploymentPlanArtifactStorage());
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -120,11 +123,14 @@ export async function runDeploymentInit(
 
     workspace = await prepareTerraformWorkspace({
       objectKey: artifact.objectKey,
-      fileName: artifact.fileName
+      fileName: artifact.fileName,
+      contentType: artifact.contentType
     });
-    assertTerraformArtifactIsSafe(await readTerraformArtifactFile(workspace.mainFilePath), {
-      liveProfile: deployment.liveProfile
-    });
+    const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      { liveProfile: deployment.liveProfile, resourceValidationMode: "plan" }
+    );
 
     const awsCredentials = await prepareAwsCredentialsForInit({
       deploymentId: deployment.id,
@@ -207,7 +213,7 @@ export async function runDeploymentInit(
           uploadTerraformLockFile({
             deploymentId: deployment.id,
             workspace: workspace!,
-            storage: initArtifactStorage
+            storage: getInitArtifactStorage()
           })
       });
       sequence = lockUpload.sequence;

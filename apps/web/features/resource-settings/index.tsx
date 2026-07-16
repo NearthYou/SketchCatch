@@ -7,12 +7,12 @@ import {
   Brush,
   ChartLine,
   ChevronDown,
-  Component,
   Container,
   Cpu,
   Database,
   Grid2X2,
   Archive,
+  Maximize2,
   Monitor,
   Network,
   PanelLeftClose,
@@ -22,7 +22,8 @@ import {
   ShieldCheck
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
 import { TemplateGallery } from "../../components/templates/TemplateGallery";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "../diagram-editor/diagram-utils";
@@ -32,13 +33,22 @@ import {
 } from "./catalog-provider";
 import {
   curatedModules,
-  type CuratedModuleCategory,
   type CuratedModuleDefinition
 } from "./module-catalog";
 import {
+  countModuleResources,
+  createModuleCatalogGroups,
+  moduleCatalogViews,
+  type ModuleCatalogViewId
+} from "./module-catalog-view";
+import {
+  isBoardTemplateAvailable,
   listBoardTemplates,
+  type AvailableBoardTemplate,
   type BoardTemplate
 } from "./template-library";
+import { setupModalAccessibility } from "../../components/ui/modal-accessibility";
+import modalStyles from "./template-library-modal.module.css";
 
 const areaLabels: Record<ResourceArea, string> = {
   containers: "Containers",
@@ -57,7 +67,6 @@ const awsProviderVersions = ["6.47.0", "6.46.0", "6.45.0", "6.44.0"] as const;
 type AwsProviderVersion = (typeof awsProviderVersions)[number];
 
 type ResourcePanelSectionId =
-  | "modules"
   | "design"
   | ResourceArea
   | "analytics"
@@ -68,7 +77,6 @@ type ResourcePanelSection = {
   label: string;
   icon: LucideIcon;
   defaultOpen?: boolean;
-  kind: "modules" | "resources";
 };
 
 type ResourceCategoryGroup = {
@@ -77,25 +85,23 @@ type ResourceCategoryGroup = {
 };
 
 const resourceSections: ResourcePanelSection[] = [
-  { id: "modules", label: "Modules", icon: Component, defaultOpen: true, kind: "modules" },
-  { id: "design", label: "Design", icon: Brush, kind: "resources" },
-  { id: "containers", label: "Containers", icon: Container, kind: "resources" },
-  { id: "compute", label: areaLabels.compute, icon: Cpu, kind: "resources" },
-  { id: "network", label: areaLabels.network, icon: Network, kind: "resources" },
-  { id: "storage", label: areaLabels.storage, icon: Archive, kind: "resources" },
-  { id: "database", label: areaLabels.database, icon: Database, kind: "resources" },
+  { id: "design", label: "Design", icon: Brush },
+  { id: "containers", label: "Containers", icon: Container },
+  { id: "compute", label: areaLabels.compute, icon: Cpu },
+  { id: "network", label: areaLabels.network, icon: Network },
+  { id: "storage", label: areaLabels.storage, icon: Archive },
+  { id: "database", label: areaLabels.database, icon: Database },
   {
     id: "security-identity",
     label: areaLabels["security-identity"],
-    icon: ShieldCheck,
-    kind: "resources"
+    icon: ShieldCheck
   },
-  { id: "tools", label: areaLabels.tools, icon: Settings, kind: "resources" },
-  { id: "ai", label: areaLabels.ai, icon: Bot, kind: "resources" },
-  { id: "analytics", label: "Analytics", icon: ChartLine, kind: "resources" },
-  { id: "application", label: areaLabels.application, icon: Monitor, kind: "resources" },
-  { id: "iot", label: "IoT", icon: RadioTower, kind: "resources" },
-  { id: "other", label: areaLabels.other, icon: Grid2X2, kind: "resources" }
+  { id: "tools", label: areaLabels.tools, icon: Settings },
+  { id: "ai", label: areaLabels.ai, icon: Bot },
+  { id: "analytics", label: "Analytics", icon: ChartLine },
+  { id: "application", label: areaLabels.application, icon: Monitor },
+  { id: "iot", label: "IoT", icon: RadioTower },
+  { id: "other", label: areaLabels.other, icon: Grid2X2 }
 ];
 
 const resourceCategoryOrderByArea: Partial<Record<ResourcePanelSectionId, readonly string[]>> = {
@@ -140,7 +146,7 @@ const resourceCategoryOrderByArea: Partial<Record<ResourcePanelSectionId, readon
 export type ResourceSettingsPanelProps = {
   catalogProvider?: ResourceCatalogProvider | undefined;
   onModuleAdd?: ((moduleId: string) => void) | undefined;
-  onTemplateApply?: ((template: BoardTemplate) => void) | undefined;
+  onTemplateApply?: ((template: AvailableBoardTemplate) => void) | undefined;
   onCollapse?: (() => void) | undefined;
 };
 
@@ -213,7 +219,8 @@ export function ResourceSettingsPanel({
         </button>
       </div>
 
-      <div className="resourceControlBar">
+      {activeTab === "resources" ? (
+        <div className="resourceControlBar">
         <div className="providerControls">
           <div
             aria-label="AWS provider"
@@ -289,6 +296,7 @@ export function ResourceSettingsPanel({
           </button>
         </div>
       </div>
+      ) : null}
 
       {activeTab === "templates" ? (
         <TemplatesPanel onTemplateApply={onTemplateApply} />
@@ -329,7 +337,6 @@ export function ResourceSettingsPanel({
                   isOpen={Boolean(openSections[section.id])}
                   items={resourcesBySection.get(section.id) ?? []}
                   key={section.id}
-                  onOpenModuleCatalog={() => setActiveResourceView("modules")}
                   onToggle={() => toggleSection(section.id)}
                   section={section}
                 />
@@ -342,10 +349,11 @@ export function ResourceSettingsPanel({
   );
 }
 
+// 왼쪽 목록의 즉시 적용과 템플릿 전체보기를 서로 다른 동작으로 제공합니다.
 function TemplatesPanel({
   onTemplateApply
 }: {
-  readonly onTemplateApply?: ((template: BoardTemplate) => void) | undefined;
+  readonly onTemplateApply?: ((template: AvailableBoardTemplate) => void) | undefined;
 }) {
   const [isModalOpen, setModalOpen] = useState(false);
   const templates = listBoardTemplates();
@@ -353,13 +361,34 @@ function TemplatesPanel({
   return (
     <>
       <div className="templateCatalogPanel">
-        <button className="templateCatalogCard templateCatalogCardWide" onClick={() => setModalOpen(true)} type="button">
-          <span>Template library</span>
-          <strong>큰 모달로 열기</strong>
+        <button
+          aria-label="템플릿 전체보기"
+          className="templateCatalogCard templateLibraryOpenCard"
+          onClick={() => setModalOpen(true)}
+          type="button"
+        >
+          <strong className="templateLibraryOpenLabel">
+            <Maximize2 aria-hidden="true" size={14} />
+            템플릿 전체보기
+          </strong>
         </button>
-        {templates.slice(0, 3).map((template) => (
-          <button className="templateCatalogCard" key={template.id} onClick={() => setModalOpen(true)} type="button">
-            <span>{template.tags.slice(0, 2).join(" · ")}</span>
+        {templates.map((template) => (
+          <button
+            aria-label={`${template.title} Template 적용`}
+            className="templateCatalogCard templateApplyCard"
+            disabled={!isBoardTemplateAvailable(template)}
+            key={template.id}
+            onClick={() => {
+              if (isBoardTemplateAvailable(template)) onTemplateApply?.(template);
+            }}
+            title={isBoardTemplateAvailable(template) ? template.title : template.unavailableReason}
+            type="button"
+          >
+            <span>
+              {isBoardTemplateAvailable(template)
+                ? template.tags.slice(0, 2).join(" · ")
+                : "미리보기 전용"}
+            </span>
             <strong>{template.title}</strong>
           </button>
         ))}
@@ -386,19 +415,55 @@ function TemplateLibraryModal({
   templates
 }: {
   readonly onClose: () => void;
-  readonly onTemplateApply: (template: BoardTemplate) => void;
+  readonly onTemplateApply: (template: AvailableBoardTemplate) => void;
   readonly templates: readonly BoardTemplate[];
 }) {
-  return (
-    <div className="templateModalOverlay" role="presentation">
-      <section className="templateModal" aria-label="Template 큰 모달" role="dialog">
-        <div className="templateModalHeader">
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+
+    if (!overlay || !dialog || !closeButton) return;
+
+    return setupModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: document,
+      onClose: () => onCloseRef.current(),
+      overlay
+    });
+  }, []);
+
+  return createPortal(
+    <div className={modalStyles.overlay} ref={overlayRef} role="presentation">
+      <section
+        aria-label="템플릿 전체보기"
+        aria-modal="true"
+        className={modalStyles.dialog}
+        ref={dialogRef}
+        role="dialog"
+      >
+        <div className={modalStyles.header}>
           <div>
             <span>Template library</span>
-            <h2>템플릿 보관함</h2>
+            <h2>템플릿 전체보기</h2>
             <p>선택하면 현재 보드를 백업하고 템플릿 구조로 덮어씁니다.</p>
           </div>
-          <button className="templateModalCloseButton" onClick={onClose} type="button">
+          <button
+            className={modalStyles.closeButton}
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
             닫기
           </button>
         </div>
@@ -407,40 +472,73 @@ function TemplateLibraryModal({
           actionLabel="현재 Board에 적용"
           onSelect={(templateId) => {
             const template = templates.find((candidate) => candidate.id === templateId);
-            if (template) onTemplateApply(template);
+            if (template && isBoardTemplateAvailable(template)) onTemplateApply(template);
           }}
           templates={templates}
         />
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 
 function ModuleCatalogPanel({ onModuleAdd }: { readonly onModuleAdd?: ((moduleId: string) => void) | undefined }) {
+  const [activeView, setActiveView] = useState<ModuleCatalogViewId>("functional");
+  const [query, setQuery] = useState("");
+  const groups = useMemo(
+    () => createModuleCatalogGroups({ modules: curatedModules, query, view: activeView }),
+    [activeView, query]
+  );
+
   return (
     <div className="moduleCatalogPanel">
-      {moduleCategories.map((category) => {
-        const modules = curatedModules.filter((moduleDefinition) => moduleDefinition.category === category.id);
-        const CategoryIcon = category.icon;
+      <div className="moduleCatalogToolbar">
+        <div aria-label="모듈 분류" className="moduleCatalogViewTabs" role="group">
+          {moduleCatalogViews.map((view) => (
+            <button
+              aria-pressed={activeView === view.id}
+              className={activeView === view.id ? "moduleCatalogViewTabActive" : "moduleCatalogViewTab"}
+              key={view.id}
+              onClick={() => setActiveView(view.id)}
+              type="button"
+            >
+              {view.label}
+            </button>
+          ))}
+        </div>
+        <label className="moduleCatalogSearch">
+          <Search aria-hidden="true" size={16} />
+          <input
+            aria-label="모듈 검색"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="모듈 검색"
+            type="search"
+            value={query}
+          />
+        </label>
+      </div>
 
-        return (
-          <section className="moduleCatalogSection" key={category.id}>
+      <div className="moduleCatalogGroups">
+        {groups.length > 0 ? groups.map((group) => (
+          <section className="moduleCatalogSection" key={group.key}>
             <div className="moduleCatalogHeader">
-              <CategoryIcon size={18} aria-hidden="true" />
-              <span>{category.label}</span>
+              <span>{group.label}</span>
+              <small>{group.modules.length}</small>
             </div>
             <div className="moduleCatalogGrid">
-              {modules.map((moduleDefinition) => (
+              {group.modules.map((moduleDefinition) => (
                 <ModuleCatalogCard
-                  key={moduleDefinition.id}
+                  key={`${group.key}:${moduleDefinition.id}`}
                   moduleDefinition={moduleDefinition}
                   onModuleAdd={onModuleAdd}
                 />
               ))}
             </div>
           </section>
-        );
-      })}
+        )) : (
+          <div className="emptyPanelState">검색 결과가 없습니다.</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -458,34 +556,21 @@ function ModuleCatalogCard({
       onClick={() => onModuleAdd?.(moduleDefinition.id)}
       type="button"
     >
-      <span>{moduleDefinition.name}</span>
-      <strong>{moduleDefinition.resources.length} resources</strong>
+      <strong>{moduleDefinition.title}</strong>
+      <span>{moduleDefinition.description}</span>
+      <small>리소스 {countModuleResources(moduleDefinition)}개</small>
     </button>
   );
 }
 
-const moduleCategories: readonly {
-  readonly id: CuratedModuleCategory;
-  readonly label: string;
-  readonly icon: LucideIcon;
-}[] = [
-  { id: "compute", label: "Compute", icon: Cpu },
-  { id: "network", label: "Network", icon: Network },
-  { id: "storage", label: "Storage", icon: Archive },
-  { id: "database", label: "Database", icon: Database },
-  { id: "security-identity", label: "Security & Identity", icon: ShieldCheck }
-];
-
 function ResourceSection({
   isOpen,
   items,
-  onOpenModuleCatalog,
   onToggle,
   section
 }: {
   isOpen: boolean;
   items: readonly ResourceItem[];
-  onOpenModuleCatalog: () => void;
   onToggle: () => void;
   section: ResourcePanelSection;
 }) {
@@ -511,26 +596,7 @@ function ResourceSection({
         />
       </button>
 
-      {isOpen && section.kind === "modules" ? (
-        <div className="resourceSectionBody">
-          <div className="resourceModulesEmptyState">
-            <strong>No modules yet</strong>
-            <span className="resourceModulesDescription">
-              Import or browse curated modules when you want grouped Terraform resources.
-            </span>
-            <div className="resourceModulesActions">
-              <button className="modulesImportButton" onClick={onOpenModuleCatalog} type="button">
-                Import
-              </button>
-              <button className="modulesCatalogButton" onClick={onOpenModuleCatalog} type="button">
-                Catalog
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isOpen && section.kind === "resources" ? (
+      {isOpen ? (
         <div className="resourceSectionBody">
           {items.length > 0 ? (
             <div className="resourceCategoryGroups">

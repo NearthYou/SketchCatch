@@ -16,6 +16,14 @@ _Avoid_: Main board, canvas, drawing board
 An infrastructure building block from a cloud provider inside a Practice Architecture, such as AWS VPC, Azure Virtual Network, GCP VPC Network, compute instances, databases, storage, IAM, or edge delivery resources.
 _Avoid_: Component, block, service
 
+**Curated Module**:
+A reusable, preassembled group of Resources, relationships, configuration, and Board structure offered from the Workspace `Modules` catalog. Expanding one creates editable Resources on the Architecture Board; it is not a Terraform module or an indivisible parent Resource.
+_Avoid_: Terraform module, Template, Resource category, AI pattern
+
+**Module Pattern Knowledge**:
+Versioned, normalized Resource relationships, containment, relative geometry, layering, and edge routing extracted deterministically from Template Boards. Curated Modules and the Architecture Board Compiler share it instead of inventing separate layouts.
+_Avoid_: Hand-authored module coordinates, LLM layout, Template screenshot
+
 **Provider Adapter**:
 The cloud-specific connector that translates provider APIs, Resource types, IaC import details, and deployment constraints into SketchCatch's provider-neutral Practice Architecture model.
 _Avoid_: Cloud plugin, provider switch, cloud mode
@@ -28,6 +36,18 @@ _Avoid_: User Redis, cache resource, cloud cache node
 A reusable starter Practice Architecture that a user can choose instead of starting from a blank prompt.
 _Avoid_: Preset, sample, example
 
+**TemplateDefinition**:
+The internal definition of a Template's Resources, relationships, IaC identities, default parameters, and deployment conditions. It is the shared source used to produce the Architecture Board shape and deployable IaC path.
+_Avoid_: UI-only template data, diagram preset
+
+**Template Selection**:
+The gg-owned decision that chooses exactly one repository-level Template from Repository Analysis, or explicitly returns that no Template was selected when the repository does not match a supported Template. The AI handoff receives the selected Template rather than a list of competing Template candidates.
+_Avoid_: Template recommendation list, AI template choice
+
+**AI Handoff**:
+The handoff from gg to the AI part containing one selected Template and the Repository Analysis evidence that supports the selection, or a Template Selection Failure with no selected Template and its mismatch details. It does not include competing Template candidates, a fallback Template, or a confidence score.
+_Avoid_: Template candidate list, AI-owned Template selection
+
 **Architecture Draft**:
 A proposed Practice Architecture that has not yet been accepted, corrected, or saved by the user.
 _Avoid_: AI result, generated diagram, draft infrastructure
@@ -36,13 +56,41 @@ _Avoid_: AI result, generated diagram, draft infrastructure
 The service capability that interprets a Requirement Prompt, proposes an Architecture Draft, explains the trade-offs, and lets the user accept it onto the Architecture Board.
 _Avoid_: Chatbot answer, auto-generated diagram, magic design
 
+**설계 제안**:
+The independent Workspace AI conversation for Architecture Drafts and Architecture Suggestions that remain unapplied until the user accepts them.
+_Avoid_: 초안 제안, general AI chat
+
+**오류 분석**:
+The independent Workspace AI conversation for interpreting a Terraform issue and presenting an explanation or safe remediation proposal without applying it.
+_Avoid_: AI 오류, auto fix
+
+**에이전트 리뷰**:
+The independent Workspace AI conversation for reviewing an IaC Preview and explaining its expected changes without executing or applying it.
+_Avoid_: Preview 설명, Deployment approval
+
+**AI 채팅**:
+Architecture Board 안에서 설계 제안, 오류 분석, 에이전트 리뷰를 각각의 독립된 대화로 제공하는 공통 진입점이다. 각 대화의 결과와 사용자 승인 경계는 서로 합쳐지지 않는다.
+_Avoid_: AI modal, right-panel AI buttons, single AI result
+
 **User-Accepted Change**:
 A state-changing update that only happens after the user explicitly accepts an Architecture Draft, Architecture Suggestion, IaC handoff, Git change, or Deployment action. AI may propose or explain the change, but it does not silently alter the Practice Architecture or execution path.
 _Avoid_: Auto apply, silent fix, AI edit
 
 **Source Repository**:
-A code repository used as optional evidence for proposing an Architecture Draft when the user starts from an existing application.
+A code repository connected to a SketchCatch project and analyzed as evidence for Template Selection. The same repository may later receive approved IaC changes through Git Integration.
 _Avoid_: GitHub link, repo URL, codebase
+
+**Repository Analysis**:
+The gg-owned static analysis of one Source Repository used to identify its deployable shape and select one repository-level Template. It can contain multiple Application Units, such as frontend and backend parts, and examines the repository tree, `package.json`, lockfile, `Dockerfile`, framework configuration, and `README` without executing repository code.
+_Avoid_: Repository execution, arbitrary deployment, codebase scan
+
+**Application Unit**:
+An independently identifiable application part inside a Source Repository, such as a frontend or backend directory, with its own path and runtime evidence.
+_Avoid_: Repository, infrastructure Resource, arbitrary service
+
+**Template Selection Failure**:
+A valid Repository Analysis result stating that no supported Template represents the repository's Application Units, together with the mismatch reasons and missing evidence.
+_Avoid_: Closest Template fallback, partial Template selection, automatic redesign
 
 **Git Integration**:
 The service capability that connects a Practice Architecture and its IaC Preview to a Source Repository so infrastructure changes can be reviewed, versioned, and handed off to the team's normal development workflow.
@@ -79,6 +127,14 @@ _Avoid_: Voice deploy, speech command, direct voice edit
 **Infrastructure Graph**:
 The normalized graph of Resources and relationships that syncs Architecture Board state and IaC Preview state without treating either surface as the only source of truth. It carries stable resource identity, IaC identity, configuration, and relationships.
 _Avoid_: AI JSON, canvas state, diagram data
+
+**Architecture Board Compiler**:
+The capability that may infer, add, remove, or change Resources, relationships, configuration, containment, and visual presentation to produce a reorganized Architecture Board proposal. Its proposal may conflict with explicit requirements, accepted deployment state, or provider and IaC validity.
+_Avoid_: Auto layout, coordinate cleanup, diagram beautifier
+
+**Compilation Distance**:
+The relative amount of semantic and visual change between an input Practice Architecture and an Architecture Board Compiler proposal. Resource deletion has greater distance than configuration, relationship, containment, size, or position changes.
+_Avoid_: Edit count, visual difference
 
 **Reverse Engineering**:
 The service capability that scans existing cloud Resources through provider adapters, reconstructs them as a Practice Architecture, and prepares an IaC handoff path through IaC Preview and import suggestions.

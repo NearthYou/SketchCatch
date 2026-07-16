@@ -1,6 +1,5 @@
 import type {
   ArchitectureGuardrailWarning,
-  AiProvider,
   AiPreDeploymentAnalysisResult,
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
@@ -8,7 +7,15 @@ import type {
   DesignSimulationResult,
   LlmExplanation
 } from "@sketchcatch/types";
+import type { ReactNode } from "react";
+import { ArrowRight, Code2, ListChecks } from "lucide-react";
 import { SelectMenu } from "../../components/ui/SelectMenu";
+import {
+  createWorkspaceAiExplanationBadge,
+  createTerraformPreviewPresentation,
+  getWorkspaceAiResultSeverityLabel,
+  type WorkspaceAiResultCheck
+} from "./workspace-ai-result-presentation";
 import styles from "./workspace.module.css";
 
 export type AiRequestState = "idle" | "loading" | "error";
@@ -106,7 +113,7 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
     <div className={styles.aiExplanation}>
       <div className={styles.aiExplanationHeader}>
         <strong>AI 설명</strong>
-        <span>{explanation.fallbackUsed ? "기본 설명" : getWorkspaceAiProviderLabel(explanation.providerMetadata?.provider)}</span>
+        <span>{createWorkspaceAiExplanationBadge(explanation)}</span>
       </div>
       <p>{explanation.summary}</p>
       {explanation.wellArchitectedConclusion ? (
@@ -118,22 +125,6 @@ export function WorkspaceAiExplanation({ explanation }: { readonly explanation: 
       ) : null}
     </div>
   );
-}
-
-function getWorkspaceAiProviderLabel(provider: AiProvider | undefined): string {
-  switch (provider) {
-    case "bedrock":
-      return "Bedrock 설명";
-    case "amazon_q":
-      return "Amazon Q 설명";
-    case "amazon_transcribe":
-      return "Amazon Transcribe";
-    case "openai":
-      return "OpenAI legacy 설명";
-    case "fallback":
-    case undefined:
-      return "AI 설명";
-  }
 }
 
 // Architecture Draft가 MVP 범위 밖 요구를 감지했을 때 사용자가 놓치지 않게 보여줍니다.
@@ -194,32 +185,18 @@ export function WorkspaceAiPreDeploymentResult({
   );
 }
 
-// Design Simulation 결과를 흐름, 병목, 장애, 비용 검토 순서로 묶어 표시합니다.
+// AI Simulation 결과를 요약, 병목, 장애, 비용 검토 순서로 묶어 표시합니다.
 export function WorkspaceAiDesignSimulationResult({
   simulation
 }: {
   readonly simulation: DesignSimulationResult;
 }) {
   const costReviewItems = simulation.costEstimate?.reviewMessages ?? simulation.costPressure;
-  const costRecommendationItems = simulation.recommendations.filter(
-    (item) => !costReviewItems.includes(item)
-  );
 
   return (
     <div className={`${styles.aiResultStack} ${styles.aiSimulationResult}`}>
       <p className={styles.aiResultSummary}>{simulation.summary}</p>
       <div className={styles.aiSimulationGrid}>
-        <section className={styles.aiSimulationCard}>
-          <strong>요청 흐름</strong>
-          <ul>
-            {simulation.requestFlow.map((step, index) => (
-              <li key={`flow-${index}-${step.fromResourceId}-${step.toResourceId}`}>
-                <span>{step.fromResourceId} -&gt; {step.toResourceId}</span>
-                <p>{step.description}</p>
-              </li>
-            ))}
-          </ul>
-        </section>
         <section className={styles.aiSimulationCard}>
           <strong>병목 후보</strong>
           <ul>
@@ -243,14 +220,14 @@ export function WorkspaceAiDesignSimulationResult({
           </ul>
         </section>
         <section className={styles.aiSimulationCard}>
-          <strong>비용·다음 검토</strong>
+          <strong>비용</strong>
           {simulation.costEstimate !== undefined ? (
             <div className={styles.aiSimulationCostMeta}>
               <span>${formatMoney(simulation.costEstimate.totalEstimate.amount)}</span>
             </div>
           ) : null}
           <ul>
-            {[...costReviewItems, ...costRecommendationItems].map((item, index) => (
+            {costReviewItems.map((item, index) => (
               <li key={`cost-${index}-${item}`}>
                 <p>{item}</p>
               </li>
@@ -269,24 +246,128 @@ export function WorkspaceAiTerraformPreviewResult({
 }: {
   readonly preview: AiTerraformPreviewExplanationResult;
 }) {
+  const result = createTerraformPreviewPresentation(preview);
+
   return (
-    <div className={`${styles.aiResultStack} ${styles.aiTerraformPreviewAssessment}`}>
-      <p className={styles.aiResultSummary}>{preview.summary}</p>
-      <section className={styles.aiTerraformPreviewConclusion}>
-        <strong>결론</strong>
-        <p>{preview.consensusRecommendation}</p>
+    <div className={styles.aiStructuredResult}>
+      <section className={styles.aiResultLead}>
+        <h3>검토 요약</h3>
+        <p>{result.summary}</p>
       </section>
-      <div className={styles.aiTerraformPreviewAgentGrid}>
-        {preview.wellArchitectedGuidance.map((guidance) => (
-          <section key={guidance.pillar} className={styles.aiTerraformPreviewAgentCard}>
-            <span>{guidance.title}</span>
-            <strong>{formatAiSignalLabel(guidance.pillar)}</strong>
-            <p>{guidance.observation}</p>
-            <p>{guidance.recommendation}</p>
-          </section>
-        ))}
+
+      <WorkspaceAiResultChecks checks={result.checks} />
+
+      <WorkspaceAiResultNextStep>{result.nextStep}</WorkspaceAiResultNextStep>
+
+      <WorkspaceAiTechnicalDetails>
+        <dl className={styles.aiTechnicalMeta}>
+          <div>
+            <dt>원문 요약</dt>
+            <dd>{result.technical.rawSummary}</dd>
+          </div>
+          <div>
+            <dt>원문 권장 사항</dt>
+            <dd>{result.technical.rawRecommendation}</dd>
+          </div>
+          {result.technical.provider ? (
+            <div>
+              <dt>응답 제공자</dt>
+              <dd>{result.technical.provider}</dd>
+            </div>
+          ) : null}
+        </dl>
+        {result.technical.resources.length > 0 ? (
+          <WorkspaceAiTechnicalList title="감지한 리소스" items={result.technical.resources} />
+        ) : null}
+        {result.technical.providerAttempts.length > 0 ? (
+          <WorkspaceAiTechnicalList
+            title="AI 제공자 시도 이력"
+            items={result.technical.providerAttempts}
+          />
+        ) : null}
+        {result.technical.findings.length > 0 ? (
+          <WorkspaceAiTechnicalList title="점검 원문" items={result.technical.findings} />
+        ) : null}
+      </WorkspaceAiTechnicalDetails>
+    </div>
+  );
+}
+
+export function WorkspaceAiResultChecks({
+  checks
+}: {
+  readonly checks: readonly WorkspaceAiResultCheck[];
+}) {
+  if (checks.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className={styles.aiResultSection}>
+      <div className={styles.aiResultSectionTitle}>
+        <ListChecks aria-hidden="true" size={16} />
+        <h4>확인할 점</h4>
       </div>
-      <WorkspaceAiFindingList findings={preview.findings} />
+      <ul className={styles.aiResultCheckList}>
+        {checks.map((item) => (
+          <li data-severity={item.severity} key={item.id}>
+            <span aria-hidden="true" className={styles.aiResultCheckMark} />
+            <div>
+              <div className={styles.aiResultCheckHeading}>
+                <strong>{item.label}</strong>
+                {item.severity ? (
+                  <span>{getWorkspaceAiResultSeverityLabel(item.severity)}</span>
+                ) : null}
+              </div>
+              <p>{item.summary}</p>
+              {item.action && item.action !== item.summary ? <p>{item.action}</p> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export function WorkspaceAiResultNextStep({ children }: { readonly children: ReactNode }) {
+  return (
+    <section className={`${styles.aiResultSection} ${styles.aiResultNextStep}`}>
+      <div className={styles.aiResultSectionTitle}>
+        <ArrowRight aria-hidden="true" size={16} />
+        <h4>다음 단계</h4>
+      </div>
+      <p>{children}</p>
+    </section>
+  );
+}
+
+export function WorkspaceAiTechnicalDetails({ children }: { readonly children: ReactNode }) {
+  return (
+    <details className={styles.aiTechnicalDetails}>
+      <summary>
+        <Code2 aria-hidden="true" size={16} />
+        기술 정보 보기
+      </summary>
+      <div className={styles.aiTechnicalDetailsBody}>{children}</div>
+    </details>
+  );
+}
+
+export function WorkspaceAiTechnicalList({
+  items,
+  title
+}: {
+  readonly items: readonly string[];
+  readonly title: string;
+}) {
+  return (
+    <div className={styles.aiTechnicalList}>
+      <strong>{title}</strong>
+      <ul>
+        {items.map((item, index) => (
+          <li key={`${title}-${index}-${item}`}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }
