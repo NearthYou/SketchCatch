@@ -340,10 +340,12 @@ run "https_routes_and_enables_worker_dispatch" {
 
   assert {
     condition = contains(
-      [
-        for item in one(jsondecode(aws_ecs_task_definition.worker.container_definitions)).secrets :
-        item.name
-      ],
+      flatten([
+        for container in jsondecode(aws_ecs_task_definition.worker.container_definitions) : try([
+          for secret in container.secrets : secret.name
+        ], [])
+        if container.name == "worker"
+      ]),
       "GIT_APP_CLIENT_SECRET"
     )
     error_message = "Worker task definitions must receive the GitHub App client secret when it is configured for the API."
@@ -351,7 +353,7 @@ run "https_routes_and_enables_worker_dispatch" {
 
   assert {
     condition = contains(
-      tolist(local.ecs_api_secret_names),
+      local.ecs_api_secret_names,
       "LIVE_OBSERVATION_CAPABILITY_CURRENT_SECRET"
     )
     error_message = "Production API secret requirements must preserve the Live Observation capability secret."
