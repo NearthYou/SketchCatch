@@ -149,3 +149,9 @@ Short English-only working log for the current agent context. Older records are 
 - Live Terraform execution emits an informational heartbeat every 10 seconds only while stdout is silent; real output still flushes within the existing 500 ms window.
 - Verification: focused Web progress tests passed 7/7, focused API live-log tests passed 2/2, `pnpm harness:check` passed, and `git diff --check` passed.
 - Package typechecks exceeded the two-minute verification limit without emitting an error and were stopped; direct ESLint binaries were unavailable in the package environments.
+
+### 2026-07-17 - Clear stale Destroy Plan failures after a successful retry
+
+- A successful Destroy Plan retry now clears a prior Plan-stage failure and stale SSO error instead of leaving the deployment marked as failed.
+- Prior Apply or Destroy failures remain preserved after planning because they may represent partial cloud mutation.
+- Verification: focused Destroy Plan service tests passed 6/6.

@@ -163,6 +163,10 @@ export async function runDeploymentDestroyPlan(
     const sourceStatus = input.startedFromStatus ?? deployment.status;
     const sourceFailureStage = input.startedFromFailureStage ?? deployment.failureStage;
     const sourceErrorSummary = input.startedFromErrorSummary ?? deployment.errorSummary;
+    const preserveSourceFailure = shouldPreserveDeploymentFailureAfterDestroyPlan(
+      sourceStatus,
+      sourceFailureStage
+    );
     failureStage = resolveDestroyPlanFailureStage(sourceStatus, sourceFailureStage);
 
     assertDeploymentCanStartDestroyPlan(deployment, sourceStatus, sourceFailureStage);
@@ -439,9 +443,9 @@ export async function runDeploymentDestroyPlan(
             isBlocked: false,
             blockedBy: null,
             blockedReason: null,
-            terminalStatus: sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
-            failureStage: sourceStatus === "FAILED" ? sourceFailureStage : null,
-            errorSummary: sourceStatus === "FAILED" ? sourceErrorSummary : null
+            terminalStatus: preserveSourceFailure ? "FAILED" : "SUCCESS",
+            failureStage: preserveSourceFailure ? sourceFailureStage : null,
+            errorSummary: preserveSourceFailure ? sourceErrorSummary : null
           })
       });
       const updatedDeployment = planSave.result;
@@ -509,6 +513,10 @@ async function saveApplicationCleanupPlan(input: {
   >;
   terraform: RunDeploymentDestroyPlanResult["terraform"];
 }): Promise<RunDeploymentDestroyPlanResult> {
+  const preserveSourceFailure = shouldPreserveDeploymentFailureAfterDestroyPlan(
+    input.sourceStatus,
+    input.sourceFailureStage
+  );
   const [artifact, awsConnection, cleanupPlan] = await Promise.all([
     requireDeploymentTerraformArtifact(input.deployment, input.repository),
     requireDeploymentAwsConnection(input.deployment, input.accessContext, input.repository),
@@ -610,9 +618,9 @@ async function saveApplicationCleanupPlan(input: {
           isBlocked: false,
           blockedBy: null,
           blockedReason: null,
-          terminalStatus: input.sourceStatus === "FAILED" ? "FAILED" : "SUCCESS",
-          failureStage: input.sourceStatus === "FAILED" ? input.sourceFailureStage : null,
-          errorSummary: input.sourceStatus === "FAILED" ? input.sourceErrorSummary : null
+          terminalStatus: preserveSourceFailure ? "FAILED" : "SUCCESS",
+          failureStage: preserveSourceFailure ? input.sourceFailureStage : null,
+          errorSummary: preserveSourceFailure ? input.sourceErrorSummary : null
         })
     });
     if (!saved.result) throw new DeploymentNotFoundError("Deployment not found");
@@ -851,6 +859,16 @@ async function failDeploymentDestroyPlan(
   }
 
   return failedDeployment;
+}
+
+function shouldPreserveDeploymentFailureAfterDestroyPlan(
+  sourceStatus: DeploymentStatus,
+  sourceFailureStage: DeploymentFailureStage | null
+): boolean {
+  return (
+    sourceStatus === "FAILED" &&
+    (sourceFailureStage === "apply" || sourceFailureStage === "destroy")
+  );
 }
 
 function resolveDestroyPlanFailureStage(

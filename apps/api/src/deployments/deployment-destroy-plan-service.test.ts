@@ -464,6 +464,56 @@ test("failed cleanup planning preserves the original apply failure stage for ret
   assert.match(result.deployment.errorSummary ?? "", /Invalid destroy plan/);
 });
 
+test("successful cleanup planning clears a prior destroy plan failure", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    status: "FAILED",
+    failureStage: "plan",
+    errorSummary: "Token is expired",
+    stateObjectKey
+  });
+
+  const result = await runDeploymentDestroyPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      ...createDestroyPlanOptions([]),
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      writeTerraformStateFile: async () => undefined
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(result.deployment.failureStage, null);
+  assert.equal(result.deployment.errorSummary, null);
+});
+
+test("successful cleanup planning preserves a prior apply failure", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    status: "FAILED",
+    failureStage: "apply",
+    errorSummary: "Original apply failure",
+    stateObjectKey
+  });
+
+  const result = await runDeploymentDestroyPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      ...createDestroyPlanOptions([]),
+      planArtifactStorage: new FakePlanArtifactStorage(),
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      writeTerraformStateFile: async () => undefined
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(result.deployment.failureStage, "apply");
+  assert.equal(result.deployment.errorSummary, "Original apply failure");
+});
+
 function createDestroyPlanOptions(runnerStages: string[]): RunDeploymentDestroyPlanOptions {
   return {
     readTerraformArtifactFile: async () => terraformArtifactContent,
