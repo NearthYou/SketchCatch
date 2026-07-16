@@ -11,6 +11,7 @@ import {
   createDraftProgressHistory,
   createProgressDiagram,
   excludeProgressCandidate,
+  preserveDraftProgressProjection,
   undoProgressCandidate
 } from "./ai-draft-progress-model";
 
@@ -135,4 +136,82 @@ test("visible progress snapshot만 Diagram으로 변환한다", () => {
 
   assert.equal(diagram?.nodes.some(({ id }) => id === "candidate-s3"), false);
   assert.equal(diagram?.edges.length, 0);
+});
+
+test("첫 요청의 preparing snapshot은 graph 없이도 요구사항과 질문을 표시한다", () => {
+  const preparing: ArchitectureDraftProgressSnapshot = {
+    sequence: 1,
+    stage: "preparing_requirements",
+    confirmedRequirements: ["정적 웹사이트"],
+    pendingQuestions: ["파일 업로드가 필요한가요?"],
+    provisionalArchitectureJson: null,
+    excludableCandidateIds: []
+  };
+
+  const visible = preserveDraftProgressProjection(null, preparing);
+
+  assert.equal(visible, preparing);
+  assert.deepEqual(visible.confirmedRequirements, ["정적 웹사이트"]);
+  assert.deepEqual(visible.pendingQuestions, ["파일 업로드가 필요한가요?"]);
+  assert.equal(visible.provisionalArchitectureJson, null);
+});
+
+test("후보 제외 continuation의 preparing snapshot은 현재 투영과 history를 유지한다", () => {
+  const excluded = excludeProgressCandidate(snapshot, exclusion);
+  const preparing: ArchitectureDraftProgressSnapshot = {
+    sequence: 1,
+    stage: "preparing_requirements",
+    confirmedRequirements: ["정적 웹사이트", "S3 후보 제외"],
+    pendingQuestions: ["대체 저장소가 필요한가요?"],
+    provisionalArchitectureJson: null,
+    excludableCandidateIds: []
+  };
+
+  const visible = preserveDraftProgressProjection(excluded, preparing);
+
+  assert.equal(visible.stage, "preparing_requirements");
+  assert.deepEqual(visible.confirmedRequirements, preparing.confirmedRequirements);
+  assert.deepEqual(visible.pendingQuestions, preparing.pendingQuestions);
+  assert.deepEqual(
+    visible.provisionalArchitectureJson?.nodes.map(({ id }) => id),
+    ["candidate-cloudfront"]
+  );
+  assert.deepEqual(visible.excludableCandidateIds, ["candidate-cloudfront"]);
+  assert.deepEqual(createDraftProgressHistory(excluded, visible), []);
+
+  const undoWhilePreparing = preserveDraftProgressProjection(
+    visible,
+    undoProgressCandidate(preparing, [])
+  );
+  assert.deepEqual(
+    undoWhilePreparing.provisionalArchitectureJson?.nodes.map(({ id }) => id),
+    ["candidate-cloudfront"]
+  );
+  assert.deepEqual(createDraftProgressHistory(visible, undoWhilePreparing), []);
+});
+
+test("retry와 follow-up continuation의 preparing snapshot은 last-good graph를 지우지 않는다", () => {
+  const retryPreparing: ArchitectureDraftProgressSnapshot = {
+    sequence: 1,
+    stage: "preparing_requirements",
+    confirmedRequirements: ["정적 웹사이트", "재시도"],
+    pendingQuestions: [],
+    provisionalArchitectureJson: null,
+    excludableCandidateIds: []
+  };
+  const retried = preserveDraftProgressProjection(snapshot, retryPreparing);
+  const followUpPreparing: ArchitectureDraftProgressSnapshot = {
+    ...retryPreparing,
+    confirmedRequirements: ["정적 웹사이트", "파일 업로드 허용"],
+    pendingQuestions: ["업로드 용량 제한은 얼마인가요?"]
+  };
+
+  const followedUp = preserveDraftProgressProjection(retried, followUpPreparing);
+
+  assert.equal(retried.provisionalArchitectureJson, architectureJson);
+  assert.equal(followedUp.provisionalArchitectureJson, architectureJson);
+  assert.deepEqual(followedUp.confirmedRequirements, followUpPreparing.confirmedRequirements);
+  assert.deepEqual(followedUp.pendingQuestions, followUpPreparing.pendingQuestions);
+  assert.deepEqual(createDraftProgressHistory(snapshot, retried), []);
+  assert.deepEqual(createDraftProgressHistory(retried, followedUp), []);
 });

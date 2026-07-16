@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
   ArchitectureDraftCandidateExclusion,
@@ -57,6 +57,7 @@ import {
   createDraftProgressHistory,
   createProgressDiagram,
   excludeProgressCandidate as projectProgressCandidateExclusion,
+  preserveDraftProgressProjection,
   undoProgressCandidate as restoreProgressCandidate,
   type DraftProgressDifference,
   type DraftProgressHistoryEntry
@@ -289,9 +290,13 @@ export function useAiStartWorkflow({
           }
 
           rawProgressSnapshotRef.current = acceptedSnapshot;
-          const visibleSnapshot = applyProgressCandidateExclusions(
+          const projectedSnapshot = applyProgressCandidateExclusions(
             acceptedSnapshot,
             candidateExclusionsRef.current
+          );
+          const visibleSnapshot = preserveDraftProgressProjection(
+            progressSnapshotRef.current,
+            projectedSnapshot
           );
           const shouldRevealProgress =
             progressSnapshotRef.current === null && !mobilePaneSelectionRef.current;
@@ -458,7 +463,10 @@ export function useAiStartWorkflow({
     candidateExclusionsRef.current = remainingExclusions;
     if (currentServerSnapshot !== null) {
       updateVisibleProgress(
-        restoreProgressCandidate(currentServerSnapshot, remainingExclusions)
+        preserveDraftProgressProjection(
+          progressSnapshotRef.current,
+          restoreProgressCandidate(currentServerSnapshot, remainingExclusions)
+        )
       );
     }
     lastExclusionRef.current = null;
@@ -691,7 +699,10 @@ export function useAiStartWorkflow({
     setMessages(trimmedMessages);
   }
 
-  const progressDiagram = createProgressDiagram(progressSnapshot);
+  const progressDiagram = useMemo(
+    () => createProgressDiagram(progressSnapshot),
+    [progressSnapshot]
+  );
 
   return {
     approveDraft,

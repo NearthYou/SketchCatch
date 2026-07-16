@@ -28,6 +28,26 @@ export function acceptProgressSnapshot(
   return current !== null && incoming.sequence <= current.sequence ? current : incoming;
 }
 
+export function preserveDraftProgressProjection(
+  previous: ArchitectureDraftProgressSnapshot | null,
+  incoming: ArchitectureDraftProgressSnapshot
+): ArchitectureDraftProgressSnapshot {
+  if (
+    previous === null ||
+    previous.provisionalArchitectureJson === null ||
+    incoming.stage !== "preparing_requirements" ||
+    incoming.provisionalArchitectureJson !== null
+  ) {
+    return incoming;
+  }
+
+  return {
+    ...incoming,
+    provisionalArchitectureJson: previous.provisionalArchitectureJson,
+    excludableCandidateIds: previous.excludableCandidateIds
+  };
+}
+
 export function excludeProgressCandidate(
   snapshot: ArchitectureDraftProgressSnapshot,
   exclusion: ArchitectureDraftCandidateExclusion

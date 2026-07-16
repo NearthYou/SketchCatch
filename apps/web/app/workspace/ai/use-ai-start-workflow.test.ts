@@ -45,6 +45,20 @@ test("Draft progress 요청은 abort와 단조 request identity로 stale event�
   assert.match(source, /progressStatus/);
   assert.match(source, /progressDiagram/);
   assert.match(source, /progressHistory/);
+  assert.match(
+    source,
+    /preserveDraftProgressProjection\(\s*progressSnapshotRef\.current,\s*projectedSnapshot\s*\)/
+  );
+});
+
+test("progress Diagram layout은 snapshot이 바뀔 때만 다시 계산한다", () => {
+  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+
+  assert.match(source, /import \{ useEffect, useMemo, useRef, useState \} from "react"/);
+  assert.match(
+    source,
+    /const progressDiagram = useMemo\(\s*\(\) => createProgressDiagram\(progressSnapshot\),\s*\[progressSnapshot\]\s*\)/
+  );
 });
 
 test("새 프로젝트 stream 중단은 마지막 snapshot을 유지하고 화면을 떠나지 않는다", () => {
@@ -83,6 +97,10 @@ test("후보 제외 undo는 clarification 이후의 최신 request와 snapshot�
   assert.match(
     undoSource,
     /restoreProgressCandidate\(currentServerSnapshot, remainingExclusions\)/
+  );
+  assert.match(
+    undoSource,
+    /preserveDraftProgressProjection\(\s*progressSnapshotRef\.current,\s*restoreProgressCandidate\(currentServerSnapshot, remainingExclusions\)\s*\)/
   );
   assert.match(undoSource, /\.\.\.currentRequest, candidateExclusions: remainingExclusions/);
   assert.doesNotMatch(undoSource, /undo\.(?:request|serverSnapshot)/);
