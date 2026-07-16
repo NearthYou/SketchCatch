@@ -91,11 +91,7 @@ export async function runTerraformPlan(
 ): Promise<TerraformRunResult> {
   const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
 
-  return runTerraformCommand(
-    workdir,
-    ["plan", "-input=false", "-no-color", `-out=${planFileName}`],
-    options
-  );
+  return runTerraformCommand(workdir, createTerraformPlanArgs(planFileName), options);
 }
 
 export async function runTerraformDestroyPlan(
@@ -104,11 +100,7 @@ export async function runTerraformDestroyPlan(
 ): Promise<TerraformRunResult> {
   const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
 
-  return runTerraformCommand(
-    workdir,
-    ["plan", "-destroy", "-input=false", "-no-color", `-out=${planFileName}`],
-    options
-  );
+  return runTerraformCommand(workdir, createTerraformDestroyPlanArgs(planFileName), options);
 }
 
 export async function runTerraformShowJson(
@@ -126,11 +118,19 @@ export async function runTerraformApply(
 ): Promise<TerraformRunResult> {
   const planFileName = options.planFileName ?? defaultTerraformPlanFileName;
 
-  return runTerraformCommand(
-    workdir,
-    ["apply", "-input=false", "-no-color", planFileName],
-    options
-  );
+  return runTerraformCommand(workdir, createTerraformApplyArgs(planFileName), options);
+}
+
+export function createTerraformPlanArgs(planFileName: string): string[] {
+  return ["plan", "-input=false", "-no-color", `-out=${planFileName}`];
+}
+
+export function createTerraformDestroyPlanArgs(planFileName: string): string[] {
+  return ["plan", "-destroy", "-input=false", "-no-color", `-out=${planFileName}`];
+}
+
+export function createTerraformApplyArgs(planFileName: string): string[] {
+  return ["apply", "-input=false", "-no-color", planFileName];
 }
 
 export async function runTerraformOutputJson(

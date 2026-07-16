@@ -1958,6 +1958,10 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
           blockedBy: "missing_approval",
           blockedReason: "Terraform Plan requires user approval before apply"
         }),
+        optimization: {
+          outcome: "execute",
+          reason: "initial_plan"
+        },
         terraform: {
           init: null,
           validate: null,
@@ -2010,6 +2014,10 @@ test("POST /api/deployments/:deploymentId/plan writes a runtime cache status sna
       deployment: createDeploymentRecord(input.deploymentId, {
         status: "PENDING"
       }),
+      optimization: {
+        outcome: "execute",
+        reason: "initial_plan"
+      },
       terraform: {
         init: null,
         validate: null,
@@ -2067,6 +2075,35 @@ test("POST /api/deployments/:deploymentId/plan rejects a deployment that is alre
   });
   assert.equal(planStarted, false);
   assert.equal(repository.deployment.status, "RUNNING");
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/plan joins an identical Plan already in flight", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    activeStage: "plan"
+  });
+  let duplicatePlanStarted = false;
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentPlan: async () => {
+      duplicatePlanStarted = true;
+      throw new Error("a duplicate Plan must not start");
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.activeStage, "plan");
+  assert.equal(duplicatePlanStarted, false);
 
   await app.close();
 });
