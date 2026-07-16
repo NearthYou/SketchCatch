@@ -859,6 +859,40 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
   assert.equal(repository.logs.some((log) => log.message.includes("resource_changes")), false);
 });
 
+test("runDeploymentPlan cleans a prepared workspace when a parallel prerequisite fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  let cleanupCalls = 0;
+
+  repository.findVerifiedAwsConnectionById = async () => {
+    throw new Error("connection lookup failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentPlan(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          planArtifactStorage: new FakePlanArtifactStorage(),
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-terraform-plan",
+              mainFilePath: "C:/tmp/sketchcatch-terraform-plan/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /connection lookup failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
+});
+
 test("application scope writes an immutable release approval plan without running Terraform", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {

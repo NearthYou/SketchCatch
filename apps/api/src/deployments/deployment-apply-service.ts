@@ -56,6 +56,7 @@ import {
   containsArchiveFileDataSource
 } from "./terraform-artifact-safety.js";
 import {
+  cleanupPreparedTerraformWorkspace,
   createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
@@ -147,6 +148,7 @@ export async function runDeploymentApply(
     options.executeApplicationRelease ?? defaultExecuteApplicationRelease;
 
   let workspace: PreparedTerraformWorkspace | undefined;
+  let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   let deploymentId: string | undefined;
   let applySucceeded = false;
   let failureRecorded = false;
@@ -189,17 +191,21 @@ export async function runDeploymentApply(
       requireCurrentPlanArtifact(deployment, repository),
       requireDeploymentAwsConnection(deployment, input.accessContext, repository)
     ]);
+    workspacePromise = prepareTerraformWorkspace({
+      objectKey: terraformArtifact.objectKey,
+      fileName: terraformArtifact.fileName,
+      contentType: terraformArtifact.contentType
+    }).then((preparedWorkspace) => {
+      workspace = preparedWorkspace;
+      return preparedWorkspace;
+    });
     const [planBuffer, preparedWorkspace] = await Promise.all([
       applyArtifactStorage.downloadDeploymentArtifact({
         deploymentId: deployment.id,
         planArtifactId: currentPlanArtifact.id,
         objectKey: currentPlanArtifact.objectKey
       }),
-      prepareTerraformWorkspace({
-        objectKey: terraformArtifact.objectKey,
-        fileName: terraformArtifact.fileName,
-        contentType: terraformArtifact.contentType
-      })
+      workspacePromise
     ]);
     workspace = preparedWorkspace;
 
@@ -683,7 +689,7 @@ export async function runDeploymentApply(
 
     throw error;
   } finally {
-    await workspace?.cleanup();
+    await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
   }
 }
 
@@ -698,6 +704,7 @@ async function runApplicationOnlyDeploymentApply(input: {
   terraform: RunDeploymentApplyResult["terraform"];
 }): Promise<RunDeploymentApplyResult> {
   let workspace: PreparedTerraformWorkspace | undefined;
+  let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   try {
     const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
       requireDeploymentTerraformArtifact(input.deployment, input.repository),
@@ -708,20 +715,27 @@ async function runApplicationOnlyDeploymentApply(input: {
         input.repository
       )
     ]);
+    workspacePromise = input
+      .prepareTerraformWorkspace({
+        objectKey: terraformArtifact.objectKey,
+        fileName: terraformArtifact.fileName,
+        contentType: terraformArtifact.contentType
+      })
+      .then((preparedWorkspace) => {
+        workspace = preparedWorkspace;
+        return preparedWorkspace;
+      });
     const [planBuffer, preparedWorkspace] = await Promise.all([
       input.applyArtifactStorage.downloadDeploymentArtifact({
         deploymentId: input.deployment.id,
         planArtifactId: currentPlanArtifact.id,
         objectKey: currentPlanArtifact.objectKey
       }),
-      input.prepareTerraformWorkspace({
-        objectKey: terraformArtifact.objectKey,
-        fileName: terraformArtifact.fileName,
-        contentType: terraformArtifact.contentType
-      })
+      workspacePromise
     ]);
-    workspace = preparedWorkspace;
-    const terraformArtifactContent = await input.readTerraformArtifactFile(workspace.mainFilePath);
+    const terraformArtifactContent = await input.readTerraformArtifactFile(
+      preparedWorkspace.mainFilePath
+    );
     assertDeploymentApplyPreconditions({
       deployment: input.deployment,
       currentPlanArtifact,
@@ -773,7 +787,7 @@ async function runApplicationOnlyDeploymentApply(input: {
     if (!completed) throw new DeploymentNotFoundError("Deployment not found");
     return { deployment: completed, terraform: input.terraform };
   } finally {
-    await workspace?.cleanup();
+    await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
   }
 }
 

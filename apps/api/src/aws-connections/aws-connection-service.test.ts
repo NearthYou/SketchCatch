@@ -75,6 +75,70 @@ test("AWS connection templates trust every configured runtime caller role", asyn
   );
 });
 
+test("AWS connection Terraform permissions scope PassRole to runtime services", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const result = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "c0ccf1a1-1111-4222-8333-444444444444",
+      generateExternalId: () => "test-external-id"
+    }
+  );
+  const policy = result.roleSetup.permissionSetup.terraformPolicyDocument as {
+    Statement: Array<Record<string, unknown>>;
+  };
+  const passRoleStatement = policy.Statement.find(
+    (statement) => statement["Action"] === "iam:PassRole"
+  );
+
+  assert.deepEqual(passRoleStatement, {
+    Effect: "Allow",
+    Action: "iam:PassRole",
+    Resource: "arn:aws:iam::*:role/*",
+    Condition: {
+      StringEquals: {
+        "iam:PassedToService": [
+          "autoscaling.amazonaws.com",
+          "codebuild.amazonaws.com",
+          "codedeploy.amazonaws.com",
+          "codepipeline.amazonaws.com",
+          "ec2.amazonaws.com",
+          "ecs-tasks.amazonaws.com",
+          "eks.amazonaws.com",
+          "lambda.amazonaws.com"
+        ]
+      }
+    }
+  });
+  assert.equal(
+    policy.Statement.some(
+      (statement) =>
+        statement["Resource"] === "*" &&
+        Array.isArray(statement["Action"]) &&
+        statement["Action"].includes("iam:PassRole")
+    ),
+    false
+  );
+
+  const template = await getAwsConnectionCloudFormationTemplate(
+    {
+      connectionId: result.awsConnection.id,
+      accessContext,
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository
+  );
+  assert.match(
+    template.templateBody,
+    /Action: iam:PassRole\n\s+Resource: !Sub "arn:\$\{AWS::Partition\}:iam::\$\{AWS::AccountId\}:role\/\*"\n\s+Condition:\n\s+StringEquals:\n\s+iam:PassedToService:/
+  );
+});
+
 function createInMemoryAwsConnectionRepository(): AwsConnectionRepository {
   const records = new Map<string, AwsConnectionRecord>();
 

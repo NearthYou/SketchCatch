@@ -360,10 +360,15 @@ export function requireGitHubAppUserAuthorizationConfig(
     throw new Error("GIT_APP_CALLBACK_URL is required");
   }
 
-  const callbackUrl = new URL(
-    "/api/source-repositories/github/user-authorization/callback",
-    setupCallbackUrl
-  ).toString();
+  let callbackUrl: string;
+  try {
+    callbackUrl = new URL(
+      "/api/source-repositories/github/user-authorization/callback",
+      setupCallbackUrl
+    ).toString();
+  } catch {
+    throw new Error("GIT_APP_CALLBACK_URL must be a valid absolute URL");
+  }
   return { clientId, clientSecret, callbackUrl };
 }
 
