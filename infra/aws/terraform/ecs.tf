@@ -374,7 +374,7 @@ resource "aws_ecs_service" "api" {
   ]
 
   lifecycle {
-    ignore_changes = [desired_count, task_definition]
+    ignore_changes = [desired_count]
   }
 }
 

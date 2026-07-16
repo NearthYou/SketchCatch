@@ -476,7 +476,9 @@ jobs:
         run: |
           set -euo pipefail
           reviewed_plan_json="${RUNNER_TEMP}/reviewed-plan.json"
+          current_state_json="${RUNNER_TEMP}/current-state.json"
           terraform -chdir="${TERRAFORM_ROOT}" show -json tfplan > "${reviewed_plan_json}"
+          terraform -chdir="${TERRAFORM_ROOT}" state pull > "${current_state_json}"
 
           jq -e '
             def is_task_definition_replacement($actions):
@@ -495,6 +497,7 @@ jobs:
               | sort_by(.address)
               == [
                 {"address": "aws_cloudwatch_log_metric_filter.ecs_error[\"web\"]", "actions": ["update"]},
+                {"address": "aws_ecs_service.api", "actions": ["update"]},
                 {"address": "aws_ecs_service.web", "actions": ["update"]},
                 {"address": "aws_iam_role_policy.ecs_task", "actions": ["update"]},
                 {"address": "aws_iam_role_policy.ecs_worker_execution", "actions": ["update"]},
@@ -519,10 +522,25 @@ jobs:
             )
           ' "${reviewed_plan_json}" > /dev/null
 
-          jq -e '
+          jq -e --slurpfile current_state "${current_state_json}" '
             def task_container($definitions; $name):
               ($definitions | fromjson | map(select(.name == $name))) as $containers
               | if ($containers | length) == 1 then $containers[0] else error("task container is missing or ambiguous") end;
+            def state_task_definition($name):
+              [
+                $current_state[0].resources[]
+                | select(
+                    .mode == "managed" and
+                    .type == "aws_ecs_task_definition" and
+                    .name == $name
+                  )
+                | .instances[]?
+                | .attributes.container_definitions
+              ] as $definitions
+              | if ($definitions | length) == 1 and ($definitions[0] | type) == "string"
+                then $definitions[0]
+                else error("Terraform state task definition is missing or ambiguous")
+                end;
             def secret_pairs($container):
               [($container.secrets // [])[] | [.name, .valueFrom]];
             def has_required_github_app_inputs($container):
@@ -535,14 +553,15 @@ jobs:
             | ($task_definitions | length) == 2
               and all($task_definitions[];
                 .address as $address
-                | (if $address == "aws_ecs_task_definition.api" then "api" else "worker" end) as $container_name
-                | task_container(.change.before.container_definitions; $container_name) as $before
-                | task_container(.change.after.container_definitions; $container_name) as $after
+                | (if $address == "aws_ecs_task_definition.api" then "api" else "worker" end) as $task_definition_name
+                | state_task_definition($task_definition_name) as $before_definitions
+                | task_container($before_definitions; $task_definition_name) as $before
+                | task_container(.change.after.container_definitions; $task_definition_name) as $after
                 | (secret_pairs($before)) as $before_secrets
                 | (secret_pairs($after)) as $after_secrets
                 | ($before.image == $after.image)
                   and has_required_github_app_inputs($after)
-                  and all($before_secrets[]; $after_secrets | index(.) != null)
+                  and ($after_secrets | contains($before_secrets))
               )
           ' "${reviewed_plan_json}" > /dev/null
 
@@ -572,11 +591,11 @@ jobs:
               ) as $execution_policy
             | get_secret_values($execution_policy.before.policy) as $before_values
             | get_secret_values($execution_policy.after.policy) as $after_values
-            | all($before_values[]; $after_values | index(.) != null)
+            | ($after_values | contains($before_values))
               and (($after_values - $before_values) == [$worker_client_secret])
           ' "${reviewed_plan_json}" > /dev/null
 
-          rm -f "${reviewed_plan_json}"
+          rm -f "${reviewed_plan_json}" "${current_state_json}"
 
       - name: Set reviewed plan artifact metadata
         id: reviewed-plan
@@ -682,6 +701,7 @@ jobs:
           else
             for address in \
               'aws_cloudwatch_log_metric_filter.ecs_error["web"]' \
+              'aws_ecs_service.api' \
               'aws_ecs_service.web' \
               'aws_ecs_task_definition.api' \
               'aws_ecs_task_definition.worker' \
