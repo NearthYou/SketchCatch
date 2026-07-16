@@ -178,5 +178,5 @@ Short English-only working log for the current agent context. Older records are 
 - Confirmed redeployments reuse the Terraform execution workspace so Plan/Apply performs incremental create, update, and delete operations.
 - Made History select a single successful version, default to the latest successful deployment, and exclude failed attempts from deployable versions.
 - Removed the idle Cancel action while preserving cancellation for running validation, Plan, Apply, and Destroy work.
-- Rebuilt Deployment History around a version picker and selected-version summary card with localized scope, status, timestamp, and separate create/update/delete metrics following `DESIGN.md`.
-- Verification: focused Direct Deployment Web tests passed 10/10; Web typecheck, Web lint, harness check, and diff check passed. No cloud deployment or destroy was executed.
+- Rebuilt Deployment History around a version picker and selected-version summary card, aligned the non-sticky recent result with settings, moved compact horizontal actions above it, removed repeated disclosure headings, and matched History chrome to surrounding cards.
+- Verification: focused Direct Deployment Web tests passed 13/13; Web typecheck and diff checks passed. Signed-in Chrome confirmed aligned columns, 157px/139px nowrap actions, and the subdued History card. No cloud deployment or destroy was executed.

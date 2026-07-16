@@ -1654,9 +1654,7 @@ export function DirectDeploymentScreen({
       <section className={styles.deploymentHistorySection} id="deployment-history">
         <header className={styles.deploymentHistoryHeader}>
           <div>
-            <span className={styles.deploymentHistoryEyebrow}>Deployment history</span>
             <h3>배포 이력</h3>
-            <p>성공한 버전의 변경 범위와 실행 결과를 확인합니다.</p>
           </div>
           <span className={styles.deploymentHistoryCount}>
             <CheckCircle2 aria-hidden="true" size={16} />

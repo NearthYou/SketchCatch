@@ -179,6 +179,8 @@ test("Deployment History selects one successful version and renders only its det
   assert.match(historySource, /deploymentHistoryPicker/);
   assert.match(historySource, /deploymentHistorySnapshot/);
   assert.match(historySource, /deploymentHistoryMetrics/);
+  assert.doesNotMatch(historySource, /Deployment history/);
+  assert.doesNotMatch(historySource, /성공한 버전의 변경 범위와 실행 결과를 확인합니다/);
   assert.match(directDeploymentSource, /label: formatDeploymentVersionDate\(deployment\.createdAt\)/);
   assert.doesNotMatch(historySource, /deploymentHistoryEntries\.map/);
   assert.doesNotMatch(historySource, /setSelectedDeploymentId/);
@@ -190,6 +192,18 @@ test("Deployment History selects one successful version and renders only its det
   assert.match(directDeploymentSource, /role="alert"/);
   assert.match(directDeploymentSource, /historyDeploymentResources/);
   assert.match(directDeploymentSource, /historyTerraformOutputs/);
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistorySection\s*\{[^}]*border:\s*1px solid var\(--workspace-line[^}]*box-shadow:\s*none;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistoryHeader\s*\{[^}]*border-bottom:\s*0;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistorySnapshot\s*\{[^}]*border:\s*1px solid var\(--workspace-line,[^}]*box-shadow:\s*none;/s
+  );
 });
 
 test("expanded history details do not repeat their disclosure titles", () => {
