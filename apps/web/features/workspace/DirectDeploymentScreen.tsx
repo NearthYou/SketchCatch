@@ -299,13 +299,6 @@ export function DirectDeploymentScreen({
   const canApply = deploymentActions.canApply;
   const canDestroy = cleanupDeploymentActions.canDestroy;
   const canCancelDeployment = deploymentActions.canCancelDeployment;
-  const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
-  const shouldShowDestroyPlanButton = cleanupActionTargets.some(
-    ({ actions }) => actions.shouldShowDestroyPlanButton
-  );
-  const shouldShowDestroyButton = cleanupActionTargets.some(
-    ({ actions }) => actions.shouldShowDestroyButton
-  );
   const deploymentActionHint = selectedDeployment
     ? getDeploymentActionHint(selectedDeployment)
     : "";
@@ -1226,24 +1219,6 @@ export function DirectDeploymentScreen({
               />
               <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
               <p>승인된 Plan과 프로젝트 스냅샷이 일치할 때만 실행됩니다.</p>
-              <div className={styles.deploymentApplyActions}>
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  onClick={() => setShowApplyConfirmation(false)}
-                  type="button"
-                >
-                  취소
-                </button>
-                <button
-                  className={styles.deploymentPrimaryButton}
-                  disabled={!canApply}
-                  onClick={startTerraformApply}
-                  type="button"
-                >
-                  <DashboardIcon name="rocket" />
-                  배포 실행
-                </button>
-              </div>
             </div>
           ) : null}
           {showDestroyConfirmation && cleanupDeployment ? (
@@ -1401,16 +1376,25 @@ export function DirectDeploymentScreen({
 
                 return buttons;
               })}
-              {!shouldShowDestroyPlanButton && !shouldShowDestroyButton ? (
-                <button
-                  className={styles.deploymentPrimaryButton}
-                  disabled={!canApply}
-                  onClick={() => setShowApplyConfirmation(true)}
-                  type="button"
-                >
-                  <DashboardIcon name="rocket" />
-                  배포 실행 검토
-                </button>
+              {showApplyConfirmation && selectedDeployment ? (
+                <>
+                  <button
+                    className={styles.deploymentSecondaryButton}
+                    onClick={() => setShowApplyConfirmation(false)}
+                    type="button"
+                  >
+                    취소
+                  </button>
+                  <button
+                    className={styles.deploymentPrimaryButton}
+                    disabled={!canApply}
+                    onClick={startTerraformApply}
+                    type="button"
+                  >
+                    <DashboardIcon name="rocket" />
+                    배포 실행
+                  </button>
+                </>
               ) : null}
             </div>
           )}

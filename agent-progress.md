@@ -44,6 +44,12 @@ Short English-only working log for the current agent context. Older records are 
 - This prevents an automatic no-op checkpoint from making a completed Deployment look modified and incorrectly showing the save-required validation state.
 - Verification: focused project draft and route tests passed 8/8; API lint, API typecheck, and `pnpm harness:check` passed.
 
+### 2026-07-16 - Keep the final Apply control beside the latest result
+
+- Removed the duplicate Deploy review entry point in Stage 3.
+- The approved snapshot details stay in the main panel while Cancel and the final Deploy action now appear only above the latest deployment result.
+- Verification: focused three-stage deployment tests passed 14/14; targeted Web lint and Web typecheck passed.
+
 ### 2026-07-16 - Wire production GitHub App runtime inputs
 
 - Added fail-closed GitHub Environment input validation and runtime tfvars overlay to the production infrastructure plan.

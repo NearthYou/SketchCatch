@@ -142,6 +142,29 @@ test("deployment actions sit directly above the recent result without a divider"
   );
 });
 
+test("the final deployment execution control appears only above the recent result", () => {
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
+  const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
+  const applyConfirmStart = directDeploymentSource.indexOf(
+    "{showApplyConfirmation && selectedDeployment ?"
+  );
+  const destroyConfirmStart = directDeploymentSource.indexOf(
+    "{showDestroyConfirmation && cleanupDeployment ?",
+    applyConfirmStart
+  );
+  const applyConfirmSource = directDeploymentSource.slice(applyConfirmStart, destroyConfirmStart);
+
+  assert.ok(actionsStart > -1);
+  assert.ok(resultsStart > actionsStart);
+  assert.ok(applyConfirmStart > -1);
+  assert.ok(destroyConfirmStart > applyConfirmStart);
+  assert.match(actionsSource, /showApplyConfirmation && selectedDeployment/);
+  assert.match(actionsSource, /onClick=\{startTerraformApply\}/);
+  assert.doesNotMatch(actionsSource, /배포 실행 검토/);
+  assert.doesNotMatch(applyConfirmSource, /onClick=\{startTerraformApply\}/);
+});
+
 test("reload restores the persisted ProjectDraft revision instead of assuming changes", () => {
   assert.match(
     managerSource,
