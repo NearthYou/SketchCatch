@@ -1,7 +1,8 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Cloud, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type {
   AwsConnection,
   AwsConnectionCloudFormationTemplateResponse
@@ -15,15 +16,15 @@ import {
   createAwsConnectionSetup,
   deleteAwsConnection,
   getAwsConnectionCloudFormationTemplate,
-  listAwsConnections,
   testAwsConnection,
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
 import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
+import { useAwsConnectionsQuery } from "../../../features/dashboard/connection-queries";
+import { useAuth } from "../../../components/auth/auth-provider";
+import { invalidateAwsConnectionQueries } from "../../../components/query/dashboard-query-invalidation";
 import styles from "../dashboard-tools.module.css";
 import { GitHubAccountSettings } from "./github-account-settings";
-
-type SettingsLoadState = "loading" | "ready" | "error";
 
 const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "서울", value: "ap-northeast-2" },
@@ -33,8 +34,10 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
 
 // AWS Role 생성 안내, CloudFormation 이동, 연결 검증과 삭제를 관리합니다.
 export function SettingsDashboardClient() {
-  const [connections, setConnections] = useState<readonly AwsConnection[]>([]);
-  const [loadState, setLoadState] = useState<SettingsLoadState>("loading");
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const connectionsQuery = useAwsConnectionsQuery();
+  const connections: readonly AwsConnection[] = connectionsQuery.data ?? [];
   const [actionPending, setActionPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [region, setRegion] = useState("ap-northeast-2");
@@ -42,18 +45,6 @@ export function SettingsDashboardClient() {
   const [cloudFormation, setCloudFormation] = useState<AwsConnectionCloudFormationTemplateResponse | null>(null);
   const [accountId, setAccountId] = useState("");
   const [deleteCandidateId, setDeleteCandidateId] = useState("");
-
-  // 저장된 AWS 연결 목록을 다시 읽고 현재 상태를 최신으로 맞춥니다.
-  async function loadConnections(): Promise<void> {
-    setErrorMessage("");
-    try {
-      setConnections(await listAwsConnections());
-      setLoadState("ready");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 불러오지 못했습니다.");
-      setLoadState("error");
-    }
-  }
 
   // 새 연결의 External ID와 Role 이름을 만들고 CloudFormation 실행 정보를 준비합니다.
   async function createConnection(): Promise<void> {
@@ -66,7 +57,7 @@ export function SettingsDashboardClient() {
       });
       setSetupConnection(created.awsConnection);
       setCloudFormation(template);
-      await loadConnections();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결 준비에 실패했습니다.");
     } finally {
@@ -109,7 +100,7 @@ export function SettingsDashboardClient() {
       setSetupConnection(null);
       setCloudFormation(null);
       setAccountId("");
-      await loadConnections();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS Role 검증에 실패했습니다.");
     } finally {
@@ -124,7 +115,7 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     try {
       await testAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
-      await loadConnections();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결 테스트에 실패했습니다.");
     } finally {
@@ -143,7 +134,7 @@ export function SettingsDashboardClient() {
     try {
       await deleteAwsConnection(connectionId);
       setDeleteCandidateId("");
-      await loadConnections();
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 삭제하지 못했습니다.");
     } finally {
@@ -151,24 +142,20 @@ export function SettingsDashboardClient() {
     }
   }
 
-  // 화면 진입 시 기존 연결을 한 번 불러옵니다.
-  useEffect(() => {
-    void loadConnections();
-  }, []);
-
   return (
     <div className="dashboardRouteStack">
       <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div><h1>설정</h1></div>
-        <button className={styles.iconAction} aria-label="연결 새로고침" onClick={() => void loadConnections()} title="새로고침" type="button"><RefreshCw size={17} /></button>
+        <button className={styles.iconAction} aria-label="연결 새로고침" disabled={connectionsQuery.isFetching} onClick={() => void connectionsQuery.refetch()} title="새로고침" type="button"><RefreshCw size={17} /></button>
       </header>
 
-      {loadState === "loading" ? (
+      {connectionsQuery.isPending && connections.length === 0 ? (
         <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
-      ) : loadState === "error" && connections.length === 0 ? (
-        <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
+      ) : connectionsQuery.isError && connections.length === 0 ? (
+        <ProductState action={<button onClick={() => void connectionsQuery.refetch()} type="button">다시 시도</button>} description={connectionsQuery.error instanceof Error ? connectionsQuery.error.message : "AWS 연결을 불러오지 못했습니다."} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
       ) : (
         <>
+          {connectionsQuery.isError ? <p className={styles.errorBand}>{connectionsQuery.error instanceof Error ? connectionsQuery.error.message : "AWS 연결을 갱신하지 못했습니다."}</p> : null}
           {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
           <section className={styles.settingsSection}>

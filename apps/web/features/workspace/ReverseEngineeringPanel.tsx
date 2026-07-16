@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
@@ -12,6 +13,8 @@ import type {
   Project
 } from "../../../../packages/types/src";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { useAuth } from "../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../components/query/dashboard-query-invalidation";
 import {
   cancelReverseEngineeringScan,
   createArchitectureSnapshot,
@@ -75,6 +78,8 @@ export function ReverseEngineeringPanel({
   projectId,
   projectName
 }: ReverseEngineeringPanelProps) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const [selectedResourceTypes, setSelectedResourceTypes] = useState<ReverseEngineeringResourceSelection[]>([
     REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
@@ -369,6 +374,10 @@ export function ReverseEngineeringPanel({
     try {
       const targetProject = createProjectOnApply ? await createProject({ name: projectName }) : null;
       const targetProjectId = targetProject?.id ?? projectId;
+
+      if (targetProject) {
+        await invalidateProjectQueries(queryClient, user?.id);
+      }
 
       if (createProjectOnApply && targetProject) {
         await saveProjectDraft({

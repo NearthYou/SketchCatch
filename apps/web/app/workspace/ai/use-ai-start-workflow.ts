@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -10,6 +11,8 @@ import type {
   DiagramJson
 } from "@sketchcatch/types";
 import { getApiErrorMessage } from "../../../lib/api-client";
+import { useAuth } from "../../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../../components/query/dashboard-query-invalidation";
 import {
   createAiArchitectureDraft,
   createAiArchitecturePatchPreview,
@@ -70,6 +73,8 @@ export function useAiStartWorkflow({
 }: {
   readonly existingProject?: AiStartExistingProject | undefined;
 } = {}) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const existingProjectId = existingProject?.projectId;
   const existingProjectName = existingProject?.projectName;
@@ -261,6 +266,7 @@ export function useAiStartWorkflow({
         const project = await createProject({ name: projectDraft.projectName });
         projectId = project.id;
         setCreatedProjectId(project.id);
+        await invalidateProjectQueries(queryClient, user?.id);
       }
 
       const approvedMessages = appendMessage(

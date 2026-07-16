@@ -44,6 +44,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+/.pnpm-store/
 
 # Local-only notes and private planning docs
 docs/private/
