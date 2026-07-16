@@ -1,14 +1,27 @@
-import type {
-  ApplicationReleaseProviderRevision,
-  ApplicationReleaseStatus,
-  ConfirmedBuildConfig,
-  DeploymentScope,
-  DeploymentSource,
-  JsonValue,
-  ProjectDeploymentRuntimeConfig,
-  RuntimeTargetKind
+import {
+  APPLICATION_ARTIFACT_CONTRACT_VERSION,
+  type ApplicationArtifact,
+  type ApplicationReleaseProviderRevision,
+  type ApplicationReleaseStatus,
+  type ConfirmedBuildConfig,
+  type DeploymentScope,
+  type DeploymentSource,
+  type JsonValue,
+  type ProjectDeploymentRuntimeConfig,
+  type RuntimeTargetKind
 } from "@sketchcatch/types";
 import { and, eq } from "drizzle-orm";
+import { createApplicationArtifactIdentity } from "../artifacts/application-artifact-identity.js";
+import {
+  applicationArtifactKindForRuntime,
+  applicationArtifactPlatformForRuntime
+} from "../artifacts/application-artifact-runtime.js";
+import {
+  resolveApplicationArtifact,
+  type ApplicationArtifactProviderVerification,
+  type ApplicationArtifactRegistryRepository
+} from "../artifacts/application-artifact-registry.js";
+import { createPostgresApplicationArtifactRegistryRepository } from "../artifacts/postgres-application-artifact-registry.js";
 import type { Database } from "../db/client.js";
 import {
   applicationReleases,
@@ -22,6 +35,7 @@ import { resolveApplicationReleaseVersion } from "../releases/application-releas
 
 export type DirectApplicationReleaseContext = {
   sourceRepository: {
+    id: string;
     provider: "github";
     installationId: string;
     owner: string;
@@ -40,6 +54,7 @@ export type DirectApplicationReleaseContext = {
     runtimeConfig: ProjectDeploymentRuntimeConfig;
   };
   connection: {
+    accountId: string;
     roleArn: string;
     externalId: string;
     region: string;
@@ -57,6 +72,7 @@ export type DirectApplicationArtifact = {
 export type DirectApplicationReleaseRecord = {
   id: string;
   projectId: string;
+  artifactId: string | null;
   deploymentId: string;
   pipelineRunId: null;
   source: "direct";
@@ -77,6 +93,7 @@ export type DirectApplicationReleaseRecord = {
 };
 
 export type DirectApplicationReleaseRepository = {
+  readonly artifactRegistry: ApplicationArtifactRegistryRepository;
   findContext(
     deploymentId: string,
     userId: string
@@ -112,6 +129,11 @@ export type DirectApplicationReleaseGateway = {
     context: DirectApplicationReleaseContext,
     abortSignal?: AbortSignal
   ): Promise<DirectApplicationArtifact>;
+  verifyArtifact(
+    context: DirectApplicationReleaseContext,
+    artifact: ApplicationArtifact,
+    abortSignal?: AbortSignal
+  ): Promise<ApplicationArtifactProviderVerification>;
   deployArtifact(input: {
     context: DirectApplicationReleaseContext;
     artifact: DirectApplicationArtifact;
@@ -148,6 +170,7 @@ export function createPostgresDirectApplicationReleaseRepository(
   db: Database
 ): DirectApplicationReleaseRepository {
   return {
+    artifactRegistry: createPostgresApplicationArtifactRegistryRepository(db),
     async findContext(deploymentId, userId) {
       const [row] = await db
         .select({
@@ -161,7 +184,9 @@ export function createPostgresDirectApplicationReleaseRepository(
           runtimeConfig: projectDeploymentTargets.runtimeConfig,
           roleArn: awsConnections.roleArn,
           externalId: awsConnections.externalId,
+          accountId: awsConnections.accountId,
           region: awsConnections.region,
+          sourceRepositoryId: sourceRepositories.id,
           sourceRepositoryProvider: sourceRepositories.provider,
           sourceRepositoryInstallationId: sourceRepositories.githubInstallationId,
           sourceRepositoryOwner: sourceRepositories.owner,
@@ -177,7 +202,8 @@ export function createPostgresDirectApplicationReleaseRepository(
           awsConnections,
           and(
             eq(awsConnections.id, deployments.awsConnectionId),
-            eq(awsConnections.id, projectDeploymentTargets.connectionId)
+            eq(awsConnections.id, projectDeploymentTargets.connectionId),
+            eq(awsConnections.region, projectDeploymentTargets.region)
           )
         )
         .leftJoin(
@@ -198,16 +224,19 @@ export function createPostgresDirectApplicationReleaseRepository(
         );
       if (
         !row?.roleArn ||
+        !row.accountId ||
         !row.confirmedBuildConfig ||
         !row.runtimeConfig ||
         row.runtimeConfig.runtimeTargetKind !== row.runtimeTargetKind
       ) return undefined;
       const sourceRepository =
         row.sourceRepositoryProvider === "github" &&
+        row.sourceRepositoryId &&
         row.sourceRepositoryInstallationId &&
         row.sourceRepositoryOwner &&
         row.sourceRepositoryName
           ? {
+              id: row.sourceRepositoryId,
               provider: "github" as const,
               installationId: row.sourceRepositoryInstallationId,
               owner: row.sourceRepositoryOwner,
@@ -229,6 +258,7 @@ export function createPostgresDirectApplicationReleaseRepository(
           runtimeConfig: row.runtimeConfig
         },
         connection: {
+          accountId: row.accountId,
           roleArn: row.roleArn,
           externalId: row.externalId,
           region: row.region
@@ -367,11 +397,13 @@ export async function prepareDirectApplicationRelease(
         existing.providerRevision?.metadata,
         "preparedBuildRevisionId"
       );
-      const buildRevisionId =
-        existing.providerRevision?.resourceType === "codebuild_artifact"
+      const artifactExecutionRevisionId =
+        preparedBuildRevisionId ??
+        existing.artifactId ??
+        (existing.providerRevision?.resourceType === "codebuild_artifact"
           ? existing.providerRevision.revisionId
-          : preparedBuildRevisionId;
-      if (!buildRevisionId || !existing.providerRevision?.artifactReference) {
+          : null);
+      if (!artifactExecutionRevisionId || !existing.providerRevision?.artifactReference) {
         throw new DirectApplicationReleaseError(
           "Failed application release does not retain immutable build evidence"
         );
@@ -380,10 +412,15 @@ export async function prepareDirectApplicationRelease(
         releaseId: existing.id,
         providerRevision: {
           provider: "aws",
-          resourceType: "codebuild_artifact",
-          revisionId: buildRevisionId,
+          resourceType: existing.artifactId ? "application_artifact" : "codebuild_artifact",
+          revisionId: existing.artifactId ?? artifactExecutionRevisionId,
           artifactReference: existing.providerRevision.artifactReference,
-          metadata: { preparedBuildRevisionId: buildRevisionId }
+          metadata: {
+            ...existing.providerRevision.metadata,
+            ...(preparedBuildRevisionId
+              ? { preparedBuildRevisionId }
+              : {})
+          }
         },
         updatedAt: now()
       });
@@ -393,14 +430,54 @@ export async function prepareDirectApplicationRelease(
     );
   }
 
-  const artifact = await gateway.prepareArtifact(context, input.abortSignal);
-  validateArtifact(artifact, context.target.confirmedBuildConfig.confirmedCommitSha);
   const timestamp = now();
   const buildConfig = context.target.confirmedBuildConfig;
+  const identity = createApplicationArtifactIdentity({
+    repository: {
+      provider: context.sourceRepository.provider,
+      owner: context.sourceRepository.owner,
+      name: context.sourceRepository.name
+    },
+    commitSha: buildConfig.confirmedCommitSha,
+    kind: applicationArtifactKindForRuntime(context.target.runtimeTargetKind),
+    confirmedBuildConfig: buildConfig,
+    buildContractVersion: APPLICATION_ARTIFACT_CONTRACT_VERSION,
+    ...applicationArtifactPlatformForRuntime(context.target.runtimeTargetKind),
+    buildInputs: {}
+  });
+  let preparedArtifact: DirectApplicationArtifact | undefined;
+  const resolved = await resolveApplicationArtifact({
+    projectId: context.deployment.projectId,
+    sourceRepositoryId: context.sourceRepository.id,
+    identity,
+    expectedLocation: {
+      provider: "aws",
+      accountId: context.connection.accountId,
+      region: context.connection.region,
+      storageNamespace: resolveExpectedStorageNamespace(context),
+      ownershipScope: `project:${context.deployment.projectId}`
+    },
+    now: timestamp,
+    repository: repository.artifactRegistry,
+    verifier: {
+      verify: (artifact) => gateway.verifyArtifact(context, artifact, input.abortSignal)
+    },
+    build: async () => {
+      preparedArtifact = await gateway.prepareArtifact(context, input.abortSignal);
+      validateArtifact(preparedArtifact, buildConfig.confirmedCommitSha);
+      return {
+        digest: preparedArtifact.digest,
+        location: createProviderLocation(context, preparedArtifact.reference)
+      };
+    }
+  });
+  const artifact = resolved.artifact;
+  const preparedBuildRevisionId = preparedArtifact?.buildRevisionId;
 
   return repository.savePreparedRelease({
     id: createId(),
     projectId: context.deployment.projectId,
+    artifactId: artifact.id,
     deploymentId: context.deployment.id,
     pipelineRunId: null,
     source: "direct",
@@ -415,10 +492,16 @@ export async function prepareDirectApplicationRelease(
     artifactDigest: artifact.digest,
     providerRevision: {
       provider: "aws",
-      resourceType: "codebuild_artifact",
-      revisionId: artifact.buildRevisionId,
-      artifactReference: artifact.reference,
-      metadata: artifact.metadata
+      resourceType: "application_artifact",
+      revisionId: artifact.id,
+      artifactReference: artifact.location.artifactReference,
+      metadata: {
+        ...(preparedArtifact?.metadata ?? {}),
+        applicationArtifactId: artifact.id,
+        artifactFingerprint: artifact.artifactFingerprint,
+        ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {}),
+        reuseOutcome: resolved.outcome
+      }
     },
     outputUrl: null,
     status: "pending",
@@ -442,7 +525,13 @@ export async function executeDirectApplicationRelease(
   assertContextMatchesTarget(context);
 
   const release = await repository.findRelease(input.deploymentId);
-  if (!release || release.providerRevision?.resourceType !== "codebuild_artifact") {
+  const providerRevision = release?.providerRevision ?? null;
+  if (
+    !release ||
+    !["codebuild_artifact", "application_artifact"].includes(
+      providerRevision?.resourceType ?? ""
+    )
+  ) {
     throw new DirectApplicationReleaseError(
       "A prepared application artifact is required before runtime release"
     );
@@ -453,16 +542,23 @@ export async function executeDirectApplicationRelease(
       `Application release cannot start from status ${release.status}`
     );
   }
-  const reference = release.providerRevision.artifactReference;
+  if (!providerRevision) {
+    throw new DirectApplicationReleaseError("Prepared application artifact revision is missing");
+  }
+  const reference = providerRevision.artifactReference;
   if (!reference) {
     throw new DirectApplicationReleaseError("Prepared application artifact reference is missing");
   }
+  const preparedBuildRevisionId = readMetadataString(
+    providerRevision.metadata,
+    "preparedBuildRevisionId"
+  );
   const artifact: DirectApplicationArtifact = {
     commitSha: release.commitSha,
     digest: release.artifactDigest,
     reference,
-    buildRevisionId: release.providerRevision.revisionId,
-    metadata: release.providerRevision.metadata
+    buildRevisionId: preparedBuildRevisionId ?? providerRevision.revisionId,
+    metadata: providerRevision.metadata
   };
   validateArtifact(artifact, context.target.confirmedBuildConfig.confirmedCommitSha);
 
@@ -490,7 +586,7 @@ export async function executeDirectApplicationRelease(
       ...result.providerRevision,
       metadata: {
         ...result.providerRevision.metadata,
-        preparedBuildRevisionId: artifact.buildRevisionId
+        ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
       }
     },
     outputUrl: result.outputUrl,
@@ -528,7 +624,8 @@ export async function rollbackDirectApplicationRelease(
     release.providerRevision.metadata,
     "preparedBuildRevisionId"
   );
-  if (!preparedBuildRevisionId) {
+  const artifactExecutionRevisionId = preparedBuildRevisionId ?? release.artifactId;
+  if (!artifactExecutionRevisionId) {
     throw new DirectApplicationReleaseError(
       "Application release does not retain its prepared build revision"
     );
@@ -537,7 +634,7 @@ export async function rollbackDirectApplicationRelease(
     commitSha: release.commitSha,
     digest: release.artifactDigest,
     reference: release.providerRevision.artifactReference,
-    buildRevisionId: preparedBuildRevisionId,
+    buildRevisionId: artifactExecutionRevisionId,
     metadata: release.providerRevision.metadata
   };
   validateArtifact(artifact, context.target.confirmedBuildConfig.confirmedCommitSha);
@@ -555,7 +652,7 @@ export async function rollbackDirectApplicationRelease(
       ...result.providerRevision,
       metadata: {
         ...result.providerRevision.metadata,
-        preparedBuildRevisionId
+        ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
       }
     },
     outputUrl: result.outputUrl,
@@ -582,7 +679,11 @@ async function requireContext(
   return context;
 }
 
-function assertContextMatchesTarget(context: DirectApplicationReleaseContext): void {
+function assertContextMatchesTarget(
+  context: DirectApplicationReleaseContext
+): asserts context is DirectApplicationReleaseContext & {
+  sourceRepository: NonNullable<DirectApplicationReleaseContext["sourceRepository"]>;
+} {
   if (
     context.deployment.source !== "direct" ||
     !context.sourceRepository ||
@@ -603,6 +704,66 @@ function assertContextMatchesTarget(context: DirectApplicationReleaseContext): v
       "DEPLOYMENT_OUTPUT_URL_REQUIRED"
     );
   }
+}
+
+function resolveExpectedStorageNamespace(
+  context: DirectApplicationReleaseContext
+): string | null {
+  const runtime = context.target.runtimeConfig;
+  if (runtime.runtimeTargetKind === "ecs_fargate") return runtime.ecrRepositoryName;
+  if (runtime.runtimeTargetKind === "static_site") return runtime.hostingBucketName;
+  return null;
+}
+
+function createProviderLocation(
+  context: DirectApplicationReleaseContext,
+  artifactReference: string
+): ApplicationArtifact["location"] {
+  const runtime = context.target.runtimeConfig;
+  let storageNamespace: string;
+
+  if (runtime.runtimeTargetKind === "ecs_fargate") {
+    const match = /^(\d{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com(?:\.cn)?\/(.+)@sha256:[a-f0-9]{64}$/u.exec(
+      artifactReference
+    );
+    if (
+      !match?.[1] ||
+      !match[2] ||
+      !match[3] ||
+      match[1] !== context.connection.accountId ||
+      match[2] !== context.connection.region ||
+      match[3] !== runtime.ecrRepositoryName
+    ) {
+      throw new DirectApplicationReleaseError(
+        "Prepared container artifact does not belong to the approved ECR target"
+      );
+    }
+    storageNamespace = match[3];
+  } else {
+    const match = /^s3:\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])\/(.+)$/u.exec(
+      artifactReference
+    );
+    if (!match?.[1] || !match[2]) {
+      throw new DirectApplicationReleaseError(
+        "Prepared application artifact must use an approved provider object reference"
+      );
+    }
+    storageNamespace = match[1];
+    if (runtime.runtimeTargetKind === "static_site" && storageNamespace !== runtime.hostingBucketName) {
+      throw new DirectApplicationReleaseError(
+        "Prepared static artifact does not belong to the approved hosting bucket"
+      );
+    }
+  }
+
+  return {
+    provider: "aws",
+    accountId: context.connection.accountId,
+    region: context.connection.region,
+    storageNamespace,
+    artifactReference,
+    ownershipScope: `project:${context.deployment.projectId}`
+  };
 }
 
 function validateArtifact(artifact: DirectApplicationArtifact, expectedCommitSha: string): void {

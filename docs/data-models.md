@@ -671,7 +671,7 @@ type TerraformArtifact = ProjectAsset & {
 };
 ```
 
-승인된 Terraform 산출물 원문은 RDS의 독립 `content` 컬럼에 저장하지 않는다. 다만 최신 편집 복구를 위한 `ProjectDraft.terraformFiles`는 DiagramJson과 함께 RDS JSONB에 임시 working state로 저장한다. 배포 이력과 릴리스 artifact의 영구 저장 기준은 S3 object다.
+승인된 Terraform 산출물 원문은 RDS의 독립 `content` 컬럼에 저장하지 않는다. 다만 최신 편집 복구를 위한 `ProjectDraft.terraformFiles`는 DiagramJson과 함께 RDS JSONB에 임시 working state로 저장한다. Terraform, export, cleanup manifest처럼 SketchCatch가 생성한 파일성 산출물의 영구 저장 기준은 SketchCatch S3 object다. 사용자 application artifact의 실제 byte는 사용자 계정의 ECR/S3 또는 provider storage에 그대로 두고 SketchCatch production ECR/S3로 복사하지 않는다.
 
 ## Terraform 생성과 Editor 검증 DTO
 
@@ -1003,6 +1003,83 @@ provider metadata의 이전 정상 revision을 `application_release_cleanup_plan
 경우에만 release를 `rolled_back`, Deployment를 `DESTROYED`로 기록한다. `infrastructure`와 `full_stack` cleanup은
 기존 Terraform state 기반 Destroy 계약을 유지한다.
 
+## ApplicationArtifact
+
+`ApplicationArtifact`는 Direct Deployment와 Git/CI/CD가 공유하는 provider-neutral application build 원장이다.
+실제 image, zip, bundle, manifest, chart, machine image byte는 사용자 계정의 ECR/S3 또는 해당 provider storage에
+남기고, RDS `application_artifacts`에는 identity, provider location metadata, digest, 검증 상태만 저장한다.
+Redis Runtime Cache와 RDS row 어느 쪽도 provider 존재 여부의 source of truth가 아니다.
+
+```ts
+type ApplicationArtifactKind =
+  | "container_image"
+  | "lambda_zip"
+  | "codedeploy_bundle"
+  | "static_bundle"
+  | "kubernetes_manifest"
+  | "helm_chart"
+  | "machine_image";
+
+type ApplicationArtifactProviderLocation = {
+  provider: CloudProvider;
+  accountId: string;
+  region: string;
+  storageNamespace: string;
+  artifactReference: string;
+  ownershipScope: string;
+};
+
+type ApplicationArtifact = {
+  id: string;
+  projectId: string;
+  sourceRepositoryId: string | null;
+  kind: ApplicationArtifactKind;
+  artifactFingerprint: string;
+  repositoryIdentity: string;
+  commitSha: string;
+  buildConfigSha256: string;
+  buildContractVersion: string;
+  targetOs: string;
+  targetArchitecture: string;
+  buildInputIdentitySha256: string;
+  digestAlgorithm: "sha256";
+  digest: string;
+  location: ApplicationArtifactProviderLocation;
+  status: "available";
+  verifiedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+```
+
+canonical `artifactFingerprint`는 repository provider/owner/name identity, exact commit SHA, 정규화한
+`ConfirmedBuildConfig`, build contract/buildspec version, target OS/architecture, 비밀값을 포함하지 않는 build
+input identity를 결합해 계산한다. 파일 key와 JSON key 순서는 canonical 정렬을 사용한다. runner 종류, worker 수,
+queue, retry, timeout처럼 artifact byte를 바꾸지 않는 orchestrator/capacity 값은 포함하지 않는다. secret 형태의
+build input key는 fingerprint 입력 단계에서 거부하며 secret value를 hash하거나 저장하는 방식으로 우회하지 않는다.
+RDS row의 내부 상태는 `building | available | invalid | failed`이며 API는 완전한 digest/location을 가진
+`available` artifact만 반환한다.
+
+재사용 직전 provider adapter는 artifact 존재, exact SHA-256 digest, account, region, 승인된 storage namespace/reference,
+project ownership scope를 read-only로 다시 검증한다. ECR은 repository와 image digest를, S3는 expected bucket owner와
+provider가 계산한 object checksum을 검증하며 checksum이 없으면 object stream의 SHA-256을 계산한다. 사용자가 쓸 수
+있는 custom object metadata는 digest 증거로 신뢰하지 않는다. 검증 실패는 row를
+`invalid`로 만들고 cache miss로 처리해 정상 build로 fallback한다. 실제 credential이나 live mutation 없이 순수
+adapter 계약과 test double로 검증하며, raw provider 오류와 credential은 DB나 로그에 남기지 않는다.
+
+같은 project와 fingerprint의 `building | available` row는 하나만 허용한다. build claim은 SHA-256 token과 만료 lease로
+소유권을 고정하며, build 동안 heartbeat가 lease를 갱신한다. 만료되지 않은 claim은 두 번째 build를 시작하지 않는다.
+만료된 lease만 새 claim으로 인수할 수 있고 renew/complete/fail/invalidate 갱신은 project, claim, status가 모두
+일치해야 한다. `ApplicationRelease`의 복합 FK
+`(artifactId, projectId)`와 project-scoped 조회가 cross-project reuse를 차단한다. Source Repository가 삭제되면
+`sourceRepositoryId`만 `null`이 되며 검증된 artifact identity와 release 연결은 보존한다.
+
+`GET /api/projects/:projectId/artifacts`는 인증된 project의 `available` artifact만 반환한다. GitOps release evidence
+v1은 기존 필드를 그대로 허용하고 registry가 canonical identity를 계산한다. v2는 `artifact` extension에 kind,
+fingerprint, build contract version, SHA-256 digest, provider location을 함께 전달하며 strict Zod validation과 canonical
+fingerprint 일치를 모두 통과해야 한다. v1 producer는 계속 호환되고 malformed v2를 v1로 downgrade하지 않는다.
+이 저장 경계는 migration `0045_application_artifact_registry.sql`에서 추가한다.
+
 ## ApplicationRelease
 
 `ApplicationRelease`는 application 배포 결과의 공통 원장이다. Direct release는 `deploymentId`, GitOps
@@ -1012,6 +1089,7 @@ release는 `pipelineRunId`를 하나만 가지며 둘 다 `GET /api/projects/:pr
 type ApplicationRelease = {
   id: string;
   projectId: string;
+  artifactId: string | null;
   deploymentId: string | null;
   pipelineRunId: string | null;
   source: "direct" | "gitops";
@@ -1040,9 +1118,11 @@ type ApplicationRelease = {
 ```
 
 release version은 exact SemVer tag, manifest version, `sha-<commit 앞 12자리>` 순으로 결정한다. artifact는
-SHA-256 digest로 식별한다. `providerRevision`은 provider, resource type, revision ID, artifact reference,
-비민감 metadata를 담고 canonical fingerprint 비교로 실제 provider revision drift를 판정한다. 실제 artifact와
-release evidence는 S3에 두며 RDS에는 식별자, 상태, 검증 결과만 저장한다.
+SHA-256 digest로 식별한다. `artifactId`는 검증된 `ApplicationArtifact`와 release를 연결하며 legacy release와
+provider 검증에 실패해 안전하게 재사용하지 않은 v1 GitOps release는 `null`을 유지한다. `providerRevision`은
+provider, resource type, revision ID, artifact reference, 비민감 metadata를 담고 canonical fingerprint 비교로
+실제 provider revision drift를 판정한다. 실제 사용자 artifact는 사용자 ECR/S3 또는 provider storage에 두고,
+RDS에는 식별자, 상태, 검증 결과만 저장한다.
 
 ## Deployment
 
@@ -1123,7 +1203,7 @@ Apply 단계는 이 snapshot과 현재 artifact, `tfplan`, AWS account/region이
 
 ### Deployment Optimization Contract v1
 
-IaC desired-state, application artifact, runtime release는 각각 별도 fingerprint와 검증 책임을 가진다. 현재 v1은 Terraform managed resource의 IaC desired-state 계층만 구현한다. 이후 artifact 재사용과 runtime no-op은 `ResourceDefinition.capabilities.deployment.optimization`이 허용하는 resource adapter에서 별도로 확장하며, 코드 fingerprint 하나만으로 실제 cloud가 동일하다고 판단하지 않는다.
+IaC desired-state, application artifact, runtime release는 각각 별도 fingerprint와 검증 책임을 가진다. Terraform managed resource의 IaC desired-state 계층과 Direct/GitOps 공통 `ApplicationArtifact` Registry v1을 구현했다. runtime no-op은 `ResourceDefinition.capabilities.deployment.optimization`이 허용하는 resource adapter에서 별도 확장하며, 코드 fingerprint 하나나 DB row만으로 실제 cloud가 동일하다고 판단하지 않는다.
 
 ```ts
 type DeploymentOptimizationDecision =

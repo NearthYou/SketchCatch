@@ -545,6 +545,7 @@ function requireDirectApplicationReleaseRepository(
   repository: DeploymentRepository
 ): DirectApplicationReleaseRepository {
   if (
+    !repository.artifactRegistry ||
     !repository.findContext ||
     !repository.findRelease ||
     !repository.savePreparedRelease ||
@@ -555,6 +556,7 @@ function requireDirectApplicationReleaseRepository(
     throw new DeploymentConflictError("Direct application release repository is unavailable");
   }
   return {
+    artifactRegistry: repository.artifactRegistry,
     findContext: repository.findContext.bind(repository),
     findRelease: repository.findRelease.bind(repository),
     savePreparedRelease: repository.savePreparedRelease.bind(repository),

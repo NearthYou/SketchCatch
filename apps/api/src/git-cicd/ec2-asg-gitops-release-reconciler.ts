@@ -93,6 +93,7 @@ export type Ec2AsgGitOpsCloudGateway = {
 
 export type Ec2AsgGitOpsReleaseReconcileInput = {
   projectId: string;
+  artifactId?: string | null;
   pipelineRunId: string;
   commitSha: string;
   pipelineStatus: GitCicdPipelineRunStatus;
@@ -158,6 +159,7 @@ export function createEc2AsgGitOpsReleaseReconciler(options: {
       return options.repository.upsertRelease({
         id: createId(),
         projectId: input.projectId,
+        artifactId: input.artifactId ?? null,
         deploymentId: null,
         pipelineRunId: input.pipelineRunId,
         source: "gitops",

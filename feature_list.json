@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-15",
+  "lastUpdated": "2026-07-16",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -764,7 +764,41 @@
         ],
         "notes": "Focused verification passed: ResourceDefinition 9/9, API/deployment/route 83/83, and existing approval/Destroy regressions 22/22. Harness, migration compatibility, lint, typecheck, and all five package builds passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template layout/parent contract failures in packages/types; this change does not modify those Template sources or tests."
       },
-      "notes": "PR 1 implements only the IaC desired-state layer. Artifact reuse and runtime no-op remain in issues #433 and #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user Git/CI/CD handoff was performed."
+      "notes": "PR 1 implements only the IaC desired-state layer. PR 2 / issue #433 is tracked separately below; runtime no-op remains in issue #435. No DB migration, live AWS mutation, Terraform apply/destroy, or user Git/CI/CD handoff was performed."
+    },
+    {
+      "id": "APPLICATION-ARTIFACT-REGISTRY-433",
+      "priority": 1,
+      "area": "application-artifact-reuse",
+      "title": "Provider-neutral ApplicationArtifact Registry shared by Direct and GitOps",
+      "user_visible_behavior": "사용자는 같은 Source Repository commit과 정규화된 build 계약으로 만든 application artifact가 사용자 provider storage에 그대로 존재하고 digest·계정·region·project ownership이 다시 검증되면 Direct Deployment와 Git/CI/CD에서 중복 build 없이 재사용한다.",
+      "status": "passing",
+      "verification": [
+        "container image, Lambda zip, CodeDeploy bundle, static bundle, Kubernetes manifest, Helm chart, machine image를 provider-neutral kind로 구분한다.",
+        "repository identity, commit SHA, normalized build config, build contract, target platform, secret-free build input만 canonical fingerprint에 포함하고 orchestrator/capacity 값은 제외한다.",
+        "RDS에는 identity와 provider metadata만 저장하고 실제 사용자 artifact byte는 사용자 ECR/S3 또는 provider storage에 유지한다.",
+        "재사용 전에 provider 존재, exact SHA-256 digest, account, region, namespace/reference, project ownership을 read-only로 검증하며 실패는 정상 build fallback으로 처리한다.",
+        "project-scoped unique claim, heartbeat lease, hashed claim token, composite release FK가 duplicate build와 cross-project reuse를 차단한다.",
+        "Direct와 GitOps release가 같은 registry를 사용하며 release evidence v1은 유지하고 strict v2 artifact extension을 검증한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-16",
+        "commands": [
+          "pnpm --filter @sketchcatch/types exec tsx --test src/application-artifact-contract.test.ts src/project-release-ledger-contract.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/artifacts/application-artifact-identity.test.ts src/artifacts/application-artifact-registry.test.ts src/artifacts/application-artifact-schemas.test.ts src/artifacts/aws-application-artifact-verifier.test.ts src/db/schema-contract.test.ts src/deployments/direct-application-artifact-reuse.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/github-actions-release-evidence.test.ts src/git-cicd/gitops-application-artifact-registrar.test.ts src/git-cicd/gitops-release-reconciler.test.ts src/releases/project-release-ledger-artifact.test.ts",
+          "pnpm harness:check",
+          "pnpm migration:compatibility:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full",
+          "pnpm test:core",
+          "pnpm --filter @sketchcatch/api test",
+          "git diff --check"
+        ],
+        "notes": "Focused PR 2 contracts pass 55/55. Harness, migration compatibility, lint, typecheck, and all five package builds pass. The API suite passes 666/669; the three remaining failures are pre-existing Windows EPERM failures while the tests attempt to create symlinks. test:core separately stops on the three pre-existing three-tier Template scope/position/parent assertions before the API package runs. A transient notification SSE bad-port failure was traced to this host's Windows dynamic port range 1024-15000 overlapping Fetch-blocked ports; the isolated test and the second full API run passed it."
+      },
+      "notes": "Migration 0045 is used because another branch reserved 0044; _journal.json changes with the new entry. The lockfile changes only for the existing-version @aws-sdk/client-ecr dependency. Generated workflows remain valid v1 producers while strict v2 consumers are available. No real credential, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff was executed. PR 3 / issue #435 was not started."
     }
   ]
 }

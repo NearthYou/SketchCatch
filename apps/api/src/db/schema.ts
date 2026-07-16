@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -14,10 +15,13 @@ import {
   varchar
 } from "drizzle-orm/pg-core";
 import type {
+  ApplicationArtifactKind,
+  ApplicationArtifactStatus,
   ApplicationReleaseProviderRevision,
   ApplicationReleaseStatus,
   ArchitectureJson,
   ConfirmedBuildConfig,
+  CloudProvider,
   DeploymentScope,
   DeploymentNotificationSource,
   DeploymentNotificationStatus,
@@ -932,6 +936,100 @@ export const gitCicdPipelineLogs = pgTable(
   ]
 );
 
+export const applicationArtifacts = pgTable(
+  "application_artifacts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sourceRepositoryId: varchar("source_repository_id", { length: 36 }).references(
+      () => sourceRepositories.id,
+      { onDelete: "set null" }
+    ),
+    kind: varchar("kind", { length: 32 }).$type<ApplicationArtifactKind>().notNull(),
+    artifactFingerprint: varchar("artifact_fingerprint", { length: 64 }).notNull(),
+    repositoryIdentity: text("repository_identity").notNull(),
+    commitSha: varchar("commit_sha", { length: 64 }).notNull(),
+    buildConfigSha256: varchar("build_config_sha256", { length: 64 }).notNull(),
+    buildContractVersion: varchar("build_contract_version", { length: 128 }).notNull(),
+    targetOs: varchar("target_os", { length: 64 }).notNull(),
+    targetArchitecture: varchar("target_architecture", { length: 64 }).notNull(),
+    buildInputIdentitySha256: varchar("build_input_identity_sha256", { length: 64 }).notNull(),
+    digestAlgorithm: varchar("digest_algorithm", { length: 16 }).$type<"sha256">(),
+    digest: varchar("digest", { length: 64 }),
+    provider: varchar("provider", { length: 32 }).$type<CloudProvider>(),
+    providerAccountId: varchar("provider_account_id", { length: 128 }),
+    providerRegion: varchar("provider_region", { length: 64 }),
+    storageNamespace: text("storage_namespace"),
+    artifactReference: text("artifact_reference"),
+    ownershipScope: varchar("ownership_scope", { length: 128 }),
+    status: varchar("status", { length: 16 })
+      .$type<ApplicationArtifactStatus>()
+      .notNull()
+      .default("building"),
+    claimTokenSha256: varchar("claim_token_sha256", { length: 64 }),
+    claimExpiresAt: timestamp("claim_expires_at", { withTimezone: true }),
+    failureReason: text("failure_reason"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("application_artifacts_id_project_unique").on(table.id, table.projectId),
+    uniqueIndex("application_artifacts_project_fingerprint_active_unique")
+      .on(table.projectId, table.artifactFingerprint)
+      .where(sql`${table.status} in ('building', 'available')`),
+    index("application_artifacts_project_created_id_idx").on(
+      table.projectId,
+      table.createdAt.desc(),
+      table.id.desc()
+    ),
+    index("application_artifacts_source_repository_id_idx").on(table.sourceRepositoryId),
+    check(
+      "application_artifacts_kind_check",
+      sql`${table.kind} in ('container_image', 'lambda_zip', 'codedeploy_bundle', 'static_bundle', 'kubernetes_manifest', 'helm_chart', 'machine_image')`
+    ),
+    check(
+      "application_artifacts_status_check",
+      sql`${table.status} in ('building', 'available', 'invalid', 'failed')`
+    ),
+    check(
+      "application_artifacts_identity_hashes_check",
+      sql`${table.artifactFingerprint} ~ '^[0-9a-f]{64}$' and ${table.buildConfigSha256} ~ '^[0-9a-f]{64}$' and ${table.buildInputIdentitySha256} ~ '^[0-9a-f]{64}$'`
+    ),
+    check(
+      "application_artifacts_commit_sha_check",
+      sql`${table.commitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    ),
+    check(
+      "application_artifacts_payload_check",
+      sql`(
+        ${table.status} = 'building'
+        and ${table.claimTokenSha256} ~ '^[0-9a-f]{64}$'
+        and ${table.claimExpiresAt} is not null
+        and ${table.digest} is null
+      ) or (
+        ${table.status} in ('available', 'invalid')
+        and ${table.claimTokenSha256} is null
+        and ${table.claimExpiresAt} is null
+        and ${table.digestAlgorithm} = 'sha256'
+        and ${table.digest} ~ '^[0-9a-f]{64}$'
+        and ${table.provider} in ('aws', 'kubernetes')
+        and ${table.providerAccountId} is not null
+        and ${table.providerRegion} is not null
+        and ${table.storageNamespace} is not null
+        and ${table.artifactReference} is not null
+        and ${table.ownershipScope} is not null
+      ) or (
+        ${table.status} = 'failed'
+        and ${table.claimTokenSha256} is null
+        and ${table.claimExpiresAt} is null
+      )`
+    )
+  ]
+);
+
 export const applicationReleases = pgTable(
   "application_releases",
   {
@@ -939,6 +1037,7 @@ export const applicationReleases = pgTable(
     projectId: varchar("project_id", { length: 36 })
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
+    artifactId: varchar("artifact_id", { length: 36 }),
     deploymentId: varchar("deployment_id", { length: 36 }).references(() => deployments.id, {
       onDelete: "set null"
     }),
@@ -982,6 +1081,11 @@ export const applicationReleases = pgTable(
     uniqueIndex("application_releases_pipeline_run_unique")
       .on(table.pipelineRunId)
       .where(sql`${table.pipelineRunId} is not null`),
+    foreignKey({
+      columns: [table.artifactId, table.projectId],
+      foreignColumns: [applicationArtifacts.id, applicationArtifacts.projectId],
+      name: "application_releases_artifact_project_fk"
+    }),
     check("application_releases_source_check", sql`${table.source} in ('direct', 'gitops')`),
     check(
       "application_releases_runtime_kind_check",
@@ -1255,6 +1359,7 @@ export const projectsRelations = relations(projects, ({ many, one }) => ({
   assets: many(projectAssets),
   sourceRepositories: many(sourceRepositories),
   deployments: many(deployments),
+  applicationArtifacts: many(applicationArtifacts),
   applicationReleases: many(applicationReleases),
   notifications: many(notifications),
   reverseEngineeringScans: many(reverseEngineeringScans),
@@ -1366,7 +1471,8 @@ export const sourceRepositoriesRelations = relations(sourceRepositories, ({ one,
   }),
   gitCicdHandoffs: many(gitCicdHandoffs),
   monitoringConfig: one(gitCicdMonitoringConfigs),
-  pipelineRuns: many(gitCicdPipelineRuns)
+  pipelineRuns: many(gitCicdPipelineRuns),
+  applicationArtifacts: many(applicationArtifacts)
 }));
 
 export const gitCicdHandoffsRelations = relations(gitCicdHandoffs, ({ one, many }) => ({
@@ -1437,7 +1543,23 @@ export const applicationReleasesRelations = relations(applicationReleases, ({ on
   pipelineRun: one(gitCicdPipelineRuns, {
     fields: [applicationReleases.pipelineRunId],
     references: [gitCicdPipelineRuns.id]
+  }),
+  artifact: one(applicationArtifacts, {
+    fields: [applicationReleases.artifactId, applicationReleases.projectId],
+    references: [applicationArtifacts.id, applicationArtifacts.projectId]
   })
+}));
+
+export const applicationArtifactsRelations = relations(applicationArtifacts, ({ many, one }) => ({
+  project: one(projects, {
+    fields: [applicationArtifacts.projectId],
+    references: [projects.id]
+  }),
+  sourceRepository: one(sourceRepositories, {
+    fields: [applicationArtifacts.sourceRepositoryId],
+    references: [sourceRepositories.id]
+  }),
+  releases: many(applicationReleases)
 }));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({

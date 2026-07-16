@@ -9,6 +9,8 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import * as databaseSchema from "./schema.js";
 import {
   architectures,
+  applicationArtifacts,
+  applicationReleases,
   awsConnectionStatusEnum,
   awsConnections,
   deploymentFailureStageEnum,
@@ -35,8 +37,92 @@ import {
   reverseEngineeringScanLogs,
   reverseEngineeringScanStatusEnum,
   reverseEngineeringScans,
+  sourceRepositories,
   users
 } from "./schema.js";
+
+test("ApplicationArtifact Registry is project-scoped metadata with persistent build leases", () => {
+  const artifactConfig = getTableConfig(applicationArtifacts);
+  const releaseConfig = getTableConfig(applicationReleases);
+
+  assert.deepEqual(
+    artifactConfig.columns.map((column) => column.name),
+    [
+      "id",
+      "project_id",
+      "source_repository_id",
+      "kind",
+      "artifact_fingerprint",
+      "repository_identity",
+      "commit_sha",
+      "build_config_sha256",
+      "build_contract_version",
+      "target_os",
+      "target_architecture",
+      "build_input_identity_sha256",
+      "digest_algorithm",
+      "digest",
+      "provider",
+      "provider_account_id",
+      "provider_region",
+      "storage_namespace",
+      "artifact_reference",
+      "ownership_scope",
+      "status",
+      "claim_token_sha256",
+      "claim_expires_at",
+      "failure_reason",
+      "verified_at",
+      "created_at",
+      "updated_at"
+    ]
+  );
+  assert.equal(findColumn(artifactConfig.columns, "bytes"), undefined);
+  assert.equal(findColumn(artifactConfig.columns, "claim_token"), undefined);
+  assert(
+    hasUniqueIndex(
+      artifactConfig.indexes,
+      "application_artifacts_project_fingerprint_active_unique",
+      ["project_id", "artifact_fingerprint"]
+    )
+  );
+  assert(hasForeignKey(artifactConfig.foreignKeys, "project_id", projects, "id"));
+  assert(
+    hasForeignKey(
+      artifactConfig.foreignKeys,
+      "source_repository_id",
+      sourceRepositories,
+      "id"
+    )
+  );
+  assert(findColumn(releaseConfig.columns, "artifact_id"));
+  assert(
+    releaseConfig.foreignKeys.some((candidate) => {
+      const reference = candidate.reference();
+      return (
+        reference.columns.map((column) => column.name).join(",") ===
+          "artifact_id,project_id" &&
+        reference.foreignTable === applicationArtifacts &&
+        reference.foreignColumns.map((column) => column.name).join(",") === "id,project_id"
+      );
+    })
+  );
+});
+
+test("ApplicationArtifact Registry migration is additive and reserves coordinated revision 0045", () => {
+  const migrationUrl = new URL(
+    "../../drizzle/0045_application_artifact_registry.sql",
+    import.meta.url
+  );
+  assert.equal(existsSync(migrationUrl), true);
+  const migration = readFileSync(migrationUrl, "utf8");
+
+  assert.match(migration, /CREATE TABLE "application_artifacts"/);
+  assert.match(migration, /ADD COLUMN "artifact_id" varchar\(36\)/);
+  assert.match(migration, /UNIQUE.*"project_id".*"artifact_fingerprint"/s);
+  assert.match(migration, /FOREIGN KEY \("artifact_id","project_id"\)/);
+  assert.doesNotMatch(migration, /DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM/i);
+});
 
 test("Git/CI/CD monitoring tables expose commit-scoped run history", () => {
   assert.ok(gitCicdMonitoringConfigs.sourceRepositoryId);

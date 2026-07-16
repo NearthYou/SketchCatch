@@ -1,4 +1,5 @@
 import type {
+  ApplicationArtifactKind,
   Ec2AsgGitOpsReleaseEvidence,
   EcsGitOpsReleaseEvidence,
   GitOpsReleaseEvidence,
@@ -8,6 +9,7 @@ import type {
   LambdaGitOpsReleaseEvidence,
   StaticSiteGitOpsReleaseEvidence
 } from "@sketchcatch/types";
+import { applicationArtifactEvidenceV2Schema } from "../artifacts/application-artifact-schemas.js";
 import { maskDeploymentMessage } from "../deployments/log-masking.js";
 import type {
   GitHubActionsReadClient,
@@ -318,7 +320,7 @@ function mapLogLineStageKind(
   return null;
 }
 
-function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
+export function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
   const results: GitOpsReleaseEvidence[] = [];
   for (const marker of [
     /SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=([A-Za-z0-9+/]{1,12000}={0,2})(?:\s|$)/g,
@@ -347,6 +349,24 @@ function parseReleaseEvidence(text: string): GitOpsReleaseEvidence[] {
   return results;
 }
 
+function validateArtifactEvidenceVersion(
+  item: Record<string, unknown>,
+  expectedKind: ApplicationArtifactKind,
+  digestWithOptionalPrefix: string,
+  artifactReference: string
+): boolean {
+  if (item.schemaVersion === 1) return item.artifact === undefined;
+  if (item.schemaVersion !== 2) return false;
+  const parsed = applicationArtifactEvidenceV2Schema.safeParse(item.artifact);
+  if (!parsed.success) return false;
+  const expectedDigest = digestWithOptionalPrefix.replace(/^sha256:/u, "");
+  return (
+    parsed.data.kind === expectedKind &&
+    parsed.data.digest === expectedDigest &&
+    parsed.data.location.artifactReference === artifactReference
+  );
+}
+
 function selectReleaseEvidence(
   candidates: readonly GitOpsReleaseEvidence[],
   commitSha: string
@@ -364,7 +384,7 @@ function validateLambdaReleaseEvidence(value: unknown): LambdaGitOpsReleaseEvide
   const allowedKeys = new Set([
     "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "artifactDigest",
     "artifactUri", "functionName", "aliasName", "publishedVersion", "previousVersion",
-    "activeVersion", "deploymentId", "deploymentConfigName", "outputUrl"
+    "activeVersion", "deploymentId", "deploymentConfigName", "outputUrl", "artifact"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -380,7 +400,7 @@ function validateLambdaReleaseEvidence(value: unknown): LambdaGitOpsReleaseEvide
   const artifactDigest = String(item.artifactDigest);
   const artifactUri = String(item.artifactUri);
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(item, "lambda_zip", artifactDigest, artifactUri) ||
     item.runtimeTargetKind !== "lambda" ||
     !["succeeded", "rolled_back", "failed"].includes(outcome) ||
     !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
@@ -415,7 +435,7 @@ function validateEc2AsgReleaseEvidence(value: unknown): Ec2AsgGitOpsReleaseEvide
     "artifactUri", "artifactVersionId", "previousArtifactUri", "previousArtifactVersionId",
     "codeDeployApplicationName", "codeDeployDeploymentGroupName", "autoScalingGroupName",
     "deploymentId", "activeDeploymentId", "deploymentConfigName", "targetInstanceCount",
-    "succeededInstanceCount", "outputUrl"
+    "succeededInstanceCount", "outputUrl", "artifact"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -435,7 +455,12 @@ function validateEc2AsgReleaseEvidence(value: unknown): Ec2AsgGitOpsReleaseEvide
   const asgNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,254}$/;
   const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(
+      item,
+      "codedeploy_bundle",
+      digest,
+      String(item.artifactUri)
+    ) ||
     item.runtimeTargetKind !== "ec2_asg" ||
     !["succeeded", "rolled_back", "failed"].includes(outcome) ||
     (outcome === "succeeded" && item.failureReason !== null) ||
@@ -484,7 +509,7 @@ function validateStaticSiteReleaseEvidence(
     "artifactDigest", "manifestUri", "manifestVersionId", "releasePrefix",
     "previousReleasePrefix", "activeReleasePrefix", "hostingBucketName",
     "cloudFrontDistributionId", "cloudFrontOriginId", "distributionEtag",
-    "invalidationId", "fileCount", "outputUrl"
+    "invalidationId", "fileCount", "outputUrl", "artifact"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -508,7 +533,7 @@ function validateStaticSiteReleaseEvidence(
   const versionIdPattern = /^[A-Za-z0-9._~+/=-]{1,1024}$/;
   const invalidationId = item.invalidationId;
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(item, "static_bundle", digest, String(item.manifestUri)) ||
     item.runtimeTargetKind !== "static_site" ||
     !["succeeded", "failed"].includes(outcome) ||
     (outcome === "succeeded" && item.failureReason !== null) ||
@@ -559,7 +584,7 @@ function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | 
   const allowedKeys = new Set([
     "schemaVersion", "runtimeTargetKind", "outcome", "commitSha", "imageDigest", "imageUri",
     "clusterName", "serviceName", "containerName", "taskDefinitionArn",
-    "previousTaskDefinitionArn", "restoredTaskDefinitionArn", "outputUrl"
+    "previousTaskDefinitionArn", "restoredTaskDefinitionArn", "outputUrl", "artifact"
   ]);
   if (Object.keys(item).some((key) => !allowedKeys.has(key))) return null;
   const stringKeys = [
@@ -568,7 +593,12 @@ function validateEcsReleaseEvidence(value: unknown): EcsGitOpsReleaseEvidence | 
   ] as const;
   if (stringKeys.some((key) => typeof item[key] !== "string")) return null;
   if (
-    item.schemaVersion !== 1 ||
+    !validateArtifactEvidenceVersion(
+      item,
+      "container_image",
+      String(item.imageDigest),
+      String(item.imageUri)
+    ) ||
     item.runtimeTargetKind !== "ecs_fargate" ||
     !["succeeded", "rolled_back", "failed"].includes(String(item.outcome)) ||
     !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(String(item.commitSha)) ||
