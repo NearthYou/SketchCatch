@@ -70,6 +70,12 @@ Short English-only working log for the current agent context. Older records are 
 - The workflow remains safely at validation for a changed draft, while the status, heading, and action explicitly say that the earlier approval must be revalidated.
 - Verification: focused deployment console tests passed 31/31; targeted Web lint, Web typecheck, and `pnpm harness:check` passed.
 
+### 2026-07-16 - Make AI parameter patch previews reviewable before apply
+
+- Parameter-only AI patches no longer paint a diagram preview. The fixed confirmation surface now lists each target resource and exact before/after parameter value beside the explicit Apply action.
+- CloudFront Origin Access Control signing-behavior requests now compile to `signingBehavior: always -> never` instead of adding an internal natural-language placeholder parameter.
+- Verification: focused API and Web patch-preview tests pass; targeted API/Web lint and typecheck pass; Chrome confirmed the exact value and enabled Apply control without applying the proposed change.
+
 ## Next Action
 
 - Review and merge `codex/fix-production-amazon-q-runtime`; run the production ECS deployment only after explicit approval.

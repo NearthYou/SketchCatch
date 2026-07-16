@@ -2269,6 +2269,34 @@
   white-space: normal;
 }
 
+.aiPatchPreviewActionRow {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(76px, 0.42fr);
+}
+
+.aiPatchPreviewActionRow .aiPrimaryButton,
+.aiPatchPreviewActionRow .aiSecondaryButton {
+  min-width: 0;
+  min-height: 38px;
+  padding: 7px 10px;
+}
+
+.aiPatchPreviewActionRow > :nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.aiPatchParameterActionSurface {
+  background: #ffffff;
+  border-top: 1px solid var(--workspace-line, #f0f0f3);
+  padding: 12px 20px 0;
+}
+
+.aiPatchParameterActionSurface .aiChatDraftCard {
+  max-height: 310px;
+  overflow-y: auto;
+}
+
 .aiPrimaryButton {
   background: var(--workspace-accent, #000000);
   border: 1px solid var(--workspace-accent, #000000);
@@ -3091,6 +3119,92 @@
   font-weight: 800;
   line-height: 1.45;
   margin: 0;
+}
+
+.aiPatchParameterPreview {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.aiPatchParameterPreview > p {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.aiPatchParameterResource {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.aiPatchParameterResource > div {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+}
+
+.aiPatchParameterResource strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.aiPatchParameterResource > div span {
+  color: #64748b;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.aiPatchParameterResource dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.aiPatchParameterResource dl > div {
+  align-items: start;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(118px, 0.95fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.aiPatchParameterResource dt {
+  color: #334155;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.aiPatchParameterResource dd {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.aiPatchParameterResource dd span {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.aiPatchParameterResource dd:last-child span {
+  color: #047857;
+}
+
+.aiPatchParameterResource code {
+  color: #172033;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .aiChatComposer {
@@ -9628,6 +9742,10 @@
   bottom: 0;
   max-height: none;
   top: 64px;
+}
+
+.aiChatDock[data-parameter-patch-preview="true"] {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
 }
 
 .aiChatTranscript {

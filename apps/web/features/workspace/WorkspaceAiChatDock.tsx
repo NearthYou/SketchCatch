@@ -70,6 +70,7 @@ import {
 } from "./workspace-ai-chat-routing";
 import {
   createWorkspaceAiPatchPreviewModel,
+  type WorkspaceAiPatchParameterChange,
   type WorkspaceAiPatchPreviewModel
 } from "./workspace-ai-patch-preview";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
@@ -1168,7 +1169,10 @@ export function WorkspaceAiChatDock({
     setPatchPreviewModel(model);
     setPatchPreviewSourceFingerprint(proposalSource.fingerprint);
     setPatchPreviewSourceRevision(proposalSource.revision);
-    context.setPreviewDiagram(model.visualPreviewDiagram, model.annotations);
+    context.setPreviewDiagram(
+      model.isParameterOnly ? null : model.visualPreviewDiagram,
+      model.isParameterOnly ? undefined : model.annotations
+    );
     setDraftState("idle");
     appendAssistantMessage("patch", createPatchPreviewSummary(preview));
   }
@@ -1637,6 +1641,9 @@ export function WorkspaceAiChatDock({
         aria-modal={isMobileChatSurface || undefined}
         className={styles.aiChatDock}
         data-chat-tab={activeChatTab}
+        data-parameter-patch-preview={
+          activeChatTab === "draft" && patchPreviewModel?.isParameterOnly ? "true" : undefined
+        }
         data-right-panel-open={context.isRightPanelOpen}
         data-terraform-leave-guard-ignore
         ref={chatDialogRef}
@@ -1999,30 +2006,28 @@ export function WorkspaceAiChatDock({
             </article>
           ) : null}
 
-          {activeChatTab === "draft" && patchPreviewModel !== null ? (
+          {activeChatTab === "draft" && patchPreviewModel !== null && !patchPreviewModel.isParameterOnly ? (
             <article className={styles.aiChatDraftCard}>
               <div className={styles.aiResultHeader}>
-                <h3>수정 미리보기</h3>
+                <h3>적용할 변경</h3>
                 <span>{patchPreviewModel.preview.changes.length}개 변경</span>
               </div>
               <WorkspaceAiExplanation explanation={patchPreviewModel.preview.llmExplanation} />
               <div className={styles.aiSafetyNotice} role="status">
                 {patchPreviewModel.preview.changes.map((change) => (
-                  <p
-                    key={`${change.action}-${change.resourceId ?? change.resourceType ?? change.summary}`}
-                  >
+                  <p key={`${change.action}-${change.resourceId ?? change.resourceType ?? change.summary}`}>
                     {change.summary}
                   </p>
                 ))}
               </div>
-              <div className={styles.aiActionRow}>
+              <div className={styles.aiPatchPreviewActionRow}>
                 <button
                   className={styles.aiPrimaryButton}
                   disabled={patchPreviewIsStale}
                   onClick={applyPatchPreviewToBoard}
                   type="button"
                 >
-                  적용
+                  변경 적용
                 </button>
                 <button
                   className={styles.aiSecondaryButton}
@@ -2052,6 +2057,50 @@ export function WorkspaceAiChatDock({
             </article>
           ) : null}
         </div>
+
+        {activeChatTab === "draft" && patchPreviewModel?.isParameterOnly ? (
+          <section className={styles.aiPatchParameterActionSurface} aria-label="수정 미리보기">
+            <article className={styles.aiChatDraftCard}>
+              <div className={styles.aiResultHeader}>
+                <h3>적용할 변경</h3>
+                <span>{patchPreviewModel.parameterChanges.length}개 파라미터</span>
+              </div>
+              <WorkspaceAiPatchParameterPreview changes={patchPreviewModel.parameterChanges} />
+              <div className={styles.aiPatchPreviewActionRow}>
+                <button
+                  className={styles.aiPrimaryButton}
+                  disabled={patchPreviewIsStale}
+                  onClick={applyPatchPreviewToBoard}
+                  type="button"
+                >
+                  변경 적용
+                </button>
+                <button
+                  className={styles.aiSecondaryButton}
+                  onClick={cancelPatchPreview}
+                  type="button"
+                >
+                  취소
+                </button>
+                {patchPreviewIsStale ? (
+                  <button
+                    className={styles.aiSecondaryButton}
+                    disabled={isChatBusy}
+                    onClick={() => void regeneratePatchPreview()}
+                    type="button"
+                  >
+                    최신 기준으로 다시 생성
+                  </button>
+                ) : null}
+              </div>
+              {patchPreviewIsStale ? (
+                <div className={styles.aiSafetyNotice} role="status">
+                  <p>보드가 변경되어 이 수정안은 적용할 수 없습니다. 최신 기준으로 다시 생성하세요.</p>
+                </div>
+              ) : null}
+            </article>
+          </section>
+        ) : null}
 
         {activeChatTab === "preview" ? (
           <div className={styles.aiReviewActionBar}>
@@ -2113,6 +2162,57 @@ export function WorkspaceAiChatDock({
 
 export function createWorkspaceAiChatStorageKey(projectId: string): string {
   return `${STORAGE_KEY_PREFIX}.${projectId}`;
+}
+
+function WorkspaceAiPatchParameterPreview({
+  changes
+}: {
+  readonly changes: readonly WorkspaceAiPatchParameterChange[];
+}) {
+  const changesByResource = new Map<string, WorkspaceAiPatchParameterChange[]>();
+
+  for (const change of changes) {
+    const existingChanges = changesByResource.get(change.resourceId) ?? [];
+    existingChanges.push(change);
+    changesByResource.set(change.resourceId, existingChanges);
+  }
+
+  return (
+    <section className={styles.aiPatchParameterPreview} aria-label="적용 예정 파라미터">
+      <p>적용하면 아래 파라미터 값이 보드에 저장됩니다.</p>
+      {[...changesByResource.values()].map((resourceChanges) => {
+        const [firstChange] = resourceChanges;
+
+        if (!firstChange) {
+          return null;
+        }
+
+        return (
+          <div className={styles.aiPatchParameterResource} key={firstChange.resourceId}>
+            <div>
+              <strong>{firstChange.resourceLabel}</strong>
+              <span>{firstChange.resourceType}</span>
+            </div>
+            <dl>
+              {resourceChanges.map((change) => (
+                <div key={change.parameter}>
+                  <dt>{change.parameter}</dt>
+                  <dd>
+                    <span>현재</span>
+                    <code>{change.before}</code>
+                  </dd>
+                  <dd>
+                    <span>변경</span>
+                    <code>{change.after}</code>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        );
+      })}
+    </section>
+  );
 }
 
 function createTerraformIssueHistoryStorageKey(projectId: string): string {
