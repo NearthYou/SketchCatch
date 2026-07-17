@@ -77,6 +77,34 @@ test("ARN만 있는 UNKNOWN은 전체 ARN을 기본 이름으로 노출하지 �
   assert.equal(presentation.displayName.includes("arn:aws:"), false);
 });
 
+test("displayName에 들어온 ARN은 사람 이름으로 바꾸고 원본 identity는 보존한다", () => {
+  const providerResourceId =
+    "arn:aws:lambda:ap-northeast-2:123456789012:function:order-handler";
+  const presentation = presentReverseEngineeringResource(
+    createResource({
+      displayName: providerResourceId,
+      providerResourceType: "AWS::Lambda::Function",
+      providerResourceId
+    })
+  );
+
+  assert.equal(presentation.displayName, "order-handler");
+  assert.equal(presentation.technicalIdentity, providerResourceId);
+});
+
+test("displayName에 들어온 내부 resource ID는 서비스 기반 기본 이름으로 바꾼다", () => {
+  const providerResourceId = "resource-01JQFWQCHB9M7RG40V9DRY7TZE";
+  const presentation = presentReverseEngineeringResource(
+    createResource({
+      displayName: providerResourceId,
+      providerResourceId
+    })
+  );
+
+  assert.equal(presentation.displayName, "이름 미확인 VPC");
+  assert.equal(presentation.technicalIdentity, providerResourceId);
+});
+
 test("빈 이름의 비-ARN provider ID는 서비스 기반 기본 이름으로 표시하고 technical identity에만 보존한다", () => {
   const presentation = presentReverseEngineeringResource(
     createResource({

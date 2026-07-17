@@ -30,6 +30,8 @@ const SERVICE_LABELS: Readonly<Record<string, string>> = {
   "AWS::S3::Bucket": "S3 버킷"
 };
 
+const MAX_DISPLAY_NAME_LENGTH = 42;
+
 export function presentReverseEngineeringResource(
   resource: DiscoveredResource
 ): ReverseEngineeringResourcePresentation {
@@ -65,7 +67,19 @@ export function summarizeReverseEngineeringScan(
 function getDisplayName(resource: DiscoveredResource, serviceLabel: string): string {
   const displayName = resource.displayName.trim();
 
-  return displayName || getFallbackDisplayName(resource.providerResourceId, serviceLabel);
+  return isHumanDisplayName(displayName, resource.providerResourceId)
+    ? displayName
+    : getFallbackDisplayName(resource.providerResourceId, serviceLabel);
+}
+
+function isHumanDisplayName(displayName: string, providerResourceId: string): boolean {
+  return (
+    displayName.length > 0 &&
+    displayName.length <= MAX_DISPLAY_NAME_LENGTH &&
+    !displayName.startsWith("arn:") &&
+    !displayName.startsWith("resource-") &&
+    displayName !== providerResourceId
+  );
 }
 
 function getFallbackDisplayName(providerResourceId: string, serviceLabel: string): string {
@@ -76,7 +90,15 @@ function getFallbackDisplayName(providerResourceId: string, serviceLabel: string
   const arnResource = providerResourceId.split(":").slice(5).join(":");
   const arnResourceName = arnResource.split(/[/:]/).filter(Boolean).at(-1);
 
-  return arnResourceName || `이름 미확인 ${serviceLabel}`;
+  return arnResourceName
+    ? shortenDisplayName(arnResourceName)
+    : `이름 미확인 ${serviceLabel}`;
+}
+
+function shortenDisplayName(displayName: string): string {
+  return displayName.length <= MAX_DISPLAY_NAME_LENGTH
+    ? displayName
+    : `${displayName.slice(0, MAX_DISPLAY_NAME_LENGTH - 1)}…`;
 }
 
 function getStatusLabel(
