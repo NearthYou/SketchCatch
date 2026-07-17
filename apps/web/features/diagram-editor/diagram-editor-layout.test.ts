@@ -317,6 +317,10 @@ test("compact workspace refits the board without changing the saved DiagramJson"
   );
   assert.match(
     diagramEditorSource,
+    /persistViewportAfterMove\(\s*\{[\s\S]*?isPreviewActive,[\s\S]*?isViewer: viewerPolicy\.isViewer/
+  );
+  assert.match(
+    diagramEditorSource,
     /initialAutoFitFrameRef\.current = null;[\s\S]*?fitVisibleDiagram\(false\);/
   );
   assert.match(

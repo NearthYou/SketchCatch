@@ -2480,7 +2480,11 @@ function DiagramEditorInner({
   const handleMoveEnd = useCallback<OnMoveEnd>(
     (_event, viewport) => {
       persistViewportAfterMove(
-        automaticViewportMoveRequestIdRef.current,
+        {
+          automaticMoveRequestId: automaticViewportMoveRequestIdRef.current,
+          isPreviewActive,
+          isViewer: viewerPolicy.isViewer
+        },
         viewport,
         (nextViewport) => {
           applyLiveDiagramUpdate((currentDiagram) =>
@@ -2489,7 +2493,7 @@ function DiagramEditorInner({
         }
       );
     },
-    [applyLiveDiagramUpdate]
+    [applyLiveDiagramUpdate, isPreviewActive, viewerPolicy.isViewer]
   );
 
   const handleZoomIn = useCallback(() => {
