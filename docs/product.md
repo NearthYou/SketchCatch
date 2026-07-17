@@ -87,7 +87,11 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
 | Runtime Cache | Redis를 내부 Runtime Cache로 사용해 Deployment, Reverse Engineering, Git/CI/CD 상태 추적과 로그 스트리밍을 보조한다. |
 
-Repository Analysis에서 Git/CI/CD 연결을 시작하면 GitHub App callback은 이미 분석한 Repository만 자동으로 연결한다. 사용자는 Repository를 다시 고르거나 다시 분석하지 않는다. 초기 UI 검증 기간에는 callback의 개별 저장 버튼을 숨기고 하단 `확인`이 배포 타깃과 GitOps 감시 설정을 순서대로 저장한 뒤 기존 추천·질문 상태에 돌아가 Board 생성을 계속한다. callback 화면의 ECS Fargate 배포 타깃 초안은 분석 commit SHA와 Dockerfile, package manifest, lockfile, static output 근거로 API/frontend build snapshot과 프로젝트별 안전한 기본값을 채운다. 이 설정 저장은 실제 cloud 배포나 Git 변경을 실행하지 않는다.
+공개 Repository는 GitHub 계정 연결 없이 분석하고 Architecture Board를 만들 수 있다. Board 저장 시 Repository URL, branch, 분석 commit SHA와 선택 Template을 프로젝트의 `RepositoryAnalysisRecord`에 저장한다. 공개 조회에 실패하면 실제 공개/비공개 여부를 단정하지 않고 입력 오류 또는 접근 제한 가능성을 함께 안내한다. GitHub가 연결되어 있으면 입력한 owner/name과 정확히 일치하는 Repository만 연결하고, 연결되어 있지 않으면 전역 GitHub 연결 또는 Repository 권한 추가로 이어진다.
+
+GitHub App installation은 Dashboard 전역 설정에서 사용자 계정 단위로 관리한다. 프로젝트별 Source Repository, 감시 branch/path, 배포 타깃, readiness와 CI/CD 실행 기록은 Workspace의 `Delivery`에서 관리한다. GitHub callback은 정확한 Repository 연결만 마친 뒤 원래 분석으로 돌아가며 배포 설정을 요구하지 않는다. 배포 modal의 CI/CD 화면은 요약과 최근 결과만 보여주고 상세 수정은 `Delivery 열기`로 이동한다. 설정 저장은 실제 cloud 배포, PR 생성 또는 Git 변경을 자동 실행하지 않는다.
+
+분석 SHA와 마지막 인증 분석 SHA가 다르면 코드 변경 사실만 안내한다. SketchCatch는 이 차이만으로 새 cloud Resource의 추가·변경·삭제를 추론하지 않고, 기존 Board를 자동 재생성하거나 덮어쓰지 않으며 Git/CI/CD readiness도 차단하지 않는다.
 
 웹 포함 ECS/Fargate의 application release는 Repository 코드를 제한된 CodeBuild에서 한 번 검증해 immutable `ReleaseCandidate`로 SketchCatch 내부 Artifact S3에 저장한다. Terraform Plan 승인과 Apply 뒤 trusted worker가 같은 candidate를 ECR/ECS와 서비스 S3/CloudFront에 활성화한다. CodeBuild와 GitHub Actions는 사용자 서비스 AWS Resource를 직접 변경하지 않으며, Direct와 Git/CI/CD 실행은 프로젝트 lease로 동시에 하나만 허용한다.
 

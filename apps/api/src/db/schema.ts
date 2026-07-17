@@ -51,6 +51,8 @@ import type {
   FrontendReleaseEvidence,
   ProjectDeploymentRuntimeConfig,
   RepositoryAnalysisAiHandoff,
+  RepositoryAnalysisTemplateId,
+  SourceRepositoryAnalysisResult,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScanResult,
   RuntimeAdapterKind,
@@ -456,6 +458,37 @@ export const sourceRepositories = pgTable(
     uniqueIndex("source_repositories_github_repository_unique")
       .on(table.projectId, table.provider, table.githubRepositoryId)
       .where(sql`${table.status} = 'active' AND ${table.githubRepositoryId} IS NOT NULL`)
+  ]
+);
+
+export const repositoryAnalysisRecords = pgTable(
+  "repository_analysis_records",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("project_id", { length: 36 })
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 32 }).$type<"github">().notNull(),
+    repositoryUrl: text("repository_url").notNull(),
+    owner: varchar("owner", { length: 120 }).notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    branch: varchar("branch", { length: 255 }).notNull(),
+    repositoryRevision: varchar("repository_revision", { length: 128 }).notNull(),
+    analysisResult: jsonb("analysis_result").$type<SourceRepositoryAnalysisResult>().notNull(),
+    selectedTemplateId: varchar("selected_template_id", { length: 128 })
+      .$type<RepositoryAnalysisTemplateId>(),
+    sourceRepositoryId: varchar("source_repository_id", { length: 36 }).references(
+      () => sourceRepositories.id,
+      { onDelete: "set null" }
+    ),
+    analyzedAt: timestamp("analyzed_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    uniqueIndex("repository_analysis_records_project_unique").on(table.projectId),
+    index("repository_analysis_records_source_repository_idx").on(table.sourceRepositoryId),
+    check("repository_analysis_records_provider_check", sql`${table.provider} = 'github'`)
   ]
 );
 

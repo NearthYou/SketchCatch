@@ -16,6 +16,7 @@ import type { Database } from "../db/client.js";
 import {
   githubInstallationConnections,
   projects,
+  repositoryAnalysisRecords,
   sourceRepositories,
   touchUpdatedAt
 } from "../db/schema.js";
@@ -66,6 +67,14 @@ export type SourceRepositoryRepository = {
   saveProjectSourceRepositoryAnalysis(
     input: SaveProjectSourceRepositoryAnalysisInput
   ): Promise<SourceRepositoryRecord | undefined>;
+  findCurrentRepositoryAnalysisTarget?(
+    projectId: string
+  ): Promise<{ readonly id: string; readonly owner: string; readonly name: string } | undefined>;
+  attachRepositoryAnalysisRecord?(
+    projectId: string,
+    recordId: string,
+    sourceRepositoryId: string
+  ): Promise<boolean>;
 };
 
 export type ConnectGitHubInstallationInput = {
@@ -78,6 +87,7 @@ export type CreateActiveGitHubSourceRepositoryInput = {
   projectId: string;
   createdByUserId: string;
   githubInstallationId: string;
+  repositoryAnalysisRecordId?: string | undefined;
   repository: GitHubRepositoryCandidate;
 };
 
@@ -352,6 +362,30 @@ export function createPostgresSourceRepositoryRepository(
       return repository;
     },
 
+    async findCurrentRepositoryAnalysisTarget(projectId) {
+      const [record] = await db
+        .select({
+          id: repositoryAnalysisRecords.id,
+          owner: repositoryAnalysisRecords.owner,
+          name: repositoryAnalysisRecords.name
+        })
+        .from(repositoryAnalysisRecords)
+        .where(eq(repositoryAnalysisRecords.projectId, projectId));
+      return record;
+    },
+
+    async attachRepositoryAnalysisRecord(projectId, recordId, sourceRepositoryId) {
+      const [record] = await db
+        .update(repositoryAnalysisRecords)
+        .set({ sourceRepositoryId, ...touchUpdatedAt })
+        .where(and(
+          eq(repositoryAnalysisRecords.id, recordId),
+          eq(repositoryAnalysisRecords.projectId, projectId)
+        ))
+        .returning({ id: repositoryAnalysisRecords.id });
+      return Boolean(record);
+    },
+
     async createActiveGitHubSourceRepository(input) {
       return db.transaction(async (tx) => {
         await tx
@@ -390,6 +424,23 @@ export function createPostgresSourceRepositoryRepository(
 
         if (!repository) {
           throw new Error("Source repository creation failed");
+        }
+
+        if (input.repositoryAnalysisRecordId) {
+          const [analysisRecord] = await tx
+            .update(repositoryAnalysisRecords)
+            .set({ sourceRepositoryId: repository.id, ...touchUpdatedAt })
+            .where(and(
+              eq(repositoryAnalysisRecords.id, input.repositoryAnalysisRecordId),
+              eq(repositoryAnalysisRecords.projectId, input.projectId)
+            ))
+            .returning({ id: repositoryAnalysisRecords.id });
+
+          if (!analysisRecord) {
+            throw new SourceRepositoryConflictError(
+              "GIT_APP_REPOSITORY_ANALYSIS_CHANGED"
+            );
+          }
         }
 
         return repository;
@@ -780,6 +831,17 @@ export async function connectGitHubSourceRepository(
     throw new SourceRepositoryConflictError("Archived GitHub repositories cannot be connected");
   }
 
+  const analysisTarget = await repository.findCurrentRepositoryAnalysisTarget?.(
+    input.projectId
+  );
+  if (
+    analysisTarget &&
+    (analysisTarget.owner.toLowerCase() !== selectedRepository.owner.toLowerCase() ||
+      analysisTarget.name.toLowerCase() !== selectedRepository.name.toLowerCase())
+  ) {
+    throw new SourceRepositoryConflictError("GIT_APP_REPOSITORY_ANALYSIS_MISMATCH");
+  }
+
   const existingRepository = (await repository.listProjectSourceRepositories(input.projectId)).find(
     (candidate) =>
       candidate.provider === "github" &&
@@ -789,6 +851,16 @@ export async function connectGitHubSourceRepository(
   );
 
   if (existingRepository) {
+    if (analysisTarget && repository.attachRepositoryAnalysisRecord) {
+      const attached = await repository.attachRepositoryAnalysisRecord(
+        input.projectId,
+        analysisTarget.id,
+        existingRepository.id
+      );
+      if (!attached) {
+        throw new SourceRepositoryConflictError("GIT_APP_REPOSITORY_ANALYSIS_CHANGED");
+      }
+    }
     return existingRepository;
   }
 
@@ -797,6 +869,7 @@ export async function connectGitHubSourceRepository(
     projectId: input.projectId,
     createdByUserId: input.accessContext.userId,
     githubInstallationId: input.installationId,
+    ...(analysisTarget ? { repositoryAnalysisRecordId: analysisTarget.id } : {}),
     repository: selectedRepository
   });
 }

@@ -756,40 +756,33 @@
       "id": "REPOSITORY-ANALYSIS-DRAFT-FLOW-001",
       "priority": 1,
       "area": "repository-analysis-draft",
-      "title": "Korean repository recommendations with required inline CI/CD connection",
-      "user_visible_behavior": "Repository Analysis 추천에서 GitHub CI/CD를 연결하면 분석한 Repository가 자동 연결되고, callback 확인 버튼이 배포 타깃과 GitOps 설정을 모두 저장한 뒤 재분석 없이 기존 상태로 돌아가 Architecture Board 생성을 계속한다.",
+      "title": "Public Repository analysis with project provenance and one Workspace Delivery center",
+      "user_visible_behavior": "사용자는 공개 Repository를 GitHub 연결 없이 분석해 Board를 만들고, 비공개 또는 확인 불가 Repository만 GitHub 권한 복구 흐름으로 연결한다. Board 생성 후 GitHub, Repository, 배포 환경, CI/CD 준비 상태는 Workspace Delivery 한 곳에서 관리한다.",
       "status": "passing",
       "verification": [
-        "AI와 deterministic 추천 후보가 한국어 추천 이유와 고려할 점을 각각 최소 2개 제공한다.",
-        "추가 질문, 선택지, 이유가 한국어로 표시되고 알려진 구형 영문 질문도 한국어로 정규화된다.",
-        "CI/CD 인계 checkbox와 전역 설정 이동을 제거하고 같은 화면에서 분석 Repository에 고정된 GitHub App 설치를 시작한다.",
-        "CI/CD 연결 없이 확인하면 이동을 중단하고 확인 버튼 위에 작은 빨간 안내 문구를 표시한다.",
-        "GitHub callback은 Repository 재선택 없이 서명된 target만 자동 연결하며, 두 개별 저장 버튼 대신 하단 확인 버튼이 두 API를 순서대로 저장한 뒤 복귀한다.",
-        "Callback 완료 액션 바는 두 저장 결과를 설명하고 48px CTA, 저장 중 상태, 인라인 오류, 모바일 전체 너비를 제공한다.",
-        "nullable runtimeConfig와 잘못된 Repository URL은 TypeError 대신 제어된 배포 또는 Source Repository 오류로 차단한다.",
-        "30분짜리 일회성 browser resume state는 project와 active Repository가 일치할 때만 소비되며 API 재분석 없이 추천 상태를 복원한다.",
-        "어떤 추천 Template을 선택해도 callback 배포 타깃은 ECS Fargate이며 project slug, commit SHA, Dockerfile evidence로 필수 좌표를 채운다.",
-        "whiskend/audience-live-check와 jh-9999/audience-live-check의 동일한 golden-path 근거는 owner와 무관하게 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
+        "공개 Repository 분석과 Board 생성은 GitHub App installation 없이 완료된다.",
+        "잘못된 URL, 공개 조회 불가, branch 없음, rate limit, GitHub 장애를 안정적인 오류 코드로 구분한다.",
+        "Board가 어떤 Repository, branch, commit SHA 분석으로 만들어졌는지 프로젝트당 한 건의 RepositoryAnalysisRecord로 저장한다.",
+        "비공개 Repository 권한 복구는 입력한 owner/name과 정확히 같은 Repository만 연결하고 여러 installation을 임의 선택하지 않는다.",
+        "GitHub callback은 SourceRepository 연결까지만 수행하고 배포 타깃이나 모니터링 설정을 자동 저장하지 않는다.",
+        "전역 환경설정의 GitHub 버튼은 미연결 시 GitHub 연결하기, 연결 시 권한 추가를 표시한다.",
+        "Workspace Delivery 조회는 GitHub, 분석 출처, SourceRepository, 환경, 배포 타깃, 모니터링, 준비 상태를 변경 없이 조합한다.",
+        "기존 프로젝트 설정 URL과 배포 모달의 CI/CD 진입은 Workspace Delivery로 모인다.",
+        "Board 분석 commit과 마지막 인증 분석 commit이 다르면 비차단 경고만 표시하며 현재 GitHub head라고 단정하거나 Board를 자동 변경하지 않는다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-15",
+        "lastVerified": "2026-07-17",
         "commands": [
-          "pnpm --filter @sketchcatch/api exec tsx --test src/routes/public-repository-analysis-revision.test.ts src/source-repositories/repository-template-recommendation.test.ts",
-          "pnpm --filter @sketchcatch/api exec tsx --test src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-app-state.test.ts src/source-repositories/github-target-connection.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-start-client.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
-          "pnpm --filter @sketchcatch/types exec tsx --test --test-name-pattern='ECS Fargate Board uses project-scoped runtime names' src/template-definitions.test.ts",
-          "live POST /api/ai/source-repository-analysis for https://github.com/whiskend/audience-live-check",
-          "read-only Fastify POST /ai/source-repository-analysis with live GitHub evidence for https://github.com/jh-9999/audience-live-check.git",
-          "authenticated in-app Browser verification of Repository Analysis recommendation and required inline CI/CD gate",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/db/repository-analysis-records-migration.test.ts src/routes/repository-analysis-records.test.ts src/routes/project-delivery-profile.test.ts src/delivery/project-delivery-profile-service.test.ts src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-target-connection.test.ts src/git-cicd/git-cicd-readiness-service.test.ts",
+          "pnpm --dir apps/web exec tsx --test app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-analysis-record-payload.test.ts app/workspace/repository/repository-recovery-action.test.ts app/workspace/workspace-start-mode.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/delivery-repository-freshness.test.ts",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "The owner-parity endpoint regression passed 3/3 after reproducing the expected casing failure, and the pre-change route/recommendation baseline passed 15/15. Live read-only analysis of both audience-live-check owners returned ECS Fargate first at 0.91 and the same current commit SHA. Repository callback/resume/runtime focused tests previously passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
+        "notes": "Focused API profile, provenance, permission, public-error, migration, and read-only readiness tests pass 101/101. Focused Web recovery, resume, Delivery routing, and freshness tests pass 28/28. Harness, lint, typecheck, and production build pass. The Web full suite passes 651/652 after updating the two feature-owned static contracts; the remaining destroy-plan state failure belongs to concurrent deployment-target work and its files were not changed by this workstream. The API full suite was stopped after extended inactivity in existing external-dependency paths; its isolated feature suite is green."
       },
-      "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
+      "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. Migration 0049 adds repository_analysis_records."
     },
     {
       "id": "DEPLOYMENT-OPTIMIZATION-CONTRACT-434",

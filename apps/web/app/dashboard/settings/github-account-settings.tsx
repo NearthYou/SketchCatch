@@ -103,7 +103,11 @@ export function GitHubAccountSettings() {
           type="button"
         >
           <DashboardIcon name="github" />
-          {actionPending ? "GitHub로 이동 중" : "GitHub App 설치/권한 추가"}
+          {actionPending
+            ? "GitHub로 이동 중"
+            : installations.length > 0
+              ? "권한 추가"
+              : "GitHub 연결하기"}
         </button>
       </div>
     </section>

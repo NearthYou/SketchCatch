@@ -30,6 +30,24 @@ const terraformArtifactSha256 = "a".repeat(64);
 const planBody = Buffer.from("approved terraform apply plan");
 const planSha256 = createHash("sha256").update(planBody).digest("hex");
 
+test("inspect reads readiness without reconciling or saving a deployment target", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  const service = createGitCicdReadinessService({
+    repository: createRepository({
+      deployments: [createDeployment({ approvedPlanArtifactId: "plan-1" })],
+      plans: [createPlan({ id: "plan-1" })],
+      state
+    }),
+    planVerifier: createPlanVerifier()
+  });
+
+  const result = await service.inspect({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(result.sourceDeploymentId, "deployment-1");
+  assert.equal(state.savedTargets.length, 0);
+  assert.equal(state.targetRows.has("project-1"), false);
+});
+
 test("selects the currently approved apply plan before other apply artifacts", async () => {
   const deployment = createDeployment({ approvedPlanArtifactId: "approved-apply" });
   const repository = createRepository({
@@ -511,6 +529,7 @@ test("creates a canonical ECS Fargate target from successful outputs without AWS
   assert.equal(result.ready, true);
   assert.equal(result.requiredActionCount, 0);
   assert.deepEqual(Object.keys(service).sort(), [
+    "inspect",
     "refresh",
     "synchronizeDeploymentTargetAfterSuccessfulApply"
   ]);

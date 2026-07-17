@@ -24,7 +24,8 @@ import {
   GalleryVerticalEnd,
   PanelRightClose,
   PanelRightOpen,
-  Rocket
+  Rocket,
+  Workflow
 } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
@@ -42,6 +43,7 @@ import {
 import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
+import { DeliveryCenterPanel } from "./DeliveryCenterPanel";
 import type { LiveObservationSelection } from "./live-observation";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
@@ -856,6 +858,11 @@ export function WorkspaceRightPanel({
         initialExpanded
         onInitialCicdReturnCommandReady={onInitialCicdReturnCommandReady}
         onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
+        onOpenDelivery={() => {
+          setIsDeploymentConsoleOpen(false);
+          context.setRightPanelOpen(true);
+          setActiveView("delivery");
+        }}
         onOpenLiveObservation={openLiveObservation}
         onOpenFindingTerraformSource={(finding) => {
           const sourceLocation = openPreDeploymentFindingTerraformSource(finding);
@@ -896,6 +903,14 @@ export function WorkspaceRightPanel({
     return (
       <>
         <aside className={styles.collapsedRightPanel} aria-label="Right panel shortcuts">
+          <button
+            className={styles.collapsedPanelButton}
+            onClick={() => openCollapsedView("delivery")}
+            title="Delivery"
+            type="button"
+          >
+            <Workflow size={18} aria-hidden="true" />
+          </button>
           <button
             className={styles.collapsedPanelButton}
             onClick={() => context.setRightPanelOpen(true)}
@@ -998,6 +1013,16 @@ export function WorkspaceRightPanel({
             </button>
           </div>
           <button
+            aria-pressed={activeView === "delivery"}
+            className={styles.panelModeTextButton}
+            onClick={() => requestView("delivery")}
+            title="Delivery"
+            type="button"
+          >
+            <Workflow size={14} aria-hidden="true" />
+            <span>Delivery</span>
+          </button>
+          <button
             className={styles.panelModeTextButton}
             onClick={() => openLiveObservation()}
             title="Live Observation"
@@ -1013,6 +1038,13 @@ export function WorkspaceRightPanel({
             context={context}
             onViewChange={handleResourceWorkspaceViewChange}
             view={resourceWorkspaceView}
+          />
+        </div>
+        <div className={styles.rightPanelView} hidden={activeView !== "delivery"}>
+          <DeliveryCenterPanel
+            onOpenDirectDeployment={() => setIsDeploymentConsoleOpen(true)}
+            onOpenLiveObservation={openLiveObservation}
+            projectId={projectId}
           />
         </div>
         <div

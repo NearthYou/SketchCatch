@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
-import { CicdConsoleScreen } from "./CicdConsoleScreen";
+import { DeliveryModalSummary } from "./DeliveryModalSummary";
 import { DirectDeploymentScreen, type DirectDeploymentScreenProps } from "./DirectDeploymentScreen";
 import type { LiveObservationSelection } from "./live-observation";
 import {
@@ -8,7 +8,6 @@ import {
   cancelPendingCicdReturn,
   completePendingCicdReturn,
   completePendingCicdReturnAfterDeployment,
-  createPendingCicdReturn,
   type InitialCicdReturnCommand,
   type PendingCicdReturn
 } from "./cicd-return-command";
@@ -27,6 +26,7 @@ export type DeploymentConsoleShellProps = Omit<
   readonly onActiveScreenChange?: ((screen: DeploymentConsoleScreen) => void) | undefined;
   readonly onExpandedClose?: (() => void) | undefined;
   readonly onInitialCicdReturnCommandReady?: ((cleanedHref: string) => void) | undefined;
+  readonly onOpenDelivery?: (() => void) | undefined;
   readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
   readonly projectName: string;
 };
@@ -39,6 +39,7 @@ export function DeploymentConsoleShell({
   onActiveScreenChange,
   onExpandedClose,
   onInitialCicdReturnCommandReady,
+  onOpenDelivery,
   onOpenLiveObservation,
   projectName,
   ...directProps
@@ -214,21 +215,9 @@ export function DeploymentConsoleShell({
         />
       </div>
       <div hidden={activeScreen !== "cicd"}>
-        <CicdConsoleScreen
-          isVisible={activeScreen === "cicd"}
-          onOpenDirectDeployment={(scope) => {
-            setPendingCicdReturn(
-              createPendingCicdReturn(
-                directProps.projectId,
-                scope ? "initial_application_release" : "approved_apply_plan"
-              )
-            );
-            setRequestedDirectScope(scope);
-            selectScreen("deployment", { preservePendingCicdReturn: true });
-          }}
-          onOpenLiveObservation={onOpenLiveObservation}
+        <DeliveryModalSummary
+          onOpenDelivery={onOpenDelivery ?? close}
           projectId={directProps.projectId}
-          readinessRefreshRequestId={readinessRefreshRequestId}
         />
       </div>
     </div>

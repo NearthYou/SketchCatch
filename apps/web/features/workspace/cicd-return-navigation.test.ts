@@ -71,17 +71,13 @@ test("returns only the workspace pathname and search", () => {
   );
 });
 
-test("server pages sanitize returnTo and pass it only to the matching readiness client", () => {
-  assert.match(settingsPageSource, /getSafeCicdReturnPath/);
-  assert.match(
-    settingsPageSource,
-    /safeReturnTo=\{readinessKey === "deployment_target" \? safeReturnTo : null\}/
-  );
-  assert.match(
-    settingsPageSource,
-    /safeReturnTo=\{readinessKey === "monitoring_config" \? safeReturnTo : null\}/
-  );
+test("legacy settings route opens the Workspace Delivery panel", () => {
+  assert.match(settingsPageSource, /startMode:\s*"delivery"/);
+  assert.match(settingsPageSource, /redirect\(`\/workspace\?\$\{query\.toString\(\)\}`\)/);
+  assert.doesNotMatch(settingsPageSource, /getSafeCicdReturnPath|safeReturnTo|readinessKey/);
+});
 
+test("repository page sanitizes returnTo for source repository readiness only", () => {
   assert.match(repositoryPageSource, /getSafeCicdReturnPath/);
   assert.match(
     repositoryPageSource,

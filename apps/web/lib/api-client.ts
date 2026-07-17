@@ -22,6 +22,14 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
   bad_gateway: "AI 응답을 아키텍처로 해석하지 못했습니다. 다시 시도해주세요.",
   conflict: "현재 상태와 요청 조건이 충돌합니다. 최신 상태와 필요한 설정을 확인해주세요.",
   internal_server_error: "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+  PUBLIC_REPOSITORY_INPUT_INVALID: "지원하는 GitHub Repository URL과 branch를 확인해주세요.",
+  PUBLIC_REPOSITORY_UNAVAILABLE:
+    "Repository를 확인할 수 없습니다. URL이 잘못되었거나 비공개 Repository일 수 있습니다.",
+  PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE: "Repository의 branch를 확인할 수 없습니다.",
+  PUBLIC_REPOSITORY_RATE_LIMITED:
+    "GitHub 공개 조회 한도를 초과했습니다. 잠시 후 다시 시도하거나 GitHub를 연결해주세요.",
+  PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE:
+    "GitHub가 Repository 정보를 반환하지 못했습니다. 잠시 후 다시 시도해주세요.",
   LIVE_OBSERVATION_DISABLED: "실시간 관측 기능이 서버에서 비활성화되어 있습니다.",
   LIVE_OBSERVATION_CACHE_UNAVAILABLE:
     "실시간 관측 저장소에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.",
