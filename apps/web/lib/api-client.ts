@@ -220,14 +220,25 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   return (await readJson(response)) as T;
 }
 
-export function getApiErrorMessage(error: unknown, fallbackMessage: string): string {
+export function getApiErrorMessage(
+  error: unknown,
+  fallbackMessage: string,
+  options: { developerMode?: boolean } = {}
+): string {
+  const developerMode = options.developerMode ?? process.env.NODE_ENV === "development";
   if (!(error instanceof ApiClientError)) {
-    return error instanceof Error
-      ? API_MESSAGE_TRANSLATIONS[error.message] ?? fallbackMessage
-      : fallbackMessage;
+    const message =
+      error instanceof Error
+        ? API_MESSAGE_TRANSLATIONS[error.message] ?? fallbackMessage
+        : fallbackMessage;
+    return appendDeveloperDiagnostic(message, error, developerMode);
   }
 
-  const message = getBaseApiErrorMessage(error, fallbackMessage);
+  const message = appendDeveloperDiagnostic(
+    getBaseApiErrorMessage(error, fallbackMessage),
+    error,
+    developerMode
+  );
   return appendApiDiagnostic(message, error);
 }
 
@@ -374,6 +385,132 @@ function appendApiDiagnostic(message: string, error: ApiClientError): string {
   const response = error.status === 0 ? "응답 없음" : `HTTP ${error.status}`;
   const requestId = context.requestId ? ` · 요청 ID ${context.requestId}` : "";
   return `${message} [${context.method} ${context.path} · ${response} · ${error.code}${requestId}]`;
+}
+
+type DeveloperErrorArea = Readonly<{
+  stage: string;
+  check: string;
+}>;
+
+function appendDeveloperDiagnostic(
+  message: string,
+  error: unknown,
+  developerMode: boolean
+): string {
+  if (!developerMode) return message;
+
+  const apiError = error instanceof ApiClientError ? error : undefined;
+  const area = getDeveloperErrorArea(apiError?.requestContext?.path);
+  const cause = sanitizeDeveloperCause(error instanceof Error ? error.message : "알 수 없는 오류");
+
+  return `${message} 개발자 진단 — 실패 단계: ${area.stage} · 서버 원인: ${cause} · 확인: ${area.check}`;
+}
+
+function getDeveloperErrorArea(path: string | undefined): DeveloperErrorArea {
+  const normalizedPath = path?.toLowerCase() ?? "";
+
+  if (normalizedPath.includes("live-observation")) {
+    return {
+      stage: "실시간 서비스 관측",
+      check:
+        "Deployment output과 관측 manifest, HTTPS Output URL, LIVE_OBSERVATION_* 설정, Redis 연결, AWS 관측 권한을 확인하세요."
+    };
+  }
+
+  if (
+    normalizedPath.includes("git-cicd") ||
+    normalizedPath.includes("release-runs") ||
+    normalizedPath.includes("infrastructure-runs")
+  ) {
+    return {
+      stage: "GitHub CI/CD 실행",
+      check:
+        "GitHub App installation과 repository 권한, Actions variables, OIDC claim, pipeline run DB 기록, ECS worker와 CodeBuild 실행 로그를 확인하세요."
+    };
+  }
+
+  if (
+    normalizedPath.includes("build-environment") ||
+    normalizedPath.includes("codeconnection")
+  ) {
+    return {
+      stage: "AWS 빌드 환경 준비",
+      check:
+        "AWS에서 CodeBuild project와 service role이 존재하는지, Role trust/policy와 Permissions Boundary, CodeConnections 상태를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("deployment-target")) {
+    return {
+      stage: "프로젝트 배포 타깃 저장",
+      check:
+        "RDS의 deployment target, verified AWS connection, Repository build evidence, ECS/S3/CloudFront runtime 좌표를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("deployments")) {
+    return {
+      stage: "Terraform 및 애플리케이션 배포",
+      check:
+        "Deployment의 failureStage·errorSummary와 worker 로그를 먼저 보고 Terraform state/output, CodeBuild, ECS target health, S3와 CloudFront 결과를 확인하세요."
+    };
+  }
+
+  if (
+    normalizedPath.includes("aws-connections") ||
+    normalizedPath.includes("/aws/connections")
+  ) {
+    return {
+      stage: "AWS 계정 연결",
+      check:
+        "CloudFormation Stack 상태와 생성 Role ARN, Account ID, Trust Policy의 Principal·External ID, 필요한 IAM 권한을 확인하세요."
+    };
+  }
+
+  if (
+    normalizedPath.includes("source-repositories") ||
+    normalizedPath.includes("repository-analysis") ||
+    normalizedPath.includes("github")
+  ) {
+    return {
+      stage: "GitHub Repository 연결 및 분석",
+      check:
+        "GitHub App installation 대상 계정·Repository, App 권한, 사용자 OAuth 승인, 분석 commit SHA와 Repository 접근 로그를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("terraform")) {
+    return {
+      stage: "Terraform 생성 및 검증",
+      check:
+        "검증 결과의 파일·행 번호와 생성 Terraform, 승인 snapshot, terraform init/validate/plan stderr를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("/ai/") || normalizedPath.includes("architecture")) {
+    return {
+      stage: "AI 아키텍처 생성 및 검증",
+      check:
+        "요청 payload와 모델 provider 설정, timeout·quota, API 서버의 동일 request ID 로그와 반환 스키마 검증 오류를 확인하세요."
+    };
+  }
+
+  return {
+    stage: "SketchCatch API 요청",
+    check:
+      "브라우저 Network 응답과 API 서버의 동일 request ID 로그, RDS 연결, 해당 route의 입력 검증 및 외부 서비스 응답을 확인하세요."
+  };
+}
+
+function sanitizeDeveloperCause(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim() || "구체 원인이 전달되지 않았습니다.";
+  const masked = normalized
+    .replace(
+      /\b(?:authorization|password|token|secret|client_secret|private_key|database_url|external_id)\b\s*[:=]\s*[^\s,}\]]+/gi,
+      "[REDACTED]"
+    )
+    .replace(/\/\/([^:\s/@]+):([^@\s]+)@/g, "//[REDACTED]@[REDACTED]");
+  return masked.length > 800 ? `${masked.slice(0, 797)}...` : masked;
 }
 
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {

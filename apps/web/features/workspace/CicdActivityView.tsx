@@ -1,4 +1,5 @@
 import type { GitCicdPipelineRun } from "@sketchcatch/types";
+import { formatPipelineExecutionKind } from "./cicd-deployment-command";
 import styles from "./workspace.module.css";
 
 export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | null }) {
@@ -10,7 +11,7 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
     <section className={styles.cicdActivity} aria-label="Pipeline activity">
       <header>
         <div>
-          <span>{formatScope(run.changeScope)}</span>
+          <span>{formatPipelineExecutionKind(run.executionKind)}</span>
           <h3>{run.commitMessage || "Commit message 없음"}</h3>
           <p>{run.branch} · {run.commitSha.slice(0, 8)}</p>
           <p>
@@ -19,6 +20,11 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
         </div>
         <strong data-status={run.status}>{formatRunStatus(run.status)}</strong>
       </header>
+      {run.statusMessage ? (
+        <p role={run.status === "failed" || run.status === "cancelled" ? "alert" : "status"}>
+          {run.statusMessage}
+        </p>
+      ) : null}
       {run.release ? (
         <dl className={styles.cicdReleaseSummary}>
           <div>
@@ -64,10 +70,6 @@ export function CicdActivityView({ run }: { readonly run: GitCicdPipelineRun | n
 
 function formatTime(value: string): string {
   return new Date(value).toLocaleString("ko-KR");
-}
-
-function formatScope(scope: GitCicdPipelineRun["changeScope"]): string {
-  return scope === "app" ? "App" : scope === "infra" ? "Infrastructure" : "App + Infrastructure";
 }
 
 function formatRunStatus(status: GitCicdPipelineRun["status"]): string {

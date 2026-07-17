@@ -1,3 +1,5 @@
+import { getApiErrorMessage } from "../../lib/api-client";
+
 export type DeploymentPreparationStage =
   | "terraform_prepare"
   | "project_draft_save"
@@ -43,5 +45,7 @@ export function getDeploymentPreparationErrorMessage(
   error: unknown,
   fallbackMessage: string
 ): string {
-  return error instanceof DeploymentPreparationError ? error.message : fallbackMessage;
+  return error instanceof DeploymentPreparationError
+    ? getApiErrorMessage(error.cause, error.message)
+    : getApiErrorMessage(error, fallbackMessage);
 }

@@ -345,6 +345,33 @@ test("production 500 responses do not expose internal error messages", async () 
   }
 });
 
+test("development 500 responses expose a masked root cause for developer diagnostics", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "development";
+  const app = buildApp({
+    runtimeEnv: createLiveObservationRuntimeEnv({ nodeEnv: "development" })
+  });
+
+  app.get("/developer-boom", async () => {
+    throw new Error(
+      "CodeBuild role lookup failed: aws_secret_access_key=do-not-expose-this role=SketchCatchCodeBuild-demo"
+    );
+  });
+
+  try {
+    const response = await app.inject({ method: "GET", url: "/developer-boom" });
+
+    assert.equal(response.statusCode, 500);
+    assert.deepEqual(response.json(), {
+      error: "internal_server_error",
+      message: "CodeBuild role lookup failed: [REDACTED] role=SketchCatchCodeBuild-demo"
+    });
+  } finally {
+    process.env.NODE_ENV = previousNodeEnv;
+    await app.close();
+  }
+});
+
 test("API logger options stay disabled in tests", () => {
   assert.equal(createApiLoggerOptions({ nodeEnv: "test" }), false);
 });

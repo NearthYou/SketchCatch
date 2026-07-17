@@ -83,6 +83,14 @@ test("AI Workbench owns dedicated result primitives and code-diff presentation",
   assert.doesNotMatch(resultSource, /WorkspaceAiPanelPieces|workspace\.module\.css/);
 });
 
+test("에이전트 리뷰는 Amazon Q 응답 전에도 단계별 진행 상태를 표시한다", () => {
+  assert.match(controllerSource, /WorkspaceAiWorkbenchReviewProgress/);
+  assert.match(controllerSource, /terraformPreviewExplanation\?\.state === "loading"/);
+  assert.match(resultSource, /Amazon Q 검토를 진행하고 있습니다/);
+  assert.match(workbenchStyles, /\.reviewProgressSteps/);
+  assert.match(workbenchStyles, /\.reviewProgressSpinner/);
+});
+
 test("draft composer grows to a six-line maximum and is absent from unsupported scopes", () => {
   assert.match(
     controllerSource,

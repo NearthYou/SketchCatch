@@ -108,7 +108,7 @@ function collectStateResources(
         typeof resource.provider_name === "string" && resource.provider_name.length > 0
           ? resource.provider_name
           : null,
-      resourceId: extractTerraformResourceId(resource.values),
+      resourceId: extractTerraformResourceId(terraformType, resource.values),
       region
     });
   }
@@ -150,12 +150,21 @@ function isTerraformStateResource(value: unknown): value is TerraformStateResour
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function extractTerraformResourceId(values: unknown): string | null {
+function extractTerraformResourceId(terraformType: string, values: unknown): string | null {
   if (typeof values !== "object" || values === null || Array.isArray(values)) {
     return null;
   }
 
-  const id = (values as { id?: unknown }).id;
+  const resourceValues = values as { arn?: unknown; id?: unknown };
+  if (
+    terraformType === "aws_ecs_task_definition" &&
+    typeof resourceValues.arn === "string" &&
+    resourceValues.arn.length > 0
+  ) {
+    return resourceValues.arn;
+  }
+
+  const id = resourceValues.id;
 
   if (typeof id === "string" && id.length > 0) {
     return id;

@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
+import { createAwsConnectionManagedCleanup } from "../aws-connections/aws-connection-managed-cleanup.js";
+import type { CleanupAwsConnectionManagedResources } from "../aws-connections/aws-connection-service.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { defaultTerraformArtifactMaxBytes } from "../deployments/terraform-workspace.js";
 import {
@@ -25,7 +27,11 @@ import {
   projects,
   touchUpdatedAt
 } from "../db/schema.js";
-import { getNextDraftRevision, toProjectDraft } from "../modules/projects/project-drafts.js";
+import {
+  getNextDraftRevision,
+  hasSameProjectDraftContent,
+  toProjectDraft
+} from "../modules/projects/project-drafts.js";
 import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
@@ -153,6 +159,7 @@ type ProjectRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
+  cleanupManagedResources?: CleanupAwsConnectionManagedResources;
 };
 
 export async function registerProjectRoutes(
@@ -163,6 +170,8 @@ export async function registerProjectRoutes(
   const projectAssetStorage = options.projectAssetStorage ?? createProjectAssetStorage();
   const projectDeletionStorage =
     options.projectDeletionStorage ?? createProjectDeletionStorage(projectAssetStorage);
+  const cleanupManagedResources =
+    options.cleanupManagedResources ?? createAwsConnectionManagedCleanup();
 
   app.addContentTypeParser(
     ["image/png", "image/webp"],
@@ -276,6 +285,7 @@ export async function registerProjectRoutes(
       db,
       projectId: params.id,
       storage: projectDeletionStorage,
+      cleanupManagedResources,
       userId: currentUserId
     });
 
@@ -383,9 +393,23 @@ export async function registerProjectRoutes(
     }
 
     const [existingDraft] = await db
-      .select({ revision: projectDrafts.revision })
+      .select()
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
+
+    const terraformFiles = body.terraformFiles ?? null;
+    if (
+      existingDraft &&
+      hasSameProjectDraftContent(existingDraft, {
+        diagramJson: body.diagramJson,
+        terraformFiles
+      })
+    ) {
+      return {
+        draft: toProjectDraft(existingDraft)
+      };
+    }
+
     const now = new Date();
     const revision = getNextDraftRevision(existingDraft?.revision);
 
@@ -395,7 +419,7 @@ export async function registerProjectRoutes(
         id: randomUUID(),
         projectId: params.id,
         diagramJson: body.diagramJson,
-        terraformFiles: body.terraformFiles ?? null,
+        terraformFiles,
         revision,
         serverSavedAt: now,
         updatedAt: now
@@ -404,7 +428,7 @@ export async function registerProjectRoutes(
         target: projectDrafts.projectId,
         set: {
           diagramJson: body.diagramJson,
-          terraformFiles: body.terraformFiles ?? null,
+          terraformFiles,
           revision,
           serverSavedAt: now,
           updatedAt: now
@@ -824,6 +848,13 @@ function sendConflict(reply: FastifyReply, message: string): FastifyReply {
 function createProjectDeletionStorage(storage: ProjectAssetStorage): ProjectDeletionStorage {
   return {
     async deleteObject(objectKey) {
+      await storage.deleteObject({ objectKey });
+    },
+    async deleteObjectVersion(objectKey, versionId) {
+      if (storage.deleteObjectVersion) {
+        await storage.deleteObjectVersion({ objectKey, versionId });
+        return;
+      }
       await storage.deleteObject({ objectKey });
     }
   };

@@ -151,6 +151,8 @@ export function createEcsGitOpsReleaseReconciler(options: {
         commitSha: input.commitSha.toLowerCase(),
         artifactDigestAlgorithm: "sha256",
         artifactDigest: input.evidence.imageDigest.slice("sha256:".length),
+        releaseCandidateId: null,
+        compositeDigest: null,
         providerRevision: {
           provider: "aws",
           resourceType: "ecs_service",
@@ -166,6 +168,9 @@ export function createEcsGitOpsReleaseReconciler(options: {
             circuitBreaker: true
           }
         },
+        frontendEvidence: null,
+        failureStage: null,
+        baselineReleaseId: null,
         outputUrl: input.evidence.outputUrl,
         status,
         healthEvidence: {
@@ -225,7 +230,7 @@ function validateObservedState(
         observed.taskDefinitionArn
       );
   const expectedMarker = evidence.schemaVersion === 3
-    ? `sketchcatch:artifact=${evidence.artifact.artifactFingerprint};target=${evidence.convergence.deploymentTargetFingerprint}`
+    ? `sketchcatch:artifact=${evidence.artifact.artifactFingerprint}:target=${evidence.convergence.deploymentTargetFingerprint}`
     : null;
   if (
     !validRevision ||

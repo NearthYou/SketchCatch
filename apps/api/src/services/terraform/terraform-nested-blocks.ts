@@ -52,6 +52,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_ecs_cluster: new Set(["setting"]),
   aws_ecs_service: new Set([
     "deploymentCircuitBreaker",
+    "lifecycle",
     "loadBalancer",
     "networkConfiguration"
   ]),
@@ -74,6 +75,7 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_s3_bucket_lifecycle_configuration: new Set(["rule"]),
   aws_s3_bucket_replication_configuration: new Set(["rule"]),
   aws_s3_bucket_versioning: new Set(["versioningConfiguration"]),
+  aws_s3_object: new Set(["lifecycle"]),
   aws_scheduler_schedule: new Set(["flexibleTimeWindow", "target"]),
   aws_security_group: new Set(["egress", "ingress"]),
   aws_waf_ipset: new Set(["ipSetDescriptors"]),
@@ -93,11 +95,18 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<stri
 };
 
 const TERRAFORM_SINGLE_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<string>> = {
+  aws_ecs_service: new Set(["lifecycle"]),
   aws_elb: new Set(["healthCheck"]),
   aws_lb_target_group: new Set(["healthCheck"]),
+  aws_s3_object: new Set(["lifecycle"]),
   aws_waf_web_acl: new Set(["defaultAction"]),
   "aws_s3_bucket_replication_configuration.rule": new Set(["destination"])
 };
+
+const TERRAFORM_LIFECYCLE_IGNORE_CHANGES_RESOURCE_TYPES = new Set([
+  "aws_ecs_service",
+  "aws_s3_object"
+]);
 
 const GENERIC_TERRAFORM_NESTED_BLOCKS = new Set([
   "container",
@@ -148,6 +157,19 @@ export function isTerraformSingleNestedBlockAttribute(
 
 export function isGenericTerraformNestedBlock(attributeName: string): boolean {
   return GENERIC_TERRAFORM_NESTED_BLOCKS.has(toCamelCase(attributeName));
+}
+
+export function isTerraformLifecycleIgnoreChangesAttribute(
+  resourceType: string,
+  attributeName: string,
+  parentPath: readonly string[]
+): boolean {
+  return (
+    TERRAFORM_LIFECYCLE_IGNORE_CHANGES_RESOURCE_TYPES.has(resourceType) &&
+    parentPath.length === 1 &&
+    toCamelCase(parentPath[0] ?? "") === "lifecycle" &&
+    toCamelCase(attributeName) === "ignoreChanges"
+  );
 }
 
 function toCamelCase(value: string): string {

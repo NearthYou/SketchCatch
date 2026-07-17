@@ -4,10 +4,11 @@ import type { LlmExplanation } from "@sketchcatch/types";
 
 const SUMMARY_MAX_LENGTH = 300;
 const ITEM_MAX_LENGTH = 120;
+const TERRAFORM_PREVIEW_ITEM_MAX_LENGTH = 360;
 const DEFAULT_ITEM_MAX_COUNT = 6;
 const DESIGN_SIMULATION_ITEM_MAX_COUNT = 5;
 const CODE_SNIPPET_MAX_LENGTH = 8_000;
-const CONCLUSION_MAX_LENGTH = 600;
+const CONCLUSION_MAX_LENGTH = 2_400;
 const BLOCKED_GUARANTEE_PHRASES = ["배포 가능 보장", "비용 없음", "보안 안전"] as const;
 const llmCodeSuggestionSchema = z.object({
   currentCode: z.string(),
@@ -46,7 +47,7 @@ type JsonRecord = Record<string, unknown>;
 
 // OpenAI 응답은 field별로 다시 확인해 깨진 부분만 rule 기반 fallback으로 바꿉니다.
 export function validateLlmExplanation(value: LlmExplanation | null, fallback: LlmExplanation): LlmExplanation {
-  const parsed = llmExplanationSchema.safeParse(normalizeLlmExplanationCandidate(value));
+  const parsed = llmExplanationSchema.safeParse(normalizeLlmExplanationCandidate(value, fallback));
 
   if (!parsed.success) {
     return fallback;
@@ -57,9 +58,20 @@ export function validateLlmExplanation(value: LlmExplanation | null, fallback: L
   }
 
   const itemMaxCount = getTextItemMaxCount(parsed.data.target);
+  const itemMaxLength = getTextItemMaxLength(parsed.data.target);
   const summary = validateSummary(parsed.data.summary, fallback.summary);
-  const highlights = validateTextItems(parsed.data.highlights, fallback.highlights, itemMaxCount);
-  const nextActions = validateTextItems(parsed.data.nextActions, fallback.nextActions, itemMaxCount);
+  const highlights = validateTextItems(
+    parsed.data.highlights,
+    fallback.highlights,
+    itemMaxCount,
+    itemMaxLength
+  );
+  const nextActions = validateTextItems(
+    parsed.data.nextActions,
+    fallback.nextActions,
+    itemMaxCount,
+    itemMaxLength
+  );
   const codeSuggestion = validateCodeSuggestion(parsed.data.codeSuggestion ?? undefined);
   const wellArchitectedConclusion = validateOptionalLongText(parsed.data.wellArchitectedConclusion ?? undefined);
   const includeWellArchitectedConclusion = parsed.data.target !== "terraform_error_explanation";
@@ -120,7 +132,8 @@ function validateSummary(value: string, fallbackValue: string): ValidationResult
 function validateTextItems(
   values: readonly string[],
   fallbackValues: string[],
-  itemMaxCount: number
+  itemMaxCount: number,
+  itemMaxLength: number
 ): ValidationResult<string[]> {
   let blockedItemFound = false;
   const normalized: string[] = [];
@@ -137,7 +150,7 @@ function validateTextItems(
       continue;
     }
 
-    normalized.push(trimTextItem(trimmed));
+    normalized.push(trimTextItem(trimmed, itemMaxLength));
 
     if (normalized.length >= itemMaxCount) {
       break;
@@ -159,6 +172,12 @@ function validateTextItems(
 
 function getTextItemMaxCount(target: LlmExplanation["target"]): number {
   return target === "design_simulation" ? DESIGN_SIMULATION_ITEM_MAX_COUNT : DEFAULT_ITEM_MAX_COUNT;
+}
+
+function getTextItemMaxLength(target: LlmExplanation["target"]): number {
+  return target === "terraform_preview_explanation"
+    ? TERRAFORM_PREVIEW_ITEM_MAX_LENGTH
+    : ITEM_MAX_LENGTH;
 }
 
 function validateCodeSuggestion(value: LlmExplanation["codeSuggestion"]): LlmExplanation["codeSuggestion"] {
@@ -206,12 +225,12 @@ function validateOptionalLongText(value: string | undefined): string | undefined
   return normalized;
 }
 
-function trimTextItem(value: string): string {
-  if (value.length <= ITEM_MAX_LENGTH) {
+function trimTextItem(value: string, maxLength = ITEM_MAX_LENGTH): string {
+  if (value.length <= maxLength) {
     return value;
   }
 
-  return value.slice(0, ITEM_MAX_LENGTH).trim();
+  return value.slice(0, maxLength).trim();
 }
 
 // LLM이 비용, 보안, 배포 가능성을 보장하는 문장은 MVP에서 그대로 노출하지 않습니다.
@@ -246,28 +265,28 @@ function parseJsonObject(value: string): unknown | null {
   }
 }
 
-function normalizeLlmExplanationCandidate(value: unknown): unknown {
+function normalizeLlmExplanationCandidate(value: unknown, fallback: LlmExplanation): unknown {
   if (!isJsonRecord(value)) {
     return value;
   }
 
-  const target = typeof value.target === "string" ? value.target : undefined;
-  const summary = typeof value.summary === "string" ? value.summary : undefined;
-  const highlights = normalizeTextListCandidate(value.highlights);
-  const nextActions = normalizeTextListCandidate(
+  const target = typeof value.target === "string" ? value.target : fallback.target;
+  const summary = typeof value.summary === "string" ? value.summary : fallback.summary;
+  const candidateHighlights = normalizeTextListCandidate(value.highlights);
+  const highlights = candidateHighlights.length > 0 ? candidateHighlights : fallback.highlights;
+  const candidateNextActions = normalizeTextListCandidate(
     value.nextActions ?? value.next_actions ?? value.nextSteps ?? value.next_steps
   );
+  const nextActions = candidateNextActions.length > 0 ? candidateNextActions : fallback.nextActions;
   const codeSuggestion = normalizeCodeSuggestionCandidate(
     value.codeSuggestion ?? value.code_suggestion ?? value.fixSuggestion ?? value.fix_suggestion
   );
   const wellArchitectedConclusion =
-    typeof (value.wellArchitectedConclusion ?? value.well_architected_conclusion) === "string"
-      ? (value.wellArchitectedConclusion ?? value.well_architected_conclusion)
-      : undefined;
-
-  if (target === undefined || summary === undefined || highlights.length === 0 || nextActions.length === 0) {
-    return value;
-  }
+    typeof value.wellArchitectedConclusion === "string"
+      ? value.wellArchitectedConclusion
+      : typeof value.well_architected_conclusion === "string"
+        ? value.well_architected_conclusion
+        : undefined;
 
   return {
     target,

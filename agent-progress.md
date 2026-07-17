@@ -101,3 +101,76 @@ Short English-only working log for the current agent context. Older records are 
 ## Next Action
 
 - Monitor the Ready PR targeting `dev`, resolve any actionable review or branch-owned CI failure, and merge only through normal review.
+
+### 2026-07-17 - Merge latest dev into deployment fixes
+
+- Updated local dev to origin/dev at 783d30b7 and merged it into fix/ck/430-deploy-bug-fix.
+- Resolved deployment conflicts by retaining dev runtime-convergence and no-change optimization behavior together with live Terraform log streaming, heartbeat progress, state restoration, destroy-plan transitions, and explicit destroy approval labels.
+- Kept the dev AI Workbench structure and restored parameter-only before/after previews inside its result artifact.
+- Focused web behavior tests passed (58/58 after the Workbench token fix); Terraform runner/live-log tests passed (4/4). API service tests and workspace typecheck could not load new dev dependencies (@aws-sdk/client-ecr, @tanstack/react-query) because the local dependency tree has not been refreshed.
+
+### 2026-07-17 - Repair Direct Deployment result layout
+
+- Restored deployment-history CSS module styles lost during the dev merge and placed step actions directly above the recent-result card.
+- Removed the duplicate Destroy confirmation, renamed the approved action to Destroy 실행, and starts Destroy directly from the approved-plan action.
+- Removed repeated action hints and joined WEB ENTRY POINT output links to the deployment summary.
+- Focused Direct Deployment tests pass 14/14; harness check passes; browser verification confirmed the repaired history and action layout. No Terraform or AWS mutation was performed.
+
+### 2026-07-17 - Restore Agent Review result UI and detail quality
+
+- Restored the prior card-based Review Summary and six-pillar Review Checks presentation, including severity colors and readable problem/action labels.
+- Restored Amazon Q review instructions, Terraform evidence payloads, and long-response validation so review content stays concrete and complete.
+- Workspace lint and harness checks pass. The focused web build compiled and type-checked before a Windows `spawn EPERM`; API typecheck is blocked only by existing deployment live-log timer typing errors.
+- Removed Next Step and Technical Details from Agent Review only; browser verification confirmed the dedicated Workbench now ends after the six review cards.
+
+### 2026-07-17 - Restore Error Analysis content and improve review readability
+
+- Restored the prior Error Analysis title, cause, raw Terraform message, resolution steps, and expandable original-code presentation while retaining the current provider recovery path.
+- Increased Agent Review typography across the summary and all six review cards for easier reading.
+- Changed both default and Amazon Q review prompts to separate criterion, judgment, and confirmation with line breaks instead of pipe characters.
+- Workspace lint passed with one unrelated existing Direct Deployment warning; harness and browser checks confirmed the Agent Review presentation. The current board had no Terraform error, so the Error Analysis result was not visually reproduced.
+
+### 2026-07-17 - Restore Agent Review progress and severity colors
+
+- Restored the four-stage waiting presentation for Terraform analysis, risk checks, mandatory Amazon Q review, and result formatting so the Review tab never appears empty during a request.
+- Promoted missing or unverifiable Well-Architected evidence to medium severity and strengthened yellow/red card surfaces while preserving white for normal checks.
+- Focused Workbench tests pass 31/31; web lint passes with one unrelated Direct Deployment warning. Chrome confirmed medium cards render yellow on the current localhost review result.
+
+### 2026-07-17 - Normalize Direct Deployment action buttons
+
+- Fixed Direct Deployment action buttons at 152x44 so two actions plus their gap stay within the 320px result rail.
+- Kept the action group anchored to a stable start position while centering icon and label content inside each button.
+- Idle buttons use a white surface with inherited dark icon color; running actions use filled state colors.
+- Focused Direct Deployment tests pass 15/15, and browser-computed layout confirms a 312px two-button footprint inside the 320px rail. No Terraform or AWS mutation was performed.
+
+### 2026-07-17 - Separate Agent Review strengths and required fixes
+
+- Replaced mixed and repeated Review Summary entries with exactly two groups: verified strengths and required fixes.
+- Removed directive sentences from strength summaries and paired each prioritized risk with a separate concrete problem and correction line.
+- Focused presentation and Workbench tests pass 26/26; web lint passes with one unrelated Direct Deployment warning. Chrome DOM verification confirmed the two groups and separated problem/correction lines.
+
+### 2026-07-17 - Repair Terraform live-log timer typing
+
+- Isolated the heartbeat scheduler behind a Node-only timer adapter so DOM timer overloads cannot widen its handle to `number | Timeout`.
+- Captured the injected heartbeat callback through an asserted collection so strict control-flow analysis no longer narrows the test call to `never`.
+- API typecheck, focused live-log tests (2/2), API lint, API build, and harness pass. Root typecheck remains blocked by malformed ignored `.next` route types in the local web build cache.
+
+### 2026-07-17 - Address PR #455 review feedback
+
+- Normalized serialized deployment timestamps, tolerated missing AI review and architecture arrays, and ignored Terraform output arriving after live-log completion.
+- Added red/green regressions for all six unresolved review threads; focused API tests pass 15/15 and focused Web tests pass 11/11.
+- Harness, workspace typecheck, workspace lint, and API build pass. The root build timed out after four minutes while local Next processes remained active; no Terraform or AWS mutation was performed.
+
+### 2026-07-17 - Merge latest dev into PR #455 branch
+
+- Merged `dev` at `5fe4b23f` into `fix/ck/430-deploy-bug-fix` and resolved deployment API and workspace UI conflicts without dropping live Terraform logs, state restoration, release recovery, or rollback behavior.
+- Combined the latest apply-result repository contract and execution fences with single-owner Terraform state persistence and approval revocation.
+- Workspace typecheck passes, and focused Web deployment tests pass 48/48.
+- Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
+- Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
+
+### 2026-07-17 - Resolve dev merge conflict in the workspace panel
+
+- Merged the controlled AI Workbench close/blocking behavior with the latest CI/CD return command and selected Live Observation target flow in `WorkspaceRightPanel`.
+- Focused workspace regressions pass 43/43. Root lint, typecheck, and build pass, and the merge contains no unresolved paths.
+- No migration was authored or modified during conflict resolution; migration files in the merge came from `dev`.

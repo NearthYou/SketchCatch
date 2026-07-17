@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-15",
+  "lastUpdated": "2026-07-17",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -348,16 +348,16 @@
         "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-14",
+        "lastVerified": "2026-07-15",
         "commands": [
-          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-service.test.ts src/deployments/deployment-approval-service.test.ts src/routes/deployments.test.ts src/db/deployment-preparation-schema.test.ts",
-          "pnpm --filter @sketchcatch/web test",
-          "pnpm --filter @sketchcatch/api test",
-          "node scripts/check-db-migration-compatibility.mjs",
-          "PostgreSQL 16 temporary container: apply apps/api/drizzle/0000..0036 with psql ON_ERROR_STOP=1",
-          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/direct-application-release-output-url.test.ts src/deployments/ecs-fargate-output-reconciliation.test.ts src/deployments/deployment-apply-service.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/aws-connections/aws-connection-service.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
         ],
-        "notes": "Focused deployment contracts, Web 1,145/1,145, migration compatibility, PostgreSQL migrations, harness, lint, typecheck, and build passed. API passed 1,456/1,459; the only failures are three unchanged Windows symlink fixture setup EPERM errors."
+        "notes": "Focused Direct deployment contracts passed 17/17 and AWS connection policy contracts passed 3/3. Full-stack ECS preparation now permits a pending artifact before the URL exists, then saves Terraform results, reconciles a safe api_base_url into the target, releases the application, and only then marks success. The generated connection Role permits the confirmed project and build names within the same account and region instead of requiring a sketchcatch-* prefix. Reconciliation failure preserves Terraform evidence and skips release. Harness, lint, typecheck, and build passed; no cloud mutation was performed."
       },
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },
@@ -666,6 +666,65 @@
       "notes": "The 5m30s total stretch target remains unmet; validation and API stabilization are the next measured bottlenecks."
     },
     {
+      "id": "USER-APPLICATION-ECR-BUILD-CACHE-001",
+      "priority": 1,
+      "area": "application-build",
+      "title": "Project-scoped ECR registry cache for user ECS applications",
+      "user_visible_behavior": "Repository가 연결된 ECS/Fargate 프로젝트는 첫 빌드의 Docker layer를 사용자 AWS 계정의 프로젝트 전용 ECR cache에 저장하고 다음 commit 빌드에서 재사용한다.",
+      "status": "blocked",
+      "blockedReason": "실제 warm-cache CodeBuild 시간 비교와 cache Repository cleanup 확인에는 사용자 AWS 계정 mutation 승인이 필요하며 이번 로컬 구현 요청에서는 실행하지 않았다.",
+      "verification": [
+        "프로젝트 ID에서 cache Repository와 platform별 mutable cache tag를 결정적으로 계산한다.",
+        "CodeBuild build-only role은 정확한 cache Repository의 layer read/write만 허용하고 ECS, 서비스 S3, CloudFront mutation 권한은 갖지 않는다.",
+        "server-generated BuildKit buildspec은 registry cache를 import/export하고 cache 오류는 검증을 생략하지 않은 cold build로 전환한다.",
+        "프로젝트 삭제와 AWS 연결 managed cleanup은 ownership tag를 다시 확인한 cache Repository만 force delete한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/build-environments/project-build-cache.test.ts src/build-environments/project-build-environment-service.test.ts src/build-environments/aws-project-build-environment-gateway.test.ts src/releases/preflight-buildspec.test.ts src/deployments/aws-codebuild-direct-application-release-gateway.test.ts src/aws-connections/aws-connection-service.test.ts src/aws-connections/aws-connection-managed-cleanup.test.ts src/projects/project-deletion-service.test.ts",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused cache protection line passed 62/62. Repository checks passed locally. A real warm-cache CodeBuild timing comparison was intentionally not run because it would mutate the connected AWS account; the code does not claim a measured duration reduction. Existing AWS connections must be deleted and reconnected once to receive the expanded CodeBuild permissions boundary."
+      },
+      "notes": "Cache images are never used as ECS release images. The immutable verified release candidate and trusted worker activation boundary remain unchanged."
+    },
+    {
+      "id": "DIRECT-FIRST-APPLICATION-RELEASE-001",
+      "priority": 1,
+      "area": "direct-deployment-git-cicd",
+      "title": "Direct first application release before Git/CI/CD installation",
+      "user_visible_behavior": "사용자는 Direct Deployment에서 최초 ECS/Fargate 앱을 실제로 공개한 뒤에만 후속 변경 자동 배포용 CI/CD 설치 PR을 만들 수 있다.",
+      "status": "blocked",
+      "blockedReason": "실제 AWS full_stack/application 배포와 GitHub 설치 PR merge trigger 수용 검증에는 외부 AWS/GitHub mutation 승인이 필요하며 이번 로컬 구현 요청에서는 실행하지 않았다.",
+      "verification": [
+        "신규 ECS/Fargate auto 배포는 build config가 있으면 full_stack을 선택하고, build config 누락을 infrastructure로 조용히 축소하지 않는다.",
+        "readiness는 승인된 Infrastructure Apply와 current target에 일치하는 healthy Direct ApplicationRelease를 별도 증거로 검증한다.",
+        "CI/CD handoff API는 provider 호출 직전에 target, release, Plan artifact를 다시 검증하고 최초 앱 증거가 없으면 명시적인 HTTP 409를 반환한다.",
+        "CI/CD의 최초 앱 CTA는 Direct application 또는 full_stack scope를 열고 실제 배포 성공 뒤에만 CI/CD로 돌아간다.",
+        "설치 PR workflow 변경만으로 App workflow가 실행되지 않으며 이후 실제 app path commit부터 실행된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-apply-service.test.ts src/git-cicd/git-cicd-readiness-service.test.ts src/git-cicd/git-cicd-handoff-apply-evidence.test.ts src/git-cicd/git-cicd-handoff-initial-release.test.ts src/routes/git-cicd-handoffs.test.ts src/services/aiArchitectureDrafts.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
+          "pnpm --filter @sketchcatch/types exec tsx --test src/git-cicd-readiness-contract.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/cicd-handoff.test.ts features/workspace/cicd-return-command.test.ts features/workspace/deployment-console-state.test.ts features/workspace/deployment-presentation.test.ts",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused verification passed with API 186 tests, shared contract 1 test, and Web 41 tests. Live AWS deployment and GitHub PR merge acceptance were not repeated in this local implementation pass; the protected server and UI contracts are verified without external mutation."
+      },
+      "notes": "No DB migration is required. Infrastructure-only deployment remains supported but cannot satisfy the initial application release gate."
+    },
+    {
       "id": "REPOSITORY-ECS-REFERENCE-LAYOUT-001",
       "priority": 1,
       "area": "repository-analysis-board",
@@ -710,23 +769,25 @@
         "nullable runtimeConfig와 잘못된 Repository URL은 TypeError 대신 제어된 배포 또는 Source Repository 오류로 차단한다.",
         "30분짜리 일회성 browser resume state는 project와 active Repository가 일치할 때만 소비되며 API 재분석 없이 추천 상태를 복원한다.",
         "어떤 추천 Template을 선택해도 callback 배포 타깃은 ECS Fargate이며 project slug, commit SHA, Dockerfile evidence로 필수 좌표를 채운다.",
-        "whiskend/audience-live-check의 명확한 컨테이너 근거는 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
+        "whiskend/audience-live-check와 jh-9999/audience-live-check의 동일한 golden-path 근거는 owner와 무관하게 AI confidence 재정렬 이후에도 ECS Fargate를 1순위로 유지한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-15",
         "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/routes/public-repository-analysis-revision.test.ts src/source-repositories/repository-template-recommendation.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-app-state.test.ts src/source-repositories/github-target-connection.test.ts src/deployments/direct-application-release-output-url.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test app/integrations/github/callback/github-callback-state.test.ts app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-start-client.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
           "pnpm --filter @sketchcatch/types exec tsx --test --test-name-pattern='ECS Fargate Board uses project-scoped runtime names' src/template-definitions.test.ts",
           "live POST /api/ai/source-repository-analysis for https://github.com/whiskend/audience-live-check",
+          "read-only Fastify POST /ai/source-repository-analysis with live GitHub evidence for https://github.com/jh-9999/audience-live-check.git",
           "authenticated in-app Browser verification of Repository Analysis recommendation and required inline CI/CD gate",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Repository callback/resume/runtime focused tests passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
+        "notes": "The owner-parity endpoint regression passed 3/3 after reproducing the expected casing failure, and the pre-change route/recommendation baseline passed 15/15. Live read-only analysis of both audience-live-check owners returned ECS Fargate first at 0.91 and the same current commit SHA. Repository callback/resume/runtime focused tests previously passed: API 10/10, Web 12/12, ECS Board name 1/1. Callback-wide ECS defaults, ordered single-confirm saves, and completion action bar contracts passed focused callback tests 6/6. Null runtime configuration and malformed URL review regressions passed 7/7. Harness, lint, typecheck, and build passed. Full pnpm test remains non-green only on the same three pre-existing three-tier Template position/parent contract failures in packages/types."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. A temporary local visual-verification account was deleted after use."
     },

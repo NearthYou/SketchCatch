@@ -1,64 +1,53 @@
-# Task 3 RED/GREEN Report
+# Task 3 Report
 
-## Scope
+## Outcome
 
-Implemented repository CI/CD monitoring settings for issue #361: durable defaults, path normalization, read-only GitHub validation, strict GET/PUT routes, handoff gating, and validated workflow path triggers.
+- Fixed ECS/Fargate provider targets now carry `maxCapacity: null` and produce available snapshots with `{ desired, running, healthy, max: null }`.
+- Service Auto Scaling V4 targets map `scaling.maxCapacity`; V2/V3 ECS and V2 ASG mappings remain unchanged.
+- Provider snapshot parsing requires available `desired`, `running`, and `healthy` values while allowing `max` to be `number | null`.
+- Fixed V4 fixtures cover Store create/read and CloudFront HTTPS traffic routing.
 
-## RED evidence
+## Files
 
-1. `pnpm --dir apps/api exec tsx --test src/git-cicd/git-cicd-monitoring-service.test.ts`
-   - Failed with `ERR_MODULE_NOT_FOUND` for the new monitoring service.
-2. `pnpm --dir apps/api exec tsx --test src/source-repositories/github-app-client.test.ts`
-   - Three new tests failed because `validateRepositoryBranch` and `validateRepositoryDirectory` did not exist.
-3. `pnpm --dir apps/api exec tsx --test src/routes/git-cicd-handoffs.test.ts`
-   - Three monitoring route tests failed with HTTP 404.
-4. `pnpm --dir apps/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts`
-   - Failed because the infra workflow still rendered the hard-coded generated Terraform path.
-5. `pnpm --dir apps/api exec tsx --test --test-name-pattern="blocked until monitoring" src/routes/git-cicd-handoffs.test.ts`
-   - Failed because handoff creation returned 201 for a `required` monitoring config instead of 409.
-6. `pnpm --dir apps/api exec tsx --test src/git-cicd/git-cicd-workflows.test.ts`
-   - Failed because the new app push event did not satisfy the release job condition.
+- `apps/api/src/live-observations/aws-live-observation-snapshot-provider.ts`
+- `apps/api/src/live-observations/aws-live-observation-snapshot-provider.test.ts`
+- `apps/api/src/live-observations/live-observation-provider-snapshot.ts`
+- `apps/api/src/live-observations/live-observation-observer-service.ts`
+- `apps/api/src/live-observations/live-observation-observer-service.test.ts`
+- `apps/api/src/live-observations/live-observation-https-transport.test.ts`
+- `apps/api/src/live-observations/live-observation-store-contract.ts`
+- `.superpowers/sdd/task-3-report.md`
 
-## GREEN result
+## Commands and Results
 
-- Root paths normalize to `.`; subdirectories normalize separators and reject empty, absolute, scheme-prefixed, and traversal paths.
-- GET creates a durable enabled/default-branch/root-path config with `validationStatus: required` when the active accessible repository has no row.
-- Disabled PUT persists normalized RDS values as `required` without provider reads.
-- Enabled PUT validates branch and both directories using read-only GitHub App calls, with stable missing/file/permission error codes.
-- Handoff creation requires an enabled, valid monitoring config and a matching validated branch before invoking the provider.
-- Approved `appPath` and `infraPath` feed workflow push filters; app push events can execute the release job.
-- Workflow file writes remain inside the existing explicit handoff/provider operation. No real GitHub, AWS, or Terraform mutation ran.
+- `pnpm harness:check` — PASS before edits.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/aws-live-observation-snapshot-provider.test.ts` — expected RED: 0/1; fixed capacity was downgraded to all-null because available snapshots required non-null `max`.
+- Same provider command after implementation — PASS: 1/1.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/live-observation-observer-service.test.ts` — expected RED: 1/2; V4 returned no provider target while V2/V3 regressions passed.
+- Same observer command after implementation — PASS: 2/2.
+- Task 3 focused command covering provider, observer, and HTTPS transport — PASS: 11/11.
+- Scoped Prettier write completed, but its broad style-only churn was removed to preserve a minimal Task 3 diff.
+- Final Task 3 focused command after diff cleanup — PASS: 11/11.
+- Final `pnpm harness:check` — PASS.
+- Scoped `git diff --check` plus new-file whitespace checks — PASS.
 
-## Verification
+## Self-review
 
-- Focused service, client, route, and workflow tests: 62 passed, 0 failed.
-- `pnpm --filter @sketchcatch/api typecheck`: passed.
-- `pnpm --filter @sketchcatch/api lint`: passed with one pre-existing `setNow` warning in `live-observation-store-contract.ts`.
-- `pnpm build`: passed (5/5 packages); Next.js emitted the existing multiple-workspace-root warning.
-- `pnpm harness:check`: passed.
-- `git diff --check`: passed (line-ending conversion warnings only).
+- No spec or repository-standard findings in the Task 3 diff.
+- The cache key uses the literal `fixed` only for nullable fixed capacity and preserves numeric maxima for scaled targets.
+- Delayed and unavailable snapshots still require all capacity values, including `max`, to be null.
+- No Task 2 runtime/materializer/repository, Web, shared types, Redis parser, DB schema, Terraform, progress, handoff, feature, or certificate files were changed by this task.
+- No files were staged or committed.
 
-## Review
+## Concerns
 
-No secrets, network calls outside injected fetch fakes, dependency changes, schema changes, or direct infrastructure/Git mutations were introduced. Evaluator result: Accept; all safety hard-fail conditions are absent.
+- Per the parent task's focused-test constraint, full lint, build, and the reusable Store contract suites were not run. The fixed V4 Store fixture is present but was not executed by the specified focused command.
+- The shared worktree contains unrelated changes owned by other workers; this report covers only the files listed above.
 
-## Important review fixes
+## Review Follow-up
 
-### RED
-
-1. `pnpm --dir apps/api exec tsx --test --test-name-pattern="does not require GitHub App" src/routes/git-cicd-handoffs.test.ts`
-   - Disabled PUT through the real default-provider path returned HTTP 500 when GitHub App environment variables were absent; expected 200.
-2. `pnpm --dir apps/api exec tsx --test --test-name-pattern="concurrent default insert" src/git-cicd/git-cicd-monitoring-service.test.ts`
-   - GET returned and persisted the default `required` config instead of preserving the concurrent `valid` winner.
-
-### GREEN
-
-- The route now passes the default GitHub monitoring provider as a factory. The service resolves that factory only after the disabled persistence early return, so disabled PUT does not read GitHub App configuration.
-- `ensureDefaultConfig` now performs `INSERT ... ON CONFLICT DO NOTHING` and then reads the winning row. GET no longer uses the overwrite-capable PUT upsert path.
-- The disabled/no-env route regression and concurrent validated-winner regression both pass.
-- Focused service, client, route, and workflow tests: 64 passed, 0 failed.
-- API typecheck passed.
-- API lint passed with the same pre-existing `setNow` warning.
-- Full build passed for 5/5 packages; the existing Next.js workspace-root warning remains.
-- Final `pnpm harness:check` and `git diff --check` passed.
-- No real GitHub, AWS, Terraform, or repository mutation ran.
+- Replaced the closure-mutated optional HTTPS request slot with `PinnedHttpsRequestOptions[]`. The V3 request is asserted at index `0`, the fixed V4 request at index `1`, and the fixture requires exactly two requests.
+- `pnpm --filter @sketchcatch/api exec tsx --test src/live-observations/aws-live-observation-snapshot-provider.test.ts src/live-observations/live-observation-observer-service.test.ts src/live-observations/live-observation-https-transport.test.ts` — PASS: 11/11.
+- `pnpm --filter @sketchcatch/api typecheck` — FAIL, exit status 2, only at `src/routes/deployments.test.ts:1848:56`: `TS2322` because resource type `"S3_BUCKET"` is not assignable to `ResourceNode["type"]` (`"S3" | ... | "UNKNOWN"`). The reviewed Task 3 HTTPS assertion no longer appears in typecheck errors.
+- Follow-up `pnpm harness:check` and scoped `git diff --check` — PASS.
+- `apps/api/src/routes/deployments.test.ts` belongs to Task 4 and was not changed by this follow-up.

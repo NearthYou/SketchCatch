@@ -1,16 +1,29 @@
-import { randomBytes, randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type {
   AwsConnection,
+  AwsConnectionListResponse,
   AwsConnectionCloudFormationTemplateResponse,
+  AwsConnectionDeletionPreviewResponse,
   AwsRolePermissionSetup,
   CreateAwsConnectionResponse,
   SketchCatchCallerRoleSetup,
   TestAwsConnectionResponse,
   VerifyAwsConnectionResponse
 } from "@sketchcatch/types";
+import type { DeploymentStatus } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { awsConnections, deployments } from "../db/schema.js";
+import { projectBuildCacheRepositoryActions } from "../build-environments/project-build-cache.js";
+import {
+  awsCodeConnections,
+  awsConnections,
+  deployedResources,
+  deploymentJobs,
+  deployments,
+  projectBuildEnvironments,
+  projectDeploymentTargets,
+  projectExecutionLeases
+} from "../db/schema.js";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import {
   AwsConnectionTestError,
@@ -21,6 +34,7 @@ import {
 } from "./aws-connection-test-service.js";
 
 export const recommendedAwsConnectionRoleName = "SketchCatchTerraformExecutionRole";
+export const recommendedCodeBuildPermissionsBoundaryName = "SketchCatchCodeBuildBoundary";
 const callerAssumeRolePolicyName = "SketchCatchAssumeTerraformExecutionRole";
 const defaultCloudFormationTemplateTokenTtlMs = 60 * 60 * 1000;
 const awsConnectionRoleNameSuffixLength = 8;
@@ -29,9 +43,21 @@ const terraformFargateServiceActions = [
   "ecr:*",
   "elasticloadbalancing:*",
   "cloudfront:*",
-  "logs:*"
+  "logs:*",
+  "application-autoscaling:RegisterScalableTarget",
+  "application-autoscaling:DeregisterScalableTarget",
+  "application-autoscaling:DescribeScalableTargets",
+  "application-autoscaling:PutScalingPolicy",
+  "application-autoscaling:DeleteScalingPolicy",
+  "application-autoscaling:DescribeScalingPolicies",
+  "application-autoscaling:ListTagsForResource",
+  "application-autoscaling:TagResource",
+  "application-autoscaling:UntagResource"
 ] as const;
 const directReleaseCodeBuildActions = [
+  "codebuild:CreateProject",
+  "codebuild:UpdateProject",
+  "codebuild:DeleteProject",
   "codebuild:BatchGetProjects",
   "codebuild:StartBuild",
   "codebuild:BatchGetBuilds",
@@ -52,9 +78,28 @@ const terraformFargateIamActions = [
   "iam:ListRolePolicies",
   "iam:ListAttachedRolePolicies",
   "iam:ListInstanceProfilesForRole",
+  "iam:GetPolicy",
+  "iam:GetPolicyVersion",
+  "iam:GetRolePolicy",
+  "iam:PutRolePolicy",
+  "iam:DeleteRolePolicy",
+  "iam:PutRolePermissionsBoundary",
+  "iam:DeleteRolePermissionsBoundary",
   "iam:AttachRolePolicy",
   "iam:DetachRolePolicy",
   "iam:CreateServiceLinkedRole"
+] as const;
+const githubCodeConnectionActions = [
+  "codeconnections:CreateConnection",
+  "codeconnections:GetConnection",
+  "codeconnections:ListConnections",
+  "codeconnections:PassConnection",
+  "codeconnections:UseConnection",
+  "codeconnections:ListTagsForResource",
+  "codeconnections:TagResource",
+  "codeconnections:DeleteConnection",
+  "codestar-connections:PassConnection",
+  "codestar-connections:UseConnection"
 ] as const;
 const terraformPassRoleResourcePattern = "arn:aws:iam::*:role/*";
 const terraformPassRoleServices = [
@@ -104,6 +149,32 @@ export type AwsConnectionRepository = {
   ): Promise<AwsConnectionRecord | undefined>;
   findAwsConnectionById(connectionId: string): Promise<AwsConnectionRecord | undefined>;
   hasDeploymentUsingAwsConnection(connectionId: string): Promise<boolean>;
+  claimAccessibleAwsConnectionDeletion(
+    connectionId: string,
+    accessContext: ProjectAccessContext,
+    now: Date
+  ): Promise<
+    | {
+        connection: AwsConnectionRecord;
+        claimed: boolean;
+        blocked: boolean;
+      }
+    | undefined
+  >;
+  releaseAwsConnectionDeletionClaim(
+    connectionId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<void>;
+  markAwsConnectionDeletionCleanupFailed?(
+    connectionId: string,
+    accessContext: ProjectAccessContext,
+    errorSummary: string
+  ): Promise<void>;
+  deleteClaimedAwsConnection(
+    connectionId: string,
+    accessContext: ProjectAccessContext
+  ): Promise<AwsConnectionRecord | undefined>;
+  findManagedResources?(connectionId: string): Promise<AwsConnectionManagedResources>;
   createAwsConnection(input: CreateAwsConnectionRecordInput): Promise<AwsConnectionRecord>;
   deleteAccessibleAwsConnection(
     connectionId: string,
@@ -113,6 +184,20 @@ export type AwsConnectionRepository = {
     input: UpdateAwsConnectionVerificationInput
   ): Promise<AwsConnectionRecord | undefined>;
 };
+
+export type AwsConnectionManagedResources = {
+  codeBuildProjects: Array<{
+    projectId: string;
+    projectName: string;
+    serviceRoleArn: string;
+  }>;
+  codeConnectionArn: string | null;
+};
+
+export type CleanupAwsConnectionManagedResources = (input: {
+  connection: AwsConnectionRecord;
+  resources: AwsConnectionManagedResources;
+}) => Promise<void>;
 
 export type CreateAwsConnectionOptions = {
   generateId?: () => string;
@@ -134,6 +219,13 @@ export type VerifyAwsConnectionCreatedRoleInput = {
 export type TestStoredAwsConnectionInput = VerifyAwsConnectionInput;
 
 export type DeleteAwsConnectionInput = {
+  connectionId: string;
+  accessContext: ProjectAccessContext;
+  confirmedManagedCleanup: boolean;
+  confirmationToken: string;
+};
+
+export type GetAwsConnectionDeletionPreviewInput = {
   connectionId: string;
   accessContext: ProjectAccessContext;
 };
@@ -201,10 +293,24 @@ export class AwsConnectionVerificationError extends Error {
   }
 }
 
+export class AwsConnectionConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsConnectionConflictError";
+  }
+}
+
 export class AwsConnectionDeleteConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "AwsConnectionDeleteConflictError";
+  }
+}
+
+export class AwsConnectionDeletionConfirmationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsConnectionDeletionConfirmationError";
   }
 }
 
@@ -216,6 +322,9 @@ export class AwsConnectionCloudFormationTemplateError extends Error {
 }
 
 export function createPostgresAwsConnectionRepository(db: Database): AwsConnectionRepository {
+  const hasBlockingDeployment = (connectionId: string, executor: Database = db) =>
+    hasDeploymentUsingAwsConnection(executor, connectionId);
+
   return {
     async findAccessibleAwsConnection(connectionId, accessContext) {
       const [awsConnection] = await db
@@ -261,13 +370,127 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
     },
 
     async hasDeploymentUsingAwsConnection(connectionId) {
-      const [deployment] = await db
-        .select({ id: deployments.id })
-        .from(deployments)
-        .where(eq(deployments.awsConnectionId, connectionId))
-        .limit(1);
+      return hasBlockingDeployment(connectionId);
+    },
 
-      return Boolean(deployment);
+    async claimAccessibleAwsConnectionDeletion(connectionId, accessContext, now) {
+      return db.transaction(async (transaction) => {
+        const tx = transaction as unknown as Database;
+        const [connection] = await transaction
+          .select()
+          .from(awsConnections)
+          .where(
+            and(
+              eq(awsConnections.id, connectionId),
+              eq(awsConnections.userId, accessContext.userId)
+            )
+          )
+          .for("update");
+        if (!connection) return undefined;
+        if (connection.deletionStartedAt && connection.deletionErrorSummary) {
+          const [reclaimed] = await transaction
+            .update(awsConnections)
+            .set({ deletionErrorSummary: null, updatedAt: now })
+            .where(
+              and(
+                eq(awsConnections.id, connectionId),
+                eq(awsConnections.userId, accessContext.userId),
+                eq(awsConnections.deletionStartedAt, connection.deletionStartedAt)
+              )
+            )
+            .returning();
+          return reclaimed
+            ? { connection: reclaimed, claimed: true, blocked: false }
+            : { connection, claimed: false, blocked: false };
+        }
+        if (connection.deletionStartedAt) {
+          return { connection, claimed: false, blocked: false };
+        }
+        if (await hasBlockingDeployment(connectionId, tx)) {
+          return { connection, claimed: false, blocked: true };
+        }
+        const [claimed] = await transaction
+          .update(awsConnections)
+          .set({ deletionStartedAt: now, updatedAt: now })
+          .where(
+            and(
+              eq(awsConnections.id, connectionId),
+              eq(awsConnections.userId, accessContext.userId),
+              isNull(awsConnections.deletionStartedAt)
+            )
+          )
+          .returning();
+        return claimed
+          ? { connection: claimed, claimed: true, blocked: false }
+          : { connection, claimed: false, blocked: false };
+      });
+    },
+
+    async releaseAwsConnectionDeletionClaim(connectionId, accessContext) {
+      await db
+        .update(awsConnections)
+        .set({ deletionStartedAt: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(awsConnections.id, connectionId),
+            eq(awsConnections.userId, accessContext.userId),
+            isNotNull(awsConnections.deletionStartedAt)
+          )
+        );
+    },
+
+    async markAwsConnectionDeletionCleanupFailed(connectionId, accessContext, errorSummary) {
+      await db
+        .update(awsConnections)
+        .set({ deletionErrorSummary: errorSummary.slice(0, 500), updatedAt: new Date() })
+        .where(
+          and(
+            eq(awsConnections.id, connectionId),
+            eq(awsConnections.userId, accessContext.userId),
+            isNotNull(awsConnections.deletionStartedAt)
+          )
+        );
+    },
+
+    async deleteClaimedAwsConnection(connectionId, accessContext) {
+      return db.transaction(async (transaction) => {
+        await transaction
+          .update(projectBuildEnvironments)
+          .set({ status: "disconnected", lastVerifiedAt: null, updatedAt: new Date() })
+          .where(eq(projectBuildEnvironments.awsConnectionId, connectionId));
+        const [connection] = await transaction
+          .delete(awsConnections)
+          .where(
+            and(
+              eq(awsConnections.id, connectionId),
+              eq(awsConnections.userId, accessContext.userId),
+              isNotNull(awsConnections.deletionStartedAt)
+            )
+          )
+          .returning();
+        return connection;
+      });
+    },
+
+    async findManagedResources(connectionId) {
+      const [buildRows, codeConnectionRows] = await Promise.all([
+        db
+          .select({
+            projectId: projectBuildEnvironments.projectId,
+            projectName: projectBuildEnvironments.codeBuildProjectName,
+            serviceRoleArn: projectBuildEnvironments.codeBuildServiceRoleArn
+          })
+          .from(projectBuildEnvironments)
+          .where(eq(projectBuildEnvironments.awsConnectionId, connectionId)),
+        db
+          .select({ connectionArn: awsCodeConnections.connectionArn })
+          .from(awsCodeConnections)
+          .where(eq(awsCodeConnections.awsConnectionId, connectionId))
+      ]);
+      return {
+        codeBuildProjects: buildRows,
+        codeConnectionArn: codeConnectionRows[0]?.connectionArn ?? null
+      };
     },
 
     async createAwsConnection(input) {
@@ -281,14 +504,22 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
     },
 
     async deleteAccessibleAwsConnection(connectionId, accessContext) {
-      const [awsConnection] = await db
-        .delete(awsConnections)
-        .where(
-          and(eq(awsConnections.id, connectionId), eq(awsConnections.userId, accessContext.userId))
-        )
-        .returning();
-
-      return awsConnection;
+      return db.transaction(async (transaction) => {
+        await transaction
+          .update(projectBuildEnvironments)
+          .set({ status: "disconnected", lastVerifiedAt: null, updatedAt: new Date() })
+          .where(eq(projectBuildEnvironments.awsConnectionId, connectionId));
+        const [awsConnection] = await transaction
+          .delete(awsConnections)
+          .where(
+            and(
+              eq(awsConnections.id, connectionId),
+              eq(awsConnections.userId, accessContext.userId)
+            )
+          )
+          .returning();
+        return awsConnection;
+      });
     },
 
     async updateAwsConnectionVerification(input) {
@@ -312,17 +543,137 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
   };
 }
 
+export function shouldBlockAwsConnectionDeletion(input: {
+  status: DeploymentStatus;
+  stateObjectKey: string | null;
+  hasResources: boolean;
+}): boolean {
+  if (input.status === "DESTROYED" || input.status === "PENDING") return false;
+  if (
+    input.status === "RUNNING" ||
+    input.status === "SUCCESS" ||
+    input.status === "PARTIALLY_FAILED" ||
+    input.status === "PARTIALLY_CANCELED"
+  ) {
+    return true;
+  }
+  return input.stateObjectKey !== null || input.hasResources;
+}
+
+async function hasDeploymentUsingAwsConnection(
+  db: Database,
+  connectionId: string
+): Promise<boolean> {
+  const [
+    rows,
+    activeLeaseRows,
+    activeDeploymentJobRows,
+    creatingCodeConnections,
+    preparingBuildEnvironments
+  ] = await Promise.all([
+    db
+      .select({
+        id: deployments.id,
+        status: deployments.status,
+        stateObjectKey: deployments.stateObjectKey,
+        deployedResourceId: deployedResources.id
+      })
+      .from(deployments)
+      .leftJoin(deployedResources, eq(deployedResources.deploymentId, deployments.id))
+      .where(eq(deployments.awsConnectionId, connectionId)),
+    db
+      .select({ projectId: projectExecutionLeases.projectId })
+      .from(projectExecutionLeases)
+      .innerJoin(
+        projectDeploymentTargets,
+        eq(projectDeploymentTargets.projectId, projectExecutionLeases.projectId)
+      )
+      .where(
+        and(
+          eq(projectDeploymentTargets.connectionId, connectionId),
+          eq(projectExecutionLeases.status, "active")
+        )
+      ),
+    db
+      .select({ id: deploymentJobs.id })
+      .from(deploymentJobs)
+      .innerJoin(deployments, eq(deployments.id, deploymentJobs.deploymentId))
+      .where(
+        and(
+          eq(deployments.awsConnectionId, connectionId),
+          inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING", "RUNNING"])
+        )
+      )
+      .limit(1),
+    db
+      .select({ id: awsCodeConnections.id })
+      .from(awsCodeConnections)
+      .where(
+        and(
+          eq(awsCodeConnections.awsConnectionId, connectionId),
+          eq(awsCodeConnections.status, "CREATING")
+        )
+      )
+      .limit(1),
+    db
+      .select({ id: projectBuildEnvironments.id })
+      .from(projectBuildEnvironments)
+      .where(
+        and(
+          eq(projectBuildEnvironments.awsConnectionId, connectionId),
+          eq(projectBuildEnvironments.status, "preparing")
+        )
+      )
+      .limit(1)
+  ]);
+
+  const byDeployment = new Map<
+    string,
+    { status: DeploymentStatus; stateObjectKey: string | null; hasResources: boolean }
+  >();
+  for (const row of rows) {
+    const current = byDeployment.get(row.id);
+    byDeployment.set(row.id, {
+      status: row.status,
+      stateObjectKey: row.stateObjectKey,
+      hasResources: current?.hasResources === true || row.deployedResourceId !== null
+    });
+  }
+  return (
+    activeLeaseRows.length > 0 ||
+    activeDeploymentJobRows.length > 0 ||
+    creatingCodeConnections.length > 0 ||
+    preparingBuildEnvironments.length > 0 ||
+    [...byDeployment.values()].some(shouldBlockAwsConnectionDeletion)
+  );
+}
+
 export async function listAwsConnections(
   input: {
     accessContext: ProjectAccessContext;
   },
   repository: AwsConnectionRepository
-): Promise<AwsConnection[]> {
+): Promise<AwsConnectionListResponse> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
 
-  return awsConnectionRows
-    .filter((awsConnection) => awsConnection.status === "verified")
-    .map(toAwsConnection);
+  return {
+    awsConnections: awsConnectionRows
+      .filter(
+        (awsConnection) =>
+          awsConnection.status === "verified" && awsConnection.deletionStartedAt === null
+      )
+      .map(toAwsConnection),
+    cleanupRetries: awsConnectionRows
+      .filter(
+        (awsConnection) =>
+          awsConnection.status === "verified" &&
+          awsConnection.deletionStartedAt !== null &&
+          awsConnection.deletionErrorSummary !== null
+      )
+      .map((awsConnection) => ({
+        awsConnection: toAwsConnection(awsConnection)
+      }))
+  };
 }
 
 export async function createAwsConnection(
@@ -366,33 +717,178 @@ export async function createAwsConnection(
   };
 }
 
-export async function deleteAwsConnection(
-  input: DeleteAwsConnectionInput,
+export async function getAwsConnectionDeletionPreview(
+  input: GetAwsConnectionDeletionPreviewInput,
   repository: AwsConnectionRepository
-): Promise<void> {
-  const awsConnection = await repository.findAccessibleAwsConnection(
+): Promise<AwsConnectionDeletionPreviewResponse> {
+  const connection = await repository.findAccessibleAwsConnection(
     input.connectionId,
     input.accessContext
   );
-
-  if (!awsConnection) {
+  if (!connection) {
     throw new AwsConnectionNotFoundError("AWS connection not found");
   }
-
-  const isUsedByDeployment = await repository.hasDeploymentUsingAwsConnection(awsConnection.id);
-
-  if (isUsedByDeployment) {
-    throw new AwsConnectionDeleteConflictError("AWS connection is used by a deployment");
+  if (!repository.findManagedResources) {
+    throw new AwsConnectionDeleteConflictError(
+      "SketchCatch가 관리하는 빌드 리소스를 확인할 수 없어 AWS 연결 삭제를 중단했습니다."
+    );
   }
 
-  const deletedConnection = await repository.deleteAccessibleAwsConnection(
-    awsConnection.id,
-    input.accessContext
+  const [resources, hasBlockingDeployment] = await Promise.all([
+    repository.findManagedResources(connection.id),
+    repository.hasDeploymentUsingAwsConnection(connection.id)
+  ]);
+  const cleanupInProgress = Boolean(
+    connection.deletionStartedAt && !connection.deletionErrorSummary
+  );
+  const blockerMessage = hasBlockingDeployment
+    ? "실행 중이거나 아직 파기되지 않은 AWS 리소스 또는 Terraform state가 있습니다. 먼저 해당 프로젝트에서 AWS 리소스를 삭제해 주세요."
+    : cleanupInProgress
+      ? "AWS 연결 삭제가 이미 진행 중입니다."
+      : null;
+
+  return {
+    connectionId: connection.id,
+    canDelete: blockerMessage === null,
+    blockerMessage,
+    cleanupRetry: Boolean(connection.deletionStartedAt && connection.deletionErrorSummary),
+    managedResources: {
+      codeBuildProjects: resources.codeBuildProjects.map((project) => ({
+        projectId: project.projectId,
+        projectName: project.projectName,
+        serviceRoleName: getRoleNameForDeletionPreview(project.serviceRoleArn),
+        logGroupName: `/aws/codebuild/${project.projectName}`
+      })),
+      codeConnection: resources.codeConnectionArn !== null
+    },
+    preservedResources: ["CloudFormation Stack", "Terraform Execution Role"],
+    confirmationToken: createAwsConnectionDeletionConfirmationToken(connection.id, resources)
+  };
+}
+
+export async function deleteAwsConnection(
+  input: DeleteAwsConnectionInput,
+  repository: AwsConnectionRepository,
+  options: { cleanupManagedResources?: CleanupAwsConnectionManagedResources } = {}
+): Promise<void> {
+  if (!input.confirmedManagedCleanup) {
+    throw new AwsConnectionDeletionConfirmationError(
+      "삭제될 SketchCatch 관리 리소스를 확인한 뒤 삭제에 동의해 주세요."
+    );
+  }
+
+  const preview = await getAwsConnectionDeletionPreview(input, repository);
+  if (!preview.canDelete) {
+    throw new AwsConnectionDeleteConflictError(
+      preview.blockerMessage ?? "AWS 연결을 삭제할 수 없습니다."
+    );
+  }
+  if (!matchesDeletionConfirmationToken(input.confirmationToken, preview.confirmationToken)) {
+    throw new AwsConnectionDeletionConfirmationError(
+      "삭제 대상이 변경되었습니다. 삭제 미리보기를 다시 확인해 주세요."
+    );
+  }
+
+  const deletionClaim = await repository.claimAccessibleAwsConnectionDeletion(
+    input.connectionId,
+    input.accessContext,
+    new Date()
   );
 
-  if (!deletedConnection) {
+  if (!deletionClaim) {
     throw new AwsConnectionNotFoundError("AWS connection not found");
   }
+  if (deletionClaim.blocked) {
+    throw new AwsConnectionDeleteConflictError(
+      "실행 중이거나 아직 파기되지 않은 AWS 리소스 또는 Terraform state가 있어 연결을 삭제할 수 없습니다. 먼저 해당 프로젝트에서 AWS 리소스를 삭제해 주세요."
+    );
+  }
+  if (!deletionClaim.claimed) {
+    throw new AwsConnectionDeleteConflictError("AWS 연결 삭제가 이미 진행 중입니다.");
+  }
+
+  if (!repository.findManagedResources) {
+    await repository.releaseAwsConnectionDeletionClaim(
+      deletionClaim.connection.id,
+      input.accessContext
+    );
+    throw new AwsConnectionDeleteConflictError(
+      "SketchCatch가 관리하는 빌드 리소스를 확인할 수 없어 AWS 연결 삭제를 중단했습니다."
+    );
+  }
+
+  const managedResources = await repository.findManagedResources(deletionClaim.connection.id);
+  const currentConfirmationToken = createAwsConnectionDeletionConfirmationToken(
+    deletionClaim.connection.id,
+    managedResources
+  );
+  if (!matchesDeletionConfirmationToken(input.confirmationToken, currentConfirmationToken)) {
+    await repository.releaseAwsConnectionDeletionClaim(
+      deletionClaim.connection.id,
+      input.accessContext
+    );
+    throw new AwsConnectionDeletionConfirmationError(
+      "삭제 대상이 변경되었습니다. 삭제 미리보기를 다시 확인해 주세요."
+    );
+  }
+
+  try {
+    if (options.cleanupManagedResources) {
+      await options.cleanupManagedResources({
+        connection: deletionClaim.connection,
+        resources: managedResources
+      });
+    }
+
+    const deletedConnection = await repository.deleteClaimedAwsConnection(
+      deletionClaim.connection.id,
+      input.accessContext
+    );
+    if (!deletedConnection) {
+      throw new AwsConnectionNotFoundError("AWS connection not found");
+    }
+  } catch (error) {
+    await repository.markAwsConnectionDeletionCleanupFailed?.(
+      deletionClaim.connection.id,
+      input.accessContext,
+      error instanceof Error ? error.message : "AWS managed cleanup failed"
+    );
+    throw error;
+  }
+}
+
+function createAwsConnectionDeletionConfirmationToken(
+  connectionId: string,
+  resources: AwsConnectionManagedResources
+): string {
+  const canonicalResources = {
+    connectionId,
+    codeBuildProjects: resources.codeBuildProjects
+      .map((project) => ({
+        projectId: project.projectId,
+        projectName: project.projectName,
+        serviceRoleArn: project.serviceRoleArn
+      }))
+      .sort((left, right) =>
+        `${left.projectId}:${left.projectName}:${left.serviceRoleArn}`.localeCompare(
+          `${right.projectId}:${right.projectName}:${right.serviceRoleArn}`
+        )
+      ),
+    codeConnectionArn: resources.codeConnectionArn
+  };
+  return createHash("sha256").update(JSON.stringify(canonicalResources)).digest("hex");
+}
+
+function matchesDeletionConfirmationToken(candidate: string, expected: string): boolean {
+  if (!/^[a-f0-9]{64}$/u.test(candidate) || candidate.length !== expected.length) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(candidate, "utf8"), Buffer.from(expected, "utf8"));
+}
+
+function getRoleNameForDeletionPreview(roleArn: string): string {
+  const roleName = roleArn.split("/").at(-1);
+  return roleName && roleName.length > 0 ? roleName : "확인 불가";
 }
 
 export async function pruneStaleAwsConnections(
@@ -492,6 +988,27 @@ export async function verifyAwsConnection(
 
   assertRecommendedAwsConnectionRoleArn(input.roleArn, awsConnection.id);
 
+  const expectedAccountId = getAwsAccountIdFromRoleArn(input.roleArn);
+  const existingVerifiedAccountConnection = await repository.findVerifiedAwsConnectionByAccountId(
+    expectedAccountId,
+    input.accessContext
+  );
+
+  if (
+    existingVerifiedAccountConnection &&
+    existingVerifiedAccountConnection.id !== awsConnection.id
+  ) {
+    if (
+      existingVerifiedAccountConnection.deletionStartedAt !== null &&
+      existingVerifiedAccountConnection.deletionErrorSummary !== null
+    ) {
+      throw new AwsConnectionConflictError(
+        "같은 AWS 계정의 이전 연결 정리가 완료되지 않았습니다. 이전 연결 정리를 재시도해 주세요."
+      );
+    }
+    throw new AwsConnectionConflictError("이미 연결된 AWS 계정입니다.");
+  }
+
   const now = options.now ?? (() => new Date());
   const markFailed = async (accountId: string | null) => {
     await repository.updateAwsConnectionVerification({
@@ -532,35 +1049,28 @@ export async function verifyAwsConnection(
     throw new AwsConnectionTestError("AWS Role connection test failed");
   }
 
-  const expectedAccountId = getAwsAccountIdFromRoleArn(input.roleArn);
-
   if (result.accountId !== expectedAccountId) {
     await markFailed(result.accountId);
     throw new AwsConnectionVerificationError("AWS Role account mismatch");
   }
 
-  const existingVerifiedAccountConnection = await repository.findVerifiedAwsConnectionByAccountId(
-    result.accountId,
-    input.accessContext
-  );
-
-  if (
-    existingVerifiedAccountConnection &&
-    existingVerifiedAccountConnection.id !== awsConnection.id
-  ) {
-    await markFailed(result.accountId);
-    throw new AwsConnectionVerificationError("AWS account is already connected");
-  }
-
   const verifiedAt = now();
-  const updatedConnection = await repository.updateAwsConnectionVerification({
-    connectionId: awsConnection.id,
-    userId: awsConnection.userId,
-    accountId: result.accountId,
-    roleArn: input.roleArn,
-    status: "verified",
-    lastVerifiedAt: verifiedAt
-  });
+  let updatedConnection: AwsConnectionRecord | undefined;
+  try {
+    updatedConnection = await repository.updateAwsConnectionVerification({
+      connectionId: awsConnection.id,
+      userId: awsConnection.userId,
+      accountId: result.accountId,
+      roleArn: input.roleArn,
+      status: "verified",
+      lastVerifiedAt: verifiedAt
+    });
+  } catch (error) {
+    if (isVerifiedAccountUniqueViolation(error)) {
+      throw new AwsConnectionConflictError("이미 연결된 AWS 계정입니다.");
+    }
+    throw error;
+  }
 
   if (!updatedConnection) {
     throw new AwsConnectionNotFoundError("AWS connection not found");
@@ -573,6 +1083,31 @@ export async function verifyAwsConnection(
     region: result.region,
     awsConnection: toAwsConnection(updatedConnection)
   };
+}
+
+function isVerifiedAccountUniqueViolation(error: unknown): boolean {
+  const visited = new Set<object>();
+  let current: unknown = error;
+
+  while (typeof current === "object" && current !== null && !visited.has(current)) {
+    visited.add(current);
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      cause?: unknown;
+    };
+
+    if (
+      candidate.code === "23505" &&
+      candidate.constraint === "aws_connections_user_verified_account_unique"
+    ) {
+      return true;
+    }
+
+    current = candidate.cause;
+  }
+
+  return false;
 }
 
 export async function verifyAwsConnectionCreatedRole(
@@ -774,8 +1309,44 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
+        Action: githubCodeConnectionActions,
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
         Action: terraformFargateIamActions,
         Resource: "*"
+      },
+      {
+        Effect: "Deny",
+        Action: ["iam:CreateRole", "iam:PutRolePermissionsBoundary"],
+        Resource: "arn:aws:iam::*:role/SketchCatchCodeBuild-*",
+        Condition: {
+          StringNotLike: {
+            "iam:PermissionsBoundary":
+              "arn:aws:iam::*:policy/SketchCatchCodeBuildBoundary*"
+          }
+        }
+      },
+      {
+        Effect: "Deny",
+        Action: "iam:CreateRole",
+        Resource: "arn:aws:iam::*:role/SketchCatchCodeBuild-*",
+        Condition: {
+          StringNotEquals: {
+            "aws:RequestTag/ManagedBy": "SketchCatch"
+          }
+        }
+      },
+      {
+        Effect: "Deny",
+        Action: "iam:PassRole",
+        Resource: "arn:aws:iam::*:role/SketchCatchCodeBuild-*",
+        Condition: {
+          StringNotEquals: {
+            "iam:PassedToService": "codebuild.amazonaws.com"
+          }
+        }
       },
       {
         Effect: "Allow",
@@ -883,6 +1454,13 @@ export function createAwsConnectionRoleName(connectionId: string): string {
   return `${recommendedAwsConnectionRoleName}-${suffix}`;
 }
 
+export function createCodeBuildPermissionsBoundaryName(connectionId: string): string {
+  const roleName = createAwsConnectionRoleName(connectionId);
+  const suffix = roleName.slice(-(awsConnectionRoleNameSuffixLength + 1));
+
+  return `${recommendedCodeBuildPermissionsBoundaryName}${suffix}`;
+}
+
 function assertRecommendedAwsConnectionRoleArn(roleArn: string, connectionId?: string): void {
   const roleName = getRoleNameFromRecommendedAwsConnectionRoleArn(roleArn);
 
@@ -928,6 +1506,10 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
   externalId: string;
 }): string {
   const roleName = yamlDoubleQuote(input.roleName);
+  const roleNameSuffix = input.roleName.slice(-(awsConnectionRoleNameSuffixLength + 1));
+  const codeBuildPermissionsBoundaryName = yamlDoubleQuote(
+    `${recommendedCodeBuildPermissionsBoundaryName}${roleNameSuffix}`
+  );
   const callerPrincipalArns = input.callerPrincipalArns.map(
     (callerPrincipalArn) => `                - ${yamlDoubleQuote(callerPrincipalArn)}`
   );
@@ -957,6 +1539,39 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '          Value: "SketchCatch"',
     "        - Key: SketchCatchConnection",
     `          Value: ${externalId}`,
+    "  SketchCatchCodeBuildBoundary:",
+    "    Type: AWS::IAM::ManagedPolicy",
+    "    Properties:",
+    `      ManagedPolicyName: ${codeBuildPermissionsBoundaryName}`,
+    "      Description: Maximum permissions for Repository-controlled CodeBuild jobs.",
+    "      PolicyDocument:",
+    '        Version: "2012-10-17"',
+    "        Statement:",
+    "          - Effect: Allow",
+    "            Action:",
+    "              - logs:CreateLogGroup",
+    "              - logs:CreateLogStream",
+    "              - logs:PutLogEvents",
+    "            Resource:",
+    '              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"',
+    '              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*:*"',
+    "          - Effect: Allow",
+    "            Action:",
+    "              - codeconnections:GetConnection",
+    "              - codeconnections:GetConnectionToken",
+    "              - codeconnections:UseConnection",
+    "              - codestar-connections:UseConnection",
+    "            Resource:",
+    '              - !Sub "arn:${AWS::Partition}:codeconnections:${AWS::Region}:${AWS::AccountId}:connection/*"',
+    '              - !Sub "arn:${AWS::Partition}:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/*"',
+    "          - Effect: Allow",
+    "            Action: ecr:GetAuthorizationToken",
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
+    ...projectBuildCacheRepositoryActions.map((action) => `              - ${action}`),
+    "            Resource:",
+    '              - !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sketchcatch-*-build-cache"',
     "  SketchCatchTerraformApplyPolicy:",
     "    Type: AWS::IAM::Policy",
     "    Properties:",
@@ -984,8 +1599,32 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '              - !Sub "arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:build/sketchcatch-*:*"',
     "          - Effect: Allow",
     "            Action:",
+    ...githubCodeConnectionActions.map((action) => `              - ${action}`),
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
     ...terraformFargateIamActions.map((action) => `              - ${action}`),
     '            Resource: "*"',
+    "          - Effect: Deny",
+    "            Action:",
+    "              - iam:CreateRole",
+    "              - iam:PutRolePermissionsBoundary",
+    '            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SketchCatchCodeBuild-*"',
+    "            Condition:",
+    "              StringNotLike:",
+    '                iam:PermissionsBoundary: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/SketchCatchCodeBuildBoundary*"',
+    "          - Effect: Deny",
+    "            Action: iam:CreateRole",
+    '            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SketchCatchCodeBuild-*"',
+    "            Condition:",
+    "              StringNotEquals:",
+    '                aws:RequestTag/ManagedBy: "SketchCatch"',
+    "          - Effect: Deny",
+    "            Action: iam:PassRole",
+    '            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SketchCatchCodeBuild-*"',
+    "            Condition:",
+    "              StringNotEquals:",
+    '                iam:PassedToService: "codebuild.amazonaws.com"',
     "          - Effect: Allow",
     "            Action: iam:PassRole",
     '            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"',
@@ -1012,6 +1651,9 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "  RoleArn:",
     "    Description: Created role ARN for SketchCatch verification.",
     "    Value: !GetAtt SketchCatchTerraformExecutionRole.Arn",
+    "  CodeBuildPermissionsBoundaryArn:",
+    "    Description: Permissions boundary required for SketchCatch CodeBuild service roles.",
+    "    Value: !Ref SketchCatchCodeBuildBoundary",
     ""
   ].join("\n");
 }

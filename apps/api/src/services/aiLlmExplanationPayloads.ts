@@ -56,10 +56,12 @@ type TerraformErrorExplanationSummaryPayload = {
 type TerraformPreviewExplanationSummaryPayload = {
   readonly target: "terraform_preview_explanation";
   readonly summary: string;
+  readonly resourceTypes: readonly string[];
   readonly findings: readonly string[];
   readonly checklist: readonly string[];
   readonly wellArchitectedGuidance: readonly string[];
   readonly consensusRecommendation: string;
+  readonly terraformEvidence: string;
 };
 
 type ArchitecturePatchPreviewSummaryPayload = {
@@ -101,7 +103,7 @@ export function createSummaryPayload(
     case "terraform_error_explanation":
       return createTerraformErrorExplanationSummaryPayload(input);
     case "terraform_preview_explanation":
-      return createTerraformPreviewExplanationSummaryPayload(input.result);
+      return createTerraformPreviewExplanationSummaryPayload(input);
     case "architecture_patch_preview":
       return createArchitecturePatchPreviewSummaryPayload(input.result);
   }
@@ -174,18 +176,48 @@ function createTerraformErrorExplanationSummaryPayload(
 }
 
 function createTerraformPreviewExplanationSummaryPayload(
-  result: AiTerraformPreviewExplanationResult
+  input: Extract<LlmExplanationInput, { readonly target: "terraform_preview_explanation" }>
 ): TerraformPreviewExplanationSummaryPayload {
+  const result = input.result;
+
   return {
     target: "terraform_preview_explanation",
     summary: result.summary,
+    resourceTypes: createTerraformResourceTypeSummary(result),
     findings: result.findings.map((finding) => `${finding.severity} ${finding.category}: ${finding.title}`),
     checklist: result.checklist.map((item) => `${item.status}: ${item.label}`),
     wellArchitectedGuidance: result.wellArchitectedGuidance.map(
       (guidance) => `${guidance.title}: ${guidance.observation} / ${guidance.recommendation}`
     ),
-    consensusRecommendation: result.consensusRecommendation
+    consensusRecommendation: result.consensusRecommendation,
+    terraformEvidence: createTerraformReviewEvidence(input.terraformCodeContext ?? "")
   };
+}
+
+function createTerraformReviewEvidence(terraformCode: string): string {
+  const highSignalPattern =
+    /^(?:assign_public_ip|desired_count|multi_az|backup_retention_period|deletion_protection|encrypted|kms_key_id|scan_on_push|image_tag_mutability|retention_in_days|block_public_acls|block_public_policy|ignore_public_acls|restrict_public_buckets|source_security_group_id|security_groups|subnets|cidr_blocks|target_type|network_mode|requires_compatibilities|cpu|memory|health_check_grace_period_seconds|viewer_protocol_policy|origin_protocol_policy)\s*=/u;
+  const structuralPattern = /^(?:resource|module|data)\s/u;
+  const lines = terraformCode
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const highSignalLines = lines.filter((line) => highSignalPattern.test(line));
+  const structuralLines = lines.filter((line) => structuralPattern.test(line));
+
+  return [...highSignalLines, ...structuralLines].slice(0, 48).join("\n");
+}
+
+function createTerraformResourceTypeSummary(
+  result: AiTerraformPreviewExplanationResult
+): string[] {
+  const counts = new Map<string, number>();
+
+  for (const resource of result.detectedResources) {
+    counts.set(resource.terraformType, (counts.get(resource.terraformType) ?? 0) + 1);
+  }
+
+  return [...counts.entries()].map(([terraformType, count]) => `${terraformType} x${count}`);
 }
 
 function createArchitecturePatchPreviewSummaryPayload(

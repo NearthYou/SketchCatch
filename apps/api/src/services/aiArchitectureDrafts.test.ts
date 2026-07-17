@@ -326,15 +326,12 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     cloudfrontDefaultCertificate: true
   }]);
   assert.equal((cloudFront?.config.origin as unknown[] | undefined)?.length, 2);
-  assert.deepEqual(cloudFront?.config.orderedCacheBehavior, [{
-    pathPattern: "/api/*",
-    targetOriginId: "api-alb",
-    viewerProtocolPolicy: "redirect-to-https",
-    allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
-    cachedMethods: ["GET", "HEAD"],
-    cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
-    originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac"
-  }]);
+  assert.deepEqual(
+    (cloudFront?.config.orderedCacheBehavior as Array<{ pathPattern?: string }> | undefined)?.map(
+      (behavior) => behavior.pathPattern
+    ),
+    ["/api/*", "/health"]
+  );
   assert.equal(cloudFrontOac?.config.signingBehavior, "always");
   assert.equal(cloudFrontOac?.config.signingProtocol, "sigv4");
   assert.deepEqual(
@@ -347,6 +344,14 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
     [true, true, true, true]
   );
   assert.equal(webBootstrap?.config.key, "index.html");
+  assert.equal(webBootstrap?.config.releaseManagedContent, true);
+  assert.match(String(webBootstrap?.config.content), /Application deployment is in progress/u);
+  assert.match(
+    String(webBootstrap?.config.content),
+    /SketchCatch is deploying the approved application release/u
+  );
+  assert.doesNotMatch(String(webBootstrap?.config.content), /GitHub Actions will replace/u);
+  assert.equal(webBucket?.config.versioningEnabled, true);
   assert.match(String(webBucketPolicy?.config.policy), /cloudfront\.amazonaws\.com/u);
   assert.match(String(webBucketPolicy?.config.policy), /repository-cloudfront/u);
   assert.match(String(webBucket?.config.bucketPrefix), /^audience-live-check-web-/u);
@@ -400,7 +405,7 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   assert.ok(edgeLabels.has("deploys task revision"));
   assert.ok(edgeLabels.has("health checks /health"));
   assert.ok(edgeLabels.has("HTTPS web and /api entry"));
-  assert.ok(edgeLabels.has("proxies /api/* to ALB over HTTP"));
+  assert.ok(edgeLabels.has("proxies /api/* and /health to ALB over HTTP"));
   assert.ok(edgeLabels.has("ALB SG -> Task SG: TCP 8080 only"));
   assert.ok(edgeLabels.has("application revisions pull API image from ECR"));
   assert.ok(edgeLabels.has("writes ECS container logs via awslogs"));

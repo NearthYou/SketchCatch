@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type {
   DiagramJson,
   TerraformSyncFileInput
@@ -46,6 +47,7 @@ import {
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
+import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
@@ -74,6 +76,7 @@ export type ProjectDraftPersistenceController = {
 export type ProjectWorkspaceDraftManagerProps = {
   cloudPlatform?: WorkspaceCloudPlatform | undefined;
   initialRightPanelView?: WorkspaceRightPanelView | undefined;
+  initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   localCacheWorkspaceId?: string | undefined;
   localSaveDebounceMs?: number | undefined;
   onDraftPersistenceReady?: ((controller: ProjectDraftPersistenceController) => void) | undefined;
@@ -90,6 +93,7 @@ export function ProjectWorkspaceDraftManager(props: ProjectWorkspaceDraftManager
 }
 
 function ProjectWorkspaceDraftManagerState({
+  initialCicdReturnCommand,
   initialRightPanelView,
   localCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
@@ -101,12 +105,14 @@ function ProjectWorkspaceDraftManagerState({
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
   workspaceId
 }: ProjectWorkspaceDraftManagerProps) {
+  const router = useRouter();
   const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [repositoryTemplateId, setRepositoryTemplateId] = useState<string | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
+  const [projectDraftRevision, setProjectDraftRevision] = useState<number | null>(null);
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [isAiChatOpen, setAiChatOpen] = useState(false);
@@ -123,6 +129,7 @@ function ProjectWorkspaceDraftManagerState({
     useState<TerraformSafeFixApplyRequest | null>(null);
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
     useState<TerraformSafeFixApplyResult | null>(null);
+  const consumedCicdReturnRef = useRef(false);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>([]);
   const [initialTerraformFiles, setInitialTerraformFiles] = useState<TerraformSyncFileInput[]>([]);
@@ -149,6 +156,20 @@ function ProjectWorkspaceDraftManagerState({
   const closeAiChat = useCallback((): void => {
     setAiChatOpen(false);
   }, []);
+
+  const acknowledgeInitialCicdReturnCommand = useCallback((cleanedHref: string) => {
+    if (
+      consumedCicdReturnRef.current ||
+      !initialCicdReturnCommand ||
+      initialCicdReturnCommand.projectId !== projectId ||
+      initialCicdReturnCommand.cleanedHref !== cleanedHref
+    ) {
+      return;
+    }
+
+    consumedCicdReturnRef.current = true;
+    router.replace(cleanedHref, { scroll: false });
+  }, [initialCicdReturnCommand, projectId, router]);
 
   useEffect(() => {
     const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
@@ -278,6 +299,7 @@ function ProjectWorkspaceDraftManagerState({
             if (result.ok) {
               if (draftChangeVersionRef.current === serverSaveVersion) {
                 setCurrentLocalDraft(result.localDraft);
+                setProjectDraftRevision(result.serverDraft.revision);
                 serverDirtyRef.current = false;
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
@@ -414,6 +436,7 @@ function ProjectWorkspaceDraftManagerState({
         setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
         setRepositoryTemplateId(verifiedRepositoryTemplateId);
         setCurrentLocalDraft(loadedDraft.localDraft);
+        setProjectDraftRevision(loadedDraft.serverDraft?.revision ?? null);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
 
@@ -653,10 +676,18 @@ function ProjectWorkspaceDraftManagerState({
             context={context}
             deploymentOpenRequestId={deploymentOpenRequestId}
             deploymentAvailability="enabled"
+            hasUnsavedProjectDraft={
+              serverSaveState === "server-dirty" ||
+              serverSaveState === "server-saving" ||
+              serverSaveState === "server-checkpoint-pending" ||
+              serverSaveState === "server-failed"
+            }
             initialView={initialRightPanelView}
+            initialCicdReturnCommand={initialCicdReturnCommand}
             initialTerraformFiles={initialTerraformFiles}
             onBlockingPanelOpenChange={setBlockingPanelOpen}
             onPanelOpenRequest={closeAiChat}
+            onInitialCicdReturnCommandReady={acknowledgeInitialCicdReturnCommand}
             onSelectTerraformIssue={setSelectedTerraformIssueKey}
             onTerraformAiContextChange={setTerraformAiContext}
             onTerraformAiInteraction={notifyTerraformAiInteraction}
@@ -664,6 +695,7 @@ function ProjectWorkspaceDraftManagerState({
             onTerraformFilesChange={handleTerraformFilesChange}
             onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
             projectId={projectId}
+            projectDraftRevision={projectDraftRevision}
             projectName={projectName}
             selectedTerraformIssueKey={selectedTerraformIssueKey}
             terraformFilesReplacement={terraformFilesReplacement}

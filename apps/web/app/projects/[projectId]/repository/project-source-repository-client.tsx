@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GitHubInstalledRepositoryCandidate, SourceRepository } from "@sketchcatch/types";
 import { useAuth } from "../../../../components/auth/auth-provider";
@@ -28,7 +29,14 @@ import styles from "./project-source-repository.module.css";
 type RequestState = "idle" | "loading" | "error";
 
 // 프로젝트의 source repository 선택과 분석만 담당하며 GitHub App 권한은 전역 설정에 맡깁니다.
-export function ProjectSourceRepositoryClient({ projectId }: { readonly projectId: string }) {
+export function ProjectSourceRepositoryClient({
+  projectId,
+  safeReturnTo = null
+}: {
+  readonly projectId: string;
+  readonly safeReturnTo?: string | null | undefined;
+}) {
+  const router = useRouter();
   const { status: authStatus } = useAuth();
   const [projectName, setProjectName] = useState("Project");
   const [sourceRepositories, setSourceRepositories] = useState<SourceRepository[]>([]);
@@ -49,6 +57,7 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
     useState<GitHubInstalledRepositoryCandidate | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [accountErrorMessage, setAccountErrorMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const repositoryChangeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dialogCancelButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -130,11 +139,15 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
     }
   }
 
-  async function connectRepository(repository: GitHubInstalledRepositoryCandidate): Promise<void> {
-    if (!installationState || repository.archived) return;
+  async function connectRepository(
+    repository: GitHubInstalledRepositoryCandidate,
+    returnAfterSuccess: boolean
+  ): Promise<boolean> {
+    if (!installationState || repository.archived) return false;
 
     setActionState("loading");
     setErrorMessage("");
+    setStatusMessage("");
 
     try {
       const connectedRepository = await connectGitHubSourceRepository({
@@ -150,26 +163,37 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
       ]);
       setShowRepositoryCandidates(false);
       setActionState("idle");
+      if (returnAfterSuccess) {
+        setPendingRepository(null);
+      }
+      setStatusMessage("GitHub repository를 프로젝트에 연결했습니다.");
+      if (returnAfterSuccess && safeReturnTo) {
+        router.replace(safeReturnTo);
+      }
+      return true;
     } catch (error) {
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "GitHub repository를 프로젝트에 연결하지 못했습니다."));
+      return false;
     }
   }
 
   function requestRepositoryConnection(repository: GitHubInstalledRepositoryCandidate): void {
+    if (loadState !== "idle") return;
+
     if (shouldConfirmRepositoryChange(activeRepository, repository)) {
       setPendingRepository(repository);
       return;
     }
 
-    void connectRepository(repository);
+    void connectRepository(repository, activeRepository === null);
   }
 
   async function confirmRepositoryChange(): Promise<void> {
     if (!pendingRepository) return;
 
-    await connectRepository(pendingRepository);
-    setPendingRepository(null);
+    const didConnect = await connectRepository(pendingRepository, true);
+    if (!didConnect) return;
     requestAnimationFrame(() => repositoryChangeTriggerRef.current?.focus());
   }
 
@@ -310,7 +334,9 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
           </div>
         ) : null}
 
-        {hasGitHubAccountConnection && (!activeRepository || showRepositoryCandidates) ? (
+        {hasGitHubAccountConnection &&
+        loadState === "idle" &&
+        (!activeRepository || showRepositoryCandidates) ? (
           <GitHubRepositoryConnectionPanel
             actionState={actionState}
             installationState={installationState}
@@ -321,6 +347,7 @@ export function ProjectSourceRepositoryClient({ projectId }: { readonly projectI
           />
         ) : null}
 
+        {statusMessage ? <p className="dashboardMessage" role="status">{statusMessage}</p> : null}
         {errorMessage ? <p className="dashboardMessage" role="alert">{errorMessage}</p> : null}
       </section>
 
