@@ -43,6 +43,10 @@ import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
 import type { LiveObservationSelection } from "./live-observation";
+import {
+  createWorkspaceOverlayNotifications,
+  type WorkspaceOverlayNotifications
+} from "./workspace-overlay-notifications";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
@@ -157,6 +161,13 @@ export function WorkspaceRightPanel({
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
+  const overlayNotificationsRef = useRef<WorkspaceOverlayNotifications | null>(null);
+  if (overlayNotificationsRef.current === null) {
+    overlayNotificationsRef.current = createWorkspaceOverlayNotifications(
+      onBlockingPanelOpenChange,
+      onDeploymentConsoleOpenChange
+    );
+  }
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(
     initialView === "deployment" ? "resource" : (initialView ?? "resource")
   );
@@ -210,19 +221,27 @@ export function WorkspaceRightPanel({
     useState<LiveObservationSelection | null>(null);
 
   useEffect(() => {
-    onBlockingPanelOpenChange(isDeploymentConsoleOpen || isLiveObservationOpen);
-  }, [isDeploymentConsoleOpen, isLiveObservationOpen, onBlockingPanelOpenChange]);
+    overlayNotificationsRef.current?.setCallbacks(
+      onBlockingPanelOpenChange,
+      onDeploymentConsoleOpenChange
+    );
+  }, [onBlockingPanelOpenChange, onDeploymentConsoleOpenChange]);
 
   useEffect(() => {
-    onDeploymentConsoleOpenChange(isDeploymentConsoleOpen);
-  }, [isDeploymentConsoleOpen, onDeploymentConsoleOpenChange]);
+    overlayNotificationsRef.current?.notifyBlockingPanel(
+      isDeploymentConsoleOpen || isLiveObservationOpen
+    );
+  }, [isDeploymentConsoleOpen, isLiveObservationOpen]);
+
+  useEffect(() => {
+    overlayNotificationsRef.current?.notifyDeploymentConsole(isDeploymentConsoleOpen);
+  }, [isDeploymentConsoleOpen]);
 
   useEffect(
     () => () => {
-      onBlockingPanelOpenChange(false);
-      onDeploymentConsoleOpenChange(false);
+      overlayNotificationsRef.current?.reset();
     },
-    [onBlockingPanelOpenChange, onDeploymentConsoleOpenChange]
+    []
   );
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { createWorkspaceOverlayNotifications } from "./workspace-overlay-notifications";
 
 const controllerSource = read("WorkspaceAiChatDock.tsx");
 const conversationSource = read("workspace-ai-chat-conversation.ts");
@@ -181,12 +182,46 @@ test("opening another workspace panel closes the controlled AI Workbench", () =>
   assert.match(controllerSource, /if \(isBlockedByWorkspaceOverlay\) \{\s*return null;\s*\}/);
   assert.match(
     rightPanelSource,
-    /onBlockingPanelOpenChange\(isDeploymentConsoleOpen \|\| isLiveObservationOpen\);/
+    /overlayNotificationsRef\.current\?\.notifyBlockingPanel\(\s*isDeploymentConsoleOpen \|\| isLiveObservationOpen\s*\);/
   );
   assert.match(rightPanelSource, /const openLiveObservation[\s\S]*?onPanelOpenRequest\(\);/);
   assert.match(
     diagramEditorSource,
     /const previewAutomaticOrganization = useCallback\(\(\) => \{\s*onWorkspacePanelOpen\?\.\(\);/
+  );
+});
+
+test("workspace overlay notifications do not reset when parent callback identities change", () => {
+  const firstBlockingCalls: boolean[] = [];
+  const firstDeploymentCalls: boolean[] = [];
+  const nextBlockingCalls: boolean[] = [];
+  const nextDeploymentCalls: boolean[] = [];
+  const notifications = createWorkspaceOverlayNotifications(
+    (isOpen) => firstBlockingCalls.push(isOpen),
+    (isOpen) => firstDeploymentCalls.push(isOpen)
+  );
+
+  notifications.notifyBlockingPanel(true);
+  notifications.notifyDeploymentConsole(true);
+  notifications.setCallbacks(
+    (isOpen) => nextBlockingCalls.push(isOpen),
+    (isOpen) => nextDeploymentCalls.push(isOpen)
+  );
+
+  assert.deepEqual(firstBlockingCalls, [true]);
+  assert.deepEqual(firstDeploymentCalls, [true]);
+  assert.deepEqual(nextBlockingCalls, []);
+  assert.deepEqual(nextDeploymentCalls, []);
+
+  notifications.notifyBlockingPanel(true);
+  notifications.notifyDeploymentConsole(true);
+  notifications.reset();
+
+  assert.deepEqual(nextBlockingCalls, [true, false]);
+  assert.deepEqual(nextDeploymentCalls, [true, false]);
+  assert.match(
+    rightPanelSource,
+    /useEffect\(\s*\(\) => \(\) => \{\s*overlayNotificationsRef\.current\?\.reset\(\);\s*\},\s*\[\]\s*\);/
   );
 });
 
