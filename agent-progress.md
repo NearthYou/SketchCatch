@@ -179,6 +179,33 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-17 - Preserve dirty local ProjectDraft recovery
 
+- Merged the controlled AI Workbench close/blocking behavior with the latest CI/CD return command and selected Live Observation target flow in `WorkspaceRightPanel`.
+- Focused workspace regressions pass 43/43. Root lint, typecheck, and build pass, and the merge contains no unresolved paths.
+- No migration was authored or modified during conflict resolution; migration files in the merge came from `dev`.
+
+### 2026-07-17 - Unify workspace observation and deployment controls
+
+- Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
+- Converted the project-bar Deployment action to the shared icon-button treatment and kept its black active state scoped only to the open Deployment console.
+- Focused workspace tests pass 17/17; Web lint and typecheck pass; root lint, typecheck, and build pass. The full test run stops on the unrelated existing `git-cicd-readiness-contract` `null !== 0` failure in `packages/types`.
+- Chrome visual automation was unavailable, so final signed-in visual confirmation remains manual. No Deployment, Terraform, AWS, or database mutation was performed.
+
+### 2026-07-17 - Stabilize workspace overlay notifications
+
+- Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
+- Added a call-recording regression for callback replacement and cleanup behavior.
+- Focused workspace tests pass 20/20; Web lint and typecheck pass.
+
+### 2026-07-17 - Guard missing template tags
+
+- Made detail-preview tag rendering tolerate templates whose runtime data omits `tags`.
+- Focused template preview tests pass 3/3; Web lint and typecheck pass.
+
+### 2026-07-17 - Refocus the repository README
+
+- Reworked the README around the problem, approval flow, and boundary between AI suggestions, deterministic validation, and user-authorized cloud mutation.
+- Kept the AWS/Terraform-first MVP and provider-neutral product direction explicit while removing repeated implementation detail.
+- Verified every relative README link and ran `pnpm harness:check` successfully. This was documentation-only, so runtime builds and product tests were not rerun.
 - Preserved dirty IndexedDB drafts during Workspace reload regardless of client/server clock skew and added an explicit choice between restoring one and replacing it with the latest server draft.
 - Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
 - Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.
