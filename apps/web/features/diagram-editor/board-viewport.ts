@@ -2,7 +2,7 @@ import type { DiagramJson } from "../../../../packages/types/src";
 
 const BOARD_MIN_ZOOM = 0.25;
 const BOARD_MAX_ZOOM = 2;
-const BOARD_LABEL_PERSISTENT_ZOOM = 0.75;
+export const BOARD_LABEL_PERSISTENT_ZOOM = 0.75;
 const SOURCE_VIEWBOX_HARD_MIN_ZOOM = 0.01;
 
 export type BoardBounds = {
@@ -100,6 +100,24 @@ export function getSourceViewBoxMinimumZoom(
       getSourceViewBoxViewport(sourceViewBox, frame).zoom
     )
   );
+}
+
+export function getFitViewMinimumZoom(
+  bounds: BoardBounds,
+  viewportSize: BoardViewportSize,
+  padding: number
+): number {
+  const viewportWidth = getPositiveFiniteDimension(viewportSize.width);
+  const viewportHeight = getPositiveFiniteDimension(viewportSize.height);
+  const boundsWidth = getPositiveFiniteDimension(bounds.width);
+  const boundsHeight = getPositiveFiniteDimension(bounds.height);
+  const paddingScale = 1 + getNonNegativeFiniteDimension(padding);
+  const fittedZoom = Math.min(
+    viewportWidth / (boundsWidth * paddingScale),
+    viewportHeight / (boundsHeight * paddingScale)
+  );
+
+  return Math.min(BOARD_MIN_ZOOM, fittedZoom);
 }
 
 export function applyInitialSourceViewBoxViewport(

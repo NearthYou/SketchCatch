@@ -114,6 +114,57 @@ test("renders S3 buckets without synthetic companion resources", () => {
   );
 });
 
+test("renders managed web bucket versioning and protects release-managed bootstrap content", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      {
+        id: "web-bucket",
+        label: "web_assets",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_bucket",
+          resourceName: "web_assets",
+          fileName: "storage"
+        },
+        config: {
+          bucketPrefix: "demo-web-",
+          versioningEnabled: true
+        }
+      },
+      {
+        id: "bootstrap-index",
+        label: "bootstrap_index",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_object",
+          resourceName: "bootstrap_index",
+          fileName: "storage"
+        },
+        config: {
+          bucket: "aws_s3_bucket.web_assets.id",
+          key: "index.html",
+          content: "bootstrap",
+          contentType: "text/html",
+          releaseManagedContent: true
+        }
+      }
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_s3_bucket_versioning" "web_assets_versioning"/);
+  assert.match(terraform, /versioning_configuration \{[\s\S]*status = "Enabled"/);
+  assert.match(
+    terraform,
+    /resource "aws_s3_object" "bootstrap_index"[\s\S]*lifecycle \{[\s\S]*ignore_changes = \[content, content_type, cache_control, etag, source\]/
+  );
+  assert.doesNotMatch(terraform, /versioning_enabled|release_managed_content/);
+});
+
 test("renders an explicit S3 public access block once", () => {
   const graph: InfrastructureGraph = {
     nodes: [
@@ -377,7 +428,13 @@ test("renders application delivery outputs for a single-task Fargate topology", 
       createLiveObservationNode("aws_lb", "demo", {}),
       createLiveObservationNode("aws_lb_target_group", "api", {}),
       createLiveObservationNode("aws_ecs_cluster", "demo", {}),
-      createLiveObservationNode("aws_ecs_service", "api", {}),
+      createLiveObservationNode("aws_ecs_service", "api", {
+        loadBalancer: {
+          targetGroupArn: "aws_lb_target_group.api.arn",
+          containerName: "api",
+          containerPort: 3000
+        }
+      }),
       createLiveObservationNode("aws_ecs_task_definition", "api", {})
     ],
     edges: []
@@ -389,10 +446,24 @@ test("renders application delivery outputs for a single-task Fargate topology", 
   assert.match(terraform, /output "api_base_url"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
   assert.match(terraform, /output "static_site_bucket_name"[\s\S]*aws_s3_bucket\.web_assets\.bucket/);
   assert.match(terraform, /output "cloudfront_distribution_id"[\s\S]*aws_cloudfront_distribution\.web\.id/);
+  assert.match(terraform, /output "cloudfront_domain_name"[\s\S]*aws_cloudfront_distribution\.web\.domain_name/);
+  assert.match(terraform, /output "cloudfront_url"[\s\S]*https:\/\//);
+  assert.match(terraform, /output "static_bucket_name"[\s\S]*aws_s3_bucket\.web_assets\.bucket/);
+  assert.match(terraform, /output "ecr_repository_name"[\s\S]*aws_ecr_repository\.api_image\.name/);
+  assert.match(terraform, /output "ecr_repository_arn"[\s\S]*aws_ecr_repository\.api_image\.arn/);
   assert.match(terraform, /output "ecr_repository_url"[\s\S]*aws_ecr_repository\.api_image\.repository_url/);
   assert.match(terraform, /output "ecs_task_family"[\s\S]*aws_ecs_task_definition\.api\.family/);
+  assert.match(terraform, /output "ecs_task_definition_arn"[\s\S]*aws_ecs_task_definition\.api\.arn/);
+  assert.match(terraform, /output "ecs_task_role_arn"[\s\S]*aws_ecs_task_definition\.api\.task_role_arn/);
+  assert.match(terraform, /output "ecs_execution_role_arn"[\s\S]*aws_ecs_task_definition\.api\.execution_role_arn/);
   assert.match(terraform, /output "ecs_cluster_name"[\s\S]*aws_ecs_cluster\.demo\.name/);
   assert.match(terraform, /output "ecs_service_name"[\s\S]*aws_ecs_service\.api\.name/);
+  assert.match(terraform, /output "ecs_container_name"[\s\S]*"api"/);
+  assert.match(terraform, /output "ecs_container_port"[\s\S]*3000/);
+  assert.match(terraform, /output "alb_arn"[\s\S]*aws_lb\.demo\.arn/);
+  assert.match(terraform, /output "alb_dns_name"[\s\S]*aws_lb\.demo\.dns_name/);
+  assert.match(terraform, /output "target_group_arn"[\s\S]*aws_lb_target_group\.api\.arn/);
+  assert.match(terraform, /output "api_origin_url"[\s\S]*aws_lb\.demo\.dns_name/);
   assert.doesNotMatch(terraform, /output "max_capacity"/);
 });
 

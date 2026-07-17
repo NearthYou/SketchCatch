@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
   getRuntimeEnv,
@@ -7,7 +7,20 @@ import {
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import { publishAwsConnectionCloudFormationTemplateToS3 } from "../aws-connections/aws-connection-template-storage.js";
 import {
+  AwsCodeConnectionError,
+  createAwsCodeConnection,
+  createAwsCodeConnectionGateway,
+  createPostgresAwsCodeConnectionRepository,
+  getAwsCodeConnection,
+  refreshAwsCodeConnection,
+  type AwsCodeConnectionGateway,
+  type AwsCodeConnectionRepository
+} from "../aws-connections/aws-codeconnection-service.js";
+import { disconnectAwsCodeConnection } from "../aws-connections/aws-codeconnection-disconnect-service.js";
+import {
+  AwsConnectionConflictError,
   AwsConnectionDeleteConflictError,
+  AwsConnectionDeletionConfirmationError,
   AwsConnectionCloudFormationTemplateError,
   AwsConnectionNotFoundError,
   AwsConnectionVerificationError,
@@ -16,6 +29,7 @@ import {
   createPostgresAwsConnectionRepository,
   deleteAwsConnection,
   getAwsConnectionCloudFormationTemplate,
+  getAwsConnectionDeletionPreview,
   isRecommendedAwsConnectionRoleArn,
   listAwsConnections,
   pruneStaleAwsConnections as defaultPruneStaleAwsConnections,
@@ -27,12 +41,15 @@ import {
   type PruneStaleAwsConnectionsResult,
   type AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
+import { createAwsConnectionManagedCleanup } from "../aws-connections/aws-connection-managed-cleanup.js";
 import {
   AwsConnectionTestError,
   createAwsConnectionTester,
   type AwsConnectionTester
 } from "../aws-connections/aws-connection-test-service.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { maskDeploymentMessage } from "../deployments/log-masking.js";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import {
   createInMemoryRateLimiter,
@@ -77,9 +94,22 @@ const verifyAwsConnectionCreatedRoleBodySchema = z.object({
   })
 });
 
+const deleteAwsConnectionBodySchema = z.object({
+  confirmedManagedCleanup: z.literal(true),
+  confirmationToken: z.string().regex(/^[a-f0-9]{64}$/u)
+});
+
+const disconnectAwsCodeConnectionBodySchema = z.object({
+  confirmedManagedCleanup: z.literal(true)
+});
+
 export type AwsConnectionRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
   createAwsConnectionRepository?: (db: DatabaseClient["db"]) => AwsConnectionRepository;
+  createAwsCodeConnectionRepository?: (
+    db: DatabaseClient["db"]
+  ) => AwsCodeConnectionRepository;
+  awsCodeConnectionGateway?: AwsCodeConnectionGateway;
   awsConnectionConfig?: {
     callerPrincipalArns: readonly string[];
   };
@@ -87,12 +117,14 @@ export type AwsConnectionRouteOptions = {
   awsConnectionTester?: AwsConnectionTester;
   awsConnectionRateLimiter?: RateLimiter;
   generateAwsConnectionId?: () => string;
+  generateAwsCodeConnectionId?: () => string;
   generateAwsExternalId?: () => string;
   pruneStaleAwsConnections?: (
     input: PruneStaleAwsConnectionsInput,
     repository: AwsConnectionRepository
   ) => Promise<PruneStaleAwsConnectionsResult>;
   now?: () => Date;
+  cleanupManagedAwsResources?: ReturnType<typeof createAwsConnectionManagedCleanup>;
 };
 
 export function parseAwsConnectionListQuery(query: unknown): { includeUnverified: boolean } {
@@ -114,6 +146,25 @@ export async function registerAwsConnectionRoutes(
 ): Promise<void> {
   const getAwsConnectionDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
 
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ZodError) {
+      return reply.status(400).send({
+        error: "bad_request",
+        message: error.message
+      });
+    }
+
+    const authenticationError = getAwsConnectionAuthenticationError(error);
+    if (authenticationError) {
+      return reply.status(authenticationError.statusCode).send({
+        error: authenticationError.errorCode,
+        message: authenticationError.message
+      });
+    }
+
+    return handleAwsConnectionError(error, reply);
+  });
+
   app.get("/aws/connections", async (request, reply) => {
     const query = parseAwsConnectionListQuery(request.query);
     const client = getAwsConnectionDatabaseClient();
@@ -123,7 +174,7 @@ export async function registerAwsConnectionRoutes(
       createPostgresAwsConnectionRepository(client.db);
 
     try {
-      const awsConnections = await listAwsConnections(
+      const awsConnectionSettings = await listAwsConnections(
         {
           accessContext: createUserProjectAccessContext(currentUserId)
         },
@@ -131,13 +182,109 @@ export async function registerAwsConnectionRoutes(
         { includeUnverified: query.includeUnverified }
       );
 
-      return reply.status(200).send({
-        awsConnections
-      });
+      return reply.status(200).send(awsConnectionSettings);
     } catch (error) {
       return handleAwsConnectionError(error, reply);
     }
   });
+
+  app.post("/aws/connections/:connectionId/codeconnection", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsCodeConnectionRepository?.(client.db) ??
+      createPostgresAwsCodeConnectionRepository(client.db);
+
+    try {
+      const result = await createAwsCodeConnection(
+        { connectionId: params.connectionId, userId: currentUserId },
+        repository,
+        options?.awsCodeConnectionGateway ?? createAwsCodeConnectionGateway(),
+        {
+          ...(options?.generateAwsCodeConnectionId
+            ? { generateId: options.generateAwsCodeConnectionId }
+            : {}),
+          ...(options?.now ? { now: options.now } : {})
+        }
+      );
+      return reply.status(201).send(result);
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
+  app.get("/aws/connections/:connectionId/codeconnection", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsCodeConnectionRepository?.(client.db) ??
+      createPostgresAwsCodeConnectionRepository(client.db);
+
+    try {
+      const result = await getAwsCodeConnection(
+        { connectionId: params.connectionId, userId: currentUserId },
+        repository
+      );
+      return reply.status(200).send(result);
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
+  app.delete("/aws/connections/:connectionId/codeconnection", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
+    const body = disconnectAwsCodeConnectionBodySchema.parse(request.body);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsCodeConnectionRepository?.(client.db) ??
+      createPostgresAwsCodeConnectionRepository(client.db);
+
+    try {
+      await disconnectAwsCodeConnection(
+        {
+          connectionId: params.connectionId,
+          userId: currentUserId,
+          confirmedManagedCleanup: body.confirmedManagedCleanup
+        },
+        repository,
+        {
+          cleanupManagedResources:
+            options?.cleanupManagedAwsResources ?? createAwsConnectionManagedCleanup(),
+          ...(options?.now ? { now: options.now } : {})
+        }
+      );
+      return reply.status(204).send();
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
+  app.post(
+    "/aws/connections/:connectionId/codeconnection/refresh",
+    async (request, reply) => {
+      const params = awsConnectionParamsSchema.parse(request.params);
+      const client = getAwsConnectionDatabaseClient();
+      const currentUserId = await requireActiveUserId(request, () => client);
+      const repository =
+        options?.createAwsCodeConnectionRepository?.(client.db) ??
+        createPostgresAwsCodeConnectionRepository(client.db);
+
+      try {
+        const result = await refreshAwsCodeConnection(
+          { connectionId: params.connectionId, userId: currentUserId },
+          repository,
+          options?.awsCodeConnectionGateway ?? createAwsCodeConnectionGateway(),
+          options?.now ? { now: options.now } : {}
+        );
+        return reply.status(200).send(result);
+      } catch (error) {
+        return handleAwsConnectionError(error, reply);
+      }
+    }
+  );
 
   app.post("/aws/connections", async (request, reply) => {
     const body = createAwsConnectionBodySchema.parse(request.body);
@@ -330,8 +477,31 @@ export async function registerAwsConnectionRoutes(
     }
   });
 
+  app.get("/aws/connections/:connectionId/deletion-preview", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsConnectionRepository?.(client.db) ??
+      createPostgresAwsConnectionRepository(client.db);
+
+    try {
+      const preview = await getAwsConnectionDeletionPreview(
+        {
+          connectionId: params.connectionId,
+          accessContext: createUserProjectAccessContext(currentUserId)
+        },
+        repository
+      );
+      return reply.status(200).send(preview);
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
   app.delete("/aws/connections/:connectionId", async (request, reply) => {
     const params = awsConnectionParamsSchema.parse(request.params);
+    const body = deleteAwsConnectionBodySchema.parse(request.body);
     const client = getAwsConnectionDatabaseClient();
     const currentUserId = await requireActiveUserId(request, () => client);
     const repository =
@@ -342,9 +512,15 @@ export async function registerAwsConnectionRoutes(
       await deleteAwsConnection(
         {
           connectionId: params.connectionId,
-          accessContext: createUserProjectAccessContext(currentUserId)
+          accessContext: createUserProjectAccessContext(currentUserId),
+          confirmedManagedCleanup: body.confirmedManagedCleanup,
+          confirmationToken: body.confirmationToken
         },
-        repository
+        repository,
+        {
+          cleanupManagedResources:
+            options?.cleanupManagedAwsResources ?? createAwsConnectionManagedCleanup()
+        }
       );
 
       return reply.status(204).send();
@@ -403,6 +579,30 @@ export async function registerAwsConnectionRoutes(
 
 }
 
+function getAwsConnectionAuthenticationError(error: unknown): {
+  statusCode: 401;
+  errorCode: "unauthorized";
+  message: string;
+} | null {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+
+  const candidate = error as {
+    statusCode?: unknown;
+    errorCode?: unknown;
+  };
+  if (candidate.statusCode !== 401 || candidate.errorCode !== "unauthorized") {
+    return null;
+  }
+
+  return {
+    statusCode: 401,
+    errorCode: "unauthorized",
+    message: "인증이 필요합니다."
+  };
+}
+
 function createS3CloudFormationTemplatePublisher(
   bucketName: string | undefined
 ): AwsConnectionCloudFormationTemplatePublisher | undefined {
@@ -420,6 +620,13 @@ function createS3CloudFormationTemplatePublisher(
 }
 
 function handleAwsConnectionError(error: unknown, reply: FastifyReply) {
+  if (error instanceof AwsCodeConnectionError) {
+    return reply.status(error.statusCode).send({
+      error: error.code,
+      message: error.message
+    });
+  }
+
   if (error instanceof AwsConnectionNotFoundError) {
     return reply.status(404).send({
       error: "not_found",
@@ -430,6 +637,20 @@ function handleAwsConnectionError(error: unknown, reply: FastifyReply) {
   if (error instanceof AwsConnectionDeleteConflictError) {
     return reply.status(409).send({
       error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof AwsConnectionConflictError) {
+    return reply.status(409).send({
+      error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof AwsConnectionDeletionConfirmationError) {
+    return reply.status(400).send({
+      error: "bad_request",
       message: error.message
     });
   }
@@ -455,7 +676,20 @@ function handleAwsConnectionError(error: unknown, reply: FastifyReply) {
     });
   }
 
-  throw error;
+  reply.request.log.error(
+    {
+      errorMessage: maskDeploymentMessage(
+        error instanceof Error ? error.message : "Unknown AWS connection error"
+      ),
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      requestId: reply.request.id
+    },
+    "AWS connection request failed"
+  );
+  return reply.status(500).send({
+    error: "internal_server_error",
+    message: getDeveloperErrorMessage(error, "AWS 연결 요청을 처리하지 못했습니다.")
+  });
 }
 
 function createUserProjectAccessContext(userId: string): ProjectAccessContext {

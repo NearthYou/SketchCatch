@@ -1611,6 +1611,81 @@ test("keeps the input diagram when an unsupported nested block is found", () => 
   assert.equal(result.diagnostics[0]?.code, "terraform.sync.nested_block");
 });
 
+test("round-trips supported lifecycle ignore_changes blocks without sync warnings", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "service-1",
+        type: "aws_ecs_service",
+        kind: "resource",
+        label: "service",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_service",
+          resourceName: "app",
+          fileName: "main",
+          values: {}
+        }
+      }),
+      makeNode({
+        id: "bootstrap-1",
+        type: "aws_s3_object",
+        kind: "resource",
+        label: "bootstrap",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_s3_object",
+          resourceName: "web_bootstrap_index",
+          fileName: "main",
+          values: {}
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_ecs_service" "app" {
+  desired_count = 1
+
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+}
+
+resource "aws_s3_object" "web_bootstrap_index" {
+  bucket  = "demo-assets"
+  key     = "index.html"
+  content = "bootstrap"
+
+  lifecycle {
+    ignore_changes = [content, content_type, cache_control, etag, source]
+  }
+}`
+  );
+
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(result.diagramJson.nodes[0]?.parameters?.values.lifecycle, {
+    ignoreChanges: ["desired_count"]
+  });
+  assert.deepEqual(result.diagramJson.nodes[1]?.parameters?.values.lifecycle, {
+    ignoreChanges: ["content", "content_type", "cache_control", "etag", "source"]
+  });
+
+  const regeneratedTerraform = generateTerraformFromDiagramJson(result.diagramJson);
+  assert.match(
+    regeneratedTerraform,
+    /resource "aws_ecs_service" "app"[\s\S]*lifecycle \{[\s\S]*ignore_changes = \[[\s\S]*desired_count,[\s\S]*\]/
+  );
+  assert.match(
+    regeneratedTerraform,
+    /resource "aws_s3_object" "web_bootstrap_index"[\s\S]*lifecycle \{[\s\S]*ignore_changes = \[[\s\S]*content,[\s\S]*content_type,[\s\S]*cache_control,[\s\S]*etag,[\s\S]*source,[\s\S]*\]/
+  );
+  assert.doesNotMatch(regeneratedTerraform, /ignore_changes = \[[\s\S]*"desired_count"/);
+});
+
 test("syncs route table association references into camelCase values", () => {
   const diagramJson: DiagramJson = {
     nodes: [

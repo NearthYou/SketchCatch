@@ -69,6 +69,7 @@ import {
   markTerraformSourceAuthoritative
 } from "../workspace/terraform-panel-utils";
 import { DEFAULT_DIAGRAM_VIEWPORT, EDGE_LABEL_MIN_ZOOM, EMPTY_DIAGRAM } from "./constants";
+import { resolveDiagramCopyShortcut } from "./diagram-keyboard-shortcuts";
 import {
   applyAreaNodeParentAssignments,
   clearDeletedAreaParentAssignments,
@@ -93,6 +94,7 @@ import {
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
 import {
   applyInitialSourceViewBoxViewport,
+  getFitViewMinimumZoom,
   getBoardZoomPresentationScale,
   getCenteredBoardViewport,
   getSourceViewBoxMinimumZoom,
@@ -145,6 +147,7 @@ import {
   normalizeSelectedNodeIds,
   stabilizeSelectedIds
 } from "./selection-utils";
+import { getDiagramEditorViewerPolicy, resolveDiagramEditorVisibleDiagram } from "./types";
 import type {
   DiagramEditorPanelContext,
   DiagramEditorProps,
@@ -179,6 +182,7 @@ const DIAGRAM_SNAP_GRID_SIZE = 12;
 const DIAGRAM_SNAP_GRID: [number, number] = [DIAGRAM_SNAP_GRID_SIZE, DIAGRAM_SNAP_GRID_SIZE];
 const BOARD_VIEWPORT_TOP_INSET = 84;
 const BOARD_VIEWPORT_BOTTOM_INSET = 72;
+const FIT_VIEW_PADDING = 0.24;
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
@@ -249,7 +253,7 @@ function DiagramEditorInner({
   allowPreviewInspection = false,
   dashboardHref = "/dashboard",
   draftStatusPanel,
-  emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요.",
+  emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요.",
   floatingPanel,
   initialBoardZoom,
   initialDiagram,
@@ -258,22 +262,30 @@ function DiagramEditorInner({
   initialReferenceDropTargetNodeId,
   initialSelectedEdgeIds,
   initialSelectedNodeIds,
+  isDeploymentConsoleOpen = false,
   leftPanel,
+  mode = "editor",
   onBoardReady,
   onDiagramChange,
   onDiagramSaveRequest,
+  onWorkspacePanelOpen,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
-  projectName = "Project workspace",
+  projectName = "프로젝트 보드",
   rightPanel,
   saveStatus = "편집 중",
   showSaveAction = true,
   workspaceUserName = "Personal workspace"
 }: DiagramEditorProps) {
+  const viewerPolicy = getDiagramEditorViewerPolicy(mode);
+  if (viewerPolicy.isViewer) {
+    allowPreviewInspection = false;
+  }
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
   const fallbackFlowInstanceRef = useRef(reactFlow);
   fallbackFlowInstanceRef.current = reactFlow;
   const boardZoom = useStore((state) => state.transform[2]);
+  const setFlowMinimumZoom = useStore((state) => state.setMinZoom);
   const showAllEdgeLabels = boardZoom >= EDGE_LABEL_MIN_ZOOM;
   const boardZoomPresentationScale = getBoardZoomPresentationScale(boardZoom);
   const normalizedInitialBoardZoom = parseBoardZoom(initialBoardZoom);
@@ -377,13 +389,36 @@ function DiagramEditorInner({
 
   /** 오른쪽 Inspector를 열거나 닫습니다. */
   const toggleRightPanel = useCallback(() => {
-    setRightPanelOpen((isOpen) => !isOpen);
-  }, []);
+    const nextOpen = !isRightPanelOpen;
+
+    if (nextOpen) {
+      onWorkspacePanelOpen?.();
+    }
+
+    setRightPanelOpen(nextOpen);
+  }, [isRightPanelOpen, onWorkspacePanelOpen]);
+
+  const updateRightPanelOpen = useCallback(
+    (nextOpen: boolean): void => {
+      if (nextOpen) {
+        onWorkspacePanelOpen?.();
+      }
+
+      setRightPanelOpen(nextOpen);
+    },
+    [onWorkspacePanelOpen]
+  );
 
   const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
-  const hasRightRail = rightPanel !== null;
-  const isPreviewActive = previewDiagram !== null;
-  const visibleDiagram = previewDiagram ?? diagram;
+  const hasRightRail = viewerPolicy.showPanels && rightPanel !== null;
+  const isPreviewActive = previewDiagram !== null || viewerPolicy.isPreview;
+  const visibleDiagram = resolveDiagramEditorVisibleDiagram({
+    currentDiagram: diagram,
+    initialDiagram,
+    initialPreviewDiagram,
+    mode,
+    previewDiagram
+  });
   const hasSourceViewBoxViewport =
     visibleDiagram.presentation?.geometryPolicy === "source-exact" &&
     visibleDiagram.presentation.sourceViewBox !== undefined;
@@ -945,12 +980,13 @@ function DiagramEditorInner({
   );
 
   const previewAutomaticOrganization = useCallback(() => {
+    onWorkspacePanelOpen?.();
     const currentDiagram = diagramRef.current;
     const proposal = createBoardAutoOrganizeProposal(currentDiagram);
 
     setPreviewDiagram(proposal.diagram);
     setCompilerPreview(proposal);
-  }, [setPreviewDiagram]);
+  }, [onWorkspacePanelOpen, setPreviewDiagram]);
 
   const applyAutomaticOrganization = useCallback(() => {
     if (compilerPreview === null) return;
@@ -1021,7 +1057,7 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
 
       window.requestAnimationFrame(() => {
         const flowInstance = getFlowInstance();
@@ -1055,7 +1091,13 @@ function DiagramEditorInner({
         focusEditorShell();
       });
     },
-    [applyLiveDiagramUpdate, focusEditorShell, getCurrentBoardViewportFrame, getFlowInstance]
+    [
+      applyLiveDiagramUpdate,
+      focusEditorShell,
+      getCurrentBoardViewportFrame,
+      getFlowInstance,
+      updateRightPanelOpen
+    ]
   );
 
   const selectResourceNode = useCallback<DiagramEditorPanelContext["selectResourceNode"]>(
@@ -1069,9 +1111,9 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
     },
-    []
+    [updateRightPanelOpen]
   );
 
   const panelContext = useMemo<DiagramEditorPanelContext>(
@@ -1095,7 +1137,7 @@ function DiagramEditorInner({
       selectResourceNode,
       saveDiagramNow: onDiagramSaveRequest,
       setPreviewDiagram,
-      setRightPanelOpen,
+      setRightPanelOpen: updateRightPanelOpen,
       updateNodeParameters,
       updateNodeMetadata
     }),
@@ -1117,6 +1159,7 @@ function DiagramEditorInner({
       selectResourceNode,
       selectedNodeId,
       terraformRefreshRequestId,
+      updateRightPanelOpen,
       updateNodeMetadata,
       updateNodeParameters
     ]
@@ -1474,10 +1517,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   const getAreaNodeFromPointerEvent = useCallback(
@@ -2169,10 +2212,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(node.id);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   const handleFlowNodeDoubleClick = useCallback(
@@ -2180,10 +2223,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(node.id);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   /** target 삭제 뒤 남은 attachment 기준으로 SG visual scope를 축소하거나 다시 맞춥니다. */
@@ -2367,6 +2410,7 @@ function DiagramEditorInner({
     ) {
       const shouldRestoreLegacyViewport = wasSourceViewBoxViewportRef.current;
       wasSourceViewBoxViewportRef.current = false;
+      setFlowMinimumZoom(0.25);
       setBoardMinimumZoom(0.25);
 
       if (shouldRestoreLegacyViewport) {
@@ -2383,7 +2427,9 @@ function DiagramEditorInner({
     const nextDiagram = applyInitialSourceViewBoxViewport(visibleDiagram, frame);
     const viewport = nextDiagram.viewport;
 
-    setBoardMinimumZoom(getSourceViewBoxMinimumZoom(presentation.sourceViewBox, frame));
+    const sourceMinimumZoom = getSourceViewBoxMinimumZoom(presentation.sourceViewBox, frame);
+    setFlowMinimumZoom(sourceMinimumZoom);
+    setBoardMinimumZoom(sourceMinimumZoom);
 
     if (nextDiagram !== visibleDiagram) {
       if (previewDiagram !== null) {
@@ -2403,6 +2449,7 @@ function DiagramEditorInner({
     previewDiagram,
     replaceDiagram,
     runViewportMoveWithoutPersistence,
+    setFlowMinimumZoom,
     visibleDiagram
   ]);
 
@@ -2458,6 +2505,8 @@ function DiagramEditorInner({
       const currentNodes = previewDiagram?.nodes ?? diagramRef.current.nodes;
 
       if (currentNodes.length === 0) {
+        setFlowMinimumZoom(0.25);
+        setBoardMinimumZoom(0.25);
         const moveToDefaultViewport = () =>
           flowInstance.setViewport(DEFAULT_DIAGRAM_VIEWPORT, {
             duration: getBoardMotionDuration(180)
@@ -2479,33 +2528,25 @@ function DiagramEditorInner({
       const frame = getCurrentBoardViewportFrame();
 
       if (!frame) {
-        const fitOptions = {
-          duration: getBoardMotionDuration(180),
-          maxZoom: 1.35,
-          minZoom: 0.25,
-          nodes: currentNodes.map((node) => ({ id: node.id })),
-          padding: 0.24
-        };
-
-        if (shouldPersistViewport) {
-          void flowInstance.fitView(fitOptions);
-        } else {
-          runViewportMoveWithoutPersistence(() => flowInstance.fitView(fitOptions));
-        }
         return;
       }
 
+      const visualBounds = getDiagramVisualBounds(currentNodes, flowEdges);
+      const fitMinimumZoom = getFitViewMinimumZoom(visualBounds, frame, FIT_VIEW_PADDING);
       const viewport = offsetBoardViewportToFrame(
         getViewportForBounds(
-          getDiagramVisualBounds(currentNodes),
+          visualBounds,
           frame.width,
           frame.height,
-          0.25,
+          fitMinimumZoom,
           1.35,
-          0.24
+          FIT_VIEW_PADDING
         ),
         frame
       );
+
+      setFlowMinimumZoom(fitMinimumZoom);
+      setBoardMinimumZoom(fitMinimumZoom);
 
       const moveToViewport = () =>
         flowInstance.setViewport(viewport, { duration: getBoardMotionDuration(180) });
@@ -2521,16 +2562,18 @@ function DiagramEditorInner({
     },
     [
       applyLiveDiagramUpdate,
+      flowEdges,
       getCurrentBoardViewportFrame,
       getFlowInstance,
       previewDiagram,
-      runViewportMoveWithoutPersistence
+      runViewportMoveWithoutPersistence,
+      setFlowMinimumZoom
     ]
   );
 
   const handleFitView = useCallback(() => {
-    fitVisibleDiagram(previewDiagram === null);
-  }, [fitVisibleDiagram, previewDiagram]);
+    fitVisibleDiagram(!isPreviewActive);
+  }, [fitVisibleDiagram, isPreviewActive]);
 
   useEffect(() => {
     if (
@@ -2707,7 +2750,15 @@ function DiagramEditorInner({
         return;
       }
 
-      if (isModifierPressed && key === "c") {
+      const copyShortcutResolution = resolveDiagramCopyShortcut({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        selectedNodeCount: selectedNodeIds.length,
+        selectedText: window.getSelection()?.toString() ?? ""
+      });
+
+      if (copyShortcutResolution === "copy_nodes") {
         event.preventDefault();
         copySelectedNodes();
         return;
@@ -2730,7 +2781,16 @@ function DiagramEditorInner({
         undo();
       }
     },
-    [copySelectedNodes, deleteSelection, isPreviewActive, onDiagramSaveRequest, pasteNodes, redo, undo]
+    [
+      copySelectedNodes,
+      deleteSelection,
+      isPreviewActive,
+      onDiagramSaveRequest,
+      pasteNodes,
+      redo,
+      selectedNodeIds,
+      undo
+    ]
   );
 
   useEffect(() => {
@@ -2884,9 +2944,12 @@ function DiagramEditorInner({
   } as CSSProperties;
   const editorShellClassName = [
     styles.editorShell,
-    !isLeftPanelOpen ? styles.editorShellLeftCollapsed : undefined,
-    !hasRightRail ? styles.editorShellRightHidden : undefined,
-    hasRightRail && !isRightPanelOpen ? styles.editorShellRightCollapsed : undefined
+    viewerPolicy.usesContainerHeight ? styles.editorShellViewer : undefined,
+    !viewerPolicy.isViewer && !isLeftPanelOpen ? styles.editorShellLeftCollapsed : undefined,
+    !viewerPolicy.isViewer && !hasRightRail ? styles.editorShellRightHidden : undefined,
+    !viewerPolicy.isViewer && hasRightRail && !isRightPanelOpen
+      ? styles.editorShellRightCollapsed
+      : undefined
   ]
     .filter(Boolean)
     .join(" ");
@@ -2909,33 +2972,36 @@ function DiagramEditorInner({
   return (
     <section
       className={editorShellClassName}
-      onKeyDown={handleShellKeyDown}
+      onKeyDown={viewerPolicy.canSelectNodes ? handleShellKeyDown : undefined}
       ref={editorShellRef}
       style={editorShellStyle}
       tabIndex={0}
     >
-      <WorkspaceProjectBar
-        actions={{
-          onSave: onDiagramSaveRequest,
-          onSaveAndDeploy: onSaveAndDeployRequest,
-          onToggleLeftPanel: toggleLeftPanel,
-          onToggleRightPanel: toggleRightPanel
-        }}
-        panels={{
-          hasRightPanel: hasRightRail,
-          isLeftPanelOpen,
-          isRightPanelOpen: hasRightRail && isRightPanelOpen
-        }}
-        workspace={{
-          dashboardHref,
-          projectName,
-          saveStatus,
-          showSaveAction,
-          userName: workspaceUserName
-        }}
-      />
+      {viewerPolicy.showWorkspaceChrome ? (
+        <WorkspaceProjectBar
+          actions={{
+            onSave: onDiagramSaveRequest,
+            onSaveAndDeploy: onSaveAndDeployRequest,
+            onToggleLeftPanel: toggleLeftPanel,
+            onToggleRightPanel: toggleRightPanel
+          }}
+          panels={{
+            hasRightPanel: hasRightRail,
+            isLeftPanelOpen,
+            isRightPanelOpen: hasRightRail && isRightPanelOpen
+          }}
+          workspace={{
+            dashboardHref,
+            isDeploymentConsoleOpen,
+            projectName,
+            saveStatus,
+            showSaveAction,
+            userName: workspaceUserName
+          }}
+        />
+      ) : null}
 
-      {isLeftPanelOpen ? (
+      {viewerPolicy.showPanels && isLeftPanelOpen ? (
         <div className={styles.leftRail} ref={leftRailRef}>
           {leftPanel === undefined ? (
             <ResourceSettingsPanel
@@ -2967,73 +3033,77 @@ function DiagramEditorInner({
 
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>
-          <div className={styles.toolbarGroup} aria-label="편집 도구">
-            <button
-              aria-label="선택 모드"
-              aria-pressed={interactionMode === "select"}
-              className={
-                interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton
-              }
-              onClick={() => setInteractionMode("select")}
-              title="선택 모드"
-              type="button"
-            >
-              <MousePointer2 aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="캔버스 이동"
-              aria-pressed={interactionMode === "pan"}
-              className={interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton}
-              onClick={() => setInteractionMode("pan")}
-              title="캔버스 이동"
-              type="button"
-            >
-              <Move aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="영역 자동 확장"
-              aria-pressed={autoExpandAreasEnabled}
-              className={autoExpandAreasEnabled ? styles.iconButtonSelected : styles.iconButton}
-              onClick={toggleAutoExpandAreas}
-              title={autoExpandAreasEnabled ? "영역 자동 확장 켜짐" : "영역 자동 확장 꺼짐"}
-              type="button"
-            >
-              <Expand aria-hidden="true" size={16} />
-            </button>
-          </div>
+          {viewerPolicy.showEditingControls ? (
+            <>
+              <div className={styles.toolbarGroup} aria-label="편집 도구">
+                <button
+                  aria-label="선택 모드"
+                  aria-pressed={interactionMode === "select"}
+                  className={
+                    interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton
+                  }
+                  onClick={() => setInteractionMode("select")}
+                  title="선택 모드"
+                  type="button"
+                >
+                  <MousePointer2 aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="캔버스 이동"
+                  aria-pressed={interactionMode === "pan"}
+                  className={interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton}
+                  onClick={() => setInteractionMode("pan")}
+                  title="캔버스 이동"
+                  type="button"
+                >
+                  <Move aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="영역 자동 확장"
+                  aria-pressed={autoExpandAreasEnabled}
+                  className={autoExpandAreasEnabled ? styles.iconButtonSelected : styles.iconButton}
+                  onClick={toggleAutoExpandAreas}
+                  title={autoExpandAreasEnabled ? "영역 자동 확장 켜짐" : "영역 자동 확장 꺼짐"}
+                  type="button"
+                >
+                  <Expand aria-hidden="true" size={16} />
+                </button>
+              </div>
 
-          <div className={styles.toolbarGroup} aria-label="History">
-            <button
-              aria-label="Architecture Board 자동 정리 미리보기"
-              className={styles.iconButton}
-              disabled={isPreviewActive || diagram.nodes.length === 0}
-              onClick={previewAutomaticOrganization}
-              title="자동 정리"
-              type="button"
-            >
-              <Sparkles aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="Undo"
-              className={styles.iconButton}
-              disabled={isPreviewActive || history.past.length === 0}
-              onClick={undo}
-              title="Undo"
-              type="button"
-            >
-              <Undo2 aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="Redo"
-              className={styles.iconButton}
-              disabled={isPreviewActive || history.future.length === 0}
-              onClick={redo}
-              title="Redo"
-              type="button"
-            >
-              <Redo2 aria-hidden="true" size={16} />
-            </button>
-          </div>
+              <div className={styles.toolbarGroup} aria-label="History">
+                <button
+                  aria-label="Architecture Board 자동 정리 미리보기"
+                  className={styles.iconButton}
+                  disabled={isPreviewActive || diagram.nodes.length === 0}
+                  onClick={previewAutomaticOrganization}
+                  title="자동 정리"
+                  type="button"
+                >
+                  <Sparkles aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="Undo"
+                  className={styles.iconButton}
+                  disabled={isPreviewActive || history.past.length === 0}
+                  onClick={undo}
+                  title="Undo"
+                  type="button"
+                >
+                  <Undo2 aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="Redo"
+                  className={styles.iconButton}
+                  disabled={isPreviewActive || history.future.length === 0}
+                  onClick={redo}
+                  title="Redo"
+                  type="button"
+                >
+                  <Redo2 aria-hidden="true" size={16} />
+                </button>
+              </div>
+            </>
+          ) : null}
 
           <div className={styles.toolbarGroup} aria-label="Viewport">
             <button
@@ -3066,106 +3136,110 @@ function DiagramEditorInner({
           </div>
         </header>
 
-        {draftStatusPanel ? (
+        {!viewerPolicy.isViewer && draftStatusPanel ? (
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        {compilerPreviewSummary ? (
-          <section
-            aria-label="자동 정리 미리보기"
-            className={`${styles.previewNotice} ${styles.compilerPreviewNotice}`}
-          >
-            <div className={styles.compilerPreviewHeader}>
-              <div>
-                <span>자동 정리 결과</span>
-                <strong>{compilerPreviewSummary.outcome.headline}</strong>
-                <p>{compilerPreviewSummary.outcome.reviewSummary}</p>
-              </div>
-              <div className={styles.compilerPreviewActions}>
-                <button onClick={cancelAutomaticOrganization} type="button">
-                  원래대로
-                </button>
-                <button onClick={applyAutomaticOrganization} type="button">
-                  이 배치 적용
-                </button>
-              </div>
-            </div>
+        {!viewerPolicy.isViewer ? (
+          <>
+            {compilerPreviewSummary ? (
+              <section
+                aria-label="자동 정리 미리보기"
+                className={`${styles.previewNotice} ${styles.compilerPreviewNotice}`}
+              >
+                <div className={styles.compilerPreviewHeader}>
+                  <div>
+                    <span>자동 정리 결과</span>
+                    <strong>{compilerPreviewSummary.outcome.headline}</strong>
+                    <p>{compilerPreviewSummary.outcome.reviewSummary}</p>
+                  </div>
+                  <div className={styles.compilerPreviewActions}>
+                    <button onClick={cancelAutomaticOrganization} type="button">
+                      원래대로
+                    </button>
+                    <button onClick={applyAutomaticOrganization} type="button">
+                      이 배치 적용
+                    </button>
+                  </div>
+                </div>
 
-            {compilerPreviewSummary.outcome.items.length > 0 ? (
-              <ul className={styles.compilerPreviewOutcomes}>
-                {compilerPreviewSummary.outcome.items.map((item) => (
-                  <li data-tone={item.tone} key={item.key}>
-                    <span>{item.label}</span>
-                    <strong>{item.summary}</strong>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.compilerPreviewEmptyOutcome}>
-                추적 지표에서 표시할 배치 문제가 없습니다.
-              </p>
-            )}
-
-            <div className={styles.compilerPreviewDetails}>
-              <CompilerPreviewDetail
-                emptyLabel="변경 없음"
-                items={compilerPreviewSummary.changeGroups.map(
-                  ({ count, label }) => `${label} ${count}`
-                )}
-                label="변경"
-              />
-              <CompilerPreviewDetail
-                emptyLabel="확인 없음"
-                items={compilerPreviewSummary.diagnosticGroups.map(
-                  ({ count, label }) => `${label} ${count}`
-                )}
-                label="확인"
-              />
-            </div>
-
-            <details className={styles.compilerPreviewTechnical}>
-              <summary>기술 세부 정보</summary>
-              <div className={styles.compilerPreviewTechnicalBody}>
-                <CompilerPreviewDetail
-                  emptyLabel="계산 없음"
-                  items={[
-                    `내부 cost ${formatCompilerScore(compilerPreviewSummary.quality.beforeScore)} → ${formatCompilerScore(compilerPreviewSummary.quality.afterScore)}`,
-                    `변경 cost ${formatCompilerScore(compilerPreviewSummary.quality.compilationDistance)}`
-                  ]}
-                  label="cost"
-                />
-                <CompilerPreviewDetail
-                  emptyLabel="일반 규칙"
-                  items={compilerPreviewSummary.referenceTemplateIds}
-                  label="참고"
-                />
-                <p>
-                  후보 {compilerPreviewSummary.candidateId} · Compiler{" "}
-                  {compilerPreviewSummary.compilerVersion}
-                </p>
-                {compilerPreviewSummary.diagnosticSummaries.length > 0 ? (
-                  <p className={styles.compilerPreviewDiagnostic}>
-                    {compilerPreviewSummary.diagnosticSummaries.slice(0, 2).join(" · ")}
-                    {compilerPreviewSummary.diagnosticSummaries.length > 2
-                      ? ` 외 ${compilerPreviewSummary.diagnosticSummaries.length - 2}`
-                      : ""}
+                {compilerPreviewSummary.outcome.items.length > 0 ? (
+                  <ul className={styles.compilerPreviewOutcomes}>
+                    {compilerPreviewSummary.outcome.items.map((item) => (
+                      <li data-tone={item.tone} key={item.key}>
+                        <span>{item.label}</span>
+                        <strong>{item.summary}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={styles.compilerPreviewEmptyOutcome}>
+                    추적 지표에서 표시할 배치 문제가 없습니다.
                   </p>
-                ) : null}
+                )}
+
+                <div className={styles.compilerPreviewDetails}>
+                  <CompilerPreviewDetail
+                    emptyLabel="변경 없음"
+                    items={compilerPreviewSummary.changeGroups.map(
+                      ({ count, label }) => `${label} ${count}`
+                    )}
+                    label="변경"
+                  />
+                  <CompilerPreviewDetail
+                    emptyLabel="확인 없음"
+                    items={compilerPreviewSummary.diagnosticGroups.map(
+                      ({ count, label }) => `${label} ${count}`
+                    )}
+                    label="확인"
+                  />
+                </div>
+
+                <details className={styles.compilerPreviewTechnical}>
+                  <summary>기술 세부 정보</summary>
+                  <div className={styles.compilerPreviewTechnicalBody}>
+                    <CompilerPreviewDetail
+                      emptyLabel="계산 없음"
+                      items={[
+                        `내부 cost ${formatCompilerScore(compilerPreviewSummary.quality.beforeScore)} → ${formatCompilerScore(compilerPreviewSummary.quality.afterScore)}`,
+                        `변경 cost ${formatCompilerScore(compilerPreviewSummary.quality.compilationDistance)}`
+                      ]}
+                      label="cost"
+                    />
+                    <CompilerPreviewDetail
+                      emptyLabel="일반 규칙"
+                      items={compilerPreviewSummary.referenceTemplateIds}
+                      label="참고"
+                    />
+                    <p>
+                      후보 {compilerPreviewSummary.candidateId} · Compiler{" "}
+                      {compilerPreviewSummary.compilerVersion}
+                    </p>
+                    {compilerPreviewSummary.diagnosticSummaries.length > 0 ? (
+                      <p className={styles.compilerPreviewDiagnostic}>
+                        {compilerPreviewSummary.diagnosticSummaries.slice(0, 2).join(" · ")}
+                        {compilerPreviewSummary.diagnosticSummaries.length > 2
+                          ? ` 외 ${compilerPreviewSummary.diagnosticSummaries.length - 2}`
+                          : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                </details>
+              </section>
+            ) : isPreviewActive ? (
+              <div className={styles.previewNotice} role="status">
+                미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
               </div>
-            </details>
-          </section>
-        ) : isPreviewActive ? (
-          <div className={styles.previewNotice} role="status">
-            미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
-          </div>
+            ) : null}
+          </>
         ) : null}
 
         <div
           className={canvasPanelClassName}
-          onAuxClickCapture={handleCanvasAuxClick}
+          onAuxClickCapture={viewerPolicy.showEditingControls ? handleCanvasAuxClick : undefined}
           onDoubleClickCapture={isPreviewActive ? undefined : handleCanvasDoubleClick}
-          onMouseDownCapture={handleCanvasMouseDown}
-          onMouseLeave={handleCanvasMouseLeave}
+          onMouseDownCapture={viewerPolicy.showEditingControls ? handleCanvasMouseDown : undefined}
+          onMouseLeave={viewerPolicy.showEditingControls ? handleCanvasMouseLeave : undefined}
           onPointerCancelCapture={isPreviewActive ? undefined : handleCanvasPointerCancel}
           onPointerDownCapture={isPreviewActive ? undefined : handleCanvasPointerDown}
           onPointerMoveCapture={isPreviewActive ? undefined : handleCanvasPointerMove}
@@ -3173,7 +3247,7 @@ function DiagramEditorInner({
           ref={canvasPanelRef}
           style={canvasPanelStyle}
         >
-          {selectedEdge ? (
+          {viewerPolicy.showEditingControls && selectedEdge ? (
             <DiagramEdgeToolbar
               edge={selectedEdge}
               key={selectedEdge.id}
@@ -3209,7 +3283,7 @@ function DiagramEditorInner({
             nodesConnectable={interactionMode === "select" && !isPreviewActive}
             nodesDraggable={interactionMode === "select" && !isPreviewActive}
             onInit={handleInit}
-            panOnDrag={isPreviewActive || interactionMode === "pan"}
+            panOnDrag={viewerPolicy.canPanAndZoom && (isPreviewActive || interactionMode === "pan")}
             panOnScroll
             panOnScrollMode={PanOnScrollMode.Free}
             proOptions={{ hideAttribution: true }}
@@ -3245,25 +3319,29 @@ function DiagramEditorInner({
                 }
               : {})}
           >
-            <Background
-              id="board-grid-major"
-              color="rgba(101, 116, 139, 0.18)"
-              gap={80}
-              size={1.15}
-              variant={BackgroundVariant.Dots}
-            />
-            <Background
-              id="board-grid-minor"
-              color="rgba(101, 116, 139, 0.1)"
-              gap={16}
-              size={0.8}
-              variant={BackgroundVariant.Dots}
-            />
+            {viewerPolicy.showBoardGrid ? (
+              <>
+                <Background
+                  id="board-grid-major"
+                  color="rgba(101, 116, 139, 0.18)"
+                  gap={80}
+                  size={1.15}
+                  variant={BackgroundVariant.Dots}
+                />
+                <Background
+                  id="board-grid-minor"
+                  color="rgba(101, 116, 139, 0.1)"
+                  gap={16}
+                  size={0.8}
+                  variant={BackgroundVariant.Dots}
+                />
+              </>
+            ) : null}
           </ReactFlow>
         </div>
       </div>
 
-      {hasRightRail ? (
+      {viewerPolicy.showPanels && hasRightRail ? (
         <div className={styles.rightRail}>
           <button
             aria-label="Resize right panel"
@@ -3292,7 +3370,7 @@ function DiagramEditorInner({
         </div>
       ) : null}
 
-      {floatingPanel ? (
+      {viewerPolicy.showPanels && floatingPanel ? (
         <div className={styles.floatingPanelSlot}>{floatingPanel?.(panelContext)}</div>
       ) : null}
     </section>

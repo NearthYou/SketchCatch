@@ -134,3 +134,51 @@ test("public AI requests use the same visible request diagnostics", async (conte
     }
   );
 });
+
+test("development errors include the failed demo stage, safe server cause, and concrete checks", () => {
+  const error = new ApiClientError(
+    502,
+    {
+      error: "internal_server_error",
+      message: "The role with name SketchCatchCodeBuild-demo cannot be found"
+    },
+    {
+      method: "POST",
+      path: "/api/projects/project-id/build-environment/prepare",
+      requestId: "req-build-env"
+    }
+  );
+
+  const message = getApiErrorMessage(error, "빌드 환경을 준비하지 못했습니다.", {
+    developerMode: true
+  });
+
+  assert.match(message, /개발자 진단/u);
+  assert.match(message, /실패 단계: AWS 빌드 환경 준비/u);
+  assert.match(message, /SketchCatchCodeBuild-demo cannot be found/u);
+  assert.match(message, /CodeBuild project와 service role/u);
+  assert.match(message, /요청 ID req-build-env/u);
+});
+
+test("development AWS connection errors point developers to CloudFormation and IAM evidence", () => {
+  const error = new ApiClientError(
+    500,
+    {
+      error: "internal_server_error",
+      message: "AssumeRole returned AccessDenied"
+    },
+    {
+      method: "POST",
+      path: "/api/aws/connections/connection-id/verify-created-role",
+      requestId: "req-aws-role"
+    }
+  );
+
+  const message = getApiErrorMessage(error, "AWS Role 검증에 실패했습니다.", {
+    developerMode: true
+  });
+
+  assert.match(message, /실패 단계: AWS 계정 연결/u);
+  assert.match(message, /AssumeRole returned AccessDenied/u);
+  assert.match(message, /CloudFormation Stack 상태.*Trust Policy/u);
+});

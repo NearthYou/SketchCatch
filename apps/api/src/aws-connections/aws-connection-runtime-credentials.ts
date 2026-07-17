@@ -4,6 +4,7 @@ import {
   assertAwsRoleRequiresExternalId,
   getAwsAccountIdFromRoleArn,
   supportedAwsConnectionRegion,
+  toAwsConnectionTestError,
   type AwsCallerIdentity,
   type AwsConnectionStsGateway,
   type AwsTemporaryCredentials
@@ -134,7 +135,7 @@ async function assumeRoleForTerraform(
       throw error;
     }
 
-    throw new AwsConnectionRuntimeCredentialsError("AWS Role connection test failed");
+    throw new AwsConnectionRuntimeCredentialsError(toAwsConnectionTestError(error).message);
   }
 }
 
@@ -156,7 +157,7 @@ async function getCallerIdentityForTerraform(
       throw error;
     }
 
-    throw new AwsConnectionRuntimeCredentialsError("AWS Role connection test failed");
+    throw new AwsConnectionRuntimeCredentialsError(toAwsConnectionTestError(error).message);
   }
 }
 

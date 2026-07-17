@@ -6,6 +6,7 @@ import type {
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
   isGenericTerraformNestedBlock,
+  isTerraformLifecycleIgnoreChangesAttribute,
   isTerraformNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
 
@@ -53,17 +54,16 @@ export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGrap
 function renderTerraformOutputs(graph: InfrastructureGraph): string[] {
   const liveObservationOutputs = renderLiveObservationOutputs(graph);
   const listeners = resourceNodes(graph, "aws_lb_listener");
+  const hasApplicationDeliveryEdge =
+    resourceNodes(graph, "aws_cloudfront_distribution").length > 0 ||
+    resourceNodes(graph, "aws_s3_bucket_website_configuration").length > 0;
   const hasHttpsListener = listeners.some(
     (listener) => listener.config["protocol"] === "HTTPS" && listener.config["port"] === 443
   );
 
-  if (hasHttpsListener) {
+  if (hasHttpsListener && !hasApplicationDeliveryEdge) {
     return liveObservationOutputs;
   }
-
-  const hasApplicationDeliveryEdge =
-    resourceNodes(graph, "aws_cloudfront_distribution").length > 0 ||
-    resourceNodes(graph, "aws_s3_bucket_website_configuration").length > 0;
 
   return listeners.length === 0 || hasApplicationDeliveryEdge
     ? renderDeploymentOutputs(graph)
@@ -87,6 +87,7 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
       node.config["metricName"] === "RequestCountPerTarget" &&
       typeof node.config["threshold"] === "number"
   );
+  const logGroups = resourceNodes(graph, "aws_cloudwatch_log_group");
 
   const outputs = website
     ? [
@@ -109,12 +110,21 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
       renderOutput(
         "cloudfront_distribution_id",
         `aws_cloudfront_distribution.${cloudFront.iac.resourceName}.id`
+      ),
+      renderOutput(
+        "cloudfront_domain_name",
+        `aws_cloudfront_distribution.${cloudFront.iac.resourceName}.domain_name`
+      ),
+      renderOutput(
+        "cloudfront_url",
+        `"https://\${aws_cloudfront_distribution.${cloudFront.iac.resourceName}.domain_name}"`
       )
     );
   }
   if (webBucket && (website || cloudFront)) {
     outputs.push(
-      renderOutput("static_site_bucket_name", `aws_s3_bucket.${webBucket.iac.resourceName}.bucket`)
+      renderOutput("static_site_bucket_name", `aws_s3_bucket.${webBucket.iac.resourceName}.bucket`),
+      renderOutput("static_bucket_name", `aws_s3_bucket.${webBucket.iac.resourceName}.bucket`)
     );
   }
   if (ecrRepository) {
@@ -122,7 +132,12 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
       renderOutput(
         "ecr_repository_url",
         `aws_ecr_repository.${ecrRepository.iac.resourceName}.repository_url`
-      )
+      ),
+      renderOutput(
+        "ecr_repository_name",
+        `aws_ecr_repository.${ecrRepository.iac.resourceName}.name`
+      ),
+      renderOutput("ecr_repository_arn", `aws_ecr_repository.${ecrRepository.iac.resourceName}.arn`)
     );
   }
   if (ecsTaskDefinition) {
@@ -130,6 +145,32 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
       renderOutput(
         "ecs_task_family",
         `aws_ecs_task_definition.${ecsTaskDefinition.iac.resourceName}.family`
+      ),
+      renderOutput(
+        "ecs_task_definition_family",
+        `aws_ecs_task_definition.${ecsTaskDefinition.iac.resourceName}.family`
+      ),
+      renderOutput(
+        "ecs_task_definition_arn",
+        `aws_ecs_task_definition.${ecsTaskDefinition.iac.resourceName}.arn`
+      ),
+      renderOutput(
+        "ecs_task_role_arn",
+        `aws_ecs_task_definition.${ecsTaskDefinition.iac.resourceName}.task_role_arn`
+      ),
+      renderOutput(
+        "ecs_execution_role_arn",
+        `aws_ecs_task_definition.${ecsTaskDefinition.iac.resourceName}.execution_role_arn`
+      )
+    );
+  }
+  if (logGroups.length > 0) {
+    outputs.push(
+      renderOutput(
+        "log_group_names",
+        `[${logGroups
+          .map((node) => `aws_cloudwatch_log_group.${node.iac.resourceName}.name`)
+          .join(", ")}]`
       )
     );
   }
@@ -144,6 +185,10 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
     : `"http://\${${loadBalancerAddress}.dns_name}"`;
   outputs.push(
     renderOutput("api_base_url", apiBaseUrl),
+    renderOutput("api_origin_url", `"http://\${${loadBalancerAddress}.dns_name}"`),
+    renderOutput("alb_arn", `${loadBalancerAddress}.arn`),
+    renderOutput("alb_dns_name", `${loadBalancerAddress}.dns_name`),
+    renderOutput("target_group_arn", `${targetGroupAddress}.arn`),
     renderOutput("alb_arn_suffix", `${loadBalancerAddress}.arn_suffix`),
     renderOutput("target_group_arn_suffix", `${targetGroupAddress}.arn_suffix`)
   );
@@ -163,6 +208,13 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
     renderOutput("ecs_cluster_name", `aws_ecs_cluster.${ecsCluster.iac.resourceName}.name`),
     renderOutput("ecs_service_name", `aws_ecs_service.${ecsService.iac.resourceName}.name`)
   );
+  const ecsContainer = resolveEcsServiceContainer(ecsService);
+  if (ecsContainer) {
+    outputs.push(
+      renderOutput("ecs_container_name", JSON.stringify(ecsContainer.name)),
+      renderOutput("ecs_container_port", String(ecsContainer.port))
+    );
+  }
   if (!applicationScalingTarget || typeof applicationScalingTarget.config["maxCapacity"] !== "number") {
     return outputs;
   }
@@ -180,6 +232,22 @@ function renderDeploymentOutputs(graph: InfrastructureGraph): string[] {
     outputs.push(renderOutput("scale_out_threshold", String(requestThreshold)));
   }
   return outputs;
+}
+
+function resolveEcsServiceContainer(
+  ecsService: InfrastructureGraphNode
+): { name: string; port: number } | null {
+  const value = ecsService.config["loadBalancer"];
+  const candidates = Array.isArray(value) ? value : [value];
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) continue;
+    const name = candidate["containerName"];
+    const port = candidate["containerPort"];
+    if (typeof name === "string" && name.trim() && Number.isInteger(port) && Number(port) > 0) {
+      return { name, port: Number(port) };
+    }
+  }
+  return null;
 }
 
 function firstResourceNode(
@@ -204,7 +272,8 @@ function cloudFrontRoutesApiTraffic(node: InfrastructureGraphNode): boolean {
 function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {
   return [
     ...(hasInlineLambdaSource(node) ? [renderInlineLambdaArchive(node)] : []),
-    ...renderReverseEngineeringEcsClusterCapacityProviders(node)
+    ...renderReverseEngineeringEcsClusterCapacityProviders(node),
+    ...(hasManagedS3Versioning(node) ? [renderManagedS3Versioning(node)] : [])
   ];
 }
 
@@ -245,6 +314,8 @@ function renderReverseEngineeringEcsClusterCapacityProviders(
 
 function createRenderableResourceConfig(node: InfrastructureGraphNode): Record<string, unknown> {
   const config = normalizeReverseEngineeringResourceConfig(node);
+  delete config["versioningEnabled"];
+  delete config["releaseManagedContent"];
   if (!hasInlineLambdaSource(node)) return config;
 
   delete config["inlineSource"];
@@ -822,6 +893,23 @@ function readBoolean(value: unknown): boolean | undefined {
 
 function readNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function hasManagedS3Versioning(node: InfrastructureGraphNode): boolean {
+  return node.iac.resourceType === "aws_s3_bucket" && node.config["versioningEnabled"] === true;
+}
+
+function renderManagedS3Versioning(node: InfrastructureGraphNode): string {
+  const name = `${node.iac.resourceName}_versioning`;
+  return [
+    `resource "aws_s3_bucket_versioning" "${name}" {`,
+    `${INDENT_UNIT}bucket = aws_s3_bucket.${node.iac.resourceName}.id`,
+    "",
+    `${INDENT_UNIT}versioning_configuration {`,
+    `${INDENT_UNIT}${INDENT_UNIT}status = "Enabled"`,
+    `${INDENT_UNIT}}`,
+    "}"
+  ].join("\n");
 }
 
 function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
@@ -1569,6 +1657,16 @@ function renderBlock(node: InfrastructureGraphNode): string {
   const body = Object.entries(createRenderableResourceConfig(node)).flatMap(([key, value]) =>
     renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
+  if (
+    node.iac.resourceType === "aws_s3_object" &&
+    node.config["releaseManagedContent"] === true
+  ) {
+    body.push(
+      "  lifecycle {",
+      "    ignore_changes = [content, content_type, cache_control, etag, source]",
+      "  }"
+    );
+  }
 
   const block = [
     `${terraformBlockType} "${node.iac.resourceType}" "${node.iac.resourceName}" {`,
@@ -1749,6 +1847,13 @@ function renderNestedBlockEntry(
   indentLevel: number
 ): string[] {
   if (
+    isTerraformLifecycleIgnoreChangesAttribute(resourceType, key, parentPath) &&
+    Array.isArray(value)
+  ) {
+    return [renderLifecycleIgnoreChanges(value, indentLevel)];
+  }
+
+  if (
     (isTerraformNestedBlockAttribute(resourceType, key, parentPath) ||
       isGenericTerraformNestedBlock(key) ||
       isReverseEngineeringEcsNestedBlock(resourceType, key, parentPath)) &&
@@ -1777,6 +1882,24 @@ function isReverseEngineeringEcsNestedBlock(
       ].includes(path)) ||
     (resourceType === "aws_ecs_service" && path === "capacity_provider_strategy")
   );
+}
+
+function renderLifecycleIgnoreChanges(value: unknown[], indentLevel: number): string {
+  const renderedValue = value.length === 0
+    ? "[]"
+    : [
+        "[",
+        ...value.map((item) =>
+          `${indent(indentLevel + 1)}${
+            typeof item === "string" && TERRAFORM_IDENTIFIER_PATTERN.test(item)
+              ? item
+              : renderValue(item, indentLevel + 1)
+          },`
+        ),
+        `${indent(indentLevel)}]`
+      ].join("\n");
+
+  return `${indent(indentLevel)}ignore_changes = ${renderedValue}`;
 }
 
 function renderAttribute(key: string, value: unknown, indentLevel: number): string {

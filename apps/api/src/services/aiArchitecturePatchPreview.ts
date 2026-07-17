@@ -636,6 +636,9 @@ LAMBDA:
 LOAD_BALANCER:
 - config.internal
 
+CLOUDFRONT:
+- config.signingBehavior
+
 AUTO_SCALING_GROUP:
 - config.minSize
 - config.maxSize
@@ -754,6 +757,7 @@ const PATCH_PLAN_ALLOWED_OPERATION_PATHS: Readonly<Partial<Record<ResourceType, 
   SECURITY_GROUP: ["config.ingress", "config.egress"],
   LAMBDA: ["config.runtime", "config.memorySize", "config.timeout"],
   LOAD_BALANCER: ["config.internal"],
+  CLOUDFRONT: ["config.signingBehavior"],
   AUTO_SCALING_GROUP: ["config.minSize", "config.maxSize", "config.desiredCapacity"]
 };
 
@@ -1796,6 +1800,14 @@ function createPatchPlanOperations(
           value: null
         }
       ];
+    }
+  }
+
+  if (isCloudFrontOriginAccessControl(targetNode)) {
+    const signingBehavior = findCloudFrontOacSigningBehavior(normalizedInstruction);
+
+    if (signingBehavior !== undefined) {
+      return [{ op: "set_value", path: "config.signingBehavior", value: signingBehavior }];
     }
   }
 
@@ -3626,6 +3638,14 @@ function createModificationConfig(
     }
   }
 
+  if (isCloudFrontOriginAccessControl(targetNode)) {
+    const signingBehavior = findCloudFrontOacSigningBehavior(normalizedInstruction);
+
+    if (signingBehavior !== undefined) {
+      updates.signingBehavior = signingBehavior;
+    }
+  }
+
   if (resourceType === "AUTO_SCALING_GROUP") {
     const desiredCapacity = findCapacityValue(normalizedInstruction, [
       "desired",
@@ -3662,6 +3682,50 @@ function createModificationConfig(
   return {
     naturalLanguageChangeRequest: intent.instruction
   };
+}
+
+function isCloudFrontOriginAccessControl(node: ResourceNode): boolean {
+  return node.type === "CLOUDFRONT" && node.config.terraformResourceType === "aws_cloudfront_origin_access_control";
+}
+
+function findCloudFrontOacSigningBehavior(
+  normalizedInstruction: string
+): "always" | "never" | "no-override" | undefined {
+  if (
+    !includesAnyPhrase(normalizedInstruction, [
+      "signing behavior",
+      "signing_behavior",
+      "signing",
+      "서명 동작",
+      "서명 행동"
+    ])
+  ) {
+    return undefined;
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["no-override", "no override"])) {
+    return "no-override";
+  }
+
+  if (
+    includesAnyPhrase(normalizedInstruction, [
+      "never",
+      "disable",
+      "off",
+      "안하도록",
+      "안 하도록",
+      "사용 안",
+      "비활성"
+    ])
+  ) {
+    return "never";
+  }
+
+  if (includesAnyPhrase(normalizedInstruction, ["always", "enable", "on", "항상", "활성"])) {
+    return "always";
+  }
+
+  return undefined;
 }
 
 const EC2_INSTANCE_SIZE_ORDER = [

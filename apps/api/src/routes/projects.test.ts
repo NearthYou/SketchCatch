@@ -63,6 +63,7 @@ test("GET /api/projects/:id/draft restores the active user's diagramJson", async
   });
 
   assert.equal(response.statusCode, 200);
+  assert.match(response.headers["cache-control"] ?? "", /private, no-store/);
   assert.equal(response.json().draft.projectId, ACTIVE_PROJECT_ID);
   assert.equal(
     response.json().draft.diagramJson.nodes[0].parameters.values.cidrBlock,
@@ -95,6 +96,7 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
     headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
       diagramJson: authoritativeDiagram,
+      expectedRevision: 4,
       terraformFiles: [
         { fileName: "main.tf", terraformCode: 'resource "aws_vpc" "vpc" {}' },
         { fileName: "variables.tf", terraformCode: 'variable "cidr" { type = string }' }
@@ -115,6 +117,70 @@ test("PUT /api/projects/:id/draft upserts the active user's latest diagramJson",
   );
   assert.equal(fakeDb.draftRows[0]?.terraformFiles?.[1]?.fileName, "variables.tf");
   assert.equal(fakeDb.projectUpdated, true);
+
+  await app.close();
+});
+
+test("PUT /api/projects/:id/draft preserves the revision when the saved draft is unchanged", async () => {
+  const existingDraft = makeProjectDraft({ revision: 4 });
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [existingDraft]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: draftDiagram,
+      expectedRevision: 4
+    }
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().draft.revision, 4);
+  assert.equal(fakeDb.draftRows[0]?.revision, 4);
+  assert.equal(fakeDb.projectUpdated, false);
+
+  await app.close();
+});
+
+test("PUT /api/projects/:id/draft rejects an unchanged save when another tab wins after the read", async () => {
+  const competingDiagram: DiagramJson = {
+    ...draftDiagram,
+    viewport: { x: 40, y: 0, zoom: 1 }
+  };
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ revision: 4 })],
+    draftUpdatedBeforeNextUpdate: makeProjectDraft({
+      diagramJson: competingDiagram,
+      revision: 5
+    })
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: draftDiagram,
+      expectedRevision: 4
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().currentRevision, 5);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, competingDiagram);
 
   await app.close();
 });
@@ -143,13 +209,117 @@ test("PUT /api/projects/:id/draft stores an empty board as the latest diagramJso
     url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
     headers: await authHeaders(ACTIVE_USER_ID),
     payload: {
-      diagramJson: emptyDiagram
+      diagramJson: emptyDiagram,
+      expectedRevision: 4
     }
   });
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json().draft.diagramJson, emptyDiagram);
   assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, emptyDiagram);
+
+  await app.close();
+});
+
+test("PUT /api/projects/:id/draft rejects a stale tab without replacing the latest draft", async () => {
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    drafts: [makeProjectDraft({ revision: 4 })]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+  const tabADiagram: DiagramJson = {
+    ...draftDiagram,
+    viewport: { x: 10, y: 0, zoom: 1 }
+  };
+  const tabBDiagram: DiagramJson = {
+    ...draftDiagram,
+    viewport: { x: 20, y: 0, zoom: 1 }
+  };
+
+  const firstSave = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: tabADiagram,
+      expectedRevision: 4
+    }
+  });
+  const staleSave = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: tabBDiagram,
+      expectedRevision: 4
+    }
+  });
+
+  assert.equal(firstSave.statusCode, 200);
+  assert.equal(staleSave.statusCode, 409);
+  assert.equal(staleSave.json().currentRevision, 5);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, tabADiagram);
+
+  await app.close();
+});
+
+test("PUT /api/projects/:id/draft rejects a non-null revision when no server draft exists", async () => {
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()]
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: draftDiagram,
+      expectedRevision: 4
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(fakeDb.draftRows.length, 0);
+
+  await app.close();
+});
+
+test("PUT /api/projects/:id/draft does not overwrite a draft created during the first-save race", async () => {
+  const competingDiagram: DiagramJson = {
+    ...draftDiagram,
+    viewport: { x: 30, y: 0, zoom: 1 }
+  };
+  const fakeDb = new ProjectDraftRouteFakeDb({
+    users: [makeUser()],
+    projects: [makeProject()],
+    draftInsertedBeforeNextInsert: makeProjectDraft({
+      diagramJson: competingDiagram,
+      revision: 1
+    })
+  });
+  const app = buildApp({
+    getDatabaseClient: () => fakeDb.client
+  });
+
+  const response = await app.inject({
+    method: "PUT",
+    url: `/api/projects/${ACTIVE_PROJECT_ID}/draft`,
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      diagramJson: draftDiagram,
+      expectedRevision: null
+    }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(fakeDb.draftRows[0]?.diagramJson, competingDiagram);
 
   await app.close();
 });
@@ -180,6 +350,8 @@ function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
     userId: ACTIVE_USER_ID,
     name: "Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: new Date("2026-06-24T00:00:00.000Z"),
     updatedAt: new Date("2026-06-24T00:00:00.000Z"),
     ...overrides
@@ -205,12 +377,22 @@ class ProjectDraftRouteFakeDb {
   projectRows: ProjectRow[];
   draftRows: ProjectDraftRow[];
   projectUpdated = false;
+  draftInsertedBeforeNextInsert: ProjectDraftRow | null;
+  draftUpdatedBeforeNextUpdate: ProjectDraftRow | null;
   client: DatabaseClient;
 
-  constructor(data: { users?: UserRow[]; projects?: ProjectRow[]; drafts?: ProjectDraftRow[] }) {
+  constructor(data: {
+    users?: UserRow[];
+    projects?: ProjectRow[];
+    drafts?: ProjectDraftRow[];
+    draftInsertedBeforeNextInsert?: ProjectDraftRow;
+    draftUpdatedBeforeNextUpdate?: ProjectDraftRow;
+  }) {
     this.userRows = data.users ?? [];
     this.projectRows = data.projects ?? [];
     this.draftRows = data.drafts ?? [];
+    this.draftInsertedBeforeNextInsert = data.draftInsertedBeforeNextInsert ?? null;
+    this.draftUpdatedBeforeNextUpdate = data.draftUpdatedBeforeNextUpdate ?? null;
     this.client = {
       db: this.createDb() as Database,
       pool: {
@@ -226,10 +408,35 @@ class ProjectDraftRouteFakeDb {
       }),
       insert: (table: unknown) => ({
         values: (values: Partial<ProjectDraftRow>) => ({
+          onConflictDoNothing: () => ({
+            returning: async () => {
+              if (table !== projectDrafts) {
+                return [];
+              }
+
+              if (this.draftInsertedBeforeNextInsert) {
+                this.draftRows[0] = this.draftInsertedBeforeNextInsert;
+                this.draftInsertedBeforeNextInsert = null;
+              }
+
+              if (this.draftRows.length > 0) {
+                return [];
+              }
+
+              const draft = makeProjectDraft(values);
+              this.draftRows[0] = draft;
+              return [draft];
+            }
+          }),
           onConflictDoUpdate: ({ set }: { set: Partial<ProjectDraftRow> }) => ({
             returning: async () => {
               if (table !== projectDrafts) {
                 return [];
+              }
+
+              if (this.draftInsertedBeforeNextInsert) {
+                this.draftRows[0] = this.draftInsertedBeforeNextInsert;
+                this.draftInsertedBeforeNextInsert = null;
               }
 
               const draft = makeProjectDraft({
@@ -243,13 +450,39 @@ class ProjectDraftRouteFakeDb {
         })
       }),
       update: (table: unknown) => ({
-        set: () => ({
-          where: async () => {
+        set: (set: Partial<ProjectDraftRow>) => ({
+          where: () => {
             if (table === projects) {
               this.projectUpdated = true;
+              return Promise.resolve([]);
             }
 
-            return [];
+            return {
+              returning: async () => {
+                if (this.draftUpdatedBeforeNextUpdate) {
+                  this.draftRows[0] = this.draftUpdatedBeforeNextUpdate;
+                  this.draftUpdatedBeforeNextUpdate = null;
+                }
+
+                const currentDraft = this.draftRows[0];
+
+                if (
+                  table !== projectDrafts ||
+                  !currentDraft ||
+                  (set.revision !== currentDraft.revision &&
+                    set.revision !== currentDraft.revision + 1)
+                ) {
+                  return [];
+                }
+
+                const draft = makeProjectDraft({
+                  ...currentDraft,
+                  ...set
+                });
+                this.draftRows[0] = draft;
+                return [draft];
+              }
+            };
           }
         })
       })

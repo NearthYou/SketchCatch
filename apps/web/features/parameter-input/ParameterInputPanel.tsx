@@ -11,6 +11,7 @@ import type {
 import { createTerraformParameterCatalogKey } from "@sketchcatch/types/resource-definitions";
 
 import { SelectMenu } from "../../components/ui/SelectMenu";
+import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import type { DiagramEditorPanelContext } from "../diagram-editor/types";
 import {
   getAwsAvailabilityZoneLabel,
@@ -723,31 +724,19 @@ function getRegionOptionDomId(listboxId: string, value: AwsRegionCode): string {
   return `${listboxId}-${value}`;
 }
 
-function PanelHeader({
-  node,
-  parameters
-}: {
+function PanelHeader({ node }: {
   node: DiagramNode;
   parameters: ResourceNodeParameters | null;
 }) {
-  const [iconFailed, setIconFailed] = useState(false);
-  const resourceType = parameters?.resourceType ?? node.type;
-
   return (
     <header className={styles.header}>
-      {node.iconUrl && !iconFailed ? (
-        <img
-          alt=""
-          className={styles.resourceIcon}
-          draggable={false}
-          onError={() => setIconFailed(true)}
-          src={node.iconUrl}
-        />
-      ) : (
-        <div className={styles.resourceIcon} aria-hidden="true">
-          {getInitials(resourceType)}
-        </div>
-      )}
+      <ResourceIconImage
+        alt=""
+        className={styles.resourceIcon}
+        fallbackClassName={styles.resourceIconFallback}
+        fallbackSize={20}
+        src={node.iconUrl}
+      />
       <div className={styles.headerText}>
         <h2>{node.label}</h2>
       </div>
@@ -1419,17 +1408,4 @@ function toRecord(value: unknown): RecordValue {
   }
 
   return value as RecordValue;
-}
-
-function getInitials(value: string): string {
-  const initials = value
-    .replace(/^aws_/u, "")
-    .split(/[_\s-]+/u)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-
-  return initials || "AWS";
 }

@@ -11,14 +11,17 @@ import {
   Search,
   Sparkles
 } from "lucide-react";
-import type { FormEvent, ReactNode, RefObject } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateArchitectureDraftRequest,
+  GitHubInstallationConnection,
   GitHubInstalledRepositoryCandidate,
   RepositoryAnalysisQuestion,
   RepositoryDeploymentType,
   RepositoryTemplateRecommendationResult,
+  SaveRepositoryAnalysisRecordRequest,
+  DiagramJson,
   SourceRepositoryAnalysisResult,
   SourceRepository,
   TemplateId
@@ -33,10 +36,13 @@ import {
   connectGitHubSourceRepository,
   createAiArchitectureDraft,
   createGitHubSourceRepositoryInstallUrl,
+  getProjectDraft,
+  listGitHubAccountInstallations,
   listGitHubInstalledRepositories,
   listSourceRepositories,
   recommendRepositoryTemplate,
-  saveProjectDraft
+  saveProjectDraft,
+  saveRepositoryAnalysisRecord
 } from "../../../features/workspace/api";
 import {
   applyRepositoryAnalysis,
@@ -55,8 +61,16 @@ import {
 } from "../../../features/workspace/public-repository-recommendation";
 import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
-import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
+import { RepositoryArchitecturePreview } from "./repository-architecture-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
+import {
+  createConnectedRepositoryAnalysisResult,
+  createRepositoryAnalysisRecordPayload
+} from "./repository-analysis-record-payload";
+import {
+  selectRepositoryRecoveryAction,
+  type RepositoryRecoveryAction
+} from "./repository-recovery-action";
 import {
   consumeRepositoryAnalysisResume,
   createRepositoryAnalysisResumeKey,
@@ -70,6 +84,13 @@ type RepositoryQuestionView = Pick<
   RepositoryAnalysisQuestion,
   "answerType" | "id" | "options" | "prompt"
 >;
+
+class RepositoryAnalysisRecordPersistenceError extends Error {
+  constructor(readonly cause: unknown) {
+    super("Repository Analysis Record persistence failed");
+    this.name = "RepositoryAnalysisRecordPersistenceError";
+  }
+}
 
 type RepositoryStartClientProps = {
   readonly initialDefaultBranch?: string;
@@ -89,44 +110,57 @@ export function RepositoryStartClient({
   const router = useRouter();
   const hasAutoAnalyzedPublicUrl = useRef(false);
   const hasRestoredRepositoryAnalysis = useRef(false);
-  const connectionSectionRef = useRef<HTMLElement | null>(null);
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
+  const [installations, setInstallations] = useState<GitHubInstallationConnection[]>([]);
+  const [projectDraftRevision, setProjectDraftRevision] = useState<number | null | undefined>(
+    undefined
+  );
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
-  const [candidatesLoaded, setCandidatesLoaded] = useState(false);
+  const [connectionOptionsLoaded, setConnectionOptionsLoaded] = useState(false);
   const [installationState, setInstallationState] = useState("");
-  const [loadState, setLoadState] = useState<RequestState>("loading");
   const [actionState, setActionState] = useState<RequestState>("idle");
   const [publicAnalysisState, setPublicAnalysisState] = useState<RequestState>("idle");
   const [repositoryUrl, setRepositoryUrl] = useState(initialRepositoryUrl);
   const [defaultBranch, setDefaultBranch] = useState(initialDefaultBranch);
   const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
-  const [connectionWarning, setConnectionWarning] = useState("");
-  const [repositoryConnectionError, setRepositoryConnectionError] = useState("");
   const [recommendationState, setRecommendationState] = useState<RequestState>("idle");
   const [deploymentType, setDeploymentType] = useState<RepositoryDeploymentType>("serverless");
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
-  const [selectedPublicTemplateId, setSelectedPublicTemplateId] = useState<PublicRepositoryTemplateId | null>(null);
-  const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
-  const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
+  const [selectedPublicTemplateId, setSelectedPublicTemplateId] =
+    useState<PublicRepositoryTemplateId | null>(null);
+  const [publicRecommendationStage, setPublicRecommendationStage] =
+    useState<PublicRecommendationStage>("configuration");
+  const [recommendation, setRecommendation] =
+    useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [pendingAnalysisRecord, setPendingAnalysisRecord] = useState<
+    SaveRepositoryAnalysisRecordRequest | null
+  >(null);
   const [restoredProjectName, setRestoredProjectName] = useState("");
   const effectiveProjectName = restoredProjectName || projectName;
-  const activeRepository = useMemo(
-    () => findActiveGitHubRepository(repositories),
-    [repositories]
-  );
+  const activeRepository = useMemo(() => findActiveGitHubRepository(repositories), [repositories]);
   const activeHandoff = activeRepository?.analysis?.aiHandoff;
-  const questions = activeHandoff?.questions
-    ?.map(localizePublicRepositoryQuestion)
-    .slice(0, 5) ?? [];
+  const questions =
+    activeHandoff?.questions?.map(localizePublicRepositoryQuestion).slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(effectiveProjectName, activeRepository);
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(projectId && (!activeRepository || publicAnalysis));
+  const recoveryAction = useMemo<RepositoryRecoveryAction>(() => {
+    try {
+      return selectRepositoryRecoveryAction({
+        repositoryUrl,
+        installations,
+        candidates,
+        activeRepository
+      });
+    } catch {
+      return { kind: "retry_only" };
+    }
+  }, [activeRepository, candidates, installations, repositoryUrl]);
 
   useEffect(() => {
     if (!projectId) {
-      setLoadState("error");
       setErrorMessage("프로젝트 정보가 없습니다. 새 프로젝트 화면에서 다시 시작해주세요.");
       return;
     }
@@ -145,27 +179,39 @@ export function RepositoryStartClient({
     void analyzePublicRepositoryUrl(initialRepositoryUrl, initialDefaultBranch);
   }, [initialDefaultBranch, initialRepositoryUrl, initialResumeKey, projectId]);
 
+  useEffect(() => {
+    if (publicAnalysisState !== "error") return;
+    const recheckPermissions = () => void loadCandidates();
+    window.addEventListener("focus", recheckPermissions);
+    return () => window.removeEventListener("focus", recheckPermissions);
+  }, [publicAnalysisState]);
+
   async function loadRepositories(): Promise<void> {
-    setLoadState("loading");
-    setRepositoryConnectionError("");
+    setErrorMessage("");
 
     try {
-      const loadedRepositories = await listSourceRepositories(projectId);
+      const [loadedRepositories, projectDraftResponse] = await Promise.all([
+        listSourceRepositories(projectId),
+        getProjectDraft(projectId)
+      ]);
       const active = findActiveGitHubRepository(loadedRepositories);
       const handoff = active?.analysis?.aiHandoff;
+      let nextRecommendation = handoff?.recommendation ?? null;
 
       setRepositories(loadedRepositories);
+      setProjectDraftRevision(projectDraftResponse.draft?.revision ?? null);
 
       if (initialResumeKey && !hasRestoredRepositoryAnalysis.current) {
         hasRestoredRepositoryAnalysis.current = true;
 
         if (!active) {
-          setRepositoryConnectionError("연결된 Repository를 확인할 수 없어 이전 분석으로 돌아가지 못했습니다.");
+          setErrorMessage("연결된 Repository를 확인할 수 없어 이전 분석으로 돌아가지 못했습니다.");
         } else {
           const resume = consumeRepositoryAnalysisResume(window.sessionStorage, {
             resumeKey: initialResumeKey,
             projectId,
-            repositoryUrl: active.repositoryUrl ?? `https://github.com/${active.owner}/${active.name}`
+            repositoryUrl:
+              active.repositoryUrl ?? `https://github.com/${active.owner}/${active.name}`
           });
 
           if (resume) {
@@ -178,43 +224,59 @@ export function RepositoryStartClient({
             setPublicRecommendationStage(resume.stage);
             setRestoredProjectName(resume.projectName);
             setPublicAnalysisState("idle");
+
+            if (!resume.publicAnalysis) {
+              const authenticatedAnalysis = await analyzeSourceRepository(projectId, active.id);
+              const analyzedRepositories = applyRepositoryAnalysis(
+                loadedRepositories,
+                authenticatedAnalysis
+              );
+              setRepositories(analyzedRepositories);
+              nextRecommendation = authenticatedAnalysis.aiHandoff.recommendation ?? null;
+              setDeploymentType(
+                authenticatedAnalysis.aiHandoff.deploymentTypeDefault ?? "serverless"
+              );
+            }
           } else {
-            setRepositoryConnectionError("이전 Repository 분석 복귀 정보가 만료되었거나 일치하지 않습니다.");
+            setErrorMessage("이전 Repository 분석 복귀 정보가 만료되었거나 일치하지 않습니다.");
           }
         }
       }
 
-      setRecommendation(handoff?.recommendation ?? null);
+      setRecommendation(nextRecommendation);
       if (!initialResumeKey) {
         setDeploymentType(handoff?.deploymentTypeDefault ?? "serverless");
       }
-      setLoadState("idle");
     } catch (error) {
-      setLoadState("error");
-      setRepositoryConnectionError(getApiErrorMessage(error, "저장소 연결 상태를 불러오지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "저장소 연결 상태를 불러오지 못했습니다."));
     }
   }
 
   async function loadCandidates(): Promise<void> {
     setActionState("loading");
-    setRepositoryConnectionError("");
+    setErrorMessage("");
 
     try {
-      const result = await listGitHubInstalledRepositories(projectId);
+      const [result, loadedInstallations] = await Promise.all([
+        listGitHubInstalledRepositories(projectId),
+        listGitHubAccountInstallations()
+      ]);
       setCandidates(result.repositories);
-      setCandidatesLoaded(true);
+      setInstallations(loadedInstallations);
       setInstallationState(result.state);
+      setConnectionOptionsLoaded(true);
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setRepositoryConnectionError(getApiErrorMessage(error, "연결 가능한 저장소를 불러오지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "연결 가능한 저장소를 불러오지 못했습니다."));
     }
   }
 
   async function openGitHubConnection(): Promise<void> {
-    if (actionState === "loading" || !publicAnalysis) return;
+    const targetRepositoryUrl = publicAnalysis?.repositoryUrl ?? repositoryUrl.trim();
+    if (actionState === "loading" || !targetRepositoryUrl) return;
     setActionState("loading");
-    setRepositoryConnectionError("");
+    setErrorMessage("");
 
     try {
       const resumeKey = createRepositoryAnalysisResumeKey();
@@ -224,7 +286,7 @@ export function RepositoryStartClient({
         createdAt: new Date().toISOString(),
         projectId,
         projectName: effectiveProjectName,
-        repositoryUrl: publicAnalysis.repositoryUrl,
+        repositoryUrl: targetRepositoryUrl,
         defaultBranch,
         publicAnalysis,
         selectedTemplateId: selectedPublicTemplateId,
@@ -233,13 +295,13 @@ export function RepositoryStartClient({
         stage: publicRecommendationStage
       });
       const { installUrl } = await createGitHubSourceRepositoryInstallUrl(projectId, {
-        repositoryUrl: publicAnalysis.repositoryUrl,
+        repositoryUrl: targetRepositoryUrl,
         resumeKey
       });
       window.location.assign(installUrl);
     } catch (error) {
       setActionState("error");
-      setRepositoryConnectionError(getApiErrorMessage(error, "GitHub 연결 화면을 열지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "GitHub 연결 화면을 열지 못했습니다."));
     }
   }
 
@@ -248,7 +310,10 @@ export function RepositoryStartClient({
     await analyzePublicRepositoryUrl(repositoryUrl, defaultBranch);
   }
 
-  async function analyzePublicRepositoryUrl(nextRepositoryUrl: string, nextDefaultBranch: string): Promise<void> {
+  async function analyzePublicRepositoryUrl(
+    nextRepositoryUrl: string,
+    nextDefaultBranch: string
+  ): Promise<void> {
     const trimmedRepositoryUrl = nextRepositoryUrl.trim();
     const trimmedDefaultBranch = nextDefaultBranch.trim();
 
@@ -259,7 +324,6 @@ export function RepositoryStartClient({
     setAnswers({});
     setSelectedPublicTemplateId(null);
     setPublicRecommendationStage("configuration");
-    setConnectionWarning("");
     setErrorMessage("");
 
     try {
@@ -285,9 +349,10 @@ export function RepositoryStartClient({
       setErrorMessage(
         getApiErrorMessage(
           error,
-          "저장소 URL을 분석하지 못했습니다. 비공개 저장소는 이 화면에서 GitHub 연결을 완료해주세요."
+          "Repository를 확인할 수 없습니다. URL이 잘못되었거나 비공개 Repository일 수 있습니다."
         )
       );
+      void loadCandidates();
     }
   }
 
@@ -305,12 +370,6 @@ export function RepositoryStartClient({
       hasConnectedRepository: Boolean(activeRepository),
       questions: recommendation.questions
     });
-
-    if (blockingIssue?.field === "ci_cd_connection") {
-      setPublicRecommendationStage("configuration");
-      focusConnectionRequirement(blockingIssue.message);
-      return;
-    }
 
     if (blockingIssue) {
       setErrorMessage(blockingIssue.message);
@@ -331,7 +390,7 @@ export function RepositoryStartClient({
 
     try {
       if (!isBuiltInTemplateId(templateId)) {
-        await saveTemplateBoard(templateId);
+        await saveTemplateBoard(templateId, publicAnalysis);
         setPublicAnalysisState("idle");
         return;
       }
@@ -342,7 +401,7 @@ export function RepositoryStartClient({
           answers,
           deploymentType: effectiveDeploymentType,
           templateId,
-          usesCiCd: true
+          usesCiCd: false
         })
       );
 
@@ -354,26 +413,31 @@ export function RepositoryStartClient({
 
       if (draft.metadata.source !== "amazon_q") {
         setPublicAnalysisState("error");
-        setErrorMessage("Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요.");
+        setErrorMessage(
+          "Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요."
+        );
         return;
       }
 
       const diagram = getDiagramJsonForArchitectureDraft(draft);
-      await saveProjectDraft({ diagramJson: diagram, projectId });
+      await saveRepositoryBoard(diagram, {
+        analysis: publicAnalysis,
+        templateId
+      });
       setPublicAnalysisState("idle");
-      router.push(
-        `/workspace?${new URLSearchParams({
-          projectId,
-          projectName: effectiveProjectName
-        }).toString()}`
-      );
     } catch (error) {
       setPublicAnalysisState("error");
-      setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
+      setErrorMessage(
+        error instanceof RepositoryAnalysisRecordPersistenceError
+          ? "보드는 저장했지만 Repository 정보를 저장하지 못했습니다. 보드 생성을 다시 누르면 안전하게 재시도합니다."
+          : getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다.")
+      );
     }
   }
 
-  async function createConnectedRepositoryBoard(templateId: PublicRepositoryTemplateId): Promise<void> {
+  async function createConnectedRepositoryBoard(
+    templateId: PublicRepositoryTemplateId
+  ): Promise<void> {
     if (!activeRepository?.analysis || actionState === "loading") return;
 
     setActionState("loading");
@@ -381,7 +445,11 @@ export function RepositoryStartClient({
 
     try {
       if (!isBuiltInTemplateId(templateId)) {
-        await saveTemplateBoard(templateId);
+        await saveTemplateBoard(
+          templateId,
+          createConnectedRepositoryAnalysisResult(activeRepository, templateId),
+          activeRepository.analysis.analyzedAt
+        );
         setActionState("idle");
         return;
       }
@@ -401,21 +469,25 @@ export function RepositoryStartClient({
       }
 
       const diagram = getDiagramJsonForArchitectureDraft(draft);
-      await saveProjectDraft({ diagramJson: diagram, projectId });
+      await saveRepositoryBoard(diagram, {
+        analysis: createConnectedRepositoryAnalysisResult(activeRepository, templateId),
+        analyzedAt: activeRepository.analysis.analyzedAt,
+        templateId
+      });
       setActionState("idle");
-      router.push(
-        `/workspace?${new URLSearchParams({
-          projectId,
-          projectName: effectiveProjectName
-        }).toString()}`
-      );
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
+      setErrorMessage(
+        getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다.")
+      );
     }
   }
 
-  async function saveTemplateBoard(templateId: PublicRepositoryTemplateId): Promise<void> {
+  async function saveTemplateBoard(
+    templateId: PublicRepositoryTemplateId,
+    publicRepositoryAnalysis?: SourceRepositoryAnalysisResult,
+    analyzedAt?: string
+  ): Promise<void> {
     const diagram = buildBoardTemplateDiagram(templateId, {
       projectSlug: effectiveProjectName,
       shortId: "repository"
@@ -425,13 +497,71 @@ export function RepositoryStartClient({
       throw new Error("REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE");
     }
 
-    await saveProjectDraft({ diagramJson: diagram, projectId });
+    await saveRepositoryBoard(
+      diagram,
+      publicRepositoryAnalysis
+        ? {
+          analysis: publicRepositoryAnalysis,
+          ...(analyzedAt ? { analyzedAt } : {}),
+          templateId
+        }
+        : undefined
+    );
+  }
+
+  async function saveRepositoryBoard(
+    diagramJson: DiagramJson,
+    provenance?: {
+      readonly analysis: SourceRepositoryAnalysisResult;
+      readonly analyzedAt?: string;
+      readonly templateId: PublicRepositoryTemplateId;
+    }
+  ): Promise<void> {
+    const response = await saveProjectDraft({
+      diagramJson,
+      expectedRevision: requireProjectDraftRevision(),
+      projectId
+    });
+    setProjectDraftRevision(response.draft?.revision ?? null);
+
+    if (provenance) {
+      const payload = createRepositoryAnalysisRecordPayload({
+        analysis: provenance.analysis,
+        analyzedAt: provenance.analyzedAt ?? new Date().toISOString(),
+        selectedTemplateId: provenance.templateId
+      });
+      try {
+        await saveRepositoryAnalysisRecord(projectId, payload);
+        setPendingAnalysisRecord(null);
+      } catch (cause) {
+        setPendingAnalysisRecord(payload);
+        throw new RepositoryAnalysisRecordPersistenceError(cause);
+      }
+    }
+
     router.push(
       `/workspace?${new URLSearchParams({
         projectId,
         projectName: effectiveProjectName
       }).toString()}`
     );
+  }
+
+  async function retryRepositoryAnalysisRecord(): Promise<void> {
+    if (!pendingAnalysisRecord || actionState === "loading") return;
+    setActionState("loading");
+    setErrorMessage("");
+    try {
+      await saveRepositoryAnalysisRecord(projectId, pendingAnalysisRecord);
+      setPendingAnalysisRecord(null);
+      router.push(`/workspace?${new URLSearchParams({
+        projectId,
+        projectName: effectiveProjectName
+      }).toString()}`);
+    } catch (error) {
+      setActionState("error");
+      setErrorMessage(getApiErrorMessage(error, "Repository 정보를 저장하지 못했습니다."));
+    }
   }
 
   async function connectRepository(candidate: GitHubInstalledRepositoryCandidate): Promise<void> {
@@ -446,15 +576,25 @@ export function RepositoryStartClient({
         projectId,
         state: installationState
       });
-      setRepositories([connected]);
-      setRecommendation(null);
-      setConnectionWarning("");
-      setRepositoryConnectionError("");
+      const analysis = await analyzeSourceRepository(projectId, connected.id);
+      const analyzedRepositories = applyRepositoryAnalysis([connected], analysis);
+      setRepositories(analyzedRepositories);
+      setRecommendation(analysis.aiHandoff.recommendation ?? null);
+      setDeploymentType(analysis.aiHandoff.deploymentTypeDefault ?? "serverless");
+      setErrorMessage("");
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setRepositoryConnectionError(getApiErrorMessage(error, "저장소를 연결하지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "저장소를 연결하지 못했습니다."));
     }
+  }
+
+  function requireProjectDraftRevision(): number | null {
+    if (projectDraftRevision === undefined) {
+      throw new Error("PROJECT_DRAFT_REVISION_UNAVAILABLE");
+    }
+
+    return projectDraftRevision;
   }
 
   async function analyzeRepository(): Promise<void> {
@@ -496,25 +636,7 @@ export function RepositoryStartClient({
     }
   }
 
-  function focusConnectionRequirement(message: string): void {
-    setConnectionWarning(message);
-    setErrorMessage("");
-    window.requestAnimationFrame(() => connectionSectionRef.current?.focus());
-  }
-
   function confirmPublicRecommendationConfiguration(): void {
-    const blockingIssue = getRepositoryDraftBlockingIssue({
-      answers: {},
-      hasConnectedRepository: Boolean(activeRepository),
-      questions: []
-    });
-
-    if (blockingIssue) {
-      focusConnectionRequirement(blockingIssue.message);
-      return;
-    }
-
-    setConnectionWarning("");
     setPublicRecommendationStage("questions");
   }
 
@@ -579,36 +701,27 @@ export function RepositoryStartClient({
                     </label>
                   ) : null}
                   <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
-                    {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+                    {isPublicAnalysisBusy ? (
+                      <LoaderCircle className={styles.spin} size={16} />
+                    ) : (
+                      <Search size={16} />
+                    )}
                     {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}
                   </button>
                 </form>
                 <p className={styles.inlineHint}>
-                  공개 저장소 분석은 바로 시작할 수 있으며, 초안 생성 전에는 아래에서 CI/CD 연결을 완료해야 합니다.
+                  공개 저장소는 GitHub 연결 없이 분석하고 보드를 만들 수 있습니다. CI/CD는 보드 생성 후 Delivery에서 연결합니다.
                 </p>
               </>
             ) : null}
             {publicAnalysis ? (
               <PublicRepositoryRecommendationStep
-                aiDesignHref={createWorkspaceAiStartHref({ projectId, projectName: effectiveProjectName })}
+                aiDesignHref={createWorkspaceAiStartHref({
+                  projectId,
+                  projectName: effectiveProjectName
+                })}
                 answers={answers}
                 analysis={publicAnalysis}
-                configurationWarning={connectionWarning}
-                connectionControl={(
-                  <RepositoryCiCdConnection
-                    actionState={actionState}
-                    activeRepository={activeRepository}
-                    candidates={candidates}
-                    candidatesLoaded={candidatesLoaded}
-                    connectionError={repositoryConnectionError}
-                    loadState={loadState}
-                    onConnect={(candidate) => void connectRepository(candidate)}
-                    onInstall={() => void openGitHubConnection()}
-                    onLoadCandidates={() => void loadCandidates()}
-                    onRetryRepositories={() => void loadRepositories()}
-                    sectionRef={connectionSectionRef}
-                  />
-                )}
                 deploymentType={deploymentType}
                 isBusy={isPublicAnalysisBusy}
                 onAnswer={(questionId, value) => {
@@ -631,6 +744,48 @@ export function RepositoryStartClient({
                 stage={publicRecommendationStage}
               />
             ) : null}
+            {publicAnalysisState === "error" && !pendingAnalysisRecord ? (
+              <RepositoryAnalysisRecovery
+                action={recoveryAction}
+                errorMessage={errorMessage}
+                isBusy={actionState === "loading" || isPublicAnalysisBusy}
+                onAddPermission={(managementUrl) => {
+                  window.open(managementUrl, "_blank", "noopener,noreferrer");
+                }}
+                onAnalyzeConnected={() => void analyzeRepository()}
+                onConnect={(candidate) => void connectRepository(candidate)}
+                onConnectGitHub={() => void openGitHubConnection()}
+                onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
+                onVerifyPermission={() => void loadCandidates()}
+              />
+            ) : null}
+            {publicAnalysis && publicAnalysisState === "idle" ? (
+              connectionOptionsLoaded ? (
+                <RepositoryAnalysisRecovery
+                  action={recoveryAction}
+                  errorMessage=""
+                  isBusy={actionState === "loading"}
+                  onAddPermission={(managementUrl) => {
+                    window.open(managementUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  onAnalyzeConnected={() => void analyzeRepository()}
+                  onConnect={(candidate) => void connectRepository(candidate)}
+                  onConnectGitHub={() => void openGitHubConnection()}
+                  onRetry={() => void loadCandidates()}
+                  onVerifyPermission={() => void loadCandidates()}
+                  title="Delivery용 Repository 연결"
+                />
+              ) : (
+                <button
+                  className={styles.secondaryAction}
+                  disabled={actionState === "loading"}
+                  onClick={() => void loadCandidates()}
+                  type="button"
+                >
+                  Delivery용 Repository 연결 확인
+                </button>
+              )
+            ) : null}
           </section>
         ) : null}
 
@@ -638,11 +793,21 @@ export function RepositoryStartClient({
           <section className={styles.analysisPanel}>
             <div>
               <span>연결된 저장소</span>
-              <h2>{activeRepository.owner}/{activeRepository.name}</h2>
+              <h2>
+                {activeRepository.owner}/{activeRepository.name}
+              </h2>
               <p>{activeRepository.defaultBranch}</p>
             </div>
-            <button disabled={actionState === "loading"} onClick={() => void analyzeRepository()} type="button">
-              {actionState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+            <button
+              disabled={actionState === "loading"}
+              onClick={() => void analyzeRepository()}
+              type="button"
+            >
+              {actionState === "loading" ? (
+                <LoaderCircle className={styles.spin} size={16} />
+              ) : (
+                <Search size={16} />
+              )}
               {actionState === "loading" ? "분석 중" : "저장소 분석"}
             </button>
 
@@ -650,7 +815,12 @@ export function RepositoryStartClient({
               <section className={styles.recommendationForm} aria-label="템플릿 추천 설정">
                 <label>
                   <span>배포 방식</span>
-                  <select value={deploymentType} onChange={(event) => setDeploymentType(event.target.value as RepositoryDeploymentType)}>
+                  <select
+                    value={deploymentType}
+                    onChange={(event) =>
+                      setDeploymentType(event.target.value as RepositoryDeploymentType)
+                    }
+                  >
                     <option value="ec2_vm">EC2/VM 기반</option>
                     <option value="container">컨테이너 기반</option>
                     <option value="serverless">서버리스 기반</option>
@@ -664,8 +834,16 @@ export function RepositoryStartClient({
                   }
                   questions={questions}
                 />
-                <button disabled={recommendationState === "loading"} onClick={() => void submitRecommendation()} type="button">
-                  {recommendationState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+                <button
+                  disabled={recommendationState === "loading"}
+                  onClick={() => void submitRecommendation()}
+                  type="button"
+                >
+                  {recommendationState === "loading" ? (
+                    <LoaderCircle className={styles.spin} size={16} />
+                  ) : (
+                    <Search size={16} />
+                  )}
                   템플릿 추천
                 </button>
               </section>
@@ -689,17 +867,107 @@ export function RepositoryStartClient({
                       : "분석 근거로 하나의 템플릿을 선택하지 못했습니다."}
                   </strong>
                 </div>
-                <AiDraftBoardPreview diagram={previewDiagram} />
+                <RepositoryArchitecturePreview diagram={previewDiagram} />
               </section>
             ) : null}
           </section>
         ) : null}
 
-        {errorMessage && loadState !== "error" ? (
-          <ProductState compact description={errorMessage} kind="error" title="작업 실패" />
+        {errorMessage && (publicAnalysisState !== "error" || pendingAnalysisRecord) ? (
+          <ProductState
+            action={pendingAnalysisRecord ? (
+              <button
+                disabled={actionState === "loading"}
+                onClick={() => void retryRepositoryAnalysisRecord()}
+                type="button"
+              >
+                Repository 정보 저장 재시도
+              </button>
+            ) : undefined}
+            compact
+            description={errorMessage}
+            kind="error"
+            title="작업 실패"
+          />
         ) : null}
       </section>
     </main>
+  );
+}
+
+function RepositoryAnalysisRecovery({
+  action,
+  errorMessage,
+  isBusy,
+  onAddPermission,
+  onAnalyzeConnected,
+  onConnect,
+  onConnectGitHub,
+  onRetry,
+  onVerifyPermission,
+  title = "Repository를 확인할 수 없습니다"
+}: {
+  readonly action: RepositoryRecoveryAction;
+  readonly errorMessage: string;
+  readonly isBusy: boolean;
+  readonly onAddPermission: (managementUrl: string) => void;
+  readonly onAnalyzeConnected: () => void;
+  readonly onConnect: (candidate: GitHubInstalledRepositoryCandidate) => void;
+  readonly onConnectGitHub: () => void;
+  readonly onRetry: () => void;
+  readonly onVerifyPermission: () => void;
+  readonly title?: string;
+}) {
+  let guidance = "URL과 branch를 확인한 뒤 다시 분석해주세요.";
+  let primaryAction: ReactNode = (
+    <button disabled={isBusy} onClick={onRetry} type="button">다시 분석</button>
+  );
+
+  if (action.kind === "connect_github") {
+    guidance = "비공개 Repository라면 GitHub를 연결한 뒤 정확한 Repository 권한을 확인합니다.";
+    primaryAction = (
+      <button disabled={isBusy} onClick={onConnectGitHub} type="button">GitHub 연결하기</button>
+    );
+  } else if (action.kind === "add_repository_permission") {
+    guidance = "GitHub에서 권한을 추가한 뒤 이 화면으로 돌아오면 자동으로 다시 확인합니다.";
+    primaryAction = (
+      <div className={styles.actions}>
+        <button
+          disabled={isBusy}
+          onClick={() => onAddPermission(action.managementUrl)}
+          type="button"
+        >
+          Repository 권한 추가
+        </button>
+        <button disabled={isBusy} onClick={onVerifyPermission} type="button">권한 다시 확인</button>
+      </div>
+    );
+  } else if (action.kind === "connect_exact_repository") {
+    guidance = "GitHub App이 입력한 Repository에 접근할 수 있습니다. 프로젝트에 명시적으로 연결한 뒤 분석합니다.";
+    primaryAction = (
+      <button disabled={isBusy} onClick={() => onConnect(action.candidate)} type="button">
+        이 Repository 연결하고 분석
+      </button>
+    );
+  } else if (action.kind === "analyze_connected_repository") {
+    guidance = "프로젝트에 연결된 Repository와 입력한 URL이 일치합니다.";
+    primaryAction = (
+      <button disabled={isBusy} onClick={onAnalyzeConnected} type="button">연결된 Repository 분석</button>
+    );
+  } else if (action.kind === "resolve_multiple_installations") {
+    guidance = "여러 GitHub installation 중 하나를 임의로 선택하지 않습니다. 환경설정에서 연결을 정리한 뒤 다시 확인해주세요.";
+    primaryAction = (
+      <button disabled={isBusy} onClick={onVerifyPermission} type="button">연결 상태 다시 확인</button>
+    );
+  }
+
+  return (
+    <ProductState
+      action={primaryAction}
+      description={`${errorMessage} ${guidance}`.trim()}
+      kind={errorMessage ? "error" : "empty"}
+      title={title}
+    />
   );
 }
 
@@ -724,27 +992,35 @@ function RepositoryQuestions({
           <fieldset className={styles.questionField} key={question.id}>
             <legend>{question.prompt}</legend>
             {question.answerType === "boolean" || question.answerType === "single_select" ? (
-              <span className={styles.questionChoices} role="radiogroup" aria-label={question.prompt}>
+              <span
+                className={styles.questionChoices}
+                role="radiogroup"
+                aria-label={question.prompt}
+              >
                 {(question.answerType === "boolean"
                   ? [
                       { label: "예", value: "true" },
                       { label: "아니요", value: "false" }
                     ]
-                  : question.options ?? []
+                  : (question.options ?? [])
                 ).map((option) => {
                   const selected = String(answers[question.id] ?? "") === option.value;
 
                   return (
                     <button
                       aria-checked={selected}
-                      className={selected
-                        ? `${styles.questionChoice} ${styles.questionChoiceSelected}`
-                        : styles.questionChoice}
+                      className={
+                        selected
+                          ? `${styles.questionChoice} ${styles.questionChoiceSelected}`
+                          : styles.questionChoice
+                      }
                       key={option.value}
-                      onClick={() => onAnswer(
-                        question.id,
-                        question.answerType === "boolean" ? option.value === "true" : option.value
-                      )}
+                      onClick={() =>
+                        onAnswer(
+                          question.id,
+                          question.answerType === "boolean" ? option.value === "true" : option.value
+                        )
+                      }
                       role="radio"
                       type="button"
                     >
@@ -768,111 +1044,6 @@ function RepositoryQuestions({
   );
 }
 
-function RepositoryCiCdConnection({
-  actionState,
-  activeRepository,
-  candidates,
-  candidatesLoaded,
-  connectionError,
-  loadState,
-  onConnect,
-  onInstall,
-  onLoadCandidates,
-  onRetryRepositories,
-  sectionRef
-}: {
-  readonly actionState: RequestState;
-  readonly activeRepository: SourceRepository | null;
-  readonly candidates: readonly GitHubInstalledRepositoryCandidate[];
-  readonly candidatesLoaded: boolean;
-  readonly connectionError: string;
-  readonly loadState: RequestState;
-  readonly onConnect: (candidate: GitHubInstalledRepositoryCandidate) => void;
-  readonly onInstall: () => void;
-  readonly onLoadCandidates: () => void;
-  readonly onRetryRepositories: () => void;
-  readonly sectionRef: RefObject<HTMLElement | null>;
-}) {
-  if (activeRepository) {
-    return (
-      <section
-        aria-label="CI/CD 연결"
-        className={styles.ciCdSection}
-        ref={sectionRef}
-        tabIndex={-1}
-      >
-        <ProductState
-          compact
-          description={`${activeRepository.owner}/${activeRepository.name} · ${activeRepository.defaultBranch}`}
-          kind="success"
-          title="CI/CD 연결 완료"
-        />
-      </section>
-    );
-  }
-
-  const isBusy = actionState === "loading" || loadState === "loading";
-
-  return (
-    <section
-      aria-label="CI/CD 연결"
-      className={styles.ciCdSection}
-      ref={sectionRef}
-      tabIndex={-1}
-    >
-      <div className={styles.ciCdCopy}>
-        <strong>CI/CD 연결</strong>
-        <small>초안을 만들 저장소를 GitHub PR과 자동 배포 흐름에 연결합니다.</small>
-      </div>
-      {loadState === "loading" ? (
-        <ProductState compact description="프로젝트 연결 상태를 확인하고 있습니다." kind="loading" title="CI/CD 연결 확인 중" />
-      ) : null}
-      {loadState === "error" ? (
-        <ProductState
-          action={<button onClick={onRetryRepositories} type="button">다시 시도</button>}
-          compact
-          description={connectionError}
-          kind="error"
-          title="CI/CD 연결 상태를 확인할 수 없습니다"
-        />
-      ) : null}
-      {actionState === "error" && loadState !== "error" ? (
-        <ProductState
-          action={<button onClick={onLoadCandidates} type="button">다시 시도</button>}
-          compact
-          description={connectionError}
-          kind="error"
-          title="GitHub 저장소를 불러오지 못했습니다"
-        />
-      ) : null}
-      {loadState === "idle" ? (
-        <div className={styles.actions}>
-          <button disabled={isBusy} onClick={onInstall} type="button">
-            GitHub 연결
-          </button>
-          <button
-            className={styles.secondaryAction}
-            disabled={isBusy}
-            onClick={onLoadCandidates}
-            type="button"
-          >
-            연결 가능한 저장소 불러오기
-          </button>
-        </div>
-      ) : null}
-      {candidatesLoaded && candidates.length === 0 && actionState !== "loading" ? (
-        <ProductState
-          compact
-          description="GitHub 연결에서 이 프로젝트에 사용할 저장소 접근 권한을 추가해주세요."
-          kind="empty"
-          title="연결 가능한 저장소가 없습니다"
-        />
-      ) : null}
-      <RepositoryCandidates actionState={actionState} candidates={candidates} onConnect={onConnect} />
-    </section>
-  );
-}
-
 function RepositoryCiCdConnectedState({ repository }: { readonly repository: SourceRepository }) {
   return (
     <section className={styles.ciCdSection} aria-label="CI/CD 연결">
@@ -889,7 +1060,7 @@ function RepositoryCiCdConnectedState({ repository }: { readonly repository: Sou
 function RepositoryTemplateCandidates({
   actionState,
   onCreateBoard,
-  recommendation,
+  recommendation
 }: {
   readonly actionState: RequestState;
   readonly onCreateBoard: (templateId: PublicRepositoryTemplateId) => void;
@@ -926,8 +1097,6 @@ function PublicRepositoryRecommendationStep({
   aiDesignHref,
   answers,
   analysis,
-  configurationWarning,
-  connectionControl,
   deploymentType,
   isBusy,
   onAnswer,
@@ -942,8 +1111,6 @@ function PublicRepositoryRecommendationStep({
   readonly aiDesignHref: string;
   readonly answers: Record<string, string | boolean>;
   readonly analysis: SourceRepositoryAnalysisResult;
-  readonly configurationWarning: string;
-  readonly connectionControl: ReactNode;
   readonly deploymentType: RepositoryDeploymentType;
   readonly isBusy: boolean;
   readonly onAnswer: (questionId: string, value: string | boolean) => void;
@@ -962,9 +1129,9 @@ function PublicRepositoryRecommendationStep({
     selectedTemplateId
   });
   const shouldAskDeploymentType = shouldAskPublicRepositoryDeploymentType(analysis);
-  const selectedCandidate = recommendation.candidates.find(
-    (candidate) => candidate.templateId === selectedTemplateId
-  ) ?? recommendation.candidates[0];
+  const selectedCandidate =
+    recommendation.candidates.find((candidate) => candidate.templateId === selectedTemplateId) ??
+    recommendation.candidates[0];
 
   if (stage === "questions") {
     return (
@@ -984,7 +1151,11 @@ function PublicRepositoryRecommendationStep({
             <strong>{selectedCandidate?.displayTitle ?? "추천 템플릿"}</strong>
           </div>
         </div>
-        <RepositoryQuestions answers={answers} onAnswer={onAnswer} questions={recommendation.questions} />
+        <RepositoryQuestions
+          answers={answers}
+          onAnswer={onAnswer}
+          questions={recommendation.questions}
+        />
         <button
           className={styles.publicBoardAction}
           disabled={isBusy || !analysis.recommendedTemplateId}
@@ -1015,7 +1186,11 @@ function PublicRepositoryRecommendationStep({
             return (
               <button
                 aria-checked={selected}
-                className={selected ? `${styles.publicCandidate} ${styles.publicCandidateSelected}` : styles.publicCandidate}
+                className={
+                  selected
+                    ? `${styles.publicCandidate} ${styles.publicCandidateSelected}`
+                    : styles.publicCandidate
+                }
                 key={candidate.templateId}
                 onClick={() => onSelectTemplate(candidate.templateId)}
                 role="radio"
@@ -1051,19 +1226,15 @@ function PublicRepositoryRecommendationStep({
           <span>원하는 배포 방식</span>
           <select
             value={deploymentType}
-            onChange={(event) => onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)}
+            onChange={(event) =>
+              onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)
+            }
           >
             <option value="ec2_vm">EC2/VM 기반</option>
             <option value="container">컨테이너 기반</option>
             <option value="serverless">서버리스 기반</option>
           </select>
         </label>
-      ) : null}
-      {connectionControl}
-      {configurationWarning ? (
-        <small aria-live="polite" className={styles.configurationWarning}>
-          {configurationWarning}
-        </small>
       ) : null}
       <button
         className={styles.publicBoardAction}
@@ -1081,41 +1252,14 @@ function PublicRepositoryRecommendationStep({
   );
 }
 
-
-function createRepositoryPreviewDiagram(
-  projectName: string,
-  repository: SourceRepository | null
-) {
+function createRepositoryPreviewDiagram(projectName: string, repository: SourceRepository | null) {
   const handoff = repository?.analysis?.aiHandoff;
   if (!repository || handoff?.status !== "template_selected") return null;
-  return buildBoardTemplateDiagram(handoff.templateId, {
-    projectSlug: projectName,
-    shortId: repository.id.slice(0, 8)
-  }) ?? null;
-}
-
-function RepositoryCandidates({
-  actionState,
-  candidates,
-  onConnect
-}: {
-  readonly actionState: RequestState;
-  readonly candidates: readonly GitHubInstalledRepositoryCandidate[];
-  readonly onConnect: (candidate: GitHubInstalledRepositoryCandidate) => void;
-}) {
-  if (candidates.length === 0) return null;
-
   return (
-    <div className={styles.candidateList}>
-      {candidates.map((candidate) => (
-        <article key={`${candidate.installationId}-${candidate.githubRepositoryId}`}>
-          <div><strong>{candidate.fullName}</strong><span>{candidate.defaultBranch}</span></div>
-          <button disabled={actionState === "loading" || candidate.archived} onClick={() => onConnect(candidate)} type="button">
-            {candidate.archived ? "보관됨" : "연결"}
-          </button>
-        </article>
-      ))}
-    </div>
+    buildBoardTemplateDiagram(handoff.templateId, {
+      projectSlug: projectName,
+      shortId: repository.id.slice(0, 8)
+    }) ?? null
   );
 }
 
@@ -1131,14 +1275,16 @@ function createConnectedRepositoryArchitectureDraftRequest({
   const analysis = repository.analysis;
   const handoff = analysis?.aiHandoff;
   const architectureFacts = handoff?.architectureFacts ?? [];
-  const architectureFactLines = architectureFacts.map((fact) =>
-    `- ${fact.kind}: ${fact.value} (source: ${fact.sourcePath})`
+  const architectureFactLines = architectureFacts.map(
+    (fact) => `- ${fact.kind}: ${fact.value} (source: ${fact.sourcePath})`
   );
-  const applicationUnitLines = (handoff?.applicationUnits ?? []).map((unit) =>
-    `- ${unit.kind} at ${unit.rootPath || "."}; frameworks: ${unit.frameworks.join(", ") || "unknown"}`
+  const applicationUnitLines = (handoff?.applicationUnits ?? []).map(
+    (unit) =>
+      `- ${unit.kind} at ${unit.rootPath || "."}; frameworks: ${unit.frameworks.join(", ") || "unknown"}`
   );
-  const evidenceLines = (handoff?.evidence ?? []).map((evidence) =>
-    `- ${evidence.kind}: ${evidence.path}; signals: ${evidence.signals.join(", ") || "none"}`
+  const evidenceLines = (handoff?.evidence ?? []).map(
+    (evidence) =>
+      `- ${evidence.kind}: ${evidence.path}; signals: ${evidence.signals.join(", ") || "none"}`
   );
   const repositoryName = repository.repositoryUrl ?? `${repository.owner}/${repository.name}`;
 

@@ -239,6 +239,7 @@ export type TerraformFilesReplacementRequest = {
   readonly diagramFingerprint: string;
   readonly files: readonly TerraformSyncFileInput[];
   readonly id: number;
+  readonly notifyFilesChange?: boolean | undefined;
 };
 
 // Terraform 생성, 검증, 저장 상태를 관리하고 화면 전용 컴포넌트에 결과만 전달합니다.
@@ -1214,7 +1215,9 @@ export const TerraformCodePanel = forwardRef<
     setIsTerraformPreviewStale(!hasSourceSeed);
     setStatusMessage(hasSourceSeed ? "원본 Terraform seed 적용됨" : "Terraform Preview 생성 대기");
     setRequestState("idle");
-    onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
+    if (replacement.notifyFilesChange !== false) {
+      onTerraformFilesChange?.(toTerraformValidationFiles(nextFiles));
+    }
     onDirtyChange(false);
     onTerraformFilesReplacementApplied?.(replacement.id);
   }, [

@@ -12,6 +12,72 @@ import type { NodeResizeUpdate } from "./node-resize";
 
 export type DiagramNodeMetadataUpdate = Partial<Omit<DiagramNode, "id" | "parameters">>;
 export type DiagramPreviewState = "added" | "modified" | "deleted";
+export type DiagramEditorMode = "editor" | "viewer";
+
+export type DiagramEditorViewerPolicy = {
+  readonly canPanAndZoom: true;
+  readonly canSelectNodes: boolean;
+  readonly isPreview: boolean;
+  readonly isViewer: boolean;
+  readonly showBoardGrid: boolean;
+  readonly showEditingControls: boolean;
+  readonly showPanels: boolean;
+  readonly showViewportControls: true;
+  readonly showWorkspaceChrome: boolean;
+  readonly usesContainerHeight: boolean;
+};
+
+/** Viewer는 preview interaction을 재사용해 변형 없이 시점 탐색만 허용합니다. */
+export function getDiagramEditorViewerPolicy(
+  mode: DiagramEditorMode = "editor"
+): DiagramEditorViewerPolicy {
+  const isViewer = mode === "viewer";
+
+  return {
+    canPanAndZoom: true,
+    canSelectNodes: !isViewer,
+    isPreview: isViewer,
+    isViewer,
+    showBoardGrid: !isViewer,
+    showEditingControls: !isViewer,
+    showPanels: !isViewer,
+    showViewportControls: true,
+    showWorkspaceChrome: !isViewer,
+    usesContainerHeight: isViewer
+  };
+}
+
+/** Preview/viewer nodes expose no resize or connection controls to pointer, keyboard, or assistive tech. */
+export function shouldRenderDiagramNodeInteractionHandles(isPreview: boolean): boolean {
+  return !isPreview;
+}
+
+/** Preview/viewer nodes keep invisible, inert anchors so persisted edge routes remain renderable. */
+export function shouldRenderDiagramNodeEdgeAnchors(isPreview: boolean): boolean {
+  return isPreview;
+}
+
+/** Viewer는 저장 후보와 같은 입력 Diagram을 normalization 없이 그대로 표시합니다. */
+export function resolveDiagramEditorVisibleDiagram({
+  currentDiagram,
+  initialDiagram,
+  initialPreviewDiagram,
+  mode,
+  previewDiagram
+}: {
+  readonly currentDiagram: DiagramJson;
+  readonly initialDiagram?: DiagramJson | undefined;
+  readonly initialPreviewDiagram?: DiagramJson | undefined;
+  readonly mode: DiagramEditorMode;
+  readonly previewDiagram: DiagramJson | null;
+}): DiagramJson {
+  if (mode === "viewer") {
+    return initialPreviewDiagram ?? initialDiagram ?? currentDiagram;
+  }
+
+  return previewDiagram ?? currentDiagram;
+}
+
 export type DiagramPreviewAnnotations = {
   readonly nodeStates: Readonly<Record<string, DiagramPreviewState>>;
   readonly edgeStates: Readonly<Record<string, DiagramPreviewState>>;
@@ -66,10 +132,13 @@ export type DiagramEditorProps = {
   initialReferenceDropTargetNodeId?: string | undefined;
   initialSelectedEdgeIds?: readonly string[] | undefined;
   initialSelectedNodeIds?: readonly string[] | undefined;
+  isDeploymentConsoleOpen?: boolean | undefined;
   leftPanel?: ReactNode;
+  mode?: DiagramEditorMode | undefined;
   onBoardReady?: ((element: HTMLElement) => void) | undefined;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
+  onWorkspacePanelOpen?: (() => void) | undefined;
   onTemplateWorkspaceApply?:
     | ((seed: {
         readonly diagramJson: DiagramJson;

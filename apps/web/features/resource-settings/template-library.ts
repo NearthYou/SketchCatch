@@ -21,6 +21,7 @@ import {
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { RESOURCE_NODE_DEFAULT_SIZE } from "../diagram-editor/resource-node-geometry";
 import { materializeTemplateDiagram } from "./template-resource-materializer";
+import { applyBoardTemplatePresentationCorrections } from "./template-presentation-corrections";
 import { getTemplateThumbnailAsset } from "./template-thumbnail-manifest";
 import { getBrainboardTemplateThumbnailAsset } from "./brainboard-template-thumbnail-manifest";
 
@@ -798,6 +799,20 @@ export function isBoardTemplateAvailable(
   return template.availability === "available";
 }
 
+// Template 내용과 설명·태그·Terraform seed를 함께 fingerprint해 선택 상태의 revision으로 사용합니다.
+export function getBoardTemplateVersion(template: AvailableBoardTemplate): string {
+  return `v-${createTemplateVersionHash(
+    JSON.stringify({
+      description: template.description,
+      diagramJson: template.diagramJson,
+      id: template.id,
+      tags: template.tags,
+      terraformFiles: template.terraformFiles,
+      title: template.title
+    })
+  )}`;
+}
+
 export function reviewAvailableBoardTemplate(
   template: AvailableBoardTemplate
 ): AvailableBoardTemplateReview {
@@ -847,12 +862,12 @@ export function buildBoardTemplateDiagram(
   const definitionId = resolveTemplateDefinitionId(templateId);
   const definition = templateDefinitions.find((candidate) => candidate.id === definitionId);
   if (definition) {
-    return materializeTemplateDiagram(
+    return materializeBoardTemplateDiagram(
+      definition.id,
       resolveApprovedBoardTemplateDiagram(
         definition.id,
         buildTemplateDiagramJson(definition.id, input)
-      ),
-      "authored"
+      )
     );
   }
 
@@ -861,12 +876,12 @@ export function buildBoardTemplateDiagram(
       candidate.id === templateId && candidate.availability === "available"
   );
   return brainboardTemplate
-    ? materializeTemplateDiagram(
+    ? materializeBoardTemplateDiagram(
+        brainboardTemplate.id,
         resolveApprovedBoardTemplateDiagram(
           brainboardTemplate.id,
           cloneDiagramJson(brainboardTemplate.diagramJson)
-        ),
-        "authored"
+        )
       )
     : undefined;
 }
@@ -1002,13 +1017,31 @@ function cloneBoardTemplate(template: BoardTemplate): BoardTemplate {
 function cloneAvailableBoardTemplate(template: AvailableBoardTemplate): AvailableBoardTemplate {
   return {
     ...template,
-    diagramJson: materializeTemplateDiagram(
-      resolveApprovedBoardTemplateDiagram(template.id, cloneDiagramJson(template.diagramJson)),
-      "authored"
+    diagramJson: materializeBoardTemplateDiagram(
+      template.id,
+      resolveApprovedBoardTemplateDiagram(template.id, cloneDiagramJson(template.diagramJson))
     ),
     tags: [...template.tags],
     terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
   };
+}
+
+function createTemplateVersionHash(value: string): string {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function materializeBoardTemplateDiagram(templateId: string, diagram: DiagramJson): DiagramJson {
+  return applyBoardTemplatePresentationCorrections(
+    templateId,
+    materializeTemplateDiagram(diagram, "authored")
+  );
 }
 
 // localStorage에 저장된 템플릿 덮어쓰기 백업을 읽습니다.

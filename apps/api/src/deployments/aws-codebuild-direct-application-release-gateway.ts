@@ -3,14 +3,18 @@ import {
   BatchGetProjectsCommand,
   CodeBuildClient,
   StartBuildCommand,
+  StopBuildCommand,
   type CodeBuildClientConfig,
   type EnvironmentVariable
 } from "@aws-sdk/client-codebuild";
+import { and, desc, eq, or } from "drizzle-orm";
 import {
   DescribeServicesCommand,
   DescribeTaskDefinitionCommand,
   ECSClient,
-  type ECSClientConfig
+  RegisterTaskDefinitionCommand,
+  type ECSClientConfig,
+  type RegisterTaskDefinitionCommandInput
 } from "@aws-sdk/client-ecs";
 import type {
   ApplicationArtifact,
@@ -21,12 +25,58 @@ import type {
   RuntimeDeploymentTarget,
   RuntimeTargetKind
 } from "@sketchcatch/types";
-import { normalizeLegacyRuntimeDeploymentTarget } from "@sketchcatch/types";
+import {
+  APPLICATION_ARTIFACT_CONTRACT_VERSION,
+  normalizeLegacyRuntimeDeploymentTarget
+} from "@sketchcatch/types";
+import { createApplicationArtifactIdentity } from "../artifacts/application-artifact-identity.js";
+import {
+  applicationArtifactKindForRuntime,
+  applicationArtifactPlatformForRuntime
+} from "../artifacts/application-artifact-runtime.js";
 import { createAwsApplicationArtifactProviderVerifier } from "../artifacts/aws-application-artifact-verifier.js";
 import type { ApplicationArtifactProviderVerification } from "../artifacts/application-artifact-registry.js";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
+import { createAwsProjectBuildEnvironmentGateway } from "../build-environments/aws-project-build-environment-gateway.js";
+import { createProjectBuildCacheIdentity } from "../build-environments/project-build-cache.js";
+import {
+  createDesiredProjectBuildEnvironment,
+  type ProjectBuildEnvironmentGateway
+} from "../build-environments/project-build-environment-service.js";
+import { getDatabaseClient } from "../db/client.js";
+import { applicationReleases, releaseCandidates } from "../db/schema.js";
+import { createAwsEcsFargateReleaseGateway } from "../releases/aws-ecs-fargate-release-gateway.js";
+import {
+  beginReleaseCandidateUpload,
+  createPostgresReleaseCandidateRepository,
+  finalizeReleaseCandidate,
+  type ReleaseCandidateRepository,
+  type ReleaseCandidateStorage
+} from "../releases/release-candidate-service.js";
+import { createS3ReleaseCandidateStorage } from "../releases/s3-release-candidate-storage.js";
+import { createPostgresTrustedReleaseRepository } from "../releases/trusted-release-step-repository.js";
+import {
+  executeTrustedEcsRollback,
+  executeTrustedFrontendRetry,
+  executeTrustedRelease,
+  type TrustedReleaseContext,
+  type TrustedReleaseRepository,
+  type TrustedReleaseResult
+} from "../releases/trusted-release-worker-service.js";
+import { renderPreflightBuildspec } from "../releases/preflight-buildspec.js";
+import {
+  acquireProjectExecutionLease,
+  assertCurrentProjectExecutionLease,
+  createPostgresProjectExecutionLeaseRepository,
+  heartbeatProjectExecutionLease,
+  recordProjectExecutionCoordinates,
+  releaseProjectExecutionLease,
+  type LeaseFence,
+  type ProjectExecutionLeaseRepository
+} from "../releases/project-execution-lease-service.js";
 import {
   DirectApplicationReleaseError,
+  type ApplicationReleaseRecord,
   type DirectApplicationArtifact,
   type DirectApplicationReleaseContext,
   type DirectApplicationReleaseGateway,
@@ -83,6 +133,8 @@ type AssumeDirectReleaseRole = (input: {
   externalId: string;
   region: string;
   roleSessionName: string;
+  durationSeconds?: number;
+  policy?: string;
   abortSignal?: AbortSignal;
 }) => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken?: string }>;
 
@@ -90,44 +142,95 @@ type CreateCodeBuildClient = (configuration: CodeBuildClientConfig) => CodeBuild
 type CreateEcsClient = (configuration: ECSClientConfig) => ECSClient;
 type WaitForCodeBuildPoll = (milliseconds: number, abortSignal?: AbortSignal) => Promise<void>;
 
-export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
-  assumeRole?: AssumeDirectReleaseRole;
-  createClient?: CreateCodeBuildClient;
-  createEcsClient?: CreateEcsClient;
-  probeHealth?: PublicHttpsHealthProbe;
-  wait?: WaitForCodeBuildPoll;
-  verifyEvidence?: VerifyDirectReleaseEvidence;
-  verifyArtifact?: (
-    context: DirectApplicationReleaseContext,
-    artifact: ApplicationArtifact
-  ) => Promise<ApplicationArtifactProviderVerification>;
-} = {}): DirectApplicationReleaseGateway {
-  const assumeRole = options.assumeRole ?? (async (input) => {
-    const credentials = await createAwsSdkStsGateway().assumeRole(input);
-    return credentials;
-  });
-  const createClient = options.createClient ?? ((configuration) =>
-    new CodeBuildClient(configuration) as unknown as CodeBuildCommandClient);
-  const createEcsClient = options.createEcsClient ?? ((configuration) =>
-    new ECSClient(configuration));
+const runtimeConvergenceTagKey = "sketchcatch:runtime-convergence";
+const runtimeConvergenceMarkerPattern =
+  /^sketchcatch:artifact=([a-f0-9]{64}):target=([a-f0-9]{64})$/u;
+
+export function createAwsCodeBuildDirectApplicationReleaseGateway(
+  options: {
+    assumeRole?: AssumeDirectReleaseRole;
+    createClient?: CreateCodeBuildClient;
+    createEcsClient?: CreateEcsClient;
+    probeHealth?: PublicHttpsHealthProbe;
+    wait?: WaitForCodeBuildPoll;
+    verifyEvidence?: VerifyDirectReleaseEvidence;
+    releaseCandidateRepository?: ReleaseCandidateRepository;
+    releaseCandidateStorage?: ReleaseCandidateStorage;
+    executionLeaseRepository?: ProjectExecutionLeaseRepository;
+    trustedReleaseRepository?: TrustedReleaseRepository;
+    generateCandidateId?: () => string;
+    now?: () => Date;
+    verifyBuildEnvironment?: (context: DirectApplicationReleaseContext) => Promise<void>;
+    verifyArtifact?: (
+      context: DirectApplicationReleaseContext,
+      artifact: ApplicationArtifact
+    ) => Promise<ApplicationArtifactProviderVerification>;
+  } = {}
+): DirectApplicationReleaseGateway {
+  const assumeRole =
+    options.assumeRole ??
+    (async (input) => {
+      const credentials = await createAwsSdkStsGateway().assumeRole(input);
+      return credentials;
+    });
+  const createClient =
+    options.createClient ??
+    ((configuration) => new CodeBuildClient(configuration) as unknown as CodeBuildCommandClient);
+  const createEcsClient =
+    options.createEcsClient ?? ((configuration) => new ECSClient(configuration));
   const probeHealth = options.probeHealth ?? createPublicHttpsHealthProbe();
   const wait = options.wait ?? waitForPoll;
-  const verifyEvidence =
-    options.verifyEvidence ?? createDirectApplicationReleaseEvidenceVerifier();
-  const verifyArtifact = options.verifyArtifact ?? (async (context, artifact) =>
-    createAwsApplicationArtifactProviderVerifier({
-      projectId: context.deployment.projectId,
-      accountId: context.connection.accountId,
-      roleArn: context.connection.roleArn,
-      externalId: context.connection.externalId,
-      region: context.connection.region
-    }).verify(artifact));
+  const verifyEvidence = options.verifyEvidence ?? createDirectApplicationReleaseEvidenceVerifier();
+  const getCandidateStorage = () =>
+    options.releaseCandidateStorage ?? createS3ReleaseCandidateStorage();
+  const verifyBuildEnvironment =
+    options.verifyBuildEnvironment ?? verifyCurrentProjectBuildEnvironment;
+
+  const getPreflightDependencies = () => {
+    const db = getDatabaseClient().db;
+    return {
+      candidateRepository:
+        options.releaseCandidateRepository ?? createPostgresReleaseCandidateRepository(db),
+      candidateStorage: getCandidateStorage(),
+      leaseRepository:
+        options.executionLeaseRepository ?? createPostgresProjectExecutionLeaseRepository(db)
+    };
+  };
+  const verifyArtifact =
+    options.verifyArtifact ??
+    (async (context, artifact) =>
+      createAwsApplicationArtifactProviderVerifier({
+        projectId: context.deployment.projectId,
+        accountId: context.connection.accountId,
+        roleArn: context.connection.roleArn,
+        externalId: context.connection.externalId,
+        region: context.connection.region
+      }).verify(artifact));
 
   return {
     async verifyArtifact(context, artifact) {
       return verifyArtifact(context, artifact);
     },
-    async prepareArtifact(context, abortSignal) {
+    async prepareArtifact(context, abortSignal, prepareOptions) {
+      if (
+        context.target.runtimeTargetKind === "ecs_fargate" &&
+        context.target.confirmedBuildConfig.ecsWeb
+      ) {
+        return prepareEcsWebReleaseCandidate({
+          context,
+          assumeRole,
+          createClient,
+          wait,
+          dependencies: getPreflightDependencies(),
+          verifyBuildEnvironment,
+          ...(prepareOptions?.retainProjectLease ? { retainProjectLease: true } : {}),
+          ...(options.generateCandidateId
+            ? { generateCandidateId: options.generateCandidateId }
+            : {}),
+          ...(options.now ? { now: options.now } : {}),
+          ...(abortSignal ? { abortSignal } : {})
+        });
+      }
       const result = await runCodeBuildPhase({
         context,
         phase: "prepare",
@@ -137,9 +240,7 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
         ...(abortSignal ? { abortSignal } : {})
       });
       const commitSha = requireExport(result.exports, "SKETCHCATCH_COMMIT_SHA").toLowerCase();
-      const digest = normalizeDigest(
-        requireExport(result.exports, "SKETCHCATCH_ARTIFACT_DIGEST")
-      );
+      const digest = normalizeDigest(requireExport(result.exports, "SKETCHCATCH_ARTIFACT_DIGEST"));
       const reference = requireExport(result.exports, "SKETCHCATCH_ARTIFACT_REFERENCE");
       return {
         commitSha,
@@ -164,6 +265,18 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
       });
     },
     async deployArtifact({ context, artifact, abortSignal }) {
+      if (
+        context.target.runtimeTargetKind === "ecs_fargate" &&
+        context.target.confirmedBuildConfig.ecsWeb &&
+        readMetadataString(artifact.metadata, "releaseCandidateId")
+      ) {
+        return deployEcsWebTrustedRelease({
+          context,
+          artifact,
+          createEcsClient,
+          ...(abortSignal ? { abortSignal } : {})
+        });
+      }
       const result = await runCodeBuildPhase({
         context,
         artifact,
@@ -180,7 +293,20 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
       );
       return verifyEvidence({ context, artifact, evidence });
     },
-    async rollbackArtifact({ context, artifact, release, abortSignal }) {
+    async rollbackArtifact({ context, artifact, release, abortSignal, retainProjectLease }) {
+      if (
+        context.target.runtimeTargetKind === "ecs_fargate" &&
+        context.target.confirmedBuildConfig.ecsWeb &&
+        readMetadataString(artifact.metadata, "releaseCandidateId")
+      ) {
+        return rollbackEcsWebTrustedRelease({
+          context,
+          artifact,
+          release,
+          ...(retainProjectLease ? { retainProjectLease: true } : {}),
+          ...(abortSignal ? { abortSignal } : {})
+        });
+      }
       const result = await runCodeBuildPhase({
         context,
         artifact,
@@ -203,8 +329,1371 @@ export function createAwsCodeBuildDirectApplicationReleaseGateway(options: {
         );
       }
       return { ...verified, status: "rolled_back" };
+    },
+    async retryFrontend({ context, release }) {
+      return retryEcsWebTrustedFrontend({ context, release });
+    },
+    async finalizeAlreadyActiveArtifact({ context, artifact, leaseFence }) {
+      const { db } = getDatabaseClient();
+      await finalizeAlreadyActiveReleaseCandidate(
+        { context, artifact, leaseFence, now: options.now?.() ?? new Date() },
+        {
+          candidateRepository:
+            options.releaseCandidateRepository ?? createPostgresReleaseCandidateRepository(db),
+          trustedRepository:
+            options.trustedReleaseRepository ?? createPostgresTrustedReleaseRepository(db),
+          leaseRepository:
+            options.executionLeaseRepository ?? createPostgresProjectExecutionLeaseRepository(db)
+        }
+      );
+    },
+    async cleanupArtifact({ artifact }) {
+      const storage = getCandidateStorage();
+      if (!storage.deleteObjectVersion) return;
+      const apiObjectKey = readMetadataString(artifact.metadata, "apiArchiveObjectKey");
+      const apiVersionId = readMetadataString(artifact.metadata, "apiArchiveObjectVersionId");
+      const frontendObjectKey = readMetadataString(artifact.metadata, "frontendArchiveObjectKey");
+      const frontendVersionId = readMetadataString(
+        artifact.metadata,
+        "frontendArchiveObjectVersionId"
+      );
+      if (!apiObjectKey || !apiVersionId || !frontendObjectKey || !frontendVersionId) return;
+      await Promise.all([
+        storage.deleteObjectVersion({ objectKey: apiObjectKey, versionId: apiVersionId }),
+        storage.deleteObjectVersion({
+          objectKey: frontendObjectKey,
+          versionId: frontendVersionId
+        })
+      ]);
     }
   };
+}
+
+export async function finalizeAlreadyActiveReleaseCandidate(
+  input: {
+    context: DirectApplicationReleaseContext;
+    artifact: DirectApplicationArtifact;
+    leaseFence: LeaseFence;
+    now: Date;
+  },
+  dependencies: {
+    candidateRepository: Pick<ReleaseCandidateRepository, "findById">;
+    trustedRepository: Pick<TrustedReleaseRepository, "markCandidateStatus">;
+    leaseRepository: ProjectExecutionLeaseRepository;
+  }
+): Promise<void> {
+  const candidateId = readMetadataString(input.artifact.metadata, "releaseCandidateId");
+  if (!candidateId) {
+    throw new DirectApplicationReleaseError(
+      "Approved ReleaseCandidate ID is missing",
+      "APPLICATION_RELEASE_CANDIDATE_REQUIRED"
+    );
+  }
+  if (
+    input.leaseFence.projectId !== input.context.deployment.projectId ||
+    input.leaseFence.holderId !== input.context.deployment.id
+  ) {
+    throw new DirectApplicationReleaseError(
+      "The current execution does not own the ReleaseCandidate fence",
+      "APPLICATION_RELEASE_CANDIDATE_FENCE_REJECTED"
+    );
+  }
+  await assertCurrentProjectExecutionLease(
+    input.leaseFence,
+    dependencies.leaseRepository,
+    input.now
+  );
+
+  const candidate = await dependencies.candidateRepository.findById(candidateId);
+  const belongsToExecution =
+    input.context.deployment.source === "gitops"
+      ? candidate?.pipelineRunId === input.context.deployment.id && candidate.deploymentId === null
+      : candidate?.deploymentId === input.context.deployment.id && candidate.pipelineRunId === null;
+  if (
+    !candidate ||
+    candidate.projectId !== input.context.deployment.projectId ||
+    !belongsToExecution ||
+    candidate.compositeDigest !== input.artifact.digest ||
+    candidate.commitSha !== input.artifact.commitSha ||
+    candidate.manifestObjectKey !== input.artifact.reference ||
+    (input.context.buildEnvironment &&
+      candidate.configFingerprint !== input.context.buildEnvironment.runtimeFingerprint)
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Approved ReleaseCandidate changed before no-op finalization",
+      "APPLICATION_RELEASE_CANDIDATE_MISMATCH"
+    );
+  }
+
+  if (candidate.status === "succeeded") return;
+  if (candidate.expiresAt <= input.now || !["pending", "activating"].includes(candidate.status)) {
+    throw new DirectApplicationReleaseError(
+      "Approved ReleaseCandidate is not eligible for no-op finalization",
+      "APPLICATION_RELEASE_CANDIDATE_MISMATCH"
+    );
+  }
+
+  const transition = async (status: "activating" | "succeeded") =>
+    dependencies.trustedRepository.markCandidateStatus({
+      ...input.leaseFence,
+      candidateId,
+      status,
+      now: input.now
+    });
+  if (candidate.status === "pending") await transition("activating");
+  await transition("succeeded");
+}
+
+export function addRuntimeConvergenceTaskDefinitionTag(
+  registration: RegisterTaskDefinitionCommandInput,
+  context: DirectApplicationReleaseContext,
+  artifact: DirectApplicationArtifact
+): RegisterTaskDefinitionCommandInput {
+  const marker = resolveRuntimeConvergenceMarker(context, artifact);
+  return {
+    ...registration,
+    tags: [
+      ...(registration.tags ?? []).filter((tag) => tag.key !== runtimeConvergenceTagKey),
+      { key: runtimeConvergenceTagKey, value: marker.value }
+    ]
+  };
+}
+
+function createRuntimeConvergenceTaggingEcsClient(
+  client: ECSClient,
+  context: DirectApplicationReleaseContext,
+  artifact: DirectApplicationArtifact
+): {
+  send(command: { input: object }): Promise<Record<string, unknown>>;
+  destroy(): void;
+} {
+  return {
+    async send(command) {
+      if (command instanceof RegisterTaskDefinitionCommand) {
+        return (await client.send(
+          new RegisterTaskDefinitionCommand(
+            addRuntimeConvergenceTaskDefinitionTag(command.input, context, artifact)
+          )
+        )) as unknown as Record<string, unknown>;
+      }
+      return (await client.send(command as never)) as unknown as Record<string, unknown>;
+    },
+    destroy() {
+      client.destroy();
+    }
+  };
+}
+
+function resolveRuntimeConvergenceMarker(
+  context: DirectApplicationReleaseContext,
+  artifact: DirectApplicationArtifact
+): { artifactFingerprint: string; targetFingerprint: string; value: string } {
+  const artifactFingerprint = artifact.artifactFingerprint;
+  if (!artifactFingerprint || !/^[a-f0-9]{64}$/u.test(artifactFingerprint)) {
+    throw new DirectApplicationReleaseError(
+      "Application artifact fingerprint is required for runtime convergence"
+    );
+  }
+  const runtimeTarget =
+    context.target.runtimeTarget ??
+    normalizeLegacyRuntimeDeploymentTarget(context.target.runtimeConfig, {
+      healthCheckPath: context.target.confirmedBuildConfig.healthCheckPath
+    });
+  const targetFingerprint = createDeploymentTargetIdentity({
+    contractVersion: "runtime-convergence/v1",
+    scope: {
+      projectId: context.deployment.projectId,
+      provider: "aws",
+      accountId: context.connection.accountId,
+      region: context.connection.region
+    },
+    target: runtimeTarget
+  }).deploymentTargetFingerprint;
+  return {
+    artifactFingerprint,
+    targetFingerprint,
+    value: `sketchcatch:artifact=${artifactFingerprint}:target=${targetFingerprint}`
+  };
+}
+
+async function deployEcsWebTrustedRelease(input: {
+  context: DirectApplicationReleaseContext;
+  artifact: DirectApplicationArtifact;
+  createEcsClient: CreateEcsClient;
+  abortSignal?: AbortSignal;
+}) {
+  await verifyCurrentProjectBuildEnvironment(input.context);
+  const { db } = getDatabaseClient();
+  const candidateId = readMetadataString(input.artifact.metadata, "releaseCandidateId");
+  if (!candidateId) {
+    throw new DirectApplicationReleaseError(
+      "Approved ReleaseCandidate ID is missing",
+      "APPLICATION_RELEASE_CANDIDATE_REQUIRED"
+    );
+  }
+  const [release] = await db
+    .select()
+    .from(applicationReleases)
+    .where(
+      and(
+        input.context.deployment.source === "gitops"
+          ? eq(applicationReleases.pipelineRunId, input.context.deployment.id)
+          : eq(applicationReleases.deploymentId, input.context.deployment.id),
+        eq(applicationReleases.projectId, input.context.deployment.projectId),
+        eq(applicationReleases.source, input.context.deployment.source),
+        eq(applicationReleases.status, "pending")
+      )
+    );
+  const [candidate] = await db
+    .select()
+    .from(releaseCandidates)
+    .where(
+      and(
+        eq(releaseCandidates.id, candidateId),
+        eq(releaseCandidates.projectId, input.context.deployment.projectId),
+        input.context.deployment.source === "gitops"
+          ? eq(releaseCandidates.pipelineRunId, input.context.deployment.id)
+          : eq(releaseCandidates.deploymentId, input.context.deployment.id),
+        eq(releaseCandidates.status, "pending")
+      )
+    );
+  if (
+    !release ||
+    !candidate ||
+    !release.providerRevision ||
+    release.releaseCandidateId !== candidate.id ||
+    candidate.compositeDigest !== input.artifact.digest ||
+    candidate.commitSha !== input.artifact.commitSha ||
+    !input.context.buildEnvironment ||
+    candidate.configFingerprint !== input.context.buildEnvironment.runtimeFingerprint ||
+    candidate.expiresAt <= new Date()
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Approved ReleaseCandidate changed or expired before activation",
+      "APPLICATION_RELEASE_CANDIDATE_MISMATCH"
+    );
+  }
+  const [baseline] = await db
+    .select()
+    .from(applicationReleases)
+    .where(
+      and(
+        eq(applicationReleases.projectId, release.projectId),
+        eq(applicationReleases.runtimeTargetKind, release.runtimeTargetKind),
+        eq(applicationReleases.status, "succeeded")
+      )
+    )
+    .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
+    .limit(1);
+  const activationBaselineReleaseId = baseline?.id ?? null;
+  if (release.baselineReleaseId !== activationBaselineReleaseId) {
+    await db
+      .update(applicationReleases)
+      .set({ baselineReleaseId: activationBaselineReleaseId, updatedAt: new Date() })
+      .where(
+        and(eq(applicationReleases.id, release.id), eq(applicationReleases.status, "pending"))
+      );
+  }
+  const runtime = input.context.target.runtimeConfig;
+  const build = input.context.target.confirmedBuildConfig.ecsWeb;
+  if (
+    runtime.runtimeTargetKind !== "ecs_fargate" ||
+    !runtime.ecrRepositoryArn ||
+    !runtime.taskDefinitionFamily ||
+    !runtime.taskDefinitionArn ||
+    !runtime.taskRoleArn ||
+    !runtime.executionRoleArn ||
+    !runtime.targetGroupArn ||
+    !runtime.loadBalancerArn ||
+    !runtime.loadBalancerDnsName ||
+    !runtime.frontendBucketName ||
+    !runtime.cloudFrontDistributionId ||
+    !runtime.cloudFrontDomainName ||
+    !runtime.outputUrl ||
+    typeof runtime.containerPort !== "number" ||
+    !build
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Terraform Apply output is incomplete for trusted ECS release",
+      "APPLICATION_RELEASE_RUNTIME_INCOMPLETE"
+    );
+  }
+  const persistedBaseline = resolvePersistedEcsReleaseBaseline({
+    baselineReleaseId: activationBaselineReleaseId,
+    baseline,
+    projectId: input.context.deployment.projectId
+  });
+  const trustedContext = {
+    projectId: input.context.deployment.projectId,
+    deploymentId: input.context.deployment.source === "direct" ? input.context.deployment.id : null,
+    releaseId: release.id,
+    source: input.context.deployment.source,
+    fencingHolderId:
+      input.context.deployment.source === "gitops"
+        ? input.context.deployment.id
+        : input.context.deployment.id,
+    connection: input.context.connection,
+    candidate: {
+      id: candidate.id,
+      commitSha: candidate.commitSha,
+      compositeDigest: candidate.compositeDigest,
+      configFingerprint: candidate.configFingerprint,
+      apiOciDigest: candidate.apiOciDigest,
+      apiArchiveDigest: candidate.apiArchiveDigest,
+      apiArchiveByteSize: candidate.apiArchiveByteSize,
+      frontendArchiveDigest: candidate.frontendArchiveDigest,
+      frontendArchiveByteSize: candidate.frontendArchiveByteSize,
+      frontendManifestDigest: candidate.frontendManifestDigest,
+      frontendIndexDigest: candidate.frontendIndexDigest,
+      apiArchiveObjectKey: candidate.apiArchiveObjectKey,
+      apiArchiveObjectVersionId: candidate.apiArchiveObjectVersionId,
+      frontendArchiveObjectKey: candidate.frontendArchiveObjectKey,
+      frontendArchiveObjectVersionId: candidate.frontendArchiveObjectVersionId,
+      frontendManifestObjectKey: candidate.frontendManifestObjectKey,
+      frontendManifestObjectVersionId: candidate.frontendManifestObjectVersionId,
+      manifestObjectKey: candidate.manifestObjectKey,
+      manifestObjectVersionId: candidate.manifestObjectVersionId,
+      expiresAt: candidate.expiresAt.toISOString()
+    },
+    baseline: persistedBaseline,
+    runtime: {
+      clusterName: runtime.clusterName,
+      serviceName: runtime.serviceName,
+      containerName: runtime.containerName,
+      containerPort: runtime.containerPort,
+      taskDefinitionFamily: runtime.taskDefinitionFamily,
+      taskDefinitionArn: runtime.taskDefinitionArn,
+      taskRoleArn: runtime.taskRoleArn,
+      executionRoleArn: runtime.executionRoleArn,
+      targetGroupArn: runtime.targetGroupArn,
+      loadBalancerArn: runtime.loadBalancerArn,
+      loadBalancerDnsName: runtime.loadBalancerDnsName,
+      ecrRepositoryName: runtime.ecrRepositoryName,
+      ecrRepositoryArn: runtime.ecrRepositoryArn,
+      frontendBucketName: runtime.frontendBucketName,
+      cloudFrontDistributionId: runtime.cloudFrontDistributionId,
+      cloudFrontDomainName: runtime.cloudFrontDomainName,
+      outputUrl: runtime.outputUrl,
+      healthCheckPath: build.api.healthCheckPath,
+      apiProbePath: "/api/check-ins",
+      runtimeEntrypoint: input.context.target.confirmedBuildConfig.runtimeEntrypoint
+    }
+  };
+  const result = await executeTrustedRelease(
+    trustedContext,
+    createPostgresTrustedReleaseRepository(db),
+    createAwsEcsFargateReleaseGateway({
+      clients: {
+        ecs: (configuration) =>
+          createRuntimeConvergenceTaggingEcsClient(
+            input.createEcsClient(configuration),
+            input.context,
+            input.artifact
+          )
+      }
+    }),
+    createPostgresProjectExecutionLeaseRepository(db),
+    {
+      releaseLeaseOnCompletion: false,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+    }
+  );
+  assertTrustedRollbackCanBeRecorded(result.status, trustedContext.baseline);
+  if (result.status === "succeeded") {
+    return {
+      providerRevision: {
+        provider: "aws" as const,
+        resourceType: "ecs_task_definition" as const,
+        revisionId: result.taskDefinitionArn,
+        artifactReference: candidate.manifestObjectKey,
+        metadata: {
+          taskDefinitionArn: result.taskDefinitionArn,
+          previousTaskDefinitionArn: result.previousTaskDefinitionArn,
+          imageDigest: result.imageDigest,
+          imageUri: result.imageUri,
+          releaseCandidateId: candidate.id,
+          frontendManifestVersionId: result.frontendEvidence.manifestVersionId,
+          frontendIndexVersionId: result.frontendEvidence.indexVersionId,
+          cloudFrontInvalidationId: result.frontendEvidence.invalidationId
+        }
+      },
+      outputUrl: runtime.outputUrl,
+      healthEvidence: {
+        state: "healthy",
+        ecs: result.healthEvidence,
+        public: result.publicEvidence
+      } as JsonValue,
+      rollbackEvidence: null,
+      frontendEvidence: result.frontendEvidence,
+      failureStage: null,
+      status: "succeeded" as const
+    };
+  }
+  if (result.status === "partially_failed") {
+    return {
+      providerRevision: {
+        provider: "aws" as const,
+        resourceType: "ecs_task_definition" as const,
+        revisionId: result.taskDefinitionArn,
+        artifactReference: candidate.manifestObjectKey,
+        metadata: {
+          taskDefinitionArn: result.taskDefinitionArn,
+          previousTaskDefinitionArn: result.previousTaskDefinitionArn,
+          imageDigest: result.imageDigest,
+          imageUri: result.imageUri,
+          releaseCandidateId: candidate.id
+        }
+      },
+      outputUrl: runtime.outputUrl,
+      healthEvidence: { state: "healthy", ecs: result.healthEvidence } as JsonValue,
+      rollbackEvidence: null,
+      frontendEvidence: result.frontendEvidence ?? null,
+      failureStage: result.failureStage,
+      status: "partially_failed" as const
+    };
+  }
+  if (result.status === "partially_cancelled") {
+    return {
+      providerRevision: {
+        provider: "aws" as const,
+        resourceType: "ecs_task_definition" as const,
+        revisionId: result.taskDefinitionArn,
+        artifactReference: candidate.manifestObjectKey,
+        metadata: {
+          taskDefinitionArn: result.taskDefinitionArn,
+          previousTaskDefinitionArn: result.previousTaskDefinitionArn,
+          imageDigest: result.imageDigest,
+          imageUri: result.imageUri,
+          releaseCandidateId: candidate.id
+        }
+      },
+      outputUrl: runtime.outputUrl,
+      healthEvidence: { state: "healthy", ecs: result.healthEvidence } as JsonValue,
+      rollbackEvidence: null,
+      frontendEvidence: result.frontendEvidence ?? null,
+      failureStage: result.failureStage,
+      status: "partially_cancelled" as const
+    };
+  }
+  return {
+    providerRevision: {
+      provider: "aws" as const,
+      resourceType: "ecs_task_definition" as const,
+      revisionId: result.rollbackTaskDefinitionArn,
+      artifactReference: candidate.manifestObjectKey,
+      metadata: {
+        taskDefinitionArn: result.rollbackTaskDefinitionArn,
+        imageDigest: result.imageDigest,
+        releaseCandidateId: candidate.id
+      }
+    },
+    outputUrl: runtime.outputUrl,
+    healthEvidence: { state: "restored" } as JsonValue,
+    rollbackEvidence: result.rollbackEvidence,
+    frontendEvidence: null,
+    failureStage: "ecs_health" as const,
+    status: result.status === "cancelled" ? ("cancelled" as const) : ("rolled_back" as const)
+  };
+}
+
+async function retryEcsWebTrustedFrontend(input: {
+  context: DirectApplicationReleaseContext;
+  release: ApplicationReleaseRecord;
+}) {
+  const { db } = getDatabaseClient();
+  const [release] = await db
+    .select()
+    .from(applicationReleases)
+    .where(
+      and(
+        eq(applicationReleases.id, input.release.id),
+        eq(applicationReleases.projectId, input.context.deployment.projectId),
+        eq(applicationReleases.source, input.context.deployment.source),
+        or(
+          and(
+            eq(applicationReleases.source, "direct"),
+            eq(applicationReleases.deploymentId, input.context.deployment.id)
+          ),
+          and(
+            eq(applicationReleases.source, "gitops"),
+            eq(applicationReleases.pipelineRunId, input.context.deployment.id)
+          )
+        ),
+        eq(applicationReleases.status, "partially_failed")
+      )
+    );
+  const candidateId = release?.releaseCandidateId;
+  const [candidate] = candidateId
+    ? await db
+        .select()
+        .from(releaseCandidates)
+        .where(
+          and(
+            eq(releaseCandidates.id, candidateId),
+            eq(releaseCandidates.projectId, input.context.deployment.projectId),
+            input.context.deployment.source === "direct"
+              ? eq(releaseCandidates.deploymentId, input.context.deployment.id)
+              : eq(releaseCandidates.pipelineRunId, input.context.deployment.id),
+            eq(releaseCandidates.status, "partially_failed")
+          )
+        )
+    : [];
+  const retryExpiresAt = candidate?.frontendRetryExpiresAt;
+  const taskDefinitionArn =
+    readProviderMetadataString(release?.providerRevision?.metadata, "taskDefinitionArn") ??
+    release?.providerRevision?.revisionId ??
+    null;
+  if (
+    !release ||
+    !candidate ||
+    !retryExpiresAt ||
+    retryExpiresAt <= new Date() ||
+    !taskDefinitionArn ||
+    !input.context.buildEnvironment ||
+    candidate.configFingerprint !== input.context.buildEnvironment.runtimeFingerprint ||
+    candidate.commitSha !== release.commitSha ||
+    candidate.compositeDigest !== release.compositeDigest?.value
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Frontend retry Artifact expired or no longer matches the approved runtime",
+      "APPLICATION_RELEASE_FRONTEND_RETRY_MISMATCH"
+    );
+  }
+  const trustedContext = createTrustedReleaseContext({
+    context: input.context,
+    release,
+    candidate,
+    expiresAt: retryExpiresAt
+  });
+  return executeTrustedFrontendRetry(
+    trustedContext,
+    taskDefinitionArn,
+    createPostgresTrustedReleaseRepository(db),
+    createAwsEcsFargateReleaseGateway(),
+    createPostgresProjectExecutionLeaseRepository(db)
+  );
+}
+
+async function rollbackEcsWebTrustedRelease(input: {
+  context: DirectApplicationReleaseContext;
+  artifact: DirectApplicationArtifact;
+  release: DirectApplicationReleaseRecord;
+  abortSignal?: AbortSignal;
+  retainProjectLease?: boolean;
+}) {
+  const { db } = getDatabaseClient();
+  const candidateId = readMetadataString(input.artifact.metadata, "releaseCandidateId");
+  const [release] = await db
+    .select()
+    .from(applicationReleases)
+    .where(
+      and(
+        eq(applicationReleases.id, input.release.id),
+        eq(applicationReleases.deploymentId, input.context.deployment.id),
+        eq(applicationReleases.projectId, input.context.deployment.projectId),
+        eq(applicationReleases.source, "direct"),
+        eq(applicationReleases.status, "succeeded")
+      )
+    );
+  const [candidate] = candidateId
+    ? await db
+        .select()
+        .from(releaseCandidates)
+        .where(
+          and(
+            eq(releaseCandidates.id, candidateId),
+            eq(releaseCandidates.projectId, input.context.deployment.projectId),
+            eq(releaseCandidates.deploymentId, input.context.deployment.id),
+            eq(releaseCandidates.status, "succeeded")
+          )
+        )
+    : [];
+  const [baseline] = release?.baselineReleaseId
+    ? await db
+        .select()
+        .from(applicationReleases)
+        .where(eq(applicationReleases.id, release.baselineReleaseId))
+        .limit(1)
+    : [];
+  if (
+    !release ||
+    !candidate ||
+    !release.providerRevision ||
+    release.releaseCandidateId !== candidate.id ||
+    candidate.compositeDigest !== input.release.compositeDigest?.value ||
+    release.providerRevision?.revisionId !== input.release.providerRevision?.revisionId
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Application release changed before trusted ECS rollback",
+      "APPLICATION_RELEASE_ROLLBACK_MISMATCH"
+    );
+  }
+  const persistedBaseline = resolvePersistedEcsReleaseBaseline({
+    baselineReleaseId: release.baselineReleaseId,
+    baseline,
+    projectId: input.context.deployment.projectId
+  });
+  if (!persistedBaseline) {
+    throw new DirectApplicationReleaseError(
+      "No previous successful application release is available for manual rollback",
+      "APPLICATION_RELEASE_BASELINE_REQUIRED"
+    );
+  }
+  const rolledBackFromTaskDefinitionArn = release.providerRevision.revisionId;
+  const trustedContext = createTrustedReleaseContext({
+    context: input.context,
+    release,
+    candidate,
+    expiresAt: candidate.expiresAt,
+    baseline: persistedBaseline
+  });
+  const result = await executeTrustedEcsRollback(
+    trustedContext as TrustedReleaseContext & {
+      baseline: NonNullable<TrustedReleaseContext["baseline"]>;
+    },
+    createPostgresTrustedReleaseRepository(db),
+    createAwsEcsFargateReleaseGateway(),
+    createPostgresProjectExecutionLeaseRepository(db),
+    {
+      releaseLeaseOnCompletion: !input.retainProjectLease,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+    }
+  );
+  const outputUrl = trustedContext.runtime.outputUrl;
+  return {
+    providerRevision: {
+      provider: "aws" as const,
+      resourceType: "ecs_task_definition" as const,
+      revisionId: result.taskDefinitionArn,
+      artifactReference: candidate.manifestObjectKey,
+      metadata: {
+        taskDefinitionArn: result.taskDefinitionArn,
+        imageDigest: result.imageDigest,
+        releaseCandidateId: candidate.id,
+        rolledBackFromTaskDefinitionArn
+      }
+    },
+    outputUrl,
+    healthEvidence: { state: "restored", rollback: result.rollbackEvidence } as JsonValue,
+    rollbackEvidence: result.rollbackEvidence,
+    status: "rolled_back" as const
+  };
+}
+
+function createTrustedReleaseContext(input: {
+  context: DirectApplicationReleaseContext;
+  release: typeof applicationReleases.$inferSelect;
+  candidate: typeof releaseCandidates.$inferSelect;
+  expiresAt: Date;
+  baseline?: TrustedReleaseContext["baseline"];
+}): TrustedReleaseContext {
+  const runtime = input.context.target.runtimeConfig;
+  const build = input.context.target.confirmedBuildConfig.ecsWeb;
+  if (
+    runtime.runtimeTargetKind !== "ecs_fargate" ||
+    !runtime.ecrRepositoryArn ||
+    !runtime.taskDefinitionFamily ||
+    !runtime.taskDefinitionArn ||
+    !runtime.taskRoleArn ||
+    !runtime.executionRoleArn ||
+    !runtime.targetGroupArn ||
+    !runtime.loadBalancerArn ||
+    !runtime.loadBalancerDnsName ||
+    !runtime.frontendBucketName ||
+    !runtime.cloudFrontDistributionId ||
+    !runtime.cloudFrontDomainName ||
+    !runtime.outputUrl ||
+    typeof runtime.containerPort !== "number" ||
+    !build
+  ) {
+    throw new DirectApplicationReleaseError(
+      "Terraform Apply output is incomplete for trusted ECS release",
+      "APPLICATION_RELEASE_RUNTIME_INCOMPLETE"
+    );
+  }
+  return {
+    projectId: input.context.deployment.projectId,
+    deploymentId: input.context.deployment.source === "direct" ? input.context.deployment.id : null,
+    releaseId: input.release.id,
+    source: input.context.deployment.source,
+    fencingHolderId: input.release.id,
+    connection: input.context.connection,
+    candidate: {
+      id: input.candidate.id,
+      commitSha: input.candidate.commitSha,
+      compositeDigest: input.candidate.compositeDigest,
+      configFingerprint: input.candidate.configFingerprint,
+      apiOciDigest: input.candidate.apiOciDigest,
+      apiArchiveDigest: input.candidate.apiArchiveDigest,
+      apiArchiveByteSize: input.candidate.apiArchiveByteSize,
+      frontendArchiveDigest: input.candidate.frontendArchiveDigest,
+      frontendArchiveByteSize: input.candidate.frontendArchiveByteSize,
+      frontendManifestDigest: input.candidate.frontendManifestDigest,
+      frontendIndexDigest: input.candidate.frontendIndexDigest,
+      apiArchiveObjectKey: input.candidate.apiArchiveObjectKey,
+      apiArchiveObjectVersionId: input.candidate.apiArchiveObjectVersionId,
+      frontendArchiveObjectKey: input.candidate.frontendArchiveObjectKey,
+      frontendArchiveObjectVersionId: input.candidate.frontendArchiveObjectVersionId,
+      frontendManifestObjectKey: input.candidate.frontendManifestObjectKey,
+      frontendManifestObjectVersionId: input.candidate.frontendManifestObjectVersionId,
+      manifestObjectKey: input.candidate.manifestObjectKey,
+      manifestObjectVersionId: input.candidate.manifestObjectVersionId,
+      expiresAt: input.expiresAt.toISOString()
+    },
+    baseline: input.baseline ?? null,
+    runtime: {
+      clusterName: runtime.clusterName,
+      serviceName: runtime.serviceName,
+      containerName: runtime.containerName,
+      containerPort: runtime.containerPort,
+      taskDefinitionFamily: runtime.taskDefinitionFamily,
+      taskDefinitionArn: runtime.taskDefinitionArn,
+      taskRoleArn: runtime.taskRoleArn,
+      executionRoleArn: runtime.executionRoleArn,
+      targetGroupArn: runtime.targetGroupArn,
+      loadBalancerArn: runtime.loadBalancerArn,
+      loadBalancerDnsName: runtime.loadBalancerDnsName,
+      ecrRepositoryName: runtime.ecrRepositoryName,
+      ecrRepositoryArn: runtime.ecrRepositoryArn,
+      frontendBucketName: runtime.frontendBucketName,
+      cloudFrontDistributionId: runtime.cloudFrontDistributionId,
+      cloudFrontDomainName: runtime.cloudFrontDomainName,
+      outputUrl: runtime.outputUrl,
+      healthCheckPath: build.api.healthCheckPath,
+      apiProbePath: "/api/check-ins",
+      runtimeEntrypoint: input.context.target.confirmedBuildConfig.runtimeEntrypoint
+    }
+  };
+}
+
+function readMetadataString(
+  metadata: Record<string, string | number | boolean | null>,
+  key: string
+): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readProviderMetadataString(metadata: JsonValue | undefined, key: string): string | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export function resolvePersistedEcsReleaseBaseline(input: {
+  baselineReleaseId: string | null;
+  baseline:
+    | {
+        id: string;
+        projectId: string;
+        runtimeTargetKind: RuntimeTargetKind;
+        status: ApplicationReleaseStatus;
+        providerRevision: ApplicationReleaseProviderRevision | null;
+      }
+    | undefined;
+  projectId: string;
+}): TrustedReleaseContext["baseline"] {
+  if (!input.baselineReleaseId) return null;
+  const baseline = input.baseline;
+  if (
+    !baseline ||
+    baseline.id !== input.baselineReleaseId ||
+    baseline.projectId !== input.projectId ||
+    baseline.runtimeTargetKind !== "ecs_fargate" ||
+    baseline.status !== "succeeded" ||
+    baseline.providerRevision?.provider !== "aws" ||
+    baseline.providerRevision.resourceType !== "ecs_task_definition"
+  ) {
+    throw new DirectApplicationReleaseError(
+      "The persisted rollback baseline is missing or no longer valid",
+      "APPLICATION_RELEASE_BASELINE_INVALID"
+    );
+  }
+  const taskDefinitionArn =
+    readProviderMetadataString(baseline.providerRevision.metadata, "taskDefinitionArn") ??
+    baseline.providerRevision.revisionId;
+  const imageDigest = readProviderMetadataString(baseline.providerRevision.metadata, "imageDigest");
+  if (!taskDefinitionArn || !imageDigest) {
+    throw new DirectApplicationReleaseError(
+      "The persisted rollback baseline has incomplete ECS evidence",
+      "APPLICATION_RELEASE_BASELINE_INVALID"
+    );
+  }
+  return {
+    releaseId: baseline.id,
+    taskDefinitionArn,
+    imageDigest
+  };
+}
+
+export function assertTrustedRollbackCanBeRecorded(
+  status: TrustedReleaseResult["status"],
+  baseline: TrustedReleaseContext["baseline"]
+): void {
+  if (status === "rolled_back" && !baseline) {
+    throw new DirectApplicationReleaseError(
+      "The first application release restored the bootstrap Task Definition, but no successful application release exists to record as a rollback",
+      "APPLICATION_RELEASE_BOOTSTRAP_RESTORED"
+    );
+  }
+}
+
+async function prepareEcsWebReleaseCandidate(input: {
+  context: DirectApplicationReleaseContext;
+  abortSignal?: AbortSignal;
+  assumeRole: AssumeDirectReleaseRole;
+  createClient: CreateCodeBuildClient;
+  wait: WaitForCodeBuildPoll;
+  dependencies: {
+    candidateRepository: ReleaseCandidateRepository;
+    candidateStorage: ReleaseCandidateStorage;
+    leaseRepository: ProjectExecutionLeaseRepository;
+  };
+  generateCandidateId?: () => string;
+  now?: () => Date;
+  verifyBuildEnvironment: (context: DirectApplicationReleaseContext) => Promise<void>;
+  retainProjectLease?: boolean;
+}): Promise<DirectApplicationArtifact> {
+  const buildEnvironment = input.context.buildEnvironment;
+  const build = input.context.target.confirmedBuildConfig;
+  const ecsWeb = build.ecsWeb;
+  if (!buildEnvironment || buildEnvironment.status !== "ready" || !ecsWeb) {
+    throw new DirectApplicationReleaseError(
+      "A verified project build environment is required before preflight",
+      "BUILD_ENVIRONMENT_NOT_READY"
+    );
+  }
+  if (input.abortSignal?.aborted) {
+    throw new DirectApplicationReleaseError("Preflight was cancelled", "PREFLIGHT_CANCELLED");
+  }
+
+  const now = input.now ?? (() => new Date());
+  const isGitOps = input.context.deployment.source === "gitops";
+  const lease = await acquireProjectExecutionLease(
+    {
+      projectId: input.context.deployment.projectId,
+      holderId: input.context.deployment.id,
+      source: isGitOps ? "gitops" : "direct"
+    },
+    input.dependencies.leaseRepository,
+    { now }
+  );
+  let client: CodeBuildCommandClient | undefined;
+  let buildId: string | undefined;
+  let releaseLeaseOnExit = !input.retainProjectLease;
+  try {
+    await input.verifyBuildEnvironment(input.context);
+    await assertCurrentProjectExecutionLease(
+      {
+        projectId: lease.projectId,
+        holderId: lease.holderId,
+        fencingVersion: lease.fencingVersion
+      },
+      input.dependencies.leaseRepository,
+      now()
+    );
+    const upload = await beginReleaseCandidateUpload(
+      {
+        projectId: input.context.deployment.projectId,
+        deploymentId: isGitOps ? null : input.context.deployment.id,
+        pipelineRunId: isGitOps ? input.context.deployment.id : null,
+        commitSha: build.confirmedCommitSha.toLowerCase(),
+        apiPartCount: 1,
+        frontendPartCount: 1,
+        manifestPartCount: 1
+      },
+      input.dependencies.candidateRepository,
+      input.dependencies.candidateStorage,
+      {
+        ...(input.generateCandidateId ? { generateId: input.generateCandidateId } : {}),
+        now
+      }
+    );
+    const credentials = await input.assumeRole({
+      ...input.context.connection,
+      roleSessionName: `sketchcatch-preflight-${input.context.deployment.id}`,
+      durationSeconds: 3_600,
+      policy: createPreflightCodeBuildSessionPolicy({
+        accountId: input.context.connection.accountId,
+        region: input.context.connection.region,
+        projectName: buildEnvironment.codeBuildProjectName
+      }),
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+    });
+    client = input.createClient({ region: input.context.connection.region, credentials });
+    await assertCodeBuildProjectSource(
+      client,
+      input.context,
+      input.abortSignal,
+      buildEnvironment.codeBuildProjectName
+    );
+    await input.verifyBuildEnvironment(input.context);
+    if (input.abortSignal?.aborted) {
+      throw new DirectApplicationReleaseError("Preflight was cancelled", "PREFLIGHT_CANCELLED");
+    }
+    const started = await client.send(
+      new StartBuildCommand({
+        projectName: buildEnvironment.codeBuildProjectName,
+        sourceVersion: build.confirmedCommitSha,
+        buildspecOverride: renderPreflightBuildspec(build),
+        environmentVariablesOverride: createPreflightEnvironmentOverrides(input.context, {
+          candidateId: upload.candidateId,
+          apiUploadUrl: requireSinglePartUrl(upload.uploads.api.partUrls),
+          frontendUploadUrl: requireSinglePartUrl(upload.uploads.frontend.partUrls),
+          manifestUploadUrl: requireSinglePartUrl(upload.uploads.manifest.partUrls)
+        })
+      }) as unknown as { input: Record<string, unknown> },
+      input.abortSignal ? { abortSignal: input.abortSignal } : undefined
+    );
+    buildId = started.build?.id;
+    if (!buildId) {
+      throw new DirectApplicationReleaseError(
+        "CodeBuild did not return a preflight build ID",
+        "PREFLIGHT_START_FAILED"
+      );
+    }
+    await recordProjectExecutionCoordinates(
+      {
+        projectId: lease.projectId,
+        holderId: lease.holderId,
+        fencingVersion: lease.fencingVersion,
+        activeCodeBuildId: buildId
+      },
+      input.dependencies.leaseRepository,
+      now()
+    );
+
+    const exports = await waitForPreflightBuild({
+      client,
+      buildId,
+      lease: {
+        projectId: lease.projectId,
+        holderId: lease.holderId,
+        fencingVersion: lease.fencingVersion
+      },
+      leaseRepository: input.dependencies.leaseRepository,
+      wait: input.wait,
+      now,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+    });
+    const commitSha = requireExport(exports, "SKETCHCATCH_COMMIT_SHA").toLowerCase();
+    if (commitSha !== build.confirmedCommitSha.toLowerCase()) {
+      throw new DirectApplicationReleaseError(
+        "Preflight commit does not match the approved source revision",
+        "PREFLIGHT_CHECKOUT_FAILED"
+      );
+    }
+    await assertCurrentProjectExecutionLease(
+      {
+        projectId: lease.projectId,
+        holderId: lease.holderId,
+        fencingVersion: lease.fencingVersion
+      },
+      input.dependencies.leaseRepository,
+      now()
+    );
+    const leaseFence = {
+      projectId: lease.projectId,
+      holderId: lease.holderId,
+      fencingVersion: lease.fencingVersion
+    };
+    const candidate = await runWithProjectLeaseHeartbeat(
+      leaseFence,
+      input.dependencies.leaseRepository,
+      now,
+      (heartbeat) =>
+        finalizeReleaseCandidate(
+          {
+            candidateId: upload.candidateId,
+            projectId: input.context.deployment.projectId,
+            deploymentId: isGitOps ? null : input.context.deployment.id,
+            pipelineRunId: isGitOps ? input.context.deployment.id : null,
+            commitSha,
+            uploads: {
+              api: {
+                uploadId: upload.uploads.api.uploadId,
+                parts: [
+                  { partNumber: 1, etag: requireExport(exports, "SKETCHCATCH_API_UPLOAD_ETAG") }
+                ]
+              },
+              frontend: {
+                uploadId: upload.uploads.frontend.uploadId,
+                parts: [
+                  {
+                    partNumber: 1,
+                    etag: requireExport(exports, "SKETCHCATCH_FRONTEND_UPLOAD_ETAG")
+                  }
+                ]
+              },
+              manifest: {
+                uploadId: upload.uploads.manifest.uploadId,
+                parts: [
+                  {
+                    partNumber: 1,
+                    etag: requireExport(exports, "SKETCHCATCH_MANIFEST_UPLOAD_ETAG")
+                  }
+                ]
+              }
+            },
+            apiArchiveDigest: normalizeDigest(
+              requireExport(exports, "SKETCHCATCH_API_ARCHIVE_DIGEST")
+            ),
+            apiOciDigest: normalizeDigest(requireExport(exports, "SKETCHCATCH_API_OCI_DIGEST")),
+            frontendArchiveDigest: normalizeDigest(
+              requireExport(exports, "SKETCHCATCH_FRONTEND_ARCHIVE_DIGEST")
+            ),
+            frontendManifestDigest: normalizeDigest(
+              requireExport(exports, "SKETCHCATCH_FRONTEND_MANIFEST_DIGEST")
+            ),
+            apiArchiveByteSize: requirePositiveIntegerExport(
+              exports,
+              "SKETCHCATCH_API_ARCHIVE_SIZE"
+            ),
+            frontendArchiveByteSize: requirePositiveIntegerExport(
+              exports,
+              "SKETCHCATCH_FRONTEND_ARCHIVE_SIZE"
+            ),
+            expectedBuildEnvironmentId: upload.buildEnvironmentId,
+            expectedConfigFingerprint: upload.configFingerprint
+          },
+          input.dependencies.candidateRepository,
+          input.dependencies.candidateStorage,
+          { now, leaseFence, heartbeat }
+        )
+    );
+    if (isGitOps) releaseLeaseOnExit = false;
+    return {
+      artifactFingerprint: createPreparedArtifactFingerprint(input.context),
+      commitSha,
+      digest: candidate.compositeDigest.value,
+      reference: candidate.manifestObjectKey,
+      buildRevisionId: buildId,
+      metadata: {
+        releaseCandidateId: candidate.id,
+        buildEnvironmentId: buildEnvironment.id,
+        configFingerprint: buildEnvironment.runtimeFingerprint,
+        apiOciDigest: candidate.compositeDigest.apiOciDigest,
+        frontendManifestDigest: candidate.compositeDigest.frontendManifestDigest,
+        apiArchiveObjectKey: candidate.apiArchiveObjectKey,
+        apiArchiveObjectVersionId: candidate.apiArchiveObjectVersionId,
+        frontendArchiveObjectKey: candidate.frontendArchiveObjectKey,
+        frontendArchiveObjectVersionId: candidate.frontendArchiveObjectVersionId,
+        frontendManifestObjectKey: candidate.frontendManifestObjectKey,
+        frontendManifestObjectVersionId: candidate.frontendManifestObjectVersionId,
+        manifestObjectVersionId: candidate.manifestObjectVersionId
+      }
+    };
+  } catch (error) {
+    if (client && buildId) {
+      try {
+        await stopCodeBuildAndConfirm(client, buildId, input.wait);
+      } catch {
+        releaseLeaseOnExit = false;
+        throw new DirectApplicationReleaseError(
+          "Preflight CodeBuild termination could not be confirmed; recovery is required",
+          "PREFLIGHT_STOP_UNCONFIRMED"
+        );
+      }
+    }
+    throw error;
+  } finally {
+    client?.destroy();
+    if (releaseLeaseOnExit) {
+      await releaseProjectExecutionLease(
+        {
+          projectId: lease.projectId,
+          holderId: lease.holderId,
+          fencingVersion: lease.fencingVersion
+        },
+        input.dependencies.leaseRepository
+      ).catch(() => false);
+    }
+  }
+}
+
+function createPreparedArtifactFingerprint(context: DirectApplicationReleaseContext): string {
+  if (!context.sourceRepository) {
+    throw new DirectApplicationReleaseError(
+      "A confirmed source repository is required to identify the prepared artifact"
+    );
+  }
+  return createApplicationArtifactIdentity({
+    repository: {
+      provider: context.sourceRepository.provider,
+      owner: context.sourceRepository.owner,
+      name: context.sourceRepository.name
+    },
+    commitSha: context.target.confirmedBuildConfig.confirmedCommitSha,
+    kind: applicationArtifactKindForRuntime(context.target.runtimeTargetKind),
+    confirmedBuildConfig: context.target.confirmedBuildConfig,
+    buildContractVersion: APPLICATION_ARTIFACT_CONTRACT_VERSION,
+    ...applicationArtifactPlatformForRuntime(context.target.runtimeTargetKind),
+    buildInputs: {}
+  }).artifactFingerprint;
+}
+
+export function createPreflightCodeBuildSessionPolicy(input: {
+  accountId: string;
+  region: string;
+  projectName: string;
+}): string {
+  const projectArn = `arn:aws:codebuild:${input.region}:${input.accountId}:project/${input.projectName}`;
+  return JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Action: ["codebuild:BatchGetProjects", "codebuild:StartBuild"],
+        Resource: projectArn
+      },
+      {
+        Effect: "Allow",
+        Action: ["codebuild:BatchGetBuilds", "codebuild:StopBuild"],
+        Resource: projectArn
+      }
+    ]
+  });
+}
+
+async function runWithProjectLeaseHeartbeat<T>(
+  fence: { projectId: string; holderId: string; fencingVersion: number },
+  repository: ProjectExecutionLeaseRepository,
+  now: () => Date,
+  operation: (heartbeat: () => Promise<void>) => Promise<T>
+): Promise<T> {
+  let heartbeatError: unknown;
+  let heartbeatInFlight: Promise<void> = Promise.resolve();
+  const heartbeat = async () => {
+    heartbeatInFlight = heartbeatInFlight.then(async () => {
+      if (heartbeatError) return;
+      try {
+        await heartbeatProjectExecutionLease(fence, repository, { now });
+      } catch (error) {
+        heartbeatError = error;
+      }
+    });
+    await heartbeatInFlight;
+    if (heartbeatError) throw heartbeatError;
+  };
+  const timer = setInterval(() => {
+    void heartbeat().catch(() => undefined);
+  }, 30_000);
+  timer.unref?.();
+  try {
+    await heartbeat();
+    const result = await operation(heartbeat);
+    await heartbeat();
+    return result;
+  } finally {
+    clearInterval(timer);
+    await heartbeatInFlight;
+  }
+}
+
+async function waitForPreflightBuild(input: {
+  client: CodeBuildCommandClient;
+  buildId: string;
+  lease: { projectId: string; holderId: string; fencingVersion: number };
+  leaseRepository: ProjectExecutionLeaseRepository;
+  wait: WaitForCodeBuildPoll;
+  now: () => Date;
+  abortSignal?: AbortSignal;
+}): Promise<Map<string, string>> {
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    if (input.abortSignal?.aborted) {
+      throw new DirectApplicationReleaseError("Preflight was cancelled", "PREFLIGHT_CANCELLED");
+    }
+    await heartbeatProjectExecutionLease(input.lease, input.leaseRepository, { now: input.now });
+    const response = await input.client.send(
+      new BatchGetBuildsCommand({ ids: [input.buildId] }) as unknown as {
+        input: Record<string, unknown>;
+      },
+      input.abortSignal ? { abortSignal: input.abortSignal } : undefined
+    );
+    const build = response.builds?.[0];
+    const exports = collectCodeBuildExports(build?.exportedEnvironmentVariables);
+    if (build?.buildStatus === "SUCCEEDED") return exports;
+    if (["FAILED", "FAULT", "STOPPED", "TIMED_OUT"].includes(build?.buildStatus ?? "")) {
+      const stage = exports.get("SKETCHCATCH_PREFLIGHT_STAGE") ?? "unknown";
+      throw new DirectApplicationReleaseError(
+        `Preflight ${stage} stage failed with status ${build?.buildStatus}`,
+        `PREFLIGHT_${stage.toUpperCase()}_FAILED`
+      );
+    }
+    await input.wait(5_000, input.abortSignal);
+  }
+  throw new DirectApplicationReleaseError("Preflight timed out", "PREFLIGHT_TIMED_OUT");
+}
+
+export async function verifyCurrentProjectBuildEnvironment(
+  context: DirectApplicationReleaseContext,
+  gateway: ProjectBuildEnvironmentGateway = createAwsProjectBuildEnvironmentGateway()
+): Promise<void> {
+  const environment = context.buildEnvironment;
+  const sourceRepository = context.sourceRepository;
+  const ecsWeb = context.target.confirmedBuildConfig.ecsWeb;
+  if (!environment || !sourceRepository || !ecsWeb) {
+    throw new DirectApplicationReleaseError(
+      "A complete project build environment is required before preflight",
+      "BUILD_ENVIRONMENT_NOT_READY"
+    );
+  }
+  const desired = createDesiredProjectBuildEnvironment({
+    projectId: context.deployment.projectId,
+    sourceRepository: {
+      id: `${sourceRepository.owner}/${sourceRepository.name}`,
+      owner: sourceRepository.owner,
+      name: sourceRepository.name
+    },
+    awsConnection: {
+      id: environment.awsConnectionId,
+      accountId: context.connection.accountId,
+      roleArn: context.connection.roleArn,
+      externalId: context.connection.externalId,
+      region: context.connection.region
+    },
+    codeConnection: {
+      id: environment.awsCodeConnectionId,
+      connectionArn: environment.codeConnectionArn,
+      status: "AVAILABLE"
+    },
+    confirmedBuildConfig: {
+      ...context.target.confirmedBuildConfig,
+      ecsWeb
+    }
+  });
+  if (
+    desired.runtimeFingerprint !== environment.runtimeFingerprint ||
+    desired.codeBuildProjectName !== environment.codeBuildProjectName ||
+    desired.codeBuildServiceRoleArn !== environment.codeBuildServiceRoleArn ||
+    desired.permissionsBoundaryArn !== environment.permissionsBoundaryArn ||
+    desired.sourceRepositoryUrl !== environment.sourceRepositoryUrl
+  ) {
+    throw new DirectApplicationReleaseError(
+      "The stored project build environment no longer matches the approved build configuration",
+      "BUILD_ENVIRONMENT_CHANGED"
+    );
+  }
+  const verification = await gateway.verify(desired);
+  if (!verification.verified) {
+    throw new DirectApplicationReleaseError(
+      verification.statusReason ?? "The project build environment could not be verified",
+      "BUILD_ENVIRONMENT_VERIFICATION_FAILED"
+    );
+  }
+}
+
+async function stopCodeBuildAndConfirm(
+  client: CodeBuildCommandClient,
+  buildId: string,
+  wait: WaitForCodeBuildPoll
+): Promise<void> {
+  await client.send(
+    new StopBuildCommand({ id: buildId }) as unknown as { input: Record<string, unknown> }
+  );
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const response = await client.send(
+      new BatchGetBuildsCommand({ ids: [buildId] }) as unknown as {
+        input: Record<string, unknown>;
+      }
+    );
+    const status = response.builds?.[0]?.buildStatus;
+    if (["STOPPED", "SUCCEEDED", "FAILED", "FAULT", "TIMED_OUT"].includes(status ?? "")) return;
+    await wait(1_000);
+  }
+  throw new DirectApplicationReleaseError(
+    "CodeBuild did not reach a terminal state after cancellation",
+    "PREFLIGHT_STOP_UNCONFIRMED"
+  );
+}
+
+function createPreflightEnvironmentOverrides(
+  context: DirectApplicationReleaseContext,
+  uploadUrls: {
+    candidateId: string;
+    apiUploadUrl: string;
+    frontendUploadUrl: string;
+    manifestUploadUrl: string;
+  }
+): EnvironmentVariable[] {
+  const build = context.target.confirmedBuildConfig;
+  const ecsWeb = build.ecsWeb;
+  if (!ecsWeb) return [];
+  const values: Array<[string, string]> = [
+    ["SKETCHCATCH_CONFIRMED_COMMIT_SHA", build.confirmedCommitSha],
+    ["SKETCHCATCH_CANDIDATE_ID", uploadUrls.candidateId],
+    ["SKETCHCATCH_API_SOURCE_ROOT", ecsWeb.api.sourceRoot],
+    ["SKETCHCATCH_DOCKERFILE_PATH", ecsWeb.api.dockerfilePath],
+    ["SKETCHCATCH_CONTAINER_PORT", String(ecsWeb.api.containerPort)],
+    ["SKETCHCATCH_HEALTH_CHECK_PATH", ecsWeb.api.healthCheckPath],
+    ["SKETCHCATCH_FRONTEND_SOURCE_ROOT", ecsWeb.frontend.sourceRoot],
+    ["SKETCHCATCH_FRONTEND_OUTPUT_PATH", ecsWeb.frontend.outputPath],
+    ["SKETCHCATCH_FRONTEND_PACKAGE_MANIFEST_PATH", ecsWeb.frontend.packageManifestPath],
+    ["SKETCHCATCH_FRONTEND_LOCKFILE_PATH", ecsWeb.frontend.lockfilePath],
+    ["SKETCHCATCH_PACKAGE_MANAGER", ecsWeb.frontend.packageManager],
+    ["SKETCHCATCH_PACKAGE_MANAGER_VERSION", ecsWeb.frontend.packageManagerVersion],
+    ["SKETCHCATCH_API_UPLOAD_URL", uploadUrls.apiUploadUrl],
+    ["SKETCHCATCH_FRONTEND_UPLOAD_URL", uploadUrls.frontendUploadUrl],
+    ["SKETCHCATCH_MANIFEST_UPLOAD_URL", uploadUrls.manifestUploadUrl]
+  ];
+  return [
+    ...values.map(([name, value]) => ({ name, value, type: "PLAINTEXT" as const })),
+    ...createPreflightBuildCacheEnvironmentOverrides({
+      projectId: context.deployment.projectId,
+      accountId: context.connection.accountId,
+      region: context.connection.region
+    })
+  ];
+}
+
+export function createPreflightBuildCacheEnvironmentOverrides(input: {
+  projectId: string;
+  accountId: string;
+  region: string;
+}): EnvironmentVariable[] {
+  const buildCache = createProjectBuildCacheIdentity(input);
+  return [
+    {
+      name: "SKETCHCATCH_BUILD_CACHE_REFERENCE",
+      value: buildCache.cacheReference,
+      type: "PLAINTEXT"
+    },
+    {
+      name: "SKETCHCATCH_BUILD_CACHE_REGISTRY",
+      value: `${input.accountId}.dkr.ecr.${input.region}.amazonaws.com`,
+      type: "PLAINTEXT"
+    }
+  ];
+}
+
+function collectCodeBuildExports(
+  variables: Array<{ name?: string; value?: string }> | undefined
+): Map<string, string> {
+  const exports = new Map<string, string>();
+  for (const variable of variables ?? []) {
+    if (typeof variable.name === "string" && typeof variable.value === "string") {
+      exports.set(variable.name, variable.value);
+    }
+  }
+  return exports;
+}
+
+function requireSinglePartUrl(parts: Array<{ partNumber: number; url: string }>): string {
+  const part = parts.length === 1 ? parts[0] : undefined;
+  if (!part || part.partNumber !== 1) {
+    throw new DirectApplicationReleaseError(
+      "Preflight upload did not return exactly one signed part URL"
+    );
+  }
+  return part.url;
+}
+
+function requirePositiveIntegerExport(exports: Map<string, string>, name: string): number {
+  const value = Number(requireExport(exports, name));
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new DirectApplicationReleaseError(`CodeBuild export ${name} is not a positive size`);
+  }
+  return value;
 }
 
 export async function inspectEcsDirectRuntime(input: {
@@ -245,27 +1734,24 @@ export async function inspectEcsDirectRuntime(input: {
       }),
       input.abortSignal ? { abortSignal: input.abortSignal } : undefined
     );
-    const containers = taskResponse.taskDefinition?.containerDefinitions?.filter(
-      (container) => container.name === target.compute.containerName
-    ) ?? [];
+    const containers =
+      taskResponse.taskDefinition?.containerDefinitions?.filter(
+        (container) => container.name === target.compute.containerName
+      ) ?? [];
     if (containers.length !== 1 || !containers[0]?.image) {
       throw new DirectApplicationReleaseError("ECS task definition current state was incomplete");
     }
-    const marker = taskResponse.tags?.find(
-      (tag) => tag.key === "sketchcatch:runtime-convergence"
-    )?.value ?? "";
-    const markerMatch = /^sketchcatch:artifact=([a-f0-9]{64});target=([a-f0-9]{64})$/u.exec(
-      marker
-    );
+    const marker =
+      taskResponse.tags?.find((tag) => tag.key === runtimeConvergenceTagKey)?.value ?? "";
+    const markerMatch = runtimeConvergenceMarkerPattern.exec(marker);
     const deploymentConfiguration = service.deploymentConfiguration;
-    const activeDeployment = service.deployments?.length === 1
-      ? service.deployments[0]
-      : undefined;
-    const fargateCapacity = service.launchType === "FARGATE" ||
-      (service.capacityProviderStrategy?.length ?? 0) > 0 &&
-      service.capacityProviderStrategy?.every((item) =>
-        item.capacityProvider === "FARGATE" || item.capacityProvider === "FARGATE_SPOT"
-      ) === true;
+    const activeDeployment = service.deployments?.length === 1 ? service.deployments[0] : undefined;
+    const fargateCapacity =
+      service.launchType === "FARGATE" ||
+      ((service.capacityProviderStrategy?.length ?? 0) > 0 &&
+        service.capacityProviderStrategy?.every(
+          (item) => item.capacityProvider === "FARGATE" || item.capacityProvider === "FARGATE_SPOT"
+        ) === true);
     const providerHealthy =
       service.status === "ACTIVE" &&
       service.desiredCount !== undefined &&
@@ -276,8 +1762,7 @@ export async function inspectEcsDirectRuntime(input: {
       fargateCapacity &&
       (target.capacity.platformVersion === null ||
         activeDeployment?.platformVersion === target.capacity.platformVersion) &&
-      deploymentConfiguration?.minimumHealthyPercent ===
-        target.rollout.minimumHealthyPercent &&
+      deploymentConfiguration?.minimumHealthyPercent === target.rollout.minimumHealthyPercent &&
       deploymentConfiguration?.maximumPercent === target.rollout.maximumPercent &&
       deploymentConfiguration?.deploymentCircuitBreaker?.enable === true &&
       deploymentConfiguration?.deploymentCircuitBreaker?.rollback ===
@@ -443,9 +1928,10 @@ async function runCodeBuildPhase(input: {
 async function assertCodeBuildProjectSource(
   client: CodeBuildCommandClient,
   context: DirectApplicationReleaseContext,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  projectNameOverride?: string
 ): Promise<void> {
-  const projectName = requireCodeBuildProjectName(context);
+  const projectName = projectNameOverride ?? requireCodeBuildProjectName(context);
   const sourceRepository = context.sourceRepository;
   if (!sourceRepository) {
     throw new DirectApplicationReleaseError(
@@ -551,28 +2037,12 @@ function createEnvironmentOverrides(
     );
   }
   if (artifact) {
-    const runtimeTarget = context.target.runtimeTarget ??
-      normalizeLegacyRuntimeDeploymentTarget(context.target.runtimeConfig, {
-        healthCheckPath: context.target.confirmedBuildConfig.healthCheckPath
-      });
-    const targetIdentity = createDeploymentTargetIdentity({
-      contractVersion: "runtime-convergence/v1",
-      scope: {
-        projectId: context.deployment.projectId,
-        provider: "aws",
-        accountId: context.connection.accountId,
-        region: context.connection.region
-      },
-      target: runtimeTarget
-    });
+    const marker = resolveRuntimeConvergenceMarker(context, artifact);
     values.push(
       ["SKETCHCATCH_ARTIFACT_DIGEST", `sha256:${artifact.digest}`],
       ["SKETCHCATCH_ARTIFACT_REFERENCE", artifact.reference],
-      ["SKETCHCATCH_ARTIFACT_FINGERPRINT", artifact.artifactFingerprint],
-      [
-        "SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT",
-        targetIdentity.deploymentTargetFingerprint
-      ]
+      ["SKETCHCATCH_ARTIFACT_FINGERPRINT", marker.artifactFingerprint],
+      ["SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT", marker.targetFingerprint]
     );
   }
   if (release?.providerRevision) {
@@ -690,7 +2160,7 @@ phases:
         with open("task-next.json", "w", encoding="utf-8") as handle:
             json.dump(task, handle)
         PY
-        NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://task-next.json --tags key=sketchcatch:runtime-convergence,value="sketchcatch:artifact=$SKETCHCATCH_ARTIFACT_FINGERPRINT;target=$SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT" --query taskDefinition.taskDefinitionArn --output text)
+        NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://task-next.json --tags key=sketchcatch:runtime-convergence,value="sketchcatch:artifact=$SKETCHCATCH_ARTIFACT_FINGERPRINT:target=$SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT" --query taskDefinition.taskDefinitionArn --output text)
         set +e
         aws ecs update-service --cluster "$SKETCHCATCH_ECS_CLUSTER" --service "$SKETCHCATCH_ECS_SERVICE" --task-definition "$NEW_TASK_DEFINITION" --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' --force-new-deployment >/dev/null
         aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE"

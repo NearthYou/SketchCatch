@@ -1,36 +1,63 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
-import { CicdConsoleScreen } from "./CicdConsoleScreen";
+import { DeliveryCenterPanel } from "./DeliveryCenterPanel";
 import { DirectDeploymentScreen, type DirectDeploymentScreenProps } from "./DirectDeploymentScreen";
+import type { LiveObservationSelection } from "./live-observation";
+import {
+  acknowledgeInitialCicdReturnCommand,
+  cancelPendingCicdReturn,
+  completePendingCicdReturn,
+  completePendingCicdReturnAfterDeployment,
+  type InitialCicdReturnCommand,
+  type PendingCicdReturn
+} from "./cicd-return-command";
 import styles from "./workspace.module.css";
 
 export type DeploymentConsoleScreen = "deployment" | "cicd";
 
-export type DeploymentConsoleShellProps = DirectDeploymentScreenProps & {
+export type DeploymentConsoleShellProps = Omit<
+  DirectDeploymentScreenProps,
+  "onApplyPlanApproved"
+> & {
   readonly activeScreen?: DeploymentConsoleScreen | undefined;
   readonly fullScreenOnly?: boolean | undefined;
+  readonly initialActiveScreen?: DeploymentConsoleScreen | undefined;
   readonly initialExpanded?: boolean | undefined;
+  readonly initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   readonly onActiveScreenChange?: ((screen: DeploymentConsoleScreen) => void) | undefined;
   readonly onExpandedClose?: (() => void) | undefined;
-  readonly onOpenLiveObservation?: (() => void) | undefined;
+  readonly onInitialCicdReturnCommandReady?: ((cleanedHref: string) => void) | undefined;
+  readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
   readonly projectName: string;
 };
 
 export function DeploymentConsoleShell({
   activeScreen: controlledActiveScreen,
   fullScreenOnly = false,
+  initialActiveScreen,
+  initialCicdReturnCommand,
   initialExpanded = false,
   onActiveScreenChange,
   onExpandedClose,
+  onInitialCicdReturnCommandReady,
   onOpenLiveObservation,
   projectName,
   ...directProps
 }: DeploymentConsoleShellProps) {
   const storageKey = `sketchcatch:deployment-console-screen:${directProps.projectId}`;
-  const [storedActiveScreen, setStoredActiveScreen] =
-    useState<DeploymentConsoleScreen>("deployment");
+  const [storedActiveScreen, setStoredActiveScreen] = useState<DeploymentConsoleScreen>(
+    initialCicdReturnCommand?.activeScreen ?? initialActiveScreen ?? "deployment"
+  );
+  const [pendingCicdReturn, setPendingCicdReturn] = useState<PendingCicdReturn | null>(null);
+  const [requestedDirectScope, setRequestedDirectScope] = useState<
+    "application" | "full_stack" | null
+  >(null);
+  const [readinessRefreshRequestId, setReadinessRefreshRequestId] = useState(
+    initialCicdReturnCommand ? 1 : 0
+  );
   const [isDeploymentExpanded, setIsDeploymentExpanded] = useState(initialExpanded);
   const [confirmationDismissRequestId, setConfirmationDismissRequestId] = useState(0);
+  const acknowledgedInitialCicdReturnHrefRef = useRef<string | null>(null);
   const confirmationOpenRef = useRef(false);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -38,9 +65,46 @@ export function DeploymentConsoleShell({
   const isDeploymentOverlayOpen = fullScreenOnly || isDeploymentExpanded;
 
   useEffect(() => {
+    if (initialCicdReturnCommand?.projectId === directProps.projectId) {
+      setStoredActiveScreen("cicd");
+      window.localStorage.setItem(storageKey, "cicd");
+      return;
+    }
+    if (initialActiveScreen) {
+      setStoredActiveScreen(initialActiveScreen);
+      window.localStorage.setItem(storageKey, initialActiveScreen);
+      return;
+    }
     const storedValue = window.localStorage.getItem(storageKey);
     setStoredActiveScreen(isDeploymentConsoleScreen(storedValue) ? storedValue : "deployment");
-  }, [storageKey]);
+  }, [directProps.projectId, initialActiveScreen, initialCicdReturnCommand, storageKey]);
+
+  useEffect(() => {
+    if (!initialCicdReturnCommand || !onInitialCicdReturnCommandReady) {
+      return;
+    }
+
+    const cleanedHref = acknowledgeInitialCicdReturnCommand({
+      command: initialCicdReturnCommand,
+      consoleState: {
+        projectId: directProps.projectId,
+        activeScreen,
+        readinessRefreshRequestId
+      }
+    });
+    if (!cleanedHref || acknowledgedInitialCicdReturnHrefRef.current === cleanedHref) {
+      return;
+    }
+
+    acknowledgedInitialCicdReturnHrefRef.current = cleanedHref;
+    onInitialCicdReturnCommandReady(cleanedHref);
+  }, [
+    activeScreen,
+    directProps.projectId,
+    initialCicdReturnCommand,
+    onInitialCicdReturnCommandReady,
+    readinessRefreshRequestId
+  ]);
 
   useEffect(() => {
     if (!isDeploymentOverlayOpen) {
@@ -100,11 +164,19 @@ export function DeploymentConsoleShell({
   }, [isDeploymentOverlayOpen]);
 
   function close(): void {
+    setPendingCicdReturn((pending) => cancelPendingCicdReturn(pending));
+    setRequestedDirectScope(null);
     setIsDeploymentExpanded(false);
     onExpandedClose?.();
   }
 
-  function selectScreen(screen: DeploymentConsoleScreen): void {
+  function selectScreen(
+    screen: DeploymentConsoleScreen,
+    options: { readonly preservePendingCicdReturn?: boolean } = {}
+  ): void {
+    if (!options.preservePendingCicdReturn) {
+      setPendingCicdReturn((pending) => cancelPendingCicdReturn(pending));
+    }
     setStoredActiveScreen(screen);
     window.localStorage.setItem(storageKey, screen);
     onActiveScreenChange?.(screen);
@@ -116,17 +188,47 @@ export function DeploymentConsoleShell({
         <DirectDeploymentScreen
           {...directProps}
           confirmationDismissRequestId={confirmationDismissRequestId}
-          onCancel={close}
           onConfirmationStateChange={(isOpen) => {
             confirmationOpenRef.current = isOpen;
+          }}
+          onOpenLiveObservation={onOpenLiveObservation}
+          requestedScope={requestedDirectScope}
+          onApplyPlanApproved={(deployment) => {
+            const completed = completePendingCicdReturn({
+              pending: pendingCicdReturn,
+              approvedDeployment: deployment,
+              currentRefreshRequestId: readinessRefreshRequestId
+            });
+            if (!completed) {
+              return;
+            }
+            setPendingCicdReturn(completed.pending);
+            setReadinessRefreshRequestId(completed.readinessRefreshRequestId);
+            selectScreen(completed.activeScreen, { preservePendingCicdReturn: true });
+          }}
+          onDeploymentSucceeded={(deployment) => {
+            const completed = completePendingCicdReturnAfterDeployment({
+              pending: pendingCicdReturn,
+              deployment,
+              currentRefreshRequestId: readinessRefreshRequestId
+            });
+            if (!completed) return;
+            setPendingCicdReturn(completed.pending);
+            setRequestedDirectScope(null);
+            setReadinessRefreshRequestId(completed.readinessRefreshRequestId);
+            selectScreen(completed.activeScreen, { preservePendingCicdReturn: true });
           }}
         />
       </div>
       <div hidden={activeScreen !== "cicd"}>
-        <CicdConsoleScreen
-          isVisible={activeScreen === "cicd"}
-          onOpenLiveObservation={onOpenLiveObservation}
+        <DeliveryCenterPanel
+          onOpenDirectDeployment={(scope) => {
+            setRequestedDirectScope(scope);
+            selectScreen("deployment");
+          }}
+          {...(onOpenLiveObservation ? { onOpenLiveObservation } : {})}
           projectId={directProps.projectId}
+          readinessRefreshRequestId={readinessRefreshRequestId}
         />
       </div>
     </div>

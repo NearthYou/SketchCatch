@@ -1,7 +1,14 @@
-import type { DiagramJson, ProjectDraftResponse, TerraformSyncFileInput } from "../../../../packages/types/src";
+import type {
+  DiagramJson,
+  ProjectDraftConflictResponse,
+  ProjectDraftResponse,
+  TerraformSyncFileInput
+} from "../../../../packages/types/src";
+import { ApiClientError } from "../../lib/api-client";
 import { getProjectDraft, saveProjectDraft } from "./api";
 import {
   chooseInitialDiagram,
+  createDraftStorageKey,
   createLocalProjectDraft,
   markDraftServerSaved,
   readLocalProjectDraft,
@@ -11,8 +18,10 @@ import type { InitialDiagramChoice, LocalProjectDraft } from "./project-draft-pe
 
 export type LoadProjectDiagramDraftInput = {
   fallbackDiagram: DiagramJson;
+  legacyLocalCacheWorkspaceId?: string | undefined;
   localCacheWorkspaceId?: string | undefined;
   projectId: string;
+  recoveryPreference?: "server" | undefined;
   workspaceId?: string | undefined;
 };
 
@@ -29,6 +38,7 @@ export type SaveProjectDiagramDraftInput = {
 type LoadProjectDiagramDraftDependencies = {
   getProjectDraft?: typeof getProjectDraft | undefined;
   readLocalProjectDraft?: typeof readLocalProjectDraft | undefined;
+  writeLocalProjectDraft?: typeof writeLocalProjectDraft | undefined;
 };
 
 type SaveProjectDiagramDraftDependencies = {
@@ -50,7 +60,9 @@ type SaveServerProjectDiagramDraftDependencies = {
 
 export type LoadedProjectDiagramDraft = InitialDiagramChoice & {
   localDraft: LocalProjectDraft | null;
+  recoveryDecisionRequired: boolean;
   serverDraft: ProjectDraftResponse["draft"];
+  shouldAutoSaveServer: boolean;
 };
 
 export type SavedProjectDiagramDraft = {
@@ -71,6 +83,7 @@ export type SavedServerProjectDiagramDraft =
   | {
       ok: false;
       error: unknown;
+      conflict: ProjectDraftConflictResponse | null;
       localDraft: LocalProjectDraft | null;
       serverDraft: null;
     };
@@ -81,21 +94,58 @@ export async function loadProjectDiagramDraft(
 ): Promise<LoadedProjectDiagramDraft> {
   const readLocal = dependencies.readLocalProjectDraft ?? readLocalProjectDraft;
   const readServer = dependencies.getProjectDraft ?? getProjectDraft;
+  const writeLocal = dependencies.writeLocalProjectDraft ?? writeLocalProjectDraft;
   const localCacheWorkspaceId = getLocalCacheWorkspaceId(input);
-  const [localDraft, serverResponse] = await Promise.all([
+  const [scopedLocalDraft, serverResponse] = await Promise.all([
     readLocal(localCacheWorkspaceId, input.projectId),
-    readServer(input.projectId).catch((): ProjectDraftResponse => ({ draft: null }))
+    readServer(input.projectId)
   ]);
+  let localDraft = scopedLocalDraft;
+
+  if (!localDraft && input.legacyLocalCacheWorkspaceId) {
+    const legacyLocalDraft = await readLocal(input.legacyLocalCacheWorkspaceId, input.projectId);
+
+    if (legacyLocalDraft) {
+      localDraft = {
+        ...legacyLocalDraft,
+        key: createDraftStorageKey(localCacheWorkspaceId, input.projectId),
+        workspaceId: localCacheWorkspaceId
+      };
+      await writeLocal(localDraft);
+    }
+  }
   const choice = chooseInitialDiagram({
     fallbackDiagram: input.fallbackDiagram,
-    localDraft,
+    localDraft: input.recoveryPreference === "server" ? null : localDraft,
     serverDraft: serverResponse.draft
   });
+  let resolvedLocalDraft = localDraft;
+
+  if (choice.source === "server" && serverResponse.draft) {
+    const localDraftForServer =
+      localDraft ??
+      createLocalProjectDraft({
+        workspaceId: localCacheWorkspaceId,
+        projectId: input.projectId,
+        diagramJson: serverResponse.draft.diagramJson,
+        terraformFiles: serverResponse.draft.terraformFiles,
+        baseServerRevision: serverResponse.draft.revision,
+        savedAt: serverResponse.draft.serverSavedAt
+      });
+    resolvedLocalDraft = markDraftServerSaved(localDraftForServer, serverResponse.draft);
+    await writeLocal(resolvedLocalDraft);
+  }
 
   return {
     ...choice,
-    localDraft,
-    serverDraft: serverResponse.draft
+    localDraft: resolvedLocalDraft,
+    recoveryDecisionRequired: choice.requiresRecoveryDecision === true,
+    serverDraft: serverResponse.draft,
+    shouldAutoSaveServer:
+      choice.requiresRecoveryDecision !== true &&
+      choice.source === "local" &&
+      localDraft !== null &&
+      Object.prototype.hasOwnProperty.call(localDraft, "baseServerRevision")
   };
 }
 
@@ -153,12 +203,14 @@ export async function saveServerProjectDiagramDraft(
     serverResponse = await saveServer({
       projectId: input.projectId,
       diagramJson: input.diagramJson,
+      expectedRevision: input.previousLocalDraft?.baseServerRevision ?? null,
       ...(input.terraformFiles !== undefined ? { terraformFiles: input.terraformFiles } : {})
     });
   } catch (error) {
     return {
       ok: false,
       error,
+      conflict: getProjectDraftConflict(error),
       localDraft: input.previousLocalDraft ?? null,
       serverDraft: null
     };
@@ -168,6 +220,7 @@ export async function saveServerProjectDiagramDraft(
     return {
       ok: false,
       error: new Error("Project draft save returned an empty draft."),
+      conflict: null,
       localDraft: input.previousLocalDraft ?? null,
       serverDraft: null
     };
@@ -187,7 +240,36 @@ export async function saveServerProjectDiagramDraft(
   };
 }
 
-function createProjectLocalDraft(input: SaveProjectDiagramDraftInput, savedAt: string): LocalProjectDraft {
+function getProjectDraftConflict(error: unknown): ProjectDraftConflictResponse | null {
+  if (!(error instanceof ApiClientError) || error.status !== 409) {
+    return null;
+  }
+
+  const response = error.response as Partial<ProjectDraftConflictResponse>;
+
+  if (
+    response.error !== "conflict" ||
+    typeof response.message !== "string" ||
+    typeof response.currentRevision !== "number" ||
+    !Number.isInteger(response.currentRevision) ||
+    response.currentRevision < 1 ||
+    typeof response.currentServerSavedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    error: "conflict",
+    message: response.message,
+    currentRevision: response.currentRevision,
+    currentServerSavedAt: response.currentServerSavedAt
+  };
+}
+
+function createProjectLocalDraft(
+  input: SaveProjectDiagramDraftInput,
+  savedAt: string
+): LocalProjectDraft {
   return createLocalProjectDraft({
     workspaceId: getLocalCacheWorkspaceId(input),
     projectId: input.projectId,

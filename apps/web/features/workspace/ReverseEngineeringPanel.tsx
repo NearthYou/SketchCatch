@@ -421,7 +421,8 @@ export function ReverseEngineeringPanel({
       if (createProjectOnApply && targetProject) {
         await saveProjectDraft({
           projectId: targetProject.id,
-          diagramJson: diagramToApply
+          diagramJson: diagramToApply,
+          expectedRevision: null
         });
       }
 

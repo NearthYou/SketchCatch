@@ -31,6 +31,7 @@ type WorkspaceProjectBarProps = {
   };
   readonly workspace: {
     readonly dashboardHref: string;
+    readonly isDeploymentConsoleOpen: boolean;
     readonly projectName: string;
     readonly saveStatus: string;
     readonly showSaveAction: boolean;
@@ -95,12 +96,15 @@ export function WorkspaceProjectBar({
 
         {actions.onSaveAndDeploy ? (
           <button
-            className={styles.projectBarPrimaryAction}
+            aria-haspopup="dialog"
+            aria-label="배포"
+            className={`${styles.projectBarIconButton} ${styles.projectBarDeployButton}`}
+            data-active={workspace.isDeploymentConsoleOpen}
             onClick={handleSaveAndDeploy}
+            title="배포"
             type="button"
           >
-            <Rocket aria-hidden="true" size={16} />
-            <span>배포</span>
+            <Rocket aria-hidden="true" size={17} />
           </button>
         ) : null}
 

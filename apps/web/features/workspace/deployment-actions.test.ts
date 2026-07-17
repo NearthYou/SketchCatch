@@ -5,14 +5,36 @@ import {
   getGitCicdHandoffStatusLabel,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
+  getInfrastructureRollbackTarget,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
   getRecommendedDeploymentLiveProfile,
   hasCompleteDeploymentApprovalSnapshot,
+  selectDeploymentCleanupTarget,
+  selectDeploymentCleanupTargets,
   shouldAutoRefreshDeployment,
   shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
+
+test("infrastructure rollback is offered only from current state to the previous successful version", () => {
+  const target = createDeployment({
+    id: "33333333-3333-4333-8333-333333333333",
+    status: "SUCCESS",
+    stateObjectKey: "deployments/target/state/terraform.tfstate",
+    createdAt: "2026-07-15T10:00:00.000Z"
+  });
+  const source = createDeployment({
+    id: "44444444-4444-4444-8444-444444444444",
+    status: "FAILED",
+    failureStage: "apply",
+    stateObjectKey: "deployments/source/state/terraform.tfstate",
+    createdAt: "2026-07-15T11:00:00.000Z"
+  });
+
+  assert.equal(getInfrastructureRollbackTarget(source, [source, target])?.id, target.id);
+  assert.equal(getInfrastructureRollbackTarget(source, [source]), null);
+});
 
 test("template resource graphs recommend the extended live deployment profile", () => {
   const diagramJson: DiagramJson = {
@@ -54,6 +76,90 @@ test("successful apply deployment offers cleanup planning but not direct destroy
   assert.equal(state.canDestroy, false);
 });
 
+test("cleanup remains attached to the stateful success when a newer validation attempt exists", () => {
+  const currentAttempt = createDeployment({
+    id: "88888888-8888-4888-8888-888888888888",
+    status: "PENDING",
+    updatedAt: "2026-07-16T02:00:00.000Z"
+  });
+  const deployedVersion = createDeployment({
+    id: "77777777-7777-4777-8777-777777777777",
+    stateObjectKey: "deployments/deployed-version/state/terraform.tfstate",
+    status: "SUCCESS",
+    updatedAt: "2026-07-16T01:00:00.000Z"
+  });
+
+  assert.equal(
+    selectDeploymentCleanupTarget([currentAttempt, deployedVersion])?.id,
+    deployedVersion.id
+  );
+});
+
+test("successful application releases remain cleanup targets without Terraform state", () => {
+  const applicationDeployment = createDeployment({
+    releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    scope: "application",
+    stateObjectKey: null,
+    status: "SUCCESS"
+  });
+
+  assert.equal(selectDeploymentCleanupTarget([applicationDeployment])?.id, applicationDeployment.id);
+  assert.equal(
+    getDeploymentActionState(applicationDeployment, "idle").shouldShowDestroyPlanButton,
+    true
+  );
+});
+
+test("a destroyed latest version never falls back to an older successful state", () => {
+  const olderSuccess = createDeployment({
+    id: "66666666-6666-4666-8666-666666666666",
+    createdAt: "2026-07-16T01:00:00.000Z",
+    stateObjectKey: "deployments/older/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+  const destroyedLatestVersion = createDeployment({
+    id: "77777777-7777-4777-8777-777777777777",
+    createdAt: "2026-07-16T02:00:00.000Z",
+    stateObjectKey: null,
+    status: "DESTROYED"
+  });
+
+  assert.equal(selectDeploymentCleanupTarget([olderSuccess, destroyedLatestVersion]), null);
+});
+
+test("application cleanup lifecycle never hides an independent infrastructure cleanup", () => {
+  const infrastructureDeployment = createDeployment({
+    id: "55555555-5555-4555-8555-555555555555",
+    createdAt: "2026-07-16T01:00:00.000Z",
+    scope: "infrastructure",
+    stateObjectKey: "deployments/infrastructure/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+  const applicationDeployment = createDeployment({
+    id: "66666666-6666-4666-8666-666666666666",
+    createdAt: "2026-07-16T02:00:00.000Z",
+    releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    scope: "application",
+    stateObjectKey: null,
+    status: "SUCCESS"
+  });
+
+  assert.deepEqual(
+    selectDeploymentCleanupTargets([infrastructureDeployment, applicationDeployment]).map(
+      (deployment) => deployment.id
+    ),
+    [applicationDeployment.id, infrastructureDeployment.id]
+  );
+
+  assert.deepEqual(
+    selectDeploymentCleanupTargets([
+      infrastructureDeployment,
+      { ...applicationDeployment, status: "DESTROYED" }
+    ]).map((deployment) => deployment.id),
+    [infrastructureDeployment.id]
+  );
+});
+
 test("pending deployment without a current plan offers a Terraform plan action", () => {
   const state = getDeploymentActionState(createDeployment(), "idle");
 
@@ -84,9 +190,50 @@ test("destroy plan waits for approval before showing destroy execution", () => {
 
   assert.equal(state.shouldShowApprovePlanButton, true);
   assert.equal(state.canApprovePlan, true);
-  assert.equal(state.approvePlanLabel, "Destroy Plan 승인");
+  assert.equal(state.approvePlanLabel, "삭제 Plan 승인");
   assert.equal(state.shouldShowApplyPlanButton, false);
+  assert.equal(state.shouldShowDestroyPlanButton, false);
+  assert.equal(state.canRunDestroyPlan, false);
+  assert.equal(state.shouldShowDestroyButton, false);
+});
+
+test("failed destroy execution requires a fresh destroy plan instead of stale approval", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "destroy",
+      failedAt: "2026-07-17T08:00:00.000Z",
+      failureStage: "destroy",
+      stateObjectKey: "deployments/deployment-id/state/terraform.tfstate",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, false);
+  assert.equal(state.canApprovePlan, false);
   assert.equal(state.shouldShowDestroyPlanButton, true);
+  assert.equal(state.canRunDestroyPlan, true);
+  assert.equal(state.shouldShowDestroyButton, false);
+});
+
+test("regenerated destroy plan on a failed deployment returns to approval", () => {
+  const state = getDeploymentActionState(
+    createDeployment({
+      currentPlanArtifactId: "99999999-9999-4999-8999-999999999999",
+      currentPlanOperation: "destroy",
+      failedAt: null,
+      failureStage: "destroy",
+      stateObjectKey: "deployments/deployment-id/state/terraform.tfstate",
+      status: "FAILED"
+    }),
+    "idle"
+  );
+
+  assert.equal(state.shouldShowApprovePlanButton, true);
+  assert.equal(state.canApprovePlan, true);
+  assert.equal(state.shouldShowDestroyPlanButton, false);
+  assert.equal(state.canRunDestroyPlan, false);
   assert.equal(state.shouldShowDestroyButton, false);
 });
 
@@ -187,8 +334,8 @@ test("approved destroy plan enables destroy and keeps apply hidden", () => {
 
   assert.equal(state.shouldShowApplyButton, false);
   assert.equal(state.canApply, false);
-  assert.equal(state.shouldShowDestroyPlanButton, true);
-  assert.equal(state.canRunDestroyPlan, true);
+  assert.equal(state.shouldShowDestroyPlanButton, false);
+  assert.equal(state.canRunDestroyPlan, false);
   assert.equal(state.shouldShowDestroyButton, true);
   assert.equal(state.canDestroy, true);
 });
@@ -297,18 +444,36 @@ test("keeps meaningful deployment info values in the detail list", () => {
 });
 
 test("deployment log tone highlights only important log levels", () => {
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "ERROR", stage: "apply" })), "error");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "WARN", stage: "plan" })), "warning");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "destroy" })), "default");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "apply" })), "default");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "plan" })), "default");
-  assert.equal(getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "init" })), "default");
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "ERROR", stage: "apply" })),
+    "error"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "WARN", stage: "plan" })),
+    "warning"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "destroy" })),
+    "default"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "apply" })),
+    "default"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "plan" })),
+    "default"
+  );
+  assert.equal(
+    getDeploymentLogTone(createDeploymentLog({ level: "INFO", stage: "init" })),
+    "default"
+  );
 });
 
 test("deployment log message tokens highlight Terraform signals without coloring everything", () => {
   assert.deepEqual(
     getDeploymentLogMessageTokens(
-      'aws_vpc.main: Creation complete after 11s [id=vpc-0e88956e55c0cb2b2]'
+      "aws_vpc.main: Creation complete after 11s [id=vpc-0e88956e55c0cb2b2]"
     ),
     [
       { text: "aws_vpc.main", tone: "resource" },
@@ -318,14 +483,11 @@ test("deployment log message tokens highlight Terraform signals without coloring
       { text: "[id=vpc-0e88956e55c0cb2b2]", tone: "metadata" }
     ]
   );
-  assert.deepEqual(
-    getDeploymentLogMessageTokens('ec2_public_ip = "15.165.43.171"'),
-    [
-      { text: "ec2_public_ip", tone: "output" },
-      { text: " = ", tone: "plain" },
-      { text: '"15.165.43.171"', tone: "string" }
-    ]
-  );
+  assert.deepEqual(getDeploymentLogMessageTokens('ec2_public_ip = "15.165.43.171"'), [
+    { text: "ec2_public_ip", tone: "output" },
+    { text: " = ", tone: "plain" },
+    { text: '"15.165.43.171"', tone: "string" }
+  ]);
 });
 
 function createDeployment(
@@ -342,11 +504,17 @@ function createDeployment(
     architectureId: "55555555-5555-4555-8555-555555555555",
     terraformArtifactId: "66666666-6666-4666-8666-666666666666",
     awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
     liveProfile: "practice",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     currentPlanArtifactId: overrides.currentPlanArtifactId ?? null,
     currentPlanOperation: overrides.currentPlanOperation ?? null,
     stateObjectKey: overrides.stateObjectKey ?? null,

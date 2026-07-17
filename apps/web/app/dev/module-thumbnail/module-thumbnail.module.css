@@ -1,0 +1,11 @@
+.thumbnailFrame {
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+}
+
+.thumbnailImage {
+  display: block;
+  width: 1280px;
+  height: 720px;
+}

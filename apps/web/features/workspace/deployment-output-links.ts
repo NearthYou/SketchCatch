@@ -27,7 +27,7 @@ export const initialDeploymentOutputState: DeploymentOutputState = {
   outputs: []
 };
 
-const WEB_OUTPUT_NAMES = ["staticsiteurl", "appurl"] as const;
+const WEB_OUTPUT_NAMES = ["cloudfronturl", "staticsiteurl", "appurl"] as const;
 const API_OUTPUT_NAMES = ["apibaseurl", "apiurl"] as const;
 
 export function getSafeDeploymentLinks(
@@ -41,7 +41,7 @@ export function getSafeDeploymentLinks(
   if (webUrl !== null) {
     links.push({ kind: "web", label: "Web entry point", url: webUrl });
   }
-  if (apiUrl !== null) {
+  if (apiUrl !== null && apiUrl !== webUrl) {
     links.push({ kind: "api", label: "API endpoint", url: apiUrl });
   }
 
@@ -49,17 +49,24 @@ export function getSafeDeploymentLinks(
 }
 
 export function getSafePipelineRunLinks(
-  run: Pick<GitCicdPipelineRun, "apiUrl" | "appUrl"> | null
+  run: Pick<GitCicdPipelineRun, "apiUrl" | "appUrl" | "release"> | null
 ): SafeDeploymentLink[] {
   if (!run) {
     return [];
   }
 
   const links: SafeDeploymentLink[] = [];
-  if (run.appUrl && isSafeHttpUrl(run.appUrl)) {
-    links.push({ kind: "web", label: "Web entry point", url: run.appUrl });
+  const releaseOutputUrl =
+    run.release?.outputUrl &&
+    ["succeeded", "partially_failed", "partially_cancelled"].includes(run.release.status) &&
+    isSafeHttpsUrl(run.release.outputUrl)
+      ? run.release.outputUrl
+      : null;
+  const webUrl = releaseOutputUrl ?? run.appUrl;
+  if (webUrl && isSafeHttpUrl(webUrl)) {
+    links.push({ kind: "web", label: "Web entry point", url: webUrl });
   }
-  if (run.apiUrl && isSafeHttpUrl(run.apiUrl)) {
+  if (run.apiUrl && run.apiUrl !== webUrl && isSafeHttpUrl(run.apiUrl)) {
     links.push({ kind: "api", label: "API endpoint", url: run.apiUrl });
   }
   return links;
@@ -113,7 +120,20 @@ function normalizeOutputName(name: string): string {
 function isSafeHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.username === "" &&
+      url.password === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isSafeHttpsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.username === "" && url.password === "";
   } catch {
     return false;
   }
