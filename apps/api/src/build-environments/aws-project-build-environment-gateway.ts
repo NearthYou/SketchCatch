@@ -290,7 +290,7 @@ async function waitForRepositoryAccessVerification(
         }>
       | undefined)?.[0];
     const buildArn = build?.arn?.trim() || initialBuildArn;
-    const resolvedCommitSha = build?.resolvedSourceVersion?.trim().toLowerCase() || null;
+    const resolvedCommitSha = build?.resolvedSourceVersion?.trim()?.toLowerCase() || null;
     if (build?.buildStatus === "SUCCEEDED") {
       const exactCommit = resolvedCommitSha === requestedCommitSha.toLowerCase();
       return {
