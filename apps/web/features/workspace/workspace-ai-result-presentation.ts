@@ -24,10 +24,18 @@ export type WorkspaceAiResultCheck = {
   readonly summary: string;
 };
 
+export type WorkspaceAiReviewSummaryItem = {
+  readonly id: string;
+  readonly label: "잘된 점" | "주요 문제" | "검토 결과";
+  readonly text: string;
+  readonly tone: "positive" | "risk" | "neutral";
+};
+
 export type TerraformPreviewPresentation = {
   readonly checks: readonly WorkspaceAiResultCheck[];
   readonly nextStep: string;
   readonly summary: string;
+  readonly summaryItems: readonly WorkspaceAiReviewSummaryItem[];
   readonly technical: {
     readonly findings: readonly string[];
     readonly provider?: string | undefined;
@@ -121,10 +129,34 @@ const CHECK_COPY = {
   },
   sustainability: {
     action: "필요한 만큼만 리소스를 사용하도록 구성했는지 확인하세요.",
-    label: "효율",
+    label: "지속 가능성",
     summary: "불필요한 리소스 사용이 없는지 확인해야 합니다."
   }
 } satisfies Record<CheckFindingCategory | WellArchitectedPillar, UserFacingCheckCopy>;
+
+const WELL_ARCHITECTED_PILLARS = [
+  "operational_excellence",
+  "security",
+  "reliability",
+  "performance_efficiency",
+  "cost_optimization",
+  "sustainability"
+] as const satisfies readonly WellArchitectedPillar[];
+
+const PILLAR_FINDING_CATEGORIES = {
+  operational_excellence: ["configuration"],
+  security: ["security", "permission", "network"],
+  reliability: ["availability"],
+  performance_efficiency: ["performance"],
+  cost_optimization: ["cost"],
+  sustainability: []
+} as const satisfies Record<WellArchitectedPillar, readonly CheckFindingCategory[]>;
+
+const RISK_LEVEL_PRIORITY = {
+  low: 0,
+  medium: 1,
+  high: 2
+} as const satisfies Record<RiskLevel, number>;
 
 const ISSUE_COPY = {
   credential: {
@@ -154,7 +186,7 @@ const ISSUE_COPY = {
   },
   syntax: {
     nextStep: "문제가 표시된 줄을 수정한 뒤 Terraform 검증을 다시 실행하세요.",
-    summary: "코드 형식이 올바르지 않아 검증을 계속할 수 없습니다.",
+    summary: "",
     title: "Terraform 코드 형식을 확인해 주세요"
   },
   unknown: {
@@ -202,38 +234,32 @@ export function createTerraformPreviewPresentation(
 ): TerraformPreviewPresentation {
   const resourceCount = preview.detectedResources.length;
   const findingCount = preview.findings.length;
-  const findingCategories = new Set(preview.findings.map((finding) => finding.category));
-  const findingChecks = preview.findings.map<WorkspaceAiResultCheck>((finding) => {
-    const copy = CHECK_COPY[finding.category];
+  const checks = WELL_ARCHITECTED_PILLARS.map<WorkspaceAiResultCheck>((pillar, index) => {
+    const copy = CHECK_COPY[pillar];
+    const guidance = preview.wellArchitectedGuidance.find((item) => item.pillar === pillar);
+    const aiReview = getAiPillarReview(preview, index);
 
     return {
-      action: copy.action,
-      id: `finding-${finding.id}`,
+      action: sanitizeReviewDetail(
+        aiReview?.action || guidance?.recommendation || copy.action
+      ),
+      id: `pillar-${pillar}`,
       label: copy.label,
-      severity: finding.severity,
-      summary: copy.summary
+      severity: getPillarRiskLevel(preview, pillar, index),
+      summary: sanitizeReviewDetail(
+        aiReview?.summary || guidance?.observation || copy.summary
+      )
     };
   });
-  const guidanceChecks = preview.wellArchitectedGuidance
-    .filter((guidance) => {
-      const findingCategory = toFindingCategory(guidance.pillar);
-      return findingCategory === null || !findingCategories.has(findingCategory);
-    })
-    .map<WorkspaceAiResultCheck>((guidance) => {
-      const copy = CHECK_COPY[guidance.pillar];
-
-      return {
-        action: copy.action,
-        id: `guidance-${guidance.pillar}`,
-        label: copy.label,
-        summary: copy.summary
-      };
-    });
+  const reviewSummary =
+    preview.llmExplanation?.wellArchitectedConclusion?.trim() ||
+    createPreviewSummary(resourceCount, findingCount);
 
   return {
-    checks: [...findingChecks, ...guidanceChecks].slice(0, 4),
+    checks,
     nextStep: createPreviewNextStep(preview),
-    summary: createPreviewSummary(resourceCount, findingCount),
+    summary: createVisibleReviewSummary(reviewSummary),
+    summaryItems: createReviewSummaryItems(reviewSummary, checks),
     technical: {
       findings: preview.findings.map((finding) =>
         [finding.title, finding.resourceId, finding.description, finding.recommendation]
@@ -305,7 +331,7 @@ export function createTerraformIssuePresentation({
           : {}),
       rawMessage: diagnostic.message || explanation.rawMessage
     },
-    title: copy.title
+    title: `${fixPlan.errorType}(${typeof diagnostic.line === "number" ? `${diagnostic.line}줄` : "위치 미상"})`
   };
 }
 
@@ -400,12 +426,293 @@ export function formatTerraformReviewContext(label: string): string {
 export function getWorkspaceAiResultSeverityLabel(severity: RiskLevel): string {
   switch (severity) {
     case "low":
-      return "낮음";
+      return "보통";
     case "medium":
-      return "주의";
+      return "확인 필요";
     case "high":
-      return "위험";
+      return "심각";
   }
+}
+
+function getPillarRiskLevel(
+  preview: AiTerraformPreviewExplanationResult,
+  pillar: WellArchitectedPillar,
+  pillarIndex: number
+): RiskLevel {
+  const categories: readonly CheckFindingCategory[] = PILLAR_FINDING_CATEGORIES[pillar];
+  const deterministicRisk = preview.findings.reduce<RiskLevel>((highestRisk, finding) => {
+    if (!categories.includes(finding.category)) {
+      return highestRisk;
+    }
+
+    return RISK_LEVEL_PRIORITY[finding.severity] > RISK_LEVEL_PRIORITY[highestRisk]
+      ? finding.severity
+      : highestRisk;
+  }, "low");
+  const aiRisk = getAiPillarRiskLevel(preview, pillarIndex);
+
+  return RISK_LEVEL_PRIORITY[aiRisk] > RISK_LEVEL_PRIORITY[deterministicRisk]
+    ? aiRisk
+    : deterministicRisk;
+}
+
+function getAiPillarRiskLevel(
+  preview: AiTerraformPreviewExplanationResult,
+  pillarIndex: number
+): RiskLevel {
+  const highlights = preview.llmExplanation?.highlights;
+
+  if (highlights?.length !== WELL_ARCHITECTED_PILLARS.length) {
+    return "low";
+  }
+
+  const review = highlights[pillarIndex] ?? "";
+
+  if (/^\s*\[심각\]/u.test(review)) {
+    return "high";
+  }
+
+  if (/^\s*\[확인 필요\]/u.test(review)) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function getAiPillarReview(
+  preview: AiTerraformPreviewExplanationResult,
+  pillarIndex: number
+): { readonly action?: string | undefined; readonly summary: string } | null {
+  const highlights = preview.llmExplanation?.highlights;
+
+  if (highlights?.length !== WELL_ARCHITECTED_PILLARS.length) {
+    return null;
+  }
+
+  const review = (highlights[pillarIndex] ?? "")
+    .replace(/^\s*\[(?:보통|확인 필요|심각)\]\s*/u, "")
+    .trim();
+  const structuredSummary = review.match(
+    /(?:^|\|\s*|\s)(?:문제|판단|현재 판단)\s*:\s*(.*?)(?=\s*(?:\|\s*)?(?:확인|확인할 부분|조치)\s*:|$)/u
+  )?.[1]?.trim();
+  const structuredAction = review.match(
+    /(?:^|\|\s*|\s)(?:확인|확인할 부분|조치)\s*:\s*([^|]+)/u
+  )?.[1]?.trim();
+  const completeSummary =
+    structuredSummary && isCompleteReviewDetail(structuredSummary) ? structuredSummary : undefined;
+  const completeAction =
+    structuredAction && isCompleteReviewDetail(structuredAction) ? structuredAction : undefined;
+
+  if (completeSummary) {
+    return {
+      ...(completeAction ? { action: completeAction } : {}),
+      summary: completeSummary
+    };
+  }
+
+  const plainReview = review.replace(/^[^:：|]{1,32}[:：|]\s*/u, "").trim();
+
+  return plainReview.length > 0 && isCompleteReviewDetail(plainReview)
+    ? { summary: plainReview }
+    : null;
+}
+
+function isCompleteReviewDetail(value: string): boolean {
+  const readableEnding = sanitizeReviewDetail(value)
+    .replace(/[.!?。]+$/gu, "")
+    .trim();
+
+  return /[다요]$/u.test(readableEnding);
+}
+
+function createReviewSummaryItems(
+  value: string,
+  checks: readonly WorkspaceAiResultCheck[]
+): WorkspaceAiReviewSummaryItem[] {
+  const riskChecks = checks
+    .filter((check) => check.severity === "high" || check.severity === "medium")
+    .sort(
+      (left, right) =>
+        RISK_LEVEL_PRIORITY[right.severity ?? "low"] -
+        RISK_LEVEL_PRIORITY[left.severity ?? "low"]
+    );
+  const strengthChecks = checks.filter((check) => check.severity === "low");
+  const strengthLimit = riskChecks.length >= 2 ? 1 : 2;
+  const riskLimit = riskChecks.length >= 2 ? 2 : 1;
+  const checkItems: WorkspaceAiReviewSummaryItem[] = [
+    ...strengthChecks.slice(0, strengthLimit).map((check) => ({
+      id: `summary-strength-${check.id}`,
+      label: "잘된 점" as const,
+      text: `${check.label}: ${check.summary}`,
+      tone: "positive" as const
+    })),
+    ...riskChecks.slice(0, riskLimit).map((check) => ({
+      id: `summary-risk-${check.id}`,
+      label: "주요 문제" as const,
+      text: `${check.label}: ${check.summary}`,
+      tone: "risk" as const
+    }))
+  ];
+
+  if (checkItems.length >= 2) {
+    return checkItems;
+  }
+
+  const sentences = splitReviewSentences(value).slice(0, 3);
+  const items = sentences.map<WorkspaceAiReviewSummaryItem>((sentence, index) => {
+    if (/다만|하지만|반면|그러나|문제|위험|부족|누락|단일 장애점|필요|어렵|취약|중단|위반/u.test(sentence)) {
+      return {
+        id: `summary-${index}`,
+        label: "주요 문제",
+        text: sentence,
+        tone: "risk"
+      };
+    }
+
+    if (/좋|잘 |적절|준수|활성화|비활성화|명확|분리|구분되어|쉬운 구조|확장하기 쉬/u.test(sentence)) {
+      return {
+        id: `summary-${index}`,
+        label: "잘된 점",
+        text: sentence,
+        tone: "positive"
+      };
+    }
+
+    return {
+      id: `summary-${index}`,
+      label: "검토 결과",
+      text: sentence,
+      tone: "neutral"
+    };
+  });
+
+  if (items.some((item) => item.tone === "positive")) {
+    return items;
+  }
+
+  const confirmedStrength = checks.find((check) => check.severity === "low");
+
+  if (!confirmedStrength) {
+    return items;
+  }
+
+  const fallbackItems: WorkspaceAiReviewSummaryItem[] = [
+    {
+      id: "summary-confirmed-strength",
+      label: "잘된 점",
+      text: `${confirmedStrength.label}: ${confirmedStrength.summary}`,
+      tone: "positive"
+    },
+    ...items.filter((item) => item.tone === "risk")
+  ];
+
+  return fallbackItems.slice(0, 3);
+}
+
+function createVisibleReviewSummary(value: string): string {
+  const sentences = splitReviewSentences(value);
+  const issueSentence = sentences
+    .slice(1)
+    .find((sentence) => /다만|하지만|반면|그러나|문제|위험|부족|필요/u.test(sentence));
+  const selectedSentences = [sentences[0], issueSentence ?? sentences[1]].filter(
+    (sentence): sentence is string => Boolean(sentence)
+  );
+  const visibleSummary = selectedSentences.join(" ");
+
+  if (visibleSummary.length <= 320) {
+    return visibleSummary;
+  }
+
+  return `${visibleSummary.slice(0, 319).trimEnd()}…`;
+}
+
+function splitReviewSentences(value: string): string[] {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+
+  return (normalized.match(/(?:\d+\.\d+|[^.!?])+(?:[.!?]+|$)/gu) ?? [normalized])
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function sanitizeReviewDetail(value: string): string {
+  const normalized = value
+    .replace(/\b(?:data|module|resource)\.[A-Za-z0-9_.-]+(?:\s+리소스)?/gu, "해당 리소스")
+    .replace(
+      /\b(?:aws|azurerm|google)_[A-Za-z0-9_]+(?:\.[A-Za-z0-9_.-]+)?(?:\s+리소스)?/gu,
+      "해당 리소스"
+    )
+    .replace(/resource 블록/gu, "Terraform 설정")
+    .replace(/\s+/gu, " ")
+    .trim();
+
+  const readable = normalized
+    .replace(
+      /desired_count\s*=\s*1로 task 장애 시 서비스가 중단됩니다/gu,
+      "실행 중인 ECS 작업이 1개뿐이라, 해당 작업에 장애가 생기면 서비스가 중단됩니다"
+    )
+    .replace(
+      /desired_count\s*=\s*1(?:은|로 인한)?\s*단일 장애점 위험/gu,
+      "실행 중인 ECS 작업이 1개뿐이라, 이 작업이 멈추면 서비스도 중단될 수 있습니다"
+    )
+    .replace(
+      /desired_count를 2 이상으로 설정하고 서로 다른 AZ에 배치하세요/gu,
+      "ECS 작업을 2개 이상 실행하고 서로 다른 가용 영역(AZ)에 배치하세요"
+    )
+    .replace(
+      /최소 2개 이상의 desired_count와 multi-AZ 배치 필요/gu,
+      "ECS 작업을 2개 이상 실행하고 서로 다른 가용 영역(AZ)에 배치하세요"
+    )
+    .replace(
+      /S3 public access 차단 확인되나 security group 규칙 불완전/gu,
+      "S3 공개 접근은 차단되어 있지만 보안 그룹의 접근 허용 범위는 충분히 검증되지 않았습니다"
+    )
+    .replace(
+      /ingress cidr_blocks 범위와 최소 권한 원칙 검증 필요/gu,
+      "보안 그룹의 인바운드 허용 IP 범위를 확인하고 필요한 대상만 접근하도록 제한하세요"
+    )
+    .replace(
+      /health_check_grace_period\s*30초 설정되나 AZ 분산 미확인/gu,
+      "상태 확인 유예 시간은 30초지만, 서비스가 여러 가용 영역에 분산됐는지는 확인되지 않았습니다"
+    )
+    .replace(
+      /최소 2개 AZ의 subnets 배치와 target group 연결 검증/gu,
+      "서로 다른 가용 영역의 서브넷을 사용하고 대상 그룹 연결과 상태 확인이 정상인지 검증하세요"
+    )
+    .replace(
+      /cpu\s*=\s*256,?\s*memory\s*=\s*512 설정되나 적정성 불명/gu,
+      "CPU 0.25 vCPU와 메모리 512 MiB가 할당됐지만 실제 부하에 적정한지는 확인되지 않았습니다"
+    )
+    .replace(
+      /워크로드 요구사항 대비 리소스 크기와 scaling 정책 필요/gu,
+      "실제 CPU·메모리 사용량을 확인하고 부하에 따라 자동으로 작업 수를 조절하도록 설정하세요"
+    )
+    .replace(
+      /Fargate 리소스 크기 확인되나 right-sizing 근거 없음/gu,
+      "Fargate 용량은 설정되어 있지만 실제 사용량에 맞춘 크기인지 판단할 근거가 없습니다"
+    )
+    .replace(
+      /실제 사용률 기반 cpu\/memory 조정과 Savings Plan 검토/gu,
+      "실제 CPU·메모리 사용률에 맞춰 용량을 조정하고 장기 사용 시 Savings Plans 적용을 검토하세요"
+    )
+    .replace(
+      /awsvpc 네트워크 모드와 최소 리소스 할당 확인/gu,
+      "ECS 작업에 전용 네트워크를 사용하고 필요한 최소 수준의 리소스를 할당했습니다"
+    )
+    .replace(
+      /network_mode\s*=\s*awsvpc,?\s*assign_public_ip\s*=\s*false로 효율적 구성/gu,
+      "각 ECS 작업에 전용 네트워크 인터페이스를 사용하고 공개 IP를 할당하지 않도록 설정했습니다"
+    )
+    .replace(/desired_count/gu, "ECS 작업 수")
+    .replace(/multi-AZ/gu, "여러 가용 영역(AZ)")
+    .replace(/security group/giu, "보안 그룹")
+    .replace(/cidr_blocks/gu, "허용 IP 범위")
+    .replace(/right-sizing/giu, "적정 용량 산정")
+    .replace(/scaling/giu, "자동 확장")
+    .replace(/subnets?/giu, "서브넷")
+    .replace(/target group/giu, "대상 그룹")
+    .trim();
+
+  return /[.!?。]$/u.test(readable) ? readable : `${readable}.`;
 }
 
 function createPreviewSummary(resourceCount: number, findingCount: number): string {
@@ -433,20 +740,4 @@ function containsInternalReference(value: string): boolean {
     /\b(?:aws|azurerm|google)_[A-Za-z0-9_]+/u.test(value) ||
     /\b[a-z][a-z0-9]*(?:_[a-z0-9]+){2,}\b/u.test(value)
   );
-}
-
-function toFindingCategory(pillar: WellArchitectedPillar): CheckFindingCategory | null {
-  switch (pillar) {
-    case "security":
-      return "security";
-    case "performance_efficiency":
-      return "performance";
-    case "cost_optimization":
-      return "cost";
-    case "reliability":
-      return "availability";
-    case "operational_excellence":
-    case "sustainability":
-      return null;
-  }
 }
