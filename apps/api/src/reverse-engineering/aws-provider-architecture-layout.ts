@@ -29,11 +29,11 @@ type LayoutSubnetChildrenInput = LayoutVpcChildrenInput & {
   readonly subnetAnchor: LayoutAnchor;
 };
 
-// 지원하지 않는 UNKNOWN은 보드 중앙에 뿌리지 않고 확인 필요 목록에만 남깁니다.
+// 관계가 있는 검토 전용 Resource는 구조를 읽을 수 있도록 보드에 남깁니다.
 export function createReverseEngineeringArchitectureJson(
   discoveredResources: readonly DiscoveredResource[]
 ): ArchitectureJson {
-  const boardResources = discoveredResources.filter(isBoardResource);
+  const boardResources = discoveredResources.filter(shouldAppearOnReverseEngineeringBoard);
   const boardResourceIds = new Set(boardResources.map((resource) => resource.id));
   const layoutByResourceId = createArchitectureLayout(boardResources);
 
@@ -186,9 +186,13 @@ function toResourceEdges(resource: DiscoveredResource, boardResourceIds: Readonl
   return edges;
 }
 
-// UNKNOWN은 발견 결과에는 남기지만, 자동 설계도 노드로는 올리지 않습니다.
-function isBoardResource(resource: DiscoveredResource): boolean {
-  return resource.resourceType !== "UNKNOWN";
+// 지원 여부와 분석 제외 상태보다 관계가 구조를 설명할 때만 검토 전용 Resource를 보드에 남깁니다.
+function shouldAppearOnReverseEngineeringBoard(resource: DiscoveredResource): boolean {
+  if (resource.resourceType !== "UNKNOWN" && !resource.analysisExcluded) {
+    return true;
+  }
+
+  return (resource.relationships?.length ?? 0) > 0;
 }
 
 // VPC 바로 아래에 보여줄 네트워크 구성요소를 고릅니다.

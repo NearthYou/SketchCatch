@@ -7,6 +7,7 @@ import {
   compileReverseEngineeringArchitecture,
   createReverseEngineeringBoardApplication
 } from "./reverse-engineering-board-application";
+import { summarizeReverseEngineeringScan } from "./reverse-engineering-presentation";
 
 const currentDiagram: DiagramJson = {
   nodes: [],
@@ -77,11 +78,11 @@ test("Reverse Engineering은 Compiler proposal을 생성하고 적용 후보와 
   });
 
   assert.equal(proposal.provenance.compilerVersion, ARCHITECTURE_BOARD_COMPILER_VERSION);
-  assert.equal(proposal.architecture.nodes.length, 1);
+  assert.equal(proposal.architecture.nodes.length, 2);
   assert.equal(application.compilation.provenance.compilerVersion, proposal.provenance.compilerVersion);
   assert.deepEqual(application.compilation.diagram, application.previewDiagram);
   assert.deepEqual(application.compilation.diagram, application.diagram);
-  assert.equal(application.previewDiagram.nodes.length, 1);
+  assert.equal(application.previewDiagram.nodes.length, 2);
   assert.equal(application.diagram.nodes[0]?.metadata?.reverseEngineering?.source, "aws_scan");
   assert.deepEqual(scanResult, inputBefore);
 });
@@ -123,6 +124,54 @@ test("Reverse Engineering은 scan finding·제외·provider error를 Compiler co
   assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.deployment:finding-public-vpc"));
   assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:excluded-unknown"));
   assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:scan-permission"));
+});
+
+test("관계가 있는 검토 전용 Lambda는 보호 metadata와 확인 필요 상태로 보드에 남기고 관계 없는 IAM Role은 목록에만 남긴다", () => {
+  const result = createReviewOnlyScanResult();
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    result
+  });
+  const lambda = application.diagram.nodes.find((node) => node.id === "lambda-1");
+
+  assert.deepEqual(
+    application.diagram.nodes.map((node) => node.id),
+    ["vpc-1", "lambda-1"]
+  );
+  assert.deepEqual(
+    application.diagram.edges.map((edge) => ({
+      sourceId: edge.sourceNodeId,
+      targetId: edge.targetNodeId,
+      label: edge.label
+    })),
+    [{ sourceId: "vpc-1", targetId: "lambda-1", label: "uses" }]
+  );
+  assert.equal(lambda?.label, "확인 필요 · orders-handler");
+  assert.deepEqual(lambda?.style, { borderColor: "#f97316", textColor: "#9a3412" });
+  assert.equal(lambda?.metadata?.reverseEngineering?.source, "aws_scan");
+  assert.deepEqual(lambda?.metadata?.reverseEngineering?.protectedValueKeys, [
+    "providerResourceId",
+    "providerResourceType",
+    "region",
+    "accountId",
+    "terraformResourceName",
+    "terraformResourceType"
+  ]);
+  assert.equal(result.discoveredResources.some((resource) => resource.id === "iam-role-1"), true);
+  assert.deepEqual(summarizeReverseEngineeringScan(result), {
+    discoveredCount: 3,
+    boardCount: 2,
+    reviewOnlyCount: 2,
+    unreadableServiceCount: 0
+  });
+  assert.deepEqual(result.importSuggestions.find((suggestion) => suggestion.resourceId === "lambda-1"), {
+    id: "import-lambda-1",
+    resourceId: "lambda-1",
+    status: "unsupported_resource_type",
+    handoffReady: false,
+    reason: "아직 정식 ResourceType으로 매핑되지 않았습니다."
+  });
 });
 
 test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하나의 Compiler proposal로 검토하고 적용한다", () => {
@@ -194,5 +243,93 @@ function makeResourceNode(
     size: { width: 48, height: 48 },
     type: resourceType,
     zIndex: 1
+  };
+}
+
+function createReviewOnlyScanResult(): ReverseEngineeringScanResult {
+  return {
+    ...structuredClone(scanResult),
+    architectureJson: {
+      nodes: [
+        {
+          id: "vpc-1",
+          type: "VPC",
+          label: "Production VPC",
+          positionX: 0,
+          positionY: 0,
+          config: { providerResourceId: "vpc-0123456789abcdef0" }
+        },
+        {
+          id: "lambda-1",
+          type: "UNKNOWN",
+          label: "orders-handler",
+          positionX: 260,
+          positionY: 0,
+          config: {
+            providerResourceId: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler",
+            providerResourceType: "AWS::Lambda::Function",
+            analysisExcluded: true
+          }
+        }
+      ],
+      edges: [{ id: "edge-lambda-1-vpc-1-uses", sourceId: "vpc-1", targetId: "lambda-1", label: "uses" }]
+    },
+    discoveredResources: [
+      {
+        id: "vpc-1",
+        provider: "aws",
+        providerResourceType: "AWS::EC2::VPC",
+        providerResourceId: "vpc-0123456789abcdef0",
+        region: "ap-northeast-2",
+        displayName: "Production VPC",
+        resourceType: "VPC",
+        config: {}
+      },
+      {
+        id: "lambda-1",
+        provider: "aws",
+        providerResourceType: "AWS::Lambda::Function",
+        providerResourceId: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler",
+        region: "ap-northeast-2",
+        displayName: "orders-handler",
+        resourceType: "UNKNOWN",
+        config: {},
+        relationships: [{ type: "connects_to", targetResourceId: "vpc-1", label: "uses" }]
+      },
+      {
+        id: "iam-role-1",
+        provider: "aws",
+        providerResourceType: "AWS::IAM::Role",
+        providerResourceId: "arn:aws:iam::123456789012:role/read-only",
+        region: "ap-northeast-2",
+        displayName: "read-only",
+        resourceType: "UNKNOWN",
+        config: {},
+        relationships: []
+      }
+    ],
+    importSuggestions: [
+      {
+        id: "import-vpc-1",
+        resourceId: "vpc-1",
+        status: "ready",
+        handoffReady: true,
+        terraformAddress: "aws_vpc.production"
+      },
+      {
+        id: "import-lambda-1",
+        resourceId: "lambda-1",
+        status: "unsupported_resource_type",
+        handoffReady: false,
+        reason: "아직 정식 ResourceType으로 매핑되지 않았습니다."
+      },
+      {
+        id: "import-iam-role-1",
+        resourceId: "iam-role-1",
+        status: "unsupported_resource_type",
+        handoffReady: false,
+        reason: "아직 정식 ResourceType으로 매핑되지 않았습니다."
+      }
+    ]
   };
 }

@@ -1,6 +1,5 @@
 import type {
   ArchitectureBoardCompilationContextSignal,
-  ArchitectureJson,
   DiagramEdge,
   DiagramJson,
   DiagramNode,
@@ -146,7 +145,7 @@ export function compileReverseEngineeringArchitecture(
   result: ReverseEngineeringScanResult
 ): ArchitectureBoardCompilationProposal {
   return compileArchitectureBoard({
-    architecture: removeUnsupportedNodes(result.architectureJson),
+    architecture: result.architectureJson,
     semanticContext: { signals: createReverseEngineeringContextSignals(result) },
     trigger: "reverse-engineering"
   });
@@ -193,22 +192,6 @@ function toFindingDiagnosticLevel(
   if (severity === "high") return "error";
   if (severity === "medium") return "warning";
   return "info";
-}
-
-// 지원하지 않는 리소스는 오른쪽 확인 목록에서 보게 하고 Architecture Board에서는 제외합니다.
-function removeUnsupportedNodes(architectureJson: ArchitectureJson): ArchitectureJson {
-  const supportedNodeIds = new Set(
-    architectureJson.nodes
-      .filter((node) => node.type !== "UNKNOWN" && node.config?.["analysisExcluded"] !== true)
-      .map((node) => node.id)
-  );
-
-  return {
-    nodes: architectureJson.nodes.filter((node) => supportedNodeIds.has(node.id)),
-    edges: architectureJson.edges.filter(
-      (edge) => supportedNodeIds.has(edge.sourceId) && supportedNodeIds.has(edge.targetId)
-    )
-  };
 }
 
 // AWS에서 가져온 노드에 보호해야 하는 원본 값 목록을 남깁니다.
