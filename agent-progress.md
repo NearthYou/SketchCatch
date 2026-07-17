@@ -19,7 +19,7 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced the incorrect AWS Account presentation mapping and empty text primitives with the existing Palette Group area while preserving the three Terraform Resources, containment, and source geometry.
 - Recaptured the committed WebP from the actual SketchCatch Board and bound its manifest hash to the corrected Diagram.
 - Added regression coverage for the source-capture `design-group` Area identity, Palette-backed Resources, containment, and thumbnail Diagram hash.
-- Focused tests, harness, lint, typecheck, build, and Architecture Board knowledge checks pass. The aggregate Compiler evidence check still rejects an unrelated `repository:three-tier-web-app` candidate switch (`siblingAreaOverlapCount` 8 > 6 and `backwardEdgeCount` 6 > 4); the baseline was not relaxed.
+- Focused tests, harness, lint, typecheck, build, and Architecture Board knowledge checks pass. The separate Compiler quality fix in this branch keeps the existing visual baseline without changing its limits.
 
 ### 2026-07-17 - Rebuild Workspace AI conversation and compiled preview
 
