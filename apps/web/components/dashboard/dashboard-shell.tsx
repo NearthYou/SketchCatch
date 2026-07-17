@@ -17,6 +17,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useAuth } from "../auth/auth-provider";
 import { ProductBrand } from "../ui/ProductBrand";
 import { ProductState } from "../ui/ProductState";
+import { shouldShowDashboardSessionState } from "./dashboard-session-state";
 
 const DASHBOARD_NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "작업 현황" },
@@ -30,7 +31,7 @@ const DASHBOARD_NAV_ITEMS = [
 export function DashboardShell({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout, status, user } = useAuth();
+  const { isRefreshing, logout, status, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pageTitle = getDashboardPageTitle(pathname);
   const shouldShowCreateAction =
@@ -53,7 +54,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
     router.replace("/login");
   }
 
-  if (status !== "authenticated") {
+  if (shouldShowDashboardSessionState(status, user !== null)) {
     return (
       <main className="dashboardSessionState">
         <ProductBrand />
@@ -72,7 +73,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
   }
 
   return (
-    <div className="dashboardShell">
+    <div aria-busy={isRefreshing || undefined} className="dashboardShell">
       <aside
         aria-label="Dashboard navigation"
         className={isMobileMenuOpen ? "dashboardSidebar dashboardSidebarOpen" : "dashboardSidebar"}
