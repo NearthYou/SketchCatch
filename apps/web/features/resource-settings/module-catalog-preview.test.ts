@@ -5,6 +5,14 @@ import { curatedModules } from "./module-catalog";
 import { createModuleCatalogPreview } from "./module-catalog-preview";
 
 const moduleCatalogPanelSource = readFileSync(new URL("./index.tsx", import.meta.url), "utf8");
+const moduleCatalogCardSource = moduleCatalogPanelSource.slice(
+  moduleCatalogPanelSource.indexOf("function ModuleCatalogCard"),
+  moduleCatalogPanelSource.indexOf("function ResourceSection")
+);
+const diagramEditorStylesSource = readFileSync(
+  new URL("../diagram-editor/diagram-editor.module.css", import.meta.url),
+  "utf8"
+);
 
 const expectedPreviews = {
   "container-image-delivery": {
@@ -193,30 +201,51 @@ test("Module 미리보기는 같은 Terraform type의 data Catalog 항목을 구
 });
 
 test("Module 카드는 캡처 fallback과 사용자용 요약만 표시한다", () => {
-  assert.match(moduleCatalogPanelSource, /<article/);
-  assert.match(moduleCatalogPanelSource, /<BoardThumbnailImage/);
+  assert.match(moduleCatalogPanelSource, /import \{ getModuleThumbnailAsset \} from "\.\/module-thumbnail-manifest";/);
+  assert.match(moduleCatalogCardSource, /<article/);
+  assert.match(moduleCatalogCardSource, /<BoardThumbnailImage/);
   assert.match(
-    moduleCatalogPanelSource,
-    /import \{ getModuleThumbnailAsset \} from "\.\/module-thumbnail-manifest";/
-  );
-  assert.match(
-    moduleCatalogPanelSource,
+    moduleCatalogCardSource,
     /const asset = getModuleThumbnailAsset\(moduleDefinition\.id\);/
   );
-  assert.match(moduleCatalogPanelSource, /src=\{asset\?\.src \?\? null\}/);
-  assert.doesNotMatch(moduleCatalogPanelSource, /src=\{null\}/);
-  assert.match(moduleCatalogPanelSource, /preview\.title/);
-  assert.match(moduleCatalogPanelSource, /preview\.description/);
+  assert.match(moduleCatalogCardSource, /src=\{asset\?\.src \?\? null\}/);
+  assert.doesNotMatch(moduleCatalogCardSource, /src=\{null\}/);
+  assert.match(moduleCatalogCardSource, /preview\.title/);
+  assert.match(moduleCatalogCardSource, /preview\.description/);
   assert.match(
-    moduleCatalogPanelSource,
+    moduleCatalogCardSource,
     /\{preview\.provider\} · Resource \{preview\.resourceCount\}개 · 연결 \{preview\.relationshipCount\}개/
   );
-  assert.match(moduleCatalogPanelSource, /주요 구성/);
-  assert.match(moduleCatalogPanelSource, /preview\.resourceSummary/);
-  assert.match(moduleCatalogPanelSource, /보드에 추가/);
-  assert.doesNotMatch(moduleCatalogPanelSource, /<details/);
-  assert.doesNotMatch(moduleCatalogPanelSource, /ModuleCatalogTopology/);
-  assert.doesNotMatch(moduleCatalogPanelSource, /preview\.(resources|relationships|inputs|outputs|version|thumbnail)/);
+  assert.match(moduleCatalogCardSource, /주요 구성/);
+  assert.match(moduleCatalogCardSource, /preview\.resourceSummary/);
+  assert.match(moduleCatalogCardSource, /보드에 추가/);
+  assert.match(moduleCatalogCardSource, /onClick=\{\(\) => onModuleAdd\?\.\(moduleDefinition\.id\)\}/);
+  assert.doesNotMatch(moduleCatalogCardSource, /<details/);
+  assert.doesNotMatch(moduleCatalogCardSource, /ModuleCatalogTopology/);
+  assert.doesNotMatch(moduleCatalogCardSource, /<svg/);
+  assert.doesNotMatch(moduleCatalogCardSource, /<code/);
+  assert.doesNotMatch(moduleCatalogCardSource, /(입력값|출력값|버전)/);
+  assert.doesNotMatch(moduleCatalogCardSource, /slice\(0, 1\)/);
+  assert.doesNotMatch(moduleCatalogCardSource, /preview\.(resources|relationships|inputs|outputs|version|thumbnail)/);
+});
+
+test("Module 카드는 Template 전용 카드 상호작용 스타일을 상속하지 않는다", () => {
+  assert.match(
+    diagramEditorStylesSource,
+    /\.leftRail :global\(\.templateCatalogCard\) \{[\s\S]*?cursor: pointer;/
+  );
+  assert.doesNotMatch(
+    diagramEditorStylesSource,
+    /\.leftRail :global\(\.moduleCatalogCard\)(?:,\s*\n\.leftRail :global\(\.templateCatalogCard\))?\s*\{[^}]*cursor: pointer;/
+  );
+  assert.match(
+    diagramEditorStylesSource,
+    /\.leftRail :global\(\.templateCatalogCard:hover\),\s*\n\.leftRail :global\(\.templateCatalogCard:focus-visible\) \{/
+  );
+  assert.doesNotMatch(
+    diagramEditorStylesSource,
+    /\.leftRail :global\(\.moduleCatalogCard:(?:hover|focus-visible)\)/
+  );
 });
 
 function findModule(id: keyof typeof expectedPreviews) {
