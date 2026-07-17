@@ -84,8 +84,16 @@ Short English-only working log for the current agent context. Older records are 
 - The deploy-policy source now grants only those two missing actions, and the complete runtime guard accepts either the original full reviewed envelope or the exact residual envelope. No state operation, import, or unreviewed apply was used.
 - Harness, production infrastructure structure check, Terraform formatting, lint, typecheck, and build pass. Local Terraform validate/test remain blocked by the uncached AWS provider package.
 
+### 2026-07-17 - Improve Architecture Board UI interactions
+
+- Closed the controlled AI Workbench before competing observation, deployment, right-panel, and auto-organize preview surfaces open.
+- Corrected Fit View visual bounds, anchored the auto-organize preview beside the left panel, scaled resource contents with their containers, and removed the empty-board `Resource` guidance while preserving view switching.
+- Added a single-template detail preview with image, description, metrics, and tags. Sidebar and full-library selection no longer apply immediately; only the preview confirmation applies the template.
+- Focused contract tests, browser smoke checks, lint, typecheck, and build pass. No DB migration, infrastructure mutation, deployment, or Git handoff was performed.
+
 ## Broken Or Unverified
 
+- The session-wide `pnpm test` run originally reported three Web failures. The owned AI chat contract failure is fixed and its focused suite passes; two unchanged failures remain in the generated architecture artifact line-ending assertion and GitHub account settings contract. The full suite was not rerun after the focused fix.
 - `pnpm test` stops in `@sketchcatch/types` at 40/43 on the same three pre-existing three-tier Template security-scope/position/parent assertions. This branch does not modify those Template sources or failing tests.
 - `pnpm --filter @sketchcatch/api test` passes 710/713. The remaining three unchanged filesystem security tests fail during Windows symlink setup with `EPERM`, before their assertions.
 - Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
@@ -161,12 +169,3 @@ Short English-only working log for the current agent context. Older records are 
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
 
-### 2026-07-17 - Prevent multi-tab ProjectDraft overwrites
-
-- Added required `expectedRevision` optimistic concurrency to every ProjectDraft save path. Conditional updates and first-save conflict handling return a typed 409 without replacing the latest server draft.
-- Workspace refresh now requires a successful no-store server read, keeps the server revision in IndexedDB, stops automatic retries after conflict, and offers latest-state reload or local editing preservation.
-- Added the Korean implementation plan under `docs/jh/07.17` and updated the shared data model contract. No DB migration was required.
-- Focused API/Workspace ProjectDraft tests pass 65/65; AI and Repository revision entrypoint contracts pass 2/2. Lint, typecheck, initial full build, harness, and diff checks pass.
-- Final two-axis review fixes block legacy IndexedDB auto-save, clear removed Terraform files, preserve conflict status after continued editing, keep each tab's local recovery key stable across refreshes and duplicated tabs, migrate the legacy shared recovery row, and extract the API revision state machine into a focused service. Post-review API/Web typecheck, focused lint, and API bundle pass; the isolated-worktree Next build is blocked only because Turbopack rejects its external dependency symlinks.
-- Full `pnpm test` escalation was rejected because it includes sandbox E2E and Terraform execution. `test:core` ran for 11 minutes, exposed only unrelated existing API failures, and did not terminate until stopped; no cloud or Terraform mutation was performed.
-- A real Chromium three-tab flow passed: the first save returned 200/revision 1, the stale tab returned 409 and showed the conflict dialog, browser refresh loaded the latest server board, and conflict reload restored it. A 50 ms stored-lock reacquisition retry preserves the same tab recovery key across document reload without allowing a live duplicate tab to share the lock.

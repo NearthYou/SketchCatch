@@ -102,6 +102,24 @@ export function getSourceViewBoxMinimumZoom(
   );
 }
 
+export function getFitViewMinimumZoom(
+  bounds: BoardBounds,
+  viewportSize: BoardViewportSize,
+  padding: number
+): number {
+  const viewportWidth = getPositiveFiniteDimension(viewportSize.width);
+  const viewportHeight = getPositiveFiniteDimension(viewportSize.height);
+  const boundsWidth = getPositiveFiniteDimension(bounds.width);
+  const boundsHeight = getPositiveFiniteDimension(bounds.height);
+  const paddingScale = 1 + getNonNegativeFiniteDimension(padding);
+  const fittedZoom = Math.min(
+    viewportWidth / (boundsWidth * paddingScale),
+    viewportHeight / (boundsHeight * paddingScale)
+  );
+
+  return Math.min(BOARD_MIN_ZOOM, fittedZoom);
+}
+
 export function applyInitialSourceViewBoxViewport(
   diagram: DiagramJson,
   frame: BoardViewportFrame

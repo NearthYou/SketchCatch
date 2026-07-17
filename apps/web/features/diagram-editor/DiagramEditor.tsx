@@ -94,6 +94,7 @@ import {
 import { isAwsDiagramConnectionAllowed } from "./aws-resource-connection-policy";
 import {
   applyInitialSourceViewBoxViewport,
+  getFitViewMinimumZoom,
   getBoardZoomPresentationScale,
   getCenteredBoardViewport,
   getSourceViewBoxMinimumZoom,
@@ -180,6 +181,7 @@ const DIAGRAM_SNAP_GRID_SIZE = 12;
 const DIAGRAM_SNAP_GRID: [number, number] = [DIAGRAM_SNAP_GRID_SIZE, DIAGRAM_SNAP_GRID_SIZE];
 const BOARD_VIEWPORT_TOP_INSET = 84;
 const BOARD_VIEWPORT_BOTTOM_INSET = 72;
+const FIT_VIEW_PADDING = 0.24;
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
@@ -252,7 +254,7 @@ function DiagramEditorInner({
   allowPreviewInspection = false,
   dashboardHref = "/dashboard",
   draftStatusPanel,
-  emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요.",
+  emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요.",
   floatingPanel,
   initialBoardZoom,
   initialDiagram,
@@ -261,10 +263,12 @@ function DiagramEditorInner({
   initialReferenceDropTargetNodeId,
   initialSelectedEdgeIds,
   initialSelectedNodeIds,
+  isDeploymentConsoleOpen = false,
   leftPanel,
   onBoardReady,
   onDiagramChange,
   onDiagramSaveRequest,
+  onWorkspacePanelOpen,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
   projectName = "Project workspace",
@@ -277,6 +281,7 @@ function DiagramEditorInner({
   const fallbackFlowInstanceRef = useRef(reactFlow);
   fallbackFlowInstanceRef.current = reactFlow;
   const boardZoom = useStore((state) => state.transform[2]);
+  const setFlowMinimumZoom = useStore((state) => state.setMinZoom);
   const showAllEdgeLabels = boardZoom >= EDGE_LABEL_MIN_ZOOM;
   const boardZoomPresentationScale = getBoardZoomPresentationScale(boardZoom);
   const normalizedInitialBoardZoom = parseBoardZoom(initialBoardZoom);
@@ -380,8 +385,25 @@ function DiagramEditorInner({
 
   /** 오른쪽 Inspector를 열거나 닫습니다. */
   const toggleRightPanel = useCallback(() => {
-    setRightPanelOpen((isOpen) => !isOpen);
-  }, []);
+    const nextOpen = !isRightPanelOpen;
+
+    if (nextOpen) {
+      onWorkspacePanelOpen?.();
+    }
+
+    setRightPanelOpen(nextOpen);
+  }, [isRightPanelOpen, onWorkspacePanelOpen]);
+
+  const updateRightPanelOpen = useCallback(
+    (nextOpen: boolean): void => {
+      if (nextOpen) {
+        onWorkspacePanelOpen?.();
+      }
+
+      setRightPanelOpen(nextOpen);
+    },
+    [onWorkspacePanelOpen]
+  );
 
   const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
   const hasRightRail = rightPanel !== null;
@@ -948,12 +970,13 @@ function DiagramEditorInner({
   );
 
   const previewAutomaticOrganization = useCallback(() => {
+    onWorkspacePanelOpen?.();
     const currentDiagram = diagramRef.current;
     const proposal = createBoardAutoOrganizeProposal(currentDiagram);
 
     setPreviewDiagram(proposal.diagram);
     setCompilerPreview(proposal);
-  }, [setPreviewDiagram]);
+  }, [onWorkspacePanelOpen, setPreviewDiagram]);
 
   const applyAutomaticOrganization = useCallback(() => {
     if (compilerPreview === null) return;
@@ -1024,7 +1047,7 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
 
       window.requestAnimationFrame(() => {
         const flowInstance = getFlowInstance();
@@ -1058,7 +1081,13 @@ function DiagramEditorInner({
         focusEditorShell();
       });
     },
-    [applyLiveDiagramUpdate, focusEditorShell, getCurrentBoardViewportFrame, getFlowInstance]
+    [
+      applyLiveDiagramUpdate,
+      focusEditorShell,
+      getCurrentBoardViewportFrame,
+      getFlowInstance,
+      updateRightPanelOpen
+    ]
   );
 
   const selectResourceNode = useCallback<DiagramEditorPanelContext["selectResourceNode"]>(
@@ -1072,9 +1101,9 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
     },
-    []
+    [updateRightPanelOpen]
   );
 
   const panelContext = useMemo<DiagramEditorPanelContext>(
@@ -1098,7 +1127,7 @@ function DiagramEditorInner({
       selectResourceNode,
       saveDiagramNow: onDiagramSaveRequest,
       setPreviewDiagram,
-      setRightPanelOpen,
+      setRightPanelOpen: updateRightPanelOpen,
       updateNodeParameters,
       updateNodeMetadata
     }),
@@ -1120,6 +1149,7 @@ function DiagramEditorInner({
       selectResourceNode,
       selectedNodeId,
       terraformRefreshRequestId,
+      updateRightPanelOpen,
       updateNodeMetadata,
       updateNodeParameters
     ]
@@ -1477,10 +1507,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   const getAreaNodeFromPointerEvent = useCallback(
@@ -2172,10 +2202,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(node.id);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   const handleFlowNodeDoubleClick = useCallback(
@@ -2183,10 +2213,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(node.id);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   /** target 삭제 뒤 남은 attachment 기준으로 SG visual scope를 축소하거나 다시 맞춥니다. */
@@ -2370,6 +2400,7 @@ function DiagramEditorInner({
     ) {
       const shouldRestoreLegacyViewport = wasSourceViewBoxViewportRef.current;
       wasSourceViewBoxViewportRef.current = false;
+      setFlowMinimumZoom(0.25);
       setBoardMinimumZoom(0.25);
 
       if (shouldRestoreLegacyViewport) {
@@ -2386,7 +2417,9 @@ function DiagramEditorInner({
     const nextDiagram = applyInitialSourceViewBoxViewport(visibleDiagram, frame);
     const viewport = nextDiagram.viewport;
 
-    setBoardMinimumZoom(getSourceViewBoxMinimumZoom(presentation.sourceViewBox, frame));
+    const sourceMinimumZoom = getSourceViewBoxMinimumZoom(presentation.sourceViewBox, frame);
+    setFlowMinimumZoom(sourceMinimumZoom);
+    setBoardMinimumZoom(sourceMinimumZoom);
 
     if (nextDiagram !== visibleDiagram) {
       if (previewDiagram !== null) {
@@ -2406,6 +2439,7 @@ function DiagramEditorInner({
     previewDiagram,
     replaceDiagram,
     runViewportMoveWithoutPersistence,
+    setFlowMinimumZoom,
     visibleDiagram
   ]);
 
@@ -2461,6 +2495,8 @@ function DiagramEditorInner({
       const currentNodes = previewDiagram?.nodes ?? diagramRef.current.nodes;
 
       if (currentNodes.length === 0) {
+        setFlowMinimumZoom(0.25);
+        setBoardMinimumZoom(0.25);
         const moveToDefaultViewport = () =>
           flowInstance.setViewport(DEFAULT_DIAGRAM_VIEWPORT, {
             duration: getBoardMotionDuration(180)
@@ -2482,33 +2518,25 @@ function DiagramEditorInner({
       const frame = getCurrentBoardViewportFrame();
 
       if (!frame) {
-        const fitOptions = {
-          duration: getBoardMotionDuration(180),
-          maxZoom: 1.35,
-          minZoom: 0.25,
-          nodes: currentNodes.map((node) => ({ id: node.id })),
-          padding: 0.24
-        };
-
-        if (shouldPersistViewport) {
-          void flowInstance.fitView(fitOptions);
-        } else {
-          runViewportMoveWithoutPersistence(() => flowInstance.fitView(fitOptions));
-        }
         return;
       }
 
+      const visualBounds = getDiagramVisualBounds(currentNodes, flowEdges);
+      const fitMinimumZoom = getFitViewMinimumZoom(visualBounds, frame, FIT_VIEW_PADDING);
       const viewport = offsetBoardViewportToFrame(
         getViewportForBounds(
-          getDiagramVisualBounds(currentNodes),
+          visualBounds,
           frame.width,
           frame.height,
-          0.25,
+          fitMinimumZoom,
           1.35,
-          0.24
+          FIT_VIEW_PADDING
         ),
         frame
       );
+
+      setFlowMinimumZoom(fitMinimumZoom);
+      setBoardMinimumZoom(fitMinimumZoom);
 
       const moveToViewport = () =>
         flowInstance.setViewport(viewport, { duration: getBoardMotionDuration(180) });
@@ -2524,10 +2552,12 @@ function DiagramEditorInner({
     },
     [
       applyLiveDiagramUpdate,
+      flowEdges,
       getCurrentBoardViewportFrame,
       getFlowInstance,
       previewDiagram,
-      runViewportMoveWithoutPersistence
+      runViewportMoveWithoutPersistence,
+      setFlowMinimumZoom
     ]
   );
 
@@ -2948,6 +2978,7 @@ function DiagramEditorInner({
         }}
         workspace={{
           dashboardHref,
+          isDeploymentConsoleOpen,
           projectName,
           saveStatus,
           showSaveAction,
