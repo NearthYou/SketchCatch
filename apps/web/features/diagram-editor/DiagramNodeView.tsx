@@ -371,7 +371,12 @@ export const DiagramNodeView = memo(function DiagramNodeView(
                   src={displayIconUrl}
                 />
               </div>
-              <div className={styles.resourceNodeLabel} style={{ color: textColor }} title={resourceNodeLabel}>
+              <div
+                className={styles.resourceNodeLabel}
+                data-board-thumbnail-persistent-label="true"
+                style={{ color: textColor }}
+                title={resourceNodeLabel}
+              >
                 {resourceNodeLabel}
               </div>
             </>

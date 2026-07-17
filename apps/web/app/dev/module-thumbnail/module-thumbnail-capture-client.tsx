@@ -58,7 +58,9 @@ async function captureBoard(element: HTMLElement): Promise<string> {
   await nextAnimationFrame();
   await nextAnimationFrame();
 
-  const blob = await captureActualBoardElement(element);
+  const blob = await captureActualBoardElement(element, {
+    preserveLowZoomLabels: true
+  });
   const dataUrl = await blobToDataUrl(blob);
 
   if (!dataUrl.startsWith("data:image/webp;base64,")) {

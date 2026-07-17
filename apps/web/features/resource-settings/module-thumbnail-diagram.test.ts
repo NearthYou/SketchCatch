@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
+import { getBoardThumbnailPersistentLabelScale } from "../workspace/project-board-thumbnail-viewbox";
 import { curatedModules, materializeCuratedModulePattern } from "./module-catalog";
 import {
   createModuleThumbnailDiagram,
@@ -21,6 +22,14 @@ const captureClientSource = readFileSync(
 );
 const stylesSource = readFileSync(
   join(currentDir, "../../app/dev/module-thumbnail/module-thumbnail.module.css"),
+  "utf8"
+);
+const projectBoardThumbnailSource = readFileSync(
+  join(currentDir, "../workspace/project-board-thumbnail.ts"),
+  "utf8"
+);
+const diagramNodeViewSource = readFileSync(
+  join(currentDir, "../diagram-editor/DiagramNodeView.tsx"),
   "utf8"
 );
 
@@ -162,4 +171,24 @@ test("Module thumbnail capture stages the real viewer and exposes a 1280 by 720 
   assert.match(captureClientSource, /data:image\/webp;base64,/);
   assert.match(stylesSource, /width:\s*1280px/);
   assert.match(stylesSource, /height:\s*720px/);
+});
+
+test("Module thumbnail capture keeps resource labels readable at its fitted clone zoom", () => {
+  assert.equal(getBoardThumbnailPersistentLabelScale(0.1), 7.5);
+  assert.equal(getBoardThumbnailPersistentLabelScale(0.5), 1.5);
+  assert.equal(getBoardThumbnailPersistentLabelScale(0.75), 1);
+  assert.equal(getBoardThumbnailPersistentLabelScale(1), 1);
+  assert.match(
+    captureClientSource,
+    /captureActualBoardElement\(element,\s*\{\s*preserveLowZoomLabels:\s*true\s*\}\)/s
+  );
+  assert.match(
+    projectBoardThumbnailSource,
+    /querySelectorAll<HTMLElement>\(\s*BOARD_THUMBNAIL_PERSISTENT_LABEL_SELECTOR\s*\)/s
+  );
+  assert.match(
+    projectBoardThumbnailSource,
+    /clone\.style\.setProperty\(\s*"--board-lod-label-scale",\s*String\(labelScale\)\s*\)/s
+  );
+  assert.match(diagramNodeViewSource, /data-board-thumbnail-persistent-label="true"/);
 });
