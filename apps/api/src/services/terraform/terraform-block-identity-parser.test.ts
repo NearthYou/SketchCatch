@@ -150,6 +150,23 @@ test("keeps scanning after a heredoc with a Unicode delimiter", () => {
   );
 });
 
+test("keeps scanning after a heredoc with an astral Unicode delimiter", () => {
+  const delimiter = "\u{10400}";
+
+  assert.deepEqual(
+    scanTerraformBlockIdentities(
+      `script = <<${delimiter}\n{\nresource "aws_lambda_function" "heredoc_value" {}\n${delimiter}\nresource "aws_lambda_function" "legacy_lambda" {}\n`
+    ),
+    [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "legacy_lambda"
+      }
+    ]
+  );
+});
+
 test("decodes Terraform quoted-string escapes in resource identities", () => {
   assert.deepEqual(
     scanTerraformBlockIdentities(
