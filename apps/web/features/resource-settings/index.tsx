@@ -22,9 +22,10 @@ import {
   ShieldCheck
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
+import { BoardThumbnailImage } from "../../components/architecture-board/BoardThumbnailImage";
 import { TemplateGallery } from "../../components/templates/TemplateGallery";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "../diagram-editor/diagram-utils";
 import {
@@ -35,13 +36,9 @@ import {
   curatedModules,
   type CuratedModuleDefinition
 } from "./module-catalog";
-import {
-  createModuleCatalogPreview,
-  type ModuleCatalogPreview
-} from "./module-catalog-preview";
+import { createModuleCatalogPreview } from "./module-catalog-preview";
 import moduleCatalogStyles from "./module-catalog-preview.module.css";
 import {
-  countModuleResources,
   createModuleCatalogGroups,
   moduleCatalogViews,
   type ModuleCatalogViewId
@@ -558,77 +555,24 @@ function ModuleCatalogCard({
   const preview = createModuleCatalogPreview(moduleDefinition);
 
   return (
-    <details className={`moduleCatalogCard ${moduleCatalogStyles.moduleCatalogCard}`}>
-      <summary className={moduleCatalogStyles.moduleCatalogSummary}>
-        <span className={moduleCatalogStyles.moduleCatalogSummaryCopy}>
-          <strong>{moduleDefinition.title}</strong>
-          <span>{moduleDefinition.description}</span>
-        </span>
-        <small>리소스 {countModuleResources(moduleDefinition)}개</small>
-      </summary>
-
-      <div className={moduleCatalogStyles.moduleCatalogPreview}>
-        <ModuleCatalogTopology preview={preview} title={moduleDefinition.title} />
-
-        <div className={moduleCatalogStyles.moduleCatalogPreviewGrid}>
-          <ModuleCatalogPreviewSection title="포함 Resource" wide>
-            <ModuleCatalogPreviewList
-              emptyLabel="포함 Resource 없음"
-              items={preview.resources.map(({ id, label, type }) => ({
-                id,
-                primary: label,
-                secondary: type
-              }))}
-            />
-          </ModuleCatalogPreviewSection>
-
-          <ModuleCatalogPreviewSection title="주요 관계" wide>
-            <ModuleCatalogPreviewList
-              emptyLabel="표시할 관계 없음"
-              items={preview.relationships.map(({ id, label, sourceLabel, targetLabel }) => ({
-                id,
-                primary: `${sourceLabel} → ${targetLabel}`,
-                secondary: label
-              }))}
-            />
-          </ModuleCatalogPreviewSection>
-
-          <ModuleCatalogPreviewSection title="Provider">
-            <p>
-              {preview.providers.length > 0 ? preview.providers.join(", ") : "Provider 정보 없음"}
-            </p>
-          </ModuleCatalogPreviewSection>
-
-          <ModuleCatalogPreviewSection title="입력값">
-            <ModuleCatalogPreviewList
-              emptyLabel="입력값 없음"
-              items={preview.inputs.map(({ name, type }) => ({
-                id: name,
-                primary: name,
-                secondary: type
-              }))}
-            />
-          </ModuleCatalogPreviewSection>
-
-          <ModuleCatalogPreviewSection title="출력값">
-            {preview.outputs.length > 0 ? (
-              <ModuleCatalogPreviewList
-                emptyLabel="출력값 없음"
-                items={preview.outputs.map((output) => ({
-                  id: output,
-                  primary: output
-                }))}
-              />
-            ) : (
-              <p>현재 Board Module은 Terraform output을 정의하지 않습니다.</p>
-            )}
-          </ModuleCatalogPreviewSection>
-
-          <ModuleCatalogPreviewSection title="버전">
-            <p>{preview.version}</p>
-          </ModuleCatalogPreviewSection>
+    <article className={`moduleCatalogCard ${moduleCatalogStyles.moduleCatalogCard}`}>
+      <BoardThumbnailImage
+        alt={`${preview.title} 모듈 보드 캡처`}
+        className={moduleCatalogStyles.moduleCatalogThumbnail}
+        src={null}
+      />
+      <div className={moduleCatalogStyles.moduleCatalogContent}>
+        <div className={moduleCatalogStyles.moduleCatalogCopy}>
+          <h3>{preview.title}</h3>
+          <p>{preview.description}</p>
         </div>
-
+        <p className={moduleCatalogStyles.moduleCatalogMetadata}>
+          {preview.provider} · Resource {preview.resourceCount}개 · 연결 {preview.relationshipCount}개
+        </p>
+        <div className={moduleCatalogStyles.moduleCatalogResourceSummary}>
+          <strong>주요 구성</strong>
+          <p>{preview.resourceSummary}</p>
+        </div>
         <button
           className={moduleCatalogStyles.moduleCatalogAddButton}
           onClick={() => onModuleAdd?.(moduleDefinition.id)}
@@ -637,101 +581,7 @@ function ModuleCatalogCard({
           보드에 추가
         </button>
       </div>
-    </details>
-  );
-}
-
-function ModuleCatalogTopology({
-  preview,
-  title
-}: {
-  readonly preview: ModuleCatalogPreview;
-  readonly title: string;
-}) {
-  const nodesById = new Map(preview.thumbnail.nodes.map((node) => [node.id, node]));
-
-  return (
-    <svg
-      aria-label={`${title} 모듈 구성 미리보기`}
-      className={moduleCatalogStyles.moduleCatalogTopology}
-      role="img"
-      viewBox="0 0 220 90"
-    >
-      <title>{title} 모듈 구성 미리보기</title>
-      {preview.thumbnail.edges.map((edge) => {
-        const source = nodesById.get(edge.sourceNodeId);
-        const target = nodesById.get(edge.targetNodeId);
-
-        if (!source || !target) return null;
-
-        return (
-          <line
-            className={moduleCatalogStyles.moduleCatalogTopologyEdge}
-            key={edge.id}
-            x1={source.x}
-            x2={target.x}
-            y1={source.y}
-            y2={target.y}
-          />
-        );
-      })}
-      {preview.thumbnail.nodes.map((node) => (
-        <g className={moduleCatalogStyles.moduleCatalogTopologyNode} key={node.id}>
-          <rect height="14" rx="4" width="28" x={node.x - 14} y={node.y - 7} />
-          <text textAnchor="middle" x={node.x} y={node.y + 3}>
-            {node.label.slice(0, 1).toUpperCase()}
-          </text>
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-function ModuleCatalogPreviewSection({
-  children,
-  title,
-  wide = false
-}: {
-  readonly children: ReactNode;
-  readonly title: string;
-  readonly wide?: boolean | undefined;
-}) {
-  return (
-    <section
-      className={
-        wide
-          ? `${moduleCatalogStyles.moduleCatalogPreviewSection} ${moduleCatalogStyles.moduleCatalogPreviewSectionWide}`
-          : moduleCatalogStyles.moduleCatalogPreviewSection
-      }
-    >
-      <h3>{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function ModuleCatalogPreviewList({
-  emptyLabel,
-  items
-}: {
-  readonly emptyLabel: string;
-  readonly items: readonly {
-    readonly id: string;
-    readonly primary: string;
-    readonly secondary?: string | undefined;
-  }[];
-}) {
-  if (items.length === 0) return <p>{emptyLabel}</p>;
-
-  return (
-    <ul className={moduleCatalogStyles.moduleCatalogPreviewList}>
-      {items.map(({ id, primary, secondary }) => (
-        <li key={id}>
-          <span>{primary}</span>
-          {secondary ? <code>{secondary}</code> : null}
-        </li>
-      ))}
-    </ul>
+    </article>
   );
 }
 
