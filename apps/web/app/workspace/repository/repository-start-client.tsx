@@ -56,7 +56,7 @@ import {
 } from "../../../features/workspace/public-repository-recommendation";
 import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
-import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
+import { RepositoryArchitecturePreview } from "./repository-architecture-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
 import {
   consumeRepositoryAnalysisResume,
@@ -769,7 +769,7 @@ export function RepositoryStartClient({
                       : "분석 근거로 하나의 템플릿을 선택하지 못했습니다."}
                   </strong>
                 </div>
-                <AiDraftBoardPreview diagram={previewDiagram} />
+                <RepositoryArchitecturePreview diagram={previewDiagram} />
               </section>
             ) : null}
           </section>

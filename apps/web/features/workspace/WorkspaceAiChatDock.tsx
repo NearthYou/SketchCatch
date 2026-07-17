@@ -96,6 +96,7 @@ import {
   isWorkspaceAiChatAbortError,
   WorkspaceAiChatRequestRegistry
 } from "./workspace-ai-chat-request";
+import { createWorkspaceAiChatStorageKey } from "./workspace-ai-chat-storage";
 import { WorkspaceAiChatLauncher } from "./WorkspaceAiChatLauncher";
 import { WorkspaceAiWorkbench } from "./WorkspaceAiWorkbench";
 import styles from "./workspace-ai-workbench.module.css";
@@ -202,7 +203,6 @@ type SelectedTerraformFixPlan = {
 };
 
 const MAX_CHAT_MESSAGES = 80;
-const STORAGE_KEY_PREFIX = "sketchcatch.workspaceAiChat";
 const NO_RESOURCE_ADDITION_SUGGESTION = "추가 안 함";
 const NO_RESOURCE_ADDITION_MESSAGE = "추가 없이 지금까지의 요청으로 새 초안을 생성합니다.";
 const REQUEST_CANCELLED_MESSAGE = "요청을 중지했습니다.";
@@ -2612,10 +2612,6 @@ export function WorkspaceAiChatDock({
       ) : null}
     </WorkspaceAiWorkbench>
   );
-}
-
-export function createWorkspaceAiChatStorageKey(projectId: string): string {
-  return `${STORAGE_KEY_PREFIX}.${projectId}`;
 }
 
 function WorkspaceAiPatchParameterPreview({

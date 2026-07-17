@@ -3,10 +3,9 @@ import type {
   ArchitectureDraftClarification,
   ArchitecturePatchClarification,
   ArchitecturePatchClarificationCandidate,
-  ArchitecturePatchPreview,
-  DiagramJson
+  ArchitecturePatchPreview
 } from "@sketchcatch/types";
-import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/WorkspaceAiChatDock";
+import { createWorkspaceAiChatStorageKey } from "../../../features/workspace/workspace-ai-chat-storage";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
 const MAX_CHAT_MESSAGES = 80;
@@ -163,10 +162,6 @@ export function createPatchSummary(preview: ArchitecturePatchPreview): string {
   }
 
   return `${preview.changes.length}개 변경 사항을 PREVIEW에 반영했습니다.`;
-}
-
-export function hasDraftResources(diagram: DiagramJson | null): boolean {
-  return diagram !== null && diagram.nodes.length > 0;
 }
 
 function isAiStartProjectDraft(value: unknown): value is AiStartProjectDraft {

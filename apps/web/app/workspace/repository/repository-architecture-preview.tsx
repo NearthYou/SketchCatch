@@ -19,25 +19,25 @@ import {
   getAreaNodeMetaLabel,
   isAreaNode
 } from "../../../features/diagram-editor/area-nodes";
-import styles from "./workspace-ai-start.module.css";
+import styles from "./repository-architecture-preview.module.css";
 
-type DraftPreviewNodeData = Record<string, unknown> & {
+type RepositoryPreviewNodeData = Record<string, unknown> & {
   readonly diagramNode: DiagramNode;
 };
 
-type DraftPreviewFlowNode = Node<DraftPreviewNodeData, "draftPreview">;
+type RepositoryPreviewFlowNode = Node<RepositoryPreviewNodeData, "repositoryPreview">;
 
 const NODE_TYPES = {
-  draftPreview: DraftPreviewNode
+  repositoryPreview: RepositoryPreviewNode
 };
 
-export function AiDraftBoardPreview({ diagram }: { readonly diagram: DiagramJson }) {
+export function RepositoryArchitecturePreview({ diagram }: { readonly diagram: DiagramJson }) {
   const nodes = useMemo(() => createPreviewNodes(diagram), [diagram]);
   const edges = useMemo(() => createPreviewEdges(diagram), [diagram]);
 
   return (
-    <div className={styles.previewCanvas} data-testid="ai-draft-board-preview">
-      <ReactFlow<DraftPreviewFlowNode, Edge>
+    <div className={styles.canvas} data-testid="repository-architecture-preview">
+      <ReactFlow<RepositoryPreviewFlowNode, Edge>
         colorMode="light"
         edges={edges}
         elementsSelectable={false}
@@ -60,7 +60,7 @@ export function AiDraftBoardPreview({ diagram }: { readonly diagram: DiagramJson
   );
 }
 
-function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
+function RepositoryPreviewNode({ data }: NodeProps<RepositoryPreviewFlowNode>) {
   const node = data.diagramNode;
   const area = isAreaNode(node);
   const label = area ? getAreaNodeLabel(node) : node.label;
@@ -68,8 +68,8 @@ function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
 
   if (area) {
     return (
-      <section className={styles.previewAreaNode}>
-        <header className={styles.previewAreaHeader}>
+      <section className={styles.areaNode}>
+        <header className={styles.areaHeader}>
           {node.iconUrl ? (
             <Image alt="" height={16} src={node.iconUrl} unoptimized width={16} />
           ) : (
@@ -83,8 +83,8 @@ function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
   }
 
   return (
-    <article className={styles.previewResourceNode}>
-      <span className={styles.previewResourceIcon}>
+    <article className={styles.resourceNode}>
+      <span className={styles.resourceIcon}>
         {node.iconUrl ? (
           <Image alt="" height={34} src={node.iconUrl} unoptimized width={34} />
         ) : (
@@ -97,7 +97,7 @@ function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
   );
 }
 
-function createPreviewNodes(diagram: DiagramJson): DraftPreviewFlowNode[] {
+function createPreviewNodes(diagram: DiagramJson): RepositoryPreviewFlowNode[] {
   return [...diagram.nodes]
     .sort((left, right) => left.zIndex - right.zIndex)
     .map((node) => ({
@@ -111,7 +111,7 @@ function createPreviewNodes(diagram: DiagramJson): DraftPreviewFlowNode[] {
         width: node.size.width,
         zIndex: node.zIndex
       },
-      type: "draftPreview"
+      type: "repositoryPreview"
     }));
 }
 

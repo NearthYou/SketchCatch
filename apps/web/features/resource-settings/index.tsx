@@ -36,8 +36,10 @@ import {
   curatedModules,
   type CuratedModuleDefinition
 } from "./module-catalog";
+import { createModuleCatalogPreview } from "./module-catalog-preview";
+import moduleCatalogStyles from "./module-catalog-preview.module.css";
+import { getModuleThumbnailAsset } from "./module-thumbnail-manifest";
 import {
-  countModuleResources,
   createModuleCatalogGroups,
   moduleCatalogViews,
   type ModuleCatalogViewId
@@ -666,16 +668,37 @@ function ModuleCatalogCard({
   readonly moduleDefinition: CuratedModuleDefinition;
   readonly onModuleAdd?: ((moduleId: string) => void) | undefined;
 }) {
+  const preview = createModuleCatalogPreview(moduleDefinition);
+  const asset = getModuleThumbnailAsset(moduleDefinition.id);
+
   return (
-    <button
-      className="moduleCatalogCard"
-      onClick={() => onModuleAdd?.(moduleDefinition.id)}
-      type="button"
-    >
-      <strong>{moduleDefinition.title}</strong>
-      <span>{moduleDefinition.description}</span>
-      <small>리소스 {countModuleResources(moduleDefinition)}개</small>
-    </button>
+    <article className={`moduleCatalogCard ${moduleCatalogStyles.moduleCatalogCard}`}>
+      <BoardThumbnailImage
+        alt={`${preview.title} 모듈 보드 캡처`}
+        className={moduleCatalogStyles.moduleCatalogThumbnail}
+        src={asset?.src ?? null}
+      />
+      <div className={moduleCatalogStyles.moduleCatalogContent}>
+        <div className={moduleCatalogStyles.moduleCatalogCopy}>
+          <h3>{preview.title}</h3>
+          <p>{preview.description}</p>
+        </div>
+        <p className={moduleCatalogStyles.moduleCatalogMetadata}>
+          {preview.provider} · Resource {preview.resourceCount}개 · 연결 {preview.relationshipCount}개
+        </p>
+        <div className={moduleCatalogStyles.moduleCatalogResourceSummary}>
+          <strong>주요 구성</strong>
+          <p>{preview.resourceSummary}</p>
+        </div>
+        <button
+          className={moduleCatalogStyles.moduleCatalogAddButton}
+          onClick={() => onModuleAdd?.(moduleDefinition.id)}
+          type="button"
+        >
+          보드에 추가
+        </button>
+      </div>
+    </article>
   );
 }
 

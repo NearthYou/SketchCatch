@@ -52,6 +52,17 @@
   width: 100%;
 }
 
+.editorShellViewer {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
+.editorShellViewer .workspace {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .editorShellLeftCollapsed {
   grid-template-columns: 0 minmax(0, 1fr) var(--right-panel-width);
 }
@@ -782,7 +793,6 @@
   border: 1px solid var(--workspace-line);
   border-radius: 8px;
   color: var(--workspace-text);
-  cursor: pointer;
   display: grid;
   font: inherit;
   gap: 4px;
@@ -791,8 +801,10 @@
   text-align: left;
 }
 
-.leftRail :global(.moduleCatalogCard:hover),
-.leftRail :global(.moduleCatalogCard:focus-visible),
+.leftRail :global(.templateCatalogCard) {
+  cursor: pointer;
+}
+
 .leftRail :global(.templateCatalogCard:hover),
 .leftRail :global(.templateCatalogCard:focus-visible) {
   border-color: var(--workspace-line-strong);
@@ -2107,6 +2119,11 @@ button.rightRailResizeHandle {
   transition: opacity 120ms ease;
 }
 
+.edgeAnchorHandle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .connectionHandleSource {
   z-index: 11;
 }
@@ -2793,6 +2810,10 @@ button.rightRailResizeHandle {
   .editorShell {
     grid-template-columns: 0 minmax(0, 1fr) 0;
     overflow: hidden;
+  }
+
+  .editorShellViewer {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .leftRail {

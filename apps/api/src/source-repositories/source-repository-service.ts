@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type {
   AnalyzeSourceRepositoryResponse,
   GitHubInstalledRepositoryCandidate,
@@ -243,40 +243,74 @@ export function createPostgresSourceRepositoryRepository(
 ): SourceRepositoryRepository {
   return {
     async connectGitHubInstallation(input) {
-      const now = new Date();
-      const [connection] = await db
-        .insert(githubInstallationConnections)
-        .values({
-          id: randomUUID(),
-          userId: input.userId,
-          githubInstallationId: input.installation.installationId,
-          accountId: input.installation.accountId,
-          accountLogin: input.installation.accountLogin,
-          accountType: input.installation.accountType,
-          repositorySelection: input.installation.repositorySelection,
-          htmlUrl: input.installation.htmlUrl,
-          status: "active",
-          connectedAt: now,
-          lastVerifiedAt: now
-        })
-        .onConflictDoUpdate({
-          target: githubInstallationConnections.githubInstallationId,
-          set: {
+      return db.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${input.userId}))`
+        );
+        const activeConnections = await transaction
+          .select({
+            githubInstallationId:
+              githubInstallationConnections.githubInstallationId
+          })
+          .from(githubInstallationConnections)
+          .where(
+            and(
+              eq(githubInstallationConnections.userId, input.userId),
+              eq(githubInstallationConnections.status, "active")
+            )
+          );
+        if (
+          activeConnections.some(
+            (connection) =>
+              connection.githubInstallationId !==
+              input.installation.installationId
+          ) &&
+          !activeConnections.some(
+            (connection) =>
+              connection.githubInstallationId ===
+              input.installation.installationId
+          )
+        ) {
+          throw new SourceRepositoryConflictError(
+            "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
+          );
+        }
+
+        const now = new Date();
+        const [connection] = await transaction
+          .insert(githubInstallationConnections)
+          .values({
+            id: randomUUID(),
+            userId: input.userId,
+            githubInstallationId: input.installation.installationId,
             accountId: input.installation.accountId,
             accountLogin: input.installation.accountLogin,
             accountType: input.installation.accountType,
             repositorySelection: input.installation.repositorySelection,
             htmlUrl: input.installation.htmlUrl,
             status: "active",
+            connectedAt: now,
             lastVerifiedAt: now,
-            disconnectedAt: null,
-            updatedAt: now
-          },
-          setWhere: eq(githubInstallationConnections.userId, input.userId)
-        })
-        .returning();
+          })
+          .onConflictDoUpdate({
+            target: githubInstallationConnections.githubInstallationId,
+            set: {
+              accountId: input.installation.accountId,
+              accountLogin: input.installation.accountLogin,
+              accountType: input.installation.accountType,
+              repositorySelection: input.installation.repositorySelection,
+              htmlUrl: input.installation.htmlUrl,
+              status: "active",
+              lastVerifiedAt: now,
+              disconnectedAt: null,
+              updatedAt: now
+            },
+            setWhere: eq(githubInstallationConnections.userId, input.userId)
+          })
+          .returning();
 
-      return connection;
+        return connection;
+      });
     },
     async listActiveGitHubInstallationConnections(userId) {
       return db
@@ -487,6 +521,17 @@ export async function createGitHubInstallationUserAuthorization(
     },
     repository
   );
+  const activeConnections =
+    await repository.listActiveGitHubInstallationConnections(setupState.userId);
+  if (
+    activeConnections.some(
+      (connection) => connection.githubInstallationId !== input.installationId
+    )
+  ) {
+    throw new SourceRepositoryConflictError(
+      "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
+    );
+  }
 
   return createGitHubAppUserAuthorization({
     userId: setupState.userId,
@@ -532,6 +577,18 @@ export async function completeGitHubInstallationUserAuthorization(
   });
   if (!installation) {
     throw new SourceRepositoryConflictError("GIT_APP_INSTALLATION_FORBIDDEN");
+  }
+
+  const activeConnections =
+    await repository.listActiveGitHubInstallationConnections(authorization.userId);
+  if (
+    activeConnections.some(
+      (connection) => connection.githubInstallationId !== authorization.installationId
+    )
+  ) {
+    throw new SourceRepositoryConflictError(
+      "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
+    );
   }
 
   const connection = await repository.connectGitHubInstallation({

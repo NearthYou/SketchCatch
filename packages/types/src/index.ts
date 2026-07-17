@@ -1682,6 +1682,11 @@ export type ProjectBuildEnvironmentStatus =
   | "verification_failed"
   | "disconnected";
 
+export type ProjectRepositoryAccessVerificationStatus =
+  | "not_checked"
+  | "verified"
+  | "failed";
+
 export type ProjectBuildEnvironment = {
   id: string;
   projectId: string;
@@ -1694,6 +1699,12 @@ export type ProjectBuildEnvironment = {
   runtimeFingerprint: string;
   status: ProjectBuildEnvironmentStatus;
   lastVerifiedAt: IsoDateTimeString | null;
+  repositoryVerificationStatus: ProjectRepositoryAccessVerificationStatus;
+  repositoryVerificationRequestedCommitSha: string | null;
+  repositoryVerificationResolvedCommitSha: string | null;
+  repositoryVerificationBuildArn: string | null;
+  repositoryVerificationStatusReason: string | null;
+  repositoryVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -3254,17 +3265,16 @@ export type CreateArchitecturePatchPreviewRequest = {
   skipConnection?: boolean | undefined;
 };
 
+export type ArchitectureDraftCandidateExclusion = {
+  candidateId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
-  dynamicQuestionAnswers?:
-    | readonly {
-        questionId: string;
-        question: string;
-        answer: string;
-      }[]
-    | undefined;
-  templateFallback?: Record<string, unknown> | undefined;
   repositoryEvidence?:
     | {
         mode: "strict";
@@ -3280,15 +3290,11 @@ export type CreateArchitectureDraftRequest = {
     | undefined;
 };
 
-export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
-  "preparing_requirements",
-  "normalizing_requirements",
-  "querying_amazon_q",
-  "validating_architecture",
-  "building_diagram"
-] as const;
-
-export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+export type ArchitectureDraftProgressSnapshot = {
+  sequence: number;
+  provisionalArchitectureJson: ArchitectureJson;
+  excludableCandidateIds: string[];
+};
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -3312,7 +3318,7 @@ export type CreateArchitectureDraftResponse =
 export type ArchitectureDraftStreamEvent =
   | {
       type: "progress";
-      stage: ArchitectureDraftProgressStage;
+      snapshot: ArchitectureDraftProgressSnapshot;
     }
   | {
       type: "result";

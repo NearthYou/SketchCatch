@@ -293,11 +293,13 @@
   border-radius: 20px;
   background: var(--workspace-surface, #ffffff);
   box-shadow: var(--shadow-card);
+  grid-template-areas: "preview content";
   grid-template-columns: minmax(0, 1.45fr) minmax(330px, 0.75fr);
 }
 
 .detailPreviewFrame {
   display: grid;
+  grid-area: preview;
   min-width: 0;
   padding: 26px;
   background: var(--workspace-surface-muted, #f2f3f5);
@@ -314,6 +316,7 @@
 
 .detailContent {
   display: flex;
+  grid-area: content;
   min-width: 0;
   flex-direction: column;
   padding: 42px 38px 36px;
@@ -386,8 +389,7 @@
 .detailActionArea {
   display: grid;
   gap: 12px;
-  margin-top: auto;
-  padding-top: 34px;
+  margin-top: 30px;
 }
 
 .detailStartAction {
@@ -513,7 +515,11 @@
   .templateFlow { padding: 48px 12px 72px; gap: 22px; }
   .templateFlowHeader { grid-template-columns: 1fr; gap: 18px; }
   .templateCount { justify-self: start; }
-  .templateDetail { min-height: 0; grid-template-columns: 1fr; }
+  .templateDetail {
+    min-height: 0;
+    grid-template-areas: "content" "preview";
+    grid-template-columns: 1fr;
+  }
   .detailPreviewFrame { min-height: 300px; padding: 14px; }
   .detailContent { padding: 30px 22px 24px; }
   .detailActionArea { margin-top: 30px; padding-top: 0; }

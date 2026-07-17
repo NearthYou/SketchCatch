@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Box,
   BringToFront,
   Layers2,
   Lock,
@@ -27,6 +26,7 @@ import type {
   ReactNode
 } from "react";
 
+import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import { getBoardNodeStateBadge, getBoardZoomLevel } from "./board-visual-state";
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
 import {
@@ -45,7 +45,11 @@ import {
   getNodeDisplayBorderStyle
 } from "./node-style";
 import { getResourceNodePresentation } from "./resource-node-presentation";
-import type { DiagramFlowNode } from "./types";
+import {
+  shouldRenderDiagramNodeEdgeAnchors,
+  shouldRenderDiagramNodeInteractionHandles,
+  type DiagramFlowNode
+} from "./types";
 import styles from "./diagram-editor.module.css";
 
 const CONNECTION_HANDLES = [
@@ -345,9 +349,13 @@ export const DiagramNodeView = memo(function DiagramNodeView(
                 />
               ))}
               <div className={styles.areaNodeHeader} style={{ color: textColor }}>
-                {areaNodeIconUrl ? (
-                  <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
-                ) : null}
+                <ResourceIconImage
+                  alt=""
+                  className={styles.areaNodeHeaderIcon}
+                  fallbackClassName={styles.areaNodeHeaderIcon}
+                  fallbackSize={16}
+                  src={areaNodeIconUrl}
+                />
                 <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
                 {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
               </div>
@@ -355,26 +363,33 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           ) : usesIconTileLayout ? (
             <>
               <div className={styles.resourceNodeIconFrame} data-icon-family={resourcePresentation.icon.family}>
-                {displayIconUrl ? (
-                  <img alt="" className={styles.resourceNodeIcon} draggable={false} src={displayIconUrl} />
-                ) : (
-                  <div className={styles.resourceNodeIconFallback} aria-hidden="true">
-                    <Box size={18} strokeWidth={1.75} />
-                  </div>
-                )}
+                <ResourceIconImage
+                  alt=""
+                  className={styles.resourceNodeIcon}
+                  fallbackClassName={styles.resourceNodeIconFallback}
+                  fallbackSize={18}
+                  src={displayIconUrl}
+                />
               </div>
-              <div className={styles.resourceNodeLabel} style={{ color: textColor }} title={resourceNodeLabel}>
+              <div
+                className={styles.resourceNodeLabel}
+                data-board-thumbnail-persistent-label="true"
+                style={{ color: textColor }}
+                title={resourceNodeLabel}
+              >
                 {resourceNodeLabel}
               </div>
             </>
           ) : (
             <>
               <div className={styles.nodeGlyph} aria-hidden="true">
-                {displayIconUrl ? (
-                  <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={displayIconUrl} />
-                ) : (
-                  "D"
-                )}
+                <ResourceIconImage
+                  alt=""
+                  className={styles.nodeGlyphIcon}
+                  fallbackClassName={styles.nodeGlyphIcon}
+                  fallbackSize={28}
+                  src={displayIconUrl}
+                />
               </div>
               <div className={styles.nodeContent}>
                 <div className={styles.nodeType}>Design</div>
@@ -432,12 +447,13 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           </>
         ) : null}
 
-        {CONNECTION_HANDLES.map((handle) => {
-          const canStartFromHandle = canConnect && !data.isConnectionActive;
-          const canEndAtHandle = data.isValidConnectionTarget;
+        {shouldRenderDiagramNodeInteractionHandles(data.isPreview)
+          ? CONNECTION_HANDLES.map((handle) => {
+              const canStartFromHandle = canConnect && !data.isConnectionActive;
+              const canEndAtHandle = data.isValidConnectionTarget;
 
-          return (
-            <Fragment key={handle.id}>
+              return (
+                <Fragment key={handle.id}>
               <Handle
                 aria-label={`${resourceNodeLabel} ${handle.label} 연결 시작`}
                 className={[
@@ -477,9 +493,38 @@ export const DiagramNodeView = memo(function DiagramNodeView(
                 tabIndex={canEndAtHandle ? 0 : -1}
                 type="target"
               />
-            </Fragment>
-          );
-        })}
+                </Fragment>
+              );
+            })
+          : null}
+        {shouldRenderDiagramNodeEdgeAnchors(data.isPreview)
+          ? CONNECTION_HANDLES.map((handle) => (
+              <Fragment key={`preview-${handle.id}`}>
+                <Handle
+                  aria-hidden="true"
+                  className={styles.edgeAnchorHandle}
+                  id={`source-${handle.id}`}
+                  isConnectable={false}
+                  isConnectableEnd={false}
+                  isConnectableStart={false}
+                  position={handle.position}
+                  tabIndex={-1}
+                  type="source"
+                />
+                <Handle
+                  aria-hidden="true"
+                  className={styles.edgeAnchorHandle}
+                  id={`target-${handle.id}`}
+                  isConnectable={false}
+                  isConnectableEnd={false}
+                  isConnectableStart={false}
+                  position={handle.position}
+                  tabIndex={-1}
+                  type="target"
+                />
+              </Fragment>
+            ))
+          : null}
       </div>
     </>
   );

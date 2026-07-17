@@ -11,7 +11,7 @@ import type {
   AiTerraformErrorExplanationResult,
   AiTerraformPreviewExplanationResult,
   ApiErrorResponse,
-  ArchitectureDraftProgressStage,
+  ArchitectureDraftProgressSnapshot,
   ArchitectureDraftStreamEvent,
   ArchitecturePatchPreviewResponse,
   ArchitectureJson,
@@ -131,16 +131,15 @@ const architectureJsonSchema: z.ZodType<ArchitectureJson> = z.object({
 
 const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z.object({
   prompt: z.string().trim().min(1),
-  templateId: z.enum(TEMPLATE_IDS).optional(),
-  dynamicQuestionAnswers: z
+  candidateExclusions: z
     .array(z.object({
-      questionId: z.string().trim().min(1).max(160),
-      question: z.string().trim().min(1).max(500),
-      answer: z.string().trim().min(1).max(500)
+      candidateId: z.string().trim().min(1),
+      resourceType: resourceTypeSchema,
+      label: z.string().trim().min(1)
     }))
     .max(32)
     .optional(),
-  templateFallback: z.record(z.string(), z.unknown()).optional(),
+  templateId: z.enum(TEMPLATE_IDS).optional(),
   repositoryEvidence: z
     .object({
       mode: z.literal("strict"),
@@ -158,15 +157,21 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
       sourceRepositoryId: z.uuid()
     })
     .optional()
-}).superRefine((body, context) => {
-  if (body.templateFallback !== undefined && body.repositoryAnalysis === undefined) {
-    context.addIssue({
-      code: "custom",
-      message: "Repository Analysis is required for template fallback",
-      path: ["repositoryAnalysis"]
-    });
-  }
 });
+
+const architectureDraftStreamBodySchema = architectureDraftBodySchema.superRefine(
+  (body, context) => {
+    for (const field of ["repositoryAnalysis", "repositoryEvidence"] as const) {
+      if (body[field] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          message: `${field} is not accepted by the new-project draft stream`,
+          path: [field]
+        });
+      }
+    }
+  }
+);
 
 export const repositoryTemplateIdSchema = z.enum(REPOSITORY_ANALYSIS_TEMPLATE_IDS) satisfies
   z.ZodType<RepositoryAnalysisTemplateId>;
@@ -356,7 +361,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
   });
 
   app.post("/ai/architecture-draft/stream", async (request, reply) => {
-    const body = architectureDraftBodySchema.parse(request.body);
+    const body = architectureDraftStreamBodySchema.parse(request.body);
 
     reply.hijack();
     for (const [name, value] of Object.entries(reply.getHeaders())) {
@@ -375,8 +380,8 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
         reply.raw.write(`${JSON.stringify(event)}\n`);
       }
     };
-    const onProgress = (stage: ArchitectureDraftProgressStage): void => {
-      writeEvent({ type: "progress", stage });
+    const onProgress = (snapshot: ArchitectureDraftProgressSnapshot): void => {
+      writeEvent({ type: "progress", snapshot });
     };
 
     try {

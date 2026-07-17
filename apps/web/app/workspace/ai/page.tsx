@@ -1,32 +1,16 @@
-import { WorkspaceAiStartClient } from "./workspace-ai-start-client";
+import { WorkspaceAiShell } from "./workspace-ai-shell";
+import { resolveWorkspaceAiExistingProject } from "./workspace-ai-route-entry";
 
 type WorkspaceAiPageProps = {
-  readonly searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  readonly searchParams: Promise<{
+    readonly projectId?: string | string[] | undefined;
+    readonly projectName?: string | string[] | undefined;
+  }>;
 };
 
 export default async function WorkspaceAiPage({ searchParams }: WorkspaceAiPageProps) {
   const params = await searchParams;
-  const projectId = getSingleValue(params?.projectId)?.trim();
-  const projectName = getSingleValue(params?.projectName)?.trim() || "Project workspace";
+  const existingProject = resolveWorkspaceAiExistingProject(params);
 
-  return (
-    <WorkspaceAiStartClient
-      existingProject={
-        projectId
-          ? {
-              projectId,
-              projectName,
-              returnHref: `/workspace/repository?${new URLSearchParams({
-                projectId,
-                projectName
-              }).toString()}`
-            }
-          : undefined
-      }
-    />
-  );
-}
-
-function getSingleValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
+  return <WorkspaceAiShell existingProject={existingProject} />;
 }
