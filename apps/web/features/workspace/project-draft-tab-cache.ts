@@ -2,7 +2,7 @@ import { createWorkspaceId } from "./project-draft-persistence";
 
 const PROJECT_DRAFT_TAB_CACHE_ID = "sketchcatch:project-draft:tab-cache-workspace-id";
 const PROJECT_DRAFT_TAB_CACHE_LOCK_PREFIX = "sketchcatch:project-draft:tab-cache:";
-const STORED_LOCK_RETRY_DELAY_MS = 50;
+const STORED_LOCK_RETRY_DELAY_MS = 150;
 
 type ProjectDraftTabSessionStorage = {
   getItem(key: string): string | null;
