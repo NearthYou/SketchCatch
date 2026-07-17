@@ -195,7 +195,16 @@ test("Module 미리보기는 같은 Terraform type의 data Catalog 항목을 구
 test("Module 카드는 캡처 fallback과 사용자용 요약만 표시한다", () => {
   assert.match(moduleCatalogPanelSource, /<article/);
   assert.match(moduleCatalogPanelSource, /<BoardThumbnailImage/);
-  assert.match(moduleCatalogPanelSource, /src=\{null\}/);
+  assert.match(
+    moduleCatalogPanelSource,
+    /import \{ getModuleThumbnailAsset \} from "\.\/module-thumbnail-manifest";/
+  );
+  assert.match(
+    moduleCatalogPanelSource,
+    /const asset = getModuleThumbnailAsset\(moduleDefinition\.id\);/
+  );
+  assert.match(moduleCatalogPanelSource, /src=\{asset\?\.src \?\? null\}/);
+  assert.doesNotMatch(moduleCatalogPanelSource, /src=\{null\}/);
   assert.match(moduleCatalogPanelSource, /preview\.title/);
   assert.match(moduleCatalogPanelSource, /preview\.description/);
   assert.match(

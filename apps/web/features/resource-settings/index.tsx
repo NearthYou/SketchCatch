@@ -38,6 +38,7 @@ import {
 } from "./module-catalog";
 import { createModuleCatalogPreview } from "./module-catalog-preview";
 import moduleCatalogStyles from "./module-catalog-preview.module.css";
+import { getModuleThumbnailAsset } from "./module-thumbnail-manifest";
 import {
   createModuleCatalogGroups,
   moduleCatalogViews,
@@ -553,13 +554,14 @@ function ModuleCatalogCard({
   readonly onModuleAdd?: ((moduleId: string) => void) | undefined;
 }) {
   const preview = createModuleCatalogPreview(moduleDefinition);
+  const asset = getModuleThumbnailAsset(moduleDefinition.id);
 
   return (
     <article className={`moduleCatalogCard ${moduleCatalogStyles.moduleCatalogCard}`}>
       <BoardThumbnailImage
         alt={`${preview.title} 모듈 보드 캡처`}
         className={moduleCatalogStyles.moduleCatalogThumbnail}
-        src={null}
+        src={asset?.src ?? null}
       />
       <div className={moduleCatalogStyles.moduleCatalogContent}>
         <div className={moduleCatalogStyles.moduleCatalogCopy}>
