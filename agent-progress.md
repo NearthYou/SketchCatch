@@ -19,14 +19,6 @@ Short English-only working log for the current agent context. Older records are 
 - Recaptured the committed WebP and bound its manifest hash to the corrected Diagram.
 - Kept the existing Compiler visual baseline by excluding visual Security Group scope, summary links, and launch dependencies from main-flow quality.
 
-### 2026-07-16 - Implement ApplicationArtifact Registry v1
-
-- Added all seven artifact kinds, strict v2 evidence DTOs, canonical identity, persistent Postgres claims, read-only AWS verification, and project-scoped artifact listing.
-- Direct preparation reuses a verified artifact without CodeBuild; GitOps registers its already-built artifact and links verified releases while preserving v1 evidence fallback.
-- RDS stores identity/metadata only. User artifact bytes stay in the user's ECR/S3 or provider storage; Redis is not a source of truth.
-- Review hardening added locale-independent ordering, path normalization, whitespace-preserving build inputs, full identity checks, exact GitOps references, runtime namespace checks, lease heartbeats, and provider-computed S3 digest verification.
-- No real credentials, live AWS mutation, Terraform apply/destroy, user deployment, or Git handoff were performed.
-
 ### 2026-07-16 - Address PR #438 review feedback
 
 - Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
