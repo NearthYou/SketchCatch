@@ -168,6 +168,34 @@ test("현재의 완전한 draft는 결과를 읽어도 그대로 유지한다", 
   assert.equal(result.scan, persistedScan);
 });
 
+test("구조가 깨진 과거 draft는 보존하지 않고 호환 draft로 다시 만든다", () => {
+  const malformedResult: Omit<ReverseEngineeringScanResult, "reverseEngineeringDraft"> & {
+    reverseEngineeringDraft: {
+      id: string;
+      scanId: string;
+      architectureJson: unknown;
+      protectedValueKeys: string[];
+      editableValueKeys: string[];
+      createdAt: string;
+    };
+  } = {
+    ...createLegacyResult(),
+    reverseEngineeringDraft: {
+      id: "draft-malformed",
+      scanId: "scan-legacy",
+      architectureJson: { nodes: [null], edges: [] },
+      protectedValueKeys: ["providerResourceId"],
+      editableValueKeys: ["displayName"],
+      createdAt: "2026-07-17T01:00:30.000Z"
+    }
+  };
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, malformedResult);
+
+  assert.equal(result.reverseEngineeringDraft.id, "draft-scan-legacy");
+  assert.equal(result.reverseEngineeringDraft.architectureJson, architectureJson);
+});
+
 test("단일 스캔 GET 응답 도우미는 과거 결과를 보정한 값만 반환한다", () => {
   const legacyResult = createLegacyResult();
 

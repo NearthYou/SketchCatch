@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { RESOURCE_TYPES } from "@sketchcatch/types";
 import type {
   AwsConnection,
   ArchitectureJson,
@@ -140,6 +141,7 @@ const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "terraformResourceType"
 ] as const;
 const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"] as const;
+const RESOURCE_TYPE_SET = new Set<string>(RESOURCE_TYPES);
 
 export class ReverseEngineeringNotFoundError extends Error {
   constructor(message: string) {
@@ -239,7 +241,47 @@ function hasUnsafeImportHandoff(suggestion: ReverseEngineeringImportSuggestion):
 }
 
 function isArchitectureJson(value: unknown): value is ArchitectureJson {
-  return isRecord(value) && Array.isArray(value.nodes) && Array.isArray(value.edges);
+  return (
+    isRecord(value) &&
+    Array.isArray(value.nodes) &&
+    value.nodes.every(isArchitectureResourceNode) &&
+    Array.isArray(value.edges) &&
+    value.edges.every(isArchitectureResourceEdge)
+  );
+}
+
+function isArchitectureResourceNode(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isResourceType(value.type) &&
+    isFiniteNumber(value.positionX) &&
+    isFiniteNumber(value.positionY) &&
+    isRecord(value.config) &&
+    isOptionalString(value.label)
+  );
+}
+
+function isArchitectureResourceEdge(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNonEmptyString(value.id) &&
+    isNonEmptyString(value.sourceId) &&
+    isNonEmptyString(value.targetId) &&
+    isOptionalString(value.label)
+  );
+}
+
+function isResourceType(value: unknown): value is ArchitectureJson["nodes"][number]["type"] {
+  return typeof value === "string" && RESOURCE_TYPE_SET.has(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === "string";
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -251,7 +293,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 // 스캔 row는 있지만 Provider 호출이 실패한 경우 404와 구분하기 위해 따로 던집니다.
