@@ -192,3 +192,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Made detail-preview tag rendering tolerate templates whose runtime data omits `tags`.
 - Focused template preview tests pass 3/3; Web lint and typecheck pass.
+
+### 2026-07-17 - Cache Live Observation reference data
+
+- Moved Deployment, release, Terraform Output, and immutable Architecture reads into the shared React Query cache.
+- Fresh project and Deployment data is reused on modal re-entry while background refreshes keep cached content visible.
+- Focused Live Observation tests pass 8/8; Web lint and typecheck pass.

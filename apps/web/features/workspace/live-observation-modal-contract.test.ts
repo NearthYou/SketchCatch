@@ -9,22 +9,18 @@ const modalSource = readFileSync(
 );
 
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
-  const architectureEffect = getSourceBlock(
-    modalSource,
-    "setArchitecture(null);",
-    "}, [selectedDeploymentId]);"
-  );
   const mapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
   const evidenceIndex = modalSource.indexOf(
     '<section className={styles.liveObservationEvidenceRail}'
   );
 
-  assert.match(modalSource, /getLiveObservationArchitecture/);
+  assert.match(modalSource, /useLiveObservationQueries\(\{/);
+  assert.match(modalSource, /deploymentId: selectedDeploymentId/);
   assert.match(modalSource, /LiveObservationDiagramMap/);
-  assert.match(architectureEffect, /setArchitectureState\("loading"\)/);
-  assert.match(architectureEffect, /setArchitecture\(response\.architecture\)/);
-  assert.match(architectureEffect, /setArchitectureState\("ready"\)/);
-  assert.match(architectureEffect, /setArchitectureState\("error"\)/);
+  assert.match(
+    modalSource,
+    /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
+  );
   assert.ok(mapIndex >= 0);
   assert.ok(evidenceIndex > mapIndex, "Architecture map must render before the evidence rail");
 });
@@ -32,15 +28,15 @@ test("selected Deployment independently loads and renders its immutable Architec
 test("renders Architecture state only when it belongs to the selected Deployment", () => {
   assert.match(
     modalSource,
-    /const \[architectureDeploymentId, setArchitectureDeploymentId\] = useState\(""\);/
+    /deploymentId: selectedDeploymentId/
   );
   assert.match(
     modalSource,
-    /architectureDeploymentId === selectedDeploymentId \? architecture : null/
+    /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
   );
   assert.match(
     modalSource,
-    /architectureDeploymentId === selectedDeploymentId[\s\S]*\? architectureState[\s\S]*: selectedDeploymentId[\s\S]*\? "loading"/
+    /const selectedArchitectureState = !selectedDeploymentId[\s\S]*queries\.architecture\.data[\s\S]*queries\.architecture\.isError/
   );
   assert.match(
     modalSource,
@@ -65,9 +61,12 @@ test("Architecture loading and errors stay separate from observation session err
 
   assert.match(
     modalSource,
-    /const \[architectureState, setArchitectureState\] = useState<\s*"idle" \| "loading" \| "ready" \| "error"\s*>\("idle"\)/
+    /const selectedArchitectureState = !selectedDeploymentId/
   );
-  assert.match(modalSource, /const \[architectureErrorMessage, setArchitectureErrorMessage\]/);
+  assert.match(
+    modalSource,
+    /const selectedArchitectureErrorMessage = queries\.architecture\.isError/
+  );
   assert.doesNotMatch(visibleSessionError, /architectureErrorMessage/);
   assert.match(modalSource, /배포 Architecture를 불러오고 있습니다\./);
   assert.match(modalSource, /이 배포의 Architecture를 찾을 수 없습니다\./);
