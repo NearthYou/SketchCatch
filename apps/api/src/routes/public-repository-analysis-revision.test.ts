@@ -3,7 +3,11 @@ import test from "node:test";
 import Fastify from "fastify";
 import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
 
-import { registerAiRoutes, resolvePublicRepositoryRevision } from "./ai.js";
+import {
+  fetchPublicRepositoryBranchInventory,
+  registerAiRoutes,
+  resolvePublicRepositoryRevision
+} from "./ai.js";
 
 test("public Repository analysis resolves the selected branch head SHA", () => {
   assert.equal(
@@ -20,6 +24,52 @@ test("public Repository analysis resolves the selected branch head SHA", () => {
 
 test("public Repository analysis rejects a branch without a commit SHA", () => {
   assert.equal(resolvePublicRepositoryRevision([{ name: "main", revision: null }], "main"), null);
+});
+
+test("public Repository lookup classifies unavailable, rate limited, and provider failures", async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    for (const scenario of [
+      { status: 404, errorCode: "PUBLIC_REPOSITORY_UNAVAILABLE", statusCode: 404 },
+      { status: 429, errorCode: "PUBLIC_REPOSITORY_RATE_LIMITED", statusCode: 429 },
+      { status: 503, errorCode: "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE", statusCode: 503 }
+    ] as const) {
+      globalThis.fetch = (async () => new Response("", { status: scenario.status })) as typeof fetch;
+
+      await assert.rejects(
+        fetchPublicRepositoryBranchInventory({ owner: "sketchcatch", repo: "private" }),
+        (error: unknown) => {
+          assert.equal((error as { errorCode?: string }).errorCode, scenario.errorCode);
+          assert.equal((error as { statusCode?: number }).statusCode, scenario.statusCode);
+          return true;
+        }
+      );
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("public Repository lookup classifies a missing selected branch separately", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input) => {
+    const url = String(input);
+    return url.includes("/branches?")
+      ? Response.json([])
+      : Response.json({ default_branch: "main" });
+  }) as typeof fetch;
+
+  try {
+    const inventory = await fetchPublicRepositoryBranchInventory({
+      owner: "sketchcatch",
+      repo: "service"
+    });
+    const branch = inventory.defaultBranch ?? "main";
+    assert.equal(resolvePublicRepositoryRevision(inventory.branches, branch), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("public Repository analysis keeps owner-only golden-path forks on the same ECS flow", async () => {

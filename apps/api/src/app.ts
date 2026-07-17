@@ -26,6 +26,14 @@ import {
   registerSourceRepositoryRoutes,
   type SourceRepositoryRouteOptions
 } from "./routes/source-repositories.js";
+import {
+  registerRepositoryAnalysisRecordRoutes,
+  type RepositoryAnalysisRecordRouteOptions
+} from "./routes/repository-analysis-records.js";
+import {
+  registerProjectDeliveryProfileRoutes,
+  type ProjectDeliveryProfileRouteOptions
+} from "./routes/project-delivery-profile.js";
 import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerLiveObservationV2Routes } from "./routes/live-observations-v2.js";
 import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-observation-public-collector.js";
@@ -168,6 +176,8 @@ export type BuildAppOptions = {
     | "githubRepositoryEvidenceReader"
     | "sourceRepositoryAnalysisRateLimiter"
   >;
+  repositoryAnalysisRecordRoutes?: Pick<RepositoryAnalysisRecordRouteOptions, "createService">;
+  projectDeliveryProfileRoutes?: Pick<ProjectDeliveryProfileRouteOptions, "getProfile">;
   runtimeCache?: RuntimeCache;
   runtimeEnv?: RuntimeEnv;
   liveObservationV2Runtime?: LiveObservationV2Runtime;
@@ -351,6 +361,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
     ...options.sourceRepositoryRoutes
+  });
+  app.register(registerRepositoryAnalysisRecordRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.repositoryAnalysisRecordRoutes
+  });
+  app.register(registerProjectDeliveryProfileRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectDeliveryProfileRoutes
   });
   app.register(registerDeploymentRoutes, {
     prefix: "/api",

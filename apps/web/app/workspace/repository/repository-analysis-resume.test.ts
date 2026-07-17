@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   consumeRepositoryAnalysisResume,
+  readRepositoryAnalysisResume,
   type RepositoryAnalysisResumeState,
   writeRepositoryAnalysisResume
 } from "./repository-analysis-resume.js";
@@ -93,4 +94,23 @@ test("resume state rejects a different Repository without exposing the record", 
     null
   );
   assert.equal(storage.values.size, 0);
+});
+
+test("resume state keeps a private Repository target before authenticated analysis", () => {
+  const storage = new MemoryStorage();
+  const state: RepositoryAnalysisResumeState = {
+    ...fixtureResumeState,
+    publicAnalysis: null
+  };
+  writeRepositoryAnalysisResume(storage, state);
+
+  assert.deepEqual(
+    readRepositoryAnalysisResume(storage, {
+      resumeKey: state.resumeKey,
+      projectId: state.projectId,
+      repositoryUrl: state.repositoryUrl,
+      now: new Date("2026-07-15T00:05:00.000Z")
+    }),
+    state
+  );
 });

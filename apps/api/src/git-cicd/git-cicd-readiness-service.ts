@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import {
   type ApplicationReleaseStatus,
   type CompositeReleaseDigest,
@@ -31,6 +31,7 @@ import {
   projectBuildEnvironments,
   projectDeploymentTargets,
   projects,
+  repositoryAnalysisRecords,
   sourceRepositories,
   terraformOutputs
 } from "../db/schema.js";
@@ -276,88 +277,101 @@ export function createGitCicdReadinessService(options: {
     createDeploymentPlanArtifactVerifier(createS3DeploymentPlanArtifactStorage());
   const now = options.now ?? (() => new Date());
 
+  async function readSnapshot(
+    input: { projectId: string; userId: string },
+    reconcileTarget: boolean
+  ): Promise<GitCicdReadinessSnapshot> {
+    return options.repository.runInProjectSnapshot(input.projectId, async (repository) => {
+      const project = await repository.findAccessibleProject(input.projectId, input.userId);
+      if (!project) {
+        throw new GitCicdReadinessNotFoundError("Project not found");
+      }
+
+      const sourceRepository = await repository.findActiveRepositoryWithMonitoring(
+        input.projectId
+      );
+      const buildEnvironment = await repository.findProjectBuildEnvironment(input.projectId);
+      let target = await repository.findProjectDeploymentTarget(input.projectId);
+      const preferredConnection = target?.connectionId
+        ? await repository.findVerifiedConnection(target.connectionId, input.userId)
+        : undefined;
+      const deploymentEvidence = await inspectLatestSuccessfulDeployment(
+        input,
+        repository,
+        planVerifier,
+        preferredConnection
+      );
+      let targetReconciled = false;
+      const checkedAt = now();
+      const selection = toSelectedApplyPlan(deploymentEvidence);
+      if (reconcileTarget && selection) {
+        const reconciledTarget = await reconcileDeploymentTarget({
+          projectId: input.projectId,
+          selection,
+          sourceRepository,
+          buildEnvironment,
+          currentTarget: target,
+          repository,
+          checkedAt
+        });
+        if (reconciledTarget) {
+          target = reconciledTarget;
+          targetReconciled = true;
+        }
+      }
+      const targetConnection = target?.connectionId
+        ? await repository.findVerifiedConnection(target.connectionId, input.userId)
+        : undefined;
+      const applicationRelease =
+        await repository.findLatestSucceededDirectApplicationRelease(input.projectId);
+      const initialApplicationReleaseReady = isEligibleInitialApplicationRelease({
+        release: applicationRelease,
+        infrastructureDeployment: deploymentEvidence.deployment,
+        target
+      });
+
+      const items = createReadinessItems({
+        deploymentEvidence,
+        sourceRepository,
+        buildEnvironment,
+        target,
+        targetConnection,
+        targetReconciled,
+        initialApplicationReleaseApplicable:
+          !target || target.runtimeTargetKind === "ecs_fargate",
+        initialApplicationReleaseReady
+      });
+      const requiredActionCount = items.filter(
+        (item) => item.status === "action_required"
+      ).length;
+
+      return {
+        projectId: input.projectId,
+        checkedAt: checkedAt.toISOString(),
+        ready: requiredActionCount === 0,
+        requiredActionCount,
+        sourceDeploymentId: deploymentEvidence.deployment?.id ?? null,
+        approvedApplyPlanArtifactId: deploymentEvidence.plan?.id ?? null,
+        initialApplicationReleaseId: initialApplicationReleaseReady
+          ? applicationRelease?.id ?? null
+          : null,
+        items
+      };
+    });
+  }
+
   return {
+    async inspect(input: {
+      projectId: string;
+      userId: string;
+    }): Promise<GitCicdReadinessSnapshot> {
+      return readSnapshot(input, false);
+    },
     async refresh(input: {
       projectId: string;
       userId: string;
     }): Promise<GitCicdReadinessSnapshot> {
-      return options.repository.runInProjectSnapshot(input.projectId, async (repository) => {
-        const project = await repository.findAccessibleProject(input.projectId, input.userId);
-        if (!project) {
-          throw new GitCicdReadinessNotFoundError("Project not found");
-        }
-
-        const sourceRepository = await repository.findActiveRepositoryWithMonitoring(
-          input.projectId
-        );
-        const buildEnvironment = await repository.findProjectBuildEnvironment(input.projectId);
-        let target = await repository.findProjectDeploymentTarget(input.projectId);
-        const preferredConnection = target?.connectionId
-          ? await repository.findVerifiedConnection(target.connectionId, input.userId)
-          : undefined;
-        const deploymentEvidence = await inspectLatestSuccessfulDeployment(
-          input,
-          repository,
-          planVerifier,
-          preferredConnection
-        );
-        let targetReconciled = false;
-        const checkedAt = now();
-        const selection = toSelectedApplyPlan(deploymentEvidence);
-        if (selection) {
-          const reconciledTarget = await reconcileDeploymentTarget({
-            projectId: input.projectId,
-            selection,
-            sourceRepository,
-            buildEnvironment,
-            currentTarget: target,
-            repository,
-            checkedAt
-          });
-          if (reconciledTarget) {
-            target = reconciledTarget;
-            targetReconciled = true;
-          }
-        }
-        const targetConnection = target?.connectionId
-          ? await repository.findVerifiedConnection(target.connectionId, input.userId)
-          : undefined;
-        const applicationRelease =
-          await repository.findLatestSucceededDirectApplicationRelease(input.projectId);
-        const initialApplicationReleaseReady = isEligibleInitialApplicationRelease({
-          release: applicationRelease,
-          infrastructureDeployment: deploymentEvidence.deployment,
-          target
-        });
-
-        const items = createReadinessItems({
-          deploymentEvidence,
-          sourceRepository,
-          buildEnvironment,
-          target,
-          targetConnection,
-          targetReconciled,
-          initialApplicationReleaseApplicable:
-            !target || target.runtimeTargetKind === "ecs_fargate",
-          initialApplicationReleaseReady
-        });
-        const requiredActionCount = items.filter(
-          (item) => item.status === "action_required"
-        ).length;
-
-        return {
-          projectId: input.projectId,
-          checkedAt: checkedAt.toISOString(),
-          ready: requiredActionCount === 0,
-          requiredActionCount,
-          sourceDeploymentId: deploymentEvidence.deployment?.id ?? null,
-          approvedApplyPlanArtifactId: deploymentEvidence.plan?.id ?? null,
-          initialApplicationReleaseId: initialApplicationReleaseReady
-            ? applicationRelease?.id ?? null
-            : null,
-          items
-        };
-      });
+      return readSnapshot(input, true);
     },
     async synchronizeDeploymentTargetAfterSuccessfulApply(input: {
       projectId: string;
@@ -631,11 +645,19 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
           gitCicdMonitoringConfigs,
           eq(gitCicdMonitoringConfigs.sourceRepositoryId, sourceRepositories.id)
         )
+        .leftJoin(
+          repositoryAnalysisRecords,
+          eq(repositoryAnalysisRecords.projectId, sourceRepositories.projectId)
+        )
         .where(
           and(
             eq(sourceRepositories.projectId, projectId),
             eq(sourceRepositories.status, "active"),
-            eq(sourceRepositories.provider, "github")
+            eq(sourceRepositories.provider, "github"),
+            or(
+              isNull(repositoryAnalysisRecords.id),
+              eq(repositoryAnalysisRecords.sourceRepositoryId, sourceRepositories.id)
+            )
           )
         );
       return record;

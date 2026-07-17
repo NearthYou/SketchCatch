@@ -38,8 +38,9 @@ test("CI/CD exposes the Git handoff action that creates the deployment pull requ
   assert.match(source, /CI\/CD PR 생성/);
 });
 
-test("CI/CD blocks PR creation until every readiness item is ready", () => {
-  assert.match(source, /refreshGitCicdReadiness/);
+test("CI/CD blocks PR creation until every read-only Delivery readiness item is ready", () => {
+  assert.match(source, /getProjectDeliveryProfile/);
+  assert.doesNotMatch(source, /refreshGitCicdReadiness/);
   assert.doesNotMatch(source, /getProjectDeploymentTarget/);
   assert.match(source, /handoffReady/);
   assert.match(source, /isReadinessReady: handoffReady/);

@@ -1,10 +1,12 @@
 import { and, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import type {
+  AwsCodeConnectionStatus,
   ProjectExecutionLease,
   ProjectExecutionLeaseSource
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
+  awsCodeConnections,
   awsConnections,
   projectDeploymentTargets,
   projectExecutionLeases,
@@ -114,12 +116,20 @@ export function createPostgresProjectExecutionLeaseRepository(
               .where(eq(awsConnections.id, target.connectionId))
               .for("key share")
           : [];
+        const [codeConnection] = target?.connectionId
+          ? await transaction
+              .select({ status: awsCodeConnections.status })
+              .from(awsCodeConnections)
+              .where(eq(awsCodeConnections.awsConnectionId, target.connectionId))
+              .for("key share")
+          : [];
         assertProjectExecutionAvailable({
           projectExists: Boolean(project),
           projectDeletionStartedAt: project?.deletionStartedAt ?? null,
           targetConnectionId: target?.connectionId ?? null,
           awsConnectionStatus: connection?.status ?? null,
-          awsConnectionDeletionStartedAt: connection?.deletionStartedAt ?? null
+          awsConnectionDeletionStartedAt: connection?.deletionStartedAt ?? null,
+          awsCodeConnectionStatus: codeConnection?.status ?? null
         });
 
         const [lease] = await transaction
@@ -307,6 +317,7 @@ export function assertProjectExecutionAvailable(input: {
   targetConnectionId: string | null;
   awsConnectionStatus: "pending" | "verified" | "failed" | null;
   awsConnectionDeletionStartedAt: Date | null;
+  awsCodeConnectionStatus?: AwsCodeConnectionStatus | null;
 }): void {
   if (!input.projectExists || input.projectDeletionStartedAt) {
     throw new ProjectExecutionLeaseError(
@@ -321,6 +332,12 @@ export function assertProjectExecutionAvailable(input: {
     throw new ProjectExecutionLeaseError(
       "PROJECT_RELEASE_UNAVAILABLE",
       "The selected AWS connection is disconnected or being deleted"
+    );
+  }
+  if (input.awsCodeConnectionStatus === "DELETING") {
+    throw new ProjectExecutionLeaseError(
+      "PROJECT_RELEASE_UNAVAILABLE",
+      "GitHub build connection is being disconnected"
     );
   }
 }

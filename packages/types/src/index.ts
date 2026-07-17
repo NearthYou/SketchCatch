@@ -26,6 +26,11 @@ export type ApiErrorCode =
   | "bad_gateway"
   | "service_unavailable"
   | "internal_server_error"
+  | "PUBLIC_REPOSITORY_INPUT_INVALID"
+  | "PUBLIC_REPOSITORY_UNAVAILABLE"
+  | "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
+  | "PUBLIC_REPOSITORY_RATE_LIMITED"
+  | "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
   | "LIVE_OBSERVATION_DISABLED"
   | "LIVE_OBSERVATION_CACHE_UNAVAILABLE"
   | "LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE"
@@ -569,6 +574,42 @@ export type SourceRepositoryAnalysisResult = {
   aiHandoff?: RepositoryAnalysisAiHandoff | undefined;
 };
 
+export type RepositoryAnalysisProvider = "github";
+
+export type RepositoryAnalysisRecord = {
+  id: string;
+  projectId: string;
+  provider: RepositoryAnalysisProvider;
+  repositoryUrl: string;
+  owner: string;
+  name: string;
+  branch: string;
+  repositoryRevision: string;
+  analysisResult: SourceRepositoryAnalysisResult;
+  selectedTemplateId: RepositoryAnalysisTemplateId | null;
+  sourceRepositoryId: string | null;
+  analyzedAt: IsoDateTimeString;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type SaveRepositoryAnalysisRecordRequest = Pick<
+  RepositoryAnalysisRecord,
+  | "provider"
+  | "repositoryUrl"
+  | "owner"
+  | "name"
+  | "branch"
+  | "repositoryRevision"
+  | "analysisResult"
+  | "selectedTemplateId"
+  | "analyzedAt"
+>;
+
+export type RepositoryAnalysisRecordResponse = {
+  record: RepositoryAnalysisRecord | null;
+};
+
 export type CreateGitHubArchitectureDraftRequest = AnalyzeSourceRepositoryRequest & {
   selectedTemplateId: RepositoryAnalysisTemplateId;
 };
@@ -822,6 +863,20 @@ export type GitCicdReadinessSnapshot = {
 
 export type GitCicdReadinessResponse = {
   readiness: GitCicdReadinessSnapshot;
+};
+
+export type ProjectDeliveryProfile = {
+  githubInstallations: Array<Omit<GitHubInstallationConnection, "repositoryCount">>;
+  repositoryAnalysisTarget: RepositoryAnalysisRecord | null;
+  sourceRepository: SourceRepository | null;
+  monitoringConfig: GitCicdMonitoringConfig | null;
+  deploymentTarget: ProjectDeploymentTarget | null;
+  environmentName: string | null;
+  readiness: GitCicdReadinessSnapshot;
+};
+
+export type ProjectDeliveryProfileResponse = {
+  profile: ProjectDeliveryProfile;
 };
 
 export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
@@ -1667,6 +1722,7 @@ export type AwsCodeConnection = {
   providerType: "GitHub";
   status: AwsCodeConnectionStatus;
   statusReason: string | null;
+  cleanupRetryRequired?: boolean;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -2848,6 +2904,10 @@ export type CreateAwsConnectionRequest = {
 export type DeleteAwsConnectionRequest = {
   confirmedManagedCleanup: true;
   confirmationToken: string;
+};
+
+export type DisconnectAwsCodeConnectionRequest = {
+  confirmedManagedCleanup: true;
 };
 
 export type AwsRolePermissionSetup = {

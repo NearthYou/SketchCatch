@@ -13,24 +13,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-17 - Clear the Workspace AI rebuild baseline
-
-- Audited the new-project, existing-project, Repository, storage, workflow, API, service, shared-type, Compiler, candidate-exclusion, approval, and save paths before removing presentation code.
-- Deleted the old `/workspace/ai` client, CSS, UI test, progress/preview components, route-only Compiler summary, and stale progress implementation plan; the route now returns `null` without a placeholder.
-- Reduced the progress transport to a candidate-only observational snapshot and removed UI-only progress models and unconsumed request fields end-to-end.
-- Preserved Repository preview behavior in a Repository-local component and moved the Workspace AI chat storage-key helper out of its presentation component.
-- Added `docs/superpowers/specs/2026-07-17-workspace-ai-rebuild-baseline.md` as the only implementation baseline for the next UI.
-- Passed the rebuild evidence Web tests 55/55, focused API tests 77/77, full Web regression 528/528, harness, lint, typecheck, build, and diff checks. Independent review returned Ready with no Critical, Important, or Minor findings.
-
-### 2026-07-17 - Implement live AI Draft progress preview (#448)
-
-- Superseded by the cleanup record above; the implementation and verification below are historical evidence and do not describe the current `/workspace/ai` route.
-- Added shared progress/exclusion contracts, API snapshot streaming, strict NDJSON validation, caller abort propagation, and reverse-proxy no-buffering headers while preserving the existing JSON paths.
-- Added the responsive progress pane, requirement/question summaries, provisional diagram, compact history, exclusion/undo, in-place cancel/retry, final transition diff, mobile pane tabs, and last-good projection retention.
-- Direct browser QA passed at 1440x900, 1024x768, 390x844, and the 720/721 boundary: no horizontal overflow, mobile send/tab/final scrolling, desktop simultaneous panes, pan/zoom, clarification handoff, server-authorized exclusion and undo, retained retry state, final replacement, and reload non-persistence. The disposable local QA account and its active tokens were removed; `Board에 적용` was not used and no user project was created.
-- Structured clarification answers now remain one confirmed `question: answer` fact, and provider-originated clarification emits a new full snapshot with the pending question before the terminal result.
-- Passed focused API 79/79, focused Web 43/43, full Web 527/527, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Final whole-branch re-review is Ready with no findings.
-
 ### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
 - Added all seven artifact kinds, strict v2 evidence DTOs, canonical identity, persistent Postgres claims, read-only AWS verification, and project-scoped artifact listing.
@@ -163,6 +145,25 @@ Short English-only working log for the current agent context. Older records are 
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
 
+### 2026-07-17 - Integrate Repository analysis with Workspace Delivery
+
+- Public Repository analysis now creates a Board without GitHub authorization and persists one project-scoped Repository Analysis Record with repository, branch, commit, and selected template provenance.
+- Added migration 0050, exact private Repository permission recovery, a read-only Project Delivery Profile, and one Workspace Delivery panel for GitHub, source, target, monitoring, and readiness settings.
+- Focused API regressions pass 101/101 and focused Web regressions pass 28/28; harness, lint, typecheck, and production build pass. The Web full suite has one unrelated failure in concurrent deployment target work, and the API full suite was stopped after extended inactivity in existing external-dependency paths. No GitHub, cloud, deployment, or Terraform mutation was performed.
+
+### 2026-07-17 - Centralize the Delivery deployment target editor
+
+- Moved the deployment target client, state, styles, and tests from the compatibility route into one Workspace Delivery feature module and supplied the current Delivery Profile as its initial state.
+- Added Repository Analysis Record evidence fallback, Runtime-specific missing-field reporting, saved-value locking, and post-save Delivery Profile/readiness refresh without starting a deployment, PR, or pipeline.
+- Focused target, Delivery integration, and return-path regressions pass 31/31. Independent review fixes cover multi-connection selection, Runtime inference, non-fabricated evidence, non-ECS URL entry and summary, confirmed-field locking across Runtime changes, loading-state protection, and component responsibility separation. Workspace lint, typecheck, production build, harness, and diff checks pass.
+- The Web full suite has one unchanged failure in `deployment-actions.test.ts` for the existing Destroy approval-state expectation; this work does not modify that module. No DB migration, GitHub mutation, cloud mutation, Terraform execution, deployment, or Git handoff was performed.
+
+### 2026-07-17 - Add GitHub build disconnect
+
+- Added a confirmed settings action that removes only SketchCatch-managed CodeBuild projects, roles, logs, build caches, and the shared CodeConnection while preserving the AWS account connection and deployed resources.
+- Disconnect claims the CodeConnection, blocks active and newly starting build/deployment work, and keeps retryable metadata after cleanup failure.
+- Review hardening added refresh CAS and cleanup-failure protection, atomic build-preparation and Direct/GitOps lease fencing, generation-safe one-hour stale-claim retry, preserved build history, and an explicit cleanup retry UI.
+- Focused API and Web settings tests plus workspace lint, typecheck, production build, harness, and diff checks pass. No DB migration or live AWS cleanup was performed.
 ### 2026-07-17 - Restore release-candidate multipart S3 permissions
 
 - Added the missing `ListMultipartUploadParts` and `AbortMultipartUpload` permissions to both production API and trusted worker task policies, with structure checks that require both roles to retain them.
@@ -210,3 +211,9 @@ Short English-only working log for the current agent context. Older records are 
 - Provider-schema validation passes all 155 enabled managed resources and all 5 enabled data sources. Direct Deployment safety remains unchanged: 61 resource types are plan-allowed and 94 stay blocked by the existing allowlist.
 - Focused regressions pass (API 28/28, Web 23/23, Types 5/5). `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass on the latest merged `dev`.
 - No Terraform apply/destroy, AWS mutation, credential access, or DB migration was performed for this work.
+
+### 2026-07-18 - Merge current dev into Delivery integration
+
+- Preserved public Repository analysis without GitHub, ProjectDraft revision fencing, Workspace Delivery ownership, exact private Repository recovery, and confirmed GitHub build cleanup while merging `origin/dev` through `04dc1c8f`.
+- Kept dev migration 0049 and renumbered Repository Analysis Record migration to 0050 with the journal and migration contract updated.
+- Focused API tests pass 49/49 and Web tests pass 50/50; lint, typecheck, build, harness, and diff checks pass. No live GitHub, AWS, deployment, or Terraform mutation was performed.
