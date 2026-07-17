@@ -689,7 +689,7 @@ function createPostgresGitHubApplicationReleaseRepository(
               eq(applicationReleases.id, input.releaseId),
               eq(applicationReleases.pipelineRunId, context.runId),
               eq(applicationReleases.source, "gitops"),
-              eq(applicationReleases.status, "pending")
+              inArray(applicationReleases.status, ["pending", "partially_failed"])
             )
           )
           .returning();

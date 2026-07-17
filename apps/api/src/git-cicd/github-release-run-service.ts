@@ -705,12 +705,13 @@ function resolveStatus(
   pipelineStatus: GitCicdPipelineRunStatus,
   releaseStatus: ApplicationReleaseStatus | null
 ): GitCicdReleaseRunStatus {
-  if (releaseStatus === "partially_failed") return "partially_failed";
-  if (releaseStatus === "partially_cancelled") return "partially_cancelled";
-  if (releaseStatus === "succeeded") return "succeeded";
-  if (releaseStatus === "cancelled") return "cancelled";
-  if (releaseStatus === "failed" || releaseStatus === "rolled_back") return "failed";
   if (pipelineStatus === "detected") return "queued";
+  if (pipelineStatus === "failed" && releaseStatus === "partially_failed") {
+    return "partially_failed";
+  }
+  if (pipelineStatus === "cancelled" && releaseStatus === "partially_cancelled") {
+    return "partially_cancelled";
+  }
   return pipelineStatus;
 }
 

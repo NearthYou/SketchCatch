@@ -151,7 +151,11 @@ export async function verifyPublicFrontendRelease(
     apiProbeMethod?: "GET" | "POST";
     apiProbeExpectedStatus?: number;
   },
-  request: typeof fetch = fetch
+  request: typeof fetch = fetch,
+  options: {
+    wait?: (milliseconds: number) => Promise<void>;
+    maxApiProbeAttempts?: number;
+  } = {}
 ): Promise<JsonValue> {
   const base = new URL(input.outputUrl);
   if (base.protocol !== "https:") throw new Error("Public release URL must use HTTPS");
@@ -169,24 +173,16 @@ export async function verifyPublicFrontendRelease(
   const apiUrl = new URL(normalizeApiProbePath(input.apiProbePath), base);
   const apiProbeMethod = input.apiProbeMethod ?? "GET";
   const apiProbeExpectedStatus = input.apiProbeExpectedStatus ?? 200;
-  const apiResponse = await request(apiUrl, {
-    method: apiProbeMethod,
-    redirect: "error",
-    ...(apiProbeMethod === "POST"
-      ? { headers: { "content-type": "application/json" }, body: "{}" }
-      : {})
-  });
-  if (!apiResponse.ok || apiResponse.status !== apiProbeExpectedStatus) {
-    throw new Error(`Public API route probe failed with ${apiResponse.status}`);
-  }
-  const apiProbeBody = await readJsonRecord(apiResponse);
-  if (
-    apiProbeMethod === "POST" &&
-    input.apiProbePath === "/api/check-ins" &&
-    (!isUuid(apiProbeBody?.["sessionId"]) || !isIsoTimestamp(apiProbeBody?.["expiresAt"]))
-  ) {
-    throw new Error("Public API route probe response does not match the demo API contract");
-  }
+  const apiProbeStatus = await verifyPublicApiProbe(
+    {
+      apiUrl,
+      apiProbePath: input.apiProbePath,
+      apiProbeMethod,
+      apiProbeExpectedStatus
+    },
+    request,
+    options
+  );
   return {
     state: "healthy",
     outputUrl: base.toString(),
@@ -194,9 +190,54 @@ export async function verifyPublicFrontendRelease(
     healthPath: healthUrl.pathname,
     apiProbePath: apiUrl.pathname,
     apiProbeMethod,
-    apiProbeStatus: apiResponse.status,
+    apiProbeStatus,
     verifiedAt: new Date().toISOString()
   };
+}
+
+async function verifyPublicApiProbe(
+  input: {
+    apiUrl: URL;
+    apiProbePath: string;
+    apiProbeMethod: "GET" | "POST";
+    apiProbeExpectedStatus: number;
+  },
+  request: typeof fetch,
+  options: {
+    wait?: (milliseconds: number) => Promise<void>;
+    maxApiProbeAttempts?: number;
+  }
+): Promise<number> {
+  const maxAttempts = options.maxApiProbeAttempts ?? 12;
+  const wait = options.wait ?? defaultWait;
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const response = await request(input.apiUrl, {
+        method: input.apiProbeMethod,
+        redirect: "error",
+        ...(input.apiProbeMethod === "POST"
+          ? { headers: { "content-type": "application/json" }, body: "{}" }
+          : {})
+      });
+      if (!response.ok || response.status !== input.apiProbeExpectedStatus) {
+        throw new Error(`Public API route probe failed with ${response.status}`);
+      }
+      const body = await readJsonRecord(response);
+      if (
+        input.apiProbeMethod === "POST" &&
+        input.apiProbePath === "/api/check-ins" &&
+        (!isUuid(body?.["sessionId"]) || !isIsoTimestamp(body?.["expiresAt"]))
+      ) {
+        throw new Error("Public API route probe response does not match the demo API contract");
+      }
+      return response.status;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Public API route probe failed");
+    }
+    if (attempt + 1 < maxAttempts) await wait(5_000);
+  }
+  throw lastError ?? new Error("Public API route probe failed");
 }
 
 async function readJsonRecord(response: Response): Promise<Record<string, unknown> | null> {

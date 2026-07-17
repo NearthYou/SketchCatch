@@ -389,6 +389,7 @@ test("GitHub release status exposes partial failure and cancellation requests", 
   stored.releaseId = "44444444-4444-4444-8444-444444444444";
   stored.releaseStatus = "partially_failed";
   stored.failureStage = "cloudfront_invalidation";
+  stored.pipelineStatus = "failed";
 
   const partial = await getGitHubReleaseRun({ runId: created.run.id, identity }, repository);
   assert.equal(partial.status, "partially_failed");
@@ -407,6 +408,37 @@ test("GitHub release status exposes partial failure and cancellation requests", 
   );
   assert.equal(cancelling.cancellationRequestedAt, "2026-07-15T01:00:00.000Z");
   assert.deepEqual(executor.cancelled, [created.run.id]);
+});
+
+test("GitHub release status waits for pipeline finalization before exposing a terminal release", async () => {
+  const repository = createMemoryRepository();
+  const created = await createGitHubReleaseRun(
+    {
+      projectId,
+      requestKey: `123456789:${commitSha}:987654321:1`,
+      request,
+      identity
+    },
+    repository,
+    createExecutor([]),
+    { generateId: () => "33333333-3333-4333-8333-333333333333" }
+  );
+  const stored = repository.records.get(created.run.id)!;
+  stored.pipelineStatus = "running";
+  stored.releaseStatus = "succeeded";
+
+  const beforePipelineCommit = await getGitHubReleaseRun(
+    { runId: created.run.id, identity },
+    repository
+  );
+  assert.equal(beforePipelineCommit.status, "running");
+
+  stored.pipelineStatus = "succeeded";
+  const completed = await getGitHubReleaseRun(
+    { runId: created.run.id, identity },
+    repository
+  );
+  assert.equal(completed.status, "succeeded");
 });
 
 function createMemoryRepository(): GitHubReleaseRunRepository & {

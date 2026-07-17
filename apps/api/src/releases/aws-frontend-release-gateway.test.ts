@@ -118,7 +118,8 @@ test("public verification rejects a routed API 404 instead of treating it as hea
             : "{}",
           { status: url.endsWith("/api/missing") ? 404 : 200 }
         );
-      }
+      },
+      { maxApiProbeAttempts: 1 }
     ),
     /Public API route probe failed with 404/u
   );
@@ -126,6 +127,7 @@ test("public verification rejects a routed API 404 instead of treating it as hea
 
 test("demo API verification requires POST /api/check-ins and its 201 response contract", async () => {
   const marker = `${"a".repeat(40)}:candidate-1`;
+  let apiProbeAttempts = 0;
   const evidence = await verifyPublicFrontendRelease(
     {
       outputUrl: "https://demo.cloudfront.net",
@@ -145,6 +147,8 @@ test("demo API verification requires POST /api/check-ins and its 201 response co
       }
       if (url.endsWith("/health")) return new Response("ok", { status: 200 });
       assert.equal(init?.method, "POST");
+      apiProbeAttempts += 1;
+      if (apiProbeAttempts === 1) return new Response("old target", { status: 200 });
       return Response.json(
         {
           sessionId: "11111111-1111-4111-8111-111111111111",
@@ -152,10 +156,12 @@ test("demo API verification requires POST /api/check-ins and its 201 response co
         },
         { status: 201 }
       );
-    }
+    },
+    { wait: async () => undefined }
   );
 
   assert.equal((evidence as { apiProbeStatus: number }).apiProbeStatus, 201);
+  assert.equal(apiProbeAttempts, 2);
 });
 
 async function createFrontendFixture(): Promise<{
