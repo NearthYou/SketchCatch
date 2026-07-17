@@ -7,6 +7,9 @@ import { queryKeys } from "../../lib/query-keys";
 import { fetchProjectThumbnail } from "../workspace/api";
 import { loadProjectThumbnail } from "./project-thumbnail-loader";
 
+export const PROJECT_THUMBNAIL_STALE_TIME_MS = 5 * 60_000;
+export const PROJECT_THUMBNAIL_GC_TIME_MS = 30 * 60_000;
+
 type ProjectThumbnailLoader = {
   readonly fetchThumbnail: (projectId: string, signal: AbortSignal) => Promise<Blob | null>;
 };
@@ -20,13 +23,15 @@ export function createProjectThumbnailQueryOptions(
   loader: ProjectThumbnailLoader = defaultProjectThumbnailLoader
 ) {
   return queryOptions({
+    gcTime: PROJECT_THUMBNAIL_GC_TIME_MS,
     queryFn: ({ signal }) =>
       loadProjectThumbnail({
         fetchThumbnail: (projectId) => loader.fetchThumbnail(projectId, signal),
         isCancelled: () => signal.aborted,
         projectId: input.projectId
       }),
-    queryKey: queryKeys.projectThumbnail(input.userId, input.projectId)
+    queryKey: queryKeys.projectThumbnail(input.userId, input.projectId),
+    staleTime: PROJECT_THUMBNAIL_STALE_TIME_MS
   });
 }
 

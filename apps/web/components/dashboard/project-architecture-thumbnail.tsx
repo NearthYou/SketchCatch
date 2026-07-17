@@ -29,8 +29,6 @@ export function ProjectArchitectureThumbnail({
       setThumbnailUrl
     });
     thumbnailLifecycleRef.current = thumbnailLifecycle;
-    setState("loading");
-    setThumbnailUrl(null);
 
     return () => {
       if (thumbnailLifecycleRef.current === thumbnailLifecycle) {
