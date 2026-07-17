@@ -210,3 +210,10 @@ Short English-only working log for the current agent context. Older records are 
 - Retained the active observation session and latest snapshot outside the modal, isolated by project.
 - Closing the modal aborts the SSE stream; reopening an active session reconnects with the retained session instead of creating a new one.
 - Focused Live Observation tests pass 9/9; Web lint and typecheck pass.
+
+### 2026-07-17 - Close reviewed Live Observation re-entry gaps
+
+- Remounted the diagram map per Deployment so cached Deployment switches restore the matching saved viewport instead of retaining the previous map transform.
+- Limited SSE reconnection to the selected, unexpired active session and abort the prior stream when that eligibility changes.
+- Focused re-entry tests pass 10/10; root harness, lint, typecheck, and build pass. Local browser smoke verification restored the selected Deployment and Architecture immediately after close and re-entry without changing the workspace URL.
+- Standards and Spec re-reviews report no remaining findings. No observation session, AWS mutation, or DB migration was performed.

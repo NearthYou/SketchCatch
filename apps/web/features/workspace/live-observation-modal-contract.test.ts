@@ -26,13 +26,17 @@ test("modal re-entry restores the selected Deployment and diagram viewport", () 
     rightPanelSource,
     /initialViewport=\{retainedLiveObservationView\.viewport\}/
   );
+  assert.match(
+    modalSource,
+    /<LiveObservationDiagramMap[\s\S]*?key=\{selectedDeploymentId\}/
+  );
   assert.match(modalSource, /onSelectedDeploymentIdChange\(nextDeploymentId\)/);
   assert.match(diagramMapSource, /defaultViewport=\{initialViewport \?\?/);
   assert.match(diagramMapSource, /fitView=\{initialViewport === null\}/);
   assert.match(diagramMapSource, /onMoveEnd=\{\(_event, viewport\) => onViewportChange\(viewport\)\}/);
 });
 
-test("modal re-entry restores an active session while closing aborts its stream", () => {
+test("modal re-entry restores only the selected, unexpired active session and aborts on close", () => {
   assert.match(rightPanelSource, /createLiveObservationSessionState\(projectId\)/);
   assert.match(
     rightPanelSource,
@@ -42,7 +46,9 @@ test("modal re-entry restores an active session while closing aborts its stream"
     rightPanelSource,
     /snapshot=\{retainedLiveObservationSession\.snapshot\}/
   );
-  assert.match(modalSource, /if \(!session \|\| snapshot\?\.status !== "active"\)/);
+  assert.match(modalSource, /if \(!selectedSession \|\| !isSessionActive\)/);
+  assert.match(modalSource, /deploymentId: selectedSession\.deploymentId/);
+  assert.match(modalSource, /observationId: selectedSession\.id/);
   assert.match(modalSource, /onSnapshotChange\(nextSnapshot\)/);
   assert.match(modalSource, /return \(\) => abortController\.abort\(\)/);
 });

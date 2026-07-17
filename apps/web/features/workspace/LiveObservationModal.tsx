@@ -262,7 +262,7 @@ export function LiveObservationModal({
   }, [outputUrl]);
 
   useEffect(() => {
-    if (!session || snapshot?.status !== "active") {
+    if (!selectedSession || !isSessionActive) {
       setStreamErrorMessage("");
       return;
     }
@@ -270,8 +270,8 @@ export function LiveObservationModal({
     const abortController = new AbortController();
     setStreamErrorMessage("");
     void streamLiveObservationSnapshots({
-      deploymentId: session.deploymentId,
-      observationId: session.id,
+      deploymentId: selectedSession.deploymentId,
+      observationId: selectedSession.id,
       onError: () => {
         if (!abortController.signal.aborted) {
           setStreamErrorMessage("관측 상태 연결이 지연되고 있습니다. 자동으로 다시 연결합니다.");
@@ -286,7 +286,7 @@ export function LiveObservationModal({
       signal: abortController.signal
     });
     return () => abortController.abort();
-  }, [onSnapshotChange, session, snapshot?.status]);
+  }, [isSessionActive, onSnapshotChange, selectedSession]);
 
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Escape") {
@@ -564,6 +564,7 @@ export function LiveObservationModal({
             <LiveObservationDiagramMap
               architecture={selectedArchitecture}
               initialViewport={initialViewport}
+              key={selectedDeploymentId}
               onViewportChange={onViewportChange}
               snapshot={selectedSnapshot}
             />
