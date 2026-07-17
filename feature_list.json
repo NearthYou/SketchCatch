@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-17",
+  "lastUpdated": "2026-07-18",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -925,6 +925,37 @@
         "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 37/37, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, source typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, preserved conflict status, separated each tab's local recovery key across tabs, refreshes, and duplicated tabs, migrated the legacy shared recovery row, and preserved every dirty local recovery draft behind an accessible local-or-server choice without client/server clock assumptions. Server choice now replaces the mounted Terraform editor without marking the restored server state dirty. A real Chromium three-tab flow passed with first save 200/revision 1, stale save 409 plus conflict dialog, server-latest browser refresh, conflict reload, and stable per-tab recovery keys. The current Webpack build compiles but its generated type check is blocked by pre-existing invalid helper exports in the architecture-draft and architecture-patch-preview Next route files. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
       },
       "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was executed."
+    },
+    {
+      "id": "SITEWIDE-UX-467",
+      "priority": 2,
+      "area": "web-ux",
+      "title": "Site-wide navigation continuity and workspace panel recovery",
+      "user_visible_behavior": "내부 화면 이동과 인증 재검증 중 기존 UI를 유지하고, Workspace와 비용 관리 화면의 사용자 상태를 복원하며, 패널을 화면 가장자리 핸들로 쉽게 닫고 다시 열 수 있다.",
+      "status": "passing",
+      "verification": [
+        "내부 링크와 알림 이동은 전체 문서 새로고침 없이 클라이언트 탐색을 사용한다.",
+        "인증 백그라운드 재검증과 Workspace 로딩 중 기존 레이아웃이 유지된다.",
+        "동일한 Diagram, viewport, Terraform 파일 변경은 dirty 상태를 만들지 않는다.",
+        "프로젝트 썸네일과 비용 관리 URL 상태는 재진입과 뒤로 가기에서 복원된다.",
+        "Workspace 패널 너비와 열림 상태가 저장되고 viewer와 반응형 자동 접힘은 사용자 설정을 덮어쓰지 않는다.",
+        "좌우 패널 가장자리 핸들은 키보드와 스크린리더로 접근 가능하며 패널 너비를 따라 이동한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-18",
+        "commands": [
+          "per-commit focused Web contract and state tests for commits 1-26",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/diagram-editor/workspace-panel-preferences.test.ts",
+          "authenticated in-app Browser smoke check for Workspace panel edge handles",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "All 26 planned implementation commits were verified before commit. Final focused Diagram Editor tests passed 61/61, and harness, lint, typecheck, and build passed. Browser QA confirmed both edge handles are visible and the left handle closes and restores the panel; an existing local-draft recovery modal blocked the right-handle click, so its symmetric callback and accessibility behavior remain covered by automated tests."
+      },
+      "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
     }
   ]
 }

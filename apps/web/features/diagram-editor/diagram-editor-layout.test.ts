@@ -327,6 +327,30 @@ test("editor panel open states persist while viewer mode bypasses preferences", 
   );
 });
 
+test("editor exposes accessible panel handles that follow the docked panel widths", () => {
+  assert.match(diagramEditorSource, /aria-label=\{isLeftPanelOpen \? "왼쪽 패널 닫기" : "왼쪽 패널 열기"\}/);
+  assert.match(diagramEditorSource, /aria-label=\{isRightPanelOpen \? "오른쪽 패널 닫기" : "오른쪽 패널 열기"\}/);
+  assert.match(diagramEditorSource, /aria-expanded=\{isLeftPanelOpen\}/);
+  assert.match(diagramEditorSource, /aria-expanded=\{isRightPanelOpen\}/);
+  assert.match(diagramEditorSource, /!viewerPolicy\.isViewer/);
+  assert.match(
+    diagramEditorStyles,
+    /\.leftPanelEdgeHandle\s*\{[^}]*left:\s*var\(--left-panel-width\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.rightPanelEdgeHandle\s*\{[^}]*right:\s*var\(--right-panel-width\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.editorShellLeftCollapsed \.leftPanelEdgeHandle\s*\{[^}]*left:\s*0;/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /\.editorShellRightCollapsed \.rightPanelEdgeHandle\s*\{[^}]*right:\s*0;/s
+  );
+});
+
 test("compact workspace refits the board without changing the saved DiagramJson", () => {
   assert.match(diagramEditorSource, /const fitVisibleDiagram = useCallback/);
   assert.match(diagramEditorSource, /const runViewportMoveWithoutPersistence = useCallback/);
@@ -806,7 +830,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   assert.match(diagramEditorSource, /rebaseBoardViewport\(reactFlow\.getViewport\(\), previousFrame, nextFrame\)/);
   assert.match(
     diagramEditorSource,
-    /<div className=\{styles\.leftRail\} ref=\{leftRailRef\}>/
+    /<div[^>]*className=\{styles\.leftRail\}[^>]*ref=\{leftRailRef\}[^>]*>/
   );
   assert.doesNotMatch(diagramEditorSource, /collapsedLeftPanel/);
 });

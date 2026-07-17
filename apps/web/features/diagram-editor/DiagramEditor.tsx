@@ -30,6 +30,8 @@ import type {
   Viewport
 } from "@xyflow/react";
 import {
+  ChevronLeft,
+  ChevronRight,
   Expand,
   Maximize2,
   MousePointer2,
@@ -3051,8 +3053,46 @@ function DiagramEditorInner({
         />
       ) : null}
 
+      {!viewerPolicy.isViewer ? (
+        <>
+          <button
+            aria-controls="workspace-left-panel"
+            aria-expanded={isLeftPanelOpen}
+            aria-label={isLeftPanelOpen ? "왼쪽 패널 닫기" : "왼쪽 패널 열기"}
+            className={`${styles.panelEdgeHandle} ${styles.leftPanelEdgeHandle}`}
+            onClick={toggleLeftPanel}
+            title={isLeftPanelOpen ? "왼쪽 패널 닫기" : "왼쪽 패널 열기"}
+            type="button"
+          >
+            {isLeftPanelOpen ? (
+              <ChevronLeft aria-hidden="true" size={16} />
+            ) : (
+              <ChevronRight aria-hidden="true" size={16} />
+            )}
+          </button>
+
+          {hasRightRail ? (
+            <button
+              aria-controls="workspace-right-panel"
+              aria-expanded={isRightPanelOpen}
+              aria-label={isRightPanelOpen ? "오른쪽 패널 닫기" : "오른쪽 패널 열기"}
+              className={`${styles.panelEdgeHandle} ${styles.rightPanelEdgeHandle}`}
+              onClick={toggleRightPanel}
+              title={isRightPanelOpen ? "오른쪽 패널 닫기" : "오른쪽 패널 열기"}
+              type="button"
+            >
+              {isRightPanelOpen ? (
+                <ChevronRight aria-hidden="true" size={16} />
+              ) : (
+                <ChevronLeft aria-hidden="true" size={16} />
+              )}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+
       {viewerPolicy.showPanels && isLeftPanelOpen ? (
-        <div className={styles.leftRail} ref={leftRailRef}>
+        <div className={styles.leftRail} id="workspace-left-panel" ref={leftRailRef}>
           {leftPanel === undefined ? (
             <ResourceSettingsPanel
               onCollapse={() => updateLeftPanelOpen(false)}
@@ -3359,7 +3399,7 @@ function DiagramEditorInner({
       </div>
 
       {viewerPolicy.showPanels && hasRightRail ? (
-        <div className={styles.rightRail}>
+        <div className={styles.rightRail} id="workspace-right-panel">
           <button
             aria-label="Resize right panel"
             aria-orientation="vertical"
