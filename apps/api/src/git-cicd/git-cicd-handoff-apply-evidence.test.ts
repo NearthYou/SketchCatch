@@ -386,6 +386,8 @@ function createDeployment(
     architectureId,
     terraformArtifactId,
     awsConnectionId: connectionId,
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
     source: "direct",
     status: "SUCCESS",
     completedAt: new Date("2026-07-17T01:00:00.000Z"),

@@ -419,6 +419,8 @@ Direct release는 GitOps와 같은 `ApplicationRelease`에 version, commit SHA, 
 composite SHA-256, provider revision, frontend VersionId/invalidation, Output URL, health, rollback evidence를
 저장한다. candidate는 SketchCatch 내부 Artifact S3에 두며 사용자 서비스 S3와 구분한다.
 
+신규 Repository 기반 ECS/Fargate 웹 프로젝트는 `auto`에서 `full_stack`을 선택해 최초 앱까지 배포한다. ECS target은 있지만 confirmed build config가 없으면 `infrastructure`로 조용히 축소하지 않고 설정 확정을 요구한다. infrastructure-only 성공과 bootstrap 문서는 CI/CD 설치 조건을 충족하지 않는다. 이 경우 CI/CD 화면의 `최초 앱 배포하기`가 Direct `application` scope를 열고, 앱 릴리즈 성공 뒤에만 CI/CD 화면으로 돌아와 readiness를 갱신한다.
+
 `infrastructure` 또는 `full_stack` ECS/Fargate Apply는 Terraform Output과 resource inventory를 RDS에 저장한
 직후, application release 전에 같은 증거로 `ProjectDeploymentTarget` metadata 동기화를 시도한다. 이 후처리는
 RDS와 승인된 Plan artifact만 사용하며 AWS Resource를 생성·수정·삭제하지 않는다. 필수 Output이나 Repository

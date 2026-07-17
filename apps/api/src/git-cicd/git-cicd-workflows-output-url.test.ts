@@ -97,6 +97,9 @@ test("ECS application and infrastructure workflows have independent triggers", (
   assert.match(workflow.content, /SKETCHCATCH_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
   assert.doesNotMatch(workflow.content, /workflow_run|head_sha/);
   assert.doesNotMatch(workflow.content, /workflow_dispatch/);
+  assert.match(workflow.content, /'!\.github\/workflows\/sketchcatch-infra\.yml'/);
+  assert.match(workflow.content, /'!\.github\/workflows\/sketchcatch-app\.yml'/);
+  assert.match(workflow.content, /'!\.github\/workflows\/sketchcatch-destroy\.yml'/);
   assert.doesNotMatch(workflow.content, /configure-aws-credentials|\baws (codebuild|ecr|ecs|s3|cloudfront)\b/);
   assert.match(infraWorkflow.content, /on:\n {2}workflow_dispatch:/);
   assert.match(infraWorkflow.content, /SKETCHCATCH_OIDC_AUDIENCE: sketchcatch-infrastructure-run/);

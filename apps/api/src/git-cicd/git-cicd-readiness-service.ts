@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
+  type ApplicationReleaseStatus,
+  type CompositeReleaseDigest,
   normalizeLegacyRuntimeDeploymentTarget,
   RUNTIME_CONVERGENCE_CONTRACT_VERSION,
   type ConfirmedBuildConfig,
   type DeploymentScope,
   type EcsFargateRuntimeConfig,
+  type FrontendReleaseEvidence,
   type GitCicdReadinessAction,
   type GitCicdReadinessItem,
   type GitCicdReadinessSnapshot,
+  type JsonValue,
   type PackageManagerKind,
   type ProjectDeploymentRuntimeConfig,
   type RepositoryAnalysisAiHandoff,
@@ -18,6 +22,7 @@ import {
 import type { Database } from "../db/client.js";
 import {
   awsConnections,
+  applicationReleases,
   deployedResources,
   deploymentPlanArtifacts,
   deployments,
@@ -70,6 +75,27 @@ export type GitCicdReadinessPlanArtifactRecord = {
   accountId: string;
   region: string;
   createdAt: Date;
+};
+
+export type GitCicdReadinessApplicationReleaseRecord = {
+  id: string;
+  projectId: string;
+  deploymentId: string | null;
+  source: "direct" | "gitops";
+  status: ApplicationReleaseStatus;
+  runtimeTargetKind: RuntimeTargetKind;
+  deploymentTargetFingerprint: string | null;
+  commitSha: string;
+  releaseCandidateId: string | null;
+  compositeDigest: CompositeReleaseDigest | null;
+  outputUrl: string | null;
+  healthEvidence: JsonValue | null;
+  frontendEvidence: FrontendReleaseEvidence | null;
+  completedAt: Date | null;
+  deploymentScope: DeploymentScope;
+  deploymentSource: "direct" | "gitops";
+  deploymentStatus: string;
+  deploymentCompletedAt: Date | null;
 };
 
 export type VerifiedConnectionRecord = {
@@ -129,9 +155,12 @@ export type GitCicdReadinessRepository = {
     projectId: string,
     userId: string
   ): Promise<{ id: string } | undefined>;
-  findLatestSuccessfulDirectDeployment(
+  findLatestSuccessfulDirectInfrastructureDeployment(
     projectId: string
   ): Promise<GitCicdReadinessDeploymentRecord | undefined>;
+  findLatestSucceededDirectApplicationRelease(
+    projectId: string
+  ): Promise<GitCicdReadinessApplicationReleaseRecord | undefined>;
   findDirectDeploymentInProject(
     projectId: string,
     deploymentId: string
@@ -279,6 +308,13 @@ export function createGitCicdReadinessService(options: {
         const targetConnection = target?.connectionId
           ? await repository.findVerifiedConnection(target.connectionId, input.userId)
           : undefined;
+        const applicationRelease =
+          await repository.findLatestSucceededDirectApplicationRelease(input.projectId);
+        const initialApplicationReleaseReady = isEligibleInitialApplicationRelease({
+          release: applicationRelease,
+          infrastructureDeployment: deploymentEvidence.deployment,
+          target
+        });
 
         const items = createReadinessItems({
           deploymentEvidence,
@@ -286,7 +322,8 @@ export function createGitCicdReadinessService(options: {
           buildEnvironment,
           target,
           targetConnection,
-          targetReconciled
+          targetReconciled,
+          initialApplicationReleaseReady
         });
         const requiredActionCount = items.filter(
           (item) => item.status === "action_required"
@@ -299,6 +336,9 @@ export function createGitCicdReadinessService(options: {
           requiredActionCount,
           sourceDeploymentId: deploymentEvidence.deployment?.id ?? null,
           approvedApplyPlanArtifactId: deploymentEvidence.plan?.id ?? null,
+          initialApplicationReleaseId: initialApplicationReleaseReady
+            ? applicationRelease?.id ?? null
+            : null,
           items
         };
       });
@@ -421,7 +461,7 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
         .where(and(eq(projects.id, projectId), eq(projects.userId, userId)));
       return project;
     },
-    async findLatestSuccessfulDirectDeployment(projectId) {
+    async findLatestSuccessfulDirectInfrastructureDeployment(projectId) {
       const [deployment] = await db
         .select({
           id: deployments.id,
@@ -442,12 +482,54 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
             eq(deployments.projectId, projectId),
             eq(deployments.status, "SUCCESS"),
             eq(deployments.source, "direct"),
+            inArray(deployments.scope, ["infrastructure", "full_stack"]),
             isNotNull(deployments.completedAt)
           )
         )
         .orderBy(desc(deployments.completedAt), desc(deployments.createdAt))
         .limit(1);
       return deployment;
+    },
+    async findLatestSucceededDirectApplicationRelease(projectId) {
+      const [release] = await db
+        .select({
+          id: applicationReleases.id,
+          projectId: applicationReleases.projectId,
+          deploymentId: applicationReleases.deploymentId,
+          source: applicationReleases.source,
+          status: applicationReleases.status,
+          runtimeTargetKind: applicationReleases.runtimeTargetKind,
+          deploymentTargetFingerprint: applicationReleases.deploymentTargetFingerprint,
+          commitSha: applicationReleases.commitSha,
+          releaseCandidateId: applicationReleases.releaseCandidateId,
+          compositeDigest: applicationReleases.compositeDigest,
+          outputUrl: applicationReleases.outputUrl,
+          healthEvidence: applicationReleases.healthEvidence,
+          frontendEvidence: applicationReleases.frontendEvidence,
+          completedAt: applicationReleases.completedAt,
+          deploymentScope: deployments.scope,
+          deploymentSource: deployments.source,
+          deploymentStatus: deployments.status,
+          deploymentCompletedAt: deployments.completedAt
+        })
+        .from(applicationReleases)
+        .innerJoin(deployments, eq(deployments.id, applicationReleases.deploymentId))
+        .where(
+          and(
+            eq(applicationReleases.projectId, projectId),
+            eq(applicationReleases.source, "direct"),
+            eq(applicationReleases.status, "succeeded"),
+            eq(applicationReleases.runtimeTargetKind, "ecs_fargate"),
+            isNotNull(applicationReleases.completedAt)
+          )
+        )
+        .orderBy(
+          desc(applicationReleases.completedAt),
+          desc(applicationReleases.createdAt),
+          desc(applicationReleases.id)
+        )
+        .limit(1);
+      return release;
     },
     async findDirectDeploymentInProject(projectId, deploymentId) {
       const [deployment] = await db
@@ -621,8 +703,10 @@ async function inspectLatestSuccessfulDeployment(
   repository: GitCicdReadinessRepository,
   planVerifier: GitCicdReadinessPlanVerifier
 ): Promise<DeploymentEvidence> {
-  const deployment = await repository.findLatestSuccessfulDirectDeployment(input.projectId);
-  if (!deployment || !isSuccessfulDirectDeployment(deployment)) {
+  const deployment = await repository.findLatestSuccessfulDirectInfrastructureDeployment(
+    input.projectId
+  );
+  if (!deployment || !isSuccessfulDirectInfrastructureDeployment(deployment)) {
     return { deployment: null, connection: null, plan: null };
   }
   if (!deployment.awsConnectionId) {
@@ -1054,6 +1138,7 @@ function createReadinessItems(input: {
   target: ProjectDeploymentTargetRecord | undefined;
   targetConnection: VerifiedConnectionRecord | undefined;
   targetReconciled: boolean;
+  initialApplicationReleaseReady: boolean;
 }): GitCicdReadinessItem[] {
   const monitoringReady = hasValidMonitoringConfig(input.sourceRepository);
   const targetMissingKeys: GitCicdReadinessItem["missingKeys"] = [];
@@ -1101,6 +1186,13 @@ function createReadinessItems(input: {
       action: "approve_apply_plan"
     }),
     createReadinessItem({
+      key: "initial_application_release",
+      label: "최초 앱 배포",
+      ready: input.initialApplicationReleaseReady,
+      action: "deploy_initial_application",
+      recommendedDeploymentScope: input.deploymentEvidence.plan ? "application" : "full_stack"
+    }),
+    createReadinessItem({
       key: "source_repository",
       label: "소스 저장소",
       ready: input.sourceRepository !== undefined,
@@ -1131,13 +1223,17 @@ function createReadinessItem(input: {
   label: string;
   ready: boolean;
   action: Exclude<GitCicdReadinessAction, "select_aws_connection" | "confirm_build_config" | "inspect_runtime_outputs" | "inspect_output_url">;
+  recommendedDeploymentScope?: "application" | "full_stack" | undefined;
 }): GitCicdReadinessItem {
   return {
     key: input.key,
     label: input.label,
     status: input.ready ? "ready" : "action_required",
     missingKeys: [],
-    action: input.ready ? null : input.action
+    action: input.ready ? null : input.action,
+    ...(input.recommendedDeploymentScope
+      ? { recommendedDeploymentScope: input.recommendedDeploymentScope }
+      : {})
   };
 }
 
@@ -1263,14 +1359,83 @@ function isMissingPlanArtifactError(error: unknown): boolean {
   return false;
 }
 
-function isSuccessfulDirectDeployment(
+function isSuccessfulDirectInfrastructureDeployment(
   deployment: GitCicdReadinessDeploymentRecord
 ): boolean {
   return (
     deployment.status === "SUCCESS" &&
     deployment.source === "direct" &&
+    (deployment.scope === "infrastructure" || deployment.scope === "full_stack") &&
+    deployment.targetKind === "ecs_fargate" &&
     deployment.completedAt !== null
   );
+}
+
+export function isEligibleInitialApplicationRelease(input: {
+  release: GitCicdReadinessApplicationReleaseRecord | undefined;
+  infrastructureDeployment: GitCicdReadinessDeploymentRecord | null;
+  target: ProjectDeploymentTargetRecord | undefined;
+}): boolean {
+  const release = input.release;
+  const infrastructure = input.infrastructureDeployment;
+  const target = input.target;
+  const buildConfig = target?.confirmedBuildConfig;
+  const frontend = release?.frontendEvidence;
+  const health = asRecord(release?.healthEvidence);
+  const sameDeployment = release?.deploymentId === infrastructure?.id;
+  const validDeploymentScope = sameDeployment
+    ? release?.deploymentScope === "full_stack"
+    : release?.deploymentScope === "application";
+
+  return Boolean(
+    release &&
+      infrastructure &&
+      target &&
+      buildConfig &&
+      release.projectId === target.projectId &&
+      release.source === "direct" &&
+      release.status === "succeeded" &&
+      release.runtimeTargetKind === "ecs_fargate" &&
+      release.completedAt &&
+      release.deploymentId &&
+      release.deploymentSource === "direct" &&
+      release.deploymentStatus === "SUCCESS" &&
+      release.deploymentCompletedAt &&
+      validDeploymentScope &&
+      isSha256(release.deploymentTargetFingerprint) &&
+      release.deploymentTargetFingerprint === target.deploymentTargetFingerprint &&
+      release.commitSha === buildConfig.confirmedCommitSha &&
+      release.outputUrl === target.runtimeConfig?.outputUrl &&
+      hasSafeOutputUrl(release.outputUrl) &&
+      release.releaseCandidateId &&
+      hasValidCompositeDigest(release.compositeDigest) &&
+      health?.["state"] === "healthy" &&
+      frontend &&
+      frontend.commitMarker === release.commitSha &&
+      hasNonEmptyString(frontend.manifestVersionId) &&
+      hasNonEmptyString(frontend.indexVersionId) &&
+      hasNonEmptyString(frontend.invalidationId)
+  );
+}
+
+function hasValidCompositeDigest(value: CompositeReleaseDigest | null): boolean {
+  return Boolean(
+    value &&
+      value.algorithm === "sha256" &&
+      isSha256(value.value) &&
+      isSha256(value.apiOciDigest) &&
+      isSha256(value.frontendManifestDigest)
+  );
+}
+
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function prioritizeApprovedApplyPlan(

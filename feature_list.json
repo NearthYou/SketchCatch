@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-15",
+  "lastUpdated": "2026-07-17",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -664,6 +664,63 @@
         "notes": "Production completed in 6m09s versus the 7m51s median baseline. Warm image build-push critical path was 7s versus 81s. API/web stabilization was 3m13s/2m56s, all health endpoints returned 200, and the read-only runtime plan reported no infrastructure changes. The full workspace test attempt timed out after 15 minutes; focused changed-path tests and all required build checks passed."
       },
       "notes": "The 5m30s total stretch target remains unmet; validation and API stabilization are the next measured bottlenecks."
+    },
+    {
+      "id": "USER-APPLICATION-ECR-BUILD-CACHE-001",
+      "priority": 1,
+      "area": "application-build",
+      "title": "Project-scoped ECR registry cache for user ECS applications",
+      "user_visible_behavior": "Repository가 연결된 ECS/Fargate 프로젝트는 첫 빌드의 Docker layer를 사용자 AWS 계정의 프로젝트 전용 ECR cache에 저장하고 다음 commit 빌드에서 재사용한다.",
+      "status": "passing",
+      "verification": [
+        "프로젝트 ID에서 cache Repository와 platform별 mutable cache tag를 결정적으로 계산한다.",
+        "CodeBuild build-only role은 정확한 cache Repository의 layer read/write만 허용하고 ECS, 서비스 S3, CloudFront mutation 권한은 갖지 않는다.",
+        "server-generated BuildKit buildspec은 registry cache를 import/export하고 cache 오류는 검증을 생략하지 않은 cold build로 전환한다.",
+        "프로젝트 삭제와 AWS 연결 managed cleanup은 ownership tag를 다시 확인한 cache Repository만 force delete한다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/build-environments/project-build-cache.test.ts src/build-environments/project-build-environment-service.test.ts src/build-environments/aws-project-build-environment-gateway.test.ts src/releases/preflight-buildspec.test.ts src/deployments/aws-codebuild-direct-application-release-gateway.test.ts src/aws-connections/aws-connection-service.test.ts src/aws-connections/aws-connection-managed-cleanup.test.ts src/projects/project-deletion-service.test.ts",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused cache protection line passed 61/61. Repository checks passed locally. A real warm-cache CodeBuild timing comparison was intentionally not run because it would mutate the connected AWS account; the code does not claim a measured duration reduction. Existing AWS connections must be deleted and reconnected once to receive the expanded CodeBuild permissions boundary."
+      },
+      "notes": "Cache images are never used as ECS release images. The immutable verified release candidate and trusted worker activation boundary remain unchanged."
+    },
+    {
+      "id": "DIRECT-FIRST-APPLICATION-RELEASE-001",
+      "priority": 1,
+      "area": "direct-deployment-git-cicd",
+      "title": "Direct first application release before Git/CI/CD installation",
+      "user_visible_behavior": "사용자는 Direct Deployment에서 최초 ECS/Fargate 앱을 실제로 공개한 뒤에만 후속 변경 자동 배포용 CI/CD 설치 PR을 만들 수 있다.",
+      "status": "passing",
+      "verification": [
+        "신규 ECS/Fargate auto 배포는 build config가 있으면 full_stack을 선택하고, build config 누락을 infrastructure로 조용히 축소하지 않는다.",
+        "readiness는 승인된 Infrastructure Apply와 current target에 일치하는 healthy Direct ApplicationRelease를 별도 증거로 검증한다.",
+        "CI/CD handoff API는 provider 호출 직전에 target, release, Plan artifact를 다시 검증하고 최초 앱 증거가 없으면 명시적인 HTTP 409를 반환한다.",
+        "CI/CD의 최초 앱 CTA는 Direct application 또는 full_stack scope를 열고 실제 배포 성공 뒤에만 CI/CD로 돌아간다.",
+        "설치 PR workflow 변경만으로 App workflow가 실행되지 않으며 이후 실제 app path commit부터 실행된다."
+      ],
+      "evidence": {
+        "lastVerified": "2026-07-17",
+        "commands": [
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-apply-service.test.ts src/git-cicd/git-cicd-readiness-service.test.ts src/git-cicd/git-cicd-handoff-apply-evidence.test.ts src/git-cicd/git-cicd-handoff-initial-release.test.ts src/routes/git-cicd-handoffs.test.ts src/services/aiArchitectureDrafts.test.ts src/git-cicd/git-cicd-workflows-output-url.test.ts",
+          "pnpm --filter @sketchcatch/types exec tsx --test src/git-cicd-readiness-contract.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/cicd-handoff.test.ts features/workspace/cicd-return-command.test.ts features/workspace/deployment-console-state.test.ts features/workspace/deployment-presentation.test.ts",
+          "pnpm harness:check",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "git diff --check"
+        ],
+        "notes": "Focused verification passed with API 182 tests, shared contract 1 test, and Web 41 tests. Live AWS deployment and GitHub PR merge acceptance were not repeated in this local implementation pass; the protected server and UI contracts are verified without external mutation."
+      },
+      "notes": "No DB migration is required. Infrastructure-only deployment remains supported but cannot satisfy the initial application release gate."
     },
     {
       "id": "REPOSITORY-ECS-REFERENCE-LAYOUT-001",

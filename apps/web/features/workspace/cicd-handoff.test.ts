@@ -33,11 +33,12 @@ test("builds a safe settings round trip for a missing build configuration", () =
   assert.match(url.searchParams.get("returnTo") ?? "", /^\/workspace\?/u);
 });
 
-test("maps one server readiness snapshot to four rows and deployment target progress", () => {
+test("maps one server readiness snapshot to five rows and deployment target progress", () => {
   const readiness = createReadinessSnapshot({
     requiredActionCount: 1,
     items: [
       readinessItem("approved_apply_plan"),
+      readinessItem("initial_application_release"),
       readinessItem("source_repository"),
       readinessItem("monitoring_config"),
       readinessItem("deployment_target", {
@@ -57,23 +58,25 @@ test("maps one server readiness snapshot to four rows and deployment target prog
   });
   const target = items.find((item) => item.key === "deployment_target");
 
-  assert.equal(items.length, 4);
+  assert.equal(items.length, 5);
   assert.equal(target?.statusLabel, "3/4 완료");
   assert.deepEqual(target?.missingKeys, ["build_config"]);
   assert.equal(target?.actionLabel, "빌드 설정 확인하기");
   assert.equal(target?.details?.filter((detail) => !detail.ready).length, 1);
   assert.deepEqual(items.map((item) => item.key), [
     "approved_apply_plan",
+    "initial_application_release",
     "source_repository",
     "monitoring_config",
     "deployment_target"
   ]);
-  assert.ok(items.slice(0, 3).every((item) => item.action === null));
+  assert.ok(items.slice(0, 4).every((item) => item.action === null));
 });
 
 test("provides one concrete CTA for every server readiness action", () => {
   const expected = {
     approve_apply_plan: "Apply Plan 승인하기",
+    deploy_initial_application: "최초 앱 배포하기",
     select_repository: "Repository 선택하기",
     confirm_monitoring_config: "Branch와 경로 확인하기",
     select_aws_connection: "AWS 연결 선택하기",
@@ -89,13 +92,34 @@ test("provides one concrete CTA for every server readiness action", () => {
     });
 
     assert.equal(navigation.actionLabel, actionLabel);
-    if (readinessAction === "approve_apply_plan") {
+    if (
+      readinessAction === "approve_apply_plan" ||
+      readinessAction === "deploy_initial_application"
+    ) {
       assert.equal(navigation.href, null);
     } else {
       assert.match(navigation.href ?? "", /returnTo=/u);
       assert.match(navigation.href ?? "", /readinessKey=/u);
     }
   }
+});
+
+test("uses the server-recommended scope for initial application deployment", () => {
+  const readiness = createReadinessSnapshot({
+    items: [
+      readinessItem("initial_application_release", {
+        status: "action_required",
+        action: "deploy_initial_application",
+        recommendedDeploymentScope: "application"
+      })
+    ]
+  });
+
+  const [item] = getGitCicdHandoffReadiness({ projectId: "project-1", readiness });
+
+  assert.equal(item?.actionLabel, "최초 앱 배포하기");
+  assert.equal(item?.directDeploymentScope, "application");
+  assert.match(item?.description ?? "", /실제 애플리케이션 릴리즈 증거/u);
 });
 
 test("does not expose the previous ambiguous readiness wording", () => {
@@ -250,6 +274,7 @@ function createReadinessSnapshot(
     requiredActionCount: 1,
     sourceDeploymentId: "deployment-1",
     approvedApplyPlanArtifactId: "apply-plan-1",
+    initialApplicationReleaseId: null,
     items: [],
     ...overrides
   };

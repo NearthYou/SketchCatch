@@ -12,6 +12,7 @@ import {
   createGitCicdReadinessService,
   createPostgresGitCicdReadinessRepository,
   type DeployedResourceRecord,
+  type GitCicdReadinessApplicationReleaseRecord,
   type GitCicdReadinessDeploymentRecord,
   type GitCicdReadinessPlanArtifactRecord,
   type GitCicdReadinessRepository,
@@ -144,6 +145,116 @@ test("keeps verified AWS connection readiness separate from Apply Plan evidence"
     getReadinessItem(result, "deployment_target").missingKeys.includes("aws_connection"),
     false
   );
+});
+
+test("requires a current successful Direct application release in addition to infrastructure evidence", async (t) => {
+  await t.test("infrastructure-only success keeps the initial release incomplete", async () => {
+    const deployment = createDeployment({ scope: "infrastructure" });
+    const state = createRepositoryState({ readyContext: true });
+    const result = await createGitCicdReadinessService({
+      repository: createRepository({ deployments: [deployment], releases: [], state }),
+      planVerifier: createPlanVerifier()
+    }).refresh({ projectId: "project-1", userId: "user-1" });
+
+    assert.equal(getReadinessItem(result, "approved_apply_plan").status, "ready");
+    assert.equal(getReadinessItem(result, "initial_application_release").status, "action_required");
+    assert.equal(
+      getReadinessItem(result, "initial_application_release").recommendedDeploymentScope,
+      "application"
+    );
+    assert.equal(result.initialApplicationReleaseId, null);
+  });
+
+  await t.test("full-stack success with matching release completes both evidence items", async () => {
+    const state = createRepositoryState({ readyContext: true });
+    const repository = createRepository({ state });
+    const result = await createGitCicdReadinessService({
+      repository,
+      planVerifier: createPlanVerifier()
+    }).refresh({ projectId: "project-1", userId: "user-1" });
+
+    assert.equal(getReadinessItem(result, "approved_apply_plan").status, "ready");
+    assert.equal(getReadinessItem(result, "initial_application_release").status, "ready");
+    assert.equal(result.initialApplicationReleaseId, "release-1");
+  });
+
+  await t.test("application-only recovery keeps the older infrastructure evidence", async () => {
+    const infrastructure = createDeployment({ id: "infra-1", scope: "infrastructure" });
+    const application = createDeployment({
+      id: "app-1",
+      scope: "application",
+      terraformArtifactId: infrastructure.terraformArtifactId,
+      completedAt: new Date("2026-07-17T04:00:00Z")
+    });
+    const state = createRepositoryState({ readyContext: true });
+    const repository = createRepository({
+      deployments: [application, infrastructure],
+      plansByDeployment: new Map([[infrastructure.id, [createPlan({ deploymentId: infrastructure.id })]]]),
+      state,
+      createRelease: (target) =>
+        createEligibleRelease(target, {
+          deploymentId: application.id,
+          deploymentScope: "application"
+        })
+    });
+
+    const result = await createGitCicdReadinessService({
+      repository,
+      planVerifier: createPlanVerifier()
+    }).refresh({ projectId: "project-1", userId: "user-1" });
+
+    assert.equal(result.sourceDeploymentId, infrastructure.id);
+    assert.equal(result.initialApplicationReleaseId, "release-1");
+    assert.equal(result.ready, true);
+  });
+
+  const invalidReleaseCases: Array<{
+    name: string;
+    override: Partial<GitCicdReadinessApplicationReleaseRecord>;
+  }> = [
+    { name: "failed status", override: { status: "failed" } },
+    { name: "different commit", override: { commitSha: "c".repeat(40) } },
+    { name: "different target", override: { deploymentTargetFingerprint: "d".repeat(64) } },
+    { name: "HTTP URL", override: { outputUrl: "http://example.com" } },
+    { name: "unhealthy runtime", override: { healthEvidence: { state: "failed" } } },
+    { name: "missing frontend evidence", override: { frontendEvidence: null } }
+  ];
+  for (const candidate of invalidReleaseCases) {
+    await t.test(`rejects ${candidate.name}`, async () => {
+      const state = createRepositoryState({ readyContext: true });
+      const result = await createGitCicdReadinessService({
+        repository: createRepository({
+          state,
+          createRelease: (target) => createEligibleRelease(target, candidate.override)
+        }),
+        planVerifier: createPlanVerifier()
+      }).refresh({ projectId: "project-1", userId: "user-1" });
+
+      assert.equal(result.initialApplicationReleaseId, null);
+      assert.equal(getReadinessItem(result, "initial_application_release").status, "action_required");
+    });
+  }
+
+  await t.test("release evidence cannot replace missing infrastructure evidence", async () => {
+    const state = createRepositoryState({
+      readyContext: true,
+      existingTarget: createExistingTarget(createConfirmedBuildConfig())
+    });
+    const target = state.targetRows.get("project-1");
+    assert.ok(target);
+    target.runtimeConfig = {
+      ...target.runtimeConfig,
+      outputUrl: "https://d111111abcdef8.cloudfront.net"
+    } as ProjectDeploymentTargetRecord["runtimeConfig"];
+    target.deploymentTargetFingerprint = "e".repeat(64);
+    const result = await createGitCicdReadinessService({
+      repository: createRepository({ deployments: [], releases: [createEligibleRelease(target)] }),
+      planVerifier: createPlanVerifier()
+    }).refresh({ projectId: "project-1", userId: "user-1" });
+
+    assert.equal(result.sourceDeploymentId, null);
+    assert.equal(result.initialApplicationReleaseId, null);
+  });
 });
 
 test("marks aws_connection missing when the deployment or persisted target connection is not verified", async (t) => {
@@ -1107,6 +1218,10 @@ function createPlanVerifier(body: Buffer = planBody) {
 
 function createRepository(input: {
   deployments?: GitCicdReadinessDeploymentRecord[];
+  releases?: GitCicdReadinessApplicationReleaseRecord[];
+  createRelease?: (
+    target: ProjectDeploymentTargetRecord
+  ) => GitCicdReadinessApplicationReleaseRecord;
   plans?: GitCicdReadinessPlanArtifactRecord[];
   plansByDeployment?: Map<string, GitCicdReadinessPlanArtifactRecord[]>;
   state?: TestRepositoryState;
@@ -1124,16 +1239,41 @@ function createRepository(input: {
     async findAccessibleProject(projectId, userId) {
       return projectId === "project-1" && userId === "user-1" ? { id: projectId } : undefined;
     },
-    async findLatestSuccessfulDirectDeployment(projectId) {
+    async findLatestSuccessfulDirectInfrastructureDeployment(projectId) {
       return deployments
         .filter(
           (deployment) =>
             deployment.projectId === projectId &&
             deployment.status === "SUCCESS" &&
             deployment.source === "direct" &&
+            (deployment.scope === "infrastructure" || deployment.scope === "full_stack") &&
             deployment.completedAt !== null
         )
         .sort(compareTestDeploymentsNewestFirst)[0];
+    },
+    async findLatestSucceededDirectApplicationRelease(projectId) {
+      if (input.releases) {
+        return input.releases
+          .filter((release) => release.projectId === projectId)
+          .sort((left, right) =>
+            (right.completedAt?.getTime() ?? 0) - (left.completedAt?.getTime() ?? 0)
+          )[0];
+      }
+      const target = state.targetRows.get(projectId);
+      if (!target) return undefined;
+      if (input.createRelease) return input.createRelease(target);
+      const infrastructure = deployments
+        .filter(
+          (deployment) =>
+            deployment.projectId === projectId &&
+            (deployment.scope === "infrastructure" || deployment.scope === "full_stack")
+        )
+        .sort(compareTestDeploymentsNewestFirst)[0];
+      if (!infrastructure) return undefined;
+      return createEligibleRelease(target, {
+        deploymentId: infrastructure.id,
+        deploymentScope: infrastructure.scope === "full_stack" ? "full_stack" : "application"
+      });
     },
     async findDirectDeploymentInProject(projectId, deploymentId) {
       return deployments.find(
@@ -1183,6 +1323,46 @@ function createRepository(input: {
   };
 
   return repository;
+}
+
+function createEligibleRelease(
+  target: ProjectDeploymentTargetRecord,
+  overrides: Partial<GitCicdReadinessApplicationReleaseRecord> = {}
+): GitCicdReadinessApplicationReleaseRecord {
+  const commitSha = target.confirmedBuildConfig?.confirmedCommitSha ?? "b".repeat(40);
+  return {
+    id: "release-1",
+    projectId: target.projectId,
+    deploymentId: "deployment-1",
+    source: "direct",
+    status: "succeeded",
+    runtimeTargetKind: "ecs_fargate",
+    deploymentTargetFingerprint: target.deploymentTargetFingerprint,
+    commitSha,
+    releaseCandidateId: "candidate-1",
+    compositeDigest: {
+      algorithm: "sha256",
+      value: "1".repeat(64),
+      apiOciDigest: "2".repeat(64),
+      frontendManifestDigest: "3".repeat(64)
+    },
+    outputUrl: target.runtimeConfig?.outputUrl ?? null,
+    healthEvidence: { state: "healthy" },
+    frontendEvidence: {
+      manifestObjectKey: "releases/release-1/manifest.json",
+      manifestVersionId: "manifest-version-1",
+      indexObjectKey: "index.html",
+      indexVersionId: "index-version-1",
+      invalidationId: "invalidation-1",
+      commitMarker: commitSha
+    },
+    completedAt: new Date("2026-07-17T04:00:00Z"),
+    deploymentScope: "full_stack",
+    deploymentSource: "direct",
+    deploymentStatus: "SUCCESS",
+    deploymentCompletedAt: new Date("2026-07-17T04:00:00Z"),
+    ...overrides
+  };
 }
 
 type TestRepositoryState = {

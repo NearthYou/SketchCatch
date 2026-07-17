@@ -777,6 +777,7 @@ export type GitCicdReadinessStatus = "ready" | "action_required";
 
 export type GitCicdReadinessItemKey =
   | "approved_apply_plan"
+  | "initial_application_release"
   | "source_repository"
   | "monitoring_config"
   | "deployment_target";
@@ -789,6 +790,7 @@ export type GitCicdDeploymentTargetReadinessKey =
 
 export type GitCicdReadinessAction =
   | "approve_apply_plan"
+  | "deploy_initial_application"
   | "select_repository"
   | "confirm_monitoring_config"
   | "select_aws_connection"
@@ -804,6 +806,7 @@ export type GitCicdReadinessItem = {
   totalCount?: number | undefined;
   missingKeys: GitCicdDeploymentTargetReadinessKey[];
   action: GitCicdReadinessAction | null;
+  recommendedDeploymentScope?: "application" | "full_stack" | undefined;
 };
 
 export type GitCicdReadinessSnapshot = {
@@ -813,6 +816,7 @@ export type GitCicdReadinessSnapshot = {
   requiredActionCount: number;
   sourceDeploymentId: string | null;
   approvedApplyPlanArtifactId: string | null;
+  initialApplicationReleaseId: string | null;
   items: GitCicdReadinessItem[];
 };
 

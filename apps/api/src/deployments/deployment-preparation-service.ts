@@ -63,6 +63,15 @@ export async function resolveDeploymentPreparation(
   }
 
   const target = await repository.findProjectTargetForPreparation(input.projectId);
+  if (
+    input.requestedScope === "auto" &&
+    target?.runtimeTargetKind === "ecs_fargate" &&
+    !target.confirmedBuildConfig
+  ) {
+    throw new DeploymentConflictError(
+      "A confirmed project deployment target is required for automatic ECS application deployment"
+    );
+  }
   const scope =
     input.requestedScope === "auto"
       ? detectDeploymentScope({ draft, target })

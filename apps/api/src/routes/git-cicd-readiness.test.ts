@@ -118,8 +118,9 @@ function createActionRequiredSnapshot(): GitCicdReadinessSnapshot {
     checkedAt: "2026-07-17T01:00:00.000Z",
     ready: false,
     requiredActionCount: 4,
-    sourceDeploymentId: null,
-    approvedApplyPlanArtifactId: null,
+  sourceDeploymentId: null,
+  approvedApplyPlanArtifactId: null,
+  initialApplicationReleaseId: null,
     items: [
       {
         key: "approved_apply_plan",

@@ -2,6 +2,7 @@ import type { GitCicdReadinessItemKey } from "@sketchcatch/types";
 
 const readinessKeys = new Set<GitCicdReadinessItemKey>([
   "approved_apply_plan",
+  "initial_application_release",
   "source_repository",
   "monitoring_config",
   "deployment_target"
@@ -17,7 +18,7 @@ export type InitialCicdReturnCommand = {
 
 export type PendingCicdReturn = {
   readonly projectId: string;
-  readonly reason: "approved_apply_plan";
+  readonly reason: "approved_apply_plan" | "initial_application_release";
 };
 
 export type CompletedCicdReturn = {
@@ -32,8 +33,11 @@ export type CicdReturnCommandConsoleState = {
   readonly readinessRefreshRequestId: number;
 };
 
-export function createPendingCicdReturn(projectId: string): PendingCicdReturn {
-  return { projectId, reason: "approved_apply_plan" };
+export function createPendingCicdReturn(
+  projectId: string,
+  reason: PendingCicdReturn["reason"] = "approved_apply_plan"
+): PendingCicdReturn {
+  return { projectId, reason };
 }
 
 export function cancelPendingCicdReturn(_pending: PendingCicdReturn | null): null {
@@ -66,8 +70,35 @@ export function completePendingCicdReturn(input: {
 }): CompletedCicdReturn | null {
   if (
     !input.pending ||
+    input.pending.reason !== "approved_apply_plan" ||
     input.pending.projectId !== input.approvedDeployment.projectId ||
     input.approvedDeployment.currentPlanOperation !== "apply"
+  ) {
+    return null;
+  }
+
+  return {
+    activeScreen: "cicd",
+    readinessRefreshRequestId: input.currentRefreshRequestId + 1,
+    pending: null
+  };
+}
+
+export function completePendingCicdReturnAfterDeployment(input: {
+  readonly pending: PendingCicdReturn | null;
+  readonly deployment: {
+    readonly projectId: string;
+    readonly scope: "infrastructure" | "application" | "full_stack";
+    readonly status: string;
+  };
+  readonly currentRefreshRequestId: number;
+}): CompletedCicdReturn | null {
+  if (
+    !input.pending ||
+    input.pending.reason !== "initial_application_release" ||
+    input.pending.projectId !== input.deployment.projectId ||
+    input.deployment.status !== "SUCCESS" ||
+    (input.deployment.scope !== "application" && input.deployment.scope !== "full_stack")
   ) {
     return null;
   }

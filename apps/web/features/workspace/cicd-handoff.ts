@@ -13,16 +13,26 @@ export type GitCicdReadinessNavigation = {
   readonly actionLabel: string;
   readonly href: string | null;
   readonly readinessKey: GitCicdReadinessItemKey;
+  readonly directDeploymentScope: "application" | "full_stack" | null;
 };
 
 export function createGitCicdReadinessNavigation(input: {
   readonly projectId: string;
   readonly projectName?: string | null | undefined;
   readonly readinessAction: GitCicdReadinessAction;
+  readonly recommendedDeploymentScope?: "application" | "full_stack" | undefined;
 }): GitCicdReadinessNavigation {
   const action = readinessNavigationByAction[input.readinessAction];
   if (action.destination === "direct_deployment") {
-    return { actionLabel: action.actionLabel, href: null, readinessKey: action.readinessKey };
+    return {
+      actionLabel: action.actionLabel,
+      href: null,
+      readinessKey: action.readinessKey,
+      directDeploymentScope:
+        input.readinessAction === "deploy_initial_application"
+          ? input.recommendedDeploymentScope ?? "full_stack"
+          : null
+    };
   }
 
   const returnSearch = new URLSearchParams({
@@ -45,7 +55,8 @@ export function createGitCicdReadinessNavigation(input: {
   return {
     actionLabel: action.actionLabel,
     href: `${pathname}?${destinationSearch.toString()}${action.hash}`,
-    readinessKey: action.readinessKey
+    readinessKey: action.readinessKey,
+    directDeploymentScope: null
   };
 }
 
@@ -63,6 +74,12 @@ const readinessNavigationByAction: Record<
     destination: "direct_deployment",
     hash: "",
     readinessKey: "approved_apply_plan"
+  },
+  deploy_initial_application: {
+    actionLabel: "최초 앱 배포하기",
+    destination: "direct_deployment",
+    hash: "",
+    readinessKey: "initial_application_release"
   },
   select_repository: {
     actionLabel: "Repository 선택하기",
@@ -111,6 +128,7 @@ export type GitCicdHandoffReadinessItem = {
   readonly action: GitCicdReadinessAction | null;
   readonly actionLabel: string | null;
   readonly href: string | null;
+  readonly directDeploymentScope: "application" | "full_stack" | null;
   readonly statusLabel: string;
   readonly missingKeys: readonly GitCicdDeploymentTargetReadinessKey[];
   readonly details?: readonly GitCicdDeploymentTargetDetail[] | undefined;
@@ -197,7 +215,10 @@ export function getGitCicdHandoffReadiness(input: {
       ? createGitCicdReadinessNavigation({
           projectId: input.projectId,
           projectName: input.projectName,
-          readinessAction: item.action
+          readinessAction: item.action,
+          ...(item.recommendedDeploymentScope
+            ? { recommendedDeploymentScope: item.recommendedDeploymentScope }
+            : {})
         })
       : null;
     const completedCount = item.completedCount ?? 0;
@@ -212,6 +233,7 @@ export function getGitCicdHandoffReadiness(input: {
       action: item.action,
       actionLabel: navigation?.actionLabel ?? null,
       href: navigation?.href ?? null,
+      directDeploymentScope: navigation?.directDeploymentScope ?? null,
       statusLabel:
         item.key === "deployment_target" && totalCount > 0
           ? `${completedCount}/${totalCount} 완료`
@@ -233,6 +255,8 @@ export function getGitCicdHandoffReadiness(input: {
 
 const readinessDescriptionByKey: Record<GitCicdReadinessItemKey, string> = {
   approved_apply_plan: "Direct Deployment에서 승인한 Terraform Apply Plan을 사용합니다.",
+  initial_application_release:
+    "인프라는 준비됐지만 실제 애플리케이션 릴리즈 증거가 없습니다.",
   source_repository: "이 프로젝트에 사용할 활성 GitHub Repository를 연결합니다.",
   monitoring_config: "배포를 감지할 branch와 애플리케이션·인프라 경로를 확인합니다.",
   deployment_target: "검증된 AWS 연결과 빌드·Runtime·HTTPS 배포 결과를 확인합니다."

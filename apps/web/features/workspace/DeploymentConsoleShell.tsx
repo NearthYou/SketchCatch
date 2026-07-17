@@ -7,6 +7,7 @@ import {
   acknowledgeInitialCicdReturnCommand,
   cancelPendingCicdReturn,
   completePendingCicdReturn,
+  completePendingCicdReturnAfterDeployment,
   createPendingCicdReturn,
   type InitialCicdReturnCommand,
   type PendingCicdReturn
@@ -46,6 +47,9 @@ export function DeploymentConsoleShell({
   const [storedActiveScreen, setStoredActiveScreen] =
     useState<DeploymentConsoleScreen>(initialCicdReturnCommand?.activeScreen ?? "deployment");
   const [pendingCicdReturn, setPendingCicdReturn] = useState<PendingCicdReturn | null>(null);
+  const [requestedDirectScope, setRequestedDirectScope] = useState<
+    "application" | "full_stack" | null
+  >(null);
   const [readinessRefreshRequestId, setReadinessRefreshRequestId] = useState(
     initialCicdReturnCommand ? 1 : 0
   );
@@ -154,6 +158,7 @@ export function DeploymentConsoleShell({
 
   function close(): void {
     setPendingCicdReturn((pending) => cancelPendingCicdReturn(pending));
+    setRequestedDirectScope(null);
     setIsDeploymentExpanded(false);
     onExpandedClose?.();
   }
@@ -181,6 +186,7 @@ export function DeploymentConsoleShell({
             confirmationOpenRef.current = isOpen;
           }}
           onOpenLiveObservation={onOpenLiveObservation}
+          requestedScope={requestedDirectScope}
           onApplyPlanApproved={(deployment) => {
             const completed = completePendingCicdReturn({
               pending: pendingCicdReturn,
@@ -194,13 +200,31 @@ export function DeploymentConsoleShell({
             setReadinessRefreshRequestId(completed.readinessRefreshRequestId);
             selectScreen(completed.activeScreen, { preservePendingCicdReturn: true });
           }}
+          onDeploymentSucceeded={(deployment) => {
+            const completed = completePendingCicdReturnAfterDeployment({
+              pending: pendingCicdReturn,
+              deployment,
+              currentRefreshRequestId: readinessRefreshRequestId
+            });
+            if (!completed) return;
+            setPendingCicdReturn(completed.pending);
+            setRequestedDirectScope(null);
+            setReadinessRefreshRequestId(completed.readinessRefreshRequestId);
+            selectScreen(completed.activeScreen, { preservePendingCicdReturn: true });
+          }}
         />
       </div>
       <div hidden={activeScreen !== "cicd"}>
         <CicdConsoleScreen
           isVisible={activeScreen === "cicd"}
-          onOpenDirectDeployment={() => {
-            setPendingCicdReturn(createPendingCicdReturn(directProps.projectId));
+          onOpenDirectDeployment={(scope) => {
+            setPendingCicdReturn(
+              createPendingCicdReturn(
+                directProps.projectId,
+                scope ? "initial_application_release" : "approved_apply_plan"
+              )
+            );
+            setRequestedDirectScope(scope);
             selectScreen("deployment", { preservePendingCicdReturn: true });
           }}
           onOpenLiveObservation={onOpenLiveObservation}

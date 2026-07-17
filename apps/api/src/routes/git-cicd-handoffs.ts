@@ -37,6 +37,7 @@ import {
   createInternalGitCicdHandoffProvider,
   createPostgresGitCicdHandoffRepository,
   getGitCicdHandoff,
+  GitCicdInitialApplicationReleaseRequiredError,
   GitCicdHandoffInvalidStatusTransitionError,
   GitCicdHandoffNotFoundError,
   GitCicdHandoffProviderConflictError,
@@ -249,6 +250,7 @@ type GitCicdHandoffRouteOptions = {
   gitCicdRunProvider?: GitCicdRunProvider;
   gitCicdMonitoringProvider?: GitCicdMonitoringProvider;
   gitCicdHandoffProvider?: GitCicdHandoffProvider;
+  createGitCicdHandoff?: typeof createGitCicdHandoff;
   gitCicdPipelineStatusProvider?: GitCicdPipelineStatusProvider;
   gitCicdRepositorySettingsApplier?: GitCicdRepositorySettingsApplier;
   createGitHubOAuthRepositorySettingsApplier?: (
@@ -473,7 +475,7 @@ export async function registerGitCicdHandoffRoutes(
     );
 
     try {
-      const handoff = await createGitCicdHandoff(
+      const handoff = await (options?.createGitCicdHandoff ?? createGitCicdHandoff)(
         {
           projectId: params.projectId,
           accessContext,
@@ -1151,6 +1153,13 @@ function handleGitCicdHandoffError(error: unknown, reply: FastifyReply) {
   if (error instanceof GitCicdHandoffProviderMismatchError) {
     return reply.status(409).send({
       error: "conflict",
+      message: error.message
+    });
+  }
+
+  if (error instanceof GitCicdInitialApplicationReleaseRequiredError) {
+    return reply.status(409).send({
+      error: error.code,
       message: error.message
     });
   }

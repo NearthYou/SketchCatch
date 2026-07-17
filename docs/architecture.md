@@ -306,6 +306,8 @@ Terraform Apply 뒤 실제 ECR/ECS/S3/CloudFront 변경은 trusted ECS RunTask w
 inventory를 재검증한 exact-resource 세션으로 수행한다. App GitHub Actions는 AWS를 직접 변경하지 않고 SketchCatch release-run API만 호출한다. 사용자가 `workflow_dispatch`로 명시적으로 승인한 Infra GitHub Actions는 OIDC로 한정된 AWS role을 획득해 같은 checkout·job에서 Terraform Plan과 해당 binary `tfplan` Apply를 수행한다. GitHub Environment는 OIDC subject scope에 사용할 수 있지만 별도 수동 approval gate를 추가하지 않는다. 이 구조는 App에서 승인한 candidate를 재빌드하지 않고 그대로 배포하며, stale build나 worker의
 AWS mutation과 결과 저장을 차단한다.
 
+최초 ECS/Fargate API·frontend 활성화는 Direct Deployment가 담당한다. CI/CD handoff API는 승인된 인프라 Apply 증거와 현재 target에 일치하는 성공 Direct `ApplicationRelease`를 같은 서버 predicate로 다시 확인한 뒤에만 설치 PR provider를 호출한다. 설치 PR은 후속 push용 Workflow와 설정만 추가하며, PR merge 자체는 최초 앱 릴리즈나 AWS mutation을 시작하지 않는다.
+
 lease row는 terminal 뒤에도 `released` 상태로 남겨 fencing generation을 단조 증가시킨다. worker task가 중단되면
 API는 ECS task의 terminal 상태를 확인한 뒤 recovery-mode trusted worker를 dispatch하고, durable release step과
 AWS의 실제 ECS/Target Group 상태를 대조해 완료 또는 rollback을 기록한다. API 프로세스 자체는 사용자 runtime을

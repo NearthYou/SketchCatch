@@ -20,6 +20,7 @@ const exactUnionAssertions: [
   IsExactUnion<
     GitCicdReadinessItemKey,
     | "approved_apply_plan"
+    | "initial_application_release"
     | "source_repository"
     | "monitoring_config"
     | "deployment_target"
@@ -32,6 +33,7 @@ const exactUnionAssertions: [
   IsExactUnion<
     GitCicdReadinessAction,
     | "approve_apply_plan"
+    | "deploy_initial_application"
     | "select_repository"
     | "confirm_monitoring_config"
     | "select_aws_connection"
@@ -43,6 +45,7 @@ const exactUnionAssertions: [
 
 const readinessItemKeys = [
   "approved_apply_plan",
+  "initial_application_release",
   "source_repository",
   "monitoring_config",
   "deployment_target"
@@ -73,15 +76,15 @@ const snapshot: GitCicdReadinessSnapshot = {
   requiredActionCount: 1,
   sourceDeploymentId: "deployment-1",
   approvedApplyPlanArtifactId: "apply-plan-1",
+  initialApplicationReleaseId: null,
   items: [
     {
-      key: "deployment_target",
-      label: "배포 타깃",
+      key: "initial_application_release",
+      label: "최초 앱 배포",
       status: "action_required",
-      completedCount: 3,
-      totalCount: 4,
-      missingKeys: ["aws_connection"],
-      action: "select_aws_connection"
+      missingKeys: [],
+      action: "deploy_initial_application",
+      recommendedDeploymentScope: "application"
     }
   ]
 };
@@ -115,6 +118,7 @@ test("defines the Git/CI/CD readiness snapshot contract", () => {
   assert.deepEqual(exactUnionAssertions, [true, true, true, true]);
   assert.deepEqual(readinessItemKeys, [
     "approved_apply_plan",
+    "initial_application_release",
     "source_repository",
     "monitoring_config",
     "deployment_target"
@@ -126,7 +130,8 @@ test("defines the Git/CI/CD readiness snapshot contract", () => {
     "output_url"
   ]);
   assert.equal(snapshot.ready, false);
-  assert.deepEqual(snapshot.items[0]?.missingKeys, ["aws_connection"]);
+  assert.equal(snapshot.initialApplicationReleaseId, null);
+  assert.equal(snapshot.items[0]?.recommendedDeploymentScope, "application");
   assert.deepEqual(
     [
       invalidReadinessItemKey,
