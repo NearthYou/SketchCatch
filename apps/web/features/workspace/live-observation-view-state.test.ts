@@ -26,3 +26,22 @@ test("Live Observation re-entry preserves the selected Deployment and viewport p
     viewport: null
   });
 });
+
+test("storing an unchanged Live Observation viewport preserves the state reference", () => {
+  const viewport = { x: 120, y: 48, zoom: 0.85 };
+  const state = storeLiveObservationViewport(
+    createLiveObservationViewState("project-1"),
+    "project-1",
+    "deployment-1",
+    viewport
+  );
+
+  const unchanged = storeLiveObservationViewport(
+    state,
+    "project-1",
+    "deployment-1",
+    { ...viewport }
+  );
+
+  assert.equal(unchanged, state);
+});

@@ -40,6 +40,16 @@ export function storeLiveObservationViewport(
 
   if (!deploymentId) return current;
 
+  const existing = current.viewportByDeploymentId[deploymentId];
+  if (
+    existing &&
+    existing.x === viewport.x &&
+    existing.y === viewport.y &&
+    existing.zoom === viewport.zoom
+  ) {
+    return current;
+  }
+
   return {
     ...current,
     viewportByDeploymentId: {
