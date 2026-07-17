@@ -10,6 +10,7 @@ function readSource(relativePath: string): string {
 const skeletonSource = readSource("./WorkspaceLoadingSkeleton.tsx");
 const projectManagerSource = readSource("./ProjectWorkspaceDraftManager.tsx");
 const localManagerSource = readSource("./WorkspaceDraftManager.tsx");
+const routeLoadingSource = readSource("../../app/workspace/loading.tsx");
 const stylesSource = readSource("./workspace.module.css");
 
 test("Workspace loading keeps the project bar, panels, and Architecture Board regions mounted", () => {
@@ -32,4 +33,9 @@ test("Local Workspace uses the same structural skeleton while restoring its Draf
     /if \(loadState === "loading"\) \{[\s\S]*?<WorkspaceLoadingSkeleton/
   );
   assert.match(localManagerSource, /projectName=\{projectName\}/);
+});
+
+test("Workspace route transitions keep the structural skeleton mounted", () => {
+  assert.match(routeLoadingSource, /WorkspaceLoadingSkeleton/);
+  assert.match(routeLoadingSource, /Architecture Board를 불러오는 중입니다\./);
 });
