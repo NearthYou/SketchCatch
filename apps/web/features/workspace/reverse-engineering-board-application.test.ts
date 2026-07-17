@@ -8,6 +8,7 @@ import {
   createReverseEngineeringBoardApplication
 } from "./reverse-engineering-board-application";
 import { summarizeReverseEngineeringScan } from "./reverse-engineering-presentation";
+import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 const currentDiagram: DiagramJson = {
   nodes: [],
@@ -338,6 +339,83 @@ test("관계가 있는 검토 전용 Lambda는 보호 metadata와 확인 필요 
       reason: "아직 정식 ResourceType으로 매핑되지 않았습니다."
     }
   );
+});
+
+test("과거 스캔에서 보정된 Lambda는 원래 배치에서도 짧은 확인 필요 이름과 실행 제외 marker를 유지한다", () => {
+  const providerResourceId =
+    "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
+  const result: ReverseEngineeringScanResult = {
+    ...structuredClone(scanResult),
+    architectureJson: {
+      nodes: [
+        {
+          id: "legacy-lambda",
+          type: "LAMBDA",
+          label: "orders-handler",
+          positionX: 120,
+          positionY: 80,
+          config: {
+            legacyConfigMarker: "keep-lambda-raw",
+            providerResourceType: "AWS::Lambda::Function",
+            providerResourceId,
+            analysisExcluded: true
+          }
+        }
+      ],
+      edges: []
+    },
+    discoveredResources: [
+      {
+        id: "legacy-lambda",
+        provider: "aws",
+        providerResourceType: "AWS::Lambda::Function",
+        providerResourceId,
+        region: "ap-northeast-2",
+        displayName: providerResourceId,
+        resourceType: "LAMBDA",
+        config: { functionName: "orders-handler" },
+        analysisExcluded: true
+      }
+    ],
+    analysisExclusions: [
+      {
+        id: "exclude-legacy-lambda",
+        resourceId: "legacy-lambda",
+        reason: "unsupported_resource_type",
+        message: "지원하지 않는 Resource입니다."
+      }
+    ],
+    importSuggestions: [
+      {
+        id: "import-legacy-lambda",
+        resourceId: "legacy-lambda",
+        status: "manual_review",
+        handoffReady: false,
+        reason: "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+      }
+    ]
+  };
+
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    placement: "original",
+    result
+  });
+  const lambda = application.diagram.nodes.find((node) => node.id === "legacy-lambda");
+  const appliedArchitecture = convertDiagramJsonToArchitectureJson(application.diagram);
+  const appliedLambda = appliedArchitecture.nodes.find((node) => node.id === "legacy-lambda");
+
+  assert.equal(application.compilation, null);
+  assert.equal(lambda?.label, "확인 필요 · orders-handler");
+  assert.equal(lambda?.parameters?.values["analysisExcluded"], true);
+  assert.equal(lambda?.parameters?.values["providerResourceId"], providerResourceId);
+  assert.equal(lambda?.parameters?.values["legacyConfigMarker"], "keep-lambda-raw");
+  assert.equal(lambda?.metadata?.reverseEngineering?.source, "aws_scan");
+  assert.equal(appliedLambda?.config["analysisExcluded"], true);
+  assert.equal(appliedLambda?.config["providerResourceId"], providerResourceId);
+  assert.equal(appliedLambda?.config["legacyConfigMarker"], "keep-lambda-raw");
+  assert.equal(result.importSuggestions[0]?.status, "manual_review");
 });
 
 test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하나의 Compiler proposal로 검토하고 적용한다", () => {
