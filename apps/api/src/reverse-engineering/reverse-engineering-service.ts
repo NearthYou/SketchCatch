@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import type {
@@ -175,7 +176,7 @@ export function normalizeReverseEngineeringScanResult(
     architectureJson,
     reverseEngineeringDraft: draft,
     importSuggestions: sanitizeImportSuggestions(
-      persistedResult.discoveredResources,
+      normalizationContext,
       persistedResult.importSuggestions
     )
   };
@@ -257,15 +258,26 @@ function normalizeReadCompatibilityNode(
 
   if (!resource) {
     const label = createFailClosedLegacyNodeLabel(node);
+    const rawLabel = node.label?.trim() || node.id;
+    const rawProviderResourceId =
+      rawLabel.startsWith("arn:") &&
+      readNonEmptyConfigString(node.config["providerResourceId"]) === undefined
+        ? rawLabel
+        : undefined;
+    const config = {
+      ...node.config,
+      ...(rawProviderResourceId ? { providerResourceId: rawProviderResourceId } : {}),
+      analysisExcluded: true
+    };
 
-    if (node.config["analysisExcluded"] === true && node.label === label) {
+    if (node.label === label && isDeepStrictEqual(node.config, config)) {
       return node;
     }
 
     return {
       ...node,
       label,
-      config: { ...node.config, analysisExcluded: true }
+      config
     };
   }
 
@@ -274,25 +286,22 @@ function normalizeReadCompatibilityNode(
   const label =
     context.displayNameByProviderResourceId.get(resource.providerResourceId) ??
     createAwsResourceDisplayName(resource);
+  const config = {
+    ...resource.config,
+    ...node.config,
+    providerResourceType: resource.providerResourceType,
+    providerResourceId: resource.providerResourceId,
+    analysisExcluded
+  };
 
-  if (
-    node.label === label &&
-    node.config["providerResourceType"] === resource.providerResourceType &&
-    node.config["providerResourceId"] === resource.providerResourceId &&
-    node.config["analysisExcluded"] === analysisExcluded
-  ) {
+  if (node.label === label && isDeepStrictEqual(node.config, config)) {
     return node;
   }
 
   return {
     ...node,
     label,
-    config: {
-      ...node.config,
-      providerResourceType: resource.providerResourceType,
-      providerResourceId: resource.providerResourceId,
-      analysisExcluded
-    }
+    config
   };
 }
 
@@ -320,7 +329,19 @@ function findCorrelatedDiscoveredResource(
     return null;
   }
 
-  return providerResourceIdMatch ?? idMatch ?? null;
+  const resource = providerResourceIdMatch ?? idMatch;
+
+  return resource && isUniquelyIndexedDiscoveredResource(resource, context) ? resource : null;
+}
+
+function isUniquelyIndexedDiscoveredResource(
+  resource: DiscoveredResource,
+  context: ReadCompatibilityNormalizationContext
+): boolean {
+  return (
+    context.discoveredResourceById.get(resource.id) === resource &&
+    context.discoveredResourceByProviderResourceId.get(resource.providerResourceId) === resource
+  );
 }
 
 function createFailClosedLegacyNodeLabel(
@@ -390,20 +411,18 @@ function isUsableReverseEngineeringDraft(
 }
 
 function sanitizeImportSuggestions(
-  discoveredResources: DiscoveredResource[],
+  context: ReadCompatibilityNormalizationContext,
   importSuggestions: ReverseEngineeringImportSuggestion[]
 ): ReverseEngineeringImportSuggestion[] {
-  const reviewOnlyResourceIds = new Set(
-    discoveredResources
-      .filter((resource) => resource.resourceType === "UNKNOWN" || resource.analysisExcluded === true)
-      .map((resource) => resource.id)
-  );
-
   return importSuggestions.map((suggestion) => {
-    if (
-      !reviewOnlyResourceIds.has(suggestion.resourceId) ||
-      !hasUnsafeImportHandoff(suggestion)
-    ) {
+    const resource = context.discoveredResourceById.get(suggestion.resourceId);
+    const isExecutableResource =
+      resource !== undefined &&
+      resource !== null &&
+      isUniquelyIndexedDiscoveredResource(resource, context) &&
+      !context.reviewOnlyResourceIds.has(resource.id);
+
+    if (isExecutableResource || !hasUnsafeImportHandoff(suggestion)) {
       return suggestion;
     }
 
