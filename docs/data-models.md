@@ -678,6 +678,7 @@ type ProjectDraftConflictResponse = ApiErrorResponse & {
 - 현재 서버 revision이 다르면 API는 `409 Conflict`와 현재 revision·저장 시각을 반환하며 DiagramJson을 변경하지 않는다.
 - `GET /api/projects/:projectId/draft`는 `private, no-store`로 응답한다. Workspace는 서버 조회가 성공한 경우 서버 draft를 IndexedDB보다 우선하며, 서버 조회 실패를 오래된 로컬 draft로 숨기지 않는다.
 - IndexedDB의 `LocalProjectDraft.baseServerRevision`은 로컬 편집이 시작된 서버 revision이다. 로컬 저장 횟수와 함께 증가하지 않고, 서버 저장 성공 또는 최신 상태 재로드 후 반환된 revision으로 교체된다.
+- 일반 Project Workspace는 탭 인스턴스마다 별도의 IndexedDB `workspaceId`를 생성하고 `sessionStorage`에 보관해 같은 탭의 새로고침에서 재사용한다. 시작 시 해당 ID를 `Web Locks`로 배타 점유하므로 탭 복제로 `sessionStorage`가 복사되어도 lock을 얻지 못한 새 탭은 새 ID를 발급한다. 따라서 같은 프로젝트를 연 다른 탭의 recovery draft가 충돌 탭의 로컬 복구본을 덮어쓰지 않으면서 새로고침 후에도 해당 탭의 복구본을 찾는다. 기존 `project:{projectId}` key의 recovery draft는 처음 읽을 때 탭 전용 key로 복사한다. URL 또는 호출자가 `localCacheWorkspaceId`/`workspaceId`를 명시한 특수 복구 흐름만 해당 scope를 재사용한다.
 
 ## ProjectAsset와 TerraformArtifact
 

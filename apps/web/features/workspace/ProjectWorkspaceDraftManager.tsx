@@ -51,6 +51,10 @@ import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import { ProjectDraftConflictDialog } from "./ProjectDraftConflictDialog";
+import {
+  claimProjectDraftTabCacheWorkspaceId,
+  type ProjectDraftTabCacheClaim
+} from "./project-draft-tab-cache";
 import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
@@ -92,13 +96,60 @@ export type ProjectWorkspaceDraftManagerProps = {
 };
 
 export function ProjectWorkspaceDraftManager(props: ProjectWorkspaceDraftManagerProps) {
-  return <ProjectWorkspaceDraftManagerState key={props.projectId} {...props} />;
+  return <ProjectWorkspaceDraftManagerCacheScope key={props.projectId} {...props} />;
+}
+
+function ProjectWorkspaceDraftManagerCacheScope(props: ProjectWorkspaceDraftManagerProps) {
+  const explicitWorkspaceId = props.localCacheWorkspaceId ?? props.workspaceId;
+  const [cacheClaim, setCacheClaim] = useState<ProjectDraftTabCacheClaim | null>(() =>
+    explicitWorkspaceId
+      ? {
+          release: () => undefined,
+          workspaceId: explicitWorkspaceId
+        }
+      : null
+  );
+
+  useEffect(() => {
+    if (explicitWorkspaceId) {
+      return;
+    }
+
+    let activeClaim: ProjectDraftTabCacheClaim | null = null;
+    let cancelled = false;
+
+    void claimProjectDraftTabCacheWorkspaceId({}).then((claim) => {
+      if (cancelled) {
+        claim.release();
+        return;
+      }
+
+      activeClaim = claim;
+      setCacheClaim(claim);
+    });
+
+    return () => {
+      cancelled = true;
+      activeClaim?.release();
+    };
+  }, [explicitWorkspaceId]);
+
+  if (!cacheClaim) {
+    return <WorkspaceNotice title="Project workspace" body="프로젝트 복구 상태를 확인하고 있습니다." />;
+  }
+
+  return (
+    <ProjectWorkspaceDraftManagerState
+      {...props}
+      resolvedLocalCacheWorkspaceId={cacheClaim.workspaceId}
+    />
+  );
 }
 
 function ProjectWorkspaceDraftManagerState({
   initialCicdReturnCommand,
   initialRightPanelView,
-  localCacheWorkspaceId,
+  localCacheWorkspaceId: providedLocalCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
   onDraftPersistenceReady,
   projectId,
@@ -106,10 +157,13 @@ function ProjectWorkspaceDraftManagerState({
   repository = defaultProjectDraftRepository,
   repositoryAnalysisHandoff,
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
-  workspaceId
-}: ProjectWorkspaceDraftManagerProps) {
+  workspaceId,
+  resolvedLocalCacheWorkspaceId: localCacheWorkspaceId
+}: ProjectWorkspaceDraftManagerProps & { resolvedLocalCacheWorkspaceId: string }) {
   const router = useRouter();
   const { user } = useAuth();
+  const legacyLocalCacheWorkspaceId =
+    providedLocalCacheWorkspaceId || workspaceId ? undefined : `project:${projectId}`;
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [repositoryTemplateId, setRepositoryTemplateId] = useState<string | null>(null);
@@ -443,6 +497,7 @@ function ProjectWorkspaceDraftManagerState({
         const loadedDraft = await repository.load({
           workspaceId,
           localCacheWorkspaceId,
+          legacyLocalCacheWorkspaceId,
           projectId,
           fallbackDiagram
         });
@@ -493,6 +548,7 @@ function ProjectWorkspaceDraftManagerState({
     };
   }, [
     clearLocalSaveTimer,
+    legacyLocalCacheWorkspaceId,
     localCacheWorkspaceId,
     projectId,
     projectName,
@@ -553,6 +609,7 @@ function ProjectWorkspaceDraftManagerState({
       const loadedDraft = await repository.load({
         workspaceId,
         localCacheWorkspaceId,
+        legacyLocalCacheWorkspaceId,
         projectId,
         fallbackDiagram: EMPTY_DIAGRAM
       });
@@ -588,6 +645,7 @@ function ProjectWorkspaceDraftManagerState({
     }
   }, [
     clearLocalSaveTimer,
+    legacyLocalCacheWorkspaceId,
     localCacheWorkspaceId,
     projectId,
     repository,

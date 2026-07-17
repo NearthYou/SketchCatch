@@ -8,6 +8,7 @@ import { ApiClientError } from "../../lib/api-client";
 import { getProjectDraft, saveProjectDraft } from "./api";
 import {
   chooseInitialDiagram,
+  createDraftStorageKey,
   createLocalProjectDraft,
   markDraftServerSaved,
   readLocalProjectDraft,
@@ -17,6 +18,7 @@ import type { InitialDiagramChoice, LocalProjectDraft } from "./project-draft-pe
 
 export type LoadProjectDiagramDraftInput = {
   fallbackDiagram: DiagramJson;
+  legacyLocalCacheWorkspaceId?: string | undefined;
   localCacheWorkspaceId?: string | undefined;
   projectId: string;
   workspaceId?: string | undefined;
@@ -92,10 +94,24 @@ export async function loadProjectDiagramDraft(
   const readServer = dependencies.getProjectDraft ?? getProjectDraft;
   const writeLocal = dependencies.writeLocalProjectDraft ?? writeLocalProjectDraft;
   const localCacheWorkspaceId = getLocalCacheWorkspaceId(input);
-  const [localDraft, serverResponse] = await Promise.all([
+  const [scopedLocalDraft, serverResponse] = await Promise.all([
     readLocal(localCacheWorkspaceId, input.projectId),
     readServer(input.projectId)
   ]);
+  let localDraft = scopedLocalDraft;
+
+  if (!localDraft && input.legacyLocalCacheWorkspaceId) {
+    const legacyLocalDraft = await readLocal(input.legacyLocalCacheWorkspaceId, input.projectId);
+
+    if (legacyLocalDraft) {
+      localDraft = {
+        ...legacyLocalDraft,
+        key: createDraftStorageKey(localCacheWorkspaceId, input.projectId),
+        workspaceId: localCacheWorkspaceId
+      };
+      await writeLocal(localDraft);
+    }
+  }
   const choice = chooseInitialDiagram({
     fallbackDiagram: input.fallbackDiagram,
     localDraft,

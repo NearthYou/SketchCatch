@@ -216,6 +216,32 @@ test("loadProjectDiagramDraft can use authenticated server ownership without a w
   assert.deepEqual(result.diagramJson, serverDiagram);
 });
 
+test("loadProjectDiagramDraft migrates the legacy shared recovery draft to the tab cache", async () => {
+  const writes: LocalProjectDraft[] = [];
+  const result = await loadProjectDiagramDraft(
+    {
+      fallbackDiagram: emptyDiagram,
+      legacyLocalCacheWorkspaceId: `project:${serverDraft.projectId}`,
+      localCacheWorkspaceId: "tab-cache-1",
+      projectId: serverDraft.projectId
+    },
+    {
+      getProjectDraft: async () => ({ draft: null }),
+      readLocalProjectDraft: async (workspaceId) =>
+        workspaceId === `project:${serverDraft.projectId}` ? localDraft : null,
+      writeLocalProjectDraft: async (draft) => {
+        writes.push(draft);
+      }
+    }
+  );
+
+  assert.equal(result.source, "local");
+  assert.equal(result.localDraft?.workspaceId, "tab-cache-1");
+  assert.equal(result.localDraft?.key, `tab-cache-1:${serverDraft.projectId}`);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0]?.workspaceId, "tab-cache-1");
+});
+
 test("loadProjectDiagramDraft rejects stale local fallback when the latest server draft cannot be loaded", async () => {
   await assert.rejects(
     loadProjectDiagramDraft(

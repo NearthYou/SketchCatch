@@ -909,7 +909,7 @@
         "lastVerified": "2026-07-17",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts src/routes/projects.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/project-draft-sync.test.ts features/workspace/project-draft-persistence.test.ts features/workspace/project-draft-save-status.test.ts features/workspace/project-draft-conflict.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/project-draft-sync.test.ts features/workspace/project-draft-persistence.test.ts features/workspace/project-draft-save-status.test.ts features/workspace/project-draft-conflict.test.ts features/workspace/project-draft-tab-cache.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/use-ai-start-workflow.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern=Repository.*saves app/workspace/repository/repository-start-client.test.ts",
           "pnpm lint",
@@ -918,7 +918,7 @@
           "pnpm harness:check",
           "git diff --check"
         ],
-        "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 29/29, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, and preserved conflict status; focused lint, API/Web typecheck, and API bundle pass afterward. The follow-up Next build cannot run from the collision-isolation worktree because Turbopack rejects dependency symlinks outside that filesystem root. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
+        "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 33/33, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, preserved conflict status, separated each tab's local recovery key across tabs, refreshes, and duplicated tabs, and migrated the legacy shared recovery row; focused lint, API/Web typecheck, and API bundle pass afterward. The follow-up Next build cannot run from the collision-isolation worktree because Turbopack rejects dependency symlinks outside that filesystem root. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
       },
       "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was executed."
     }
