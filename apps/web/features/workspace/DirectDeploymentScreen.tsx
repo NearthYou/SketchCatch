@@ -1296,6 +1296,13 @@ export function DirectDeploymentScreen({
             {selectedDeployment?.status === "RUNNING" ? (
               <button
                 className={styles.deploymentSecondaryButton}
+                data-active="true"
+                data-tone={
+                  activeProgress?.operation === "destroy" ||
+                  selectedDeployment.currentPlanOperation === "destroy"
+                    ? "danger"
+                    : "default"
+                }
                 disabled={!canCancelDeployment}
                 onClick={cancelSelectedDeployment}
                 type="button"
@@ -1311,7 +1318,15 @@ export function DirectDeploymentScreen({
                 {cleanupActionTargets.map(({ actions, deployment }) =>
                   actions.shouldShowDestroyPlanButton ? (
                     <button
+                      aria-busy={
+                        activeProgress?.operation === "destroy-plan" &&
+                        requestState === "loading"
+                      }
                       className={styles.deploymentSecondaryButton}
+                      data-active={
+                        activeProgress?.operation === "destroy-plan" &&
+                        requestState === "loading"
+                      }
                       disabled={!actions.canRunDestroyPlan}
                       key={deployment.id}
                       onClick={() => void startTerraformDestroyPlan(deployment)}
@@ -1325,6 +1340,7 @@ export function DirectDeploymentScreen({
                 <button
                   aria-busy={validationIsBusy}
                   className={styles.deploymentPrimaryButton}
+                  data-active={validationIsBusy}
                   disabled={!canRunDeploymentReviewStep}
                   onClick={() => void runDeploymentReviewStep()}
                   type="button"
@@ -1341,6 +1357,9 @@ export function DirectDeploymentScreen({
               <button
                 aria-busy={requestState === "loading"}
                 className={styles.deploymentPrimaryButton}
+                data-active={
+                  activeProgress?.operation === "plan" && requestState === "loading"
+                }
                 disabled={!canRunPlan}
                 onClick={() => void startTerraformPlan()}
                 type="button"
@@ -1357,7 +1376,9 @@ export function DirectDeploymentScreen({
         return (
           <div className={styles.deploymentStepActionBar}>
             <button
+              aria-busy={requestState === "loading"}
               className={styles.deploymentPrimaryButton}
+              data-active={requestState === "loading"}
               disabled={!canApprovePlan}
               onClick={() => void approveCurrentPlan()}
               type="button"
@@ -1374,6 +1395,13 @@ export function DirectDeploymentScreen({
           {selectedDeployment?.status === "RUNNING" ? (
             <button
               className={styles.deploymentSecondaryButton}
+              data-active="true"
+              data-tone={
+                activeProgress?.operation === "destroy" ||
+                selectedDeployment.currentPlanOperation === "destroy"
+                  ? "danger"
+                  : "default"
+              }
               disabled={!canCancelDeployment}
               onClick={cancelSelectedDeployment}
               type="button"
@@ -1388,7 +1416,15 @@ export function DirectDeploymentScreen({
                 if (actions.shouldShowDestroyPlanButton) {
                   buttons.push(
                     <button
+                      aria-busy={
+                        activeProgress?.operation === "destroy-plan" &&
+                        requestState === "loading"
+                      }
                       className={styles.deploymentSecondaryButton}
+                      data-active={
+                        activeProgress?.operation === "destroy-plan" &&
+                        requestState === "loading"
+                      }
                       disabled={!actions.canRunDestroyPlan}
                       key={`${deployment.id}:plan`}
                       onClick={() => void startTerraformDestroyPlan(deployment)}
@@ -1402,7 +1438,16 @@ export function DirectDeploymentScreen({
                 if (actions.shouldShowDestroyButton) {
                   buttons.push(
                     <button
+                      aria-busy={
+                        activeProgress?.operation === "destroy" &&
+                        requestState === "loading"
+                      }
                       className={styles.deploymentDangerButton}
+                      data-active={
+                        activeProgress?.operation === "destroy" &&
+                        requestState === "loading"
+                      }
+                      data-tone="danger"
                       disabled={!actions.canDestroy}
                       key={`${deployment.id}:destroy`}
                       onClick={() => void startTerraformDestroy(deployment)}
@@ -1418,7 +1463,9 @@ export function DirectDeploymentScreen({
               {showApplyConfirmation && selectedDeployment ? (
                 <>
                   <button
+                    aria-busy={requestState === "loading" && activeProgress === null}
                     className={styles.deploymentSecondaryButton}
+                    data-active={requestState === "loading" && activeProgress === null}
                     disabled={requestState === "loading"}
                     onClick={() => void revokeCurrentPlanApproval()}
                     type="button"
@@ -1426,7 +1473,13 @@ export function DirectDeploymentScreen({
                     Plan 승인 취소
                   </button>
                   <button
+                    aria-busy={
+                      activeProgress?.operation === "apply" && requestState === "loading"
+                    }
                     className={styles.deploymentPrimaryButton}
+                    data-active={
+                      activeProgress?.operation === "apply" && requestState === "loading"
+                    }
                     disabled={!canApply}
                     onClick={startTerraformApply}
                     type="button"

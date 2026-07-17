@@ -139,7 +139,31 @@ test("deployment actions sit directly above the recent result without a divider"
   );
   assert.match(
     workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentPrimaryButton,[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*auto;/
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentPrimaryButton,[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*152px;/
+  );
+});
+
+test("deployment action buttons use one size and fill only while active", () => {
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
+  const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
+
+  assert.match(actionsSource, /data-active=/);
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*justify-content:\s*start;[^}]*justify-items:\s*start;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar :is\([\s\S]*?\) svg\s*\{[^}]*color:\s*inherit;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar [^{]*\[data-active="true"\][\s\S]*?background:\s*var\(--workspace-accent,\s*#000000\);/
   );
 });
 
