@@ -71,25 +71,25 @@ export type CreateReverseEngineeringBoardComparisonInput = {
 export function createReverseEngineeringBoardApplication(
   input: CreateReverseEngineeringBoardApplicationInput
 ): ReverseEngineeringBoardApplication {
+  const originalPreview = createOriginalReverseEngineeringPreview(input.result);
   const preview =
     input.placement === "compiled"
-      ? createCompiledReverseEngineeringPreview(input.result)
-      : createOriginalReverseEngineeringPreview(input.result);
-  const previewDiagram = preview.diagram;
-  const comparison = compareDiagrams(input.currentDiagram, previewDiagram);
+      ? createCompiledReverseEngineeringPreview(input.result, originalPreview.diagram)
+      : originalPreview;
+  const comparison = compareDiagrams(input.currentDiagram, preview.diagram);
 
   if (input.mode === "replace") {
     return {
       compilation: preview.compilation,
       comparison,
-      diagram: previewDiagram,
-      previewDiagram
+      diagram: preview.diagram,
+      previewDiagram: preview.diagram
     };
   }
 
   const appendDiagram = appendAdditionsToCurrentDiagram(
     input.currentDiagram,
-    previewDiagram,
+    preview.diagram,
     comparison
   );
 
@@ -155,11 +155,14 @@ function createOriginalReverseEngineeringPreview(result: ReverseEngineeringScanR
   };
 }
 
-function createCompiledReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
+function createCompiledReverseEngineeringPreview(
+  result: ReverseEngineeringScanResult,
+  rawDiagram: DiagramJson
+): {
   readonly compilation: ArchitectureBoardCompilationProposal;
   readonly diagram: DiagramJson;
 } {
-  const compilation = compileReverseEngineeringArchitecture(result);
+  const compilation = compileReverseEngineeringArchitectureFromRaw(result, rawDiagram);
   const diagram = markReverseEngineeringDiagram(compilation.diagram);
 
   return {
@@ -192,8 +195,18 @@ function compileReverseEngineeringAppendArchitecture(
 export function compileReverseEngineeringArchitecture(
   result: ReverseEngineeringScanResult
 ): ArchitectureBoardCompilationProposal {
+  const rawDiagram = createOriginalReverseEngineeringPreview(result).diagram;
+
+  return compileReverseEngineeringArchitectureFromRaw(result, rawDiagram);
+}
+
+function compileReverseEngineeringArchitectureFromRaw(
+  result: ReverseEngineeringScanResult,
+  rawDiagram: DiagramJson
+): ArchitectureBoardCompilationProposal {
   return compileArchitectureBoard({
     architecture: result.architectureJson,
+    currentDiagram: rawDiagram,
     semanticContext: { signals: createReverseEngineeringContextSignals(result) },
     trigger: "reverse-engineering"
   });

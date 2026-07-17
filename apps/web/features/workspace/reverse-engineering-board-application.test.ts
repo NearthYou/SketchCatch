@@ -122,6 +122,47 @@ test("Reverse Engineering은 원래 배치를 선택하면 Compiler proposal 없
   );
 });
 
+test("Reverse Engineering Compiler는 사용자가 본 원래 배치를 품질과 변경의 기준으로 사용한다", () => {
+  const overlappingResult = createOverlappingBucketScanResult();
+  const originalApplication = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    placement: "original",
+    result: overlappingResult
+  });
+  const compiledApplication = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    placement: "compiled",
+    result: overlappingResult
+  });
+  const originalQuality = evaluateAutomaticDiagramLayout({
+    edges: originalApplication.diagram.edges.map((edge) => ({
+      id: edge.id,
+      sourceId: edge.sourceNodeId,
+      targetId: edge.targetNodeId
+    })),
+    nodes: originalApplication.diagram.nodes
+  });
+  const compilation = compiledApplication.compilation;
+
+  assert.ok(compilation);
+  const beforeOverlapCount = compilation.quality.before.metrics.nodeOverlapCount;
+  const afterOverlapCount = compilation.quality.after.metrics.nodeOverlapCount;
+
+  assert.ok(originalQuality.nodeOverlapCount > 0);
+  assert.ok(beforeOverlapCount !== undefined);
+  assert.ok(afterOverlapCount !== undefined);
+  assert.equal(beforeOverlapCount, originalQuality.nodeOverlapCount);
+  assert.ok(afterOverlapCount < beforeOverlapCount);
+  assert.ok(compilation.changes.some((change) => change.kind === "geometry"));
+  assert.notDeepEqual(
+    compiledApplication.diagram.nodes.map(({ id, position }) => ({ id, position })),
+    originalApplication.diagram.nodes.map(({ id, position }) => ({ id, position }))
+  );
+  assert.deepEqual(compilation.diagram, compiledApplication.diagram);
+});
+
 test("Reverse Engineering은 사용자가 명시적으로 요청한 경우에만 배치 Compiler proposal을 만든다", () => {
   const originalApplication = createReverseEngineeringBoardApplication({
     currentDiagram,
@@ -218,7 +259,10 @@ test("Reverse Engineering은 raw scan enum 없이 Compiler context 진단을 사
     level: "warning",
     summary: "자동 분석 제외: 자동 분석 범위 밖",
     message: "이 Resource는 현재 자동 분석 범위에 포함되지 않습니다.",
-    relatedChangeIds: [],
+    relatedChangeIds: [
+      "configuration:modify:unknown-1",
+      "geometry:modify:unknown-1:position"
+    ],
     relatedResourceIds: ["unknown-1"],
     penalty: 150
   });
@@ -367,6 +411,33 @@ function makeResourceNode(
     size: { width: 48, height: 48 },
     type: resourceType,
     zIndex: 1
+  };
+}
+
+function createOverlappingBucketScanResult(): ReverseEngineeringScanResult {
+  return {
+    ...scanResult,
+    architectureJson: {
+      nodes: [
+        {
+          id: "bucket-a",
+          type: "S3",
+          label: "Bucket A",
+          positionX: 0,
+          positionY: 0,
+          config: { providerResourceId: "bucket-a" }
+        },
+        {
+          id: "bucket-b",
+          type: "S3",
+          label: "Bucket B",
+          positionX: 0,
+          positionY: 0,
+          config: { providerResourceId: "bucket-b" }
+        }
+      ],
+      edges: []
+    }
   };
 }
 
