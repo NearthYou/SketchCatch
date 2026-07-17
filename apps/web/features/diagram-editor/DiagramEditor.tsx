@@ -108,6 +108,14 @@ import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramEdgeView } from "./DiagramEdgeView";
 import { DiagramNodeView } from "./DiagramNodeView";
 import { WorkspaceProjectBar } from "./WorkspaceProjectBar";
+import {
+  MAX_LEFT_PANEL_WIDTH,
+  MAX_RIGHT_PANEL_WIDTH,
+  MIN_LEFT_PANEL_WIDTH,
+  MIN_RIGHT_PANEL_WIDTH,
+  readWorkspacePanelPreferences,
+  writeWorkspacePanelPreferences
+} from "./workspace-panel-preferences";
 import { isProjectDraftSaveShortcut } from "../workspace/project-draft-hotkey";
 import { persistViewportAfterMove } from "./viewport-persistence";
 import {
@@ -169,14 +177,6 @@ const EDGE_TYPES = {
 };
 
 const MAX_HISTORY_ITEMS = 80;
-const LEFT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.leftPanelWidth.brainboardV1";
-const RIGHT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.rightPanelWidth.brainboardV1";
-const DEFAULT_LEFT_PANEL_WIDTH = 346;
-const DEFAULT_RIGHT_PANEL_WIDTH = 440;
-const MIN_LEFT_PANEL_WIDTH = 300;
-const MAX_LEFT_PANEL_WIDTH = 520;
-const MIN_RIGHT_PANEL_WIDTH = 360;
-const MAX_RIGHT_PANEL_WIDTH = 640;
 const MIN_WORKSPACE_WIDTH = 420;
 const DIAGRAM_SNAP_GRID_SIZE = 12;
 const DIAGRAM_SNAP_GRID: [number, number] = [DIAGRAM_SNAP_GRID_SIZE, DIAGRAM_SNAP_GRID_SIZE];
@@ -3387,33 +3387,25 @@ function haveAnyNodePositionDifference(
 }
 
 function readStoredLeftPanelWidth(): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_LEFT_PANEL_WIDTH;
-  }
-
-  const storedWidth = Number(window.localStorage.getItem(LEFT_PANEL_WIDTH_STORAGE_KEY));
-
-  return Number.isFinite(storedWidth) ? clampLeftPanelWidth(storedWidth) : DEFAULT_LEFT_PANEL_WIDTH;
+  const preferences = readWorkspacePanelPreferences(
+    typeof window === "undefined" ? null : window.localStorage
+  );
+  return clampLeftPanelWidth(preferences.leftPanelWidth);
 }
 
 function readStoredRightPanelWidth(): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_RIGHT_PANEL_WIDTH;
-  }
-
-  const storedWidth = Number(window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY));
-
-  return Number.isFinite(storedWidth)
-    ? clampRightPanelWidth(storedWidth)
-    : DEFAULT_RIGHT_PANEL_WIDTH;
+  const preferences = readWorkspacePanelPreferences(
+    typeof window === "undefined" ? null : window.localStorage
+  );
+  return clampRightPanelWidth(preferences.rightPanelWidth);
 }
 
 function storeLeftPanelWidth(width: number): void {
-  window.localStorage.setItem(LEFT_PANEL_WIDTH_STORAGE_KEY, String(width));
+  writeWorkspacePanelPreferences(window.localStorage, { leftPanelWidth: width });
 }
 
 function storeRightPanelWidth(width: number): void {
-  window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(width));
+  writeWorkspacePanelPreferences(window.localStorage, { rightPanelWidth: width });
 }
 
 function clampLeftPanelWidth(width: number): number {
