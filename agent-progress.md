@@ -192,3 +192,9 @@ Short English-only working log for the current agent context. Older records are 
 
 - Made detail-preview tag rendering tolerate templates whose runtime data omits `tags`.
 - Focused template preview tests pass 3/3; Web lint and typecheck pass.
+
+### 2026-07-17 - Refocus the repository README
+
+- Reworked the README around the problem, approval flow, and boundary between AI suggestions, deterministic validation, and user-authorized cloud mutation.
+- Kept the AWS/Terraform-first MVP and provider-neutral product direction explicit while removing repeated implementation detail.
+- Verified every relative README link and ran `pnpm harness:check` successfully. This was documentation-only, so runtime builds and product tests were not rerun.
