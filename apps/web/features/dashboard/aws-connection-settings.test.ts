@@ -98,17 +98,23 @@ test("settings separates failed cleanup retries from connections that can run Gi
     ),
     "utf8"
   );
+  const querySource = readFileSync(
+    fileURLToPath(new URL("./connection-queries.ts", import.meta.url)),
+    "utf8"
+  );
 
-  assert.match(source, /listAwsConnectionSettings/);
+  assert.match(source, /useAwsConnectionSettingsQuery/);
   assert.match(source, /deriveAwsConnectionSettingsState/);
-  assert.match(source, /setConnections\(loadedState\.activeConnections\)/);
-  assert.match(source, /setCleanupRetries\(loadedState\.cleanupRetries\)/);
+  assert.match(source, /const connections = connectionSettings\.activeConnections/);
+  assert.match(source, /const cleanupRetries = connectionSettings\.cleanupRetries/);
+  assert.match(querySource, /listAwsConnectionSettings/);
+  assert.match(querySource, /queryKeys\.awsConnectionSettings/);
   assert.match(source, /정리 재시도 필요/);
   assert.match(source, /이전 AWS 연결 정리를 완료해야 같은 계정을 다시 연결할 수 있습니다\./);
   assert.match(source, /onClick=\{\(\) => void removeConnection\(retry\.id\)\}/);
   assert.match(source, /AWS 연결 정리 재시도/);
   assert.match(source, /관리 리소스 정리 재시도/);
-  assert.match(source, /connections\.length === 0 && cleanupRetries\.length === 0/);
+  assert.match(source, /connectionsQuery\.isError && connections\.length === 0 && cleanupRetries\.length === 0/);
   assert.match(source, /AWS 연결 정리 재시도 닫기/);
 });
 

@@ -86,7 +86,6 @@ const terraformFargateIamActions = [
   "iam:DeleteRolePermissionsBoundary",
   "iam:AttachRolePolicy",
   "iam:DetachRolePolicy",
-  "iam:PassRole",
   "iam:CreateServiceLinkedRole"
 ] as const;
 const githubCodeConnectionActions = [
@@ -100,6 +99,17 @@ const githubCodeConnectionActions = [
   "codeconnections:DeleteConnection",
   "codestar-connections:PassConnection",
   "codestar-connections:UseConnection"
+] as const;
+const terraformPassRoleResourcePattern = "arn:aws:iam::*:role/*";
+const terraformPassRoleServices = [
+  "autoscaling.amazonaws.com",
+  "codebuild.amazonaws.com",
+  "codedeploy.amazonaws.com",
+  "codepipeline.amazonaws.com",
+  "ec2.amazonaws.com",
+  "ecs-tasks.amazonaws.com",
+  "eks.amazonaws.com",
+  "lambda.amazonaws.com"
 ] as const;
 
 export type AwsConnectionRetentionPolicy = {
@@ -1339,6 +1349,16 @@ function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
+        Action: "iam:PassRole",
+        Resource: terraformPassRoleResourcePattern,
+        Condition: {
+          StringEquals: {
+            "iam:PassedToService": terraformPassRoleServices
+          }
+        }
+      },
+      {
+        Effect: "Allow",
         Action: [
           "ce:GetCostAndUsage",
           "ce:GetDimensionValues",
@@ -1596,6 +1616,13 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "            Condition:",
     "              StringNotEquals:",
     '                iam:PassedToService: "codebuild.amazonaws.com"',
+    "          - Effect: Allow",
+    "            Action: iam:PassRole",
+    '            Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/*"',
+    "            Condition:",
+    "              StringEquals:",
+    "                iam:PassedToService:",
+    ...terraformPassRoleServices.map((service) => `                  - ${service}`),
     "          - Effect: Allow",
     "            Action:",
     "              - ce:GetCostAndUsage",

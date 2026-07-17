@@ -37,6 +37,7 @@ import {
 } from "./deployment-service.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
 import {
+  cleanupPreparedTerraformWorkspace,
   createTerraformFilesSafetyContent,
   prepareTerraformWorkspace as defaultPrepareTerraformWorkspace,
   type PreparedTerraformWorkspace
@@ -124,6 +125,7 @@ export async function runDeploymentDestroy(
     options.executeApplicationCleanup ?? defaultExecuteApplicationCleanup;
 
   let workspace: PreparedTerraformWorkspace | undefined;
+  let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   let deploymentId: string | undefined;
   let destroySucceeded = false;
   let failureRecorded = false;
@@ -193,17 +195,21 @@ export async function runDeploymentDestroy(
       requireCurrentDestroyPlanArtifact(deployment, repository),
       requireDeploymentAwsConnection(deployment, input.accessContext, repository)
     ]);
+    workspacePromise = prepareTerraformWorkspace({
+      objectKey: terraformArtifact.objectKey,
+      fileName: terraformArtifact.fileName,
+      contentType: terraformArtifact.contentType
+    }).then((preparedWorkspace) => {
+      workspace = preparedWorkspace;
+      return preparedWorkspace;
+    });
     const [planBuffer, preparedWorkspace, stateBuffer] = await Promise.all([
       applyArtifactStorage.downloadDeploymentArtifact({
         deploymentId: deployment.id,
         planArtifactId: currentPlanArtifact.id,
         objectKey: currentPlanArtifact.objectKey
       }),
-      prepareTerraformWorkspace({
-        objectKey: terraformArtifact.objectKey,
-        fileName: terraformArtifact.fileName,
-        contentType: terraformArtifact.contentType
-      }),
+      workspacePromise,
       applyArtifactStorage.downloadDeploymentState({
         deploymentId: deployment.id,
         objectKey: deployment.stateObjectKey ?? ""
@@ -386,12 +392,15 @@ export async function runDeploymentDestroy(
 
     throw error;
   } finally {
-    await workspace?.cleanup();
-    if (destroyLeaseFence && repository.projectExecutionLeaseRepository) {
-      await releaseProjectExecutionLease(
-        destroyLeaseFence,
-        repository.projectExecutionLeaseRepository
-      ).catch(() => false);
+    try {
+      await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
+    } finally {
+      if (destroyLeaseFence && repository.projectExecutionLeaseRepository) {
+        await releaseProjectExecutionLease(
+          destroyLeaseFence,
+          repository.projectExecutionLeaseRepository
+        ).catch(() => false);
+      }
     }
   }
 }
@@ -413,28 +422,36 @@ async function runApplicationOnlyDestroy(input: {
   let applicationLeaseFence:
     | { projectId: string; holderId: string; fencingVersion: number }
     | undefined;
-  const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
-    requireDeploymentTerraformArtifact(input.deployment, input.repository),
-    requireCurrentDestroyPlanArtifact(input.deployment, input.repository),
-    requireDeploymentAwsConnection(
-      input.deployment,
-      input.input.accessContext,
-      input.repository
-    )
-  ]);
-  const [planBuffer, workspace] = await Promise.all([
-    input.applyArtifactStorage.downloadDeploymentArtifact({
-      deploymentId: input.deployment.id,
-      planArtifactId: currentPlanArtifact.id,
-      objectKey: currentPlanArtifact.objectKey
-    }),
-    input.prepareTerraformWorkspace({
-      objectKey: terraformArtifact.objectKey,
-      fileName: terraformArtifact.fileName,
-      contentType: terraformArtifact.contentType
-    })
-  ]);
+  let workspace: PreparedTerraformWorkspace | undefined;
+  let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   try {
+    const [terraformArtifact, currentPlanArtifact, awsConnection] = await Promise.all([
+      requireDeploymentTerraformArtifact(input.deployment, input.repository),
+      requireCurrentDestroyPlanArtifact(input.deployment, input.repository),
+      requireDeploymentAwsConnection(
+        input.deployment,
+        input.input.accessContext,
+        input.repository
+      )
+    ]);
+    workspacePromise = input
+      .prepareTerraformWorkspace({
+        objectKey: terraformArtifact.objectKey,
+        fileName: terraformArtifact.fileName,
+        contentType: terraformArtifact.contentType
+      })
+      .then((preparedWorkspace) => {
+        workspace = preparedWorkspace;
+        return preparedWorkspace;
+      });
+    const [planBuffer, preparedWorkspace] = await Promise.all([
+      input.applyArtifactStorage.downloadDeploymentArtifact({
+        deploymentId: input.deployment.id,
+        planArtifactId: currentPlanArtifact.id,
+        objectKey: currentPlanArtifact.objectKey
+      }),
+      workspacePromise
+    ]);
     const cleanupPlan = parseApplicationCleanupPlan(planBuffer, input.deployment);
     if (input.repository.projectExecutionLeaseRepository) {
       const lease = await acquireProjectExecutionLease(
@@ -457,9 +474,11 @@ async function runApplicationOnlyDestroy(input: {
         );
       }
     }
-    const terraformArtifactContent = await input.readTerraformArtifactFile(workspace.mainFilePath);
+    const terraformArtifactContent = await input.readTerraformArtifactFile(
+      preparedWorkspace.mainFilePath
+    );
     assertTerraformArtifactIsSafe(
-      createTerraformFilesSafetyContent(workspace.terraformFiles, terraformArtifactContent),
+      createTerraformFilesSafetyContent(preparedWorkspace.terraformFiles, terraformArtifactContent),
       { liveProfile: input.deployment.liveProfile }
     );
     assertDeploymentDestroyPreconditions({
@@ -519,12 +538,15 @@ async function runApplicationOnlyDestroy(input: {
     if (!completed) throw new DeploymentNotFoundError("Deployment not found");
     return { deployment: completed, terraform: input.terraform };
   } finally {
-    await workspace.cleanup();
-    if (applicationLeaseFence && input.repository.projectExecutionLeaseRepository) {
-      await releaseProjectExecutionLease(
-        applicationLeaseFence,
-        input.repository.projectExecutionLeaseRepository
-      ).catch(() => false);
+    try {
+      await cleanupPreparedTerraformWorkspace({ workspace, workspacePromise });
+    } finally {
+      if (applicationLeaseFence && input.repository.projectExecutionLeaseRepository) {
+        await releaseProjectExecutionLease(
+          applicationLeaseFence,
+          input.repository.projectExecutionLeaseRepository
+        ).catch(() => false);
+      }
     }
   }
 }
@@ -600,6 +622,10 @@ function parseApplicationCleanupPlan(
   content: Buffer,
   deployment: DeploymentRecord
 ): ApplicationCleanupPlanSummary {
+  if (!deployment.targetKind) {
+    throw new DeploymentConflictError("Deployment target kind is missing");
+  }
+
   let value: unknown;
   try {
     value = JSON.parse(content.toString("utf8"));
@@ -626,7 +652,7 @@ function parseApplicationCleanupPlan(
   }
   return {
     releaseId: record["releaseId"],
-    runtimeTargetKind: deployment.targetKind!,
+    runtimeTargetKind: deployment.targetKind,
     currentRevision: record["currentRevision"],
     previousRevision: record["previousRevision"]
   };

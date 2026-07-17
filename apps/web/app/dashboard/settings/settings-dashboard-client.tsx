@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -9,7 +10,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AwsConnection,
   AwsCodeConnectionResponse,
@@ -30,12 +31,14 @@ import {
   getAwsCodeConnection,
   getAwsConnectionDeletionPreview,
   getAwsConnectionCloudFormationTemplate,
-  listAwsConnectionSettings,
   refreshAwsCodeConnection,
   testAwsConnection,
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
 import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
+import { useAwsConnectionSettingsQuery } from "../../../features/dashboard/connection-queries";
+import { useAuth } from "../../../components/auth/auth-provider";
+import { invalidateAwsConnectionQueries } from "../../../components/query/dashboard-query-invalidation";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   deriveAwsConnectionSettingsState,
@@ -43,8 +46,6 @@ import {
 } from "../../../features/dashboard/aws-connection-settings-state";
 import styles from "../dashboard-tools.module.css";
 import { GitHubAccountSettings } from "./github-account-settings";
-
-type SettingsLoadState = "loading" | "ready" | "error";
 
 const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "서울", value: "ap-northeast-2" },
@@ -54,11 +55,23 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
 
 // AWS Role 생성 안내, CloudFormation 이동, 연결 검증과 삭제를 관리합니다.
 export function SettingsDashboardClient() {
-  const [connections, setConnections] = useState<readonly AwsConnection[]>([]);
-  const [verifiedConnections, setVerifiedConnections] = useState<readonly AwsConnection[]>([]);
-  const [cleanupRetries, setCleanupRetries] =
-    useState<readonly AwsConnectionCleanupRetryDisplay[]>([]);
-  const [loadState, setLoadState] = useState<SettingsLoadState>("loading");
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const connectionsQuery = useAwsConnectionSettingsQuery();
+  const connectionSettings = useMemo(
+    () =>
+      connectionsQuery.data
+        ? deriveAwsConnectionSettingsState(connectionsQuery.data)
+        : {
+            activeConnections: [] as readonly AwsConnection[],
+            verifiedConnections: [] as readonly AwsConnection[],
+            cleanupRetries: [] as readonly AwsConnectionCleanupRetryDisplay[]
+          },
+    [connectionsQuery.data]
+  );
+  const connections = connectionSettings.activeConnections;
+  const verifiedConnections = connectionSettings.verifiedConnections;
+  const cleanupRetries = connectionSettings.cleanupRetries;
   const [actionPending, setActionPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [region, setRegion] = useState("ap-northeast-2");
@@ -75,35 +88,18 @@ export function SettingsDashboardClient() {
   const modalOverlayRef = useRef<HTMLDivElement>(null);
   const modalDialogRef = useRef<HTMLElement>(null);
   const modalCloseButtonRef = useRef<HTMLButtonElement>(null);
+
   // 저장된 AWS 연결 목록을 다시 읽고 현재 상태를 최신으로 맞춥니다.
   async function loadConnections(): Promise<void> {
     setErrorMessage("");
-    try {
-      const loadedSettings = await listAwsConnectionSettings();
-      const loadedState = deriveAwsConnectionSettingsState(loadedSettings);
-      const loadedVerifiedConnections = loadedState.verifiedConnections;
-      setConnections(loadedState.activeConnections);
-      setVerifiedConnections(loadedVerifiedConnections);
-      setCleanupRetries(loadedState.cleanupRetries);
-      setSelectedBuildAwsConnectionId((current) =>
-        loadedVerifiedConnections.some((connection) => connection.id === current)
-          ? current
-          : loadedVerifiedConnections.length === 1
-            ? (loadedVerifiedConnections[0]?.id ?? "")
-            : ""
-      );
-      const codeConnectionEntries = await Promise.all(
-        loadedVerifiedConnections.map(async (connection) => [
-          connection.id,
-          await getAwsCodeConnection(connection.id)
-        ] as const)
-      );
-      setCodeConnections(Object.fromEntries(codeConnectionEntries));
-      setLoadState("ready");
-    } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 불러오지 못했습니다."));
-      setLoadState("error");
+    const result = await connectionsQuery.refetch();
+    if (result.error) {
+      setErrorMessage(getApiErrorMessage(result.error, "AWS 연결을 불러오지 못했습니다."));
     }
+  }
+
+  async function invalidateConnections(): Promise<void> {
+    await invalidateAwsConnectionQueries(queryClient, user?.id);
   }
 
   // 새 연결의 External ID와 Role 이름을 만들고 CloudFormation 실행 정보를 준비합니다.
@@ -117,7 +113,7 @@ export function SettingsDashboardClient() {
       });
       setSetupConnection(created.awsConnection);
       setCloudFormation(template);
-      await loadConnections();
+      await invalidateConnections();
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS 연결 준비에 실패했습니다."));
     } finally {
@@ -160,7 +156,7 @@ export function SettingsDashboardClient() {
       setSetupConnection(null);
       setCloudFormation(null);
       setAccountId("");
-      await loadConnections();
+      await invalidateConnections();
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS Role 검증에 실패했습니다."));
     } finally {
@@ -175,7 +171,7 @@ export function SettingsDashboardClient() {
     setErrorMessage("");
     try {
       await testAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
-      await loadConnections();
+      await invalidateConnections();
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error, "AWS 연결 테스트에 실패했습니다."));
     } finally {
@@ -207,7 +203,7 @@ export function SettingsDashboardClient() {
         confirmationToken: deletionPreview.confirmationToken
       });
       setDeletionPreview(null);
-      await loadConnections();
+      await invalidateConnections();
     } catch (error) {
       setDeletionPreview(null);
       setErrorMessage(getApiErrorMessage(error, "AWS 연결을 삭제하지 못했습니다."));
@@ -257,10 +253,38 @@ export function SettingsDashboardClient() {
     }
   }
 
-  // 화면 진입 시 기존 연결을 한 번 불러옵니다.
   useEffect(() => {
-    void loadConnections();
-  }, []);
+    setSelectedBuildAwsConnectionId((current) =>
+      verifiedConnections.some((connection) => connection.id === current)
+        ? current
+        : verifiedConnections.length === 1
+          ? (verifiedConnections[0]?.id ?? "")
+          : ""
+    );
+  }, [verifiedConnections]);
+
+  useEffect(() => {
+    let active = true;
+
+    void Promise.all(
+      verifiedConnections.map(async (connection) => [
+        connection.id,
+        await getAwsCodeConnection(connection.id)
+      ] as const)
+    )
+      .then((entries) => {
+        if (active) setCodeConnections(Object.fromEntries(entries));
+      })
+      .catch((error) => {
+        if (active) {
+          setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결 상태를 불러오지 못했습니다."));
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [verifiedConnections]);
 
   useEffect(() => {
     if (!showAwsRequiredModal && !deletionPreview) return;
@@ -285,15 +309,16 @@ export function SettingsDashboardClient() {
     <div className="dashboardRouteStack">
       <header className="dashboardPageHeader dashboardPageHeaderCompact">
         <div><h1>설정</h1></div>
-        <button className={styles.iconAction} aria-label="연결 새로고침" onClick={() => void loadConnections()} title="새로고침" type="button"><RefreshCw size={17} /></button>
+        <button className={styles.iconAction} aria-label="연결 새로고침" disabled={connectionsQuery.isFetching} onClick={() => void loadConnections()} title="새로고침" type="button"><RefreshCw size={17} /></button>
       </header>
 
-      {loadState === "loading" ? (
+      {connectionsQuery.isPending && !connectionsQuery.data ? (
         <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
-      ) : loadState === "error" && connections.length === 0 && cleanupRetries.length === 0 ? (
-        <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
+      ) : connectionsQuery.isError && connections.length === 0 && cleanupRetries.length === 0 ? (
+        <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={getApiErrorMessage(connectionsQuery.error, "AWS 연결을 불러오지 못했습니다.")} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
       ) : (
         <>
+          {connectionsQuery.isError ? <p className={styles.errorBand}>{getApiErrorMessage(connectionsQuery.error, "AWS 연결을 갱신하지 못했습니다.")}</p> : null}
           {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
 
           <section className={styles.settingsSection} id="aws-account-connection">

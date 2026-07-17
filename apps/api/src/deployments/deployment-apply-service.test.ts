@@ -660,6 +660,41 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   );
 });
 
+test("runDeploymentApply cleans a full-stack workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentApply(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-terraform-apply",
+              mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
+});
+
 test("infrastructure ECS apply synchronizes target metadata after result storage", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createApprovedDeploymentRecord({
@@ -1243,6 +1278,46 @@ test("application scope releases the approved artifact without Terraform init or
   assert.equal(repository.completeCalls, 1);
   assert.equal(applyArtifactStorage.uploadedStates.length, 0);
   assert.equal(targetSyncCalls, 0);
+});
+
+test("application scope cleans its prepared workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentApply(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          readTerraformArtifactFile: async () => terraformArtifactContent,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-application-release",
+              mainFilePath: "C:/tmp/sketchcatch-application-release/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
 });
 
 test("application partial failure preserves the successful ECS state without completing Deployment", async () => {

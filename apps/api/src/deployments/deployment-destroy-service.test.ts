@@ -395,6 +395,41 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
   );
 });
 
+test("runDeploymentDestroy cleans a full-stack workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("destroy plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroy(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-terraform-destroy",
+              mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /destroy plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
+});
+
 test("application cleanup restores its release without Terraform state or destroy apply", async () => {
   const repository = new FakeDeploymentRepository();
   repository.projectExecutionLeaseRepository = createTrackingLeaseRepository(
@@ -465,6 +500,91 @@ test("application cleanup restores its release without Terraform state or destro
   assert.equal(result.deployment.status, "DESTROYED");
   assert.equal(result.terraform.init, null);
   assert.equal(result.terraform.destroy, null);
+});
+
+test("application cleanup cleans its prepared workspace when plan download fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate",
+    stateObjectKey: null
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let cleanupCalls = 0;
+
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("cleanup plan download failed");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroy(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          readTerraformArtifactFile: async () => terraformArtifactContent,
+          prepareTerraformWorkspace: async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            return {
+              workdir: "C:/tmp/sketchcatch-application-cleanup",
+              mainFilePath: "C:/tmp/sketchcatch-application-cleanup/main.tf",
+              terraformFiles: [],
+              cleanup: async () => {
+                cleanupCalls += 1;
+              }
+            };
+          }
+        }
+      ),
+    /cleanup plan download failed/
+  );
+
+  assert.equal(cleanupCalls, 1);
+});
+
+test("application cleanup rejects a deployment without a runtime target kind", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applicationPlanBuffer = Buffer.from(
+    JSON.stringify({
+      schemaVersion: 1,
+      kind: "application_release_cleanup_plan",
+      deploymentId,
+      projectId,
+      releaseId: "88888888-8888-4888-8888-888888888888",
+      runtimeTargetKind: null,
+      currentRevision: "task-definition/api:42",
+      previousRevision: "task-definition/api:41"
+    })
+  );
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    scope: "application",
+    targetKind: null,
+    stateObjectKey: null,
+    approvedTfplanHash: createSha256(applicationPlanBuffer)
+  });
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroy(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage: new FakeApplyArtifactStorage(applicationPlanBuffer),
+          readTerraformArtifactFile: async () => terraformArtifactContent,
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-application-cleanup",
+            mainFilePath: "C:/tmp/sketchcatch-application-cleanup/main.tf",
+            terraformFiles: [],
+            cleanup: async () => undefined
+          }),
+          executeApplicationCleanup: async () => {
+            throw new Error("application cleanup must not run without a target kind");
+          }
+        }
+      ),
+    /Deployment target kind is missing/
+  );
 });
 
 test("runDeploymentDestroy reports Terraform apply timeouts without marking duration as completed", async () => {

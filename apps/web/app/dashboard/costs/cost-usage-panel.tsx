@@ -3,7 +3,6 @@
 import { AlertTriangle, RefreshCw, TrendingUp, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AwsConnection,
   CostUsageAnalysisRange,
   CostUsageAnalysisResponse,
   CostUsageTrendPoint
@@ -33,13 +32,11 @@ import {
   normalizeCostUsageProjectKey,
   selectCostUsageProject
 } from "../../../features/costs/cost-usage-project-view";
-import { createCostRequestCoordinator } from "../../../features/costs/cost-request-coordinator";
 import { createCostUsageDisplayCopy } from "../../../features/costs/cost-usage-copy";
-import { listAwsConnections, listCostUsageAnalysis } from "../../../features/workspace/api";
+import { useCostUsageQuery } from "../../../features/costs/cost-queries";
+import { useAwsConnectionsQuery } from "../../../features/dashboard/connection-queries";
 import { CostMetric, formatUsd } from "./cost-dashboard-presentation";
 import styles from "../dashboard-tools.module.css";
-
-type CostLoadState = "loading" | "ready" | "error";
 
 const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
   { label: "최근 7일", value: "7d" },
@@ -48,14 +45,29 @@ const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
 ];
 
 export function CostUsagePanel() {
-  const [connections, setConnections] = useState<readonly AwsConnection[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
   const [range, setRange] = useState<CostUsageAnalysisRange>("30d");
-  const [data, setData] = useState<CostUsageAnalysisResponse | null>(null);
-  const [loadState, setLoadState] = useState<CostLoadState>("loading");
-  const [errorMessage, setErrorMessage] = useState("");
-  const requestCoordinatorRef = useRef(createCostRequestCoordinator());
+  const connectionsQuery = useAwsConnectionsQuery();
+  const connections = useMemo(
+    () => getVerifiedCostUsageAwsConnections(connectionsQuery.data ?? []),
+    [connectionsQuery.data]
+  );
+  const effectiveConnectionId = connections.some(
+    (connection) => connection.id === selectedConnectionId
+  )
+    ? selectedConnectionId
+    : connections[0]?.id ?? "";
+  const usageQuery = useCostUsageQuery({
+    connectionId: effectiveConnectionId,
+    enabled: connectionsQuery.isSuccess,
+    range
+  });
+  const data: CostUsageAnalysisResponse | null = usageQuery.data ?? null;
+  const isFetching = connectionsQuery.isFetching || usageQuery.isFetching;
+  const queryError = connectionsQuery.error ?? usageQuery.error;
+  const refetchUsage = () =>
+    connectionsQuery.isError ? connectionsQuery.refetch() : usageQuery.refetch();
   const projectOptions = useMemo(() => createCostUsageProjectOptions(data?.projectCosts ?? []), [data]);
   const projectSelectOptions = useMemo<readonly SelectMenuOption[]>(
     () => [
@@ -148,46 +160,18 @@ export function CostUsagePanel() {
     [data, selectedProject]
   );
 
-  async function loadCosts(nextRange = range, connectionId = selectedConnectionId): Promise<void> {
-    const request = requestCoordinatorRef.current.begin();
-    setLoadState("loading");
-    setErrorMessage("");
-    try {
-      const loadedConnections = getVerifiedCostUsageAwsConnections(
-        await listAwsConnections({ signal: request.signal })
-      );
-      if (!request.isCurrent()) return;
-      const selectedId = loadedConnections.some((connection) => connection.id === connectionId)
-        ? connectionId
-        : loadedConnections[0]?.id ?? "";
-      const result = await listCostUsageAnalysis({
-        range: nextRange,
-        ...(selectedId ? { awsConnectionId: selectedId } : {})
-      }, { signal: request.signal });
-      if (!request.isCurrent()) return;
-      setConnections(loadedConnections);
-      setSelectedConnectionId(selectedId);
-      setSelectedProjectKey((current) => normalizeCostUsageProjectKey(result.projectCosts, current));
-      setData(result);
-      setLoadState("ready");
-    } catch (error) {
-      if (request.signal.aborted || !request.isCurrent()) return;
-      setErrorMessage(error instanceof Error ? error.message : "실제 사용량을 불러오지 못했습니다.");
-      setLoadState("error");
-    }
-  }
-
-  useEffect(() => () => requestCoordinatorRef.current.dispose(), []);
   useEffect(() => {
-    void loadCosts("30d", "");
-  }, []);
+    if (data) {
+      setSelectedProjectKey((current) => normalizeCostUsageProjectKey(data.projectCosts, current));
+    }
+  }, [data]);
 
-  if (loadState === "loading" && !data) {
-    return <ProductState description="성공 배포 프로젝트의 AWS 사용량을 확인하고 있습니다." kind="loading" title="실제 사용량 불러오는 중" />;
+  if (queryError && !data) {
+    return <ProductState action={<button onClick={() => void refetchUsage()} type="button">다시 시도</button>} description={queryError instanceof Error ? queryError.message : "실제 사용량을 불러오지 못했습니다."} kind="error" title="실제 사용량을 불러오지 못했습니다" />;
   }
 
-  if (loadState === "error" && !data) {
-    return <ProductState action={<button onClick={() => void loadCosts()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="실제 사용량을 불러오지 못했습니다" />;
+  if ((connectionsQuery.isPending || usageQuery.isPending) && !data) {
+    return <ProductState description="성공 배포 프로젝트의 AWS 사용량을 확인하고 있습니다." kind="loading" title="실제 사용량 불러오는 중" />;
   }
 
   if (data?.projectCosts.length === 0) {
@@ -195,11 +179,11 @@ export function CostUsagePanel() {
       <ProductState
         action={
           <button
-            disabled={loadState === "loading"}
-            onClick={() => void loadCosts()}
+            disabled={isFetching}
+            onClick={() => void usageQuery.refetch()}
             type="button"
           >
-            {loadState === "loading" ? "새로고침 중" : "새로고침"}
+            {isFetching ? "새로고침 중" : "새로고침"}
           </button>
         }
         description="프로젝트를 배포하면 AWS Cost Explorer와 CloudWatch 기반 실제 사용량이 여기에 표시됩니다."
@@ -232,12 +216,11 @@ export function CostUsagePanel() {
               emptyLabel="AWS 연결 선택"
               onChange={(id) => {
                 setSelectedConnectionId(id);
-                void loadCosts(range, id);
               }}
               options={connectionSelectOptions}
               size="large"
               tone="surface"
-              value={selectedConnectionId}
+              value={effectiveConnectionId}
             />
           </div>
           <div className={styles.controlField}>
@@ -248,7 +231,6 @@ export function CostUsagePanel() {
               onChange={(value) => {
                 const nextRange = value as CostUsageAnalysisRange;
                 setRange(nextRange);
-                void loadCosts(nextRange);
               }}
               options={COST_USAGE_RANGE_OPTIONS}
               size="large"
@@ -258,13 +240,13 @@ export function CostUsagePanel() {
           </div>
         </div>
         <button
-          aria-busy={loadState === "loading"}
-          aria-label={loadState === "loading" ? "실제 사용량 새로고침 중" : "실제 사용량 새로고침"}
+          aria-busy={isFetching}
+          aria-label={isFetching ? "실제 사용량 새로고침 중" : "실제 사용량 새로고침"}
           className={styles.iconAction}
-          data-loading={loadState === "loading"}
-          disabled={loadState === "loading"}
-          onClick={() => void loadCosts()}
-          title={loadState === "loading" ? "새로고침 중" : "새로고침"}
+          data-loading={isFetching}
+          disabled={isFetching}
+          onClick={() => void usageQuery.refetch()}
+          title={isFetching ? "새로고침 중" : "새로고침"}
           type="button"
         >
           <RefreshCw aria-hidden="true" size={17} />
@@ -272,7 +254,7 @@ export function CostUsagePanel() {
       </div>
 
       {displayCopy.sampleNotice ? <p className="dashboardInformationBand" role="status">{displayCopy.sampleNotice}</p> : null}
-      {errorMessage ? <p className={styles.errorBand}>{errorMessage}</p> : null}
+      {queryError ? <p className={styles.errorBand}>{queryError instanceof Error ? queryError.message : "실제 사용량을 갱신하지 못했습니다."}</p> : null}
 
       <section className={styles.metricGrid}>
         <CostMetric icon={<WalletCards size={18} />} label={selectedProject ? `${selectedProject.projectName} ${displayCopy.metricCostLabel}` : displayCopy.metricCostLabel} value={formatUsd(currentCost)} />

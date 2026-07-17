@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -17,6 +18,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } 
 import { BoardThumbnailImage } from "../../../components/architecture-board/BoardThumbnailImage";
 import { TemplateGallery } from "../../../components/templates/TemplateGallery";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
+import { useAuth } from "../../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../../components/query/dashboard-query-invalidation";
 import {
   createProject,
   deleteProject,
@@ -84,6 +87,8 @@ export function WorkspaceStartClient({
   readonly initialStartKind?: WorkspaceStartKind | undefined;
   readonly initialTemplateId?: string | undefined;
 } = {}) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const [title, setTitle] = useState("");
   const projectNameInputRef = useRef<HTMLInputElement>(null);
@@ -211,6 +216,7 @@ export function WorkspaceStartClient({
         try {
           const project = await createProject({ name: projectName });
           createdProjectId = project.id;
+          await invalidateProjectQueries(queryClient, user?.id);
 
           if (action.kind === "createRepositoryProject") {
             clearWorkspaceStartForm();
