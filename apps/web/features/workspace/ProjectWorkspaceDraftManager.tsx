@@ -19,6 +19,7 @@ import {
   type RepositoryAnalysisHandoffLocation
 } from "./repository-template-handoff";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
+import { WorkspaceLoadingSkeleton } from "./WorkspaceLoadingSkeleton";
 import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
@@ -140,7 +141,12 @@ function ProjectWorkspaceDraftManagerCacheScope(props: ProjectWorkspaceDraftMana
   }, [explicitWorkspaceId]);
 
   if (!cacheClaim) {
-    return <WorkspaceNotice title="Project workspace" body="프로젝트 복구 상태를 확인하고 있습니다." />;
+    return (
+      <WorkspaceLoadingSkeleton
+        message="프로젝트 복구 상태를 확인하고 있습니다."
+        projectName={resolveProjectWorkspaceTitle(props.projectName)}
+      />
+    );
   }
 
   return (
@@ -821,9 +827,9 @@ function ProjectWorkspaceDraftManagerState({
 
   if (loadState === "loading") {
     return (
-      <WorkspaceNotice
-        title="Project loading"
-        body="DB에 저장된 프로젝트 draft를 불러오는 중입니다."
+      <WorkspaceLoadingSkeleton
+        message="저장된 프로젝트 Draft를 불러오는 중입니다."
+        projectName={displayProjectName}
       />
     );
   }
