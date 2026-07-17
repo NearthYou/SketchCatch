@@ -76,7 +76,9 @@ export function CicdConsoleScreen({
   readinessRefreshRequestId = 0
 }: {
   readonly isVisible: boolean;
-  readonly onOpenDirectDeployment?: (() => void) | undefined;
+  readonly onOpenDirectDeployment?: (
+    (scope: "application" | "full_stack" | null) => void
+  ) | undefined;
   readonly onOpenLiveObservation?: ((selection?: LiveObservationSelection) => void) | undefined;
   readonly projectId: string;
   readonly readinessRefreshRequestId?: number | undefined;
@@ -789,8 +791,8 @@ export function CicdConsoleScreen({
         </header>
 
         <p className={styles.deploymentHint}>
-          승인된 Terraform apply plan을 기준으로 GitHub에 배포 브랜치와 PR을 만듭니다. PR을
-          merge하기 전에는 CI/CD 배포가 시작되지 않습니다.
+          이 PR은 이미 배포된 앱의 후속 변경을 자동 배포하도록 Workflow와 Repository 설정을
+          설치합니다. PR merge만으로 최초 앱 배포를 시작하지 않습니다.
         </p>
 
         <div className={handoffStyles.readiness} aria-label="CI/CD PR 준비 상태">
@@ -843,10 +845,13 @@ export function CicdConsoleScreen({
                       </ul>
                     ) : null}
                   </div>
-                  {!item.ready && item.action === "approve_apply_plan" ? (
+                  {!item.ready &&
+                  (item.action === "approve_apply_plan" ||
+                    item.action === "deploy_initial_application") ? (
                     <button
                       className={styles.deploymentSecondaryButton}
-                      onClick={onOpenDirectDeployment}
+                      onClick={() => onOpenDirectDeployment?.(item.directDeploymentScope)}
+                      disabled={!onOpenDirectDeployment}
                       type="button"
                     >
                       {item.actionLabel}

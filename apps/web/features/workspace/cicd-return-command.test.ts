@@ -4,6 +4,7 @@ import {
   acknowledgeInitialCicdReturnCommand,
   cancelPendingCicdReturn,
   completePendingCicdReturn,
+  completePendingCicdReturnAfterDeployment,
   createPendingCicdReturn,
   resolveInitialCicdReturnCommand
 } from "./cicd-return-command";
@@ -135,4 +136,48 @@ test("does not consume a stale return after closing Direct and approving on a la
     }),
     null
   );
+});
+
+test("returns to CI/CD only after the initial application deployment succeeds", () => {
+  const result = completePendingCicdReturnAfterDeployment({
+    pending: createPendingCicdReturn("project-1", "initial_application_release"),
+    deployment: {
+      projectId: "project-1",
+      scope: "application",
+      status: "SUCCESS"
+    },
+    currentRefreshRequestId: 4
+  });
+
+  assert.deepEqual(result, {
+    activeScreen: "cicd",
+    readinessRefreshRequestId: 5,
+    pending: null
+  });
+});
+
+test("keeps the initial application return pending at plan approval or deployment failure", () => {
+  const pending = createPendingCicdReturn("project-1", "initial_application_release");
+
+  assert.equal(
+    completePendingCicdReturn({
+      pending,
+      approvedDeployment: { projectId: "project-1", currentPlanOperation: "apply" },
+      currentRefreshRequestId: 4
+    }),
+    null
+  );
+  for (const deployment of [
+    { projectId: "project-1", scope: "application" as const, status: "FAILED" },
+    { projectId: "project-1", scope: "infrastructure" as const, status: "SUCCESS" }
+  ]) {
+    assert.equal(
+      completePendingCicdReturnAfterDeployment({
+        pending,
+        deployment,
+        currentRefreshRequestId: 4
+      }),
+      null
+    );
+  }
 });

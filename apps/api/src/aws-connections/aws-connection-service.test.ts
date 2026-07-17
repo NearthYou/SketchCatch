@@ -334,6 +334,18 @@ test("AWS connection policy authorizes only SketchCatch-managed CodeBuild names"
   assert.match(template.templateBody, /PermissionsBoundary/);
   assert.match(template.templateBody, /iam:PutRolePolicy/);
   assert.match(template.templateBody, /iam:GetRolePolicy/);
+  assert.match(template.templateBody, /ecr:GetAuthorizationToken/);
+  assert.match(template.templateBody, /ecr:BatchCheckLayerAvailability/);
+  assert.match(template.templateBody, /ecr:GetDownloadUrlForLayer/);
+  assert.match(template.templateBody, /ecr:BatchGetImage/);
+  assert.match(template.templateBody, /ecr:InitiateLayerUpload/);
+  assert.match(template.templateBody, /ecr:UploadLayerPart/);
+  assert.match(template.templateBody, /ecr:CompleteLayerUpload/);
+  assert.match(template.templateBody, /ecr:PutImage/);
+  assert.match(
+    template.templateBody,
+    /repository\/sketchcatch-\*-build-cache/
+  );
 });
 
 test("AWS connection Terraform permissions scope PassRole to runtime services", async () => {

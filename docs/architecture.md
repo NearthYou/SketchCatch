@@ -298,13 +298,15 @@ ECS/ALB/ECR/IAM/CloudWatch runtime은 기존 state key를 유지하고, Route53/
 
 웹 포함 ECS/Fargate의 사용자 AWS CodeBuild는 active SourceRepository의 확정 commit을 checkout해 API OCI
 archive와 frontend archive를 한 번 만들고 SketchCatch 내부 Artifact S3에 업로드하는 build-only 경계다.
-CodeBuild service role에는 ECR, ECS, 서비스 S3, CloudFront, `iam:PassRole` 권한을 주지 않으며 permissions
-boundary를 반드시 적용한다. Repository의 Dockerfile과 package lifecycle script는 이 제한된 경계에서만 실행한다.
+CodeBuild service role에는 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront, `iam:PassRole` 권한을 주지 않으며 permissions
+boundary를 반드시 적용한다. Docker layer 재사용을 위해 사용자 AWS 계정의 프로젝트 전용 build-cache ECR Repository에만 정확한 layer read/write 권한을 허용한다. Repository의 Dockerfile과 package lifecycle script는 이 제한된 경계에서만 실행한다.
 
 SketchCatch API는 프로젝트 단위 lease와 fencing version을 저장하고 CodeBuild 시작·상태 조회·중단을 소유한다. Direct, App release-run, Infra workflow는 같은 lease를 재사용하며 충돌 시 대기열 없이 고정된 문구로 즉시 차단한다.
 Terraform Apply 뒤 실제 ECR/ECS/S3/CloudFront 변경은 trusted ECS RunTask worker가 승인된 output과 resource
 inventory를 재검증한 exact-resource 세션으로 수행한다. App GitHub Actions는 AWS를 직접 변경하지 않고 SketchCatch release-run API만 호출한다. 사용자가 `workflow_dispatch`로 명시적으로 승인한 Infra GitHub Actions는 OIDC로 한정된 AWS role을 획득해 같은 checkout·job에서 Terraform Plan과 해당 binary `tfplan` Apply를 수행한다. GitHub Environment는 OIDC subject scope에 사용할 수 있지만 별도 수동 approval gate를 추가하지 않는다. 이 구조는 App에서 승인한 candidate를 재빌드하지 않고 그대로 배포하며, stale build나 worker의
 AWS mutation과 결과 저장을 차단한다.
+
+최초 ECS/Fargate API·frontend 활성화는 Direct Deployment가 담당한다. CI/CD handoff API는 승인된 인프라 Apply 증거와 현재 target에 일치하는 성공 Direct `ApplicationRelease`를 같은 서버 predicate로 다시 확인한 뒤에만 설치 PR provider를 호출한다. 설치 PR은 후속 push용 Workflow와 설정만 추가하며, PR merge 자체는 최초 앱 릴리즈나 AWS mutation을 시작하지 않는다.
 
 lease row는 terminal 뒤에도 `released` 상태로 남겨 fencing generation을 단조 증가시킨다. worker task가 중단되면
 API는 ECS task의 terminal 상태를 확인한 뒤 recovery-mode trusted worker를 dispatch하고, durable release step과

@@ -119,6 +119,19 @@ test("build environment preparation reconciles one project-scoped build environm
   assert.equal(first.buildEnvironment?.id, "build-environment-1");
   assert.equal(first.buildEnvironment?.status, "ready");
   assert.equal(first.buildEnvironment?.runtimeFingerprint.length, 64);
+  const desired = createDesiredProjectBuildEnvironment(context as Parameters<
+    typeof createDesiredProjectBuildEnvironment
+  >[0]);
+  assert.deepEqual(desired.buildCache, {
+    repositoryName: "sketchcatch-12345678-build-cache",
+    repositoryArn:
+      "arn:aws:ecr:ap-northeast-2:131404649047:repository/sketchcatch-12345678-build-cache",
+    repositoryUri:
+      "131404649047.dkr.ecr.ap-northeast-2.amazonaws.com/sketchcatch-12345678-build-cache",
+    cacheTag: "buildcache-v1-linux-amd64",
+    cacheReference:
+      "131404649047.dkr.ecr.ap-northeast-2.amazonaws.com/sketchcatch-12345678-build-cache:buildcache-v1-linux-amd64"
+  });
   assert.equal(second.buildEnvironment?.id, "build-environment-1");
   assert.deepEqual(reconciledInputs, [
     {

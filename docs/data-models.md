@@ -1051,8 +1051,8 @@ API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Dir
 
 웹 포함 ECS target은 SketchCatch가 관리하는 격리된 `ProjectBuildEnvironment`를 가진다. CodeBuild project는
 확인된 commit만 checkout하고 API OCI archive, frontend archive, 파일별 SHA-256 manifest를 만든 뒤 SketchCatch
-내부 Artifact S3의 `ReleaseCandidate` prefix에 업로드한다. CodeBuild는 ECR, ECS, 서비스 S3, CloudFront를
-변경하지 않는다. 실제 release activation은 SketchCatch trusted worker가 수행한다. Lambda, EC2/ASG, Static의
+내부 Artifact S3의 `ReleaseCandidate` prefix에 업로드한다. CodeBuild는 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront를
+변경하지 않는다. Docker layer cache는 사용자 AWS 계정의 프로젝트 전용 build-cache ECR Repository에만 읽고 쓴다. 실제 release activation은 SketchCatch trusted worker가 수행한다. Lambda, EC2/ASG, Static의
 기존 runtime adapter는 이 ECS 전용 전환과 별도로 호환한다. 사용자 임의 shell 문자열은 저장하거나 실행하지 않는다.
 Direct build를 시작하기 전에 active GitHub Source Repository의 owner/name과 CodeBuild project의 `GITHUB` source
 URL을 비교하고, source auth가 `CODECONNECTIONS`인지 확인한다. 다른 저장소, OAuth source, inactive installation은
@@ -1726,6 +1726,7 @@ type GitCicdReadinessStatus = "ready" | "action_required";
 
 type GitCicdReadinessItemKey =
   | "approved_apply_plan"
+  | "initial_application_release"
   | "source_repository"
   | "monitoring_config"
   | "deployment_target";
@@ -1738,6 +1739,7 @@ type GitCicdDeploymentTargetReadinessKey =
 
 type GitCicdReadinessAction =
   | "approve_apply_plan"
+  | "deploy_initial_application"
   | "select_repository"
   | "confirm_monitoring_config"
   | "select_aws_connection"
@@ -1753,6 +1755,7 @@ type GitCicdReadinessItem = {
   totalCount?: number | undefined;
   missingKeys: GitCicdDeploymentTargetReadinessKey[];
   action: GitCicdReadinessAction | null;
+  recommendedDeploymentScope?: "application" | "full_stack" | undefined;
 };
 
 type GitCicdReadinessSnapshot = {
@@ -1762,6 +1765,7 @@ type GitCicdReadinessSnapshot = {
   requiredActionCount: number;
   sourceDeploymentId: string | null;
   approvedApplyPlanArtifactId: string | null;
+  initialApplicationReleaseId: string | null;
   items: GitCicdReadinessItem[];
 };
 
@@ -1770,9 +1774,11 @@ type GitCicdReadinessResponse = {
 };
 ```
 
-`items`는 네 상위 항목을 유지하고, `deployment_target`은 `aws_connection`, `build_config`, `runtime_config`, `output_url` 네 세부 key의 완료 수와 누락 목록을 함께 제공한다. 모든 상위 항목이 `ready`일 때만 snapshot의 `ready`가 `true`이며, `requiredActionCount`는 `action_required`인 상위 항목 수다. `refreshing`과 `error`는 서버 저장 상태나 readiness 응답 status가 아니라 Web request state로 관리한다.
+`items`는 다섯 상위 항목을 유지하고, `deployment_target`은 `aws_connection`, `build_config`, `runtime_config`, `output_url` 네 세부 key의 완료 수와 누락 목록을 함께 제공한다. 모든 상위 항목이 `ready`일 때만 snapshot의 `ready`가 `true`이며, `requiredActionCount`는 `action_required`인 상위 항목 수다. `refreshing`과 `error`는 서버 저장 상태나 readiness 응답 status가 아니라 Web request state로 관리한다.
 
 `approved_apply_plan`은 `DeploymentPlanArtifact.operation: "apply"`인 승인 Plan만 준비 완료로 인정한다. `sourceDeploymentId`는 그 Plan의 원본 Deployment를, `approvedApplyPlanArtifactId`는 승인된 Apply Plan artifact를 가리킨다. `operation: "destroy"` Plan은 cleanup 승인과 실행에만 사용하며 readiness를 충족하거나 `approvedApplyPlanArtifactId`에 들어가지 않는다. 이 조회 DTO 자체는 Apply, Destroy, Git 변경, handoff를 승인하거나 실행하지 않는다.
+
+`sourceDeploymentId`는 `scope in (infrastructure, full_stack)`인 최신 성공 Direct Infrastructure Apply Evidence의 Deployment ID다. `initialApplicationReleaseId`는 current target의 fingerprint, confirmed commit SHA, 안전한 HTTPS Output URL과 일치하고 ReleaseCandidate·composite digest·healthy ECS·frontend VersionId/invalidation/commit marker 증거를 모두 가진 성공 Direct `ApplicationRelease` ID다. 같은 full_stack Deployment의 릴리즈이거나, 기존 bootstrap-only 환경을 복구한 별도 application-scope Deployment의 릴리즈만 인정한다. 인프라 증거가 있고 앱 증거만 없으면 `recommendedDeploymentScope`는 `application`, 인프라 증거도 없으면 `full_stack`이다.
 
 2026-07-07 추가 계약:
 

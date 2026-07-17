@@ -38,6 +38,7 @@ import { createAwsApplicationArtifactProviderVerifier } from "../artifacts/aws-a
 import type { ApplicationArtifactProviderVerification } from "../artifacts/application-artifact-registry.js";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
 import { createAwsProjectBuildEnvironmentGateway } from "../build-environments/aws-project-build-environment-gateway.js";
+import { createProjectBuildCacheIdentity } from "../build-environments/project-build-cache.js";
 import {
   createDesiredProjectBuildEnvironment,
   type ProjectBuildEnvironmentGateway
@@ -1635,7 +1636,34 @@ function createPreflightEnvironmentOverrides(
     ["SKETCHCATCH_FRONTEND_UPLOAD_URL", uploadUrls.frontendUploadUrl],
     ["SKETCHCATCH_MANIFEST_UPLOAD_URL", uploadUrls.manifestUploadUrl]
   ];
-  return values.map(([name, value]) => ({ name, value, type: "PLAINTEXT" }));
+  return [
+    ...values.map(([name, value]) => ({ name, value, type: "PLAINTEXT" as const })),
+    ...createPreflightBuildCacheEnvironmentOverrides({
+      projectId: context.deployment.projectId,
+      accountId: context.connection.accountId,
+      region: context.connection.region
+    })
+  ];
+}
+
+export function createPreflightBuildCacheEnvironmentOverrides(input: {
+  projectId: string;
+  accountId: string;
+  region: string;
+}): EnvironmentVariable[] {
+  const buildCache = createProjectBuildCacheIdentity(input);
+  return [
+    {
+      name: "SKETCHCATCH_BUILD_CACHE_REFERENCE",
+      value: buildCache.cacheReference,
+      type: "PLAINTEXT"
+    },
+    {
+      name: "SKETCHCATCH_BUILD_CACHE_REGISTRY",
+      value: `${input.accountId}.dkr.ecr.${input.region}.amazonaws.com`,
+      type: "PLAINTEXT"
+    }
+  ];
 }
 
 function collectCodeBuildExports(

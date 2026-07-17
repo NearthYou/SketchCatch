@@ -75,7 +75,40 @@ ${packageManagerSetupCommands}
     on-failure: ABORT
     commands:
       - export SKETCHCATCH_PREFLIGHT_STAGE=api_build
-      - docker build --file "\${SKETCHCATCH_DOCKERFILE_PATH}" --tag sketchcatch-preflight-api "\${SKETCHCATCH_API_SOURCE_ROOT}"
+      - |
+        set -euo pipefail
+        cold_build_api_image() {
+          docker build --file "\${SKETCHCATCH_DOCKERFILE_PATH}" --tag sketchcatch-preflight-api "\${SKETCHCATCH_API_SOURCE_ROOT}"
+        }
+        if ! command -v aws >/dev/null 2>&1 || ! docker buildx version >/dev/null 2>&1; then
+          echo "Build cache tooling is unavailable; falling back to a cold Docker build" >&2
+          cold_build_api_image
+        elif ! CACHE_PASSWORD=$(aws ecr get-login-password 2>/dev/null); then
+          echo "Build cache login is unavailable; falling back to a cold Docker build" >&2
+          cold_build_api_image
+        elif ! printf '%s' "\${CACHE_PASSWORD}" | docker login --username AWS --password-stdin "\${SKETCHCATCH_BUILD_CACHE_REGISTRY}" >/dev/null 2>&1; then
+          unset CACHE_PASSWORD
+          echo "Build cache login failed; falling back to a cold Docker build" >&2
+          cold_build_api_image
+        else
+          unset CACHE_PASSWORD
+          if ! (docker buildx create --use --name sketchcatch-builder >/dev/null 2>&1 || docker buildx use sketchcatch-builder >/dev/null 2>&1); then
+            echo "Build cache builder setup failed; falling back to a cold Docker build" >&2
+            cold_build_api_image
+          elif ! docker buildx inspect --bootstrap >/dev/null 2>&1; then
+            echo "Build cache builder failed; falling back to a cold Docker build" >&2
+            cold_build_api_image
+          elif ! docker buildx build \
+            --file "\${SKETCHCATCH_DOCKERFILE_PATH}" \
+            --tag sketchcatch-preflight-api \
+            --cache-from "type=registry,ref=\${SKETCHCATCH_BUILD_CACHE_REFERENCE}" \
+            --cache-to "type=registry,ref=\${SKETCHCATCH_BUILD_CACHE_REFERENCE},mode=max,oci-mediatypes=true,image-manifest=true,ignore-error=true" \
+            --load \
+            "\${SKETCHCATCH_API_SOURCE_ROOT}"; then
+            echo "Build cache failed; falling back to a cold Docker build" >&2
+            cold_build_api_image
+          fi
+        fi
       - export SKETCHCATCH_PREFLIGHT_STAGE=api_health
       - |
         set -euo pipefail

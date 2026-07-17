@@ -150,6 +150,7 @@ export type DirectDeploymentScreenProps = {
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
   readonly onApplyPlanApproved?: ((deployment: Deployment) => void) | undefined;
+  readonly onDeploymentSucceeded?: ((deployment: Deployment) => void) | undefined;
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onOpenLiveObservation?: (() => void) | undefined;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
@@ -159,6 +160,7 @@ export type DirectDeploymentScreenProps = {
   readonly onValidateTerraformDiagnostics: () => Promise<TerraformDiagnostic[]>;
   readonly preDeploymentCheckState: DeploymentPreDeploymentCheckState;
   readonly projectId: string;
+  readonly requestedScope?: "application" | "full_stack" | null | undefined;
   readonly projectDraftRevision?: number | null | undefined;
 };
 
@@ -169,6 +171,7 @@ export function DirectDeploymentScreen({
   diagramJson,
   hasUnsavedDeploymentBaseline,
   onApplyPlanApproved,
+  onDeploymentSucceeded,
   onConfirmationStateChange,
   onOpenFindingTerraformSource,
   onOpenLiveObservation,
@@ -177,6 +180,7 @@ export function DirectDeploymentScreen({
   onValidateTerraformDiagnostics,
   preDeploymentCheckState,
   projectId,
+  requestedScope = null,
   projectDraftRevision = null
 }: DirectDeploymentScreenProps) {
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
@@ -210,7 +214,12 @@ export function DirectDeploymentScreen({
   } | null>(null);
   const [selectedDirectStepId, setSelectedDirectStepId] =
     useState<DirectDeploymentStepId>("validation");
+  const completionCandidateDeploymentIdsRef = useRef(new Set<string>());
   const isDeploymentOverlayOpen = true;
+
+  useEffect(() => {
+    if (requestedScope) setSelectedScope(requestedScope);
+  }, [requestedScope]);
 
   const verifiedAwsConnections = useMemo(
     () => awsConnections.filter((connection) => connection.status === "verified"),
@@ -398,6 +407,15 @@ export function DirectDeploymentScreen({
   useEffect(() => {
     setSelectedDirectStepId(directDeploymentFlow.activeStepId);
   }, [directDeploymentFlow.activeStepId]);
+
+  useEffect(() => {
+    if (
+      selectedDeployment?.status === "SUCCESS" &&
+      completionCandidateDeploymentIdsRef.current.delete(selectedDeployment.id)
+    ) {
+      onDeploymentSucceeded?.(selectedDeployment);
+    }
+  }, [onDeploymentSucceeded, selectedDeployment]);
 
   useEffect(() => {
     const selection = resolveDeploymentHistorySelection({
@@ -1054,6 +1072,7 @@ export function DirectDeploymentScreen({
       type: "clear",
       deploymentId: selectedDeployment.id
     });
+    completionCandidateDeploymentIdsRef.current.add(selectedDeployment.id);
     await runRequest(async () => {
       const deployment = await executeDeployment(selectedDeployment.id);
       setDeployments((currentDeployments) =>
@@ -1071,6 +1090,12 @@ export function DirectDeploymentScreen({
       setDeploymentLogs(logs);
       setDeploymentResources(resources);
       dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
+      if (
+        deployment.status === "SUCCESS" &&
+        completionCandidateDeploymentIdsRef.current.delete(deployment.id)
+      ) {
+        onDeploymentSucceeded?.(deployment);
+      }
     }, "Terraform Apply를 시작하지 못했습니다.");
   }
 
@@ -1765,6 +1790,13 @@ export function DirectDeploymentScreen({
                 label={recentResultStatus.label}
                 tone={recentResultStatus.tone}
               />
+              {selectedDeployment.status === "SUCCESS" ? (
+                <p className={styles.deploymentHint}>
+                  {selectedDeployment.scope === "infrastructure"
+                    ? "인프라 배포가 완료됐습니다. 실제 앱을 공개하려면 최초 앱 배포가 필요합니다."
+                    : "인프라와 최초 앱 배포가 완료됐습니다."}
+                </p>
+              ) : null}
               <dl className={styles.deploymentRecentResultFacts}>
                 <div>
                   <dt>실행 범위</dt>
@@ -1794,6 +1826,26 @@ export function DirectDeploymentScreen({
                   <dt>실행 시각</dt>
                   <dd>{formatDate(selectedDeployment.createdAt)}</dd>
                 </div>
+                {selectedDeployment.status === "SUCCESS" &&
+                selectedDeployment.scope !== "infrastructure" &&
+                selectedApplicationRelease ? (
+                  <>
+                    <div>
+                      <dt>Commit</dt>
+                      <dd><code>{selectedApplicationRelease.commitSha}</code></dd>
+                    </div>
+                    <div>
+                      <dt>서비스 URL</dt>
+                      <dd>
+                        {selectedApplicationRelease.outputUrl ? (
+                          <a href={selectedApplicationRelease.outputUrl} rel="noreferrer" target="_blank">
+                            {selectedApplicationRelease.outputUrl}
+                          </a>
+                        ) : "확인 중"}
+                      </dd>
+                    </div>
+                  </>
+                ) : null}
               </dl>
               {selectedDeployment.errorSummary ? (
                 <p className={styles.deploymentRecentResultError}>

@@ -25,6 +25,7 @@ import {
 } from "../artifacts/application-artifact-runtime.js";
 import {
   architectures,
+  applicationReleases,
   awsConnections,
   deploymentPlanArtifacts,
   deployments,
@@ -36,6 +37,10 @@ import {
   sourceRepositories,
   touchUpdatedAt
 } from "../db/schema.js";
+import {
+  isEligibleInitialApplicationRelease,
+  type GitCicdReadinessApplicationReleaseRecord
+} from "./git-cicd-readiness-service.js";
 import {
   createAwsRoleDiffPreview,
   createGitCicdAutomationFiles,
@@ -96,6 +101,10 @@ export type GitCicdHandoffApprovedDeploymentRecord = Pick<
   | "architectureId"
   | "terraformArtifactId"
   | "awsConnectionId"
+  | "awsAccountIdSnapshot"
+  | "awsRegionSnapshot"
+  | "scope"
+  | "targetKind"
   | "source"
   | "status"
   | "completedAt"
@@ -359,6 +368,9 @@ export type GitCicdHandoffRepository = {
   findProjectDeploymentTarget(
     projectId: string
   ): Promise<GitCicdHandoffDeploymentTargetRecord | undefined>;
+  findLatestSucceededDirectApplicationRelease(
+    projectId: string
+  ): Promise<GitCicdReadinessApplicationReleaseRecord | undefined>;
   listSuccessfulDirectDeploymentsForHandoff(
     projectId: string
   ): Promise<GitCicdHandoffApprovedDeploymentRecord[]>;
@@ -436,6 +448,16 @@ export class GitCicdHandoffPlanArtifactVerificationUnavailableError extends GitC
       "GIT_CICD_HANDOFF_PLAN_VERIFICATION_UNAVAILABLE"
     );
     this.name = "GitCicdHandoffPlanArtifactVerificationUnavailableError";
+  }
+}
+
+export class GitCicdInitialApplicationReleaseRequiredError extends GitCicdHandoffProviderConflictError {
+  constructor() {
+    super(
+      "최초 앱 배포를 완료한 뒤 CI/CD 설치 PR을 생성해 주세요.",
+      "GIT_CICD_INITIAL_APPLICATION_RELEASE_REQUIRED"
+    );
+    this.name = "GitCicdInitialApplicationReleaseRequiredError";
   }
 }
 
@@ -519,7 +541,8 @@ export async function resolveGitCicdHandoffApplyEvidence(
     deployment.architectureId !== input.architectureId ||
     deployment.terraformArtifactId !== input.terraformArtifactId ||
     deployment.approvedTerraformArtifactId !== input.terraformArtifactId ||
-    deployment.awsConnectionId !== input.connectionId ||
+    deployment.awsAccountIdSnapshot !== input.accountId ||
+    deployment.awsRegionSnapshot !== input.region ||
     deployment.source !== "direct" ||
     deployment.status !== "SUCCESS" ||
     deployment.completedAt === null ||
@@ -637,6 +660,66 @@ export async function executeGitCicdHandoffWithVerifiedApplyEvidence<T>(
     evidence.plan,
     verifier,
     () => invokeProvider(evidence)
+  );
+}
+
+export async function executeGitCicdHandoffWithVerifiedInitialRelease<T>(
+  input: GitCicdHandoffApplyEvidenceInput & {
+    expectedTarget: GitCicdHandoffDeploymentTargetRecord;
+  },
+  repository: Pick<
+    GitCicdHandoffRepository,
+    | "listSuccessfulDirectDeploymentsForHandoff"
+    | "listPlanArtifactsForHandoff"
+    | "findProjectDeploymentTarget"
+    | "findLatestSucceededDirectApplicationRelease"
+  >,
+  verifier: GitCicdHandoffPlanArtifactVerifier,
+  invokeProvider: (evidence: GitCicdHandoffApplyEvidence) => Promise<T>
+): Promise<T> {
+  const evidence = await resolveGitCicdHandoffApplyEvidence(input, repository, verifier);
+  if (input.expectedTarget.runtimeTargetKind !== "ecs_fargate") {
+    return invokeGitCicdHandoffProviderWithVerifiedPlan(evidence.plan, verifier, () =>
+      invokeProvider(evidence)
+    );
+  }
+  const [target, release] = await Promise.all([
+    repository.findProjectDeploymentTarget(input.projectId),
+    repository.findLatestSucceededDirectApplicationRelease(input.projectId)
+  ]);
+  if (
+    !target ||
+    (evidence.deployment.scope !== "infrastructure" &&
+      evidence.deployment.scope !== "full_stack") ||
+    evidence.deployment.targetKind !== "ecs_fargate" ||
+    target.deploymentTargetFingerprint !== input.expectedTarget.deploymentTargetFingerprint ||
+    target.confirmedBuildConfig?.confirmedCommitSha !==
+      input.expectedTarget.confirmedBuildConfig?.confirmedCommitSha ||
+    target.runtimeConfig?.outputUrl !== input.expectedTarget.runtimeConfig?.outputUrl ||
+    !isEligibleInitialApplicationRelease({
+      release,
+      infrastructureDeployment: {
+        id: evidence.deployment.id,
+        projectId: evidence.deployment.projectId,
+        terraformArtifactId: evidence.deployment.terraformArtifactId,
+        awsConnectionId: evidence.deployment.awsConnectionId,
+        awsAccountIdSnapshot: evidence.deployment.awsAccountIdSnapshot,
+        awsRegionSnapshot: evidence.deployment.awsRegionSnapshot,
+        approvedPlanArtifactId: evidence.deployment.approvedPlanArtifactId,
+        scope: evidence.deployment.scope,
+        targetKind: evidence.deployment.targetKind,
+        status: evidence.deployment.status,
+        source: evidence.deployment.source,
+        completedAt: evidence.deployment.completedAt,
+        createdAt: evidence.deployment.createdAt
+      },
+      target
+    })
+  ) {
+    throw new GitCicdInitialApplicationReleaseRequiredError();
+  }
+  return invokeGitCicdHandoffProviderWithVerifiedPlan(evidence.plan, verifier, () =>
+    invokeProvider(evidence)
   );
 }
 
@@ -810,6 +893,9 @@ export function createGitCicdPullRequestDraft(input: {
     input.planSummary?.warnings?.map((warning) => `- ${warning.level}: ${warning.message}`) ?? [];
   const body = [
     handoffKind === "static_site" ? "## Static Site CI/CD" : "## IaC Preview",
+    "",
+    "이 PR은 이미 배포된 앱의 후속 변경을 자동 배포하도록 Workflow와 Repository 설정을 설치합니다.",
+    "PR merge만으로 최초 앱 배포를 시작하지 않습니다.",
     "",
     `- Artifact: ${input.terraformArtifact.fileName}`,
     `- Handoff kind: ${handoffKind}`,
@@ -1025,6 +1111,10 @@ export function createPostgresGitCicdHandoffRepository(
           architectureId: deployments.architectureId,
           terraformArtifactId: deployments.terraformArtifactId,
           awsConnectionId: deployments.awsConnectionId,
+          awsAccountIdSnapshot: deployments.awsAccountIdSnapshot,
+          awsRegionSnapshot: deployments.awsRegionSnapshot,
+          scope: deployments.scope,
+          targetKind: deployments.targetKind,
           source: deployments.source,
           status: deployments.status,
           completedAt: deployments.completedAt,
@@ -1050,6 +1140,48 @@ export function createPostgresGitCicdHandoffRepository(
           desc(deployments.createdAt),
           desc(deployments.id)
         );
+    },
+
+    async findLatestSucceededDirectApplicationRelease(projectId) {
+      const [release] = await db
+        .select({
+          id: applicationReleases.id,
+          projectId: applicationReleases.projectId,
+          deploymentId: applicationReleases.deploymentId,
+          source: applicationReleases.source,
+          status: applicationReleases.status,
+          runtimeTargetKind: applicationReleases.runtimeTargetKind,
+          deploymentTargetFingerprint: applicationReleases.deploymentTargetFingerprint,
+          commitSha: applicationReleases.commitSha,
+          releaseCandidateId: applicationReleases.releaseCandidateId,
+          compositeDigest: applicationReleases.compositeDigest,
+          outputUrl: applicationReleases.outputUrl,
+          healthEvidence: applicationReleases.healthEvidence,
+          frontendEvidence: applicationReleases.frontendEvidence,
+          completedAt: applicationReleases.completedAt,
+          deploymentScope: deployments.scope,
+          deploymentSource: deployments.source,
+          deploymentStatus: deployments.status,
+          deploymentCompletedAt: deployments.completedAt
+        })
+        .from(applicationReleases)
+        .innerJoin(deployments, eq(deployments.id, applicationReleases.deploymentId))
+        .where(
+          and(
+            eq(applicationReleases.projectId, projectId),
+            eq(applicationReleases.source, "direct"),
+            eq(applicationReleases.status, "succeeded"),
+            eq(applicationReleases.runtimeTargetKind, "ecs_fargate"),
+            isNotNull(applicationReleases.completedAt)
+          )
+        )
+        .orderBy(
+          desc(applicationReleases.completedAt),
+          desc(applicationReleases.createdAt),
+          desc(applicationReleases.id)
+        )
+        .limit(1);
+      return release;
     },
 
     // 서버가 approved Apply 우선, 아니면 최신 Apply를 선택할 수 있도록 전체 Plan을 조회합니다.
@@ -1404,7 +1536,7 @@ export async function createGitCicdHandoff(
     approvedDeployment,
     providerResult,
     pullRequestTitle
-  } = await executeGitCicdHandoffWithVerifiedApplyEvidence(
+  } = await executeGitCicdHandoffWithVerifiedInitialRelease(
     {
       projectId: input.projectId,
       architectureId: input.architectureId,
@@ -1414,7 +1546,8 @@ export async function createGitCicdHandoff(
       userId: input.accessContext.userId,
       connectionId,
       accountId: awsAccountId,
-      region: deploymentTarget.region
+      region: deploymentTarget.region,
+      expectedTarget: deploymentTarget
     },
     repository,
     options.planArtifactVerifier ??

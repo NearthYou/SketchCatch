@@ -345,6 +345,12 @@ test("repository evidence strict mode keeps the Fargate diagram minimal and evid
   );
   assert.equal(webBootstrap?.config.key, "index.html");
   assert.equal(webBootstrap?.config.releaseManagedContent, true);
+  assert.match(String(webBootstrap?.config.content), /Application deployment is in progress/u);
+  assert.match(
+    String(webBootstrap?.config.content),
+    /SketchCatch is deploying the approved application release/u
+  );
+  assert.doesNotMatch(String(webBootstrap?.config.content), /GitHub Actions will replace/u);
   assert.equal(webBucket?.config.versioningEnabled, true);
   assert.match(String(webBucketPolicy?.config.policy), /cloudfront\.amazonaws\.com/u);
   assert.match(String(webBucketPolicy?.config.policy), /repository-cloudfront/u);

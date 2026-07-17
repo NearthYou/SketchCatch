@@ -2219,7 +2219,7 @@ function applyStrictRepositoryEvidencePolicy(
       {
         id: webBootstrapObjectId,
         type: "S3",
-        label: "Bootstrap Index (CI/CD replaces)",
+        label: "Bootstrap Index (release in progress)",
         positionX: 760,
         positionY: 280,
         config: {
@@ -2230,7 +2230,7 @@ function applyStrictRepositoryEvidencePolicy(
           key: "index.html",
           contentType: "text/html; charset=utf-8",
           releaseManagedContent: true,
-          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment ready</title><body><main><h1>Application deployment ready</h1><p>GitHub Actions will replace this bootstrap document with apps/web/dist.</p></main></body></html>"
+          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment is in progress</title><body><main><h1>Application deployment is in progress</h1><p>SketchCatch is deploying the approved application release.</p></main></body></html>"
         }
       },
       {
