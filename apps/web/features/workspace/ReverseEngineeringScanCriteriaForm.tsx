@@ -1,6 +1,9 @@
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
-import { isReverseEngineeringResourceSelectionChecked } from "./reverse-engineering-resource-types";
+import {
+  formatReverseEngineeringResourceSelectionLabel,
+  isReverseEngineeringResourceSelectionChecked
+} from "./reverse-engineering-resource-types";
 import styles from "./reverse-engineering.module.css";
 
 type ReverseEngineeringScanCriteriaFormProps = {
@@ -76,6 +79,10 @@ export function ReverseEngineeringScanCriteriaForm({
           {createProjectOnApply
             ? "프로젝트는 후보를 적용할 때 생성됩니다."
             : "결과를 바로 반영하지 않고 먼저 미리보기로 보여줍니다."}
+        </p>
+        <p className={styles.scopeHelp}>
+          전체: 현재 지원 Resource와 확인 전용 AWS Resource를 함께 읽습니다.<br />
+          개별 선택: 선택한 정식 지원 Resource만 읽습니다.
         </p>
 
         <button
@@ -180,7 +187,7 @@ function getSelectedAwsConnectionRegion(
 
 // `ALL`은 사용자가 이해하는 화면 라벨로 보여주고, 실제 리소스 타입 이름은 그대로 둡니다.
 function formatResourceSelectionLabel(resourceType: ReverseEngineeringResourceSelection): string {
-  return resourceType === "ALL" ? "전체" : resourceType;
+  return formatReverseEngineeringResourceSelectionLabel(resourceType);
 }
 
 // AWS 연결 선택 박스에 보여줄 짧은 이름을 만듭니다.

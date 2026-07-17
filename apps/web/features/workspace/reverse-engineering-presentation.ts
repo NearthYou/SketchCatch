@@ -38,7 +38,7 @@ export function presentReverseEngineeringResource(
   const displayState =
     resource.resourceType === "UNKNOWN" || resource.analysisExcluded ? "review_only" : "supported";
   const hasRelationships = (resource.relationships?.length ?? 0) > 0;
-  const serviceLabel = SERVICE_LABELS[resource.providerResourceType] ?? "AWS Resource";
+  const serviceLabel = getReverseEngineeringServiceLabel(resource.providerResourceType);
 
   return {
     displayState,
@@ -49,6 +49,10 @@ export function presentReverseEngineeringResource(
     regionLabel: resource.region,
     technicalIdentity: resource.providerResourceId
   };
+}
+
+export function getReverseEngineeringServiceLabel(providerResourceType: string): string {
+  return SERVICE_LABELS[providerResourceType] ?? "AWS Resource";
 }
 
 export function summarizeReverseEngineeringScan(

@@ -18,6 +18,30 @@ export const REVERSE_ENGINEERING_RESOURCE_SELECTIONS: ReverseEngineeringResource
   ...REVERSE_ENGINEERING_RESOURCE_TYPES
 ];
 
+const RESOURCE_SELECTION_LABELS: Readonly<Partial<Record<ResourceType, string>>> = {
+  VPC: "네트워크(VPC)",
+  SUBNET: "서브넷",
+  INTERNET_GATEWAY: "인터넷 게이트웨이",
+  ROUTE_TABLE: "라우팅 테이블",
+  SECURITY_GROUP: "보안 그룹",
+  EC2: "가상 서버(EC2)",
+  RDS: "데이터베이스(RDS)",
+  S3: "파일 저장소(S3)",
+  UNKNOWN: "확인 전용 AWS Resource"
+};
+
+export function formatReverseEngineeringResourceSelectionLabel(
+  resourceType: ReverseEngineeringResourceSelection
+): string {
+  return resourceType === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
+    ? "전체"
+    : formatReverseEngineeringResourceTypeLabel(resourceType);
+}
+
+export function formatReverseEngineeringResourceTypeLabel(resourceType: ResourceType): string {
+  return RESOURCE_SELECTION_LABELS[resourceType] ?? "AWS Resource";
+}
+
 export function getReverseEngineeringSelectionHelp(
   selection: ReverseEngineeringResourceSelection
 ): string {

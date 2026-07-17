@@ -13,7 +13,11 @@ import {
   formatCompilationScore
 } from "./reverse-engineering-compilation-review";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
-import { ReverseEngineeringResourceParametersPanel } from "./ReverseEngineeringResourceParametersPanel";
+import {
+  presentReverseEngineeringResource,
+  summarizeReverseEngineeringScan
+} from "./reverse-engineering-presentation";
+import { formatReverseEngineeringResourceTypeLabel } from "./reverse-engineering-resource-types";
 import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error";
@@ -47,8 +51,7 @@ export function ReverseEngineeringResultPanel({
   onAppendToCurrentBoard,
   onOpenAsNewBoard,
   onRetryScan,
-  response,
-  selectedCandidateId
+  response
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
 
@@ -57,10 +60,10 @@ export function ReverseEngineeringResultPanel({
   }
 
   const isApplying = applyState === "saving";
+  const summary = summarizeReverseEngineeringScan(result);
   const unsupportedResources = result.discoveredResources.filter(
-    (resource) => resource.resourceType === "UNKNOWN"
+    (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
   );
-  const selectedCandidate = getSelectedBoardCandidate({ candidates: boardCandidates, selectedCandidateId });
   const primaryApplyLabel = getPrimaryApplyLabel({ createProjectOnApply, hasCurrentBoardResources });
   const compilationReview = createReverseEngineeringCompilationReview(compilation);
 
@@ -68,18 +71,22 @@ export function ReverseEngineeringResultPanel({
     <>
       <section className={styles.section}>
         <h3>스캔 요약</h3>
-        <div className={styles.stats}>
+        <div className={styles.summaryStats}>
           <span>
-            찾은 리소스
-            <strong>{result.discoveredResources.length}</strong>
+            찾은 Resource
+            <strong>{summary.discoveredCount}</strong>
+          </span>
+          <span>
+            보드에 표시
+            <strong>{summary.boardCount}</strong>
+          </span>
+          <span>
+            확인 필요
+            <strong>{summary.reviewOnlyCount}</strong>
           </span>
           <span>
             못 읽은 서비스
-            <strong>{result.scanErrors.length}</strong>
-          </span>
-          <span>
-            적용할 구조
-            <strong>{selectedCandidate?.title ?? "기본 후보"}</strong>
+            <strong>{summary.unreadableServiceCount}</strong>
           </span>
         </div>
         <p className={styles.hint}>
@@ -88,6 +95,18 @@ export function ReverseEngineeringResultPanel({
         {comparison.manualReviews.length > 0 ? (
           <p className={styles.warning}>
             AWS 원본 ID가 없거나 Terraform 이름만 겹치는 Resource는 자동으로 합치지 않습니다.
+          </p>
+        ) : null}
+        {summary.reviewOnlyCount > 0 ? (
+          <p className={styles.warning}>
+            일부 Resource는 AWS에서 찾았지만 아직 자동 분석과 Terraform 처리 범위가 아닙니다.
+            <br />
+            보드 또는 확인 필요 목록에서 위치와 원본 정보를 확인할 수 있습니다.
+          </p>
+        ) : null}
+        {summary.unreadableServiceCount > 0 ? (
+          <p className={styles.warning}>
+            일부 AWS 서비스를 읽지 못했습니다. 이 결과는 전체 AWS 환경을 완전히 보여주지 않을 수 있습니다.
           </p>
         ) : null}
         <div className={styles.buttonRow}>
@@ -161,7 +180,6 @@ export function ReverseEngineeringResultPanel({
         <ReverseEngineeringScanCoveragePanel
           onRetryScan={onRetryScan}
           scanErrors={result.scanErrors}
-          unsupportedResourceCount={unsupportedResources.length}
         />
       </ReverseEngineeringDetailGroup>
 
@@ -172,14 +190,11 @@ export function ReverseEngineeringResultPanel({
         </p>
       </ReverseEngineeringDetailGroup>
 
-      <ReverseEngineeringDetailGroup title="리소스 파라미터">
-        <ReverseEngineeringResourceParametersPanel discoveredResources={result.discoveredResources} />
-      </ReverseEngineeringDetailGroup>
-
       <ReverseEngineeringDetailGroup title="위험/비용 finding">
         <ReverseEngineeringFindingsPanel
           analysisExclusions={result.analysisExclusions}
           findings={result.findings}
+          resources={result.discoveredResources}
         />
       </ReverseEngineeringDetailGroup>
 
@@ -192,17 +207,6 @@ export function ReverseEngineeringResultPanel({
       </ReverseEngineeringDetailGroup>
     </>
   );
-}
-
-// 왼쪽에서 고른 후보를 찾고, 아직 선택이 없으면 첫 후보를 기본값으로 사용합니다.
-function getSelectedBoardCandidate({
-  candidates,
-  selectedCandidateId
-}: {
-  readonly candidates: readonly ReverseEngineeringBoardCandidate[];
-  readonly selectedCandidateId: string;
-}): ReverseEngineeringBoardCandidate | null {
-  return candidates.find((candidate) => candidate.id === selectedCandidateId) ?? candidates[0] ?? null;
 }
 
 // 새 프로젝트 시작인지 기존 보드 작업인지에 맞춰 적용 버튼 문구를 정합니다.
@@ -239,28 +243,16 @@ function ReverseEngineeringDetailGroup({
 // 사용자가 적용하기 전에 이번 스캔이 전체 결과인지 부분 결과인지 먼저 알려줍니다.
 function ReverseEngineeringScanCoveragePanel({
   onRetryScan,
-  scanErrors,
-  unsupportedResourceCount
+  scanErrors
 }: {
   readonly onRetryScan: () => void;
   readonly scanErrors: ReverseEngineeringScanError[];
-  readonly unsupportedResourceCount: number;
 }) {
   const notice = getScanCoverageNotice(scanErrors);
   const hasRetryableScanError = scanErrors.some((scanError) => scanError.retryable);
 
   return (
     <div>
-      <div className={styles.stats}>
-        <span>
-          못 읽은 서비스
-          <strong>{scanErrors.length}</strong>
-        </span>
-        <span>
-          확인 필요
-          <strong>{unsupportedResourceCount}</strong>
-        </span>
-      </div>
       <p className={scanErrors.length > 0 ? styles.warning : styles.hint}>
         {notice}
       </p>
@@ -271,12 +263,16 @@ function ReverseEngineeringScanCoveragePanel({
             <ul className={styles.resultList}>
               {scanErrors.map((scanError, index) => (
                 <li key={`${scanError.id}-${index}`} className={styles.resultItem}>
-                  <strong>{scanError.resourceType}</strong>
-                  <span>
-                    stage: {scanError.stage} · reason: {scanError.reason} · retryable:{" "}
-                    {formatRetryableStatus(scanError.retryable)}
-                  </span>
+                  <strong>{formatReverseEngineeringResourceTypeLabel(scanError.resourceType)}</strong>
+                  <span className={styles.errorBadge}>읽기 실패</span>
                   <span>{scanError.message}</span>
+                  <span>{formatRetryableStatus(scanError.retryable)}</span>
+                  <details className={styles.diagnosticDetails}>
+                    <summary>진단 정보</summary>
+                    <span>
+                      stage: {scanError.stage} · reason: {scanError.reason} · retryable: {String(scanError.retryable)}
+                    </span>
+                  </details>
                 </li>
               ))}
             </ul>
@@ -313,18 +309,15 @@ function UnsupportedResourceList({ resources }: { readonly resources: Discovered
 
   return (
     <>
-      <p className={styles.hint}>
-        AWS에서 발견했지만 아직 SketchCatch 정식 ResourceType으로 매핑하지 못한 항목입니다.
-      </p>
       <ul className={styles.resultList}>
         {resources.map((resource) => (
           <li key={resource.id} className={styles.resultItem}>
-            <strong>{resource.displayName}</strong>
-            <span>{resource.providerResourceType}</span>
+            <ResourceListIdentity resource={resource} />
+            <span>연결된 Resource 수: {resource.relationships?.length ?? 0}</span>
             <span>
-              {resource.providerResourceId} · {resource.region}
+              이 Resource는 AWS에서 발견됐지만 현재 Reverse Engineering 자동 처리 범위가 아닙니다.
+              Terraform 생성·import 제안·배포·확정 비용/보안 판단에는 포함하지 않습니다.
             </span>
-            <span>Terraform 생성, 배포, 확정 비용/보안 판단에서는 제외됩니다.</span>
           </li>
         ))}
       </ul>
@@ -332,7 +325,7 @@ function UnsupportedResourceList({ resources }: { readonly resources: Discovered
   );
 }
 
-// 이번 스캔에서 발견한 리소스의 이름과 AWS 원본 식별자를 간단히 보여줍니다.
+// 이번 스캔에서 발견한 Resource는 사람이 읽는 이름과 상태만 기본 목록에 보여줍니다.
 function DiscoveredResourcePreview({ resources }: { readonly resources: readonly DiscoveredResource[] }) {
   if (resources.length === 0) {
     return <p className={styles.hint}>아직 발견한 Resource가 없습니다.</p>;
@@ -342,13 +335,29 @@ function DiscoveredResourcePreview({ resources }: { readonly resources: readonly
     <ul className={styles.resultList}>
       {resources.slice(0, 8).map((resource) => (
         <li key={resource.id} className={styles.resultItem}>
-          <strong>{resource.displayName}</strong>
-          <span>
-            {resource.resourceType} · {resource.providerResourceId}
-          </span>
+          <ResourceListIdentity resource={resource} />
         </li>
       ))}
     </ul>
+  );
+}
+
+function ResourceListIdentity({ resource }: { readonly resource: DiscoveredResource }) {
+  const presentation = presentReverseEngineeringResource(resource);
+
+  return (
+    <>
+      <strong>{presentation.displayName}</strong>
+      <span>{presentation.serviceLabel}</span>
+      <span>{presentation.regionLabel}</span>
+      <span
+        className={
+          presentation.displayState === "supported" ? styles.supportedBadge : styles.reviewOnlyBadge
+        }
+      >
+        {presentation.statusLabel}
+      </span>
+    </>
   );
 }
 

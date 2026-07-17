@@ -59,6 +59,7 @@
 .candidateIntro span,
 .panelHeader p,
 .sectionDescription,
+.scopeHelp,
 .hint,
 .emptyState span {
   color: var(--reverse-muted);
@@ -66,6 +67,16 @@
   line-height: 1.5;
   margin: 0;
   word-break: keep-all;
+}
+
+.scopeHelp {
+  background: var(--reverse-surface-muted);
+  border-left: 3px solid var(--reverse-line-strong);
+  color: var(--reverse-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 9px 10px;
 }
 
 .candidateList {
@@ -532,6 +543,14 @@ button.candidateCardSelected {
   content: "−";
 }
 
+.advancedSummary:focus-visible,
+.detailSummary:focus-visible,
+.inspectorDetails > summary:focus-visible,
+.diagnosticDetails > summary:focus-visible {
+  outline: 3px solid rgba(13, 116, 206, 0.38);
+  outline-offset: -3px;
+}
+
 .advancedBody,
 .detailBody {
   border-top: 1px solid var(--reverse-line);
@@ -597,6 +616,39 @@ button.candidateCardSelected {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
+}
+
+.summaryStats {
+  border: 1px solid var(--reverse-line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.summaryStats > span {
+  color: var(--reverse-muted);
+  display: flex;
+  flex-direction: column-reverse;
+  font-size: 12px;
+  gap: 4px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.summaryStats > span:nth-child(even) {
+  border-left: 1px solid var(--reverse-line);
+}
+
+.summaryStats > span:nth-child(n + 3) {
+  border-top: 1px solid var(--reverse-line);
+}
+
+.summaryStats strong {
+  color: var(--reverse-text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .stat,
@@ -668,6 +720,54 @@ button.candidateCardSelected {
   overflow-wrap: anywhere;
 }
 
+.supportedBadge,
+.reviewOnlyBadge,
+.errorBadge {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 3px 7px;
+  width: fit-content;
+}
+
+.supportedBadge {
+  background: #edf9f1;
+  color: #14723b !important;
+}
+
+.reviewOnlyBadge {
+  background: #fff7e6;
+  color: #935600 !important;
+}
+
+.errorBadge {
+  background: #fff0f0;
+  color: #b42318 !important;
+}
+
+.diagnosticDetails {
+  color: var(--reverse-muted);
+  display: grid;
+  font-size: 12px;
+  gap: 6px;
+}
+
+.diagnosticDetails > summary,
+.inspectorDetails > summary {
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+
+.diagnosticDetails > summary::-webkit-details-marker,
+.inspectorDetails > summary::-webkit-details-marker {
+  display: none;
+}
+
 .parameterDetails {
   min-width: 0;
 }
@@ -736,6 +836,44 @@ button.candidateCardSelected {
   margin: 0;
 }
 
+.inspectorPurpose {
+  color: var(--reverse-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.inspectorDetails {
+  background: var(--reverse-surface);
+  border: 1px solid var(--reverse-line);
+  border-radius: 8px;
+  display: grid;
+  min-width: 0;
+}
+
+.inspectorDetails > summary {
+  color: var(--reverse-text);
+  min-height: 42px;
+  padding: 12px 14px;
+}
+
+.inspectorDetailsBody {
+  border-top: 1px solid var(--reverse-line);
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+}
+
+.rawValue {
+  color: var(--reverse-text);
+  font-family: Inter, Geist, ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .identityList {
   display: grid;
   gap: 10px;
@@ -767,6 +905,7 @@ button.candidateCardSelected {
 
 @container (max-width: 410px) {
   .stats,
+  .summaryStats,
   .resourceGrid {
     grid-template-columns: 1fr;
   }
@@ -774,6 +913,14 @@ button.candidateCardSelected {
   .stat + .stat,
   .stats > span + span {
     border-left: 0;
+    border-top: 1px solid var(--reverse-line);
+  }
+
+  .summaryStats > span:nth-child(even) {
+    border-left: 0;
+  }
+
+  .summaryStats > span + span {
     border-top: 1px solid var(--reverse-line);
   }
 }
