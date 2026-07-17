@@ -677,9 +677,13 @@ export async function createAwsConnectionSetup({
 }
 
 export async function listAwsConnections(
-  options: { readonly signal?: AbortSignal | undefined } = {}
+  options: {
+    readonly includeUnverified?: boolean | undefined;
+    readonly signal?: AbortSignal | undefined;
+  } = {}
 ): Promise<AwsConnection[]> {
-  const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
+  const query = options.includeUnverified ? "?includeUnverified=true" : "";
+  const response = await apiFetch<AwsConnectionListResponse>(`/aws/connections${query}`, {
     auth: true,
     ...(options.signal ? { signal: options.signal } : {})
   });

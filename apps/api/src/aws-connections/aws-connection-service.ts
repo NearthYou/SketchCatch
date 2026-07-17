@@ -72,6 +72,10 @@ export type AwsConnectionRetentionPolicy = {
   maxUnverifiedConnectionsPerUser: number;
 };
 
+export type ListAwsConnectionsOptions = {
+  includeUnverified?: boolean;
+};
+
 export const defaultAwsConnectionRetentionPolicy: AwsConnectionRetentionPolicy = {
   maxUnverifiedConnectionsPerUser: 5
 };
@@ -316,13 +320,15 @@ export async function listAwsConnections(
   input: {
     accessContext: ProjectAccessContext;
   },
-  repository: AwsConnectionRepository
+  repository: AwsConnectionRepository,
+  options: ListAwsConnectionsOptions = {}
 ): Promise<AwsConnection[]> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
 
-  return awsConnectionRows
-    .filter((awsConnection) => awsConnection.status === "verified")
-    .map(toAwsConnection);
+  return (options.includeUnverified
+    ? awsConnectionRows
+    : awsConnectionRows.filter((awsConnection) => awsConnection.status === "verified")
+  ).map(toAwsConnection);
 }
 
 export async function createAwsConnection(
