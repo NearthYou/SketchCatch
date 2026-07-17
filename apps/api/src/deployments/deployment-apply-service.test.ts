@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AwsConnection, TerraformArtifactBundle } from "@sketchcatch/types";
 import { runDeploymentApply } from "./deployment-apply-service.js";
+import { selectDeploymentStateBaseline } from "./deployment-service.js";
 import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
 import type {
   DeploymentApplyArtifactStorage,
@@ -56,6 +57,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
   planArtifact: DeploymentPlanArtifactRecord | undefined = createPlanArtifactRecord();
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
+  deployments: DeploymentRecord[] | null = null;
   relatedDeployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
   completeCalls = 0;
@@ -148,6 +150,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
+    if (this.deployments) return this.deployments;
     return this.deployment
       ? [this.deployment, ...this.relatedDeployments]
       : this.relatedDeployments;
@@ -405,6 +408,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
 class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   readonly uploadedStates: UploadDeploymentStateInput[] = [];
+  readonly downloadedStates: Array<{ deploymentId: string; objectKey: string }> = [];
   stateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
   optimizationEvidenceContent: Buffer | undefined;
 
@@ -422,11 +426,12 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
     return planBuffer;
   }
 
-  async downloadDeploymentState(_input: {
+  async downloadDeploymentState(input: {
     deploymentId: string;
     objectKey: string;
   }): Promise<Buffer> {
-    return Buffer.from("{}");
+    this.downloadedStates.push(input);
+    return Buffer.from('{"version":4,"serial":7}');
   }
 
   async downloadDeploymentPlanOptimizationEvidence(): Promise<Buffer | undefined> {
@@ -442,16 +447,47 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   }
 }
 
+test("selectDeploymentStateBaseline sorts serialized creation dates", () => {
+  const current = createApprovedDeploymentRecord({
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    createdAt: "2026-01-02T00:00:00.000Z" as unknown as Date,
+    stateObjectKey: "deployments/current/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+  const previous = createApprovedDeploymentRecord({
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    createdAt: "2026-01-01T00:00:00.000Z" as unknown as Date,
+    stateObjectKey: "deployments/previous/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+
+  assert.equal(selectDeploymentStateBaseline(current, [previous]), current);
+});
+
 test("runDeploymentApply applies the approved tfplan and stores state resources and outputs", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createApprovedDeploymentRecord({
     scope: "full_stack",
     targetKind: "ecs_fargate"
   });
+  const previousDeploymentId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const previousStateObjectKey = `deployments/${previousDeploymentId}/state/terraform.tfstate`;
+  repository.deployments = [
+    repository.deployment,
+    createApprovedDeploymentRecord({
+      id: previousDeploymentId,
+      approvedPlanArtifactId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      createdAt: "2025-12-31T00:00:00.000Z" as unknown as Date,
+      currentPlanArtifactId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      stateObjectKey: previousStateObjectKey,
+      status: "SUCCESS"
+    })
+  ];
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const runnerStages: string[] = [];
   let cleanupCalled = false;
   let writtenPlanFile: { filePath: string; content: Buffer } | undefined;
+  let restoredState: { filePath: string; content: Buffer } | undefined;
 
   const result = await runDeploymentApply(
     {
@@ -468,6 +504,9 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
           content: Buffer.from(content)
         };
       },
+      writeTerraformStateFile: async (filePath, content) => {
+        restoredState = { filePath, content };
+      },
       prepareTerraformWorkspace: async () => ({
         workdir: "C:/tmp/sketchcatch-terraform-apply",
         mainFilePath: "C:/tmp/sketchcatch-terraform-apply/main.tf",
@@ -477,7 +516,8 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
         }
       }),
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
-      runTerraformInit: async () => {
+      runTerraformInit: async (_workdir, options) => {
+        assert.equal(options?.timeoutMs, expectedTerraformMutationTimeoutMs);
         runnerStages.push("init");
         return createRunnerResult("init");
       },
@@ -591,6 +631,11 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   assert.equal(cleanupCalled, true);
   assert.match(writtenPlanFile?.filePath ?? "", /[\\/]tfplan$/);
   assert.deepEqual(writtenPlanFile?.content, planBuffer);
+  assert.deepEqual(applyArtifactStorage.downloadedStates, [
+    { deploymentId: previousDeploymentId, objectKey: previousStateObjectKey }
+  ]);
+  assert.match(restoredState?.filePath ?? "", /[\\/]terraform\.tfstate$/);
+  assert.equal(restoredState?.content.toString(), '{"version":4,"serial":7}');
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(result.deployment.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.equal(result.deployment.resultWarningSummary, null);

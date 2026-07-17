@@ -51,6 +51,7 @@ import {
 import {
   WorkspaceAiWorkbenchExplanation,
   WorkspaceAiWorkbenchRequestMessage,
+  WorkspaceAiWorkbenchReviewProgress,
   WorkspaceAiWorkbenchTerraformIssueResult,
   WorkspaceAiWorkbenchTerraformPreviewResult,
   type AiRequestState
@@ -72,6 +73,7 @@ import {
 } from "./workspace-ai-chat-routing";
 import {
   createWorkspaceAiPatchPreviewModel,
+  type WorkspaceAiPatchParameterChange,
   type WorkspaceAiPatchPreviewModel
 } from "./workspace-ai-patch-preview";
 import { formatTerraformDiagnosticTitle } from "./terraform-panel-utils";
@@ -299,6 +301,7 @@ export function WorkspaceAiChatDock({
   const [patchPreviewSourceRevision, setPatchPreviewSourceRevision] = useState<number | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<TerraformPreviewExplanationState | null>(null);
+  const [terraformPreviewReviewElapsedMs, setTerraformPreviewReviewElapsedMs] = useState(0);
   const [terraformIssueAnalyses, setTerraformIssueAnalyses] = useState<
     Record<string, TerraformIssueAnalysisState>
   >(() => readBrowserTerraformIssueAnalyses(projectId));
@@ -675,6 +678,7 @@ export function WorkspaceAiChatDock({
     setTerraformIssueBatchProgress(null);
     setTerraformFixUnavailableReasons({});
     setTerraformPreviewExplanation(null);
+    setTerraformPreviewReviewElapsedMs(0);
     setApplyingTerraformFixRequestId(null);
     setCompletedTerraformFixIssueKeys([]);
     pendingTerraformFixApplyRef.current = null;
@@ -691,6 +695,21 @@ export function WorkspaceAiChatDock({
     setPatchPreviewSourceRevision(null);
     loadedProjectIdRef.current = projectId;
   }, [projectId]);
+
+  useEffect(() => {
+    if (terraformPreviewExplanation?.state !== "loading") {
+      return;
+    }
+
+    const startedAt = Date.now();
+    setTerraformPreviewReviewElapsedMs(0);
+    const timerId = window.setInterval(() => {
+      setTerraformPreviewReviewElapsedMs(Date.now() - startedAt);
+    }, 500);
+
+    return () => window.clearInterval(timerId);
+  }, [terraformPreviewExplanation?.state, terraformPreviewExplanation?.terraformFingerprint]);
+
 
   useEffect(() => {
     if (
@@ -1630,7 +1649,10 @@ export function WorkspaceAiChatDock({
     setPatchPreviewModel(model);
     setPatchPreviewSourceFingerprint(proposalSource.fingerprint);
     setPatchPreviewSourceRevision(proposalSource.revision);
-    context.setPreviewDiagram(model.visualPreviewDiagram, model.annotations);
+    context.setPreviewDiagram(
+      model.isParameterOnly ? null : model.visualPreviewDiagram,
+      model.isParameterOnly ? undefined : model.annotations
+    );
     setDraftState("idle");
     appendAssistantMessage("patch", createPatchPreviewSummary(preview));
   }
@@ -2294,6 +2316,11 @@ export function WorkspaceAiChatDock({
               검토 대상 또는 Terraform 코드가 변경되었습니다. 최신 대상을 다시 검토하세요.
             </p>
           ) : null}
+          {terraformPreviewExplanation?.state === "loading" ? (
+            <WorkspaceAiWorkbenchReviewProgress
+              elapsedMs={terraformPreviewReviewElapsedMs}
+            />
+          ) : null}
           {terraformPreviewExplanation?.state === "error" ||
           (terraformPreviewExplanation?.message &&
             terraformPreviewExplanation.state !== "loading") ? (
@@ -2517,19 +2544,28 @@ export function WorkspaceAiChatDock({
               <span>생성된 변경</span>
               <h3 id="workspace-ai-patch-result-title">수정 미리보기</h3>
             </div>
-            <p>{patchPreviewModel.preview.changes.length}개 변경</p>
+            <p>
+              {patchPreviewModel.isParameterOnly
+                ? patchPreviewModel.parameterChanges.length
+                : patchPreviewModel.preview.changes.length}
+              {patchPreviewModel.isParameterOnly ? "개 파라미터" : "개 변경"}
+            </p>
           </header>
           <div className={styles.artifactBody}>
             <WorkspaceAiWorkbenchExplanation explanation={patchPreviewModel.preview.llmExplanation} />
-            <ul className={styles.changeList} aria-label="생성된 변경 사항">
-              {patchPreviewModel.preview.changes.map((change) => (
-                <li
-                  key={`${change.action}-${change.resourceId ?? change.resourceType ?? change.summary}`}
-                >
-                  {change.summary}
-                </li>
-              ))}
-            </ul>
+            {patchPreviewModel.isParameterOnly ? (
+              <WorkspaceAiPatchParameterPreview changes={patchPreviewModel.parameterChanges} />
+            ) : (
+              <ul className={styles.changeList} aria-label="생성된 변경 사항">
+                {patchPreviewModel.preview.changes.map((change) => (
+                  <li
+                    key={`${change.action}-${change.resourceId ?? change.resourceType ?? change.summary}`}
+                  >
+                    {change.summary}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           {patchPreviewIsStale ? (
             <div className={styles.staleNotice} role="status">
@@ -2571,6 +2607,57 @@ export function WorkspaceAiChatDock({
 
 export function createWorkspaceAiChatStorageKey(projectId: string): string {
   return `${STORAGE_KEY_PREFIX}.${projectId}`;
+}
+
+function WorkspaceAiPatchParameterPreview({
+  changes
+}: {
+  readonly changes: readonly WorkspaceAiPatchParameterChange[];
+}) {
+  const changesByResource = new Map<string, WorkspaceAiPatchParameterChange[]>();
+
+  for (const change of changes) {
+    const existingChanges = changesByResource.get(change.resourceId) ?? [];
+    existingChanges.push(change);
+    changesByResource.set(change.resourceId, existingChanges);
+  }
+
+  return (
+    <section className={styles.parameterPreview} aria-label="적용 예정 파라미터">
+      <p>적용하면 아래 파라미터 값이 보드에 저장됩니다.</p>
+      {[...changesByResource.values()].map((resourceChanges) => {
+        const [firstChange] = resourceChanges;
+
+        if (!firstChange) {
+          return null;
+        }
+
+        return (
+          <div className={styles.parameterPreviewResource} key={firstChange.resourceId}>
+            <div>
+              <strong>{firstChange.resourceLabel}</strong>
+              <span>{firstChange.resourceType}</span>
+            </div>
+            <dl>
+              {resourceChanges.map((change) => (
+                <div key={change.parameter}>
+                  <dt>{change.parameter}</dt>
+                  <dd>
+                    <span>현재</span>
+                    <code>{change.before}</code>
+                  </dd>
+                  <dd>
+                    <span>변경</span>
+                    <code>{change.after}</code>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        );
+      })}
+    </section>
+  );
 }
 
 function readBrowserTerraformIssueAnalyses(

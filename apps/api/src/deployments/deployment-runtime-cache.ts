@@ -122,6 +122,13 @@ export function createRuntimeCachedDeploymentRepository(input: {
 
       return deployment;
     },
+    revokeDeploymentApproval: async (deploymentId, revokeInput) => {
+      const deployment = await repository.revokeDeploymentApproval?.(deploymentId, revokeInput);
+
+      await cacheStatus(deployment);
+
+      return deployment;
+    },
     completeDeploymentApply: async (deploymentId) => {
       const deployment = await repository.completeDeploymentApply(deploymentId);
 

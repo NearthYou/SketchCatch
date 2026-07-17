@@ -30,6 +30,7 @@ export type LlmExplanationInput =
   | {
       readonly target: "terraform_preview_explanation";
       readonly result: AiTerraformPreviewExplanationResult;
+      readonly terraformCodeContext?: string | undefined;
     }
   | {
       readonly target: "architecture_patch_preview";

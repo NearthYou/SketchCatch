@@ -176,7 +176,6 @@ export function DeploymentConsoleShell({
         <DirectDeploymentScreen
           {...directProps}
           confirmationDismissRequestId={confirmationDismissRequestId}
-          onCancel={close}
           onConfirmationStateChange={(isOpen) => {
             confirmationOpenRef.current = isOpen;
           }}

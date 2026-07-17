@@ -77,18 +77,15 @@ export function getDeploymentActionState(
   const canStartFreshApplyPlan = Boolean(deployment && !hasCurrentPlan && !isDestroyPlan);
   const canShowApplyPlanAction = Boolean(
     deployment &&
-      canStartFreshApplyPlan &&
-      deployment.status !== "RUNNING" &&
-      deployment.status !== "SUCCESS" &&
-      deployment.status !== "DESTROYED" &&
-      !isDestroyable &&
-      !isPlanApproved
+    canStartFreshApplyPlan &&
+    deployment.status !== "RUNNING" &&
+    deployment.status !== "SUCCESS" &&
+    deployment.status !== "DESTROYED" &&
+    !isDestroyable &&
+    !isPlanApproved
   );
   const canShowApprovePlanAction = Boolean(
-    deployment &&
-      hasCurrentPlan &&
-      !isPlanApproved &&
-      deployment.status !== "RUNNING"
+    deployment && hasCurrentPlan && !isPlanApproved && deployment.status !== "RUNNING"
   );
   const canShowDestroyPlanAction = Boolean(
     deployment &&
@@ -101,25 +98,25 @@ export function getDeploymentActionState(
   const canApprovePlan = canShowApprovePlanAction && !isLoading;
   const canApply = Boolean(
     deployment &&
-      isApplyPlan &&
-      isPlanApproved &&
-      deployment.status !== "RUNNING" &&
-      deployment.status !== "SUCCESS" &&
-      deployment.status !== "DESTROYED" &&
-      deployment.isBlocked === false &&
-      hasCompleteApprovalSnapshot &&
-      !isLoading
+    isApplyPlan &&
+    isPlanApproved &&
+    deployment.status !== "RUNNING" &&
+    deployment.status !== "SUCCESS" &&
+    deployment.status !== "DESTROYED" &&
+    deployment.isBlocked === false &&
+    hasCompleteApprovalSnapshot &&
+    !isLoading
   );
   const canRunDestroyPlan = canShowDestroyPlanAction && !isLoading;
   const canDestroy = Boolean(
     deployment &&
-      isDestroyable &&
-      isDestroyPlan &&
-      isPlanApproved &&
-      deployment.status !== "RUNNING" &&
-      deployment.isBlocked === false &&
-      hasCompleteApprovalSnapshot &&
-      !isLoading
+    isDestroyable &&
+    isDestroyPlan &&
+    isPlanApproved &&
+    deployment.status !== "RUNNING" &&
+    deployment.isBlocked === false &&
+    hasCompleteApprovalSnapshot &&
+    !isLoading
   );
   const canCancelDeployment = Boolean(
     deployment?.status === "RUNNING" && !deployment.cancelRequestedAt && !isLoading
@@ -136,27 +133,53 @@ export function getDeploymentActionState(
     shouldShowApprovePlanButton: canShowApprovePlanAction,
     shouldShowApplyButton: Boolean(
       deployment &&
-        isApplyPlan &&
-        isPlanApproved &&
-        deployment.status !== "SUCCESS" &&
-        deployment.status !== "DESTROYED"
+      isApplyPlan &&
+      isPlanApproved &&
+      deployment.status !== "SUCCESS" &&
+      deployment.status !== "DESTROYED"
     ),
     shouldShowDestroyPlanButton: canShowDestroyPlanAction,
     shouldShowDestroyButton: Boolean(deployment && isDestroyPlan && isPlanApproved),
-    approvePlanLabel: isDestroyPlan ? "Destroy Plan 승인" : "Plan 승인"
+    approvePlanLabel: isDestroyPlan ? "삭제 Plan 승인" : "Plan 승인"
   };
+}
+
+export function selectDeploymentCleanupTarget(
+  deployments: readonly Deployment[]
+): Deployment | null {
+  return selectDeploymentCleanupTargets(deployments)[0] ?? null;
+}
+
+export function selectDeploymentCleanupTargets(
+  deployments: readonly Deployment[]
+): Deployment[] {
+  const lifecycleHeads = new Map<"application" | "terraform", Deployment>();
+
+  for (const deployment of [...deployments]
+    .filter(isDeploymentLifecycleHeadCandidate)
+    .sort(compareDeploymentCreatedAtDescending)) {
+    const lineage = deployment.scope === "application" ? "application" : "terraform";
+
+    if (!lifecycleHeads.has(lineage)) {
+      lifecycleHeads.set(lineage, deployment);
+    }
+  }
+
+  return [...lifecycleHeads.values()]
+    .filter(isCleanupDestroyCandidate)
+    .sort(compareDeploymentCreatedAtDescending);
 }
 
 export function hasCompleteDeploymentApprovalSnapshot(deployment: Deployment): boolean {
   return Boolean(
     deployment.approvedAt &&
-      deployment.approvedByUserId &&
-      deployment.approvedTerraformArtifactId &&
-      deployment.approvedPlanArtifactId &&
-      deployment.approvedTerraformArtifactHash &&
-      deployment.approvedTfplanHash &&
-      deployment.approvedAwsAccountId &&
-      deployment.approvedAwsRegion
+    deployment.approvedByUserId &&
+    deployment.approvedTerraformArtifactId &&
+    deployment.approvedPlanArtifactId &&
+    deployment.approvedTerraformArtifactHash &&
+    deployment.approvedTfplanHash &&
+    deployment.approvedAwsAccountId &&
+    deployment.approvedAwsRegion
   );
 }
 
@@ -283,19 +306,21 @@ export function shouldShowDeploymentInfoValue(value: string | null | undefined):
   return Boolean(value && value !== "없음");
 }
 
-function getNextDeploymentLogMessageToken(
-  text: string
-): DeploymentLogMessageToken | null {
+function getNextDeploymentLogMessageToken(text: string): DeploymentLogMessageToken | null {
   const patterns: readonly {
     readonly tone: DeploymentLogMessageTokenTone;
     readonly pattern: RegExp;
   }[] = [
     { tone: "metadata", pattern: /^\[[^\]]+\]/ },
     { tone: "string", pattern: /^"[^"]*"/ },
-    { tone: "resource", pattern: /^(?:data\.)?[a-z][a-z0-9_]*\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/ },
+    {
+      tone: "resource",
+      pattern: /^(?:data\.)?[a-z][a-z0-9_]*\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/
+    },
     {
       tone: "operation",
-      pattern: /^(?:Creation complete|Destruction complete|Still creating|Still destroying|Creating|Destroying|Apply complete|Destroy complete|Outputs)/
+      pattern:
+        /^(?:Creation complete|Destruction complete|Still creating|Still destroying|Creating|Destroying|Apply complete|Destroy complete|Outputs)/
     },
     { tone: "output", pattern: /^[A-Za-z_][A-Za-z0-9_]*(?=\s*=)/ }
   ];
@@ -333,6 +358,18 @@ function appendDeploymentLogMessageToken(
 }
 
 function isCleanupDestroyCandidate(deployment: Deployment): boolean {
+  if (deployment.scope === "application") {
+    if (!deployment.releaseId) {
+      return false;
+    }
+
+    return (
+      deployment.status === "SUCCESS" ||
+      (deployment.status === "FAILED" &&
+        (deployment.failureStage === "apply" || deployment.failureStage === "destroy"))
+    );
+  }
+
   if (!deployment.stateObjectKey) {
     return false;
   }
@@ -346,5 +383,21 @@ function isCleanupDestroyCandidate(deployment: Deployment): boolean {
     (deployment.failureStage === "plan" ||
       deployment.failureStage === "apply" ||
       deployment.failureStage === "destroy")
+  );
+}
+
+function isDeploymentLifecycleHeadCandidate(deployment: Deployment): boolean {
+  return (
+    deployment.status === "SUCCESS" ||
+    deployment.status === "DESTROYED" ||
+    (deployment.status === "FAILED" &&
+      (deployment.stateObjectKey !== null ||
+        (deployment.scope === "application" && deployment.releaseId !== null)))
+  );
+}
+
+function compareDeploymentCreatedAtDescending(left: Deployment, right: Deployment): number {
+  return (
+    Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id)
   );
 }

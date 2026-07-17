@@ -75,6 +75,17 @@ export type DirectDeploymentPreflightInput = {
   readonly requestState: RequestState;
 };
 
+export type DeploymentValidationActionInput = {
+  readonly deploymentStatus: Deployment["status"] | null;
+  readonly hasUnsavedBaseline: boolean;
+  readonly preflightState: DirectDeploymentPreflightState;
+};
+
+export type DeploymentDraftChangeInput = {
+  readonly currentDraftRevision: number | null;
+  readonly hasUnsavedWorkspaceChanges: boolean;
+  readonly preparedDraftRevision: number | null;
+};
 export type DeploymentBuildEnvironmentTarget = Pick<Deployment, "scope" | "targetKind">;
 
 export type DeploymentPlanActionLabelInput = {
@@ -165,11 +176,12 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   const usesSavedCleanupSnapshot =
     input.actions.shouldShowDestroyPlanButton || input.actions.shouldShowDestroyButton;
   const validation = getValidationStep(input);
+  const hasUnsavedApplyBaseline =
+    input.hasUnsavedBaseline && input.deployment?.currentPlanOperation !== "destroy";
   if (
     !deployment ||
     (!usesSavedCleanupSnapshot &&
-      (input.hasUnsavedBaseline ||
-        input.preflightState === "idle" ||
+      (hasUnsavedApplyBaseline ||
         input.preflightState === "loading" ||
         input.preflightState === "blocked" ||
         input.preflightState === "error" ||
@@ -230,19 +242,45 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
   );
 }
 
+export function shouldShowDeploymentValidationActions(
+  input: DeploymentValidationActionInput
+): boolean {
+  return (
+    input.deploymentStatus === null ||
+    input.hasUnsavedBaseline ||
+    (input.preflightState === "idle" && input.deploymentStatus !== "SUCCESS")
+  );
+}
+
+export function hasDeploymentDraftChanges(input: DeploymentDraftChangeInput): boolean {
+  if (input.hasUnsavedWorkspaceChanges) {
+    return true;
+  }
+
+  return (
+    input.currentDraftRevision !== null &&
+    input.preparedDraftRevision !== null &&
+    input.currentDraftRevision !== input.preparedDraftRevision
+  );
+}
+
 export function shouldStartQueuedApplyPlan(input: QueuedApplyPlanInput): boolean {
   return Boolean(
     input.deployment &&
-      input.queuedDeploymentId === input.deployment.id &&
-      input.deployment.status === "PENDING" &&
-      !input.deployment.currentPlanArtifactId &&
-      input.requestState === "idle"
+    input.queuedDeploymentId === input.deployment.id &&
+    input.deployment.status === "PENDING" &&
+    !input.deployment.currentPlanArtifactId &&
+    input.requestState === "idle"
   );
 }
 
 function getValidationStep(input: DirectDeploymentFlowInput): DirectDeploymentStep {
   if (input.hasUnsavedBaseline) {
-    return step("validation", "active", "저장 필요");
+    return step(
+      "validation",
+      "active",
+      input.deployment?.approvedAt ? "변경 후 재검증 필요" : "저장 필요"
+    );
   }
   const mapped = {
     blocked: ["blocked", "차단 항목 확인"],

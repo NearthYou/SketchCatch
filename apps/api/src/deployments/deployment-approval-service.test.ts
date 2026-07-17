@@ -8,7 +8,8 @@ import type { AwsConnection, DeploymentPlanSummary } from "@sketchcatch/types";
 import {
   approveDeploymentPlan,
   assertDeploymentApplyPreconditions,
-  DeploymentApplyPreconditionError
+  DeploymentApplyPreconditionError,
+  revokeDeploymentApproval
 } from "./deployment-approval-service.js";
 import {
   DeploymentConflictError,
@@ -56,6 +57,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     deploymentId: string;
     input: Parameters<DeploymentRepository["approveDeployment"]>[1];
   }> = [];
+  readonly revokedApprovals: string[] = [];
 
   async findAccessibleProject(candidateProjectId: string, accessContext: ProjectAccessContext) {
     if (
@@ -219,6 +221,37 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  revokeDeploymentApproval: NonNullable<DeploymentRepository["revokeDeploymentApproval"]> = async (
+    candidateDeploymentId,
+    input
+  ) => {
+    this.revokedApprovals.push(candidateDeploymentId);
+
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      approvedAt: null,
+      approvedByUserId: null,
+      approvedTerraformArtifactId: null,
+      approvedPlanArtifactId: null,
+      approvedTerraformArtifactHash: null,
+      approvedTfplanHash: null,
+      approvedAwsAccountId: null,
+      approvedAwsRegion: null,
+      approvedPreparedSnapshotHash: null,
+      status: "PENDING",
+      isBlocked: true,
+      blockedBy: "missing_approval",
+      blockedReason: input.blockedReason,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
   saveDeploymentApplyResults: DeploymentRepository["saveDeploymentApplyResults"] = async (
     candidateDeploymentId,
     input
@@ -364,6 +397,38 @@ test("approveDeploymentPlan stores the approved artifact plan and AWS snapshot",
     status: "PENDING",
     preserveFailureDetails: false
   });
+});
+
+test("revokeDeploymentApproval clears approval and returns the apply plan to approval", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = {
+    ...repository.deployment!,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: artifactHash,
+    approvedTfplanHash: tfplanHash,
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2",
+    status: "PENDING",
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null
+  };
+
+  const deployment = await revokeDeploymentApproval(
+    { deploymentId, accessContext: createAccessContext() },
+    repository
+  );
+
+  assert.equal(deployment.approvedAt, null);
+  assert.equal(deployment.approvedPlanArtifactId, null);
+  assert.equal(deployment.status, "PENDING");
+  assert.equal(deployment.isBlocked, true);
+  assert.equal(deployment.blockedBy, "missing_approval");
+  assert.equal(deployment.blockedReason, "Terraform Plan requires user approval before apply");
+  assert.deepEqual(repository.revokedApprovals, [deploymentId]);
 });
 
 test("approveDeploymentPlan reads local Terraform artifacts from project asset storage", async () => {

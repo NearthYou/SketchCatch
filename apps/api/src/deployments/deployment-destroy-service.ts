@@ -22,12 +22,11 @@ import {
   type DeploymentApplyArtifactStorage
 } from "./deployment-apply-artifact-storage.js";
 import {
-  appendTerraformDurationLog,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
+import { createDeploymentTerraformLiveLogWriter } from "./deployment-terraform-live-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
 import {
-  appendDeploymentLogs,
   DeploymentConflictError,
   DeploymentNotFoundError,
   getDeployment,
@@ -266,17 +265,22 @@ export async function runDeploymentDestroy(
 
     let sequence = await repository.getNextDeploymentLogSequence(deployment.id);
 
-    terraform.init = await runTerraformInit(workspace.workdir, {
-      env: awsCredentials.env,
-      signal: input.abortSignal
-    });
-    sequence = await appendTerraformDestroyOutput({
+    const initLogWriter = createDeploymentTerraformLiveLogWriter({
       deploymentId: deployment.id,
       accessContext: input.accessContext,
       sequence,
-      label: "terraform init",
-      result: terraform.init,
+      stage: "destroy",
       repository
+    });
+    terraform.init = await runTerraformInit(workspace.workdir, {
+      env: awsCredentials.env,
+      onOutputLine: initLogWriter.onOutputLine,
+      signal: input.abortSignal,
+      timeoutMs: terraformMutationTimeoutMs
+    });
+    sequence = await initLogWriter.complete({
+      label: "terraform init",
+      result: terraform.init
     });
 
     if (terraform.init.cancelled) {
@@ -314,6 +318,13 @@ export async function runDeploymentDestroy(
     });
     sequence = lockUpload.sequence;
 
+    const destroyLogWriter = createDeploymentTerraformLiveLogWriter({
+      deploymentId: deployment.id,
+      accessContext: input.accessContext,
+      sequence,
+      stage: "destroy",
+      repository
+    });
     terraform.destroy = await runWithDestroyLeaseHeartbeat(
       destroyLeaseFence,
       repository,
@@ -321,17 +332,14 @@ export async function runDeploymentDestroy(
         runTerraformApply(workspace!.workdir, {
           env: awsCredentials.env,
           planFileName: defaultPlanFileName,
+          onOutputLine: destroyLogWriter.onOutputLine,
           timeoutMs: terraformMutationTimeoutMs,
           signal: input.abortSignal
         })
     );
-    sequence = await appendTerraformDestroyOutput({
-      deploymentId: deployment.id,
-      accessContext: input.accessContext,
-      sequence,
+    sequence = await destroyLogWriter.complete({
       label: "terraform apply tfplan",
-      result: terraform.destroy,
-      repository
+      result: terraform.destroy
     });
 
     if (terraform.destroy.cancelled) {
@@ -828,74 +836,7 @@ async function failDeploymentDestroyRun(input: {
   };
 }
 
-async function appendTerraformDestroyOutput(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  label: string;
-  result: TerraformRunResult;
-  repository: DeploymentRepository;
-}): Promise<number> {
-  let nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: input.sequence,
-    output: input.result.stdout,
-    level: "INFO",
-    repository: input.repository
-  });
 
-  nextSequence = await appendOutputLines({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    output: input.result.stderr,
-    level: input.result.exitCode === 0 ? "WARN" : "ERROR",
-    repository: input.repository
-  });
-
-  return appendTerraformDurationLog({
-    deploymentId: input.deploymentId,
-    accessContext: input.accessContext,
-    sequence: nextSequence,
-    stage: "destroy",
-    label: input.label,
-    result: input.result,
-    repository: input.repository
-  });
-}
-
-async function appendOutputLines(input: {
-  deploymentId: string;
-  accessContext: ProjectAccessContext;
-  sequence: number;
-  output: string;
-  level: "INFO" | "WARN" | "ERROR";
-  repository: DeploymentRepository;
-}): Promise<number> {
-  const lines = splitOutputLines(input.output);
-
-  if (lines.length === 0) {
-    return input.sequence;
-  }
-
-  await appendDeploymentLogs(
-    {
-      deploymentId: input.deploymentId,
-      accessContext: input.accessContext,
-      logs: lines.map((line, index) => ({
-        sequence: input.sequence + index,
-        stage: "destroy",
-        level: input.level,
-        message: line,
-        relatedResourceId: null
-      }))
-    },
-    input.repository
-  );
-
-  return input.sequence + lines.length;
-}
 
 function splitOutputLines(output: string): string[] {
   return output

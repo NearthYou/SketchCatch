@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, ne, notInArray, sql } from "drizzle-orm";
 import type {
   AwsConnection,
   DeployedResource,
@@ -168,6 +168,11 @@ export type ApproveDeploymentInput = {
   preserveFailureDetails?: boolean;
 };
 
+export type RevokeDeploymentApprovalInput = {
+  blockedBy: DeploymentBlockedBy;
+  blockedReason: string;
+};
+
 export type CreateDeployedResourceRecordInput = {
   id: string;
   deploymentId: string;
@@ -298,6 +303,10 @@ export type DeploymentRepository = {
     deploymentId: string,
     input: ApproveDeploymentInput
   ): Promise<DeploymentRecord | undefined>;
+  revokeDeploymentApproval?: (
+    deploymentId: string,
+    input: RevokeDeploymentApprovalInput
+  ) => Promise<DeploymentRecord | undefined>;
   saveDeploymentApplyResults(
     deploymentId: string,
     input: SaveDeploymentApplyResultsInput
@@ -408,6 +417,87 @@ function createTerminalDeploymentValues(
     completedAt: sql`now()`,
     ...touchUpdatedAt
   };
+}
+
+function isTerraformDeploymentScope(scope: DeploymentScope): boolean {
+  return scope === "infrastructure" || scope === "full_stack";
+}
+
+export function selectDeploymentStateBaseline(
+  deployment: DeploymentRecord,
+  projectDeployments: readonly DeploymentRecord[]
+): DeploymentRecord | null {
+  if (!isTerraformDeploymentScope(deployment.scope) || !deployment.awsConnectionId) {
+    return null;
+  }
+
+  const candidates = [
+    deployment,
+    ...projectDeployments.filter((candidate) => candidate.id !== deployment.id)
+  ]
+    .filter(
+      (candidate) =>
+        candidate.projectId === deployment.projectId &&
+        candidate.awsConnectionId === deployment.awsConnectionId &&
+        isTerraformDeploymentScope(candidate.scope) &&
+        ((candidate.id === deployment.id && candidate.stateObjectKey !== null) ||
+          candidate.status === "SUCCESS" ||
+          candidate.status === "FAILED" ||
+          candidate.status === "DESTROYED")
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime() ||
+        right.id.localeCompare(left.id)
+    );
+
+  for (const candidate of candidates) {
+    if (candidate.status === "DESTROYED") {
+      return null;
+    }
+
+    if (candidate.stateObjectKey) {
+      return candidate;
+    }
+
+    if (
+      candidate.status === "SUCCESS" ||
+      (candidate.status === "FAILED" &&
+        candidate.resultWarningSummary?.includes("state upload"))
+    ) {
+      throw new DeploymentConflictError(
+        "The latest Terraform state was not persisted; automatic redeployment is blocked to avoid using stale state"
+      );
+    }
+  }
+
+  return null;
+}
+
+async function clearOlderTerraformStateOwnership(
+  executor: Database,
+  deployment: DeploymentRecord
+): Promise<void> {
+  if (
+    !deployment.stateObjectKey ||
+    !deployment.awsConnectionId ||
+    !isTerraformDeploymentScope(deployment.scope)
+  ) {
+    return;
+  }
+
+  await executor
+    .update(deployments)
+    .set({ stateObjectKey: null })
+    .where(
+      and(
+        eq(deployments.projectId, deployment.projectId),
+        eq(deployments.awsConnectionId, deployment.awsConnectionId),
+        inArray(deployments.scope, ["infrastructure", "full_stack"]),
+        ne(deployments.id, deployment.id),
+        isNotNull(deployments.stateObjectKey)
+      )
+    );
 }
 
 async function runWithOptionalDeploymentFence<T>(
@@ -879,6 +969,32 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       return deployment;
     },
 
+    async revokeDeploymentApproval(deploymentId, input) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          ...clearDeploymentApprovalFields,
+          status: "PENDING",
+          activeStage: null,
+          isBlocked: true,
+          blockedBy: input.blockedBy,
+          blockedReason: input.blockedReason,
+          failureStage: null,
+          errorSummary: null,
+          ...touchUpdatedAt
+        })
+        .where(
+          and(
+            eq(deployments.id, deploymentId),
+            eq(deployments.status, "PENDING"),
+            isNotNull(deployments.approvedAt)
+          )
+        )
+        .returning();
+
+      return deployment;
+    },
+
     async saveDeploymentApplyResults(deploymentId, input) {
       return db.transaction(async (tx) => {
         await tx.delete(deployedResources).where(eq(deployedResources.deploymentId, deploymentId));
@@ -906,22 +1022,30 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
           throw new Error("Deployment apply results could not be saved");
         }
 
+        await clearOlderTerraformStateOwnership(tx as unknown as Database, deployment);
+
         return deployment;
       });
     },
 
     async saveDeploymentApplyState(deploymentId, input) {
-      const [deployment] = await db
-        .update(deployments)
-        .set({
-          stateObjectKey: input.stateObjectKey,
-          resultWarningSummary: input.resultWarningSummary,
-          ...touchUpdatedAt
-        })
-        .where(eq(deployments.id, deploymentId))
-        .returning();
+      return db.transaction(async (tx) => {
+        const [deployment] = await tx
+          .update(deployments)
+          .set({
+            stateObjectKey: input.stateObjectKey,
+            resultWarningSummary: input.resultWarningSummary,
+            ...touchUpdatedAt
+          })
+          .where(eq(deployments.id, deploymentId))
+          .returning();
 
-      return deployment;
+        if (deployment) {
+          await clearOlderTerraformStateOwnership(tx as unknown as Database, deployment);
+        }
+
+        return deployment;
+      });
     },
 
     async completeDeploymentApply(deploymentId, input = {}) {
@@ -988,6 +1112,10 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
             })
             .where(eq(deployments.id, deploymentId))
             .returning();
+          if (deployment) {
+            await clearOlderTerraformStateOwnership(executor, deployment);
+          }
+
           return deployment;
         }
       );
