@@ -18,6 +18,14 @@ export const REVERSE_ENGINEERING_RESOURCE_SELECTIONS: ReverseEngineeringResource
   ...REVERSE_ENGINEERING_RESOURCE_TYPES
 ];
 
+export function getReverseEngineeringSelectionHelp(
+  selection: ReverseEngineeringResourceSelection
+): string {
+  return selection === REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
+    ? "현재 지원 Resource와 확인 전용 AWS Resource를 함께 읽습니다."
+    : "선택한 정식 지원 Resource만 읽습니다.";
+}
+
 // API의 `ALL` 값은 모든 리소스를 뜻하므로, 화면에서도 개별 항목이 모두 선택된 상태로 보입니다.
 export function isReverseEngineeringResourceSelectionChecked(
   selectedResourceTypes: readonly ReverseEngineeringResourceSelection[],

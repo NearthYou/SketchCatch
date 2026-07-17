@@ -1,0 +1,103 @@
+import type { DiscoveredResource, ReverseEngineeringScanResult } from "@sketchcatch/types";
+
+export type ReverseEngineeringDisplayState = "supported" | "review_only";
+
+export type ReverseEngineeringResourcePresentation = {
+  readonly displayState: ReverseEngineeringDisplayState;
+  readonly displayName: string;
+  readonly serviceLabel: string;
+  readonly statusLabel: string;
+  readonly statusDescription: string;
+  readonly regionLabel: string;
+  readonly technicalIdentity: string;
+};
+
+export type ReverseEngineeringScanSummary = {
+  readonly discoveredCount: number;
+  readonly boardCount: number;
+  readonly reviewOnlyCount: number;
+  readonly unreadableServiceCount: number;
+};
+
+const SERVICE_LABELS: Readonly<Record<string, string>> = {
+  "AWS::EC2::VPC": "VPC",
+  "AWS::EC2::Subnet": "서브넷",
+  "AWS::EC2::Instance": "EC2 인스턴스",
+  "AWS::IAM::Role": "IAM 역할",
+  "AWS::Lambda::Function": "Lambda 함수",
+  "AWS::ElasticLoadBalancingV2::LoadBalancer": "로드 밸런서",
+  "AWS::RDS::DBInstance": "RDS 데이터베이스",
+  "AWS::S3::Bucket": "S3 버킷"
+};
+
+export function presentReverseEngineeringResource(
+  resource: DiscoveredResource
+): ReverseEngineeringResourcePresentation {
+  const displayState =
+    resource.resourceType === "UNKNOWN" || resource.analysisExcluded ? "review_only" : "supported";
+  const hasRelationships = (resource.relationships?.length ?? 0) > 0;
+
+  return {
+    displayState,
+    displayName: getDisplayName(resource),
+    serviceLabel: SERVICE_LABELS[resource.providerResourceType] ?? "AWS Resource",
+    statusLabel: getStatusLabel(displayState, hasRelationships),
+    statusDescription: getStatusDescription(displayState, hasRelationships),
+    regionLabel: resource.region,
+    technicalIdentity: resource.providerResourceId
+  };
+}
+
+export function summarizeReverseEngineeringScan(
+  result: ReverseEngineeringScanResult
+): ReverseEngineeringScanSummary {
+  return {
+    discoveredCount: result.discoveredResources.length,
+    boardCount: result.architectureJson.nodes.length,
+    reviewOnlyCount: result.discoveredResources.filter(
+      (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
+    ).length,
+    unreadableServiceCount: result.scanErrors.length
+  };
+}
+
+function getDisplayName(resource: DiscoveredResource): string {
+  const displayName = resource.displayName.trim();
+
+  return displayName || getFallbackDisplayName(resource.providerResourceId);
+}
+
+function getFallbackDisplayName(providerResourceId: string): string {
+  if (!providerResourceId.startsWith("arn:")) {
+    return providerResourceId || "이름 미확인 AWS Resource";
+  }
+
+  const arnResource = providerResourceId.split(":").slice(5).join(":");
+  const arnResourceName = arnResource.split(/[/:]/).filter(Boolean).at(-1);
+
+  return arnResourceName || "이름 미확인 AWS Resource";
+}
+
+function getStatusLabel(
+  displayState: ReverseEngineeringDisplayState,
+  hasRelationships: boolean
+): string {
+  if (displayState === "supported") {
+    return "지원됨";
+  }
+
+  return hasRelationships ? "확인 필요" : "검토 전용";
+}
+
+function getStatusDescription(
+  displayState: ReverseEngineeringDisplayState,
+  hasRelationships: boolean
+): string {
+  if (displayState === "supported") {
+    return "정식 지원 Resource로 Board와 후속 작업에 반영할 수 있습니다.";
+  }
+
+  return hasRelationships
+    ? "관계를 확인한 뒤 수동으로 반영할 수 있습니다."
+    : "정식 지원 전까지 검토용으로만 표시합니다.";
+}
