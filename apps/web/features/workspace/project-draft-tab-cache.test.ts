@@ -45,9 +45,6 @@ test("a tab keeps its exclusive local recovery key after refresh", async () => {
     sessionStorage: storage
   });
   firstClaim.release();
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
-  });
 
   const refreshedClaim = await claimProjectDraftTabCacheWorkspaceId({
     createId: () => "unexpected-new-id",

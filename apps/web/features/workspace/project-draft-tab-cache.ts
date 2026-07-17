@@ -2,6 +2,7 @@ import { createWorkspaceId } from "./project-draft-persistence";
 
 const PROJECT_DRAFT_TAB_CACHE_ID = "sketchcatch:project-draft:tab-cache-workspace-id";
 const PROJECT_DRAFT_TAB_CACHE_LOCK_PREFIX = "sketchcatch:project-draft:tab-cache:";
+const STORED_LOCK_RETRY_DELAY_MS = 50;
 
 type ProjectDraftTabSessionStorage = {
   getItem(key: string): string | null;
@@ -31,12 +32,14 @@ export async function claimProjectDraftTabCacheWorkspaceId({
   localCacheWorkspaceId,
   lockManager = getLockManager(),
   sessionStorage = getSessionStorage(),
+  waitForStoredLockRelease = waitForStoredLockReleaseRetry,
   workspaceId
 }: {
   createId?: (() => string) | undefined;
   localCacheWorkspaceId?: string | undefined;
   lockManager?: ProjectDraftTabLockManager | null | undefined;
   sessionStorage?: ProjectDraftTabSessionStorage | null | undefined;
+  waitForStoredLockRelease?: (() => Promise<void>) | undefined;
   workspaceId?: string | undefined;
 }): Promise<ProjectDraftTabCacheClaim> {
   const explicitWorkspaceId = localCacheWorkspaceId ?? workspaceId;
@@ -58,6 +61,13 @@ export async function claimProjectDraftTabCacheWorkspaceId({
       const fallbackWorkspaceId = createId();
       storeWorkspaceId(sessionStorage, fallbackWorkspaceId);
       return createClaim(fallbackWorkspaceId);
+    }
+
+    await waitForStoredLockRelease();
+    const retriedStoredClaim = await tryAcquireWorkspaceLock(lockManager, storedWorkspaceId);
+
+    if (retriedStoredClaim.status === "acquired") {
+      return retriedStoredClaim.claim;
     }
   }
 
@@ -165,4 +175,10 @@ function getSessionStorage(): ProjectDraftTabSessionStorage | null {
   } catch {
     return null;
   }
+}
+
+function waitForStoredLockReleaseRetry(): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, STORED_LOCK_RETRY_DELAY_MS);
+  });
 }
