@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DiscoveredResource, ReverseEngineeringScanResult } from "@sketchcatch/types";
+import type {
+  DiscoveredResource,
+  ResourceType,
+  ReverseEngineeringScanResult
+} from "@sketchcatch/types";
 import {
   getReverseEngineeringServiceLabel,
   presentReverseEngineeringResource,
@@ -9,8 +13,12 @@ import {
 
 type LegacyReverseEngineeringScanResult = Omit<
   ReverseEngineeringScanResult,
-  "reverseEngineeringDraft"
->;
+  "reverseEngineeringDraft" | "scan"
+> & {
+  scan: Omit<ReverseEngineeringScanResult["scan"], "resourceTypes"> & {
+    resourceTypes: ResourceType[];
+  };
+};
 
 function createResource(overrides: Partial<DiscoveredResource> = {}): DiscoveredResource {
   return {
@@ -33,7 +41,7 @@ const legacySavedScanResult = {
     awsConnectionId: "aws-connection-legacy",
     provider: "aws",
     region: "ap-northeast-2",
-    resourceTypes: ["ALL"],
+    resourceTypes: ["VPC", "LAMBDA", "IAM_ROLE"],
     status: "completed",
     createdAt: "2026-07-16T00:00:00.000Z",
     updatedAt: "2026-07-16T00:01:00.000Z",
