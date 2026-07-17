@@ -4,6 +4,8 @@ import {
   type AwsCodeConnectionRepository
 } from "./aws-codeconnection-service.js";
 
+const defaultDeletionReservationTtlMs = 60 * 60 * 1000;
+
 export async function disconnectAwsCodeConnection(
   input: {
     connectionId: string;
@@ -13,6 +15,7 @@ export async function disconnectAwsCodeConnection(
   repository: AwsCodeConnectionRepository,
   options: {
     cleanupManagedResources?: CleanupAwsConnectionManagedResources;
+    deletionReservationTtlMs?: number;
     now?: () => Date;
   } = {}
 ): Promise<void> {
@@ -46,7 +49,7 @@ export async function disconnectAwsCodeConnection(
       404
     );
   }
-  if (existing.status === "CREATING" || existing.status === "DELETING") {
+  if (existing.status === "CREATING") {
     throw new AwsCodeConnectionError(
       "CODECONNECTION_DELETE_BLOCKED",
       "현재 GitHub 빌드 연결 작업이나 앱 빌드·배포가 진행 중입니다. 완료 후 다시 시도해 주세요."
@@ -57,7 +60,10 @@ export async function disconnectAwsCodeConnection(
   const claim = await repository.claimDeletion({
     id: existing.id,
     connectionId: connection.id,
-    now
+    now,
+    staleBefore: new Date(
+      now.getTime() - (options.deletionReservationTtlMs ?? defaultDeletionReservationTtlMs)
+    )
   });
   if (claim !== "claimed") {
     throw new AwsCodeConnectionError(

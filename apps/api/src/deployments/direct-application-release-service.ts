@@ -341,6 +341,7 @@ export function createPostgresDirectApplicationReleaseRepository(
           buildEnvironmentAwsConnectionId: projectBuildEnvironments.awsConnectionId,
           buildEnvironmentAwsCodeConnectionId: projectBuildEnvironments.awsCodeConnectionId,
           buildEnvironmentCodeConnectionArn: awsCodeConnections.connectionArn,
+          buildEnvironmentCodeConnectionStatus: awsCodeConnections.status,
           buildEnvironmentProjectName: projectBuildEnvironments.codeBuildProjectName,
           buildEnvironmentServiceRoleArn: projectBuildEnvironments.codeBuildServiceRoleArn,
           buildEnvironmentPermissionsBoundaryArn: projectBuildEnvironments.permissionsBoundaryArn,
@@ -415,6 +416,7 @@ export function createPostgresDirectApplicationReleaseRepository(
           row.buildEnvironmentAwsConnectionId &&
           row.buildEnvironmentAwsCodeConnectionId &&
           row.buildEnvironmentCodeConnectionArn &&
+          row.buildEnvironmentCodeConnectionStatus === "AVAILABLE" &&
           row.buildEnvironmentProjectName &&
           row.buildEnvironmentServiceRoleArn &&
           row.buildEnvironmentPermissionsBoundaryArn &&

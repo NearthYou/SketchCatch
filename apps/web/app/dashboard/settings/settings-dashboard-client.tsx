@@ -652,18 +652,18 @@ function GitHubBuildConnectionAction({
       </div>
     );
   }
-  if (
-    connection.codeConnection.status === "ERROR" &&
-    !connection.codeConnection.connectionArn
-  ) {
+  if (connection.codeConnection.status === "ERROR") {
+    const hasAwsConnection = Boolean(connection.codeConnection.connectionArn);
     return (
       <div className={styles.buildConnectionPending} role="alert">
         <span>{connection.codeConnection.statusReason ?? "GitHub 빌드 연결 생성에 실패했습니다."}</span>
-        <button disabled={actionPending} onClick={onConnect} type="button">
-          다시 생성
-        </button>
+        {hasAwsConnection ? (
+          <button disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
+        ) : (
+          <button disabled={actionPending} onClick={onConnect} type="button">다시 생성</button>
+        )}
         <button data-danger="true" disabled={actionPending} onClick={onDisconnect} type="button">
-          연결 정보 지우기
+          {hasAwsConnection ? "연결 해제 재시도" : "연결 정보 지우기"}
         </button>
       </div>
     );

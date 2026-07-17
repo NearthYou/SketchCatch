@@ -67,6 +67,7 @@ test("settings gates GitHub build connection behind a verified AWS connection", 
   assert.match(source, /refreshAwsCodeConnection/);
   assert.match(source, /disconnectAwsCodeConnection/);
   assert.match(source, /GitHub 빌드 연결 해제/);
+  assert.match(source, /연결 해제 재시도/);
   assert.match(source, /배포된 애플리케이션 및 인프라는 유지됩니다\./);
   assert.match(source, /confirmedManagedCleanup: true/);
   assert.match(source, /onDisconnect/);

@@ -61,14 +61,21 @@ export type AwsCodeConnectionRepository = {
     now: Date;
   }): Promise<AwsCodeConnectionRecord | undefined>;
   markCreationFailed(input: { id: string; reason: string; now: Date }): Promise<void>;
-  save(
-    input: Omit<AwsCodeConnectionRecord, "createdAt"> & { createdAt?: Date }
-  ): Promise<AwsCodeConnectionRecord>;
+  saveObservedStatus(input: {
+    id: string;
+    expectedUpdatedAt: Date;
+    connectionArn: string;
+    providerType: "GitHub";
+    status: AwsCodeConnectionStatus;
+    statusReason: string | null;
+    updatedAt: Date;
+  }): Promise<AwsCodeConnectionRecord | undefined>;
   findManagedResources(connectionId: string): Promise<AwsConnectionManagedResources>;
   claimDeletion(input: {
     id: string;
     connectionId: string;
     now: Date;
+    staleBefore: Date;
   }): Promise<"claimed" | "blocked" | "busy" | "not_found">;
   completeDeletion(input: { id: string; connectionId: string }): Promise<boolean>;
   markDeletionFailed(input: { id: string; reason: string; now: Date }): Promise<void>;
@@ -236,29 +243,24 @@ export function createPostgresAwsCodeConnectionRepository(
         );
     },
 
-    async save(input) {
-      const createdAt = input.createdAt ?? input.updatedAt;
+    async saveObservedStatus(input) {
       const [connection] = await db
-        .insert(awsCodeConnections)
-        .values({ ...input, createdAt })
-        .onConflictDoUpdate({
-          target: awsCodeConnections.awsConnectionId,
-          set: {
-            connectionArn: input.connectionArn,
-            providerType: input.providerType,
-            status: input.status,
-            statusReason: input.statusReason,
-            updatedAt: input.updatedAt
-          }
+        .update(awsCodeConnections)
+        .set({
+          connectionArn: input.connectionArn,
+          providerType: input.providerType,
+          status: input.status,
+          statusReason: input.statusReason,
+          updatedAt: input.updatedAt
         })
+        .where(
+          and(
+            eq(awsCodeConnections.id, input.id),
+            eq(awsCodeConnections.updatedAt, input.expectedUpdatedAt),
+            inArray(awsCodeConnections.status, ["PENDING", "AVAILABLE", "ERROR"])
+          )
+        )
         .returning();
-
-      if (!connection) {
-        throw new AwsCodeConnectionError(
-          "CODECONNECTION_CREATE_FAILED",
-          "GitHub build connection metadata was not saved"
-        );
-      }
       return connection;
     },
 
@@ -304,7 +306,10 @@ export function createPostgresAwsCodeConnectionRepository(
           )
           .for("update");
         if (!record) return "not_found" as const;
-        if (record.status === "CREATING" || record.status === "DELETING") {
+        if (
+          record.status === "CREATING" ||
+          (record.status === "DELETING" && record.updatedAt > input.staleBefore)
+        ) {
           return "busy" as const;
         }
         if (await hasActiveBuildWork(tx, input.connectionId)) {
@@ -638,20 +643,26 @@ export async function refreshAwsCodeConnection(
   if (!existing.connectionArn) {
     return toResponse(existing, connection.region);
   }
+  if (existing.status === "DELETING") {
+    return toResponse(existing, connection.region);
+  }
 
   const observed = await gateway.get({
     ...connection,
     connectionArn: existing.connectionArn
   });
-  const saved = await repository.save({
-    ...existing,
+  const saved = await repository.saveObservedStatus({
+    id: existing.id,
+    expectedUpdatedAt: existing.updatedAt,
     connectionArn: observed.connectionArn,
     providerType: observed.providerType,
     status: observed.status,
     statusReason: observed.statusReason,
     updatedAt: options.now?.() ?? new Date()
   });
-  return toResponse(saved, connection.region);
+  if (saved) return toResponse(saved, connection.region);
+  const current = await repository.findByAwsConnectionId(connection.id);
+  return current ? toResponse(current, connection.region) : { codeConnection: null };
 }
 
 async function requireVerifiedConnection(

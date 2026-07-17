@@ -115,10 +115,30 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
     };
   }
 
-  async save(input: Omit<AwsCodeConnectionRecord, "createdAt"> & { createdAt?: Date }) {
+  async saveObservedStatus(input: {
+    id: string;
+    expectedUpdatedAt: Date;
+    connectionArn: string;
+    providerType: "GitHub";
+    status: AwsCodeConnectionStatus;
+    statusReason: string | null;
+    updatedAt: Date;
+  }) {
+    if (
+      !this.record ||
+      this.record.id !== input.id ||
+      this.record.status === "DELETING" ||
+      this.record.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()
+    ) {
+      return undefined;
+    }
     this.record = {
-      ...input,
-      createdAt: input.createdAt ?? this.record?.createdAt ?? fixedNow
+      ...this.record,
+      connectionArn: input.connectionArn,
+      providerType: input.providerType,
+      status: input.status,
+      statusReason: input.statusReason,
+      updatedAt: input.updatedAt
     };
     return this.record;
   }
@@ -127,10 +147,13 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
     return this.managedResources;
   }
 
-  async claimDeletion(input: { id: string; now: Date }) {
+  async claimDeletion(input: { id: string; now: Date; staleBefore: Date }) {
     if (!this.record || this.record.id !== input.id) return "not_found" as const;
     if (this.activeBuildWork) return "blocked" as const;
-    if (this.record.status === "CREATING" || this.record.status === "DELETING") {
+    if (
+      this.record.status === "CREATING" ||
+      (this.record.status === "DELETING" && this.record.updatedAt > input.staleBefore)
+    ) {
       return "busy" as const;
     }
     this.record = {
@@ -440,6 +463,28 @@ test("refreshing a GitHub CodeConnection persists the AWS handshake status", asy
   assert.equal(repository.record?.updatedAt.toISOString(), "2026-07-15T00:05:00.000Z");
 });
 
+test("refresh does not overwrite a concurrent disconnect claim", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = createAvailableRecord();
+  repository.saveObservedStatus = async () => {
+    repository.record = {
+      ...createAvailableRecord(),
+      status: "DELETING",
+      updatedAt: new Date("2026-07-15T00:01:00.000Z")
+    };
+    return undefined;
+  };
+
+  const refreshed = await refreshAwsCodeConnection(
+    { connectionId, userId },
+    repository,
+    new FakeGateway(),
+    { now: () => new Date("2026-07-15T00:02:00.000Z") }
+  );
+
+  assert.equal(refreshed.codeConnection?.status, "DELETING");
+});
+
 test("disconnect removes the confirmed managed build resources and metadata", async () => {
   const repository = new InMemoryRepository();
   repository.record = createAvailableRecord();
@@ -512,6 +557,26 @@ test("disconnect keeps retryable metadata when AWS cleanup fails", async () => {
   assert.equal(repository.record?.status, "ERROR");
   assert.match(repository.record?.statusReason ?? "", /관리 리소스 정리에 실패/u);
   assert.doesNotMatch(repository.record?.statusReason ?? "", /secret/u);
+});
+
+test("disconnect retries an expired deletion claim", async () => {
+  const repository = new InMemoryRepository();
+  repository.record = {
+    ...createAvailableRecord(),
+    status: "DELETING"
+  };
+
+  await disconnectAwsCodeConnection(
+    { connectionId, userId, confirmedManagedCleanup: true },
+    repository,
+    {
+      cleanupManagedResources: async () => undefined,
+      deletionReservationTtlMs: 1_000,
+      now: () => new Date("2026-07-15T00:00:02.000Z")
+    }
+  );
+
+  assert.equal(repository.record, undefined);
 });
 
 function createAvailableRecord(): AwsCodeConnectionRecord {
