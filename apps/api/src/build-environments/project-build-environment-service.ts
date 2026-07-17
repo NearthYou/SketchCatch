@@ -19,6 +19,10 @@ import {
   sourceRepositories
 } from "../db/schema.js";
 import { createCodeBuildPermissionsBoundaryName } from "../aws-connections/aws-connection-service.js";
+import {
+  createProjectBuildCacheIdentity,
+  type ProjectBuildCacheIdentity
+} from "./project-build-cache.js";
 
 export const projectBuildImage = "aws/codebuild/standard:7.0";
 export const projectBuildComputeType = "BUILD_GENERAL1_SMALL";
@@ -97,6 +101,7 @@ export type DesiredProjectBuildEnvironment = {
   sourceRepositoryUrl: string;
   image: typeof projectBuildImage;
   computeType: typeof projectBuildComputeType;
+  buildCache: ProjectBuildCacheIdentity;
   runtimeFingerprint: string;
 };
 
@@ -626,6 +631,11 @@ export function createDesiredProjectBuildEnvironment(
   const permissionsBoundaryArn = `arn:aws:iam::${context.awsConnection.accountId}:policy/${createCodeBuildPermissionsBoundaryName(context.awsConnection.id)}`;
   const repositoryName = context.sourceRepository.name.replace(/\.git$/iu, "");
   const sourceRepositoryUrl = `https://github.com/${context.sourceRepository.owner}/${repositoryName}.git`;
+  const buildCache = createProjectBuildCacheIdentity({
+    projectId: context.projectId,
+    accountId: context.awsConnection.accountId,
+    region: context.awsConnection.region
+  });
   const fingerprintInput = {
     projectId: context.projectId,
     codeBuildProjectName,
@@ -635,6 +645,7 @@ export function createDesiredProjectBuildEnvironment(
     codeConnectionArn: context.codeConnection.connectionArn,
     image: projectBuildImage,
     computeType: projectBuildComputeType,
+    buildCache,
     buildConfig: context.confirmedBuildConfig.ecsWeb
   } as const;
   const runtimeFingerprint = createHash("sha256")

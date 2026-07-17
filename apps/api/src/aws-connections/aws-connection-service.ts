@@ -13,6 +13,7 @@ import type {
 } from "@sketchcatch/types";
 import type { DeploymentStatus } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
+import { projectBuildCacheRepositoryActions } from "../build-environments/project-build-cache.js";
 import {
   awsCodeConnections,
   awsConnections,
@@ -1563,6 +1564,14 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "            Resource:",
     '              - !Sub "arn:${AWS::Partition}:codeconnections:${AWS::Region}:${AWS::AccountId}:connection/*"',
     '              - !Sub "arn:${AWS::Partition}:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/*"',
+    "          - Effect: Allow",
+    "            Action: ecr:GetAuthorizationToken",
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
+    ...projectBuildCacheRepositoryActions.map((action) => `              - ${action}`),
+    "            Resource:",
+    '              - !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/sketchcatch-*-build-cache"',
     "  SketchCatchTerraformApplyPolicy:",
     "    Type: AWS::IAM::Policy",
     "    Properties:",
