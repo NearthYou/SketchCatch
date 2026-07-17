@@ -6700,6 +6700,21 @@
   width: 46px;
 }
 
+.liveObservationPresentationIconImage {
+  height: 46px;
+  object-fit: contain;
+  width: 46px;
+}
+
+.liveObservationPresentationIconFallback {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  display: inline-flex;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+
 .liveObservationPresentationStage > strong,
 .liveObservationCapacityUnit > strong {
   color: var(--workspace-text, #171717);

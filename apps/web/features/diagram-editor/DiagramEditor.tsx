@@ -266,7 +266,7 @@ function DiagramEditorInner({
   onDiagramSaveRequest,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
-  projectName = "Project workspace",
+  projectName = "프로젝트 보드",
   rightPanel,
   saveStatus = "편집 중",
   showSaveAction = true,

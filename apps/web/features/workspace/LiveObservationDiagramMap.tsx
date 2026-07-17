@@ -1,6 +1,7 @@
 import { Box } from "lucide-react";
 import { useMemo } from "react";
 import type { DiagramJson, DiagramNode, LiveObservationSnapshot } from "@sketchcatch/types";
+import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import type { LiveObservationSignalMapBurst } from "./LiveObservationSignalMap";
 import {
   createLiveObservationDiagramModel,
@@ -148,10 +149,14 @@ export function LiveObservationDiagramMap({
 }
 
 function ResourceIcon({ node }: { readonly node: DiagramNode }) {
-  return node.iconUrl ? (
-    <img alt="" draggable={false} src={node.iconUrl} />
-  ) : (
-    <Box aria-hidden="true" size={26} strokeWidth={1.5} />
+  return (
+    <ResourceIconImage
+      alt=""
+      className={styles.liveObservationPresentationIconImage}
+      fallbackClassName={styles.liveObservationPresentationIconFallback}
+      fallbackSize={26}
+      src={node.iconUrl}
+    />
   );
 }
 
