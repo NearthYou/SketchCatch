@@ -21,6 +21,75 @@ function createResource(overrides: Partial<DiscoveredResource> = {}): Discovered
   };
 }
 
+const legacySavedScanResult = {
+  architectureJson: {
+    nodes: [
+      { id: "vpc-legacy", type: "VPC", label: "Production VPC", positionX: 0, positionY: 0, config: {} },
+      {
+        id: "lambda-legacy",
+        type: "LAMBDA",
+        label: "legacy-orders-handler",
+        positionX: 240,
+        positionY: 0,
+        config: {}
+      }
+    ],
+    edges: [
+      {
+        id: "edge-lambda-legacy-vpc-legacy",
+        sourceId: "vpc-legacy",
+        targetId: "lambda-legacy"
+      }
+    ]
+  },
+  discoveredResources: [
+    {
+      id: "vpc-legacy",
+      provider: "aws",
+      providerResourceType: "AWS::EC2::VPC",
+      providerResourceId: "vpc-0123456789abcdef0",
+      region: "ap-northeast-2",
+      displayName: "Production VPC",
+      resourceType: "VPC",
+      config: {}
+    },
+    {
+      id: "lambda-legacy",
+      provider: "aws",
+      providerResourceType: "AWS::Lambda::Function",
+      providerResourceId:
+        "arn:aws:lambda:ap-northeast-2:123456789012:function:legacy-orders-handler",
+      displayName:
+        "arn:aws:lambda:ap-northeast-2:123456789012:function:legacy-orders-handler",
+      region: "ap-northeast-2",
+      resourceType: "LAMBDA",
+      config: {},
+      analysisExcluded: true,
+      relationships: [{ type: "connects_to", targetResourceId: "vpc-legacy" }]
+    },
+    {
+      id: "iam-role-legacy",
+      provider: "aws",
+      providerResourceType: "AWS::IAM::Role",
+      providerResourceId: "arn:aws:iam::123456789012:role/legacy-read-only",
+      displayName: "legacy-read-only",
+      region: "ap-northeast-2",
+      resourceType: "UNKNOWN",
+      config: {}
+    }
+  ],
+  scanErrors: [
+    {
+      id: "legacy-scan-error",
+      resourceType: "S3",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "Denied",
+      retryable: false
+    }
+  ]
+} as unknown as ReverseEngineeringScanResult;
+
 test("VPC는 지원됨 상태와 사람이 읽을 수 있는 서비스 이름으로 표시한다", () => {
   const presentation = presentReverseEngineeringResource(createResource());
 
@@ -145,6 +214,32 @@ test("빈 이름의 비-ARN provider ID는 서비스 기반 기본 이름으로 
 
   assert.equal(presentation.displayName, "이름 미확인 VPC");
   assert.equal(presentation.technicalIdentity, "vpc-0123456789abcdef0");
+});
+
+test("과거 저장 scan JSONB는 새 표시 필드 없이 안전하게 짧은 이름과 검토 상태를 계산한다", () => {
+  const legacyLambda = legacySavedScanResult.discoveredResources.find(
+    (resource) => resource.id === "lambda-legacy"
+  );
+
+  assert.ok(legacyLambda);
+
+  const presentation = presentReverseEngineeringResource(legacyLambda);
+
+  assert.deepEqual(presentation, {
+    displayState: "review_only",
+    displayName: "legacy-orders-handler",
+    serviceLabel: "Lambda 함수",
+    statusLabel: "확인 필요",
+    statusDescription: "관계를 확인한 뒤 수동으로 반영할 수 있습니다.",
+    regionLabel: "ap-northeast-2",
+    technicalIdentity: "arn:aws:lambda:ap-northeast-2:123456789012:function:legacy-orders-handler"
+  });
+  assert.deepEqual(summarizeReverseEngineeringScan(legacySavedScanResult), {
+    discoveredCount: 3,
+    boardCount: 2,
+    reviewOnlyCount: 2,
+    unreadableServiceCount: 1
+  });
 });
 
 test("스캔 요약은 발견, Board, 확인 전용, 읽지 못한 서비스 수를 분리한다", () => {

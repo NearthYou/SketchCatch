@@ -1856,6 +1856,12 @@ type ReverseEngineeringScanResult = {
 - `importSuggestions`: Terraform import로 넘길 수 있는 제안
 - `scanErrors`: 일부 리소스를 읽지 못했을 때의 이유
 
+화면의 `supported`/`review_only` 표시는 저장하는 상태가 아니라 읽기 시점의 presentation 값이다.
+`DiscoveredResource.resourceType`, `analysisExcluded`, 관계 유무를 바탕으로 계산하므로, 과거
+`ReverseEngineeringScanResult` JSONB에 새 표시 필드를 추가하거나 DB migration을 하지 않아도 기존 scan 결과를
+그대로 읽을 수 있다. 원본 `providerResourceId`는 기술 원본 정보로 보존하고, 기본 화면 이름은 읽기 시점에 짧고
+사람이 읽을 수 있는 이름으로 유도한다.
+
 스캔 중에 보여줄 진행 상황은 `ReverseEngineeringScanLogLine`으로 저장한다.
 
 ```ts
