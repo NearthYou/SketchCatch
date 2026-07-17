@@ -174,3 +174,10 @@ Short English-only working log for the current agent context. Older records are 
 - Merged the controlled AI Workbench close/blocking behavior with the latest CI/CD return command and selected Live Observation target flow in `WorkspaceRightPanel`.
 - Focused workspace regressions pass 43/43. Root lint, typecheck, and build pass, and the merge contains no unresolved paths.
 - No migration was authored or modified during conflict resolution; migration files in the merge came from `dev`.
+
+### 2026-07-17 - Unify workspace observation and deployment controls
+
+- Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
+- Converted the project-bar Deployment action to the shared icon-button treatment and kept its black active state scoped only to the open Deployment console.
+- Focused workspace tests pass 17/17; Web lint and typecheck pass; root lint, typecheck, and build pass. The full test run stops on the unrelated existing `git-cicd-readiness-contract` `null !== 0` failure in `packages/types`.
+- Chrome visual automation was unavailable, so final signed-in visual confirmation remains manual. No Deployment, Terraform, AWS, or database mutation was performed.

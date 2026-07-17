@@ -117,6 +117,7 @@ function ProjectWorkspaceDraftManagerState({
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [isAiChatOpen, setAiChatOpen] = useState(false);
   const [isBlockingPanelOpen, setBlockingPanelOpen] = useState(false);
+  const [isDeploymentConsoleOpen, setDeploymentConsoleOpen] = useState(false);
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
@@ -663,6 +664,7 @@ function ProjectWorkspaceDraftManagerState({
           />
         )}
         initialDiagram={initialDiagram}
+        isDeploymentConsoleOpen={isDeploymentConsoleOpen}
         onBoardReady={handleBoardReady}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
@@ -686,6 +688,7 @@ function ProjectWorkspaceDraftManagerState({
             initialCicdReturnCommand={initialCicdReturnCommand}
             initialTerraformFiles={initialTerraformFiles}
             onBlockingPanelOpenChange={setBlockingPanelOpen}
+            onDeploymentConsoleOpenChange={setDeploymentConsoleOpen}
             onPanelOpenRequest={closeAiChat}
             onInitialCicdReturnCommandReady={acknowledgeInitialCicdReturnCommand}
             onSelectTerraformIssue={setSelectedTerraformIssueKey}

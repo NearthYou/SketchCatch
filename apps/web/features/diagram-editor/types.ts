@@ -66,6 +66,7 @@ export type DiagramEditorProps = {
   initialReferenceDropTargetNodeId?: string | undefined;
   initialSelectedEdgeIds?: readonly string[] | undefined;
   initialSelectedNodeIds?: readonly string[] | undefined;
+  isDeploymentConsoleOpen?: boolean | undefined;
   leftPanel?: ReactNode;
   onBoardReady?: ((element: HTMLElement) => void) | undefined;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;

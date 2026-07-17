@@ -263,6 +263,7 @@ function DiagramEditorInner({
   initialReferenceDropTargetNodeId,
   initialSelectedEdgeIds,
   initialSelectedNodeIds,
+  isDeploymentConsoleOpen = false,
   leftPanel,
   onBoardReady,
   onDiagramChange,
@@ -2977,6 +2978,7 @@ function DiagramEditorInner({
         }}
         workspace={{
           dashboardHref,
+          isDeploymentConsoleOpen,
           projectName,
           saveStatus,
           showSaveAction,

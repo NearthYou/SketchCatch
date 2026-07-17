@@ -93,6 +93,7 @@ export type WorkspaceRightPanelProps = {
   readonly onInitialCicdReturnCommandReady?: ((cleanedHref: string) => void) | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
   readonly onBlockingPanelOpenChange: (isOpen: boolean) => void;
+  readonly onDeploymentConsoleOpenChange?: ((isOpen: boolean) => void) | undefined;
   readonly onPanelOpenRequest: () => void;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
@@ -134,6 +135,7 @@ export function WorkspaceRightPanel({
   initialTerraformFiles,
   terraformFilesReplacement,
   onBlockingPanelOpenChange,
+  onDeploymentConsoleOpenChange = noopDeploymentConsoleOpenChange,
   onPanelOpenRequest,
   onInitialCicdReturnCommandReady,
   onSelectTerraformIssue,
@@ -211,11 +213,16 @@ export function WorkspaceRightPanel({
     onBlockingPanelOpenChange(isDeploymentConsoleOpen || isLiveObservationOpen);
   }, [isDeploymentConsoleOpen, isLiveObservationOpen, onBlockingPanelOpenChange]);
 
+  useEffect(() => {
+    onDeploymentConsoleOpenChange(isDeploymentConsoleOpen);
+  }, [isDeploymentConsoleOpen, onDeploymentConsoleOpenChange]);
+
   useEffect(
     () => () => {
       onBlockingPanelOpenChange(false);
+      onDeploymentConsoleOpenChange(false);
     },
-    [onBlockingPanelOpenChange]
+    [onBlockingPanelOpenChange, onDeploymentConsoleOpenChange]
   );
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
@@ -957,6 +964,7 @@ export function WorkspaceRightPanel({
             <Rocket size={18} aria-hidden="true" />
           </button>
           <button
+            aria-label="Live Observation"
             className={styles.collapsedPanelButton}
             onClick={() => openLiveObservation()}
             title="Live Observation"
@@ -1019,16 +1027,16 @@ export function WorkspaceRightPanel({
                 {issueCount}
               </span>
             </button>
+            <button
+              aria-label="Live Observation"
+              className={styles.panelModeButton}
+              onClick={() => openLiveObservation()}
+              title="Live Observation"
+              type="button"
+            >
+              <Activity size={16} aria-hidden="true" />
+            </button>
           </div>
-          <button
-            className={styles.panelModeTextButton}
-            onClick={() => openLiveObservation()}
-            title="Live Observation"
-            type="button"
-          >
-            <Activity size={14} aria-hidden="true" />
-            <span>Live Observation</span>
-          </button>
         </div>
 
         <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
@@ -1115,6 +1123,8 @@ function clampTerraformCodePaneRatio(ratio: number): number {
     Math.max(MIN_TERRAFORM_CODE_PANE_RATIO, Math.round(ratio))
   );
 }
+
+function noopDeploymentConsoleOpenChange(): void {}
 
 function getTerraformLeaveReplayTarget(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) {

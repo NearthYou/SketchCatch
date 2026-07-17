@@ -178,31 +178,10 @@
   cursor: not-allowed;
 }
 
-.projectBarPrimaryAction {
-  align-items: center;
+.projectBarDeployButton[data-active="true"] {
   background: var(--workspace-text);
-  border: 1px solid var(--workspace-text);
-  border-radius: 8px;
+  border-color: var(--workspace-text);
   color: var(--workspace-surface);
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 700;
-  gap: 6px;
-  height: 36px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
-.projectBarPrimaryAction:hover,
-.projectBarPrimaryAction:focus-visible {
-  opacity: 0.86;
-  outline: none;
-}
-
-.projectBarPrimaryAction:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .projectBarDivider {
