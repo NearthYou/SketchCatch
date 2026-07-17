@@ -68,6 +68,9 @@ test("GitHub App user authorization connects an installation without changing lo
   });
   let connectedUserId: string | null = null;
   const repository = createRepository({
+    async listActiveGitHubInstallationConnections() {
+      return [];
+    },
     async connectGitHubInstallation(input: {
       userId: string;
       installation: GitHubAppInstallation;
@@ -124,6 +127,9 @@ test("spoofed setup installation ids fail provider user-access verification", as
   });
   let connectionAttempted = false;
   const repository = createRepository({
+    async listActiveGitHubInstallationConnections() {
+      return [];
+    },
     async connectGitHubInstallation() {
       connectionAttempted = true;
       return createConnection(userId, "spoofed-installation");
@@ -164,6 +170,100 @@ test("spoofed setup installation ids fail provider user-access verification", as
     (error) =>
       error instanceof SourceRepositoryConflictError &&
       error.message === "GIT_APP_INSTALLATION_FORBIDDEN"
+  );
+  assert.equal(connectionAttempted, false);
+});
+
+test("GitHub App authorization rejects a second active account", async () => {
+  const userId = "password-login-user";
+  const { state: setupState } = await createGitHubAppState({
+    scope: "account",
+    userId,
+    secret: stateSecret
+  });
+  const repository = createRepository({
+    async listActiveGitHubInstallationConnections() {
+      return [createConnection(userId, "installation-existing")];
+    }
+  });
+
+  await assert.rejects(
+    createGitHubInstallationUserAuthorization(
+      {
+        installationId: installation.installationId,
+        setupState,
+        accessContext: { kind: "user", userId },
+        stateSecret,
+        config: {
+          clientId: "github-app-client-id",
+          callbackUrl:
+            "https://sketchcatch.test/api/source-repositories/github/user-authorization/callback"
+        }
+      },
+      repository
+    ),
+    (error) =>
+      error instanceof SourceRepositoryConflictError &&
+      error.message === "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
+  );
+});
+
+test("GitHub App authorization rechecks the single-account invariant at completion", async () => {
+  const userId = "password-login-user";
+  const { state: setupState } = await createGitHubAppState({
+    scope: "account",
+    userId,
+    secret: stateSecret
+  });
+  let listCalls = 0;
+  let connectionAttempted = false;
+  const repository = createRepository({
+    async listActiveGitHubInstallationConnections() {
+      listCalls += 1;
+      return listCalls === 1
+        ? []
+        : [createConnection(userId, "installation-concurrently-connected")];
+    },
+    async connectGitHubInstallation() {
+      connectionAttempted = true;
+      return createConnection(userId, installation.installationId);
+    }
+  });
+  const config = {
+    clientId: "github-app-client-id",
+    clientSecret: "github-app-client-secret",
+    callbackUrl:
+      "https://sketchcatch.test/api/source-repositories/github/user-authorization/callback"
+  };
+  const authorization = await createGitHubInstallationUserAuthorization(
+    {
+      installationId: installation.installationId,
+      setupState,
+      accessContext: { kind: "user", userId },
+      stateSecret,
+      config
+    },
+    repository
+  );
+  const authorizationState = new URL(authorization.authorizationUrl).searchParams.get("state");
+  assert.ok(authorizationState);
+
+  await assert.rejects(
+    completeGitHubInstallationUserAuthorization(
+      {
+        code: "provider-code",
+        authorizationState,
+        cookie: authorization.cookie,
+        accessContext: { kind: "user", userId },
+        stateSecret,
+        config,
+        fetcher: createUserAuthorizationFetch([installation])
+      },
+      repository
+    ),
+    (error) =>
+      error instanceof SourceRepositoryConflictError &&
+      error.message === "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
   );
   assert.equal(connectionAttempted, false);
 });

@@ -230,10 +230,13 @@ export async function putProjectDeploymentTarget(
   return response.target;
 }
 
-export async function listApplicationReleases(projectId: string): Promise<ApplicationRelease[]> {
+export async function listApplicationReleases(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<ApplicationRelease[]> {
   const response = await apiFetch<ApplicationReleaseListResponse>(
     `/projects/${encodeURIComponent(projectId)}/releases`,
-    { auth: true }
+    { auth: true, ...(options.signal ? { signal: options.signal } : {}) }
   );
   return response.releases;
 }
@@ -272,7 +275,8 @@ export async function getProjectDetails(projectId: string): Promise<ProjectDetai
 
 export async function getProjectDraft(projectId: string): Promise<ProjectDraftResponse> {
   return apiFetch<ProjectDraftResponse>(`/projects/${encodeURIComponent(projectId)}/draft`, {
-    auth: true
+    auth: true,
+    cache: "no-store"
   });
 }
 
@@ -315,6 +319,7 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
 export async function saveProjectDraft({
   projectId,
   diagramJson,
+  expectedRevision,
   terraformFiles
 }: {
   projectId: string;
@@ -324,6 +329,7 @@ export async function saveProjectDraft({
     method: "PUT",
     body: {
       diagramJson,
+      expectedRevision,
       ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
@@ -1527,6 +1533,21 @@ export async function prepareProjectBuildEnvironment(
   return response.buildEnvironment;
 }
 
+export async function verifyProjectRepositoryAccess(
+  projectId: string
+): Promise<ProjectBuildEnvironment> {
+  const response = await apiFetch<ProjectBuildEnvironmentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/build-environment/verify-repository-access`,
+    { auth: true, method: "POST" }
+  );
+
+  if (!response.buildEnvironment) {
+    throw new Error("GitHub repository 접근 검증 결과를 확인하지 못했습니다.");
+  }
+
+  return response.buildEnvironment;
+}
+
 export async function listDeployments(
   projectId: string,
   options: { readonly signal?: AbortSignal | undefined } = {}
@@ -2156,9 +2177,7 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
-export async function prepareInfrastructureRollback(
-  deploymentId: string
-): Promise<Deployment> {
+export async function prepareInfrastructureRollback(deploymentId: string): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/infrastructure-rollback`,
     { auth: true, method: "POST" }
@@ -2342,11 +2361,15 @@ export async function listDeploymentResources(deploymentId: string): Promise<Dep
   return response.resources;
 }
 
-export async function listTerraformOutputs(deploymentId: string): Promise<TerraformOutput[]> {
+export async function listTerraformOutputs(
+  deploymentId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<TerraformOutput[]> {
   const response = await apiFetch<TerraformOutputListResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/outputs`,
     {
-      auth: true
+      auth: true,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 

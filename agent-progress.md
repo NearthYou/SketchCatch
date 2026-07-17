@@ -42,23 +42,6 @@ Short English-only working log for the current agent context. Older records are 
 - Structured clarification answers now remain one confirmed `question: answer` fact, and provider-originated clarification emits a new full snapshot with the pending question before the terminal result.
 - Passed focused API 79/79, focused Web 43/43, full Web 527/527, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Final whole-branch re-review is Ready with no findings.
 
-### 2026-07-16 - Implement provider-verified Runtime Convergence v1
-
-- Added provider-neutral shared targets, strict Zod DTOs, canonical target identity, nullable RDS release evidence, and legacy target reconstruction with fail-closed canonical/legacy consistency checks.
-- Added a ten-adapter registry with current-state reads, provider/target and artifact comparison, rollout, health, rollback evidence, already-active decisions, and secret-shaped evidence rejection.
-- Added adversarial regressions for cross-provider revisions, pre-provider stale target rejection, inactive ECS services, non-Fargate GitOps observations, unhealthy Lambda versions, GitOps region drift, v3 rollback evidence, and divergent handoff targets.
-- Integrated Direct releases with read-only ECS/Fargate inspection, a DNS-pinned public HTTPS health probe, safe rollout fallback, and persisted convergence outcomes.
-- Extended generated GitOps workflows and v3 evidence for ECS, Lambda, EC2 ASG, and Static S3/CloudFront. Mutations are skipped only after provider preflight and independently rechecked by reconcilers.
-- Kept static artifact bytes target-independent by storing convergence markers on the CloudFront origin rather than in the artifact manifest.
-- Added explicit coverage for all ten runtime adapters across deployable ResourceDefinitions and documented the contract, safety boundaries, compatibility behavior, and operational flow.
-- No real credentials, live AWS mutation, Terraform apply/destroy, user artifact upload, or user Git/CI/CD handoff was performed.
-
-### 2026-07-17 - Address PR #446 review feedback
-
-- Kept missing ECS deployment configuration fail-closed, made every nested access explicit, and guarded unexpected DNS lookup result shapes before address processing.
-- Converted malformed health URLs into Zod validation errors and malformed provider revision metadata into `provider_revision_unverified` rather than native runtime errors.
-- Review regressions pass with the full focused runtime/resource/API set at 79/79. Harness, migration compatibility, lint, typecheck, build, and diff checks pass.
-
 ### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
 - Added all seven artifact kinds, strict v2 evidence DTOs, canonical identity, persistent Postgres claims, read-only AWS verification, and project-scoped artifact listing.
@@ -191,11 +174,13 @@ Short English-only working log for the current agent context. Older records are 
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
 
-### 2026-07-17 - Resolve dev merge conflict in the workspace panel
+### 2026-07-17 - Restore release-candidate multipart S3 permissions
 
-- Merged the controlled AI Workbench close/blocking behavior with the latest CI/CD return command and selected Live Observation target flow in `WorkspaceRightPanel`.
-- Focused workspace regressions pass 43/43. Root lint, typecheck, and build pass, and the merge contains no unresolved paths.
-- No migration was authored or modified during conflict resolution; migration files in the merge came from `dev`.
+- Added the missing `ListMultipartUploadParts` and `AbortMultipartUpload` permissions to both production API and trusted worker task policies, with structure checks that require both roles to retain them.
+- Multipart completion failures now preserve the S3 operation, object key, provider error name, and HTTP status; the public storage interface and deployment failure-stage contract are unchanged.
+- Focused release-candidate tests (3/3), production infrastructure structure checks, Terraform formatting and validation, all workspace lint/typecheck commands, API/shared-package builds, sandbox safety tests (25/25), harness, formatting, and diff checks pass.
+- Full API, web, and types suites still expose unrelated `dev` failures caused by missing test environment values/tools, sandbox socket restrictions, and pre-existing contract assertions. The API build passes; the webpack web build compiles but stops on the existing invalid Next Route export in `architecture-draft/route.ts`.
+- No Terraform plan/apply, AWS mutation, or deployment was performed. After review and merge, an operator-approved runtime Terraform plan/apply is required before the deployed task roles receive the permissions.
 
 ### 2026-07-17 - Unify workspace observation and deployment controls
 
@@ -212,6 +197,19 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-17 - Merge issue #448 work with current dev
 
-- Merged `origin/dev` at `404d30a9` and resolved five Workspace/Diagram conflicts without dropping viewer, Live Observation, saved-title, draft-revision, CI/CD return, or AI patch-preview behavior.
+- Merged `origin/dev` through `f2f0c8ff` and resolved Workspace, Diagram, AI start, ProjectDraft, and GitHub settings conflicts without dropping either branch's behavior.
 - Updated the cached GitHub settings contract and restored the Destroy Plan approval/retry boundary using `failedAt`.
 - Focused Module/Template regressions and full Web tests pass; harness, knowledge check, lint, typecheck, and build pass. Local full API tests remain environment-blocked by missing `DATABASE_URL` and `zstd`; affected API files match `origin/dev`.
+
+### 2026-07-17 - Refocus the repository README
+
+- Reworked the README around the problem, approval flow, and boundary between AI suggestions, deterministic validation, and user-authorized cloud mutation.
+- Kept the AWS/Terraform-first MVP and provider-neutral product direction explicit while removing repeated implementation detail.
+- Verified every relative README link and ran `pnpm harness:check` successfully. This was documentation-only, so runtime builds and product tests were not rerun.
+
+### 2026-07-17 - Preserve dirty local ProjectDraft recovery
+
+- Preserved dirty IndexedDB drafts during Workspace reload regardless of client/server clock skew and added an explicit choice between restoring one and replacing it with the latest server draft.
+- Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
+- Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.
+- Focused ProjectDraft Web tests pass 37/37. Changed-file lint and direct API/Web typechecks pass. The local full Turbo wrapper could not start API/Web tasks because pnpm refused to purge copied temporary-worktree `node_modules` without a TTY. The Webpack build compiled, then the generated Next route check failed on pre-existing helper exports in architecture-draft and architecture-patch-preview routes. No DB migration, cloud mutation, deployment, or Git handoff was performed.

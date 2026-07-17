@@ -49,6 +49,7 @@ import {
   prepareDeployment,
   prepareInfrastructureRollback,
   prepareProjectBuildEnvironment,
+  verifyProjectRepositoryAccess,
   retryDeploymentFrontend,
   runDeploymentInit,
   runDeploymentDestroy,
@@ -976,7 +977,18 @@ export function DirectDeploymentScreen({
         setBuildEnvironment(preparedBuildEnvironment);
         if (preparedBuildEnvironment.status !== "ready") {
           throw new Error(
-            "빌드 환경 검증을 완료하지 못했습니다. GitHub 빌드 연결과 AWS 권한을 확인해 주세요."
+            "빌드 환경 검증을 완료하지 못했습니다. AWS CodeBuild용 GitHub 권한과 AWS 연결을 확인해 주세요."
+          );
+        }
+        const repositoryVerifiedBuildEnvironment =
+          await verifyProjectRepositoryAccess(projectId);
+        setBuildEnvironment(repositoryVerifiedBuildEnvironment);
+        if (
+          repositoryVerifiedBuildEnvironment.repositoryVerificationStatus !== "verified"
+        ) {
+          throw new Error(
+            repositoryVerifiedBuildEnvironment.repositoryVerificationStatusReason ??
+              "CodeBuild가 프로젝트 GitHub repository의 확정 commit을 checkout하지 못했습니다."
           );
         }
       }
@@ -1334,6 +1346,43 @@ export function DirectDeploymentScreen({
                   </DeploymentSummaryItem>
                 ) : null}
               </div>
+              {needsBuildEnvironment &&
+              buildEnvironment?.repositoryVerificationStatus === "failed" ? (
+                <div className={styles.deploymentValidationError} role="alert">
+                  <strong>Repository 빌드 권한 확인 필요</strong>
+                  <p>
+                    {buildEnvironment.sourceRepositoryUrl} · 요청 commit{
+                      " "
+                    }{buildEnvironment.repositoryVerificationRequestedCommitSha ?? "확인 불가"} · 실제 checkout{
+                      " "
+                    }{buildEnvironment.repositoryVerificationResolvedCommitSha ?? "실패"}
+                  </p>
+                  <p>
+                    AWS {selectedAwsConnection?.accountId ?? "계정 확인 불가"} ·{
+                      " "
+                    }{selectedAwsConnection?.region ?? "region 확인 불가"}
+                  </p>
+                  <p>
+                    {buildEnvironment.repositoryVerificationStatusReason ??
+                      "CodeBuild가 프로젝트 Repository의 확정 commit을 checkout하지 못했습니다."}
+                  </p>
+                  <div className={styles.deploymentValidationActions}>
+                    <a href="/dashboard/settings#github-account-connection">
+                      GitHub Repository 권한 확인
+                    </a>
+                    <a href="/dashboard/settings#aws-codebuild-github-authorization">
+                      AWS GitHub 권한 다시 연결
+                    </a>
+                    <button
+                      disabled={!canRunPlan || requestState === "loading"}
+                      onClick={() => void startTerraformPlan()}
+                      type="button"
+                    >
+                      Repository 빌드 권한 다시 확인
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {selectedDeployment?.planSummary ? (
                 <PlanSummaryRows deployment={selectedDeployment} />
               ) : null}
@@ -2537,7 +2586,13 @@ function formatBuildEnvironmentStatus(
   buildEnvironment: ProjectBuildEnvironment | null
 ): string {
   if (!buildEnvironment) return "준비 필요";
-  if (buildEnvironment.status === "ready") return "사용 가능";
+  if (
+    buildEnvironment.status === "ready" &&
+    buildEnvironment.repositoryVerificationStatus === "verified"
+  ) {
+    return "Repository 검증 완료";
+  }
+  if (buildEnvironment.status === "ready") return "Repository 검증 필요";
   if (buildEnvironment.status === "preparing") return "준비 중";
   if (buildEnvironment.status === "verification_failed") return "확인 실패";
   return "AWS 재연결 필요";
@@ -2546,7 +2601,13 @@ function formatBuildEnvironmentStatus(
 function getBuildEnvironmentStatusTone(
   buildEnvironment: ProjectBuildEnvironment | null
 ): DeploymentStatusTone | "warning" {
-  if (buildEnvironment?.status === "ready") return "success";
+  if (
+    buildEnvironment?.status === "ready" &&
+    buildEnvironment.repositoryVerificationStatus === "verified"
+  ) {
+    return "success";
+  }
+  if (buildEnvironment?.status === "ready") return "warning";
   if (buildEnvironment?.status === "preparing") return "running";
   if (buildEnvironment?.status === "verification_failed") return "error";
   return "warning";

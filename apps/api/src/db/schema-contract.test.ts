@@ -242,6 +242,12 @@ test("deployment status enum uses a domain-specific database name", () => {
 test("GitHub CodeBuild release plane persists build, candidate, lease, and step evidence", () => {
   assert(findColumn(getTableConfig(awsCodeConnections).columns, "connection_arn"));
   assert(findColumn(getTableConfig(projectBuildEnvironments).columns, "permissions_boundary_arn"));
+  assert(
+    findColumn(
+      getTableConfig(projectBuildEnvironments).columns,
+      "repository_verification_resolved_commit_sha"
+    )
+  );
   assert(findColumn(getTableConfig(projectExecutionLeases).columns, "fencing_version"));
   assert(findColumn(getTableConfig(releaseCandidates).columns, "composite_digest"));
   assert(findColumn(getTableConfig(applicationReleaseSteps).columns, "fencing_version"));

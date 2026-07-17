@@ -31,6 +31,7 @@ import {
   type LiveObservationArchitectureResource,
   type LiveObservationArchitectureResourceState
 } from "./live-observation-architecture";
+import type { LiveObservationViewport } from "./live-observation-view-state";
 import styles from "./workspace.module.css";
 
 type LiveObservationFlowNodeData = Record<string, unknown> & {
@@ -48,12 +49,21 @@ const LIVE_OBSERVATION_RESOURCE_MIN_WIDTH = 168;
 const LIVE_OBSERVATION_RESOURCE_MIN_HEIGHT = 112;
 const LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_WIDTH = 216;
 const LIVE_OBSERVATION_DETAIL_RESOURCE_MIN_HEIGHT = 124;
+const DEFAULT_LIVE_OBSERVATION_VIEWPORT: LiveObservationViewport = {
+  x: 0,
+  y: 0,
+  zoom: 1
+};
 
 export function LiveObservationDiagramMap({
   architecture,
+  initialViewport,
+  onViewportChange,
   snapshot
 }: {
   readonly architecture: ArchitectureJson;
+  readonly initialViewport: LiveObservationViewport | null;
+  readonly onViewportChange: (viewport: LiveObservationViewport) => void;
   readonly snapshot: LiveObservationV2Snapshot | null;
 }) {
   const model = useMemo(
@@ -87,9 +97,10 @@ export function LiveObservationDiagramMap({
       <div className={styles.liveObservationArchitectureCanvas}>
         <ReactFlow<LiveObservationFlowNode, Edge>
           colorMode="light"
+          defaultViewport={initialViewport ?? DEFAULT_LIVE_OBSERVATION_VIEWPORT}
           edges={edges}
           elementsSelectable={false}
-          fitView
+          fitView={initialViewport === null}
           fitViewOptions={{ maxZoom: 1.2, minZoom: 0.8, padding: 0.16 }}
           maxZoom={1.8}
           minZoom={0.12}
@@ -97,6 +108,7 @@ export function LiveObservationDiagramMap({
           nodes={nodes}
           nodesConnectable={false}
           nodesDraggable={false}
+          onMoveEnd={(_event, viewport) => onViewportChange(viewport)}
           panOnDrag
           proOptions={{ hideAttribution: true }}
           zoomOnDoubleClick={false}

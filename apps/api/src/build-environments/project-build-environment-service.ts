@@ -19,6 +19,7 @@ import {
   sourceRepositories
 } from "../db/schema.js";
 import { createCodeBuildPermissionsBoundaryName } from "../aws-connections/aws-connection-service.js";
+import { maskDeploymentMessage } from "../deployments/log-masking.js";
 import {
   createProjectBuildCacheIdentity,
   type ProjectBuildCacheIdentity
@@ -102,11 +103,20 @@ export type DesiredProjectBuildEnvironment = {
   image: typeof projectBuildImage;
   computeType: typeof projectBuildComputeType;
   buildCache: ProjectBuildCacheIdentity;
+  confirmedCommitSha: string;
   runtimeFingerprint: string;
 };
 
 export type ProjectBuildEnvironmentVerification = {
   verified: boolean;
+  statusReason: string | null;
+};
+
+export type ProjectRepositoryAccessVerification = {
+  verified: boolean;
+  requestedCommitSha: string;
+  resolvedCommitSha: string | null;
+  buildArn: string | null;
   statusReason: string | null;
 };
 
@@ -117,6 +127,10 @@ export type ProjectBuildEnvironmentGateway = {
   verify(
     input: DesiredProjectBuildEnvironment
   ): Promise<ProjectBuildEnvironmentVerification>;
+  verifyRepositoryAccess(
+    input: DesiredProjectBuildEnvironment,
+    requestedCommitSha: string
+  ): Promise<ProjectRepositoryAccessVerification>;
   remove?(input: ProjectBuildEnvironmentRemoval): Promise<void>;
 };
 
@@ -134,7 +148,8 @@ export type ProjectBuildEnvironmentErrorCode =
   | "BUILD_ENVIRONMENT_NOT_FOUND"
   | "BUILD_ENVIRONMENT_DELETE_BLOCKED"
   | "BUILD_ENVIRONMENT_DELETE_FAILED"
-  | "BUILD_ENVIRONMENT_PREPARE_FAILED";
+  | "BUILD_ENVIRONMENT_PREPARE_FAILED"
+  | "REPOSITORY_ACCESS_VERIFICATION_REQUIRED";
 
 export class ProjectBuildEnvironmentError extends Error {
   constructor(
@@ -380,6 +395,14 @@ export function createPostgresProjectBuildEnvironmentRepository(
             runtimeFingerprint: input.runtimeFingerprint,
             status: input.status,
             lastVerifiedAt: input.lastVerifiedAt,
+            repositoryVerificationStatus: input.repositoryVerificationStatus,
+            repositoryVerificationRequestedCommitSha:
+              input.repositoryVerificationRequestedCommitSha,
+            repositoryVerificationResolvedCommitSha:
+              input.repositoryVerificationResolvedCommitSha,
+            repositoryVerificationBuildArn: input.repositoryVerificationBuildArn,
+            repositoryVerificationStatusReason: input.repositoryVerificationStatusReason,
+            repositoryVerifiedAt: input.repositoryVerifiedAt,
             updatedAt: input.updatedAt
           }
         })
@@ -421,6 +444,12 @@ export async function prepareProjectBuildEnvironment(
     runtimeFingerprint: desired.runtimeFingerprint,
     status: "preparing",
     lastVerifiedAt: null,
+    repositoryVerificationStatus: "not_checked",
+    repositoryVerificationRequestedCommitSha: null,
+    repositoryVerificationResolvedCommitSha: null,
+    repositoryVerificationBuildArn: null,
+    repositoryVerificationStatusReason: null,
+    repositoryVerifiedAt: null,
     ...(existing ? { createdAt: existing.createdAt } : {}),
     updatedAt: now
   });
@@ -455,6 +484,12 @@ export async function prepareProjectBuildEnvironment(
     runtimeFingerprint: desired.runtimeFingerprint,
     status: verification.verified ? "ready" : "verification_failed",
     lastVerifiedAt: verification.verified ? now : null,
+    repositoryVerificationStatus: "not_checked",
+    repositoryVerificationRequestedCommitSha: null,
+    repositoryVerificationResolvedCommitSha: null,
+    repositoryVerificationBuildArn: null,
+    repositoryVerificationStatusReason: null,
+    repositoryVerifiedAt: null,
     createdAt: preparing.createdAt,
     updatedAt: now
   });
@@ -463,7 +498,9 @@ export async function prepareProjectBuildEnvironment(
 
 function safeAwsPreparationError(error: unknown): string {
   if (!(error instanceof Error) || !error.message.trim()) return "AWS 요청이 실패했습니다.";
-  return error.message.replace(/[\r\n\t]+/gu, " ").slice(0, 500);
+  return maskDeploymentMessage(error.message)
+    .replace(/[\r\n\t]+/gu, " ")
+    .slice(0, 500);
 }
 
 export async function getProjectBuildEnvironment(
@@ -507,6 +544,81 @@ export async function verifyProjectBuildEnvironment(
     runtimeFingerprint: desired.runtimeFingerprint,
     status: verification.verified ? "ready" : "verification_failed",
     lastVerifiedAt: verification.verified ? now : null,
+    updatedAt: now
+  });
+  return { buildEnvironment: toProjectBuildEnvironment(saved) };
+}
+
+export async function verifyProjectRepositoryAccess(
+  input: { projectId: string; userId: string },
+  repository: ProjectBuildEnvironmentRepository,
+  gateway: ProjectBuildEnvironmentGateway,
+  options: Pick<ProjectBuildEnvironmentServiceOptions, "now"> = {}
+): Promise<ProjectBuildEnvironmentResponse> {
+  const context = await requirePreparationContext(input, repository);
+  const existing = await repository.findByProjectId(input.projectId);
+  if (!existing || existing.status !== "ready") {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_ENVIRONMENT_NOT_FOUND",
+      "Prepare a ready project build environment before verifying repository access",
+      404
+    );
+  }
+  const desired = createDesiredProjectBuildEnvironment(context);
+  if (existing.runtimeFingerprint !== desired.runtimeFingerprint) {
+    throw new ProjectBuildEnvironmentError(
+      "REPOSITORY_ACCESS_VERIFICATION_REQUIRED",
+      "The project build environment changed and must be prepared again"
+    );
+  }
+
+  const requestedCommitSha = context.confirmedBuildConfig.confirmedCommitSha.toLowerCase();
+  let verification: ProjectRepositoryAccessVerification;
+  try {
+    const environmentVerification = await gateway.verify(desired);
+    verification = environmentVerification.verified
+      ? await gateway.verifyRepositoryAccess(desired, requestedCommitSha)
+      : {
+          verified: false,
+          requestedCommitSha,
+          resolvedCommitSha: null,
+          buildArn: null,
+          statusReason:
+            environmentVerification.statusReason ??
+            "The CodeBuild project no longer matches the approved Repository and connection"
+        };
+  } catch (error) {
+    verification = {
+      verified: false,
+      requestedCommitSha,
+      resolvedCommitSha: null,
+      buildArn: null,
+      statusReason: `CodeBuild repository checkout failed: ${safeAwsPreparationError(error)}`
+    };
+  }
+  const resolvedCommitCandidate = verification.resolvedCommitSha?.toLowerCase() ?? null;
+  const resolvedCommitSha =
+    resolvedCommitCandidate && /^([0-9a-f]{40}|[0-9a-f]{64})$/u.test(resolvedCommitCandidate)
+      ? resolvedCommitCandidate
+      : null;
+  const exactCommitVerified =
+    verification.verified &&
+    verification.requestedCommitSha.toLowerCase() === requestedCommitSha &&
+    resolvedCommitSha === requestedCommitSha &&
+    Boolean(verification.buildArn);
+  const now = options.now?.() ?? new Date();
+  const statusReason = exactCommitVerified
+    ? null
+    : verification.statusReason ??
+      "CodeBuild checkout commit did not match the confirmed repository commit";
+  const saved = await repository.save({
+    ...existing,
+    repositoryVerificationStatus: exactCommitVerified ? "verified" : "failed",
+    repositoryVerificationRequestedCommitSha: requestedCommitSha,
+    repositoryVerificationResolvedCommitSha: resolvedCommitSha,
+    repositoryVerificationBuildArn: verification.buildArn,
+    repositoryVerificationStatusReason: statusReason,
+    repositoryVerifiedAt: exactCommitVerified ? now : null,
     updatedAt: now
   });
   return { buildEnvironment: toProjectBuildEnvironment(saved) };
@@ -646,6 +758,7 @@ export function createDesiredProjectBuildEnvironment(
     image: projectBuildImage,
     computeType: projectBuildComputeType,
     buildCache,
+    confirmedCommitSha: context.confirmedBuildConfig.confirmedCommitSha.toLowerCase(),
     buildConfig: context.confirmedBuildConfig.ecsWeb
   } as const;
   const runtimeFingerprint = createHash("sha256")
@@ -762,6 +875,14 @@ function toProjectBuildEnvironment(
     runtimeFingerprint: record.runtimeFingerprint,
     status: record.status,
     lastVerifiedAt: record.lastVerifiedAt?.toISOString() ?? null,
+    repositoryVerificationStatus: record.repositoryVerificationStatus,
+    repositoryVerificationRequestedCommitSha:
+      record.repositoryVerificationRequestedCommitSha,
+    repositoryVerificationResolvedCommitSha:
+      record.repositoryVerificationResolvedCommitSha,
+    repositoryVerificationBuildArn: record.repositoryVerificationBuildArn,
+    repositoryVerificationStatusReason: record.repositoryVerificationStatusReason,
+    repositoryVerifiedAt: record.repositoryVerifiedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString()
   };

@@ -51,7 +51,7 @@ test("pending AWS connections restore the saved verification setup", async () =>
   });
 });
 
-test("settings gates GitHub build connection behind a verified AWS connection", () => {
+test("settings gates AWS CodeBuild GitHub authorization behind one GitHub App and a verified AWS connection", () => {
   const source = readFileSync(
     fileURLToPath(
       new URL("../../app/dashboard/settings/settings-dashboard-client.tsx", import.meta.url)
@@ -59,10 +59,21 @@ test("settings gates GitHub build connection behind a verified AWS connection", 
     "utf8"
   );
 
-  assert.match(source, /GitHub 빌드 연결/);
+  assert.match(source, /AWS CodeBuild용 GitHub 권한/);
+  assert.match(source, /GitHub App 연결이 먼저 필요합니다/);
+  assert.match(source, /GitHub App 연결하기/);
+  assert.match(source, /GitHub 연결 정리 필요/);
+  assert.match(source, /승인 대상 GitHub 계정/);
+  assert.match(source, /useGitHubInstallationsQuery/);
+  assert.match(source, /deriveGitHubCodeBuildAuthorizationTarget/);
   assert.match(source, /AWS 연결이 먼저 필요합니다/);
   assert.match(source, /AWS 연결하러 가기/);
-  assert.match(source, /AWS에서 승인하기/);
+  assert.match(source, /AWS에서 GitHub 권한 승인하기/);
+  assert.match(source, /AWS GitHub 승인 완료/);
+  assert.match(source, /승인 세션이 남아 있으면 로그인 화면이 생략될 수 있습니다/);
+  assert.match(source, /Repository 접근은 프로젝트별 검증/);
+  assert.match(source, /승인한 GitHub 계정 이름을 반환하지 않으므로/);
+  assert.doesNotMatch(source, /GitHub 빌드 연결 완료/);
   assert.match(source, /createAwsCodeConnection/);
   assert.match(source, /refreshAwsCodeConnection/);
   assert.match(source, /connection\.status === "verified"/);

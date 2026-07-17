@@ -242,7 +242,10 @@ export function WorkspaceStartClient({
           }
 
           if (action.kind === "createProject" && action.openMode === "template" && template) {
-            await saveProjectDraft(createTemplateProjectDraft({ projectId: project.id, template }));
+            await saveProjectDraft({
+              ...createTemplateProjectDraft({ projectId: project.id, template }),
+              expectedRevision: null
+            });
           }
 
           clearWorkspaceStartForm();
