@@ -27,12 +27,23 @@ export class TerraformDiagramValidationError extends Error {
 }
 
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
-  const resourceBlocks = graph.nodes.flatMap((node) => [
+  const renderableNodeIds = new Set(
+    graph.nodes
+      .filter((node) => node.config["sketchcatchReferenceTerraform"] !== true)
+      .map((node) => node.id)
+  );
+  const renderableGraph: InfrastructureGraph = {
+    nodes: graph.nodes.filter((node) => renderableNodeIds.has(node.id)),
+    edges: graph.edges.filter(
+      (edge) => renderableNodeIds.has(edge.sourceId) && renderableNodeIds.has(edge.targetId)
+    )
+  };
+  const resourceBlocks = renderableGraph.nodes.flatMap((node) => [
     renderBlock(node),
     ...renderCompanionBlocks(node)
   ]);
 
-  return [...resourceBlocks, ...renderTerraformOutputs(graph)].join("\n\n");
+  return [...resourceBlocks, ...renderTerraformOutputs(renderableGraph)].join("\n\n");
 }
 
 function renderTerraformOutputs(graph: InfrastructureGraph): string[] {
@@ -191,7 +202,7 @@ function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {
 }
 
 function createRenderableResourceConfig(node: InfrastructureGraphNode): Record<string, unknown> {
-  const config = { ...node.config };
+  const config = normalizeReverseEngineeringResourceConfig(node);
   if (!hasInlineLambdaSource(node)) return config;
 
   delete config["inlineSource"];
@@ -199,6 +210,281 @@ function createRenderableResourceConfig(node: InfrastructureGraphNode): Record<s
   config["filename"] = `${archiveAddress}.output_path`;
   config["sourceCodeHash"] = `${archiveAddress}.output_base64sha256`;
   return config;
+}
+
+function normalizeReverseEngineeringResourceConfig(
+  node: InfrastructureGraphNode
+): Record<string, unknown> {
+  if (!isReverseEngineeringResourceConfig(node.config)) {
+    return { ...node.config };
+  }
+
+  if (node.iac.resourceType === "aws_lb") {
+    return normalizeReverseEngineeringLoadBalancerConfig(node.config);
+  }
+
+  if (node.iac.resourceType === "aws_cloudfront_distribution") {
+    return normalizeReverseEngineeringCloudFrontConfig(node.config);
+  }
+
+  return { ...node.config };
+}
+
+function isReverseEngineeringResourceConfig(config: Record<string, unknown>): boolean {
+  return (
+    config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::LoadBalancer" ||
+    config["providerResourceType"] === "AWS::CloudFront::Distribution"
+  );
+}
+
+function normalizeReverseEngineeringLoadBalancerConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  const scheme = readNonEmptyString(config["scheme"]);
+  const internal =
+    typeof config["internal"] === "boolean"
+      ? config["internal"]
+      : scheme
+        ? scheme === "internal"
+        : undefined;
+
+  return compactTerraformConfig({
+    internal,
+    loadBalancerType:
+      readNonEmptyString(config["loadBalancerType"]) ?? readNonEmptyString(config["type"]),
+    name: readNonEmptyString(config["name"]),
+    securityGroups: readStringArray(config["securityGroups"] ?? config["securityGroupIds"]),
+    subnetMapping: normalizeLoadBalancerSubnetMappings(config["subnetMapping"]),
+    subnets: readStringArray(config["subnets"] ?? config["subnetIds"])
+  });
+}
+
+function normalizeLoadBalancerSubnetMappings(value: unknown): Record<string, unknown>[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const mappings = value
+    .filter(isRecord)
+    .map((mapping) =>
+      compactTerraformConfig({
+        allocationId: readNonEmptyString(mapping["allocationId"]),
+        ipv6Address: readNonEmptyString(mapping["ipv6Address"]),
+        privateIpv4Address: readNonEmptyString(mapping["privateIpv4Address"]),
+        subnetId: readNonEmptyString(mapping["subnetId"])
+      })
+    )
+    .filter((mapping) => Object.keys(mapping).length > 0);
+
+  return mappings.length > 0 ? mappings : undefined;
+}
+
+function normalizeReverseEngineeringCloudFrontConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    aliases: readStringArray(config["aliases"]),
+    comment: readString(config["comment"]),
+    defaultCacheBehavior: normalizeCloudFrontCacheBehaviors(config["defaultCacheBehavior"], false),
+    defaultRootObject: readString(config["defaultRootObject"]),
+    enabled: readBoolean(config["enabled"]),
+    httpVersion: readNonEmptyString(config["httpVersion"]),
+    isIpv6Enabled: readBoolean(config["isIpv6Enabled"]),
+    orderedCacheBehavior: normalizeCloudFrontCacheBehaviors(config["orderedCacheBehavior"], true),
+    origin: normalizeCloudFrontOriginBlocks(config["origin"]),
+    priceClass: readNonEmptyString(config["priceClass"]),
+    restrictions: normalizeCloudFrontRestrictions(config["restrictions"]),
+    retainOnDelete: readBoolean(config["retainOnDelete"]),
+    viewerCertificate: normalizeCloudFrontViewerCertificates(config["viewerCertificate"]),
+    waitForDeployment: readBoolean(config["waitForDeployment"]),
+    webAclId: readNonEmptyString(config["webAclId"])
+  });
+}
+
+function normalizeCloudFrontOriginBlocks(value: unknown): Record<string, unknown>[] | undefined {
+  const origins = normalizeRecordList(value).map((origin) =>
+    compactTerraformConfig({
+      connectionAttempts: readNumber(origin["connectionAttempts"]),
+      connectionTimeout: readNumber(origin["connectionTimeout"]),
+      customOriginConfig: normalizeCloudFrontCustomOriginConfig(origin["customOriginConfig"]),
+      domainName: readNonEmptyString(origin["domainName"]),
+      originAccessControlId: readNonEmptyString(origin["originAccessControlId"]),
+      originId: readNonEmptyString(origin["originId"]),
+      originPath: readString(origin["originPath"]),
+      s3OriginConfig: normalizeCloudFrontS3OriginConfig(origin["s3OriginConfig"])
+    })
+  );
+
+  return origins.length > 0 ? origins : undefined;
+}
+
+function normalizeCloudFrontCustomOriginConfig(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized = compactTerraformConfig({
+    httpPort: readNumber(value["httpPort"]),
+    httpsPort: readNumber(value["httpsPort"]),
+    originKeepaliveTimeout: readNumber(value["originKeepaliveTimeout"]),
+    originProtocolPolicy: readNonEmptyString(value["originProtocolPolicy"]),
+    originReadTimeout: readNumber(value["originReadTimeout"]),
+    originSslProtocols: readStringArray(value["originSslProtocols"])
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeCloudFrontS3OriginConfig(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const originAccessIdentity = readString(value["originAccessIdentity"]);
+
+  return originAccessIdentity === undefined ? undefined : { originAccessIdentity };
+}
+
+function normalizeCloudFrontCacheBehaviors(
+  value: unknown,
+  multiple: boolean
+): Record<string, unknown> | Record<string, unknown>[] | undefined {
+  const behaviors = normalizeRecordList(value).map((behavior) =>
+    compactTerraformConfig({
+      allowedMethods: readStringArray(behavior["allowedMethods"]),
+      cachePolicyId: readNonEmptyString(behavior["cachePolicyId"]),
+      cachedMethods: readStringArray(behavior["cachedMethods"]),
+      compress: readBoolean(behavior["compress"]),
+      defaultTtl: readNumber(behavior["defaultTtl"]),
+      fieldLevelEncryptionId: readNonEmptyString(behavior["fieldLevelEncryptionId"]),
+      forwardedValues: normalizeCloudFrontForwardedValues(behavior["forwardedValues"]),
+      maxTtl: readNumber(behavior["maxTtl"]),
+      minTtl: readNumber(behavior["minTtl"]),
+      originRequestPolicyId: readNonEmptyString(behavior["originRequestPolicyId"]),
+      pathPattern: readNonEmptyString(behavior["pathPattern"]),
+      realtimeLogConfigArn: readNonEmptyString(behavior["realtimeLogConfigArn"]),
+      responseHeadersPolicyId: readNonEmptyString(behavior["responseHeadersPolicyId"]),
+      smoothStreaming: readBoolean(behavior["smoothStreaming"]),
+      targetOriginId: readNonEmptyString(behavior["targetOriginId"]),
+      trustedKeyGroups: readStringArray(behavior["trustedKeyGroups"]),
+      trustedSigners: readStringArray(behavior["trustedSigners"]),
+      viewerProtocolPolicy: readNonEmptyString(behavior["viewerProtocolPolicy"])
+    })
+  );
+
+  if (behaviors.length === 0) {
+    return undefined;
+  }
+
+  return multiple ? behaviors : behaviors[0];
+}
+
+function normalizeCloudFrontForwardedValues(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized = compactTerraformConfig({
+    cookies: normalizeCloudFrontCookies(value["cookies"]),
+    headers: readStringArray(value["headers"]),
+    queryString: readBoolean(value["queryString"]),
+    queryStringCacheKeys: readStringArray(value["queryStringCacheKeys"])
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeCloudFrontCookies(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized = compactTerraformConfig({
+    forward: readNonEmptyString(value["forward"]),
+    whitelistedNames: readStringArray(value["whitelistedNames"])
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeCloudFrontRestrictions(value: unknown): Record<string, unknown> | undefined {
+  const restriction = normalizeRecordList(value)[0];
+  const geoRestriction = restriction && isRecord(restriction["geoRestriction"])
+    ? compactTerraformConfig({
+        locations: readStringArray(restriction["geoRestriction"]["locations"]),
+        restrictionType: readNonEmptyString(
+          restriction["geoRestriction"]["restrictionType"]
+        )
+      })
+    : undefined;
+
+  return geoRestriction && Object.keys(geoRestriction).length > 0
+    ? { geoRestriction }
+    : undefined;
+}
+
+function normalizeCloudFrontViewerCertificates(
+  value: unknown
+): Record<string, unknown> | undefined {
+  const certificate = normalizeRecordList(value)[0];
+  if (!certificate) {
+    return undefined;
+  }
+
+  const normalized = compactTerraformConfig({
+    acmCertificateArn: readNonEmptyString(certificate["acmCertificateArn"]),
+    cloudfrontDefaultCertificate: readBoolean(certificate["cloudfrontDefaultCertificate"]),
+    iamCertificateId: readNonEmptyString(certificate["iamCertificateId"]),
+    minimumProtocolVersion: readNonEmptyString(certificate["minimumProtocolVersion"]),
+    sslSupportMethod: readNonEmptyString(certificate["sslSupportMethod"])
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeRecordList(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) {
+    return value.filter(isRecord);
+  }
+
+  return isRecord(value) ? [value] : [];
+}
+
+function compactTerraformConfig(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => {
+      if (value === undefined) return false;
+      return !Array.isArray(value) || value.length > 0;
+    })
+  );
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const strings = value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0
+  );
+
+  return strings.length > 0 ? strings : undefined;
+}
+
+function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function hasInlineLambdaSource(node: InfrastructureGraphNode): boolean {
@@ -947,11 +1233,63 @@ function renderBlock(node: InfrastructureGraphNode): string {
     renderBodyEntry(node.iac.resourceType, key, value, 1)
   );
 
-  return [
+  const block = [
     `${terraformBlockType} "${node.iac.resourceType}" "${node.iac.resourceName}" {`,
     ...body,
     "}"
   ].join("\n");
+
+  return isReverseEngineeringResourceConfig(node.config)
+    ? alignSingleLineTerraformAttributes(block)
+    : block;
+}
+
+// terraform fmt가 같은 depth의 연속된 단일행 attribute에 적용하는 정렬을 재현합니다.
+// Reverse Engineering fixture를 쓰기 전에 수정하지 않아도 strict fmt -check를 통과하게 합니다.
+function alignSingleLineTerraformAttributes(block: string): string {
+  const lines = block.split("\n");
+  let groupStart = 0;
+
+  while (groupStart < lines.length) {
+    const first = parseSingleLineTerraformAttribute(lines[groupStart]);
+    if (!first) {
+      groupStart += 1;
+      continue;
+    }
+
+    const attributes = [first];
+    let groupEnd = groupStart + 1;
+
+    while (groupEnd < lines.length) {
+      const next = parseSingleLineTerraformAttribute(lines[groupEnd]);
+      if (!next || next.indentation !== first.indentation) {
+        break;
+      }
+
+      attributes.push(next);
+      groupEnd += 1;
+    }
+
+    const longestNameLength = Math.max(...attributes.map((attribute) => attribute.name.length));
+    for (const [offset, attribute] of attributes.entries()) {
+      lines[groupStart + offset] =
+        `${attribute.indentation}${attribute.name.padEnd(longestNameLength)} = ${attribute.value}`;
+    }
+    groupStart = groupEnd;
+  }
+
+  return lines.join("\n");
+}
+
+function parseSingleLineTerraformAttribute(
+  line: string | undefined
+): { indentation: string; name: string; value: string } | null {
+  const match = /^(\s+)([a-zA-Z_][a-zA-Z0-9_-]*) = (.+)$/.exec(line ?? "");
+  if (!match || match[3] === "[" || match[3] === "{") {
+    return null;
+  }
+
+  return { indentation: match[1]!, name: match[2]!, value: match[3]! };
 }
 
 function renderBodyEntry(
@@ -1020,7 +1358,8 @@ function shouldRenderNestedBlocks(
   value: unknown
 ): value is Record<string, unknown> | Record<string, unknown>[] {
   return (
-    isTerraformNestedBlockAttribute(resourceType, key) &&
+    (isTerraformNestedBlockAttribute(resourceType, key) ||
+      (resourceType === "aws_lb" && toSnakeCase(key) === "subnet_mapping")) &&
     ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
   );
 }

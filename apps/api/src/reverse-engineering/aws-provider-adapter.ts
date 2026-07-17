@@ -1,5 +1,6 @@
 import type {
   ArchitectureJson,
+  CheckFinding,
   CloudProvider,
   DiscoveredResource,
   DiscoveredResourceRelationship,
@@ -59,7 +60,9 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::EC2::SecurityGroup", "SECURITY_GROUP"],
   ["AWS::EC2::Instance", "EC2"],
   ["AWS::RDS::DBInstance", "RDS"],
-  ["AWS::S3::Bucket", "S3"]
+  ["AWS::S3::Bucket", "S3"],
+  ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
+  ["AWS::CloudFront::Distribution", "CLOUDFRONT"]
 ]);
 
 const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
@@ -70,7 +73,13 @@ const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
   ["SECURITY_GROUP", "aws_security_group"],
   ["EC2", "aws_instance"],
   ["RDS", "aws_db_instance"],
-  ["S3", "aws_s3_bucket"]
+  ["S3", "aws_s3_bucket"],
+  ["LOAD_BALANCER", "aws_lb"],
+  ["CLOUDFRONT", "aws_cloudfront_distribution"]
+]);
+const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
+  "LOAD_BALANCER",
+  "CLOUDFRONT"
 ]);
 const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "providerResourceId",
@@ -101,7 +110,10 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
         discoveredResources,
         reverseEngineeringDraft: createReverseEngineeringDraft(scan, architectureJson),
         architectureJson,
-        findings: createReverseEngineeringFindings(discoveredResources),
+        findings: [
+          ...createReverseEngineeringFindings(discoveredResources),
+          ...createTerraformCreationValidationFindings(discoveredResources)
+        ],
         analysisExclusions: createAnalysisExclusions(discoveredResources),
         importSuggestions: createImportSuggestions(discoveredResources),
         scanErrors: discoveryResult.scanErrors
@@ -165,6 +177,22 @@ function toDiscoveredResource(
   displayName: string
 ): DiscoveredResource {
   const resourceType = awsResourceTypeMap.get(record.providerResourceType) ?? "UNKNOWN";
+  const terraformResourceType = terraformResourceTypeMap.get(resourceType);
+  const terraformResourceName = createTerraformResourceName(record.providerResourceId);
+  const missingTerraformFields = getMissingTerraformCreationFields(resourceType, record.config);
+  const config = REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES.has(resourceType)
+    ? {
+        ...record.config,
+        terraformResourceName,
+        terraformResourceType,
+        ...(missingTerraformFields.length > 0
+          ? {
+              sketchcatchReferenceTerraform: true,
+              terraformValidationMissingFields: missingTerraformFields
+            }
+          : {})
+      }
+    : record.config;
   const baseResource: DiscoveredResource = {
     id: createNodeId(record),
     provider: "aws",
@@ -173,7 +201,7 @@ function toDiscoveredResource(
     region: record.region,
     displayName,
     resourceType,
-    config: record.config,
+    config,
     relationships: record.relationships.flatMap((relationship) =>
       toDiscoveredRelationship(relationship, idMap)
     )
@@ -241,17 +269,184 @@ function createImportSuggestions(
 
     const terraformResourceName = createTerraformResourceName(resource.providerResourceId);
     const terraformAddress = `${terraformResourceType}.${terraformResourceName}`;
+    const terraformBlockDraft = `resource "${terraformResourceType}" "${terraformResourceName}" {}`;
+    const importId = getStableTerraformImportId(resource);
+
+    if (!importId) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        terraformAddress,
+        terraformBlockDraft,
+        reason: createMissingImportIdReason(resource.resourceType),
+        handoffReady: false
+      };
+    }
 
     return {
       id: `import-${resource.id}`,
       resourceId: resource.id,
       status: "ready",
       terraformAddress,
-      importCommand: `terraform import ${terraformAddress} ${resource.providerResourceId}`,
-      terraformBlockDraft: `resource "${terraformResourceType}" "${terraformResourceName}" {}`,
+      importCommand: `terraform import ${terraformAddress} ${importId}`,
+      terraformBlockDraft,
       handoffReady: true
     };
   });
+}
+
+function getStableTerraformImportId(resource: DiscoveredResource): string | null {
+  if (resource.resourceType === "CLOUDFRONT") {
+    return getNonEmptyString(resource.config["id"]);
+  }
+
+  if (resource.resourceType === "LOAD_BALANCER") {
+    const providerResourceId = resource.providerResourceId.trim();
+
+    return isApplicationLoadBalancerArn(providerResourceId) ? providerResourceId : null;
+  }
+
+  return getNonEmptyString(resource.providerResourceId);
+}
+
+function createMissingImportIdReason(resourceType: ResourceType): string {
+  return resourceType === "CLOUDFRONT"
+    ? "Terraform import에 필요한 CloudFront distribution ID가 없습니다."
+    : resourceType === "LOAD_BALANCER"
+      ? "Terraform import에 필요한 ALB ARN이 없습니다."
+      : "Terraform import에 필요한 provider Resource ID가 없습니다.";
+}
+
+function isApplicationLoadBalancerArn(value: string): boolean {
+  return /^arn:[^:]+:elasticloadbalancing:[^:]+:[^:]+:loadbalancer\/app\/.+/.test(value);
+}
+
+function createTerraformCreationValidationFindings(
+  discoveredResources: DiscoveredResource[]
+): CheckFinding[] {
+  return discoveredResources.flatMap((resource) => {
+    if (!REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES.has(resource.resourceType)) {
+      return [];
+    }
+
+    const missingFields = getStringArray(resource.config["terraformValidationMissingFields"]);
+    if (missingFields.length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        id: `reverse-terraform-missing-data-${resource.id}`,
+        category: "configuration" as const,
+        severity: "medium" as const,
+        resourceId: resource.id,
+        title: "새 Terraform 생성에 필요한 정보가 부족합니다",
+        description: `AWS 조회 결과에 ${missingFields.join(", ")} 값이 없습니다.`,
+        recommendation:
+          "기존 Resource import 제안을 검토하거나 누락 값을 직접 채운 뒤 Terraform 생성과 배포를 진행하세요."
+      }
+    ];
+  });
+}
+
+function getMissingTerraformCreationFields(
+  resourceType: ResourceType,
+  config: Record<string, unknown>
+): string[] {
+  if (resourceType === "LOAD_BALANCER") {
+    return [
+      ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
+      ...(getNonEmptyString(config["type"]) ? [] : ["type"]),
+      ...(getNonEmptyString(config["scheme"]) ? [] : ["scheme"]),
+      ...(hasLoadBalancerSubnetPlacement(config) ? [] : ["subnetIds/subnetMapping"])
+    ];
+  }
+
+  if (resourceType === "CLOUDFRONT") {
+    return [
+      ...(typeof config["enabled"] === "boolean" ? [] : ["enabled"]),
+      ...(hasCloudFrontOrigin(config["origin"]) ? [] : ["origin"]),
+      ...(hasCloudFrontDefaultCacheBehavior(config["defaultCacheBehavior"])
+        ? []
+        : ["defaultCacheBehavior"]),
+      ...(hasGeoRestriction(config["restrictions"]) ? [] : ["restrictions"]),
+      ...(hasCloudFrontViewerCertificate(config["viewerCertificate"])
+        ? []
+        : ["viewerCertificate"])
+    ];
+  }
+
+  return [];
+}
+
+function hasCloudFrontOrigin(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (origin) =>
+        isRecord(origin) &&
+        getNonEmptyString(origin["originId"]) !== null &&
+        getNonEmptyString(origin["domainName"]) !== null
+    )
+  );
+}
+
+function hasLoadBalancerSubnetPlacement(config: Record<string, unknown>): boolean {
+  if (getStringArray(config["subnetIds"]).length > 0) {
+    return true;
+  }
+
+  return (
+    Array.isArray(config["subnetMapping"]) &&
+    config["subnetMapping"].length > 0 &&
+    config["subnetMapping"].every(
+      (mapping) => isRecord(mapping) && getNonEmptyString(mapping["subnetId"]) !== null
+    )
+  );
+}
+
+function hasCloudFrontDefaultCacheBehavior(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    getNonEmptyString(value["targetOriginId"]) !== null &&
+    getNonEmptyString(value["viewerProtocolPolicy"]) !== null &&
+    getStringArray(value["allowedMethods"]).length > 0 &&
+    getStringArray(value["cachedMethods"]).length > 0 &&
+    (isRecord(value["forwardedValues"]) || getNonEmptyString(value["cachePolicyId"]) !== null)
+  );
+}
+
+function hasGeoRestriction(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isRecord(value["geoRestriction"]) &&
+    getNonEmptyString(value["geoRestriction"]["restrictionType"]) !== null
+  );
+}
+
+function hasCloudFrontViewerCertificate(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (typeof value["cloudfrontDefaultCertificate"] === "boolean" ||
+      getNonEmptyString(value["acmCertificateArn"]) !== null ||
+      getNonEmptyString(value["iamCertificateId"]) !== null)
+  );
+}
+
+function getNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createNodeId(record: AwsDiscoveredResourceRecord): string {

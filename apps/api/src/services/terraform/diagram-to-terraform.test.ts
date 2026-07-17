@@ -1355,3 +1355,105 @@ function createEcsObservationRuntime(
     ]
   };
 }
+
+test("Reverse Engineering ALB와 CloudFront fixture는 AWS snapshot을 최소 Terraform 필드로 정규화한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_lb", "orders", {
+        accountId: "123456789012",
+        analysisExcluded: false,
+        arn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+        availabilityZones: [
+          { availabilityZone: "ap-northeast-2a", subnetId: "subnet-public-a" },
+          { availabilityZone: "ap-northeast-2b", subnetId: "subnet-public-b" }
+        ],
+        dnsName: "orders-123.ap-northeast-2.elb.amazonaws.com",
+        name: "orders",
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
+        providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        scheme: "internet-facing",
+        securityGroupIds: ["sg-web"],
+        subnetIds: ["subnet-public-a", "subnet-public-b"],
+        type: "application",
+        vpcId: "vpc-orders"
+      }),
+      createLiveObservationNode("aws_cloudfront_distribution", "orders", {
+        accountId: "123456789012",
+        arn: "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTION",
+        comment: "orders entry",
+        defaultCacheBehavior: {
+          allowedMethods: ["GET", "HEAD"],
+          cachedMethods: ["GET", "HEAD"],
+          forwardedValues: { queryString: false, cookies: { forward: "none" } },
+          targetOriginId: "orders-alb",
+          viewerProtocolPolicy: "redirect-to-https"
+        },
+        domainName: "d111111abcdef8.cloudfront.net",
+        enabled: true,
+        id: "EDISTRIBUTION",
+        origin: [
+          {
+            customOriginConfig: {
+              httpPort: 80,
+              httpsPort: 443,
+              originProtocolPolicy: "https-only",
+              originSslProtocols: ["TLSv1.2"]
+            },
+            domainName: "orders-123.ap-northeast-2.elb.amazonaws.com",
+            originId: "orders-alb"
+          }
+        ],
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceType: "AWS::CloudFront::Distribution",
+        restrictions: { geoRestriction: { restrictionType: "none" } },
+        status: "Deployed",
+        viewerCertificate: { cloudfrontDefaultCertificate: true }
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_lb" "orders" \{/);
+  assert.match(terraform, /name\s+= "orders"/);
+  assert.match(terraform, /internal\s+= false/);
+  assert.match(terraform, /load_balancer_type\s+= "application"/);
+  assert.match(terraform, /security_groups = \[[\s\S]*"sg-web"/);
+  assert.match(terraform, /subnets = \[[\s\S]*"subnet-public-a"[\s\S]*"subnet-public-b"/);
+  assert.match(terraform, /resource "aws_cloudfront_distribution" "orders" \{/);
+  assert.match(terraform, /origin \{[\s\S]*origin_id\s+= "orders-alb"/);
+  assert.match(terraform, /default_cache_behavior \{[\s\S]*target_origin_id\s+= "orders-alb"/);
+  assert.match(terraform, /restrictions \{[\s\S]*geo_restriction \{/);
+  assert.match(terraform, /viewer_certificate \{[\s\S]*cloudfront_default_certificate = true/);
+  assert.doesNotMatch(
+    terraform,
+    /^\s*(account_id|analysis_excluded|arn|availability_zones|dns_name|id|provider_parameters|provider_resource_id|provider_resource_type|scheme|status|type|vpc_id)\s*=/m
+  );
+  assert.equal(terraform.match(/^\s*domain_name\s*=/gm)?.length, 1);
+  assert.doesNotMatch(terraform, /must-not-render/);
+});
+
+test("생성 필수값이 부족한 Reverse Engineering Resource는 Terraform block과 output에서 제외한다", () => {
+  const terraform = renderTerraformFromInfrastructureGraph({
+    nodes: [
+      createLiveObservationNode("aws_lb", "incomplete", {
+        arn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/incomplete/one",
+        name: "incomplete",
+        sketchcatchReferenceTerraform: true,
+        terraformValidationMissingFields: ["scheme", "subnetIds"]
+      }),
+      createLiveObservationNode("aws_cloudfront_distribution", "incomplete", {
+        enabled: true,
+        id: "EINCOMPLETE",
+        sketchcatchReferenceTerraform: true,
+        terraformValidationMissingFields: ["origin", "defaultCacheBehavior"]
+      })
+    ],
+    edges: []
+  });
+
+  assert.equal(terraform, "");
+});

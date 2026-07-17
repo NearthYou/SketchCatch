@@ -8,6 +8,7 @@ import type {
 const BOARD_LAYOUT = {
   resourceGapX: 260,
   resourceGapY: 130,
+  globalEdgeStartY: 20,
   subnetGapX: 330,
   subnetGapY: 300,
   vpcGapX: 1120,
@@ -50,7 +51,16 @@ function createArchitectureLayout(resources: readonly DiscoveredResource[]): Rea
   const layoutByResourceId = new Map<string, ArchitectureNodeLayout>();
   const resourcesById = new Map(resources.map((resource) => [resource.id, resource]));
   const vpcs = resources.filter((resource) => resource.resourceType === "VPC");
+  const globalEdgeResources = resources.filter((resource) => resource.resourceType === "CLOUDFRONT");
   const independentResources: DiscoveredResource[] = [];
+
+  for (const [index, resource] of globalEdgeResources.entries()) {
+    layoutByResourceId.set(resource.id, {
+      label: createResourceLabel(resource),
+      positionX: BOARD_LAYOUT.vpcStartX + index * BOARD_LAYOUT.resourceGapX,
+      positionY: BOARD_LAYOUT.globalEdgeStartY
+    });
+  }
 
   for (const [vpcIndex, vpc] of vpcs.entries()) {
     const vpcAnchor = getVpcAnchor(vpcIndex);
@@ -195,13 +205,14 @@ function shouldAppearOnReverseEngineeringBoard(resource: DiscoveredResource): bo
   return (resource.relationships?.length ?? 0) > 0;
 }
 
-// VPC 바로 아래에 보여줄 네트워크 구성요소를 고릅니다.
+// VPC 바로 아래에는 네트워크 구성요소와 여러 Subnet에 걸치는 ALB를 배치합니다.
 function isVpcNetworkResource(resource: DiscoveredResource): boolean {
   return (
     resource.resourceType === "INTERNET_GATEWAY" ||
     resource.resourceType === "ROUTE_TABLE" ||
     resource.resourceType === "ROUTE_TABLE_ASSOCIATION" ||
-    resource.resourceType === "SECURITY_GROUP"
+    resource.resourceType === "SECURITY_GROUP" ||
+    resource.resourceType === "LOAD_BALANCER"
   );
 }
 
@@ -229,7 +240,11 @@ function isSubnetChildResource(
   subnet: DiscoveredResource,
   resourcesById: ReadonlyMap<string, DiscoveredResource>
 ): boolean {
-  if (resource.id === subnet.id || resource.resourceType === "SECURITY_GROUP") {
+  if (
+    resource.id === subnet.id ||
+    resource.resourceType === "SECURITY_GROUP" ||
+    resource.resourceType === "LOAD_BALANCER"
+  ) {
     return false;
   }
 

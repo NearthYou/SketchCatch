@@ -16,6 +16,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test \"src/**/*.test.ts\"",
+    "test:terraform-validate": "tsx src/services/terraform/reverse-engineering-terraform-validation.ts",
     "terraform:audit:validate": "tsx ../../scripts/terraform-resource-validation-audit.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
