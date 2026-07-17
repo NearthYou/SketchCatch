@@ -17,6 +17,7 @@ import {
   createAiArchitectureDraft,
   createAiArchitecturePatchPreview,
   createProject,
+  getProjectDraft,
   saveProjectDraft
 } from "../../../features/workspace/api";
 import { useBrowserVoiceInput } from "../../../features/workspace/use-browser-voice-input";
@@ -87,15 +88,20 @@ export function useAiStartWorkflow({
   const [compilationProposal, setCompilationProposal] =
     useState<ArchitectureBoardCompilationProposal | null>(null);
   const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
-  const [draftClarification, setDraftClarification] =
-    useState<PendingDraftClarification | null>(null);
-  const [patchClarification, setPatchClarification] =
-    useState<PendingPatchClarification | null>(null);
+  const [draftClarification, setDraftClarification] = useState<PendingDraftClarification | null>(
+    null
+  );
+  const [patchClarification, setPatchClarification] = useState<PendingPatchClarification | null>(
+    null
+  );
   const [draftFollowUp, setDraftFollowUp] = useState<ArchitectureDraftFollowUpSession | null>(null);
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
     null
   );
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
+  const [existingProjectDraftRevision, setExistingProjectDraftRevision] = useState<
+    number | null | undefined
+  >(existingProjectId ? undefined : null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [voiceTranscriptNeedsConfirmation, setVoiceTranscriptNeedsConfirmation] = useState(false);
@@ -105,13 +111,14 @@ export function useAiStartWorkflow({
   });
 
   useEffect(() => {
-    const storedDraft = existingProjectId && existingProjectName
-      ? {
-          projectName: existingProjectName,
-          startMode: "ai" as const,
-          updatedAt: new Date().toISOString()
-        }
-      : readAiStartProjectDraft();
+    const storedDraft =
+      existingProjectId && existingProjectName
+        ? {
+            projectName: existingProjectName,
+            startMode: "ai" as const,
+            updatedAt: new Date().toISOString()
+          }
+        : readAiStartProjectDraft();
 
     if (storedDraft === null) {
       router.replace("/workspace/new");
@@ -128,14 +135,39 @@ export function useAiStartWorkflow({
     ]);
   }, [existingProjectId, existingProjectName, router]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!existingProjectId) {
+      setExistingProjectDraftRevision(null);
+      return;
+    }
+
+    setExistingProjectDraftRevision(undefined);
+    void getProjectDraft(existingProjectId)
+      .then((response) => {
+        if (!cancelled) {
+          setExistingProjectDraftRevision(response.draft?.revision ?? null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRequestState("error");
+          setErrorMessage(
+            getApiErrorMessage(error, "현재 프로젝트의 최신 Draft 상태를 불러오지 못했습니다.")
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [existingProjectId]);
+
   async function submitPrompt(value = composerValue): Promise<void> {
     const prompt = value.trim();
 
-    if (
-      prompt.length === 0 ||
-      requestState === "loading" ||
-      voiceTranscriptNeedsConfirmation
-    ) {
+    if (prompt.length === 0 || requestState === "loading" || voiceTranscriptNeedsConfirmation) {
       return;
     }
 
@@ -257,6 +289,13 @@ export function useAiStartWorkflow({
       return;
     }
 
+    if (existingProjectId && existingProjectDraftRevision === undefined) {
+      failRequest(
+        "현재 프로젝트의 최신 Draft 상태를 확인하는 중입니다. 잠시 후 다시 시도해주세요."
+      );
+      return;
+    }
+
     beginRequest(false);
 
     try {
@@ -272,7 +311,11 @@ export function useAiStartWorkflow({
       const approvedMessages = appendMessage(
         createAiStartMessage("assistant", "status", `${draft.title}을 Board에 적용했습니다.`)
       );
-      await saveProjectDraft({ diagramJson: compilationProposal.diagram, projectId });
+      await saveProjectDraft({
+        diagramJson: compilationProposal.diagram,
+        expectedRevision: existingProjectId ? (existingProjectDraftRevision ?? null) : null,
+        projectId
+      });
       storeApprovedAiStartMessages(projectId, approvedMessages);
       if (!existingProjectId) {
         clearAiStartProjectDraft();
@@ -412,7 +455,10 @@ export function useAiStartWorkflow({
   return {
     approveDraft,
     canApprove:
-      draft !== null && compilationProposal !== null && previewDiagram !== null && requestState !== "loading",
+      draft !== null &&
+      compilationProposal !== null &&
+      previewDiagram !== null &&
+      requestState !== "loading",
     canSubmit:
       composerValue.trim().length > 0 &&
       requestState !== "loading" &&

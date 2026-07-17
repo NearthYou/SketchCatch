@@ -152,58 +152,9 @@ Short English-only working log for the current agent context. Older records are 
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
 
-### 2026-07-17 - Resolve dev merge conflict in the workspace panel
+### 2026-07-17 - Preserve dirty local ProjectDraft recovery
 
-- Merged the controlled AI Workbench close/blocking behavior with the latest CI/CD return command and selected Live Observation target flow in `WorkspaceRightPanel`.
-- Focused workspace regressions pass 43/43. Root lint, typecheck, and build pass, and the merge contains no unresolved paths.
-- No migration was authored or modified during conflict resolution; migration files in the merge came from `dev`.
-
-### 2026-07-17 - Unify workspace observation and deployment controls
-
-- Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
-- Converted the project-bar Deployment action to the shared icon-button treatment and kept its black active state scoped only to the open Deployment console.
-- Focused workspace tests pass 17/17; Web lint and typecheck pass; root lint, typecheck, and build pass. The full test run stops on the unrelated existing `git-cicd-readiness-contract` `null !== 0` failure in `packages/types`.
-- Chrome visual automation was unavailable, so final signed-in visual confirmation remains manual. No Deployment, Terraform, AWS, or database mutation was performed.
-
-### 2026-07-17 - Stabilize workspace overlay notifications
-
-- Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
-- Added a call-recording regression for callback replacement and cleanup behavior.
-- Focused workspace tests pass 20/20; Web lint and typecheck pass.
-
-### 2026-07-17 - Guard missing template tags
-
-- Made detail-preview tag rendering tolerate templates whose runtime data omits `tags`.
-- Focused template preview tests pass 3/3; Web lint and typecheck pass.
-
-### 2026-07-17 - Cache Live Observation reference data
-
-- Moved Deployment, release, Terraform Output, and immutable Architecture reads into the shared React Query cache.
-- Fresh project and Deployment data is reused on modal re-entry while background refreshes keep cached content visible.
-- Focused Live Observation tests pass 8/8; Web lint and typecheck pass.
-
-### 2026-07-17 - Retain Live Observation view state
-
-- Retained the selected Deployment and React Flow viewport outside the modal, scoped by project and Deployment.
-- Re-entry restores the prior zoom and pan state, while switching projects starts with an isolated view state.
-- Focused Live Observation tests pass 8/8; Web lint and typecheck pass.
-
-### 2026-07-17 - Retain active Live Observation sessions on re-entry
-
-- Retained the active observation session and latest snapshot outside the modal, isolated by project.
-- Closing the modal aborts the SSE stream; reopening an active session reconnects with the retained session instead of creating a new one.
-- Focused Live Observation tests pass 9/9; Web lint and typecheck pass.
-
-### 2026-07-17 - Close reviewed Live Observation re-entry gaps
-
-- Remounted the diagram map per Deployment so cached Deployment switches restore the matching saved viewport instead of retaining the previous map transform.
-- Limited SSE reconnection to the selected, unexpired active session and abort the prior stream when that eligibility changes.
-- Focused re-entry tests pass 10/10; root harness, lint, typecheck, and build pass. Local browser smoke verification restored the selected Deployment and Architecture immediately after close and re-entry without changing the workspace URL.
-- Standards and Spec re-reviews report no remaining findings. No observation session, AWS mutation, or DB migration was performed.
-
-### 2026-07-17 - Address Live Observation state update review feedback
-
-- Preserved the existing view-state reference when a Deployment viewport is stored with unchanged x, y, and zoom values.
-- Prevented the reference-data effect from notifying the parent when its CI/CD target or fallback Deployment is already selected.
-- Focused viewport tests pass 2/2 and modal contract tests pass 9/9. Harness, lint, typecheck, and build pass; Standards and Spec reviews report no findings.
-- The full test command remains blocked by the existing Git/CI/CD readiness contract assertion (`null !== 0`) in `packages/types`, unrelated to these Web-only changes. No DB migration or external mutation was performed.
+- Preserved dirty IndexedDB drafts during Workspace reload regardless of client/server clock skew and added an explicit choice between restoring one and replacing it with the latest server draft.
+- Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
+- Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.
+- Focused ProjectDraft Web tests pass 37/37. Changed-file lint and direct API/Web typechecks pass. The local full Turbo wrapper could not start API/Web tasks because pnpm refused to purge copied temporary-worktree `node_modules` without a TTY. The Webpack build compiled, then the generated Next route check failed on pre-existing helper exports in architecture-draft and architecture-patch-preview routes. No DB migration, cloud mutation, deployment, or Git handoff was performed.
