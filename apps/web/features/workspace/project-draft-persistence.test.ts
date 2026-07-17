@@ -87,6 +87,7 @@ test("chooseInitialDiagram keeps Terraform files from the selected server draft"
   ];
   const localDraft = makeLocalProjectDraft({
     diagramJson: editedDiagram,
+    dirty: false,
     draftSavedAt: "2026-06-24T01:01:00.000Z",
     terraformFiles: [{ fileName: "main.tf", terraformCode: 'variable "cidr" {}' }]
   });
@@ -139,7 +140,10 @@ test("markDraftServerSaved removes stale local Terraform files when the server d
   assert.equal("terraformFiles" in savedDraft, false);
 });
 
-test("chooseInitialDiagram prefers the server draft even when the local draft was saved later", () => {
+test("chooseInitialDiagram preserves a newer dirty local draft for an explicit recovery decision", () => {
+  const localTerraformFiles = [
+    { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "local" {}' }
+  ];
   const serverDraft = makeProjectDraft({
     diagramJson: emptyDiagram,
     serverSavedAt: "2026-06-24T01:00:00.000Z"
@@ -147,7 +151,8 @@ test("chooseInitialDiagram prefers the server draft even when the local draft wa
   const localDraft = makeLocalProjectDraft({
     diagramJson: editedDiagram,
     dirty: true,
-    draftSavedAt: "2026-06-24T01:01:00.000Z"
+    draftSavedAt: "2026-06-24T01:01:00.000Z",
+    terraformFiles: localTerraformFiles
   });
 
   assert.deepEqual(
@@ -157,13 +162,15 @@ test("chooseInitialDiagram prefers the server draft even when the local draft wa
       fallbackDiagram: emptyDiagram
     }),
     {
-      diagramJson: emptyDiagram,
-      source: "server"
+      diagramJson: editedDiagram,
+      requiresRecoveryDecision: true,
+      source: "local",
+      terraformFiles: localTerraformFiles
     }
   );
 });
 
-test("chooseInitialDiagram prefers the server draft when it is newer than a dirty local draft", () => {
+test("chooseInitialDiagram preserves a dirty local draft when the server changed later", () => {
   const serverDraft = makeProjectDraft({
     diagramJson: editedDiagram,
     serverSavedAt: "2026-06-24T01:01:00.000Z"
@@ -181,13 +188,14 @@ test("chooseInitialDiagram prefers the server draft when it is newer than a dirt
       fallbackDiagram: editedDiagram
     }),
     {
-      diagramJson: editedDiagram,
-      source: "server"
+      diagramJson: emptyDiagram,
+      requiresRecoveryDecision: true,
+      source: "local"
     }
   );
 });
 
-test("chooseInitialDiagram uses the server draft when save times are equal", () => {
+test("chooseInitialDiagram preserves a dirty local draft when save times are equal", () => {
   const savedAt = "2026-06-24T01:00:00.000Z";
   const serverDraft = makeProjectDraft({
     diagramJson: editedDiagram,
@@ -206,13 +214,14 @@ test("chooseInitialDiagram uses the server draft when save times are equal", () 
       fallbackDiagram: emptyDiagram
     }),
     {
-      diagramJson: editedDiagram,
-      source: "server"
+      diagramJson: emptyDiagram,
+      requiresRecoveryDecision: true,
+      source: "local"
     }
   );
 });
 
-test("chooseInitialDiagram does not replace a server board with a newer empty local board", () => {
+test("chooseInitialDiagram preserves a newer dirty empty board for an explicit recovery decision", () => {
   const serverDraft = makeProjectDraft({
     diagramJson: editedDiagram,
     serverSavedAt: "2026-06-24T01:00:00.000Z"
@@ -230,8 +239,9 @@ test("chooseInitialDiagram does not replace a server board with a newer empty lo
       fallbackDiagram: editedDiagram
     }),
     {
-      diagramJson: editedDiagram,
-      source: "server"
+      diagramJson: emptyDiagram,
+      requiresRecoveryDecision: true,
+      source: "local"
     }
   );
 });

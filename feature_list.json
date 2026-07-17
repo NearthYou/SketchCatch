@@ -903,13 +903,14 @@
         "저장 요청이 마지막으로 읽은 expectedRevision을 필수로 전달하고 서버는 조건부 UPDATE 또는 충돌 없는 최초 INSERT만 허용한다.",
         "오래된 revision과 최초 저장 경쟁은 409 Conflict를 반환하며 최신 DiagramJson과 Terraform files를 변경하지 않는다.",
         "Workspace 새로고침은 no-store 서버 응답을 우선하고 서버 조회 실패를 오래된 IndexedDB 상태로 숨기지 않는다.",
+        "dirty 로컬 복구본은 클라이언트·서버 시계와 관계없이 사용자 선택 전까지 보존되고 자동 서버 저장이 차단되며, 서버 상태 선택 시에만 IndexedDB를 교체한다.",
         "충돌 UI는 로컬 편집을 보존한 채 최신 상태 재로드와 현재 편집 유지 선택지를 제공하고 자동 checkpoint 재시도를 중단한다."
       ],
       "evidence": {
         "lastVerified": "2026-07-17",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/routes/project-draft-schemas.test.ts src/routes/projects.test.ts",
-          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/project-draft-sync.test.ts features/workspace/project-draft-persistence.test.ts features/workspace/project-draft-save-status.test.ts features/workspace/project-draft-conflict.test.ts features/workspace/project-draft-tab-cache.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/project-draft-sync.test.ts features/workspace/project-draft-persistence.test.ts features/workspace/project-draft-save-status.test.ts features/workspace/project-draft-conflict.test.ts features/workspace/project-draft-recovery.test.ts features/workspace/project-draft-tab-cache.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/use-ai-start-workflow.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test --test-name-pattern=Repository.*saves app/workspace/repository/repository-start-client.test.ts",
           "pnpm lint",
@@ -918,7 +919,7 @@
           "pnpm harness:check",
           "git diff --check"
         ],
-        "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 33/33, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, preserved conflict status, separated each tab's local recovery key across tabs, refreshes, and duplicated tabs, and migrated the legacy shared recovery row; focused lint, API/Web typecheck, and API bundle pass afterward. A real Chromium three-tab flow passed with first save 200/revision 1, stale save 409 plus conflict dialog, server-latest browser refresh, conflict reload, and stable per-tab recovery keys. The follow-up Next build cannot run from the collision-isolation worktree because Turbopack rejects dependency symlinks outside that filesystem root. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
+        "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 37/37, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, source typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, preserved conflict status, separated each tab's local recovery key across tabs, refreshes, and duplicated tabs, migrated the legacy shared recovery row, and preserved every dirty local recovery draft behind an accessible local-or-server choice without client/server clock assumptions. Server choice now replaces the mounted Terraform editor without marking the restored server state dirty. A real Chromium three-tab flow passed with first save 200/revision 1, stale save 409 plus conflict dialog, server-latest browser refresh, conflict reload, and stable per-tab recovery keys. The current Webpack build compiles but its generated type check is blocked by pre-existing invalid helper exports in the architecture-draft and architecture-patch-preview Next route files. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
       },
       "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was executed."
     }

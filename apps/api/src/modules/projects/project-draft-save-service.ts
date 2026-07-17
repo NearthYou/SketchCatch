@@ -57,7 +57,7 @@ export async function saveProjectDraftRevision({
       .where(
         and(
           eq(projectDrafts.projectId, projectId),
-          eq(projectDrafts.revision, input.expectedRevision)
+          eq(projectDrafts.revision, existingDraft.revision)
         )
       )
       .returning();
@@ -72,7 +72,7 @@ export async function saveProjectDraftRevision({
   const savedDraft = existingDraft
     ? await updateExistingDraft({
         db,
-        expectedRevision: input.expectedRevision,
+        expectedRevision: existingDraft.revision,
         input,
         now,
         projectId,
@@ -110,7 +110,7 @@ async function updateExistingDraft({
   terraformFiles
 }: {
   db: Database;
-  expectedRevision: number | null;
+  expectedRevision: number;
   input: SaveProjectDraftRequest;
   now: Date;
   projectId: string;

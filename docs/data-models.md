@@ -676,7 +676,7 @@ type ProjectDraftConflictResponse = ApiErrorResponse & {
 - 서버 draft가 없는 새 프로젝트의 최초 저장만 `expectedRevision: null`을 보낸다.
 - `PUT /api/projects/:projectId/draft`는 `projectId`와 `expectedRevision`이 모두 일치하는 row만 갱신한다. 최초 생성 경쟁은 `INSERT ... ON CONFLICT DO NOTHING`으로 한 요청만 성공시킨다.
 - 현재 서버 revision이 다르면 API는 `409 Conflict`와 현재 revision·저장 시각을 반환하며 DiagramJson을 변경하지 않는다.
-- `GET /api/projects/:projectId/draft`는 `private, no-store`로 응답한다. Workspace는 서버 조회가 성공한 경우 서버 draft를 IndexedDB보다 우선하며, 서버 조회 실패를 오래된 로컬 draft로 숨기지 않는다.
+- `GET /api/projects/:projectId/draft`는 `private, no-store`로 응답한다. Workspace는 서버 조회가 성공한 경우 서버 draft를 기준으로 삼되, IndexedDB draft가 `dirty: true`이면 서버에 반영되지 않은 변경으로 간주해 로컬 복구본을 먼저 보존하고 복구 선택 다이얼로그를 표시한다. 브라우저와 서버의 시계 차이로 복구본을 버리지 않도록 `draftSavedAt`과 `serverSavedAt`의 절대 시각만으로 dirty draft를 자동 폐기하지 않는다. 사용자가 `서버 최신 상태 사용`을 선택한 경우에만 IndexedDB를 서버 상태로 교체하며, `로컬 복구본 복원`을 선택하면 해당 로컬 상태와 `baseServerRevision`을 유지한 채 다음 저장에서 낙관적 동시성 검사를 수행한다. 선택 전에는 자동 checkpoint와 페이지 이탈 서버 저장을 실행하지 않는다. 서버 조회 실패는 오래된 로컬 draft로 숨기지 않는다.
 - IndexedDB의 `LocalProjectDraft.baseServerRevision`은 로컬 편집이 시작된 서버 revision이다. 로컬 저장 횟수와 함께 증가하지 않고, 서버 저장 성공 또는 최신 상태 재로드 후 반환된 revision으로 교체된다.
 - 일반 Project Workspace는 탭 인스턴스마다 별도의 IndexedDB `workspaceId`를 생성하고 `sessionStorage`에 보관해 같은 탭의 새로고침에서 재사용한다. 시작 시 해당 ID를 `Web Locks`로 배타 점유하므로 탭 복제로 `sessionStorage`가 복사되어도 lock을 얻지 못한 새 탭은 새 ID를 발급한다. 따라서 같은 프로젝트를 연 다른 탭의 recovery draft가 충돌 탭의 로컬 복구본을 덮어쓰지 않으면서 새로고침 후에도 해당 탭의 복구본을 찾는다. 기존 `project:{projectId}` key의 recovery draft는 처음 읽을 때 탭 전용 key로 복사한다. URL 또는 호출자가 `localCacheWorkspaceId`/`workspaceId`를 명시한 특수 복구 흐름만 해당 scope를 재사용한다.
 
