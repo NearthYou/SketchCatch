@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useReducer, useRef } from "react";
 import type {
@@ -185,7 +185,7 @@ export function DirectDeploymentScreen({
   const previousLatestHistoryDeploymentIdRef = useRef("");
   const [queuedApplyPlanDeploymentId, setQueuedApplyPlanDeploymentId] = useState("");
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
-  const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
+
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [activeProgress, setActiveProgress] = useState<{
@@ -258,10 +258,7 @@ export function DirectDeploymentScreen({
     () => selectDeploymentCleanupTargets(deployments),
     [deployments]
   );
-  const cleanupDeployment =
-    cleanupDeployments.find((deployment) => deployment.id === selectedDeploymentId) ??
-    cleanupDeployments[0] ??
-    null;
+
   const terraformOutputs = useMemo(
     () => getVisibleDeploymentOutputs(terraformOutputState, selectedDeploymentId),
     [selectedDeploymentId, terraformOutputState]
@@ -307,7 +304,7 @@ export function DirectDeploymentScreen({
   const canStartDeploymentReview = selectedAwsConnectionId.length > 0 && requestState !== "loading";
   const hasCurrentPlan = Boolean(selectedDeployment?.currentPlanArtifactId);
   const deploymentActions = getDeploymentActionState(selectedDeployment, requestState);
-  const cleanupDeploymentActions = getDeploymentActionState(cleanupDeployment, requestState);
+
   const cleanupActionTargets = cleanupDeployments.map((deployment) => ({
     actions: getDeploymentActionState(deployment, requestState),
     deployment
@@ -315,12 +312,10 @@ export function DirectDeploymentScreen({
   const canRunPlan = deploymentActions.canRunApplyPlan;
   const canApprovePlan = deploymentActions.canApprovePlan;
   const canApply = deploymentActions.canApply;
-  const canDestroy = cleanupDeploymentActions.canDestroy;
+
   const canCancelDeployment = deploymentActions.canCancelDeployment;
   const shouldShowApplyButton = deploymentActions.shouldShowApplyButton;
-  const deploymentActionHint = selectedDeployment
-    ? getDeploymentActionHint(selectedDeployment)
-    : "";
+
   const hasCurrentDeploymentChanges = hasDeploymentDraftChanges({
     currentDraftRevision: projectDraftRevision,
     hasUnsavedWorkspaceChanges: hasUnsavedDeploymentBaseline,
@@ -431,13 +426,12 @@ export function DirectDeploymentScreen({
   }, [shouldShowApplyButton]);
 
   useEffect(() => {
-    onConfirmationStateChange?.(showApplyConfirmation || showDestroyConfirmation);
-  }, [onConfirmationStateChange, showApplyConfirmation, showDestroyConfirmation]);
+    onConfirmationStateChange?.(showApplyConfirmation);
+  }, [onConfirmationStateChange, showApplyConfirmation]);
 
   useEffect(() => {
     if (confirmationDismissRequestId > 0) {
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
     }
   }, [confirmationDismissRequestId]);
 
@@ -554,7 +548,6 @@ export function DirectDeploymentScreen({
       setDeploymentResources([]);
       dispatchTerraformOutputState({ type: "clear", deploymentId: null });
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
       return;
     }
 
@@ -578,7 +571,6 @@ export function DirectDeploymentScreen({
             outputs
           });
           setShowApplyConfirmation(false);
-          setShowDestroyConfirmation(false);
         }
       }, "배포 로그를 불러오지 못했습니다.");
     }
@@ -901,7 +893,6 @@ export function DirectDeploymentScreen({
         deploymentId: prewarmedDeployment.id
       });
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
     }, "배포 검토를 시작하지 못했습니다.");
   }
 
@@ -934,7 +925,6 @@ export function DirectDeploymentScreen({
       setDeploymentResources(resources);
       dispatchTerraformOutputState({ type: "loaded", deploymentId: deployment.id, outputs });
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
     }, "Terraform Plan을 시작하지 못했습니다.");
   }
 
@@ -1017,7 +1007,6 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
       const [logs, resources, outputs] = await Promise.all([
         listDeploymentLogs(deployment.id),
         listDeploymentResources(deployment.id),
@@ -1050,7 +1039,6 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
       const [logs, resources, outputs] = await Promise.all([
         listDeploymentLogs(deployment.id),
         listDeploymentResources(deployment.id),
@@ -1062,18 +1050,19 @@ export function DirectDeploymentScreen({
     }, "Terraform Destroy Plan을 시작하지 못했습니다.");
   }
 
-  async function startTerraformDestroy(): Promise<void> {
-    if (!cleanupDeployment || !canDestroy) {
+  async function startTerraformDestroy(targetDeployment: Deployment): Promise<void> {
+    if (!getDeploymentActionState(targetDeployment, requestState).canDestroy) {
       return;
     }
 
+    setSelectedDeploymentId(targetDeployment.id);
     setActiveProgress({ operation: "destroy", requestedAtMs: Date.now() });
     dispatchTerraformOutputState({
       type: "clear",
-      deploymentId: cleanupDeployment.id
+      deploymentId: targetDeployment.id
     });
     await runRequest(async () => {
-      const deployment = await runDeploymentDestroy(cleanupDeployment.id);
+      const deployment = await runDeploymentDestroy(targetDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
           currentDeployment.id === deployment.id ? deployment : currentDeployment
@@ -1081,7 +1070,6 @@ export function DirectDeploymentScreen({
       );
       setSelectedDeploymentId(deployment.id);
       setShowApplyConfirmation(false);
-      setShowDestroyConfirmation(false);
       const [logs, resources, outputs] = await Promise.all([
         listDeploymentLogs(deployment.id),
         listDeploymentResources(deployment.id),
@@ -1259,28 +1247,33 @@ export function DirectDeploymentScreen({
 
       return (
         <>
-          <div className={styles.deploymentStepSummary}>
-            <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
-            <InfoRow label="범위" value={selectedDeployment?.scope ?? "대기"} />
-            <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
-            {selectedDeployment?.planSummary ? (
-              <PlanSummaryRows deployment={selectedDeployment} />
+          <div className={styles.deploymentResultOverview}>
+            <div
+              className={styles.deploymentStepSummary}
+              data-has-output-links={deploymentOutputLinks.length > 0}
+            >
+              <InfoRow label="상태" value={selectedDeployment?.status ?? "대기"} />
+              <InfoRow label="범위" value={selectedDeployment?.scope ?? "대기"} />
+              <InfoRow label="현재 작업" value={primaryDeploymentStepStatus} />
+              {selectedDeployment?.planSummary ? (
+                <PlanSummaryRows deployment={selectedDeployment} />
+              ) : null}
+              <OptionalInfoRow
+                label="릴리즈"
+                value={
+                  applicationReleases.find(
+                    (release) => release.deploymentId === selectedDeployment?.id
+                  )?.version ?? null
+                }
+              />
+            </div>
+            {deploymentOutputLinks.length > 0 ? (
+              <DeploymentOutputLinks
+                links={deploymentOutputLinks}
+                scopeKey={selectedDeploymentId || null}
+              />
             ) : null}
-            <OptionalInfoRow
-              label="릴리즈"
-              value={
-                applicationReleases.find(
-                  (release) => release.deploymentId === selectedDeployment?.id
-                )?.version ?? null
-              }
-            />
           </div>
-          {deploymentOutputLinks.length > 0 ? (
-            <DeploymentOutputLinks
-              links={deploymentOutputLinks}
-              scopeKey={selectedDeploymentId || null}
-            />
-          ) : null}
           {showApplyConfirmation && selectedDeployment ? (
             <div className={styles.deploymentApplyConfirm}>
               <h3>배포 실행 확인</h3>
@@ -1290,30 +1283,6 @@ export function DirectDeploymentScreen({
               />
               <InfoRow label="AWS region" value={selectedDeployment.approvedAwsRegion ?? "없음"} />
               <p>승인된 Plan과 프로젝트 스냅샷이 일치할 때만 실행됩니다.</p>
-            </div>
-          ) : null}
-          {showDestroyConfirmation && cleanupDeployment ? (
-            <div className={styles.deploymentDestroyConfirm}>
-              <h3>정리 실행 확인</h3>
-              <p>승인된 Destroy Plan으로 프로젝트 리소스를 정리합니다.</p>
-              <div className={styles.deploymentApplyActions}>
-                <button
-                  className={styles.deploymentSecondaryButton}
-                  onClick={() => setShowDestroyConfirmation(false)}
-                  type="button"
-                >
-                  취소
-                </button>
-                <button
-                  className={styles.deploymentDangerButton}
-                  disabled={!canDestroy}
-                  onClick={startTerraformDestroy}
-                  type="button"
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                  정리 실행
-                </button>
-              </div>
             </div>
           ) : null}
         </>
@@ -1387,7 +1356,6 @@ export function DirectDeploymentScreen({
       if (stepId === "approval") {
         return (
           <div className={styles.deploymentStepActionBar}>
-            <p>{selectedStep.disabledReason ?? "승인된 스냅샷만 실행할 수 있습니다."}</p>
             <button
               className={styles.deploymentPrimaryButton}
               disabled={!canApprovePlan}
@@ -1403,7 +1371,6 @@ export function DirectDeploymentScreen({
 
       return (
         <div className={styles.deploymentStepActionBar}>
-          <p>{selectedStep.disabledReason ?? deploymentActionHint}</p>
           {selectedDeployment?.status === "RUNNING" ? (
             <button
               className={styles.deploymentSecondaryButton}
@@ -1438,10 +1405,7 @@ export function DirectDeploymentScreen({
                       className={styles.deploymentDangerButton}
                       disabled={!actions.canDestroy}
                       key={`${deployment.id}:destroy`}
-                      onClick={() => {
-                        setSelectedDeploymentId(deployment.id);
-                        setShowDestroyConfirmation(true);
-                      }}
+                      onClick={() => void startTerraformDestroy(deployment)}
                       type="button"
                     >
                       {getCleanupExecutionActionLabel(deployment, cleanupDeployments.length)}
@@ -2312,60 +2276,6 @@ function getPrimaryDeploymentStepStatus(deployment: Deployment | null): string {
   return "실행 준비됨";
 }
 
-function getDeploymentActionHint(deployment: Deployment): string {
-  if (deployment.status === "DESTROYED") {
-    return "Cleanup destroy가 완료되었습니다. Deployment 결과와 state pointer가 정리되었습니다.";
-  }
-
-  if (deployment.approvedAt && !hasCompleteDeploymentApprovalSnapshot(deployment)) {
-    const actionLabel = deployment.currentPlanOperation === "destroy" ? "Destroy" : "Apply";
-
-    return `승인 스냅샷이 불완전합니다. Terraform Plan을 다시 실행하고 승인한 뒤 ${actionLabel}를 진행하세요.`;
-  }
-
-  if (deployment.currentPlanOperation === "destroy" && deployment.approvedAt) {
-    return "승인된 Destroy Plan이 준비되었습니다. 실제 삭제 전 AWS 계정과 삭제 변경 내용을 다시 확인하세요.";
-  }
-
-  if (
-    deployment.currentPlanOperation === "destroy" &&
-    deployment.isBlocked &&
-    deployment.blockedBy === "missing_approval"
-  ) {
-    return "Destroy Plan 내용을 확인한 뒤 승인할 수 있습니다. 승인 전에는 AWS 리소스를 삭제하지 않습니다.";
-  }
-
-  if (deployment.status === "RUNNING") {
-    if (deployment.cancelRequestedAt) {
-      return "취소 요청을 보냈습니다. Terraform 프로세스가 멈추면 상태가 갱신됩니다.";
-    }
-
-    return "Terraform 작업이 진행 중입니다. 상태와 로그가 자동으로 갱신됩니다.";
-  }
-
-  if (deployment.approvedAt) {
-    if (deployment.status === "SUCCESS") {
-      return "Apply가 완료되었습니다. 생성된 리소스와 Terraform output을 아래에서 확인할 수 있습니다.";
-    }
-
-    return "승인된 Plan이 준비되었습니다. Apply 실행 전 AWS 계정과 변경 내용을 다시 확인하세요.";
-  }
-
-  if (!deployment.currentPlanArtifactId) {
-    return "Terraform Plan을 먼저 실행하면 승인 버튼이 표시됩니다.";
-  }
-
-  if (deployment.isBlocked && deployment.blockedBy === "missing_approval") {
-    return "Plan 내용을 확인한 뒤 승인할 수 있습니다.";
-  }
-
-  if (deployment.isBlocked) {
-    return "현재 Plan은 승인 전에 차단 사유를 해결해야 합니다.";
-  }
-
-  return "";
-}
-
 function getCleanupPlanActionLabel(deployment: Deployment, targetCount: number): string {
   if (targetCount <= 1) {
     return "Destroy Plan 생성";
@@ -2378,12 +2288,12 @@ function getCleanupPlanActionLabel(deployment: Deployment, targetCount: number):
 
 function getCleanupExecutionActionLabel(deployment: Deployment, targetCount: number): string {
   if (targetCount <= 1) {
-    return "정리 실행 검토";
+    return "Destroy 실행";
   }
 
   return deployment.scope === "application"
-    ? "애플리케이션 정리 실행 검토"
-    : "인프라 정리 실행 검토";
+    ? "애플리케이션 Destroy 실행"
+    : "인프라 Destroy 실행";
 }
 
 function mergeDeploymentLog(logs: DeploymentLog[], log: DeploymentLog): DeploymentLog[] {

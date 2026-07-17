@@ -100,3 +100,10 @@ Short English-only working log for the current agent context. Older records are 
 - Resolved deployment conflicts by retaining dev runtime-convergence and no-change optimization behavior together with live Terraform log streaming, heartbeat progress, state restoration, destroy-plan transitions, and explicit destroy approval labels.
 - Kept the dev AI Workbench structure and restored parameter-only before/after previews inside its result artifact.
 - Focused web behavior tests passed (58/58 after the Workbench token fix); Terraform runner/live-log tests passed (4/4). API service tests and workspace typecheck could not load new dev dependencies (@aws-sdk/client-ecr, @tanstack/react-query) because the local dependency tree has not been refreshed.
+
+### 2026-07-17 - Repair Direct Deployment result layout
+
+- Restored deployment-history CSS module styles lost during the dev merge and placed step actions directly above the recent-result card.
+- Removed the duplicate Destroy confirmation, renamed the approved action to Destroy 실행, and starts Destroy directly from the approved-plan action.
+- Removed repeated action hints and joined WEB ENTRY POINT output links to the deployment summary.
+- Focused Direct Deployment tests pass 14/14; harness check passes; browser verification confirmed the repaired history and action layout. No Terraform or AWS mutation was performed.
