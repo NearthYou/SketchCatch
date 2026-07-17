@@ -1,4 +1,3 @@
-import { DeleteObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type {
   DeleteProjectRequest,
@@ -70,11 +69,7 @@ export type ProjectDeleteSnapshot = {
 export type ProjectDeletionStorage = {
   deleteObject(objectKey: string): Promise<void>;
   deleteObjectVersion?(objectKey: string, versionId: string): Promise<void>;
-};
-
-export type CreateS3ProjectDeletionStorageOptions = {
-  bucketName: string;
-  s3Client: S3Client;
+  deletePrefix?(input: { prefix: string }): Promise<void>;
 };
 
 export type DeleteProjectRecordsInput = {
@@ -131,35 +126,12 @@ export class ProjectDeletionConflictError extends Error {
 export class ProjectDeletionManagedCleanupError extends Error {
   readonly statusCode = 502;
   readonly errorCode = "managed_cleanup_failed";
+  readonly exposeMessage = true;
 
   constructor(message: string) {
     super(message);
     this.name = "ProjectDeletionManagedCleanupError";
   }
-}
-
-export function createS3ProjectDeletionStorage(
-  options: CreateS3ProjectDeletionStorageOptions
-): ProjectDeletionStorage {
-  return {
-    async deleteObject(objectKey) {
-      await options.s3Client.send(
-        new DeleteObjectCommand({
-          Bucket: options.bucketName,
-          Key: objectKey
-        })
-      );
-    },
-    async deleteObjectVersion(objectKey, versionId) {
-      await options.s3Client.send(
-        new DeleteObjectCommand({
-          Bucket: options.bucketName,
-          Key: objectKey,
-          VersionId: versionId
-        })
-      );
-    }
-  };
 }
 
 export async function getProjectDeletePreview(input: {
@@ -197,10 +169,14 @@ export async function deleteProjectRecords(
 
   try {
     await cleanupProjectManagedBuildEnvironment(snapshot, input.cleanupManagedResources);
-    await cleanupCandidateObjectVersions(input.storage, snapshot.candidateObjectVersions);
-
     const objectKeys = collectProjectDeletionObjectKeys(snapshot);
-    const failedObjectKeys = await deleteObjectsBestEffort(input.storage, objectKeys);
+
+    if (input.storage.deletePrefix) {
+      await cleanupProjectArtifactPrefixes(input.storage, snapshot);
+    } else {
+      await cleanupCandidateObjectVersions(input.storage, snapshot.candidateObjectVersions);
+      await deleteObjectsOrThrow(input.storage, objectKeys);
+    }
 
     await deleteProjectDatabaseRows({
       db: input.db,
@@ -212,7 +188,7 @@ export async function deleteProjectRecords(
 
     return {
       deleted: true,
-      cleanup: createCleanupResult(objectKeys.length, failedObjectKeys.length)
+      cleanup: createCleanupResult(objectKeys.length, 0)
     };
   } catch (error) {
     await deletionGuard.markCleanupFailed?.({
@@ -818,10 +794,34 @@ async function deleteProjectDatabaseRows(input: {
   });
 }
 
-async function deleteObjectsBestEffort(
+async function cleanupProjectArtifactPrefixes(
+  storage: ProjectDeletionStorage,
+  snapshot: ProjectDeleteSnapshot
+): Promise<void> {
+  if (!storage.deletePrefix) {
+    throw new Error("Project artifact prefix deletion is unavailable");
+  }
+
+  const prefixes = [
+    `projects/${snapshot.projectId}/`,
+    ...snapshot.deployments.map((deployment) => `deployments/${deployment.id}/`)
+  ];
+
+  try {
+    for (const prefix of prefixes) {
+      await storage.deletePrefix({ prefix });
+    }
+  } catch {
+    throw new ProjectDeletionManagedCleanupError(
+      "SketchCatch 내부 S3 산출물을 모두 삭제하지 못했습니다. 프로젝트 기록은 유지되었으므로 S3 권한을 확인한 뒤 다시 삭제해 주세요."
+    );
+  }
+}
+
+async function deleteObjectsOrThrow(
   storage: ProjectDeletionStorage,
   objectKeys: string[]
-): Promise<string[]> {
+): Promise<void> {
   const uniqueObjectKeys = [...new Set(objectKeys)];
   const results = await Promise.allSettled(
     uniqueObjectKeys.map(async (objectKey) => {
@@ -830,9 +830,15 @@ async function deleteObjectsBestEffort(
     })
   );
 
-  return results.flatMap((result, index) =>
+  const failedObjectKeys = results.flatMap((result, index) =>
     result.status === "rejected" ? [uniqueObjectKeys[index] as string] : []
   );
+
+  if (failedObjectKeys.length > 0) {
+    throw new ProjectDeletionManagedCleanupError(
+      "SketchCatch 내부 산출물을 모두 삭제하지 못했습니다. 프로젝트 기록은 유지되었으므로 저장소 권한을 확인한 뒤 다시 삭제해 주세요."
+    );
+  }
 }
 
 function createCleanupResult(
@@ -843,7 +849,9 @@ function createCleanupResult(
     s3Status: getCleanupStatus(objectKeyCount, failedObjectCount),
     failedObjectCount,
     message:
-      failedObjectCount > 0 ? "일부 SketchCatch 산출물 정리에 실패했습니다." : null
+      failedObjectCount > 0
+        ? "프로젝트 기록은 삭제됐지만 일부 SketchCatch 내부 S3 산출물 정리에 실패했습니다. 이 경고는 클라우드 리소스가 남았다는 의미가 아닙니다."
+        : null
   };
 }
 
