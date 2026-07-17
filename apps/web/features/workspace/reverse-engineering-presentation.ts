@@ -36,11 +36,12 @@ export function presentReverseEngineeringResource(
   const displayState =
     resource.resourceType === "UNKNOWN" || resource.analysisExcluded ? "review_only" : "supported";
   const hasRelationships = (resource.relationships?.length ?? 0) > 0;
+  const serviceLabel = SERVICE_LABELS[resource.providerResourceType] ?? "AWS Resource";
 
   return {
     displayState,
-    displayName: getDisplayName(resource),
-    serviceLabel: SERVICE_LABELS[resource.providerResourceType] ?? "AWS Resource",
+    displayName: getDisplayName(resource, serviceLabel),
+    serviceLabel,
     statusLabel: getStatusLabel(displayState, hasRelationships),
     statusDescription: getStatusDescription(displayState, hasRelationships),
     regionLabel: resource.region,
@@ -57,25 +58,25 @@ export function summarizeReverseEngineeringScan(
     reviewOnlyCount: result.discoveredResources.filter(
       (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
     ).length,
-    unreadableServiceCount: result.scanErrors.length
+    unreadableServiceCount: new Set(result.scanErrors.map((error) => error.resourceType)).size
   };
 }
 
-function getDisplayName(resource: DiscoveredResource): string {
+function getDisplayName(resource: DiscoveredResource, serviceLabel: string): string {
   const displayName = resource.displayName.trim();
 
-  return displayName || getFallbackDisplayName(resource.providerResourceId);
+  return displayName || getFallbackDisplayName(resource.providerResourceId, serviceLabel);
 }
 
-function getFallbackDisplayName(providerResourceId: string): string {
+function getFallbackDisplayName(providerResourceId: string, serviceLabel: string): string {
   if (!providerResourceId.startsWith("arn:")) {
-    return providerResourceId || "이름 미확인 AWS Resource";
+    return `이름 미확인 ${serviceLabel}`;
   }
 
   const arnResource = providerResourceId.split(":").slice(5).join(":");
   const arnResourceName = arnResource.split(/[/:]/).filter(Boolean).at(-1);
 
-  return arnResourceName || "이름 미확인 AWS Resource";
+  return arnResourceName || `이름 미확인 ${serviceLabel}`;
 }
 
 function getStatusLabel(
