@@ -5,6 +5,7 @@ import { test } from "node:test";
 const managerSource = read("ProjectWorkspaceDraftManager.tsx");
 const directDeploymentSource = read("DirectDeploymentScreen.tsx");
 const deploymentShellSource = read("DeploymentConsoleShell.tsx");
+const deploymentArtifactsSource = read("workspace-deployment-artifacts.ts");
 const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const projectBarSource = read("../diagram-editor/WorkspaceProjectBar.tsx");
 const diagramEditorStyles = read("../diagram-editor/diagram-editor.module.css");
@@ -55,6 +56,19 @@ test("deployment preparation flushes the synchronized draft before artifact crea
   assert.ok(saveIndex > syncIndex);
   assert.ok(artifactIndex > saveIndex);
   assert.match(rightPanelSource, /requireSavedProjectDraftRevision\(saveResult\)/);
+});
+
+test("deployment preparation validates the exact merged Terraform artifact without a bypass", () => {
+  const validationIndex = deploymentArtifactsSource.indexOf("validateTerraformCode({");
+  const snapshotIndex = deploymentArtifactsSource.indexOf(
+    "saveWorkspaceArchitectureSnapshot({",
+    validationIndex
+  );
+
+  assert.ok(validationIndex > -1);
+  assert.ok(snapshotIndex > validationIndex);
+  assert.doesNotMatch(deploymentArtifactsSource, /skipValidation/);
+  assert.doesNotMatch(rightPanelSource, /skipValidation:\s*true/);
 });
 
 test("Direct Deployment uses prepare, approve, and execute with three external phases", () => {

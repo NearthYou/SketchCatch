@@ -21,9 +21,8 @@ test("global settings owns GitHub App installation without project repository be
   assert.match(connectionQueriesSource, /export function useGitHubInstallationsQuery/);
   assert.match(connectionQueriesSource, /queryFn:\s*listGitHubAccountInstallations/);
   assert.match(source, /createGitHubAccountInstallUrl/);
-  assert.match(source, /installations\.length === 0/);
   assert.match(source, /GitHub 연결하기/);
-  assert.doesNotMatch(source, /"권한 추가"/);
+  assert.match(source, /installations\.length > 0\s*\? "권한 추가"\s*:\s*"GitHub 연결하기"/s);
   assert.doesNotMatch(
     source,
     /projectId|SourceRepository|analyzeSourceRepository|connectGitHubSourceRepository/

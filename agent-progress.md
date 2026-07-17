@@ -15,40 +15,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-18 - Correct Cross-account AWS S3 Template mapping
 
-- Verified the public Brainboard Template and its cloned Board in Chrome: one Region, two Group areas (`Prod account` and `Test account`), one S3 Bucket, two S3 Object Resources, and two authored relationships.
-- Replaced the incorrect AWS Account presentation mapping and empty text primitives with the existing Palette Group area while preserving the three Terraform Resources, containment, and source geometry.
-- Recaptured the committed WebP from the actual SketchCatch Board and bound its manifest hash to the corrected Diagram.
-- Added regression coverage for the source-capture `design-group` Area identity, Palette-backed Resources, containment, and thumbnail Diagram hash.
-- Focused tests, harness, lint, typecheck, build, and Architecture Board knowledge checks pass. The separate Compiler quality fix in this branch keeps the existing visual baseline without changing its limits.
-
-### 2026-07-17 - Rebuild Workspace AI conversation and compiled preview
-
-- Added a responsibility-separated route shell, transcript, composer, selected-option model and accessible trail, deterministic option-to-resource mapper, decorative AWS Resource Orbit, and read-only final Architecture Preview.
-- Recorded exactly one clicked assistant option per single-select question before submitting it; direct and voice input do not enter the trail, while failed, cancelled, and retried requests retain the click record.
-- Built the Orbit only from enabled `resourceCatalog` entries whose icon URLs use `/Resource-Icons_07312025/`; stable option state produces stable composition and each click changes only a bounded subset.
-- Kept the Orbit explicitly decorative and replaced it, without a fake morph, only after the Compiler returns the actual Diagram used by the final pan/zoom Preview.
-- Preserved actual candidate exclusion/undo and the explicit Board-application boundary without reviving server progress APIs or the deleted Workspace AI presentation.
-- Browser QA covered 1440x900, 1024x768, both sides of the 959px breakpoint, and 390x844. It verified option accumulation, bounded Orbit changes, continuous multi-ring motion, the click pulse/kick/excursion response, the separate Orbit exit and final Diagram reveal, pan/zoom, mobile reachability, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix. Board application was not used.
-- Passed focused Workspace AI/Compiler tests 94/94, full Web regression 545/545, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
-- No real cloud apply, deployment, user-project mutation, Git handoff, push, or PR was performed.
-
-### 2026-07-17 - Clear the Workspace AI rebuild baseline
-
-- Audited the new-project, existing-project, Repository, storage, workflow, API, service, shared-type, Compiler, candidate-exclusion, approval, and save paths before removing presentation code.
-- Deleted the old `/workspace/ai` client, CSS, UI test, progress/preview components, route-only Compiler summary, and stale progress implementation plan; the route now returns `null` without a placeholder.
-- Reduced the progress transport to a candidate-only observational snapshot and removed UI-only progress models and unconsumed request fields end-to-end.
-- Preserved Repository preview behavior in a Repository-local component and moved the Workspace AI chat storage-key helper out of its presentation component.
-- Added `docs/superpowers/specs/2026-07-17-workspace-ai-rebuild-baseline.md` as the only implementation baseline for the next UI.
-- Passed the rebuild evidence Web tests 55/55, focused API tests 77/77, full Web regression 528/528, harness, lint, typecheck, build, and diff checks. Independent review returned Ready with no Critical, Important, or Minor findings.
-
-### 2026-07-17 - Implement live AI Draft progress preview (#448)
-
-- Superseded by the cleanup record above; the implementation and verification below are historical evidence and do not describe the current `/workspace/ai` route.
-- Added shared progress/exclusion contracts, API snapshot streaming, strict NDJSON validation, caller abort propagation, and reverse-proxy no-buffering headers while preserving the existing JSON paths.
-- Added the responsive progress pane, requirement/question summaries, provisional diagram, compact history, exclusion/undo, in-place cancel/retry, final transition diff, mobile pane tabs, and last-good projection retention.
-- Direct browser QA passed at 1440x900, 1024x768, 390x844, and the 720/721 boundary: no horizontal overflow, mobile send/tab/final scrolling, desktop simultaneous panes, pan/zoom, clarification handoff, server-authorized exclusion and undo, retained retry state, final replacement, and reload non-persistence. The disposable local QA account and its active tokens were removed; `Board에 적용` was not used and no user project was created.
-- Structured clarification answers now remain one confirmed `question: answer` fact, and provider-originated clarification emits a new full snapshot with the pending question before the terminal result.
-- Passed focused API 79/79, focused Web 43/43, full Web 527/527, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Final whole-branch re-review is Ready with no findings.
+- Replaced the incorrect AWS Account presentation mapping and empty text primitives with existing Palette Group areas while preserving the three Terraform Resources, containment, and source geometry.
+- Recaptured the committed WebP and bound its manifest hash to the corrected Diagram.
+- Kept the existing Compiler visual baseline by excluding visual Security Group scope, summary links, and launch dependencies from main-flow quality.
 
 ### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
@@ -182,6 +151,25 @@ Short English-only working log for the current agent context. Older records are 
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
 
+### 2026-07-17 - Integrate Repository analysis with Workspace Delivery
+
+- Public Repository analysis now creates a Board without GitHub authorization and persists one project-scoped Repository Analysis Record with repository, branch, commit, and selected template provenance.
+- Added migration 0050, exact private Repository permission recovery, a read-only Project Delivery Profile, and one Workspace Delivery panel for GitHub, source, target, monitoring, and readiness settings.
+- Focused API regressions pass 101/101 and focused Web regressions pass 28/28; harness, lint, typecheck, and production build pass. The Web full suite has one unrelated failure in concurrent deployment target work, and the API full suite was stopped after extended inactivity in existing external-dependency paths. No GitHub, cloud, deployment, or Terraform mutation was performed.
+
+### 2026-07-17 - Centralize the Delivery deployment target editor
+
+- Moved the deployment target client, state, styles, and tests from the compatibility route into one Workspace Delivery feature module and supplied the current Delivery Profile as its initial state.
+- Added Repository Analysis Record evidence fallback, Runtime-specific missing-field reporting, saved-value locking, and post-save Delivery Profile/readiness refresh without starting a deployment, PR, or pipeline.
+- Focused target, Delivery integration, and return-path regressions pass 31/31. Independent review fixes cover multi-connection selection, Runtime inference, non-fabricated evidence, non-ECS URL entry and summary, confirmed-field locking across Runtime changes, loading-state protection, and component responsibility separation. Workspace lint, typecheck, production build, harness, and diff checks pass.
+- The Web full suite has one unchanged failure in `deployment-actions.test.ts` for the existing Destroy approval-state expectation; this work does not modify that module. No DB migration, GitHub mutation, cloud mutation, Terraform execution, deployment, or Git handoff was performed.
+
+### 2026-07-17 - Add GitHub build disconnect
+
+- Added a confirmed settings action that removes only SketchCatch-managed CodeBuild projects, roles, logs, build caches, and the shared CodeConnection while preserving the AWS account connection and deployed resources.
+- Disconnect claims the CodeConnection, blocks active and newly starting build/deployment work, and keeps retryable metadata after cleanup failure.
+- Review hardening added refresh CAS and cleanup-failure protection, atomic build-preparation and Direct/GitOps lease fencing, generation-safe one-hour stale-claim retry, preserved build history, and an explicit cleanup retry UI.
+- Focused API and Web settings tests plus workspace lint, typecheck, production build, harness, and diff checks pass. No DB migration or live AWS cleanup was performed.
 ### 2026-07-17 - Restore release-candidate multipart S3 permissions
 
 - Added the missing `ListMultipartUploadParts` and `AbortMultipartUpload` permissions to both production API and trusted worker task policies, with structure checks that require both roles to retain them.
@@ -189,3 +177,49 @@ Short English-only working log for the current agent context. Older records are 
 - Focused release-candidate tests (3/3), production infrastructure structure checks, Terraform formatting and validation, all workspace lint/typecheck commands, API/shared-package builds, sandbox safety tests (25/25), harness, formatting, and diff checks pass.
 - Full API, web, and types suites still expose unrelated `dev` failures caused by missing test environment values/tools, sandbox socket restrictions, and pre-existing contract assertions. The API build passes; the webpack web build compiles but stops on the existing invalid Next Route export in `architecture-draft/route.ts`.
 - No Terraform plan/apply, AWS mutation, or deployment was performed. After review and merge, an operator-approved runtime Terraform plan/apply is required before the deployed task roles receive the permissions.
+
+### 2026-07-17 - Unify workspace observation and deployment controls
+
+- Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
+- Converted the project-bar Deployment action to the shared icon-button treatment and kept its black active state scoped only to the open Deployment console.
+- Focused workspace tests pass 17/17; Web lint and typecheck pass; root lint, typecheck, and build pass. The full test run stops on the unrelated existing `git-cicd-readiness-contract` `null !== 0` failure in `packages/types`.
+- Chrome visual automation was unavailable, so final signed-in visual confirmation remains manual. No Deployment, Terraform, AWS, or database mutation was performed.
+
+### 2026-07-17 - Stabilize workspace overlay notifications
+
+- Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
+- Added a call-recording regression for callback replacement and cleanup behavior.
+- Focused workspace tests pass 20/20; Web lint and typecheck pass.
+
+### 2026-07-17 - Merge issue #448 work with current dev
+
+- Merged `origin/dev` through `f2f0c8ff` and resolved Workspace, Diagram, AI start, ProjectDraft, and GitHub settings conflicts without dropping either branch's behavior.
+- Updated the cached GitHub settings contract and restored the Destroy Plan approval/retry boundary using `failedAt`.
+- Focused Module/Template regressions and full Web tests pass; harness, knowledge check, lint, typecheck, and build pass. Local full API tests remain environment-blocked by missing `DATABASE_URL` and `zstd`; affected API files match `origin/dev`.
+
+### 2026-07-17 - Refocus the repository README
+
+- Reworked the README around the problem, approval flow, and boundary between AI suggestions, deterministic validation, and user-authorized cloud mutation.
+- Kept the AWS/Terraform-first MVP and provider-neutral product direction explicit while removing repeated implementation detail.
+- Verified every relative README link and ran `pnpm harness:check` successfully. This was documentation-only, so runtime builds and product tests were not rerun.
+
+### 2026-07-17 - Preserve dirty local ProjectDraft recovery
+
+- Preserved dirty IndexedDB drafts during Workspace reload regardless of client/server clock skew and added an explicit choice between restoring one and replacing it with the latest server draft.
+- Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
+- Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.
+- Focused ProjectDraft Web tests pass 37/37. Changed-file lint and direct API/Web typechecks pass. The local full Turbo wrapper could not start API/Web tasks because pnpm refused to purge copied temporary-worktree `node_modules` without a TTY. The Webpack build compiled, then the generated Next route check failed on pre-existing helper exports in architecture-draft and architecture-patch-preview routes. No DB migration, cloud mutation, deployment, or Git handoff was performed.
+
+### 2026-07-17 - Harden Terraform module validation and palette audit
+
+- Prevented duplicate module-level `required_providers`, retained per-file syntax boundaries, and made final merged deployment artifacts pass validation before persistence.
+- Provider refresh now merges missing requirements while preserving user-owned default and aliased provider blocks; SketchCatch-managed EKS runtime provider blocks remain refreshable.
+- Provider-schema validation passes all 155 enabled managed resources and all 5 enabled data sources. Direct Deployment safety remains unchanged: 61 resource types are plan-allowed and 94 stay blocked by the existing allowlist.
+- Focused regressions pass (API 28/28, Web 23/23, Types 5/5). `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass on the latest merged `dev`.
+- No Terraform apply/destroy, AWS mutation, credential access, or DB migration was performed for this work.
+
+### 2026-07-18 - Merge current dev into Delivery integration
+
+- Preserved public Repository analysis without GitHub, ProjectDraft revision fencing, Workspace Delivery ownership, exact private Repository recovery, and confirmed GitHub build cleanup while merging `origin/dev` through `04dc1c8f`.
+- Kept dev migration 0049 and renumbered Repository Analysis Record migration to 0050 with the journal and migration contract updated.
+- Focused API tests pass 49/49 and Web tests pass 50/50; lint, typecheck, build, harness, and diff checks pass. No live GitHub, AWS, deployment, or Terraform mutation was performed.

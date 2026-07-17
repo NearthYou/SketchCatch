@@ -8,6 +8,7 @@ import type {
   ProjectDeploymentTarget,
   PutProjectDeploymentTargetRequest,
   RepositoryAnalysisAiHandoff,
+  RepositoryAnalysisRecord,
   RuntimeTargetKind,
   SourceRepository
 } from "@sketchcatch/types";
@@ -49,29 +50,51 @@ export type EcsFargateDeploymentDefaultsInput = {
   readonly ecsWeb?: EcsWebBuildConfig | null;
 };
 
+export const systemManagedFields = [
+  "commitSha",
+  "codeBuildProjectName",
+  "ecrRepositoryName",
+  "clusterName",
+  "serviceName",
+  "containerName",
+  "functionLogicalId",
+  "functionName",
+  "aliasName",
+  "codeDeployApplicationName",
+  "codeDeployDeploymentGroupName",
+  "autoScalingGroupName",
+  "hostingBucketName",
+  "cloudFrontDistributionId",
+  "cloudFrontOriginId"
+] as const;
+
+export type SystemManagedField = (typeof systemManagedFields)[number];
+
+type ProjectDeploymentRepositoryEvidence = {
+  readonly name: string;
+  readonly repositoryRevision: string;
+  readonly aiHandoff?: RepositoryAnalysisAiHandoff | undefined;
+};
+
 const runtimeBuildConfig: Record<
   RuntimeTargetKind,
-  { buildPreset: BuildExecutionPreset; evidenceKind: BuildEvidenceKind; defaultPath: string }
+  { buildPreset: BuildExecutionPreset; evidenceKind: BuildEvidenceKind }
 > = {
   ecs_fargate: {
     buildPreset: "docker_build",
-    evidenceKind: "dockerfile",
-    defaultPath: "Dockerfile"
+    evidenceKind: "dockerfile"
   },
   lambda: {
     buildPreset: "sam_build",
-    evidenceKind: "sam_template",
-    defaultPath: "template.yaml"
+    evidenceKind: "sam_template"
   },
   ec2_asg: {
     buildPreset: "codedeploy_bundle",
-    evidenceKind: "appspec",
-    defaultPath: "appspec.yml"
+    evidenceKind: "appspec"
   },
   static_site: {
     buildPreset: "static_export",
-    evidenceKind: "static_output",
-    defaultPath: "dist"
+    evidenceKind: "static_output"
   }
 };
 
@@ -81,42 +104,48 @@ export function createDeploymentTargetDraft(
   sourceRepository?: SourceRepository | null,
   ecsDefaultsInput?: EcsFargateDeploymentDefaultsInput | null,
   mode: "preserve_target" | "prefer_ecs_defaults" = "preserve_target",
-  diagramJson?: DiagramJson | null
+  diagramJson?: DiagramJson | null,
+  repositoryAnalysisRecord?: RepositoryAnalysisRecord | null
 ): ProjectDeploymentTargetDraft {
-  const ecsDefaults = (!target || mode === "prefer_ecs_defaults") && ecsDefaultsInput
-    ? createEcsFargateDeploymentDefaults(ecsDefaultsInput)
-    : null;
+  const repositoryEvidence = getProjectDeploymentRepositoryEvidence(
+    sourceRepository,
+    repositoryAnalysisRecord
+  );
+  const ecsDefaults =
+    (!target || mode === "prefer_ecs_defaults") && ecsDefaultsInput
+      ? createEcsFargateDeploymentDefaults(ecsDefaultsInput)
+      : null;
   const preferEcsDefaults = mode === "prefer_ecs_defaults" && ecsDefaults !== null;
   const runtimeTargetKind = preferEcsDefaults
     ? "ecs_fargate"
-    : target?.runtimeTargetKind ?? ecsDefaults?.runtimeTargetKind ?? "ecs_fargate";
+    : (target?.runtimeTargetKind ??
+      ecsDefaults?.runtimeTargetKind ??
+      inferRuntimeTargetKind(diagramJson, repositoryEvidence) ??
+      "ecs_fargate");
   const config = preferEcsDefaults ? null : target?.confirmedBuildConfig;
-  const ecsConfig = target?.runtimeConfig?.runtimeTargetKind === "ecs_fargate"
-    ? target.runtimeConfig
-    : null;
-  const lambdaConfig = target?.runtimeConfig?.runtimeTargetKind === "lambda"
-    ? target.runtimeConfig
-    : null;
-  const ec2AsgConfig = target?.runtimeConfig?.runtimeTargetKind === "ec2_asg"
-    ? target.runtimeConfig
-    : null;
-  const staticConfig = target?.runtimeConfig?.runtimeTargetKind === "static_site"
-    ? target.runtimeConfig
-    : null;
-  const suggestion = getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
-  const architectureDefaults = runtimeTargetKind === "ecs_fargate"
-    ? getEcsFargateArchitectureDefaults(diagramJson)
-    : null;
-  const inferredEcsWeb = runtimeTargetKind === "ecs_fargate" &&
-      hasWebInclusiveEcsArchitecture(diagramJson)
-    ? inferEcsWebBuildConfig(sourceRepository?.analysis?.aiHandoff, architectureDefaults)
-    : null;
-  const ecsWeb = runtimeTargetKind === "ecs_fargate"
-    ? config?.ecsWeb ?? ecsDefaults?.ecsWeb ?? inferredEcsWeb
-    : null;
-  const repositoryRuntimeNames = runtimeTargetKind === "ecs_fargate" && sourceRepository
-    ? createEcsFargateRuntimeNames(sourceRepository.name)
-    : null;
+  const ecsConfig =
+    target?.runtimeConfig?.runtimeTargetKind === "ecs_fargate" ? target.runtimeConfig : null;
+  const lambdaConfig =
+    target?.runtimeConfig?.runtimeTargetKind === "lambda" ? target.runtimeConfig : null;
+  const ec2AsgConfig =
+    target?.runtimeConfig?.runtimeTargetKind === "ec2_asg" ? target.runtimeConfig : null;
+  const staticConfig =
+    target?.runtimeConfig?.runtimeTargetKind === "static_site" ? target.runtimeConfig : null;
+  const suggestion = getEvidenceSuggestion(runtimeTargetKind, repositoryEvidence);
+  const architectureDefaults =
+    runtimeTargetKind === "ecs_fargate" ? getEcsFargateArchitectureDefaults(diagramJson) : null;
+  const inferredEcsWeb =
+    runtimeTargetKind === "ecs_fargate" && hasWebInclusiveEcsArchitecture(diagramJson)
+      ? inferEcsWebBuildConfig(repositoryEvidence?.aiHandoff, architectureDefaults)
+      : null;
+  const ecsWeb =
+    runtimeTargetKind === "ecs_fargate"
+      ? (config?.ecsWeb ?? ecsDefaults?.ecsWeb ?? inferredEcsWeb)
+      : null;
+  const repositoryRuntimeNames =
+    runtimeTargetKind === "ecs_fargate" && repositoryEvidence
+      ? createEcsFargateRuntimeNames(repositoryEvidence.name)
+      : null;
   const defaultEcrRepositoryName = firstNonBlank(
     ecsDefaults?.ecrRepositoryName,
     architectureDefaults?.ecrRepositoryName,
@@ -162,9 +191,10 @@ export function createDeploymentTargetDraft(
         architectureDefaults?.containerName,
         repositoryRuntimeNames?.containerName
       );
+  const verifiedConnections = connections.filter((item) => item.status === "verified");
   return {
     connectionId:
-      target?.connectionId ?? connections.find((item) => item.status === "verified")?.id ?? "",
+      target?.connectionId ?? (verifiedConnections.length === 1 ? verifiedConnections[0]!.id : ""),
     runtimeTargetKind,
     sourceRoot: firstNonBlank(
       ecsWeb?.api.sourceRoot,
@@ -173,13 +203,11 @@ export function createDeploymentTargetDraft(
       suggestion?.sourceRoot,
       "."
     ),
-    evidencePath:
-      firstNonBlank(
-        config?.evidence[0]?.path,
-        ecsDefaults?.evidencePath,
-        suggestion?.evidencePath,
-        getDefaultDeploymentEvidencePath(runtimeTargetKind)
-      ),
+    evidencePath: firstNonBlank(
+      config?.evidence[0]?.path,
+      ecsDefaults?.evidencePath,
+      suggestion?.evidencePath
+    ),
     commitSha: firstNonBlank(
       config?.confirmedCommitSha,
       ecsDefaults?.commitSha,
@@ -217,7 +245,8 @@ export function createDeploymentTargetDraft(
       (preferEcsDefaults ? null : lambdaConfig?.outputUrl) ??
       (preferEcsDefaults ? null : ec2AsgConfig?.outputUrl) ??
       (preferEcsDefaults ? null : staticConfig?.outputUrl) ??
-      ecsDefaults?.outputUrl ?? "",
+      ecsDefaults?.outputUrl ??
+      "",
     ecsWeb,
     evidenceSuggested: Boolean(ecsDefaults || suggestion)
   };
@@ -233,6 +262,38 @@ function hasWebInclusiveEcsArchitecture(diagramJson?: DiagramJson | null): boole
     resourceTypes.has("aws_cloudfront_distribution") &&
     resourceTypes.has("aws_ecs_service")
   );
+}
+
+function inferRuntimeTargetKind(
+  diagramJson: DiagramJson | null | undefined,
+  repositoryEvidence: ProjectDeploymentRepositoryEvidence | null
+): RuntimeTargetKind | null {
+  const resourceTypes = new Set(
+    diagramJson?.nodes.map((node) => node.parameters?.resourceType).filter(Boolean) ?? []
+  );
+  if (resourceTypes.has("aws_ecs_service")) return "ecs_fargate";
+  if (resourceTypes.has("aws_lambda_function")) return "lambda";
+  if (resourceTypes.has("aws_autoscaling_group")) return "ec2_asg";
+  if (resourceTypes.has("aws_cloudfront_distribution")) return "static_site";
+
+  const evidence = repositoryEvidence?.aiHandoff?.evidence ?? [];
+  if (evidence.some((item) => item.kind === "dockerfile")) return "ecs_fargate";
+  if (
+    evidence.some(
+      (item) => item.kind === "framework_config" && /(?:^|\/)template\.ya?ml$/i.test(item.path)
+    )
+  ) {
+    return "lambda";
+  }
+  if (
+    evidence.some(
+      (item) => item.kind === "framework_config" && /(?:^|\/)appspec\.ya?ml$/i.test(item.path)
+    )
+  ) {
+    return "ec2_asg";
+  }
+  if (evidence.some((item) => item.kind === "static_output")) return "static_site";
+  return null;
 }
 
 export function inferEcsWebBuildConfig(
@@ -266,10 +327,11 @@ export function inferEcsWebBuildConfig(
   const hasRootPackageManifest = handoff.evidence.some(
     (item) => item.kind === "package_json" && item.path === "package.json"
   );
-  const apiSourceRoot = hasRootPackageManifest && dockerfile.path.includes("/")
-    ? "."
-    : handoff.applicationUnits.find((unit) => unit.id === dockerfile.applicationUnitId)?.rootPath ??
-      getParentRepositoryPath(dockerfile.path);
+  const apiSourceRoot =
+    hasRootPackageManifest && dockerfile.path.includes("/")
+      ? "."
+      : (handoff.applicationUnits.find((unit) => unit.id === dockerfile.applicationUnitId)
+          ?.rootPath ?? getParentRepositoryPath(dockerfile.path));
   const healthCheckPath = architectureDefaults?.healthCheckPath || "/health";
 
   return {
@@ -376,7 +438,7 @@ function getSingleResourceValues(
   const matches = diagramJson.nodes.filter(
     (node) => node.parameters?.resourceType === resourceType
   );
-  return matches.length === 1 ? matches[0]?.parameters?.values ?? null : null;
+  return matches.length === 1 ? (matches[0]?.parameters?.values ?? null) : null;
 }
 
 function readRecord(
@@ -385,7 +447,7 @@ function readRecord(
 ): Record<string, unknown> | null {
   const value = values?.[key];
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -439,14 +501,18 @@ export function createEcsFargateDeploymentDefaults(
 export function changeDeploymentTargetRuntime(
   draft: ProjectDeploymentTargetDraft,
   runtimeTargetKind: RuntimeTargetKind,
-  sourceRepository?: SourceRepository | null
+  sourceRepository?: SourceRepository | null,
+  repositoryAnalysisRecord?: RepositoryAnalysisRecord | null
 ): ProjectDeploymentTargetDraft {
-  const suggestion = getEvidenceSuggestion(runtimeTargetKind, sourceRepository);
+  const suggestion = getEvidenceSuggestion(
+    runtimeTargetKind,
+    getProjectDeploymentRepositoryEvidence(sourceRepository, repositoryAnalysisRecord)
+  );
   return {
     ...draft,
     runtimeTargetKind,
     sourceRoot: suggestion?.sourceRoot ?? ".",
-    evidencePath: suggestion?.evidencePath ?? getDefaultDeploymentEvidencePath(runtimeTargetKind),
+    evidencePath: suggestion?.evidencePath ?? "",
     commitSha: suggestion?.commitSha ?? "",
     installPreset: suggestion?.installPreset ?? "none",
     healthCheckPath:
@@ -461,8 +527,28 @@ export function changeDeploymentTargetRuntime(
   };
 }
 
-export function getDefaultDeploymentEvidencePath(runtimeTargetKind: RuntimeTargetKind): string {
-  return runtimeBuildConfig[runtimeTargetKind].defaultPath;
+export function getLockedSystemFields(
+  draft: ProjectDeploymentTargetDraft,
+  savedTarget: ProjectDeploymentTarget | null
+): ReadonlySet<SystemManagedField> {
+  const lockableFields = savedTarget ? systemManagedFields : (["commitSha"] as const);
+  return new Set(lockableFields.filter((field) => draft[field].trim().length > 0));
+}
+
+export function getLockedSystemFieldsAfterRuntimeChange(
+  current: ReadonlySet<SystemManagedField>,
+  nextCommitSha: string
+): ReadonlySet<SystemManagedField> {
+  return new Set(current.has("commitSha") && nextCommitSha.trim() ? ["commitSha"] : []);
+}
+
+export function getDeploymentTargetOutputUrlSummary(
+  draft: Pick<ProjectDeploymentTargetDraft, "runtimeTargetKind" | "outputUrl">
+): string {
+  if (draft.outputUrl.trim()) return draft.outputUrl.trim();
+  return draft.runtimeTargetKind === "ecs_fargate"
+    ? "첫 배포 후 자동 입력"
+    : "저장 전 입력 필요";
 }
 
 export function formatDeploymentTargetUpdatedAt(value: string): string {
@@ -473,26 +559,97 @@ export function formatDeploymentTargetUpdatedAt(value: string): string {
   });
 }
 
+export type MissingDeploymentTargetFieldKey =
+  | "aws_connection"
+  | "source_root"
+  | "build_evidence_path"
+  | "confirmed_commit_sha"
+  | "health_check_path"
+  | "install_preset"
+  | "codebuild_project"
+  | "ecr_repository"
+  | "ecs_cluster"
+  | "ecs_service"
+  | "container"
+  | "lambda_function_logical_id"
+  | "lambda_function"
+  | "lambda_alias"
+  | "codedeploy_application"
+  | "codedeploy_deployment_group"
+  | "auto_scaling_group"
+  | "hosting_bucket"
+  | "cloudfront_distribution"
+  | "cloudfront_origin"
+  | "output_url";
+
+export function getMissingDeploymentTargetFieldKeys(
+  draft: ProjectDeploymentTargetDraft,
+  connections: readonly AwsConnection[]
+): MissingDeploymentTargetFieldKey[] {
+  const missing: MissingDeploymentTargetFieldKey[] = [];
+  if (
+    !connections.some(
+      (connection) => connection.id === draft.connectionId && connection.status === "verified"
+    )
+  ) {
+    missing.push("aws_connection");
+  }
+  if (!draft.sourceRoot.trim()) missing.push("source_root");
+  if (!draft.evidencePath.trim()) missing.push("build_evidence_path");
+  if (!/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(draft.commitSha)) {
+    missing.push("confirmed_commit_sha");
+  }
+  if (!draft.codeBuildProjectName.trim()) missing.push("codebuild_project");
+
+  if (draft.runtimeTargetKind !== "static_site" && !/^\//.test(draft.healthCheckPath)) {
+    missing.push("health_check_path");
+  }
+  switch (draft.runtimeTargetKind) {
+    case "ecs_fargate":
+      if (!draft.ecrRepositoryName.trim()) missing.push("ecr_repository");
+      if (!draft.clusterName.trim()) missing.push("ecs_cluster");
+      if (!draft.serviceName.trim()) missing.push("ecs_service");
+      if (!draft.containerName.trim()) missing.push("container");
+      break;
+    case "lambda":
+      if (!draft.functionLogicalId.trim()) missing.push("lambda_function_logical_id");
+      if (!draft.functionName.trim()) missing.push("lambda_function");
+      if (!draft.aliasName.trim()) missing.push("lambda_alias");
+      if (!draft.codeDeployApplicationName.trim()) missing.push("codedeploy_application");
+      if (!draft.codeDeployDeploymentGroupName.trim()) {
+        missing.push("codedeploy_deployment_group");
+      }
+      break;
+    case "ec2_asg":
+      if (!draft.codeDeployApplicationName.trim()) missing.push("codedeploy_application");
+      if (!draft.codeDeployDeploymentGroupName.trim()) {
+        missing.push("codedeploy_deployment_group");
+      }
+      if (!draft.autoScalingGroupName.trim()) missing.push("auto_scaling_group");
+      break;
+    case "static_site":
+      if (draft.installPreset === "none") missing.push("install_preset");
+      if (!draft.hostingBucketName.trim()) missing.push("hosting_bucket");
+      if (!draft.cloudFrontDistributionId.trim()) missing.push("cloudfront_distribution");
+      if (!draft.cloudFrontOriginId.trim()) missing.push("cloudfront_origin");
+      break;
+  }
+
+  const outputUrl = draft.outputUrl.trim();
+  if (
+    (draft.runtimeTargetKind === "ecs_fargate" && outputUrl && !hasSafeHttpsOutputUrl(outputUrl)) ||
+    (draft.runtimeTargetKind !== "ecs_fargate" && !hasSafeHttpsOutputUrl(outputUrl))
+  ) {
+    missing.push("output_url");
+  }
+  return missing;
+}
+
 export function isDeploymentTargetDraftReady(
   draft: ProjectDeploymentTargetDraft,
   connections: readonly AwsConnection[]
 ): boolean {
-  return (
-    connections.some(
-      (connection) => connection.id === draft.connectionId && connection.status === "verified"
-    ) &&
-    /^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(draft.commitSha) &&
-    draft.sourceRoot.trim().length > 0 &&
-    draft.evidencePath.trim().length > 0 &&
-    (draft.runtimeTargetKind !== "ecs_fargate" ||
-      (/^\//.test(draft.healthCheckPath) && hasCompleteEcsCoordinates(draft))) &&
-    (draft.runtimeTargetKind !== "lambda" ||
-      (/^\//.test(draft.healthCheckPath) && hasCompleteLambdaCoordinates(draft))) &&
-    (draft.runtimeTargetKind !== "ec2_asg" ||
-      (/^\//.test(draft.healthCheckPath) && hasCompleteEc2AsgCoordinates(draft))) &&
-    (draft.runtimeTargetKind !== "static_site" ||
-      (draft.installPreset !== "none" && hasCompleteStaticSiteCoordinates(draft)))
-  );
+  return getMissingDeploymentTargetFieldKeys(draft, connections).length === 0;
 }
 
 export function createDeploymentTargetRequest(
@@ -585,7 +742,7 @@ export function createDeploymentTargetRequest(
 
 function getEvidenceSuggestion(
   runtimeTargetKind: RuntimeTargetKind,
-  sourceRepository?: SourceRepository | null
+  repositoryEvidence?: ProjectDeploymentRepositoryEvidence | null
 ): {
   sourceRoot: string;
   evidencePath: string;
@@ -593,20 +750,14 @@ function getEvidenceSuggestion(
   installPreset: BuildInstallPreset;
 } | null {
   if (
-    !sourceRepository ||
-    sourceRepository.status !== "active" ||
-    sourceRepository.archived ||
-    !sourceRepository.analysis ||
-    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(sourceRepository.analysis.repositoryRevision)
+    !repositoryEvidence ||
+    !/^(?:[a-f\d]{40}|[a-f\d]{64})$/i.test(repositoryEvidence.repositoryRevision)
   ) {
     return null;
   }
-  const handoff = sourceRepository.analysis.aiHandoff;
-  if (
-    !handoff ||
-    !Array.isArray(handoff.evidence) ||
-    !Array.isArray(handoff.applicationUnits)
-  ) return null;
+  const handoff = repositoryEvidence.aiHandoff;
+  if (!handoff || !Array.isArray(handoff.evidence) || !Array.isArray(handoff.applicationUnits))
+    return null;
   const evidenceKind = runtimeBuildConfig[runtimeTargetKind].evidenceKind;
   const matchingEvidence = handoff.evidence.filter((item) =>
     runtimeTargetKind === "lambda"
@@ -628,12 +779,37 @@ function getEvidenceSuggestion(
   return {
     sourceRoot,
     evidencePath: evidence.path,
-    commitSha: sourceRepository.analysis.repositoryRevision.toLowerCase(),
+    commitSha: repositoryEvidence.repositoryRevision.toLowerCase(),
     installPreset:
       runtimeTargetKind === "static_site"
         ? inferInstallPreset(handoff.evidence, sourceRoot)
         : "none"
   };
+}
+
+function getProjectDeploymentRepositoryEvidence(
+  sourceRepository?: SourceRepository | null,
+  repositoryAnalysisRecord?: RepositoryAnalysisRecord | null
+): ProjectDeploymentRepositoryEvidence | null {
+  if (repositoryAnalysisRecord) {
+    return {
+      name: repositoryAnalysisRecord.name,
+      repositoryRevision: repositoryAnalysisRecord.repositoryRevision,
+      aiHandoff: repositoryAnalysisRecord.analysisResult.aiHandoff
+    };
+  }
+  if (
+    sourceRepository?.status === "active" &&
+    !sourceRepository.archived &&
+    sourceRepository.analysis
+  ) {
+    return {
+      name: sourceRepository.name,
+      repositoryRevision: sourceRepository.analysis.repositoryRevision,
+      aiHandoff: sourceRepository.analysis.aiHandoff
+    };
+  }
+  return null;
 }
 
 function inferInstallPreset(
@@ -643,15 +819,17 @@ function inferInstallPreset(
   const lockfiles = evidence
     .filter((item) => item.kind === "lockfile")
     .map((item) => item.path.toLowerCase());
-  const normalizedRoot =
-    sourceRoot.replace(/^\.\//, "").replace(/\/$/, "").toLowerCase() || ".";
-  const scopedLockfiles = normalizedRoot === "."
-    ? lockfiles.filter((path) => !path.includes("/"))
-    : lockfiles.filter((path) => path.startsWith(`${normalizedRoot}/`) &&
-        !path.slice(normalizedRoot.length + 1).includes("/"));
-  const candidates = scopedLockfiles.length > 0
-    ? scopedLockfiles
-    : lockfiles.filter((path) => !path.includes("/"));
+  const normalizedRoot = sourceRoot.replace(/^\.\//, "").replace(/\/$/, "").toLowerCase() || ".";
+  const scopedLockfiles =
+    normalizedRoot === "."
+      ? lockfiles.filter((path) => !path.includes("/"))
+      : lockfiles.filter(
+          (path) =>
+            path.startsWith(`${normalizedRoot}/`) &&
+            !path.slice(normalizedRoot.length + 1).includes("/")
+        );
+  const candidates =
+    scopedLockfiles.length > 0 ? scopedLockfiles : lockfiles.filter((path) => !path.includes("/"));
   const presets = new Set<BuildInstallPreset>();
   if (candidates.some((path) => path.endsWith("pnpm-lock.yaml"))) {
     presets.add("pnpm_frozen_lockfile");
@@ -661,50 +839,6 @@ function inferInstallPreset(
     presets.add("yarn_frozen_lockfile");
   }
   return presets.size === 1 ? [...presets][0]! : "none";
-}
-
-function hasCompleteEcsCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
-  const values = [
-    draft.codeBuildProjectName,
-    draft.ecrRepositoryName,
-    draft.clusterName,
-    draft.serviceName,
-    draft.containerName
-  ];
-  if (values.some((value) => value.trim().length === 0)) return false;
-  return !draft.outputUrl.trim() || hasSafeHttpsOutputUrl(draft.outputUrl);
-}
-
-function hasCompleteLambdaCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
-  const values = [
-    draft.codeBuildProjectName,
-    draft.functionLogicalId,
-    draft.functionName,
-    draft.aliasName,
-    draft.codeDeployApplicationName,
-    draft.codeDeployDeploymentGroupName
-  ];
-  return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
-}
-
-function hasCompleteEc2AsgCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
-  const values = [
-    draft.codeBuildProjectName,
-    draft.codeDeployApplicationName,
-    draft.codeDeployDeploymentGroupName,
-    draft.autoScalingGroupName
-  ];
-  return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
-}
-
-function hasCompleteStaticSiteCoordinates(draft: ProjectDeploymentTargetDraft): boolean {
-  const values = [
-    draft.codeBuildProjectName,
-    draft.hostingBucketName,
-    draft.cloudFrontDistributionId,
-    draft.cloudFrontOriginId
-  ];
-  return values.every((value) => value.trim().length > 0) && hasSafeHttpsOutputUrl(draft.outputUrl);
 }
 
 function hasSafeHttpsOutputUrl(value: string): boolean {

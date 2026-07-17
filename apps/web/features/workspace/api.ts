@@ -47,6 +47,7 @@ import type {
   CreateProjectRequest,
   CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
+  DisconnectAwsCodeConnectionRequest,
   DeleteProjectResponse,
   DeleteAwsConnectionRequest,
   DesignSimulationResult,
@@ -99,12 +100,16 @@ import type {
   ProjectResponse,
   ProjectDeploymentTarget,
   ProjectDeploymentTargetResponse,
+  ProjectDeliveryProfile,
+  ProjectDeliveryProfileResponse,
   ProjectBuildEnvironment,
   ProjectBuildEnvironmentResponse,
   PrepareDeploymentRequest,
   PutProjectDeploymentTargetRequest,
   RecommendRepositoryTemplateRequest,
   RecommendRepositoryTemplateResponse,
+  RepositoryAnalysisRecord,
+  RepositoryAnalysisRecordResponse,
   RecentSuccessfulDeploymentProject,
   RecentSuccessfulDeploymentProjectListResponse,
   SourceRepository,
@@ -119,6 +124,7 @@ import type {
   ReverseEngineeringScanLogListResponse,
   ReverseEngineeringScanResponse,
   SaveProjectDraftRequest,
+  SaveRepositoryAnalysisRecordRequest,
   TerraformDiagnostic,
   TerraformOutput,
   TerraformOutputListResponse,
@@ -216,6 +222,16 @@ export async function getProjectDeploymentTarget(
     { auth: true }
   );
   return response.target;
+}
+
+export async function getProjectDeliveryProfile(
+  projectId: string
+): Promise<ProjectDeliveryProfile> {
+  const response = await apiFetch<ProjectDeliveryProfileResponse>(
+    `/projects/${encodeURIComponent(projectId)}/delivery-profile`,
+    { auth: true }
+  );
+  return response.profile;
 }
 
 export async function putProjectDeploymentTarget(
@@ -333,6 +349,35 @@ export async function saveProjectDraft({
       ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
+}
+
+export async function getRepositoryAnalysisRecord(
+  projectId: string
+): Promise<RepositoryAnalysisRecord | null> {
+  const response = await apiFetch<RepositoryAnalysisRecordResponse>(
+    `/projects/${encodeURIComponent(projectId)}/repository-analysis-record`,
+    { auth: true }
+  );
+  return response.record;
+}
+
+export async function saveRepositoryAnalysisRecord(
+  projectId: string,
+  input: SaveRepositoryAnalysisRecordRequest
+): Promise<RepositoryAnalysisRecord> {
+  const response = await apiFetch<RepositoryAnalysisRecordResponse>(
+    `/projects/${encodeURIComponent(projectId)}/repository-analysis-record`,
+    {
+      auth: true,
+      method: "PUT",
+      body: input
+    }
+  );
+
+  if (!response.record) {
+    throw new Error("Repository Analysis Record was not saved");
+  }
+  return response.record;
 }
 
 export async function createArchitectureSnapshot({
@@ -1323,6 +1368,20 @@ export async function refreshAwsCodeConnection(
   return apiFetch<AwsCodeConnectionResponse>(
     `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection/refresh`,
     { auth: true, method: "POST" }
+  );
+}
+
+export async function disconnectAwsCodeConnection(
+  connectionId: string,
+  input: DisconnectAwsCodeConnectionRequest
+): Promise<void> {
+  await apiFetch<void>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
+    {
+      auth: true,
+      method: "DELETE",
+      body: input
+    }
   );
 }
 

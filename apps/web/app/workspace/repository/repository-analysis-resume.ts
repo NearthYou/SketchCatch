@@ -17,7 +17,7 @@ export type RepositoryAnalysisResumeState = {
   readonly projectName: string;
   readonly repositoryUrl: string;
   readonly defaultBranch: string;
-  readonly publicAnalysis: SourceRepositoryAnalysisResult;
+  readonly publicAnalysis: SourceRepositoryAnalysisResult | null;
   readonly selectedTemplateId: PublicRepositoryTemplateId | null;
   readonly deploymentType: RepositoryDeploymentType;
   readonly answers: Readonly<Record<string, string | boolean>>;
@@ -64,7 +64,8 @@ export function readRepositoryAnalysisResume(
       state.resumeKey !== input.resumeKey ||
       state.projectId !== input.projectId ||
       normalizeGitHubRepositoryUrl(state.repositoryUrl) !== normalizeGitHubRepositoryUrl(input.repositoryUrl) ||
-      normalizeGitHubRepositoryUrl(state.publicAnalysis.repositoryUrl) !== normalizeGitHubRepositoryUrl(input.repositoryUrl)
+      (state.publicAnalysis !== null &&
+        normalizeGitHubRepositoryUrl(state.publicAnalysis.repositoryUrl) !== normalizeGitHubRepositoryUrl(input.repositoryUrl))
     ) {
       storage.removeItem(storageKey);
       return null;
@@ -101,7 +102,9 @@ function parseRepositoryAnalysisResumeState(value: unknown): RepositoryAnalysisR
 
   const createdAt = requireString(value.createdAt);
   const parsedCreatedAt = new Date(createdAt);
-  const publicAnalysis = parsePublicAnalysis(value.publicAnalysis);
+  const publicAnalysis = value.publicAnalysis === null
+    ? null
+    : parsePublicAnalysis(value.publicAnalysis);
   const answers = parseAnswers(value.answers);
   const deploymentType = value.deploymentType;
   const stage = value.stage;

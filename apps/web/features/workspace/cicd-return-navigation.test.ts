@@ -12,10 +12,7 @@ const repositoryPageSource = readFileSync(
   "utf8"
 );
 const deploymentTargetClientSource = readFileSync(
-  new URL(
-    "../../app/projects/[projectId]/settings/project-deployment-target-settings-client.tsx",
-    import.meta.url
-  ),
+  new URL("./delivery/ProjectDeploymentTargetEditor.tsx", import.meta.url),
   "utf8"
 );
 const monitoringClientSource = readFileSync(
@@ -37,10 +34,7 @@ test("accepts the current project's workspace CI/CD return path", () => {
   const returnTo =
     "/workspace?projectId=project-1&projectName=demo&deploymentView=cicd&readinessKey=deployment_target";
 
-  assert.equal(
-    getSafeCicdReturnPath({ rawReturnTo: returnTo, projectId: "project-1" }),
-    returnTo
-  );
+  assert.equal(getSafeCicdReturnPath({ rawReturnTo: returnTo, projectId: "project-1" }), returnTo);
 });
 
 test("rejects external, non-workspace, and cross-project return paths", () => {
@@ -53,11 +47,7 @@ test("rejects external, non-workspace, and cross-project return paths", () => {
   ];
 
   for (const rawReturnTo of rejectedReturnPaths) {
-    assert.equal(
-      getSafeCicdReturnPath({ rawReturnTo, projectId: "project-1" }),
-      null,
-      rawReturnTo
-    );
+    assert.equal(getSafeCicdReturnPath({ rawReturnTo, projectId: "project-1" }), null, rawReturnTo);
   }
 });
 
@@ -71,17 +61,13 @@ test("returns only the workspace pathname and search", () => {
   );
 });
 
-test("server pages sanitize returnTo and pass it only to the matching readiness client", () => {
-  assert.match(settingsPageSource, /getSafeCicdReturnPath/);
-  assert.match(
-    settingsPageSource,
-    /safeReturnTo=\{readinessKey === "deployment_target" \? safeReturnTo : null\}/
-  );
-  assert.match(
-    settingsPageSource,
-    /safeReturnTo=\{readinessKey === "monitoring_config" \? safeReturnTo : null\}/
-  );
+test("legacy settings route opens the Workspace Delivery panel", () => {
+  assert.match(settingsPageSource, /startMode:\s*"delivery"/);
+  assert.match(settingsPageSource, /redirect\(`\/workspace\?\$\{query\.toString\(\)\}`\)/);
+  assert.doesNotMatch(settingsPageSource, /getSafeCicdReturnPath|safeReturnTo|readinessKey/);
+});
 
+test("repository page sanitizes returnTo for source repository readiness only", () => {
   assert.match(repositoryPageSource, /getSafeCicdReturnPath/);
   assert.match(
     repositoryPageSource,
@@ -89,7 +75,7 @@ test("server pages sanitize returnTo and pass it only to the matching readiness 
   );
 });
 
-test("settings clients replace the route only after successful state and status updates", () => {
+test("shared target editor and monitoring client replace the route only after successful updates", () => {
   for (const source of [deploymentTargetClientSource, monitoringClientSource]) {
     assert.match(source, /useRouter/);
     assert.match(source, /safeReturnTo/);
@@ -118,7 +104,10 @@ test("repository connections return after first connect or confirmed change, but
   assert.match(repositoryClientSource, /useRouter/);
   assert.match(repositoryClientSource, /safeReturnTo/);
   assert.match(repositoryClientSource, /setStatusMessage/);
-  assert.match(repositoryClientSource, /connectRepository\(repository, activeRepository === null\)/);
+  assert.match(
+    repositoryClientSource,
+    /connectRepository\(repository, activeRepository === null\)/
+  );
   assert.match(repositoryClientSource, /connectRepository\(pendingRepository, true\)/);
 
   const statusIndex = repositoryClientSource.indexOf(

@@ -568,7 +568,7 @@ async function hasDeploymentUsingAwsConnection(
     rows,
     activeLeaseRows,
     activeDeploymentJobRows,
-    creatingCodeConnections,
+    changingCodeConnections,
     preparingBuildEnvironments
   ] = await Promise.all([
     db
@@ -611,7 +611,7 @@ async function hasDeploymentUsingAwsConnection(
       .where(
         and(
           eq(awsCodeConnections.awsConnectionId, connectionId),
-          eq(awsCodeConnections.status, "CREATING")
+          inArray(awsCodeConnections.status, ["CREATING", "DELETING"])
         )
       )
       .limit(1),
@@ -642,7 +642,7 @@ async function hasDeploymentUsingAwsConnection(
   return (
     activeLeaseRows.length > 0 ||
     activeDeploymentJobRows.length > 0 ||
-    creatingCodeConnections.length > 0 ||
+    changingCodeConnections.length > 0 ||
     preparingBuildEnvironments.length > 0 ||
     [...byDeployment.values()].some(shouldBlockAwsConnectionDeletion)
   );

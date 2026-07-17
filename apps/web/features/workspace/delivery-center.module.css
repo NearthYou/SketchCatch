@@ -1,0 +1,36 @@
+.root { display: grid; gap: 18px; padding: 20px; overflow: auto; }
+.header, .cardHeading, .sectionLabel, .accountList li, .readinessList li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.header p { margin: 0 0 4px; color: #777; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.header h2, .card h3, .sectionLabel h3 { margin: 0; }
+.header button { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #ddd; border-radius: 8px; background: #fff; }
+.intro, .card p { margin: 0; color: #60646c; line-height: 1.6; }
+.card, .editorSection, .execution { min-width: 0; padding: 18px; border: 1px solid #e6e6eb; border-radius: 12px; background: #fff; }
+.cardHeading > div, .sectionLabel { justify-content: flex-start; }
+.cardHeading span, .sectionLabel > span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: #171719; color: #fff; font-size: 12px; font-weight: 800; }
+.cardHeading > strong { color: #4a4d55; font-size: 12px; }
+.accountList, .readinessList { display: grid; gap: 10px; margin: 14px 0 0; padding: 0; list-style: none; }
+.accountList a, .actionLink { display: inline-flex; align-items: center; gap: 6px; color: #3157d5; font-weight: 700; text-decoration: none; }
+.actionLink { margin-top: 14px; }
+.definitionList { display: grid; gap: 10px; margin: 16px 0 0; }
+.definitionList div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; }
+.definitionList dt { color: #777; font-size: 12px; }
+.definitionList dd { margin: 0; overflow-wrap: anywhere; font-weight: 650; }
+.warning { margin-top: 14px; padding: 12px; border: 1px solid #edb95d; border-radius: 8px; background: #fff9ec; }
+.warning p { margin-top: 4px; }
+.sectionLabel { margin-bottom: 14px; }
+.editorSection :global(.dashboardPanel) { margin: 0; padding: 0; border: 0; box-shadow: none; }
+.readinessList li { padding-top: 10px; border-top: 1px solid #eee; }
+.readinessList li[data-ready="true"] strong { color: #147a42; }
+.error { color: #b42318; }
+.message { padding: 24px; }
+.message button { margin-top: 10px; }
+.execution { overflow: hidden; }
+.modalSummary { display: grid; gap: 18px; padding: 32px; }
+.modalSummary > div > p { margin: 0 0 6px; color: #777; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.modalSummary h2 { margin: 0; }
+.modalDefinitionList { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.modalDefinitionList div { padding: 14px; border: 1px solid #e6e6eb; border-radius: 10px; }
+.modalDefinitionList dt { color: #777; font-size: 12px; }
+.modalDefinitionList dd { margin: 6px 0 0; font-weight: 750; }
+.primaryButton { justify-self: start; padding: 10px 16px; border: 0; border-radius: 8px; background: #171719; color: #fff; font-weight: 750; }
+@media (max-width: 760px) { .definitionList div { grid-template-columns: 1fr; gap: 3px; } }
