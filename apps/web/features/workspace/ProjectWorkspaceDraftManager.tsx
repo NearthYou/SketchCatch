@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import type {
   DiagramJson,
   ProjectDraftConflictResponse,
@@ -9,6 +10,7 @@ import type {
 } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../lib/api-client";
+import { queryKeys } from "../../lib/query-keys";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
@@ -173,6 +175,7 @@ function ProjectWorkspaceDraftManagerState({
   resolvedLocalCacheWorkspaceId: localCacheWorkspaceId
 }: ProjectWorkspaceDraftManagerProps & { resolvedLocalCacheWorkspaceId: string }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const legacyLocalCacheWorkspaceId =
     providedLocalCacheWorkspaceId || workspaceId ? undefined : `project:${projectId}`;
@@ -275,6 +278,18 @@ function ProjectWorkspaceDraftManagerState({
 
   useEffect(() => {
     const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
+      onCaptureUploaded: (uploadedProjectId) => {
+        const userId = user?.id;
+
+        if (!userId) {
+          return;
+        }
+
+        void queryClient.invalidateQueries({
+          exact: true,
+          queryKey: queryKeys.projectThumbnail(userId, uploadedProjectId)
+        });
+      },
       projectId,
       onStateChange: setThumbnailLifecycleState
     });
@@ -292,7 +307,7 @@ function ProjectWorkspaceDraftManagerState({
 
       thumbnailLifecycle.dispose();
     };
-  }, [projectId]);
+  }, [projectId, queryClient, user?.id]);
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
