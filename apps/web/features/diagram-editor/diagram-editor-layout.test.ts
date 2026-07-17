@@ -342,6 +342,18 @@ test("fit view uses the unobscured board frame and complete diagram visual bound
   assert.doesNotMatch(diagramEditorSource, /const fitViewWidth = editorBounds/);
 });
 
+test("automatic organization preview stays at the lower-left of the board workspace", () => {
+  assert.match(diagramEditorStyles, /\.workspace\s*\{[\s\S]*?position:\s*relative;/);
+  assert.match(
+    diagramEditorStyles,
+    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*16px;[\s\S]*?left:\s*16px;[\s\S]*?right:\s*auto;/
+  );
+  assert.match(
+    diagramEditorSource,
+    /<div className=\{styles\.workspace\}>[\s\S]*?aria-label="자동 정리 미리보기"/
+  );
+});
+
 test("viewport controls use the React Flow instance received from onInit", () => {
   assert.match(diagramEditorSource, /const fallbackFlowInstanceRef = useRef\(reactFlow\);/);
   assert.match(diagramEditorSource, /fallbackFlowInstanceRef\.current = reactFlow;/);

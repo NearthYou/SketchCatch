@@ -1334,10 +1334,10 @@ button.rightRailResizeHandle {
   color: var(--board-ink);
   flex-direction: column;
   font-weight: 500;
-  left: auto;
+  left: 16px;
   max-width: min(500px, calc(100% - 48px));
   padding: 10px 12px;
-  right: 16px;
+  right: auto;
   text-align: left;
   top: auto;
   transform: none;
