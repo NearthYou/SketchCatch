@@ -2497,6 +2497,8 @@ AI는 원천 진실이 아니라 설명과 제안 계층이다. 배포 가능한
 
 AI provider 응답에는 호출 출처와 비용 추적을 위한 metadata를 함께 둔다. Bedrock, Amazon Q Business, Amazon Transcribe는 `AI_BILLING_MODE=aws_credit_only`와 provider별 credit confirmation flag가 모두 충족될 때만 실제 호출한다. 오류 분석과 에이전트 리뷰는 Amazon Q, Bedrock, deterministic rule fallback 순서로 전환하며, 조건이 맞지 않는 provider는 호출하지 않고 안전한 시도 결과만 metadata에 남긴다.
 
+Architecture Draft의 clarification 질문과 option은 provider availability보다 먼저 결정론적으로 계산한다. 이 응답은 Amazon Q를 호출하지 않으며 `providerMetadata.provider`도 `fallback`으로 기록한다. 실제 Amazon Q provenance는 요구사항이 완성되고 credit gate를 통과한 뒤 Q Business 응답을 사용한 결과에만 부여한다.
+
 Architecture Draft는 사용자 최초 질의와 질문 답변을 `ArchitectureIntentPlan`으로 정규화한다. OpenAI normalizer는 이 단계에서만 선택적으로 사용하며 `patternIds`, 필수 리소스, 수량, 금지 capability, runtime topology, 리전과 가용성을 반환한다. OpenAI 결과는 deterministic normalizer 결과와 병합되고, `no EC2`, Fargate, 파일 업로드 없음과 같은 명시적 금지 조건이 우선한다.
 
 Amazon Q Business는 Anonymous application의 `RETRIEVAL_MODE`만 사용한다. API는 선택된 각 `patternId`를 `pattern_id` equals filter로 따로 검색하고, 기대한 인덱스 문서의 `documentId`가 citation에 포함된 경우에만 해당 패턴을 승인한다. 여러 패턴을 하나의 OR 검색으로 가져오지 않으며 Creator mode나 Q 사용자 구독을 Architecture Draft 경로에 사용하지 않는다.
@@ -3269,9 +3271,20 @@ type GitHubInstallationConnection = {
   repositoryCount: number;
   htmlUrl: string | null;
 };
+
+type GitHubAppCapabilityAvailability = "ready" | "not_configured";
+
+type ListGitHubInstallationsResponse = {
+  availability: {
+    installationRead: GitHubAppCapabilityAvailability;
+    connectionSetup: GitHubAppCapabilityAvailability;
+  };
+  installations: GitHubInstallationConnection[];
+};
 ```
 
 - `GitHubInstallationConnection`은 installation ID, 계정 표시 정보, repository 권한 범위와 개수, GitHub 관리 URL만 반환합니다. installation access token과 GitHub App private key는 반환하거나 저장하지 않습니다.
+- `installationRead`는 기존 installation을 조회할 수 있는지, `connectionSetup`은 새 GitHub user authorization을 시작할 수 있는지를 별도로 나타냅니다. user authorization 설정만 빠진 경우 기존 installation은 그대로 반환하며 새 연결 시작만 차단합니다.
 - account scope callback은 서명된 state의 SketchCatch 사용자와 provider가 user access token으로 확인한 installation을 연결하지만 `SourceRepository`를 생성하거나 변경하지 않습니다.
 - project scope callback은 provider가 확인한 installation 소유권과 서명된 target repository를 함께 검증한 뒤 프로젝트별 `SourceRepository`로 생성하거나 기존 동일 active 연결을 재사용합니다.
 - account scope와 project scope의 서명 state는 구분되며 서로 바꿔 사용할 수 없습니다.

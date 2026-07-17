@@ -95,3 +95,36 @@ test("GitHub connection preserves and restores public analysis without reanalysi
   assert.match(source, /if \(initialResumeKey\) return/);
   assert.match(source, /setPublicAnalysis\(resume\.publicAnalysis\)/);
 });
+
+test("GitHub connection checks server availability before configured-only repository calls", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+  const loadCandidatesBody = source.slice(
+    source.indexOf("async function loadCandidates"),
+    source.indexOf("async function openGitHubConnection")
+  );
+  const openConnectionBody = source.slice(
+    source.indexOf("async function openGitHubConnection"),
+    source.indexOf("async function analyzeRepositoryUrl")
+  );
+
+  assert.match(source, /GitHub App 서버 설정이 필요합니다/);
+  const listAccountInstallationsIndex = loadCandidatesBody.indexOf(
+    "listGitHubAccountInstallations"
+  );
+  const listInstalledRepositoriesIndex = loadCandidatesBody.indexOf(
+    "listGitHubInstalledRepositories"
+  );
+  assert.ok(listAccountInstallationsIndex >= 0);
+  assert.ok(
+    listInstalledRepositoriesIndex >= 0 &&
+      listAccountInstallationsIndex < listInstalledRepositoriesIndex
+  );
+  const createInstallUrlIndex = openConnectionBody.indexOf(
+    "createGitHubSourceRepositoryInstallUrl"
+  );
+  const connectionSetupIndex = openConnectionBody.indexOf("connectionSetup");
+  const installationReadIndex = openConnectionBody.indexOf("installationRead");
+  assert.ok(createInstallUrlIndex >= 0);
+  assert.ok(connectionSetupIndex >= 0 && connectionSetupIndex < createInstallUrlIndex);
+  assert.ok(installationReadIndex >= 0 && installationReadIndex < createInstallUrlIndex);
+});
