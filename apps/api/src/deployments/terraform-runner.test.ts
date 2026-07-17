@@ -3,7 +3,25 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { runTerraformInit, type TerraformOutputLine } from "./terraform-runner.js";
+import {
+  createTerraformApplyArgs,
+  createTerraformDestroyPlanArgs,
+  createTerraformPlanArgs,
+  runTerraformInit,
+  type TerraformOutputLine
+} from "./terraform-runner.js";
+
+test("Plan, destroy Plan, and Apply commands never use Terraform -target", () => {
+  const commands = [
+    createTerraformPlanArgs("tfplan"),
+    createTerraformDestroyPlanArgs("tfplan"),
+    createTerraformApplyArgs("tfplan")
+  ];
+
+  for (const command of commands) {
+    assert.equal(command.some((argument) => argument === "-target" || argument.startsWith("-target=")), false);
+  }
+});
 
 test("runTerraformInit emits complete output lines before the command exits", async () => {
   const workdir = await mkdtemp(join(tmpdir(), "sketchcatch-terraform-runner-"));

@@ -13,6 +13,7 @@ test("Direct application preparation fails before CodeBuild without an output UR
   let prepareCalls = 0;
   const context = {
     sourceRepository: {
+      id: "repository-1",
       provider: "github",
       installationId: "installation-1",
       owner: "NearthYou",
@@ -56,6 +57,7 @@ test("Direct application preparation fails before CodeBuild without an output UR
       }
     },
     connection: {
+      accountId: "123456789012",
       roleArn: "arn:aws:iam::123456789012:role/SketchCatch",
       externalId: "external-id",
       region: "ap-northeast-2"

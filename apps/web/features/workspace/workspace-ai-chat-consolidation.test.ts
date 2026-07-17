@@ -1,0 +1,115 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+const chatSource = read("WorkspaceAiChatDock.tsx");
+const toolbarSource = read("TerraformCodeToolbar.tsx");
+const issuesSource = read("TerraformIssuesPanel.tsx");
+const stylesSource = read("workspace-ai-workbench.module.css");
+
+test("오류 분석과 에이전트 리뷰 실행은 AI 채팅에만 존재한다", () => {
+  assert.doesNotMatch(toolbarSource, /TerraformAgentReviewButton/);
+  assert.doesNotMatch(issuesSource, /TerraformIssueAnalysisButton/);
+  assert.match(chatSource, />선택 오류 분석</);
+  assert.match(chatSource, />모두 분석</);
+  assert.match(chatSource, />에이전트 리뷰</);
+  assert.match(chatSource, />적용 가능한 항목 모두 수정</);
+});
+
+test("데스크톱 AI 채팅은 명시적으로 닫을 때까지 Board 상호작용을 막지 않는다", () => {
+  assert.doesNotMatch(chatSource, /event\.target === event\.currentTarget[\s\S]*closeChatDock/);
+  assert.match(stylesSource, /\.overlay\s*\{[^}]*pointer-events:\s*none;/s);
+  assert.match(stylesSource, /\.workWindow\s*\{[^}]*pointer-events:\s*auto;/s);
+  assert.match(
+    stylesSource,
+    /@media \(max-width:\s*768px\)[\s\S]*\.overlay\s*\{[^}]*pointer-events:\s*auto;/s
+  );
+});
+
+test("오류 분석과 에이전트 리뷰 작업은 Workbench 작업 행에 머문다", () => {
+  const errorActionsSection = readSection("workspace-ai-error-actions-title");
+  const selectedErrorSection = readSection("workspace-ai-selected-error-title");
+  const reviewSection = readSection("workspace-ai-review-title");
+  const draftSection = readSection("workspace-ai-draft-result-title");
+  const patchSection = readSection("workspace-ai-patch-result-title");
+
+  assert.match(
+    errorActionsSection,
+    /className=\{styles\.taskActions\}[\s\S]*onClick=\{\(\) => void analyzeSelectedTerraformIssue\(\)\}[\s\S]*>선택 오류 분석<\/[\s\S]*onClick=\{\(\) => void analyzeAllTerraformIssues\(\)\}[\s\S]*>모두 분석<\//
+  );
+  assert.match(errorActionsSection, /onClick=\{applyAllTerraformIssueFixes\}/);
+  assert.match(
+    reviewSection,
+    /className=\{styles\.taskActions\}[\s\S]*onClick=\{\(\) => void runTerraformAgentReview\(\)\}[\s\S]*>에이전트 리뷰<\//
+  );
+  assert.match(
+    selectedErrorSection,
+    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applySelectedTerraformIssueFix\}/
+  );
+  assert.match(
+    draftSection,
+    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applyDraftToBoard\}[\s\S]*>Board에 적용<\/[\s\S]*onClick=\{cancelDraftPreview\}[\s\S]*>취소<\/[\s\S]*regenerateDraft/
+  );
+  assert.match(
+    patchSection,
+    /className=\{styles\.approvalTray\}[\s\S]*onClick=\{applyPatchPreviewToBoard\}[\s\S]*>Board에 적용<\/[\s\S]*onClick=\{cancelPatchPreview\}[\s\S]*>취소<\/[\s\S]*regeneratePatchPreview/
+  );
+});
+
+test("오른쪽 패널 상호작용은 탭만 바꾸고 닫힌 채팅을 강제로 열지 않는다", () => {
+  assert.doesNotMatch(chatSource, /terraformIssueRequest|terraformPreviewRequest/);
+  assert.match(
+    chatSource,
+    /latestTerraformAiInteractionIdRef\.current = terraformAiInteraction\.id;\s*setActiveChatTab\(terraformAiInteraction\.scope\);/
+  );
+  assert.match(chatSource, /onOpen=\{\(\) => setOpen\(true\)\}/);
+});
+
+test("후속 질문을 거친 Draft도 생성 당시 Board source를 유지한다", () => {
+  assert.match(
+    chatSource,
+    /setDraftFollowUpSession\(\{\s*proposalSource,\s*session: previewDecision\.session\s*\}\)/
+  );
+  assert.match(
+    chatSource,
+    /showDraftPreview\(pendingDraft, draftFollowUpSession\.proposalSource\)/
+  );
+});
+
+test("오류 분석은 파일별 코드와 fingerprint를 사용해 순차 실행하고 결과를 저장한다", () => {
+  assert.match(chatSource, /resolveTerraformIssueCode\(\{/);
+  assert.match(
+    chatSource,
+    /for \(let index = 0; index < issues\.length; index \+= 1\)[\s\S]*await analyzeTerraformIssue/
+  );
+  assert.match(chatSource, /readStoredTerraformIssueAnalyses/);
+  assert.match(chatSource, /storeTerraformIssueAnalyses/);
+  assert.match(
+    chatSource,
+    /terraformAiContextRef\.current\.fingerprint !== contextSnapshot\.fingerprint/
+  );
+  assert.match(chatSource, /requestRegistryRef\.current\.cancel\("errors"\)/);
+});
+
+test("안전 수정은 최신 분석과 정확한 파일이 있을 때만 batch 계약으로 요청한다", () => {
+  assert.match(chatSource, /analysis\?\.state !== "idle" \|\| !analysis\.explanation/);
+  assert.match(chatSource, /expectedTerraformFingerprint: terraformAiContext\.fingerprint/);
+  assert.match(chatSource, /mode: "single"/);
+  assert.match(chatSource, /mode: "all"/);
+  assert.match(chatSource, /오류가 발생한 Terraform 파일을 특정할 수 없습니다/);
+  assert.match(chatSource, /오류 분석에 실패했습니다\. 다시 분석한 뒤 수정안을 적용하세요/);
+});
+
+function read(relativePath: string): string {
+  return readFileSync(new URL(relativePath, import.meta.url), "utf8");
+}
+
+function readSection(labelledBy: string): string {
+  const labelIndex = chatSource.indexOf(`aria-labelledby="${labelledBy}"`);
+  assert.notEqual(labelIndex, -1, `${labelledBy} section must exist`);
+  const sectionStart = chatSource.lastIndexOf("<section", labelIndex);
+  const sectionEnd = chatSource.indexOf("</section>", labelIndex);
+  assert.notEqual(sectionStart, -1, `${labelledBy} section start must exist`);
+  assert.notEqual(sectionEnd, -1, `${labelledBy} section end must exist`);
+  return chatSource.slice(sectionStart, sectionEnd + "</section>".length);
+}

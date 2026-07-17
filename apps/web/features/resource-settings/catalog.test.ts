@@ -3,12 +3,14 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  createTerraformParameterCatalogKey,
   getResourceDefinitionById,
   getResourceDefinitionByTerraform,
   resourceDefinitions
 } from "@sketchcatch/types/resource-definitions";
 import { terraformAwsParameterCatalog as generatedTerraformAwsParameterCatalog } from "../parameter-input/catalog.generated";
 import { terraformParameterCatalog } from "../parameter-input/catalog";
+import { capturedBrainboardPaletteResourceIds } from "./captured-brainboard-palette-resource-ids";
 import { resourceCatalog } from "./catalog";
 
 const publicDirectoryPath = fileURLToPath(new URL("../../public", import.meta.url));
@@ -116,40 +118,6 @@ const requestedMissingCatalogItems = [
   }
 ] as const;
 
-const sourceFixtureOnlyCatalogItemIds = [
-  "aws-api-gateway-integration-response",
-  "aws-api-gateway-method-response",
-  "aws-budgets-budget",
-  "aws-cloudfront-origin-access-identity",
-  "aws-docdb-cluster",
-  "aws-dynamodb-global-table",
-  "aws-elastic-beanstalk-application",
-  "aws-elastic-beanstalk-environment",
-  "aws-elb",
-  "aws-flow-log",
-  "aws-fsx-lustre-file-system",
-  "aws-iam-group",
-  "aws-iam-group-policy-attachment",
-  "aws-iam-user",
-  "aws-iam-user-group-membership",
-  "aws-iam-user-login-profile",
-  "aws-launch-configuration",
-  "aws-main-route-table-association",
-  "aws-network-interface",
-  "aws-organizations-account",
-  "aws-s3-bucket-acl",
-  "aws-s3-bucket-logging",
-  "aws-s3-bucket-notification",
-  "aws-s3-bucket-object",
-  "aws-s3-bucket-replication-configuration",
-  "aws-ses-email-identity",
-  "aws-vpc-peering-connection-accepter",
-  "aws-waf-ipset",
-  "aws-waf-rule",
-  "aws-waf-web-acl",
-  "aws-iam-policy-data"
-] as const;
-
 const legacySchemaLessPaletteItemIds = [
   "aws-cognito-user-pool",
   "aws-cognito-user-pool-client",
@@ -200,6 +168,11 @@ test("resourceCatalog exposes the reusable flow Design items with their real ico
     label: "Source Repository",
     size: { width: 48, height: 48 }
   });
+  assert.deepEqual(getCatalogDefaults("design-aws-account"), {
+    type: "sketchcatch_aws_account",
+    label: "AWS Account",
+    size: { width: 200, height: 130 }
+  });
 
   assert.equal(
     existsSync(
@@ -217,6 +190,10 @@ test("resourceCatalog exposes the reusable flow Design items with their real ico
     existsSync(
       `${publicDirectoryPath}/Resource-Icons_07312025/Res_General-Icons/Res_48_Light/Res_Git-Repository_48_Light.svg`
     ),
+    true
+  );
+  assert.equal(
+    existsSync(`${publicDirectoryPath}/Architecture-Group-Icons_07312025/AWS-Account_32.svg`),
     true
   );
 });
@@ -275,13 +252,26 @@ test("resourceCatalog displays every shared Terraform resource definition", () =
 });
 
 test("resource parameter panel capability matches the parameter catalog", () => {
-  const parameterCatalogResourceTypes = Object.keys(terraformParameterCatalog.resources).sort();
-  const capabilityResourceTypes = resourceDefinitions
+  const capabilityKeys = new Set(resourceDefinitions
     .filter((definition) => definition.capabilities.parameterPanel)
-    .map((definition) => definition.terraform.resourceType)
-    .sort();
+    .map((definition) =>
+      createTerraformParameterCatalogKey(
+        definition.terraform.blockType,
+        definition.terraform.resourceType
+      )
+    ));
 
-  assert.deepEqual(capabilityResourceTypes, parameterCatalogResourceTypes);
+  for (const key of capabilityKeys) {
+    assert.ok(terraformParameterCatalog.resources[key]?.length, key);
+  }
+
+  for (const key of Object.keys(terraformParameterCatalog.resources)) {
+    assert.equal(
+      capabilityKeys.has(key) || Object.hasOwn(generatedTerraformAwsParameterCatalog.resources, key),
+      true,
+      key
+    );
+  }
 });
 
 test("legacy schema-less Terraform items remain enabled in the manual palette", () => {
@@ -335,7 +325,18 @@ test("Autoscaling Policy is available through the shared definition and resource
     capabilities: {
       parameterPanel: true,
       terraformPreview: true,
-      terraformSync: true
+      terraformSync: true,
+      deployment: {
+        status: "supported",
+        provisioner: "terraform",
+        executionRole: "managed_resource",
+        optimization: {
+          desiredStateReuse: "verified",
+          artifactReuse: "none",
+          runtimeNoOp: "none",
+          healthVerification: "terraform_plan"
+        }
+      }
     }
   });
   assert.equal(resource?.category, "EC2 Launch & Scaling");
@@ -469,30 +470,46 @@ test("committed Brainboard captures have exactly one shared and catalog match fo
   }
 });
 
-test("new schema-less Brainboard items stay source-fixture-only in the manual palette", () => {
-  assert.equal(sourceFixtureOnlyCatalogItemIds.length, 31);
+test("captured Brainboard resources are configurable from the manual Palette", () => {
+  assert.equal(capturedBrainboardPaletteResourceIds.length, 31);
 
-  assert.deepEqual(
-    getTerraformCatalogItems()
-      .filter((resource) => !resource.enabled)
-      .map((resource) => resource.id)
-      .sort(),
-    [...sourceFixtureOnlyCatalogItemIds].sort()
-  );
+  assert.equal(getTerraformCatalogItems().every((resource) => resource.enabled), true);
 
-  for (const id of sourceFixtureOnlyCatalogItemIds) {
+  for (const id of capturedBrainboardPaletteResourceIds) {
     const resource = resourceCatalog.find((candidate) => candidate.id === id);
     const definition = getResourceDefinitionById(id);
 
     assert.ok(resource, id);
     assert.ok(definition, id);
-    assert.equal(resource.enabled, false, id);
-    assert.equal(definition.capabilities.parameterPanel, false, id);
+    assert.equal(resource.enabled, true, id);
+    assert.equal(definition.capabilities.parameterPanel, true, id);
+    assert.ok(
+      terraformParameterCatalog.resources[
+        createTerraformParameterCatalogKey(
+          definition.terraform.blockType,
+          definition.terraform.resourceType
+        )
+      ]?.length,
+      `${id} has no parameter catalog`
+    );
     assert.equal(definition.capabilities.terraformPreview, true, id);
     assert.equal(definition.capabilities.terraformSync, true, id);
     assert.ok(resource.iconUrl, id);
     assert.equal(existsSync(`${publicDirectoryPath}${resource.iconUrl}`), true, resource.iconUrl);
   }
+});
+
+test("IAM Policy data source uses its own block-type-aware parameter schema", () => {
+  const parameters = terraformParameterCatalog.resources[
+    createTerraformParameterCatalogKey("data", "aws_iam_policy")
+  ];
+
+  assert.ok(parameters);
+  assert.deepEqual(
+    parameters.map(({ name }) => name),
+    ["arn", "name", "pathPrefix"]
+  );
+  assert.equal(parameters.some(({ name }) => name === "policy"), false);
 });
 
 test("resourceCatalog IDs and Terraform identities remain unique", () => {

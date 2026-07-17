@@ -23,7 +23,6 @@ import type {
   CreateArchitecturePatchPreviewRequest,
   CreateDesignSimulationRequest,
   DesignSimulationResult,
-  LlmExplanation,
   RepositoryAnalysisTemplateId,
   SourceRepositoryAnalysisResult,
   TranscribeConfirmation,
@@ -99,75 +98,6 @@ const SAFETY_EXPLANATION_CACHE_NAMESPACE = "ai:safety-finding-explanation:v1";
 const SAFETY_EXPLANATION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SAFETY_EXPLANATION_TIMEOUT_MS = 2_500;
 const PRE_DEPLOYMENT_DEEP_SCAN_CACHE_NAMESPACE = "pre-deployment-deep-scan:v1";
-const TERRAFORM_REVIEW_CONCLUSION_MIN_LENGTH = 200;
-
-class AmazonQTerraformReviewUnavailableError extends Error {
-  readonly statusCode = 503;
-  readonly errorCode = "service_unavailable";
-  readonly exposeMessage = true;
-
-  constructor(reason: LlmExplanation["fallbackReason"] = "invalid_response") {
-    super(createAmazonQTerraformReviewUnavailableMessage(reason));
-    this.name = "AmazonQTerraformReviewUnavailableError";
-  }
-}
-
-function createAmazonQTerraformReviewUnavailableMessage(
-  reason: LlmExplanation["fallbackReason"]
-): string {
-  switch (reason) {
-    case "auth_error":
-      return "Amazon Q 인증에 실패했습니다. AWS 로그인 상태와 권한을 확인해주세요.";
-    case "timeout":
-      return "Amazon Q 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
-    case "rate_limited":
-    case "daily_limit_exceeded":
-      return "Amazon Q 호출 한도에 도달했습니다. 잠시 후 다시 시도해주세요.";
-    case "invalid_response":
-      return "Amazon Q 응답 형식을 확인하지 못했습니다. 다시 시도해주세요.";
-    case "provider_not_configured":
-      return "Amazon Q 연결 설정이 완료되지 않았습니다. 서버 설정을 확인해주세요.";
-    case "credit_not_confirmed":
-      return "Amazon Q 사용 승인이 확인되지 않았습니다. 서버 설정을 확인해주세요.";
-    case "invalid_request":
-      return "Amazon Q가 검토 요청을 처리하지 못했습니다. Terraform 내용을 확인해주세요.";
-    case "missing_api_key":
-    case "provider_error":
-    case undefined:
-      return "Amazon Q 호출 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
-  }
-}
-
-function requireAmazonQTerraformReview(explanation: LlmExplanation): LlmExplanation {
-  const conclusion = normalizeAmazonQTerraformReviewConclusion(
-    explanation.wellArchitectedConclusion ?? ""
-  );
-
-  if (
-    explanation.fallbackUsed ||
-    explanation.providerMetadata?.provider !== "amazon_q" ||
-    explanation.providerMetadata?.service !== "amazon_q_business" ||
-    conclusion.length < TERRAFORM_REVIEW_CONCLUSION_MIN_LENGTH
-  ) {
-    throw new AmazonQTerraformReviewUnavailableError(
-      explanation.fallbackUsed
-        ? explanation.fallbackReason ?? "provider_error"
-        : "invalid_response"
-    );
-  }
-
-  return {
-    ...explanation,
-    wellArchitectedConclusion: conclusion
-  };
-}
-
-function normalizeAmazonQTerraformReviewConclusion(conclusion: string): string {
-  return conclusion
-    .replace(/(?:^|\s)(?:잘한 점|문제점)\s*:\s*/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-}
 const PRE_DEPLOYMENT_DEEP_SCAN_TTL_MS = 5 * 60 * 1000;
 const PRE_DEPLOYMENT_DEEP_SCAN_MAX_LOCAL_ENTRIES = 100;
 type LocalDeepScanEntry = {
@@ -670,7 +600,12 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       });
 
       return {
-        ...result
+        ...result,
+        llmExplanation: await createLlmExplanation({
+          target: "terraform_error_explanation",
+          result,
+          terraformCodeContext: body.terraformCodeContext
+        })
       };
     }
   );
@@ -680,15 +615,13 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
     async (request): Promise<AiTerraformPreviewExplanationResult> => {
       const body = terraformPreviewExplanationBodySchema.parse(request.body);
       const result = explainTerraformPreview(body.terraformCode);
-      const llmExplanation = await createLlmExplanation({
-        target: "terraform_preview_explanation",
-        result,
-        terraformCodeContext: body.terraformCode
-      });
 
       return {
         ...result,
-        llmExplanation: requireAmazonQTerraformReview(llmExplanation)
+        llmExplanation: await createLlmExplanation({
+          target: "terraform_preview_explanation",
+          result
+        })
       };
     }
   );

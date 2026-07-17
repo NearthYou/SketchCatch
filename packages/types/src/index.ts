@@ -3,6 +3,12 @@ import { AVAILABLE_BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts
 import type { AvailableBrainboardTemplateId } from "./brainboard-templates/ids.ts";
 import { TEMPLATE_IDS } from "./template-definitions.ts";
 import type { TemplateId } from "./template-definitions.ts";
+import type {
+  RuntimeAdapterKind,
+  RuntimeConvergenceEvidence,
+  RuntimeConvergenceOutcome,
+  RuntimeDeploymentTarget
+} from "./runtime-convergence.js";
 
 export type IsoDateTimeString = string;
 
@@ -140,6 +146,7 @@ export const RESOURCE_TYPES = [
   "ECS_CAPACITY_PROVIDER",
   "EKS_CLUSTER",
   "EKS_NODE_GROUP",
+  "EKS_FARGATE_PROFILE",
   "EKS_ADDON",
   "KUBERNETES_NAMESPACE",
   "KUBERNETES_DEPLOYMENT",
@@ -1102,7 +1109,84 @@ export type ConfirmedBuildConfig = {
   confirmedAt: IsoDateTimeString;
 };
 
-export type EcsGitOpsReleaseEvidence = {
+export const APPLICATION_ARTIFACT_CONTRACT_VERSION = "application-artifact/v1" as const;
+
+export const APPLICATION_ARTIFACT_KINDS = [
+  "container_image",
+  "lambda_zip",
+  "codedeploy_bundle",
+  "static_bundle",
+  "kubernetes_manifest",
+  "helm_chart",
+  "machine_image"
+] as const;
+
+export type ApplicationArtifactKind = (typeof APPLICATION_ARTIFACT_KINDS)[number];
+export type ApplicationArtifactStatus = "building" | "available" | "invalid" | "failed";
+
+export type ApplicationArtifactProviderLocation = {
+  provider: CloudProvider;
+  accountId: string;
+  region: string;
+  storageNamespace: string;
+  artifactReference: string;
+  ownershipScope: string;
+};
+
+export type ApplicationArtifactFingerprintInput = {
+  repository: {
+    provider: SourceRepositoryProvider;
+    owner: string;
+    name: string;
+  };
+  commitSha: string;
+  kind: ApplicationArtifactKind;
+  confirmedBuildConfig: ConfirmedBuildConfig;
+  buildContractVersion: string;
+  targetOs: string;
+  targetArchitecture: string;
+  buildInputs: Record<string, string | number | boolean | null>;
+};
+
+export type ApplicationArtifactIdentity = {
+  artifactFingerprint: string;
+  repositoryIdentity: string;
+  commitSha: string;
+  kind: ApplicationArtifactKind;
+  buildConfigSha256: string;
+  buildContractVersion: string;
+  targetOs: string;
+  targetArchitecture: string;
+  buildInputIdentitySha256: string;
+};
+
+export type ApplicationArtifact = ApplicationArtifactIdentity & {
+  id: string;
+  projectId: string;
+  sourceRepositoryId: string | null;
+  digestAlgorithm: "sha256";
+  digest: string;
+  location: ApplicationArtifactProviderLocation;
+  status: "available";
+  verifiedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ApplicationArtifactEvidenceV2 = {
+  kind: ApplicationArtifactKind;
+  artifactFingerprint: string;
+  buildContractVersion: string;
+  digestAlgorithm: "sha256";
+  digest: string;
+  location: ApplicationArtifactProviderLocation;
+};
+
+export type ApplicationArtifactListResponse = {
+  artifacts: ApplicationArtifact[];
+};
+
+export type EcsGitOpsReleaseEvidenceV1 = {
   schemaVersion: 1;
   runtimeTargetKind: "ecs_fargate";
   outcome: "succeeded" | "rolled_back" | "failed";
@@ -1118,7 +1202,22 @@ export type EcsGitOpsReleaseEvidence = {
   outputUrl: string;
 };
 
-export type LambdaGitOpsReleaseEvidence = {
+export type EcsGitOpsReleaseEvidenceV2 = Omit<EcsGitOpsReleaseEvidenceV1, "schemaVersion"> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type EcsGitOpsReleaseEvidenceV3 = Omit<EcsGitOpsReleaseEvidenceV2, "schemaVersion"> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type EcsGitOpsReleaseEvidence =
+  | EcsGitOpsReleaseEvidenceV1
+  | EcsGitOpsReleaseEvidenceV2
+  | EcsGitOpsReleaseEvidenceV3;
+
+export type LambdaGitOpsReleaseEvidenceV1 = {
   schemaVersion: 1;
   runtimeTargetKind: "lambda";
   outcome: "succeeded" | "rolled_back" | "failed";
@@ -1135,7 +1234,28 @@ export type LambdaGitOpsReleaseEvidence = {
   outputUrl: string;
 };
 
-export type Ec2AsgGitOpsReleaseEvidence = {
+export type LambdaGitOpsReleaseEvidenceV2 = Omit<
+  LambdaGitOpsReleaseEvidenceV1,
+  "schemaVersion"
+> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type LambdaGitOpsReleaseEvidenceV3 = Omit<
+  LambdaGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type LambdaGitOpsReleaseEvidence =
+  | LambdaGitOpsReleaseEvidenceV1
+  | LambdaGitOpsReleaseEvidenceV2
+  | LambdaGitOpsReleaseEvidenceV3;
+
+export type Ec2AsgGitOpsReleaseEvidenceV1 = {
   schemaVersion: 1;
   runtimeTargetKind: "ec2_asg";
   outcome: "succeeded" | "rolled_back" | "failed";
@@ -1157,7 +1277,28 @@ export type Ec2AsgGitOpsReleaseEvidence = {
   outputUrl: string;
 };
 
-export type StaticSiteGitOpsReleaseEvidence = {
+export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<
+  Ec2AsgGitOpsReleaseEvidenceV1,
+  "schemaVersion"
+> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<
+  Ec2AsgGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type Ec2AsgGitOpsReleaseEvidence =
+  | Ec2AsgGitOpsReleaseEvidenceV1
+  | Ec2AsgGitOpsReleaseEvidenceV2
+  | Ec2AsgGitOpsReleaseEvidenceV3;
+
+export type StaticSiteGitOpsReleaseEvidenceV1 = {
   schemaVersion: 1;
   runtimeTargetKind: "static_site";
   outcome: "succeeded" | "failed";
@@ -1181,6 +1322,27 @@ export type StaticSiteGitOpsReleaseEvidence = {
   fileCount: number;
   outputUrl: string;
 };
+
+export type StaticSiteGitOpsReleaseEvidenceV2 = Omit<
+  StaticSiteGitOpsReleaseEvidenceV1,
+  "schemaVersion"
+> & {
+  schemaVersion: 2;
+  artifact: ApplicationArtifactEvidenceV2;
+};
+
+export type StaticSiteGitOpsReleaseEvidenceV3 = Omit<
+  StaticSiteGitOpsReleaseEvidenceV2,
+  "schemaVersion"
+> & {
+  schemaVersion: 3;
+  convergence: RuntimeConvergenceEvidence;
+};
+
+export type StaticSiteGitOpsReleaseEvidence =
+  | StaticSiteGitOpsReleaseEvidenceV1
+  | StaticSiteGitOpsReleaseEvidenceV2
+  | StaticSiteGitOpsReleaseEvidenceV3;
 
 export type GitOpsReleaseEvidence =
   | EcsGitOpsReleaseEvidence
@@ -1241,6 +1403,8 @@ export type ProjectDeploymentTarget = {
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig | null;
   runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget?: RuntimeDeploymentTarget | null | undefined;
+  deploymentTargetFingerprint?: string | null | undefined;
   rolloutStrategy: DeploymentRolloutStrategy;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
@@ -1248,10 +1412,17 @@ export type ProjectDeploymentTarget = {
 
 export type PutProjectDeploymentTargetRequest = Omit<
   ProjectDeploymentTarget,
-  "projectId" | "confirmedBuildConfig" | "runtimeConfig" | "createdAt" | "updatedAt"
+  | "projectId"
+  | "confirmedBuildConfig"
+  | "runtimeConfig"
+  | "runtimeTarget"
+  | "deploymentTargetFingerprint"
+  | "createdAt"
+  | "updatedAt"
 > & {
   confirmedBuildConfig: ConfirmedBuildConfig;
   runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget?: RuntimeDeploymentTarget | null | undefined;
 };
 
 export type ProjectDeploymentTargetResponse = {
@@ -1278,10 +1449,14 @@ export type ApplicationReleaseProviderRevision = {
 export type ApplicationRelease = {
   id: string;
   projectId: string;
+  artifactId: string | null;
   deploymentId: string | null;
   pipelineRunId: string | null;
   source: DeploymentSource;
   runtimeTargetKind: RuntimeTargetKind;
+  runtimeAdapterKind: RuntimeAdapterKind | null;
+  deploymentTargetFingerprint: string | null;
+  convergenceOutcome: RuntimeConvergenceOutcome | null;
   version: string;
   commitSha: string;
   artifactDigestAlgorithm: "sha256";
@@ -1473,6 +1648,64 @@ export type DeploymentPlanSummary = {
   replaceCount: number;
   blocked: boolean;
   warnings: DeploymentPlanWarning[];
+};
+
+export const DEPLOYMENT_OPTIMIZATION_CONTRACT_VERSION = 1 as const;
+
+export type DeploymentOptimizationDecision =
+  | {
+      readonly outcome: "execute";
+      readonly reason:
+        | "initial_plan"
+        | "cache_miss"
+        | "desired_state_changed"
+        | "provider_lock_changed"
+        | "target_changed"
+        | "state_changed"
+        | "drift_ttl_expired";
+    }
+  | {
+      readonly outcome: "reuse";
+      readonly reason: "verified_pending_plan" | "concurrent_plan_joined";
+    }
+  | {
+      readonly outcome: "no_change";
+      readonly reason: "terraform_plan_no_changes";
+    }
+  | {
+      readonly outcome: "fallback_execute";
+      readonly reason: "cache_validation_failed";
+    }
+  | {
+      readonly outcome: "unsupported";
+      readonly reason: "resource_not_deployable";
+    };
+
+export type TerraformResourceChangeAction =
+  | "create"
+  | "update"
+  | "delete"
+  | "replace"
+  | "no_change"
+  | "read"
+  | "unknown";
+
+export type TerraformResourceChangeEvidence = {
+  readonly resourceAddress: string;
+  readonly action: TerraformResourceChangeAction;
+};
+
+export type TerraformDesiredStateIdentity = {
+  readonly fingerprint: string;
+  readonly terraformBundleSha256: string;
+  readonly providerLockSha256: string;
+  readonly providerIdentitySha256: string;
+  readonly variableIdentitySha256: string;
+  readonly backendIdentitySha256: string;
+  readonly targetIdentitySha256: string;
+  readonly stateIdentitySha256: string;
+  readonly stateLineageSha256: string | null;
+  readonly stateSerial: number | null;
 };
 
 export type ApproveDeploymentPlanRequest = {
@@ -2311,6 +2544,15 @@ export type AiProviderService =
   | "openai_responses"
   | "rule_fallback";
 
+export type AiProviderAttemptStatus = "succeeded" | "fallback" | "skipped" | "failed";
+
+export type AiProviderAttempt = {
+  provider: AiProvider;
+  service: AiProviderService;
+  status: AiProviderAttemptStatus;
+  fallbackReason?: LlmExplanationFallbackReason | undefined;
+};
+
 export type AiBillingMode = "aws_credit_only" | "standard" | "disabled";
 
 export type AiEstimatedUsage = {
@@ -2329,6 +2571,7 @@ export type AiProviderMetadata = {
   cacheKey: string;
   estimatedUsage: AiEstimatedUsage;
   billingMode: AiBillingMode;
+  attempts?: AiProviderAttempt[] | undefined;
   generatedAt: IsoDateTimeString;
 };
 
@@ -3056,6 +3299,8 @@ export type DiagramNodeMetadata = {
         moduleId: string;
         moduleVersion: string;
         expandedAt: IsoDateTimeString;
+        representativeTemplateId?: string | undefined;
+        referenceTemplateIds?: string[] | undefined;
       }
     | undefined;
   reverseEngineering?:
@@ -3346,6 +3591,12 @@ export type ArchitectureBoardCompilationProposal = {
     candidateIds?: string[] | undefined;
     /** Knowledge-derived spacing profiles added to the geometry candidate search. */
     layoutProfileIds?: string[] | undefined;
+    /** Complete Template graph patterns that produced geometry candidates. */
+    modulePatternIds?: string[] | undefined;
+    /** Representative Templates selected by the matched pattern extractor. */
+    modulePatternRepresentativeTemplateIds?: string[] | undefined;
+    /** Every source Template supporting the matched pattern candidates. */
+    modulePatternSourceTemplateIds?: string[] | undefined;
     referenceTemplateIds: string[];
   };
 };
@@ -3539,3 +3790,5 @@ export type TerraformSyncToDiagramResponse = {
   preservedResourceAddresses?: string[] | undefined;
   proposals?: TerraformDiagramChangeProposal[] | undefined;
 };
+
+export * from "./runtime-convergence.ts";

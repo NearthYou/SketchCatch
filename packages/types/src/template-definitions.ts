@@ -205,9 +205,16 @@ type TemplatePresentationLayout = {
   >;
 };
 
+const TEMPLATE_LAYOUT_GRID_SIZE = 40;
+const DEFAULT_TEMPLATE_RESOURCE_SIZE = { width: 124, height: 96 } as const;
+const TEMPLATE_AREA_PADDING = TEMPLATE_LAYOUT_GRID_SIZE;
+const TEMPLATE_AREA_HEADER_HEIGHT = TEMPLATE_LAYOUT_GRID_SIZE * 2;
+
 // The presentation layer is deliberately separate from deployable resource values.
 // It lets a template follow the AWS pattern diagram without changing Terraform identity or behavior.
-const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<RepositoryTemplateId, TemplatePresentationLayout>> = {
+const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<
+  Record<RepositoryTemplateId, TemplatePresentationLayout>
+> = {
   "static-web-hosting": {
     viewport: { x: 0, y: 0, zoom: 0.8 },
     resources: {
@@ -411,15 +418,15 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<RepositoryTemplateId, Templ
       "db-route-a": layoutAt(640, 1080, "az-a"),
       "db-route-b": layoutAt(1600, 1080, "az-b"),
       "alb-security-group": layoutAt(1080, 400, "vpc", { width: 240, height: 200 }),
-      "app-security-group": layoutAt(1080, 840, "application-group", { width: 240, height: 280 }),
+      "app-security-group": layoutAt(1080, 800, "vpc", { width: 240, height: 280 }),
       "db-security-group": layoutAt(1080, 1120, "vpc", { width: 240, height: 240 }),
       "latest-ami": layoutAt(240, 880, "region"),
-      "launch-template": layoutAt(1160, 880, "application-group"),
+      "launch-template": layoutAt(1160, 840, "vpc"),
       "load-balancer": layoutAt(1160, 480, "vpc"),
       "target-group": layoutAt(1280, 600, "vpc"),
       listener: layoutAt(1040, 600, "vpc"),
-      "application-group": layoutAt(1040, 800, "vpc", { width: 320, height: 320 }, true),
-      "db-subnet-group": layoutAt(2000, 1200, "vpc"),
+      "application-group": layoutAt(1160, 960, "vpc"),
+      "db-subnet-group": layoutAt(1920, 1200, "vpc"),
       database: layoutAt(1160, 1200, "vpc")
     },
     routing: {
@@ -487,15 +494,15 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<RepositoryTemplateId, Templ
       cluster: layoutAt(1280, 280, "vpc", { width: 320, height: 240 }, true),
       "alb-security-group": layoutAt(560, 280, "vpc", { width: 200, height: 200 }),
       "task-security-group": layoutAt(1360, 320, "cluster", { width: 160, height: 160 }),
-      "execution-role": layoutAt(1880, 200, "global-iam-group"),
-      "execution-policy": layoutAt(2000, 200, "global-iam-group"),
-      "task-role": layoutAt(1880, 320, "global-iam-group"),
-      repository: layoutAt(1880, 560, "definition-ops-group"),
-      "log-group": layoutAt(1880, 680, "definition-ops-group"),
+      "execution-role": layoutInSupportGrid(1840, 120, 0, 0, "global-iam-group"),
+      "execution-policy": layoutInSupportGrid(1840, 120, 1, 0, "global-iam-group"),
+      "task-role": layoutInSupportGrid(1840, 120, 0, 1, "global-iam-group"),
+      repository: layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
+      "log-group": layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group"),
       "load-balancer": layoutAt(640, 360, "vpc"),
       "target-group": layoutAt(1080, 360, "vpc"),
       listener: layoutAt(880, 360, "vpc"),
-      task: layoutAt(2000, 560, "definition-ops-group"),
+      task: layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
       service: layoutAt(1400, 360, "cluster")
     },
     routing: {
@@ -517,21 +524,56 @@ const TEMPLATE_PRESENTATION_LAYOUTS: Readonly<Record<RepositoryTemplateId, Templ
     },
     presentationNodes: {
       user: presentationNode("design-user-client", "User / Client", 80, 360),
-      region: presentationNode("aws-region", "Region", 240, 40, { width: 1920, height: 880 }),
-      "definition-ops-group": presentationNode(
+      region: presentationAreaAroundChildren("aws-region", "Region", 240, 40, [
+        layoutAt(400, 200, "region", { width: 1360, height: 560 }),
+        layoutAt(360, 240, "region"),
+        presentationAreaAroundChildren(
+          "design-group",
+          "Definition / Ops",
+          1840,
+          480,
+          [
+            layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
+            layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
+            layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group")
+          ],
+          "region"
+        ),
+        presentationAreaAroundChildren(
+          "design-group",
+          "Global IAM",
+          1840,
+          120,
+          [
+            layoutInSupportGrid(1840, 120, 0, 0, "global-iam-group"),
+            layoutInSupportGrid(1840, 120, 1, 0, "global-iam-group"),
+            layoutInSupportGrid(1840, 120, 0, 1, "global-iam-group")
+          ],
+          "region"
+        )
+      ]),
+      "definition-ops-group": presentationAreaAroundChildren(
         "design-group",
         "Definition / Ops",
         1840,
         480,
-        { width: 280, height: 280 },
+        [
+          layoutInSupportGrid(1840, 480, 0, 0, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 1, 0, "definition-ops-group"),
+          layoutInSupportGrid(1840, 480, 0, 1, "definition-ops-group")
+        ],
         "region"
       ),
-      "global-iam-group": presentationNode(
+      "global-iam-group": presentationAreaAroundChildren(
         "design-group",
         "Global IAM",
         1840,
         120,
-        { width: 280, height: 280 },
+        [
+          layoutInSupportGrid(1840, 120, 0, 0, "global-iam-group"),
+          layoutInSupportGrid(1840, 120, 1, 0, "global-iam-group"),
+          layoutInSupportGrid(1840, 120, 0, 1, "global-iam-group")
+        ],
         "region"
       )
     },
@@ -1668,9 +1710,10 @@ export function buildTemplateDiagramJson(
 ): DiagramJson {
   // Keep project metadata out of Terraform local names so Board labels and deployable identity remain separate.
   const definition = getTemplateDefinitionById(templateId);
-  const resources = templateId === "ecs-fargate-container-app"
-    ? applyEcsFargateRuntimeNames(definition.resources, input.projectSlug)
-    : definition.resources;
+  const resources =
+    templateId === "ecs-fargate-container-app"
+      ? applyEcsFargateRuntimeNames(definition.resources, input.projectSlug)
+      : definition.resources;
   const resourceById = new Map(resources.map((resource) => [resource.id, resource]));
   const resourceNames = createTemplateTerraformResourceNames(resources);
   const nodeIdByResourceId = new Map(
@@ -1743,13 +1786,14 @@ export function buildTemplateDiagramJson(
 }
 
 export function createEcsFargateRuntimeNames(projectSlug: string): EcsFargateRuntimeNames {
-  const normalizedSlug = projectSlug
-    .normalize("NFKD")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "")
-    .slice(0, 48)
-    .replace(/-+$/gu, "") || "sketchcatch";
+  const normalizedSlug =
+    projectSlug
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gu, "-")
+      .replace(/^-+|-+$/gu, "")
+      .slice(0, 48)
+      .replace(/-+$/gu, "") || "sketchcatch";
   const applicationName = `${normalizedSlug}-app`;
 
   return {
@@ -1812,11 +1856,13 @@ function renameEcsContainerDefinition(value: unknown, containerName: string): un
     const definitions: unknown = JSON.parse(value);
     if (!Array.isArray(definitions)) return value;
 
-    return JSON.stringify(definitions.map((definition, index) =>
-      index === 0 && isTemplateRecord(definition)
-        ? { ...definition, name: containerName }
-        : definition
-    ));
+    return JSON.stringify(
+      definitions.map((definition, index) =>
+        index === 0 && isTemplateRecord(definition)
+          ? { ...definition, name: containerName }
+          : definition
+      )
+    );
   } catch {
     return value;
   }
@@ -1879,7 +1925,7 @@ function createDiagramNode(
       ? { ...resource.size }
       : resource.kind === "design"
         ? { width: 260, height: 180 }
-        : { width: 124, height: 96 },
+        : { ...DEFAULT_TEMPLATE_RESOURCE_SIZE },
     type: resource.terraformResourceType,
     zIndex: resource.zIndex ?? (resource.kind === "design" ? 0 : 1),
     ...(resource.rotation === undefined ? {} : { rotation: resource.rotation })
@@ -1936,10 +1982,10 @@ export function createTemplateTerraformResourceNames(
     resourcesById.set(resource.id, resource);
     const namespaceKey = `${resource.terraformBlockType}:${resource.terraformResourceType}`;
     const collisionKey = `${namespaceKey}:${resource.normalizedName}`;
-    reservedNamesByNamespace.set(namespaceKey, new Set([
-      ...(reservedNamesByNamespace.get(namespaceKey) ?? []),
-      resource.normalizedName
-    ]));
+    reservedNamesByNamespace.set(
+      namespaceKey,
+      new Set([...(reservedNamesByNamespace.get(namespaceKey) ?? []), resource.normalizedName])
+    );
     const targetGroups = resource.hasExplicitName ? explicitNameGroups : collisionGroups;
     targetGroups.set(collisionKey, [...(targetGroups.get(collisionKey) ?? []), resource]);
   }
@@ -1954,7 +2000,7 @@ export function createTemplateTerraformResourceNames(
     const firstResource = duplicateExplicitNameGroup[0];
     const resourceIds = duplicateExplicitNameGroup
       .map(({ id }) => id)
-      .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+      .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
 
     throw new Error(
       `Duplicate explicit TemplateDefinition Terraform resource name "${firstResource?.normalizedName}" in ${firstResource?.terraformBlockType}:${firstResource?.terraformResourceType}: ${resourceIds.join(", ")}`
@@ -2314,6 +2360,60 @@ function layoutAt(
     ...(size ? { size } : {}),
     ...(presentationArea ? { presentationArea: true } : {})
   };
+}
+
+function layoutInSupportGrid(
+  areaX: number,
+  areaY: number,
+  column: number,
+  row: number,
+  parentResourceId: string
+): TemplatePresentationPlacement {
+  const columnWidth = roundUpToTemplateGrid(DEFAULT_TEMPLATE_RESOURCE_SIZE.width);
+  const rowHeight = roundUpToTemplateGrid(DEFAULT_TEMPLATE_RESOURCE_SIZE.height);
+  return layoutAt(
+    areaX + TEMPLATE_AREA_PADDING + column * columnWidth,
+    areaY + TEMPLATE_AREA_HEADER_HEIGHT + row * rowHeight,
+    parentResourceId
+  );
+}
+
+function presentationAreaAroundChildren(
+  catalogItemId: string,
+  label: string,
+  x: number,
+  y: number,
+  children: readonly {
+    readonly position: { readonly x: number; readonly y: number };
+    readonly size?: DiagramNode["size"];
+  }[],
+  parentNodeId?: string
+): Omit<TemplatePresentationNodeDefinition, "id"> {
+  const right = Math.max(
+    ...children.map(
+      (child) => child.position.x + (child.size ?? DEFAULT_TEMPLATE_RESOURCE_SIZE).width
+    )
+  );
+  const bottom = Math.max(
+    ...children.map(
+      (child) => child.position.y + (child.size ?? DEFAULT_TEMPLATE_RESOURCE_SIZE).height
+    )
+  );
+  return presentationNode(
+    catalogItemId,
+    label,
+    x,
+    y,
+    {
+      width: roundUpToTemplateGrid(right - x + TEMPLATE_AREA_PADDING),
+      height: roundUpToTemplateGrid(bottom - y + TEMPLATE_AREA_PADDING)
+    },
+    parentNodeId
+  );
+}
+
+function roundUpToTemplateGrid(value: number): number {
+  return Math.ceil(value / TEMPLATE_LAYOUT_GRID_SIZE) * TEMPLATE_LAYOUT_GRID_SIZE;
 }
 
 // Stored handles make support rails deterministic instead of letting auto-routing cross the runtime flow.

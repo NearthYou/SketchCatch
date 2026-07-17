@@ -403,6 +403,28 @@ test("application cleanup creates an approved rollback manifest without Terrafor
   assert.match(manifest, /task-definition\/api:41/);
 });
 
+test("application cleanup planning rejects a deployment without a runtime target kind", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord({
+    scope: "application",
+    targetKind: null,
+    stateObjectKey: null
+  });
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroyPlan(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          ...createDestroyPlanOptions([]),
+          planArtifactStorage: new FakePlanArtifactStorage()
+        }
+      ),
+    /Deployment target kind is missing/
+  );
+});
+
 test("runDeploymentDestroyPlan rejects deployments without cleanup state", async () => {
   const rejectedStatuses: Array<{
     status: DeploymentStatus;

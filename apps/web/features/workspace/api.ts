@@ -584,7 +584,14 @@ async function postPublicAiJson<ResponseBody>(
       method: "POST",
       ...(options.signal ? { signal: options.signal } : {})
     });
-  } catch {
+  } catch (error) {
+    if (
+      options.signal?.aborted === true ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      throw error;
+    }
+
     throw new ApiClientError(
       0,
       {
@@ -653,7 +660,6 @@ function isApiErrorCode(value: unknown): value is ApiErrorCode {
     value === "conflict" ||
     value === "github_oauth_required" ||
     value === "too_many_requests" ||
-    value === "service_unavailable" ||
     value === "internal_server_error"
   );
 }

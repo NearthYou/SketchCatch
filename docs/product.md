@@ -80,6 +80,8 @@ SketchCatch는 단순 다이어그램 도구가 아니다.
 | --- | --- |
 | 실제 AWS Direct Deployment | Plan, 승인, Apply, 로그, Outputs, Destroy/Cleanup까지 연결한다. |
 | Git/CI/CD 운영 경로 | Terraform commit/PR, pipeline template, Plan 결과, 실행 상태를 연결한다. |
+| Application Artifact 재사용 | Direct Deployment와 Git/CI/CD가 같은 provider-neutral Registry를 사용하되 provider의 실제 artifact와 project ownership을 다시 검증한 경우에만 build를 재사용한다. |
+| Runtime Convergence | 동일한 Application Artifact와 runtime configuration이 provider에서 healthy 상태로 실제 실행 중인 경우에만 rollout을 생략한다. DB나 Runtime Cache 기록만으로 성공 처리하지 않으며 provider 조회 실패·불일치·unhealthy 상태는 안전한 rollout으로 fallback한다. ECS Service(Fargate/EC2 Capacity Provider), 단일 EC2, EC2+ASG, EKS(Managed/Self-managed/Fargate), Kubernetes Deployment, Lambda Alias/Version, Static S3/CloudFront는 독립 Adapter 경계를 유지한다. |
 | 리버스 엔지니어링 | Provider Adapter로 기존 cloud Resource를 가져와 Architecture Board와 IaC Preview/import 제안으로 복원한다. MVP는 AWS-first로 시작한다. |
 | 비용 분석 | Practice Architecture, IaC Preview, Deployment Plan, Deployment History 단위의 Cost Risk를 보여준다. |
 | Well-Architected 기반 리뷰 | 보안, 비용, 신뢰성, 성능, 운영 관점으로 아키텍처를 리뷰한다. |
@@ -186,6 +188,9 @@ MVP에서 하지 않는다.
 - 실행 기록은 **Deployment History**
 - 빠른 검증/샌드박스 실행 경로는 **Direct Deployment Path**
 - 팀 운영 배포 경로는 **Git/CI/CD Deployment Path**
+- 재사용 가능한 application build identity는 **Application Artifact**, 해당 artifact를 runtime에 반영한 이력은 **Application Release**
+- application byte identity는 **artifactFingerprint**, orchestrator·compute·capacity·rollout을 포함한 실행 목표 identity는 **deploymentTargetFingerprint**
+- provider의 current state 조회, desired target 비교, rollout, health 확인, rollback evidence, already-active 판정을 캡슐화하는 경계는 **Runtime Convergence Adapter**
 - 기존 클라우드 상태 복원은 **Reverse Engineering**
 - 내부 Redis 기반 상태/cache 계층은 **Runtime Cache**
 - 성공한 Deployment의 제한된 실시간 관측 세션은 **Live Observation**

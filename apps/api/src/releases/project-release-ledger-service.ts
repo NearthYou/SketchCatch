@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { and, desc, eq } from "drizzle-orm";
 import type {
+  ApplicationArtifact,
   ApplicationReleaseProviderRevision,
   ApplicationReleaseStatus,
   ConfirmedBuildConfig,
@@ -8,10 +10,13 @@ import type {
   JsonValue,
   ProjectDeploymentRuntimeConfig,
   PutProjectDeploymentTargetRequest,
+  RuntimeDeploymentTarget,
   RuntimeTargetKind
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
+import { applicationArtifactKindForRuntime } from "../artifacts/application-artifact-runtime.js";
 import {
+  applicationArtifacts,
   applicationReleases,
   awsConnections,
   deployments,
@@ -19,6 +24,9 @@ import {
   projectDeploymentTargets,
   projects
 } from "../db/schema.js";
+import { toAvailableArtifact } from "../artifacts/postgres-application-artifact-registry.js";
+import { createDeploymentTargetIdentity } from "../runtime-convergence/deployment-target-identity.js";
+import { normalizeLegacyRuntimeDeploymentTarget } from "@sketchcatch/types";
 import {
   resolveApplicationReleaseVersion,
   type ApplicationReleaseVersionEvidence
@@ -35,6 +43,8 @@ export type SaveProjectDeploymentTargetInput = {
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig;
   runtimeConfig: ProjectDeploymentRuntimeConfig | null;
+  runtimeTarget: RuntimeDeploymentTarget | null;
+  deploymentTargetFingerprint: string | null;
   rolloutStrategy: "all_at_once";
   updatedAt: Date;
 };
@@ -49,7 +59,7 @@ export type ProjectReleaseLedgerRepository = {
   findVerifiedConnection(
     connectionId: string,
     userId: string
-  ): Promise<{ id: string; region: string } | undefined>;
+  ): Promise<{ id: string; accountId: string; region: string } | undefined>;
   findProjectDeploymentTarget(
     projectId: string
   ): Promise<ProjectDeploymentTargetRecord | undefined>;
@@ -67,6 +77,11 @@ export type ProjectReleaseLedgerRepository = {
   createApplicationRelease(
     input: CreateApplicationReleaseRecordInput
   ): Promise<ApplicationReleaseRecord>;
+  findAvailableApplicationArtifact(
+    projectId: string,
+    artifactId: string
+  ): Promise<ApplicationArtifact | undefined>;
+  listProjectApplicationArtifacts(projectId: string): Promise<ApplicationArtifact[]>;
   listProjectApplicationReleases(projectId: string): Promise<ApplicationReleaseRecord[]>;
   findProjectApplicationRelease(
     projectId: string,
@@ -114,7 +129,11 @@ export function createPostgresProjectReleaseLedgerRepository(
     },
     async findVerifiedConnection(connectionId, userId) {
       const [connection] = await db
-        .select({ id: awsConnections.id, region: awsConnections.region })
+        .select({
+          id: awsConnections.id,
+          accountId: awsConnections.accountId,
+          region: awsConnections.region
+        })
         .from(awsConnections)
         .where(
           and(
@@ -123,7 +142,9 @@ export function createPostgresProjectReleaseLedgerRepository(
             eq(awsConnections.status, "verified")
           )
         );
-      return connection;
+      return connection?.accountId
+        ? { id: connection.id, accountId: connection.accountId, region: connection.region }
+        : undefined;
     },
     async findProjectDeploymentTarget(projectId) {
       const [target] = await db
@@ -145,6 +166,8 @@ export function createPostgresProjectReleaseLedgerRepository(
             runtimeTargetKind: input.runtimeTargetKind,
             confirmedBuildConfig: input.confirmedBuildConfig,
             runtimeConfig: input.runtimeConfig,
+            runtimeTarget: input.runtimeTarget,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
             rolloutStrategy: input.rolloutStrategy,
             updatedAt: input.updatedAt
           }
@@ -192,6 +215,33 @@ export function createPostgresProjectReleaseLedgerRepository(
         }
         return written;
       });
+    },
+    async findAvailableApplicationArtifact(projectId, artifactId) {
+      const [artifact] = await db
+        .select()
+        .from(applicationArtifacts)
+        .where(
+          and(
+            eq(applicationArtifacts.id, artifactId),
+            eq(applicationArtifacts.projectId, projectId),
+            eq(applicationArtifacts.status, "available")
+          )
+        );
+      return artifact ? toAvailableArtifact(artifact) : undefined;
+    },
+    async listProjectApplicationArtifacts(projectId) {
+      const artifacts = await db
+        .select()
+        .from(applicationArtifacts)
+        .where(
+          and(
+            eq(applicationArtifacts.projectId, projectId),
+            eq(applicationArtifacts.status, "available")
+          )
+        )
+        .orderBy(desc(applicationArtifacts.createdAt), desc(applicationArtifacts.id))
+        .limit(100);
+      return artifacts.map(toAvailableArtifact);
     },
     async listProjectApplicationReleases(projectId) {
       return db
@@ -261,6 +311,20 @@ export async function putProjectDeploymentTarget(
     input.target.runtimeConfig
   );
 
+  const runtimeTarget = resolveCanonicalRuntimeTarget(input.target);
+  const deploymentTargetFingerprint = runtimeTarget
+    ? createDeploymentTargetIdentity({
+        contractVersion: "runtime-convergence/v1",
+        scope: {
+          projectId: input.projectId,
+          provider: "aws",
+          accountId: connection.accountId,
+          region: connection.region
+        },
+        target: runtimeTarget
+      }).deploymentTargetFingerprint
+    : null;
+
   return repository.saveProjectDeploymentTarget({
     projectId: input.projectId,
     provider: input.target.provider,
@@ -269,9 +333,30 @@ export async function putProjectDeploymentTarget(
     runtimeTargetKind: input.target.runtimeTargetKind,
     confirmedBuildConfig: input.target.confirmedBuildConfig,
     runtimeConfig: input.target.runtimeConfig,
+    runtimeTarget,
+    deploymentTargetFingerprint,
     rolloutStrategy: input.target.rolloutStrategy,
     updatedAt: now()
   });
+}
+
+function resolveCanonicalRuntimeTarget(
+  target: PutProjectDeploymentTargetRequest
+): RuntimeDeploymentTarget | null {
+  const legacyTarget = target.runtimeConfig
+    ? normalizeLegacyRuntimeDeploymentTarget(target.runtimeConfig, {
+        healthCheckPath: target.confirmedBuildConfig.healthCheckPath
+      })
+    : null;
+  if (target.runtimeTarget) {
+    if (!legacyTarget || !isDeepStrictEqual(target.runtimeTarget, legacyTarget)) {
+      throw new ReleaseLedgerValidationError(
+        "Canonical runtime target must exactly match the backward-compatible runtime config."
+      );
+    }
+    return target.runtimeTarget;
+  }
+  return legacyTarget;
 }
 
 export async function listApplicationReleases(
@@ -280,6 +365,14 @@ export async function listApplicationReleases(
 ): Promise<ApplicationReleaseRecord[]> {
   await requireAccessibleProject(input, repository);
   return repository.listProjectApplicationReleases(input.projectId);
+}
+
+export async function listApplicationArtifacts(
+  input: { projectId: string; userId: string },
+  repository: ProjectReleaseLedgerRepository
+): Promise<ApplicationArtifact[]> {
+  await requireAccessibleProject(input, repository);
+  return repository.listProjectApplicationArtifacts(input.projectId);
 }
 
 export async function getApplicationRelease(
@@ -298,6 +391,7 @@ export async function getApplicationRelease(
 export type RecordApplicationReleaseInput = {
   projectId: string;
   userId: string;
+  artifactId: string | null;
   deploymentId: string | null;
   pipelineRunId: string | null;
   source: DeploymentSource;
@@ -331,6 +425,22 @@ export async function recordApplicationRelease(
   if (!/^[0-9a-f]{64}$/.test(input.artifactDigest)) {
     throw new ReleaseLedgerValidationError("A lowercase SHA-256 artifact digest is required.");
   }
+  if (input.artifactId) {
+    const artifact = await repository.findAvailableApplicationArtifact(
+      input.projectId,
+      input.artifactId
+    );
+    if (
+      !artifact ||
+      artifact.digest !== input.artifactDigest ||
+      artifact.commitSha !== input.versionEvidence.commitSha.toLowerCase() ||
+      artifact.kind !== applicationArtifactKindForRuntime(input.runtimeTargetKind)
+    ) {
+      throw new ReleaseLedgerConflictError(
+        "Application release artifact must be available in the same project."
+      );
+    }
+  }
   validateReleaseEvidence(input, target.provider);
 
   let version: string;
@@ -346,10 +456,14 @@ export async function recordApplicationRelease(
   return repository.createApplicationRelease({
     id: generateId(),
     projectId: input.projectId,
+    artifactId: input.artifactId,
     deploymentId: input.deploymentId,
     pipelineRunId: input.pipelineRunId,
     source: input.source,
     runtimeTargetKind: input.runtimeTargetKind,
+    runtimeAdapterKind: null,
+    deploymentTargetFingerprint: null,
+    convergenceOutcome: null,
     version,
     commitSha: input.versionEvidence.commitSha.toLowerCase(),
     artifactDigest: input.artifactDigest,

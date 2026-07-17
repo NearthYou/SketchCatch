@@ -9,35 +9,43 @@ import {
   type ArchitectureBoardKnowledgeArtifact
 } from "./architecture-board-knowledge-contract";
 import { extractArchitectureBoardKnowledgeCase } from "./architecture-board-knowledge-metrics";
+import {
+  extractArchitectureBoardModulePatterns,
+  type ArchitectureBoardModulePatternSourceDiagram
+} from "./architecture-board-module-pattern-source";
 
 export function createArchitectureBoardKnowledgeArtifactFromSource(): ArchitectureBoardKnowledgeArtifact {
-  const repositoryCases = templateDefinitions.map((definition) =>
-    extractArchitectureBoardKnowledgeCase(
-      `repository:${definition.id}`,
-      buildTemplateDiagramJson(definition.id, {
+  const repositorySources: ArchitectureBoardModulePatternSourceDiagram[] = templateDefinitions.map(
+    (definition) => ({
+      id: `repository:${definition.id}`,
+      diagram: buildTemplateDiagramJson(definition.id, {
         projectSlug: "compiler-knowledge",
         shortId: definition.id
       })
-    )
+    })
   );
-  const brainboardCases = brainboardTemplateRegistry.flatMap((entry) =>
-    entry.status === "available"
-      ? [
-          extractArchitectureBoardKnowledgeCase(
-            `brainboard:${entry.id}`,
-            adaptBrainboardTemplateSource(entry.source).diagramJson
-          )
-        ]
-      : []
-  );
+  const brainboardSources: ArchitectureBoardModulePatternSourceDiagram[] =
+    brainboardTemplateRegistry.flatMap((entry) =>
+      entry.status === "available"
+        ? [
+            {
+              id: `brainboard:${entry.id}`,
+              diagram: adaptBrainboardTemplateSource(entry.source).diagramJson
+            }
+          ]
+        : []
+    );
   const unavailableTemplateIds = brainboardTemplateRegistry.flatMap((entry) =>
     entry.status === "unavailable" ? [entry.id] : []
   );
-  const cases = [...repositoryCases, ...brainboardCases].sort((left, right) =>
-    left.id.localeCompare(right.id)
-  );
+  const sources = [...repositorySources, ...brainboardSources];
+  const cases = sources
+    .map(({ id, diagram }) => extractArchitectureBoardKnowledgeCase(id, diagram))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const modulePatterns = extractArchitectureBoardModulePatterns(sources);
   const content = stableSerialize({
     cases,
+    modulePatterns,
     unavailableTemplateIds,
     version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION
   });
@@ -46,6 +54,7 @@ export function createArchitectureBoardKnowledgeArtifactFromSource(): Architectu
     version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
     hash: fnv1a(content),
     cases,
+    modulePatterns,
     unavailableTemplateIds
   };
 }
@@ -64,6 +73,7 @@ export function renderArchitectureBoardKnowledgeArtifact(
     "  version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,",
     `  hash: ${JSON.stringify(artifact.hash)},`,
     `  cases: ${indentJson(JSON.stringify(artifact.cases, null, 2), 2)},`,
+    `  modulePatterns: ${indentJson(JSON.stringify(artifact.modulePatterns, null, 2), 2)},`,
     `  unavailableTemplateIds: ${indentJson(JSON.stringify(artifact.unavailableTemplateIds, null, 2), 2)}`,
     "} as const satisfies ArchitectureBoardKnowledgeArtifact;",
     ""

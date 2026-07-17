@@ -983,7 +983,7 @@ function parseAttributes(
         values,
         nestedBlockName,
         nestedValues.values,
-        isTerraformSingleNestedBlockAttribute(resourceType, nestedBlockName)
+        isTerraformSingleNestedBlockAttribute(resourceType, nestedBlockName, parentPath)
       );
       continue;
     }

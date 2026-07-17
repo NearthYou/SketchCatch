@@ -641,6 +641,10 @@ async function defaultPrepareApplicationCleanupPlan(input: {
   deployment: DeploymentRecord;
   repository: DeploymentRepository;
 }): Promise<ApplicationCleanupPlanSummary> {
+  if (!input.deployment.targetKind) {
+    throw new DeploymentConflictError("Deployment target kind is missing");
+  }
+
   const release = await input.repository.findRelease?.(input.deployment.id);
   if (
     !release ||

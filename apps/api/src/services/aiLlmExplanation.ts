@@ -5,8 +5,10 @@ import OpenAI from "openai";
 import type {
   AiBillingMode,
   AiProvider,
+  AiProviderAttempt,
   AiProviderMetadata,
   AiProviderService,
+  LlmCodeSuggestion,
   LlmExplanation,
   LlmExplanationFallbackReason,
   LlmExplanationTarget
@@ -219,6 +221,18 @@ export type AiTextProvider = {
   readonly generate: (request: AiTextProviderRequest) => Promise<AiTextProviderResponse>;
 };
 
+export type AiTextProviderFor<
+  Provider extends AiTextProvider["provider"],
+  Service extends AiTextProvider["service"]
+> = Omit<AiTextProvider, "provider" | "service"> & {
+  readonly provider: Provider;
+  readonly service: Service;
+};
+
+export type BedrockTextProvider = AiTextProviderFor<"bedrock", "bedrock_runtime">;
+export type AmazonQTextProvider = AiTextProviderFor<"amazon_q", "amazon_q_business">;
+export type OpenAiTextProvider = AiTextProviderFor<"openai", "openai_responses">;
+
 export type AiCreditPolicy = {
   readonly bedrock: boolean;
   readonly amazonQ: boolean;
@@ -239,18 +253,18 @@ export type AiProviderRegions = {
 };
 
 export type CreateAiProviderBackedLlmExplanationOptions = {
-  readonly bedrockProvider?: AiTextProvider | undefined;
-  readonly amazonQProvider?: AiTextProvider | undefined;
-  readonly openAiProvider?: AiTextProvider | undefined;
+  readonly bedrockProvider?: BedrockTextProvider | undefined;
+  readonly amazonQProvider?: AmazonQTextProvider | undefined;
+  readonly openAiProvider?: OpenAiTextProvider | undefined;
   readonly fallbackProvider?: CreateLlmExplanation | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
   readonly limits?: AiProviderLimits | undefined;
 };
 
 export type CreateConfiguredAiExplanationOptions = {
-  readonly bedrockProvider?: AiTextProvider | undefined;
-  readonly amazonQProvider?: AiTextProvider | undefined;
-  readonly openAiProvider?: AiTextProvider | undefined;
+  readonly bedrockProvider?: BedrockTextProvider | undefined;
+  readonly amazonQProvider?: AmazonQTextProvider | undefined;
+  readonly openAiProvider?: OpenAiTextProvider | undefined;
   readonly creditPolicy?: AiCreditPolicy | undefined;
   readonly limits?: AiProviderLimits | undefined;
 };
@@ -308,46 +322,109 @@ export function createAiProviderBackedLlmExplanation(
   const callWindows = new Map<AiProvider, ProviderCallWindow>();
   const creditPolicy = options.creditPolicy ?? readAiCreditPolicyFromEnv();
   const limits = options.limits ?? readAiProviderLimitsFromEnv();
+  const amazonQProvider = isExpectedTextProvider(
+    options.amazonQProvider,
+    "amazon_q",
+    "amazon_q_business"
+  )
+    ? options.amazonQProvider
+    : undefined;
+  const bedrockProvider = isExpectedTextProvider(
+    options.bedrockProvider,
+    "bedrock",
+    "bedrock_runtime"
+  )
+    ? options.bedrockProvider
+    : undefined;
+  const openAiProvider = isExpectedTextProvider(
+    options.openAiProvider,
+    "openai",
+    "openai_responses"
+  )
+    ? options.openAiProvider
+    : undefined;
 
   return async (input) => {
-    let primaryProviderFallback: LlmExplanation | null = null;
-
     if (isAmazonQPrimaryTarget(input.target)) {
-      if (options.amazonQProvider === undefined) {
-        return createFallbackExplanationWithProviderMetadata(
-          input,
-          resolveAmazonQUnavailableFallbackReason(creditPolicy),
-          creditPolicy.billingMode,
-          {
+      const attempts: AiProviderAttempt[] = [];
+
+      if (amazonQProvider === undefined) {
+        attempts.push(
+          createProviderAttempt({
             provider: "amazon_q",
-            service: "amazon_q_business"
-          }
+            service: "amazon_q_business",
+            status: "skipped",
+            fallbackReason:
+              options.amazonQProvider === undefined
+                ? resolveProviderUnavailableFallbackReason("amazon_q", creditPolicy)
+                : "provider_not_configured"
+          })
         );
-      }
+      } else {
+        const qResult = await tryProvider({
+          provider: amazonQProvider,
+          input,
+          cache,
+          callWindows,
+          creditPolicy,
+          limits,
+          attempts
+        });
 
-      const qResult = await tryProvider({
-        provider: options.amazonQProvider,
-        input,
-        cache,
-        callWindows,
-        creditPolicy,
-        limits
-      });
-
-      if (qResult !== null) {
-        if (
-          input.target === "terraform_error_explanation" &&
-          shouldTrySecondaryProviderAfterAmazonQ(qResult)
-        ) {
-          primaryProviderFallback = qResult;
-        } else {
-          return qResult;
+        if (qResult !== null && !qResult.fallbackUsed) {
+          return withProviderAttempts(qResult, attempts);
         }
       }
+
+      if (bedrockProvider === undefined) {
+        attempts.push(
+          createProviderAttempt({
+            provider: "bedrock",
+            service: "bedrock_runtime",
+            status: "skipped",
+            fallbackReason:
+              options.bedrockProvider === undefined
+                ? resolveProviderUnavailableFallbackReason("bedrock", creditPolicy)
+                : "provider_not_configured"
+          })
+        );
+      } else {
+        const bedrockResult = await tryProvider({
+          provider: bedrockProvider,
+          input,
+          cache,
+          callWindows,
+          creditPolicy,
+          limits,
+          attempts
+        });
+
+        if (bedrockResult !== null && !bedrockResult.fallbackUsed) {
+          return withProviderAttempts(bedrockResult, attempts);
+        }
+      }
+
+      const fallbackExplanation = createFallbackExplanationWithMetadata(
+        input,
+        resolveProviderChainFallbackReason(
+          attempts,
+          resolveFallbackReasonForMissingProvider(input.target, creditPolicy)
+        ),
+        creditPolicy.billingMode
+      );
+      attempts.push(
+        createProviderAttempt({
+          provider: "fallback",
+          service: "rule_fallback",
+          status: "succeeded"
+        })
+      );
+
+      return withProviderAttempts(fallbackExplanation, attempts);
     }
 
     const bedrockResult = await tryProvider({
-      provider: options.bedrockProvider,
+      provider: bedrockProvider,
       input,
       cache,
       callWindows,
@@ -356,15 +433,11 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (bedrockResult !== null) {
-      if (bedrockResult.fallbackUsed && primaryProviderFallback !== null) {
-        return primaryProviderFallback;
-      }
-
       return bedrockResult;
     }
 
     const openAiResult = await tryProvider({
-      provider: options.openAiProvider,
+      provider: openAiProvider,
       input,
       cache,
       callWindows,
@@ -373,10 +446,6 @@ export function createAiProviderBackedLlmExplanation(
     });
 
     if (openAiResult !== null) {
-      if (openAiResult.fallbackUsed && primaryProviderFallback !== null) {
-        return primaryProviderFallback;
-      }
-
       return openAiResult;
     }
 
@@ -388,15 +457,22 @@ export function createAiProviderBackedLlmExplanation(
   };
 }
 
-function shouldTrySecondaryProviderAfterAmazonQ(explanation: LlmExplanation): boolean {
-  return explanation.fallbackUsed && explanation.fallbackReason === "invalid_response";
-}
-
 function isAmazonQPrimaryTarget(target: LlmExplanationTarget): boolean {
   return target === "terraform_error_explanation" || target === "terraform_preview_explanation";
 }
 
-export function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): AiTextProvider {
+function isExpectedTextProvider<
+  Provider extends AiTextProvider["provider"],
+  Service extends AiTextProvider["service"]
+>(
+  provider: AiTextProvider | undefined,
+  expectedProvider: Provider,
+  expectedService: Service
+): provider is AiTextProviderFor<Provider, Service> {
+  return provider?.provider === expectedProvider && provider.service === expectedService;
+}
+
+export function createBedrockTextProvider(input: { readonly region: string; readonly modelId: string }): BedrockTextProvider {
   const client = new BedrockRuntimeClient({ region: input.region });
 
   return {
@@ -429,7 +505,7 @@ export function createBedrockTextProvider(input: { readonly region: string; read
   };
 }
 
-export function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AiTextProvider | undefined {
+export function createAmazonQBusinessTextProviderFromEnv(input: { readonly region: string }): AmazonQTextProvider | undefined {
   if (process.env.AMAZON_Q_ENABLED !== "true") {
     return undefined;
   }
@@ -457,7 +533,7 @@ export function createAmazonQBusinessTextProvider(input: {
   readonly userId?: string | undefined;
   readonly region: string;
   readonly client?: AmazonQBusinessChatClient | undefined;
-}): AiTextProvider {
+}): AmazonQTextProvider {
   const client = input.client ?? createDefaultAmazonQBusinessChatClient(input.region);
 
   return {
@@ -698,6 +774,7 @@ async function tryProvider(input: {
   readonly callWindows: Map<AiProvider, ProviderCallWindow>;
   readonly creditPolicy: AiCreditPolicy;
   readonly limits: AiProviderLimits;
+  readonly attempts?: AiProviderAttempt[] | undefined;
 }): Promise<LlmExplanation | null> {
   if (input.provider === undefined) {
     return null;
@@ -706,6 +783,8 @@ async function tryProvider(input: {
   const creditFallbackReason = getCreditFallbackReason(input.provider.provider, input.creditPolicy);
 
   if (creditFallbackReason !== null) {
+    recordProviderAttempt(input.attempts, input.provider, "skipped", creditFallbackReason);
+
     if (
       isAmazonQPrimaryTarget(input.input.target) &&
       input.provider.provider === "amazon_q"
@@ -739,7 +818,7 @@ async function tryProvider(input: {
   const cached = input.cache.get(cacheKey);
 
   if (cached !== undefined) {
-    return withProviderMetadata(cached.explanation, {
+    const cachedExplanation = withProviderMetadata(cached.explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
       model: input.provider.model,
@@ -749,11 +828,20 @@ async function tryProvider(input: {
       billingMode: input.creditPolicy.billingMode,
       payload
     });
+    recordProviderAttempt(
+      input.attempts,
+      input.provider,
+      cachedExplanation.fallbackUsed ? "fallback" : "succeeded",
+      cachedExplanation.fallbackReason
+    );
+
+    return cachedExplanation;
   }
 
   const rateLimitReason = reserveProviderCall(input.provider.provider, input.callWindows, input.limits);
 
   if (rateLimitReason !== null) {
+    recordProviderAttempt(input.attempts, input.provider, "skipped", rateLimitReason);
     return createFallbackExplanationWithMetadata(input.input, rateLimitReason, input.creditPolicy.billingMode);
   }
 
@@ -766,13 +854,12 @@ async function tryProvider(input: {
       payload
     });
     const fallback = createFallbackExplanation(input.input, "invalid_response");
-    const parsedExplanation = parseProviderExplanationText({
-      fallback,
+    const parsedExplanation = parseLlmExplanationText(response.text, fallback);
+    const explanation = completeAmazonQTerraformCodeSuggestion({
+      explanation: parsedExplanation,
       input: input.input,
-      provider: input.provider.provider,
-      text: response.text
+      provider: input.provider.provider
     });
-    const explanation = parsedExplanation;
     const explanationWithMetadata = withProviderMetadata(explanation, {
       provider: input.provider.provider,
       service: input.provider.service,
@@ -785,25 +872,57 @@ async function tryProvider(input: {
       outputCharacters: response.outputCharacters ?? response.text.length
     });
 
-    if (!explanationWithMetadata.fallbackUsed) {
-      input.cache.set(cacheKey, {
-        explanation: explanationWithMetadata
-      });
-    }
+    input.cache.set(cacheKey, {
+      explanation: explanationWithMetadata
+    });
+    recordProviderAttempt(
+      input.attempts,
+      input.provider,
+      explanationWithMetadata.fallbackUsed ? "fallback" : "succeeded",
+      explanationWithMetadata.fallbackReason
+    );
 
     return explanationWithMetadata;
   } catch (error) {
-    return createFallbackExplanationWithProviderMetadata(
+    const fallbackReason = classifyProviderError(error);
+    recordProviderAttempt(input.attempts, input.provider, "failed", fallbackReason);
+
+    return createFallbackExplanationWithMetadata(
       input.input,
-      classifyProviderError(error),
-      input.creditPolicy.billingMode,
-      {
-        provider: input.provider.provider,
-        service: input.provider.service,
-        model: input.provider.model
-      }
+      fallbackReason,
+      input.creditPolicy.billingMode
     );
   }
+}
+
+function recordProviderAttempt(
+  attempts: AiProviderAttempt[] | undefined,
+  provider: AiTextProvider,
+  status: AiProviderAttempt["status"],
+  fallbackReason?: LlmExplanationFallbackReason | undefined
+): void {
+  attempts?.push(
+    createProviderAttempt({
+      provider: provider.provider,
+      service: provider.service,
+      status,
+      fallbackReason
+    })
+  );
+}
+
+function createProviderAttempt(input: {
+  readonly provider: AiProvider;
+  readonly service: AiProviderService;
+  readonly status: AiProviderAttempt["status"];
+  readonly fallbackReason?: LlmExplanationFallbackReason | undefined;
+}): AiProviderAttempt {
+  return {
+    provider: input.provider,
+    service: input.service,
+    status: input.status,
+    ...(input.fallbackReason === undefined ? {} : { fallbackReason: input.fallbackReason })
+  };
 }
 
 function createProviderPrompt(provider: AiProvider, target: LlmExplanationTarget, payload: unknown): string {
@@ -834,15 +953,8 @@ function createDefaultProviderPrompt(target: LlmExplanationTarget, payload: unkn
           "For Terraform preview explanations, review the Terraform code and deterministic preview result as IaC evidence.",
           "Use the AWS Well-Architected Framework pillars to evaluate the preview: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
           "Return exactly six highlights, in this order: operational excellence, security, reliability, performance efficiency, cost optimization, sustainability.",
-          'Start every highlight with exactly one severity marker: "[보통]", "[확인 필요]", or "[심각]".',
-          'Use "[심각]" for an immediate material risk, "[확인 필요]" for missing evidence or a recommended correction, and "[보통]" when no issue is identified.',
-          'Format every highlight exactly as: "[등급] 기준 | 판단: concrete issue or confirmed strength | 확인: exact setting, value, or action".',
-          "Keep each highlight within 110 Korean characters as complete plain Korean sentences: explain impact first, then one exact setting and action or evidence; avoid unexplained Terraform terms and vague fragments.",
-          "Return one nextActions item within 80 Korean characters and keep summary within 30 Korean characters.",
           "Each highlight must name the pillar in Korean and include both an observation and a recommendation.",
-          "Write wellArchitectedConclusion as exactly 3 complete Korean sentences and 200 to 380 Korean characters.",
-          "Use specific Terraform evidence to explain what is configured well and what is missing or risky, weaving strengths and problems naturally into a single paragraph without headings or bullet points.",
-          "Only claim a strength or problem when the payload supports it. If evidence is absent, say that it cannot be verified instead of claiming the setting is absent.",
+          "Set wellArchitectedConclusion to an overall Korean evaluation that synthesizes the six pillar reviews.",
           "Do not include codeSuggestion for Terraform preview explanations."
         ]
       : [];
@@ -850,7 +962,7 @@ function createDefaultProviderPrompt(target: LlmExplanationTarget, payload: unkn
   return [
     "Return JSON only. Do not wrap the response in markdown.",
     "The JSON shape must be:",
-    '{"target":"TARGET","summary":"brief result label","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":"detailed paragraph or null"}',
+    '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
     "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale, and wellArchitectedConclusion must stay null.",
     "For Terraform preview explanations, highlights must contain the six Well-Architected pillar reviews and wellArchitectedConclusion must contain the overall evaluation. For other cases, keep codeSuggestion null.",
     `TARGET must be "${target}".`,
@@ -876,20 +988,12 @@ function createAmazonQProviderPrompt(target: LlmExplanationTarget, payload: unkn
         ? [
             "Review the Terraform preview using the six AWS Well-Architected pillars.",
             "Return exactly six highlights and an overall wellArchitectedConclusion.",
-            'Start every highlight with exactly one severity marker: "[보통]", "[확인 필요]", or "[심각]".',
-            'Use "[심각]" for an immediate material risk, "[확인 필요]" for missing evidence or a recommended correction, and "[보통]" when no issue is identified.',
-            'Format every highlight exactly as: "[등급] 기준 | 판단: concrete issue or confirmed strength | 확인: exact setting, value, or action".',
-            "Keep each highlight within 110 Korean characters as complete plain Korean sentences: explain impact first, then one exact setting and action or evidence; avoid unexplained Terraform terms and vague fragments.",
-            "Return one nextActions item within 80 Korean characters and keep summary within 30 Korean characters.",
-            "Write wellArchitectedConclusion as exactly 3 complete Korean sentences and 200 to 380 Korean characters.",
-            "Use specific Terraform evidence to explain what is configured well and what is missing or risky, weaving strengths and problems naturally into a single paragraph without headings or bullet points.",
-            "Only claim a strength or problem when the payload supports it; describe unavailable evidence as not verifiable.",
             "Do not include codeSuggestion."
           ]
         : ["Use the deterministic payload as source of truth."];
   const header = [
     "Return Korean JSON only, no markdown.",
-    '{"target":"TARGET","summary":"brief label","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":"detailed paragraph or null"}',
+    '{"target":"TARGET","summary":"short","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
     `TARGET="${target}".`,
     ...targetInstructions,
     "Payload:"
@@ -964,10 +1068,11 @@ function compactPayloadForAmazonQ(target: LlmExplanationTarget, payload: unknown
   if (target === "terraform_preview_explanation") {
     return {
       target,
-      terraformEvidence: trimProviderPayloadValue(payload.terraformEvidence, 600),
-      resourceTypes: trimProviderPayloadArray(payload.resourceTypes, 12, 60),
-      findings: trimProviderPayloadArray(payload.findings, 4, 90),
-      summary: trimProviderPayloadValue(payload.summary, 100)
+      summary: trimProviderPayloadValue(payload.summary, 220),
+      findings: trimProviderPayloadArray(payload.findings, 6, 140),
+      checklist: trimProviderPayloadArray(payload.checklist, 6, 140),
+      wellArchitectedGuidance: trimProviderPayloadArray(payload.wellArchitectedGuidance, 6, 160),
+      consensusRecommendation: trimProviderPayloadValue(payload.consensusRecommendation, 220)
     };
   }
 
@@ -1005,172 +1110,82 @@ function trimProviderPrompt(value: string, maxLength: number): string {
   return value.slice(0, Math.max(0, maxLength - 1)).trimEnd();
 }
 
-function parseProviderExplanationText(input: {
-  readonly fallback: LlmExplanation;
+function completeAmazonQTerraformCodeSuggestion(input: {
+  readonly explanation: LlmExplanation;
   readonly input: LlmExplanationInput;
   readonly provider: AiProvider;
-  readonly text: string;
 }): LlmExplanation {
-  const parsed = parseLlmExplanationText(input.text, input.fallback);
-
-  if (!parsed.fallbackUsed || parsed.fallbackReason !== "invalid_response") {
-    return parsed;
+  if (
+    input.provider !== "amazon_q" ||
+    input.input.target !== "terraform_error_explanation" ||
+    input.explanation.fallbackUsed ||
+    input.explanation.codeSuggestion !== undefined
+  ) {
+    return input.explanation;
   }
 
-  if (input.provider === "amazon_q" && input.input.target === "terraform_error_explanation") {
-    return createAmazonQTerraformPlainTextExplanation(input.text, input.fallback);
+  const codeSuggestion = createStandaloneTerraformLineDeletionSuggestion(input.input);
+
+  if (codeSuggestion === undefined) {
+    return input.explanation;
   }
 
-  if (input.provider === "amazon_q" && input.input.target === "terraform_preview_explanation") {
-    return createAmazonQTerraformPreviewPlainTextExplanation(input.text, input.fallback);
-  }
-
-  return parsed;
+  return {
+    ...input.explanation,
+    codeSuggestion
+  };
 }
 
-function createAmazonQTerraformPreviewPlainTextExplanation(
-  text: string,
-  fallback: LlmExplanation
-): LlmExplanation {
-  const jsonLikeResponse = /^\s*(?:```(?:json)?\s*)?\{/iu.test(text);
-  const looseConclusion = jsonLikeResponse ? extractLooseAmazonQConclusion(text) : "";
-  const items = jsonLikeResponse
-    ? extractLooseAmazonQHighlights(text)
-    : normalizeProviderTextItems(text);
-  const firstItem = items[0] ?? "";
+function createStandaloneTerraformLineDeletionSuggestion(
+  input: Extract<LlmExplanationInput, { readonly target: "terraform_error_explanation" }>
+): LlmCodeSuggestion | undefined {
+  const diagnostic = input.result.diagnosticExplanation;
+  const lineNumber = diagnostic?.line;
 
   if (
-    (firstItem.length === 0 && looseConclusion.length < 80) ||
-    (!jsonLikeResponse &&
-      firstItem.startsWith("[") &&
-      !/^\[(?:보통|확인 필요|심각)\]/u.test(firstItem))
+    diagnostic === undefined ||
+    lineNumber === undefined ||
+    !isStandaloneTerraformSyntaxError(diagnostic.errorType) ||
+    input.terraformCodeContext === undefined ||
+    input.terraformCodeContext.trim().length === 0
   ) {
-    return fallback;
+    return undefined;
   }
 
-  const providerText = [looseConclusion, ...items].filter(Boolean).join(" ");
+  const line = extractLine(input.terraformCodeContext, lineNumber);
 
-  if (providerText.length < 80 || isUnhelpfulProviderText(providerText)) {
-    return fallback;
+  if (line === undefined || line.trim().length === 0 || isLikelyTerraformBlockOrAttribute(line)) {
+    return undefined;
   }
 
-  const highlights =
-    items.length >= 6
-      ? items.slice(0, 6).map((item) => trimProviderText(item, 360))
-      : fallback.highlights.slice(0, 6);
-  const reviewFragments = [
-    looseConclusion,
-    ...items.map(stripAmazonQReviewHeading),
-    ...fallback.highlights.map(stripAmazonQReviewHeading)
-  ].filter((item) => item.length > 0);
-  let conclusion = "";
-
-  for (const fragment of reviewFragments) {
-    if (conclusion.includes(fragment)) {
-      continue;
-    }
-
-    conclusion = `${conclusion} ${fragment}`.trim();
-
-    if (conclusion.length >= TERRAFORM_REVIEW_CONCLUSION_TARGET_LENGTH) {
-      break;
-    }
-  }
+  const lineBreak = input.terraformCodeContext.includes("\r\n") ? "\r\n" : "\n";
+  const currentCode = input.terraformCodeContext.includes(`${line}${lineBreak}`) ? `${line}${lineBreak}` : line;
+  const fileName = diagnostic.sourceFileName ?? "Terraform 파일";
 
   return {
-    target: "terraform_preview_explanation",
-    summary: "Amazon Q가 Terraform 구성을 검토했습니다.",
-    highlights,
-    nextActions: fallback.nextActions.slice(0, 5),
-    wellArchitectedConclusion: conclusion,
-    fallbackUsed: false
+    currentCode,
+    suggestedCode: "",
+    rationale: `${fileName} ${lineNumber}번째 줄의 \`${line.trim()}\` 코드는 Terraform block header나 attribute가 아니므로 삭제해야 합니다.`
   };
 }
 
-const TERRAFORM_REVIEW_CONCLUSION_TARGET_LENGTH = 200;
-
-function extractLooseAmazonQHighlights(value: string): string[] {
-  return Array.from(
-    value.matchAll(/"(\[(?:보통|확인 필요|심각)\]\s*(?:\\.|[^"\\])*)"/gu),
-    (match) => decodeLooseAmazonQString(match[1] ?? "")
-  ).filter((item) => item.length > 0);
+function isStandaloneTerraformSyntaxError(errorType: string): boolean {
+  return errorType === "terraform.sync.block_header" || errorType === "terraform.unexpected_token";
 }
 
-function extractLooseAmazonQConclusion(value: string): string {
-  const match = value.match(
-    /"wellArchitectedConclusion"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/u
-  );
-
-  return decodeLooseAmazonQString(match?.[1] ?? "");
+function extractLine(value: string, lineNumber: number): string | undefined {
+  return value.split(/\r?\n/)[lineNumber - 1];
 }
 
-function decodeLooseAmazonQString(value: string): string {
-  if (value.length === 0) {
-    return "";
-  }
-
-  try {
-    return JSON.parse(`"${value}"`) as string;
-  } catch {
-    return value
-      .replace(/\\n/gu, " ")
-      .replace(/\\"/gu, '"')
-      .replace(/\\\\/gu, "\\")
-      .trim();
-  }
-}
-
-function stripAmazonQReviewHeading(value: string): string {
-  return value
-    .replace(/^\[(?:보통|확인 필요|심각)\]\s*/u, "")
-    .replace(/^[^:：]{1,24}[:：]\s*/u, "")
-    .trim();
-}
-
-function createAmazonQTerraformPlainTextExplanation(
-  text: string,
-  fallback: LlmExplanation
-): LlmExplanation {
-  const items = normalizeProviderTextItems(text);
-  const summary = items[0] ?? "";
-
-  if (summary.length === 0 || isUnhelpfulProviderText(summary)) {
-    return fallback;
-  }
-
-  return {
-    target: "terraform_error_explanation",
-    summary: trimProviderText(summary, 300),
-    highlights: items.slice(1, 4).map((item) => trimProviderText(item, 120)),
-    nextActions: fallback.nextActions.slice(0, 5),
-    fallbackUsed: false
-  };
-}
-
-function isUnhelpfulProviderText(value: string): boolean {
-  const normalized = value.toLowerCase();
+function isLikelyTerraformBlockOrAttribute(line: string): boolean {
+  const trimmed = line.trim();
 
   return (
-    normalized.includes("could not find relevant information") ||
-    normalized.includes("cannot find relevant information") ||
-    normalized.includes("sorry, i could not") ||
-    normalized.includes("not enough information")
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("//") ||
+    trimmed.endsWith("{") ||
+    /^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(trimmed)
   );
-}
-
-function normalizeProviderTextItems(text: string): string[] {
-  return text
-    .split(/\r?\n+/)
-    .map((line) => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, "").trim())
-    .filter((line) => line.length > 0 && !/^```/.test(line));
-}
-
-function trimProviderText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value;
-  }
-
-  return value.slice(0, maxLength).trim();
 }
 
 function createFallbackExplanationWithMetadata(
@@ -1233,6 +1248,23 @@ function withProviderMetadata(
   };
 }
 
+function withProviderAttempts(
+  explanation: LlmExplanation,
+  attempts: readonly AiProviderAttempt[]
+): LlmExplanation {
+  if (explanation.providerMetadata === undefined) {
+    return explanation;
+  }
+
+  return {
+    ...explanation,
+    providerMetadata: {
+      ...explanation.providerMetadata,
+      attempts: attempts.map((attempt) => ({ ...attempt }))
+    }
+  };
+}
+
 function createProviderMetadata(input: {
   readonly provider: AiProvider;
   readonly service: AiProviderService;
@@ -1277,14 +1309,26 @@ function getCreditFallbackReason(provider: AiProvider, creditPolicy: AiCreditPol
   return null;
 }
 
-function resolveAmazonQUnavailableFallbackReason(
+function resolveProviderUnavailableFallbackReason(
+  provider: Extract<AiProvider, "amazon_q" | "bedrock">,
   creditPolicy: AiCreditPolicy
 ): LlmExplanationFallbackReason {
-  if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
-    return "credit_not_confirmed";
+  return getCreditFallbackReason(provider, creditPolicy) ?? "provider_not_configured";
+}
+
+function resolveProviderChainFallbackReason(
+  attempts: readonly AiProviderAttempt[],
+  defaultReason: LlmExplanationFallbackReason
+): LlmExplanationFallbackReason {
+  for (let index = attempts.length - 1; index >= 0; index -= 1) {
+    const fallbackReason = attempts[index]?.fallbackReason;
+
+    if (fallbackReason !== undefined) {
+      return fallbackReason;
+    }
   }
 
-  return "provider_not_configured";
+  return defaultReason;
 }
 
 function reserveProviderCall(
@@ -1352,10 +1396,7 @@ function classifyProviderError(error: unknown): LlmExplanationFallbackReason {
     return "rate_limited";
   }
 
-  if (
-    error instanceof Error &&
-    /auth|credential|accessdenied|expired|token|unauthorized|unrecognizedclient/i.test(error.name)
-  ) {
+  if (error instanceof Error && /auth|credential|accessdenied/i.test(error.name)) {
     return "auth_error";
   }
 

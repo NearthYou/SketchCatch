@@ -46,15 +46,8 @@
   background: #2f855a;
 }
 
-.terraformIssueBanner {
-  background: #fff7ed;
-  border-bottom: 1px solid #fed7aa;
-  color: #9a3412;
-}
-
 .terraformSaveBanner,
-.terraformSaveBannerError,
-.terraformIssueBanner {
+.terraformSaveBannerError {
   align-items: center;
   display: flex;
   font-size: 12px;
@@ -67,8 +60,7 @@
 }
 
 .terraformSaveBanner span,
-.terraformSaveBannerError span,
-.terraformIssueBanner span {
+.terraformSaveBannerError span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -83,28 +75,4 @@
 .terraformSaveBannerError {
   background: #fff1f0;
   color: #b42318;
-}
-
-.terraformSaveBanner button,
-.terraformSaveBannerError button,
-.terraformIssueBanner button {
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  flex: 0 0 auto;
-  font: inherit;
-  font-weight: 750;
-  padding: 3px 0;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  white-space: nowrap;
-}
-
-.terraformSaveBanner button:focus-visible,
-.terraformSaveBannerError button:focus-visible,
-.terraformIssueBanner button:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
 }

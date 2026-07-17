@@ -31,6 +31,16 @@ export type PreparedTerraformWorkspace = {
   cleanup: () => Promise<void>;
 };
 
+export async function cleanupPreparedTerraformWorkspace(input: {
+  workspace: PreparedTerraformWorkspace | undefined;
+  workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
+}): Promise<void> {
+  const workspace =
+    input.workspace ?? (await input.workspacePromise?.catch(() => undefined));
+
+  await workspace?.cleanup();
+}
+
 export async function prepareTerraformWorkspace(
   input: PrepareTerraformWorkspaceInput,
   options: PrepareTerraformWorkspaceOptions = {}
@@ -174,19 +184,35 @@ export function parseTerraformArtifactBundle(content: string): TerraformArtifact
   return { schemaVersion: 1, files };
 }
 
-// 파일 경계와 순서를 포함해 bundle의 hash 기준 문자열을 만듭니다.
+// 파일명 정렬과 개행 정규화로 bundle의 안정적인 hash 기준 문자열을 만듭니다.
 function createTerraformBundleCanonicalContent(bundle: TerraformArtifactBundle): Buffer {
-  return Buffer.from(JSON.stringify(bundle));
+  return Buffer.from(
+    JSON.stringify({
+      schemaVersion: bundle.schemaVersion,
+      files: [...bundle.files]
+        .sort((left, right) =>
+          left.fileName < right.fileName ? -1 : left.fileName > right.fileName ? 1 : 0
+        )
+        .map((file) => ({
+          fileName: file.fileName,
+          terraformCode: file.terraformCode.replace(/\r\n?/gu, "\n")
+        }))
+    })
+  );
 }
 
 export async function downloadTerraformArtifactFromS3(
   objectKey: string,
-  options: { maxBytes?: number } = {}
+  options: {
+    maxBytes?: number;
+    bucketName?: string;
+    s3Client?: ReturnType<typeof getS3Client>;
+  } = {}
 ): Promise<Buffer> {
   const maxBytes = options.maxBytes ?? defaultS3ArtifactDownloadMaxBytes;
-  const result = await getS3Client().send(
+  const result = await (options.s3Client ?? getS3Client()).send(
     new GetObjectCommand({
-      Bucket: requireS3BucketName(),
+      Bucket: options.bucketName ?? requireS3BucketName(),
       Key: objectKey
     })
   );

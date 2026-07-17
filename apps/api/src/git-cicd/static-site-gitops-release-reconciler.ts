@@ -28,6 +28,10 @@ import {
   projectDeploymentTargets
 } from "../db/schema.js";
 import { resolveApplicationReleaseVersion } from "../releases/application-release-identity.js";
+import {
+  resolveGitOpsDeploymentTargetFingerprint,
+  verifyGitOpsRuntimeConvergence
+} from "./gitops-runtime-convergence.js";
 
 export type StaticSiteGitOpsReleaseRecord = typeof applicationReleases.$inferSelect;
 
@@ -39,12 +43,15 @@ export type StaticSiteGitOpsVerificationTarget = {
     region: string;
   };
   runtimeConfig: StaticSiteRuntimeConfig;
+  deploymentTargetFingerprint?: string | null | undefined;
 };
 
 export type StaticSiteGitOpsObservedState = {
   manifestVersionId: string;
   manifestDigest: string;
   manifestFileCount: number;
+  artifactFingerprint?: string | null | undefined;
+  deploymentTargetFingerprint?: string | null | undefined;
   releaseObjectCount: number;
   distributionStatus: string;
   distributionEnabled: boolean;
@@ -81,6 +88,7 @@ export type StaticSiteGitOpsCloudGateway = {
 
 export type StaticSiteGitOpsReleaseReconcileInput = {
   projectId: string;
+  artifactId?: string | null;
   pipelineRunId: string;
   commitSha: string;
   pipelineStatus: GitCicdPipelineRunStatus;
@@ -140,16 +148,23 @@ export function createStaticSiteGitOpsReleaseReconciler(options: {
         );
       }
       validateObservedState(input.evidence, observed, target.runtimeConfig);
+      const convergence = verifyGitOpsRuntimeConvergence({
+        evidence: input.evidence,
+        expectedAdapterKind: "static_s3_cloudfront",
+        expectedDeploymentTargetFingerprint: target.deploymentTargetFingerprint
+      });
 
       const timestamp = now();
       const succeeded = input.evidence.outcome === "succeeded";
       return options.repository.upsertRelease({
         id: createId(),
         projectId: input.projectId,
+        artifactId: input.artifactId ?? null,
         deploymentId: null,
         pipelineRunId: input.pipelineRunId,
         source: "gitops",
         runtimeTargetKind: "static_site",
+        ...convergence,
         version: resolveApplicationReleaseVersion({ commitSha: input.commitSha }),
         commitSha: input.commitSha.toLowerCase(),
         artifactDigestAlgorithm: "sha256",
@@ -176,7 +191,10 @@ export function createStaticSiteGitOpsReleaseReconciler(options: {
           distributionStatus: observed.distributionStatus,
           originPath: observed.originPath,
           invalidationStatus: observed.invalidationStatus,
-          verifiedAt: timestamp.toISOString()
+          verifiedAt: timestamp.toISOString(),
+          ...(input.evidence.schemaVersion === 3
+            ? { convergence: input.evidence.convergence }
+            : {})
         },
         rollbackEvidence: succeeded
           ? null
@@ -231,6 +249,12 @@ function validateObservedState(
   observed: StaticSiteGitOpsObservedState,
   runtime: StaticSiteRuntimeConfig
 ): void {
+  const expectedArtifactFingerprint = evidence.schemaVersion === 3
+    ? evidence.artifact.artifactFingerprint
+    : null;
+  const expectedTargetFingerprint = evidence.schemaVersion === 3
+    ? evidence.convergence.deploymentTargetFingerprint
+    : null;
   const expectedOriginPath = evidence.activeReleasePrefix
     ? `/${evidence.activeReleasePrefix}`
     : "";
@@ -243,6 +267,10 @@ function validateObservedState(
     observed.manifestVersionId !== evidence.manifestVersionId ||
     observed.manifestDigest !== evidence.artifactDigest.slice("sha256:".length) ||
     observed.manifestFileCount !== evidence.fileCount ||
+    (expectedArtifactFingerprint !== null &&
+      observed.artifactFingerprint !== expectedArtifactFingerprint) ||
+    (expectedTargetFingerprint !== null &&
+      observed.deploymentTargetFingerprint !== expectedTargetFingerprint) ||
     observed.releaseObjectCount !== evidence.fileCount + 1 ||
     observed.distributionStatus !== "Deployed" ||
     !observed.distributionEnabled ||
@@ -276,7 +304,11 @@ export function createPostgresStaticSiteGitOpsReleaseRepository(
         .select({
           projectId: projectDeploymentTargets.projectId,
           runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+          confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
           runtimeConfig: projectDeploymentTargets.runtimeConfig,
+          runtimeTarget: projectDeploymentTargets.runtimeTarget,
+          deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
+          accountId: awsConnections.accountId,
           roleArn: awsConnections.roleArn,
           externalId: awsConnections.externalId,
           region: awsConnections.region
@@ -295,6 +327,8 @@ export function createPostgresStaticSiteGitOpsReleaseRepository(
         );
       if (
         !row?.roleArn ||
+        !row.accountId ||
+        !row.confirmedBuildConfig ||
         row.runtimeTargetKind !== "static_site" ||
         row.runtimeConfig?.runtimeTargetKind !== "static_site"
       ) return undefined;
@@ -305,7 +339,16 @@ export function createPostgresStaticSiteGitOpsReleaseRepository(
           externalId: row.externalId,
           region: row.region
         },
-        runtimeConfig: row.runtimeConfig
+        runtimeConfig: row.runtimeConfig,
+        deploymentTargetFingerprint: resolveGitOpsDeploymentTargetFingerprint({
+          projectId: row.projectId,
+          accountId: row.accountId,
+          region: row.region,
+          runtimeTarget: row.runtimeTarget,
+          runtimeConfig: row.runtimeConfig,
+          healthCheckPath: row.confirmedBuildConfig.healthCheckPath,
+          persistedDeploymentTargetFingerprint: row.deploymentTargetFingerprint
+        })
       };
     },
     async upsertRelease(input) {
@@ -319,6 +362,9 @@ export function createPostgresStaticSiteGitOpsReleaseRepository(
             version: input.version,
             commitSha: input.commitSha,
             artifactDigest: input.artifactDigest,
+            runtimeAdapterKind: input.runtimeAdapterKind,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+            convergenceOutcome: input.convergenceOutcome,
             providerRevision: input.providerRevision,
             outputUrl: input.outputUrl,
             status: input.status,
@@ -431,6 +477,7 @@ export function createAwsStaticSiteGitOpsCloudGateway(options: {
         const origins = config?.Origins?.Items ?? [];
         const matchingOrigins = origins.filter((item) => item.Id === input.cloudFrontOriginId);
         const origin = matchingOrigins[0];
+        const convergenceMarkers = readCloudFrontConvergenceMarkers(origin);
         const checksum = manifestHead.ChecksumSHA256;
         const checksumBytes = checksum ? Buffer.from(checksum, "base64") : Buffer.alloc(0);
         if (
@@ -451,6 +498,8 @@ export function createAwsStaticSiteGitOpsCloudGateway(options: {
           manifestVersionId: manifestHead.VersionId,
           manifestDigest: checksumBytes.toString("hex"),
           manifestFileCount: manifest.paths.length,
+          artifactFingerprint: convergenceMarkers.artifactFingerprint,
+          deploymentTargetFingerprint: convergenceMarkers.deploymentTargetFingerprint,
           releaseObjectCount: listedKeys.length,
           distributionStatus: distribution.Distribution.Status,
           distributionEnabled: config.Enabled === true,
@@ -515,6 +564,47 @@ function parseManifest(value: string, commitSha: string): { paths: string[] } {
     throw new StaticSiteGitOpsReleaseVerificationError("Static release manifest paths are invalid");
   }
   return { paths };
+}
+
+function readCloudFrontConvergenceMarkers(origin: {
+  readonly CustomHeaders?: {
+    readonly Items?: readonly {
+      readonly HeaderName?: string | undefined;
+      readonly HeaderValue?: string | undefined;
+    }[] | undefined;
+  } | undefined;
+} | undefined): {
+  artifactFingerprint: string | null;
+  deploymentTargetFingerprint: string | null;
+} {
+  const headers = new Map(
+    (origin?.CustomHeaders?.Items ?? []).map((item) => [
+      item.HeaderName?.toLowerCase() ?? "",
+      item.HeaderValue
+    ])
+  );
+  const artifactFingerprint = readOptionalFingerprint(
+    headers.get("x-sketchcatch-artifact-fingerprint")
+  );
+  const deploymentTargetFingerprint = readOptionalFingerprint(
+    headers.get("x-sketchcatch-deployment-target-fingerprint")
+  );
+  if ((artifactFingerprint === null) !== (deploymentTargetFingerprint === null)) {
+    throw new StaticSiteGitOpsReleaseVerificationError(
+      "CloudFront convergence markers are incomplete"
+    );
+  }
+  return { artifactFingerprint, deploymentTargetFingerprint };
+}
+
+function readOptionalFingerprint(value: unknown): string | null {
+  if (value === undefined) return null;
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/u.test(value)) {
+    throw new StaticSiteGitOpsReleaseVerificationError(
+      "CloudFront convergence fingerprint is invalid"
+    );
+  }
+  return value;
 }
 
 function isSafeRelativePath(path: string): boolean {

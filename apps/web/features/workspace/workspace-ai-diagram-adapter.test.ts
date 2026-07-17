@@ -1424,6 +1424,55 @@ test("convertArchitectureJsonToDiagramJson marks VPC and Subnet containment for 
   );
 });
 
+test("convertArchitectureJsonToDiagramJson hides only containment edges across Area ancestry", () => {
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      {
+        id: "vpc-main",
+        type: "VPC",
+        label: "Main VPC",
+        positionX: 80,
+        positionY: 80,
+        config: { terraformResourceName: "main" }
+      },
+      {
+        id: "subnet-public",
+        type: "SUBNET",
+        label: "Public Subnet",
+        positionX: 200,
+        positionY: 200,
+        config: { terraformResourceName: "public", vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "internet-gateway",
+        type: "INTERNET_GATEWAY",
+        label: "Internet Gateway",
+        positionX: 360,
+        positionY: 80,
+        config: { vpcId: "aws_vpc.main.id" }
+      },
+      {
+        id: "nat-gateway",
+        type: "NAT_GATEWAY",
+        label: "NAT Gateway",
+        positionX: 360,
+        positionY: 200,
+        config: { subnetId: "aws_subnet.public.id" }
+      }
+    ],
+    edges: [
+      { id: "vpc-subnet", sourceId: "vpc-main", targetId: "subnet-public", label: "contains" },
+      { id: "vpc-igw", sourceId: "vpc-main", targetId: "internet-gateway", label: "routes" },
+      { id: "subnet-nat", sourceId: "subnet-public", targetId: "nat-gateway", label: "egress" },
+      { id: "nat-vpc", sourceId: "nat-gateway", targetId: "vpc-main", label: "reports health" }
+    ]
+  };
+
+  const diagram = convertArchitectureJsonToDiagramJson(architectureJson);
+
+  assert.deepEqual(diagram.edges.map(({ id }) => id).sort(), ["nat-vpc", "subnet-nat", "vpc-igw"]);
+});
+
 test("convertArchitectureJsonToDiagramJson maps server and storage draft resources to Terraform nodes", () => {
   const architectureJson: ArchitectureJson = {
     nodes: [
@@ -2041,6 +2090,9 @@ test("createPlannedDiagramJson applies Template layout rules as hard constraints
   const authoredRoute = authoredDiagram.edges.find(
     (edge) => edge.id === `template-${templateId}-target-group-service`
   );
+  const authoredRegion = authoredDiagram.nodes.find(
+    (node) => node.id === `template-${templateId}-presentation-region`
+  );
   const plannedVpc = nodeById.get(`fixed-template-${templateId}-vpc`);
   const plannedSubnet = nodeById.get(`fixed-template-${templateId}-subnet-a`);
   const plannedRegion = nodeById.get(`fixed-template-${templateId}-presentation-region`);
@@ -2048,11 +2100,12 @@ test("createPlannedDiagramJson applies Template layout rules as hard constraints
 
   assert.ok(authoredVpc);
   assert.ok(authoredRoute);
+  assert.ok(authoredRegion);
   assert.deepEqual(plannedVpc?.position, authoredVpc.position);
   assert.deepEqual(plannedVpc?.size, authoredVpc.size);
   assert.equal(plannedSubnet?.metadata?.parentAreaNodeId, `fixed-template-${templateId}-vpc`);
   assert.equal(plannedRegion?.kind, "design");
-  assert.deepEqual(plannedRegion?.size, { width: 1_920, height: 880 });
+  assert.deepEqual(plannedRegion?.size, authoredRegion.size);
   assert.equal(plannedRoute?.sourceHandleId, authoredRoute.sourceHandleId);
   assert.equal(plannedRoute?.targetHandleId, authoredRoute.targetHandleId);
   assert.equal(plannedRoute?.metadata?.presentationRole, "primary");

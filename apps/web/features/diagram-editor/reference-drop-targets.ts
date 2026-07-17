@@ -1,4 +1,5 @@
 import type { DiagramNode } from "../../../../packages/types/src";
+import { createTerraformParameterCatalogKey } from "@sketchcatch/types/resource-definitions";
 import type { ParameterCatalog, ParameterCatalogDefinition } from "../parameter-input/catalog";
 import {
   getReferenceAttribute,
@@ -29,7 +30,14 @@ export function findInnermostReferenceDropTarget(
   }
 
   const childParameters = mergeNodeParameters(childNode, catalog);
-  const referenceDefinitions = getReferenceDefinitions(catalog.resources[childParameters.resourceType] ?? []);
+  const referenceDefinitions = getReferenceDefinitions(
+    catalog.resources[
+      createTerraformParameterCatalogKey(
+        childParameters.terraformBlockType ?? "resource",
+        childParameters.resourceType
+      )
+    ] ?? []
+  );
 
   if (referenceDefinitions.length === 0) {
     return null;
@@ -72,7 +80,14 @@ export function findContainingReferenceDropTargets(
   }
 
   const childParameters = mergeNodeParameters(childNode, catalog);
-  const referenceDefinitions = getReferenceDefinitions(catalog.resources[childParameters.resourceType] ?? []);
+  const referenceDefinitions = getReferenceDefinitions(
+    catalog.resources[
+      createTerraformParameterCatalogKey(
+        childParameters.terraformBlockType ?? "resource",
+        childParameters.resourceType
+      )
+    ] ?? []
+  );
 
   if (referenceDefinitions.length === 0) {
     return [];

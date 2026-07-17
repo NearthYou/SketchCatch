@@ -9,6 +9,7 @@ import type {
   TerraformBlockType
 } from "@sketchcatch/types";
 import {
+  createTerraformParameterCatalogKey,
   getResourceDefinitionByTerraform,
   type ResourceDefinition
 } from "@sketchcatch/types/resource-definitions";
@@ -308,7 +309,12 @@ async function auditCandidate(
     };
   }
 
-  const definitions = context.catalog.resources[candidate.terraformResourceType];
+  const definitions = context.catalog.resources[
+    createTerraformParameterCatalogKey(
+      candidate.terraformBlockType,
+      candidate.terraformResourceType
+    )
+  ];
 
   if (!definitions || definitions.length === 0) {
     return {
@@ -541,7 +547,9 @@ function createReferenceSampleValue(
   }
 
   const targetDefinition = getResourceDefinitionByTerraform("resource", targetType);
-  const targetDefinitions = context.catalog.resources[targetType];
+  const targetDefinitions = context.catalog.resources[
+    createTerraformParameterCatalogKey("resource", targetType)
+  ];
 
   if (!targetDefinition?.capabilities.terraformPreview || !targetDefinitions) {
     return {

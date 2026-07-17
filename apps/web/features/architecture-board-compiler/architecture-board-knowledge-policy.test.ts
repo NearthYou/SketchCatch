@@ -78,6 +78,7 @@ function createArtifact(
   return {
     version: ARCHITECTURE_BOARD_KNOWLEDGE_VERSION,
     hash: `test-${id}`,
+    modulePatterns: [],
     unavailableTemplateIds: [],
     cases: [
       {

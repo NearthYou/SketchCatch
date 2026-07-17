@@ -4,7 +4,8 @@ import type { DiagramJson, DiagramNode } from "@sketchcatch/types";
 import { TerraformDiagramValidationError } from "./diagram-to-terraform.js";
 import {
   getTerraformNestedBlockAttributes,
-  isTerraformNestedBlockAttribute
+  isTerraformNestedBlockAttribute,
+  isTerraformSingleNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
 import { createTerraformDiagnostics } from "./terraform-diagnostics.js";
 import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
@@ -1532,6 +1533,59 @@ test("renders deployable Terraform defaults for AI-generated CI/CD resources", (
   assert.equal(
     createTerraformDiagnostics(terraformCode).filter((diagnostic) => diagnostic.severity === "error").length,
     0
+  );
+});
+
+test("renders Classic ELB health checks and listeners as nested blocks", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "classic-elb",
+        type: "aws_elb",
+        kind: "resource",
+        label: "Classic ELB",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_elb",
+          resourceName: "classic",
+          fileName: "main",
+          values: {
+            healthCheck: {
+              healthyThreshold: 2,
+              interval: 30,
+              target: "HTTP:80/",
+              timeout: 3,
+              unhealthyThreshold: 2
+            },
+            listener: [{
+              instancePort: 80,
+              instanceProtocol: "http",
+              lbPort: 80,
+              lbProtocol: "http"
+            }]
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const terraformCode = generateTerraformFromDiagramJson(diagramJson);
+
+  assert.match(terraformCode, /health_check \{[\s\S]*healthy_threshold = 2[\s\S]*\}/);
+  assert.match(terraformCode, /listener \{[\s\S]*instance_port = 80[\s\S]*lb_protocol = "http"[\s\S]*\}/);
+  assert.doesNotMatch(terraformCode, /health_check\s*=|listener\s*=/);
+  assert.equal(isTerraformSingleNestedBlockAttribute("aws_elb", "healthCheck"), true);
+  assert.equal(isTerraformSingleNestedBlockAttribute("aws_elb", "listener"), false);
+  assert.equal(isTerraformSingleNestedBlockAttribute("aws_waf_web_acl", "defaultAction"), true);
+  assert.equal(
+    isTerraformSingleNestedBlockAttribute(
+      "aws_s3_bucket_replication_configuration",
+      "destination",
+      ["rule"]
+    ),
+    true
   );
 });
 

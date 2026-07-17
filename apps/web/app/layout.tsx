@@ -7,6 +7,7 @@ import "../components/auth/auth.css";
 import { AuthProvider } from "../components/auth/auth-provider";
 import { PlainTextCopyGuard } from "../components/clipboard/plain-text-copy-guard";
 import { DeploymentNotificationCenter } from "../components/notifications/DeploymentNotificationCenter";
+import { AppQueryProvider } from "../components/query/app-query-provider";
 
 export const metadata: Metadata = {
   title: "SketchCatch",
@@ -21,8 +22,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="ko">
       <body>
         <AuthProvider>
-          <PlainTextCopyGuard />
-          <DeploymentNotificationCenter>{children}</DeploymentNotificationCenter>
+          <AppQueryProvider>
+            <PlainTextCopyGuard />
+            <DeploymentNotificationCenter>{children}</DeploymentNotificationCenter>
+          </AppQueryProvider>
         </AuthProvider>
       </body>
     </html>

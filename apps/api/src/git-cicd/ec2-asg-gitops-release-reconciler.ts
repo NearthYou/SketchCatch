@@ -29,6 +29,10 @@ import {
   projectDeploymentTargets
 } from "../db/schema.js";
 import { resolveApplicationReleaseVersion } from "../releases/application-release-identity.js";
+import {
+  resolveGitOpsDeploymentTargetFingerprint,
+  verifyGitOpsRuntimeConvergence
+} from "./gitops-runtime-convergence.js";
 
 export type Ec2AsgGitOpsReleaseRecord = typeof applicationReleases.$inferSelect;
 
@@ -40,6 +44,7 @@ export type Ec2AsgGitOpsVerificationTarget = {
     region: string;
   };
   runtimeConfig: Ec2AsgRuntimeConfig;
+  deploymentTargetFingerprint?: string | null | undefined;
 };
 
 export type Ec2AsgS3Revision = {
@@ -53,6 +58,7 @@ export type Ec2AsgS3Revision = {
 export type Ec2AsgGitOpsObservedState = {
   originalDeploymentStatus: string;
   activeDeploymentStatus: string;
+  runtimeConvergenceMarker?: string | null | undefined;
   originalRollbackDeploymentId: string | null;
   originalRevision: Ec2AsgS3Revision;
   activeRevision: Ec2AsgS3Revision;
@@ -93,6 +99,7 @@ export type Ec2AsgGitOpsCloudGateway = {
 
 export type Ec2AsgGitOpsReleaseReconcileInput = {
   projectId: string;
+  artifactId?: string | null;
   pipelineRunId: string;
   commitSha: string;
   pipelineStatus: GitCicdPipelineRunStatus;
@@ -151,6 +158,11 @@ export function createEc2AsgGitOpsReleaseReconciler(options: {
         );
       }
       validateObservedState(input.evidence, observed, target.runtimeConfig);
+      const convergence = verifyGitOpsRuntimeConvergence({
+        evidence: input.evidence,
+        expectedAdapterKind: "ec2_auto_scaling_group",
+        expectedDeploymentTargetFingerprint: target.deploymentTargetFingerprint
+      });
 
       const timestamp = now();
       const status = mapReleaseStatus(input.evidence.outcome);
@@ -158,10 +170,12 @@ export function createEc2AsgGitOpsReleaseReconciler(options: {
       return options.repository.upsertRelease({
         id: createId(),
         projectId: input.projectId,
+        artifactId: input.artifactId ?? null,
         deploymentId: null,
         pipelineRunId: input.pipelineRunId,
         source: "gitops",
         runtimeTargetKind: "ec2_asg",
+        ...convergence,
         version: resolveApplicationReleaseVersion({ commitSha: input.commitSha }),
         commitSha: input.commitSha.toLowerCase(),
         artifactDigestAlgorithm: "sha256",
@@ -197,7 +211,10 @@ export function createEc2AsgGitOpsReleaseReconciler(options: {
           activeDeploymentStatus: observed.activeDeploymentStatus,
           targetInstanceCount: observed.targetInstanceIds.length,
           succeededInstanceCount: observed.succeededInstanceIds.length,
-          verifiedAt: timestamp.toISOString()
+          verifiedAt: timestamp.toISOString(),
+          ...(input.evidence.schemaVersion === 3
+            ? { convergence: input.evidence.convergence }
+            : {})
         },
         rollbackEvidence: restored
           ? {
@@ -257,6 +274,9 @@ function validateObservedState(
   const succeeded = evidence.outcome === "succeeded";
   const rolledBack = evidence.outcome === "rolled_back";
   const explicitlyRestored = evidence.outcome === "failed";
+  const expectedMarker = evidence.schemaVersion === 3
+    ? `sketchcatch:artifact=${evidence.artifact.artifactFingerprint};target=${evidence.convergence.deploymentTargetFingerprint}`
+    : null;
   const expectedCurrent = parseS3Uri(evidence.artifactUri);
   const expectedPrevious = parseS3Uri(evidence.previousArtifactUri);
   const expectedActive = succeeded ? expectedCurrent : expectedPrevious;
@@ -274,6 +294,7 @@ function validateObservedState(
   if (
     !validOriginalStatus ||
     observed.activeDeploymentStatus !== "Succeeded" ||
+    (expectedMarker !== null && observed.runtimeConvergenceMarker !== expectedMarker) ||
     observed.deploymentConfigName !== "CodeDeployDefault.AllAtOnce" ||
     observed.codeDeployApplicationName !== runtime.codeDeployApplicationName ||
     observed.codeDeployDeploymentGroupName !== runtime.codeDeployDeploymentGroupName ||
@@ -366,7 +387,11 @@ export function createPostgresEc2AsgGitOpsReleaseRepository(
         .select({
           projectId: projectDeploymentTargets.projectId,
           runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+          confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
           runtimeConfig: projectDeploymentTargets.runtimeConfig,
+          runtimeTarget: projectDeploymentTargets.runtimeTarget,
+          deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
+          accountId: awsConnections.accountId,
           roleArn: awsConnections.roleArn,
           externalId: awsConnections.externalId,
           region: awsConnections.region
@@ -385,6 +410,8 @@ export function createPostgresEc2AsgGitOpsReleaseRepository(
         );
       if (
         !row?.roleArn ||
+        !row.accountId ||
+        !row.confirmedBuildConfig ||
         row.runtimeTargetKind !== "ec2_asg" ||
         row.runtimeConfig?.runtimeTargetKind !== "ec2_asg"
       ) return undefined;
@@ -395,7 +422,16 @@ export function createPostgresEc2AsgGitOpsReleaseRepository(
           externalId: row.externalId,
           region: row.region
         },
-        runtimeConfig: row.runtimeConfig
+        runtimeConfig: row.runtimeConfig,
+        deploymentTargetFingerprint: resolveGitOpsDeploymentTargetFingerprint({
+          projectId: row.projectId,
+          accountId: row.accountId,
+          region: row.region,
+          runtimeTarget: row.runtimeTarget,
+          runtimeConfig: row.runtimeConfig,
+          healthCheckPath: row.confirmedBuildConfig.healthCheckPath,
+          persistedDeploymentTargetFingerprint: row.deploymentTargetFingerprint
+        })
       };
     },
     async upsertRelease(input) {
@@ -409,6 +445,9 @@ export function createPostgresEc2AsgGitOpsReleaseRepository(
             version: input.version,
             commitSha: input.commitSha,
             artifactDigest: input.artifactDigest,
+            runtimeAdapterKind: input.runtimeAdapterKind,
+            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+            convergenceOutcome: input.convergenceOutcome,
             providerRevision: input.providerRevision,
             outputUrl: input.outputUrl,
             status: input.status,
@@ -513,6 +552,7 @@ export function createAwsEc2AsgGitOpsCloudGateway(options: {
         const observed: Ec2AsgGitOpsObservedState = {
           originalDeploymentStatus: original.deploymentInfo?.status ?? "",
           activeDeploymentStatus: active.deploymentInfo?.status ?? "",
+          runtimeConvergenceMarker: active.deploymentInfo?.description ?? null,
           originalRollbackDeploymentId:
             original.deploymentInfo?.rollbackInfo?.rollbackDeploymentId ?? null,
           originalRevision: readS3Revision(original.deploymentInfo?.revision),
