@@ -14,7 +14,7 @@ import type {
   ProjectDeleteAction,
   ProjectDeletePreview
 } from "@sketchcatch/types";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Search } from "lucide-react";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { ApiProjectCard, getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -75,7 +75,7 @@ type ProjectActionMenuState =
   | { readonly preview: ProjectDeletePreview; readonly project: Project; readonly status: "ready" }
   | { readonly errorMessage: string; readonly project: Project; readonly status: "error" };
 
-export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }) {
+export function ProjectsClient() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [deploymentStatusByProjectId, setDeploymentStatusByProjectId] = useState<
     Record<string, boolean>
@@ -84,6 +84,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   const [loadState, setLoadState] = useState<ProjectsLoadState>("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [sortMode, setSortMode] = useState<ProjectSortMode>("recent_work");
+  const [searchQuery, setSearchQuery] = useState("");
   const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ status: "closed" });
@@ -608,9 +609,49 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     );
   }
 
+  const projectControls = (
+    <div className="projectListControls" aria-label="프로젝트 검색, 배포 여부 및 정렬">
+      <label className="dashboardSearchField">
+        <Search aria-hidden="true" size={17} />
+        <span className="dashboardVisuallyHidden">프로젝트 검색</span>
+        <input
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="프로젝트 검색"
+          type="search"
+          value={searchQuery}
+        />
+      </label>
+      <div className="settingsField projectDeploymentFilterField">
+        <span>배포 여부</span>
+        <SelectMenu
+          ariaLabel="프로젝트 배포 여부 필터 선택"
+          emptyLabel="필터 선택"
+          onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
+          options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
+          size="large"
+          tone="surface"
+          value={deploymentFilter}
+        />
+      </div>
+      <div className="settingsField projectSortField">
+        <span>정렬</span>
+        <SelectMenu
+          ariaLabel="프로젝트 정렬 선택"
+          emptyLabel="정렬 선택"
+          onChange={(value) => setSortMode(value as ProjectSortMode)}
+          options={PROJECT_SORT_OPTIONS}
+          size="large"
+          tone="surface"
+          value={sortMode}
+        />
+      </div>
+    </div>
+  );
+
   if (loadState === "loading") {
     return (
       <section className="dashboardPanel" aria-label="프로젝트 목록 로딩">
+        {projectControls}
         <p className="workspaceStateText">프로젝트 목록을 불러오는 중입니다.</p>
       </section>
     );
@@ -619,6 +660,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   if (loadState === "error") {
     return (
       <section className="dashboardPanel" aria-label="프로젝트 목록 오류">
+        {projectControls}
         <p className="dashboardMessage" role="alert">
           {errorMessage}
         </p>
@@ -628,32 +670,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
 
   return (
     <section className="dashboardPanel" aria-label="프로젝트 목록">
-      <div className="projectListControls" aria-label="프로젝트 정렬 및 필터">
-        <div className="settingsField projectSortField">
-          <span>정렬</span>
-          <SelectMenu
-            ariaLabel="프로젝트 정렬 선택"
-            emptyLabel="정렬 선택"
-            onChange={(value) => setSortMode(value as ProjectSortMode)}
-            options={PROJECT_SORT_OPTIONS}
-            size="large"
-            tone="surface"
-            value={sortMode}
-          />
-        </div>
-        <div className="settingsField projectDeploymentFilterField">
-          <span>배포 여부</span>
-          <SelectMenu
-            ariaLabel="프로젝트 배포 여부 필터 선택"
-            emptyLabel="필터 선택"
-            onChange={(value) => setDeploymentFilter(value as ProjectDeploymentFilter)}
-            options={PROJECT_DEPLOYMENT_FILTER_OPTIONS}
-            size="large"
-            tone="surface"
-            value={deploymentFilter}
-          />
-        </div>
-      </div>
+      {projectControls}
 
       {deleteErrorMessage ? (
         <p className="dashboardMessage" role="alert">

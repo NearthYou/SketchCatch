@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { ProductState } from "../../components/ui/ProductState";
@@ -30,6 +30,17 @@ type DashboardOverviewState =
 export function DashboardOverview() {
   const [state, setState] = useState<DashboardOverviewState>({ status: "loading" });
   const [reloadCount, setReloadCount] = useState(0);
+  const overviewHeader = (
+    <header className="dashboardPageHeader dashboardPageHeaderCompact">
+      <div>
+        <h1>작업 현황</h1>
+      </div>
+      <Link className="dashboardPrimaryAction" href="/workspace/new?fresh=1">
+        <Plus aria-hidden="true" size={17} />
+        <span>새 프로젝트</span>
+      </Link>
+    </header>
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -62,30 +73,43 @@ export function DashboardOverview() {
   }, [reloadCount]);
 
   if (state.status === "loading") {
-    return <DashboardOverviewLoading />;
+    return (
+      <div className="dashboardOverview" aria-label="Dashboard 로딩">
+        {overviewHeader}
+        <DashboardOverviewLoading />
+      </div>
+    );
   }
 
   if (state.status === "error") {
     return (
-      <ProductState
-        action={
-          <button
-            className="dashboardSecondaryButton"
-            onClick={() => setReloadCount((count) => count + 1)}
-            type="button"
-          >
-            다시 시도
-          </button>
-        }
-        description={state.message}
-        kind="error"
-        title="Dashboard를 불러오지 못했습니다"
-      />
+      <div className="dashboardOverview">
+        {overviewHeader}
+        <ProductState
+          action={
+            <button
+              className="dashboardSecondaryButton"
+              onClick={() => setReloadCount((count) => count + 1)}
+              type="button"
+            >
+              다시 시도
+            </button>
+          }
+          description={state.message}
+          kind="error"
+          title="Dashboard를 불러오지 못했습니다"
+        />
+      </div>
     );
   }
 
   if (state.status === "empty") {
-    return <DashboardOverviewEmpty />;
+    return (
+      <div className="dashboardOverview">
+        {overviewHeader}
+        <DashboardOverviewEmpty />
+      </div>
+    );
   }
 
   const { data } = state;
@@ -96,11 +120,7 @@ export function DashboardOverview() {
 
   return (
     <div className="dashboardOverview">
-      <header className="dashboardPageHeader dashboardPageHeaderCompact">
-        <div>
-          <h1>작업 현황</h1>
-        </div>
-      </header>
+      {overviewHeader}
 
       {data.partialWarnings.length > 0 ? (
         <section className="dashboardPartialWarning" aria-label="일부 데이터 로딩 실패">
