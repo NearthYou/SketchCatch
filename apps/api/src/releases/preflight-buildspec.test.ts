@@ -13,6 +13,12 @@ test("preflight buildspec builds and checks API/frontend without deployment perm
   assert.match(buildspec, /command -v zstd/);
   assert.match(buildspec, /CODEBUILD_RESOLVED_SOURCE_VERSION/);
   assert.match(buildspec, /docker build/);
+  assert.match(buildspec, /docker buildx build/);
+  assert.match(buildspec, /--cache-from/);
+  assert.match(buildspec, /--cache-to/);
+  assert.match(buildspec, /ignore-error=true/);
+  assert.match(buildspec, /--load/);
+  assert.match(buildspec, /falling back to a cold Docker build/);
   assert.match(buildspec, /docker run/);
   assert.match(buildspec, /docker logs/);
   assert.match(buildspec, /API container exited before the health check passed/);
@@ -32,7 +38,9 @@ test("preflight buildspec builds and checks API/frontend without deployment perm
   assert.match(packager, /application\/vnd\.oci\.image\.manifest\.v1\+json/);
   assert.match(packager, /frontend-manifest\.json/);
   assert.match(buildspec, /SKETCHCATCH_API_UPLOAD_URL/);
-  assert.doesNotMatch(buildspec, /aws\s+(?:ecr|ecs|s3|cloudfront)/i);
+  assert.match(buildspec, /aws ecr get-login-password/);
+  assert.doesNotMatch(buildspec, /aws\s+(?:ecs|s3|cloudfront)/i);
+  assert.doesNotMatch(buildspec, /SKETCHCATCH_ECR_REPOSITORY/);
   assert.doesNotMatch(buildspec, /buildspec\.ya?ml/i);
 });
 
