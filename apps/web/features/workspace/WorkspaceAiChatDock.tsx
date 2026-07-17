@@ -102,7 +102,10 @@ import styles from "./workspace-ai-workbench.module.css";
 
 export type WorkspaceAiChatDockProps = {
   readonly context: DiagramEditorPanelContext;
+  readonly isBlockedByWorkspaceOverlay: boolean;
+  readonly isOpen: boolean;
   readonly onApplyTerraformIssueFix: (request: TerraformSafeFixApplyRequest) => void;
+  readonly onOpenChange: (isOpen: boolean) => void;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly projectId: string;
   readonly repositoryAnalysisSourceRepositoryId?: string | undefined;
@@ -252,7 +255,10 @@ type SpeechRecognitionWindow = Window & {
 // Repository Analysis에서 넘긴 Template을 표시하고 이후 AI Draft 요청에 유지합니다.
 export function WorkspaceAiChatDock({
   context,
+  isBlockedByWorkspaceOverlay,
+  isOpen,
   onApplyTerraformIssueFix,
+  onOpenChange,
   onSelectTerraformIssue,
   projectId,
   repositoryAnalysisSourceRepositoryId,
@@ -262,7 +268,6 @@ export function WorkspaceAiChatDock({
   terraformAiInteraction,
   terraformSafeFixApplyResult
 }: WorkspaceAiChatDockProps) {
-  const [isOpen, setOpen] = useState(false);
   const [activeChatTab, setActiveChatTab] = useState<WorkspaceAiChatScope>(() =>
     readStoredActiveChatScope(projectId)
   );
@@ -624,11 +629,11 @@ export function WorkspaceAiChatDock({
       (pendingTerraformFixApplyRef.current?.diagnosticKeys.length ?? 0) > 1);
 
   const closeChatDock = useCallback(() => {
-    setOpen(false);
+    onOpenChange(false);
     window.requestAnimationFrame(() => {
       launcherButtonRef.current?.focus();
     });
-  }, []);
+  }, [onOpenChange]);
 
   useEffect(() => {
     if (loadedProjectIdRef.current !== projectId) {
@@ -2125,11 +2130,15 @@ export function WorkspaceAiChatDock({
     voiceNoSpeechTimerRef.current = null;
   }
 
+  if (isBlockedByWorkspaceOverlay) {
+    return null;
+  }
+
   if (!isOpen) {
     return (
       <WorkspaceAiChatLauncher
         isRightPanelOpen={context.isRightPanelOpen}
-        onOpen={() => setOpen(true)}
+        onOpen={() => onOpenChange(true)}
         ref={launcherButtonRef}
       />
     );

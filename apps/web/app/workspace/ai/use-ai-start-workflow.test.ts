@@ -12,6 +12,11 @@ test("AI 시작 Draft와 Patch는 Compiler proposal을 같은 preview와 승인 
   assert.match(source, /compileArchitectureDraftProposal/);
   assert.doesNotMatch(source, /getDiagramJsonForArchitectureDraft/);
   assert.match(source, /showDraft\(nextDraft, baseDiagram, createPatchSummary\(response\)\)/);
-  assert.match(source, /saveProjectDraft\(\{ diagramJson: compilationProposal\.diagram, projectId \}\)/);
+  assert.match(source, /getProjectDraft\(existingProjectId\)/);
+  assert.match(
+    source,
+    /expectedRevision:\s*existingProjectId \? \(existingProjectDraftRevision \?\? null\) : null/
+  );
+  assert.match(source, /diagramJson: compilationProposal\.diagram/);
   assert.match(source, /canApprove:[\s\S]*compilationProposal !== null/);
 });
