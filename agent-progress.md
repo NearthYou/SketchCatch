@@ -76,20 +76,6 @@ Short English-only working log for the current agent context. Older records are 
 
 - Monitor the Ready PR targeting `dev`, resolve any actionable review or branch-owned CI failure, and merge only through normal review.
 
-### 2026-07-17 - Merge latest dev into deployment fixes
-
-- Updated local dev to origin/dev at 783d30b7 and merged it into fix/ck/430-deploy-bug-fix.
-- Resolved deployment conflicts by retaining dev runtime-convergence and no-change optimization behavior together with live Terraform log streaming, heartbeat progress, state restoration, destroy-plan transitions, and explicit destroy approval labels.
-- Kept the dev AI Workbench structure and restored parameter-only before/after previews inside its result artifact.
-- Focused web behavior tests passed (58/58 after the Workbench token fix); Terraform runner/live-log tests passed (4/4). API service tests and workspace typecheck could not load new dev dependencies (@aws-sdk/client-ecr, @tanstack/react-query) because the local dependency tree has not been refreshed.
-
-### 2026-07-17 - Repair Direct Deployment result layout
-
-- Restored deployment-history CSS module styles lost during the dev merge and placed step actions directly above the recent-result card.
-- Removed the duplicate Destroy confirmation, renamed the approved action to Destroy 실행, and starts Destroy directly from the approved-plan action.
-- Removed repeated action hints and joined WEB ENTRY POINT output links to the deployment summary.
-- Focused Direct Deployment tests pass 14/14; harness check passes; browser verification confirmed the repaired history and action layout. No Terraform or AWS mutation was performed.
-
 ### 2026-07-17 - Restore Agent Review result UI and detail quality
 
 - Restored the prior card-based Review Summary and six-pillar Review Checks presentation, including severity colors and readable problem/action labels.
@@ -215,3 +201,15 @@ Short English-only working log for the current agent context. Older records are 
 - Preserved public Repository analysis without GitHub, ProjectDraft revision fencing, Workspace Delivery ownership, exact private Repository recovery, and confirmed GitHub build cleanup while merging `origin/dev` through `04dc1c8f`.
 - Kept dev migration 0049 and renumbered Repository Analysis Record migration to 0050 with the journal and migration contract updated.
 - Focused API tests pass 49/49 and Web tests pass 50/50; lint, typecheck, build, harness, and diff checks pass. No live GitHub, AWS, deployment, or Terraform mutation was performed.
+
+### 2026-07-18 - Integrate Delivery into the CI/CD deployment modal
+
+- Moved the complete project Delivery workflow into the existing deployment modal's CI/CD tab and removed the duplicate Workspace right-panel entry and summary-only handoff.
+- Added a responsive, token-aligned connection, pipeline configuration, readiness, and execution layout; legacy Delivery bookmarks now open the CI/CD modal directly.
+- Focused Delivery tests pass 34/34; Impeccable detection, browser desktop/mobile checks, harness, lint, typecheck, build, and diff checks pass. No deployment, Git handoff, cloud mutation, or DB migration was performed.
+
+### 2026-07-18 - Accept the safe pre-cache CodeBuild boundary
+
+- Build-environment verification now accepts the exact legacy logs and CodeConnections permissions boundary used before optional ECR build caching, while continuing to reject all other boundary drift.
+- The focused gateway suite passes 17/17; formatting, API lint/typecheck, root lint/typecheck/build, harness, and diff checks pass. Live dev verification and Terraform Plan completed successfully and stopped before Apply.
+- No Terraform Apply, deployment, Git commit, push, or DB migration was performed. Existing environments can use the cold Docker-build fallback; the next action is user approval only if Apply is intended.

@@ -4,6 +4,10 @@ import test from "node:test";
 
 const panelSource = readFileSync(new URL("./DeliveryCenterPanel.tsx", import.meta.url), "utf8");
 const shellSource = readFileSync(new URL("./DeploymentConsoleShell.tsx", import.meta.url), "utf8");
+const rightPanelSource = readFileSync(
+  new URL("./WorkspaceRightPanel.tsx", import.meta.url),
+  "utf8"
+);
 const repositorySource = readFileSync(
   new URL("../../app/workspace/repository/repository-start-client.tsx", import.meta.url),
   "utf8"
@@ -21,7 +25,7 @@ const githubCallbackSource = readFileSync(
   "utf8"
 );
 
-test("Workspace Delivery owns the project delivery configuration sections", () => {
+test("CI/CD Delivery owns the project delivery configuration sections", () => {
   assert.match(panelSource, /GitHub 연결/);
   assert.match(panelSource, /Source Repository/);
   assert.match(panelSource, /ProjectCicdMonitoringSettingsClient/);
@@ -32,13 +36,14 @@ test("Workspace Delivery owns the project delivery configuration sections", () =
     panelSource,
     /app\/projects\/\[projectId\]\/settings\/project-deployment-target-settings-client/
   );
-  assert.match(panelSource, /CI\/CD 실행과 기록/);
+  assert.match(panelSource, /Pull Request와 Pipeline을 관리하세요/);
 });
 
-test("deployment modal shows a summary and opens Delivery instead of another CI/CD editor", () => {
-  assert.match(shellSource, /DeliveryModalSummary/);
-  assert.match(shellSource, /onOpenDelivery/);
-  assert.doesNotMatch(shellSource, /CicdConsoleScreen/);
+test("deployment modal renders Delivery in its existing CI/CD screen", () => {
+  assert.match(shellSource, /DeliveryCenterPanel/);
+  assert.match(shellSource, /activeScreen !== "cicd"/);
+  assert.doesNotMatch(shellSource, /DeliveryModalSummary|onOpenDelivery/);
+  assert.doesNotMatch(rightPanelSource, /activeView === "delivery"|<DeliveryCenterPanel/);
 });
 
 test("legacy project settings route opens the single Delivery editor", () => {
