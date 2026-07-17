@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Dashboard 주요 페이지의 `새 프로젝트` 링크를 주변 UI와 어울리는 차분한 아웃라인 행동으로 표시한다.
+**Goal:** Dashboard 주요 페이지의 `새 프로젝트` 링크를 주변 UI와 어울리는 차분한 톤온톤 회색 행동으로 표시한다.
 
 **Architecture:** 기존 전역 primary button 계약은 유지하고, `작업 현황`과 `내 프로젝트` 헤더 링크에 전용 modifier class를 더한다. 정적 presentation 회귀 테스트로 적용 범위를 고정한다.
 
@@ -34,7 +34,7 @@
 test("Dashboard 주요 페이지의 새 프로젝트 링크는 차분한 헤더 전용 스타일을 사용한다", () => {
   assert.match(overviewSource, /className="dashboardPrimaryAction dashboardCreateAction"/);
   assert.match(projectsSource, /className="dashboardPrimaryAction dashboardCreateAction"/);
-  assert.match(styles, /\.dashboardPrimaryAction\.dashboardCreateAction\s*\{[\s\S]*?background:\s*#ffffff;/);
+  assert.match(styles, /\.dashboardPrimaryAction\.dashboardCreateAction\s*\{[\s\S]*?min-height:\s*36px;[\s\S]*?border-color:\s*transparent;[\s\S]*?background:\s*var\(--color-surface-strong\);[\s\S]*?box-shadow:\s*none;/);
   assert.match(styles, /\.dashboardPrimaryAction\.dashboardCreateAction:hover\s*\{[\s\S]*?transform:\s*none;/);
 });
 ```
@@ -43,7 +43,7 @@ test("Dashboard 주요 페이지의 새 프로젝트 링크는 차분한 헤더 
 
 Run: `pnpm --filter @sketchcatch/web exec tsx --test features/dashboard/dashboard-create-action-presentation.test.ts`
 
-Expected: FAIL because `dashboardCreateAction` is not present.
+Expected: FAIL because the current modifier still uses the rejected white outlined style.
 
 - [ ] **Step 3: Add the modifier to both header links**
 
@@ -51,20 +51,22 @@ Expected: FAIL because `dashboardCreateAction` is not present.
 <Link className="dashboardPrimaryAction dashboardCreateAction" href="/workspace/new?fresh=1">
 ```
 
-- [ ] **Step 4: Add the scoped outline styling**
+- [ ] **Step 4: Add the scoped tone-on-tone styling**
 
 ```css
 .dashboardPrimaryAction.dashboardCreateAction {
-  border-color: #dcdee0;
-  background: #ffffff;
-  color: #171717;
-  box-shadow: 0 1px 2px rgba(23, 23, 23, 0.06);
+  min-height: 36px;
+  border-color: transparent;
+  padding: 0 14px;
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+  box-shadow: none;
 }
 
 .dashboardPrimaryAction.dashboardCreateAction:hover {
-  border-color: #aeb1b7;
-  background: #f7f8fa;
-  box-shadow: 0 2px 6px rgba(23, 23, 23, 0.08);
+  border-color: transparent;
+  background: #e5e5e9;
+  box-shadow: none;
   transform: none;
 }
 ```
@@ -88,4 +90,3 @@ Expected: exit 0, or report unrelated pre-existing failures exactly.
 Run: `git diff -- apps/web/features/dashboard/dashboard-create-action-presentation.test.ts apps/web/features/dashboard/dashboard-overview.tsx apps/web/features/dashboard/dashboard-projects-route.tsx apps/web/components/dashboard/dashboard-shell.css`
 
 Expected: only the modifier test, two class additions, and scoped CSS rules.
-
