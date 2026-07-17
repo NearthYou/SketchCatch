@@ -58,7 +58,12 @@ export type AwsLiveObservationSnapshotTarget = {
   logGroupNames: string[];
   capacityTarget:
     | { kind: "asg"; autoScalingGroupName: string }
-    | { kind: "ecs_fargate"; clusterName: string; serviceName: string; maxCapacity: number };
+    | {
+        kind: "ecs_fargate";
+        clusterName: string;
+        serviceName: string;
+        maxCapacity: number | null;
+      };
 };
 
 export type AwsLiveObservationSnapshotProvider = {
@@ -196,7 +201,8 @@ export function createAwsLiveObservationSnapshotProvider(
   const observeFresh = async (
     target: AwsLiveObservationSnapshotTarget,
     evaluatedAtMs: number,
-    abortSignal: AbortSignal
+    abortSignal: AbortSignal,
+    lastKnownSnapshot: LiveObservationProviderSnapshot | null
   ): Promise<LiveObservationProviderSnapshot> => {
     let credentials: AwsTemporaryCredentials;
     try {
@@ -228,10 +234,16 @@ export function createAwsLiveObservationSnapshotProvider(
       )
     ]);
 
+    if (metrics.state === "delayed") {
+      return delayedSnapshot(
+        lastKnownSnapshot,
+        metrics.observedAt ?? new Date(evaluatedAtMs).toISOString(),
+        logs ?? []
+      );
+    }
     if (metrics.state !== "available" || !capacity || logs === null) {
-      const state = metrics.state === "delayed" ? "delayed" : "unavailable";
       return emptySnapshot(
-        state,
+        "unavailable",
         metrics.observedAt ?? new Date(evaluatedAtMs).toISOString(),
         logs ?? []
       );
@@ -264,17 +276,23 @@ export function createAwsLiveObservationSnapshotProvider(
   return {
     async observe(target, observationId) {
       const evaluatedAtMs = now();
-      for (const [key, entry] of cache) {
-        if (entry.state === "settled" && entry.expiresAtMs <= evaluatedAtMs) {
-          cache.delete(key);
-        }
-      }
       const key = createCacheKey(observationId, target);
+      let lastKnownSnapshot: LiveObservationProviderSnapshot | null = null;
       const cached = cache.get(key);
       if (cached) {
-        return cached.state === "pending"
-          ? parseLiveObservationProviderSnapshot(await cached.pending)
-          : parseLiveObservationProviderSnapshot(cached.snapshot);
+        if (cached.state === "pending") {
+          return parseLiveObservationProviderSnapshot(await cached.pending);
+        }
+        if (cached.expiresAtMs > evaluatedAtMs) {
+          return parseLiveObservationProviderSnapshot(cached.snapshot);
+        }
+        if (
+          cached.snapshot.state === "available" ||
+          (cached.snapshot.state === "delayed" && cached.snapshot.requests !== null)
+        ) {
+          lastKnownSnapshot = cached.snapshot;
+        }
+        cache.delete(key);
       }
 
       if (cache.size >= cacheMaxEntries) {
@@ -295,7 +313,12 @@ export function createAwsLiveObservationSnapshotProvider(
         () => abortController.abort(),
         requestTimeoutMs
       );
-      const pending = observeFresh(target, evaluatedAtMs, abortController.signal)
+      const pending = observeFresh(
+        target,
+        evaluatedAtMs,
+        abortController.signal,
+        lastKnownSnapshot
+      )
         .catch(() => emptySnapshot("unavailable", new Date(evaluatedAtMs).toISOString()))
         .then((snapshot) => {
           const parsed = parseLiveObservationProviderSnapshot(snapshot);
@@ -332,7 +355,7 @@ function createCacheKey(
         "ecs",
         target.capacityTarget.clusterName,
         target.capacityTarget.serviceName,
-        target.capacityTarget.maxCapacity
+        target.capacityTarget.maxCapacity ?? "fixed"
       ].join(":");
   return [
     observationId,
@@ -613,6 +636,26 @@ async function observeLogs(
   } catch {
     return null;
   }
+}
+
+function delayedSnapshot(
+  lastKnownSnapshot: LiveObservationProviderSnapshot | null,
+  observedAt: string,
+  logs: LiveObservationProviderSnapshot["logs"]
+): LiveObservationProviderSnapshot {
+  if (!lastKnownSnapshot || lastKnownSnapshot.requests === null) {
+    return emptySnapshot("delayed", observedAt, logs);
+  }
+  return parseLiveObservationProviderSnapshot({
+    requests: lastKnownSnapshot.requests,
+    errorRate: lastKnownSnapshot.errorRate,
+    p95LatencyMs: lastKnownSnapshot.p95LatencyMs,
+    availability: lastKnownSnapshot.availability,
+    capacity: { ...lastKnownSnapshot.capacity },
+    logs,
+    observedAt,
+    state: "delayed"
+  });
 }
 
 function emptySnapshot(

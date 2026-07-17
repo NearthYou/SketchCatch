@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DiagramJson, TerraformSyncFileInput } from "../../../../packages/types/src";
+import { useRouter } from "next/navigation";
+import type {
+  DiagramJson,
+  TerraformSyncFileInput
+} from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
@@ -43,6 +47,7 @@ import {
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
+import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
@@ -71,6 +76,7 @@ export type ProjectDraftPersistenceController = {
 export type ProjectWorkspaceDraftManagerProps = {
   cloudPlatform?: WorkspaceCloudPlatform | undefined;
   initialRightPanelView?: WorkspaceRightPanelView | undefined;
+  initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   localCacheWorkspaceId?: string | undefined;
   localSaveDebounceMs?: number | undefined;
   onDraftPersistenceReady?: ((controller: ProjectDraftPersistenceController) => void) | undefined;
@@ -87,6 +93,7 @@ export function ProjectWorkspaceDraftManager(props: ProjectWorkspaceDraftManager
 }
 
 function ProjectWorkspaceDraftManagerState({
+  initialCicdReturnCommand,
   initialRightPanelView,
   localCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
@@ -98,6 +105,7 @@ function ProjectWorkspaceDraftManagerState({
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
   workspaceId
 }: ProjectWorkspaceDraftManagerProps) {
+  const router = useRouter();
   const { user } = useAuth();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
@@ -119,6 +127,7 @@ function ProjectWorkspaceDraftManagerState({
     useState<TerraformSafeFixApplyRequest | null>(null);
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
     useState<TerraformSafeFixApplyResult | null>(null);
+  const consumedCicdReturnRef = useRef(false);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>([]);
   const [initialTerraformFiles, setInitialTerraformFiles] = useState<TerraformSyncFileInput[]>([]);
@@ -142,6 +151,20 @@ function ProjectWorkspaceDraftManagerState({
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+
+  const acknowledgeInitialCicdReturnCommand = useCallback((cleanedHref: string) => {
+    if (
+      consumedCicdReturnRef.current ||
+      !initialCicdReturnCommand ||
+      initialCicdReturnCommand.projectId !== projectId ||
+      initialCicdReturnCommand.cleanedHref !== cleanedHref
+    ) {
+      return;
+    }
+
+    consumedCicdReturnRef.current = true;
+    router.replace(cleanedHref, { scroll: false });
+  }, [initialCicdReturnCommand, projectId, router]);
 
   useEffect(() => {
     const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
@@ -651,7 +674,9 @@ function ProjectWorkspaceDraftManagerState({
               serverSaveState === "server-failed"
             }
             initialView={initialRightPanelView}
+            initialCicdReturnCommand={initialCicdReturnCommand}
             initialTerraformFiles={initialTerraformFiles}
+            onInitialCicdReturnCommandReady={acknowledgeInitialCicdReturnCommand}
             onSelectTerraformIssue={setSelectedTerraformIssueKey}
             onTerraformAiContextChange={setTerraformAiContext}
             onTerraformAiInteraction={notifyTerraformAiInteraction}

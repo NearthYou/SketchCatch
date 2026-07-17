@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { performance } from "node:perf_hooks";
 
 const terraformInitArgs = ["init", "-backend=false", "-input=false", "-no-color"] as const;
@@ -12,6 +12,7 @@ const defaultTerraformPlanFileName = "tfplan";
 const defaultTerraformPluginCacheDir = join(tmpdir(), "sketchcatch-terraform-plugin-cache");
 const defaultTerraformOutputMaxBytes = 512 * 1024;
 const terraformForceKillGraceMs = 2_000;
+export const terraformInitTimeoutMs = 3 * 60 * 1_000;
 export const terraformMutationTimeoutMs = 15 * 60 * 1_000;
 
 export type TerraformRunResult = {
@@ -67,7 +68,10 @@ export async function runTerraformInit(
   workdir: string,
   options: RunTerraformInitOptions = {}
 ): Promise<TerraformRunResult> {
-  return runTerraformCommand(workdir, [...terraformInitArgs], options);
+  return runTerraformCommand(workdir, [...terraformInitArgs], {
+    ...options,
+    timeoutMs: options.timeoutMs ?? terraformInitTimeoutMs
+  });
 }
 
 export async function runTerraformValidate(
@@ -425,8 +429,8 @@ export function createTerraformProcessEnv(
   return {
     ...env,
     TF_IN_AUTOMATION: "1",
-    TF_PLUGIN_CACHE_DIR: getTerraformPluginCacheDir(terraformEnv, baseEnv),
-    ...terraformEnv
+    ...terraformEnv,
+    TF_PLUGIN_CACHE_DIR: getTerraformPluginCacheDir(terraformEnv, baseEnv)
   };
 }
 
@@ -434,7 +438,18 @@ function getTerraformPluginCacheDir(
   terraformEnv: NodeJS.ProcessEnv,
   baseEnv: NodeJS.ProcessEnv
 ): string {
-  return terraformEnv.TF_PLUGIN_CACHE_DIR ?? baseEnv.TF_PLUGIN_CACHE_DIR ?? defaultTerraformPluginCacheDir;
+  const configuredCacheDir =
+    terraformEnv.TF_PLUGIN_CACHE_DIR?.trim() ?? baseEnv.TF_PLUGIN_CACHE_DIR?.trim();
+  if (!configuredCacheDir) {
+    return defaultTerraformPluginCacheDir;
+  }
+  const belongsToAnotherPlatform =
+    (process.platform === "win32" && posix.isAbsolute(configuredCacheDir)) ||
+    (process.platform !== "win32" && win32.isAbsolute(configuredCacheDir));
+  if (belongsToAnotherPlatform) {
+    return defaultTerraformPluginCacheDir;
+  }
+  return isAbsolute(configuredCacheDir) ? configuredCacheDir : resolve(configuredCacheDir);
 }
 
 async function ensureTerraformPluginCacheDir(cacheDir: string | undefined): Promise<void> {

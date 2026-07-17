@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -20,6 +21,16 @@ const verifiedConnection = {
   updatedAt: "2026-07-15T00:00:00.000Z"
 };
 
+test("settings loader preserves callback ECS web build defaults", () => {
+  const clientSource = readFileSync(
+    new URL("./project-deployment-target-settings-client.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(clientSource, /const ecsDefaultsEcsWeb = ecsDefaults\?\.ecsWeb;/);
+  assert.match(clientSource, /ecsWeb: ecsDefaultsEcsWeb/);
+});
+
 test("ECS defaults use project slug and analyzed Dockerfile evidence", () => {
   assert.deepEqual(
     createEcsFargateDeploymentDefaults({
@@ -39,7 +50,8 @@ test("ECS defaults use project slug and analyzed Dockerfile evidence", () => {
       serviceName: "audience-live-check-service",
       containerName: "web",
       healthCheckPath: "/",
-      outputUrl: ""
+      outputUrl: "",
+      ecsWeb: null
     }
   );
 });
@@ -48,8 +60,26 @@ test("ECS defaults are immediately saveable without a fabricated output URL", ()
   const draft = createDeploymentTargetDraft(null, [verifiedConnection], null, {
     projectName: "Audience Live Check",
     repositoryRevision: "a".repeat(40),
-    sourceRoot: "apps/api",
-    dockerfilePath: "apps/api/Dockerfile"
+    sourceRoot: ".",
+    dockerfilePath: "apps/api/Dockerfile",
+    ecsWeb: {
+      api: {
+        sourceRoot: ".",
+        dockerfilePath: "apps/api/Dockerfile",
+        containerPort: 8080,
+        healthCheckPath: "/health"
+      },
+      frontend: {
+        sourceRoot: "apps/web",
+        packageManifestPath: "apps/web/package.json",
+        lockfilePath: "package-lock.json",
+        packageManager: "npm",
+        packageManagerVersion: "10.9.2",
+        installPreset: "npm_ci",
+        buildPreset: "npm_build",
+        outputPath: "apps/web/dist"
+      }
+    }
   });
   const request = createDeploymentTargetRequest(
     draft,
@@ -58,8 +88,122 @@ test("ECS defaults are immediately saveable without a fabricated output URL", ()
   );
 
   assert.equal(request.runtimeConfig?.runtimeTargetKind, "ecs_fargate");
+  if (request.runtimeConfig?.runtimeTargetKind === "ecs_fargate") {
+    assert.equal(request.runtimeConfig.codeBuildProjectName, "audience-live-check-api-build");
+    assert.equal(request.runtimeConfig.ecrRepositoryName, "audience-live-check-api");
+    assert.equal(request.runtimeConfig.clusterName, "audience-live-check-cluster");
+    assert.equal(request.runtimeConfig.serviceName, "audience-live-check-service");
+    assert.equal(request.runtimeConfig.containerName, "api");
+  }
   assert.equal(request.runtimeConfig?.outputUrl, null);
-  assert.equal(request.confirmedBuildConfig.healthCheckPath, "/");
+  assert.equal(request.confirmedBuildConfig.healthCheckPath, "/health");
+  assert.deepEqual(request.confirmedBuildConfig.ecsWeb, {
+    api: {
+      sourceRoot: ".",
+      dockerfilePath: "apps/api/Dockerfile",
+      containerPort: 8080,
+      healthCheckPath: "/health"
+    },
+    frontend: {
+      sourceRoot: "apps/web",
+      packageManifestPath: "apps/web/package.json",
+      lockfilePath: "package-lock.json",
+      packageManager: "npm",
+      packageManagerVersion: "10.9.2",
+      installPreset: "npm_ci",
+      buildPreset: "npm_build",
+      outputPath: "apps/web/dist"
+    }
+  });
+});
+
+test("web-inclusive ECS Architecture derives the frontend build snapshot from Repository evidence", () => {
+  const repositoryRevision = "d".repeat(40);
+  const sourceRepository = {
+    id: "source-repository-1",
+    projectId: "project-1",
+    provider: "github" as const,
+    status: "active" as const,
+    githubInstallationId: "123",
+    githubRepositoryId: "456",
+    owner: "jh-9999",
+    name: "audience-live-check",
+    defaultBranch: "main",
+    repositoryUrl: "https://github.com/jh-9999/audience-live-check",
+    visibility: "public" as const,
+    archived: false,
+    analysis: {
+      repositoryRevision,
+      analyzedAt: "2026-07-15T00:00:00.000Z",
+      aiHandoff: {
+        status: "template_selected" as const,
+        templateId: "ecs-fargate-container-app" as const,
+        selectionReasons: ["Container API and Vite frontend"],
+        applicationUnits: [
+          {
+            id: "api",
+            rootPath: "apps/api",
+            kind: "backend" as const,
+            frameworks: ["Express"],
+            evidencePaths: ["apps/api/Dockerfile", "apps/api/package.json"]
+          },
+          {
+            id: "web",
+            rootPath: "apps/web",
+            kind: "frontend" as const,
+            frameworks: ["React", "Vite"],
+            evidencePaths: ["apps/web/package.json"]
+          }
+        ],
+        evidence: [
+          { kind: "package_json" as const, path: "package.json", applicationUnitId: null, signals: [] },
+          { kind: "lockfile" as const, path: "package-lock.json", applicationUnitId: null, signals: [] },
+          { kind: "dockerfile" as const, path: "apps/api/Dockerfile", applicationUnitId: "api", signals: [] },
+          { kind: "package_json" as const, path: "apps/web/package.json", applicationUnitId: "web", signals: ["React", "Vite"] },
+          { kind: "static_output" as const, path: "apps/web/dist", applicationUnitId: "web", signals: ["Vite static build output"] }
+        ],
+        architectureFacts: [],
+        missingEvidence: []
+      }
+    },
+    disconnectedAt: null,
+    createdAt: "2026-07-15T00:00:00.000Z",
+    updatedAt: "2026-07-15T00:00:00.000Z"
+  };
+  const diagramJson = {
+    nodes: [
+      deploymentNode("aws_s3_bucket", { bucketPrefix: "audience-web" }),
+      deploymentNode("aws_cloudfront_distribution", { enabled: true }),
+      deploymentNode("aws_ecr_repository", { name: "audience-live-check-api" }),
+      deploymentNode("aws_ecs_cluster", { name: "audience-live-check-cluster" }),
+      deploymentNode("aws_ecs_service", {
+        name: "audience-live-check-service",
+        loadBalancer: { containerName: "api" }
+      }),
+      deploymentNode("aws_lb_target_group", { healthCheck: { path: "/health" } })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const draft = createDeploymentTargetDraft(
+    null,
+    [verifiedConnection],
+    sourceRepository,
+    null,
+    "preserve_target",
+    diagramJson
+  );
+  const request = createDeploymentTargetRequest(
+    draft,
+    [verifiedConnection],
+    new Date("2026-07-15T00:00:00.000Z")
+  );
+
+  assert.equal(draft.sourceRoot, ".");
+  assert.equal(draft.healthCheckPath, "/health");
+  assert.equal(request.confirmedBuildConfig.ecsWeb?.frontend.packageManager, "npm");
+  assert.equal(request.confirmedBuildConfig.ecsWeb?.frontend.outputPath, "apps/web/dist");
 });
 
 test("empty ECS settings use Source Repository evidence and current Architecture defaults", () => {

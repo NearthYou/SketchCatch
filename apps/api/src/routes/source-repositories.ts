@@ -17,6 +17,7 @@ import { REPOSITORY_DEPLOYMENT_TYPES } from "@sketchcatch/types";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 import {
   requireGitHubAppConfig,
   requireGitHubAppUserAuthorizationConfig,
@@ -752,14 +753,14 @@ function handleSourceRepositoryError(error: unknown, reply: FastifyReply) {
   }
 
   if (error instanceof GitHubApiRequestError) {
-    const message =
+    const stableMessage =
       error.statusCode === 401 || error.statusCode === 403
         ? "GIT_APP_AUTHENTICATION_FAILED"
         : "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE";
 
     return reply.status(409).send({
       error: "conflict",
-      message
+      message: getDeveloperErrorMessage(error, stableMessage)
     });
   }
 

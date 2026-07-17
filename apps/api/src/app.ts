@@ -13,6 +13,7 @@ import type { CostUsageAnalysisProvider } from "./services/cost-usage-analysis.j
 import type { CreateLlmExplanation } from "./services/aiLlmExplanation.js";
 import type { CreateSafetyFindingExplanation } from "./services/aiSafetyFindingExplanation.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { maskDeploymentMessage } from "./deployments/log-masking.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerProjectRoutes } from "./routes/projects.js";
@@ -29,6 +30,15 @@ import { registerDeploymentRoutes } from "./routes/deployments.js";
 import { registerLiveObservationV2Routes } from "./routes/live-observations-v2.js";
 import { registerLiveObservationPublicCollectorRoutes } from "./routes/live-observation-public-collector.js";
 import { registerGitCicdHandoffRoutes } from "./routes/git-cicd-handoffs.js";
+import { registerGitCicdReadinessRoutes } from "./routes/git-cicd-readiness.js";
+import {
+  registerGitHubReleaseRunRoutes,
+  type GitHubReleaseRunRouteOptions
+} from "./routes/git-cicd-release-runs.js";
+import {
+  registerGitHubInfrastructureRunRoutes,
+  type GitHubInfrastructureRunRouteOptions
+} from "./routes/git-cicd-infrastructure-runs.js";
 import { registerCostRoutes } from "./routes/costs.js";
 import {
   registerNotificationRoutes,
@@ -54,6 +64,10 @@ import {
   type TerraformRouteOptions
 } from "./routes/terraform.js";
 import { registerAwsConnectionRoutes } from "./routes/aws-connections.js";
+import {
+  registerProjectBuildEnvironmentRoutes,
+  type ProjectBuildEnvironmentRouteOptions
+} from "./routes/project-build-environments.js";
 import {
   registerReverseEngineeringRoutes,
   type ReverseEngineeringRouteOptions
@@ -128,6 +142,23 @@ export type BuildAppOptions = {
   projectAssetStorage?: ProjectAssetStorage;
   projectDeletionStorage?: ProjectDeletionStorage;
   projectReleaseLedgerRoutes?: Pick<ProjectReleaseLedgerRouteOptions, "createRepository">;
+  projectBuildEnvironmentRoutes?: Pick<
+    ProjectBuildEnvironmentRouteOptions,
+    "createRepository" | "gateway" | "generateId" | "now"
+  >;
+  gitHubReleaseRunRoutes?: Pick<
+    GitHubReleaseRunRouteOptions,
+    "repository" | "executor" | "verifyIdentity" | "now" | "generateId"
+  >;
+  gitHubInfrastructureRunRoutes?: Pick<
+    GitHubInfrastructureRunRouteOptions,
+    | "repository"
+    | "executionLeaseRepository"
+    | "githubActionsClient"
+    | "verifyIdentity"
+    | "now"
+    | "generateId"
+  >;
   sourceRepositoryRoutes?: Pick<
     SourceRepositoryRouteOptions,
     | "createSourceRepositoryRepository"
@@ -231,11 +262,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     stopNotificationOutboxJob?.();
   });
 
-  app.setErrorHandler((error, _request, reply) => {
+  app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
       reply.status(400).send({
         error: "bad_request",
-        message: error.message
+        message: maskDeploymentMessage(error.message)
       });
       return;
     }
@@ -243,7 +274,16 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     const statusCode = getErrorStatusCode(error);
 
     if (statusCode >= 500) {
-      app.log.error(error instanceof Error ? error : getErrorMessage(error));
+      app.log.error(
+        {
+          errorMessage: maskDeploymentMessage(getErrorMessage(error)),
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          method: request.method,
+          path: request.url.split("?", 1)[0],
+          requestId: request.id
+        },
+        "API request failed"
+      );
     }
 
     reply.status(statusCode).send({
@@ -341,6 +381,10 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       enabled: true
     });
   }
+  app.register(registerGitCicdReadinessRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient
+  });
   app.register(registerGitCicdHandoffRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient,
@@ -353,6 +397,17 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     gitCicdRunProvider: createGitHubActionsRunProvider(githubAppClient),
     runtimeCache
   });
+  app.register(registerGitHubReleaseRunRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.gitHubReleaseRunRoutes
+  });
+  app.register(registerGitHubInfrastructureRunRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    githubActionsClient: githubAppClient,
+    ...options.gitHubInfrastructureRunRoutes
+  });
   app.register(registerCostRoutes, createCostRouteOptions(options, getAppDatabaseClient));
   app.register(
     registerTerraformRoutes,
@@ -361,6 +416,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(registerAwsConnectionRoutes, {
     prefix: "/api",
     getDatabaseClient: getAppDatabaseClient
+  });
+  app.register(registerProjectBuildEnvironmentRoutes, {
+    prefix: "/api",
+    getDatabaseClient: getAppDatabaseClient,
+    ...options.projectBuildEnvironmentRoutes
   });
   app.register(registerReverseEngineeringRoutes, {
     prefix: "/api",
@@ -509,14 +569,14 @@ function getErrorMessage(error: unknown): string {
 
 function getResponseErrorMessage(statusCode: number, error: unknown): string {
   if (hasExposedMessage(error)) {
-    return getErrorMessage(error);
+    return maskDeploymentMessage(getErrorMessage(error));
   }
 
   if (statusCode >= 500 && process.env.NODE_ENV === "production") {
     return "Internal server error";
   }
 
-  return getErrorMessage(error);
+  return maskDeploymentMessage(getErrorMessage(error));
 }
 
 function hasExposedMessage(error: unknown): error is { readonly exposeMessage: true } {

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
 import type {
   DeploymentLiveObservationManifestRecord,
@@ -6,17 +6,24 @@ import type {
   DeploymentLiveObservationManifestV2
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import {
-  deploymentLiveObservationManifests
-} from "../db/schema.js";
+import { deploymentLiveObservationManifests } from "../db/schema.js";
 import { parseDeploymentLiveObservationManifestV2 } from "./live-observation-manifest.js";
 
 const genericInvalidReason = "Live Observation manifest verification failed.";
+const persistenceConflictMessage = "Live Observation manifest immutable persistence conflict";
+
+export class LiveObservationManifestPersistenceConflictError extends Error {
+  constructor() {
+    super(persistenceConflictMessage);
+    Object.defineProperty(this, "name", {
+      configurable: true,
+      value: "LiveObservationManifestPersistenceConflictError"
+    });
+  }
+}
 
 export type DeploymentLiveObservationManifestRepository = {
-  findByDeploymentId(
-    deploymentId: string
-  ): Promise<DeploymentLiveObservationManifestRecord | null>;
+  findByDeploymentId(deploymentId: string): Promise<DeploymentLiveObservationManifestRecord | null>;
   saveValid(
     manifest: DeploymentLiveObservationManifestV2
   ): Promise<DeploymentLiveObservationManifestRecord>;
@@ -40,9 +47,9 @@ type DeploymentLiveObservationManifestPersistenceValues = {
 export function createPostgresDeploymentLiveObservationManifestRepository(
   db: Database
 ): DeploymentLiveObservationManifestRepository {
-  async function insertImmutableManifestRecord(
+  async function insertManifestRecord(
     values: DeploymentLiveObservationManifestPersistenceValues
-  ): Promise<DeploymentLiveObservationManifestRecord> {
+  ): Promise<DeploymentLiveObservationManifestDatabaseRow | undefined> {
     const [row] = await db
       .insert(deploymentLiveObservationManifests)
       .values(values)
@@ -50,14 +57,7 @@ export function createPostgresDeploymentLiveObservationManifestRepository(
         target: deploymentLiveObservationManifests.deploymentId
       })
       .returning();
-
-    if (row) return requireManifestRecord(row);
-
-    const existing = await findDatabaseRow(values.deploymentId);
-    if (!existing || !isIdenticalManifestRecord(existing, values)) {
-      throw new Error("Live Observation manifest immutable persistence conflict");
-    }
-    return toManifestRecord(existing);
+    return row;
   }
 
   async function findDatabaseRow(deploymentId: string) {
@@ -66,6 +66,28 @@ export function createPostgresDeploymentLiveObservationManifestRepository(
       .from(deploymentLiveObservationManifests)
       .where(eq(deploymentLiveObservationManifests.deploymentId, deploymentId))
       .limit(1);
+    return row;
+  }
+
+  async function replaceInvalidWithValid(
+    values: DeploymentLiveObservationManifestPersistenceValues
+  ): Promise<DeploymentLiveObservationManifestDatabaseRow | undefined> {
+    const [row] = await db
+      .update(deploymentLiveObservationManifests)
+      .set({
+        schemaVersion: values.schemaVersion,
+        status: values.status,
+        manifest: values.manifest,
+        invalidReason: values.invalidReason,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(deploymentLiveObservationManifests.deploymentId, values.deploymentId),
+          eq(deploymentLiveObservationManifests.status, "manifest_invalid")
+        )
+      )
+      .returning();
     return row;
   }
 
@@ -86,7 +108,27 @@ export function createPostgresDeploymentLiveObservationManifestRepository(
         invalidReason: null
       };
 
-      return insertImmutableManifestRecord(values);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const replaced = await replaceInvalidWithValid(values);
+        if (replaced) return requireManifestRecord(replaced);
+
+        const inserted = await insertManifestRecord(values);
+        if (inserted) return requireManifestRecord(inserted);
+
+        const existing = await findDatabaseRow(values.deploymentId);
+        if (existing && isIdenticalManifestRecord(existing, values)) {
+          return toManifestRecord(existing);
+        }
+        if (existing && existing.status !== "manifest_invalid") {
+          throw new LiveObservationManifestPersistenceConflictError();
+        }
+      }
+
+      const winner = await findDatabaseRow(values.deploymentId);
+      if (winner && isIdenticalManifestRecord(winner, values)) {
+        return toManifestRecord(winner);
+      }
+      throw new LiveObservationManifestPersistenceConflictError();
     },
 
     async saveInvalid(input) {
@@ -104,7 +146,30 @@ export function createPostgresDeploymentLiveObservationManifestRepository(
         invalidReason: reason
       };
 
-      return insertImmutableManifestRecord(values);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const [refreshed] = await db
+          .update(deploymentLiveObservationManifests)
+          .set({ updatedAt: new Date() })
+          .where(
+            and(
+              eq(deploymentLiveObservationManifests.deploymentId, input.deploymentId),
+              eq(deploymentLiveObservationManifests.status, "manifest_invalid")
+            )
+          )
+          .returning();
+        if (refreshed) return requireManifestRecord(refreshed);
+
+        const inserted = await insertManifestRecord(values);
+        if (inserted) return requireManifestRecord(inserted);
+
+        const existing = await findDatabaseRow(values.deploymentId);
+        if (existing && isIdenticalManifestRecord(existing, values)) {
+          return toManifestRecord(existing);
+        }
+        if (existing) throw new LiveObservationManifestPersistenceConflictError();
+      }
+
+      throw new LiveObservationManifestPersistenceConflictError();
     }
   };
 }

@@ -48,6 +48,9 @@ const STAGE_WINDOWS: Readonly<Record<DeploymentStage, ProgressWindow>> = {
   validate: { expectedSeconds: 25, maximum: 46, minimum: 31 },
   plan: { expectedSeconds: 90, maximum: 94, minimum: 48 },
   apply: { expectedSeconds: 210, maximum: 94, minimum: 16 },
+  application_release: { expectedSeconds: 300, maximum: 94, minimum: 48 },
+  preflight: { expectedSeconds: 120, maximum: 46, minimum: 12 },
+  rollback: { expectedSeconds: 180, maximum: 94, minimum: 16 },
   destroy: { expectedSeconds: 210, maximum: 94, minimum: 16 }
 };
 

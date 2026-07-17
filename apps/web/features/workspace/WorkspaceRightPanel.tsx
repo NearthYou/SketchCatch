@@ -42,6 +42,7 @@ import {
 import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
+import type { LiveObservationSelection } from "./live-observation";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
@@ -78,6 +79,7 @@ import {
 } from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { DeploymentAvailability } from "./deployment-availability";
+import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
@@ -86,7 +88,9 @@ export type WorkspaceRightPanelProps = {
   readonly deploymentOpenRequestId?: number | undefined;
   readonly hasUnsavedProjectDraft?: boolean | undefined;
   readonly initialView?: WorkspaceRightPanelView | undefined;
+  readonly initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
+  readonly onInitialCicdReturnCommandReady?: ((cleanedHref: string) => void) | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
@@ -123,9 +127,11 @@ export function WorkspaceRightPanel({
   deploymentAvailability,
   deploymentOpenRequestId = 0,
   hasUnsavedProjectDraft = false,
+  initialCicdReturnCommand,
   initialView,
   initialTerraformFiles,
   terraformFilesReplacement,
+  onInitialCicdReturnCommandReady,
   onSelectTerraformIssue,
   onTerraformAiContextChange,
   onTerraformAiInteraction,
@@ -183,7 +189,7 @@ export function WorkspaceRightPanel({
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
-    initialView === "deployment"
+    initialView === "deployment" || initialCicdReturnCommand?.shouldOpenDeploymentConsole === true
   );
 
   useEffect(() => {
@@ -193,6 +199,8 @@ export function WorkspaceRightPanel({
   }, [deploymentOpenRequestId]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
+  const [liveObservationSelection, setLiveObservationSelection] =
+    useState<LiveObservationSelection | null>(null);
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -575,7 +583,8 @@ export function WorkspaceRightPanel({
     setIsDeploymentConsoleOpen(true);
   }, [requestTerraformLeave]);
 
-  const openLiveObservation = useCallback((): void => {
+  const openLiveObservation = useCallback((selection?: LiveObservationSelection): void => {
+    setLiveObservationSelection(selection ?? null);
     setIsLiveObservationOpen(true);
   }, []);
 
@@ -843,7 +852,9 @@ export function WorkspaceRightPanel({
         diagramJson={context.diagram}
         fullScreenOnly
         hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+        initialCicdReturnCommand={initialCicdReturnCommand}
         initialExpanded
+        onInitialCicdReturnCommandReady={onInitialCicdReturnCommandReady}
         onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
         onOpenLiveObservation={openLiveObservation}
         onOpenFindingTerraformSource={(finding) => {
@@ -868,7 +879,14 @@ export function WorkspaceRightPanel({
     ? createPortal(deploymentConsoleContent, document.body)
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
-    <LiveObservationModal onClose={() => setIsLiveObservationOpen(false)} projectId={projectId} />
+    <LiveObservationModal
+      onClose={() => {
+        setIsLiveObservationOpen(false);
+        setLiveObservationSelection(null);
+      }}
+      projectId={projectId}
+      selection={liveObservationSelection}
+    />
   ) : null;
   const terraformSplitStyle = {
     "--terraform-code-pane-ratio": `${terraformCodePaneRatio}%`
@@ -917,7 +935,7 @@ export function WorkspaceRightPanel({
           </button>
           <button
             className={styles.collapsedPanelButton}
-            onClick={openLiveObservation}
+            onClick={() => openLiveObservation()}
             title="Live Observation"
             type="button"
           >
@@ -981,7 +999,7 @@ export function WorkspaceRightPanel({
           </div>
           <button
             className={styles.panelModeTextButton}
-            onClick={openLiveObservation}
+            onClick={() => openLiveObservation()}
             title="Live Observation"
             type="button"
           >

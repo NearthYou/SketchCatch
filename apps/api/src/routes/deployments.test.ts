@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import type {
   AwsConnection,
   DeploymentFailureExplanationResponse,
+  DeploymentLiveObservationArchitectureResponse,
   RecentSuccessfulDeploymentProjectListResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
@@ -29,6 +30,8 @@ import type {
   RunDeploymentDestroyResult
 } from "../deployments/deployment-destroy-service.js";
 import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
+import type { DeploymentPreparationDraft } from "../deployments/deployment-preparation-service.js";
+import { TerraformArtifactSafetyError } from "../deployments/terraform-artifact-safety.js";
 import type { PruneProjectDeploymentStorageResult } from "../deployments/deployment-retention.js";
 import { users } from "../db/schema.js";
 import type { CreateLlmExplanation } from "../services/aiLlmExplanation.js";
@@ -70,6 +73,10 @@ import type {
   DispatchDeploymentWorkerInput,
   StopDeploymentWorkerInput
 } from "../deployments/deployment-worker-dispatcher.js";
+import type {
+  ProjectExecutionLeaseRecord,
+  ProjectExecutionLeaseRepository
+} from "../releases/project-execution-lease-service.js";
 
 process.env.NODE_ENV = "test";
 process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-characters";
@@ -81,6 +88,8 @@ type DeploymentResponse = {
     architectureId: string;
     terraformArtifactId: string;
     awsConnectionId: string | null;
+    rollbackOfDeploymentId: string | null;
+    rollbackTargetDeploymentId: string | null;
     consolePhase: "validation" | "approval" | "deployment";
     preparedDraftRevision: number | null;
     preparedSnapshotHash: string | null;
@@ -265,8 +274,149 @@ type TerraformArtifactRecordReference = {
   contentType: string;
 };
 
+class FakeProjectExecutionLeaseRepository implements ProjectExecutionLeaseRepository {
+  readonly events: string[];
+  current: ProjectExecutionLeaseRecord | undefined;
+
+  constructor(current?: ProjectExecutionLeaseRecord, events: string[] = []) {
+    this.current = current;
+    this.events = events;
+  }
+
+  async acquire(input: Parameters<ProjectExecutionLeaseRepository["acquire"]>[0]) {
+    this.events.push("lease:acquire");
+    if (this.current?.status === "active" && this.current.holderId !== input.holderId) {
+      return undefined;
+    }
+    const next: ProjectExecutionLeaseRecord = {
+      projectId: input.projectId,
+      holderId: input.holderId,
+      source: input.source,
+      fencingVersion:
+        this.current && this.current.holderId !== input.holderId
+          ? this.current.fencingVersion + 1
+          : (this.current?.fencingVersion ?? 1),
+      status: "active",
+      activeCodeBuildId: null,
+      activeWorkerTaskArn: null,
+      heartbeatAt: input.now,
+      expiresAt: input.expiresAt,
+      createdAt: this.current?.createdAt ?? input.now,
+      updatedAt: input.now
+    };
+    this.current = next;
+    return next;
+  }
+
+  async find(candidateProjectId: string) {
+    return this.current?.projectId === candidateProjectId ? this.current : undefined;
+  }
+
+  async recoverVerifiedTerminal(
+    input: Parameters<NonNullable<ProjectExecutionLeaseRepository["recoverVerifiedTerminal"]>>[0]
+  ) {
+    this.events.push("lease:recover_terminal");
+    if (
+      !this.current ||
+      this.current.projectId !== input.projectId ||
+      this.current.holderId !== input.expectedHolderId ||
+      this.current.fencingVersion !== input.expectedFencingVersion ||
+      this.current.status !== "active" ||
+      this.current.activeCodeBuildId !== input.expectedActiveCodeBuildId ||
+      this.current.activeWorkerTaskArn !== input.expectedActiveWorkerTaskArn
+    ) {
+      return undefined;
+    }
+    this.current = {
+      ...this.current,
+      holderId: input.holderId,
+      source: input.source,
+      fencingVersion: this.current.fencingVersion + 1,
+      activeCodeBuildId: null,
+      activeWorkerTaskArn: null,
+      heartbeatAt: input.now,
+      expiresAt: input.expiresAt,
+      updatedAt: input.now
+    };
+    return this.current;
+  }
+
+  async heartbeat(input: Parameters<ProjectExecutionLeaseRepository["heartbeat"]>[0]) {
+    if (!this.isCurrentFence(input)) return undefined;
+    this.current = {
+      ...this.current!,
+      heartbeatAt: input.now,
+      expiresAt: input.expiresAt,
+      updatedAt: input.now
+    };
+    return this.current;
+  }
+
+  async setExecutionCoordinates(
+    input: Parameters<ProjectExecutionLeaseRepository["setExecutionCoordinates"]>[0]
+  ) {
+    if (!this.isCurrentFence(input)) return undefined;
+    this.current = {
+      ...this.current!,
+      ...(input.activeCodeBuildId === undefined
+        ? {}
+        : { activeCodeBuildId: input.activeCodeBuildId }),
+      ...(input.activeWorkerTaskArn === undefined
+        ? {}
+        : { activeWorkerTaskArn: input.activeWorkerTaskArn }),
+      updatedAt: input.now
+    };
+    return this.current;
+  }
+
+  async release(input: Parameters<ProjectExecutionLeaseRepository["release"]>[0]) {
+    this.events.push("lease:release");
+    if (!this.isCurrentFence(input)) return false;
+    this.current = {
+      ...this.current!,
+      status: "released",
+      activeCodeBuildId: null,
+      activeWorkerTaskArn: null,
+      heartbeatAt: input.now,
+      expiresAt: input.now,
+      updatedAt: input.now
+    };
+    return true;
+  }
+
+  private isCurrentFence(input: { projectId: string; holderId: string; fencingVersion: number }) {
+    return Boolean(
+      this.current &&
+      this.current.status === "active" &&
+      this.current.projectId === input.projectId &&
+      this.current.holderId === input.holderId &&
+      this.current.fencingVersion === input.fencingVersion
+    );
+  }
+}
+
+function createActiveProjectExecutionLease(
+  overrides: Partial<ProjectExecutionLeaseRecord> = {}
+): ProjectExecutionLeaseRecord {
+  return {
+    projectId,
+    holderId: deploymentId,
+    source: "direct",
+    fencingVersion: 7,
+    status: "active",
+    activeCodeBuildId: null,
+    activeWorkerTaskArn: null,
+    heartbeatAt: fixedNow,
+    expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    createdAt: fixedNow,
+    updatedAt: fixedNow,
+    ...overrides
+  };
+}
+
 class FakeDeploymentRepository implements DeploymentRepository {
   readonly calls: RepositoryCall[] = [];
+  projectExecutionLeaseRepository?: ProjectExecutionLeaseRepository;
   project: ProjectRecord | undefined = createProjectRecord();
   architecture: ArchitectureRecord | undefined = createArchitectureRecord();
   terraformArtifact: ProjectAssetRecord | undefined = createProjectAssetRecord();
@@ -292,18 +442,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
   logs: DeploymentLogRecord[] = [];
   resources: DeployedResourceRecord[] = [];
   outputs: TerraformOutputRecord[] = [];
-  projectDraft:
-    | {
-        revision: number;
-        diagramJson: { nodes: []; edges: []; viewport: { x: number; y: number; zoom: number } };
-        terraformFiles: Array<{ fileName: string; terraformCode: string }>;
-      }
-    | undefined = {
+  projectDraft: DeploymentPreparationDraft | undefined = {
     revision: 7,
     diagramJson: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
-    terraformFiles: [
-      { fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }
-    ]
+    terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }]
   };
 
   async findProjectDraftForPreparation() {
@@ -418,7 +560,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
       deploymentId: candidateDeploymentId
     });
 
-    return this.deployment;
+    return this.deployment?.id === candidateDeploymentId
+      ? this.deployment
+      : this.deployments.find((deployment) => deployment.id === candidateDeploymentId);
   }
 
   async findDeploymentPlanArtifactById(candidatePlanArtifactId: string) {
@@ -658,7 +802,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
-  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+  saveDeploymentApplyResults: DeploymentRepository["saveDeploymentApplyResults"] = async (
     candidateDeploymentId,
     input
   ) => {
@@ -670,9 +814,24 @@ class FakeDeploymentRepository implements DeploymentRepository {
     this.outputs = input.outputs.map((output) => ({ ...output, createdAt: fixedNow }));
     this.deployment = {
       ...this.deployment,
-      status: "SUCCESS",
       stateObjectKey: input.stateObjectKey,
       resultWarningSummary: input.resultWarningSummary,
+      updatedAt: fixedNow
+    };
+
+    return this.deployment;
+  };
+
+  completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async (
+    candidateDeploymentId
+  ) => {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
+      return undefined;
+    }
+
+    this.deployment = {
+      ...this.deployment,
+      status: "SUCCESS",
       failureStage: null,
       errorSummary: null,
       updatedAt: fixedNow
@@ -1018,6 +1177,17 @@ type DeploymentRouteTestOptions = {
     input: RunDeploymentPlanInput,
     repository: DeploymentRepository
   ) => Promise<RunDeploymentPlanResult>;
+  prepareProjectBuildEnvironment?: (input: {
+    architectureId: string;
+    db: DatabaseClient["db"];
+    projectId: string;
+    userId: string;
+  }) => Promise<void>;
+  retryApplicationFrontendRelease?: (input: {
+    db: DatabaseClient["db"];
+    deploymentId: string;
+    userId: string;
+  }) => Promise<void>;
   approveDeploymentPlan?: (
     input: ApproveDeploymentPlanInput,
     repository: DeploymentRepository
@@ -1066,6 +1236,12 @@ async function buildDeploymentTestApp(
     ...(routeOptions.runDeploymentPlan
       ? { runDeploymentPlan: routeOptions.runDeploymentPlan }
       : {}),
+    ...(routeOptions.prepareProjectBuildEnvironment
+      ? { prepareProjectBuildEnvironment: routeOptions.prepareProjectBuildEnvironment }
+      : {}),
+    ...(routeOptions.retryApplicationFrontendRelease
+      ? { retryApplicationFrontendRelease: routeOptions.retryApplicationFrontendRelease }
+      : {}),
     ...(routeOptions.approveDeploymentPlan
       ? { approveDeploymentPlan: routeOptions.approveDeploymentPlan }
       : {}),
@@ -1107,11 +1283,17 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
     liveProfile: "practice",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
     currentPlanArtifactId: null,
@@ -1144,6 +1326,45 @@ function createDeploymentRecord(
     ...overrides
   };
 }
+
+test("POST /api/deployments/:deploymentId/infrastructure-rollback prepares a new deployment and never applies it", async () => {
+  const sourceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const targetId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const repository = new FakeDeploymentRepository();
+  const source = createDeploymentRecord(sourceId, {
+    status: "FAILED",
+    failureStage: "apply",
+    stateObjectKey: `deployments/${sourceId}/state/terraform.tfstate`,
+    createdAt: new Date("2026-07-15T11:00:00.000Z")
+  });
+  const target = createDeploymentRecord(targetId, {
+    status: "SUCCESS",
+    stateObjectKey: `deployments/${targetId}/state/terraform.tfstate`,
+    createdAt: new Date("2026-07-15T10:00:00.000Z")
+  });
+  repository.deployment = source;
+  repository.deployments = [source, target];
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${sourceId}/infrastructure-rollback`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 201);
+  const body = response.json() as DeploymentResponse;
+  assert.equal(body.deployment.status, "PENDING");
+  assert.equal(body.deployment.rollbackOfDeploymentId, sourceId);
+  assert.equal(body.deployment.rollbackTargetDeploymentId, targetId);
+  assert.equal(body.deployment.currentPlanArtifactId, null);
+  assert.equal(
+    repository.calls.some((call) => call.name === "markDeploymentApplyRunning"),
+    false
+  );
+
+  await app.close();
+});
 
 function clearDeploymentApprovalSnapshot(): Pick<
   DeploymentRecord,
@@ -1222,6 +1443,8 @@ function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRec
     userId,
     name: "Test Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides
@@ -1418,12 +1641,17 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
         architectureId,
         terraformArtifactId,
         awsConnectionId,
+        awsAccountIdSnapshot: "123456789012",
+        awsRegionSnapshot: "ap-northeast-2",
+        awsConnectionNameSnapshot: "123456789012",
         liveProfile: "practice",
         scope: "infrastructure",
         targetKind: null,
         source: "direct",
         preparedDraftRevision: null,
         preparedSnapshotHash: null,
+        rollbackOfDeploymentId: null,
+        rollbackTargetDeploymentId: null,
         status: "PENDING"
       }
     }
@@ -1464,6 +1692,72 @@ test("POST /api/projects/:projectId/deployments/prepare locks the saved draft re
   await app.close();
 });
 
+test("POST /api/projects/:projectId/deployments/prepare selects the ECS web-service profile for Application Auto Scaling", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.projectDraft = {
+    revision: 7,
+    diagramJson: {
+      nodes: [
+        {
+          id: "autoscaling-target",
+          type: "aws_appautoscaling_target",
+          kind: "resource",
+          position: { x: 0, y: 0 },
+          size: { width: 124, height: 96 },
+          label: "ECS scaling target",
+          locked: false,
+          zIndex: 1
+        },
+        {
+          id: "autoscaling-policy",
+          type: "aws_appautoscaling_policy",
+          kind: "resource",
+          position: { x: 160, y: 0 },
+          size: { width: 124, height: 96 },
+          label: "ECS scaling policy",
+          locked: false,
+          zIndex: 1
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: [
+          'resource "aws_ecs_service" "web" {}',
+          'resource "aws_appautoscaling_target" "web" {}',
+          'resource "aws_appautoscaling_policy" "web" {}'
+        ].join("\n")
+      }
+    ]
+  };
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  const createCall = repository.calls.find((call) => call.name === "createDeployment");
+  assert.equal(createCall?.name, "createDeployment");
+  if (createCall?.name === "createDeployment") {
+    assert.equal(createCall.input.liveProfile, "demo_web_service");
+  }
+
+  await app.close();
+});
+
 test("POST /api/projects/:projectId/deployments/prepare rejects a stale draft", async () => {
   const repository = new FakeDeploymentRepository();
   const app = await buildDeploymentTestApp(repository);
@@ -1483,7 +1777,10 @@ test("POST /api/projects/:projectId/deployments/prepare rejects a stale draft", 
 
   assert.equal(response.statusCode, 409);
   assert.match(response.json().message, /stale/i);
-  assert.equal(repository.calls.some((call) => call.name === "createDeployment"), false);
+  assert.equal(
+    repository.calls.some((call) => call.name === "createDeployment"),
+    false
+  );
 
   await app.close();
 });
@@ -1595,9 +1892,153 @@ test("GET /api/deployments/:deploymentId returns a deployment", async () => {
   await app.close();
 });
 
+test("GET /api/deployments/:deploymentId/live-observation-architecture returns the approved immutable architecture snapshot", async () => {
+  const terraformArtifactSha256 = "a".repeat(64);
+  const architecture = {
+    nodes: [
+      {
+        id: "approved-bucket",
+        type: "S3" as const,
+        label: "Approved bucket",
+        positionX: 120,
+        positionY: 80,
+        config: { versioning: true }
+      }
+    ],
+    edges: []
+  };
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: terraformArtifactSha256
+  });
+  repository.architecture = createArchitectureRecord({ architectureJson: architecture });
+  repository.findProjectDraftForPreparation = async () => {
+    throw new Error("The mutable project draft must not be read");
+  };
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as DeploymentLiveObservationArchitectureResponse, {
+    deploymentId,
+    architectureId,
+    terraformArtifactSha256,
+    architecture
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
+      name: "findArchitectureInProject",
+      architectureId,
+      projectId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/live-observation-architecture hides another user's deployment", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.project = undefined;
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: "b".repeat(64)
+  });
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Deployment not found"
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/live-observation-architecture maps a missing architecture snapshot to not_found", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: "c".repeat(64)
+  });
+  repository.architecture = undefined;
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Architecture not found for deployment"
+  });
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/live-observation-architecture rejects an invalid approved artifact hash", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: "not-a-sha256"
+  });
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Deployment does not have a valid approved Terraform artifact hash"
+  });
+
+  await app.close();
+});
+
 test("GET /api/deployments/:deploymentId maps missing deployments to not_found", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = undefined;
+  repository.deployments = [];
   const app = await buildDeploymentTestApp(repository);
 
   const response = await app.inject({
@@ -1792,6 +2233,7 @@ test("POST /api/deployments/:deploymentId/init starts Terraform init in the back
 test("POST /api/deployments/:deploymentId/init maps missing deployments to not_found", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = undefined;
+  repository.deployments = [];
   const app = await buildDeploymentTestApp(repository, {
     runDeploymentInit: async () => {
       throw new Error("background init should not start");
@@ -2012,6 +2454,108 @@ test("POST /api/deployments/:deploymentId/plan starts Terraform plan in the back
   await app.close();
 });
 
+test("POST plan prepares an ECS project build environment before starting preflight and Terraform", async () => {
+  const repository = new FakeDeploymentRepository();
+  const calls: string[] = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    prepareProjectBuildEnvironment: async (input) => {
+      assert.equal(input.architectureId, architectureId);
+      assert.equal(input.projectId, projectId);
+      assert.equal(input.userId, userId);
+      calls.push("prepare_build_environment");
+    },
+    runDeploymentPlan: async (input) => {
+      calls.push("preflight_and_plan");
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          scope: "full_stack",
+          targetKind: "ecs_fargate",
+          status: "PENDING"
+        }),
+        optimization: {
+          outcome: "execute",
+          reason: "initial_plan"
+        },
+        terraform: { init: null, validate: null, plan: null, showJson: null }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/plan`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(calls, ["prepare_build_environment", "preflight_and_plan"]);
+  await app.close();
+});
+
+test("POST frontend retry runs the owner-scoped frontend-only release operation", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
+    status: "PARTIALLY_FAILED",
+    failureStage: "application_release"
+  });
+  const calls: Array<{ deploymentId: string; userId: string }> = [];
+  const app = await buildDeploymentTestApp(repository, {
+    retryApplicationFrontendRelease: async (input) => {
+      calls.push({ deploymentId: input.deploymentId, userId: input.userId });
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/application-release/frontend/retry`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.deepEqual(calls, [{ deploymentId, userId }]);
+  await app.close();
+});
+
+test("POST frontend retry dispatches a durable ECS worker job by default", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
+    status: "PARTIALLY_FAILED",
+    failureStage: "application_release"
+  });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs"
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/application-release/frontend/retry`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 202);
+  const activeJob = await jobRepository.findActiveDeploymentJob(deploymentId);
+  assert.equal(activeJob?.operation, "retry_application_frontend");
+  assert.equal(activeJob?.status, "RUNNING");
+  assert.equal(activeJob?.startedFromStatus, "PARTIALLY_FAILED");
+  assert.equal(activeJob?.startedFromFailureStage, "application_release");
+  assert.equal(dispatcher.dispatchCalls.length, 1);
+
+  await app.close();
+});
+
 test("POST /api/deployments/:deploymentId/plan writes a runtime cache status snapshot", async () => {
   const repository = new FakeDeploymentRepository();
   const runtimeCache = createInMemoryRuntimeCache({ cleanupIntervalMs: null });
@@ -2084,6 +2628,75 @@ test("POST /api/deployments/:deploymentId/plan rejects a deployment that is alre
   assert.equal(repository.deployment.status, "RUNNING");
 
   await app.close();
+});
+
+test("POST plan and apply reject an active GitOps project lease before changing deployment or job state", async (t) => {
+  for (const operation of ["plan", "apply"] as const) {
+    await t.test(operation, async () => {
+      const repository = new FakeDeploymentRepository();
+      const jobRepository = new FakeDeploymentJobRepository();
+      repository.projectExecutionLeaseRepository = new FakeProjectExecutionLeaseRepository(
+        createActiveProjectExecutionLease({
+          holderId: "github-release-run-id",
+          source: "gitops"
+        })
+      );
+      repository.deployment = createDeploymentRecord(deploymentId, {
+        ...(operation === "apply"
+          ? {
+              currentPlanArtifactId: planArtifactId,
+              planSummary: {
+                createCount: 1,
+                updateCount: 0,
+                deleteCount: 0,
+                replaceCount: 0,
+                blocked: false,
+                warnings: []
+              },
+              approvedAt: fixedNow,
+              approvedByUserId: userId,
+              approvedTerraformArtifactId: terraformArtifactId,
+              approvedPlanArtifactId: planArtifactId,
+              approvedTerraformArtifactHash: "c".repeat(64),
+              approvedTfplanHash: "a".repeat(64),
+              approvedAwsAccountId: "123456789012",
+              approvedAwsRegion: "ap-northeast-2"
+            }
+          : {})
+      });
+      repository.deployments = [repository.deployment];
+      const app = await buildDeploymentTestApp(repository, {
+        createDeploymentJobRepository: () => jobRepository,
+        workerDispatcher: new FakeDeploymentWorkerDispatcher(),
+        workerDispatchMode: "ecs"
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/deployments/${deploymentId}/${operation}`,
+        headers: await authHeaders(),
+        ...(operation === "apply" ? { payload: {} } : {})
+      });
+
+      assert.equal(response.statusCode, 409);
+      assert.deepEqual(response.json(), {
+        error: "PROJECT_RELEASE_IN_PROGRESS",
+        message: "GitHub release is already running for this project",
+        activeSource: "gitops"
+      });
+      assert.equal(repository.deployment.status, "PENDING");
+      assert.equal(jobRepository.jobs.size, 0);
+      assert.equal(
+        repository.calls.some(
+          (call) =>
+            call.name === "markDeploymentPlanRunning" || call.name === "markDeploymentApplyRunning"
+        ),
+        false
+      );
+
+      await app.close();
+    });
+  }
 });
 
 test("POST /api/deployments/:deploymentId/plan joins an identical Plan already in flight", async () => {
@@ -2249,6 +2862,33 @@ test("POST /api/deployments/:deploymentId/revoke-approval clears the apply appro
 
 
 
+
+test("POST /api/deployments/:deploymentId/approve exposes Terraform safety conflicts instead of returning 500", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository, {
+    approveDeploymentPlan: async () => {
+      throw new TerraformArtifactSafetyError(
+        'Terraform resource "aws_appautoscaling_target" is not allowed before live deployment at line 305'
+      );
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/approve`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "terraform_artifact_unsafe",
+    message:
+      'Terraform resource "aws_appautoscaling_target" is not allowed before live deployment at line 305'
+  });
+
+  await app.close();
+});
 
 test("POST /api/deployments/:deploymentId/execute starts Terraform apply through the same safety path", async () => {
   const repository = new FakeDeploymentRepository();
@@ -2638,10 +3278,11 @@ test("POST /api/deployments/:deploymentId/cancel marks stale running deployments
   await app.close();
 });
 
-test("POST /api/deployments/:deploymentId/cancel stops an active ECS worker task", async () => {
+test("POST /api/deployments/:deploymentId/cancel confirms the ECS worker stopped and flags infrastructure review", async () => {
   const repository = new FakeDeploymentRepository();
   const jobRepository = new FakeDeploymentJobRepository();
   const dispatcher = new FakeDeploymentWorkerDispatcher();
+  const terminalizationEvents: string[] = [];
   repository.deployment = createDeploymentRecord(deploymentId, {
     status: "RUNNING",
     activeStage: "apply"
@@ -2668,6 +3309,15 @@ test("POST /api/deployments/:deploymentId/cancel stops an active ECS worker task
     updatedAt: fixedNow
   };
   jobRepository.jobs.set(activeJob.id, activeJob);
+  repository.projectExecutionLeaseRepository = new FakeProjectExecutionLeaseRepository(
+    createActiveProjectExecutionLease({ activeWorkerTaskArn: dispatcher.taskArn }),
+    terminalizationEvents
+  );
+  const failDeployment = repository.failDeployment.bind(repository);
+  repository.failDeployment = async (candidateDeploymentId, input) => {
+    terminalizationEvents.push("deployment:terminal");
+    return failDeployment(candidateDeploymentId, input);
+  };
   const app = await buildDeploymentTestApp(repository, {
     createDeploymentJobRepository: () => jobRepository,
     workerDispatcher: dispatcher,
@@ -2683,13 +3333,78 @@ test("POST /api/deployments/:deploymentId/cancel stops an active ECS worker task
 
   assert.equal(response.statusCode, 202);
   const body = response.json() as DeploymentResponse;
-  assert.equal(body.deployment.status, "RUNNING");
+  assert.equal(body.deployment.status, "FAILED");
+  assert.equal(body.deployment.failureStage, "apply");
+  assert.match(body.deployment.errorSummary ?? "", /자동 롤백하지 않았으므로/u);
   assert.equal(body.deployment.cancelRequestedAt, fixedNow.toISOString());
   assert.equal(dispatcher.stopCalls.length, 1);
   assert.equal(dispatcher.stopCalls[0]?.job.ecsTaskArn, dispatcher.taskArn);
   const cancelledJob = await jobRepository.findDeploymentJobById(activeJob.id);
   assert.equal(cancelledJob?.status, "CANCELLED");
-  assert.match(cancelledJob?.errorSummary ?? "", /StopTask/);
+  assert.match(cancelledJob?.errorSummary ?? "", /reached STOPPED/);
+  assert.deepEqual(terminalizationEvents, [
+    "lease:recover_terminal",
+    "deployment:terminal",
+    "lease:release"
+  ]);
+  assert.equal(
+    (repository.projectExecutionLeaseRepository as FakeProjectExecutionLeaseRepository).current
+      ?.status,
+    "released"
+  );
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/cancel dispatches trusted application recovery after worker STOPPED", async () => {
+  const repository = new FakeDeploymentRepository();
+  const jobRepository = new FakeDeploymentJobRepository();
+  const dispatcher = new FakeDeploymentWorkerDispatcher();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "RUNNING",
+    activeStage: "application_release"
+  });
+  const originalJobId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  jobRepository.jobs.set(originalJobId, {
+    id: originalJobId,
+    deploymentId,
+    operation: "apply",
+    status: "RUNNING",
+    requestedByUserId: userId,
+    accessContext: { kind: "user", userId },
+    startedFromStatus: "PENDING",
+    startedFromFailureStage: null,
+    ecsTaskArn: dispatcher.taskArn,
+    errorSummary: null,
+    startedAt: fixedNow,
+    completedAt: null,
+    failedAt: null,
+    cancelledAt: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  });
+  const app = await buildDeploymentTestApp(repository, {
+    createDeploymentJobRepository: () => jobRepository,
+    workerDispatcher: dispatcher,
+    workerDispatchMode: "ecs"
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/cancel`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.equal((response.json() as DeploymentResponse).deployment.status, "RUNNING");
+  assert.equal((await jobRepository.findDeploymentJobById(originalJobId))?.status, "CANCELLED");
+  assert.equal(dispatcher.stopCalls.length, 1);
+  assert.equal(dispatcher.dispatchCalls.length, 1);
+  assert.equal(dispatcher.dispatchCalls[0]?.job.operation, "recover_application_release");
+  const recoveryJob = await jobRepository.findDeploymentJobById(jobRepository.nextId);
+  assert.equal(recoveryJob?.status, "RUNNING");
+  assert.equal(recoveryJob?.ecsTaskArn, dispatcher.taskArn);
 
   await app.close();
 });
@@ -3061,6 +3776,7 @@ test("writeDeploymentLogStreamChunk skips closed streams and reports write failu
 test("GET /api/deployments/:deploymentId/logs maps missing deployments to not_found", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = undefined;
+  repository.deployments = [];
   const app = await buildDeploymentTestApp(repository);
 
   const response = await app.inject({

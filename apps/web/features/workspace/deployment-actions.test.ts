@@ -5,6 +5,7 @@ import {
   getGitCicdHandoffStatusLabel,
   getDefaultDeploymentPanelMode,
   getDeploymentActionState,
+  getInfrastructureRollbackTarget,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
   getRecommendedDeploymentLiveProfile,
@@ -15,6 +16,25 @@ import {
   shouldAutoRefreshGitCicdHandoff,
   shouldShowDeploymentInfoValue
 } from "./deployment-actions";
+
+test("infrastructure rollback is offered only from current state to the previous successful version", () => {
+  const target = createDeployment({
+    id: "33333333-3333-4333-8333-333333333333",
+    status: "SUCCESS",
+    stateObjectKey: "deployments/target/state/terraform.tfstate",
+    createdAt: "2026-07-15T10:00:00.000Z"
+  });
+  const source = createDeployment({
+    id: "44444444-4444-4444-8444-444444444444",
+    status: "FAILED",
+    failureStage: "apply",
+    stateObjectKey: "deployments/source/state/terraform.tfstate",
+    createdAt: "2026-07-15T11:00:00.000Z"
+  });
+
+  assert.equal(getInfrastructureRollbackTarget(source, [source, target])?.id, target.id);
+  assert.equal(getInfrastructureRollbackTarget(source, [source]), null);
+});
 
 test("template resource graphs recommend the extended live deployment profile", () => {
   const diagramJson: DiagramJson = {
@@ -444,11 +464,17 @@ function createDeployment(
     architectureId: "55555555-5555-4555-8555-555555555555",
     terraformArtifactId: "66666666-6666-4666-8666-666666666666",
     awsConnectionId: "33333333-3333-4333-8333-333333333333",
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
     liveProfile: "practice",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     currentPlanArtifactId: overrides.currentPlanArtifactId ?? null,
     currentPlanOperation: overrides.currentPlanOperation ?? null,
     stateObjectKey: overrides.stateObjectKey ?? null,

@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import type { AwsConnection, TerraformArtifactBundle } from "@sketchcatch/types";
 import { runDeploymentApply } from "./deployment-apply-service.js";
 import { selectDeploymentStateBaseline } from "./deployment-service.js";
+import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
 import type {
   DeploymentApplyArtifactStorage,
   UploadDeploymentStateInput
 } from "./deployment-apply-artifact-storage.js";
 import type {
   ArchitectureRecord,
-  CompleteDeploymentApplyInput,
   CreateDeploymentRecordInput,
   CreateDeploymentLogRecordInput,
   DeployedResourceRecord,
@@ -20,6 +20,9 @@ import type {
   DeploymentRepository,
   ProjectAccessContext,
   ProjectRecord,
+  ReleaseCandidateRecord,
+  SaveDeploymentApplyResultsInput,
+  SaveDeploymentApplyStateInput,
   SaveDeploymentPlanInput,
   TerraformArtifactRecord,
   TerraformOutputRecord
@@ -44,16 +47,26 @@ const terraformArtifactSha256 = createSha256(terraformArtifactContent);
 const planBuffer = Buffer.from("approved binary tfplan");
 const tfplanSha256 = createSha256(planBuffer);
 const expectedTerraformMutationTimeoutMs = 15 * 60 * 1_000;
+const releaseCandidateId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 class FakeDeploymentRepository implements DeploymentRepository {
+  readonly activeStages: Array<NonNullable<DeploymentRecord["activeStage"]>> = [];
   project: ProjectRecord | undefined = createProjectRecord();
   deployment: DeploymentRecord | undefined = createApprovedDeploymentRecord();
+  releaseCandidate: ReleaseCandidateRecord | undefined = createReleaseCandidateRecord();
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
   planArtifact: DeploymentPlanArtifactRecord | undefined = createPlanArtifactRecord();
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
   deployments: DeploymentRecord[] | null = null;
+  relatedDeployments: DeploymentRecord[] = [];
   logs: DeploymentLogRecord[] = [];
-  completedInput: CompleteDeploymentApplyInput | undefined;
+  completeCalls = 0;
+  completedInput: SaveDeploymentApplyResultsInput | undefined;
+  savedInput: SaveDeploymentApplyResultsInput | undefined;
+  lifecycleEvents: string[] = [];
+  synchronizeDeploymentTargetAfterApply?: NonNullable<
+    DeploymentRepository["synchronizeDeploymentTargetAfterApply"]
+  >;
   failedInput:
     | {
         deploymentId: string;
@@ -115,11 +128,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   }
 
   async findDeploymentById(candidateDeploymentId: string) {
-    if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
-      return undefined;
-    }
-
-    return this.deployment;
+    return this.deployment?.id === candidateDeploymentId
+      ? this.deployment
+      : this.relatedDeployments.find((deployment) => deployment.id === candidateDeploymentId);
   }
 
   async findDeploymentPlanArtifactById(candidatePlanArtifactId: string) {
@@ -130,12 +141,19 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.planArtifact;
   }
 
+  async findReleaseCandidateById(candidateId: string) {
+    return this.releaseCandidate?.id === candidateId ? this.releaseCandidate : undefined;
+  }
+
   async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
     return this.deployment?.status === "RUNNING" ? this.deployment : undefined;
   }
 
   async listDeploymentsByProject(): Promise<DeploymentRecord[]> {
-    return this.deployments ?? (this.deployment ? [this.deployment] : []);
+    if (this.deployments) return this.deployments;
+    return this.deployment
+      ? [this.deployment, ...this.relatedDeployments]
+      : this.relatedDeployments;
   }
 
   updateDeploymentStatus: DeploymentRepository["updateDeploymentStatus"] = async (
@@ -162,6 +180,16 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   markDeploymentDestroyRunning: DeploymentRepository["markDeploymentDestroyRunning"] = async () =>
     this.deployment;
+
+  async markDeploymentActiveStage(
+    candidateDeploymentId: string,
+    activeStage: NonNullable<DeploymentRecord["activeStage"]>
+  ) {
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) return undefined;
+    this.activeStages.push(activeStage);
+    this.deployment = { ...this.deployment, activeStage, updatedAt: fixedNow };
+    return this.deployment;
+  }
 
   markDeploymentInitSucceeded: DeploymentRepository["markDeploymentInitSucceeded"] = async () =>
     this.deployment;
@@ -204,7 +232,11 @@ class FakeDeploymentRepository implements DeploymentRepository {
     candidateDeploymentId,
     input
   ) => {
-    this.completedInput = input;
+    this.lifecycleEvents.push("terminal-complete");
+    this.completeCalls += 1;
+    if (input && "resources" in input) {
+      this.completedInput = input as unknown as SaveDeploymentApplyResultsInput;
+    }
 
     if (!this.deployment || this.deployment.id !== candidateDeploymentId) {
       return undefined;
@@ -213,8 +245,6 @@ class FakeDeploymentRepository implements DeploymentRepository {
     this.deployment = {
       ...this.deployment,
       status: "SUCCESS",
-      stateObjectKey: input.stateObjectKey,
-      resultWarningSummary: input.resultWarningSummary,
       failureStage: null,
       errorSummary: null,
       updatedAt: fixedNow
@@ -222,6 +252,37 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
     return this.deployment;
   };
+
+  saveDeploymentApplyResults: DeploymentRepository["saveDeploymentApplyResults"] = async (
+    candidateDeploymentId: string,
+    input: SaveDeploymentApplyResultsInput
+  ) => {
+    this.lifecycleEvents.push("results-save");
+    this.savedInput = input;
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) return undefined;
+    this.deployment = {
+      ...this.deployment,
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      updatedAt: fixedNow
+    };
+    return this.deployment;
+  };
+
+  async saveDeploymentApplyState(
+    candidateDeploymentId: string,
+    input: SaveDeploymentApplyStateInput
+  ): Promise<DeploymentRecord | undefined> {
+    this.lifecycleEvents.push("state-save");
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) return undefined;
+    this.deployment = {
+      ...this.deployment,
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      updatedAt: fixedNow
+    };
+    return this.deployment;
+  }
 
   completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
     candidateDeploymentId,
@@ -246,6 +307,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   };
 
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
+    this.lifecycleEvents.push("terminal-fail");
     this.failedInput = {
       deploymentId: candidateDeploymentId,
       failureStage: input.failureStage,
@@ -475,6 +537,10 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
               sensitive: false,
               value: "sketchcatch-demo-bucket"
             },
+            api_base_url: {
+              sensitive: false,
+              value: "https://api.example.com"
+            },
             admin_password: {
               sensitive: true,
               value: "do-not-store"
@@ -529,14 +595,39 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
         });
       },
       executeApplicationRelease: async () => {
-        assert.equal(repository.completedInput, undefined);
+        assert.ok(repository.savedInput);
+        repository.lifecycleEvents.push("application-release");
         runnerStages.push("application-release");
+      },
+      synchronizeDeploymentTargetAfterApply: async (input) => {
+        assert.deepEqual(input, {
+          projectId,
+          deploymentId,
+          accessContext: createAccessContext()
+        });
+        assert.ok(repository.savedInput);
+        repository.lifecycleEvents.push("target-sync");
+      },
+      reconcileApplicationOutput: async ({ outputs }) => {
+        assert.equal(
+          outputs.find((output) => output.name === "api_base_url")?.value,
+          "https://api.example.com"
+        );
+        repository.lifecycleEvents.push("output-reconcile");
       },
       generateResultId: createSequentialIdGenerator()
     }
   );
 
   assert.deepEqual(runnerStages, ["init", "apply", "output", "show-state", "application-release"]);
+  assert.deepEqual(repository.lifecycleEvents, [
+    "results-save",
+    "target-sync",
+    "output-reconcile",
+    "application-release",
+    "terminal-complete"
+  ]);
+  assert.deepEqual(repository.activeStages, ["application_release"]);
   assert.equal(cleanupCalled, true);
   assert.match(writtenPlanFile?.filePath ?? "", /[\\/]tfplan$/);
   assert.deepEqual(writtenPlanFile?.content, planBuffer);
@@ -548,7 +639,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(result.deployment.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.equal(result.deployment.resultWarningSummary, null);
-  assert.deepEqual(repository.completedInput?.resources, [
+  assert.deepEqual(repository.savedInput?.resources, [
     {
       id: "result-1",
       deploymentId,
@@ -568,7 +659,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
       region: "ap-northeast-2"
     }
   ]);
-  assert.deepEqual(repository.completedInput?.outputs, [
+  assert.deepEqual(repository.savedInput?.outputs, [
     {
       id: "result-3",
       deploymentId,
@@ -578,6 +669,13 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
     },
     {
       id: "result-4",
+      deploymentId,
+      name: "api_base_url",
+      value: "https://api.example.com",
+      sensitive: false
+    },
+    {
+      id: "result-5",
       deploymentId,
       name: "bucket_name",
       value: "sketchcatch-demo-bucket",
@@ -642,10 +740,339 @@ test("runDeploymentApply cleans a full-stack workspace when plan download fails"
   assert.equal(cleanupCalls, 1);
 });
 
-test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", async () => {
+test("infrastructure ECS apply synchronizes target metadata after result storage", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "infrastructure",
+    targetKind: "ecs_fargate"
+  });
+  const synchronizationInputs: unknown[] = [];
+  repository.synchronizeDeploymentTargetAfterApply = async (input) => {
+    assert.ok(repository.savedInput);
+    repository.lifecycleEvents.push("target-sync");
+    synchronizationInputs.push(input);
+  };
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-infrastructure-target-sync",
+        mainFilePath: "C:/tmp/sketchcatch-infrastructure-target-sync/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        })
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.deepEqual(synchronizationInputs, [
+    { projectId, deploymentId, accessContext: createAccessContext() }
+  ]);
+  assert.deepEqual(repository.lifecycleEvents, [
+    "results-save",
+    "target-sync",
+    "terminal-complete"
+  ]);
+});
+
+test("target metadata sync failure records a warning without failing successful apply", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "infrastructure",
+    targetKind: "ecs_fargate"
+  });
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-target-sync-warning",
+        mainFilePath: "C:/tmp/sketchcatch-target-sync-warning/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary metadata store outage");
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assert.equal(
+    repository.logs.some(
+      (log) =>
+        log.level === "WARN" &&
+        log.message ===
+          "Deployment target metadata synchronization failed after successful apply: temporary metadata store outage"
+    ),
+    true
+  );
+});
+
+test("successful full-stack apply continues release when target sync warning storage also fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((log) =>
+        log.message.startsWith("Deployment target metadata synchronization failed")
+      )
+    ) {
+      throw new Error("warning persistence unavailable");
+    }
+    return createDeploymentLogs(logs);
+  };
+  let releaseCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-target-sync-warning-storage-failure",
+        mainFilePath: "C:/tmp/sketchcatch-target-sync-warning-storage-failure/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      reconcileApplicationOutput: async () => undefined,
+      executeApplicationRelease: async () => {
+        releaseCalls += 1;
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(releaseCalls, 1);
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assertContiguousDeploymentLogSequences(repository);
+});
+
+test("successful full-stack apply continues release when warning persistence commits before rejecting", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  installCommitAfterRejectingWarningPersistence(repository);
+  let releaseCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-target-sync-warning-ambiguous-commit",
+        mainFilePath:
+          "C:/tmp/sketchcatch-target-sync-warning-ambiguous-commit/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      reconcileApplicationOutput: async () => undefined,
+      executeApplicationRelease: async () => {
+        releaseCalls += 1;
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(releaseCalls, 1);
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assertContiguousDeploymentLogSequences(repository);
+});
+
+test("full-stack output reconciliation failure preserves Terraform results and skips release", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let releaseCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-output-reconciliation-failure",
+        mainFilePath: "C:/tmp/sketchcatch-output-reconciliation-failure/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () =>
+        createRunnerResult("output", {
+          stdout: JSON.stringify({
+            api_base_url: {
+              sensitive: false,
+              value: "https://api.example.com"
+            }
+          })
+        }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        }),
+      reconcileApplicationOutput: async () => {
+        throw new Error("DEPLOYMENT_OUTPUT_URL_CONFLICT");
+      },
+      executeApplicationRelease: async () => {
+        releaseCalls += 1;
+      },
+      generateResultId: createSequentialIdGenerator()
+    }
+  );
+
+  assert.equal(result.deployment.status, "FAILED");
+  assert.equal(releaseCalls, 0);
+  assert.equal(repository.completeCalls, 0);
+  assert.equal(repository.savedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.deepEqual(repository.savedInput?.outputs, [
+    {
+      id: "result-1",
+      deploymentId,
+      name: "api_base_url",
+      value: "https://api.example.com",
+      sensitive: false
+    }
+  ]);
+  assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.match(repository.failedInput?.errorSummary ?? "", /DEPLOYMENT_OUTPUT_URL_CONFLICT/);
+});
+
+function createVerifiedNoChangeApplyScenario(): {
+  repository: FakeDeploymentRepository;
+  applyArtifactStorage: FakeApplyArtifactStorage;
+  existingStateObjectKey: string;
+} {
   const repository = new FakeDeploymentRepository();
   const existingStateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
   repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
+    stateObjectKey: existingStateObjectKey,
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    }
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  applyArtifactStorage.optimizationEvidenceContent = Buffer.from(
+    JSON.stringify(
+      createDeploymentPlanOptimizationEvidence({
+        projectId,
+        deploymentId,
+        planArtifactId,
+        planArtifactSha256: tfplanSha256,
+        desiredStateIdentity: createTerraformDesiredStateIdentity({
+          projectId,
+          canonicalTerraformBundle: terraformArtifactContent,
+          terraformFiles: [{ fileName: "main.tf", terraformCode: terraformArtifactContent }],
+          providerLockContent: null,
+          target: {
+            provider: "aws",
+            accountId: "123456789012",
+            region: "ap-northeast-2"
+          },
+          state: { lineage: null, serial: null }
+        }),
+        driftVerifiedAt: fixedNow.toISOString(),
+        planSummary: repository.deployment.planSummary!,
+        preDeploymentResult: { findings: [] },
+        resourceChanges: []
+      })
+    )
+  );
+  return { repository, applyArtifactStorage, existingStateObjectKey };
+}
+
+test("no-change Apply preserves release when target sync warning storage fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((log) =>
+        log.message.startsWith("Deployment target metadata synchronization failed")
+      )
+    ) {
+      throw new Error("warning persistence unavailable");
+    }
+    return createDeploymentLogs(logs);
+  };
+  const existingStateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
     stateObjectKey: existingStateObjectKey,
     planSummary: {
       createCount: 0,
@@ -711,6 +1138,12 @@ test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", 
         terraformRan = true;
         throw new Error("No-change Apply must not run Terraform apply");
       },
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      executeApplicationRelease: async () => {
+        repository.lifecycleEvents.push("application-release");
+      },
       now: () => fixedNow
     }
   );
@@ -718,14 +1151,65 @@ test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", 
   assert.equal(result.deployment.status, "SUCCESS");
   assert.equal(credentialsPrepared, false);
   assert.equal(terraformRan, false);
-  assert.equal(repository.completedInput?.stateObjectKey, existingStateObjectKey);
+  assert.equal(repository.savedInput?.stateObjectKey, existingStateObjectKey);
+  assert.deepEqual(repository.lifecycleEvents, [
+    "results-save",
+    "application-release",
+    "terminal-complete"
+  ]);
   assert(
     repository.logs.some(
       (log) =>
         log.message ===
         "[optimization] event=apply_decision outcome=no_change reason=terraform_plan_no_changes"
-    )
+      )
   );
+  assertContiguousDeploymentLogSequences(repository);
+});
+
+test("no-change Apply remains successful when warning persistence commits before rejecting", async () => {
+  const { repository, applyArtifactStorage, existingStateObjectKey } =
+    createVerifiedNoChangeApplyScenario();
+  installCommitAfterRejectingWarningPersistence(repository);
+  let releaseCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-no-change-warning-ambiguous-commit",
+        mainFilePath: "C:/tmp/sketchcatch-no-change-warning-ambiguous-commit/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => {
+        throw new Error("No-change Apply must not prepare Terraform credentials");
+      },
+      runTerraformInit: async () => {
+        throw new Error("No-change Apply must not run Terraform init");
+      },
+      runTerraformApply: async () => {
+        throw new Error("No-change Apply must not run Terraform apply");
+      },
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      executeApplicationRelease: async () => {
+        releaseCalls += 1;
+      },
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(repository.savedInput?.stateObjectKey, existingStateObjectKey);
+  assert.equal(releaseCalls, 1);
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assertContiguousDeploymentLogSequences(repository);
 });
 
 test("runDeploymentApply safely falls back when no-change evidence cannot be verified", async () => {
@@ -761,8 +1245,7 @@ test("runDeploymentApply safely falls back when no-change evidence cannot be ver
         applyCalls += 1;
         return createRunnerResult("apply");
       },
-      runTerraformOutputJson: async () =>
-        createRunnerResult("output", { stdout: "{}" }),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
       runTerraformShowStateJson: async () =>
         createRunnerResult("show", { stdout: '{"values":{"root_module":{"resources":[]}}}' })
     }
@@ -787,6 +1270,7 @@ test("application scope releases the approved artifact without Terraform init or
   });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const stages: string[] = [];
+  let targetSyncCalls = 0;
 
   const result = await runDeploymentApply(
     { deploymentId, accessContext: createAccessContext() },
@@ -817,6 +1301,9 @@ test("application scope releases the approved artifact without Terraform init or
       runTerraformShowStateJson: async () => {
         throw new Error("application scope must not inspect Terraform state");
       },
+      synchronizeDeploymentTargetAfterApply: async () => {
+        targetSyncCalls += 1;
+      },
       executeApplicationRelease: async () => {
         stages.push("application-release");
       }
@@ -824,6 +1311,7 @@ test("application scope releases the approved artifact without Terraform init or
   );
 
   assert.deepEqual(stages, ["application-release", "cleanup"]);
+  assert.deepEqual(repository.activeStages, ["application_release"]);
   assert.equal(result.deployment.status, "SUCCESS");
   assert.deepEqual(result.terraform, {
     init: null,
@@ -831,13 +1319,10 @@ test("application scope releases the approved artifact without Terraform init or
     outputJson: null,
     showStateJson: null
   });
-  assert.deepEqual(repository.completedInput, {
-    stateObjectKey: null,
-    resultWarningSummary: null,
-    resources: [],
-    outputs: []
-  });
+  assert.equal(repository.savedInput, undefined);
+  assert.equal(repository.completeCalls, 1);
   assert.equal(applyArtifactStorage.uploadedStates.length, 0);
+  assert.equal(targetSyncCalls, 0);
 });
 
 test("application scope cleans its prepared workspace when plan download fails", async () => {
@@ -878,6 +1363,104 @@ test("application scope cleans its prepared workspace when plan download fails",
   );
 
   assert.equal(cleanupCalls, 1);
+});
+
+test("application partial failure preserves the successful ECS state without completing Deployment", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-partial-release",
+        mainFilePath: "C:/tmp/sketchcatch-partial-release/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      executeApplicationRelease: async () => {
+        assert(repository.deployment);
+        repository.deployment = {
+          ...repository.deployment,
+          status: "PARTIALLY_FAILED",
+          failureStage: "application_release",
+          errorSummary: "Application release partially failed at frontend_activation"
+        };
+        return "partially_failed";
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "PARTIALLY_FAILED");
+  assert.equal(result.deployment.failureStage, "application_release");
+  assert.equal(repository.completeCalls, 0);
+});
+
+test("application cancellation completes only after ECS rollback result is persisted", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-cancelled-release",
+        mainFilePath: "C:/tmp/sketchcatch-cancelled-release/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      executeApplicationRelease: async () => "cancelled"
+    }
+  );
+
+  assert.equal(result.deployment.status, "CANCELLED");
+  assert.match(result.deployment.errorSummary ?? "", /safely cancelled/);
+  assert.equal(repository.completeCalls, 0);
+});
+
+test("application cancellation after frontend activation preserves partial state", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "application",
+    targetKind: "ecs_fargate"
+  });
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-partial-cancelled-release",
+        mainFilePath: "C:/tmp/sketchcatch-partial-cancelled-release/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      executeApplicationRelease: async () => {
+        assert(repository.deployment);
+        repository.deployment = {
+          ...repository.deployment,
+          status: "PARTIALLY_CANCELED",
+          failureStage: "application_release",
+          errorSummary: "Application release was cancelled after frontend_activation"
+        };
+        return "partially_cancelled";
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "PARTIALLY_CANCELED");
+  assert.equal(repository.completeCalls, 0);
 });
 
 test("runDeploymentApply materializes archive data files before applying an approved plan", async () => {
@@ -1125,6 +1708,7 @@ test("runDeploymentApply rejects approval snapshot drift before credentials or T
 test("runDeploymentApply marks apply failures failed and masks secret output", async () => {
   const repository = new FakeDeploymentRepository();
   const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let targetSyncCalls = 0;
 
   const result = await runDeploymentApply(
     {
@@ -1149,7 +1733,10 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
           exitCode: 1,
           stdout: "",
           stderr: "aws_secret_access_key=very-secret\napply failed\n"
-        })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        targetSyncCalls += 1;
+      }
     }
   );
 
@@ -1159,7 +1746,14 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
   assert.equal(repository.failedInput?.errorSummary, "[REDACTED]");
   assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.match(repository.failedInput?.resultWarningSummary ?? "", /Partial Terraform state/);
+  assert.equal(result.deployment.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.equal(
+    result.deployment.resultWarningSummary,
+    "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
+  );
+  assert.deepEqual(repository.lifecycleEvents, ["state-save", "terminal-fail"]);
   assert.equal(applyArtifactStorage.uploadedStates.length, 1);
+  assert.equal(targetSyncCalls, 0);
   assert.equal(applyArtifactStorage.uploadedStates[0]?.deploymentId, deploymentId);
   assert.match(
     applyArtifactStorage.uploadedStates[0]?.stateFilePath ?? "",
@@ -1187,6 +1781,61 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
     repository.logs.some((log) =>
       log.message.startsWith("[duration] partial terraform state upload completed in ")
     )
+  );
+});
+
+test("runDeploymentApply persists partial state before terminal failure recording", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((log) =>
+        log.message.startsWith("[duration] partial terraform state upload completed in ")
+      )
+    ) {
+      throw new Error("simulated interruption immediately after partial state upload");
+    }
+    return createDeploymentLogs(logs);
+  };
+  repository.failDeployment = async () => {
+    throw new Error("simulated process interruption before terminal failure recording");
+  };
+
+  await assert.rejects(
+    runDeploymentApply(
+      {
+        deploymentId,
+        accessContext: createAccessContext()
+      },
+      repository,
+      {
+        applyArtifactStorage,
+        readTerraformArtifactFile: async () => terraformArtifactContent,
+        writePlanFile: async () => undefined,
+        prepareTerraformWorkspace: async () => ({
+          workdir: "C:/tmp/sketchcatch-terraform-partial-state",
+          mainFilePath: "C:/tmp/sketchcatch-terraform-partial-state/main.tf",
+          terraformFiles: [],
+          cleanup: async () => undefined
+        }),
+        prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+        runTerraformInit: async () => createRunnerResult("init"),
+        runTerraformApply: async () =>
+          createRunnerResult("apply", {
+            exitCode: 1,
+            stderr: "apply failed after changing resources"
+          })
+      }
+    ),
+    /simulated process interruption before terminal failure recording/
+  );
+
+  assert.equal(applyArtifactStorage.uploadedStates.length, 1);
+  assert.equal(repository.deployment?.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.equal(
+    repository.deployment?.resultWarningSummary,
+    "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
   );
 });
 
@@ -1272,8 +1921,8 @@ test("runDeploymentApply keeps successful apply as success when post-apply parsi
     result.deployment.resultWarningSummary ?? "",
     /Terraform output parse failed after successful apply/
   );
-  assert.equal(repository.completedInput?.outputs.length, 0);
-  assert.equal(repository.completedInput?.resources.length, 0);
+  assert.equal(repository.savedInput?.outputs.length, 0);
+  assert.equal(repository.savedInput?.resources.length, 0);
   assert.equal(
     repository.logs.some((log) =>
       log.message.includes("Terraform output parse failed after successful apply")
@@ -1285,17 +1934,23 @@ test("runDeploymentApply keeps successful apply as success when post-apply parsi
 function createApprovedDeploymentRecord(
   overrides: Partial<DeploymentRecord> = {}
 ): DeploymentRecord {
-  return {
+  const deployment: DeploymentRecord = {
     id: deploymentId,
     projectId,
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
     liveProfile: "practice",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
@@ -1334,6 +1989,160 @@ function createApprovedDeploymentRecord(
     updatedAt: fixedNow,
     ...overrides
   };
+  if (deployment.scope !== "infrastructure" && deployment.releaseCandidateId === null) {
+    const candidate = createReleaseCandidateRecord();
+    const snapshot = createPreparedReleaseSnapshotHash({
+      candidateId: candidate.id,
+      commitSha: candidate.commitSha,
+      compositeDigest: candidate.compositeDigest,
+      configFingerprint: candidate.configFingerprint
+    });
+    return {
+      ...deployment,
+      releaseCandidateId: candidate.id,
+      preparedSnapshotHash: snapshot,
+      approvedPreparedSnapshotHash: snapshot
+    };
+  }
+  return deployment;
+}
+
+function installCommitAfterRejectingWarningPersistence(
+  repository: FakeDeploymentRepository
+): void {
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((candidate) =>
+        repository.logs.some(
+          (persisted) =>
+            persisted.deploymentId === candidate.deploymentId &&
+            persisted.sequence === candidate.sequence
+        )
+      )
+    ) {
+      throw new Error("duplicate deployment log sequence");
+    }
+    const persisted = await createDeploymentLogs(logs);
+    if (
+      logs.some((log) =>
+        log.message.startsWith("Deployment target metadata synchronization failed")
+      )
+    ) {
+      throw new Error("warning persistence response unavailable after commit");
+    }
+    return persisted;
+  };
+}
+
+function assertContiguousDeploymentLogSequences(
+  repository: FakeDeploymentRepository
+): void {
+  const sequences = repository.logs
+    .filter((log) => log.deploymentId === deploymentId)
+    .map((log) => log.sequence)
+    .sort((left, right) => left - right);
+  assert.deepEqual(
+    sequences,
+    Array.from({ length: sequences.length }, (_, index) => index + 1)
+  );
+}
+
+test("infrastructure rollback apply restores the same current state used by the approved plan", async () => {
+  const sourceId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const targetId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    rollbackOfDeploymentId: sourceId,
+    rollbackTargetDeploymentId: targetId,
+    createdAt: new Date("2026-07-15T12:00:00.000Z")
+  });
+  repository.relatedDeployments = [
+    createApprovedDeploymentRecord({
+      id: sourceId,
+      status: "FAILED",
+      stateObjectKey: `deployments/${sourceId}/state/terraform.tfstate`,
+      createdAt: new Date("2026-07-15T11:00:00.000Z")
+    }),
+    createApprovedDeploymentRecord({
+      id: targetId,
+      status: "SUCCESS",
+      stateObjectKey: `deployments/${targetId}/state/terraform.tfstate`,
+      currentPlanArtifactId: null,
+      createdAt: new Date("2026-07-15T10:00:00.000Z")
+    })
+  ];
+  const stateWrites: Array<{ filePath: string; content: Buffer }> = [];
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  applyArtifactStorage.downloadDeploymentState = async (input) => {
+    assert.deepEqual(input, {
+      deploymentId: sourceId,
+      objectKey: `deployments/${sourceId}/state/terraform.tfstate`
+    });
+    return Buffer.from('{"lineage":"current"}');
+  };
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      writeTerraformStateFile: async (filePath, content) => {
+        stateWrites.push({ filePath, content: Buffer.from(content) });
+      },
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-terraform-rollback-apply",
+        mainFilePath: "C:/tmp/sketchcatch-terraform-rollback-apply/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", { stdout: JSON.stringify({ values: { root_module: {} } }) })
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(stateWrites[0]?.filePath.endsWith("terraform.tfstate"), true);
+  assert.equal(stateWrites[0]?.content.toString("utf8"), '{"lineage":"current"}');
+});
+
+function createReleaseCandidateRecord(): ReleaseCandidateRecord {
+  return {
+    id: releaseCandidateId,
+    projectId,
+    deploymentId,
+    pipelineRunId: null,
+    buildEnvironmentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    commitSha: "a".repeat(40),
+    configFingerprint: "b".repeat(64),
+    compositeDigest: "c".repeat(64),
+    apiOciDigest: "d".repeat(64),
+    apiArchiveDigest: "e".repeat(64),
+    frontendArchiveDigest: "f".repeat(64),
+    frontendManifestDigest: "1".repeat(64),
+    frontendIndexDigest: "2".repeat(64),
+    apiArchiveObjectKey: `deployments/${deploymentId}/release-candidates/${releaseCandidateId}/api-image.oci.tar`,
+    apiArchiveObjectVersionId: "api-v1",
+    apiArchiveByteSize: 100,
+    frontendArchiveObjectKey: `deployments/${deploymentId}/release-candidates/${releaseCandidateId}/frontend.tar.zst`,
+    frontendArchiveObjectVersionId: "frontend-v1",
+    frontendArchiveByteSize: 200,
+    frontendManifestObjectKey: `deployments/${deploymentId}/release-candidates/${releaseCandidateId}/frontend-manifest.json`,
+    frontendManifestObjectVersionId: "manifest-v1",
+    manifestObjectKey: `deployments/${deploymentId}/release-candidates/${releaseCandidateId}/candidate-manifest.json`,
+    manifestObjectVersionId: "candidate-v1",
+    status: "pending",
+    expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+    frontendRetryExpiresAt: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
+  };
 }
 
 function createPlanArtifactRecord(
@@ -1360,6 +2169,8 @@ function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRec
     userId,
     name: "Test Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides

@@ -39,6 +39,7 @@ export const practiceLiveApplySupportedResourceTypes = new Set([
   "aws_s3_bucket",
   "aws_s3_bucket_policy",
   "aws_s3_bucket_public_access_block",
+  "aws_s3_bucket_versioning",
   "aws_s3_object",
   "aws_codebuild_project",
   "aws_codedeploy_app",
@@ -139,6 +140,26 @@ export function getLiveApplySupportedResourceTypes(
   }
 
   return practiceLiveApplySupportedResourceTypes;
+}
+
+export function getRecommendedLiveApplyProfile(
+  resourceTypes: Iterable<string>
+): DeploymentLiveProfile {
+  const requiredResourceTypes = [...new Set(resourceTypes)];
+  const orderedProfiles: DeploymentLiveProfile[] = [
+    "practice",
+    "demo_web_service",
+    "demo_web_service_with_rds"
+  ];
+
+  return (
+    orderedProfiles.find((profile) => {
+      const supportedResourceTypes = getLiveApplySupportedResourceTypes(profile);
+      return requiredResourceTypes.every((resourceType) =>
+        supportedResourceTypes.has(resourceType)
+      );
+    }) ?? "practice"
+  );
 }
 
 export function getTerraformPlanSupportedResourceTypes(): ReadonlySet<string> {

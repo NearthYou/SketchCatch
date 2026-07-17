@@ -115,6 +115,7 @@ test("practice live apply safety accepts every Terraform resource in the Reposit
     "aws_s3_bucket",
     "aws_s3_bucket_policy",
     "aws_s3_bucket_public_access_block",
+    "aws_s3_bucket_versioning",
     "aws_s3_object",
     "aws_security_group",
     "aws_subnet",

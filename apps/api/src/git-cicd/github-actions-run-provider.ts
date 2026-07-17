@@ -3,6 +3,7 @@ import type {
   Ec2AsgGitOpsReleaseEvidence,
   EcsGitOpsReleaseEvidence,
   GitOpsReleaseEvidence,
+  GitCicdPipelineExecutionKind,
   GitCicdPipelineRunStatus,
   GitCicdPipelineStageKind,
   GitCicdPipelineStageStatus,
@@ -33,6 +34,9 @@ export type GitCicdRunProviderLog = {
 };
 
 export type GitCicdRunProviderSnapshot = {
+  workflowRunId: string;
+  workflowRunAttempt: number;
+  executionKind: GitCicdPipelineExecutionKind;
   commitSha: string;
   commitMessage: string;
   branch: string;
@@ -55,9 +59,9 @@ export type GitCicdRunProvider = {
   listCommitFiles(input: GitHubRepositoryRefInput & { commitSha: string }): Promise<string[]>;
 };
 
-const monitoredWorkflowSlots = ["SketchCatch Infra", "SketchCatch App"] as const;
-const monitoredWorkflowNames = new Set<string>(monitoredWorkflowSlots);
-export const maxHydratedPipelineCommitGroups = 10;
+export const maxHydratedPipelineRuns = 10;
+const appWorkflowPath = ".github/workflows/sketchcatch-app.yml";
+const infrastructureWorkflowPath = ".github/workflows/sketchcatch-infra.yml";
 
 export function createGitHubActionsRunProvider(
   client: GitHubActionsReadClient
@@ -67,99 +71,97 @@ export function createGitHubActionsRunProvider(
     async listSnapshots(input) {
       const runs = selectLatestWorkflowAttempts(
         (await client.listBranchWorkflowRuns(input)).filter((run) =>
-          monitoredWorkflowNames.has(run.workflowName) &&
+          classifyWorkflowRun(run) !== null &&
           (!input.commitSha || run.commitSha === input.commitSha)
         )
-      ).sort(compareWorkflowRunsNewestFirst);
-      const groups = new Map<string, GitHubWorkflowRunSummary[]>();
-      for (const run of runs)
-        groups.set(run.commitSha, [...(groups.get(run.commitSha) ?? []), run]);
+      )
+        .sort(compareWorkflowRunsNewestFirst)
+        .slice(0, maxHydratedPipelineRuns);
 
       const snapshots: GitCicdRunProviderSnapshot[] = [];
-      for (const [commitSha, commitRuns] of [...groups].slice(0, maxHydratedPipelineCommitGroups)) {
+      for (const run of runs) {
+        const executionKind = classifyWorkflowRun(run);
+        if (!executionKind) continue;
         const jobs: GitCicdRunProviderJob[] = [];
         const logs: GitCicdRunProviderLog[] = [];
         const releaseEvidenceCandidates: GitOpsReleaseEvidence[] = [];
-        for (const run of [...commitRuns].sort(compareWorkflowHydrationOrder)) {
-          for (const job of await client.listWorkflowJobs({ ...input, runId: run.id })) {
-            const jobStageKind = mapJobStageKind(run.workflowName, job.name);
-            const mappedSteps = (job.steps ?? []).flatMap((step) => {
-              const stageKind = mapStepStageKind(run.workflowName, job.name, step.name);
-              return stageKind
-                ? [
-                    {
-                      stageKind,
-                      status: mapStageStatus(step.status, step.conclusion),
-                      runUrl: job.runUrl,
-                      startedAt: toDate(step.startedAt),
-                      finishedAt: toDate(step.finishedAt)
-                    }
-                  ]
-                : [];
+        for (const job of await client.listWorkflowJobs({ ...input, runId: run.id })) {
+          const jobStageKind = mapJobStageKind(run.workflowName, job.name);
+          const mappedSteps = (job.steps ?? []).flatMap((step) => {
+            const stageKind = mapStepStageKind(run.workflowName, job.name, step.name);
+            return stageKind
+              ? [
+                  {
+                    stageKind,
+                    status: mapStageStatus(step.status, step.conclusion),
+                    runUrl: job.runUrl,
+                    startedAt: toDate(step.startedAt),
+                    finishedAt: toDate(step.finishedAt)
+                  }
+                ]
+              : [];
+          });
+          if (mappedSteps.length) jobs.push(...mappedSteps);
+          else {
+            jobs.push({
+              stageKind: jobStageKind,
+              status: mapStageStatus(job.status, job.conclusion),
+              runUrl: job.runUrl,
+              startedAt: toDate(job.startedAt),
+              finishedAt: toDate(job.finishedAt)
             });
-            if (mappedSteps.length) jobs.push(...mappedSteps);
-            else {
-              jobs.push({
-                stageKind: jobStageKind,
-                status: mapStageStatus(job.status, job.conclusion),
-                runUrl: job.runUrl,
-                startedAt: toDate(job.startedAt),
-                finishedAt: toDate(job.finishedAt)
-              });
-            }
-            if (job.status !== "completed" || job.conclusion === "skipped") continue;
-            let rawText: string;
-            try {
-              rawText = await client.readWorkflowJobLog({ ...input, jobId: job.id });
-            } catch {
-              logs.push({
-                stageKind: jobStageKind,
-                level: "warning",
-                message: "GitHub Actions job log is unavailable."
-              });
-              continue;
-            }
-            releaseEvidenceCandidates.push(...parseReleaseEvidence(rawText));
-            const text = maskDeploymentMessage(rawText);
-            let activeStageKind = jobStageKind;
-            for (const line of text.split(/\r?\n/).filter(Boolean)) {
-              const lineStageKind = mapLogLineStageKind(run.workflowName, job.name, line);
-              if (lineStageKind) activeStageKind = lineStageKind;
-              const evidenceLabel = line.includes("SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=")
-                ? "ECS release evidence captured."
-                : line.includes("SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=")
-                  ? "Lambda release evidence captured."
-                  : line.includes("SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64=")
-                    ? "EC2 ASG release evidence captured."
-                    : line.includes("SKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64=")
-                      ? "Static release evidence captured."
-                      : null;
-              logs.push({
-                stageKind: evidenceLabel ? "verify" : activeStageKind,
-                level: job.conclusion === "failure" ? "error" : "info",
-                message: evidenceLabel ?? line
-              });
-            }
+          }
+          if (job.status !== "completed" || job.conclusion === "skipped") continue;
+          let rawText: string;
+          try {
+            rawText = await client.readWorkflowJobLog({ ...input, jobId: job.id });
+          } catch {
+            logs.push({
+              stageKind: jobStageKind,
+              level: "warning",
+              message: "GitHub Actions job log is unavailable."
+            });
+            continue;
+          }
+          releaseEvidenceCandidates.push(...parseReleaseEvidence(rawText));
+          const text = maskDeploymentMessage(rawText);
+          let activeStageKind = jobStageKind;
+          for (const line of text.split(/\r?\n/).filter(Boolean)) {
+            const lineStageKind = mapLogLineStageKind(run.workflowName, job.name, line);
+            if (lineStageKind) activeStageKind = lineStageKind;
+            const evidenceLabel = line.includes("SKETCHCATCH_ECS_RELEASE_EVIDENCE_B64=")
+              ? "ECS release evidence captured."
+              : line.includes("SKETCHCATCH_LAMBDA_RELEASE_EVIDENCE_B64=")
+                ? "Lambda release evidence captured."
+                : line.includes("SKETCHCATCH_EC2_RELEASE_EVIDENCE_B64=")
+                  ? "EC2 ASG release evidence captured."
+                  : line.includes("SKETCHCATCH_STATIC_RELEASE_EVIDENCE_B64=")
+                    ? "Static release evidence captured."
+                    : null;
+            logs.push({
+              stageKind: evidenceLabel ? "verify" : activeStageKind,
+              level: job.conclusion === "failure" ? "error" : "info",
+              message: evidenceLabel ?? line
+            });
           }
         }
-        const first = commitRuns[0]!;
-        const logRevision = createSelectedWorkflowRevision(commitRuns);
         snapshots.push({
-          commitSha,
-          commitMessage: first.commitMessage,
-          branch: first.branch,
-          workflowName: commitRuns.map((run) => run.workflowName).join(" + "),
-          runUrl: commitRuns.at(-1)?.runUrl ?? first.runUrl,
-          startedAt: minDate(commitRuns.map((run) => toDate(run.startedAt))),
-          finishedAt: commitRuns.every((run) => run.status === "completed")
-            ? maxDate(commitRuns.map((run) => toDate(run.finishedAt)))
-            : null,
-          status: aggregateStatus(commitRuns),
-          upstreamOrderingToken: `${getMaxWorkflowUpdatedAt(commitRuns).toISOString()}|${createSelectedWorkflowOrderingRevision(commitRuns)}`,
-          logRevision,
+          workflowRunId: String(run.id),
+          workflowRunAttempt: run.runAttempt,
+          executionKind,
+          commitSha: run.commitSha,
+          commitMessage: run.commitMessage,
+          branch: run.branch,
+          workflowName: run.workflowName,
+          runUrl: run.runUrl,
+          startedAt: toDate(run.startedAt),
+          finishedAt: run.status === "completed" ? toDate(run.finishedAt) : null,
+          status: aggregateStatus([run]),
+          upstreamOrderingToken: `${getWorkflowUpdatedAt(run).toISOString()}|${String(run.id).padStart(20, "0")}:${String(run.runAttempt).padStart(10, "0")}`,
+          logRevision: `${run.workflowName}:${run.id}:${run.runAttempt}`,
           jobs,
           logs,
-          releaseEvidence: selectReleaseEvidence(releaseEvidenceCandidates, commitSha)
+          releaseEvidence: selectReleaseEvidence(releaseEvidenceCandidates, run.commitSha)
         });
       }
       return snapshots;
@@ -177,53 +179,14 @@ function compareWorkflowRunsNewestFirst(
   if (createdDifference !== 0) return createdDifference;
   const shaDifference = left.commitSha.localeCompare(right.commitSha);
   if (shaDifference !== 0) return shaDifference;
+  const idDifference = right.id - left.id;
+  if (idDifference !== 0) return idDifference;
   const workflowDifference = left.workflowName.localeCompare(right.workflowName);
-  return workflowDifference !== 0 ? workflowDifference : right.id - left.id;
+  return workflowDifference !== 0 ? workflowDifference : right.runAttempt - left.runAttempt;
 }
 
-function compareWorkflowHydrationOrder(
-  left: GitHubWorkflowRunSummary,
-  right: GitHubWorkflowRunSummary
-): number {
-  const workflowOrder = ["SketchCatch Infra", "SketchCatch App"];
-  return (
-    workflowOrder.indexOf(left.workflowName) - workflowOrder.indexOf(right.workflowName) ||
-    left.id - right.id
-  );
-}
-
-function createSelectedWorkflowRevision(runs: readonly GitHubWorkflowRunSummary[]): string {
-  return [...runs]
-    .sort(
-      (left, right) =>
-        left.workflowName.localeCompare(right.workflowName) ||
-        left.id - right.id ||
-        left.runAttempt - right.runAttempt
-    )
-    .map((run) => `${run.workflowName}:${run.id}:${run.runAttempt}`)
-    .join("|");
-}
-
-function createSelectedWorkflowOrderingRevision(
-  runs: readonly GitHubWorkflowRunSummary[]
-): string {
-  const selectedByWorkflow = new Map(runs.map((run) => [run.workflowName, run]));
-  const presenceMask = monitoredWorkflowSlots
-    .map((workflowName) => (selectedByWorkflow.has(workflowName) ? "1" : "0"))
-    .join("");
-  const slots = monitoredWorkflowSlots.map((workflowName) => {
-    const run = selectedByWorkflow.get(workflowName);
-    return run
-      ? `${String(run.id).padStart(20, "0")}:${String(run.runAttempt).padStart(10, "0")}`
-      : "00000000000000000000:0000000000";
-  });
-  return [presenceMask, ...slots].join("|");
-}
-
-function getMaxWorkflowUpdatedAt(runs: readonly GitHubWorkflowRunSummary[]): Date {
-  const timestamp = Math.max(
-    ...runs.map((run) => readWorkflowTime(run.updatedAt) || readWorkflowTime(run.createdAt))
-  );
+function getWorkflowUpdatedAt(run: GitHubWorkflowRunSummary): Date {
+  const timestamp = readWorkflowTime(run.updatedAt) || readWorkflowTime(run.createdAt);
   return new Date(timestamp);
 }
 
@@ -238,7 +201,7 @@ function selectLatestWorkflowAttempts(
 ): GitHubWorkflowRunSummary[] {
   const selected = new Map<string, GitHubWorkflowRunSummary>();
   for (const run of runs) {
-    const key = `${run.commitSha}\0${run.workflowName}`;
+    const key = String(run.id);
     const current = selected.get(key);
     if (!current || compareAttempts(run, current) > 0) selected.set(key, run);
   }
@@ -246,12 +209,7 @@ function selectLatestWorkflowAttempts(
 }
 
 function compareAttempts(left: GitHubWorkflowRunSummary, right: GitHubWorkflowRunSummary): number {
-  const automatedEventDifference =
-    Number(isAutomatedDeploymentEvent(left.event)) - Number(isAutomatedDeploymentEvent(right.event));
-  if (automatedEventDifference !== 0) return automatedEventDifference;
-  if (left.id === right.id && left.runAttempt !== right.runAttempt) {
-    return left.runAttempt - right.runAttempt;
-  }
+  if (left.runAttempt !== right.runAttempt) return left.runAttempt - right.runAttempt;
   const leftUpdated = left.updatedAt ? Date.parse(left.updatedAt) : 0;
   const rightUpdated = right.updatedAt ? Date.parse(right.updatedAt) : 0;
   if (leftUpdated !== rightUpdated) return leftUpdated - rightUpdated;
@@ -261,8 +219,24 @@ function compareAttempts(left: GitHubWorkflowRunSummary, right: GitHubWorkflowRu
   return left.id - right.id;
 }
 
-function isAutomatedDeploymentEvent(event: string): boolean {
-  return event === "push" || event === "workflow_run";
+function classifyWorkflowRun(
+  run: GitHubWorkflowRunSummary
+): GitCicdPipelineExecutionKind | null {
+  if (
+    run.workflowName === "SketchCatch App" &&
+    run.workflowPath === appWorkflowPath &&
+    run.event === "push"
+  ) {
+    return "app";
+  }
+  if (
+    run.workflowName === "SketchCatch Infra" &&
+    run.workflowPath === infrastructureWorkflowPath &&
+    run.event === "workflow_dispatch"
+  ) {
+    return "infra";
+  }
+  return null;
 }
 
 function mapStepStageKind(
@@ -270,6 +244,11 @@ function mapStepStageKind(
   jobName: string,
   stepName: string
 ): GitCicdPipelineStageKind | null {
+  if (workflowName === "SketchCatch Infra" && jobName === "deploy") {
+    if (stepName === "Terraform Plan") return "infra_plan";
+    if (stepName === "Terraform Apply") return "infra_apply";
+    return null;
+  }
   if (workflowName !== "SketchCatch App" || jobName !== "release") return null;
   if (stepName === "Run CodeBuild" || stepName === "Upload release artifact") return "app_build";
   if (stepName === "Build confirmed SAM application") return "app_build";
@@ -296,6 +275,10 @@ function mapLogLineStageKind(
   line: string
 ): GitCicdPipelineStageKind | null {
   for (const stepName of [
+    "Prepare Terraform",
+    "Terraform Plan",
+    "Terraform Apply",
+    "Report SketchCatch infrastructure result",
     "Run CodeBuild",
     "Publish immutable ECR digest",
     "Deploy ECS Fargate revision",
@@ -724,14 +707,4 @@ function aggregateStatus(runs: readonly GitHubWorkflowRunSummary[]): GitCicdPipe
 
 function toDate(value: string | null): Date | null {
   return value ? new Date(value) : null;
-}
-
-function minDate(values: readonly (Date | null)[]): Date | null {
-  const dates = values.filter((value): value is Date => value !== null);
-  return dates.length ? new Date(Math.min(...dates.map((date) => date.getTime()))) : null;
-}
-
-function maxDate(values: readonly (Date | null)[]): Date | null {
-  const dates = values.filter((value): value is Date => value !== null);
-  return dates.length ? new Date(Math.max(...dates.map((date) => date.getTime()))) : null;
 }

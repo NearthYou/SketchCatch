@@ -11,6 +11,11 @@ import {
   type DeploymentStartupReconciliationResult
 } from "./deployments/deployment-startup-reconciliation.js";
 import { createConfiguredDeploymentWorkerDispatcher } from "./deployments/deployment-worker-dispatcher.js";
+import {
+  createEcsInterruptedDirectReleaseRecoveryDispatcher,
+  createInterruptedDirectApplicationReleaseRecovery,
+  createPostgresInterruptedDirectReleaseRecoveryStore
+} from "./deployments/direct-release-recovery-orchestrator.js";
 import { warmTerraformPluginCache as defaultWarmTerraformPluginCache } from "./deployments/terraform-plugin-cache-warmup.js";
 import type { TerraformRunResult } from "./deployments/terraform-runner.js";
 import { warmTrivyCheckBundle as defaultWarmTrivyCheckBundle } from "./services/terraform/trivy-terraform-scan.js";
@@ -100,6 +105,18 @@ async function defaultRecoverInterruptedDeployments(
   const workerMode = getDeploymentWorkerMode();
   const dispatcher =
     workerMode === "ecs" ? createConfiguredDeploymentWorkerDispatcher() : undefined;
+  const recoverApplicationReleases =
+    workerMode === "ecs" && dispatcher
+      ? createEcsInterruptedDirectReleaseRecoveryDispatcher({
+          store: createPostgresInterruptedDirectReleaseRecoveryStore(client.db),
+          jobs: jobRepository,
+          dispatcher,
+          ...(logger ? { logger } : {})
+        })
+      : createInterruptedDirectApplicationReleaseRecovery({
+          db: client.db,
+          ...(logger ? { logger } : {})
+        });
 
   return reconcileDeploymentStartup(
     {
@@ -110,7 +127,8 @@ async function defaultRecoverInterruptedDeployments(
     jobRepository,
     deploymentRepository,
     async (job) => dispatcher?.inspect({ job }) ?? { state: "MISSING", lastStatus: null },
-    logger
+    logger,
+    recoverApplicationReleases
   );
 }
 

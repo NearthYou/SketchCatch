@@ -2,11 +2,12 @@ import { requireGitHubAppConfig } from "../config/env.js";
 import {
   createTerraformArtifactCanonicalContent,
   defaultTerraformArtifactMaxBytes,
-  downloadTerraformArtifactFromS3,
   parseTerraformArtifactBundle
 } from "../deployments/terraform-workspace.js";
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
+import { createProjectAssetStorage } from "../projects/project-asset-storage-factory.js";
+import type { ProjectAssetStorage } from "../projects/project-asset-storage.js";
 import {
   createGitHubAppClient,
   type GitHubAppClient
@@ -19,19 +20,27 @@ import type {
 export type CreateGitHubAppGitProviderOptions = {
   githubAppClient?: GitHubAppClient;
   downloadTerraformArtifact?: (objectKey: string) => Promise<Buffer | Uint8Array | string>;
+  projectAssetStorage?: ProjectAssetStorage;
 };
 
 export function createGitHubAppGitProvider(
   options: CreateGitHubAppGitProviderOptions = {}
 ): GitProvider {
   let cachedClient: GitHubAppClient | null = null;
+  const projectAssetStorage = options.projectAssetStorage ?? createProjectAssetStorage();
 
   return {
     async createPullRequest(input) {
       cachedClient = cachedClient ?? options.githubAppClient ?? createGitHubAppClientFromEnv();
       const files = (
         await Promise.all(
-          input.files.map((file) => expandPullRequestFile(file, options.downloadTerraformArtifact))
+          input.files.map((file) =>
+            expandPullRequestFile(
+              file,
+              options.downloadTerraformArtifact,
+              projectAssetStorage
+            )
+          )
         )
       ).flat();
       const result = await cachedClient.createPullRequest({
@@ -62,9 +71,14 @@ async function expandPullRequestFile(
   file: GitProviderCreatePullRequestInput["files"][number],
   downloadTerraformArtifact:
     | ((objectKey: string) => Promise<Buffer | Uint8Array | string>)
-    | undefined
+    | undefined,
+  projectAssetStorage: ProjectAssetStorage
 ): Promise<Array<{ path: string; content: string }>> {
-  const content = await downloadTerraformArtifactText(file, downloadTerraformArtifact);
+  const content = await downloadTerraformArtifactText(
+    file,
+    downloadTerraformArtifact,
+    projectAssetStorage
+  );
   assertApprovedTerraformArtifact(file, content);
   if (file.contentType !== "application/vnd.sketchcatch.terraform-files+json") {
     return [{ path: file.path, content }];
@@ -77,7 +91,7 @@ async function expandPullRequestFile(
   }));
 }
 
-// S3에서 다시 읽은 Terraform이 사용자가 승인한 Plan의 파일과 같은지 확인합니다.
+// Project asset 저장소에서 다시 읽은 Terraform이 승인한 Plan의 파일과 같은지 확인합니다.
 function assertApprovedTerraformArtifact(
   file: GitProviderCreatePullRequestInput["files"][number],
   content: string
@@ -123,7 +137,8 @@ async function downloadTerraformArtifactText(
   file: GitProviderCreatePullRequestInput["files"][number],
   downloadTerraformArtifact:
     | ((objectKey: string) => Promise<Buffer | Uint8Array | string>)
-    | undefined
+    | undefined,
+  projectAssetStorage: ProjectAssetStorage
 ): Promise<string> {
   if (file.content !== undefined) {
     return file.content;
@@ -136,9 +151,14 @@ async function downloadTerraformArtifactText(
   const content =
     downloadTerraformArtifact !== undefined
       ? await downloadTerraformArtifact(file.artifactObjectKey)
-      : await downloadTerraformArtifactFromS3(file.artifactObjectKey, {
-          maxBytes: defaultTerraformArtifactMaxBytes
-        });
+      : await projectAssetStorage.getObject({ objectKey: file.artifactObjectKey });
 
-  return typeof content === "string" ? content : Buffer.from(content).toString("utf8");
+  const buffer = typeof content === "string" ? Buffer.from(content) : Buffer.from(content);
+  if (buffer.byteLength > defaultTerraformArtifactMaxBytes) {
+    throw new Error(
+      `Terraform artifact exceeds the ${defaultTerraformArtifactMaxBytes} byte size limit`
+    );
+  }
+
+  return buffer.toString("utf8");
 }

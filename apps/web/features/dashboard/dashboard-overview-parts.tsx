@@ -89,6 +89,8 @@ export function getDeploymentStatusLabel(status: DeploymentStatus): string {
     CANCELLED: "취소",
     DESTROYED: "정리 완료",
     FAILED: "실패",
+    PARTIALLY_CANCELED: "부분 취소",
+    PARTIALLY_FAILED: "부분 실패",
     PENDING: "대기",
     RUNNING: "진행 중",
     SUCCESS: "성공"
@@ -104,7 +106,12 @@ export function getDeploymentTone(
     return "success";
   }
 
-  if (status === "FAILED" || status === "CANCELLED") {
+  if (
+    status === "FAILED" ||
+    status === "CANCELLED" ||
+    status === "PARTIALLY_FAILED" ||
+    status === "PARTIALLY_CANCELED"
+  ) {
     return "error";
   }
 

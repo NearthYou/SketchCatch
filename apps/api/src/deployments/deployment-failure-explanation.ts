@@ -95,8 +95,12 @@ function toAiTerraformStage(stage: DeploymentFailureStage | null): AiTerraformSt
       return "plan";
     case "apply":
     case "destroy":
+    case "application_release":
+    case "rollback":
       return "apply";
     case "init":
+    case "build_environment":
+    case "preflight":
     case "validate":
     case "aws_connection":
     case "mock_run":

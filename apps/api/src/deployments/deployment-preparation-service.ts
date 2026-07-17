@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   ConfirmedBuildConfig,
   DeploymentConsolePhase,
+  DeploymentLiveProfile,
   DeploymentScope,
   DeploymentStatus,
   DiagramJson,
@@ -9,6 +10,7 @@ import type {
   TerraformSyncFileInput
 } from "@sketchcatch/types";
 import { DeploymentConflictError } from "./deployment-service.js";
+import { getRecommendedLiveApplyProfile } from "./deployment-plan-summary.js";
 
 export type DeploymentPreparationDraft = {
   revision: number;
@@ -39,6 +41,7 @@ export type ResolveDeploymentPreparationInput = {
 };
 
 export type ResolvedDeploymentPreparation = {
+  liveProfile: DeploymentLiveProfile;
   scope: DeploymentScope;
   targetKind: RuntimeTargetKind | null;
   preparedDraftRevision: number;
@@ -79,11 +82,20 @@ export async function resolveDeploymentPreparation(
   }
 
   return {
+    liveProfile: getRecommendedLiveApplyProfile(getDraftResourceTypes(draft)),
     scope,
     targetKind: scope === "infrastructure" ? null : target?.runtimeTargetKind ?? null,
     preparedDraftRevision: draft.revision,
     preparedSnapshotHash: createPreparedDraftSnapshotHash(draft)
   };
+}
+
+function getDraftResourceTypes(draft: DeploymentPreparationDraft): string[] {
+  return draft.diagramJson.nodes.flatMap((node) => {
+    if (node.kind !== "resource") return [];
+    const resourceType = node.parameters?.resourceType ?? node.type;
+    return resourceType ? [resourceType] : [];
+  });
 }
 
 export function detectDeploymentScope({
@@ -108,6 +120,26 @@ export function createPreparedDraftSnapshotHash(value: {
   terraformFiles: TerraformSyncFileInput[] | null;
 }): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+export function createPreparedReleaseSnapshotHash(input: {
+  candidateId: string;
+  commitSha: string;
+  compositeDigest: string;
+  configFingerprint: string;
+}): string {
+  return createHash("sha256")
+    .update(
+      canonicalJson({
+        releaseCandidate: {
+          id: input.candidateId,
+          commitSha: input.commitSha,
+          compositeDigest: input.compositeDigest,
+          configFingerprint: input.configFingerprint
+        }
+      })
+    )
+    .digest("hex");
 }
 
 export function getDeploymentConsolePhase(deployment: {

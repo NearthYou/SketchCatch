@@ -208,6 +208,8 @@ function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
     userId: ACTIVE_USER_ID,
     name: "Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: new Date("2026-06-24T00:00:00.000Z"),
     updatedAt: new Date("2026-06-24T00:00:00.000Z"),
     ...overrides

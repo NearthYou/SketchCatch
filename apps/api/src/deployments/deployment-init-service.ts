@@ -23,7 +23,7 @@ import {
 } from "./terraform-workspace.js";
 import {
   runTerraformInit as defaultRunTerraformInit,
-  terraformMutationTimeoutMs,
+  terraformInitTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { maskDeploymentMessage } from "./log-masking.js";
@@ -163,7 +163,7 @@ export async function runDeploymentInit(
       env: awsCredentials.env,
       onOutputLine: initLogWriter.onOutputLine,
       signal: input.abortSignal,
-      timeoutMs: terraformMutationTimeoutMs
+      timeoutMs: terraformInitTimeoutMs
     });
     sequence = await initLogWriter.complete({
       label: "terraform init",
