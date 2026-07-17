@@ -4,10 +4,12 @@ import { test } from "node:test";
 import {
   parseCostEstimatePeriod,
   parseCostUsageConnectionId,
+  parseCostUsageProjectKey,
   parseExpectedUserCount,
   parseCostDashboardTab,
   writeCostEstimatePeriod,
   writeCostUsageConnectionId,
+  writeCostUsageProjectKey,
   writeExpectedUserCount,
   writeCostDashboardTab
 } from "./cost-dashboard-url-state";
@@ -73,4 +75,16 @@ test("AWS connection selection round-trips without dropping other filters", () =
   assert.equal(selected.get("tab"), "usage");
   assert.equal(selected.get("range"), "7d");
   assert.equal(cleared.has("connection"), false);
+});
+
+test("usage project keys are encoded, restored, and omitted for all projects", () => {
+  const projectKey = "project-id:alpha/beta";
+  const selected = writeCostUsageProjectKey(new URLSearchParams("tab=usage"), projectKey);
+  const allProjects = writeCostUsageProjectKey(selected, "all-projects");
+
+  assert.equal(parseCostUsageProjectKey(selected), projectKey);
+  assert.match(selected.toString(), /project=project-id%3Aalpha%2Fbeta/);
+  assert.equal(selected.get("tab"), "usage");
+  assert.equal(parseCostUsageProjectKey(new URLSearchParams()), "all-projects");
+  assert.equal(allProjects.has("project"), false);
 });

@@ -1,5 +1,6 @@
 import type { CostEstimatePeriod } from "@sketchcatch/types";
 import { normalizeExpectedUserCount } from "../../../features/costs/cost-estimate-input";
+import { COST_USAGE_ALL_PROJECTS_KEY } from "../../../features/costs/cost-usage-project-view";
 
 export type CostDashboardTab = "estimate" | "usage";
 export const DEFAULT_EXPECTED_USER_COUNT = 1000;
@@ -87,6 +88,26 @@ export function writeCostUsageConnectionId(
     next.set("connection", normalizedConnectionId);
   } else {
     next.delete("connection");
+  }
+
+  return next;
+}
+
+export function parseCostUsageProjectKey(searchParams: CostDashboardSearchParams): string {
+  return searchParams.get("project")?.trim() || COST_USAGE_ALL_PROJECTS_KEY;
+}
+
+export function writeCostUsageProjectKey(
+  searchParams: CostDashboardSearchParams,
+  projectKey: string
+): URLSearchParams {
+  const next = new URLSearchParams(searchParams.toString());
+  const normalizedProjectKey = projectKey.trim();
+
+  if (!normalizedProjectKey || normalizedProjectKey === COST_USAGE_ALL_PROJECTS_KEY) {
+    next.delete("project");
+  } else {
+    next.set("project", normalizedProjectKey);
   }
 
   return next;

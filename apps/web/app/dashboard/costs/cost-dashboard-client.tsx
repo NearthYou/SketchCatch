@@ -3,17 +3,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CostEstimatePeriod, CostUsageAnalysisRange } from "@sketchcatch/types";
-import { COST_USAGE_ALL_PROJECTS_KEY } from "../../../features/costs/cost-usage-project-view";
 import { CostEstimatePanel } from "./cost-estimate-panel";
 import { CostUsagePanel } from "./cost-usage-panel";
 import {
   parseCostEstimatePeriod,
   parseCostDashboardTab,
   parseCostUsageConnectionId,
+  parseCostUsageProjectKey,
   parseExpectedUserCount,
   writeCostEstimatePeriod,
   writeCostDashboardTab,
   writeCostUsageConnectionId,
+  writeCostUsageProjectKey,
   writeExpectedUserCount,
   type CostDashboardTab
 } from "./cost-dashboard-url-state";
@@ -39,7 +40,9 @@ export function CostDashboardClient() {
   const [selectedConnectionId, setSelectedConnectionId] = useState(() =>
     parseCostUsageConnectionId(searchParams)
   );
-  const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
+  const [selectedProjectKey, setSelectedProjectKey] = useState(() =>
+    parseCostUsageProjectKey(searchParams)
+  );
   const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>("30d");
   const tabRefs = useRef<Partial<Record<CostDashboardTab, HTMLButtonElement | null>>>({});
 
@@ -47,6 +50,7 @@ export function CostDashboardClient() {
     setActiveTab(parseCostDashboardTab(searchParams));
     setEstimatePeriod(parseCostEstimatePeriod(searchParams));
     setSelectedConnectionId(parseCostUsageConnectionId(searchParams));
+    setSelectedProjectKey(parseCostUsageProjectKey(searchParams));
     const nextExpectedUserCount = parseExpectedUserCount(searchParams);
 
     if (expectedUserCountRef.current !== nextExpectedUserCount) {
@@ -94,6 +98,14 @@ export function CostDashboardClient() {
     (nextConnectionId: string): void => {
       setSelectedConnectionId(nextConnectionId);
       pushCostSearchParams(writeCostUsageConnectionId(searchParams, nextConnectionId));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeSelectedProject = useCallback(
+    (nextProjectKey: string): void => {
+      setSelectedProjectKey(nextProjectKey);
+      pushCostSearchParams(writeCostUsageProjectKey(searchParams, nextProjectKey));
     },
     [pushCostSearchParams, searchParams]
   );
@@ -183,7 +195,7 @@ export function CostDashboardClient() {
           ) : (
             <CostUsagePanel
               onConnectionChange={changeSelectedConnection}
-              onProjectChange={setSelectedProjectKey}
+              onProjectChange={changeSelectedProject}
               onRangeChange={setUsageRange}
               range={usageRange}
               selectedConnectionId={selectedConnectionId}
