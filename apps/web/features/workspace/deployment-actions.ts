@@ -91,7 +91,7 @@ export function getDeploymentActionState(
     deployment &&
       isDestroyable &&
       deployment.status !== "RUNNING" &&
-      !(isDestroyPlan && isPlanApproved)
+      !isDestroyPlan
   );
 
   const canRunApplyPlan = canShowApplyPlanAction && !isLoading;

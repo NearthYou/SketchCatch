@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Deployment, ProjectDeletePreview } from "@sketchcatch/types";
 import {
   getDestroyDeleteAcknowledgedWarningIds,
+  isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "./project-delete-flow";
 
@@ -25,7 +26,7 @@ test("destroy delete polling stops when the projects page unmounts", () => {
   const pollingSource = getSourceBetween(
     projectsClientSource,
     "async function waitForProjectDeployment(input:",
-    "function isDestroyPlanReadyForApproval"
+    "function compareProjectsBySortMode"
   );
 
   assert.match(projectsClientSource, /const isMountedRef = useRef\(true\);/);
@@ -130,6 +131,46 @@ test("destroy delete approval has no warning acknowledgements without a plan sum
       }
     } as unknown as Deployment),
     []
+  );
+});
+
+test("project deletion accepts a completed unapproved destroy plan", () => {
+  const deployment = {
+    ...createDeploymentWithWarnings([]),
+    isBlocked: false
+  };
+
+  assert.equal(deployment.isBlocked, false);
+  assert.equal(deployment.blockedBy, null);
+  assert.equal(isDestroyPlanReadyForApproval(deployment), true);
+});
+
+test("project deletion accepts a destroy plan that preserves an apply failure", () => {
+  const deployment = {
+    ...createDeploymentWithWarnings([]),
+    errorSummary: "Apply failed after creating resources.",
+    failureStage: "apply" as const,
+    isBlocked: false,
+    status: "FAILED" as const
+  };
+
+  assert.equal(
+    isDestroyPlanReadyForApproval(deployment),
+    true,
+    "a preserved apply failure must still advance to destroy approval"
+  );
+});
+
+test("project deletion does not accept a stale destroy plan while planning is still running", () => {
+  const deployment = createDeploymentWithWarnings([]);
+
+  assert.equal(
+    isDestroyPlanReadyForApproval({
+      ...deployment,
+      activeStage: "plan",
+      status: "RUNNING"
+    }),
+    false
   );
 });
 

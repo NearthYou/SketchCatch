@@ -31,3 +31,13 @@ export function getDestroyDeleteAcknowledgedWarningIds(
       .map((warning) => warning.id) ?? []
   );
 }
+
+export function isDestroyPlanReadyForApproval(deployment: Deployment): boolean {
+  return (
+    deployment.status !== "RUNNING" &&
+    deployment.activeStage === null &&
+    deployment.currentPlanArtifactId !== null &&
+    deployment.currentPlanOperation === "destroy" &&
+    deployment.planSummary !== null
+  );
+}

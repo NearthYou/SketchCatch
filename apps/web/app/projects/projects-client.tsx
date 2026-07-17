@@ -37,6 +37,7 @@ import {
 } from "../../features/projects/project-action-menu";
 import {
   getDestroyDeleteAcknowledgedWarningIds,
+  isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "../../features/projects/project-delete-flow";
 import { filterProjectsByName } from "../../features/projects/project-search";
@@ -228,7 +229,10 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       setDeleteDialog({ status: "closed" });
 
       if (result.cleanup.failedObjectCount > 0) {
-        setDeleteErrorMessage(result.cleanup.message ?? "일부 SketchCatch 산출물 정리에 실패했습니다.");
+        setDeleteErrorMessage(
+          result.cleanup.message ??
+            "프로젝트 기록은 삭제됐지만 일부 SketchCatch 내부 S3 산출물 정리에 실패했습니다. 이 경고는 클라우드 리소스가 남았다는 의미가 아닙니다."
+        );
       }
     } catch (error) {
       setDeleteDialog({
@@ -354,7 +358,10 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       setDeleteDialog({ status: "closed" });
 
       if (result.cleanup.failedObjectCount > 0) {
-        setDeleteErrorMessage(result.cleanup.message ?? "일부 SketchCatch 산출물 정리에 실패했습니다.");
+        setDeleteErrorMessage(
+          result.cleanup.message ??
+            "프로젝트 기록은 삭제됐지만 일부 SketchCatch 내부 S3 산출물 정리에 실패했습니다. 이 경고는 클라우드 리소스가 남았다는 의미가 아닙니다."
+        );
       }
     } catch (error) {
       if (!isMountedRef.current) {
@@ -892,15 +899,6 @@ async function waitForProjectDeployment(input: {
   }
 
   throw new Error(input.timeoutMessage);
-}
-
-function isDestroyPlanReadyForApproval(deployment: Deployment): boolean {
-  return (
-    deployment.currentPlanArtifactId !== null &&
-    deployment.currentPlanOperation === "destroy" &&
-    deployment.isBlocked &&
-    deployment.blockedBy === "missing_approval"
-  );
 }
 
 function compareProjectsBySortMode(
