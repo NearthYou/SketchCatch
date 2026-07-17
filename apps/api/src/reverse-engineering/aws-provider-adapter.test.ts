@@ -10,6 +10,10 @@ const ALB_ARN =
   "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/shared/1111111111111111";
 const CLOUDFRONT_ARN_A = "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTIONA";
 const CLOUDFRONT_ARN_B = "arn:aws:cloudfront::123456789012:distribution/EDISTRIBUTIONB";
+const ECS_CLUSTER_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
+const ECS_SERVICE_ARN = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
+const ECS_TASK_DEFINITION_ARN =
+  "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
 
 test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform import로 변환한다", async () => {
   const result = await scan([
@@ -69,6 +73,166 @@ test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform imp
     assert.equal(suggestion?.handoffReady, false);
     assert.equal(suggestion?.importCommand, undefined);
   }
+});
+
+test("ECS Cluster Service Task Definition을 known type과 provider import identity로 변환한다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ECS::Cluster",
+      providerResourceId: ECS_CLUSTER_ARN,
+      displayName: "orders",
+      config: { arn: ECS_CLUSTER_ARN, name: "orders", status: "ACTIVE" }
+    }),
+    record({
+      providerResourceType: "AWS::ECS::Service",
+      providerResourceId: ECS_SERVICE_ARN,
+      displayName: "api",
+      config: {
+        arn: ECS_SERVICE_ARN,
+        name: "api",
+        clusterArn: ECS_CLUSTER_ARN,
+        clusterName: "orders",
+        taskDefinitionArn: ECS_TASK_DEFINITION_ARN,
+        desiredCount: 2,
+        launchType: "FARGATE",
+        networkConfiguration: {
+          awsvpcConfiguration: {
+            subnets: ["subnet-private-a"],
+            securityGroups: ["sg-api"],
+            assignPublicIp: "DISABLED"
+          }
+        }
+      },
+      relationships: [
+        { type: "depends_on", targetProviderResourceId: ECS_CLUSTER_ARN },
+        { type: "depends_on", targetProviderResourceId: ECS_TASK_DEFINITION_ARN }
+      ]
+    }),
+    record({
+      providerResourceType: "AWS::ECS::TaskDefinition",
+      providerResourceId: ECS_TASK_DEFINITION_ARN,
+      displayName: "orders:7",
+      config: {
+        arn: ECS_TASK_DEFINITION_ARN,
+        family: "orders",
+        revision: 7,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "512",
+        memory: "1024",
+        containerDefinitions: [
+          {
+            name: "api",
+            image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
+            essential: true,
+            secrets: [
+              {
+                name: "DATABASE_URL",
+                valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
+              }
+            ]
+          }
+        ]
+      }
+    }),
+    record({
+      providerResourceType: "AWS::Lambda::Function",
+      providerResourceId: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders",
+      displayName: "orders-lambda"
+    }),
+    record({
+      providerResourceType: "AWS::IAM::Role",
+      providerResourceId: "arn:aws:iam::123456789012:role/orders",
+      displayName: "orders-role"
+    })
+  ]);
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => resource.resourceType),
+    ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION", "UNKNOWN", "UNKNOWN"]
+  );
+  assert.deepEqual(
+    result.discoveredResources.slice(0, 3).map((resource) =>
+      resource.config["terraformResourceType"]
+    ),
+    ["aws_ecs_cluster", "aws_ecs_service", "aws_ecs_task_definition"]
+  );
+  assert.deepEqual(
+    result.architectureJson.nodes.map((node) => node.type),
+    ["ECS_CLUSTER", "ECS_SERVICE", "ECS_TASK_DEFINITION"]
+  );
+  assertReadyImport(result.importSuggestions[0], "aws_ecs_cluster", ECS_CLUSTER_ARN);
+  assertReadyImport(result.importSuggestions[1], "aws_ecs_service", "orders/api");
+  assertReadyImport(
+    result.importSuggestions[2],
+    "aws_ecs_task_definition",
+    ECS_TASK_DEFINITION_ARN
+  );
+  assert.deepEqual(result.findings, []);
+
+  for (const resource of result.discoveredResources.slice(3)) {
+    assert.equal(resource.analysisExcluded, true);
+  }
+  for (const suggestion of result.importSuggestions.slice(3)) {
+    assert.equal(suggestion.status, "unsupported_resource_type");
+    assert.equal(suggestion.handoffReady, false);
+  }
+});
+
+test("ECS import name 또는 Terraform 생성 입력이 부족하면 import와 생성 readiness를 각각 fail-close 한다", async () => {
+  const invalidServiceId = "service-without-provider-identity";
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ECS::Service",
+      providerResourceId: invalidServiceId,
+      displayName: "unknown-service",
+      config: {
+        clusterArn: ECS_CLUSTER_ARN,
+        taskDefinitionArn: ECS_TASK_DEFINITION_ARN,
+        desiredCount: 1,
+        launchType: "FARGATE",
+        networkConfiguration: {
+          awsvpcConfiguration: { subnets: ["subnet-a"], securityGroups: ["sg-a"] }
+        }
+      }
+    }),
+    record({
+      providerResourceType: "AWS::ECS::TaskDefinition",
+      providerResourceId: ECS_TASK_DEFINITION_ARN,
+      displayName: "orders:7",
+      config: {
+        family: "orders",
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "512",
+        memory: "1024",
+        containerDefinitions: [{ name: "api", image: "example.invalid/orders:stable" }],
+        requiresManualEnvironmentInput: true
+      }
+    })
+  ]);
+
+  const [service, taskDefinition] = result.discoveredResources;
+  const [serviceImport, taskDefinitionImport] = result.importSuggestions;
+  assert.equal(service?.resourceType, "ECS_SERVICE");
+  assert.equal(serviceImport?.status, "manual_review");
+  assert.equal(serviceImport?.handoffReady, false);
+  assert.equal(serviceImport?.importCommand, undefined);
+  assert.match(serviceImport?.reason ?? "", /cluster.*service.*name/i);
+  assert.equal(service?.config["sketchcatchReferenceTerraform"], true);
+  assert.deepEqual(service?.config["terraformValidationMissingFields"], ["name"]);
+
+  assert.equal(taskDefinitionImport?.status, "ready");
+  assert.equal(taskDefinitionImport?.handoffReady, true);
+  assert.equal(taskDefinition?.config["sketchcatchReferenceTerraform"], true);
+  assert.deepEqual(taskDefinition?.config["terraformValidationMissingFields"], [
+    "containerDefinitions.environment"
+  ]);
+  assert.deepEqual(
+    result.findings.map((finding) => finding.resourceId),
+    [service?.id, taskDefinition?.id]
+  );
+  assert.match(result.findings[1]?.description ?? "", /containerDefinitions\.environment/);
 });
 
 test("정규화된 application 증거가 없는 ELBv2 record는 NLB를 포함해 review-only로 남긴다", async () => {

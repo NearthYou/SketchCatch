@@ -202,7 +202,45 @@ function cloudFrontRoutesApiTraffic(node: InfrastructureGraphNode): boolean {
 }
 
 function renderCompanionBlocks(node: InfrastructureGraphNode): string[] {
-  return hasInlineLambdaSource(node) ? [renderInlineLambdaArchive(node)] : [];
+  return [
+    ...(hasInlineLambdaSource(node) ? [renderInlineLambdaArchive(node)] : []),
+    ...renderReverseEngineeringEcsClusterCapacityProviders(node)
+  ];
+}
+
+function renderReverseEngineeringEcsClusterCapacityProviders(
+  node: InfrastructureGraphNode
+): string[] {
+  if (
+    node.iac.resourceType !== "aws_ecs_cluster" ||
+    node.config["providerResourceType"] !== "AWS::ECS::Cluster"
+  ) {
+    return [];
+  }
+
+  const capacityProviders = readStringArray(node.config["capacityProviders"]);
+  if (!capacityProviders) {
+    return [];
+  }
+
+  const resourceName = `${node.iac.resourceName}_capacity_providers`;
+  const companionNode: InfrastructureGraphNode = {
+    id: `${node.id}-capacity-providers`,
+    label: `${node.label} capacity providers`,
+    iac: {
+      provider: node.iac.provider,
+      terraformBlockType: "resource",
+      resourceType: "aws_ecs_cluster_capacity_providers",
+      resourceName,
+      fileName: node.iac.fileName
+    },
+    config: {
+      clusterName: `aws_ecs_cluster.${node.iac.resourceName}.name`,
+      capacityProviders
+    }
+  };
+
+  return [renderBlock(companionNode)];
 }
 
 function createRenderableResourceConfig(node: InfrastructureGraphNode): Record<string, unknown> {
@@ -231,13 +269,28 @@ function normalizeReverseEngineeringResourceConfig(
     return normalizeReverseEngineeringCloudFrontConfig(node.config);
   }
 
+  if (node.iac.resourceType === "aws_ecs_cluster") {
+    return normalizeReverseEngineeringEcsClusterConfig(node.config);
+  }
+
+  if (node.iac.resourceType === "aws_ecs_service") {
+    return normalizeReverseEngineeringEcsServiceConfig(node.config);
+  }
+
+  if (node.iac.resourceType === "aws_ecs_task_definition") {
+    return normalizeReverseEngineeringEcsTaskDefinitionConfig(node.config);
+  }
+
   return { ...node.config };
 }
 
 function isReverseEngineeringResourceConfig(config: Record<string, unknown>): boolean {
   return (
     config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::LoadBalancer" ||
-    config["providerResourceType"] === "AWS::CloudFront::Distribution"
+    config["providerResourceType"] === "AWS::CloudFront::Distribution" ||
+    config["providerResourceType"] === "AWS::ECS::Cluster" ||
+    config["providerResourceType"] === "AWS::ECS::Service" ||
+    config["providerResourceType"] === "AWS::ECS::TaskDefinition"
   );
 }
 
@@ -299,6 +352,221 @@ function normalizeLoadBalancerSubnetMappings(value: unknown): Record<string, unk
     .filter((mapping) => Object.keys(mapping).length > 0);
 
   return mappings.length > 0 ? mappings : undefined;
+}
+
+function normalizeReverseEngineeringEcsClusterConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    name: readNonEmptyString(config["name"]),
+    configuration: normalizeEcsClusterConfiguration(config["configuration"])
+  });
+}
+
+function normalizeEcsClusterConfiguration(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value) || !isRecord(value["executeCommandConfiguration"])) {
+    return undefined;
+  }
+
+  const executeCommand = value["executeCommandConfiguration"];
+  const normalizedExecuteCommand = compactTerraformConfig({
+    kmsKeyId: readNonEmptyString(executeCommand["kmsKeyId"]),
+    logging: readNonEmptyString(executeCommand["logging"]),
+    logConfiguration: normalizeEcsExecuteCommandLogConfiguration(
+      executeCommand["logConfiguration"]
+    )
+  });
+
+  return Object.keys(normalizedExecuteCommand).length > 0
+    ? { executeCommandConfiguration: normalizedExecuteCommand }
+    : undefined;
+}
+
+function normalizeEcsExecuteCommandLogConfiguration(
+  value: unknown
+): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized = compactTerraformConfig({
+    cloudWatchEncryptionEnabled: readBoolean(value["cloudWatchEncryptionEnabled"]),
+    cloudWatchLogGroupName: readNonEmptyString(value["cloudWatchLogGroupName"]),
+    s3BucketName: readNonEmptyString(value["s3BucketName"]),
+    s3EncryptionEnabled: readBoolean(value["s3EncryptionEnabled"]),
+    s3KeyPrefix: readString(value["s3KeyPrefix"])
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeReverseEngineeringEcsServiceConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  const capacityProviderStrategy = normalizeEcsCapacityProviderStrategy(
+    config["capacityProviderStrategy"]
+  );
+
+  return compactTerraformConfig({
+    name: readNonEmptyString(config["name"]),
+    cluster: readNonEmptyString(config["clusterArn"]),
+    taskDefinition: readNonEmptyString(config["taskDefinitionArn"]),
+    desiredCount: readNumber(config["desiredCount"]),
+    launchType:
+      capacityProviderStrategy === undefined
+        ? readNonEmptyString(config["launchType"])
+        : undefined,
+    capacityProviderStrategy,
+    networkConfiguration: normalizeEcsServiceNetworkConfiguration(
+      config["networkConfiguration"]
+    ),
+    loadBalancer: normalizeEcsServiceLoadBalancers(config["loadBalancers"])
+  });
+}
+
+function normalizeEcsCapacityProviderStrategy(
+  value: unknown
+): Record<string, unknown>[] | undefined {
+  const strategy = normalizeRecordList(value)
+    .map((item) =>
+      compactTerraformConfig({
+        capacityProvider: readNonEmptyString(item["capacityProvider"]),
+        base: readNumber(item["base"]),
+        weight: readNumber(item["weight"])
+      })
+    )
+    .filter((item) => readNonEmptyString(item["capacityProvider"]) !== undefined);
+
+  return strategy.length > 0 ? strategy : undefined;
+}
+
+function normalizeEcsServiceNetworkConfiguration(
+  value: unknown
+): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const awsvpc = isRecord(value["awsvpcConfiguration"])
+    ? value["awsvpcConfiguration"]
+    : value;
+  const assignPublicIp = normalizeEcsAssignPublicIp(awsvpc["assignPublicIp"]);
+  const normalized = compactTerraformConfig({
+    assignPublicIp,
+    securityGroups: readStringArray(awsvpc["securityGroups"]),
+    subnets: readStringArray(awsvpc["subnets"])
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeEcsAssignPublicIp(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return value === "ENABLED" ? true : value === "DISABLED" ? false : undefined;
+}
+
+function normalizeEcsServiceLoadBalancers(
+  value: unknown
+): Record<string, unknown>[] | undefined {
+  const loadBalancers = normalizeRecordList(value)
+    .map((loadBalancer) =>
+      compactTerraformConfig({
+        targetGroupArn: readNonEmptyString(loadBalancer["targetGroupArn"]),
+        loadBalancerName: readNonEmptyString(loadBalancer["loadBalancerName"]),
+        containerName: readNonEmptyString(loadBalancer["containerName"]),
+        containerPort: readNumber(loadBalancer["containerPort"])
+      })
+    )
+    .filter(
+      (loadBalancer) =>
+        readNonEmptyString(loadBalancer["targetGroupArn"]) !== undefined ||
+        readNonEmptyString(loadBalancer["loadBalancerName"]) !== undefined
+    );
+
+  return loadBalancers.length > 0 ? loadBalancers : undefined;
+}
+
+function normalizeReverseEngineeringEcsTaskDefinitionConfig(
+  config: Record<string, unknown>
+): Record<string, unknown> {
+  return compactTerraformConfig({
+    family: readNonEmptyString(config["family"]),
+    containerDefinitions: normalizeEcsContainerDefinitions(config["containerDefinitions"]),
+    networkMode: readNonEmptyString(config["networkMode"]),
+    requiresCompatibilities: readStringArray(config["requiresCompatibilities"]),
+    cpu: readNonEmptyString(config["cpu"]),
+    memory: readNonEmptyString(config["memory"]),
+    executionRoleArn: readNonEmptyString(config["executionRoleArn"]),
+    taskRoleArn: readNonEmptyString(config["taskRoleArn"])
+  });
+}
+
+function normalizeEcsContainerDefinitions(
+  value: unknown
+): Record<string, unknown>[] | undefined {
+  const containers = normalizeRecordList(value)
+    .map((container) =>
+      compactTerraformConfig({
+        name: readNonEmptyString(container["name"]),
+        image: readNonEmptyString(container["image"]),
+        cpu: readNumber(container["cpu"]),
+        memory: readNumber(container["memory"]),
+        memoryReservation: readNumber(container["memoryReservation"]),
+        essential: readBoolean(container["essential"]),
+        portMappings: normalizeEcsContainerPortMappings(container["portMappings"]),
+        secrets: normalizeEcsContainerSecrets(container["secrets"]),
+        readonlyRootFilesystem: readBoolean(container["readonlyRootFilesystem"]),
+        user: readString(container["user"]),
+        workingDirectory: readString(container["workingDirectory"])
+      })
+    )
+    .filter(
+      (container) =>
+        readNonEmptyString(container["name"]) !== undefined &&
+        readNonEmptyString(container["image"]) !== undefined
+    );
+
+  return containers.length > 0 ? containers : undefined;
+}
+
+function normalizeEcsContainerPortMappings(
+  value: unknown
+): Record<string, unknown>[] | undefined {
+  const portMappings = normalizeRecordList(value)
+    .map((portMapping) =>
+      compactTerraformConfig({
+        name: readNonEmptyString(portMapping["name"]),
+        containerPort: readNumber(portMapping["containerPort"]),
+        hostPort: readNumber(portMapping["hostPort"]),
+        protocol: readNonEmptyString(portMapping["protocol"]),
+        appProtocol: readNonEmptyString(portMapping["appProtocol"])
+      })
+    )
+    .filter((portMapping) => readNumber(portMapping["containerPort"]) !== undefined);
+
+  return portMappings.length > 0 ? portMappings : undefined;
+}
+
+function normalizeEcsContainerSecrets(
+  value: unknown
+): Record<string, unknown>[] | undefined {
+  const secrets = normalizeRecordList(value)
+    .map((secret) =>
+      compactTerraformConfig({
+        name: readNonEmptyString(secret["name"]),
+        valueFrom: readNonEmptyString(secret["valueFrom"])
+      })
+    )
+    .filter(
+      (secret) =>
+        readNonEmptyString(secret["name"]) !== undefined &&
+        readNonEmptyString(secret["valueFrom"]) !== undefined
+    );
+
+  return secrets.length > 0 ? secrets : undefined;
 }
 
 function normalizeReverseEngineeringCloudFrontConfig(
@@ -1307,7 +1575,7 @@ function parseSingleLineTerraformAttribute(
   line: string | undefined
 ): { indentation: string; name: string; value: string } | null {
   const match = /^(\s+)([a-zA-Z_][a-zA-Z0-9_-]*) = (.+)$/.exec(line ?? "");
-  if (!match || match[3] === "[" || match[3] === "{") {
+  if (!match || /[([{]$/.test(match[3] ?? "")) {
     return null;
   }
 
@@ -1321,6 +1589,16 @@ function renderBodyEntry(
   indentLevel: number
 ): string[] {
   const normalizedValue = normalizeTopLevelValue(resourceType, key, value);
+
+  if (
+    resourceType === "aws_ecs_task_definition" &&
+    toSnakeCase(key) === "container_definitions" &&
+    Array.isArray(normalizedValue)
+  ) {
+    return [
+      `${indent(indentLevel)}container_definitions = jsonencode(${renderValue(normalizedValue, indentLevel)})`
+    ];
+  }
 
   if (shouldRenderNestedBlocks(resourceType, key, normalizedValue)) {
     return renderNestedBlocks(resourceType, key, normalizedValue, indentLevel, []);
@@ -1381,7 +1659,8 @@ function shouldRenderNestedBlocks(
 ): value is Record<string, unknown> | Record<string, unknown>[] {
   return (
     (isTerraformNestedBlockAttribute(resourceType, key) ||
-      (resourceType === "aws_lb" && toSnakeCase(key) === "subnet_mapping")) &&
+      (resourceType === "aws_lb" && toSnakeCase(key) === "subnet_mapping") ||
+      isReverseEngineeringEcsNestedBlock(resourceType, key)) &&
     ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
   );
 }
@@ -1424,13 +1703,32 @@ function renderNestedBlockEntry(
 ): string[] {
   if (
     (isTerraformNestedBlockAttribute(resourceType, key, parentPath) ||
-      isGenericTerraformNestedBlock(key)) &&
+      isGenericTerraformNestedBlock(key) ||
+      isReverseEngineeringEcsNestedBlock(resourceType, key, parentPath)) &&
     ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
   ) {
     return renderNestedBlocks(resourceType, key, value, indentLevel, parentPath);
   }
 
   return [renderAttribute(key, value, indentLevel)];
+}
+
+function isReverseEngineeringEcsNestedBlock(
+  resourceType: string,
+  key: string,
+  parentPath: readonly string[] = []
+): boolean {
+  const path = [...parentPath.map(toSnakeCase), toSnakeCase(key)].join(".");
+
+  return (
+    (resourceType === "aws_ecs_cluster" &&
+      [
+        "configuration",
+        "configuration.execute_command_configuration",
+        "configuration.execute_command_configuration.log_configuration"
+      ].includes(path)) ||
+    (resourceType === "aws_ecs_service" && path === "capacity_provider_strategy")
+  );
 }
 
 function renderAttribute(key: string, value: unknown, indentLevel: number): string {

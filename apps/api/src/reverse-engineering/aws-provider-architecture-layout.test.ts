@@ -130,3 +130,77 @@ test("ALB는 VPC 상위 서비스로, CloudFront는 global edge 영역의 suppor
     ]
   );
 });
+
+test("ECS Cluster를 Task Definition과 Service 사이 중심에 두고 evidence-only edge만 만든다", () => {
+  const architectureJson = createReverseEngineeringArchitectureJson([
+    {
+      id: "ecs-cluster-orders",
+      provider: "aws",
+      providerResourceType: "AWS::ECS::Cluster",
+      providerResourceId: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
+      region: "ap-northeast-2",
+      displayName: "orders",
+      resourceType: "ECS_CLUSTER",
+      config: { name: "orders" },
+      relationships: []
+    },
+    {
+      id: "ecs-service-api",
+      provider: "aws",
+      providerResourceType: "AWS::ECS::Service",
+      providerResourceId: "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api",
+      region: "ap-northeast-2",
+      displayName: "api",
+      resourceType: "ECS_SERVICE",
+      config: {
+        clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
+        taskDefinitionArn:
+          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+        networkConfiguration: {
+          awsvpcConfiguration: {
+            subnets: ["subnet-not-in-scan"],
+            securityGroups: ["sg-not-in-scan"]
+          }
+        },
+        loadBalancers: [
+          {
+            targetGroupArn:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/not-in-scan/one"
+          }
+        ]
+      },
+      relationships: [
+        { type: "depends_on", targetResourceId: "ecs-cluster-orders", label: "depends_on" },
+        { type: "depends_on", targetResourceId: "ecs-task-orders", label: "depends_on" }
+      ]
+    },
+    {
+      id: "ecs-task-orders",
+      provider: "aws",
+      providerResourceType: "AWS::ECS::TaskDefinition",
+      providerResourceId:
+        "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+      region: "ap-northeast-2",
+      displayName: "orders:7",
+      resourceType: "ECS_TASK_DEFINITION",
+      config: { family: "orders" },
+      relationships: []
+    }
+  ]);
+  const nodes = new Map(architectureJson.nodes.map((node) => [node.id, node]));
+  const taskX = nodes.get("ecs-task-orders")?.positionX ?? Infinity;
+  const clusterX = nodes.get("ecs-cluster-orders")?.positionX ?? -Infinity;
+  const serviceX = nodes.get("ecs-service-api")?.positionX ?? -Infinity;
+
+  assert.ok(taskX < clusterX);
+  assert.ok(clusterX < serviceX);
+  assert.equal(nodes.get("ecs-cluster-orders")?.config["analysisExcluded"], false);
+  assert.deepEqual(
+    architectureJson.edges.map((edge) => [edge.sourceId, edge.targetId]),
+    [
+      ["ecs-cluster-orders", "ecs-service-api"],
+      ["ecs-task-orders", "ecs-service-api"]
+    ]
+  );
+  assert.equal(architectureJson.edges.length, 2);
+});

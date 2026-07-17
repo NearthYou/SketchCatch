@@ -1436,6 +1436,127 @@ test("Reverse Engineering ALB와 CloudFront fixture는 AWS snapshot을 최소 Te
   assert.doesNotMatch(terraform, /must-not-render/);
 });
 
+test("Reverse Engineering ECS fixture는 민감 환경 값 없이 최소 Cluster Service Task Definition을 만든다", () => {
+  const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
+  const serviceArn = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
+  const taskDefinitionArn =
+    "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_ecs_cluster", "orders", {
+        arn: clusterArn,
+        name: "orders",
+        status: "ACTIVE",
+        capacityProviders: ["FARGATE", "FARGATE_SPOT"],
+        configuration: {
+          executeCommandConfiguration: {
+            logging: "DEFAULT"
+          }
+        },
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId: clusterArn,
+        providerResourceType: "AWS::ECS::Cluster"
+      }),
+      createLiveObservationNode("aws_ecs_task_definition", "orders", {
+        arn: taskDefinitionArn,
+        family: "orders",
+        revision: 7,
+        networkMode: "awsvpc",
+        requiresCompatibilities: ["FARGATE"],
+        cpu: "512",
+        memory: "1024",
+        executionRoleArn: "arn:aws:iam::123456789012:role/ecs-execution",
+        taskRoleArn: "arn:aws:iam::123456789012:role/orders-task",
+        containerDefinitions: [
+          {
+            name: "api",
+            image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
+            essential: true,
+            environment: [{ name: "API_TOKEN", value: "must-not-leak" }],
+            secrets: [
+              {
+                name: "DATABASE_URL",
+                valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
+              }
+            ],
+            portMappings: [{ containerPort: 4000, protocol: "tcp" }],
+            rawSdkField: "must-not-render"
+          }
+        ],
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId: taskDefinitionArn,
+        providerResourceType: "AWS::ECS::TaskDefinition"
+      }),
+      createLiveObservationNode("aws_ecs_service", "api", {
+        arn: serviceArn,
+        name: "api",
+        clusterArn,
+        clusterName: "orders",
+        taskDefinitionArn,
+        desiredCount: 2,
+        launchType: "FARGATE",
+        networkConfiguration: {
+          awsvpcConfiguration: {
+            subnets: ["subnet-private-a"],
+            securityGroups: ["sg-api"],
+            assignPublicIp: "DISABLED"
+          }
+        },
+        loadBalancers: [
+          {
+            targetGroupArn:
+              "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one",
+            containerName: "api",
+            containerPort: 4000
+          }
+        ],
+        providerParameters: { rawSdkField: "must-not-render" },
+        providerResourceId: serviceArn,
+        providerResourceType: "AWS::ECS::Service"
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_ecs_cluster" "orders" \{/);
+  assert.match(terraform, /name\s+= "orders"/);
+  assert.match(
+    terraform,
+    /resource "aws_ecs_cluster_capacity_providers" "orders_capacity_providers" \{/
+  );
+  assert.match(terraform, /cluster_name\s+= aws_ecs_cluster\.orders\.name/);
+  assert.match(terraform, /capacity_providers = \[[\s\S]*"FARGATE"[\s\S]*"FARGATE_SPOT"/);
+  assert.match(
+    terraform,
+    /configuration \{[\s\S]*execute_command_configuration \{[\s\S]*logging\s+= "DEFAULT"/
+  );
+  assert.match(terraform, /resource "aws_ecs_task_definition" "orders" \{/);
+  assert.match(terraform, /container_definitions\s+= jsonencode\(\[/);
+  assert.match(terraform, /network_mode\s+= "awsvpc"/);
+  assert.match(terraform, /requires_compatibilities = \[[\s\S]*"FARGATE"/);
+  assert.match(terraform, /execution_role_arn\s+= "arn:aws:iam::123456789012:role\/ecs-execution"/);
+  assert.match(terraform, /valueFrom = "arn:aws:secretsmanager:[^"]+:secret:db"/);
+  assert.match(terraform, /resource "aws_ecs_service" "api" \{/);
+  assert.match(terraform, new RegExp(`cluster\\s+= "${clusterArn}"`));
+  assert.match(terraform, new RegExp(`task_definition\\s+= "${taskDefinitionArn}"`));
+  assert.match(terraform, /desired_count\s+= 2/);
+  assert.match(terraform, /launch_type\s+= "FARGATE"/);
+  assert.match(
+    terraform,
+    /network_configuration \{[\s\S]*assign_public_ip\s+= false[\s\S]*security_groups = \[[\s\S]*"sg-api"/
+  );
+  assert.match(
+    terraform,
+    /load_balancer \{[\s\S]*target_group_arn\s+= "arn:aws:elasticloadbalancing:[^"]+:targetgroup\/api\/one"/
+  );
+  assert.doesNotMatch(terraform, /must-not-leak|must-not-render|provider_parameters|raw_sdk_field/);
+  assert.doesNotMatch(terraform, /^\s*environment\s*=/m);
+  assert.doesNotMatch(terraform, /^\s*cluster_name\s+= "orders"/m);
+  assert.doesNotMatch(terraform, /^\s*(arn|cluster_arn|provider_resource_id|provider_resource_type|revision|status|task_definition_arn)\s*=/m);
+});
+
 test("생성 필수값이 부족한 Reverse Engineering Resource는 Terraform block과 output에서 제외한다", () => {
   const terraform = renderTerraformFromInfrastructureGraph({
     nodes: [

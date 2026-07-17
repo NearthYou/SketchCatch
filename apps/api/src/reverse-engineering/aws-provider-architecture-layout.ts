@@ -6,6 +6,7 @@ import type {
 } from "@sketchcatch/types";
 
 const BOARD_LAYOUT = {
+  ecsGroupGapX: 900,
   resourceGapX: 260,
   resourceGapY: 130,
   globalEdgeStartY: 20,
@@ -51,6 +52,7 @@ function createArchitectureLayout(resources: readonly DiscoveredResource[]): Rea
   const layoutByResourceId = new Map<string, ArchitectureNodeLayout>();
   const resourcesById = new Map(resources.map((resource) => [resource.id, resource]));
   const vpcs = resources.filter((resource) => resource.resourceType === "VPC");
+  const ecsClusters = resources.filter((resource) => resource.resourceType === "ECS_CLUSTER");
   const globalEdgeResources = resources.filter((resource) => resource.resourceType === "CLOUDFRONT");
   const independentResources: DiscoveredResource[] = [];
 
@@ -61,6 +63,14 @@ function createArchitectureLayout(resources: readonly DiscoveredResource[]): Rea
       positionY: BOARD_LAYOUT.globalEdgeStartY
     });
   }
+
+  layoutEcsGroups({
+    clusters: ecsClusters,
+    layoutByResourceId,
+    resources,
+    resourcesById,
+    startX: BOARD_LAYOUT.vpcStartX + vpcs.length * BOARD_LAYOUT.vpcGapX
+  });
 
   for (const [vpcIndex, vpc] of vpcs.entries()) {
     const vpcAnchor = getVpcAnchor(vpcIndex);
@@ -83,12 +93,68 @@ function createArchitectureLayout(resources: readonly DiscoveredResource[]): Rea
   for (const [index, resource] of independentResources.entries()) {
     layoutByResourceId.set(resource.id, {
       label: createResourceLabel(resource),
-      positionX: BOARD_LAYOUT.vpcStartX + vpcs.length * BOARD_LAYOUT.vpcGapX + index * BOARD_LAYOUT.resourceGapX,
+      positionX:
+        BOARD_LAYOUT.vpcStartX +
+        vpcs.length * BOARD_LAYOUT.vpcGapX +
+        ecsClusters.length * BOARD_LAYOUT.ecsGroupGapX +
+        index * BOARD_LAYOUT.resourceGapX,
       positionY: BOARD_LAYOUT.vpcStartY
     });
   }
 
   return layoutByResourceId;
+}
+
+function layoutEcsGroups(input: {
+  readonly clusters: readonly DiscoveredResource[];
+  readonly layoutByResourceId: Map<string, ArchitectureNodeLayout>;
+  readonly resources: readonly DiscoveredResource[];
+  readonly resourcesById: ReadonlyMap<string, DiscoveredResource>;
+  readonly startX: number;
+}): void {
+  for (const [clusterIndex, cluster] of input.clusters.entries()) {
+    const groupStartX = input.startX + clusterIndex * BOARD_LAYOUT.ecsGroupGapX;
+    const services = input.resources.filter(
+      (resource) =>
+        resource.resourceType === "ECS_SERVICE" && referencesResource(resource, cluster)
+    );
+    const taskDefinitions = [
+      ...new Map(
+        services.flatMap((service) =>
+          (service.relationships ?? []).flatMap((relationship) => {
+            const target = input.resourcesById.get(relationship.targetResourceId);
+
+            return target?.resourceType === "ECS_TASK_DEFINITION" ? [[target.id, target] as const] : [];
+          })
+        )
+      ).values()
+    ];
+    const rowCount = Math.max(services.length, taskDefinitions.length, 1);
+
+    input.layoutByResourceId.set(cluster.id, {
+      label: createResourceLabel(cluster),
+      positionX: groupStartX + BOARD_LAYOUT.resourceGapX,
+      positionY: BOARD_LAYOUT.vpcStartY + Math.floor((rowCount - 1) / 2) * BOARD_LAYOUT.resourceGapY
+    });
+
+    for (const [index, taskDefinition] of taskDefinitions.entries()) {
+      if (!input.layoutByResourceId.has(taskDefinition.id)) {
+        input.layoutByResourceId.set(taskDefinition.id, {
+          label: createResourceLabel(taskDefinition),
+          positionX: groupStartX,
+          positionY: BOARD_LAYOUT.vpcStartY + index * BOARD_LAYOUT.resourceGapY
+        });
+      }
+    }
+
+    for (const [index, service] of services.entries()) {
+      input.layoutByResourceId.set(service.id, {
+        label: createResourceLabel(service),
+        positionX: groupStartX + BOARD_LAYOUT.resourceGapX * 2,
+        positionY: BOARD_LAYOUT.vpcStartY + index * BOARD_LAYOUT.resourceGapY
+      });
+    }
+  }
 }
 
 // VPC 안쪽에는 네트워크 구성요소, Subnet, 그 안의 서버/DB를 층으로 나눠 배치합니다.

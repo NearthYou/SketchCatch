@@ -37,6 +37,25 @@ import {
   type LoadBalancer
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import {
+  DescribeClustersCommand,
+  DescribeServicesCommand,
+  DescribeTaskDefinitionCommand,
+  ECSClient,
+  ListClustersCommand,
+  ListServicesCommand,
+  type Cluster,
+  type ClusterConfiguration,
+  type ContainerDefinition,
+  type DescribeClustersCommandOutput,
+  type DescribeServicesCommandOutput,
+  type DescribeTaskDefinitionCommandOutput,
+  type Failure,
+  type ListClustersCommandOutput,
+  type ListServicesCommandOutput,
+  type Service,
+  type TaskDefinition
+} from "@aws-sdk/client-ecs";
+import {
   IAMClient,
   ListInstanceProfilesCommand,
   ListPoliciesCommand,
@@ -125,6 +144,7 @@ export type AwsReverseEngineeringGatewayOptions = {
 export type AwsReverseEngineeringReaderPlan = {
   readonly loadBalancers: boolean;
   readonly cloudFrontDistributions: boolean;
+  readonly ecsResources: boolean;
   readonly unknownResources: boolean;
 };
 
@@ -159,6 +179,13 @@ export type AwsElbReadClientFactory = (
   region: string,
   credentials: TerraformAwsCredentialEnv
 ) => AwsElbReadClient;
+export type AwsEcsReadClient = {
+  send(command: object): Promise<unknown>;
+};
+export type AwsEcsReadClientFactory = (
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+) => AwsEcsReadClient;
 export type AwsLambdaReadClient = {
   send(command: object): Promise<unknown>;
 };
@@ -271,11 +298,16 @@ export function createAwsReverseEngineeringGateway(
               )
             ]
           : []),
+        ...(readerPlan.ecsResources
+          ? [readEcsResourcesWithDiagnostics(input.region, credentials)]
+          : []),
         ...(readerPlan.unknownResources ? [readUnknownResourceGroup(input, credentials)] : [])
       ]);
 
-      const records = resolveCloudFrontOriginRelationships(
-        uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+      const records = resolveEcsRelationships(
+        resolveCloudFrontOriginRelationships(
+          uniqueDiscoveredRecordsByProviderId(resourceGroups.flatMap((group) => group.records))
+        )
       );
 
       return {
@@ -324,8 +356,18 @@ export function createAwsReverseEngineeringReaderPlan(
   return {
     loadBalancers: shouldReadResourceGroup(input, "LOAD_BALANCER"),
     cloudFrontDistributions: shouldReadResourceGroup(input, "CLOUDFRONT"),
+    ecsResources: shouldReadEcsResourceGroup(input),
     unknownResources: shouldReadUnknownResourceGroup(input)
   };
+}
+
+function shouldReadEcsResourceGroup(input: AwsProviderScanInput): boolean {
+  return (
+    input.resourceTypes.includes("ALL") ||
+    input.resourceTypes.includes("ECS_CLUSTER") ||
+    input.resourceTypes.includes("ECS_SERVICE") ||
+    input.resourceTypes.includes("ECS_TASK_DEFINITION")
+  );
 }
 
 async function describeVpcs(
@@ -777,6 +819,456 @@ async function listUnknownResources(
   };
 }
 
+const ECS_DESCRIBE_CLUSTERS_BATCH_SIZE = 100;
+const ECS_DESCRIBE_SERVICES_BATCH_SIZE = 10;
+
+// ECS는 Cluster를 기준으로 Service와 Task Definition 증거를 한 번의 family scan으로 모읍니다.
+export async function readEcsResourcesWithDiagnostics(
+  region: string,
+  credentials: TerraformAwsCredentialEnv,
+  createClient: AwsEcsReadClientFactory = createDefaultEcsReadClient
+): Promise<AwsProviderDiscoveryResult> {
+  const client = createClient(region, credentials);
+  const scanErrors: ReverseEngineeringScanError[] = [];
+  let clusterArns: string[];
+
+  try {
+    clusterArns = await listAllEcsClusterArns(client);
+  } catch (error) {
+    return { records: [], scanErrors: [toScanError("ECS_CLUSTER", error)] };
+  }
+
+  const clusters = await describeEcsClusters(client, clusterArns, scanErrors);
+  const clusterRecords = clusters.flatMap((cluster) => toEcsClusterRecord(cluster, region));
+  const serviceRecords: AwsDiscoveredResourceRecord[] = [];
+  const taskDefinitionArns = new Set<string>();
+
+  for (const cluster of clusters) {
+    const clusterArn = cluster.clusterArn;
+    if (!clusterArn) {
+      continue;
+    }
+
+    try {
+      const serviceArns = await listAllEcsServiceArns(client, clusterArn);
+      const services = await describeEcsServices(
+        client,
+        cluster,
+        serviceArns,
+        scanErrors
+      );
+
+      for (const service of services) {
+        const record = toEcsServiceRecord(service, cluster, region);
+        if (!record) {
+          continue;
+        }
+
+        serviceRecords.push(record);
+        const taskDefinitionArn = getNonEmptyStringValue(record.config["taskDefinitionArn"]);
+        if (taskDefinitionArn) {
+          taskDefinitionArns.add(taskDefinitionArn);
+        }
+      }
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_SERVICE", error));
+    }
+  }
+
+  const taskDefinitionRecords: AwsDiscoveredResourceRecord[] = [];
+  for (const taskDefinitionArn of taskDefinitionArns) {
+    try {
+      const response = await sendEcsCommand<DescribeTaskDefinitionCommandOutput>(
+        client,
+        new DescribeTaskDefinitionCommand({ taskDefinition: taskDefinitionArn })
+      );
+      const record = response.taskDefinition
+        ? toEcsTaskDefinitionRecord(response.taskDefinition, region)
+        : null;
+
+      if (record) {
+        taskDefinitionRecords.push(record);
+      } else {
+        scanErrors.push(
+          toScanError(
+            "ECS_TASK_DEFINITION",
+            new Error(`DescribeTaskDefinition returned no task definition for ${taskDefinitionArn}`)
+          )
+        );
+      }
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_TASK_DEFINITION", error));
+    }
+  }
+
+  return {
+    records: resolveEcsRelationships([
+      ...clusterRecords,
+      ...serviceRecords,
+      ...taskDefinitionRecords
+    ]),
+    scanErrors
+  };
+}
+
+async function listAllEcsClusterArns(client: AwsEcsReadClient): Promise<string[]> {
+  const clusterArns: string[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await sendEcsCommand<ListClustersCommandOutput>(
+      client,
+      new ListClustersCommand({ nextToken })
+    );
+    clusterArns.push(...(response.clusterArns ?? []).filter(isNonEmptyString));
+    nextToken = getNonEmptyStringValue(response.nextToken) ?? undefined;
+  } while (nextToken);
+
+  return [...new Set(clusterArns)];
+}
+
+async function describeEcsClusters(
+  client: AwsEcsReadClient,
+  clusterArns: readonly string[],
+  scanErrors: ReverseEngineeringScanError[]
+): Promise<Cluster[]> {
+  const clusters: Cluster[] = [];
+
+  for (const clusterArnBatch of chunkValues(clusterArns, ECS_DESCRIBE_CLUSTERS_BATCH_SIZE)) {
+    try {
+      const response = await sendEcsCommand<DescribeClustersCommandOutput>(
+        client,
+        new DescribeClustersCommand({ clusters: clusterArnBatch })
+      );
+      clusters.push(...(response.clusters ?? []));
+      scanErrors.push(
+        ...(response.failures ?? []).map((failure) =>
+          toScanError("ECS_CLUSTER", toEcsFailureError(failure))
+        )
+      );
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_CLUSTER", error));
+    }
+  }
+
+  return clusters;
+}
+
+async function listAllEcsServiceArns(
+  client: AwsEcsReadClient,
+  clusterArn: string
+): Promise<string[]> {
+  const serviceArns: string[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await sendEcsCommand<ListServicesCommandOutput>(
+      client,
+      new ListServicesCommand({ cluster: clusterArn, nextToken })
+    );
+    serviceArns.push(...(response.serviceArns ?? []).filter(isNonEmptyString));
+    nextToken = getNonEmptyStringValue(response.nextToken) ?? undefined;
+  } while (nextToken);
+
+  return [...new Set(serviceArns)];
+}
+
+async function describeEcsServices(
+  client: AwsEcsReadClient,
+  cluster: Cluster,
+  serviceArns: readonly string[],
+  scanErrors: ReverseEngineeringScanError[]
+): Promise<Service[]> {
+  const services: Service[] = [];
+
+  for (const serviceArnBatch of chunkValues(serviceArns, ECS_DESCRIBE_SERVICES_BATCH_SIZE)) {
+    try {
+      const response = await sendEcsCommand<DescribeServicesCommandOutput>(
+        client,
+        new DescribeServicesCommand({
+          cluster: cluster.clusterArn,
+          services: serviceArnBatch
+        })
+      );
+      services.push(...(response.services ?? []));
+      scanErrors.push(
+        ...(response.failures ?? []).map((failure) =>
+          toScanError("ECS_SERVICE", toEcsFailureError(failure))
+        )
+      );
+    } catch (error) {
+      scanErrors.push(toScanError("ECS_SERVICE", error));
+    }
+  }
+
+  return services;
+}
+
+function toEcsClusterRecord(
+  cluster: Cluster,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord[] {
+  const arn = cluster.clusterArn;
+  if (!arn) {
+    return [];
+  }
+
+  return [
+    {
+      providerResourceType: "AWS::ECS::Cluster",
+      providerResourceId: arn,
+      displayName: cluster.clusterName ?? arn,
+      region: parseAwsArn(arn).region || fallbackRegion,
+      config: compactRecord({
+        arn,
+        name: cluster.clusterName,
+        status: cluster.status,
+        configuration: normalizeEcsClusterConfiguration(cluster.configuration),
+        capacityProviders: normalizeStringArray(cluster.capacityProviders)
+      }),
+      relationships: []
+    }
+  ];
+}
+
+function normalizeEcsClusterConfiguration(
+  configuration: ClusterConfiguration | undefined
+): Record<string, unknown> | undefined {
+  if (!configuration) {
+    return undefined;
+  }
+
+  const executeCommand = configuration.executeCommandConfiguration;
+  const logConfiguration = executeCommand?.logConfiguration;
+  const managedStorage = configuration.managedStorageConfiguration;
+  const normalized = compactRecord({
+    executeCommandConfiguration: executeCommand
+      ? compactRecord({
+          kmsKeyId: executeCommand.kmsKeyId,
+          logging: executeCommand.logging,
+          logConfiguration: logConfiguration
+            ? compactRecord({
+                cloudWatchEncryptionEnabled: logConfiguration.cloudWatchEncryptionEnabled,
+                cloudWatchLogGroupName: logConfiguration.cloudWatchLogGroupName,
+                s3BucketName: logConfiguration.s3BucketName,
+                s3EncryptionEnabled: logConfiguration.s3EncryptionEnabled,
+                s3KeyPrefix: logConfiguration.s3KeyPrefix
+              })
+            : undefined
+        })
+      : undefined,
+    managedStorageConfiguration: managedStorage
+      ? compactRecord({
+          kmsKeyId: managedStorage.kmsKeyId,
+          fargateEphemeralStorageKmsKeyId: managedStorage.fargateEphemeralStorageKmsKeyId
+        })
+      : undefined
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function toEcsServiceRecord(
+  service: Service,
+  cluster: Cluster,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord | null {
+  const arn = service.serviceArn;
+  if (!arn) {
+    return null;
+  }
+
+  const clusterArn = service.clusterArn ?? cluster.clusterArn;
+  const taskDefinitionArn = getNonEmptyStringValue(service.taskDefinition) ?? undefined;
+
+  return {
+    providerResourceType: "AWS::ECS::Service",
+    providerResourceId: arn,
+    displayName: service.serviceName ?? arn,
+    region: parseAwsArn(arn).region || fallbackRegion,
+    config: compactRecord({
+      arn,
+      name: service.serviceName,
+      clusterArn,
+      clusterName: cluster.clusterName,
+      taskDefinitionArn,
+      desiredCount: service.desiredCount,
+      launchType: service.launchType,
+      capacityProviderStrategy: normalizeEcsCapacityProviderStrategy(
+        service.capacityProviderStrategy
+      ),
+      networkConfiguration: normalizeEcsNetworkConfiguration(service),
+      loadBalancers: normalizeEcsLoadBalancers(service)
+    }),
+    relationships: []
+  };
+}
+
+function normalizeEcsCapacityProviderStrategy(
+  strategy: Service["capacityProviderStrategy"]
+): Record<string, unknown>[] | undefined {
+  const normalized = (strategy ?? [])
+    .map((item) =>
+      compactRecord({
+        capacityProvider: item.capacityProvider,
+        base: item.base,
+        weight: item.weight
+      })
+    )
+    .filter((item) => getNonEmptyStringValue(item["capacityProvider"]) !== null);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeEcsNetworkConfiguration(service: Service): Record<string, unknown> | undefined {
+  const awsvpc = service.networkConfiguration?.awsvpcConfiguration;
+  if (!awsvpc) {
+    return undefined;
+  }
+
+  return {
+    awsvpcConfiguration: compactRecord({
+      subnets: normalizeStringArray(awsvpc.subnets),
+      securityGroups: normalizeStringArray(awsvpc.securityGroups),
+      assignPublicIp: awsvpc.assignPublicIp
+    })
+  };
+}
+
+function normalizeEcsLoadBalancers(service: Service): Record<string, unknown>[] | undefined {
+  const loadBalancers = (service.loadBalancers ?? [])
+    .map((loadBalancer) =>
+      compactRecord({
+        targetGroupArn: loadBalancer.targetGroupArn,
+        loadBalancerName: loadBalancer.loadBalancerName,
+        containerName: loadBalancer.containerName,
+        containerPort: loadBalancer.containerPort
+      })
+    )
+    .filter((loadBalancer) => Object.keys(loadBalancer).length > 0);
+
+  return loadBalancers.length > 0 ? loadBalancers : undefined;
+}
+
+function toEcsTaskDefinitionRecord(
+  taskDefinition: TaskDefinition,
+  fallbackRegion: string
+): AwsDiscoveredResourceRecord | null {
+  const arn = taskDefinition.taskDefinitionArn;
+  if (!arn) {
+    return null;
+  }
+
+  const normalizedContainers = normalizeEcsContainerDefinitions(
+    taskDefinition.containerDefinitions
+  );
+
+  return {
+    providerResourceType: "AWS::ECS::TaskDefinition",
+    providerResourceId: arn,
+    displayName:
+      taskDefinition.family && taskDefinition.revision !== undefined
+        ? `${taskDefinition.family}:${taskDefinition.revision}`
+        : taskDefinition.family ?? arn,
+    region: parseAwsArn(arn).region || fallbackRegion,
+    config: compactRecord({
+      arn,
+      family: taskDefinition.family,
+      revision: taskDefinition.revision,
+      networkMode: taskDefinition.networkMode,
+      requiresCompatibilities: normalizeStringArray(taskDefinition.requiresCompatibilities),
+      cpu: taskDefinition.cpu,
+      memory: taskDefinition.memory,
+      containerDefinitions: normalizedContainers.definitions,
+      executionRoleArn: taskDefinition.executionRoleArn,
+      taskRoleArn: taskDefinition.taskRoleArn,
+      requiresManualEnvironmentInput:
+        normalizedContainers.requiresManualEnvironmentInput || undefined
+    }),
+    relationships: []
+  };
+}
+
+function normalizeEcsContainerDefinitions(
+  containerDefinitions: ContainerDefinition[] | undefined
+): {
+  definitions: Record<string, unknown>[];
+  requiresManualEnvironmentInput: boolean;
+} {
+  let requiresManualEnvironmentInput = false;
+  const definitions = (containerDefinitions ?? []).map((container) => {
+    if ((container.environment?.length ?? 0) > 0) {
+      requiresManualEnvironmentInput = true;
+    }
+
+    const secrets = (container.secrets ?? []).flatMap((secret) => {
+      if (!isNonEmptyString(secret.name) || !isNonEmptyString(secret.valueFrom)) {
+        requiresManualEnvironmentInput = true;
+        return [];
+      }
+
+      return [{ name: secret.name, valueFrom: secret.valueFrom }];
+    });
+    const portMappings = (container.portMappings ?? [])
+      .map((portMapping) =>
+        compactRecord({
+          name: portMapping.name,
+          containerPort: portMapping.containerPort,
+          hostPort: portMapping.hostPort,
+          protocol: portMapping.protocol,
+          appProtocol: portMapping.appProtocol
+        })
+      )
+      .filter((portMapping) => Object.keys(portMapping).length > 0);
+
+    return compactRecord({
+      name: container.name,
+      image: container.image,
+      cpu: container.cpu,
+      memory: container.memory,
+      memoryReservation: container.memoryReservation,
+      essential: container.essential,
+      portMappings: portMappings.length > 0 ? portMappings : undefined,
+      secrets: secrets.length > 0 ? secrets : undefined,
+      readonlyRootFilesystem: container.readonlyRootFilesystem,
+      user: container.user,
+      workingDirectory: container.workingDirectory
+    });
+  });
+
+  return { definitions, requiresManualEnvironmentInput };
+}
+
+function chunkValues<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+function toEcsFailureError(failure: Failure): Error {
+  const message = [failure.reason, failure.detail, failure.arn].filter(isNonEmptyString).join(": ");
+
+  return new Error(message || "Amazon ECS가 Resource 조회 실패를 반환했습니다.");
+}
+
+function normalizeStringArray(values: readonly string[] | undefined): string[] | undefined {
+  const normalized = (values ?? []).filter(isNonEmptyString);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function getNonEmptyStringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return getNonEmptyStringValue(value) !== null;
+}
+
 // ALB는 태그가 없어도 자주 쓰이므로 ELBv2 API를 정식 reader로 사용합니다.
 export async function listApplicationLoadBalancers(
   region: string,
@@ -1089,6 +1581,20 @@ function createDefaultElbReadClient(
   };
 }
 
+function createDefaultEcsReadClient(
+  region: string,
+  credentials: TerraformAwsCredentialEnv
+): AwsEcsReadClient {
+  const client = new ECSClient({
+    region,
+    credentials: toAwsSdkCredentials(credentials)
+  });
+
+  return {
+    send: (command) => client.send(command as Parameters<ECSClient["send"]>[0])
+  };
+}
+
 function createDefaultLambdaReadClient(
   region: string,
   credentials: TerraformAwsCredentialEnv
@@ -1216,6 +1722,10 @@ async function sendResourceExplorerCommand<TOutput>(
 }
 
 async function sendElbCommand<TOutput>(client: AwsElbReadClient, command: object): Promise<TOutput> {
+  return (await client.send(command)) as TOutput;
+}
+
+async function sendEcsCommand<TOutput>(client: AwsEcsReadClient, command: object): Promise<TOutput> {
   return (await client.send(command)) as TOutput;
 }
 
@@ -2031,8 +2541,82 @@ export function isReverseEngineeringPromotedResourceArn(arn: string): boolean {
     (parsedArn.service === "elasticloadbalancing" &&
       parsedArn.resourceKind === "loadbalancer" &&
       parsedArn.resourceName.startsWith("app/")) ||
-    (parsedArn.service === "cloudfront" && parsedArn.resourceKind === "distribution")
+    (parsedArn.service === "cloudfront" && parsedArn.resourceKind === "distribution") ||
+    (parsedArn.service === "ecs" &&
+      ["cluster", "service", "task-definition"].includes(parsedArn.resourceKind))
   );
+}
+
+// ECS 관계는 API 응답의 명시적인 ID가 같은 scan record로 확인될 때만 Board로 전달합니다.
+export function resolveEcsRelationships(
+  records: AwsDiscoveredResourceRecord[]
+): AwsDiscoveredResourceRecord[] {
+  const providerResourceIds = new Set(records.map((record) => record.providerResourceId));
+
+  return records.map((record) => {
+    if (record.providerResourceType !== "AWS::ECS::Service") {
+      return record;
+    }
+
+    const candidateRelationships: AwsDiscoveredResourceRecord["relationships"] = [
+      ...record.relationships,
+      ...createEcsRelationship(record.config["clusterArn"], "depends_on"),
+      ...createEcsRelationship(record.config["taskDefinitionArn"], "depends_on")
+    ];
+    const networkConfiguration = isRecordValue(record.config["networkConfiguration"])
+      ? record.config["networkConfiguration"]
+      : null;
+    const awsvpcConfiguration = networkConfiguration && isRecordValue(
+      networkConfiguration["awsvpcConfiguration"]
+    )
+      ? networkConfiguration["awsvpcConfiguration"]
+      : null;
+
+    if (awsvpcConfiguration) {
+      candidateRelationships.push(
+        ...createEcsRelationships(awsvpcConfiguration["subnets"], "attached_to"),
+        ...createEcsRelationships(awsvpcConfiguration["securityGroups"], "attached_to")
+      );
+    }
+
+    const loadBalancers = Array.isArray(record.config["loadBalancers"])
+      ? record.config["loadBalancers"].filter(isRecordValue)
+      : [];
+    candidateRelationships.push(
+      ...loadBalancers.flatMap((loadBalancer) =>
+        createEcsRelationship(loadBalancer["targetGroupArn"], "attached_to")
+      )
+    );
+
+    return {
+      ...record,
+      relationships: uniqueDiscoveredRelationships(
+        candidateRelationships.filter((relationship) =>
+          providerResourceIds.has(relationship.targetProviderResourceId)
+        )
+      )
+    };
+  });
+}
+
+function createEcsRelationship(
+  providerResourceId: unknown,
+  type: AwsDiscoveredResourceRecord["relationships"][number]["type"]
+): AwsDiscoveredResourceRecord["relationships"] {
+  const normalizedId = getNonEmptyStringValue(providerResourceId);
+
+  return normalizedId ? [{ type, targetProviderResourceId: normalizedId }] : [];
+}
+
+function createEcsRelationships(
+  providerResourceIds: unknown,
+  type: AwsDiscoveredResourceRecord["relationships"][number]["type"]
+): AwsDiscoveredResourceRecord["relationships"] {
+  return Array.isArray(providerResourceIds)
+    ? providerResourceIds.flatMap((providerResourceId) =>
+        createEcsRelationship(providerResourceId, type)
+      )
+    : [];
 }
 
 // CloudFront origin의 명시적인 domain/ARN이 같은 scan record와 일치할 때만 관계를 추가합니다.

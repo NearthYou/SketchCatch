@@ -6,6 +6,7 @@ import type { InfrastructureGraph } from "@sketchcatch/types";
 import { renderTerraformFromInfrastructureGraph } from "./diagram-to-terraform.js";
 
 const REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE = "reverse-engineering-alb-cloudfront";
+const REVERSE_ENGINEERING_ECS_FIXTURE = "reverse-engineering-ecs";
 const PROVIDERS_TF = `terraform {
   required_providers {
     aws = {
@@ -26,10 +27,16 @@ provider "aws" {
 
 async function main(): Promise<void> {
   const fixtureName = readFixtureName(process.argv.slice(2));
-  if (fixtureName !== REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE) {
+  const createFixture = fixtureName === REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE
+    ? createAlbCloudFrontFixture
+    : fixtureName === REVERSE_ENGINEERING_ECS_FIXTURE
+      ? createEcsFixture
+      : null;
+  if (!createFixture) {
     throw new Error(
       `Unknown Terraform validation fixture: ${fixtureName ?? "<missing>"}. ` +
-        `Expected --fixture ${REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE}.`
+        `Expected --fixture ${REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE} or ` +
+        `${REVERSE_ENGINEERING_ECS_FIXTURE}.`
     );
   }
 
@@ -37,7 +44,7 @@ async function main(): Promise<void> {
   const workingDirectory = await mkdtemp(join(tmpdir(), "sketchcatch-reverse-engineering-terraform-"));
 
   try {
-    const terraform = renderTerraformFromInfrastructureGraph(createAlbCloudFrontFixture());
+    const terraform = renderTerraformFromInfrastructureGraph(createFixture());
     await Promise.all([
       writeFile(join(workingDirectory, "main.tf"), `${terraform}\n`, "utf8"),
       writeFile(join(workingDirectory, "providers.tf"), PROVIDERS_TF, "utf8")
@@ -56,7 +63,7 @@ async function main(): Promise<void> {
     );
     runTerraform(terraformBinary, ["validate", "-no-color"], workingDirectory);
     process.stdout.write(
-      `Terraform fixture ${REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE}: fmt, init, validate passed.\n`
+      `Terraform fixture ${fixtureName}: fmt, init, validate passed.\n`
     );
   } finally {
     await rm(workingDirectory, { recursive: true, force: true });
@@ -195,6 +202,124 @@ function createAlbCloudFrontFixture(): InfrastructureGraph {
         id: "reverse-engineering-cloudfront-origin",
         sourceId: "reverse-engineering-alb",
         targetId: "reverse-engineering-cloudfront",
+        label: "depends_on"
+      }
+    ]
+  };
+}
+
+function createEcsFixture(): InfrastructureGraph {
+  const clusterArn = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
+  const taskDefinitionArn =
+    "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
+
+  return {
+    nodes: [
+      {
+        id: "reverse-engineering-ecs-cluster",
+        label: "orders",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_cluster",
+          resourceName: "orders",
+          fileName: "main"
+        },
+        config: {
+          name: "orders",
+          capacityProviders: ["FARGATE", "FARGATE_SPOT"],
+          configuration: {
+            executeCommandConfiguration: { logging: "DEFAULT" }
+          },
+          providerResourceId: clusterArn,
+          providerResourceType: "AWS::ECS::Cluster"
+        }
+      },
+      {
+        id: "reverse-engineering-ecs-task-definition",
+        label: "orders:7",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_task_definition",
+          resourceName: "orders",
+          fileName: "main"
+        },
+        config: {
+          family: "orders",
+          networkMode: "awsvpc",
+          requiresCompatibilities: ["FARGATE"],
+          cpu: "512",
+          memory: "1024",
+          executionRoleArn: "arn:aws:iam::123456789012:role/ecs-execution",
+          taskRoleArn: "arn:aws:iam::123456789012:role/orders-task",
+          containerDefinitions: [
+            {
+              name: "api",
+              image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
+              essential: true,
+              portMappings: [{ containerPort: 4000, protocol: "tcp" }],
+              secrets: [
+                {
+                  name: "DATABASE_URL",
+                  valueFrom:
+                    "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:orders-db"
+                }
+              ]
+            }
+          ],
+          providerResourceId: taskDefinitionArn,
+          providerResourceType: "AWS::ECS::TaskDefinition"
+        }
+      },
+      {
+        id: "reverse-engineering-ecs-service",
+        label: "api",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_service",
+          resourceName: "api",
+          fileName: "main"
+        },
+        config: {
+          name: "api",
+          clusterArn,
+          taskDefinitionArn,
+          desiredCount: 2,
+          launchType: "FARGATE",
+          networkConfiguration: {
+            awsvpcConfiguration: {
+              subnets: ["subnet-0123456789abcdef0"],
+              securityGroups: ["sg-0123456789abcdef0"],
+              assignPublicIp: "DISABLED"
+            }
+          },
+          loadBalancers: [
+            {
+              targetGroupArn:
+                "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/orders/one",
+              containerName: "api",
+              containerPort: 4000
+            }
+          ],
+          providerResourceId:
+            "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api",
+          providerResourceType: "AWS::ECS::Service"
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "reverse-engineering-ecs-cluster-service",
+        sourceId: "reverse-engineering-ecs-cluster",
+        targetId: "reverse-engineering-ecs-service",
+        label: "depends_on"
+      },
+      {
+        id: "reverse-engineering-ecs-task-service",
+        sourceId: "reverse-engineering-ecs-task-definition",
+        targetId: "reverse-engineering-ecs-service",
         label: "depends_on"
       }
     ]

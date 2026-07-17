@@ -4,6 +4,13 @@ import {
   DescribeLoadBalancersCommand
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import { ListDistributionsCommand } from "@aws-sdk/client-cloudfront";
+import {
+  DescribeClustersCommand,
+  DescribeServicesCommand,
+  DescribeTaskDefinitionCommand,
+  ListClustersCommand,
+  ListServicesCommand
+} from "@aws-sdk/client-ecs";
 import type { TerraformAwsCredentialEnv } from "../aws-connections/aws-connection-runtime-credentials.js";
 import type { AwsDiscoveredResourceRecord, AwsProviderScanInput } from "./aws-provider-adapter.js";
 import {
@@ -11,6 +18,7 @@ import {
   isReverseEngineeringPromotedResourceArn,
   listApplicationLoadBalancers,
   listCloudFrontDistributions,
+  readEcsResourcesWithDiagnostics,
   resolveCloudFrontOriginRelationships
 } from "./aws-reverse-engineering-gateway.js";
 
@@ -28,23 +36,287 @@ test("ALB와 CloudFront reader 선택은 ALL 및 직접 선택에만 한 번씩 
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["ALL"])), {
     loadBalancers: true,
     cloudFrontDistributions: true,
+    ecsResources: true,
     unknownResources: true
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["LOAD_BALANCER"])), {
     loadBalancers: true,
     cloudFrontDistributions: false,
+    ecsResources: false,
     unknownResources: false
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["CLOUDFRONT"])), {
     loadBalancers: false,
     cloudFrontDistributions: true,
+    ecsResources: false,
     unknownResources: false
   });
   assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput(["UNKNOWN"])), {
     loadBalancers: false,
     cloudFrontDistributions: false,
+    ecsResources: false,
     unknownResources: true
   });
+
+  for (const resourceType of [
+    "ECS_CLUSTER",
+    "ECS_SERVICE",
+    "ECS_TASK_DEFINITION"
+  ] as const) {
+    assert.deepEqual(createAwsReverseEngineeringReaderPlan(scanInput([resourceType])), {
+      loadBalancers: false,
+      cloudFrontDistributions: false,
+      ecsResources: true,
+      unknownResources: false
+    });
+  }
+});
+
+test("ECS reader는 cluster/service pagination과 공유 Task Definition dedupe를 지키며 환경 값을 제외한다", async () => {
+  const clusterA = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders";
+  const clusterB = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/empty";
+  const serviceA = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api";
+  const serviceB = "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/worker";
+  const taskDefinition = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7";
+  const commands: object[] = [];
+  const result = await readEcsResourcesWithDiagnostics(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        commands.push(command);
+
+        if (command instanceof ListClustersCommand) {
+          return command.input.nextToken
+            ? { clusterArns: [clusterB] }
+            : { clusterArns: [clusterA], nextToken: "clusters-page-2" };
+        }
+
+        if (command instanceof DescribeClustersCommand) {
+          return {
+            clusters: [
+              {
+                clusterArn: clusterA,
+                clusterName: "orders",
+                status: "ACTIVE",
+                configuration: {
+                  executeCommandConfiguration: {
+                    logging: "DEFAULT"
+                  }
+                },
+                capacityProviders: ["FARGATE", "FARGATE_SPOT"]
+              },
+              {
+                clusterArn: clusterB,
+                clusterName: "empty",
+                status: "ACTIVE"
+              }
+            ]
+          };
+        }
+
+        if (command instanceof ListServicesCommand) {
+          if (command.input.cluster === clusterB) {
+            return { serviceArns: [] };
+          }
+
+          return command.input.nextToken
+            ? { serviceArns: [serviceB] }
+            : { serviceArns: [serviceA], nextToken: "services-page-2" };
+        }
+
+        if (command instanceof DescribeServicesCommand) {
+          return {
+            services: [
+              {
+                serviceArn: serviceA,
+                serviceName: "api",
+                clusterArn: clusterA,
+                taskDefinition,
+                desiredCount: 2,
+                launchType: "FARGATE",
+                networkConfiguration: {
+                  awsvpcConfiguration: {
+                    subnets: ["subnet-private-a"],
+                    securityGroups: ["sg-api"],
+                    assignPublicIp: "DISABLED"
+                  }
+                },
+                loadBalancers: [
+                  {
+                    targetGroupArn:
+                      "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one",
+                    containerName: "api",
+                    containerPort: 4000
+                  }
+                ]
+              },
+              {
+                serviceArn: serviceB,
+                serviceName: "worker",
+                clusterArn: clusterA,
+                taskDefinition,
+                desiredCount: 1,
+                capacityProviderStrategy: [{ capacityProvider: "FARGATE_SPOT", weight: 1 }],
+                networkConfiguration: {
+                  awsvpcConfiguration: {
+                    subnets: ["subnet-private-a"],
+                    securityGroups: ["sg-worker"],
+                    assignPublicIp: "DISABLED"
+                  }
+                }
+              }
+            ]
+          };
+        }
+
+        if (command instanceof DescribeTaskDefinitionCommand) {
+          return {
+            taskDefinition: {
+              taskDefinitionArn: taskDefinition,
+              family: "orders",
+              revision: 7,
+              networkMode: "awsvpc",
+              requiresCompatibilities: ["FARGATE"],
+              cpu: "512",
+              memory: "1024",
+              executionRoleArn: "arn:aws:iam::123456789012:role/ecs-execution",
+              taskRoleArn: "arn:aws:iam::123456789012:role/orders-task",
+              containerDefinitions: [
+                {
+                  name: "api",
+                  image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
+                  essential: true,
+                  environment: [{ name: "API_TOKEN", value: "must-not-leak" }],
+                  secrets: [
+                    {
+                      name: "DATABASE_URL",
+                      valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
+                    }
+                  ],
+                  portMappings: [{ containerPort: 4000, protocol: "tcp" }],
+                  rawSdkField: "must-not-copy"
+                }
+              ],
+              $metadata: { requestId: "must-not-copy" }
+            },
+            $metadata: { requestId: "must-not-copy" }
+          };
+        }
+
+        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+      }
+    })
+  );
+
+  assert.deepEqual(result.scanErrors, []);
+  assert.deepEqual(
+    commands.filter((command) => command instanceof ListClustersCommand).map((command) => command.input.nextToken),
+    [undefined, "clusters-page-2"]
+  );
+  assert.deepEqual(
+    commands
+      .filter(
+        (command): command is ListServicesCommand =>
+          command instanceof ListServicesCommand && command.input.cluster === clusterA
+      )
+      .map((command) => command.input.nextToken),
+    [undefined, "services-page-2"]
+  );
+  assert.equal(commands.filter((command) => command instanceof DescribeTaskDefinitionCommand).length, 1);
+  assert.deepEqual(
+    result.records.map((record) => record.providerResourceType),
+    [
+      "AWS::ECS::Cluster",
+      "AWS::ECS::Cluster",
+      "AWS::ECS::Service",
+      "AWS::ECS::Service",
+      "AWS::ECS::TaskDefinition"
+    ]
+  );
+  assert.deepEqual(
+    result.records.map((record) => record.providerResourceId),
+    [clusterA, clusterB, serviceA, serviceB, taskDefinition]
+  );
+
+  const apiService = result.records.find((record) => record.providerResourceId === serviceA);
+  assert.deepEqual(apiService?.relationships, [
+    { type: "depends_on", targetProviderResourceId: clusterA },
+    { type: "depends_on", targetProviderResourceId: taskDefinition }
+  ]);
+  const taskDefinitionRecord = result.records.find(
+    (record) => record.providerResourceId === taskDefinition
+  );
+  assert.equal(taskDefinitionRecord?.config["requiresManualEnvironmentInput"], true);
+  assert.deepEqual(taskDefinitionRecord?.config["containerDefinitions"], [
+    {
+      name: "api",
+      image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/orders:stable",
+      essential: true,
+      portMappings: [{ containerPort: 4000, protocol: "tcp" }],
+      secrets: [
+        {
+          name: "DATABASE_URL",
+          valueFrom: "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:db"
+        }
+      ]
+    }
+  ]);
+  assert.doesNotMatch(JSON.stringify(result), /must-not-leak|must-not-copy|\$metadata/);
+});
+
+test("한 Cluster의 service 조회 실패는 다른 ECS 결과를 유지하고 하위 group scanError로 남긴다", async () => {
+  const healthyCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/healthy";
+  const deniedCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/denied";
+  const healthyService = "arn:aws:ecs:ap-northeast-2:123456789012:service/healthy/api";
+  const result = await readEcsResourcesWithDiagnostics(
+    "ap-northeast-2",
+    credentials,
+    () => ({
+      async send(command: object): Promise<unknown> {
+        if (command instanceof ListClustersCommand) {
+          return { clusterArns: [healthyCluster, deniedCluster] };
+        }
+        if (command instanceof DescribeClustersCommand) {
+          return {
+            clusters: [
+              { clusterArn: healthyCluster, clusterName: "healthy", status: "ACTIVE" },
+              { clusterArn: deniedCluster, clusterName: "denied", status: "ACTIVE" }
+            ]
+          };
+        }
+        if (command instanceof ListServicesCommand) {
+          if (command.input.cluster === deniedCluster) {
+            throw new Error("AccessDeniedException: account 123456789012 cannot list services");
+          }
+          return { serviceArns: [healthyService] };
+        }
+        if (command instanceof DescribeServicesCommand) {
+          return {
+            services: [
+              {
+                serviceArn: healthyService,
+                serviceName: "api",
+                clusterArn: healthyCluster,
+                desiredCount: 1,
+                launchType: "FARGATE"
+              }
+            ]
+          };
+        }
+        throw new Error(`Unexpected ECS command: ${command.constructor.name}`);
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.records.map((record) => record.providerResourceId),
+    [healthyCluster, deniedCluster, healthyService]
+  );
+  assert.equal(result.scanErrors.length, 1);
+  assert.equal(result.scanErrors[0]?.resourceType, "ECS_SERVICE");
+  assert.equal(result.scanErrors[0]?.reason, "permission_denied");
+  assert.doesNotMatch(result.scanErrors[0]?.message ?? "", /123456789012/);
 });
 
 test("ALB reader는 pagination을 끝까지 읽고 실제 VPC, Security Group, Subnet 관계만 정규화한다", async () => {
@@ -348,6 +620,24 @@ test("정식 reader가 맡는 ARN만 UNKNOWN inventory에서 제외한다", () =
   );
   assert.equal(
     isReverseEngineeringPromotedResourceArn(
+      "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders"
+    ),
+    true
+  );
+  assert.equal(
+    isReverseEngineeringPromotedResourceArn(
+      "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api"
+    ),
+    true
+  );
+  assert.equal(
+    isReverseEngineeringPromotedResourceArn(
+      "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7"
+    ),
+    true
+  );
+  assert.equal(
+    isReverseEngineeringPromotedResourceArn(
       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/net/orders/one"
     ),
     false
@@ -355,6 +645,12 @@ test("정식 reader가 맡는 ARN만 UNKNOWN inventory에서 제외한다", () =
   assert.equal(
     isReverseEngineeringPromotedResourceArn(
       "arn:aws:lambda:ap-northeast-2:123456789012:function:orders"
+    ),
+    false
+  );
+  assert.equal(
+    isReverseEngineeringPromotedResourceArn(
+      "arn:aws:ecs:ap-northeast-2:123456789012:task/orders/one"
     ),
     false
   );

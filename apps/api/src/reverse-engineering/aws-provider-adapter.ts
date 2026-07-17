@@ -62,7 +62,10 @@ const awsResourceTypeMap: ReadonlyMap<string, ResourceType> = new Map([
   ["AWS::RDS::DBInstance", "RDS"],
   ["AWS::S3::Bucket", "S3"],
   ["AWS::ElasticLoadBalancingV2::LoadBalancer", "LOAD_BALANCER"],
-  ["AWS::CloudFront::Distribution", "CLOUDFRONT"]
+  ["AWS::CloudFront::Distribution", "CLOUDFRONT"],
+  ["AWS::ECS::Cluster", "ECS_CLUSTER"],
+  ["AWS::ECS::Service", "ECS_SERVICE"],
+  ["AWS::ECS::TaskDefinition", "ECS_TASK_DEFINITION"]
 ]);
 
 const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
@@ -75,11 +78,17 @@ const terraformResourceTypeMap: ReadonlyMap<ResourceType, string> = new Map([
   ["RDS", "aws_db_instance"],
   ["S3", "aws_s3_bucket"],
   ["LOAD_BALANCER", "aws_lb"],
-  ["CLOUDFRONT", "aws_cloudfront_distribution"]
+  ["CLOUDFRONT", "aws_cloudfront_distribution"],
+  ["ECS_CLUSTER", "aws_ecs_cluster"],
+  ["ECS_SERVICE", "aws_ecs_service"],
+  ["ECS_TASK_DEFINITION", "aws_ecs_task_definition"]
 ]);
 const REVERSE_ENGINEERING_PROMOTED_RESOURCE_TYPES = new Set<ResourceType>([
   "LOAD_BALANCER",
-  "CLOUDFRONT"
+  "CLOUDFRONT",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION"
 ]);
 const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
   "providerResourceId",
@@ -336,6 +345,22 @@ function getStableTerraformImportId(resource: DiscoveredResource): string | null
     return isApplicationLoadBalancerArn(providerResourceId) ? providerResourceId : null;
   }
 
+  if (resource.resourceType === "ECS_CLUSTER") {
+    const providerResourceId = resource.providerResourceId.trim();
+
+    return isEcsClusterArn(providerResourceId) ? providerResourceId : null;
+  }
+
+  if (resource.resourceType === "ECS_SERVICE") {
+    return getEcsServiceImportId(resource);
+  }
+
+  if (resource.resourceType === "ECS_TASK_DEFINITION") {
+    const providerResourceId = resource.providerResourceId.trim();
+
+    return isEcsTaskDefinitionArn(providerResourceId) ? providerResourceId : null;
+  }
+
   return getNonEmptyString(resource.providerResourceId);
 }
 
@@ -344,11 +369,49 @@ function createMissingImportIdReason(resourceType: ResourceType): string {
     ? "Terraform import에 필요한 CloudFront distribution ID가 없습니다."
     : resourceType === "LOAD_BALANCER"
       ? "Terraform import에 필요한 ALB ARN이 없습니다."
+      : resourceType === "ECS_CLUSTER"
+        ? "Terraform import에 필요한 ECS Cluster ARN이 없습니다."
+        : resourceType === "ECS_SERVICE"
+          ? "Terraform import에 필요한 ECS cluster name과 service name이 없습니다."
+          : resourceType === "ECS_TASK_DEFINITION"
+            ? "Terraform import에 필요한 ECS Task Definition ARN이 없습니다."
       : "Terraform import에 필요한 provider Resource ID가 없습니다.";
 }
 
 function isApplicationLoadBalancerArn(value: string): boolean {
   return /^arn:[^:]+:elasticloadbalancing:[^:]+:[^:]+:loadbalancer\/app\/.+/.test(value);
+}
+
+function isEcsClusterArn(value: string): boolean {
+  return /^arn:[^:]+:ecs:[^:]+:\d{12}:cluster\/[A-Za-z0-9_-]+$/.test(value);
+}
+
+function isEcsTaskDefinitionArn(value: string): boolean {
+  return /^arn:[^:]+:ecs:[^:]+:\d{12}:task-definition\/[A-Za-z0-9_-]+:\d+$/.test(value);
+}
+
+function getEcsServiceImportId(resource: DiscoveredResource): string | null {
+  const serviceArnMatch = /^arn:[^:]+:ecs:[^:]+:\d{12}:service\/([^/]+)(?:\/([^/]+))?$/.exec(
+    resource.providerResourceId.trim()
+  );
+  const clusterArnMatch = /^arn:[^:]+:ecs:[^:]+:\d{12}:cluster\/([^/]+)$/.exec(
+    getNonEmptyString(resource.config["clusterArn"]) ?? ""
+  );
+  const clusterName =
+    getValidEcsName(resource.config["clusterName"]) ??
+    getValidEcsName(clusterArnMatch?.[1]) ??
+    getValidEcsName(serviceArnMatch?.[2] ? serviceArnMatch[1] : undefined);
+  const serviceName =
+    getValidEcsName(resource.config["name"]) ??
+    getValidEcsName(serviceArnMatch?.[2] ?? serviceArnMatch?.[1]);
+
+  return clusterName && serviceName ? `${clusterName}/${serviceName}` : null;
+}
+
+function getValidEcsName(value: unknown): string | null {
+  const name = getNonEmptyString(value);
+
+  return name && /^[A-Za-z0-9_-]+$/.test(name) ? name : null;
 }
 
 function createTerraformCreationValidationFindings(
@@ -414,7 +477,85 @@ function getMissingTerraformCreationFields(
     ];
   }
 
+  if (resourceType === "ECS_CLUSTER") {
+    return getValidEcsName(config["name"]) ? [] : ["name"];
+  }
+
+  if (resourceType === "ECS_SERVICE") {
+    return [
+      ...(getValidEcsName(config["name"]) ? [] : ["name"]),
+      ...(getNonEmptyString(config["clusterArn"]) ? [] : ["clusterArn"]),
+      ...(getNonEmptyString(config["taskDefinitionArn"]) ? [] : ["taskDefinitionArn"]),
+      ...(isNonNegativeNumber(config["desiredCount"]) ? [] : ["desiredCount"]),
+      ...(
+        getNonEmptyString(config["launchType"]) ||
+        hasEcsCapacityProviderStrategy(config["capacityProviderStrategy"])
+          ? []
+          : ["launchType/capacityProviderStrategy"]
+      ),
+      ...(hasEcsNetworkConfiguration(config["networkConfiguration"])
+        ? []
+        : ["networkConfiguration"])
+    ];
+  }
+
+  if (resourceType === "ECS_TASK_DEFINITION") {
+    return [
+      ...(getValidEcsName(config["family"]) ? [] : ["family"]),
+      ...(hasEcsContainerDefinitions(config["containerDefinitions"])
+        ? []
+        : ["containerDefinitions"]),
+      ...(getNonEmptyString(config["networkMode"]) ? [] : ["networkMode"]),
+      ...(getStringArray(config["requiresCompatibilities"]).length > 0
+        ? []
+        : ["requiresCompatibilities"]),
+      ...(getNonEmptyString(config["cpu"]) ? [] : ["cpu"]),
+      ...(getNonEmptyString(config["memory"]) ? [] : ["memory"]),
+      ...(config["requiresManualEnvironmentInput"] === true
+        ? ["containerDefinitions.environment"]
+        : [])
+    ];
+  }
+
   return [];
+}
+
+function hasEcsCapacityProviderStrategy(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (item) => isRecord(item) && getValidEcsName(item["capacityProvider"]) !== null
+    )
+  );
+}
+
+function hasEcsNetworkConfiguration(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value["awsvpcConfiguration"])) {
+    return false;
+  }
+
+  return (
+    getStringArray(value["awsvpcConfiguration"]["subnets"]).length > 0 &&
+    getStringArray(value["awsvpcConfiguration"]["securityGroups"]).length > 0
+  );
+}
+
+function hasEcsContainerDefinitions(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (container) =>
+        isRecord(container) &&
+        getValidEcsName(container["name"]) !== null &&
+        getNonEmptyString(container["image"]) !== null
+    )
+  );
+}
+
+function isNonNegativeNumber(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function hasCloudFrontOrigin(value: unknown): boolean {
