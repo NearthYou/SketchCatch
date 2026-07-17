@@ -4,8 +4,10 @@ import { test } from "node:test";
 
 const managerSource = read("ProjectWorkspaceDraftManager.tsx");
 const directDeploymentSource = read("DirectDeploymentScreen.tsx");
+const deploymentShellSource = read("DeploymentConsoleShell.tsx");
 const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const projectBarSource = read("../diagram-editor/WorkspaceProjectBar.tsx");
+const workspaceStyles = read("workspace.module.css");
 
 test("the main board opens deployment immediately without saving", () => {
   const callbackStart = managerSource.indexOf("const saveAndOpenDeployment");
@@ -46,6 +48,152 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
+test("changed drafts keep cleanup available beside save and validation", () => {
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const validationStart = directDeploymentSource.indexOf(
+    'if (stepId === "validation")',
+    actionsStart
+  );
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    validationStart
+  );
+  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+
+  assert.ok(actionsStart > -1);
+  assert.ok(validationStart > -1);
+  assert.ok(approvalStart > validationStart);
+  assert.match(validationSource, /startTerraformDestroyPlan/);
+  assert.match(validationSource, /저장 후 검증 실행/);
+  assert.doesNotMatch(validationSource, /검증 단계에서는 실제 리소스를 변경하지 않습니다/);
+});
+
+test("idle validation has no cancel button while running deployment can still be cancelled", () => {
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const validationStart = directDeploymentSource.indexOf(
+    'if (stepId === "validation")',
+    actionsStart
+  );
+  const approvalStart = directDeploymentSource.indexOf(
+    'if (stepId === "approval")',
+    validationStart
+  );
+  const validationSource = directDeploymentSource.slice(validationStart, approvalStart);
+
+  assert.doesNotMatch(validationSource, /onClick=\{onCancel\}/);
+  assert.doesNotMatch(validationSource, />\s*취소\s*</);
+  assert.match(validationSource, /selectedDeployment\?\.status === "RUNNING"/);
+  assert.match(validationSource, /onClick=\{cancelSelectedDeployment\}/);
+  assert.match(validationSource, />\s*실행 취소\s*</);
+  assert.match(directDeploymentSource, /setShowApplyConfirmation\(false\)/);
+  assert.match(directDeploymentSource, /confirmationDismissRequestId/);
+  assert.match(deploymentShellSource, /confirmationDismissRequestId/);
+});
+
+test("the recent validation result aligns with settings and does not follow scrolling", () => {
+  const setupStart = directDeploymentSource.indexOf("const renderSetupSection");
+  const historyStart = directDeploymentSource.indexOf("const renderResultsSection", setupStart);
+  const setupSource = directDeploymentSource.slice(setupStart, historyStart);
+  const headingIndex = setupSource.indexOf("styles.deploymentStepHeading");
+  const workspaceIndex = setupSource.indexOf("styles.deploymentStepWorkspace", headingIndex);
+  const recentResultIndex = setupSource.indexOf("styles.deploymentRecentResultCard", workspaceIndex);
+
+  assert.ok(headingIndex > -1);
+  assert.ok(workspaceIndex > headingIndex);
+  assert.ok(recentResultIndex > workspaceIndex);
+  assert.match(setupSource, /마지막 완료 단계/);
+  assert.match(directDeploymentSource, /getLatestCompletedDeploymentStep\(selectedDeployment\)/);
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepHeading\s*\{[^}]*grid-column:\s*1 \/ -1;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentRecentResultCard\s*\{[^}]*position:\s*static;/s
+  );
+});
+
+test("deployment actions sit directly above the recent result without a divider", () => {
+  const setupStart = directDeploymentSource.indexOf("const renderSetupSection");
+  const historyStart = directDeploymentSource.indexOf("const renderResultsSection", setupStart);
+  const setupSource = directDeploymentSource.slice(setupStart, historyStart);
+  const headingIndex = setupSource.lastIndexOf("styles.deploymentStepHeading");
+  const actionsIndex = setupSource.lastIndexOf("renderDirectStepActions(selectedStep.id)");
+  const workspaceIndex = setupSource.lastIndexOf("styles.deploymentStepWorkspace");
+  const recentResultIndex = setupSource.lastIndexOf("styles.deploymentRecentResultCard");
+
+  assert.ok(actionsIndex > headingIndex);
+  assert.ok(workspaceIndex > actionsIndex);
+  assert.ok(recentResultIndex > workspaceIndex);
+  assert.match(
+    workspaceStyles,
+    /"heading actions"\s*"workspace result"/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*border:\s*0;[^}]*grid-area:\s*actions;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentValidationActions\s*\{[^}]*display:\s*flex;[^}]*flex-wrap:\s*nowrap;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar \.deploymentPrimaryButton,[\s\S]*?white-space:\s*nowrap;[\s\S]*?width:\s*152px;/
+  );
+});
+
+test("deployment action buttons use one size and fill only while active", () => {
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
+  const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
+
+  assert.match(actionsSource, /data-active=/);
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar\s*\{[^}]*justify-content:\s*start;[^}]*justify-items:\s*start;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*14px;[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar :is\([\s\S]*?\) svg\s*\{[^}]*color:\s*inherit;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar [^{]*\[data-active="true"\][\s\S]*?background:\s*var\(--workspace-accent,\s*#000000\);/
+  );
+});
+
+test("Destroy execution starts directly from the action rail without another confirmation", () => {
+  const actionsStart = directDeploymentSource.indexOf("function renderDirectStepActions");
+  const resultsStart = directDeploymentSource.indexOf("const renderResultsSection", actionsStart);
+  const actionsSource = directDeploymentSource.slice(actionsStart, resultsStart);
+
+  assert.ok(actionsStart > -1);
+  assert.ok(resultsStart > actionsStart);
+  assert.match(actionsSource, /showApplyConfirmation && selectedDeployment/);
+  assert.match(actionsSource, /onClick=\{startTerraformApply\}/);
+  assert.match(actionsSource, /onClick=\{\(\) => void startTerraformDestroy\(deployment\)\}/);
+  assert.match(directDeploymentSource, /return "Destroy 실행"/);
+  assert.doesNotMatch(directDeploymentSource, /정리 실행 확인|setShowDestroyConfirmation\(true\)/);
+});
+test("reload restores the persisted ProjectDraft revision instead of assuming changes", () => {
+  assert.match(
+    managerSource,
+    /setProjectDraftRevision\(loadedDraft\.serverDraft\?\.revision \?\? null\)/
+  );
+  assert.match(managerSource, /projectDraftRevision=\{projectDraftRevision\}/);
+  assert.match(rightPanelSource, /useState\(false\)/);
+  assert.match(
+    rightPanelSource,
+    /useState<string \| null>\(\(\) => toDeploymentBaselineFingerprint\(context\.diagram\)\)/
+  );
+  assert.match(rightPanelSource, /projectDraftRevision=\{projectDraftRevision\}/);
+});
+
 test("Direct Deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
   assert.match(directDeploymentSource, /PARTIALLY_FAILED/);
   assert.match(directDeploymentSource, /같은 빌드 결과로 웹 배포 재시도/);
@@ -61,6 +209,59 @@ test("Direct Deployment auto-selects the verified AWS connection without renderi
 test("Direct Deployment omits the removed deployment context and run-details sections", () => {
   assert.doesNotMatch(directDeploymentSource, /deploymentContextPanel/);
   assert.doesNotMatch(directDeploymentSource, /deployment-run-details|실행 세부정보/);
+});
+
+test("Deployment History selects one successful version and renders only its details", () => {
+  const historyStart = directDeploymentSource.indexOf("const renderDeploymentHistory");
+  const historyEnd = directDeploymentSource.indexOf("const renderHistoryView", historyStart);
+  const historySource = directDeploymentSource.slice(historyStart, historyEnd);
+
+  assert.ok(historyStart > -1);
+  assert.ok(historyEnd > historyStart);
+  assert.match(historySource, /id="deployment-history-version-select"/);
+  assert.match(historySource, /onChange=\{setSelectedHistoryDeploymentId\}/);
+  assert.match(historySource, /deploymentHistoryHeader/);
+  assert.match(historySource, /deploymentHistoryPicker/);
+  assert.match(historySource, /deploymentHistorySnapshot/);
+  assert.match(historySource, /deploymentHistoryMetrics/);
+  assert.doesNotMatch(historySource, /Deployment history/);
+  assert.doesNotMatch(historySource, /성공한 버전의 변경 범위와 실행 결과를 확인합니다/);
+  assert.match(directDeploymentSource, /label: formatDeploymentVersionDate\(deployment\.createdAt\)/);
+  assert.doesNotMatch(historySource, /deploymentHistoryEntries\.map/);
+  assert.doesNotMatch(historySource, /setSelectedDeploymentId/);
+  assert.match(directDeploymentSource, /listDeploymentLogs\(deploymentId\)/);
+  assert.match(directDeploymentSource, /beginDeploymentHistoryDetailsLoad/);
+  assert.match(directDeploymentSource, /completeDeploymentHistoryDetailsLoad/);
+  assert.match(directDeploymentSource, /failDeploymentHistoryDetailsLoad/);
+  assert.match(directDeploymentSource, /aria-busy="true"/);
+  assert.match(directDeploymentSource, /role="alert"/);
+  assert.match(directDeploymentSource, /historyDeploymentResources/);
+  assert.match(directDeploymentSource, /historyTerraformOutputs/);
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistorySection\s*\{[^}]*border:\s*1px solid var\(--workspace-line[^}]*box-shadow:\s*none;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistoryHeader\s*\{[^}]*border-bottom:\s*0;/s
+  );
+  assert.match(
+    workspaceStyles,
+    /\.deploymentHistorySnapshot\s*\{[^}]*border:\s*1px solid var\(--workspace-line,[^}]*box-shadow:\s*none;/s
+  );
+});
+
+test("expanded history details do not repeat their disclosure titles", () => {
+  const resultsStart = directDeploymentSource.indexOf("const renderResultsSection");
+  const logsStart = directDeploymentSource.indexOf("const renderLogsSection", resultsStart);
+  const historyStart = directDeploymentSource.indexOf("const renderDeploymentHistory", logsStart);
+  const resultsSource = directDeploymentSource.slice(resultsStart, logsStart);
+  const logsSource = directDeploymentSource.slice(logsStart, historyStart);
+
+  assert.doesNotMatch(resultsSource, /<h3>리소스와 Output<\/h3>/);
+  assert.doesNotMatch(logsSource, /<h3>전체 로그<\/h3>/);
+  assert.match(resultsSource, /aria-label="리소스와 Output 세부 내용"/);
+  assert.match(logsSource, /aria-label="전체 로그 세부 내용"/);
 });
 
 function read(relativePath: string): string {

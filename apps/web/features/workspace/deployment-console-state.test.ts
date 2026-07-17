@@ -5,6 +5,8 @@ import {
   getDeploymentPlanActionLabel,
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
+  hasDeploymentDraftChanges,
+  shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
   shouldStartQueuedApplyPlan,
   type DirectDeploymentFlowInput
@@ -38,7 +40,10 @@ function createInput(
 test("Direct Deployment exposes exactly validation, approval, and deployment", () => {
   const flow = getDirectDeploymentFlow(createInput({ hasUnsavedBaseline: true }));
 
-  assert.deepEqual(flow.steps.map((step) => step.id), ["validation", "approval", "deployment"]);
+  assert.deepEqual(
+    flow.steps.map((step) => step.id),
+    ["validation", "approval", "deployment"]
+  );
   assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "active");
   assert.equal(flow.steps[1]?.state, "idle");
@@ -68,53 +73,6 @@ test("a created deployment without a plan advances to Plan", () => {
 
   assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "active");
-});
-
-test("an ECS application plan prepares the project build environment only until it is ready", () => {
-  const deployment = {
-    scope: "full_stack" as const,
-    targetKind: "ecs_fargate" as const
-  };
-
-  assert.equal(requiresProjectBuildEnvironment(deployment), true);
-  assert.equal(
-    getDeploymentPlanActionLabel({
-      buildEnvironmentStatus: null,
-      deployment,
-      isLoading: false
-    }),
-    "빌드 환경 준비 후 Plan 생성"
-  );
-  assert.equal(
-    getDeploymentPlanActionLabel({
-      buildEnvironmentStatus: "ready",
-      deployment,
-      isLoading: false
-    }),
-    "Plan 생성"
-  );
-});
-
-test("infrastructure-only and non-ECS plans do not prepare an ECS build environment", () => {
-  assert.equal(
-    requiresProjectBuildEnvironment({ scope: "infrastructure", targetKind: "ecs_fargate" }),
-    false
-  );
-  assert.equal(
-    requiresProjectBuildEnvironment({ scope: "full_stack", targetKind: "lambda" }),
-    false
-  );
-});
-
-test("the Plan action names the build-environment work while the first request is running", () => {
-  assert.equal(
-    getDeploymentPlanActionLabel({
-      buildEnvironmentStatus: "preparing",
-      deployment: { scope: "application", targetKind: "ecs_fargate" },
-      isLoading: true
-    }),
-    "빌드 환경 준비 및 Plan 생성 중"
-  );
 });
 
 test("a warning Preflight still advances a created deployment to Plan", () => {
@@ -238,6 +196,24 @@ test("an approved apply plan advances to Apply", () => {
   assert.equal(flow.steps[2]?.state, "active");
 });
 
+test("a persisted plan resumes at approval after the local preflight state resets", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "plan-1",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[1]?.state, "active");
+});
+
 test("running apply reports a running final step", () => {
   const flow = getDirectDeploymentFlow(
     createInput({
@@ -280,6 +256,154 @@ test("destroy uses the same approval and deployment phases", () => {
 
   assert.equal(flow.activeStepId, "approval");
   assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("a persisted destroy plan advances despite unrelated draft changes", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: { ...idleActions, canApprovePlan: true, shouldShowApprovePlanButton: true },
+      deployment: {
+        approvedAt: null,
+        currentPlanArtifactId: "destroy-plan",
+        currentPlanOperation: "destroy",
+        status: "SUCCESS"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "approval");
+  assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("an unchanged successful deployment returns to cleanup after reload", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      deployment: {
+        approvedAt: "2026-07-16T00:00:00.000Z",
+        currentPlanArtifactId: "apply-plan",
+        currentPlanOperation: "apply",
+        status: "SUCCESS"
+      },
+      hasUnsavedBaseline: false,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[2]?.statusLabel, "배포 완료");
+});
+
+test("an approved plan returns to validation with an explicit revalidation status after a draft change", () => {
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      deployment: {
+        approvedAt: "2026-07-16T00:00:00.000Z",
+        currentPlanArtifactId: "apply-plan",
+        currentPlanOperation: "apply",
+        status: "PENDING"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "validation");
+  assert.equal(flow.steps[0]?.statusLabel, "변경 후 재검증 필요");
+});
+
+test("save and validation actions depend on changes after a successful deployment", () => {
+  assert.equal(
+    shouldShowDeploymentValidationActions({
+      deploymentStatus: "SUCCESS",
+      hasUnsavedBaseline: false,
+      preflightState: "idle"
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowDeploymentValidationActions({
+      deploymentStatus: "SUCCESS",
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    }),
+    true
+  );
+});
+
+test("persisted draft revisions restore whether a successful deployment changed after reload", () => {
+  assert.equal(
+    hasDeploymentDraftChanges({
+      currentDraftRevision: 7,
+      hasUnsavedWorkspaceChanges: false,
+      preparedDraftRevision: 7
+    }),
+    false
+  );
+  assert.equal(
+    hasDeploymentDraftChanges({
+      currentDraftRevision: 8,
+      hasUnsavedWorkspaceChanges: false,
+      preparedDraftRevision: 7
+    }),
+    true
+  );
+  assert.equal(
+    hasDeploymentDraftChanges({
+      currentDraftRevision: 7,
+      hasUnsavedWorkspaceChanges: true,
+      preparedDraftRevision: 7
+    }),
+    true
+  );
+});
+
+test("an ECS application plan prepares the project build environment only until it is ready", () => {
+  const deployment = {
+    scope: "full_stack" as const,
+    targetKind: "ecs_fargate" as const
+  };
+
+  assert.equal(requiresProjectBuildEnvironment(deployment), true);
+  assert.equal(
+    getDeploymentPlanActionLabel({
+      buildEnvironmentStatus: null,
+      deployment,
+      isLoading: false
+    }),
+    "\uBE4C\uB4DC \uD658\uACBD \uC900\uBE44 \uD6C4 Plan \uC0DD\uC131"
+  );
+  assert.equal(
+    getDeploymentPlanActionLabel({
+      buildEnvironmentStatus: "ready",
+      deployment,
+      isLoading: false
+    }),
+    "Plan \uC0DD\uC131"
+  );
+});
+
+test("infrastructure-only and non-ECS plans do not prepare an ECS build environment", () => {
+  assert.equal(
+    requiresProjectBuildEnvironment({ scope: "infrastructure", targetKind: "ecs_fargate" }),
+    false
+  );
+  assert.equal(
+    requiresProjectBuildEnvironment({ scope: "full_stack", targetKind: "lambda" }),
+    false
+  );
+});
+
+test("the Plan action names the build-environment work while the first request is running", () => {
+  assert.equal(
+    getDeploymentPlanActionLabel({
+      buildEnvironmentStatus: "preparing",
+      deployment: { scope: "application", targetKind: "ecs_fargate" },
+      isLoading: true
+    }),
+    "\uBE4C\uB4DC \uD658\uACBD \uC900\uBE44 \uBC0F Plan \uC0DD\uC131 \uC911"
+  );
 });
 
 test("failed apply cleanup uses its saved deployment snapshot instead of the current Board state", () => {

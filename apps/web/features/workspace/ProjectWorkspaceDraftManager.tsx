@@ -112,6 +112,7 @@ function ProjectWorkspaceDraftManagerState({
   const [repositoryTemplateId, setRepositoryTemplateId] = useState<string | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
+  const [projectDraftRevision, setProjectDraftRevision] = useState<number | null>(null);
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
@@ -293,6 +294,7 @@ function ProjectWorkspaceDraftManagerState({
             if (result.ok) {
               if (draftChangeVersionRef.current === serverSaveVersion) {
                 setCurrentLocalDraft(result.localDraft);
+                setProjectDraftRevision(result.serverDraft.revision);
                 serverDirtyRef.current = false;
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
@@ -429,6 +431,7 @@ function ProjectWorkspaceDraftManagerState({
         setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
         setRepositoryTemplateId(verifiedRepositoryTemplateId);
         setCurrentLocalDraft(loadedDraft.localDraft);
+        setProjectDraftRevision(loadedDraft.serverDraft?.revision ?? null);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
         setServerSaveState(sourceServerSaveState[loadedDraft.source]);
 
@@ -664,6 +667,12 @@ function ProjectWorkspaceDraftManagerState({
             context={context}
             deploymentOpenRequestId={deploymentOpenRequestId}
             deploymentAvailability="enabled"
+            hasUnsavedProjectDraft={
+              serverSaveState === "server-dirty" ||
+              serverSaveState === "server-saving" ||
+              serverSaveState === "server-checkpoint-pending" ||
+              serverSaveState === "server-failed"
+            }
             initialView={initialRightPanelView}
             initialCicdReturnCommand={initialCicdReturnCommand}
             initialTerraformFiles={initialTerraformFiles}
@@ -675,6 +684,7 @@ function ProjectWorkspaceDraftManagerState({
             onTerraformFilesChange={handleTerraformFilesChange}
             onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
             projectId={projectId}
+            projectDraftRevision={projectDraftRevision}
             projectName={projectName}
             selectedTerraformIssueKey={selectedTerraformIssueKey}
             terraformFilesReplacement={terraformFilesReplacement}

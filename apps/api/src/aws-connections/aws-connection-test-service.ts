@@ -255,7 +255,7 @@ function isExpectedAssumeRoleDeniedError(error: unknown): boolean {
   return isAwsAccessDeniedError(error);
 }
 
-function toAwsConnectionTestError(error: unknown): AwsConnectionTestError {
+export function toAwsConnectionTestError(error: unknown): AwsConnectionTestError {
   if (isAwsAccessDeniedError(error)) {
     return new AwsConnectionTestError("AWS Role assume permission denied");
   }

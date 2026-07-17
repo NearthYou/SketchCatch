@@ -7,6 +7,14 @@ export type DeploymentStatusPresentation = {
   readonly tone: DeploymentStatusTone;
 };
 
+export type DeploymentHistorySummary = Pick<Deployment, "createdAt" | "id" | "status">;
+
+export type DeploymentHistoryEntry<T extends DeploymentHistorySummary = DeploymentHistorySummary> =
+  {
+    readonly deployment: T;
+    readonly versionLabel: string;
+  };
+
 const DEPLOYMENT_STATUS_PRESENTATIONS: Readonly<
   Record<Deployment["status"], DeploymentStatusPresentation>
 > = {
@@ -26,6 +34,56 @@ export function getDeploymentStatusPresentation(
   return DEPLOYMENT_STATUS_PRESENTATIONS[status];
 }
 
+export function getDeploymentHistoryEntries<T extends DeploymentHistorySummary>(
+  deployments: readonly T[]
+): DeploymentHistoryEntry<T>[] {
+  const ascendingDeployments = deployments
+    .filter(isSuccessfulDeploymentVersion)
+    .sort(compareDeploymentHistoryAscending);
+
+  return ascendingDeployments
+    .map((deployment) => ({
+      deployment,
+      versionLabel: createStableDeploymentVersionLabel(deployment)
+    }))
+    .reverse();
+}
+
+export function resolveDeploymentHistorySelection<T extends DeploymentHistorySummary>(input: {
+  readonly currentSelectionId: string;
+  readonly deployments: readonly T[];
+  readonly previousLatestDeploymentId: string;
+}): { readonly latestDeploymentId: string; readonly selectedDeploymentId: string } {
+  const entries = getDeploymentHistoryEntries(input.deployments);
+  const latestDeploymentId = entries[0]?.deployment.id ?? "";
+  const currentSelectionIsAvailable = entries.some(
+    ({ deployment }) => deployment.id === input.currentSelectionId
+  );
+  const hasNewSuccessfulDeployment =
+    latestDeploymentId !== input.previousLatestDeploymentId;
+
+  return {
+    latestDeploymentId,
+    selectedDeploymentId:
+      !currentSelectionIsAvailable || hasNewSuccessfulDeployment
+        ? latestDeploymentId
+        : input.currentSelectionId
+  };
+}
+
+function isSuccessfulDeploymentVersion(deployment: DeploymentHistorySummary): boolean {
+  return deployment.status === "SUCCESS" || deployment.status === "DESTROYED";
+}
+
+function createStableDeploymentVersionLabel(deployment: DeploymentHistorySummary): string {
+  const timestamp = deployment.createdAt
+    .replace(/[-:TZ.]/gu, "")
+    .replace(/^(\d{8})(\d{6})(\d{3})$/u, "$1-$2-$3");
+  const identitySuffix = deployment.id.replace(/[^a-zA-Z0-9]/gu, "").slice(-6);
+
+  return `v${timestamp}-${identitySuffix}`;
+}
+
 export function getRecentDeploymentResultTitle(
   deployment: Pick<Deployment, "approvedAt" | "status"> | null
 ): "최근 검증 결과" | "최근 배포 결과" | "최근 실행 결과" {
@@ -42,6 +100,31 @@ export function getRecentDeploymentResultTitle(
   }
 
   return "최근 배포 결과";
+}
+
+export function getLatestCompletedDeploymentStep(
+  deployment: Pick<
+    Deployment,
+    "approvedAt" | "currentPlanArtifactId" | "currentPlanOperation" | "status"
+  >
+): string {
+  if (deployment.status === "DESTROYED") return "정리 실행";
+  if (deployment.status === "SUCCESS") return "배포 실행";
+  if (deployment.approvedAt) return "Plan 승인";
+  if (deployment.currentPlanArtifactId) {
+    return deployment.currentPlanOperation === "destroy" ? "Destroy Plan 생성" : "Plan 생성";
+  }
+
+  return "검증 완료";
+}
+
+function compareDeploymentHistoryAscending(
+  left: DeploymentHistorySummary,
+  right: DeploymentHistorySummary
+): number {
+  const createdAtDifference = Date.parse(left.createdAt) - Date.parse(right.createdAt);
+
+  return createdAtDifference !== 0 ? createdAtDifference : left.id.localeCompare(right.id);
 }
 
 const DEPLOYMENT_FAILURE_DEVELOPER_CHECKS: Readonly<
