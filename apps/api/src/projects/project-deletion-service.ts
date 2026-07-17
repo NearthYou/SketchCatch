@@ -3,6 +3,7 @@ import type {
   DeleteProjectRequest,
   DeleteProjectResponse,
   DeploymentFailureStage,
+  DeploymentScope,
   DeploymentStatus,
   ProjectDeleteAction,
   ProjectDeleteCleanupStatus,
@@ -41,6 +42,7 @@ import type {
 type ProjectDeleteDeploymentSummary = {
   id: string;
   status: DeploymentStatus;
+  scope: DeploymentScope;
   activeStage: string | null;
   currentPlanArtifactId: string | null;
   stateObjectKey: string | null;
@@ -406,6 +408,22 @@ export function createProjectDeletePreview(snapshot: ProjectDeleteSnapshot): Pro
       throw new Error("Active deployment classification failed");
     }
 
+    if (activeDeployment.scope !== "application" && !activeDeployment.stateObjectKey) {
+      return buildPreview({
+        activeDeploymentCount: 1,
+        activeDeploymentId: null,
+        activeResourceCount,
+        availableActions: ["delete_project_only"],
+        hasDeploymentHistory,
+        hasPlanHistory,
+        latestDeploymentStatus: latestDeployment?.status ?? null,
+        message:
+          "Terraform state 저장이 완료되지 않아 리소스 포함 삭제를 시작할 수 없습니다. 배포 정리가 끝난 뒤 다시 시도하거나 AWS 리소스를 남긴 채 프로젝트 기록만 삭제할 수 있습니다.",
+        mode: "active_resources",
+        projectId: snapshot.projectId
+      });
+    }
+
     return buildPreview({
       activeDeploymentCount: 1,
       activeDeploymentId: activeDeployment.id,
@@ -685,6 +703,7 @@ function toProjectDeleteDeploymentSummary(
   return {
     id: deployment.id,
     status: deployment.status,
+    scope: deployment.scope,
     activeStage: deployment.activeStage,
     currentPlanArtifactId: deployment.currentPlanArtifactId,
     stateObjectKey: deployment.stateObjectKey,

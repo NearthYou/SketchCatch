@@ -35,6 +35,7 @@ test("createProjectDeletePreview exposes both delete choices for one active depl
         createDeploymentSummary({
           id: "deployment-success",
           resourceCount: 2,
+          stateObjectKey: "deployments/deployment-success/state/terraform.tfstate",
           status: "SUCCESS"
         })
       ]
@@ -44,6 +45,46 @@ test("createProjectDeletePreview exposes both delete choices for one active depl
   assert.equal(preview.mode, "active_resources");
   assert.equal(preview.activeDeploymentId, "deployment-success");
   assert.equal(preview.activeResourceCount, 2);
+  assert.deepEqual(preview.availableActions, ["destroy_then_delete", "delete_project_only"]);
+});
+
+test("createProjectDeletePreview does not offer destroy before Terraform state is available", () => {
+  const preview = createProjectDeletePreview(
+    createSnapshot({
+      deployments: [
+        createDeploymentSummary({
+          id: "deployment-success-without-state",
+          resourceCount: 1,
+          stateObjectKey: null,
+          status: "SUCCESS"
+        })
+      ]
+    })
+  );
+
+  assert.equal(preview.mode, "active_resources");
+  assert.equal(preview.activeDeploymentId, null);
+  assert.equal(preview.activeResourceCount, 1);
+  assert.deepEqual(preview.availableActions, ["delete_project_only"]);
+  assert.match(preview.message, /Terraform state/);
+});
+
+test("createProjectDeletePreview still offers destroy for application deployments without Terraform state", () => {
+  const preview = createProjectDeletePreview(
+    createSnapshot({
+      deployments: [
+        createDeploymentSummary({
+          id: "application-deployment",
+          resourceCount: 1,
+          scope: "application",
+          stateObjectKey: null,
+          status: "SUCCESS"
+        })
+      ]
+    })
+  );
+
+  assert.equal(preview.activeDeploymentId, "application-deployment");
   assert.deepEqual(preview.availableActions, ["destroy_then_delete", "delete_project_only"]);
 });
 
@@ -584,6 +625,7 @@ function createDeploymentSummary(
     failureStage: null,
     id: "deployment-id",
     resourceCount: 0,
+    scope: "infrastructure",
     stateObjectKey: null,
     status: "PENDING",
     updatedAt: fixedDate,

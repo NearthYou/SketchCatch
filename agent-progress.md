@@ -8,6 +8,8 @@
 - Project deletion now removes every current object, historical version, and delete marker under the project and linked deployment S3 prefixes before deleting RDS records.
 - Internal artifact cleanup is fail-closed: any S3 cleanup failure returns `managed_cleanup_failed`, retains project records, and allows a safe retry.
 - Extended the API task IAM policy and production infrastructure check for prefix-scoped `s3:ListBucketVersions` and `s3:DeleteObjectVersion`.
+- Aligned project deletion preview eligibility with the Destroy Plan contract: infrastructure cleanup now requires a persisted Terraform state pointer, while application cleanup remains state-independent.
+- Added regressions for the missing-state race that previously exposed an impossible resource-inclusive delete action; focused project deletion and Destroy Plan tests pass 23/23.
 - Verification passed: focused API tests 18/18, route contract tests 2/2, focused Web tests 37/37, production infrastructure structure check, workspace lint, typecheck, build, and `git diff --check`.
 - No real cloud mutation, Terraform apply/destroy, project deletion, DB migration, or Git/CI/CD handoff was performed.
 
