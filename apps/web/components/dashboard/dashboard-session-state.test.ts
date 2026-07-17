@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { shouldShowDashboardSessionState } from "./dashboard-session-state";
+import { shouldShowAuthenticatedShellFallback } from "../auth/auth-gate-state";
 
-test("Dashboard only replaces its shell before any authenticated user is available", () => {
-  assert.equal(shouldShowDashboardSessionState("loading", false), true);
-  assert.equal(shouldShowDashboardSessionState("unauthenticated", false), true);
-  assert.equal(shouldShowDashboardSessionState("authenticated", true), false);
-  assert.equal(shouldShowDashboardSessionState("loading", true), false);
+test("authenticated shells only show a fallback before any user is available", () => {
+  assert.equal(shouldShowAuthenticatedShellFallback("loading", false), true);
+  assert.equal(shouldShowAuthenticatedShellFallback("unauthenticated", false), true);
+  assert.equal(shouldShowAuthenticatedShellFallback("authenticated", true), false);
+  assert.equal(shouldShowAuthenticatedShellFallback("loading", true), false);
 });

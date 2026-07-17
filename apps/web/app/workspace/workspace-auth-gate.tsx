@@ -3,10 +3,11 @@
 import { type ReactNode, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../components/auth/auth-provider";
+import { shouldShowAuthenticatedShellFallback } from "../../components/auth/auth-gate-state";
 
 export function WorkspaceAuthGate({ children }: { readonly children: ReactNode }) {
   const router = useRouter();
-  const { status } = useAuth();
+  const { status, user } = useAuth();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -15,12 +16,12 @@ export function WorkspaceAuthGate({ children }: { readonly children: ReactNode }
     }
   }, [router, status]);
 
-  if (status === "loading") {
-    return <main><p>Checking session</p></main>;
-  }
-
-  if (status === "unauthenticated") {
-    return <main><p>Redirecting to login</p></main>;
+  if (shouldShowAuthenticatedShellFallback(status, user !== null)) {
+    return (
+      <main>
+        <p>{status === "loading" ? "Checking session" : "Redirecting to login"}</p>
+      </main>
+    );
   }
 
   return <>{children}</>;
