@@ -180,6 +180,7 @@ export const projectDraftQuerySchema = z.object({
 
 export const saveProjectDraftBodySchema = z.object({
   diagramJson: diagramJsonSchema,
+  expectedRevision: z.number().int().positive().nullable(),
   terraformFiles: z
     .array(
       z

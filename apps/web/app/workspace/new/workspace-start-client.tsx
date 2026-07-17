@@ -145,13 +145,12 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
-      const restoredTemplateId =
-        boardTemplates.some(
-          (template) =>
-            template.id === storedForm.selectedTemplateId && isBoardTemplateAvailable(template)
-        )
-          ? storedForm.selectedTemplateId
-          : null;
+      const restoredTemplateId = boardTemplates.some(
+        (template) =>
+          template.id === storedForm.selectedTemplateId && isBoardTemplateAvailable(template)
+      )
+        ? storedForm.selectedTemplateId
+        : null;
       setSelectedTemplateId(restoredTemplateId);
       setPreviewTemplateId(restoredTemplateId);
     } else {
@@ -234,6 +233,7 @@ export function WorkspaceStartClient({
                 template.terraformFiles.length > 0
                   ? markTerraformSourceAuthoritative(template.diagramJson)
                   : template.diagramJson,
+              expectedRevision: null,
               projectId: project.id,
               terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
             });
