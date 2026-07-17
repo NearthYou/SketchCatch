@@ -308,6 +308,25 @@ test("workspace shell docks both panels and collapses them on compact screens", 
   assert.match(diagramEditorSource, /matchMedia\("\(max-width: 1120px\)"\)/);
 });
 
+test("editor panel open states persist while viewer mode bypasses preferences", () => {
+  assert.match(
+    diagramEditorSource,
+    /useState\(\(\) =>\s*viewerPolicy\.isViewer\s*\? true\s*:\s*readWorkspacePanelPreferences/
+  );
+  assert.match(
+    diagramEditorSource,
+    /if \(!viewerPolicy\.isViewer\) \{\s*writeWorkspacePanelPreferences/
+  );
+  assert.match(
+    diagramEditorSource,
+    /collapsePanelsForCompactViewport[\s\S]*?setLeftPanelOpen\(false\);[\s\S]*?setRightPanelOpen\(false\);/
+  );
+  assert.match(
+    diagramEditorSource,
+    /restorePanelPreferencesForWideViewport[\s\S]*?readWorkspacePanelPreferences[\s\S]*?setLeftPanelOpen\(preferences\.leftPanelOpen\);[\s\S]*?setRightPanelOpen\(preferences\.rightPanelOpen\);/
+  );
+});
+
 test("compact workspace refits the board without changing the saved DiagramJson", () => {
   assert.match(diagramEditorSource, /const fitVisibleDiagram = useCallback/);
   assert.match(diagramEditorSource, /const runViewportMoveWithoutPersistence = useCallback/);

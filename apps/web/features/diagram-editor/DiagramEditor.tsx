@@ -316,8 +316,20 @@ function DiagramEditorInner({
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
-  const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [isRightPanelOpen, setRightPanelOpen] = useState(true);
+  const [isLeftPanelOpen, setLeftPanelOpen] = useState(() =>
+    viewerPolicy.isViewer
+      ? true
+      : readWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage
+        ).leftPanelOpen
+  );
+  const [isRightPanelOpen, setRightPanelOpen] = useState(() =>
+    viewerPolicy.isViewer
+      ? true
+      : readWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage
+        ).rightPanelOpen
+  );
   const [leftPanelWidth, setLeftPanelWidth] = useState(readStoredLeftPanelWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
   const [autoExpandAreasEnabled, setAutoExpandAreasEnabled] = useState(() =>
@@ -384,21 +396,19 @@ function DiagramEditorInner({
     []
   );
 
-  /** 왼쪽 Resource palette를 열거나 닫습니다. */
-  const toggleLeftPanel = useCallback(() => {
-    setLeftPanelOpen((isOpen) => !isOpen);
-  }, []);
+  const updateLeftPanelOpen = useCallback(
+    (nextOpen: boolean): void => {
+      if (!viewerPolicy.isViewer) {
+        writeWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage,
+          { leftPanelOpen: nextOpen }
+        );
+      }
 
-  /** 오른쪽 Inspector를 열거나 닫습니다. */
-  const toggleRightPanel = useCallback(() => {
-    const nextOpen = !isRightPanelOpen;
-
-    if (nextOpen) {
-      onWorkspacePanelOpen?.();
-    }
-
-    setRightPanelOpen(nextOpen);
-  }, [isRightPanelOpen, onWorkspacePanelOpen]);
+      setLeftPanelOpen(nextOpen);
+    },
+    [viewerPolicy.isViewer]
+  );
 
   const updateRightPanelOpen = useCallback(
     (nextOpen: boolean): void => {
@@ -406,10 +416,27 @@ function DiagramEditorInner({
         onWorkspacePanelOpen?.();
       }
 
+      if (!viewerPolicy.isViewer) {
+        writeWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage,
+          { rightPanelOpen: nextOpen }
+        );
+      }
+
       setRightPanelOpen(nextOpen);
     },
-    [onWorkspacePanelOpen]
+    [onWorkspacePanelOpen, viewerPolicy.isViewer]
   );
+
+  /** 왼쪽 Resource palette를 열거나 닫습니다. */
+  const toggleLeftPanel = useCallback(() => {
+    updateLeftPanelOpen(!isLeftPanelOpen);
+  }, [isLeftPanelOpen, updateLeftPanelOpen]);
+
+  /** 오른쪽 Inspector를 열거나 닫습니다. */
+  const toggleRightPanel = useCallback(() => {
+    updateRightPanelOpen(!isRightPanelOpen);
+  }, [isRightPanelOpen, updateRightPanelOpen]);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
   const hasRightRail = viewerPolicy.showPanels && rightPanel !== null;
@@ -2840,9 +2867,20 @@ function DiagramEditorInner({
   useEffect(() => {
     const compactViewport = window.matchMedia("(max-width: 1120px)");
 
+    function restorePanelPreferencesForWideViewport(): void {
+      const preferences = readWorkspacePanelPreferences(window.localStorage);
+      setLeftPanelOpen(preferences.leftPanelOpen);
+      setRightPanelOpen(preferences.rightPanelOpen);
+    }
+
     /** 좁은 화면에서는 Board가 먼저 보이도록 양쪽 패널을 접습니다. */
     function collapsePanelsForCompactViewport(event: MediaQueryListEvent | MediaQueryList): void {
+      if (viewerPolicy.isViewer) {
+        return;
+      }
+
       if (!event.matches) {
+        restorePanelPreferencesForWideViewport();
         return;
       }
 
@@ -2854,7 +2892,7 @@ function DiagramEditorInner({
     compactViewport.addEventListener("change", collapsePanelsForCompactViewport);
 
     return () => compactViewport.removeEventListener("change", collapsePanelsForCompactViewport);
-  }, []);
+  }, [viewerPolicy.isViewer]);
 
   useEffect(() => {
     const canvasPanel = canvasPanelRef.current;
@@ -3017,7 +3055,7 @@ function DiagramEditorInner({
         <div className={styles.leftRail} ref={leftRailRef}>
           {leftPanel === undefined ? (
             <ResourceSettingsPanel
-              onCollapse={() => setLeftPanelOpen(false)}
+              onCollapse={() => updateLeftPanelOpen(false)}
               onModuleAdd={addCuratedModule}
               onTemplateApply={applyBoardTemplate}
             />

@@ -57,3 +57,22 @@ test("unknown versions and invalid fields use safe defaults", () => {
 
   assert.deepEqual(readWorkspacePanelPreferences(storage), DEFAULT_WORKSPACE_PANEL_PREFERENCES);
 });
+
+test("panel open states round-trip with the stored widths", () => {
+  const storage = createStorage();
+
+  writeWorkspacePanelPreferences(storage, {
+    leftPanelOpen: false,
+    leftPanelWidth: 430,
+    rightPanelOpen: false,
+    rightPanelWidth: 520
+  });
+
+  assert.deepEqual(readWorkspacePanelPreferences(storage), {
+    version: 1,
+    leftPanelOpen: false,
+    leftPanelWidth: 430,
+    rightPanelOpen: false,
+    rightPanelWidth: 520
+  });
+});
