@@ -42,7 +42,9 @@ const OUTCOME_METRICS = [
   { key: "edgeCrossingCount", label: "서로 교차하는 연결선" },
   { key: "parentBoundaryViolationCount", label: "영역 경계 밖 Resource" },
   { key: "siblingAreaOverlapCount", label: "서로 겹치는 영역" },
-  { key: "edgeAreaTitleIntersectionCount", label: "영역 제목을 지나는 연결선" }
+  { key: "edgeAreaTitleIntersectionCount", label: "영역 제목을 지나는 연결선" },
+  { key: "backwardEdgeCount", label: "역방향 연결선" },
+  { key: "supportLaneIntrusionCount", label: "보조 레인 침범" }
 ] as const;
 
 export type ArchitectureBoardCompilationOutcomeItem = {

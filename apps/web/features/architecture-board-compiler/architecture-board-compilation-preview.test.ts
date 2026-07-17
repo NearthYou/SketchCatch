@@ -4,6 +4,15 @@ import type { ArchitectureBoardCompilationProposal } from "@sketchcatch/types";
 
 import { createArchitectureBoardCompilationPreview } from ".";
 
+const NO_EXISTING_LAYOUT_ISSUES = {
+  nodeOverlapCount: 0,
+  edgeNodeIntersectionCount: 0,
+  edgeCrossingCount: 0,
+  parentBoundaryViolationCount: 0,
+  siblingAreaOverlapCount: 0,
+  edgeAreaTitleIntersectionCount: 0
+} as const;
+
 test("Compiler proposal을 자동 정리 미리보기용으로 범주별 요약한다", () => {
   const preview = createArchitectureBoardCompilationPreview(
     proposal({
@@ -127,6 +136,58 @@ test("Compiler metric이 나빠진 경우 개선 표현을 만들지 않고 증�
       tone: "regressed"
     }
   ]);
+});
+
+test("역방향 연결선만 남은 Compiler proposal도 배치 문제로 정직하게 설명한다", () => {
+  const preview = createArchitectureBoardCompilationPreview(
+    proposal({
+      beforeMetrics: { ...NO_EXISTING_LAYOUT_ISSUES, backwardEdgeCount: 1 },
+      afterMetrics: { ...NO_EXISTING_LAYOUT_ISSUES, backwardEdgeCount: 1 }
+    })
+  );
+
+  assert.deepEqual(preview.outcome, {
+    headline: "추적된 배치 문제 1건이 그대로 남아 있습니다.",
+    items: [
+      {
+        after: 1,
+        before: 1,
+        key: "backwardEdgeCount",
+        label: "역방향 연결선",
+        summary: "1건 남음",
+        tone: "unchanged"
+      }
+    ],
+    remainingDiagnosticCount: 0,
+    remainingLayoutIssueCount: 1,
+    reviewSummary: "배치 문제 1건이 남아 있습니다."
+  });
+});
+
+test("보조 레인 침범만 남은 Compiler proposal도 실제 감소와 잔여 문제를 설명한다", () => {
+  const preview = createArchitectureBoardCompilationPreview(
+    proposal({
+      beforeMetrics: { ...NO_EXISTING_LAYOUT_ISSUES, supportLaneIntrusionCount: 2 },
+      afterMetrics: { ...NO_EXISTING_LAYOUT_ISSUES, supportLaneIntrusionCount: 1 }
+    })
+  );
+
+  assert.deepEqual(preview.outcome, {
+    headline: "배치 문제 1건을 줄였습니다.",
+    items: [
+      {
+        after: 1,
+        before: 2,
+        key: "supportLaneIntrusionCount",
+        label: "보조 레인 침범",
+        summary: "1건 감소 · 1건 남음",
+        tone: "improved"
+      }
+    ],
+    remainingDiagnosticCount: 0,
+    remainingLayoutIssueCount: 1,
+    reviewSummary: "배치 문제 1건이 남아 있습니다."
+  });
 });
 
 function proposal({
