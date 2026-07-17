@@ -6,11 +6,21 @@ import { createTerraformResourceValidationCandidates } from "./terraform-resourc
 test("resource validation candidates include every provider-backed palette resource", () => {
   const catalog: ResourceItem[] = [
     createCatalogItem("design-user-client", "sketchcatch_user_client"),
+    createCatalogItem("aws-caller-identity", "aws_caller_identity"),
     createCatalogItem("aws-s3-bucket", "aws_s3_bucket"),
     createCatalogItem("kubernetes-deployment", "kubernetes_deployment")
   ];
 
   assert.deepEqual(createTerraformResourceValidationCandidates(catalog), [
+    {
+      definitionId: "aws-caller-identity",
+      enabled: true,
+      label: "aws_caller_identity",
+      name: "aws-caller-identity",
+      provider: "aws",
+      terraformBlockType: "data",
+      terraformResourceType: "aws_caller_identity"
+    },
     {
       definitionId: "aws-s3-bucket",
       enabled: true,

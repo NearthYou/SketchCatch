@@ -8,23 +8,50 @@ export type TerraformRequiredProvidersDeclaration = {
   readonly line: number;
 };
 
+export type TerraformRequiredProvidersBlockLocation =
+  TerraformRequiredProvidersDeclaration & {
+    readonly bodyEndOffset: number;
+    readonly bodyStartOffset: number;
+    readonly endOffset: number;
+    readonly startOffset: number;
+  };
+
 type StructureToken = {
+  readonly endOffset: number;
   readonly kind: "close" | "equals" | "identifier" | "newline" | "open" | "string";
   readonly line: number;
+  readonly startOffset: number;
   readonly value: string;
+};
+
+type OpenStructureBlock = {
+  readonly blockType: string | null;
+  readonly requiredProviders?: Omit<
+    TerraformRequiredProvidersBlockLocation,
+    "bodyEndOffset" | "endOffset"
+  > | undefined;
 };
 
 export function findTerraformRequiredProvidersDeclarations(
   files: readonly TerraformModuleFile[]
 ): TerraformRequiredProvidersDeclaration[] {
-  return files.flatMap((file) => findFileRequiredProvidersDeclarations(file));
+  return findTerraformRequiredProvidersBlockLocations(files).map(({ fileName, line }) => ({
+    fileName,
+    line
+  }));
 }
 
-function findFileRequiredProvidersDeclarations(
+export function findTerraformRequiredProvidersBlockLocations(
+  files: readonly TerraformModuleFile[]
+): TerraformRequiredProvidersBlockLocation[] {
+  return files.flatMap((file) => findFileRequiredProvidersBlockLocations(file));
+}
+
+function findFileRequiredProvidersBlockLocations(
   file: TerraformModuleFile
-): TerraformRequiredProvidersDeclaration[] {
-  const declarations: TerraformRequiredProvidersDeclaration[] = [];
-  const stack: Array<string | null> = [];
+): TerraformRequiredProvidersBlockLocation[] {
+  const declarations: TerraformRequiredProvidersBlockLocation[] = [];
+  const stack: OpenStructureBlock[] = [];
   const headerTokensByDepth = new Map<number, StructureToken[]>();
   const attributeValueDepths = new Set<number>();
   let depth = 0;
@@ -56,24 +83,39 @@ function findFileRequiredProvidersDeclarations(
       const headerTokens = headerTokensByDepth.get(depth) ?? [];
       const typeToken = headerTokens[0];
       const blockType = typeToken?.kind === "identifier" ? typeToken.value : null;
-      const parentBlockType = stack[stack.length - 1];
+      const parentBlockType = stack[stack.length - 1]?.blockType;
+      const isRequiredProviders =
+        parentBlockType === "terraform" && blockType === "required_providers";
 
-      if (parentBlockType === "terraform" && blockType === "required_providers") {
-        declarations.push({
-          fileName: file.fileName,
-          line: typeToken?.line ?? token.line
-        });
-      }
+      stack.push({
+        blockType,
+        ...(isRequiredProviders ? {
+          requiredProviders: {
+            bodyStartOffset: token.endOffset,
+            fileName: file.fileName,
+            line: typeToken?.line ?? token.line,
+            startOffset: typeToken?.startOffset ?? token.startOffset
+          }
+        } : {})
+      });
 
       headerTokensByDepth.set(depth, []);
       attributeValueDepths.delete(depth);
-      stack.push(blockType);
       depth += 1;
       continue;
     }
 
     depth = Math.max(0, depth - 1);
-    stack.pop();
+    const closedBlock = stack.pop();
+
+    if (closedBlock?.requiredProviders) {
+      declarations.push({
+        ...closedBlock.requiredProviders,
+        bodyEndOffset: token.startOffset,
+        endOffset: token.endOffset
+      });
+    }
+
     headerTokensByDepth.delete(depth + 1);
     headerTokensByDepth.set(depth, []);
     attributeValueDepths.delete(depth);
@@ -93,7 +135,13 @@ function tokenizeTerraformStructure(source: string): StructureToken[] {
     const nextChar = source[index + 1];
 
     if (char === "\n") {
-      tokens.push({ kind: "newline", value: char, line });
+      tokens.push({
+        endOffset: index + 1,
+        kind: "newline",
+        value: char,
+        line,
+        startOffset: index
+      });
       line += 1;
       index += 1;
       continue;
@@ -125,26 +173,50 @@ function tokenizeTerraformStructure(source: string): StructureToken[] {
 
     if (char === "\"") {
       const parsed = parseQuotedString(source, index, line);
-      tokens.push({ kind: "string", value: parsed.value, line });
+      tokens.push({
+        endOffset: parsed.index,
+        kind: "string",
+        value: parsed.value,
+        line,
+        startOffset: index
+      });
       index = parsed.index;
       line = parsed.line;
       continue;
     }
 
     if (char === "{") {
-      tokens.push({ kind: "open", value: char, line });
+      tokens.push({
+        endOffset: index + 1,
+        kind: "open",
+        value: char,
+        line,
+        startOffset: index
+      });
       index += 1;
       continue;
     }
 
     if (char === "}") {
-      tokens.push({ kind: "close", value: char, line });
+      tokens.push({
+        endOffset: index + 1,
+        kind: "close",
+        value: char,
+        line,
+        startOffset: index
+      });
       index += 1;
       continue;
     }
 
     if (char === "=") {
-      tokens.push({ kind: "equals", value: char, line });
+      tokens.push({
+        endOffset: index + 1,
+        kind: "equals",
+        value: char,
+        line,
+        startOffset: index
+      });
       index += 1;
       continue;
     }
@@ -158,9 +230,11 @@ function tokenizeTerraformStructure(source: string): StructureToken[] {
       }
 
       tokens.push({
+        endOffset: index,
         kind: "identifier",
         value: source.slice(start, index),
-        line
+        line,
+        startOffset: start
       });
       continue;
     }

@@ -1,5 +1,6 @@
 import {
   createTerraformProviderFiles,
+  findTerraformRequiredProvidersBlockLocations,
   findTerraformRequiredProvidersDeclarations,
   isTerraformDeployableNode,
   type DiagramJson,
@@ -248,33 +249,54 @@ export function mergeGeneratedTerraformFiles(
   generatedFiles: readonly TerraformVirtualFile[],
   preservedResourceAddresses: ReadonlySet<string>
 ): TerraformVirtualFile[] {
-  const hasExistingRequiredProviders = findTerraformRequiredProvidersDeclarations(
+  const existingRequiredProviders = findTerraformRequiredProvidersBlockLocations(
     existingFiles.map((file) => ({
       fileName: file.fileName,
       terraformCode: file.code
     }))
-  ).length > 0;
-  const effectiveGeneratedFiles = hasExistingRequiredProviders
-    ? generatedFiles.filter(
-        (file) =>
+  );
+  const [existingRequiredProvidersBlock] = existingRequiredProviders;
+  const providerAwareExistingFiles = existingRequiredProvidersBlock
+    ? mergeRequiredProviderEntries(
+        existingFiles,
+        generatedFiles,
+        existingRequiredProvidersBlock
+      )
+    : existingFiles;
+  const effectiveGeneratedFiles = existingRequiredProvidersBlock
+    ? generatedFiles.flatMap((file) => {
+        if (
           findTerraformRequiredProvidersDeclarations([
             { fileName: file.fileName, terraformCode: file.code }
           ]).length === 0
-      )
+        ) {
+          return [file];
+        }
+
+        const runtimeCode = removeGeneratedRequiredProvidersBlocks(file.code);
+
+        return runtimeCode
+          ? [{
+              code: runtimeCode,
+              fileName: existingRequiredProvidersBlock.fileName
+            }]
+          : [];
+      })
     : generatedFiles;
   const generatedAddresses = new Set(
     effectiveGeneratedFiles.flatMap((file) =>
       parseTerraformBlocks(file.fileName, file.code).map((block) => block.address)
     )
   );
-  const staleManagedAddresses = parseTerraformFiles(existingFiles)
+  const staleManagedAddresses = parseTerraformFiles(providerAwareExistingFiles)
     .map((block) => block.address)
     .filter(
       (address) => !generatedAddresses.has(address) && !preservedResourceAddresses.has(address)
     );
-  const nextFiles = removeTerraformBlocksByAddress(existingFiles, staleManagedAddresses).map(
-    (file) => ({ ...file })
-  );
+  const nextFiles = removeTerraformBlocksByAddress(
+    providerAwareExistingFiles,
+    staleManagedAddresses
+  ).map((file) => ({ ...file }));
 
   upsertGeneratedTerraformOutputs(nextFiles, effectiveGeneratedFiles);
 
@@ -325,7 +347,334 @@ export function mergeGeneratedTerraformFiles(
     }
   }
 
+  upsertGeneratedProviderBlocks(nextFiles, effectiveGeneratedFiles);
+
   return nextFiles.sort((left, right) => compareTerraformFileNames(left.fileName, right.fileName));
+}
+
+type TerraformRequiredProviderEntry = {
+  readonly code: string;
+  readonly name: string;
+};
+
+function mergeRequiredProviderEntries(
+  existingFiles: readonly TerraformVirtualFile[],
+  generatedFiles: readonly TerraformVirtualFile[],
+  existingBlock: ReturnType<typeof findTerraformRequiredProvidersBlockLocations>[number]
+): TerraformVirtualFile[] {
+  const generatedEntries = generatedFiles.flatMap((file) =>
+    findTerraformRequiredProvidersBlockLocations([
+      { fileName: file.fileName, terraformCode: file.code }
+    ]).flatMap((block) =>
+      parseRequiredProviderEntries(file.code.slice(block.bodyStartOffset, block.bodyEndOffset))
+    )
+  );
+  const existingFileIndex = existingFiles.findIndex(
+    (file) => file.fileName === existingBlock.fileName
+  );
+  const existingFile = existingFiles[existingFileIndex];
+
+  if (!existingFile) {
+    return [...existingFiles];
+  }
+
+  const existingBody = existingFile.code.slice(
+    existingBlock.bodyStartOffset,
+    existingBlock.bodyEndOffset
+  );
+  const existingNames = new Set(
+    parseRequiredProviderEntries(existingBody).map((entry) => entry.name)
+  );
+  const missingEntries = generatedEntries.filter((entry) => !existingNames.has(entry.name));
+
+  if (missingEntries.length === 0) {
+    return [...existingFiles];
+  }
+
+  const closingIndent = existingBody.match(/(?:^|\n)([ \t]*)$/)?.[1] ?? "";
+  const bodyWithoutTrailingWhitespace = existingBody.replace(/\s*$/, "");
+  const mergedBody = `${bodyWithoutTrailingWhitespace}\n${missingEntries
+    .map((entry) => entry.code.trimEnd())
+    .join("\n")}\n${closingIndent}`;
+  const nextFiles = [...existingFiles];
+
+  nextFiles[existingFileIndex] = {
+    ...existingFile,
+    code: `${existingFile.code.slice(0, existingBlock.bodyStartOffset)}${mergedBody}${existingFile.code.slice(existingBlock.bodyEndOffset)}`
+  };
+
+  return nextFiles;
+}
+
+function parseRequiredProviderEntries(body: string): TerraformRequiredProviderEntry[] {
+  const entries: TerraformRequiredProviderEntry[] = [];
+  const lines = body.split("\n");
+  let depth = 0;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const entryMatch = depth === 0
+      ? /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*=/.exec(line)
+      : null;
+
+    if (!entryMatch?.[1]) {
+      depth += countBraceDelta(line);
+      continue;
+    }
+
+    const entryLines = [line];
+    let entryDepth = countBraceDelta(line);
+
+    while (entryDepth > 0 && index + 1 < lines.length) {
+      index += 1;
+      const nextLine = lines[index] ?? "";
+      entryLines.push(nextLine);
+      entryDepth += countBraceDelta(nextLine);
+    }
+
+    entries.push({
+      code: entryLines.join("\n"),
+      name: entryMatch[1]
+    });
+  }
+
+  return entries;
+}
+
+type TerraformTopLevelBlockLocation = {
+  readonly blockType: "provider" | "terraform";
+  readonly code: string;
+  readonly endOffset: number;
+  readonly label?: string | undefined;
+  readonly startOffset: number;
+};
+
+function parseTerraformTopLevelBlocks(terraformCode: string): TerraformTopLevelBlockLocation[] {
+  const blocks: TerraformTopLevelBlockLocation[] = [];
+  const rawLines = terraformCode.split("\n");
+  const lineOffsets: number[] = [];
+  let offset = 0;
+
+  for (const line of rawLines) {
+    lineOffsets.push(offset);
+    offset += line.length + 1;
+  }
+
+  for (let index = 0; index < rawLines.length; index += 1) {
+    const line = rawLines[index] ?? "";
+    const headerMatch = /^\s*(terraform|provider)(?:\s+"([^"]+)")?\s*\{/.exec(line);
+
+    if (!headerMatch) {
+      continue;
+    }
+
+    const startOffset = lineOffsets[index] ?? 0;
+    let depth = countBraceDelta(line);
+    let endIndex = index;
+    let endOffset = startOffset + line.length;
+
+    while (depth > 0 && endIndex + 1 < rawLines.length) {
+      endIndex += 1;
+      const nextLine = rawLines[endIndex] ?? "";
+      depth += countBraceDelta(nextLine);
+      endOffset = (lineOffsets[endIndex] ?? 0) + nextLine.length;
+    }
+
+    blocks.push({
+      blockType: headerMatch[1] as "provider" | "terraform",
+      code: terraformCode.slice(startOffset, endOffset),
+      endOffset,
+      ...(headerMatch[2] ? { label: headerMatch[2] } : {}),
+      startOffset
+    });
+    index = endIndex;
+  }
+
+  return blocks;
+}
+
+function removeGeneratedRequiredProvidersBlocks(terraformCode: string): string {
+  const removableBlocks = parseTerraformTopLevelBlocks(terraformCode)
+    .filter(
+      (block) =>
+        block.blockType === "terraform" &&
+        findTerraformRequiredProvidersDeclarations([
+          { fileName: "generated.tf", terraformCode: block.code }
+        ]).length > 0
+    )
+    .sort((left, right) => right.startOffset - left.startOffset);
+  let nextCode = terraformCode;
+
+  for (const block of removableBlocks) {
+    nextCode = `${nextCode.slice(0, block.startOffset)}${nextCode.slice(block.endOffset)}`;
+  }
+
+  return normalizeTerraformCodeAfterBlockRemoval(nextCode);
+}
+
+function upsertGeneratedProviderBlocks(
+  files: TerraformVirtualFile[],
+  generatedFiles: readonly TerraformVirtualFile[]
+): void {
+  for (const generatedFile of generatedFiles) {
+    const generatedProviderBlocks = parseTerraformTopLevelBlocks(generatedFile.code).filter(
+      (block) => block.blockType === "provider"
+    );
+
+    for (const generatedProviderBlock of generatedProviderBlocks) {
+      const generatedAlias = getTerraformProviderAlias(generatedProviderBlock.code);
+      const matchingExistingBlocks = files.flatMap((file, fileIndex) =>
+        parseTerraformTopLevelBlocks(file.code)
+          .filter(
+            (block) =>
+              block.blockType === "provider" &&
+              block.label === generatedProviderBlock.label &&
+              getTerraformProviderAlias(block.code) === generatedAlias
+          )
+          .map((block) => ({ block, file, fileIndex }))
+      );
+      const managedExistingBlock = matchingExistingBlocks.find(({ block }) =>
+        isSketchCatchManagedProviderBlock(block.code)
+      );
+
+      if (managedExistingBlock) {
+        const { block, file, fileIndex } = managedExistingBlock;
+        files[fileIndex] = {
+          ...file,
+          code: `${file.code.slice(0, block.startOffset)}${generatedProviderBlock.code}${file.code.slice(block.endOffset)}`
+        };
+        continue;
+      }
+
+      if (matchingExistingBlocks.length > 0) {
+        continue;
+      }
+
+      const targetFileIndex = files.findIndex(
+        (file) => file.fileName === generatedFile.fileName
+      );
+      if (targetFileIndex === -1) {
+        files.push({
+          fileName: generatedFile.fileName,
+          code: generatedProviderBlock.code
+        });
+        continue;
+      }
+
+      const targetFile = files[targetFileIndex]!;
+      files[targetFileIndex] = {
+        ...targetFile,
+        code: appendTerraformBlock(targetFile.code, generatedProviderBlock.code)
+      };
+    }
+  }
+}
+
+function getTerraformProviderAlias(providerCode: string): string | null {
+  const bodyStart = providerCode.indexOf("{");
+  const bodyEnd = providerCode.lastIndexOf("}");
+
+  if (bodyStart === -1 || bodyEnd <= bodyStart) {
+    return null;
+  }
+
+  const body = providerCode.slice(bodyStart + 1, bodyEnd);
+  let depth = 0;
+  let index = 0;
+
+  while (index < body.length) {
+    const character = body[index]!;
+    const nextCharacter = body[index + 1];
+
+    if (/\s/.test(character)) {
+      index += 1;
+      continue;
+    }
+
+    if (character === "#" || (character === "/" && nextCharacter === "/")) {
+      index = body.indexOf("\n", index);
+      if (index === -1) return null;
+      continue;
+    }
+
+    if (character === "/" && nextCharacter === "*") {
+      const commentEnd = body.indexOf("*/", index + 2);
+      index = commentEnd === -1 ? body.length : commentEnd + 2;
+      continue;
+    }
+
+    if (character === "\"") {
+      index = skipTerraformQuotedString(body, index);
+      continue;
+    }
+
+    if (character === "{") {
+      depth += 1;
+      index += 1;
+      continue;
+    }
+
+    if (character === "}") {
+      depth = Math.max(0, depth - 1);
+      index += 1;
+      continue;
+    }
+
+    if (depth === 0 && /[A-Za-z_]/.test(character)) {
+      const identifierStart = index;
+      index += 1;
+
+      while (index < body.length && /[A-Za-z0-9_-]/.test(body[index]!)) {
+        index += 1;
+      }
+
+      const identifier = body.slice(identifierStart, index);
+      while (index < body.length && /\s/.test(body[index]!)) index += 1;
+
+      if (identifier !== "alias" || body[index] !== "=") {
+        continue;
+      }
+
+      index += 1;
+      while (index < body.length && /\s/.test(body[index]!)) index += 1;
+      if (body[index] !== "\"") return null;
+
+      const valueStart = index + 1;
+      const valueEnd = skipTerraformQuotedString(body, index) - 1;
+      return body.slice(valueStart, valueEnd);
+    }
+
+    index += 1;
+  }
+
+  return null;
+}
+
+function skipTerraformQuotedString(source: string, startOffset: number): number {
+  let index = startOffset + 1;
+
+  while (index < source.length) {
+    if (source[index] === "\\") {
+      index += 2;
+      continue;
+    }
+
+    if (source[index] === "\"") {
+      return index + 1;
+    }
+
+    index += 1;
+  }
+
+  return source.length;
+}
+
+function isSketchCatchManagedProviderBlock(providerCode: string): boolean {
+  return providerCode.includes("# sketchcatch:managed-provider") ||
+    (
+      /cluster_ca_certificate\s*=\s*base64decode\(aws_eks_cluster\./.test(providerCode) &&
+      /token\s*=\s*data\.aws_eks_cluster_auth\.sketchcatch\.token/.test(providerCode)
+    );
 }
 
 export function createTerraformFilesForRefresh({

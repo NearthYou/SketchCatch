@@ -214,7 +214,7 @@ export async function runTerraformResourceValidationAudit(
         await auditCandidate(candidate, {
           catalog: options.catalog,
           commandOptions,
-          includeDataSources: Boolean(options.includeDataSources),
+          includeDataSources: options.includeDataSources !== false,
           providerSchemas,
           workdir
         })

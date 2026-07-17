@@ -2182,10 +2182,12 @@ export {
   isTerraformDeployableNode
 } from "./terraform-provider-files.ts";
 export {
+  findTerraformRequiredProvidersBlockLocations,
   findTerraformRequiredProvidersDeclarations
 } from "./terraform-module-structure.ts";
 export type {
   TerraformModuleFile,
+  TerraformRequiredProvidersBlockLocation,
   TerraformRequiredProvidersDeclaration
 } from "./terraform-module-structure.ts";
 

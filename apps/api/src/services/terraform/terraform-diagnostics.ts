@@ -41,6 +41,11 @@ const FAST_AWS_UNSUPPORTED_ARGUMENTS: Record<string, ReadonlySet<string>> = {
   aws_s3_bucket: new Set(["bucket_purpose", "origin_resource_id", "public_access_block"])
 };
 
+const MODULE_WIDE_DIAGNOSTIC_CODES = new Set([
+  "terraform.duplicate_address",
+  "terraform.undefined_reference"
+]);
+
 type TerraformValidationFile = {
   readonly fileName: string;
   readonly terraformCode: string;
@@ -118,9 +123,14 @@ export function createTerraformValidationDiagnostics(
   }
 
   const moduleSource = createTerraformModuleSource(nonEmptyFiles);
-  const fileDiagnostics = createTerraformDiagnostics(moduleSource.terraformCode).map(
-    (diagnostic) => addModuleDiagnosticSource(diagnostic, moduleSource.files)
+  const fileDiagnostics = nonEmptyFiles.flatMap((file) =>
+    createTerraformDiagnostics(file.terraformCode)
+      .filter((diagnostic) => !MODULE_WIDE_DIAGNOSTIC_CODES.has(diagnostic.code ?? ""))
+      .map((diagnostic) => addDiagnosticSource(diagnostic, file.fileName))
   );
+  const moduleDiagnostics = createTerraformDiagnostics(moduleSource.terraformCode)
+    .filter((diagnostic) => MODULE_WIDE_DIAGNOSTIC_CODES.has(diagnostic.code ?? ""))
+    .map((diagnostic) => addModuleDiagnosticSource(diagnostic, moduleSource.files));
   const requiredProvidersDeclarations = findTerraformRequiredProvidersDeclarations(nonEmptyFiles);
   const [firstRequiredProvidersDeclaration] = requiredProvidersDeclarations;
   const duplicateRequiredProvidersDiagnostics = requiredProvidersDeclarations
@@ -133,7 +143,11 @@ export function createTerraformValidationDiagnostics(
       message: `Terraform module에는 required_providers 블록을 하나만 선언할 수 있습니다. ${firstRequiredProvidersDeclaration?.fileName}:${firstRequiredProvidersDeclaration?.line}에서 이미 선언되었습니다.`
     }));
 
-  return [...fileDiagnostics, ...duplicateRequiredProvidersDiagnostics];
+  return [
+    ...fileDiagnostics,
+    ...moduleDiagnostics,
+    ...duplicateRequiredProvidersDiagnostics
+  ];
 }
 
 export function createFirstBlockingTerraformDiagnostic(

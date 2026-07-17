@@ -52,7 +52,7 @@ async function main(): Promise<void> {
 
 function parseCliOptions(args: readonly string[]): CliOptions {
   let format: CliOptions["format"] = "markdown";
-  let includeDataSources = false;
+  let includeDataSources = true;
   let keepWorkdir = false;
   let providerVersion: string | undefined;
   let terraformBinary: string | undefined;
@@ -65,6 +65,11 @@ function parseCliOptions(args: readonly string[]): CliOptions {
 
     if (arg === "--include-data-sources") {
       includeDataSources = true;
+      continue;
+    }
+
+    if (arg === "--exclude-data-sources") {
+      includeDataSources = false;
       continue;
     }
 

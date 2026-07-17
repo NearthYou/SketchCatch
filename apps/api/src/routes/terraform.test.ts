@@ -745,6 +745,42 @@ test("POST /api/terraform/validate resolves references and duplicate addresses a
   await app.close();
 });
 
+test("POST /api/terraform/validate keeps syntax validation isolated per module file", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [{ id: ACTIVE_USER_ID, deletedAt: null }]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "open.tf",
+          terraformCode: `resource "aws_vpc" "main" {`
+        },
+        {
+          fileName: "close.tf",
+          terraformCode: `}`
+        }
+      ]
+    }
+  });
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics
+      .filter((diagnostic) => diagnostic.code === "terraform.unbalanced")
+      .map((diagnostic) => diagnostic.sourceFileName),
+    ["open.tf", "close.tf"]
+  );
+
+  await app.close();
+});
+
 test("POST /api/terraform/validate rejects a duplicate required_providers in the merged artifact", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [{ id: ACTIVE_USER_ID, deletedAt: null }]

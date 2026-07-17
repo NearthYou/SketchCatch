@@ -13,17 +13,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-17 - Rebuild Workspace AI conversation and compiled preview
-
-- Added a responsibility-separated route shell, transcript, composer, selected-option model and accessible trail, deterministic option-to-resource mapper, decorative AWS Resource Orbit, and read-only final Architecture Preview.
-- Recorded exactly one clicked assistant option per single-select question before submitting it; direct and voice input do not enter the trail, while failed, cancelled, and retried requests retain the click record.
-- Built the Orbit only from enabled `resourceCatalog` entries whose icon URLs use `/Resource-Icons_07312025/`; stable option state produces stable composition and each click changes only a bounded subset.
-- Kept the Orbit explicitly decorative and replaced it, without a fake morph, only after the Compiler returns the actual Diagram used by the final pan/zoom Preview.
-- Preserved actual candidate exclusion/undo and the explicit Board-application boundary without reviving server progress APIs or the deleted Workspace AI presentation.
-- Browser QA covered 1440x900, 1024x768, both sides of the 959px breakpoint, and 390x844. It verified option accumulation, bounded Orbit changes, continuous multi-ring motion, the click pulse/kick/excursion response, the separate Orbit exit and final Diagram reveal, pan/zoom, mobile reachability, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix. Board application was not used.
-- Passed focused Workspace AI/Compiler tests 94/94, full Web regression 545/545, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
-- No real cloud apply, deployment, user-project mutation, Git handoff, push, or PR was performed.
-
 ### 2026-07-17 - Clear the Workspace AI rebuild baseline
 
 - Audited the new-project, existing-project, Repository, storage, workflow, API, service, shared-type, Compiler, candidate-exclusion, approval, and save paths before removing presentation code.
@@ -213,3 +202,11 @@ Short English-only working log for the current agent context. Older records are 
 - Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
 - Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.
 - Focused ProjectDraft Web tests pass 37/37. Changed-file lint and direct API/Web typechecks pass. The local full Turbo wrapper could not start API/Web tasks because pnpm refused to purge copied temporary-worktree `node_modules` without a TTY. The Webpack build compiled, then the generated Next route check failed on pre-existing helper exports in architecture-draft and architecture-patch-preview routes. No DB migration, cloud mutation, deployment, or Git handoff was performed.
+
+### 2026-07-17 - Harden Terraform module validation and palette audit
+
+- Prevented duplicate module-level `required_providers`, retained per-file syntax boundaries, and made final merged deployment artifacts pass validation before persistence.
+- Provider refresh now merges missing requirements while preserving user-owned default and aliased provider blocks; SketchCatch-managed EKS runtime provider blocks remain refreshable.
+- Provider-schema validation passes all 155 enabled managed resources and all 5 enabled data sources. Direct Deployment safety remains unchanged: 61 resource types are plan-allowed and 94 stay blocked by the existing allowlist.
+- Focused regressions pass (API 28/28, Web 23/23, Types 5/5). `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm build` pass on the latest merged `dev`.
+- No Terraform apply/destroy, AWS mutation, credential access, or DB migration was performed for this work.
