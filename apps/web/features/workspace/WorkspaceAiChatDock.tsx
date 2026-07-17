@@ -51,6 +51,7 @@ import {
 import {
   WorkspaceAiWorkbenchExplanation,
   WorkspaceAiWorkbenchRequestMessage,
+  WorkspaceAiWorkbenchReviewProgress,
   WorkspaceAiWorkbenchTerraformIssueResult,
   WorkspaceAiWorkbenchTerraformPreviewResult,
   type AiRequestState
@@ -300,6 +301,7 @@ export function WorkspaceAiChatDock({
   const [patchPreviewSourceRevision, setPatchPreviewSourceRevision] = useState<number | null>(null);
   const [terraformPreviewExplanation, setTerraformPreviewExplanation] =
     useState<TerraformPreviewExplanationState | null>(null);
+  const [terraformPreviewReviewElapsedMs, setTerraformPreviewReviewElapsedMs] = useState(0);
   const [terraformIssueAnalyses, setTerraformIssueAnalyses] = useState<
     Record<string, TerraformIssueAnalysisState>
   >(() => readBrowserTerraformIssueAnalyses(projectId));
@@ -676,6 +678,7 @@ export function WorkspaceAiChatDock({
     setTerraformIssueBatchProgress(null);
     setTerraformFixUnavailableReasons({});
     setTerraformPreviewExplanation(null);
+    setTerraformPreviewReviewElapsedMs(0);
     setApplyingTerraformFixRequestId(null);
     setCompletedTerraformFixIssueKeys([]);
     pendingTerraformFixApplyRef.current = null;
@@ -692,6 +695,21 @@ export function WorkspaceAiChatDock({
     setPatchPreviewSourceRevision(null);
     loadedProjectIdRef.current = projectId;
   }, [projectId]);
+
+  useEffect(() => {
+    if (terraformPreviewExplanation?.state !== "loading") {
+      return;
+    }
+
+    const startedAt = Date.now();
+    setTerraformPreviewReviewElapsedMs(0);
+    const timerId = window.setInterval(() => {
+      setTerraformPreviewReviewElapsedMs(Date.now() - startedAt);
+    }, 500);
+
+    return () => window.clearInterval(timerId);
+  }, [terraformPreviewExplanation?.state, terraformPreviewExplanation?.terraformFingerprint]);
+
 
   useEffect(() => {
     if (
@@ -2297,6 +2315,11 @@ export function WorkspaceAiChatDock({
             <p className={styles.staleNotice} role="status">
               검토 대상 또는 Terraform 코드가 변경되었습니다. 최신 대상을 다시 검토하세요.
             </p>
+          ) : null}
+          {terraformPreviewExplanation?.state === "loading" ? (
+            <WorkspaceAiWorkbenchReviewProgress
+              elapsedMs={terraformPreviewReviewElapsedMs}
+            />
           ) : null}
           {terraformPreviewExplanation?.state === "error" ||
           (terraformPreviewExplanation?.message &&

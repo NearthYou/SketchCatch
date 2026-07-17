@@ -121,3 +121,15 @@ Short English-only working log for the current agent context. Older records are 
 - Increased Agent Review typography across the summary and all six review cards for easier reading.
 - Changed both default and Amazon Q review prompts to separate criterion, judgment, and confirmation with line breaks instead of pipe characters.
 - Workspace lint passed with one unrelated existing Direct Deployment warning; harness and browser checks confirmed the Agent Review presentation. The current board had no Terraform error, so the Error Analysis result was not visually reproduced.
+
+### 2026-07-17 - Restore Agent Review progress and severity colors
+
+- Restored the four-stage waiting presentation for Terraform analysis, risk checks, mandatory Amazon Q review, and result formatting so the Review tab never appears empty during a request.
+- Promoted missing or unverifiable Well-Architected evidence to medium severity and strengthened yellow/red card surfaces while preserving white for normal checks.
+- Focused Workbench tests pass 31/31; web lint passes with one unrelated Direct Deployment warning. Chrome confirmed medium cards render yellow on the current localhost review result.
+
+### 2026-07-17 - Separate Agent Review strengths and required fixes
+
+- Replaced mixed and repeated Review Summary entries with exactly two groups: verified strengths and required fixes.
+- Removed directive sentences from strength summaries and paired each prioritized risk with a separate concrete problem and correction line.
+- Focused presentation and Workbench tests pass 26/26; web lint passes with one unrelated Direct Deployment warning. Chrome DOM verification confirmed the two groups and separated problem/correction lines.

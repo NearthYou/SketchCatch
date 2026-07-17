@@ -13,6 +13,10 @@ import {
   createTerraformPreviewPresentation,
   type WorkspaceAiResultCheck
 } from "./workspace-ai-result-presentation";
+import {
+  getTerraformPreviewReviewProgressStep,
+  terraformPreviewReviewSteps
+} from "./workspace-ai-chat-status";
 import styles from "./workspace-ai-workbench.module.css";
 
 export type AiRequestState = "idle" | "loading" | "error";
@@ -42,6 +46,47 @@ export function WorkspaceAiWorkbenchRequestMessage({
 
   return null;
 }
+
+export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly elapsedMs: number }) {
+  const currentStep = getTerraformPreviewReviewProgressStep(elapsedMs);
+  const activeStep = terraformPreviewReviewSteps[currentStep];
+
+  return (
+    <div className={styles.reviewProgress}>
+      <div aria-live="polite" className={styles.reviewProgressHeader} role="status">
+        <span aria-hidden="true" className={styles.reviewProgressSpinner} />
+        <div>
+          <strong>Amazon Q 검토를 진행하고 있습니다</strong>
+          <span>{activeStep?.description}</span>
+        </div>
+      </div>
+      <ol className={styles.reviewProgressSteps}>
+        {terraformPreviewReviewSteps.map((step, index) => {
+          const state =
+            index < currentStep ? "complete" : index === currentStep ? "active" : "pending";
+
+          return (
+            <li
+              aria-current={state === "active" ? "step" : undefined}
+              data-state={state}
+              key={step.label}
+            >
+              <span aria-hidden="true" className={styles.reviewProgressMarker} />
+              <div>
+                <strong>{step.label}</strong>
+                <span>{step.description}</span>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <p className={styles.reviewProgressNotice}>
+        Amazon Q 응답이 도착하면 여섯 가지 기준의 검토 결과를 바로 표시합니다.
+      </p>
+    </div>
+  );
+}
+
 
 export function WorkspaceAiWorkbenchExplanation({
   explanation

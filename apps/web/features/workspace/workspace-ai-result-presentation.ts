@@ -26,9 +26,9 @@ export type WorkspaceAiResultCheck = {
 
 export type WorkspaceAiReviewSummaryItem = {
   readonly id: string;
-  readonly label: "잘된 점" | "주요 문제" | "검토 결과";
+  readonly label: "잘된 점" | "수정해야 할 점";
   readonly text: string;
-  readonly tone: "positive" | "risk" | "neutral";
+  readonly tone: "positive" | "risk";
 };
 
 export type TerraformPreviewPresentation = {
@@ -259,7 +259,7 @@ export function createTerraformPreviewPresentation(
     checks,
     nextStep: createPreviewNextStep(preview),
     summary: createVisibleReviewSummary(reviewSummary),
-    summaryItems: createReviewSummaryItems(reviewSummary, checks),
+    summaryItems: createReviewSummaryItems(checks),
     technical: {
       findings: preview.findings.map((finding) =>
         [finding.title, finding.resourceId, finding.description, finding.recommendation]
@@ -450,10 +450,15 @@ function getPillarRiskLevel(
       : highestRisk;
   }, "low");
   const aiRisk = getAiPillarRiskLevel(preview, pillarIndex);
+  const guidanceRisk = getReviewEvidenceRiskLevel(
+    preview.wellArchitectedGuidance.find((item) => item.pillar === pillar)?.observation
+  );
 
-  return RISK_LEVEL_PRIORITY[aiRisk] > RISK_LEVEL_PRIORITY[deterministicRisk]
-    ? aiRisk
-    : deterministicRisk;
+  return [deterministicRisk, aiRisk, guidanceRisk].reduce<RiskLevel>(
+    (highestRisk, risk) =>
+      RISK_LEVEL_PRIORITY[risk] > RISK_LEVEL_PRIORITY[highestRisk] ? risk : highestRisk,
+    "low"
+  );
 }
 
 function getAiPillarRiskLevel(
@@ -477,6 +482,18 @@ function getAiPillarRiskLevel(
   }
 
   return "low";
+}
+
+function getReviewEvidenceRiskLevel(value: string | undefined): RiskLevel {
+  if (!value) {
+    return "low";
+  }
+
+  return /보이지 않|확인되지 않|검증되지 않|판단할 (?:정보|근거)[^.]{0,30}(?:제한|없)|정보가 제한|근거가 없|누락|알 수 없|어려울 수/u.test(
+    value
+  )
+    ? "medium"
+    : "low";
 }
 
 function getAiPillarReview(
@@ -526,7 +543,6 @@ function isCompleteReviewDetail(value: string): boolean {
 }
 
 function createReviewSummaryItems(
-  value: string,
   checks: readonly WorkspaceAiResultCheck[]
 ): WorkspaceAiReviewSummaryItem[] {
   const riskChecks = checks
@@ -537,78 +553,87 @@ function createReviewSummaryItems(
         RISK_LEVEL_PRIORITY[left.severity ?? "low"]
     );
   const strengthChecks = checks.filter((check) => check.severity === "low");
-  const strengthLimit = riskChecks.length >= 2 ? 1 : 2;
-  const riskLimit = riskChecks.length >= 2 ? 2 : 1;
-  const checkItems: WorkspaceAiReviewSummaryItem[] = [
-    ...strengthChecks.slice(0, strengthLimit).map((check) => ({
-      id: `summary-strength-${check.id}`,
-      label: "잘된 점" as const,
-      text: `${check.label}: ${check.summary}`,
-      tone: "positive" as const
-    })),
-    ...riskChecks.slice(0, riskLimit).map((check) => ({
-      id: `summary-risk-${check.id}`,
-      label: "주요 문제" as const,
-      text: `${check.label}: ${check.summary}`,
-      tone: "risk" as const
-    }))
-  ];
 
-  if (checkItems.length >= 2) {
-    return checkItems;
-  }
-
-  const sentences = splitReviewSentences(value).slice(0, 3);
-  const items = sentences.map<WorkspaceAiReviewSummaryItem>((sentence, index) => {
-    if (/다만|하지만|반면|그러나|문제|위험|부족|누락|단일 장애점|필요|어렵|취약|중단|위반/u.test(sentence)) {
-      return {
-        id: `summary-${index}`,
-        label: "주요 문제",
-        text: sentence,
-        tone: "risk"
-      };
-    }
-
-    if (/좋|잘 |적절|준수|활성화|비활성화|명확|분리|구분되어|쉬운 구조|확장하기 쉬/u.test(sentence)) {
-      return {
-        id: `summary-${index}`,
-        label: "잘된 점",
-        text: sentence,
-        tone: "positive"
-      };
-    }
-
-    return {
-      id: `summary-${index}`,
-      label: "검토 결과",
-      text: sentence,
-      tone: "neutral"
-    };
-  });
-
-  if (items.some((item) => item.tone === "positive")) {
-    return items;
-  }
-
-  const confirmedStrength = checks.find((check) => check.severity === "low");
-
-  if (!confirmedStrength) {
-    return items;
-  }
-
-  const fallbackItems: WorkspaceAiReviewSummaryItem[] = [
+  return [
     {
-      id: "summary-confirmed-strength",
+      id: "summary-strengths",
       label: "잘된 점",
-      text: `${confirmedStrength.label}: ${confirmedStrength.summary}`,
+      text: createStrengthSummaryText(strengthChecks),
       tone: "positive"
     },
-    ...items.filter((item) => item.tone === "risk")
+    {
+      id: "summary-fixes",
+      label: "수정해야 할 점",
+      text: createFixSummaryText(riskChecks),
+      tone: "risk"
+    }
   ];
-
-  return fallbackItems.slice(0, 3);
 }
 
+function createStrengthSummaryText(checks: readonly WorkspaceAiResultCheck[]): string {
+  const details = checks
+    .slice(0, 2)
+    .map((check) => `• ${check.label}: ${getReviewObservation(check)}`);
+
+  return details.length > 0
+    ? details.join("\n")
+    : "• 현재 검토에서 명확하게 확인된 강점은 없습니다.";
+}
+
+function createFixSummaryText(checks: readonly WorkspaceAiResultCheck[]): string {
+  const details = checks.slice(0, 2).flatMap((check) => {
+    const observation = getReviewObservation(check);
+    const action = getReviewAction(check, observation);
+
+    return [
+      `• ${check.label} 문제: ${observation}`,
+      ...(action ? [`• ${check.label} 수정: ${action}`] : [])
+    ];
+  });
+
+  return details.length > 0
+    ? details.join("\n")
+    : "• 현재 검토에서 즉시 수정해야 할 문제는 확인되지 않았습니다.";
+}
+
+function getReviewObservation(check: WorkspaceAiResultCheck): string {
+  const summarySentences = splitReviewSentences(check.summary);
+  const actionSentences = new Set(
+    splitReviewSentences(check.action ?? "").map(normalizeReviewSentence)
+  );
+  const observation = summarySentences.find(
+    (sentence) =>
+      !actionSentences.has(normalizeReviewSentence(sentence)) &&
+      !isReviewActionInstruction(sentence)
+  );
+
+  return observation ?? summarySentences[0] ?? check.summary;
+}
+
+function getReviewAction(
+  check: WorkspaceAiResultCheck,
+  observation: string
+): string | null {
+  if (!check.action) {
+    return null;
+  }
+
+  const action = splitReviewSentences(check.action)[0] ?? check.action;
+
+  return normalizeReviewSentence(action) === normalizeReviewSentence(observation)
+    ? null
+    : action;
+}
+
+function normalizeReviewSentence(value: string): string {
+  return value.replace(/[.!?]+$/gu, "").replace(/\s+/gu, " ").trim();
+}
+
+function isReviewActionInstruction(value: string): boolean {
+  return /(?:확인|검토|수정|추가|설정|제한|배치|적용|실행|명시|보강|유지|진행|회수)하세요[.!?]?$/u.test(
+    value
+  );
+}
 function createVisibleReviewSummary(value: string): string {
   const sentences = splitReviewSentences(value);
   const issueSentence = sentences
