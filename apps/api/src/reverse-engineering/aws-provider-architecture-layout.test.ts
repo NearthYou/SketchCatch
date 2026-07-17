@@ -204,3 +204,65 @@ test("ECS Cluster를 Task Definition과 Service 사이 중심에 두고 evidence
   );
   assert.equal(architectureJson.edges.length, 2);
 });
+
+test("같은 scan의 evidence-only ECS Service Target Group 관계는 검토 전용 endpoint도 보드에 남긴다", () => {
+  const architectureJson = createReverseEngineeringArchitectureJson([
+    {
+      id: "ecs-service-api",
+      provider: "aws",
+      providerResourceType: "AWS::ECS::Service",
+      providerResourceId: "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api",
+      region: "ap-northeast-2",
+      displayName: "api",
+      resourceType: "ECS_SERVICE",
+      config: { name: "api" },
+      relationships: [
+        {
+          type: "connects_to",
+          targetResourceId: "target-group-api",
+          label: "target group"
+        }
+      ]
+    },
+    {
+      id: "target-group-api",
+      provider: "aws",
+      providerResourceType: "AWS::ElasticLoadBalancingV2::TargetGroup",
+      providerResourceId:
+        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one",
+      region: "ap-northeast-2",
+      displayName: "api",
+      resourceType: "UNKNOWN",
+      config: {},
+      relationships: [],
+      analysisExcluded: true,
+      importSuggestionStatus: "unsupported_resource_type"
+    },
+    {
+      id: "unrelated-review-only-resource",
+      provider: "aws",
+      providerResourceType: "AWS::IAM::Role",
+      providerResourceId: "arn:aws:iam::123456789012:role/unrelated",
+      region: "ap-northeast-2",
+      displayName: "unrelated",
+      resourceType: "UNKNOWN",
+      config: {},
+      relationships: [],
+      analysisExcluded: true,
+      importSuggestionStatus: "unsupported_resource_type"
+    }
+  ]);
+  const nodes = new Map(architectureJson.nodes.map((node) => [node.id, node]));
+
+  assert.deepEqual([...nodes.keys()], ["ecs-service-api", "target-group-api"]);
+  assert.equal(nodes.get("target-group-api")?.type, "UNKNOWN");
+  assert.equal(nodes.get("target-group-api")?.config["analysisExcluded"], true);
+  assert.deepEqual(architectureJson.edges, [
+    {
+      id: "edge-ecs-service-api-target-group-api-target group",
+      sourceId: "target-group-api",
+      targetId: "ecs-service-api",
+      label: "target group"
+    }
+  ]);
+});

@@ -1450,7 +1450,11 @@ test("Reverse Engineering ECS fixture는 민감 환경 값 없이 최소 Cluster
         capacityProviders: ["FARGATE", "FARGATE_SPOT"],
         configuration: {
           executeCommandConfiguration: {
-            logging: "DEFAULT"
+            logging: "OVERRIDE",
+            logConfiguration: {
+              s3BucketName: "orders-command-logs",
+              s3EncryptionEnabled: true
+            }
           }
         },
         providerParameters: { rawSdkField: "must-not-render" },
@@ -1530,8 +1534,10 @@ test("Reverse Engineering ECS fixture는 민감 환경 값 없이 최소 Cluster
   assert.match(terraform, /capacity_providers = \[[\s\S]*"FARGATE"[\s\S]*"FARGATE_SPOT"/);
   assert.match(
     terraform,
-    /configuration \{[\s\S]*execute_command_configuration \{[\s\S]*logging\s+= "DEFAULT"/
+    /configuration \{[\s\S]*execute_command_configuration \{[\s\S]*logging\s+= "OVERRIDE"/
   );
+  assert.match(terraform, /s3_bucket_encryption_enabled\s+= true/);
+  assert.doesNotMatch(terraform, /s3_encryption_enabled\s+=/);
   assert.match(terraform, /resource "aws_ecs_task_definition" "orders" \{/);
   assert.match(terraform, /container_definitions\s+= jsonencode\(\[/);
   assert.match(terraform, /network_mode\s+= "awsvpc"/);
@@ -1555,6 +1561,40 @@ test("Reverse Engineering ECS fixture는 민감 환경 값 없이 최소 Cluster
   assert.doesNotMatch(terraform, /^\s*environment\s*=/m);
   assert.doesNotMatch(terraform, /^\s*cluster_name\s+= "orders"/m);
   assert.doesNotMatch(terraform, /^\s*(arn|cluster_arn|provider_resource_id|provider_resource_type|revision|status|task_definition_arn)\s*=/m);
+});
+
+test("Reverse Engineering ECS managed storage-only configuration은 KMS 값을 Terraform nested block으로 보존한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_ecs_cluster", "managed_storage", {
+        name: "managed-storage",
+        configuration: {
+          managedStorageConfiguration: {
+            kmsKeyId: "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
+            fargateEphemeralStorageKmsKeyId:
+              "arn:aws:kms:ap-northeast-2:123456789012:key/66666666-7777-8888-9999-000000000000"
+          }
+        },
+        providerResourceId: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/managed-storage",
+        providerResourceType: "AWS::ECS::Cluster"
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(terraform, /resource "aws_ecs_cluster" "managed_storage" \{/);
+  assert.match(terraform, /configuration \{[\s\S]*managed_storage_configuration \{/);
+  assert.match(
+    terraform,
+    /managed_storage_configuration \{[\s\S]*kms_key_id\s+= "arn:aws:kms:ap-northeast-2:123456789012:key\/11111111-2222-3333-4444-555555555555"/
+  );
+  assert.match(
+    terraform,
+    /managed_storage_configuration \{[\s\S]*fargate_ephemeral_storage_kms_key_id\s+= "arn:aws:kms:ap-northeast-2:123456789012:key\/66666666-7777-8888-9999-000000000000"/
+  );
+  assert.doesNotMatch(terraform, /execute_command_configuration/);
 });
 
 test("생성 필수값이 부족한 Reverse Engineering Resource는 Terraform block과 output에서 제외한다", () => {

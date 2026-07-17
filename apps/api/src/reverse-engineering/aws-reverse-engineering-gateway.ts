@@ -37,6 +37,7 @@ import {
   type LoadBalancer
 } from "@aws-sdk/client-elastic-load-balancing-v2";
 import {
+  ClusterField,
   DescribeClustersCommand,
   DescribeServicesCommand,
   DescribeTaskDefinitionCommand,
@@ -938,7 +939,10 @@ async function describeEcsClusters(
     try {
       const response = await sendEcsCommand<DescribeClustersCommandOutput>(
         client,
-        new DescribeClustersCommand({ clusters: clusterArnBatch })
+        new DescribeClustersCommand({
+          clusters: clusterArnBatch,
+          include: [ClusterField.CONFIGURATIONS]
+        })
       );
       clusters.push(...(response.clusters ?? []));
       scanErrors.push(

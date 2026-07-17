@@ -364,22 +364,31 @@ function normalizeReverseEngineeringEcsClusterConfig(
 }
 
 function normalizeEcsClusterConfiguration(value: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(value) || !isRecord(value["executeCommandConfiguration"])) {
+  if (!isRecord(value)) {
     return undefined;
   }
 
   const executeCommand = value["executeCommandConfiguration"];
-  const normalizedExecuteCommand = compactTerraformConfig({
-    kmsKeyId: readNonEmptyString(executeCommand["kmsKeyId"]),
-    logging: readNonEmptyString(executeCommand["logging"]),
-    logConfiguration: normalizeEcsExecuteCommandLogConfiguration(
-      executeCommand["logConfiguration"]
+  const normalizedExecuteCommand = isRecord(executeCommand)
+    ? compactTerraformConfig({
+        kmsKeyId: readNonEmptyString(executeCommand["kmsKeyId"]),
+        logging: readNonEmptyString(executeCommand["logging"]),
+        logConfiguration: normalizeEcsExecuteCommandLogConfiguration(
+          executeCommand["logConfiguration"]
+        )
+      })
+    : undefined;
+  const normalized = compactTerraformConfig({
+    executeCommandConfiguration:
+      normalizedExecuteCommand && Object.keys(normalizedExecuteCommand).length > 0
+        ? normalizedExecuteCommand
+        : undefined,
+    managedStorageConfiguration: normalizeEcsManagedStorageConfiguration(
+      value["managedStorageConfiguration"]
     )
   });
 
-  return Object.keys(normalizedExecuteCommand).length > 0
-    ? { executeCommandConfiguration: normalizedExecuteCommand }
-    : undefined;
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 function normalizeEcsExecuteCommandLogConfiguration(
@@ -393,8 +402,25 @@ function normalizeEcsExecuteCommandLogConfiguration(
     cloudWatchEncryptionEnabled: readBoolean(value["cloudWatchEncryptionEnabled"]),
     cloudWatchLogGroupName: readNonEmptyString(value["cloudWatchLogGroupName"]),
     s3BucketName: readNonEmptyString(value["s3BucketName"]),
-    s3EncryptionEnabled: readBoolean(value["s3EncryptionEnabled"]),
+    s3BucketEncryptionEnabled: readBoolean(value["s3EncryptionEnabled"]),
     s3KeyPrefix: readString(value["s3KeyPrefix"])
+  });
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeEcsManagedStorageConfiguration(
+  value: unknown
+): Record<string, unknown> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const normalized = compactTerraformConfig({
+    kmsKeyId: readNonEmptyString(value["kmsKeyId"]),
+    fargateEphemeralStorageKmsKeyId: readNonEmptyString(
+      value["fargateEphemeralStorageKmsKeyId"]
+    )
   });
 
   return Object.keys(normalized).length > 0 ? normalized : undefined;
@@ -1725,7 +1751,8 @@ function isReverseEngineeringEcsNestedBlock(
       [
         "configuration",
         "configuration.execute_command_configuration",
-        "configuration.execute_command_configuration.log_configuration"
+        "configuration.execute_command_configuration.log_configuration",
+        "configuration.managed_storage_configuration"
       ].includes(path)) ||
     (resourceType === "aws_ecs_service" && path === "capacity_provider_strategy")
   );

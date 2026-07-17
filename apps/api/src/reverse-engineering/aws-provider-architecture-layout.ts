@@ -35,7 +35,14 @@ type LayoutSubnetChildrenInput = LayoutVpcChildrenInput & {
 export function createReverseEngineeringArchitectureJson(
   discoveredResources: readonly DiscoveredResource[]
 ): ArchitectureJson {
-  const boardResources = discoveredResources.filter(shouldAppearOnReverseEngineeringBoard);
+  const evidenceRelationshipTargetIds = new Set(
+    discoveredResources.flatMap((resource) =>
+      (resource.relationships ?? []).map((relationship) => relationship.targetResourceId)
+    )
+  );
+  const boardResources = discoveredResources.filter((resource) =>
+    shouldAppearOnReverseEngineeringBoard(resource, evidenceRelationshipTargetIds)
+  );
   const boardResourceIds = new Set(boardResources.map((resource) => resource.id));
   const layoutByResourceId = createArchitectureLayout(boardResources);
 
@@ -262,13 +269,16 @@ function toResourceEdges(resource: DiscoveredResource, boardResourceIds: Readonl
   return edges;
 }
 
-// 지원 여부와 분석 제외 상태보다 관계가 구조를 설명할 때만 검토 전용 Resource를 보드에 남깁니다.
-function shouldAppearOnReverseEngineeringBoard(resource: DiscoveredResource): boolean {
+// 지원 여부와 분석 제외 상태보다 evidence 관계가 구조를 설명할 때만 검토 전용 Resource를 보드에 남깁니다.
+function shouldAppearOnReverseEngineeringBoard(
+  resource: DiscoveredResource,
+  evidenceRelationshipTargetIds: ReadonlySet<string>
+): boolean {
   if (resource.resourceType !== "UNKNOWN" && !resource.analysisExcluded) {
     return true;
   }
 
-  return (resource.relationships?.length ?? 0) > 0;
+  return (resource.relationships?.length ?? 0) > 0 || evidenceRelationshipTargetIds.has(resource.id);
 }
 
 // VPC 바로 아래에는 네트워크 구성요소와 여러 Subnet에 걸치는 ALB를 배치합니다.

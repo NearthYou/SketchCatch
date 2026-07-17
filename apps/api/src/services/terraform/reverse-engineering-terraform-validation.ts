@@ -229,9 +229,40 @@ function createEcsFixture(): InfrastructureGraph {
           name: "orders",
           capacityProviders: ["FARGATE", "FARGATE_SPOT"],
           configuration: {
-            executeCommandConfiguration: { logging: "DEFAULT" }
+            executeCommandConfiguration: {
+              logging: "OVERRIDE",
+              logConfiguration: {
+                s3BucketName: "orders-command-logs",
+                s3EncryptionEnabled: true
+              }
+            }
           },
           providerResourceId: clusterArn,
+          providerResourceType: "AWS::ECS::Cluster"
+        }
+      },
+      {
+        id: "reverse-engineering-ecs-managed-storage-cluster",
+        label: "managed-storage",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_cluster",
+          resourceName: "managed_storage",
+          fileName: "main"
+        },
+        config: {
+          name: "managed-storage",
+          configuration: {
+            managedStorageConfiguration: {
+              kmsKeyId:
+                "arn:aws:kms:ap-northeast-2:123456789012:key/11111111-2222-3333-4444-555555555555",
+              fargateEphemeralStorageKmsKeyId:
+                "arn:aws:kms:ap-northeast-2:123456789012:key/66666666-7777-8888-9999-000000000000"
+            }
+          },
+          providerResourceId:
+            "arn:aws:ecs:ap-northeast-2:123456789012:cluster/managed-storage",
           providerResourceType: "AWS::ECS::Cluster"
         }
       },

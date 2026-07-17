@@ -217,6 +217,14 @@ test("ECS reader는 cluster/service pagination과 공유 Task Definition dedupe�
   assert.deepEqual(
     commands
       .filter(
+        (command): command is DescribeClustersCommand => command instanceof DescribeClustersCommand
+      )
+      .map((command) => command.input),
+    [{ clusters: [clusterA, clusterB], include: ["CONFIGURATIONS"] }]
+  );
+  assert.deepEqual(
+    commands
+      .filter(
         (command): command is ListServicesCommand =>
           command instanceof ListServicesCommand && command.input.cluster === clusterA
       )
