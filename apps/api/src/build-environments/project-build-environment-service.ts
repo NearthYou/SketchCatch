@@ -387,7 +387,7 @@ export function createPostgresProjectBuildEnvironmentRepository(
               .where(eq(awsCodeConnections.id, input.awsCodeConnectionId))
               .for("key share")
           : [];
-        if (codeConnection?.status !== "AVAILABLE") {
+        if (input.awsCodeConnectionId && codeConnection?.status !== "AVAILABLE") {
           throw new ProjectBuildEnvironmentError(
             "CODECONNECTION_REQUIRED",
             "사용 가능한 GitHub 빌드 연결이 필요합니다."
