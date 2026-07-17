@@ -1,8 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { execFileSync } from "node:child_process";
+import { findAppendOnlyMigrationHistoryFailures } from "./db-migration-history.mjs";
 
 const migrationDirectory = path.join(process.cwd(), "apps/api/drizzle");
+const migrationJournalRelativePath = "apps/api/drizzle/meta/_journal.json";
+const migrationJournalPath = path.join(process.cwd(), migrationJournalRelativePath);
 const policyStartRevision = 29;
 const destructivePatterns = [
   /\bDROP\s+(?:TABLE|COLUMN)\b/i,
@@ -26,6 +30,26 @@ for (const fileName of migrationFiles) {
   if (hasDestructiveDdl && !contractMarker.test(sql)) {
     failures.push(
       `${fileName}: destructive DDL requires -- sketchcatch:contract-migration-after: vX.Y.Z`
+    );
+  }
+}
+
+const baseSha = process.env.MIGRATION_BASE_SHA?.trim();
+if (baseSha && !/^0{40}$/.test(baseSha)) {
+  if (!/^[a-f\d]{40}$/i.test(baseSha)) {
+    failures.push("MIGRATION_BASE_SHA must be a 40-character Git commit SHA");
+  } else {
+    const currentJournal = JSON.parse(fs.readFileSync(migrationJournalPath, "utf8"));
+    const baseJournal = JSON.parse(
+      execFileSync("git", ["show", `${baseSha}:${migrationJournalRelativePath}`], {
+        encoding: "utf8"
+      })
+    );
+    failures.push(
+      ...findAppendOnlyMigrationHistoryFailures(
+        baseJournal.entries ?? [],
+        currentJournal.entries ?? []
+      )
     );
   }
 }
