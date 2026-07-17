@@ -239,6 +239,38 @@ test("blocks an analysis-excluded resource after a CRLF heredoc before sync chan
   assert.equal(result.diagramJson.nodes[0]?.parameters?.values["functionName"], "keep-marker");
 });
 
+test("blocks an analysis-excluded resource after a heredoc nested inside interpolation", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "legacy-lambda",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "Legacy Lambda",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "legacy_lambda",
+          fileName: "compute.tf",
+          values: { analysisExcluded: true, functionName: "keep-marker" }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    'locals {\n  rendered = "${jsonencode({ value = <<EOT\n{\nEOT\n })}"\n}\nresource "aws_lambda_function" "legacy_lambda" {}\n'
+  );
+
+  assert.equal(result.diagramJson, diagramJson);
+  assert.deepEqual(result.proposals, []);
+  assert.equal(result.diagnostics.at(-1)?.code, "terraform.sync.analysis_excluded_resource");
+  assert.equal(result.diagramJson.nodes[0]?.parameters?.values["functionName"], "keep-marker");
+});
+
 test("updates data block values", () => {
   const diagramJson: DiagramJson = {
     nodes: [

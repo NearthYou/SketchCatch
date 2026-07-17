@@ -109,8 +109,8 @@ function tokenizeTerraform(terraformCode: string): TerraformToken[] {
       }
     }
 
-    if (isIdentifierStart(character)) {
-      const end = readIdentifierEnd(terraformCode, index + 1);
+    if (isIdentifierStart(readCodePoint(terraformCode, index))) {
+      const end = readIdentifierEnd(terraformCode, index);
       tokens.push({ kind: "identifier", value: terraformCode.slice(index, end) });
       index = end;
       continue;
@@ -265,6 +265,14 @@ function skipTemplateExpression(source: string, startIndex: number): number | nu
       continue;
     }
 
+    if (character === "<" && source[index + 1] === "<") {
+      const heredocEnd = skipHeredoc(source, index);
+      if (heredocEnd !== null) {
+        index = heredocEnd - 1;
+        continue;
+      }
+    }
+
     if (character === "{") {
       braceDepth += 1;
       continue;
@@ -302,11 +310,11 @@ function skipHeredoc(source: string, startIndex: number): number | null {
     index += 1;
   }
 
-  if (!isIdentifierStart(source[index] ?? "")) {
+  if (!isIdentifierStart(readCodePoint(source, index))) {
     return null;
   }
 
-  const delimiterEnd = readIdentifierEnd(source, index + 1);
+  const delimiterEnd = readIdentifierEnd(source, index);
   const delimiter = source.slice(index, delimiterEnd);
   const lineEnd = source.indexOf("\n", delimiterEnd);
   if (
@@ -369,17 +377,27 @@ function isWhitespace(value: string): boolean {
 }
 
 function isIdentifierStart(value: string): boolean {
-  return /[A-Za-z_]/.test(value);
+  return /^[_\p{ID_Start}]$/u.test(value);
 }
 
 function isIdentifierPart(value: string): boolean {
-  return /[A-Za-z0-9_-]/.test(value);
+  return /^[-\p{ID_Continue}]$/u.test(value);
 }
 
 function readIdentifierEnd(source: string, startIndex: number): number {
   let index = startIndex;
-  while (index < source.length && isIdentifierPart(source[index]!)) {
-    index += 1;
+  while (index < source.length) {
+    const codePoint = readCodePoint(source, index);
+    if (!isIdentifierPart(codePoint)) {
+      break;
+    }
+
+    index += codePoint.length;
   }
   return index;
+}
+
+function readCodePoint(source: string, index: number): string {
+  const codePoint = source.codePointAt(index);
+  return codePoint === undefined ? "" : String.fromCodePoint(codePoint);
 }

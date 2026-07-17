@@ -120,6 +120,36 @@ test("keeps scanning after template directives with nested interpolation braces"
   );
 });
 
+test("keeps scanning after a heredoc nested inside a template interpolation", () => {
+  assert.deepEqual(
+    scanTerraformBlockIdentities(
+      'locals {\n  rendered = "${jsonencode({ value = <<EOT\n{\nEOT\n })}"\n}\nresource "aws_lambda_function" "legacy_lambda" {}\n'
+    ),
+    [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "legacy_lambda"
+      }
+    ]
+  );
+});
+
+test("keeps scanning after a heredoc with a Unicode delimiter", () => {
+  assert.deepEqual(
+    scanTerraformBlockIdentities(
+      'script = <<종료\n{\nresource "aws_lambda_function" "heredoc_value" {}\n종료\nresource "aws_lambda_function" "legacy_lambda" {}\n'
+    ),
+    [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "legacy_lambda"
+      }
+    ]
+  );
+});
+
 test("decodes Terraform quoted-string escapes in resource identities", () => {
   assert.deepEqual(
     scanTerraformBlockIdentities(
