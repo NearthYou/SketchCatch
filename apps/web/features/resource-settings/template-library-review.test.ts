@@ -61,3 +61,14 @@ test("승인된 visual-only Template review variant만 gallery/start diagram res
   assert.deepEqual(resolved, candidate.session.proposal.diagram);
   assert.deepEqual(candidate.template.diagramJson, sourceBefore);
 });
+
+test("AWS onboarding template does not expose the Training prefix", () => {
+  const template = listBoardTemplates().find(
+    (candidate) => candidate.id === "brainboard-training-aws-onboarding"
+  );
+
+  assert.ok(template);
+  if (!template) return;
+
+  assert.equal(template.title, "AWS onboarding");
+});

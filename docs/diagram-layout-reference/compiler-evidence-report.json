@@ -3198,7 +3198,7 @@
     },
     {
       "id": "brainboard:brainboard-training-aws-onboarding",
-      "title": "[Training] AWS onboarding",
+      "title": "AWS onboarding",
       "source": "brainboard",
       "compilerVersion": "architecture-board-compiler/v3",
       "candidateId": "compiled:presentation:split-support-reversed",
@@ -4488,7 +4488,7 @@
       },
       {
         "id": "brainboard:brainboard-training-aws-onboarding",
-        "title": "[Training] AWS onboarding",
+        "title": "AWS onboarding",
         "source": "brainboard",
         "findings": []
       },
