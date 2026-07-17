@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import type {
   AwsConnection,
+  ArchitectureJson,
+  DiscoveredResource,
+  ReverseEngineeringDraft,
+  ReverseEngineeringImportSuggestion,
   ReverseEngineeringResourceSelection,
   ReverseEngineeringScan,
   ReverseEngineeringScanLogLine,
@@ -119,11 +123,135 @@ export type ReverseEngineeringScanJob = {
   run(): Promise<ReverseEngineeringScanResult>;
 };
 
+export type PersistedReverseEngineeringScanResult = Omit<
+  ReverseEngineeringScanResult,
+  "scan" | "reverseEngineeringDraft"
+> & {
+  scan?: ReverseEngineeringScan | undefined;
+  reverseEngineeringDraft?: unknown;
+};
+
+const REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS = [
+  "providerResourceId",
+  "providerResourceType",
+  "region",
+  "accountId",
+  "terraformResourceName",
+  "terraformResourceType"
+] as const;
+const REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS = ["displayName", "description"] as const;
+
 export class ReverseEngineeringNotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ReverseEngineeringNotFoundError";
   }
+}
+
+// JSONB에 저장된 과거 스캔은 draft가 없을 수 있으므로, 읽을 때만 현재 응답 계약으로 보정합니다.
+export function normalizeReverseEngineeringScanResult(
+  scan: ReverseEngineeringScan,
+  persistedResult: PersistedReverseEngineeringScanResult
+): ReverseEngineeringScanResult {
+  const draft = isUsableReverseEngineeringDraft(persistedResult.reverseEngineeringDraft, scan.id)
+    ? persistedResult.reverseEngineeringDraft
+    : createReadCompatibilityDraft(scan, persistedResult.architectureJson);
+
+  return {
+    ...persistedResult,
+    scan,
+    reverseEngineeringDraft: draft,
+    importSuggestions: sanitizeImportSuggestions(
+      persistedResult.discoveredResources,
+      persistedResult.importSuggestions
+    )
+  };
+}
+
+function createReadCompatibilityDraft(
+  scan: ReverseEngineeringScan,
+  architectureJson: ArchitectureJson
+): ReverseEngineeringDraft {
+  return {
+    id: `draft-${scan.id}`,
+    scanId: scan.id,
+    architectureJson,
+    protectedValueKeys: [...REVERSE_ENGINEERING_PROTECTED_VALUE_KEYS],
+    editableValueKeys: [...REVERSE_ENGINEERING_EDITABLE_VALUE_KEYS],
+    createdAt: scan.completedAt ?? scan.updatedAt
+  };
+}
+
+function isUsableReverseEngineeringDraft(
+  value: unknown,
+  scanId: string
+): value is ReverseEngineeringDraft {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    isNonEmptyString(value.id) &&
+    value.scanId === scanId &&
+    isArchitectureJson(value.architectureJson) &&
+    isStringArray(value.protectedValueKeys) &&
+    isStringArray(value.editableValueKeys) &&
+    isNonEmptyString(value.createdAt)
+  );
+}
+
+function sanitizeImportSuggestions(
+  discoveredResources: DiscoveredResource[],
+  importSuggestions: ReverseEngineeringImportSuggestion[]
+): ReverseEngineeringImportSuggestion[] {
+  const reviewOnlyResourceIds = new Set(
+    discoveredResources
+      .filter((resource) => resource.resourceType === "UNKNOWN" || resource.analysisExcluded === true)
+      .map((resource) => resource.id)
+  );
+
+  return importSuggestions.map((suggestion) => {
+    if (
+      !reviewOnlyResourceIds.has(suggestion.resourceId) ||
+      !hasUnsafeImportHandoff(suggestion)
+    ) {
+      return suggestion;
+    }
+
+    return {
+      id: suggestion.id,
+      resourceId: suggestion.resourceId,
+      status: "manual_review",
+      handoffReady: false,
+      reason: suggestion.reason ?? "검토 전용 Resource는 Terraform import 또는 배포에 사용할 수 없습니다."
+    };
+  });
+}
+
+function hasUnsafeImportHandoff(suggestion: ReverseEngineeringImportSuggestion): boolean {
+  return (
+    suggestion.status === "ready" ||
+    suggestion.handoffReady ||
+    suggestion.terraformAddress !== undefined ||
+    suggestion.importCommand !== undefined ||
+    suggestion.terraformBlockDraft !== undefined
+  );
+}
+
+function isArchitectureJson(value: unknown): value is ArchitectureJson {
+  return isRecord(value) && Array.isArray(value.nodes) && Array.isArray(value.edges);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 // 스캔 row는 있지만 Provider 호출이 실패한 경우 404와 구분하기 위해 따로 던집니다.

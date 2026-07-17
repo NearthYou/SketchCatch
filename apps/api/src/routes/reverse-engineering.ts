@@ -1,14 +1,16 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { RESOURCE_TYPES } from "@sketchcatch/types";
+import { RESOURCE_TYPES, type ReverseEngineeringScan } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   createPostgresReverseEngineeringRepository,
   createReverseEngineeringPreviewScan,
   createReverseEngineeringScanJob,
+  normalizeReverseEngineeringScanResult,
   ReverseEngineeringNotFoundError,
   toReverseEngineeringScan,
+  type PersistedReverseEngineeringScanResult,
   toReverseEngineeringScanLogLine,
   type ReverseEngineeringRepository,
   type ReverseEngineeringServiceOptions
@@ -138,10 +140,9 @@ export async function registerReverseEngineeringRoutes(
       return sendNotFound(reply, "Reverse Engineering 스캔을 찾을 수 없습니다.");
     }
 
-    return reply.status(200).send({
-      scan: toReverseEngineeringScan(scan),
-      result: scan.result ?? undefined
-    });
+    return reply.status(200).send(
+      toReverseEngineeringScanReadResponse(toReverseEngineeringScan(scan), scan.result)
+    );
   });
 
   app.get(
@@ -210,6 +211,18 @@ export async function registerReverseEngineeringRoutes(
 
     return reply.status(204).send();
   });
+}
+
+export function toReverseEngineeringScanReadResponse(
+  scan: ReverseEngineeringScan,
+  result: PersistedReverseEngineeringScanResult | null
+) {
+  return {
+    scan,
+    result: result
+      ? normalizeReverseEngineeringScanResult(scan, result)
+      : undefined
+  };
 }
 
 function createRepository(
