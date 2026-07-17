@@ -379,7 +379,7 @@
         "lastVerified": "2026-07-14",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/git-cicd/ecs-gitops-release-reconciler.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/routes/git-cicd-handoffs.test.ts",
-          "pnpm exec tsx .\\app\\projects\\[projectId]\\settings\\project-deployment-target-state.test.ts (from apps/web)",
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts",
           "pnpm test",
           "pnpm migration:compatibility:check",
           "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
@@ -405,7 +405,7 @@
         "lastVerified": "2026-07-14",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/db/project-release-ledger-schema.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/lambda-gitops-release-reconciler.test.ts src/git-cicd/git-cicd-pipeline-run-service.test.ts src/releases/project-release-ledger-service.test.ts src/routes/git-cicd-handoffs.test.ts src/routes/project-release-ledger.test.ts",
-          "pnpm exec tsx .\\app\\projects\\[projectId]\\settings\\project-deployment-target-state.test.ts (from apps/web)",
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts",
           "pnpm test",
           "pnpm migration:compatibility:check",
           "PostgreSQL 16 temporary container: apply migrations 0000..0038 with runtime migrator",
