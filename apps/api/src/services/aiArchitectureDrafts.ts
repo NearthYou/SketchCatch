@@ -2601,6 +2601,7 @@ function applyStrictRepositoryEvidencePolicy(
           bucketPrefix: `${deploymentName}-web-`,
           bucketPurpose: "static_website_origin",
           publicAccessBlock: true,
+          versioningEnabled: true,
           forceDestroy: true
         }
       },
@@ -2624,7 +2625,7 @@ function applyStrictRepositoryEvidencePolicy(
       {
         id: webBootstrapObjectId,
         type: "S3",
-        label: "Bootstrap Index (CI/CD replaces)",
+        label: "Bootstrap Index (release in progress)",
         positionX: 760,
         positionY: 280,
         config: {
@@ -2634,7 +2635,8 @@ function applyStrictRepositoryEvidencePolicy(
           bucket: `aws_s3_bucket.${webAssetsId}.id`,
           key: "index.html",
           contentType: "text/html; charset=utf-8",
-          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment ready</title><body><main><h1>Application deployment ready</h1><p>GitHub Actions will replace this bootstrap document with apps/web/dist.</p></main></body></html>"
+          releaseManagedContent: true,
+          content: "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Application deployment is in progress</title><body><main><h1>Application deployment is in progress</h1><p>SketchCatch is deploying the approved application release.</p></main></body></html>"
         }
       },
       {
@@ -2689,15 +2691,15 @@ function applyStrictRepositoryEvidencePolicy(
             cachedMethods: ["GET", "HEAD"],
             cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6"
           }],
-          orderedCacheBehavior: [{
-            pathPattern: "/api/*",
+          orderedCacheBehavior: ["/api/*", "/health"].map((pathPattern) => ({
+            pathPattern,
             targetOriginId: "api-alb",
             viewerProtocolPolicy: "redirect-to-https",
             allowedMethods: ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"],
             cachedMethods: ["GET", "HEAD"],
             cachePolicyId: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
             originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac"
-          }],
+          })),
           restrictions: [{ geoRestriction: [{ restrictionType: "none" }] }],
           viewerCertificate: [{ cloudfrontDefaultCertificate: true }]
         }
@@ -3127,7 +3129,7 @@ function applyStrictRepositoryEvidencePolicy(
     connect(
       cloudFrontId,
       coreNodeId("alb-security-group"),
-      "proxies /api/* to ALB over HTTP"
+      "proxies /api/* and /health to ALB over HTTP"
     );
   } else {
     connect("repository-browser", coreNodeId("alb-security-group"), "API -> ALB SG: TCP 80");

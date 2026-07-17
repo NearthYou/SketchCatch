@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const diagramEditorSource = readFileSync(
   fileURLToPath(new URL("./DiagramEditor.tsx", import.meta.url)),
   "utf8"
-);
+).replaceAll("\r\n", "\n");
 const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
@@ -330,13 +330,28 @@ test("compact workspace refits the board without changing the saved DiagramJson"
   );
 });
 
-test("fit view uses the unobscured board frame and visual resource bounds", () => {
+test("fit view uses the unobscured board frame and complete diagram visual bounds", () => {
   assert.match(
     diagramEditorSource,
-    /getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height/s
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,\s*fitMinimumZoom/s
   );
+  assert.match(diagramEditorSource, /getFitViewMinimumZoom\([\s\S]*?FIT_VIEW_PADDING/);
+  assert.match(diagramEditorSource, /setFlowMinimumZoom\(fitMinimumZoom\);/);
+  assert.doesNotMatch(diagramEditorSource, /flowInstance\.fitView\(fitOptions\)/);
   assert.match(diagramEditorSource, /offsetBoardViewportToFrame/);
   assert.doesNotMatch(diagramEditorSource, /const fitViewWidth = editorBounds/);
+});
+
+test("automatic organization preview stays at the lower-left of the board workspace", () => {
+  assert.match(diagramEditorStyles, /\.workspace\s*\{[\s\S]*?position:\s*relative;/);
+  assert.match(
+    diagramEditorStyles,
+    /\.compilerPreviewNotice\s*\{[\s\S]*?bottom:\s*16px;[\s\S]*?left:\s*16px;[\s\S]*?right:\s*auto;/
+  );
+  assert.match(
+    diagramEditorSource,
+    /<div className=\{styles\.workspace\}>[\s\S]*?aria-label="자동 정리 미리보기"/
+  );
 });
 
 test("viewport controls use the React Flow instance received from onInit", () => {
@@ -355,7 +370,7 @@ test("viewport controls use the React Flow instance received from onInit", () =>
 test("a single node click opens the matching resource inspector", () => {
   assert.match(
     diagramEditorSource,
-    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?setRightPanelOpen\(true\);/
+    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?updateRightPanelOpen\(true\);/
   );
 });
 
@@ -369,7 +384,8 @@ test("reverse preview can opt into read-only resource inspection", () => {
 });
 
 test("a dedicated workflow can replace the default empty board guidance", () => {
-  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요\."/);
+  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요\."/);
+  assert.doesNotMatch(diagramEditorSource, /emptyBoardDescription = "[^"]*Resource/);
   assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
 });
 
@@ -739,7 +755,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
     /import \{ getDiagramVisualBounds \} from "\.\/resource-node-visual-footprint";/
   );
   assert.match(diagramEditorSource, /getDiagramVisualBounds\(\[targetNode\]\)/);
-  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes\)/);
+  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes, flowEdges\)/);
   assert.match(
     diagramEditorSource,
     /getDiagramVisualBounds\(previewDiagram\?\.nodes \?\? diagramRef\.current\.nodes\)/
@@ -752,7 +768,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   );
   assert.match(
     diagramEditorSource,
-    /offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height,/s
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,/s
   );
   assert.match(diagramEditorSource, /getUnobscuredBoardViewportFrame\(/);
   assert.match(diagramEditorSource, /BOARD_VIEWPORT_TOP_INSET/);
@@ -787,6 +803,27 @@ test("deleting a Resource refits the Security Group scopes that referenced it", 
   assert.match(
     deleteSelectionSource,
     /refitSecurityGroupScopesForTargetChanges\(\{\s*changedNodeIds: deletedNodeIds,\s*currentNodes: nodesWithReconciledAreas,\s*previousNodes: currentDiagram\.nodes\s*\}\)/s
+  );
+});
+
+test("diagram copy shortcuts preserve native text copy and only intercept selected nodes", () => {
+  const handleKeyDownSource = getSourceBlock(
+    diagramEditorSource,
+    "const handleKeyDown = useCallback(",
+    "useEffect(() => {\n    window.addEventListener(\"keydown\", handleKeyDown);"
+  );
+
+  assert.match(
+    diagramEditorSource,
+    /import \{ resolveDiagramCopyShortcut \} from "\.\/diagram-keyboard-shortcuts";/
+  );
+  assert.match(
+    handleKeyDownSource,
+    /resolveDiagramCopyShortcut\(\{[\s\S]*selectedNodeCount: selectedNodeIds\.length,[\s\S]*selectedText: window\.getSelection\(\)\?\.toString\(\) \?\? ""[\s\S]*\}\)/
+  );
+  assert.match(
+    handleKeyDownSource,
+    /if \(copyShortcutResolution === "copy_nodes"\) \{\s*event\.preventDefault\(\);\s*copySelectedNodes\(\);\s*return;\s*\}/
   );
 });
 

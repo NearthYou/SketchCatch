@@ -174,7 +174,25 @@ function createLegacyRequest(): PutProjectDeploymentTargetRequest {
       exactSemVerTag: null,
       manifestVersion: null,
       confirmedCommitSha: "a".repeat(40),
-      confirmedAt: "2026-07-16T00:00:00.000Z"
+      confirmedAt: "2026-07-16T00:00:00.000Z",
+      ecsWeb: {
+        api: {
+          sourceRoot: ".",
+          dockerfilePath: "Dockerfile",
+          containerPort: 8080,
+          healthCheckPath: "/health"
+        },
+        frontend: {
+          sourceRoot: "frontend",
+          packageManifestPath: "frontend/package.json",
+          lockfilePath: "frontend/pnpm-lock.yaml",
+          packageManager: "pnpm",
+          packageManagerVersion: "10.13.1",
+          installPreset: "pnpm_frozen_lockfile",
+          buildPreset: "pnpm_build",
+          outputPath: "frontend/dist"
+        }
+      }
     },
     runtimeConfig: {
       runtimeTargetKind: "ecs_fargate",

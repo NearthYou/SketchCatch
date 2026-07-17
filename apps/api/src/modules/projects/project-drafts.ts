@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { ProjectDraft, DiagramJson, TerraformSyncFileInput } from "@sketchcatch/types";
 
 export type ProjectDraftRow = {
@@ -13,6 +14,16 @@ export type ProjectDraftRow = {
 
 export function getNextDraftRevision(currentRevision: number | null | undefined): number {
   return currentRevision === null || currentRevision === undefined ? 1 : currentRevision + 1;
+}
+
+export function hasSameProjectDraftContent(
+  current: Pick<ProjectDraftRow, "diagramJson" | "terraformFiles">,
+  next: Pick<ProjectDraftRow, "diagramJson" | "terraformFiles">
+): boolean {
+  return (
+    isDeepStrictEqual(current.diagramJson, next.diagramJson) &&
+    isDeepStrictEqual(current.terraformFiles, next.terraformFiles)
+  );
 }
 
 export function toProjectDraft(row: ProjectDraftRow): ProjectDraft {

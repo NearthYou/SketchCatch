@@ -2,7 +2,10 @@ import type {
   GitHubProjectConnectionTarget,
   GitHubRepositoryCandidate
 } from "@sketchcatch/types";
-import type { EcsFargateDeploymentDefaultsInput } from "../../../projects/[projectId]/settings/project-deployment-target-state";
+import {
+  inferEcsWebBuildConfig,
+  type EcsFargateDeploymentDefaultsInput
+} from "../../../projects/[projectId]/settings/project-deployment-target-state";
 import type { RepositoryAnalysisResumeState } from "../../../workspace/repository/repository-analysis-resume";
 
 export function canResumeRepositoryAnalysis(input: {
@@ -53,11 +56,22 @@ export function createCallbackEcsDefaults(
   const pathSeparator = dockerfilePath.lastIndexOf("/");
   const sourceRoot = applicationUnit?.rootPath ||
     (pathSeparator === -1 ? "." : dockerfilePath.slice(0, pathSeparator));
+  const ecsWeb = inferEcsWebBuildConfig(resume.publicAnalysis.aiHandoff);
 
   return {
-    projectName: resume.projectName,
+    projectName: getRepositoryName(resume.repositoryUrl),
     repositoryRevision: resume.publicAnalysis.repositoryRevision,
-    sourceRoot,
-    dockerfilePath
+    sourceRoot: ecsWeb?.api.sourceRoot ?? sourceRoot,
+    dockerfilePath,
+    ...(ecsWeb ? { ecsWeb } : {})
   };
+}
+
+function getRepositoryName(repositoryUrl: string): string {
+  const pathname = new URL(repositoryUrl).pathname;
+  const rawName = pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const name = rawName.replace(/\.git$/iu, "").trim();
+
+  if (!name) throw new Error("Repository 이름을 확인할 수 없습니다.");
+  return name;
 }

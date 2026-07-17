@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type {
   ApplicationArtifact,
   ApplicationReleaseProviderRevision,
@@ -21,8 +21,11 @@ import {
   awsConnections,
   deployments,
   gitCicdPipelineRuns,
+  projectBuildEnvironments,
   projectDeploymentTargets,
-  projects
+  projectExecutionLeases,
+  projects,
+  releaseCandidates
 } from "../db/schema.js";
 import { toAvailableArtifact } from "../artifacts/postgres-application-artifact-registry.js";
 import { createDeploymentTargetIdentity } from "../runtime-convergence/deployment-target-identity.js";
@@ -51,8 +54,23 @@ export type SaveProjectDeploymentTargetInput = {
 
 export type CreateApplicationReleaseRecordInput = Omit<
   ApplicationReleaseRecord,
-  "artifactDigestAlgorithm"
->;
+  | "artifactDigestAlgorithm"
+  | "releaseCandidateId"
+  | "compositeDigest"
+  | "frontendEvidence"
+  | "failureStage"
+  | "baselineReleaseId"
+> &
+  Partial<
+    Pick<
+      ApplicationReleaseRecord,
+      | "releaseCandidateId"
+      | "compositeDigest"
+      | "frontendEvidence"
+      | "failureStage"
+      | "baselineReleaseId"
+    >
+  >;
 
 export type ProjectReleaseLedgerRepository = {
   findAccessibleProject(projectId: string, userId: string): Promise<{ id: string } | undefined>;
@@ -154,26 +172,92 @@ export function createPostgresProjectReleaseLedgerRepository(
       return target;
     },
     async saveProjectDeploymentTarget(input) {
-      const [target] = await db
-        .insert(projectDeploymentTargets)
-        .values(input)
-        .onConflictDoUpdate({
-          target: projectDeploymentTargets.projectId,
-          set: {
-            provider: input.provider,
-            connectionId: input.connectionId,
-            region: input.region,
-            runtimeTargetKind: input.runtimeTargetKind,
-            confirmedBuildConfig: input.confirmedBuildConfig,
-            runtimeConfig: input.runtimeConfig,
-            runtimeTarget: input.runtimeTarget,
-            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
-            rolloutStrategy: input.rolloutStrategy,
-            updatedAt: input.updatedAt
-          }
-        })
-        .returning();
-      return requireWrittenRecord(target, "Deployment target was not saved");
+      return db.transaction(async (transaction) => {
+        const [lockedProject] = await transaction
+          .select({ id: projects.id })
+          .from(projects)
+          .where(eq(projects.id, input.projectId))
+          .for("update");
+        if (!lockedProject) {
+          throw new ReleaseLedgerConflictError("배포 대상을 저장할 프로젝트가 없습니다.");
+        }
+        const [activeLease] = await transaction
+          .select({ holderId: projectExecutionLeases.holderId })
+          .from(projectExecutionLeases)
+          .where(
+            and(
+              eq(projectExecutionLeases.projectId, input.projectId),
+              eq(projectExecutionLeases.status, "active")
+            )
+          )
+          .for("update");
+        if (activeLease) {
+          throw new ReleaseLedgerConflictError(
+            "앱 릴리즈가 실행 중인 프로젝트의 배포 대상과 빌드 설정은 변경할 수 없습니다."
+          );
+        }
+        const [existing] = await transaction
+          .select({
+            connectionId: projectDeploymentTargets.connectionId,
+            region: projectDeploymentTargets.region,
+            runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
+            confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
+            runtimeConfig: projectDeploymentTargets.runtimeConfig,
+            runtimeTarget: projectDeploymentTargets.runtimeTarget,
+            deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint
+          })
+          .from(projectDeploymentTargets)
+          .where(eq(projectDeploymentTargets.projectId, input.projectId))
+          .for("update");
+        const targetChanged =
+          existing !== undefined &&
+          (existing.connectionId !== input.connectionId ||
+            existing.region !== input.region ||
+            existing.runtimeTargetKind !== input.runtimeTargetKind ||
+            !isDeepStrictEqual(existing.confirmedBuildConfig, input.confirmedBuildConfig) ||
+            !isDeepStrictEqual(existing.runtimeConfig, input.runtimeConfig) ||
+            !isDeepStrictEqual(existing.runtimeTarget, input.runtimeTarget) ||
+            existing.deploymentTargetFingerprint !== input.deploymentTargetFingerprint);
+        const [target] = await transaction
+          .insert(projectDeploymentTargets)
+          .values(input)
+          .onConflictDoUpdate({
+            target: projectDeploymentTargets.projectId,
+            set: {
+              provider: input.provider,
+              connectionId: input.connectionId,
+              region: input.region,
+              runtimeTargetKind: input.runtimeTargetKind,
+              confirmedBuildConfig: input.confirmedBuildConfig,
+              runtimeConfig: input.runtimeConfig,
+              runtimeTarget: input.runtimeTarget,
+              deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+              rolloutStrategy: input.rolloutStrategy,
+              updatedAt: input.updatedAt
+            }
+          })
+          .returning();
+        if (targetChanged) {
+          await transaction
+            .update(projectBuildEnvironments)
+            .set({
+              status: "verification_failed",
+              lastVerifiedAt: null,
+              updatedAt: input.updatedAt
+            })
+            .where(eq(projectBuildEnvironments.projectId, input.projectId));
+          await transaction
+            .update(releaseCandidates)
+            .set({ status: "failed", updatedAt: input.updatedAt })
+            .where(
+              and(
+                eq(releaseCandidates.projectId, input.projectId),
+                inArray(releaseCandidates.status, ["building", "pending"])
+              )
+            );
+        }
+        return requireWrittenRecord(target, "Deployment target was not saved");
+      });
     },
     async findDeploymentInProject(deploymentId, projectId) {
       const [deployment] = await db
@@ -198,7 +282,14 @@ export function createPostgresProjectReleaseLedgerRepository(
       return db.transaction(async (transaction) => {
         const [release] = await transaction
           .insert(applicationReleases)
-          .values(input)
+          .values({
+            ...input,
+            releaseCandidateId: input.releaseCandidateId ?? null,
+            compositeDigest: input.compositeDigest ?? null,
+            frontendEvidence: input.frontendEvidence ?? null,
+            failureStage: input.failureStage ?? null,
+            baselineReleaseId: input.baselineReleaseId ?? null
+          })
           .returning();
         const written = requireWrittenRecord(release, "Application release was not saved");
 
@@ -256,10 +347,7 @@ export function createPostgresProjectReleaseLedgerRepository(
         .select()
         .from(applicationReleases)
         .where(
-          and(
-            eq(applicationReleases.projectId, projectId),
-            eq(applicationReleases.id, releaseId)
-          )
+          and(eq(applicationReleases.projectId, projectId), eq(applicationReleases.id, releaseId))
         );
       return release;
     }
@@ -302,10 +390,7 @@ export async function putProjectDeploymentTarget(
   if (!input.target.confirmedBuildConfig) {
     throw new ReleaseLedgerValidationError("Confirmed build configuration is required.");
   }
-  validateConfirmedBuildConfig(
-    input.target.runtimeTargetKind,
-    input.target.confirmedBuildConfig
-  );
+  validateConfirmedBuildConfig(input.target.runtimeTargetKind, input.target.confirmedBuildConfig);
   validateProjectDeploymentRuntimeConfig(
     input.target.runtimeTargetKind,
     input.target.runtimeConfig
@@ -380,10 +465,7 @@ export async function getApplicationRelease(
   repository: ProjectReleaseLedgerRepository
 ): Promise<ApplicationReleaseRecord> {
   await requireAccessibleProject(input, repository);
-  const release = await repository.findProjectApplicationRelease(
-    input.projectId,
-    input.releaseId
-  );
+  const release = await repository.findProjectApplicationRelease(input.projectId, input.releaseId);
   if (!release) throw new ReleaseLedgerNotFoundError("Application release not found");
   return release;
 }
@@ -491,10 +573,18 @@ export function validateConfirmedBuildConfig(
     config.packageManifestPath,
     config.samTemplatePath,
     config.appSpecPath,
-    config.staticOutputPath
-  ].filter((path): path is string => path !== null);
+    config.staticOutputPath,
+    config.ecsWeb?.api.sourceRoot,
+    config.ecsWeb?.api.dockerfilePath,
+    config.ecsWeb?.frontend.sourceRoot,
+    config.ecsWeb?.frontend.packageManifestPath,
+    config.ecsWeb?.frontend.lockfilePath,
+    config.ecsWeb?.frontend.outputPath
+  ].filter((path): path is string => typeof path === "string");
   if (paths.some((path) => !isSafeRepositoryPath(path))) {
-    throw new ReleaseLedgerValidationError("Build evidence must use safe repository-relative paths.");
+    throw new ReleaseLedgerValidationError(
+      "Build evidence must use safe repository-relative paths."
+    );
   }
   if (config.evidence.length === 0) {
     throw new ReleaseLedgerValidationError("At least one build evidence file is required.");
@@ -512,6 +602,34 @@ export function validateConfirmedBuildConfig(
   }
   if (!Number.isFinite(Date.parse(config.confirmedAt))) {
     throw new ReleaseLedgerValidationError("Build confirmation timestamp is invalid.");
+  }
+  if (runtimeTargetKind === "ecs_fargate" && !config.ecsWeb) {
+    throw new ReleaseLedgerValidationError(
+      "ECS web build configuration is required for a new ECS/Fargate deployment target."
+    );
+  }
+  if (runtimeTargetKind === "ecs_fargate" && config.ecsWeb) {
+    const frontend = config.ecsWeb.frontend;
+    const expectedInstallPreset = {
+      npm: "npm_ci",
+      pnpm: "pnpm_frozen_lockfile",
+      yarn: "yarn_frozen_lockfile"
+    }[frontend.packageManager];
+    const expectedBuildPreset = {
+      npm: "npm_build",
+      pnpm: "pnpm_build",
+      yarn: "yarn_build"
+    }[frontend.packageManager];
+    if (
+      frontend.installPreset !== expectedInstallPreset ||
+      frontend.buildPreset !== expectedBuildPreset ||
+      config.ecsWeb.api.containerPort < 1 ||
+      config.ecsWeb.api.containerPort > 65_535
+    ) {
+      throw new ReleaseLedgerValidationError(
+        "ECS web build configuration does not match its package manager or container port."
+      );
+    }
   }
 
   const evidenceKinds = new Set(config.evidence.map((item) => item.kind));
@@ -550,9 +668,7 @@ export function validateProjectDeploymentRuntimeConfig(
   const codeBuildNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{1,254}$/;
   if (runtimeTargetKind === "static_site") {
     if (!config || config.runtimeTargetKind !== "static_site") {
-      throw new ReleaseLedgerValidationError(
-        "Static site runtime configuration is required."
-      );
+      throw new ReleaseLedgerValidationError("Static site runtime configuration is required.");
     }
     const bucketPattern = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/;
     const distributionPattern = /^[A-Z0-9]{3,32}$/;
@@ -572,9 +688,7 @@ export function validateProjectDeploymentRuntimeConfig(
   }
   if (runtimeTargetKind === "ec2_asg") {
     if (!config || config.runtimeTargetKind !== "ec2_asg") {
-      throw new ReleaseLedgerValidationError(
-        "EC2 Auto Scaling runtime configuration is required."
-      );
+      throw new ReleaseLedgerValidationError("EC2 Auto Scaling runtime configuration is required.");
     }
     const codeDeployNamePattern = /^[A-Za-z0-9._+=,@-]{1,100}$/;
     const autoScalingGroupNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,254}$/;
@@ -593,9 +707,7 @@ export function validateProjectDeploymentRuntimeConfig(
   }
   if (runtimeTargetKind === "lambda") {
     if (!config || config.runtimeTargetKind !== "lambda") {
-      throw new ReleaseLedgerValidationError(
-        "Lambda runtime configuration is required."
-      );
+      throw new ReleaseLedgerValidationError("Lambda runtime configuration is required.");
     }
     const logicalIdPattern = /^[A-Za-z][A-Za-z0-9]{0,254}$/;
     const functionNamePattern = /^[A-Za-z0-9_-]{1,64}$/;
@@ -625,13 +737,12 @@ export function validateProjectDeploymentRuntimeConfig(
     return;
   }
   if (!config || config.runtimeTargetKind !== "ecs_fargate") {
-    throw new ReleaseLedgerValidationError(
-      "ECS Fargate runtime configuration is required."
-    );
+    throw new ReleaseLedgerValidationError("ECS Fargate runtime configuration is required.");
   }
 
   const ecsNamePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/;
-  const ecrRepositoryPattern = /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*)(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/;
+  const ecrRepositoryPattern =
+    /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*)(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/;
   if (
     !codeBuildNamePattern.test(config.codeBuildProjectName) ||
     config.ecrRepositoryName.length > 256 ||

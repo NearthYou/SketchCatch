@@ -42,6 +42,11 @@ import {
 import { WorkspaceIssuesPanel } from "./WorkspaceIssuesPanel";
 import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
+import type { LiveObservationSelection } from "./live-observation";
+import {
+  createWorkspaceOverlayNotifications,
+  type WorkspaceOverlayNotifications
+} from "./workspace-overlay-notifications";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
@@ -78,15 +83,22 @@ import {
 } from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { DeploymentAvailability } from "./deployment-availability";
+import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly deploymentAvailability: DeploymentAvailability;
   readonly deploymentOpenRequestId?: number | undefined;
+  readonly hasUnsavedProjectDraft?: boolean | undefined;
   readonly initialView?: WorkspaceRightPanelView | undefined;
+  readonly initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
+  readonly onInitialCicdReturnCommandReady?: ((cleanedHref: string) => void) | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
+  readonly onBlockingPanelOpenChange: (isOpen: boolean) => void;
+  readonly onDeploymentConsoleOpenChange?: ((isOpen: boolean) => void) | undefined;
+  readonly onPanelOpenRequest: () => void;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
   readonly onTerraformAiInteraction: (
@@ -95,6 +107,7 @@ export type WorkspaceRightPanelProps = {
   ) => void;
   readonly onTerraformSafeFixApplyResult: (result: TerraformSafeFixApplyResult) => void;
   readonly projectId: string;
+  readonly projectDraftRevision?: number | null | undefined;
   readonly projectName: string;
   readonly onTerraformFilesChange?:
     | ((files: readonly TerraformSyncFileInput[]) => void)
@@ -120,14 +133,21 @@ export function WorkspaceRightPanel({
   context,
   deploymentAvailability,
   deploymentOpenRequestId = 0,
+  hasUnsavedProjectDraft = false,
+  initialCicdReturnCommand,
   initialView,
   initialTerraformFiles,
   terraformFilesReplacement,
+  onBlockingPanelOpenChange,
+  onDeploymentConsoleOpenChange = noopDeploymentConsoleOpenChange,
+  onPanelOpenRequest,
+  onInitialCicdReturnCommandReady,
   onSelectTerraformIssue,
   onTerraformAiContextChange,
   onTerraformAiInteraction,
   onTerraformSafeFixApplyResult,
   projectId,
+  projectDraftRevision = null,
   projectName,
   onTerraformFilesChange,
   onTerraformFilesReplacementApplied,
@@ -141,6 +161,13 @@ export function WorkspaceRightPanel({
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
+  const overlayNotificationsRef = useRef<WorkspaceOverlayNotifications | null>(null);
+  if (overlayNotificationsRef.current === null) {
+    overlayNotificationsRef.current = createWorkspaceOverlayNotifications(
+      onBlockingPanelOpenChange,
+      onDeploymentConsoleOpenChange
+    );
+  }
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(
     initialView === "deployment" ? "resource" : (initialView ?? "resource")
   );
@@ -148,9 +175,9 @@ export function WorkspaceRightPanel({
     defaultResourceWorkspaceView
   );
   const [hasUnsavedTerraformChanges, setHasUnsavedTerraformChanges] = useState(false);
-  const [isDeploymentBaselineDirty, setIsDeploymentBaselineDirty] = useState(true);
+  const [isDeploymentBaselineDirty, setIsDeploymentBaselineDirty] = useState(false);
   const [lastSavedDeploymentBaselineFingerprint, setLastSavedDeploymentBaselineFingerprint] =
-    useState<string | null>(null);
+    useState<string | null>(() => toDeploymentBaselineFingerprint(context.diagram));
   const [showTerraformLeaveDialog, setShowTerraformLeaveDialog] = useState(false);
   const [terraformLeaveSaveState, setTerraformLeaveSaveState] =
     useState<TerraformLeaveSaveState>("idle");
@@ -179,16 +206,43 @@ export function WorkspaceRightPanel({
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
-    initialView === "deployment"
+    initialView === "deployment" || initialCicdReturnCommand?.shouldOpenDeploymentConsole === true
   );
 
   useEffect(() => {
     if (deploymentOpenRequestId > 0) {
+      onPanelOpenRequest();
       setIsDeploymentConsoleOpen(true);
     }
-  }, [deploymentOpenRequestId]);
+  }, [deploymentOpenRequestId, onPanelOpenRequest]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
+  const [liveObservationSelection, setLiveObservationSelection] =
+    useState<LiveObservationSelection | null>(null);
+
+  useEffect(() => {
+    overlayNotificationsRef.current?.setCallbacks(
+      onBlockingPanelOpenChange,
+      onDeploymentConsoleOpenChange
+    );
+  }, [onBlockingPanelOpenChange, onDeploymentConsoleOpenChange]);
+
+  useEffect(() => {
+    overlayNotificationsRef.current?.notifyBlockingPanel(
+      isDeploymentConsoleOpen || isLiveObservationOpen
+    );
+  }, [isDeploymentConsoleOpen, isLiveObservationOpen]);
+
+  useEffect(() => {
+    overlayNotificationsRef.current?.notifyDeploymentConsole(isDeploymentConsoleOpen);
+  }, [isDeploymentConsoleOpen]);
+
+  useEffect(
+    () => () => {
+      overlayNotificationsRef.current?.reset();
+    },
+    []
+  );
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -211,6 +265,7 @@ export function WorkspaceRightPanel({
     [context.diagram]
   );
   const hasUnsavedDeploymentBaseline =
+    hasUnsavedProjectDraft ||
     isDeploymentBaselineDirty ||
     lastSavedDeploymentBaselineFingerprint !== currentDeploymentBaselineFingerprint;
 
@@ -442,6 +497,7 @@ export function WorkspaceRightPanel({
 
     try {
       if (pendingAction.kind === "view") {
+        onPanelOpenRequest();
         setActiveView(pendingAction.view);
         onTerraformAiInteraction(
           pendingAction.view === "terraform" ? "preview" : "draft"
@@ -450,6 +506,7 @@ export function WorkspaceRightPanel({
       }
 
       if (pendingAction.kind === "deployment-console") {
+        onPanelOpenRequest();
         setIsDeploymentConsoleOpen(true);
         return;
       }
@@ -465,16 +522,18 @@ export function WorkspaceRightPanel({
         skipTerraformLeaveGuardRef.current = false;
       }, 0);
     }
-  }, [context, onTerraformAiInteraction]);
+  }, [context, onPanelOpenRequest, onTerraformAiInteraction]);
 
   const requestView = useCallback(
     (nextView: WorkspaceRightPanelView): void => {
       if (nextView === activeView) {
+        onPanelOpenRequest();
         onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
         return;
       }
 
       if (nextView === "terraform") {
+        onPanelOpenRequest();
         setActiveView("terraform");
         onTerraformAiInteraction("preview");
         return;
@@ -484,10 +543,11 @@ export function WorkspaceRightPanel({
         return;
       }
 
+      onPanelOpenRequest();
       setActiveView(nextView);
       onTerraformAiInteraction("draft");
     },
-    [activeView, onTerraformAiInteraction, requestTerraformLeave]
+    [activeView, onPanelOpenRequest, onTerraformAiInteraction, requestTerraformLeave]
   );
 
   const startTerraformSplitResize = useCallback(
@@ -567,12 +627,15 @@ export function WorkspaceRightPanel({
       return;
     }
 
+    onPanelOpenRequest();
     setIsDeploymentConsoleOpen(true);
-  }, [requestTerraformLeave]);
+  }, [onPanelOpenRequest, requestTerraformLeave]);
 
-  const openLiveObservation = useCallback((): void => {
+  const openLiveObservation = useCallback((selection?: LiveObservationSelection): void => {
+    onPanelOpenRequest();
+    setLiveObservationSelection(selection ?? null);
     setIsLiveObservationOpen(true);
-  }, []);
+  }, [onPanelOpenRequest]);
 
   const applyTerraformLeaveSaveFeedback = useCallback(
     (feedback: TerraformLeaveSaveFeedback): void => {
@@ -695,55 +758,54 @@ export function WorkspaceRightPanel({
     [projectId]
   );
 
-  const prepareDeploymentArtifacts = useCallback(async (): Promise<
-    PreparedWorkspaceDeploymentArtifacts
-  > => {
-    let preparedSource: PreparedTerraformArtifactSource | undefined;
+  const prepareDeploymentArtifacts =
+    useCallback(async (): Promise<PreparedWorkspaceDeploymentArtifacts> => {
+      let preparedSource: PreparedTerraformArtifactSource | undefined;
 
-    try {
-      preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
-    } catch (cause) {
-      throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
-    }
+      try {
+        preparedSource = await terraformPanelRef.current?.prepareTerraformArtifact();
+      } catch (cause) {
+        throw new DeploymentPreparationError({ cause, stage: "terraform_prepare" });
+      }
 
-    if (!preparedSource) {
-      throw new DeploymentPreparationError({
-        cause: new Error("Terraform panel did not provide deployment artifacts"),
-        stage: "terraform_prepare"
-      });
-    }
+      if (!preparedSource) {
+        throw new DeploymentPreparationError({
+          cause: new Error("Terraform panel did not provide deployment artifacts"),
+          stage: "terraform_prepare"
+        });
+      }
 
-    let saveResult: unknown;
+      let saveResult: unknown;
 
-    try {
-      saveResult = await context.saveDiagramNow?.();
-    } catch (cause) {
-      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
-    }
+      try {
+        saveResult = await context.saveDiagramNow?.();
+      } catch (cause) {
+        throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
+      }
 
-    let preparedDraftRevision: number;
+      let preparedDraftRevision: number;
 
-    try {
-      preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
-    } catch (cause) {
-      throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
-    }
+      try {
+        preparedDraftRevision = requireSavedProjectDraftRevision(saveResult);
+      } catch (cause) {
+        throw new DeploymentPreparationError({ cause, stage: "project_draft_save" });
+      }
 
-    const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
+      const savedArtifacts = await savePreparedTerraformArtifact(preparedSource);
 
-    setHasUnsavedTerraformChanges(false);
-    setLastSavedDeploymentBaselineFingerprint(
-      toDeploymentBaselineFingerprint(preparedSource.diagramJson)
-    );
-    setIsDeploymentBaselineDirty(false);
+      setHasUnsavedTerraformChanges(false);
+      setLastSavedDeploymentBaselineFingerprint(
+        toDeploymentBaselineFingerprint(preparedSource.diagramJson)
+      );
+      setIsDeploymentBaselineDirty(false);
 
-    return {
-      ...savedArtifacts,
-      diagramJson: preparedSource.diagramJson,
-      preparedDraftRevision,
-      terraformFiles: preparedSource.terraformFiles
-    };
-  }, [context, savePreparedTerraformArtifact]);
+      return {
+        ...savedArtifacts,
+        diagramJson: preparedSource.diagramJson,
+        preparedDraftRevision,
+        terraformFiles: preparedSource.terraformFiles
+      };
+    }, [context, savePreparedTerraformArtifact]);
 
   const validateTerraformForPreDeployment = useCallback(async (): Promise<
     TerraformDiagnostic[]
@@ -839,7 +901,9 @@ export function WorkspaceRightPanel({
         diagramJson={context.diagram}
         fullScreenOnly
         hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+        initialCicdReturnCommand={initialCicdReturnCommand}
         initialExpanded
+        onInitialCicdReturnCommandReady={onInitialCicdReturnCommandReady}
         onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
         onOpenLiveObservation={openLiveObservation}
         onOpenFindingTerraformSource={(finding) => {
@@ -856,6 +920,7 @@ export function WorkspaceRightPanel({
         onValidateTerraformDiagnostics={validateTerraformForPreDeployment}
         preDeploymentCheckState={preDeploymentCheckState}
         projectId={projectId}
+        projectDraftRevision={projectDraftRevision}
         projectName={projectName}
       />
     ) : null;
@@ -864,8 +929,12 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
-      onClose={() => setIsLiveObservationOpen(false)}
+      onClose={() => {
+        setIsLiveObservationOpen(false);
+        setLiveObservationSelection(null);
+      }}
       projectId={projectId}
+      selection={liveObservationSelection}
     />
   ) : null;
   const terraformSplitStyle = {
@@ -914,8 +983,9 @@ export function WorkspaceRightPanel({
             <Rocket size={18} aria-hidden="true" />
           </button>
           <button
+            aria-label="Live Observation"
             className={styles.collapsedPanelButton}
-            onClick={openLiveObservation}
+            onClick={() => openLiveObservation()}
             title="Live Observation"
             type="button"
           >
@@ -976,16 +1046,16 @@ export function WorkspaceRightPanel({
                 {issueCount}
               </span>
             </button>
+            <button
+              aria-label="Live Observation"
+              className={styles.panelModeButton}
+              onClick={() => openLiveObservation()}
+              title="Live Observation"
+              type="button"
+            >
+              <Activity size={16} aria-hidden="true" />
+            </button>
           </div>
-          <button
-            className={styles.panelModeTextButton}
-            onClick={openLiveObservation}
-            title="Live Observation"
-            type="button"
-          >
-            <Activity size={14} aria-hidden="true" />
-            <span>Live Observation</span>
-          </button>
         </div>
 
         <div className={styles.rightPanelView} hidden={activeView !== "resource"}>
@@ -1072,6 +1142,8 @@ function clampTerraformCodePaneRatio(ratio: number): number {
     Math.max(MIN_TERRAFORM_CODE_PANE_RATIO, Math.round(ratio))
   );
 }
+
+function noopDeploymentConsoleOpenChange(): void {}
 
 function getTerraformLeaveReplayTarget(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) {

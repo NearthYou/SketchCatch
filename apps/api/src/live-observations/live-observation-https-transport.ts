@@ -69,14 +69,18 @@ export function createLiveObservationHttpsTransport(options: {
         const addresses = await runWithinDeadline(
           deadline,
           async () => {
-            await assertVerifiedCname(
-              evidence.trafficHostname,
-              evidence.loadBalancerDnsName,
-              resolveTrafficCname
-            );
-            assertDeadlineActive(deadline);
+            if (evidence.routingKind === "alb_custom_domain") {
+              await assertVerifiedCname(
+                evidence.trafficHostname,
+                evidence.loadBalancerDnsName,
+                resolveTrafficCname
+              );
+              assertDeadlineActive(deadline);
+            }
             const resolved = await resolvePublicAddresses(
-              evidence.loadBalancerDnsName,
+              evidence.routingKind === "cloudfront"
+                ? evidence.trafficHostname
+                : evidence.loadBalancerDnsName,
               resolveIpv4,
               resolveIpv6
             );
