@@ -4,17 +4,27 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- Issue #448 is implemented on `feat/gg/448-ai-draft-progress-visualization`, based on the latest merged `dev` state in merge commit `45d7625e`.
-- Only the new-project first Architecture Draft uses sequenced NDJSON full-state progress snapshots. Existing-project and Repository flows keep their JSON contracts.
-- The right pane shows confirmed requirements, pending questions, a server-owned provisional graph, compact change history, pan/zoom, and server-authorized reversible exclusion. It exposes no Board mutation or apply/edit authority before the final Draft.
-- Cancel, interruption, retry, exclusion/undo, clarification continuation, stale-request rejection, final diff/replacement, and compiler-failure retention preserve the last valid projection. Preparatory continuation snapshots do not blank the graph or synthesize history.
-- Mobile uses `대화` / `진행 중인 초안` tabs at `<=720px`; final preview content is scroll-reachable and the 390px composer avoids the global notification control.
-- Final whole-branch review is Ready with no remaining Critical, Important, or Minor findings. Focused API 79/79, focused Web 43/43, and the full Web suite 527/527 pass; harness, lint, typecheck, build, and `git diff --check` pass.
+- `/workspace/ai` is intentionally a buildable `null` route shell while its UI is rebuilt from a clean baseline.
+- The previous client JSX, CSS, progress/preview presentation, mobile pane, route-only Compiler summary, and source/CSS UI test are deleted rather than retained as reference code.
+- The remaining stream contract carries only the server-owned provisional Architecture and excludable candidate IDs; lifecycle cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save contracts remain in functional code.
+- Dead progress stages, requirement/question summaries, history/final diff, `dynamicQuestionAnswers`, `templateFallback`, and unused hook/model exports are removed end-to-end.
+- Repository keeps its production preview through a Repository-local read-only component, and the chat storage-key helper is now presentation-neutral.
+- The rebuild baseline records the actual entry paths, retained/shared/removed contracts, known gaps, option accumulation rules, decorative AWS icon rules, and final Preview authority.
 
 ## Session Record
 
+### 2026-07-17 - Clear the Workspace AI rebuild baseline
+
+- Audited the new-project, existing-project, Repository, storage, workflow, API, service, shared-type, Compiler, candidate-exclusion, approval, and save paths before removing presentation code.
+- Deleted the old `/workspace/ai` client, CSS, UI test, progress/preview components, route-only Compiler summary, and stale progress implementation plan; the route now returns `null` without a placeholder.
+- Reduced the progress transport to a candidate-only observational snapshot and removed UI-only progress models and unconsumed request fields end-to-end.
+- Preserved Repository preview behavior in a Repository-local component and moved the Workspace AI chat storage-key helper out of its presentation component.
+- Added `docs/superpowers/specs/2026-07-17-workspace-ai-rebuild-baseline.md` as the only implementation baseline for the next UI.
+- Passed the rebuild evidence Web tests 55/55, focused API tests 77/77, full Web regression 528/528, harness, lint, typecheck, build, and diff checks. Independent review returned Ready with no Critical, Important, or Minor findings.
+
 ### 2026-07-17 - Implement live AI Draft progress preview (#448)
 
+- Superseded by the cleanup record above; the implementation and verification below are historical evidence and do not describe the current `/workspace/ai` route.
 - Added shared progress/exclusion contracts, API snapshot streaming, strict NDJSON validation, caller abort propagation, and reverse-proxy no-buffering headers while preserving the existing JSON paths.
 - Added the responsive progress pane, requirement/question summaries, provisional diagram, compact history, exclusion/undo, in-place cancel/retry, final transition diff, mobile pane tabs, and last-good projection retention.
 - Direct browser QA passed at 1440x900, 1024x768, 390x844, and the 720/721 boundary: no horizontal overflow, mobile send/tab/final scrolling, desktop simultaneous panes, pan/zoom, clarification handoff, server-authorized exclusion and undo, retained retry state, final replacement, and reload non-persistence. The disposable local QA account and its active tokens were removed; `Board에 적용` was not used and no user project was created.
@@ -92,9 +102,10 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Broken Or Unverified
 
+- `apps/web/app/workspace/repository/repository-start-client.test.ts` has two stale source-contract assertions for `compileArchitectureDraftProposal` and explicit approval code that are absent at the unchanged baseline HEAD as well as this cleanup. It is not used as evidence for this change and the unrelated Repository workflow was not altered to satisfy it.
 - `pnpm test:core` does not terminate in the unchanged `apps/api/src/app.test.ts` logger-stream test. The isolated run passed 17 assertions with zero failures, then remained pending at `await once(stream, "finish")` and was interrupted after 31 seconds. Consequently root `pnpm test` was not continued into sandbox/Terraform suites.
 - No real cloud apply, deployment, Git handoff, user project creation, or persistent QA account remains.
 
 ## Next Action
 
-- Push and open the issue #448 PR when requested, then resolve only branch-owned review or CI findings before normal merge into `dev`.
+- Rebuild `/workspace/ai` from the documented baseline when requested; do not restore the deleted presentation layer or UI-only progress contracts.

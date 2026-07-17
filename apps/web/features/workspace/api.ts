@@ -13,7 +13,6 @@ import type {
   AnalyzeSourceRepositoryRequest,
   ApiErrorCode,
   ApiErrorResponse,
-  ArchitectureDraftProgressStage,
   ArchitectureDraftProgressSnapshot,
   ArchitectureDraftStreamEvent,
   ArchitectureJson,
@@ -126,10 +125,7 @@ import type {
   VerifyAwsConnectionRequest,
   VerifyAwsConnectionResponse
 } from "../../../../packages/types/src";
-import {
-  ARCHITECTURE_DRAFT_PROGRESS_STAGES,
-  RESOURCE_TYPES
-} from "../../../../packages/types/src";
+import { RESOURCE_TYPES } from "../../../../packages/types/src";
 import {
   ApiClientError,
   apiFetch,
@@ -816,11 +812,8 @@ function isArchitectureDraftStreamEvent(value: unknown): value is ArchitectureDr
 
   if (value.type === "progress") {
     return (
-      "stage" in value &&
-      isArchitectureDraftProgressStage(value.stage) &&
       "snapshot" in value &&
-      isArchitectureDraftProgressSnapshot(value.snapshot) &&
-      value.snapshot.stage === value.stage
+      isArchitectureDraftProgressSnapshot(value.snapshot)
     );
   }
 
@@ -855,15 +848,8 @@ function isArchitectureDraftProgressSnapshot(
     Number.isSafeInteger(value.sequence) &&
     typeof value.sequence === "number" &&
     value.sequence > 0 &&
-    "stage" in value &&
-    isArchitectureDraftProgressStage(value.stage) &&
-    "confirmedRequirements" in value &&
-    isStringArray(value.confirmedRequirements) &&
-    "pendingQuestions" in value &&
-    isStringArray(value.pendingQuestions) &&
     "provisionalArchitectureJson" in value &&
-    (value.provisionalArchitectureJson === null ||
-      isArchitectureJson(value.provisionalArchitectureJson)) &&
+    isArchitectureJson(value.provisionalArchitectureJson) &&
     "excludableCandidateIds" in value &&
     isStringArray(value.excludableCandidateIds)
   );
@@ -1138,15 +1124,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-function isArchitectureDraftProgressStage(
-  value: unknown
-): value is ArchitectureDraftProgressStage {
-  return (
-    typeof value === "string" &&
-    (ARCHITECTURE_DRAFT_PROGRESS_STAGES as readonly string[]).includes(value)
-  );
 }
 
 function isResourceType(value: unknown): boolean {

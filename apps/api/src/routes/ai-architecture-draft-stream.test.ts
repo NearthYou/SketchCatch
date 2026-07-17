@@ -32,17 +32,11 @@ const provisionalArchitectureJson: ArchitectureJson = {
 const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [
   {
     sequence: 1,
-    stage: "preparing_requirements",
-    confirmedRequirements: ["정적 웹사이트"],
-    pendingQuestions: ["파일 업로드가 필요한가요?"],
-    provisionalArchitectureJson: null,
-    excludableCandidateIds: []
+    provisionalArchitectureJson,
+    excludableCandidateIds: ["candidate-s3"]
   },
   {
     sequence: 2,
-    stage: "normalizing_requirements",
-    confirmedRequirements: ["정적 웹사이트", "파일 업로드 없음"],
-    pendingQuestions: [],
     provisionalArchitectureJson,
     excludableCandidateIds: ["candidate-s3"]
   }
@@ -98,12 +92,10 @@ test("POST /api/ai/architecture-draft/stream serializes complete replacement sna
   assert.deepEqual(events.slice(0, 2), [
     {
       type: "progress",
-      stage: progressSnapshots[0]!.stage,
       snapshot: progressSnapshots[0]
     },
     {
       type: "progress",
-      stage: progressSnapshots[1]!.stage,
       snapshot: progressSnapshots[1]
     }
   ]);
@@ -113,6 +105,11 @@ test("POST /api/ai/architecture-draft/stream serializes complete replacement sna
     ),
     [1, 2]
   );
+  assert.deepEqual(Object.keys(progressSnapshots[0]!).sort(), [
+    "excludableCandidateIds",
+    "provisionalArchitectureJson",
+    "sequence"
+  ]);
   assert.deepEqual(events[2], { type: "result", result: terminalResult });
 });
 
@@ -205,13 +202,6 @@ test("POST /api/ai/architecture-draft/stream rejects Repository Analysis authori
           }
         ]
       }
-    },
-    {
-      repositoryAnalysis: {
-        projectId: "11111111-1111-4111-8111-111111111111",
-        sourceRepositoryId: "22222222-2222-4222-8222-222222222222"
-      },
-      templateFallback: { source: "repository-analysis" }
     }
   ];
 

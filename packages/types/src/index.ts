@@ -2848,14 +2848,6 @@ export type CreateArchitectureDraftRequest = {
   prompt: string;
   candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
-  dynamicQuestionAnswers?:
-    | readonly {
-        questionId: string;
-        question: string;
-        answer: string;
-      }[]
-    | undefined;
-  templateFallback?: Record<string, unknown> | undefined;
   repositoryEvidence?:
     | {
         mode: "strict";
@@ -2871,22 +2863,9 @@ export type CreateArchitectureDraftRequest = {
     | undefined;
 };
 
-export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
-  "preparing_requirements",
-  "normalizing_requirements",
-  "querying_amazon_q",
-  "validating_architecture",
-  "building_diagram"
-] as const;
-
-export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
-
 export type ArchitectureDraftProgressSnapshot = {
   sequence: number;
-  stage: ArchitectureDraftProgressStage;
-  confirmedRequirements: string[];
-  pendingQuestions: string[];
-  provisionalArchitectureJson: ArchitectureJson | null;
+  provisionalArchitectureJson: ArchitectureJson;
   excludableCandidateIds: string[];
 };
 
@@ -2912,7 +2891,6 @@ export type CreateArchitectureDraftResponse =
 export type ArchitectureDraftStreamEvent =
   | {
       type: "progress";
-      stage: ArchitectureDraftProgressStage;
       snapshot: ArchitectureDraftProgressSnapshot;
     }
   | {

@@ -4,7 +4,6 @@ import type {
   AiProviderMetadata,
   ArchitectureDraftCandidateExclusion,
   ArchitectureDraftProgressSnapshot,
-  ArchitectureDraftProgressStage,
   ArchitectureDraftClarification,
   ArchitectureJson,
   CreateArchitectureDraftRequest,
@@ -335,8 +334,6 @@ export async function createAmazonQArchitectureDraftResponse(
   const provider = options.provider;
   const progressReporter = createArchitectureDraftProgressReporter(request, options.onProgress);
 
-  progressReporter.report("preparing_requirements");
-
   if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
     await reportFallbackDraftProgress(progressReporter, options.onProgress);
     return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
@@ -359,7 +356,7 @@ export async function createAmazonQArchitectureDraftResponse(
     return createArchitectureDraftClarification(conditionalQuestion, request, provider, creditPolicy.billingMode);
   }
 
-  progressReporter.report("normalizing_requirements");
+  progressReporter.reportCandidates();
   const architectureDecisionSpace = createArchitectureDecisionSpace(request.prompt);
   const providerNormalizedRequirement = await createNormalizedArchitectureIntentPlan({
     prompt: request.prompt,
@@ -395,7 +392,7 @@ export async function createAmazonQArchitectureDraftResponse(
   try {
     let activePayload = payload;
     let retryUsed = false;
-    progressReporter.report("querying_amazon_q");
+    progressReporter.reportCandidates();
     let response = await generateArchitectureDraftProviderResponse(provider, {
       target: ARCHITECTURE_DRAFT_TARGET,
       instructions: createAmazonQArchitectureDraftInstructions(),
@@ -408,7 +405,7 @@ export async function createAmazonQArchitectureDraftResponse(
       ),
       payload: activePayload
     });
-    progressReporter.report("validating_architecture");
+    progressReporter.reportCandidates();
     let parsedResponse = applyOperationalPolicyToProviderResponse(
       parseArchitectureDraftProviderResponse(response.text),
       request.prompt,
@@ -440,7 +437,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
-        progressReporter.report("querying_amazon_q");
+        progressReporter.reportCandidates();
         response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -455,7 +452,7 @@ export async function createAmazonQArchitectureDraftResponse(
           ),
           payload: activePayload
         });
-        progressReporter.report("validating_architecture");
+        progressReporter.reportCandidates();
         parsedResponse = applyOperationalPolicyToProviderResponse(
           parseArchitectureDraftProviderResponse(response.text),
           request.prompt,
@@ -494,7 +491,6 @@ export async function createAmazonQArchitectureDraftResponse(
     });
 
     if (parsedResponse.status === "needs_clarification") {
-      progressReporter.reportClarification(parsedResponse.question);
       return {
         status: "needs_clarification",
         question: parsedResponse.question,
@@ -505,7 +501,7 @@ export async function createAmazonQArchitectureDraftResponse(
 
     if (parsedResponse.status === "plan") {
       try {
-        progressReporter.report("building_diagram");
+        progressReporter.reportCandidates();
         return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
@@ -542,7 +538,7 @@ export async function createAmazonQArchitectureDraftResponse(
           supportedResourceTypes: SUPPORTED_RESOURCE_TYPES,
           supportedResourceCatalog: SUPPORTED_RESOURCE_CATALOG
         });
-        progressReporter.report("querying_amazon_q");
+        progressReporter.reportCandidates();
         response = await generateArchitectureDraftProviderResponse(provider, {
           target: ARCHITECTURE_DRAFT_TARGET,
           instructions: createAmazonQArchitectureDraftInstructions(),
@@ -557,7 +553,7 @@ export async function createAmazonQArchitectureDraftResponse(
           ),
           payload: activePayload
         });
-        progressReporter.report("validating_architecture");
+        progressReporter.reportCandidates();
         parsedResponse = parseArchitectureDraftProviderResponse(response.text);
 
         if (parsedResponse.status !== "plan") {
@@ -576,7 +572,7 @@ export async function createAmazonQArchitectureDraftResponse(
           outputCharacters: response.outputCharacters ?? response.text.length
         });
 
-        progressReporter.report("building_diagram");
+        progressReporter.reportCandidates();
         return applyArchitectureDraftRequestPolicies(
           createAmazonQPlanDraftResult(
             parsedResponse,
@@ -589,7 +585,7 @@ export async function createAmazonQArchitectureDraftResponse(
       }
     }
 
-    progressReporter.report("building_diagram");
+    progressReporter.reportCandidates();
     return applyArchitectureDraftRequestPolicies(
       createAmazonQDraftResult(parsedResponse, providerMetadata),
       request
@@ -830,15 +826,14 @@ function applyArchitectureParameterCompletenessDefaults(
 }
 
 type ArchitectureDraftProgressReporter = {
-  readonly report: (stage: ArchitectureDraftProgressStage) => void;
-  readonly reportClarification: (question: string) => void;
+  readonly reportCandidates: () => void;
 };
 
 async function reportFallbackDraftProgress(
   progressReporter: ArchitectureDraftProgressReporter,
   onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
 ): Promise<void> {
-  progressReporter.report("building_diagram");
+  progressReporter.reportCandidates();
   if (onProgress !== undefined) {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
@@ -849,118 +844,33 @@ function createArchitectureDraftProgressReporter(
   onProgress: ((snapshot: ArchitectureDraftProgressSnapshot) => void) | undefined
 ): ArchitectureDraftProgressReporter {
   let sequence = 0;
-  let lastProvisionalArchitectureJson: ArchitectureJson | null = null;
-  let excludableCandidateIds: string[] = [];
-  const confirmedRequirements = createConfirmedRequirementSummaries(request);
-  let pendingQuestions = createPendingArchitectureDraftQuestions(request.prompt);
+  let reported = false;
 
-  function report(stage: ArchitectureDraftProgressStage): void {
-    if (onProgress === undefined) {
+  function reportCandidates(): void {
+    if (onProgress === undefined || reported) {
       return;
     }
 
-    if (
-      stage !== "preparing_requirements"
-      && pendingQuestions.length === 0
-      && lastProvisionalArchitectureJson === null
-    ) {
-      try {
-        lastProvisionalArchitectureJson = createArchitectureDraft(request).architectureJson;
-        excludableCandidateIds = resolveExcludableCandidateIds(
-          lastProvisionalArchitectureJson
-        );
-      } catch {
-        // A provisional projection is observational and must not interrupt final generation.
-      }
-    }
-
-    sequence += 1;
-    let provisionalArchitectureJson: ArchitectureJson | null = null;
     try {
-      provisionalArchitectureJson =
-        lastProvisionalArchitectureJson === null
-          ? null
-          : structuredClone(lastProvisionalArchitectureJson);
-    } catch {
-      // Keep emitting the complete non-graph state if a provisional clone cannot be reported.
-    }
+      const provisionalArchitectureJson = structuredClone(
+        createArchitectureDraft(request).architectureJson
+      );
+      const snapshot: ArchitectureDraftProgressSnapshot = {
+        sequence: ++sequence,
+        provisionalArchitectureJson,
+        excludableCandidateIds: resolveExcludableCandidateIds(
+          provisionalArchitectureJson
+        )
+      };
 
-    const snapshot: ArchitectureDraftProgressSnapshot = {
-      sequence,
-      stage,
-      confirmedRequirements: [...confirmedRequirements],
-      pendingQuestions: [...pendingQuestions],
-      provisionalArchitectureJson,
-      excludableCandidateIds:
-        provisionalArchitectureJson === null ? [] : [...excludableCandidateIds]
-    };
-
-    try {
+      reported = true;
       onProgress(snapshot);
     } catch {
-      // Progress reporting is observational and must never interrupt Q generation.
+      // Candidate reporting is observational and must never interrupt final generation.
     }
   }
 
-  return {
-    report,
-    reportClarification(question) {
-      const normalizedQuestion = question.trim();
-      pendingQuestions = normalizedQuestion.length === 0 ? [] : [normalizedQuestion];
-      report("preparing_requirements");
-    }
-  };
-}
-
-function createConfirmedRequirementSummaries(
-  request: CreateArchitectureDraftRequest
-): string[] {
-  const summaries = [
-    ...createPromptRequirementSummaries(request.prompt),
-    ...(request.dynamicQuestionAnswers ?? []).map(
-      ({ question, answer }) => `${question}: ${answer}`
-    )
-  ]
-    .map((summary) => summary.trim())
-    .filter((summary) => summary.length > 0);
-
-  return [...new Set(summaries)].slice(0, 32);
-}
-
-function createPromptRequirementSummaries(prompt: string): string[] {
-  const lines = prompt
-    .split(/\r?\n/u)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  const summaries: string[] = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    const nextLine = lines[index + 1];
-
-    if (
-      line !== undefined
-      && nextLine !== undefined
-      && /[?？]$/u.test(line)
-      && !/[?？]$/u.test(nextLine)
-    ) {
-      summaries.push(`${line}: ${nextLine}`);
-      index += 1;
-      continue;
-    }
-
-    if (line !== undefined) {
-      summaries.push(line);
-    }
-  }
-
-  return summaries;
-}
-
-function createPendingArchitectureDraftQuestions(prompt: string): string[] {
-  const pendingQuestion =
-    findMissingRequiredQuestion(prompt) ?? findConditionalArchitectureQuestion(prompt);
-  return pendingQuestion === null ? [] : [pendingQuestion.question];
+  return { reportCandidates };
 }
 
 function readArchitectureDraftErrorMessage(error: unknown): string {

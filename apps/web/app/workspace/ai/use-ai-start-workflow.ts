@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AiArchitectureDraftResult,
   ArchitectureDraftCandidateExclusion,
@@ -51,11 +51,6 @@ import {
   type AiStartProjectDraft
 } from "./ai-start-model";
 import {
-  createProgressDiagram,
-  resolveDraftProgressMobilePane,
-  type DraftProgressDifference,
-  type DraftProgressHistoryEntry,
-  type DraftProgressMobilePane,
   type DraftProgressState,
   type DraftProgressStatus
 } from "./ai-draft-progress-model";
@@ -93,7 +88,6 @@ export function useAiStartWorkflow({
   const [messages, setMessages] = useState<AiStartMessage[]>([]);
   const messagesRef = useRef<AiStartMessage[]>([]);
   const draftProgressCoordinatorRef = useRef(new AiDraftProgressCoordinator());
-  const mobilePaneSelectionRef = useRef(false);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [compilationProposal, setCompilationProposal] =
     useState<ArchitectureBoardCompilationProposal | null>(null);
@@ -109,15 +103,10 @@ export function useAiStartWorkflow({
   const [progressSnapshot, setProgressSnapshot] =
     useState<ArchitectureDraftProgressSnapshot | null>(null);
   const [progressStatus, setProgressStatus] = useState<DraftProgressStatus>("idle");
-  const [progressHistory, setProgressHistory] = useState<DraftProgressHistoryEntry[]>([]);
   const [lastExclusion, setLastExclusion] =
     useState<ArchitectureDraftCandidateExclusion | null>(null);
-  const [finalProgressDifference, setFinalProgressDifference] =
-    useState<DraftProgressDifference | null>(null);
-  const [mobilePane, setMobilePaneState] = useState<DraftProgressMobilePane>("conversation");
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
-  const [errorMessage, setErrorMessage] = useState("");
   const [voiceTranscriptNeedsConfirmation, setVoiceTranscriptNeedsConfirmation] = useState(false);
   const voiceInput = useBrowserVoiceInput({
     onChange: handleVoiceTranscriptChange,
@@ -153,15 +142,6 @@ export function useAiStartWorkflow({
       draftProgressCoordinatorRef.current.dispose();
     };
   }, []);
-
-  useEffect(() => {
-    if (finalProgressDifference === null) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setFinalProgressDifference(null), 4_000);
-    return () => window.clearTimeout(timeoutId);
-  }, [finalProgressDifference]);
 
   async function submitPrompt(value = composerValue): Promise<void> {
     const prompt = value.trim();
@@ -229,7 +209,6 @@ export function useAiStartWorkflow({
 
   async function requestDraft(request: CreateArchitectureDraftRequest): Promise<void> {
     beginRequest();
-    setFinalProgressDifference(null);
 
     if (existingProjectId !== undefined) {
       abortActiveDraftRequest();
@@ -252,7 +231,6 @@ export function useAiStartWorkflow({
       const response = await createAiArchitectureDraftStream(progressRequest.request, {
         signal: progressRequest.signal,
         onProgress: (snapshot) => {
-          const currentProgress = draftProgressCoordinatorRef.current.state;
           const nextProgress = draftProgressCoordinatorRef.current.receive(
             progressRequest,
             snapshot
@@ -261,14 +239,7 @@ export function useAiStartWorkflow({
             return;
           }
 
-          const shouldRevealProgress =
-            currentProgress.visibleSnapshot === null && !mobilePaneSelectionRef.current;
           publishDraftProgressState(nextProgress);
-          if (shouldRevealProgress) {
-            setMobilePaneState((current) =>
-              resolveDraftProgressMobilePane(current, "snapshot_received", false)
-            );
-          }
         }
       });
 
@@ -296,13 +267,6 @@ export function useAiStartWorkflow({
     if (isArchitectureDraftClarification(response)) {
       setDraftClarification({ clarification: response, prompt: request.prompt });
       publishDraftProgressState(draftProgressCoordinatorRef.current.awaitInput());
-      setMobilePaneState((current) =>
-        resolveDraftProgressMobilePane(
-          current,
-          "awaiting_input",
-          mobilePaneSelectionRef.current
-        )
-      );
       finishRequest();
       appendAssistantMessage("question", response.question, response.suggestions);
       return;
@@ -312,13 +276,6 @@ export function useAiStartWorkflow({
     if (decision.action === "ask_follow_up") {
       setDraftFollowUp(decision.session);
       publishDraftProgressState(draftProgressCoordinatorRef.current.awaitInput());
-      setMobilePaneState((current) =>
-        resolveDraftProgressMobilePane(
-          current,
-          "awaiting_input",
-          mobilePaneSelectionRef.current
-        )
-      );
       finishRequest();
       appendAssistantMessage("question", decision.session.question, decision.session.suggestions);
       return;
@@ -342,7 +299,6 @@ export function useAiStartWorkflow({
   function publishDraftProgressState(nextState: DraftProgressState): void {
     setProgressSnapshot(nextState.visibleSnapshot);
     setProgressStatus(nextState.status);
-    setProgressHistory([...nextState.history]);
   }
 
   function excludeCandidateFromProgress(candidateId: string): void {
@@ -372,11 +328,6 @@ export function useAiStartWorkflow({
     if (retryRequest !== null) {
       await requestDraft(retryRequest);
     }
-  }
-
-  function selectMobilePane(pane: DraftProgressMobilePane): void {
-    mobilePaneSelectionRef.current = true;
-    setMobilePaneState(pane);
   }
 
   async function requestPatch(
@@ -533,27 +484,22 @@ export function useAiStartWorkflow({
     currentDiagram?: DiagramJson,
     message = `${result.title} PREVIEW가 준비됐습니다.`
   ): void {
-    const completedProgress = draftProgressCoordinatorRef.current.finalize(
-      result.architectureJson,
-      () => compileArchitectureDraftProposal(result, currentDiagram)
+    const completedProgress = draftProgressCoordinatorRef.current.finalize(() =>
+      compileArchitectureDraftProposal(result, currentDiagram)
     );
     const proposal = completedProgress.value;
 
-    setFinalProgressDifference(completedProgress.difference);
     setDraft(result);
     setCompilationProposal(proposal);
     setPreviewDiagram(proposal.diagram);
     publishDraftProgressState(completedProgress.state);
     setLastExclusion(null);
-    setMobilePaneState("progress");
     finishRequest();
     appendAssistantMessage("draft", message);
   }
 
   function beginRequest(clearPreview = true): void {
     setRequestState("loading");
-    setErrorMessage("");
-    setFinalProgressDifference(null);
     setDraftClarification(null);
     setPatchClarification(null);
     setDraftFollowUp(null);
@@ -570,7 +516,6 @@ export function useAiStartWorkflow({
 
   function failRequest(message: string): void {
     setRequestState("error");
-    setErrorMessage(message);
     appendAssistantMessage("error", message);
   }
 
@@ -595,11 +540,6 @@ export function useAiStartWorkflow({
     setMessages(trimmedMessages);
   }
 
-  const progressDiagram = useMemo(
-    () => createProgressDiagram(progressSnapshot),
-    [progressSnapshot]
-  );
-
   return {
     approveDraft,
     canApprove:
@@ -614,15 +554,10 @@ export function useAiStartWorkflow({
     compilationProposal,
     confirmVoiceTranscript,
     draft,
-    errorMessage,
     excludeProgressCandidate: excludeCandidateFromProgress,
-    finalProgressDifference,
     lastExclusion,
-    mobilePane,
     messages,
     previewDiagram,
-    progressDiagram,
-    progressHistory,
     progressSnapshot,
     progressStatus,
     projectDraft,
@@ -630,7 +565,6 @@ export function useAiStartWorkflow({
     requestState,
     retryDraft,
     setComposerValue: updateComposerValue,
-    setMobilePane: selectMobilePane,
     submitPrompt,
     undoLastExclusion,
     voiceInput,

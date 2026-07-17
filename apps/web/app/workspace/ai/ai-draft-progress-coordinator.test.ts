@@ -35,20 +35,11 @@ const architectureJson: ArchitectureJson = {
   ]
 };
 
-function createSnapshot(
-  sequence: number,
-  provisionalArchitectureJson: ArchitectureJson | null = architectureJson
-): ArchitectureDraftProgressSnapshot {
+function createSnapshot(sequence: number): ArchitectureDraftProgressSnapshot {
   return {
     sequence,
-    stage: provisionalArchitectureJson === null ? "preparing_requirements" : "building_diagram",
-    confirmedRequirements: ["정적 웹사이트"],
-    pendingQuestions: [],
-    provisionalArchitectureJson,
-    excludableCandidateIds:
-      provisionalArchitectureJson === null
-        ? []
-        : provisionalArchitectureJson.nodes.map(({ id }) => id)
+    provisionalArchitectureJson: architectureJson,
+    excludableCandidateIds: architectureJson.nodes.map(({ id }) => id)
   };
 }
 
@@ -101,7 +92,7 @@ test("서버가 허용한 후보 제외과 undo는 재시작 request payload와 
   );
 
   const restart = coordinator.begin(excluded.request);
-  coordinator.receive(restart, createSnapshot(1, null));
+  coordinator.receive(restart, createSnapshot(1));
   const undone = coordinator.undoLastExclusion();
 
   assert.ok(undone);
@@ -121,16 +112,15 @@ test("추가 답변 대기와 final 전환을 상태로 보장하고 compiler �
   assert.equal(coordinator.awaitInput().status, "awaiting_input");
 
   assert.throws(() =>
-    coordinator.finalize(architectureJson, () => {
+    coordinator.finalize(() => {
       throw new Error("compiler failed");
     })
   );
   assert.equal(coordinator.state.status, "awaiting_input");
   assert.equal(coordinator.state.visibleSnapshot?.sequence, 1);
 
-  const finalized = coordinator.finalize(architectureJson, () => ({ proposal: true }));
+  const finalized = coordinator.finalize(() => ({ proposal: true }));
   assert.deepEqual(finalized.value, { proposal: true });
-  assert.deepEqual(finalized.difference, { added: 0, removed: 0 });
   assert.equal(finalized.state.status, "idle");
   assert.equal(finalized.state.visibleSnapshot, null);
   assert.equal(coordinator.state, finalized.state);
@@ -142,7 +132,7 @@ test("active stream의 compiler 실패는 요청을 먼저 닫지 않고 interru
   coordinator.receive(active, createSnapshot(1));
 
   assert.throws(() =>
-    coordinator.finalize(architectureJson, () => {
+    coordinator.finalize(() => {
       throw new Error("compiler failed");
     })
   );

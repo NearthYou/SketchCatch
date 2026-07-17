@@ -139,15 +139,6 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
     .max(32)
     .optional(),
   templateId: z.enum(TEMPLATE_IDS).optional(),
-  dynamicQuestionAnswers: z
-    .array(z.object({
-      questionId: z.string().trim().min(1).max(160),
-      question: z.string().trim().min(1).max(500),
-      answer: z.string().trim().min(1).max(500)
-    }))
-    .max(32)
-    .optional(),
-  templateFallback: z.record(z.string(), z.unknown()).optional(),
   repositoryEvidence: z
     .object({
       mode: z.literal("strict"),
@@ -165,23 +156,11 @@ const architectureDraftBodySchema: z.ZodType<CreateArchitectureDraftRequest> = z
       sourceRepositoryId: z.uuid()
     })
     .optional()
-}).superRefine((body, context) => {
-  if (body.templateFallback !== undefined && body.repositoryAnalysis === undefined) {
-    context.addIssue({
-      code: "custom",
-      message: "Repository Analysis is required for template fallback",
-      path: ["repositoryAnalysis"]
-    });
-  }
 });
 
 const architectureDraftStreamBodySchema = architectureDraftBodySchema.superRefine(
   (body, context) => {
-    for (const field of [
-      "repositoryAnalysis",
-      "repositoryEvidence",
-      "templateFallback"
-    ] as const) {
+    for (const field of ["repositoryAnalysis", "repositoryEvidence"] as const) {
       if (body[field] !== undefined) {
         context.addIssue({
           code: "custom",
@@ -401,7 +380,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
       }
     };
     const onProgress = (snapshot: ArchitectureDraftProgressSnapshot): void => {
-      writeEvent({ type: "progress", stage: snapshot.stage, snapshot });
+      writeEvent({ type: "progress", snapshot });
     };
 
     try {

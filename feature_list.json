@@ -560,13 +560,13 @@
         "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-16",
+        "lastVerified": "2026-07-17",
         "commands": [
           "pnpm harness:check",
           "pnpm architecture-board-knowledge:check",
           "pnpm architecture-board-evidence:check",
           "pnpm architecture-board-evidence-review:check",
-          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/workspace-ai-start-client.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/repository/repository-start-client.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/ai-start-model.test.ts app/workspace/ai/ai-draft-progress-model.test.ts app/workspace/ai/ai-draft-progress-coordinator.test.ts app/workspace/ai/use-ai-start-workflow.test.ts features/workspace/workspace-ai-chat-storage.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
           "pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-consolidation.test.ts features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-chat-request.test.ts features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-context-bridge.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/workspace-ai-result-presentation.test.ts features/workspace/workspace-ai-workbench-contract.test.ts features/workspace/workspace-ai-workbench-state.test.ts features/workspace/workspace-api-abort.test.ts",
           "pnpm --dir apps/api exec tsx --test src/services/aiLlmExplanation.test.ts",
           "pnpm lint",

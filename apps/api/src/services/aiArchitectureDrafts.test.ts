@@ -853,60 +853,6 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
   }
 });
 
-test("progress requirements collapse a clarification question and answer into one confirmed fact", async () => {
-  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
-  const question = "예상 트래픽 규모는?";
-  const answer = "소규모 (일 100명 미만, 동시 10명 미만)";
-
-  await createAmazonQArchitectureDraftResponse(
-    {
-      prompt: ["회사 소개용 웹사이트를 만들고 싶어요.", question, answer].join("\n")
-    },
-    {
-      provider: createFakeAmazonQProvider(() => "{}"),
-      creditPolicy: confirmedCreditPolicy,
-      onProgress: (snapshot) => progressSnapshots.push(snapshot)
-    }
-  );
-
-  assert.ok(progressSnapshots.length > 0);
-  assert.ok(!progressSnapshots[0]?.confirmedRequirements.includes(question));
-  assert.ok(
-    progressSnapshots[0]?.confirmedRequirements.includes(`${question}: ${answer}`)
-  );
-});
-
-test("provider clarification emits a new full snapshot with the pending question", async () => {
-  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
-  const question = "도메인이 있나요?";
-  const response = await createAmazonQArchitectureDraftResponse(
-    {
-      prompt: createKoreaNoUploadNoRealtimePrompt()
-    },
-    {
-      provider: createFakeAmazonQProvider(() =>
-        JSON.stringify({
-          status: "needs_clarification",
-          question,
-          suggestions: ["있음", "없음"]
-        })
-      ),
-      creditPolicy: confirmedCreditPolicy,
-      onProgress: (snapshot) => progressSnapshots.push(snapshot)
-    }
-  );
-
-  assert.ok("status" in response);
-  assert.equal(response.status, "needs_clarification");
-  assert.equal(response.question, question);
-  assert.deepEqual(progressSnapshots.at(-1)?.pendingQuestions, [question]);
-  assert.equal(progressSnapshots.at(-1)?.stage, "preparing_requirements");
-  assert.deepEqual(
-    progressSnapshots.map(({ sequence }) => sequence),
-    [1, 2, 3, 4, 5]
-  );
-});
-
 test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture preview when requirements are complete", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;
@@ -1027,28 +973,24 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
-  assert.deepEqual(progressSnapshots.map(({ sequence }) => sequence), [1, 2, 3, 4, 5]);
-  assert.deepEqual(progressSnapshots.map(({ stage }) => stage), [
-    "preparing_requirements",
-    "normalizing_requirements",
-    "querying_amazon_q",
-    "validating_architecture",
-    "building_diagram"
-  ]);
-  assert.ok(progressSnapshots.every((snapshot) => snapshot.confirmedRequirements.length > 0));
+  assert.deepEqual(progressSnapshots.map(({ sequence }) => sequence), [1]);
   assert.ok(
-    progressSnapshots.some(
-      (snapshot) => (snapshot.provisionalArchitectureJson?.nodes.length ?? 0) > 0
+    progressSnapshots.every(
+      (snapshot) => snapshot.provisionalArchitectureJson.nodes.length > 0
     )
   );
   assert.ok(
     progressSnapshots.every(
       (snapshot) =>
-        Array.isArray(snapshot.pendingQuestions)
-        && Array.isArray(snapshot.excludableCandidateIds)
+        Array.isArray(snapshot.excludableCandidateIds)
         && Object.hasOwn(snapshot, "provisionalArchitectureJson")
     )
   );
+  assert.deepEqual(Object.keys(progressSnapshots[0]!).sort(), [
+    "excludableCandidateIds",
+    "provisionalArchitectureJson",
+    "sequence"
+  ]);
 });
 
 test("createAmazonQArchitectureDraftResponse applies an exact server-authorized exclusion to provisional and final graphs", async () => {
@@ -1413,10 +1355,9 @@ test("provider fallback still emits a candidate-bearing progress snapshot before
   if ("status" in response) return;
 
   const candidateSnapshot = progressSnapshots.find(
-    ({ provisionalArchitectureJson }) => (provisionalArchitectureJson?.nodes.length ?? 0) > 0
+    ({ provisionalArchitectureJson }) => provisionalArchitectureJson.nodes.length > 0
   );
   assert.ok(candidateSnapshot);
-  assert.equal(candidateSnapshot.stage, "building_diagram");
   assert.deepEqual(
     candidateSnapshot.provisionalArchitectureJson,
     response.architectureJson
@@ -1452,7 +1393,7 @@ test("candidate exclusions only apply to the exact server-issued id, type, and l
   assert.equal(response.architectureJson.nodes.some(({ type }) => type === "S3"), true);
   assert.equal(
     progressSnapshots.some((snapshot) =>
-      snapshot.provisionalArchitectureJson?.nodes.some(({ type }) => type === "S3")
+      snapshot.provisionalArchitectureJson.nodes.some(({ type }) => type === "S3")
     ),
     true
   );
@@ -1473,7 +1414,7 @@ test("createAmazonQArchitectureDraftResponse keeps progress reporting observatio
   );
 
   assert.ok(!("status" in response));
-  assert.equal(progressCallbackCount, 5);
+  assert.equal(progressCallbackCount, 1);
 });
 
 test("createAmazonQArchitectureDraftResponse keeps candidate exclusion failures observational", async () => {

@@ -10,9 +10,6 @@ import { createAiArchitectureDraftStream } from "./api";
 
 const snapshot: ArchitectureDraftProgressSnapshot = {
   sequence: 1,
-  stage: "normalizing_requirements",
-  confirmedRequirements: ["정적 웹사이트"],
-  pendingQuestions: [],
   provisionalArchitectureJson: {
     nodes: [
       {
@@ -44,7 +41,7 @@ test("AI draft stream은 임의 청크 경계와 한 청크의 여러 NDJSON 줄
   const originalFetch = globalThis.fetch;
   const progressEvents: ArchitectureDraftProgressSnapshot[] = [];
   const payload = [
-    JSON.stringify({ type: "progress", stage: snapshot.stage, snapshot }),
+    JSON.stringify({ type: "progress", snapshot }),
     JSON.stringify({ type: "result", result })
   ].join("\n") + "\n";
   globalThis.fetch = async (_input, init) => {
@@ -111,7 +108,7 @@ test("AI draft stream은 malformed event와 result 없는 종료를 typed invali
     for (const chunks of [
       ["{not-json}\n"],
       ["null\n"],
-      [`${JSON.stringify({ type: "progress", stage: snapshot.stage, snapshot })}\n`]
+      [`${JSON.stringify({ type: "progress", snapshot })}\n`]
     ]) {
       globalThis.fetch = async () => createChunkedResponse(chunks);
 
@@ -165,7 +162,7 @@ test("AI draft stream은 파싱 실패 시 남은 upstream reader를 취소한�
 
 test("AI draft stream은 full snapshot/result와 단일 terminal 순서를 강제한다", async () => {
   const originalFetch = globalThis.fetch;
-  const progressLine = JSON.stringify({ type: "progress", stage: snapshot.stage, snapshot });
+  const progressLine = JSON.stringify({ type: "progress", snapshot });
   const resultLine = JSON.stringify({ type: "result", result });
   const invalidPayloads = [
     `${JSON.stringify({ type: "result", result: {} })}\n`,
@@ -198,13 +195,7 @@ test("AI draft stream은 full snapshot/result와 단일 terminal 순서를 강�
     })}\n`,
     `${JSON.stringify({
       type: "progress",
-      stage: snapshot.stage,
       snapshot: { sequence: 1 }
-    })}\n${resultLine}\n`,
-    `${JSON.stringify({
-      type: "progress",
-      stage: "building_diagram",
-      snapshot
     })}\n${resultLine}\n`,
     `${resultLine}\n${resultLine}\n`,
     `${resultLine}\n${progressLine}\n`

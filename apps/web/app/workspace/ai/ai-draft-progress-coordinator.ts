@@ -1,7 +1,6 @@
 import type {
   ArchitectureDraftCandidateExclusion,
   ArchitectureDraftProgressSnapshot,
-  ArchitectureJson,
   CreateArchitectureDraftRequest
 } from "@sketchcatch/types";
 import {
@@ -12,7 +11,6 @@ import {
   projectDraftProgressExclusions,
   receiveDraftProgressSnapshot,
   startDraftProgressRequest,
-  type DraftProgressDifference,
   type DraftProgressState
 } from "./ai-draft-progress-model";
 
@@ -49,10 +47,6 @@ export class AiDraftProgressCoordinator {
 
   get state(): DraftProgressState {
     return this.#state;
-  }
-
-  get lastExclusion(): ArchitectureDraftCandidateExclusion | null {
-    return this.#lastExclusion;
   }
 
   get hasActiveRequest(): boolean {
@@ -158,7 +152,7 @@ export class AiDraftProgressCoordinator {
       return null;
     }
 
-    const candidate = serverSnapshot.provisionalArchitectureJson?.nodes.find(
+    const candidate = serverSnapshot.provisionalArchitectureJson.nodes.find(
       (node) => node.id === candidateId
     );
     if (candidate === undefined) {
@@ -217,20 +211,16 @@ export class AiDraftProgressCoordinator {
     return { request, state: this.#state };
   }
 
-  finalize<Value>(
-    finalArchitectureJson: ArchitectureJson,
-    createValue: () => Value
-  ): {
-    readonly difference: DraftProgressDifference | null;
+  finalize<Value>(createValue: () => Value): {
     readonly state: DraftProgressState;
     readonly value: Value;
   } {
-    const completedProgress = completeDraftProgress(this.#state, finalArchitectureJson);
     const value = createValue();
+    const state = completeDraftProgress();
 
-    this.#state = completedProgress.state;
+    this.#state = state;
     this.#lastExclusion = null;
-    return { ...completedProgress, value };
+    return { state, value };
   }
 
   #cancelActiveRequest(): boolean {

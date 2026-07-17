@@ -19,42 +19,25 @@ import {
   getAreaNodeMetaLabel,
   isAreaNode
 } from "../../../features/diagram-editor/area-nodes";
-import styles from "./workspace-ai-start.module.css";
+import styles from "./repository-architecture-preview.module.css";
 
-type DraftPreviewNodeData = Record<string, unknown> & {
+type RepositoryPreviewNodeData = Record<string, unknown> & {
   readonly diagramNode: DiagramNode;
 };
 
-type DraftPreviewFlowNode = Node<DraftPreviewNodeData, "draftPreview">;
+type RepositoryPreviewFlowNode = Node<RepositoryPreviewNodeData, "repositoryPreview">;
 
 const NODE_TYPES = {
-  draftPreview: DraftPreviewNode
+  repositoryPreview: RepositoryPreviewNode
 };
 
-type AiDraftBoardPreviewProps = {
-  readonly diagram: DiagramJson;
-  readonly excludableCandidateIds?: readonly string[];
-  readonly onExcludeCandidate?: (candidateId: string) => void;
-};
-
-export function AiDraftBoardPreview({
-  diagram,
-  excludableCandidateIds = [],
-  onExcludeCandidate
-}: AiDraftBoardPreviewProps) {
+export function RepositoryArchitecturePreview({ diagram }: { readonly diagram: DiagramJson }) {
   const nodes = useMemo(() => createPreviewNodes(diagram), [diagram]);
   const edges = useMemo(() => createPreviewEdges(diagram), [diagram]);
-  const excludableCandidates = useMemo(
-    () =>
-      onExcludeCandidate === undefined
-        ? []
-        : diagram.nodes.filter((node) => excludableCandidateIds.includes(node.id)),
-    [diagram.nodes, excludableCandidateIds, onExcludeCandidate]
-  );
 
   return (
-    <div className={styles.previewCanvas} data-testid="ai-draft-board-preview">
-      <ReactFlow<DraftPreviewFlowNode, Edge>
+    <div className={styles.canvas} data-testid="repository-architecture-preview">
+      <ReactFlow<RepositoryPreviewFlowNode, Edge>
         colorMode="light"
         edges={edges}
         elementsSelectable={false}
@@ -73,26 +56,11 @@ export function AiDraftBoardPreview({
         <Background color="#d9dde3" gap={24} size={1} variant={BackgroundVariant.Dots} />
         <Controls position="bottom-right" showInteractive={false} />
       </ReactFlow>
-      {onExcludeCandidate !== undefined && excludableCandidates.length > 0 ? (
-        <aside className={styles.previewExclusionOverlay} aria-label="제외 가능한 Resource 후보">
-          <strong>후보 제외</strong>
-          <ul className={styles.previewExclusionList}>
-            {excludableCandidates.map((node) => (
-              <li key={node.id}>
-                <span title={getPreviewNodeLabel(node)}>{getPreviewNodeLabel(node)}</span>
-                <button onClick={() => onExcludeCandidate(node.id)} type="button">
-                  제외
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-      ) : null}
     </div>
   );
 }
 
-function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
+function RepositoryPreviewNode({ data }: NodeProps<RepositoryPreviewFlowNode>) {
   const node = data.diagramNode;
   const area = isAreaNode(node);
   const label = area ? getAreaNodeLabel(node) : node.label;
@@ -100,8 +68,8 @@ function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
 
   if (area) {
     return (
-      <section className={styles.previewAreaNode}>
-        <header className={styles.previewAreaHeader}>
+      <section className={styles.areaNode}>
+        <header className={styles.areaHeader}>
           {node.iconUrl ? (
             <Image alt="" height={16} src={node.iconUrl} unoptimized width={16} />
           ) : (
@@ -115,8 +83,8 @@ function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
   }
 
   return (
-    <article className={styles.previewResourceNode}>
-      <span className={styles.previewResourceIcon}>
+    <article className={styles.resourceNode}>
+      <span className={styles.resourceIcon}>
         {node.iconUrl ? (
           <Image alt="" height={34} src={node.iconUrl} unoptimized width={34} />
         ) : (
@@ -129,11 +97,7 @@ function DraftPreviewNode({ data }: NodeProps<DraftPreviewFlowNode>) {
   );
 }
 
-function getPreviewNodeLabel(node: DiagramNode): string {
-  return isAreaNode(node) ? getAreaNodeLabel(node) : node.label;
-}
-
-function createPreviewNodes(diagram: DiagramJson): DraftPreviewFlowNode[] {
+function createPreviewNodes(diagram: DiagramJson): RepositoryPreviewFlowNode[] {
   return [...diagram.nodes]
     .sort((left, right) => left.zIndex - right.zIndex)
     .map((node) => ({
@@ -147,7 +111,7 @@ function createPreviewNodes(diagram: DiagramJson): DraftPreviewFlowNode[] {
         width: node.size.width,
         zIndex: node.zIndex
       },
-      type: "draftPreview"
+      type: "repositoryPreview"
     }));
 }
 
