@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import type { ApiErrorResponse, ArchitectureJson } from "@sketchcatch/types";
+import type {
+  ApiErrorResponse,
+  ArchitectureJson,
+  ProjectDraftConflictResponse
+} from "@sketchcatch/types";
 import { RESOURCE_TYPES } from "@sketchcatch/types";
 import { requireActiveUserId } from "../auth/current-user.js";
 import { createAwsConnectionManagedCleanup } from "../aws-connections/aws-connection-managed-cleanup.js";
@@ -372,9 +376,9 @@ export async function registerProjectRoutes(
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
 
-    return {
+    return reply.header("Cache-Control", "private, no-store").send({
       draft: draft ? toProjectDraft(draft) : null
-    };
+    });
   });
 
   app.put("/projects/:id/draft", async (request, reply) => {
@@ -397,6 +401,14 @@ export async function registerProjectRoutes(
       .from(projectDrafts)
       .where(eq(projectDrafts.projectId, params.id));
 
+    if (existingDraft && body.expectedRevision !== existingDraft.revision) {
+      return sendProjectDraftConflict(reply, existingDraft);
+    }
+
+    if (!existingDraft && body.expectedRevision !== null) {
+      return sendConflict(reply, "서버에 저장된 프로젝트 draft revision이 없습니다.");
+    }
+
     const terraformFiles = body.terraformFiles ?? null;
     if (
       existingDraft &&
@@ -405,13 +417,78 @@ export async function registerProjectRoutes(
         terraformFiles
       })
     ) {
-      return {
-        draft: toProjectDraft(existingDraft)
-      };
+      const [verifiedDraft] = await db
+        .update(projectDrafts)
+        .set({ revision: existingDraft.revision })
+        .where(
+          and(
+            eq(projectDrafts.projectId, params.id),
+            eq(projectDrafts.revision, body.expectedRevision)
+          )
+        )
+        .returning();
+
+      if (verifiedDraft) {
+        return {
+          draft: toProjectDraft(verifiedDraft)
+        };
+      }
+
+      const [currentDraft] = await db
+        .select()
+        .from(projectDrafts)
+        .where(eq(projectDrafts.projectId, params.id));
+
+      if (currentDraft) {
+        return sendProjectDraftConflict(reply, currentDraft);
+      }
+
+      throw new Error("Project draft disappeared during unchanged save");
     }
 
     const now = new Date();
     const revision = getNextDraftRevision(existingDraft?.revision);
+
+    if (existingDraft) {
+      const [draft] = await db
+        .update(projectDrafts)
+        .set({
+          diagramJson: body.diagramJson,
+          terraformFiles,
+          revision,
+          serverSavedAt: now,
+          updatedAt: now
+        })
+        .where(
+          and(
+            eq(projectDrafts.projectId, params.id),
+            eq(projectDrafts.revision, body.expectedRevision)
+          )
+        )
+        .returning();
+
+      if (!draft) {
+        const [currentDraft] = await db
+          .select()
+          .from(projectDrafts)
+          .where(eq(projectDrafts.projectId, params.id));
+
+        if (currentDraft) {
+          return sendProjectDraftConflict(reply, currentDraft);
+        }
+
+        throw new Error("Project draft disappeared during save");
+      }
+
+      await db
+        .update(projects)
+        .set(touchUpdatedAt)
+        .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
+
+      return {
+        draft: toProjectDraft(draft)
+      };
+    }
 
     const [draft] = await db
       .insert(projectDrafts)
@@ -424,19 +501,19 @@ export async function registerProjectRoutes(
         serverSavedAt: now,
         updatedAt: now
       })
-      .onConflictDoUpdate({
-        target: projectDrafts.projectId,
-        set: {
-          diagramJson: body.diagramJson,
-          terraformFiles,
-          revision,
-          serverSavedAt: now,
-          updatedAt: now
-        }
-      })
+      .onConflictDoNothing({ target: projectDrafts.projectId })
       .returning();
 
     if (!draft) {
+      const [currentDraft] = await db
+        .select()
+        .from(projectDrafts)
+        .where(eq(projectDrafts.projectId, params.id));
+
+      if (currentDraft) {
+        return sendProjectDraftConflict(reply, currentDraft);
+      }
+
       throw new Error("Failed to save project draft");
     }
 
@@ -547,9 +624,7 @@ export async function registerProjectRoutes(
       }
 
       const body = request.body;
-      const byteSize = Buffer.isBuffer(body)
-        ? body.byteLength
-        : Buffer.byteLength(body, "utf-8");
+      const byteSize = Buffer.isBuffer(body) ? body.byteLength : Buffer.byteLength(body, "utf-8");
 
       if (asset.byteSize !== null && byteSize !== asset.byteSize) {
         return sendConflict(reply, "업로드된 파일 크기가 요청한 artifact 크기와 다릅니다.");
@@ -564,7 +639,10 @@ export async function registerProjectRoutes(
           !projectThumbnailContentTypes.has(asset.contentType) ||
           requestContentType !== asset.contentType
         ) {
-          return sendBadRequest(reply, "Thumbnail은 등록한 형식과 일치하는 PNG 또는 WebP여야 합니다.");
+          return sendBadRequest(
+            reply,
+            "Thumbnail은 등록한 형식과 일치하는 PNG 또는 WebP여야 합니다."
+          );
         }
       }
 
@@ -811,10 +889,7 @@ async function pruneUploadedProjectThumbnails({
       }
     });
   } catch (error) {
-    log.warn(
-      { error, projectId },
-      "Failed to list superseded project thumbnails"
-    );
+    log.warn({ error, projectId }, "Failed to list superseded project thumbnails");
   }
 }
 
@@ -840,6 +915,20 @@ function sendConflict(reply: FastifyReply, message: string): FastifyReply {
   const response: ApiErrorResponse = {
     error: "conflict",
     message
+  };
+
+  return reply.status(409).send(response);
+}
+
+function sendProjectDraftConflict(
+  reply: FastifyReply,
+  draft: typeof projectDrafts.$inferSelect
+): FastifyReply {
+  const response: ProjectDraftConflictResponse = {
+    error: "conflict",
+    message: "다른 탭에서 이 프로젝트가 변경되었습니다.",
+    currentRevision: draft.revision,
+    currentServerSavedAt: draft.serverSavedAt.toISOString()
   };
 
   return reply.status(409).send(response);

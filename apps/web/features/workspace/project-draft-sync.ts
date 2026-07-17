@@ -1,4 +1,10 @@
-import type { DiagramJson, ProjectDraftResponse, TerraformSyncFileInput } from "../../../../packages/types/src";
+import type {
+  DiagramJson,
+  ProjectDraftConflictResponse,
+  ProjectDraftResponse,
+  TerraformSyncFileInput
+} from "../../../../packages/types/src";
+import { ApiClientError } from "../../lib/api-client";
 import { getProjectDraft, saveProjectDraft } from "./api";
 import {
   chooseInitialDiagram,
@@ -29,6 +35,7 @@ export type SaveProjectDiagramDraftInput = {
 type LoadProjectDiagramDraftDependencies = {
   getProjectDraft?: typeof getProjectDraft | undefined;
   readLocalProjectDraft?: typeof readLocalProjectDraft | undefined;
+  writeLocalProjectDraft?: typeof writeLocalProjectDraft | undefined;
 };
 
 type SaveProjectDiagramDraftDependencies = {
@@ -71,6 +78,7 @@ export type SavedServerProjectDiagramDraft =
   | {
       ok: false;
       error: unknown;
+      conflict: ProjectDraftConflictResponse | null;
       localDraft: LocalProjectDraft | null;
       serverDraft: null;
     };
@@ -81,20 +89,37 @@ export async function loadProjectDiagramDraft(
 ): Promise<LoadedProjectDiagramDraft> {
   const readLocal = dependencies.readLocalProjectDraft ?? readLocalProjectDraft;
   const readServer = dependencies.getProjectDraft ?? getProjectDraft;
+  const writeLocal = dependencies.writeLocalProjectDraft ?? writeLocalProjectDraft;
   const localCacheWorkspaceId = getLocalCacheWorkspaceId(input);
   const [localDraft, serverResponse] = await Promise.all([
     readLocal(localCacheWorkspaceId, input.projectId),
-    readServer(input.projectId).catch((): ProjectDraftResponse => ({ draft: null }))
+    readServer(input.projectId)
   ]);
   const choice = chooseInitialDiagram({
     fallbackDiagram: input.fallbackDiagram,
     localDraft,
     serverDraft: serverResponse.draft
   });
+  let resolvedLocalDraft = localDraft;
+
+  if (choice.source === "server" && serverResponse.draft) {
+    const localDraftForServer =
+      localDraft ??
+      createLocalProjectDraft({
+        workspaceId: localCacheWorkspaceId,
+        projectId: input.projectId,
+        diagramJson: serverResponse.draft.diagramJson,
+        terraformFiles: serverResponse.draft.terraformFiles,
+        baseServerRevision: serverResponse.draft.revision,
+        savedAt: serverResponse.draft.serverSavedAt
+      });
+    resolvedLocalDraft = markDraftServerSaved(localDraftForServer, serverResponse.draft);
+    await writeLocal(resolvedLocalDraft);
+  }
 
   return {
     ...choice,
-    localDraft,
+    localDraft: resolvedLocalDraft,
     serverDraft: serverResponse.draft
   };
 }
@@ -153,12 +178,14 @@ export async function saveServerProjectDiagramDraft(
     serverResponse = await saveServer({
       projectId: input.projectId,
       diagramJson: input.diagramJson,
+      expectedRevision: input.previousLocalDraft?.baseServerRevision ?? null,
       ...(input.terraformFiles !== undefined ? { terraformFiles: input.terraformFiles } : {})
     });
   } catch (error) {
     return {
       ok: false,
       error,
+      conflict: getProjectDraftConflict(error),
       localDraft: input.previousLocalDraft ?? null,
       serverDraft: null
     };
@@ -168,6 +195,7 @@ export async function saveServerProjectDiagramDraft(
     return {
       ok: false,
       error: new Error("Project draft save returned an empty draft."),
+      conflict: null,
       localDraft: input.previousLocalDraft ?? null,
       serverDraft: null
     };
@@ -187,7 +215,36 @@ export async function saveServerProjectDiagramDraft(
   };
 }
 
-function createProjectLocalDraft(input: SaveProjectDiagramDraftInput, savedAt: string): LocalProjectDraft {
+function getProjectDraftConflict(error: unknown): ProjectDraftConflictResponse | null {
+  if (!(error instanceof ApiClientError) || error.status !== 409) {
+    return null;
+  }
+
+  const response = error.response as Partial<ProjectDraftConflictResponse>;
+
+  if (
+    response.error !== "conflict" ||
+    typeof response.message !== "string" ||
+    typeof response.currentRevision !== "number" ||
+    !Number.isInteger(response.currentRevision) ||
+    response.currentRevision < 1 ||
+    typeof response.currentServerSavedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    error: "conflict",
+    message: response.message,
+    currentRevision: response.currentRevision,
+    currentServerSavedAt: response.currentServerSavedAt
+  };
+}
+
+function createProjectLocalDraft(
+  input: SaveProjectDiagramDraftInput,
+  savedAt: string
+): LocalProjectDraft {
   return createLocalProjectDraft({
     workspaceId: getLocalCacheWorkspaceId(input),
     projectId: input.projectId,

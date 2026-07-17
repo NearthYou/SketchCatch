@@ -656,6 +656,29 @@ DB 기준: `project_drafts`
 
 프로젝트당 최신 draft 1개를 유지한다. `diagramJson`과 편집 중인 선택적 `terraformFiles`는 같은 revision의 화면 복구 상태로 JSONB에 저장한다. `terraformFiles`는 SketchCatch 동기화 subset이 해석하지 못하는 유효 HCL을 재접속 후에도 원문 그대로 유지하기 위한 working draft이며, 승인된 배포/릴리스 산출물의 영구 저장 기준은 계속 S3 `TerraformArtifact`다.
 
+Project draft 저장은 클라이언트가 마지막으로 읽은 서버 revision을 명시하는 낙관적 동시성 계약을 사용한다.
+
+```ts
+type SaveProjectDraftRequest = {
+  diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[];
+  expectedRevision: number | null;
+};
+
+type ProjectDraftConflictResponse = ApiErrorResponse & {
+  error: "conflict";
+  currentRevision: number;
+  currentServerSavedAt: IsoDateTimeString;
+};
+```
+
+- 서버 draft를 읽은 편집은 그 `revision`을 `expectedRevision`으로 보낸다.
+- 서버 draft가 없는 새 프로젝트의 최초 저장만 `expectedRevision: null`을 보낸다.
+- `PUT /api/projects/:projectId/draft`는 `projectId`와 `expectedRevision`이 모두 일치하는 row만 갱신한다. 최초 생성 경쟁은 `INSERT ... ON CONFLICT DO NOTHING`으로 한 요청만 성공시킨다.
+- 현재 서버 revision이 다르면 API는 `409 Conflict`와 현재 revision·저장 시각을 반환하며 DiagramJson을 변경하지 않는다.
+- `GET /api/projects/:projectId/draft`는 `private, no-store`로 응답한다. Workspace는 서버 조회가 성공한 경우 서버 draft를 IndexedDB보다 우선하며, 서버 조회 실패를 오래된 로컬 draft로 숨기지 않는다.
+- IndexedDB의 `LocalProjectDraft.baseServerRevision`은 로컬 편집이 시작된 서버 revision이다. 로컬 저장 횟수와 함께 증가하지 않고, 서버 저장 성공 또는 최신 상태 재로드 후 반환된 revision으로 교체된다.
+
 ## ProjectAsset와 TerraformArtifact
 
 파일성 산출물은 S3에 저장하고, RDS에는 metadata와 `objectKey`만 저장한다.
@@ -2252,11 +2275,7 @@ type DeploymentLiveObservationArchitectureResponse = {
   architecture: ArchitectureJson;
 };
 
-type DeploymentResourceObservationState =
-  | "observed"
-  | "delayed"
-  | "unavailable"
-  | "not_supported";
+type DeploymentResourceObservationState = "observed" | "delayed" | "unavailable" | "not_supported";
 ```
 
 `provenance`는 Deployment, Terraform artifact SHA-256, 연결, region, 서버 검증 시점을 증명한다. `deploymentId`는 UUID여야 하고, `awsConnectionId`는 AWS connection repository가 `randomUUID()`로 생성하는 canonical lowercase UUIDv4만 허용한다. Role ARN, External ID, credential 값은 이 provenance identifier에 저장하지 않으며 AWS connection record의 보호된 필드에서만 다룬다. `endpoints`는 credential, query, fragment가 없는 absolute HTTPS URL만 허용하고, `pressure`는 분당 target당 60 requests를 60초 window로 해석하는 고정 계약이다. core envelope는 provider-neutral하게 유지하며, MVP의 의도적인 `provider: "aws"` 값과 `adapter`만 Provider Adapter 경계를 나타낸다. core consumer는 adapter의 `kind`와 `version`만 분기하고 AWS payload 해석은 AWS Provider Adapter 경계에 둔다. shared contract는 v1-v4 discriminated union으로 안전한 payload shape만 제한한다.

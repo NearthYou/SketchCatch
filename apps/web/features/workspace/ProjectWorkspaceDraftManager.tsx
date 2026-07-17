@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   DiagramJson,
+  ProjectDraftConflictResponse,
   TerraformSyncFileInput
 } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
@@ -48,6 +49,7 @@ import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { InitialCicdReturnCommand } from "./cicd-return-command";
+import { ProjectDraftConflictDialog } from "./ProjectDraftConflictDialog";
 import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
@@ -113,6 +115,9 @@ function ProjectWorkspaceDraftManagerState({
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [projectDraftRevision, setProjectDraftRevision] = useState<number | null>(null);
+  const [draftConflict, setDraftConflict] = useState<ProjectDraftConflictResponse | null>(null);
+  const [isReloadingLatestDraft, setReloadingLatestDraft] = useState(false);
+  const [draftReloadError, setDraftReloadError] = useState<string | null>(null);
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
@@ -141,6 +146,7 @@ function ProjectWorkspaceDraftManagerState({
   const draftReadyRef = useRef(false);
   const draftChangeVersionRef = useRef(0);
   const serverDirtyRef = useRef(false);
+  const serverConflictRef = useRef(false);
   const serverSavingRef = useRef(false);
   const serverSavePromiseRef = useRef<Promise<FlushDraftToServerResult> | null>(null);
   const boardElementRef = useRef<HTMLElement | null>(null);
@@ -152,19 +158,22 @@ function ProjectWorkspaceDraftManagerState({
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
 
-  const acknowledgeInitialCicdReturnCommand = useCallback((cleanedHref: string) => {
-    if (
-      consumedCicdReturnRef.current ||
-      !initialCicdReturnCommand ||
-      initialCicdReturnCommand.projectId !== projectId ||
-      initialCicdReturnCommand.cleanedHref !== cleanedHref
-    ) {
-      return;
-    }
+  const acknowledgeInitialCicdReturnCommand = useCallback(
+    (cleanedHref: string) => {
+      if (
+        consumedCicdReturnRef.current ||
+        !initialCicdReturnCommand ||
+        initialCicdReturnCommand.projectId !== projectId ||
+        initialCicdReturnCommand.cleanedHref !== cleanedHref
+      ) {
+        return;
+      }
 
-    consumedCicdReturnRef.current = true;
-    router.replace(cleanedHref, { scroll: false });
-  }, [initialCicdReturnCommand, projectId, router]);
+      consumedCicdReturnRef.current = true;
+      router.replace(cleanedHref, { scroll: false });
+    },
+    [initialCicdReturnCommand, projectId, router]
+  );
 
   useEffect(() => {
     const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
@@ -237,6 +246,7 @@ function ProjectWorkspaceDraftManagerState({
         return Promise.resolve({
           ok: false,
           error: new Error("Project draft is not loaded yet."),
+          conflict: null,
           localDraft: localDraftRef.current,
           serverDraft: null
         });
@@ -264,6 +274,7 @@ function ProjectWorkspaceDraftManagerState({
                 return {
                   ok: false,
                   error: new Error("Draft changed while preparing server save."),
+                  conflict: null,
                   localDraft: localDraftRef.current,
                   serverDraft: null
                 };
@@ -274,6 +285,7 @@ function ProjectWorkspaceDraftManagerState({
               return {
                 ok: false,
                 error,
+                conflict: null,
                 localDraft: localDraftRef.current,
                 serverDraft: null
               };
@@ -296,6 +308,9 @@ function ProjectWorkspaceDraftManagerState({
                 setCurrentLocalDraft(result.localDraft);
                 setProjectDraftRevision(result.serverDraft.revision);
                 serverDirtyRef.current = false;
+                serverConflictRef.current = false;
+                setDraftConflict(null);
+                setDraftReloadError(null);
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
                 const thumbnailLifecycle = thumbnailLifecycleRef.current;
@@ -317,12 +332,21 @@ function ProjectWorkspaceDraftManagerState({
               return {
                 ok: false,
                 error: new Error("Draft changed while server save was in progress."),
+                conflict: null,
                 localDraft: localDraftRef.current,
                 serverDraft: null
               };
             }
 
             if (draftChangeVersionRef.current === serverSaveVersion) {
+              if (result.conflict) {
+                serverConflictRef.current = true;
+                setDraftConflict(result.conflict);
+                setDraftReloadError(null);
+                setServerSaveState("server-conflict");
+                return result;
+              }
+
               setServerSaveState("server-failed");
               return result;
             }
@@ -337,6 +361,7 @@ function ProjectWorkspaceDraftManagerState({
             return {
               ok: false,
               error,
+              conflict: null,
               localDraft: localDraftRef.current,
               serverDraft: null
             };
@@ -364,7 +389,8 @@ function ProjectWorkspaceDraftManagerState({
         hasPendingLocalChanges: hasPendingLocalChangesRef.current,
         serverDirty: serverDirtyRef.current,
         serverSaving: serverSavingRef.current
-      })
+      }) ||
+      serverConflictRef.current
     ) {
       return;
     }
@@ -385,6 +411,9 @@ function ProjectWorkspaceDraftManagerState({
     setTerraformAiInteraction(null);
     setTerraformSafeFixApplyRequest(null);
     setTerraformSafeFixApplyResult(null);
+    setDraftConflict(null);
+    setDraftReloadError(null);
+    serverConflictRef.current = false;
 
     async function loadWorkspace() {
       try {
@@ -426,6 +455,7 @@ function ProjectWorkspaceDraftManagerState({
         latestTerraformFilesRef.current = loadedDraft.terraformFiles ?? [];
         hasPendingLocalChangesRef.current = false;
         serverDirtyRef.current = loadedDraft.source === "local";
+        serverConflictRef.current = false;
         draftChangeVersionRef.current = 0;
         setInitialDiagram(nextDiagram);
         setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
@@ -492,7 +522,7 @@ function ProjectWorkspaceDraftManagerState({
     }
 
     const checkpointTimer = setInterval(() => {
-      if (!serverDirtyRef.current || serverSavingRef.current) {
+      if (!serverDirtyRef.current || serverSavingRef.current || serverConflictRef.current) {
         return;
       }
 
@@ -513,6 +543,61 @@ function ProjectWorkspaceDraftManagerState({
       flushDraftToServer
     });
   }, [flushDraftToServer, initialDiagram, loadState]);
+
+  const reloadLatestProjectDraft = useCallback(async (): Promise<void> => {
+    setReloadingLatestDraft(true);
+    setDraftReloadError(null);
+
+    try {
+      const loadedDraft = await repository.load({
+        workspaceId,
+        localCacheWorkspaceId,
+        projectId,
+        fallbackDiagram: EMPTY_DIAGRAM
+      });
+
+      if (loadedDraft.source !== "server" || !loadedDraft.serverDraft) {
+        throw new Error("Latest server draft is unavailable.");
+      }
+
+      clearLocalSaveTimer();
+      const nextDiagram = restoreSavedDiagram(loadedDraft.diagramJson, EMPTY_DIAGRAM);
+      const nextTerraformFiles = (loadedDraft.terraformFiles ?? []).map((file) => ({ ...file }));
+      latestDiagramRef.current = nextDiagram;
+      latestTerraformFilesRef.current = nextTerraformFiles;
+      hasPendingLocalChangesRef.current = false;
+      serverDirtyRef.current = false;
+      serverConflictRef.current = false;
+      draftChangeVersionRef.current = 0;
+      setInitialDiagram(nextDiagram);
+      setInitialTerraformFiles(nextTerraformFiles);
+      setCurrentLocalDraft(loadedDraft.localDraft);
+      setProjectDraftRevision(loadedDraft.serverDraft.revision);
+      setLocalSaveState("local-saved");
+      setServerSaveState("server-saved");
+      setDraftConflict(null);
+      setDraftReloadError(null);
+      void thumbnailLifecycleRef.current
+        ?.requestInitialServerRevision(loadedDraft.serverDraft.revision)
+        .catch(() => undefined);
+    } catch {
+      setDraftReloadError("최신 프로젝트 상태를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setReloadingLatestDraft(false);
+    }
+  }, [
+    clearLocalSaveTimer,
+    localCacheWorkspaceId,
+    projectId,
+    repository,
+    setCurrentLocalDraft,
+    workspaceId
+  ]);
+
+  const keepCurrentDraftEditing = useCallback((): void => {
+    setDraftConflict(null);
+    setDraftReloadError(null);
+  }, []);
 
   const handleDiagramChange = useCallback(
     (diagram: DiagramJson) => {
@@ -540,10 +625,7 @@ function ProjectWorkspaceDraftManagerState({
   }, []);
 
   const notifyTerraformAiInteraction = useCallback(
-    (
-      scope: WorkspaceAiContextInteraction["scope"],
-      diagnosticKey?: string | undefined
-    ): void => {
+    (scope: WorkspaceAiContextInteraction["scope"], diagnosticKey?: string | undefined): void => {
       terraformAiInteractionIdRef.current += 1;
       setTerraformAiInteraction({
         ...(diagnosticKey ? { diagnosticKey } : {}),
@@ -671,6 +753,7 @@ function ProjectWorkspaceDraftManagerState({
               serverSaveState === "server-dirty" ||
               serverSaveState === "server-saving" ||
               serverSaveState === "server-checkpoint-pending" ||
+              serverSaveState === "server-conflict" ||
               serverSaveState === "server-failed"
             }
             initialView={initialRightPanelView}
@@ -693,6 +776,14 @@ function ProjectWorkspaceDraftManagerState({
         )}
         saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
       />
+      {draftConflict ? (
+        <ProjectDraftConflictDialog
+          errorMessage={draftReloadError ?? undefined}
+          isReloading={isReloadingLatestDraft}
+          onKeepEditing={keepCurrentDraftEditing}
+          onReloadLatest={() => void reloadLatestProjectDraft()}
+        />
+      ) : null}
     </>
   );
 }

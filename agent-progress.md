@@ -160,3 +160,11 @@ Short English-only working log for the current agent context. Older records are 
 - Workspace typecheck passes, and focused Web deployment tests pass 48/48.
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
+
+### 2026-07-17 - Prevent multi-tab ProjectDraft overwrites
+
+- Added required `expectedRevision` optimistic concurrency to every ProjectDraft save path. Conditional updates and first-save conflict handling return a typed 409 without replacing the latest server draft.
+- Workspace refresh now requires a successful no-store server read, keeps the server revision in IndexedDB, stops automatic retries after conflict, and offers latest-state reload or local editing preservation.
+- Added the Korean implementation plan under `docs/jh/07.17` and updated the shared data model contract. No DB migration was required.
+- Focused ProjectDraft tests pass 60/60; AI and Repository revision entrypoint contracts pass 2/2. Lint, typecheck, build, harness, and diff checks pass.
+- Full `pnpm test` escalation was rejected because it includes sandbox E2E and Terraform execution. `test:core` ran for 11 minutes, exposed only unrelated existing API failures, and did not terminate until stopped; no cloud or Terraform mutation was performed.

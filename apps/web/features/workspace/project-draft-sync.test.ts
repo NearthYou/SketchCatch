@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { DiagramJson, ProjectDraft, ProjectDraftResponse } from "../../../../packages/types/src";
+import type {
+  DiagramJson,
+  ProjectDraft,
+  ProjectDraftConflictResponse,
+  ProjectDraftResponse
+} from "../../../../packages/types/src";
+import { ApiClientError } from "../../lib/api-client";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import {
   loadProjectDiagramDraft,
@@ -66,6 +72,7 @@ const localDraft: LocalProjectDraft = {
   workspaceId: "workspace-1",
   projectId: "11111111-1111-4111-8111-111111111111",
   diagramJson: localDiagram,
+  baseServerRevision: 2,
   revision: 3,
   draftSavedAt: "2026-06-24T01:00:00.000Z",
   dirty: true
@@ -108,10 +115,12 @@ test("loadProjectDiagramDraft loads the server draft when it is newer than local
   assert.equal(result.source, "server");
   assert.deepEqual(result.diagramJson, serverDiagram);
   assert.deepEqual(result.serverDraft, serverDraft);
-  assert.deepEqual(result.localDraft, localDraft);
+  assert.equal(result.localDraft?.baseServerRevision, serverDraft.revision);
+  assert.equal(result.localDraft?.dirty, false);
+  assert.deepEqual(result.localDraft?.diagramJson, serverDiagram);
 });
 
-test("loadProjectDiagramDraft restores a newer empty local draft over a stale server draft", async () => {
+test("loadProjectDiagramDraft restores the server draft over a newer empty local draft", async () => {
   const deletedLocalDraft: LocalProjectDraft = {
     ...localDraft,
     diagramJson: emptyDiagram,
@@ -137,9 +146,11 @@ test("loadProjectDiagramDraft restores a newer empty local draft over a stale se
     }
   );
 
-  assert.equal(result.source, "local");
-  assert.deepEqual(result.diagramJson, emptyDiagram);
-  assert.deepEqual(result.localDraft, deletedLocalDraft);
+  assert.equal(result.source, "server");
+  assert.deepEqual(result.diagramJson, serverDiagram);
+  assert.equal(result.localDraft?.baseServerRevision, staleServerDraft.revision);
+  assert.equal(result.localDraft?.dirty, false);
+  assert.deepEqual(result.localDraft?.diagramJson, serverDiagram);
   assert.deepEqual(result.serverDraft, staleServerDraft);
 });
 
@@ -171,7 +182,9 @@ test("loadProjectDiagramDraft restores newer server draft instead of stale empty
 
   assert.equal(result.source, "server");
   assert.deepEqual(result.diagramJson, serverDiagram);
-  assert.deepEqual(result.localDraft, staleDeletedLocalDraft);
+  assert.equal(result.localDraft?.baseServerRevision, newerServerDraft.revision);
+  assert.equal(result.localDraft?.dirty, false);
+  assert.deepEqual(result.localDraft?.diagramJson, serverDiagram);
   assert.deepEqual(result.serverDraft, newerServerDraft);
 });
 
@@ -203,46 +216,42 @@ test("loadProjectDiagramDraft can use authenticated server ownership without a w
   assert.deepEqual(result.diagramJson, serverDiagram);
 });
 
-test("loadProjectDiagramDraft falls back to local draft when server draft load fails", async () => {
-  const result = await loadProjectDiagramDraft(
-    {
-      fallbackDiagram: emptyDiagram,
-      projectId: serverDraft.projectId,
-      workspaceId: "workspace-1"
-    },
-    {
-      getProjectDraft: async () => {
-        throw new Error("server unavailable");
+test("loadProjectDiagramDraft rejects stale local fallback when the latest server draft cannot be loaded", async () => {
+  await assert.rejects(
+    loadProjectDiagramDraft(
+      {
+        fallbackDiagram: emptyDiagram,
+        projectId: serverDraft.projectId,
+        workspaceId: "workspace-1"
       },
-      readLocalProjectDraft: async () => localDraft
-    }
+      {
+        getProjectDraft: async () => {
+          throw new Error("server unavailable");
+        },
+        readLocalProjectDraft: async () => localDraft
+      }
+    ),
+    /server unavailable/
   );
-
-  assert.equal(result.source, "local");
-  assert.deepEqual(result.diagramJson, localDiagram);
-  assert.deepEqual(result.localDraft, localDraft);
-  assert.equal(result.serverDraft, null);
 });
 
-test("loadProjectDiagramDraft falls back to empty diagram when server draft load fails without local draft", async () => {
-  const result = await loadProjectDiagramDraft(
-    {
-      fallbackDiagram: emptyDiagram,
-      projectId: serverDraft.projectId,
-      workspaceId: "workspace-1"
-    },
-    {
-      getProjectDraft: async () => {
-        throw new Error("server unavailable");
+test("loadProjectDiagramDraft rejects empty fallback when the latest server draft cannot be loaded", async () => {
+  await assert.rejects(
+    loadProjectDiagramDraft(
+      {
+        fallbackDiagram: emptyDiagram,
+        projectId: serverDraft.projectId,
+        workspaceId: "workspace-1"
       },
-      readLocalProjectDraft: async () => null
-    }
+      {
+        getProjectDraft: async () => {
+          throw new Error("server unavailable");
+        },
+        readLocalProjectDraft: async () => null
+      }
+    ),
+    /server unavailable/
   );
-
-  assert.equal(result.source, "empty");
-  assert.deepEqual(result.diagramJson, emptyDiagram);
-  assert.equal(result.localDraft, null);
-  assert.equal(result.serverDraft, null);
 });
 
 test("saveProjectDiagramDraft can use authenticated server ownership without a workspace query", async () => {
@@ -299,6 +308,7 @@ test("saveServerProjectDiagramDraft saves PostgreSQL draft and syncs the local c
   const saveCalls: Array<{
     projectId: string;
     diagramJson: DiagramJson;
+    expectedRevision: number | null;
   }> = [];
   const result = await saveServerProjectDiagramDraft(
     {
@@ -308,10 +318,11 @@ test("saveServerProjectDiagramDraft saves PostgreSQL draft and syncs the local c
       workspaceId: "workspace-1"
     },
     {
-      saveProjectDraft: async ({ projectId, diagramJson }) => {
+      saveProjectDraft: async ({ projectId, diagramJson, expectedRevision }) => {
         saveCalls.push({
           projectId,
-          diagramJson
+          diagramJson,
+          expectedRevision
         });
         return {
           draft: {
@@ -332,7 +343,8 @@ test("saveServerProjectDiagramDraft saves PostgreSQL draft and syncs the local c
   assert.deepEqual(saveCalls, [
     {
       projectId: serverDraft.projectId,
-      diagramJson: serverDiagram
+      diagramJson: serverDiagram,
+      expectedRevision: 2
     }
   ]);
   if (!result.ok) {
@@ -372,6 +384,36 @@ test("saveServerProjectDiagramDraft returns failure without discarding local rec
   assert.equal(result.localDraft, localDraft);
   assert.equal(result.serverDraft, null);
   assert.equal(writes.length, 0);
+});
+
+test("saveServerProjectDiagramDraft preserves server conflict details for reload UI", async () => {
+  const conflict: ProjectDraftConflictResponse = {
+    error: "conflict",
+    message: "다른 탭에서 이 프로젝트가 변경되었습니다.",
+    currentRevision: 9,
+    currentServerSavedAt: "2026-06-24T03:00:00.000Z"
+  };
+  const result = await saveServerProjectDiagramDraft(
+    {
+      diagramJson: serverDiagram,
+      previousLocalDraft: localDraft,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      saveProjectDraft: async () => {
+        throw new ApiClientError(409, conflict);
+      },
+      writeLocalProjectDraft: async () => undefined
+    }
+  );
+
+  if (result.ok) {
+    assert.fail("stale server draft save should report a conflict");
+  }
+
+  assert.deepEqual(result.conflict, conflict);
+  assert.equal(result.localDraft, localDraft);
 });
 
 test("saveServerProjectDiagramDraft can skip local sync when the caller detects a stale save", async () => {
