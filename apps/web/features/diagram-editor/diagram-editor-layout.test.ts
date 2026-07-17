@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const diagramEditorSource = readFileSync(
   fileURLToPath(new URL("./DiagramEditor.tsx", import.meta.url)),
   "utf8"
-);
+).replaceAll("\r\n", "\n");
 const diagramEditorStyles = readFileSync(
   fileURLToPath(new URL("./diagram-editor.module.css", import.meta.url)),
   "utf8"
@@ -355,7 +355,7 @@ test("viewport controls use the React Flow instance received from onInit", () =>
 test("a single node click opens the matching resource inspector", () => {
   assert.match(
     diagramEditorSource,
-    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?setRightPanelOpen\(true\);/
+    /const handleFlowNodeClick[\s\S]*?setSelectedNodeIds\(\[node\.id\]\);[\s\S]*?setInspectedNodeId\(node\.id\);[\s\S]*?updateRightPanelOpen\(true\);/
   );
 });
 

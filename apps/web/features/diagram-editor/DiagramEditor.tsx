@@ -264,6 +264,7 @@ function DiagramEditorInner({
   onBoardReady,
   onDiagramChange,
   onDiagramSaveRequest,
+  onRightPanelOpen,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
   projectName = "Project workspace",
@@ -379,8 +380,25 @@ function DiagramEditorInner({
 
   /** 오른쪽 Inspector를 열거나 닫습니다. */
   const toggleRightPanel = useCallback(() => {
-    setRightPanelOpen((isOpen) => !isOpen);
-  }, []);
+    const nextOpen = !isRightPanelOpen;
+
+    if (nextOpen) {
+      onRightPanelOpen?.();
+    }
+
+    setRightPanelOpen(nextOpen);
+  }, [isRightPanelOpen, onRightPanelOpen]);
+
+  const updateRightPanelOpen = useCallback(
+    (nextOpen: boolean): void => {
+      if (nextOpen) {
+        onRightPanelOpen?.();
+      }
+
+      setRightPanelOpen(nextOpen);
+    },
+    [onRightPanelOpen]
+  );
 
   const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
   const hasRightRail = rightPanel !== null;
@@ -1023,7 +1041,7 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
 
       window.requestAnimationFrame(() => {
         const flowInstance = getFlowInstance();
@@ -1057,7 +1075,13 @@ function DiagramEditorInner({
         focusEditorShell();
       });
     },
-    [applyLiveDiagramUpdate, focusEditorShell, getCurrentBoardViewportFrame, getFlowInstance]
+    [
+      applyLiveDiagramUpdate,
+      focusEditorShell,
+      getCurrentBoardViewportFrame,
+      getFlowInstance,
+      updateRightPanelOpen
+    ]
   );
 
   const selectResourceNode = useCallback<DiagramEditorPanelContext["selectResourceNode"]>(
@@ -1071,9 +1095,9 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
     },
-    []
+    [updateRightPanelOpen]
   );
 
   const panelContext = useMemo<DiagramEditorPanelContext>(
@@ -1097,7 +1121,7 @@ function DiagramEditorInner({
       selectResourceNode,
       saveDiagramNow: onDiagramSaveRequest,
       setPreviewDiagram,
-      setRightPanelOpen,
+      setRightPanelOpen: updateRightPanelOpen,
       updateNodeParameters,
       updateNodeMetadata
     }),
@@ -1119,6 +1143,7 @@ function DiagramEditorInner({
       selectResourceNode,
       selectedNodeId,
       terraformRefreshRequestId,
+      updateRightPanelOpen,
       updateNodeMetadata,
       updateNodeParameters
     ]
@@ -1476,10 +1501,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([nodeId]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(nodeId);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   const getAreaNodeFromPointerEvent = useCallback(
@@ -2171,10 +2196,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(node.id);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   const handleFlowNodeDoubleClick = useCallback(
@@ -2182,10 +2207,10 @@ function DiagramEditorInner({
       setSelectedNodeIds([node.id]);
       setSelectedEdgeIds([]);
       setInspectedNodeId(node.id);
-      setRightPanelOpen(true);
+      updateRightPanelOpen(true);
       focusEditorShell();
     },
-    [focusEditorShell]
+    [focusEditorShell, updateRightPanelOpen]
   );
 
   /** target 삭제 뒤 남은 attachment 기준으로 SG visual scope를 축소하거나 다시 맞춥니다. */

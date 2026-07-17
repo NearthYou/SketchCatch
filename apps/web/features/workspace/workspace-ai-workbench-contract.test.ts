@@ -6,9 +6,12 @@ const controllerSource = read("WorkspaceAiChatDock.tsx");
 const conversationSource = read("workspace-ai-chat-conversation.ts");
 const launcherSource = read("WorkspaceAiChatLauncher.tsx");
 const launcherStyles = read("workspace-ai-chat-launcher.module.css");
+const projectManagerSource = read("ProjectWorkspaceDraftManager.tsx");
 const resultSource = read("WorkspaceAiWorkbenchResults.tsx");
+const rightPanelSource = read("WorkspaceRightPanel.tsx");
 const workbenchSource = read("WorkspaceAiWorkbench.tsx");
 const workbenchStyles = read("workspace-ai-workbench.module.css");
+const workspaceManagerSource = read("WorkspaceDraftManager.tsx");
 const workspaceStyles = read("workspace.module.css");
 
 test("AI chat controller delegates its outer surface to the AI Workbench", () => {
@@ -148,8 +151,30 @@ test("legacy AI chat selectors are removed from the shared workspace stylesheet"
 test("closing the Workbench restores focus to its launcher", () => {
   assert.match(
     controllerSource,
-    /const closeChatDock = useCallback\(\(\) => \{[\s\S]*?setOpen\(false\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?launcherButtonRef\.current\?\.focus\(\);/
+    /const closeChatDock = useCallback\(\(\) => \{[\s\S]*?onOpenChange\(false\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?launcherButtonRef\.current\?\.focus\(\);/
   );
+});
+
+test("opening another workspace panel closes the controlled AI Workbench", () => {
+  for (const managerSource of [projectManagerSource, workspaceManagerSource]) {
+    assert.match(managerSource, /const \[isAiChatOpen, setAiChatOpen\] = useState\(false\);/);
+    assert.match(
+      managerSource,
+      /<WorkspaceAiChatDock[\s\S]*?isBlockedByWorkspaceOverlay=\{isBlockingPanelOpen\}[\s\S]*?isOpen=\{isAiChatOpen\}[\s\S]*?onOpenChange=\{setAiChatOpen\}/
+    );
+    assert.match(managerSource, /onRightPanelOpen=\{closeAiChat\}/);
+    assert.match(
+      managerSource,
+      /<WorkspaceRightPanel[\s\S]*?onBlockingPanelOpenChange=\{setBlockingPanelOpen\}[\s\S]*?onPanelOpenRequest=\{closeAiChat\}/
+    );
+  }
+
+  assert.match(controllerSource, /if \(isBlockedByWorkspaceOverlay\) \{\s*return null;\s*\}/);
+  assert.match(
+    rightPanelSource,
+    /onBlockingPanelOpenChange\(isDeploymentConsoleOpen \|\| isLiveObservationOpen\);/
+  );
+  assert.match(rightPanelSource, /const openLiveObservation[\s\S]*?onPanelOpenRequest\(\);/);
 });
 
 test("mobile focus trap ignores roving tabs that are not keyboard focusable", () => {

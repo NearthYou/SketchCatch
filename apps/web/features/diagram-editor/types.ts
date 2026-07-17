@@ -70,6 +70,7 @@ export type DiagramEditorProps = {
   onBoardReady?: ((element: HTMLElement) => void) | undefined;
   onDiagramChange?: ((diagram: DiagramJson) => void) | undefined;
   onDiagramSaveRequest?: (() => Promise<unknown>) | undefined;
+  onRightPanelOpen?: (() => void) | undefined;
   onTemplateWorkspaceApply?:
     | ((seed: {
         readonly diagramJson: DiagramJson;

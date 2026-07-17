@@ -87,6 +87,8 @@ export type WorkspaceRightPanelProps = {
   readonly initialView?: WorkspaceRightPanelView | undefined;
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
+  readonly onBlockingPanelOpenChange: (isOpen: boolean) => void;
+  readonly onPanelOpenRequest: () => void;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
   readonly onTerraformAiInteraction: (
@@ -123,6 +125,8 @@ export function WorkspaceRightPanel({
   initialView,
   initialTerraformFiles,
   terraformFilesReplacement,
+  onBlockingPanelOpenChange,
+  onPanelOpenRequest,
   onSelectTerraformIssue,
   onTerraformAiContextChange,
   onTerraformAiInteraction,
@@ -184,11 +188,23 @@ export function WorkspaceRightPanel({
 
   useEffect(() => {
     if (deploymentOpenRequestId > 0) {
+      onPanelOpenRequest();
       setIsDeploymentConsoleOpen(true);
     }
-  }, [deploymentOpenRequestId]);
+  }, [deploymentOpenRequestId, onPanelOpenRequest]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
+
+  useEffect(() => {
+    onBlockingPanelOpenChange(isDeploymentConsoleOpen || isLiveObservationOpen);
+  }, [isDeploymentConsoleOpen, isLiveObservationOpen, onBlockingPanelOpenChange]);
+
+  useEffect(
+    () => () => {
+      onBlockingPanelOpenChange(false);
+    },
+    [onBlockingPanelOpenChange]
+  );
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -442,6 +458,7 @@ export function WorkspaceRightPanel({
 
     try {
       if (pendingAction.kind === "view") {
+        onPanelOpenRequest();
         setActiveView(pendingAction.view);
         onTerraformAiInteraction(
           pendingAction.view === "terraform" ? "preview" : "draft"
@@ -450,6 +467,7 @@ export function WorkspaceRightPanel({
       }
 
       if (pendingAction.kind === "deployment-console") {
+        onPanelOpenRequest();
         setIsDeploymentConsoleOpen(true);
         return;
       }
@@ -465,16 +483,18 @@ export function WorkspaceRightPanel({
         skipTerraformLeaveGuardRef.current = false;
       }, 0);
     }
-  }, [context, onTerraformAiInteraction]);
+  }, [context, onPanelOpenRequest, onTerraformAiInteraction]);
 
   const requestView = useCallback(
     (nextView: WorkspaceRightPanelView): void => {
       if (nextView === activeView) {
+        onPanelOpenRequest();
         onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
         return;
       }
 
       if (nextView === "terraform") {
+        onPanelOpenRequest();
         setActiveView("terraform");
         onTerraformAiInteraction("preview");
         return;
@@ -484,10 +504,11 @@ export function WorkspaceRightPanel({
         return;
       }
 
+      onPanelOpenRequest();
       setActiveView(nextView);
       onTerraformAiInteraction("draft");
     },
-    [activeView, onTerraformAiInteraction, requestTerraformLeave]
+    [activeView, onPanelOpenRequest, onTerraformAiInteraction, requestTerraformLeave]
   );
 
   const startTerraformSplitResize = useCallback(
@@ -567,12 +588,14 @@ export function WorkspaceRightPanel({
       return;
     }
 
+    onPanelOpenRequest();
     setIsDeploymentConsoleOpen(true);
-  }, [requestTerraformLeave]);
+  }, [onPanelOpenRequest, requestTerraformLeave]);
 
   const openLiveObservation = useCallback((): void => {
+    onPanelOpenRequest();
     setIsLiveObservationOpen(true);
-  }, []);
+  }, [onPanelOpenRequest]);
 
   const applyTerraformLeaveSaveFeedback = useCallback(
     (feedback: TerraformLeaveSaveFeedback): void => {

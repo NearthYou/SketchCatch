@@ -109,6 +109,8 @@ function ProjectWorkspaceDraftManagerState({
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
+  const [isAiChatOpen, setAiChatOpen] = useState(false);
+  const [isBlockingPanelOpen, setBlockingPanelOpen] = useState(false);
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
@@ -144,6 +146,9 @@ function ProjectWorkspaceDraftManagerState({
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+  const closeAiChat = useCallback((): void => {
+    setAiChatOpen(false);
+  }, []);
 
   useEffect(() => {
     const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
@@ -620,7 +625,10 @@ function ProjectWorkspaceDraftManagerState({
         floatingPanel={(context) => (
           <WorkspaceAiChatDock
             context={context}
+            isBlockedByWorkspaceOverlay={isBlockingPanelOpen}
+            isOpen={isAiChatOpen}
             onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+            onOpenChange={setAiChatOpen}
             projectId={projectId}
             repositoryAnalysisSourceRepositoryId={repositoryAnalysisHandoff?.sourceRepositoryId}
             repositoryTemplateId={repositoryTemplateId ?? undefined}
@@ -635,6 +643,7 @@ function ProjectWorkspaceDraftManagerState({
         onBoardReady={handleBoardReady}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
+        onRightPanelOpen={closeAiChat}
         onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
         onSaveAndDeployRequest={saveAndOpenDeployment}
         projectName={projectName}
@@ -646,6 +655,8 @@ function ProjectWorkspaceDraftManagerState({
             deploymentAvailability="enabled"
             initialView={initialRightPanelView}
             initialTerraformFiles={initialTerraformFiles}
+            onBlockingPanelOpenChange={setBlockingPanelOpen}
+            onPanelOpenRequest={closeAiChat}
             onSelectTerraformIssue={setSelectedTerraformIssueKey}
             onTerraformAiContextChange={setTerraformAiContext}
             onTerraformAiInteraction={notifyTerraformAiInteraction}

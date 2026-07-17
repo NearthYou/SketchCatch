@@ -74,6 +74,8 @@ export function WorkspaceDraftManager({
   const [projectName, setProjectName] = useState(initialProjectName ?? LOCAL_PROJECT_NAME);
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [isAiChatOpen, setAiChatOpen] = useState(false);
+  const [isBlockingPanelOpen, setBlockingPanelOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
     EMPTY_WORKSPACE_TERRAFORM_AI_CONTEXT
@@ -98,6 +100,9 @@ export function WorkspaceDraftManager({
   const draftChangeVersionRef = useRef(0);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+  const closeAiChat = useCallback((): void => {
+    setAiChatOpen(false);
+  }, []);
 
   const setCurrentLocalDraft = useCallback((draft: LocalProjectDraft | null) => {
     localDraftRef.current = draft;
@@ -339,7 +344,10 @@ export function WorkspaceDraftManager({
       floatingPanel={(context) => (
         <WorkspaceAiChatDock
           context={context}
+          isBlockedByWorkspaceOverlay={isBlockingPanelOpen}
+          isOpen={isAiChatOpen}
           onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+          onOpenChange={setAiChatOpen}
           onSelectTerraformIssue={setSelectedTerraformIssueKey}
           projectId={LOCAL_PROJECT_ID}
           selectedTerraformIssueKey={selectedTerraformIssueKey}
@@ -357,6 +365,7 @@ export function WorkspaceDraftManager({
       initialSelectedNodeIds={initialSelectedNodeIds}
       onDiagramChange={handleDiagramChange}
       onDiagramSaveRequest={saveCurrentDraftLocally}
+      onRightPanelOpen={closeAiChat}
       onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
       projectName={projectName}
       workspaceUserName={workspaceUserName}
@@ -366,6 +375,8 @@ export function WorkspaceDraftManager({
           deploymentAvailability="project_required"
           initialTerraformFiles={initialTerraformFiles}
           initialView={initialRightPanelView}
+          onBlockingPanelOpenChange={setBlockingPanelOpen}
+          onPanelOpenRequest={closeAiChat}
           onSelectTerraformIssue={setSelectedTerraformIssueKey}
           onTerraformAiContextChange={setTerraformAiContext}
           onTerraformAiInteraction={notifyTerraformAiInteraction}
