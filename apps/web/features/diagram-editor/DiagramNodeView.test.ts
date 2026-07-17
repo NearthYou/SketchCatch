@@ -192,19 +192,21 @@ test("diagram node view renders bounded two-line labels on a transparent backgro
   assert.match(labelBlock, /-webkit-line-clamp:\s*2;/);
 });
 
-test("resource and design icon nodes share one 48px visual icon size", () => {
+test("resource and design icons scale with their node geometry", () => {
   assert.match(
     diagramEditorCssSource,
     /\.nodeShellResource\s*\{[^}]*background:\s*transparent;[^}]*border-width:\s*0;/s
   );
   assert.match(
     diagramEditorCssSource,
-    /\.resourceNodeIconFrame\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*height:\s*100%;[^}]*width:\s*100%;/s
+    /\.resourceNodeIconFrame\s*\{[^}]*background:\s*transparent;[^}]*border:\s*0;[^}]*height:\s*100%;[^}]*padding:\s*4cqmin;[^}]*width:\s*100%;/s
   );
-  assert.match(
-    diagramEditorCssSource,
-    /\.resourceNodeIcon\s*\{[^}]*height:\s*100%;[^}]*max-height:\s*48px;[^}]*max-width:\s*48px;[^}]*width:\s*100%;/s
-  );
+  const resourceIconBlock = getCssBlock(".resourceNodeIcon");
+  assert.match(resourceIconBlock, /height:\s*100%;/);
+  assert.match(resourceIconBlock, /object-fit:\s*contain;/);
+  assert.match(resourceIconBlock, /width:\s*100%;/);
+  assert.doesNotMatch(resourceIconBlock, /max-height:/);
+  assert.doesNotMatch(resourceIconBlock, /max-width:/);
   assert.match(
     diagramEditorCssSource,
     /\.resourceNodeIconFallback\s*\{[^}]*background:\s*transparent;[^}]*height:\s*100%;[^}]*width:\s*100%;/s
@@ -229,7 +231,7 @@ test("resource labels stay four pixels below the icon and metadata is not render
   assert.doesNotMatch(diagramNodeViewSource, /className=\{styles\.resourceNodeMeta\}/);
   assert.match(
     diagramEditorCssSource,
-    /\.resourceNodeLabel\s*\{[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*top:\s*calc\(50% \+ 28px\);[^}]*transform:\s*translateX\(-50%\);/s
+    /\.resourceNodeLabel\s*\{[^}]*left:\s*50%;[^}]*position:\s*absolute;[^}]*top:\s*calc\(100% \+ 4px\);[^}]*transform:\s*translateX\(-50%\);/s
   );
 });
 

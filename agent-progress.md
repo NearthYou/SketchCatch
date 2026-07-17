@@ -84,8 +84,16 @@ Short English-only working log for the current agent context. Older records are 
 - The deploy-policy source now grants only those two missing actions, and the complete runtime guard accepts either the original full reviewed envelope or the exact residual envelope. No state operation, import, or unreviewed apply was used.
 - Harness, production infrastructure structure check, Terraform formatting, lint, typecheck, and build pass. Local Terraform validate/test remain blocked by the uncached AWS provider package.
 
+### 2026-07-17 - Improve Architecture Board UI interactions
+
+- Closed the controlled AI Workbench before competing observation, deployment, right-panel, and auto-organize preview surfaces open.
+- Corrected Fit View visual bounds, anchored the auto-organize preview beside the left panel, scaled resource contents with their containers, and removed the empty-board `Resource` guidance while preserving view switching.
+- Added a single-template detail preview with image, description, metrics, and tags. Sidebar and full-library selection no longer apply immediately; only the preview confirmation applies the template.
+- Focused contract tests, browser smoke checks, lint, typecheck, and build pass. No DB migration, infrastructure mutation, deployment, or Git handoff was performed.
+
 ## Broken Or Unverified
 
+- The session-wide `pnpm test` run originally reported three Web failures. The owned AI chat contract failure is fixed and its focused suite passes; two unchanged failures remain in the generated architecture artifact line-ending assertion and GitHub account settings contract. The full suite was not rerun after the focused fix.
 - `pnpm test` stops in `@sketchcatch/types` at 40/43 on the same three pre-existing three-tier Template security-scope/position/parent assertions. This branch does not modify those Template sources or failing tests.
 - `pnpm --filter @sketchcatch/api test` passes 710/713. The remaining three unchanged filesystem security tests fail during Windows symlink setup with `EPERM`, before their assertions.
 - Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
@@ -160,3 +168,27 @@ Short English-only working log for the current agent context. Older records are 
 - Workspace typecheck passes, and focused Web deployment tests pass 48/48.
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
+
+### 2026-07-17 - Resolve dev merge conflict in the workspace panel
+
+- Merged the controlled AI Workbench close/blocking behavior with the latest CI/CD return command and selected Live Observation target flow in `WorkspaceRightPanel`.
+- Focused workspace regressions pass 43/43. Root lint, typecheck, and build pass, and the merge contains no unresolved paths.
+- No migration was authored or modified during conflict resolution; migration files in the merge came from `dev`.
+
+### 2026-07-17 - Unify workspace observation and deployment controls
+
+- Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
+- Converted the project-bar Deployment action to the shared icon-button treatment and kept its black active state scoped only to the open Deployment console.
+- Focused workspace tests pass 17/17; Web lint and typecheck pass; root lint, typecheck, and build pass. The full test run stops on the unrelated existing `git-cicd-readiness-contract` `null !== 0` failure in `packages/types`.
+- Chrome visual automation was unavailable, so final signed-in visual confirmation remains manual. No Deployment, Terraform, AWS, or database mutation was performed.
+
+### 2026-07-17 - Stabilize workspace overlay notifications
+
+- Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
+- Added a call-recording regression for callback replacement and cleanup behavior.
+- Focused workspace tests pass 20/20; Web lint and typecheck pass.
+
+### 2026-07-17 - Guard missing template tags
+
+- Made detail-preview tag rendering tolerate templates whose runtime data omits `tags`.
+- Focused template preview tests pass 3/3; Web lint and typecheck pass.
