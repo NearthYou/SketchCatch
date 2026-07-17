@@ -1,16 +1,25 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CostEstimatePeriod, CostUsageAnalysisRange } from "@sketchcatch/types";
 import { COST_USAGE_ALL_PROJECTS_KEY } from "../../../features/costs/cost-usage-project-view";
 import { CostEstimatePanel } from "./cost-estimate-panel";
 import { CostUsagePanel } from "./cost-usage-panel";
+import {
+  parseCostDashboardTab,
+  writeCostDashboardTab,
+  type CostDashboardTab
+} from "./cost-dashboard-url-state";
 import styles from "../dashboard-tools.module.css";
 
-type CostDashboardTab = "estimate" | "usage";
-
 export function CostDashboardClient() {
-  const [activeTab, setActiveTab] = useState<CostDashboardTab>("estimate");
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<CostDashboardTab>(() =>
+    parseCostDashboardTab(searchParams)
+  );
   const [estimatePeriod, setEstimatePeriod] = useState<CostEstimatePeriod>("month");
   const [expectedUserCount, setExpectedUserCount] = useState(1000);
   const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
@@ -18,6 +27,20 @@ export function CostDashboardClient() {
   const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
   const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>("30d");
   const tabRefs = useRef<Partial<Record<CostDashboardTab, HTMLButtonElement | null>>>({});
+
+  useEffect(() => {
+    setActiveTab(parseCostDashboardTab(searchParams));
+  }, [searchParams]);
+
+  const changeActiveTab = useCallback(
+    (nextTab: CostDashboardTab): void => {
+      setActiveTab(nextTab);
+      const nextSearchParams = writeCostDashboardTab(searchParams, nextTab);
+      const nextQuery = nextSearchParams.toString();
+      router.push(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   function selectTabFromKeyboard(
     event: React.KeyboardEvent<HTMLButtonElement>,
@@ -38,7 +61,7 @@ export function CostDashboardClient() {
 
     if (nextTab === undefined) return;
     event.preventDefault();
-    setActiveTab(nextTab);
+    changeActiveTab(nextTab);
     tabRefs.current[nextTab]?.focus();
   }
 
@@ -57,7 +80,7 @@ export function CostDashboardClient() {
           aria-selected={activeTab === "estimate"}
           className={styles.costTab}
           id="cost-tab-estimate"
-          onClick={() => setActiveTab("estimate")}
+          onClick={() => changeActiveTab("estimate")}
           onKeyDown={(event) => selectTabFromKeyboard(event, "estimate")}
           ref={(element) => {
             tabRefs.current.estimate = element;
@@ -73,7 +96,7 @@ export function CostDashboardClient() {
           aria-selected={activeTab === "usage"}
           className={styles.costTab}
           id="cost-tab-usage"
-          onClick={() => setActiveTab("usage")}
+          onClick={() => changeActiveTab("usage")}
           onKeyDown={(event) => selectTabFromKeyboard(event, "usage")}
           ref={(element) => {
             tabRefs.current.usage = element;

@@ -12,7 +12,7 @@ const estimatePanelSource = readSource("./cost-estimate-panel.tsx");
 const usagePanelSource = readSource("./cost-usage-panel.tsx");
 
 test("Cost Dashboard owns the navigation and filter state", () => {
-  assert.match(dashboardSource, /useState<CostDashboardTab>\("estimate"\)/);
+  assert.match(dashboardSource, /useState<CostDashboardTab>\(\(\) =>/);
   assert.match(dashboardSource, /useState<CostEstimatePeriod>\("month"\)/);
   assert.match(dashboardSource, /useState\(1000\)/);
   assert.match(dashboardSource, /useState\("1000"\)/);
