@@ -74,3 +74,69 @@ test("does not throw or infer an identity from malformed editor input", () => {
     []
   );
 });
+
+test("keeps scanning after a CRLF heredoc before an excluded-resource header", () => {
+  assert.deepEqual(
+    scanTerraformBlockIdentities(
+      "script = <<SCRIPT\r\nresource \"aws_lambda_function\" \"heredoc_value\" {}\r\nSCRIPT\r\nresource \"aws_lambda_function\" \"legacy_lambda\" {}\r\n"
+    ),
+    [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "legacy_lambda"
+      }
+    ]
+  );
+});
+
+test("keeps scanning after a template interpolation with an inner string and brace", () => {
+  assert.deepEqual(
+    scanTerraformBlockIdentities(
+      'locals {\n  rendered = "${format("{")}"\n}\nresource "aws_lambda_function" "legacy_lambda" {}\n'
+    ),
+    [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "legacy_lambda"
+      }
+    ]
+  );
+});
+
+test("keeps scanning after template directives with nested interpolation braces", () => {
+  assert.deepEqual(
+    scanTerraformBlockIdentities(
+      'locals {\n  rendered = "%{ if true }${jsonencode({ value = "}" })}%{ endif }"\n}\nresource "aws_lambda_function" "legacy_lambda" {}\n'
+    ),
+    [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "legacy_lambda"
+      }
+    ]
+  );
+});
+
+test("decodes Terraform quoted-string escapes in resource identities", () => {
+  assert.deepEqual(
+    scanTerraformBlockIdentities(
+      'resource "aws_\\u006cambda_function" "legacy\\u005flambda\\nname" {}\n' +
+        'data "aws_ami" "quoted\\"name\\\\path\\/slash\\tvalue\\r\\b\\f\\U00000041" {}'
+    ),
+    [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "legacy_lambda\nname"
+      },
+      {
+        terraformBlockType: "data",
+        resourceType: "aws_ami",
+        resourceName: 'quoted"name\\path/slash\tvalue\r\b\fA'
+      }
+    ]
+  );
+});

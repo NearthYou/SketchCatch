@@ -144,13 +144,34 @@ function readQuotedString(
     const character = source[index]!;
 
     if (character === "\\") {
-      const escapedCharacter = source[index + 1];
-      if (escapedCharacter === undefined) {
+      const escapedValue = readQuotedStringEscape(source, index);
+      if (escapedValue === null) {
         return null;
       }
 
-      value += escapedCharacter;
-      index += 1;
+      value += escapedValue.value;
+      index = escapedValue.nextIndex - 1;
+      continue;
+    }
+
+    if (
+      (character === "$" || character === "%") &&
+      source[index + 1] === character &&
+      source[index + 2] === "{"
+    ) {
+      value += `${character}{`;
+      index += 2;
+      continue;
+    }
+
+    if ((character === "$" || character === "%") && source[index + 1] === "{") {
+      const expressionEnd = skipTemplateExpression(source, index);
+      if (expressionEnd === null) {
+        return null;
+      }
+
+      value += source.slice(index, expressionEnd);
+      index = expressionEnd - 1;
       continue;
     }
 
@@ -159,6 +180,102 @@ function readQuotedString(
     }
 
     value += character;
+  }
+
+  return null;
+}
+
+function readQuotedStringEscape(
+  source: string,
+  startIndex: number
+): { value: string; nextIndex: number } | null {
+  const escape = source[startIndex + 1];
+  if (escape === undefined) {
+    return null;
+  }
+
+  const simpleEscapes: Record<string, string> = {
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    b: "\b",
+    f: "\f",
+    n: "\n",
+    r: "\r",
+    t: "\t"
+  };
+  const simpleValue = simpleEscapes[escape];
+  if (simpleValue !== undefined) {
+    return { value: simpleValue, nextIndex: startIndex + 2 };
+  }
+
+  const unicodeLength = escape === "u" ? 4 : escape === "U" ? 8 : 0;
+  if (unicodeLength > 0) {
+    const hexStart = startIndex + 2;
+    const hex = source.slice(hexStart, hexStart + unicodeLength);
+    if (hex.length === unicodeLength && /^[0-9A-Fa-f]+$/.test(hex)) {
+      const codePoint = Number.parseInt(hex, 16);
+      if (unicodeLength === 4) {
+        return {
+          value: String.fromCharCode(codePoint),
+          nextIndex: hexStart + unicodeLength
+        };
+      }
+
+      if (codePoint <= 0x10ffff && (codePoint < 0xd800 || codePoint > 0xdfff)) {
+        return {
+          value: String.fromCodePoint(codePoint),
+          nextIndex: hexStart + unicodeLength
+        };
+      }
+    }
+  }
+
+  return { value: escape, nextIndex: startIndex + 2 };
+}
+
+function skipTemplateExpression(source: string, startIndex: number): number | null {
+  let braceDepth = 1;
+
+  for (let index = startIndex + 2; index < source.length; index += 1) {
+    const character = source[index]!;
+
+    if (character === '"') {
+      const nestedString = readQuotedString(source, index);
+      if (nestedString === null) {
+        return null;
+      }
+
+      index = nestedString.nextIndex - 1;
+      continue;
+    }
+
+    if (character === "#") {
+      index = skipLine(source, index + 1) - 1;
+      continue;
+    }
+
+    if (character === "/" && source[index + 1] === "/") {
+      index = skipLine(source, index + 2) - 1;
+      continue;
+    }
+
+    if (character === "/" && source[index + 1] === "*") {
+      index = skipBlockComment(source, index + 2) - 1;
+      continue;
+    }
+
+    if (character === "{") {
+      braceDepth += 1;
+      continue;
+    }
+
+    if (character === "}") {
+      braceDepth -= 1;
+      if (braceDepth === 0) {
+        return index + 1;
+      }
+    }
   }
 
   return null;
@@ -203,7 +320,7 @@ function skipHeredoc(source: string, startIndex: number): number | null {
   while (lineStart <= source.length) {
     const nextLineEnd = source.indexOf("\n", lineStart);
     const lineEndIndex = nextLineEnd === -1 ? source.length : nextLineEnd;
-    const line = source.slice(lineStart, lineEndIndex);
+    const line = source.slice(lineStart, lineEndIndex).replace(/\r$/, "");
     const candidate = allowIndentedTerminator ? line.trim() : line;
 
     if (candidate === delimiter) {
