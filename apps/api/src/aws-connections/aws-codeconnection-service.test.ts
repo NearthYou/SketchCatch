@@ -38,7 +38,7 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
   };
   record: AwsCodeConnectionRecord | undefined;
   activeBuildWork = false;
-  deletedBuildEnvironmentCount = 0;
+  disconnectedBuildEnvironmentCount = 0;
   managedResources = {
     codeBuildProjects: [
       {
@@ -147,7 +147,7 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
       return false;
     }
     this.record = undefined;
-    this.deletedBuildEnvironmentCount = this.managedResources.codeBuildProjects.length;
+    this.disconnectedBuildEnvironmentCount = this.managedResources.codeBuildProjects.length;
     return true;
   }
 
@@ -462,7 +462,7 @@ test("disconnect removes the confirmed managed build resources and metadata", as
 
   assert.equal(cleanupCalls.length, 1);
   assert.equal(repository.record, undefined);
-  assert.equal(repository.deletedBuildEnvironmentCount, 1);
+  assert.equal(repository.disconnectedBuildEnvironmentCount, 1);
 });
 
 test("disconnect is blocked while a project build or deployment is active", async () => {

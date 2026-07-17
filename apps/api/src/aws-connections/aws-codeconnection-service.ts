@@ -328,7 +328,13 @@ export function createPostgresAwsCodeConnectionRepository(
     async completeDeletion(input) {
       return db.transaction(async (transaction) => {
         await transaction
-          .delete(projectBuildEnvironments)
+          .update(projectBuildEnvironments)
+          .set({
+            awsCodeConnectionId: null,
+            status: "disconnected",
+            lastVerifiedAt: null,
+            updatedAt: new Date()
+          })
           .where(eq(projectBuildEnvironments.awsConnectionId, input.connectionId));
         const [deleted] = await transaction
           .delete(awsCodeConnections)
