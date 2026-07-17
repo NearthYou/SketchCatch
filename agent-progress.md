@@ -4,16 +4,43 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- PR 1 / issue #434 and PR 2 / issue #433 are merged into `dev`. PR 3 / issue #435 started from merge commit `13716049532bcedc61d68e094bf829747077b989`, which contains reviewed PR 2 head `efdda2294830c9e8b4f8d863f280cc677daba61d`.
-- Runtime Convergence v1 separates `artifactFingerprint` from project/account/region-scoped `deploymentTargetFingerprint` and models ten distinct ECS, EC2, EKS, Kubernetes, Lambda, and Static adapters.
-- No-op requires read-only provider evidence for the canonical target, provider/account/region boundary, exact artifact fingerprint/digest/reference, and verified healthy state. Missing, mismatched, or unhealthy evidence falls back to rollout.
-- Direct ECS/Fargate and generated GitOps ECS/Lambda/EC2 ASG/Static workflows use the contract. The remaining canonical adapters are isolated ports verified with test doubles and explicit ResourceDefinition coverage.
-- Migration `0046_runtime_convergence.sql` is additive and `_journal.json` is updated after merged revision 0045.
-- Focused runtime/resource/storage/integration regressions pass. Harness, migration compatibility, lint, typecheck, build, generated Bash/Python syntax, and `git diff --check` pass.
-- Clean-state review and the evaluator rubric result are Accept (12/12, no hard fail).
-- Production runtime validation on `dev` preserves GitHub App and Live Observation Secret wiring, rejects cross-account or cross-region ARNs, reconciles ECS task definitions, and checks post-apply worker execution-policy coverage without exposing Secret values.
+- `/workspace/ai` is rebuilt as a new conversation surface with a selected-option trail, a decorative AWS Resource Orbit, and a Compiler-authoritative final Preview.
+- Clicked assistant options are semantic, current-session selections; direct input, voice input, retry, and candidate exclusion remain separate concerns.
+- The Orbit uses deterministic presentation-only selections from the actual AWS Resource icon catalog and does not restore or depend on backend progress stages.
+- A final Preview appears only from a successful Architecture Board Compiler proposal and renders that proposal's Diagram read-only until explicit Board application.
+- The deleted progress card, requirement list, history panel, mobile tabs, route-only summary, and other unused presentation/progress contracts remain deleted.
+- Cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save boundaries remain in functional code.
 
 ## Session Record
+
+### 2026-07-17 - Rebuild Workspace AI conversation and compiled preview
+
+- Added a responsibility-separated route shell, transcript, composer, selected-option model and accessible trail, deterministic option-to-resource mapper, decorative AWS Resource Orbit, and read-only final Architecture Preview.
+- Recorded exactly one clicked assistant option per single-select question before submitting it; direct and voice input do not enter the trail, while failed, cancelled, and retried requests retain the click record.
+- Built the Orbit only from enabled `resourceCatalog` entries whose icon URLs use `/Resource-Icons_07312025/`; stable option state produces stable composition and each click changes only a bounded subset.
+- Kept the Orbit explicitly decorative and replaced it, without a fake morph, only after the Compiler returns the actual Diagram used by the final pan/zoom Preview.
+- Preserved actual candidate exclusion/undo and the explicit Board-application boundary without reviving server progress APIs or the deleted Workspace AI presentation.
+- Browser QA covered 1440x900, 1024x768, both sides of the 959px breakpoint, and 390x844. It verified option accumulation, bounded Orbit changes, continuous multi-ring motion, the click pulse/kick/excursion response, the separate Orbit exit and final Diagram reveal, pan/zoom, mobile reachability, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix. Board application was not used.
+- Passed focused Workspace AI/Compiler tests 94/94, full Web regression 545/545, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+- No real cloud apply, deployment, user-project mutation, Git handoff, push, or PR was performed.
+
+### 2026-07-17 - Clear the Workspace AI rebuild baseline
+
+- Audited the new-project, existing-project, Repository, storage, workflow, API, service, shared-type, Compiler, candidate-exclusion, approval, and save paths before removing presentation code.
+- Deleted the old `/workspace/ai` client, CSS, UI test, progress/preview components, route-only Compiler summary, and stale progress implementation plan; the route now returns `null` without a placeholder.
+- Reduced the progress transport to a candidate-only observational snapshot and removed UI-only progress models and unconsumed request fields end-to-end.
+- Preserved Repository preview behavior in a Repository-local component and moved the Workspace AI chat storage-key helper out of its presentation component.
+- Added `docs/superpowers/specs/2026-07-17-workspace-ai-rebuild-baseline.md` as the only implementation baseline for the next UI.
+- Passed the rebuild evidence Web tests 55/55, focused API tests 77/77, full Web regression 528/528, harness, lint, typecheck, build, and diff checks. Independent review returned Ready with no Critical, Important, or Minor findings.
+
+### 2026-07-17 - Implement live AI Draft progress preview (#448)
+
+- Superseded by the cleanup record above; the implementation and verification below are historical evidence and do not describe the current `/workspace/ai` route.
+- Added shared progress/exclusion contracts, API snapshot streaming, strict NDJSON validation, caller abort propagation, and reverse-proxy no-buffering headers while preserving the existing JSON paths.
+- Added the responsive progress pane, requirement/question summaries, provisional diagram, compact history, exclusion/undo, in-place cancel/retry, final transition diff, mobile pane tabs, and last-good projection retention.
+- Direct browser QA passed at 1440x900, 1024x768, 390x844, and the 720/721 boundary: no horizontal overflow, mobile send/tab/final scrolling, desktop simultaneous panes, pan/zoom, clarification handoff, server-authorized exclusion and undo, retained retry state, final replacement, and reload non-persistence. The disposable local QA account and its active tokens were removed; `Board에 적용` was not used and no user project was created.
+- Structured clarification answers now remain one confirmed `question: answer` fact, and provider-originated clarification emits a new full snapshot with the pending question before the terminal result.
+- Passed focused API 79/79, focused Web 43/43, full Web 527/527, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`. Final whole-branch re-review is Ready with no findings.
 
 ### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
@@ -29,11 +56,6 @@ Short English-only working log for the current agent context. Older records are 
 - Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
 - Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
 - No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
-
-### 2026-07-16 - Production runtime plan drift review
-
-- Review-only Plan 29498864502 succeeded with 3 add, 7 change, and only 2 task-definition replacement destroys. Worker Secret wiring and the Live Observation capability Secret preservation were added without exposing Secret values.
-- Verification passed: harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Local Terraform validation/test could not initialize the uncached AWS provider within the timeout.
 
 ### 2026-07-16 - Follow up merged PR #439 review
 
@@ -160,12 +182,6 @@ Short English-only working log for the current agent context. Older records are 
 - Full API, web, and types suites still expose unrelated `dev` failures caused by missing test environment values/tools, sandbox socket restrictions, and pre-existing contract assertions. The API build passes; the webpack web build compiles but stops on the existing invalid Next Route export in `architecture-draft/route.ts`.
 - No Terraform plan/apply, AWS mutation, or deployment was performed. After review and merge, an operator-approved runtime Terraform plan/apply is required before the deployed task roles receive the permissions.
 
-### 2026-07-17 - Preserve dirty local ProjectDraft recovery
-
-- Merged the controlled AI Workbench close/blocking behavior with the latest CI/CD return command and selected Live Observation target flow in `WorkspaceRightPanel`.
-- Focused workspace regressions pass 43/43. Root lint, typecheck, and build pass, and the merge contains no unresolved paths.
-- No migration was authored or modified during conflict resolution; migration files in the merge came from `dev`.
-
 ### 2026-07-17 - Unify workspace observation and deployment controls
 
 - Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
@@ -179,16 +195,20 @@ Short English-only working log for the current agent context. Older records are 
 - Added a call-recording regression for callback replacement and cleanup behavior.
 - Focused workspace tests pass 20/20; Web lint and typecheck pass.
 
-### 2026-07-17 - Guard missing template tags
+### 2026-07-17 - Merge issue #448 work with current dev
 
-- Made detail-preview tag rendering tolerate templates whose runtime data omits `tags`.
-- Focused template preview tests pass 3/3; Web lint and typecheck pass.
+- Merged `origin/dev` through `f2f0c8ff` and resolved Workspace, Diagram, AI start, ProjectDraft, and GitHub settings conflicts without dropping either branch's behavior.
+- Updated the cached GitHub settings contract and restored the Destroy Plan approval/retry boundary using `failedAt`.
+- Focused Module/Template regressions and full Web tests pass; harness, knowledge check, lint, typecheck, and build pass. Local full API tests remain environment-blocked by missing `DATABASE_URL` and `zstd`; affected API files match `origin/dev`.
 
 ### 2026-07-17 - Refocus the repository README
 
 - Reworked the README around the problem, approval flow, and boundary between AI suggestions, deterministic validation, and user-authorized cloud mutation.
 - Kept the AWS/Terraform-first MVP and provider-neutral product direction explicit while removing repeated implementation detail.
 - Verified every relative README link and ran `pnpm harness:check` successfully. This was documentation-only, so runtime builds and product tests were not rerun.
+
+### 2026-07-17 - Preserve dirty local ProjectDraft recovery
+
 - Preserved dirty IndexedDB drafts during Workspace reload regardless of client/server clock skew and added an explicit choice between restoring one and replacing it with the latest server draft.
 - Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
 - Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.

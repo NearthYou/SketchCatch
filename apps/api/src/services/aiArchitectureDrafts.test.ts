@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ArchitectureJson } from "@sketchcatch/types";
+import type {
+  ArchitectureDraftCandidateExclusion,
+  ArchitectureDraftProgressSnapshot,
+  ArchitectureJson
+} from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import type { AiTextProvider } from "./aiLlmExplanation.js";
 import {
@@ -857,7 +861,7 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
 test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture preview when requirements are complete", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;
-  const progressStages: string[] = [];
+  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
   const provider = createFakeAmazonQProvider((request) => {
     requestedPrompt = request.prompt;
     requestedPayload = request.payload;
@@ -929,7 +933,7 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
     {
       provider,
       creditPolicy: confirmedCreditPolicy,
-      onProgress: (stage) => progressStages.push(stage)
+      onProgress: (snapshot) => progressSnapshots.push(snapshot)
     }
   );
 
@@ -974,13 +978,472 @@ test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture p
   assert.equal(response.architectureJson.nodes[0]?.type, "S3");
   assert.equal(response.llmExplanation?.fallbackUsed, false);
   assert.equal(response.llmExplanation?.providerMetadata?.provider, "amazon_q");
-  assert.deepEqual(progressStages, [
-    "preparing_requirements",
-    "normalizing_requirements",
-    "querying_amazon_q",
-    "validating_architecture",
-    "building_diagram"
+  assert.deepEqual(progressSnapshots.map(({ sequence }) => sequence), [1]);
+  assert.ok(
+    progressSnapshots.every(
+      (snapshot) => snapshot.provisionalArchitectureJson.nodes.length > 0
+    )
+  );
+  assert.ok(
+    progressSnapshots.every(
+      (snapshot) =>
+        Array.isArray(snapshot.excludableCandidateIds)
+        && Object.hasOwn(snapshot, "provisionalArchitectureJson")
+    )
+  );
+  assert.deepEqual(Object.keys(progressSnapshots[0]!).sort(), [
+    "excludableCandidateIds",
+    "provisionalArchitectureJson",
+    "sequence"
   ]);
+});
+
+test("createAmazonQArchitectureDraftResponse applies an exact server-authorized exclusion to provisional and final graphs", async () => {
+  const prompt = createMultiCandidateDraftPrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const candidate = baseline.architectureJson.nodes.find(({ type }) => type === "SQS_QUEUE");
+  assert.ok(candidate);
+  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt,
+      candidateExclusions: [
+        {
+          candidateId: candidate.id,
+          resourceType: candidate.type,
+          label: candidate.label ?? candidate.type
+        }
+      ]
+    },
+    {
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: (snapshot) => progressSnapshots.push(snapshot)
+    }
+  );
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === candidate.type), false);
+  assertGraphHasNoDanglingEdges(response.architectureJson);
+  assert.ok(
+    response.metadata.assumptions.some((assumption) =>
+      assumption.includes(candidate.type)
+    )
+  );
+  assert.ok(
+    response.metadata.explanations.some((explanation) =>
+      explanation.includes(candidate.id)
+    )
+  );
+
+  const provisionalSnapshots = progressSnapshots.filter(
+    (snapshot) => snapshot.provisionalArchitectureJson !== null
+  );
+  assert.ok(provisionalSnapshots.length > 0);
+  for (const snapshot of provisionalSnapshots) {
+    assert.equal(
+      snapshot.provisionalArchitectureJson?.nodes.some((node) => node.type === candidate.type),
+      false
+    );
+    assert.equal(snapshot.excludableCandidateIds.includes("ecs-service"), false);
+    assert.equal(snapshot.excludableCandidateIds.includes("ecs-task-definition"), false);
+    assertGraphHasNoDanglingEdges(snapshot.provisionalArchitectureJson!);
+  }
+});
+
+test("candidate exclusions ignore forged ids and mismatched types or labels", () => {
+  const prompt = createMultiCandidateDraftPrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const candidate = baseline.architectureJson.nodes.find(({ type }) => type === "SQS_QUEUE");
+  assert.ok(candidate);
+
+  const invalidExclusions: ArchitectureDraftCandidateExclusion[] = [
+    {
+      candidateId: "forged-candidate-id",
+      resourceType: candidate.type,
+      label: candidate.label ?? candidate.type
+    },
+    {
+      candidateId: candidate.id,
+      resourceType: "CODEBUILD_PROJECT",
+      label: candidate.label ?? candidate.type
+    },
+    {
+      candidateId: candidate.id,
+      resourceType: candidate.type,
+      label: "Mismatched Candidate Label"
+    }
+  ];
+
+  for (const candidateExclusion of invalidExclusions) {
+    const result = createArchitectureDraft({
+      prompt,
+      candidateExclusions: [candidateExclusion]
+    });
+
+    assert.deepEqual(result.architectureJson, baseline.architectureJson);
+  }
+});
+
+test("candidate exclusions ignore stale candidates issued for a different draft", () => {
+  const staleCandidate = createArchitectureDraft({
+    prompt: createStaticPortfolioQuestionnairePrompt()
+  }).architectureJson.nodes.find(({ type }) => type === "S3");
+  assert.ok(staleCandidate);
+  const prompt = createStructuralCandidateDraftPrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  assert.ok(baseline.architectureJson.nodes.some(({ type }) => type === "S3"));
+
+  const result = createArchitectureDraft({
+    prompt,
+    candidateExclusions: [
+      {
+        candidateId: staleCandidate.id,
+        resourceType: staleCandidate.type,
+        label: staleCandidate.label ?? staleCandidate.type
+      }
+    ]
+  });
+
+  assert.deepEqual(result.architectureJson, baseline.architectureJson);
+});
+
+test("structural draft resources are never exposed or accepted as excludable candidates", async () => {
+  const prompt = createStructuralCandidateDraftPrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const structuralCandidate = baseline.architectureJson.nodes.find(({ type }) => type === "VPC");
+  const referencedCandidate = baseline.architectureJson.nodes.find(({ type }) => type === "S3");
+  const leafCandidate = baseline.architectureJson.nodes.find(
+    ({ type }) => type === "CLOUDWATCH_METRIC_ALARM"
+  );
+  assert.ok(structuralCandidate);
+  assert.ok(referencedCandidate);
+  assert.ok(leafCandidate);
+  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
+
+  const result = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt,
+      candidateExclusions: [
+        {
+          candidateId: structuralCandidate.id,
+          resourceType: structuralCandidate.type,
+          label: structuralCandidate.label ?? structuralCandidate.type
+        }
+      ]
+    },
+    {
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: (snapshot) => progressSnapshots.push(snapshot)
+    }
+  );
+
+  assert.ok(!("status" in result));
+  if ("status" in result) return;
+  assert.deepEqual(result.architectureJson, baseline.architectureJson);
+  const candidateSnapshot = progressSnapshots.find(
+    ({ provisionalArchitectureJson }) => provisionalArchitectureJson !== null
+  );
+  assert.ok(candidateSnapshot);
+  assert.equal(candidateSnapshot.excludableCandidateIds.includes(structuralCandidate.id), false);
+  assert.equal(candidateSnapshot.excludableCandidateIds.includes(referencedCandidate.id), false);
+  assert.equal(candidateSnapshot.excludableCandidateIds.includes(leafCandidate.id), true);
+});
+
+test("candidate exclusions reject a resource that surviving config still references", () => {
+  const prompt = createStructuralCandidateDraftPrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const referencedCandidate = baseline.architectureJson.nodes.find(({ type }) => type === "S3");
+  assert.ok(referencedCandidate);
+  assert.ok(
+    baseline.architectureJson.nodes.some(
+      ({ config }) => config.originResourceId === referencedCandidate.id
+    )
+  );
+
+  const result = createArchitectureDraft({
+    prompt,
+    candidateExclusions: [
+      {
+        candidateId: referencedCandidate.id,
+        resourceType: referencedCandidate.type,
+        label: referencedCandidate.label ?? referencedCandidate.type
+      }
+    ]
+  });
+
+  assert.deepEqual(result.architectureJson, baseline.architectureJson);
+});
+
+test("one exact candidate tuple authorizes the documented resource-type exclusion constraint", () => {
+  const prompt = createStructuralCandidateDraftPrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const sameTypeCandidates = baseline.architectureJson.nodes.filter(
+    ({ type }) => type === "CLOUDFRONT"
+  );
+  assert.ok(sameTypeCandidates.length > 1);
+  const candidate = sameTypeCandidates[0];
+  assert.ok(candidate);
+
+  const result = createArchitectureDraft({
+    prompt,
+    candidateExclusions: [
+      {
+        candidateId: candidate.id,
+        resourceType: candidate.type,
+        label: candidate.label ?? candidate.type
+      }
+    ]
+  });
+
+  assert.equal(result.architectureJson.nodes.some(({ type }) => type === candidate.type), false);
+  assertGraphHasNoDanglingEdges(result.architectureJson);
+});
+
+test("candidate exclusions fall back to the unfiltered graph when combined removal would empty the draft", () => {
+  const prompt = createSafeCandidateOnlyDraftPrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  assert.ok(baseline.architectureJson.nodes.length > 1);
+
+  const result = createArchitectureDraft({
+    prompt,
+    candidateExclusions: baseline.architectureJson.nodes.map((candidate) => ({
+      candidateId: candidate.id,
+      resourceType: candidate.type,
+      label: candidate.label ?? candidate.type
+    }))
+  });
+
+  assert.deepEqual(result.architectureJson, baseline.architectureJson);
+  assertGraphHasNoDanglingEdges(result.architectureJson);
+  assert.ok(
+    result.metadata.explanations.some((explanation) =>
+      explanation.includes("적용하지")
+    )
+  );
+});
+
+test("authorized candidate exclusions are sent to Amazon Q and override matching earlier requirements", async () => {
+  const prompt = createStaticPortfolioWithOptionalQueuePrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const candidate = baseline.architectureJson.nodes.find(({ type }) => type === "SQS_QUEUE");
+  assert.ok(candidate);
+  const requestedPrompts: string[] = [];
+  const requestedPayloads: unknown[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+    requestedPayloads.push(request.payload);
+    return createStaticProviderPreview(false);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt,
+      candidateExclusions: [
+        {
+          candidateId: candidate.id,
+          resourceType: candidate.type,
+          label: candidate.label ?? candidate.type
+        }
+      ]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+  assert.equal(requestedPrompts.length, 1);
+  assert.match(requestedPrompts[0] ?? "", /Server-authorized Draft Candidate Exclusions/);
+  assert.match(requestedPrompts[0] ?? "", /sqs-queue/);
+  assert.deepEqual(
+    (requestedPayloads[0] as { candidateExclusions?: unknown }).candidateExclusions,
+    [
+      {
+        candidateId: candidate.id,
+        resourceType: candidate.type,
+        label: candidate.label ?? candidate.type
+      }
+    ]
+  );
+  assert.equal(response.architectureJson.nodes.some(({ type }) => type === candidate.type), false);
+});
+
+test("Amazon Q previews that violate an authorized candidate exclusion are retried", async () => {
+  const prompt = createStaticPortfolioWithOptionalQueuePrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const candidate = baseline.architectureJson.nodes.find(({ type }) => type === "SQS_QUEUE");
+  assert.ok(candidate);
+  const requestedPrompts: string[] = [];
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+    callCount += 1;
+    return createStaticProviderPreview(callCount === 1);
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt,
+      candidateExclusions: [
+        {
+          candidateId: candidate.id,
+          resourceType: candidate.type,
+          label: candidate.label ?? candidate.type
+        }
+      ]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+  assert.equal(callCount, 2);
+  assert.match(requestedPrompts[1] ?? "", /violates the server-authorized candidate exclusion/);
+  assert.equal(response.architectureJson.nodes.some(({ type }) => type === candidate.type), false);
+});
+
+test("Amazon Q cannot satisfy combined authorized exclusions with an empty final graph", async () => {
+  const prompt = createStaticPortfolioWithOptionalQueuePrompt();
+  const baseline = createArchitectureDraft({ prompt });
+  const candidates = baseline.architectureJson.nodes.filter(({ type }) =>
+    type === "S3" || type === "SQS_QUEUE"
+  );
+  assert.equal(candidates.length, 2);
+  let callCount = 0;
+  const requestedPrompts: string[] = [];
+  const provider = createFakeAmazonQProvider((request) => {
+    requestedPrompts.push(request.prompt);
+    callCount += 1;
+    return JSON.stringify({
+      status: "preview",
+      title: "Empty Exclusion Result",
+      architectureJson: { nodes: [], edges: [] },
+      requirementCoverage: sampleRequirementCoverage(),
+      assumptions: ["All excluded candidates were removed."],
+      explanations: ["No alternative topology was selected."]
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt,
+      candidateExclusions: candidates.map((candidate) => ({
+        candidateId: candidate.id,
+        resourceType: candidate.type,
+        label: candidate.label ?? candidate.type
+      }))
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+  assert.equal(callCount, 2);
+  assert.match(requestedPrompts[1] ?? "", /must contain at least one usable ResourceNode/);
+  assert.deepEqual(response.architectureJson, baseline.architectureJson);
+  assert.equal(response.llmExplanation?.fallbackUsed, true);
+  assert.equal(response.llmExplanation?.fallbackReason, "invalid_response");
+});
+
+test("provider fallback still emits a candidate-bearing progress snapshot before the final draft", async () => {
+  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticPortfolioQuestionnairePrompt() },
+    {
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: (snapshot) => progressSnapshots.push(snapshot)
+    }
+  );
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  const candidateSnapshot = progressSnapshots.find(
+    ({ provisionalArchitectureJson }) => provisionalArchitectureJson.nodes.length > 0
+  );
+  assert.ok(candidateSnapshot);
+  assert.deepEqual(
+    candidateSnapshot.provisionalArchitectureJson,
+    response.architectureJson
+  );
+  assert.deepEqual(
+    candidateSnapshot.excludableCandidateIds,
+    []
+  );
+});
+
+test("candidate exclusions only apply to the exact server-issued id, type, and label tuple", async () => {
+  const progressSnapshots: ArchitectureDraftProgressSnapshot[] = [];
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createStaticPortfolioQuestionnairePrompt(),
+      candidateExclusions: [
+        {
+          candidateId: "forged-candidate-id",
+          resourceType: "S3",
+          label: "Static Website Bucket"
+        }
+      ]
+    },
+    {
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: (snapshot) => progressSnapshots.push(snapshot)
+    }
+  );
+
+  assert.ok(!("status" in response));
+  if ("status" in response) return;
+
+  assert.equal(response.architectureJson.nodes.some(({ type }) => type === "S3"), true);
+  assert.equal(
+    progressSnapshots.some((snapshot) =>
+      snapshot.provisionalArchitectureJson.nodes.some(({ type }) => type === "S3")
+    ),
+    true
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse keeps progress reporting observational", async () => {
+  let progressCallbackCount = 0;
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createStaticPortfolioQuestionnairePrompt() },
+    {
+      provider: createFakeAmazonQProvider(createNormalizedRequirementPlan),
+      creditPolicy: confirmedCreditPolicy,
+      onProgress: () => {
+        progressCallbackCount += 1;
+        throw new Error("progress consumer failed");
+      }
+    }
+  );
+
+  assert.ok(!("status" in response));
+  assert.equal(progressCallbackCount, 1);
+});
+
+test("createAmazonQArchitectureDraftResponse keeps candidate exclusion failures observational", async () => {
+  const candidateExclusions = new Proxy<ArchitectureDraftCandidateExclusion[]>([], {
+    get(target, property, receiver) {
+      if (property === "length") {
+        throw new Error("candidate exclusions unavailable");
+      }
+      return Reflect.get(target, property, receiver);
+    }
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: createStaticPortfolioQuestionnairePrompt(),
+      candidateExclusions
+    },
+    {
+      provider: createFakeAmazonQProvider(createNormalizedRequirementPlan),
+      creditPolicy: confirmedCreditPolicy
+    }
+  );
+
+  assert.ok(!("status" in response));
 });
 
 test("createAmazonQArchitectureDraftResponse materializes a compact Amazon Q architecture plan", async () => {
@@ -5411,6 +5874,89 @@ function createStaticPortfolioQuestionnairePrompt(): string {
   ].join("\n");
 }
 
+function createStaticPortfolioWithOptionalQueuePrompt(): string {
+  return [
+    createStaticPortfolioQuestionnairePrompt(),
+    "Required supporting component: SQS Queue for optional asynchronous notifications."
+  ].join("\n");
+}
+
+function createStaticProviderPreview(includeQueue: boolean): string {
+  const nodes = [
+    {
+      id: "site-bucket",
+      type: "S3",
+      label: "Static Website Bucket",
+      positionX: 120,
+      positionY: 180,
+      config: { versioning: true }
+    },
+    {
+      id: "cdn",
+      type: "CLOUDFRONT",
+      label: "CloudFront CDN",
+      positionX: 360,
+      positionY: 180,
+      config: { originResourceId: "site-bucket" }
+    },
+    ...(includeQueue
+      ? [
+          {
+            id: "provider-queue",
+            type: "SQS_QUEUE",
+            label: "Optional Notification Queue",
+            positionX: 600,
+            positionY: 180,
+            config: {}
+          }
+        ]
+      : [])
+  ];
+
+  return JSON.stringify({
+    status: "preview",
+    title: "Cost Optimized Static Site",
+    architectureJson: {
+      nodes,
+      edges: [
+        {
+          id: "cdn-to-site",
+          sourceId: "cdn",
+          targetId: "site-bucket",
+          label: "origin"
+        }
+      ]
+    },
+    requirementCoverage: sampleRequirementCoverage(nodes.map(({ id }) => id)),
+    assumptions: ["The excluded optional queue is not required for static delivery."],
+    explanations: ["S3 and CloudFront provide the selected static delivery path."],
+    summary: "Amazon Q recommended a managed static delivery path.",
+    highlights: ["Low operational overhead"],
+    nextActions: ["Review domain and SSL certificate requirements."]
+  });
+}
+
+function createMultiCandidateDraftPrompt(): string {
+  return [
+    "Required components: ECS Cluster, ECS Service, ECS Task Definition, SQS Queue, CodeBuild Project, and SSM Parameter.",
+    "Architecture flow: Fargate service processes queue jobs and CodeBuild packages deployments."
+  ].join("\n");
+}
+
+function createSafeCandidateOnlyDraftPrompt(): string {
+  return [
+    "Required components: SQS Queue and CodeBuild Project.",
+    "Architecture flow: CodeBuild packages a worker that publishes optional jobs to SQS."
+  ].join("\n");
+}
+
+function createStructuralCandidateDraftPrompt(): string {
+  return [
+    "Required components: VPC, Subnet, Internet Gateway, EC2, RDS, S3, and CloudFront.",
+    "Architecture flow: CloudFront to S3 and Internet Gateway to VPC to Subnet to EC2 to RDS."
+  ].join("\n");
+}
+
 function createGitCiCdEc2HandoffQuestionnairePrompt(): string {
   return [
     "website type: dynamic web application admin board member system",
@@ -5515,6 +6061,16 @@ function readDecisionSpace(payload: unknown): {
     answerProfile: { upload?: string };
     preferredPatterns: Array<{ id?: string }>;
   };
+}
+
+function assertGraphHasNoDanglingEdges(architectureJson: ArchitectureJson): void {
+  const nodeIds = new Set(architectureJson.nodes.map((node) => node.id));
+
+  assert.ok(
+    architectureJson.edges.every(
+      (edge) => nodeIds.has(edge.sourceId) && nodeIds.has(edge.targetId)
+    )
+  );
 }
 
 function sampleRequirementCoverage(nodes: string[] = []): Array<{

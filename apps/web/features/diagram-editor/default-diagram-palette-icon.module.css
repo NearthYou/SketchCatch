@@ -1,0 +1,8 @@
+.paletteIconFallback {
+  align-items: center;
+  color: var(--board-body);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}

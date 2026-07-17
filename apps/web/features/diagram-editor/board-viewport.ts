@@ -2,7 +2,7 @@ import type { DiagramJson } from "../../../../packages/types/src";
 
 const BOARD_MIN_ZOOM = 0.25;
 const BOARD_MAX_ZOOM = 2;
-const BOARD_LABEL_PERSISTENT_ZOOM = 0.75;
+export const BOARD_LABEL_PERSISTENT_ZOOM = 0.75;
 const SOURCE_VIEWBOX_HARD_MIN_ZOOM = 0.01;
 
 export type BoardBounds = {

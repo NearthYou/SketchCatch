@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   Background,
   BackgroundVariant,
@@ -14,13 +13,13 @@ import {
   type Node,
   type NodeProps
 } from "@xyflow/react";
-import { Box } from "lucide-react";
 import { useMemo } from "react";
 import type {
   ArchitectureJson,
   DiagramNode,
   LiveObservationV2Snapshot
 } from "@sketchcatch/types";
+import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import {
   getAreaNodeLabel,
   getAreaNodeMetaLabel,
@@ -201,10 +200,29 @@ function LiveObservationEdgeEndpoints() {
 }
 
 function ResourceIcon({ node, size }: { readonly node: DiagramNode; readonly size: number }) {
-  return node.iconUrl ? (
-    <Image alt="" height={size} src={node.iconUrl} unoptimized width={size} />
-  ) : (
-    <Box aria-hidden="true" size={size} strokeWidth={1.5} />
+  const baseSize = 46;
+  const inset = (baseSize - size) / 2;
+
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-flex",
+        height: baseSize,
+        margin: `-${inset}px`,
+        transform: `scale(${size / baseSize})`,
+        transformOrigin: "center",
+        width: baseSize
+      }}
+    >
+      <ResourceIconImage
+        alt=""
+        className={styles.liveObservationPresentationIconImage}
+        fallbackClassName={styles.liveObservationPresentationIconFallback}
+        fallbackSize={baseSize}
+        src={node.iconUrl}
+      />
+    </span>
   );
 }
 

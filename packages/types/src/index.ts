@@ -3258,17 +3258,16 @@ export type CreateArchitecturePatchPreviewRequest = {
   skipConnection?: boolean | undefined;
 };
 
+export type ArchitectureDraftCandidateExclusion = {
+  candidateId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
-  dynamicQuestionAnswers?:
-    | readonly {
-        questionId: string;
-        question: string;
-        answer: string;
-      }[]
-    | undefined;
-  templateFallback?: Record<string, unknown> | undefined;
   repositoryEvidence?:
     | {
         mode: "strict";
@@ -3284,15 +3283,11 @@ export type CreateArchitectureDraftRequest = {
     | undefined;
 };
 
-export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
-  "preparing_requirements",
-  "normalizing_requirements",
-  "querying_amazon_q",
-  "validating_architecture",
-  "building_diagram"
-] as const;
-
-export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+export type ArchitectureDraftProgressSnapshot = {
+  sequence: number;
+  provisionalArchitectureJson: ArchitectureJson;
+  excludableCandidateIds: string[];
+};
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -3316,7 +3311,7 @@ export type CreateArchitectureDraftResponse =
 export type ArchitectureDraftStreamEvent =
   | {
       type: "progress";
-      stage: ArchitectureDraftProgressStage;
+      snapshot: ArchitectureDraftProgressSnapshot;
     }
   | {
       type: "result";
