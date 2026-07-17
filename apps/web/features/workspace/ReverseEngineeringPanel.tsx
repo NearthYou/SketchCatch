@@ -41,6 +41,10 @@ import {
   REVERSE_ENGINEERING_RESOURCE_SELECTIONS
 } from "./reverse-engineering-resource-types";
 import {
+  canStartReverseEngineeringScan,
+  getReverseEngineeringAwsConnectionRecovery
+} from "./reverse-engineering-aws-connection-readiness";
+import {
   ReverseEngineeringResultPanel,
   type ReverseEngineeringApplyState
 } from "./ReverseEngineeringResultPanel";
@@ -98,6 +102,7 @@ export function ReverseEngineeringPanel({
   const {
     loadOptions,
     loadState,
+    awsConnections,
     projects,
     selectedAwsConnectionId,
     selectedProjectId,
@@ -124,15 +129,27 @@ export function ReverseEngineeringPanel({
   });
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId);
-  const selectedAwsConnection = verifiedAwsConnections.find(
-    (connection) => connection.id === selectedAwsConnectionId
+  const awsConnectionRecovery = useMemo(
+    () =>
+      getReverseEngineeringAwsConnectionRecovery({
+        connections: awsConnections,
+        selectedConnectionId: selectedAwsConnectionId
+      }),
+    [awsConnections, selectedAwsConnectionId]
   );
-  const canStartScan =
-    (createProjectOnApply || Boolean(selectedProject)) &&
-    Boolean(selectedAwsConnection) &&
-    selectedResourceTypes.length > 0 &&
-    loadState !== "loading" &&
-    scanState !== "loading";
+  const resolvedSelectedAwsConnectionId = awsConnectionRecovery.selectedConnectionId ?? "";
+  const selectedAwsConnection = verifiedAwsConnections.find(
+    (connection) => connection.id === resolvedSelectedAwsConnectionId
+  );
+  const canStartScan = canStartReverseEngineeringScan({
+    createProjectOnApply,
+    hasSelectedVerifiedConnection: Boolean(selectedAwsConnection),
+    hasSelectedProject: Boolean(selectedProject),
+    loadState,
+    recovery: awsConnectionRecovery,
+    scanState,
+    selectedResourceTypeCount: selectedResourceTypes.length
+  });
   const boardCandidates = useMemo(() => {
     if (!scanResponse?.result) {
       return [];
@@ -443,7 +460,8 @@ export function ReverseEngineeringPanel({
     <section className={styles.panel} aria-label="Reverse Engineering">
       <div className={styles.panelContent}>
         <ReverseEngineeringScanCriteriaForm
-          awsConnections={verifiedAwsConnections}
+          awsConnectionRecovery={awsConnectionRecovery}
+          awsConnections={awsConnections}
           canStartScan={canStartScan}
           createProjectOnApply={createProjectOnApply}
           isLoadingOptions={loadState === "loading"}
@@ -456,7 +474,7 @@ export function ReverseEngineeringPanel({
           onSelectedProjectChange={setSelectedProjectId}
           projects={projects}
           resourceTypes={REVERSE_ENGINEERING_RESOURCE_SELECTIONS}
-          selectedAwsConnectionId={selectedAwsConnectionId}
+          selectedAwsConnectionId={resolvedSelectedAwsConnectionId}
           selectedProjectId={selectedProjectId}
           selectedResourceTypes={selectedResourceTypes}
         />
