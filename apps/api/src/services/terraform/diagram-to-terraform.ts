@@ -507,21 +507,33 @@ function normalizeEcsServiceLoadBalancers(
   value: unknown
 ): Record<string, unknown>[] | undefined {
   const loadBalancers = normalizeRecordList(value)
-    .map((loadBalancer) =>
-      compactTerraformConfig({
-        targetGroupArn: readNonEmptyString(loadBalancer["targetGroupArn"]),
-        loadBalancerName: readNonEmptyString(loadBalancer["loadBalancerName"]),
-        containerName: readNonEmptyString(loadBalancer["containerName"]),
-        containerPort: readNumber(loadBalancer["containerPort"])
-      })
-    )
-    .filter(
-      (loadBalancer) =>
-        readNonEmptyString(loadBalancer["targetGroupArn"]) !== undefined ||
-        readNonEmptyString(loadBalancer["loadBalancerName"]) !== undefined
-    );
+    .flatMap((loadBalancer) => {
+      const targetGroupArn = readNonEmptyString(loadBalancer["targetGroupArn"]);
+      const elbName = readNonEmptyString(loadBalancer["loadBalancerName"]);
+      const containerName = readNonEmptyString(loadBalancer["containerName"]);
+      const containerPort = readEcsContainerPort(loadBalancer["containerPort"]);
+
+      return hasExactlyOneEcsServiceLoadBalancerTarget(targetGroupArn, elbName) &&
+        containerName !== undefined &&
+        containerPort !== undefined
+        ? [compactTerraformConfig({ targetGroupArn, elbName, containerName, containerPort })]
+        : [];
+    });
 
   return loadBalancers.length > 0 ? loadBalancers : undefined;
+}
+
+function hasExactlyOneEcsServiceLoadBalancerTarget(
+  targetGroupArn: string | undefined,
+  elbName: string | undefined
+): boolean {
+  return (targetGroupArn !== undefined) !== (elbName !== undefined);
+}
+
+function readEcsContainerPort(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65_535
+    ? value
+    : undefined;
 }
 
 function normalizeReverseEngineeringEcsTaskDefinitionConfig(

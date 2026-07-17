@@ -72,14 +72,27 @@ async function main(): Promise<void> {
 }
 
 function assertStrictFixtureTerraform(fixtureName: string | undefined, terraform: string): void {
-  if (fixtureName !== REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE) {
+  if (fixtureName === REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE) {
+    if (!/^\s*ip_address_type\s+=\s+"dualstack"\s*$/m.test(terraform)) {
+      throw new Error(
+        "ALB CloudFront fixture must preserve dualstack as aws_lb.ip_address_type before Terraform validation."
+      );
+    }
     return;
   }
 
-  if (!/^\s*ip_address_type\s+=\s+"dualstack"\s*$/m.test(terraform)) {
+  if (fixtureName !== REVERSE_ENGINEERING_ECS_FIXTURE) {
+    return;
+  }
+
+  if (!/resource "aws_ecs_service" "classic_api" \{[\s\S]*elb_name\s+= "orders-classic-elb"/.test(terraform)) {
     throw new Error(
-      "ALB CloudFront fixture must preserve dualstack as aws_lb.ip_address_type before Terraform validation."
+      "ECS fixture must preserve classic LoadBalancerName as aws_ecs_service.load_balancer.elb_name before Terraform validation."
     );
+  }
+
+  if (/\bload_balancer_name\s+=/.test(terraform)) {
+    throw new Error("ECS fixture must not render unsupported aws_ecs_service.load_balancer.load_balancer_name.");
   }
 }
 
@@ -350,6 +363,34 @@ function createEcsFixture(): InfrastructureGraph {
           ],
           providerResourceId:
             "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/api",
+          providerResourceType: "AWS::ECS::Service"
+        }
+      },
+      {
+        id: "reverse-engineering-ecs-classic-service",
+        label: "classic-api",
+        iac: {
+          provider: "aws",
+          terraformBlockType: "resource",
+          resourceType: "aws_ecs_service",
+          resourceName: "classic_api",
+          fileName: "main"
+        },
+        config: {
+          name: "classic-api",
+          clusterArn,
+          taskDefinitionArn,
+          desiredCount: 1,
+          launchType: "EC2",
+          loadBalancers: [
+            {
+              loadBalancerName: "orders-classic-elb",
+              containerName: "api",
+              containerPort: 4000
+            }
+          ],
+          providerResourceId:
+            "arn:aws:ecs:ap-northeast-2:123456789012:service/orders/classic-api",
           providerResourceType: "AWS::ECS::Service"
         }
       }

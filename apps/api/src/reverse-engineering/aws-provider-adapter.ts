@@ -513,7 +513,8 @@ function getMissingTerraformCreationFields(
       ),
       ...(hasEcsNetworkConfiguration(config["networkConfiguration"])
         ? []
-        : ["networkConfiguration"])
+        : ["networkConfiguration"]),
+      ...getMissingEcsServiceLoadBalancerFields(config["loadBalancers"])
     ];
   }
 
@@ -557,6 +558,38 @@ function hasEcsNetworkConfiguration(value: unknown): boolean {
     getStringArray(value["awsvpcConfiguration"]["subnets"]).length > 0 &&
     getStringArray(value["awsvpcConfiguration"]["securityGroups"]).length > 0
   );
+}
+
+function getMissingEcsServiceLoadBalancerFields(value: unknown): string[] {
+  if (value === undefined || (Array.isArray(value) && value.length === 0)) {
+    return [];
+  }
+
+  if (!Array.isArray(value) || !value.every(isRecord)) {
+    return ["loadBalancers"];
+  }
+
+  const missingFields = new Set<string>();
+  for (const loadBalancer of value) {
+    const targetGroupArn = getNonEmptyString(loadBalancer["targetGroupArn"]);
+    const loadBalancerName = getNonEmptyString(loadBalancer["loadBalancerName"]);
+
+    if ((targetGroupArn === null) === (loadBalancerName === null)) {
+      missingFields.add("loadBalancers.targetGroupArn/loadBalancerName");
+    }
+    if (getNonEmptyString(loadBalancer["containerName"]) === null) {
+      missingFields.add("loadBalancers.containerName");
+    }
+    if (!isEcsContainerPort(loadBalancer["containerPort"])) {
+      missingFields.add("loadBalancers.containerPort");
+    }
+  }
+
+  return [...missingFields];
+}
+
+function isEcsContainerPort(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 65_535;
 }
 
 function hasEcsContainerDefinitions(value: unknown): boolean {

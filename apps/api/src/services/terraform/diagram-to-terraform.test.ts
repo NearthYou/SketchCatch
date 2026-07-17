@@ -1600,6 +1600,56 @@ test("Reverse Engineering ECS managed storage-only configuration은 KMS 값을 T
   assert.doesNotMatch(terraform, /execute_command_configuration/);
 });
 
+test("Reverse Engineering ECS Service는 classic ELB를 elb_name으로 렌더링하고 불완전한 binding은 생략한다", () => {
+  const graph: InfrastructureGraph = {
+    nodes: [
+      createLiveObservationNode("aws_ecs_service", "classic", {
+        name: "classic-api",
+        clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
+        taskDefinitionArn:
+          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+        desiredCount: 1,
+        launchType: "EC2",
+        loadBalancers: [
+          {
+            loadBalancerName: "orders-classic-elb",
+            containerName: "api",
+            containerPort: 4000
+          }
+        ],
+        providerResourceType: "AWS::ECS::Service"
+      }),
+      createLiveObservationNode("aws_ecs_service", "incomplete", {
+        name: "incomplete-api",
+        clusterArn: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/orders",
+        taskDefinitionArn:
+          "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/orders:7",
+        desiredCount: 1,
+        launchType: "EC2",
+        loadBalancers: [
+          { targetGroupArn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api/one", containerName: "api" }
+        ],
+        providerResourceType: "AWS::ECS::Service"
+      })
+    ],
+    edges: []
+  };
+
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.match(
+    terraform,
+    /resource "aws_ecs_service" "classic" \{[\s\S]*load_balancer \{[\s\S]*elb_name\s+= "orders-classic-elb"/
+  );
+  assert.match(terraform, /container_name\s+= "api"/);
+  assert.match(terraform, /container_port\s+= 4000/);
+  assert.doesNotMatch(terraform, /load_balancer_name\s+=/);
+  assert.doesNotMatch(
+    terraform,
+    /resource "aws_ecs_service" "incomplete" \{[\s\S]*load_balancer \{/
+  );
+});
+
 test("생성 필수값이 부족한 Reverse Engineering Resource는 Terraform block과 output에서 제외한다", () => {
   const terraform = renderTerraformFromInfrastructureGraph({
     nodes: [

@@ -211,6 +211,49 @@ test("ECS Cluster Service Task Definition을 known type과 provider import ident
   }
 });
 
+test("불완전한 ECS Service loadBalancer evidence는 supported 상태지만 handoff를 fail-close 한다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ECS::Service",
+      providerResourceId: ECS_SERVICE_ARN,
+      displayName: "legacy-api",
+      config: {
+        arn: ECS_SERVICE_ARN,
+        name: "legacy-api",
+        clusterArn: ECS_CLUSTER_ARN,
+        clusterName: "orders",
+        taskDefinitionArn: ECS_TASK_DEFINITION_ARN,
+        desiredCount: 1,
+        launchType: "EC2",
+        networkConfiguration: {
+          awsvpcConfiguration: {
+            subnets: ["subnet-private-a"],
+            securityGroups: ["sg-api"],
+            assignPublicIp: "DISABLED"
+          }
+        },
+        loadBalancers: [{ loadBalancerName: "orders-classic-elb" }]
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  const [suggestion] = result.importSuggestions;
+  const [finding] = result.findings;
+
+  assert.equal(resource?.resourceType, "ECS_SERVICE");
+  assert.equal(resource?.analysisExcluded ?? false, false);
+  assert.equal(resource?.config["sketchcatchReferenceTerraform"], true);
+  assert.deepEqual(resource?.config["terraformValidationMissingFields"], [
+    "loadBalancers.containerName",
+    "loadBalancers.containerPort"
+  ]);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.match(suggestion?.reason ?? "", /loadBalancers\.containerName.*loadBalancers\.containerPort/);
+  assert.match(finding?.description ?? "", /loadBalancers\.containerName.*loadBalancers\.containerPort/);
+});
+
 test("ECS import name 또는 Terraform 생성 입력이 부족하면 import와 생성 readiness를 각각 fail-close 한다", async () => {
   const invalidServiceId = "service-without-provider-identity";
   const result = await scan([
