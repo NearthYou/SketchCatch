@@ -19,6 +19,11 @@ export type ReverseEngineeringScanSummary = {
   readonly unreadableServiceCount: number;
 };
 
+type ReverseEngineeringScanSummaryInput = Pick<
+  ReverseEngineeringScanResult,
+  "architectureJson" | "discoveredResources" | "scanErrors"
+>;
+
 const SERVICE_LABELS: Readonly<Record<string, string>> = {
   "AWS::EC2::VPC": "VPC",
   "AWS::EC2::Subnet": "서브넷",
@@ -59,7 +64,7 @@ export function getReverseEngineeringServiceLabel(providerResourceType: string):
 }
 
 export function summarizeReverseEngineeringScan(
-  result: ReverseEngineeringScanResult
+  result: ReverseEngineeringScanSummaryInput
 ): ReverseEngineeringScanSummary {
   return {
     discoveredCount: result.discoveredResources.length,
