@@ -384,7 +384,8 @@ test("reverse preview can opt into read-only resource inspection", () => {
 });
 
 test("a dedicated workflow can replace the default empty board guidance", () => {
-  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요\."/);
+  assert.match(diagramEditorSource, /emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요\."/);
+  assert.doesNotMatch(diagramEditorSource, /emptyBoardDescription = "[^"]*Resource/);
   assert.match(diagramEditorSource, /<span>\{emptyBoardDescription\}<\/span>/);
 });
 

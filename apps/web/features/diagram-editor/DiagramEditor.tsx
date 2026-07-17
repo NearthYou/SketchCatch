@@ -253,7 +253,7 @@ function DiagramEditorInner({
   allowPreviewInspection = false,
   dashboardHref = "/dashboard",
   draftStatusPanel,
-  emptyBoardDescription = "왼쪽 Resource에서 필요한 항목을 끌어오세요.",
+  emptyBoardDescription = "왼쪽 패널에서 필요한 항목을 끌어오세요.",
   floatingPanel,
   initialBoardZoom,
   initialDiagram,

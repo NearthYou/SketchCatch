@@ -275,8 +275,9 @@ export function ResourceSettingsPanel({
             ) : null}
           </div>
         </div>
-        <div className="resourceViewToggles" aria-label="Resource view mode">
+        <div className="resourceViewToggles" aria-label="리소스 보기 방식">
           <button
+            aria-label="리소스 목록 보기"
             aria-pressed={activeResourceView === "resources"}
             className={activeResourceView === "resources" ? "resourceViewToggleActive" : "resourceViewToggle"}
             onClick={() => setActiveResourceView("resources")}
@@ -286,6 +287,7 @@ export function ResourceSettingsPanel({
             <Box aria-hidden="true" size={20} />
           </button>
           <button
+            aria-label="모듈 목록 보기"
             aria-pressed={activeResourceView === "modules"}
             className={activeResourceView === "modules" ? "resourceViewToggleActive" : "resourceViewToggle"}
             onClick={() => setActiveResourceView("modules")}
