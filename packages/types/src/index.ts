@@ -1742,6 +1742,7 @@ export type AwsCodeConnection = {
   providerType: "GitHub";
   status: AwsCodeConnectionStatus;
   statusReason: string | null;
+  cleanupRetryRequired?: boolean;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };

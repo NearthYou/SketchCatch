@@ -1241,6 +1241,7 @@ Repository를 고르는 별도 사용자 입력을 받지 않고 active `SourceR
 CodeConnection과 metadata를 정리한다. AWS 계정 연결과 이미 배포된 애플리케이션·인프라는 유지하며,
 앱 빌드나 배포가 진행 중이면 해제를 차단한다. `DELETING` 상태는 상태 새로고침과 새 Direct/GitOps 실행의
 영속 fence이며, 중단된 해제 claim은 1시간 뒤 재시도할 수 있다.
+부분 정리 실패는 `cleanupRetryRequired`로 응답하며 일반 상태 새로고침으로 `AVAILABLE`에 복구하지 않는다.
 
 생성은 AWS API보다 먼저 RDS에 `CREATING` row를 예약한다. 같은 AWS connection의 동시 요청은 이 row를 보고
 AWS Resource를 하나만 만들며, API가 AWS 생성 뒤 중단되면 결정적 이름과 `ManagedBy=SketchCatch`,

@@ -1,5 +1,6 @@
 import type { CleanupAwsConnectionManagedResources } from "./aws-connection-service.js";
 import {
+  awsCodeConnectionManagedCleanupFailureReason,
   AwsCodeConnectionError,
   type AwsCodeConnectionRepository
 } from "./aws-codeconnection-service.js";
@@ -80,7 +81,8 @@ export async function disconnectAwsCodeConnection(
     if (
       !(await repository.completeDeletion({
         id: existing.id,
-        connectionId: connection.id
+        connectionId: connection.id,
+        claimedAt: now
       }))
     ) {
       throw new Error("GitHub build connection metadata changed during cleanup");
@@ -88,7 +90,8 @@ export async function disconnectAwsCodeConnection(
   } catch {
     await repository.markDeletionFailed({
       id: existing.id,
-      reason: "AWS의 SketchCatch 관리 리소스 정리에 실패했습니다. 다시 시도해 주세요.",
+      claimedAt: now,
+      reason: awsCodeConnectionManagedCleanupFailureReason,
       now
     });
     throw new AwsCodeConnectionError(

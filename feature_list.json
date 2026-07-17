@@ -776,7 +776,7 @@
         "lastVerified": "2026-07-17",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/db/repository-analysis-records-migration.test.ts src/routes/repository-analysis-records.test.ts src/routes/project-delivery-profile.test.ts src/delivery/project-delivery-profile-service.test.ts src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-target-connection.test.ts src/git-cicd/git-cicd-readiness-service.test.ts",
-          "pnpm --dir apps/api exec tsx --test src/aws-connections/aws-codeconnection-service.test.ts src/releases/project-execution-lease-service.test.ts",
+          "pnpm --dir apps/api exec tsx --test src/aws-connections/aws-codeconnection-service.test.ts src/build-environments/project-build-environment-service.test.ts src/releases/project-execution-lease-service.test.ts",
           "pnpm --dir apps/web exec tsx --test app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-analysis-record-payload.test.ts app/workspace/repository/repository-recovery-action.test.ts app/workspace/workspace-start-mode.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/delivery-repository-freshness.test.ts features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/cicd-return-navigation.test.ts",
           "pnpm --dir apps/web exec tsx --test features/dashboard/aws-connection-settings.test.ts",
           "pnpm lint",

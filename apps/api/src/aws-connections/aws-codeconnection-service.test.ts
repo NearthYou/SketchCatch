@@ -165,8 +165,13 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
     return "claimed" as const;
   }
 
-  async completeDeletion(input: { id: string }) {
-    if (!this.record || this.record.id !== input.id || this.record.status !== "DELETING") {
+  async completeDeletion(input: { id: string; claimedAt: Date }) {
+    if (
+      !this.record ||
+      this.record.id !== input.id ||
+      this.record.status !== "DELETING" ||
+      this.record.updatedAt.getTime() !== input.claimedAt.getTime()
+    ) {
       return false;
     }
     this.record = undefined;
@@ -174,8 +179,19 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
     return true;
   }
 
-  async markDeletionFailed(input: { id: string; reason: string; now: Date }) {
-    if (!this.record || this.record.id !== input.id) return;
+  async markDeletionFailed(input: {
+    id: string;
+    claimedAt: Date;
+    reason: string;
+    now: Date;
+  }) {
+    if (
+      !this.record ||
+      this.record.id !== input.id ||
+      this.record.updatedAt.getTime() !== input.claimedAt.getTime()
+    ) {
+      return;
+    }
     this.record = {
       ...this.record,
       status: "ERROR",
@@ -557,6 +573,14 @@ test("disconnect keeps retryable metadata when AWS cleanup fails", async () => {
   assert.equal(repository.record?.status, "ERROR");
   assert.match(repository.record?.statusReason ?? "", /관리 리소스 정리에 실패/u);
   assert.doesNotMatch(repository.record?.statusReason ?? "", /secret/u);
+
+  const refreshed = await refreshAwsCodeConnection(
+    { connectionId, userId },
+    repository,
+    new FakeGateway()
+  );
+  assert.equal(refreshed.codeConnection?.status, "ERROR");
+  assert.equal(refreshed.codeConnection?.cleanupRetryRequired, true);
 });
 
 test("disconnect retries an expired deletion claim", async () => {
@@ -570,7 +594,13 @@ test("disconnect retries an expired deletion claim", async () => {
     { connectionId, userId, confirmedManagedCleanup: true },
     repository,
     {
-      cleanupManagedResources: async () => undefined,
+      cleanupManagedResources: async () => {
+        const previousClaimCompleted = await repository.completeDeletion({
+          id: codeConnectionId,
+          claimedAt: fixedNow
+        });
+        assert.equal(previousClaimCompleted, false);
+      },
       deletionReservationTtlMs: 1_000,
       now: () => new Date("2026-07-15T00:00:02.000Z")
     }

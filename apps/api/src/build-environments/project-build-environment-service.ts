@@ -364,28 +364,43 @@ export function createPostgresProjectBuildEnvironmentRepository(
     },
 
     async save(input) {
-      const createdAt = input.createdAt ?? input.updatedAt;
-      const [environment] = await db
-        .insert(projectBuildEnvironments)
-        .values({ ...input, createdAt })
-        .onConflictDoUpdate({
-          target: projectBuildEnvironments.projectId,
-          set: {
-            awsConnectionId: input.awsConnectionId,
-            awsCodeConnectionId: input.awsCodeConnectionId,
-            codeBuildProjectName: input.codeBuildProjectName,
-            codeBuildServiceRoleArn: input.codeBuildServiceRoleArn,
-            permissionsBoundaryArn: input.permissionsBoundaryArn,
-            sourceRepositoryUrl: input.sourceRepositoryUrl,
-            runtimeFingerprint: input.runtimeFingerprint,
-            status: input.status,
-            lastVerifiedAt: input.lastVerifiedAt,
-            updatedAt: input.updatedAt
-          }
-        })
-        .returning();
-      if (!environment) throw new Error("Project build environment was not saved");
-      return environment;
+      return db.transaction(async (transaction) => {
+        const [codeConnection] = input.awsCodeConnectionId
+          ? await transaction
+              .select({ status: awsCodeConnections.status })
+              .from(awsCodeConnections)
+              .where(eq(awsCodeConnections.id, input.awsCodeConnectionId))
+              .for("key share")
+          : [];
+        if (codeConnection?.status !== "AVAILABLE") {
+          throw new ProjectBuildEnvironmentError(
+            "CODECONNECTION_REQUIRED",
+            "사용 가능한 GitHub 빌드 연결이 필요합니다."
+          );
+        }
+        const createdAt = input.createdAt ?? input.updatedAt;
+        const [environment] = await transaction
+          .insert(projectBuildEnvironments)
+          .values({ ...input, createdAt })
+          .onConflictDoUpdate({
+            target: projectBuildEnvironments.projectId,
+            set: {
+              awsConnectionId: input.awsConnectionId,
+              awsCodeConnectionId: input.awsCodeConnectionId,
+              codeBuildProjectName: input.codeBuildProjectName,
+              codeBuildServiceRoleArn: input.codeBuildServiceRoleArn,
+              permissionsBoundaryArn: input.permissionsBoundaryArn,
+              sourceRepositoryUrl: input.sourceRepositoryUrl,
+              runtimeFingerprint: input.runtimeFingerprint,
+              status: input.status,
+              lastVerifiedAt: input.lastVerifiedAt,
+              updatedAt: input.updatedAt
+            }
+          })
+          .returning();
+        if (!environment) throw new Error("Project build environment was not saved");
+        return environment;
+      });
     }
   };
 }

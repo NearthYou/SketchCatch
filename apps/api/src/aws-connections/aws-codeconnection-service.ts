@@ -24,6 +24,9 @@ import type {
 } from "./aws-connection-service.js";
 import { createAwsSdkStsGateway } from "./aws-connection-test-service.js";
 
+export const awsCodeConnectionManagedCleanupFailureReason =
+  "AWS의 SketchCatch 관리 리소스 정리에 실패했습니다. 다시 시도해 주세요.";
+
 export type VerifiedAwsConnectionForCodeConnection = {
   id: string;
   accountId: string;
@@ -77,8 +80,17 @@ export type AwsCodeConnectionRepository = {
     now: Date;
     staleBefore: Date;
   }): Promise<"claimed" | "blocked" | "busy" | "not_found">;
-  completeDeletion(input: { id: string; connectionId: string }): Promise<boolean>;
-  markDeletionFailed(input: { id: string; reason: string; now: Date }): Promise<void>;
+  completeDeletion(input: {
+    id: string;
+    connectionId: string;
+    claimedAt: Date;
+  }): Promise<boolean>;
+  markDeletionFailed(input: {
+    id: string;
+    claimedAt: Date;
+    reason: string;
+    now: Date;
+  }): Promise<void>;
 };
 
 export type AwsCodeConnectionGateway = {
@@ -332,6 +344,18 @@ export function createPostgresAwsCodeConnectionRepository(
 
     async completeDeletion(input) {
       return db.transaction(async (transaction) => {
+        const [deleted] = await transaction
+          .delete(awsCodeConnections)
+          .where(
+            and(
+              eq(awsCodeConnections.id, input.id),
+              eq(awsCodeConnections.awsConnectionId, input.connectionId),
+              eq(awsCodeConnections.status, "DELETING"),
+              eq(awsCodeConnections.updatedAt, input.claimedAt)
+            )
+          )
+          .returning({ id: awsCodeConnections.id });
+        if (!deleted) return false;
         await transaction
           .update(projectBuildEnvironments)
           .set({
@@ -341,17 +365,7 @@ export function createPostgresAwsCodeConnectionRepository(
             updatedAt: new Date()
           })
           .where(eq(projectBuildEnvironments.awsConnectionId, input.connectionId));
-        const [deleted] = await transaction
-          .delete(awsCodeConnections)
-          .where(
-            and(
-              eq(awsCodeConnections.id, input.id),
-              eq(awsCodeConnections.awsConnectionId, input.connectionId),
-              eq(awsCodeConnections.status, "DELETING")
-            )
-          )
-          .returning({ id: awsCodeConnections.id });
-        return Boolean(deleted);
+        return true;
       });
     },
 
@@ -366,7 +380,8 @@ export function createPostgresAwsCodeConnectionRepository(
         .where(
           and(
             eq(awsCodeConnections.id, input.id),
-            eq(awsCodeConnections.status, "DELETING")
+            eq(awsCodeConnections.status, "DELETING"),
+            eq(awsCodeConnections.updatedAt, input.claimedAt)
           )
         );
     }
@@ -646,6 +661,12 @@ export async function refreshAwsCodeConnection(
   if (existing.status === "DELETING") {
     return toResponse(existing, connection.region);
   }
+  if (
+    existing.status === "ERROR" &&
+    existing.statusReason === awsCodeConnectionManagedCleanupFailureReason
+  ) {
+    return toResponse(existing, connection.region);
+  }
 
   const observed = await gateway.get({
     ...connection,
@@ -695,6 +716,9 @@ function toResponse(
       providerType: record.providerType,
       status: record.status,
       statusReason: record.statusReason,
+      cleanupRetryRequired:
+        record.status === "ERROR" &&
+        record.statusReason === awsCodeConnectionManagedCleanupFailureReason,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString()
     },
