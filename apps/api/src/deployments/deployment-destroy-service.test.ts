@@ -395,6 +395,36 @@ test("runDeploymentDestroy retries an approved cleanup after plan failure and cl
     )
   );
 });
+test("runDeploymentDestroy reaches approved cleanup after an AWS connection failure", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDestroyDeploymentRecord({
+    status: "FAILED",
+    failureStage: "aws_connection",
+    errorSummary: "AWS Role connection test failed"
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  applyArtifactStorage.downloadDeploymentArtifact = async () => {
+    throw new Error("approved AWS connection failure cleanup reached");
+  };
+
+  await assert.rejects(
+    () =>
+      runDeploymentDestroy(
+        { deploymentId, accessContext: createAccessContext() },
+        repository,
+        {
+          applyArtifactStorage,
+          prepareTerraformWorkspace: async () => ({
+            workdir: "C:/tmp/sketchcatch-terraform-destroy",
+            mainFilePath: "C:/tmp/sketchcatch-terraform-destroy/main.tf",
+            terraformFiles: [],
+            cleanup: async () => undefined
+          })
+        }
+      ),
+    /approved AWS connection failure cleanup reached/
+  );
+});
 
 test("runDeploymentDestroy cleans a full-stack workspace when plan download fails", async () => {
   const repository = new FakeDeploymentRepository();

@@ -43,6 +43,7 @@ import {
   type RunDeploymentDestroyInput,
   type RunDeploymentDestroyResult
 } from "../deployments/deployment-destroy-service.js";
+import { isDeploymentDestroySourceStatus } from "../deployments/deployment-destroy-eligibility.js";
 import {
   approveDeploymentPlan as defaultApproveDeploymentPlan,
   revokeDeploymentApproval as defaultRevokeDeploymentApproval,
@@ -2036,16 +2037,7 @@ function requireDeploymentCanStartDestroyPlan(deployment: DeploymentRecord): voi
     throw new DeploymentConflictError("Terraform state is required before destroy");
   }
 
-  if (deployment.status === "SUCCESS") {
-    return;
-  }
-
-  if (
-    deployment.status === "FAILED" &&
-    (deployment.failureStage === "plan" ||
-      deployment.failureStage === "apply" ||
-      deployment.failureStage === "destroy")
-  ) {
+  if (isDeploymentDestroySourceStatus(deployment.status)) {
     return;
   }
 

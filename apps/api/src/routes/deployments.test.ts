@@ -3252,6 +3252,65 @@ test("POST /api/deployments/:deploymentId/destroy starts approved destroy in the
 
   await app.close();
 });
+test("POST /api/deployments/:deploymentId/destroy starts approved cleanup after an AWS connection failure", async () => {
+  const repository = new FakeDeploymentRepository();
+  const destroyCalls: RunDeploymentDestroyInput[] = [];
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    status: "FAILED",
+    failureStage: "aws_connection",
+    errorSummary: "AWS Role connection test failed",
+    currentPlanArtifactId: planArtifactId,
+    stateObjectKey,
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 1,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    },
+    isBlocked: false,
+    blockedBy: null,
+    blockedReason: null,
+    approvedAt: fixedNow,
+    approvedByUserId: userId,
+    approvedTerraformArtifactId: terraformArtifactId,
+    approvedPlanArtifactId: planArtifactId,
+    approvedTerraformArtifactHash: "c".repeat(64),
+    approvedTfplanHash: "a".repeat(64),
+    approvedAwsAccountId: "123456789012",
+    approvedAwsRegion: "ap-northeast-2"
+  });
+  repository.planArtifact = createDeploymentPlanArtifactRecord({ operation: "destroy" });
+  repository.deployments = [repository.deployment];
+  const app = await buildDeploymentTestApp(repository, {
+    runDeploymentDestroy: async (input) => {
+      destroyCalls.push(input);
+      return {
+        deployment: createDeploymentRecord(input.deploymentId, {
+          status: "DESTROYED",
+          currentPlanArtifactId: null,
+          stateObjectKey: null
+        }),
+        terraform: { init: null, destroy: null }
+      };
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/destroy`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.equal(destroyCalls.length, 1);
+  assert.equal(destroyCalls[0]?.startedFromStatus, "FAILED");
+  assert.equal(destroyCalls[0]?.startedFromFailureStage, "aws_connection");
+
+  await app.close();
+});
 
 test("POST /api/deployments/:deploymentId/cancel marks stale running deployments failed", async () => {
   const repository = new FakeDeploymentRepository();
