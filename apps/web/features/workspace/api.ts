@@ -244,7 +244,8 @@ export async function getProjectDetails(projectId: string): Promise<ProjectDetai
 
 export async function getProjectDraft(projectId: string): Promise<ProjectDraftResponse> {
   return apiFetch<ProjectDraftResponse>(`/projects/${encodeURIComponent(projectId)}/draft`, {
-    auth: true
+    auth: true,
+    cache: "no-store"
   });
 }
 
@@ -287,6 +288,7 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
 export async function saveProjectDraft({
   projectId,
   diagramJson,
+  expectedRevision,
   terraformFiles
 }: {
   projectId: string;
@@ -296,6 +298,7 @@ export async function saveProjectDraft({
     method: "PUT",
     body: {
       diagramJson,
+      expectedRevision,
       ...(terraformFiles !== undefined ? { terraformFiles } : {})
     }
   });
@@ -608,8 +611,7 @@ async function postPublicAiJson<ResponseBody>(
       0,
       {
         error: "internal_server_error",
-        message:
-          "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
+        message: "API 서버에 연결할 수 없습니다. Docker DB와 API 서버가 켜져 있는지 확인해주세요."
       },
       requestContext
     );
@@ -1643,9 +1645,7 @@ export async function runDeploymentPlan(deploymentId: string): Promise<Deploymen
   return response.deployment;
 }
 
-export async function prepareInfrastructureRollback(
-  deploymentId: string
-): Promise<Deployment> {
+export async function prepareInfrastructureRollback(deploymentId: string): Promise<Deployment> {
   const response = await apiFetch<DeploymentResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/infrastructure-rollback`,
     { auth: true, method: "POST" }

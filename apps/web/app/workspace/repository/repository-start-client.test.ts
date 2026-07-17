@@ -6,6 +6,14 @@ import { dirname, join } from "node:path";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
+test("Repository draft saves retain the server revision loaded with the screen", () => {
+  const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
+
+  assert.match(source, /getProjectDraft\(projectId\)/);
+  assert.match(source, /setProjectDraftRevision\(projectDraftResponse\.draft\?\.revision \?\? null\)/);
+  assert.equal(source.match(/expectedRevision: requireProjectDraftRevision\(\)/g)?.length, 3);
+});
+
 test("Repository start screen exposes an explicit AI chat fallback", () => {
   const source = readFileSync(join(currentDir, "repository-start-client.tsx"), "utf8");
 
