@@ -1,5 +1,9 @@
 import type { DeploymentStage } from "@sketchcatch/types";
 import {
+  clearInterval as clearNodeInterval,
+  setInterval as setNodeInterval
+} from "node:timers";
+import {
   appendDeploymentLogs,
   type DeploymentRepository,
   type ProjectAccessContext
@@ -11,6 +15,23 @@ import type { TerraformOutputLine, TerraformRunResult } from "./terraform-runner
 const liveLogBatchSize = 5;
 const liveLogFlushDelayMs = 500;
 const liveLogHeartbeatIntervalMs = 10_000;
+
+function scheduleNodeInterval(
+  callback: () => void,
+  delayMs: number
+): NodeJS.Timeout {
+  const timer = setNodeInterval(callback, delayMs);
+
+  if (typeof timer === "number") {
+    throw new TypeError("Expected a Node.js interval handle");
+  }
+
+  return timer;
+}
+
+function cancelNodeInterval(timer: NodeJS.Timeout): void {
+  clearNodeInterval(timer);
+}
 
 type DeploymentTerraformLiveLogWriterInput = {
   accessContext: ProjectAccessContext;
@@ -38,8 +59,8 @@ export function createDeploymentTerraformLiveLogWriter(
 ) {
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? liveLogHeartbeatIntervalMs;
   const now = options.now ?? Date.now;
-  const scheduleInterval = options.setInterval ?? setInterval;
-  const cancelInterval = options.clearInterval ?? clearInterval;
+  const scheduleInterval = options.setInterval ?? scheduleNodeInterval;
+  const cancelInterval = options.clearInterval ?? cancelNodeInterval;
   const startedAtMs = now();
   let lastActivityAtMs = startedAtMs;
   let completed = false;

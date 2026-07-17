@@ -53,7 +53,7 @@ test("live Terraform logs emit a heartbeat while Terraform is silent", async () 
     userId: "user-id"
   };
   let nowMs = 0;
-  let scheduledHeartbeat: (() => void) | null = null;
+  const scheduledHeartbeats: Array<() => void> = [];
   const writer = createDeploymentTerraformLiveLogWriter(
     {
       accessContext,
@@ -67,16 +67,18 @@ test("live Terraform logs emit a heartbeat while Terraform is silent", async () 
       heartbeatIntervalMs: 10_000,
       now: () => nowMs,
       setInterval: (callback) => {
-        scheduledHeartbeat = callback;
+        scheduledHeartbeats.push(callback);
         return {} as NodeJS.Timeout;
       }
     }
   );
+  const scheduledHeartbeat = scheduledHeartbeats[0];
+  assert.ok(scheduledHeartbeat);
 
   nowMs = 10_000;
-  scheduledHeartbeat?.();
+  scheduledHeartbeat();
   nowMs = 20_000;
-  scheduledHeartbeat?.();
+  scheduledHeartbeat();
   await writer.complete({
     label: "terraform apply",
     result: {

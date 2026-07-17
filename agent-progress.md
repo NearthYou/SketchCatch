@@ -140,3 +140,9 @@ Short English-only working log for the current agent context. Older records are 
 - Replaced mixed and repeated Review Summary entries with exactly two groups: verified strengths and required fixes.
 - Removed directive sentences from strength summaries and paired each prioritized risk with a separate concrete problem and correction line.
 - Focused presentation and Workbench tests pass 26/26; web lint passes with one unrelated Direct Deployment warning. Chrome DOM verification confirmed the two groups and separated problem/correction lines.
+
+### 2026-07-17 - Repair Terraform live-log timer typing
+
+- Isolated the heartbeat scheduler behind a Node-only timer adapter so DOM timer overloads cannot widen its handle to `number | Timeout`.
+- Captured the injected heartbeat callback through an asserted collection so strict control-flow analysis no longer narrows the test call to `never`.
+- API typecheck, focused live-log tests (2/2), API lint, API build, and harness pass. Root typecheck remains blocked by malformed ignored `.next` route types in the local web build cache.
