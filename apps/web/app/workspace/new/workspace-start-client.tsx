@@ -27,11 +27,9 @@ import {
   createWorkspaceStartSingleFlight,
   type WorkspaceStartSingleFlight
 } from "../../../features/workspace/workspace-start-single-flight";
-import { markTerraformSourceAuthoritative } from "../../../features/workspace/terraform-panel-utils";
 import {
   getBoardTemplateRelationshipCount,
   getBoardTemplateResourceCount,
-  isBoardTemplateAvailable,
   listBoardTemplates,
   type AvailableBoardTemplate,
   type BoardTemplate
@@ -41,6 +39,11 @@ import {
   resolveWorkspaceStartAction,
   type WorkspaceStartKind
 } from "./workspace-start-options";
+import {
+  createTemplateProjectDraft,
+  createWorkspaceStartTemplateSelection,
+  resolveWorkspaceStartTemplate
+} from "./workspace-start-template-flow";
 import styles from "./workspace-start.module.css";
 
 const AI_START_DRAFT_STORAGE_KEY = "sketchcatch.newProjectDraft";
@@ -65,6 +68,7 @@ type WorkspaceStartForm = {
   readonly projectName: string;
   readonly selectedKind: WorkspaceStartKind;
   readonly selectedTemplateId: string | null;
+  readonly selectedTemplateVersion: string | null;
 };
 
 type TemplateStartView = "catalog" | "detail" | null;
@@ -86,6 +90,11 @@ export function WorkspaceStartClient({
 } = {}) {
   const router = useRouter();
   const [title, setTitle] = useState("");
+  const initialTemplate = resolveWorkspaceStartTemplate(boardTemplates, {
+    templateId: initialTemplateId ?? null,
+    templateVersion: null
+  });
+  const initialTemplateSelection = createWorkspaceStartTemplateSelection(initialTemplate);
   const projectNameInputRef = useRef<HTMLInputElement>(null);
   const [startSingleFlight] = useState<WorkspaceStartSingleFlight>(() =>
     createWorkspaceStartSingleFlight()
@@ -94,18 +103,13 @@ export function WorkspaceStartClient({
   const [selectedKind, setSelectedKind] = useState<WorkspaceStartKind>(initialStartKind ?? "ai");
   const [isStartFormHydrated, setIsStartFormHydrated] = useState(initialStartKind !== undefined);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    boardTemplates.some(
-      (template) => template.id === initialTemplateId && isBoardTemplateAvailable(template)
-    )
-      ? (initialTemplateId ?? null)
-      : null
+    initialTemplateSelection.templateId
+  );
+  const [selectedTemplateVersion, setSelectedTemplateVersion] = useState<string | null>(
+    initialTemplateSelection.templateVersion
   );
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(
-    boardTemplates.some(
-      (template) => template.id === initialTemplateId && isBoardTemplateAvailable(template)
-    )
-      ? (initialTemplateId ?? null)
-      : null
+    initialTemplateSelection.templateId
   );
   const [templateStartView, setTemplateStartView] = useState<TemplateStartView>(() =>
     initialStartKind === "template" ? "catalog" : null
@@ -113,14 +117,20 @@ export function WorkspaceStartClient({
   const [errorMessage, setErrorMessage] = useState("");
   const [projectNameError, setProjectNameError] = useState("");
   const [submittingKind, setSubmittingKind] = useState<WorkspaceStartKind | null>(null);
-  const selectedTemplate = useMemo(() => {
-    const template = boardTemplates.find((candidate) => candidate.id === selectedTemplateId);
-    return template && isBoardTemplateAvailable(template) ? template : null;
-  }, [selectedTemplateId]);
+  const selectedTemplate = useMemo(
+    () =>
+      resolveWorkspaceStartTemplate(boardTemplates, {
+        templateId: selectedTemplateId,
+        templateVersion: selectedTemplateVersion
+      }),
+    [selectedTemplateId, selectedTemplateVersion]
+  );
   const previewTemplate = useMemo(() => {
-    const template = boardTemplates.find((candidate) => candidate.id === previewTemplateId);
-    return template && isBoardTemplateAvailable(template) ? template : null;
-  }, [previewTemplateId]);
+    return resolveWorkspaceStartTemplate(boardTemplates, {
+      templateId: previewTemplateId,
+      templateVersion: previewTemplateId === selectedTemplateId ? selectedTemplateVersion : null
+    });
+  }, [previewTemplateId, selectedTemplateId, selectedTemplateVersion]);
   const isSubmitting = submittingKind !== null;
 
   useEffect(() => {
@@ -140,15 +150,14 @@ export function WorkspaceStartClient({
     if (storedForm) {
       setTitle(storedForm.projectName);
       setSelectedKind(storedForm.selectedKind);
-      const restoredTemplateId =
-        boardTemplates.some(
-          (template) =>
-            template.id === storedForm.selectedTemplateId && isBoardTemplateAvailable(template)
-        )
-          ? storedForm.selectedTemplateId
-          : null;
-      setSelectedTemplateId(restoredTemplateId);
-      setPreviewTemplateId(restoredTemplateId);
+      const restoredTemplate = resolveWorkspaceStartTemplate(boardTemplates, {
+        templateId: storedForm.selectedTemplateId,
+        templateVersion: storedForm.selectedTemplateVersion
+      });
+      const restoredSelection = createWorkspaceStartTemplateSelection(restoredTemplate);
+      setSelectedTemplateId(restoredSelection.templateId);
+      setSelectedTemplateVersion(restoredSelection.templateVersion);
+      setPreviewTemplateId(restoredSelection.templateId);
     } else {
       const aiDraft = readAiStartDraft();
       if (aiDraft?.projectName) {
@@ -164,8 +173,13 @@ export function WorkspaceStartClient({
       return;
     }
 
-    writeWorkspaceStartForm({ projectName: title, selectedKind, selectedTemplateId });
-  }, [isStartFormHydrated, selectedKind, selectedTemplateId, title]);
+    writeWorkspaceStartForm({
+      projectName: title,
+      selectedKind,
+      selectedTemplateId,
+      selectedTemplateVersion
+    });
+  }, [isStartFormHydrated, selectedKind, selectedTemplateId, selectedTemplateVersion, title]);
 
   // 명시된 시작 방식을 즉시 실행하고 같은 순간의 다른 시작 요청은 한 번만 처리합니다.
   async function handleContinue(
@@ -223,14 +237,7 @@ export function WorkspaceStartClient({
           }
 
           if (action.kind === "createProject" && action.openMode === "template" && template) {
-            await saveProjectDraft({
-              diagramJson:
-                template.terraformFiles.length > 0
-                  ? markTerraformSourceAuthoritative(template.diagramJson)
-                  : template.diagramJson,
-              projectId: project.id,
-              terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
-            });
+            await saveProjectDraft(createTemplateProjectDraft({ projectId: project.id, template }));
           }
 
           clearWorkspaceStartForm();
@@ -289,8 +296,19 @@ export function WorkspaceStartClient({
       return;
     }
 
-    setSelectedTemplateId(templateId);
-    setPreviewTemplateId(templateId);
+    const template = resolveWorkspaceStartTemplate(boardTemplates, {
+      templateId,
+      templateVersion: null
+    });
+
+    if (!template) {
+      return;
+    }
+
+    const selection = createWorkspaceStartTemplateSelection(template);
+    setSelectedTemplateId(selection.templateId);
+    setSelectedTemplateVersion(selection.templateVersion);
+    setPreviewTemplateId(selection.templateId);
     setTemplateStartView("detail");
     setErrorMessage("");
   }
@@ -637,11 +655,15 @@ function readWorkspaceStartForm(): WorkspaceStartForm | null {
     const candidate = value as Partial<WorkspaceStartForm>;
     return typeof candidate.projectName === "string" &&
       isWorkspaceStartKind(candidate.selectedKind) &&
-      (candidate.selectedTemplateId === null || typeof candidate.selectedTemplateId === "string")
+      (candidate.selectedTemplateId === null || typeof candidate.selectedTemplateId === "string") &&
+      (candidate.selectedTemplateVersion === undefined ||
+        candidate.selectedTemplateVersion === null ||
+        typeof candidate.selectedTemplateVersion === "string")
       ? {
           projectName: candidate.projectName,
           selectedKind: candidate.selectedKind,
-          selectedTemplateId: candidate.selectedTemplateId
+          selectedTemplateId: candidate.selectedTemplateId,
+          selectedTemplateVersion: candidate.selectedTemplateVersion ?? null
         }
       : null;
   } catch {

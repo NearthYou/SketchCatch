@@ -33,7 +33,9 @@ test("ASG 템플릿은 실제 Launch Configuration·Subnet·Load Balancer 관계
   assert.deepEqual(
     template.diagramJson.edges
       .filter((edge) => edge.targetNodeId === ASG_NODE_ID)
-      .map((edge) => [edge.sourceNodeId, edge.label])
+      .map(
+        (edge): readonly [string, string] => [edge.sourceNodeId, edge.label ?? ""]
+      )
       .sort(([left], [right]) => left.localeCompare(right)),
     [
       [SUBNET_B_NODE_ID, "subnet"],

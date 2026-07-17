@@ -57,7 +57,7 @@ function applyAsgNodePresentation(node: DiagramNode): DiagramNode {
 
 function applyAsgRelationshipPresentation(
   sourceEdges: readonly DiagramEdge[]
-): readonly DiagramEdge[] {
+): DiagramEdge[] {
   const existingEdges = sourceEdges.map((edge) => {
     if (edge.sourceNodeId !== ASG_NODE_ID || edge.targetNodeId !== LOAD_BALANCER_NODE_ID) {
       return edge;

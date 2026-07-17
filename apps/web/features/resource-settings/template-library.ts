@@ -799,6 +799,20 @@ export function isBoardTemplateAvailable(
   return template.availability === "available";
 }
 
+// Template 내용과 설명·태그·Terraform seed를 함께 fingerprint해 선택 상태의 revision으로 사용합니다.
+export function getBoardTemplateVersion(template: AvailableBoardTemplate): string {
+  return `v-${createTemplateVersionHash(
+    JSON.stringify({
+      description: template.description,
+      diagramJson: template.diagramJson,
+      id: template.id,
+      tags: template.tags,
+      terraformFiles: template.terraformFiles,
+      title: template.title
+    })
+  )}`;
+}
+
 export function reviewAvailableBoardTemplate(
   template: AvailableBoardTemplate
 ): AvailableBoardTemplateReview {
@@ -1010,6 +1024,17 @@ function cloneAvailableBoardTemplate(template: AvailableBoardTemplate): Availabl
     tags: [...template.tags],
     terraformFiles: template.terraformFiles.map((file) => ({ ...file }))
   };
+}
+
+function createTemplateVersionHash(value: string): string {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function materializeBoardTemplateDiagram(templateId: string, diagram: DiagramJson): DiagramJson {
