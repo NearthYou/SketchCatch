@@ -1051,8 +1051,8 @@ API는 `GET|PUT /api/projects/:projectId/deployment-target`을 사용한다. Dir
 
 웹 포함 ECS target은 SketchCatch가 관리하는 격리된 `ProjectBuildEnvironment`를 가진다. CodeBuild project는
 확인된 commit만 checkout하고 API OCI archive, frontend archive, 파일별 SHA-256 manifest를 만든 뒤 SketchCatch
-내부 Artifact S3의 `ReleaseCandidate` prefix에 업로드한다. CodeBuild는 ECR, ECS, 서비스 S3, CloudFront를
-변경하지 않는다. 실제 release activation은 SketchCatch trusted worker가 수행한다. Lambda, EC2/ASG, Static의
+내부 Artifact S3의 `ReleaseCandidate` prefix에 업로드한다. CodeBuild는 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront를
+변경하지 않는다. Docker layer cache는 사용자 AWS 계정의 프로젝트 전용 build-cache ECR Repository에만 읽고 쓴다. 실제 release activation은 SketchCatch trusted worker가 수행한다. Lambda, EC2/ASG, Static의
 기존 runtime adapter는 이 ECS 전용 전환과 별도로 호환한다. 사용자 임의 shell 문자열은 저장하거나 실행하지 않는다.
 Direct build를 시작하기 전에 active GitHub Source Repository의 owner/name과 CodeBuild project의 `GITHUB` source
 URL을 비교하고, source auth가 `CODECONNECTIONS`인지 확인한다. 다른 저장소, OAuth source, inactive installation은

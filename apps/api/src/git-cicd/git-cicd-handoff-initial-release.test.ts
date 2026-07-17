@@ -59,6 +59,28 @@ test("invokes the provider only after revalidating the current target and initia
   assert.equal(providerCalls, 1);
 });
 
+test("does not apply the ECS initial release gate to other runtime handoffs", async () => {
+  const target = {
+    ...createTarget(),
+    runtimeTargetKind: "lambda"
+  } as unknown as GitCicdHandoffDeploymentTargetRecord;
+  const repository = createRepository(target, undefined);
+  let providerCalls = 0;
+
+  const result = await executeGitCicdHandoffWithVerifiedInitialRelease(
+    createInput(target),
+    repository,
+    { async verify() { return true; } },
+    async () => {
+      providerCalls += 1;
+      return "created";
+    }
+  );
+
+  assert.equal(result, "created");
+  assert.equal(providerCalls, 1);
+});
+
 function createInput(target: GitCicdHandoffDeploymentTargetRecord) {
   return {
     projectId,
@@ -107,6 +129,8 @@ function createDeployment(): GitCicdHandoffApprovedDeploymentRecord {
     architectureId: "44444444-4444-4444-8444-444444444444",
     terraformArtifactId: "55555555-5555-4555-8555-555555555555",
     awsConnectionId: "77777777-7777-4777-8777-777777777777",
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
     scope: "full_stack",
     targetKind: "ecs_fargate",
     source: "direct",

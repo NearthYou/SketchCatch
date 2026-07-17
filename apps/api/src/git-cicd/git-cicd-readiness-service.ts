@@ -55,6 +55,8 @@ export type GitCicdReadinessDeploymentRecord = {
   projectId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  awsAccountIdSnapshot: string | null;
+  awsRegionSnapshot: string | null;
   approvedPlanArtifactId: string | null;
   scope: DeploymentScope;
   targetKind: RuntimeTargetKind | null;
@@ -277,16 +279,20 @@ export function createGitCicdReadinessService(options: {
           throw new GitCicdReadinessNotFoundError("Project not found");
         }
 
-        const deploymentEvidence = await inspectLatestSuccessfulDeployment(
-          input,
-          repository,
-          planVerifier
-        );
         const sourceRepository = await repository.findActiveRepositoryWithMonitoring(
           input.projectId
         );
         const buildEnvironment = await repository.findProjectBuildEnvironment(input.projectId);
         let target = await repository.findProjectDeploymentTarget(input.projectId);
+        const preferredConnection = target?.connectionId
+          ? await repository.findVerifiedConnection(target.connectionId, input.userId)
+          : undefined;
+        const deploymentEvidence = await inspectLatestSuccessfulDeployment(
+          input,
+          repository,
+          planVerifier,
+          preferredConnection
+        );
         let targetReconciled = false;
         const checkedAt = now();
         const selection = toSelectedApplyPlan(deploymentEvidence);
@@ -323,6 +329,8 @@ export function createGitCicdReadinessService(options: {
           target,
           targetConnection,
           targetReconciled,
+          initialApplicationReleaseApplicable:
+            !target || target.runtimeTargetKind === "ecs_fargate",
           initialApplicationReleaseReady
         });
         const requiredActionCount = items.filter(
@@ -468,6 +476,8 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
           projectId: deployments.projectId,
           terraformArtifactId: deployments.terraformArtifactId,
           awsConnectionId: deployments.awsConnectionId,
+          awsAccountIdSnapshot: deployments.awsAccountIdSnapshot,
+          awsRegionSnapshot: deployments.awsRegionSnapshot,
           approvedPlanArtifactId: deployments.approvedPlanArtifactId,
           scope: deployments.scope,
           targetKind: deployments.targetKind,
@@ -538,6 +548,8 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
           projectId: deployments.projectId,
           terraformArtifactId: deployments.terraformArtifactId,
           awsConnectionId: deployments.awsConnectionId,
+          awsAccountIdSnapshot: deployments.awsAccountIdSnapshot,
+          awsRegionSnapshot: deployments.awsRegionSnapshot,
           approvedPlanArtifactId: deployments.approvedPlanArtifactId,
           scope: deployments.scope,
           targetKind: deployments.targetKind,
@@ -701,7 +713,8 @@ type DeploymentEvidence = {
 async function inspectLatestSuccessfulDeployment(
   input: { projectId: string; userId: string },
   repository: GitCicdReadinessRepository,
-  planVerifier: GitCicdReadinessPlanVerifier
+  planVerifier: GitCicdReadinessPlanVerifier,
+  preferredConnection?: VerifiedConnectionRecord | undefined
 ): Promise<DeploymentEvidence> {
   const deployment = await repository.findLatestSuccessfulDirectInfrastructureDeployment(
     input.projectId
@@ -709,14 +722,18 @@ async function inspectLatestSuccessfulDeployment(
   if (!deployment || !isSuccessfulDirectInfrastructureDeployment(deployment)) {
     return { deployment: null, connection: null, plan: null };
   }
-  if (!deployment.awsConnectionId) {
-    return { deployment, connection: null, plan: null };
-  }
-  const connection = await repository.findVerifiedConnection(
-    deployment.awsConnectionId,
-    input.userId
-  );
+  const connection =
+    preferredConnection ??
+    (deployment.awsConnectionId
+      ? await repository.findVerifiedConnection(deployment.awsConnectionId, input.userId)
+      : undefined);
   if (!connection) return { deployment, connection: null, plan: null };
+  if (
+    deployment.awsAccountIdSnapshot !== connection.accountId ||
+    deployment.awsRegionSnapshot !== connection.region
+  ) {
+    return { deployment, connection, plan: null };
+  }
 
   const plans = await repository.listPlanArtifacts(deployment.id);
   const orderedPlans = prioritizeApprovedApplyPlan(
@@ -1138,6 +1155,7 @@ function createReadinessItems(input: {
   target: ProjectDeploymentTargetRecord | undefined;
   targetConnection: VerifiedConnectionRecord | undefined;
   targetReconciled: boolean;
+  initialApplicationReleaseApplicable: boolean;
   initialApplicationReleaseReady: boolean;
 }): GitCicdReadinessItem[] {
   const monitoringReady = hasValidMonitoringConfig(input.sourceRepository);
@@ -1178,6 +1196,21 @@ function createReadinessItems(input: {
     targetMissingKeys.push("output_url");
   }
 
+  const initialApplicationReleaseItems: GitCicdReadinessItem[] =
+    input.initialApplicationReleaseApplicable
+      ? [
+          createReadinessItem({
+            key: "initial_application_release",
+            label: "최초 앱 배포",
+            ready: input.initialApplicationReleaseReady,
+            action: "deploy_initial_application",
+            recommendedDeploymentScope: input.deploymentEvidence.plan
+              ? "application"
+              : "full_stack"
+          })
+        ]
+      : [];
+
   const items: GitCicdReadinessItem[] = [
     createReadinessItem({
       key: "approved_apply_plan",
@@ -1185,13 +1218,7 @@ function createReadinessItems(input: {
       ready: input.deploymentEvidence.plan !== null,
       action: "approve_apply_plan"
     }),
-    createReadinessItem({
-      key: "initial_application_release",
-      label: "최초 앱 배포",
-      ready: input.initialApplicationReleaseReady,
-      action: "deploy_initial_application",
-      recommendedDeploymentScope: input.deploymentEvidence.plan ? "application" : "full_stack"
-    }),
+    ...initialApplicationReleaseItems,
     createReadinessItem({
       key: "source_repository",
       label: "소스 저장소",

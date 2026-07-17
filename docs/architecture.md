@@ -298,8 +298,8 @@ ECS/ALB/ECR/IAM/CloudWatch runtime은 기존 state key를 유지하고, Route53/
 
 웹 포함 ECS/Fargate의 사용자 AWS CodeBuild는 active SourceRepository의 확정 commit을 checkout해 API OCI
 archive와 frontend archive를 한 번 만들고 SketchCatch 내부 Artifact S3에 업로드하는 build-only 경계다.
-CodeBuild service role에는 ECR, ECS, 서비스 S3, CloudFront, `iam:PassRole` 권한을 주지 않으며 permissions
-boundary를 반드시 적용한다. Repository의 Dockerfile과 package lifecycle script는 이 제한된 경계에서만 실행한다.
+CodeBuild service role에는 사용자 배포용 ECR, ECS, 서비스 S3, CloudFront, `iam:PassRole` 권한을 주지 않으며 permissions
+boundary를 반드시 적용한다. Docker layer 재사용을 위해 사용자 AWS 계정의 프로젝트 전용 build-cache ECR Repository에만 정확한 layer read/write 권한을 허용한다. Repository의 Dockerfile과 package lifecycle script는 이 제한된 경계에서만 실행한다.
 
 SketchCatch API는 프로젝트 단위 lease와 fencing version을 저장하고 CodeBuild 시작·상태 조회·중단을 소유한다. Direct, App release-run, Infra workflow는 같은 lease를 재사용하며 충돌 시 대기열 없이 고정된 문구로 즉시 차단한다.
 Terraform Apply 뒤 실제 ECR/ECS/S3/CloudFront 변경은 trusted ECS RunTask worker가 승인된 output과 resource

@@ -659,8 +659,8 @@ GitHub ECS deploy/migration role은 ECS API/web/worker task family, service, wor
 Direct application release용 연결 Role은 CodeConnections 생성·조회·사용, 프로젝트 CodeBuild project와
 build-only service role의 create/reconcile, `codebuild:BatchGetProjects`, `StartBuild`, `BatchGetBuilds`, `StopBuild`를
 허용합니다. 동적으로 생성하는 service role에는 SketchCatch 관리 permissions boundary를 반드시 연결합니다.
-CodeBuild service role에는 Repository checkout, log 전송과 SketchCatch API가 발급한 presigned multipart upload만
-허용하며 ECR/ECS/서비스 S3/CloudFront/`iam:PassRole` 권한을 주지 않습니다. 실제 application mutation은 trusted
+CodeBuild service role에는 Repository checkout, log 전송, SketchCatch API가 발급한 presigned multipart upload와 프로젝트 전용 build-cache ECR layer read/write만
+허용하며 사용자 배포용 ECR/ECS/서비스 S3/CloudFront/`iam:PassRole` 권한을 주지 않습니다. 실제 application mutation은 trusted
 worker가 연결 Role을 AssumeRole하면서 승인된 resource ARN으로 제한한 session policy를 사용합니다. 기존
 CloudFormation Stack은 템플릿 변경이 자동 반영되지 않으므로 개발 단계의 기존 연결은 다시 연결해야 합니다.
 

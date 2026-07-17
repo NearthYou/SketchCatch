@@ -18,6 +18,10 @@ test("preflight buildspec builds and checks API/frontend without deployment perm
   assert.match(buildspec, /--cache-to/);
   assert.match(buildspec, /ignore-error=true/);
   assert.match(buildspec, /--load/);
+  assert.match(
+    buildspec,
+    /if ! \(docker buildx create[\s\S]*\|\| docker buildx use[\s\S]*\); then[\s\S]*cold_build_api_image/
+  );
   assert.match(buildspec, /falling back to a cold Docker build/);
   assert.match(buildspec, /docker run/);
   assert.match(buildspec, /docker logs/);

@@ -60,6 +60,23 @@ test("failed build role creation removes only the cache repository created by th
   assert.equal(calls.includes("ecr:DeleteRepositoryCommand"), true);
 });
 
+test("failed cache lifecycle setup removes the repository created by this request", async () => {
+  const calls: string[] = [];
+  const gateway = createGatewayImplementation({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createEcrClient: () => createEcrClient(calls, { lifecycleSetupFails: true }),
+    createIamClient: () => createVerifiedIamClient({ includeConnectionTokenAccess: true }),
+    createCodeBuildClient: () => createVerifiedCodeBuildClient()
+  });
+
+  await assert.rejects(gateway.reconcile(desired), /PutLifecyclePolicy failed/);
+  assert.equal(calls.includes("ecr:DeleteRepositoryCommand"), true);
+});
+
 test("build environment removal deletes the owned project cache repository", async () => {
   const calls: string[] = [];
   const gateway = createGatewayImplementation({
@@ -451,7 +468,7 @@ const desired: DesiredProjectBuildEnvironment = {
 
 function createEcrClient(
   calls: string[],
-  options: { repositoryExists?: boolean } = {}
+  options: { repositoryExists?: boolean; lifecycleSetupFails?: boolean } = {}
 ) {
   let repositoryExists = options.repositoryExists ?? false;
   return {
@@ -471,6 +488,9 @@ function createEcrClient(
       }
       if (name === "GetLifecyclePolicyCommand") {
         return { lifecyclePolicyText: verifiedEcrLifecyclePolicy() };
+      }
+      if (name === "PutLifecyclePolicyCommand" && options.lifecycleSetupFails) {
+        throw new Error("PutLifecyclePolicy failed");
       }
       if (name === "DeleteRepositoryCommand") repositoryExists = false;
       return {};

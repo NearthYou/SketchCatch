@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, isNotNull } from "drizzle-orm";
 import {
   APPLICATION_ARTIFACT_CONTRACT_VERSION
 } from "@sketchcatch/types";
@@ -101,6 +101,8 @@ export type GitCicdHandoffApprovedDeploymentRecord = Pick<
   | "architectureId"
   | "terraformArtifactId"
   | "awsConnectionId"
+  | "awsAccountIdSnapshot"
+  | "awsRegionSnapshot"
   | "scope"
   | "targetKind"
   | "source"
@@ -539,9 +541,8 @@ export async function resolveGitCicdHandoffApplyEvidence(
     deployment.architectureId !== input.architectureId ||
     deployment.terraformArtifactId !== input.terraformArtifactId ||
     deployment.approvedTerraformArtifactId !== input.terraformArtifactId ||
-    deployment.awsConnectionId !== input.connectionId ||
-    (deployment.scope !== "infrastructure" && deployment.scope !== "full_stack") ||
-    deployment.targetKind !== "ecs_fargate" ||
+    deployment.awsAccountIdSnapshot !== input.accountId ||
+    deployment.awsRegionSnapshot !== input.region ||
     deployment.source !== "direct" ||
     deployment.status !== "SUCCESS" ||
     deployment.completedAt === null ||
@@ -677,12 +678,20 @@ export async function executeGitCicdHandoffWithVerifiedInitialRelease<T>(
   invokeProvider: (evidence: GitCicdHandoffApplyEvidence) => Promise<T>
 ): Promise<T> {
   const evidence = await resolveGitCicdHandoffApplyEvidence(input, repository, verifier);
+  if (input.expectedTarget.runtimeTargetKind !== "ecs_fargate") {
+    return invokeGitCicdHandoffProviderWithVerifiedPlan(evidence.plan, verifier, () =>
+      invokeProvider(evidence)
+    );
+  }
   const [target, release] = await Promise.all([
     repository.findProjectDeploymentTarget(input.projectId),
     repository.findLatestSucceededDirectApplicationRelease(input.projectId)
   ]);
   if (
     !target ||
+    (evidence.deployment.scope !== "infrastructure" &&
+      evidence.deployment.scope !== "full_stack") ||
+    evidence.deployment.targetKind !== "ecs_fargate" ||
     target.deploymentTargetFingerprint !== input.expectedTarget.deploymentTargetFingerprint ||
     target.confirmedBuildConfig?.confirmedCommitSha !==
       input.expectedTarget.confirmedBuildConfig?.confirmedCommitSha ||
@@ -694,6 +703,8 @@ export async function executeGitCicdHandoffWithVerifiedInitialRelease<T>(
         projectId: evidence.deployment.projectId,
         terraformArtifactId: evidence.deployment.terraformArtifactId,
         awsConnectionId: evidence.deployment.awsConnectionId,
+        awsAccountIdSnapshot: evidence.deployment.awsAccountIdSnapshot,
+        awsRegionSnapshot: evidence.deployment.awsRegionSnapshot,
         approvedPlanArtifactId: evidence.deployment.approvedPlanArtifactId,
         scope: evidence.deployment.scope,
         targetKind: evidence.deployment.targetKind,
@@ -1100,6 +1111,8 @@ export function createPostgresGitCicdHandoffRepository(
           architectureId: deployments.architectureId,
           terraformArtifactId: deployments.terraformArtifactId,
           awsConnectionId: deployments.awsConnectionId,
+          awsAccountIdSnapshot: deployments.awsAccountIdSnapshot,
+          awsRegionSnapshot: deployments.awsRegionSnapshot,
           scope: deployments.scope,
           targetKind: deployments.targetKind,
           source: deployments.source,
@@ -1119,8 +1132,6 @@ export function createPostgresGitCicdHandoffRepository(
             eq(deployments.projectId, projectId),
             eq(deployments.source, "direct"),
             eq(deployments.status, "SUCCESS"),
-            inArray(deployments.scope, ["infrastructure", "full_stack"]),
-            eq(deployments.targetKind, "ecs_fargate"),
             isNotNull(deployments.completedAt)
           )
         )

@@ -92,8 +92,10 @@ ${packageManagerSetupCommands}
           cold_build_api_image
         else
           unset CACHE_PASSWORD
-          docker buildx create --use --name sketchcatch-builder >/dev/null 2>&1 || docker buildx use sketchcatch-builder >/dev/null
-          if ! docker buildx inspect --bootstrap >/dev/null 2>&1; then
+          if ! (docker buildx create --use --name sketchcatch-builder >/dev/null 2>&1 || docker buildx use sketchcatch-builder >/dev/null 2>&1); then
+            echo "Build cache builder setup failed; falling back to a cold Docker build" >&2
+            cold_build_api_image
+          elif ! docker buildx inspect --bootstrap >/dev/null 2>&1; then
             echo "Build cache builder failed; falling back to a cold Docker build" >&2
             cold_build_api_image
           elif ! docker buildx build \

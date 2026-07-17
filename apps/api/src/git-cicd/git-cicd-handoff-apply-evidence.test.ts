@@ -108,6 +108,24 @@ test("handoff keeps the valid approved Apply ahead of a newer unapproved Apply",
   assert.equal(result, approvedApplyPlanId);
 });
 
+test("handoff reuses Apply evidence after reconnecting the same AWS account and region", async () => {
+  const repository = createSelectionRepository({
+    deployments: [createDeployment()],
+    plans: [createApplyPlan()]
+  });
+
+  const result = await resolveGitCicdHandoffApplyEvidence(
+    createEvidenceInput({
+      connectionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    }),
+    repository,
+    createPlanVerifier()
+  );
+
+  assert.equal(result.deployment.id, deploymentId);
+  assert.equal(result.plan.id, applyPlanId);
+});
+
 test("handoff falls back to the newest Apply when the approved Apply fails S3 verification", async () => {
   const tamperedApprovedPlanId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
   const repository = createSelectionRepository({
@@ -386,6 +404,8 @@ function createDeployment(
     architectureId,
     terraformArtifactId,
     awsConnectionId: connectionId,
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
     scope: "full_stack",
     targetKind: "ecs_fargate",
     source: "direct",

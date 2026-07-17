@@ -147,6 +147,50 @@ test("keeps verified AWS connection readiness separate from Apply Plan evidence"
   );
 });
 
+test("reuses infrastructure evidence after reconnecting the same AWS account and region", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  const service = createGitCicdReadinessService({
+    repository: createRepository({ state }),
+    planVerifier: createPlanVerifier()
+  });
+  await service.refresh({ projectId: "project-1", userId: "user-1" });
+  const currentTarget = state.targetRows.get("project-1");
+  assert.ok(currentTarget);
+
+  state.targetRows.set("project-1", {
+    ...currentTarget,
+    connectionId: "connection-2"
+  });
+  state.buildEnvironment = {
+    ...state.buildEnvironment!,
+    awsConnectionId: "connection-2"
+  };
+  state.verifiedConnectionIds.add("connection-2");
+
+  const result = await service.refresh({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(getReadinessItem(result, "approved_apply_plan").status, "ready");
+  assert.equal(
+    getReadinessItem(result, "deployment_target").missingKeys.includes("aws_connection"),
+    false
+  );
+});
+
+test("does not add the ECS initial release item for another runtime target", async () => {
+  const target = {
+    ...createExistingTarget(createConfirmedBuildConfig()),
+    runtimeTargetKind: "lambda"
+  } as unknown as ProjectDeploymentTargetRecord;
+  const state = createRepositoryState({ existingTarget: target });
+
+  const result = await createGitCicdReadinessService({
+    repository: createRepository({ state }),
+    planVerifier: createPlanVerifier()
+  }).refresh({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(result.items.some((item) => item.key === "initial_application_release"), false);
+});
+
 test("requires a current successful Direct application release in addition to infrastructure evidence", async (t) => {
   await t.test("infrastructure-only success keeps the initial release incomplete", async () => {
     const deployment = createDeployment({ scope: "infrastructure" });
@@ -1179,6 +1223,8 @@ function createDeployment(
     projectId: "project-1",
     terraformArtifactId: "terraform-artifact-1",
     awsConnectionId: "connection-1",
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
     approvedPlanArtifactId: null,
     scope: "full_stack",
     targetKind: "ecs_fargate",

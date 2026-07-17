@@ -314,7 +314,20 @@ async function reconcileBuildCacheRepository(
       tags: buildCacheOwnershipTags(input.projectId)
     })
   );
-  await putBuildCacheLifecyclePolicy(ecr, input.buildCache.repositoryName);
+  try {
+    await putBuildCacheLifecyclePolicy(ecr, input.buildCache.repositoryName);
+  } catch (error) {
+    try {
+      await cleanupOwnedBuildCacheRepository(ecr, input);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        "ECR build cache setup failed and its repository cleanup also failed",
+        { cause: cleanupError }
+      );
+    }
+    throw error;
+  }
   return true;
 }
 

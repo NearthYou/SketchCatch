@@ -27,16 +27,20 @@ test("selects full_stack, application, and explicit infrastructure scopes", asyn
 
 test("does not silently downgrade an ECS/Fargate auto deployment when build config is missing", async () => {
   await assert.rejects(
-    resolveScope(createDraft(true), createTarget(null), "auto"),
+    resolveScope(createDraft(true, true), createTarget(null), "auto"),
     (error: unknown) =>
       error instanceof DeploymentConflictError &&
       error.message === "A confirmed project deployment target is required for automatic ECS application deployment"
+  );
+  await assert.rejects(
+    resolveScope(createDraft(true, true), undefined, "auto"),
+    /confirmed project deployment target/
   );
 });
 
 async function resolveScope(
   draft: DeploymentPreparationDraft,
-  target: DeploymentPreparationTarget,
+  target: DeploymentPreparationTarget | undefined,
   requestedScope: "auto" | "infrastructure"
 ) {
   const repository: DeploymentPreparationRepository = {
@@ -60,10 +64,32 @@ async function resolveScope(
   ).scope;
 }
 
-function createDraft(hasTerraform: boolean): DeploymentPreparationDraft {
+function createDraft(hasTerraform: boolean, includeEcs = false): DeploymentPreparationDraft {
   return {
     revision: 1,
-    diagramJson,
+    diagramJson: includeEcs
+      ? {
+          ...diagramJson,
+          nodes: [
+            {
+              id: "ecs-service",
+              kind: "resource",
+              type: "ECS_SERVICE",
+              label: "ECS Service",
+              position: { x: 0, y: 0 },
+              size: { width: 200, height: 120 },
+              locked: false,
+              zIndex: 0,
+              parameters: {
+                resourceType: "ECS_SERVICE",
+                resourceName: "app",
+                fileName: "main.tf",
+                values: {}
+              }
+            }
+          ]
+        }
+      : diagramJson,
     terraformFiles: hasTerraform
       ? [{ fileName: "main.tf", terraformCode: 'resource "aws_ecs_service" "app" {}' }]
       : []

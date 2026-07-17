@@ -671,7 +671,8 @@
       "area": "application-build",
       "title": "Project-scoped ECR registry cache for user ECS applications",
       "user_visible_behavior": "Repository가 연결된 ECS/Fargate 프로젝트는 첫 빌드의 Docker layer를 사용자 AWS 계정의 프로젝트 전용 ECR cache에 저장하고 다음 commit 빌드에서 재사용한다.",
-      "status": "passing",
+      "status": "blocked",
+      "blockedReason": "실제 warm-cache CodeBuild 시간 비교와 cache Repository cleanup 확인에는 사용자 AWS 계정 mutation 승인이 필요하며 이번 로컬 구현 요청에서는 실행하지 않았다.",
       "verification": [
         "프로젝트 ID에서 cache Repository와 platform별 mutable cache tag를 결정적으로 계산한다.",
         "CodeBuild build-only role은 정확한 cache Repository의 layer read/write만 허용하고 ECS, 서비스 S3, CloudFront mutation 권한은 갖지 않는다.",
@@ -688,7 +689,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "Focused cache protection line passed 61/61. Repository checks passed locally. A real warm-cache CodeBuild timing comparison was intentionally not run because it would mutate the connected AWS account; the code does not claim a measured duration reduction. Existing AWS connections must be deleted and reconnected once to receive the expanded CodeBuild permissions boundary."
+        "notes": "Focused cache protection line passed 62/62. Repository checks passed locally. A real warm-cache CodeBuild timing comparison was intentionally not run because it would mutate the connected AWS account; the code does not claim a measured duration reduction. Existing AWS connections must be deleted and reconnected once to receive the expanded CodeBuild permissions boundary."
       },
       "notes": "Cache images are never used as ECS release images. The immutable verified release candidate and trusted worker activation boundary remain unchanged."
     },
@@ -698,7 +699,8 @@
       "area": "direct-deployment-git-cicd",
       "title": "Direct first application release before Git/CI/CD installation",
       "user_visible_behavior": "사용자는 Direct Deployment에서 최초 ECS/Fargate 앱을 실제로 공개한 뒤에만 후속 변경 자동 배포용 CI/CD 설치 PR을 만들 수 있다.",
-      "status": "passing",
+      "status": "blocked",
+      "blockedReason": "실제 AWS full_stack/application 배포와 GitHub 설치 PR merge trigger 수용 검증에는 외부 AWS/GitHub mutation 승인이 필요하며 이번 로컬 구현 요청에서는 실행하지 않았다.",
       "verification": [
         "신규 ECS/Fargate auto 배포는 build config가 있으면 full_stack을 선택하고, build config 누락을 infrastructure로 조용히 축소하지 않는다.",
         "readiness는 승인된 Infrastructure Apply와 current target에 일치하는 healthy Direct ApplicationRelease를 별도 증거로 검증한다.",
@@ -718,7 +720,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "Focused verification passed with API 182 tests, shared contract 1 test, and Web 41 tests. Live AWS deployment and GitHub PR merge acceptance were not repeated in this local implementation pass; the protected server and UI contracts are verified without external mutation."
+        "notes": "Focused verification passed with API 186 tests, shared contract 1 test, and Web 41 tests. Live AWS deployment and GitHub PR merge acceptance were not repeated in this local implementation pass; the protected server and UI contracts are verified without external mutation."
       },
       "notes": "No DB migration is required. Infrastructure-only deployment remains supported but cannot satisfy the initial application release gate."
     },
