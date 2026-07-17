@@ -15,6 +15,69 @@ function createAwsProjectBuildEnvironmentGateway(
   });
 }
 
+test("repository access verification starts CodeBuild at the confirmed commit and records the resolved commit", async () => {
+  const commitSha = "b".repeat(40);
+  const commands: Array<{ name: string; input: Record<string, unknown> }> = [];
+  const emptyClient = () => ({
+    async send(): Promise<Record<string, unknown>> {
+      return {};
+    },
+    destroy() {}
+  });
+  const gateway = createGatewayImplementation({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createIamClient: emptyClient,
+    createEcrClient: emptyClient,
+    createCloudWatchLogsClient: emptyClient,
+    createCodeBuildClient: () => ({
+      async send(command: unknown): Promise<Record<string, unknown>> {
+        const value = command as {
+          constructor: { name: string };
+          input: Record<string, unknown>;
+        };
+        commands.push({ name: value.constructor.name, input: value.input });
+        if (value.constructor.name === "StartBuildCommand") {
+          return {
+            build: {
+              id: "sketchcatch-12345678-build:verify-1",
+              arn: "arn:aws:codebuild:ap-northeast-2:123456789012:build/sketchcatch-12345678-build:verify-1"
+            }
+          };
+        }
+        return {
+          builds: [
+            {
+              id: "sketchcatch-12345678-build:verify-1",
+              arn: "arn:aws:codebuild:ap-northeast-2:123456789012:build/sketchcatch-12345678-build:verify-1",
+              buildStatus: "SUCCEEDED",
+              resolvedSourceVersion: commitSha
+            }
+          ]
+        };
+      },
+      destroy() {}
+    })
+  });
+
+  const result = await gateway.verifyRepositoryAccess(desired, commitSha);
+
+  assert.deepEqual(result, {
+    verified: true,
+    requestedCommitSha: commitSha,
+    resolvedCommitSha: commitSha,
+    buildArn:
+      "arn:aws:codebuild:ap-northeast-2:123456789012:build/sketchcatch-12345678-build:verify-1",
+    statusReason: null
+  });
+  assert.equal(commands[0]?.name, "StartBuildCommand");
+  assert.equal(commands[0]?.input["sourceVersion"], commitSha);
+  assert.match(String(commands[0]?.input["buildspecOverride"]), /repository access verified/);
+});
+
 test("new build environment creates and verifies its project cache repository", async () => {
   const calls: string[] = [];
   const gateway = createGatewayImplementation({
@@ -453,6 +516,7 @@ const desired: DesiredProjectBuildEnvironment = {
   sourceRepositoryUrl: "https://github.com/jh-9999/audience-live-check.git",
   image: "aws/codebuild/standard:7.0",
   computeType: "BUILD_GENERAL1_SMALL",
+  confirmedCommitSha: "b".repeat(40),
   buildCache: {
     repositoryName: "sketchcatch-12345678-build-cache",
     repositoryArn:

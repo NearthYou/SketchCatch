@@ -10,6 +10,7 @@ import {
   getProjectBuildEnvironment,
   prepareProjectBuildEnvironment,
   verifyProjectBuildEnvironment,
+  verifyProjectRepositoryAccess,
   type ProjectBuildEnvironmentGateway,
   type ProjectBuildEnvironmentRepository
 } from "../build-environments/project-build-environment-service.js";
@@ -90,6 +91,25 @@ export async function registerProjectBuildEnvironmentRoutes(
       return handleProjectBuildEnvironmentError(error, reply);
     }
   });
+
+  app.post(
+    "/projects/:projectId/build-environment/verify-repository-access",
+    async (request, reply) => {
+      const params = paramsSchema.parse(request.params);
+      const dependencies = await getDependencies(request);
+      try {
+        const result = await verifyProjectRepositoryAccess(
+          { projectId: params.projectId, userId: dependencies.userId },
+          dependencies.repository,
+          dependencies.gateway,
+          options.now ? { now: options.now } : {}
+        );
+        return reply.status(200).send(result);
+      } catch (error) {
+        return handleProjectBuildEnvironmentError(error, reply);
+      }
+    }
+  );
 
   app.delete("/projects/:projectId/build-environment", async (request, reply) => {
     const params = paramsSchema.parse(request.params);

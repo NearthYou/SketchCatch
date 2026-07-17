@@ -4,8 +4,10 @@ import { Box, Cloud, GripVertical } from "lucide-react";
 import type { DragEvent } from "react";
 import type { ResourceItem } from "../../../../packages/types/src";
 
+import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "./diagram-utils";
 import { resourceCatalog } from "../resource-settings/catalog";
+import iconStyles from "./default-diagram-palette-icon.module.css";
 import styles from "./diagram-editor.module.css";
 
 export type DefaultDiagramPaletteProps = {
@@ -53,7 +55,13 @@ function PaletteSection({ icon, items, title }: PaletteSectionProps) {
             onDragStart={(event) => handlePaletteDragStart(event, item)}
             type="button"
           >
-            <img alt="" className={styles.paletteIcon} draggable={false} src={item.iconUrl} />
+            <ResourceIconImage
+              alt=""
+              className={styles.paletteIcon}
+              fallbackClassName={iconStyles.paletteIconFallback}
+              fallbackSize={26}
+              src={item.iconUrl}
+            />
             <span className={styles.paletteItemText}>
               <span className={styles.paletteItemName}>{item.name}</span>
               <span className={styles.paletteItemType}>{item.nodeDefaults.type}</span>

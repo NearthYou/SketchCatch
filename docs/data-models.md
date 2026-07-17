@@ -656,6 +656,30 @@ DB 기준: `project_drafts`
 
 프로젝트당 최신 draft 1개를 유지한다. `diagramJson`과 편집 중인 선택적 `terraformFiles`는 같은 revision의 화면 복구 상태로 JSONB에 저장한다. `terraformFiles`는 SketchCatch 동기화 subset이 해석하지 못하는 유효 HCL을 재접속 후에도 원문 그대로 유지하기 위한 working draft이며, 승인된 배포/릴리스 산출물의 영구 저장 기준은 계속 S3 `TerraformArtifact`다.
 
+Project draft 저장은 클라이언트가 마지막으로 읽은 서버 revision을 명시하는 낙관적 동시성 계약을 사용한다.
+
+```ts
+type SaveProjectDraftRequest = {
+  diagramJson: DiagramJson;
+  terraformFiles?: TerraformSyncFileInput[];
+  expectedRevision: number | null;
+};
+
+type ProjectDraftConflictResponse = ApiErrorResponse & {
+  error: "conflict";
+  currentRevision: number;
+  currentServerSavedAt: IsoDateTimeString;
+};
+```
+
+- 서버 draft를 읽은 편집은 그 `revision`을 `expectedRevision`으로 보낸다.
+- 서버 draft가 없는 새 프로젝트의 최초 저장만 `expectedRevision: null`을 보낸다.
+- `PUT /api/projects/:projectId/draft`는 `projectId`와 `expectedRevision`이 모두 일치하는 row만 갱신한다. 최초 생성 경쟁은 `INSERT ... ON CONFLICT DO NOTHING`으로 한 요청만 성공시킨다.
+- 현재 서버 revision이 다르면 API는 `409 Conflict`와 현재 revision·저장 시각을 반환하며 DiagramJson을 변경하지 않는다.
+- `GET /api/projects/:projectId/draft`는 `private, no-store`로 응답한다. Workspace는 서버 조회가 성공한 경우 서버 draft를 기준으로 삼되, IndexedDB draft가 `dirty: true`이면 서버에 반영되지 않은 변경으로 간주해 로컬 복구본을 먼저 보존하고 복구 선택 다이얼로그를 표시한다. 브라우저와 서버의 시계 차이로 복구본을 버리지 않도록 `draftSavedAt`과 `serverSavedAt`의 절대 시각만으로 dirty draft를 자동 폐기하지 않는다. 사용자가 `서버 최신 상태 사용`을 선택한 경우에만 IndexedDB를 서버 상태로 교체하며, `로컬 복구본 복원`을 선택하면 해당 로컬 상태와 `baseServerRevision`을 유지한 채 다음 저장에서 낙관적 동시성 검사를 수행한다. 선택 전에는 자동 checkpoint와 페이지 이탈 서버 저장을 실행하지 않는다. 서버 조회 실패는 오래된 로컬 draft로 숨기지 않는다.
+- IndexedDB의 `LocalProjectDraft.baseServerRevision`은 로컬 편집이 시작된 서버 revision이다. 로컬 저장 횟수와 함께 증가하지 않고, 서버 저장 성공 또는 최신 상태 재로드 후 반환된 revision으로 교체된다.
+- 일반 Project Workspace는 탭 인스턴스마다 별도의 IndexedDB `workspaceId`를 생성하고 `sessionStorage`에 보관해 같은 탭의 새로고침에서 재사용한다. 시작 시 해당 ID를 `Web Locks`로 배타 점유하므로 탭 복제로 `sessionStorage`가 복사되어도 lock을 얻지 못한 새 탭은 새 ID를 발급한다. 따라서 같은 프로젝트를 연 다른 탭의 recovery draft가 충돌 탭의 로컬 복구본을 덮어쓰지 않으면서 새로고침 후에도 해당 탭의 복구본을 찾는다. 기존 `project:{projectId}` key의 recovery draft는 처음 읽을 때 탭 전용 key로 복사한다. URL 또는 호출자가 `localCacheWorkspaceId`/`workspaceId`를 명시한 특수 복구 흐름만 해당 scope를 재사용한다.
+
 ## ProjectAsset와 TerraformArtifact
 
 파일성 산출물은 S3에 저장하고, RDS에는 metadata와 `objectKey`만 저장한다.
@@ -1253,6 +1277,15 @@ CodeConnections나 이름만 같은 Resource는 채택하지 않는다.
 service role이다. service role에는 permissions boundary를 붙이고 Repository checkout, CloudWatch Logs,
 SketchCatch가 발급한 presigned multipart upload 외에는 cloud mutation 권한을 주지 않는다. project, role,
 source URL, CodeConnection, build image와 compute 설정의 canonical fingerprint를 RDS에 저장한다.
+
+CodeConnections `AVAILABLE`과 Repository 접근 검증은 별도 상태다. 기존 build environment와 새로 준비한 environment는
+`repositoryVerificationStatus = not_checked`에서 시작한다. 사용자가 Plan을 요청하면 확정된
+`confirmedCommitSha`를 `sourceVersion`으로 지정해 server-generated no-op CodeBuild를 실행한다. 성공한 build의
+`resolvedSourceVersion`이 요청 SHA와 정확히 같을 때만 `verified`로 바꾸며, 요청 SHA, resolved SHA, build ARN,
+검증 시각을 함께 저장한다. checkout 실패나 SHA 불일치는 `failed`와 안전한 오류 요약을 저장한다. 이 검증은
+SketchCatch GitHub token을 AWS에 전달하거나 재사용하지 않는다. AWS API는 CodeConnections 승인에 사용한 GitHub
+계정명을 반환하지 않으므로 `AwsCodeConnection`에 추정 계정명을 저장하지 않으며, account-name 일치를 검증했다고
+표시하지 않는다. 강제 가능한 경계는 활성 GitHub App installation 하나와 exact Repository checkout 성공이다.
 
 `ReleaseCandidate`는 preflight에서 한 번 만든 API OCI archive와 frontend archive의 immutable 묶음이다. 대용량
 파일은 SketchCatch 내부 Artifact S3의 `deployments/<deployment-or-run-id>/release-candidates/<candidateId>/` 아래에 두고 RDS에는 object
@@ -2260,11 +2293,7 @@ type DeploymentLiveObservationArchitectureResponse = {
   architecture: ArchitectureJson;
 };
 
-type DeploymentResourceObservationState =
-  | "observed"
-  | "delayed"
-  | "unavailable"
-  | "not_supported";
+type DeploymentResourceObservationState = "observed" | "delayed" | "unavailable" | "not_supported";
 ```
 
 `provenance`는 Deployment, Terraform artifact SHA-256, 연결, region, 서버 검증 시점을 증명한다. `deploymentId`는 UUID여야 하고, `awsConnectionId`는 AWS connection repository가 `randomUUID()`로 생성하는 canonical lowercase UUIDv4만 허용한다. Role ARN, External ID, credential 값은 이 provenance identifier에 저장하지 않으며 AWS connection record의 보호된 필드에서만 다룬다. `endpoints`는 credential, query, fragment가 없는 absolute HTTPS URL만 허용하고, `pressure`는 분당 target당 60 requests를 60초 window로 해석하는 고정 계약이다. core envelope는 provider-neutral하게 유지하며, MVP의 의도적인 `provider: "aws"` 값과 `adapter`만 Provider Adapter 경계를 나타낸다. core consumer는 adapter의 `kind`와 `version`만 분기하고 AWS payload 해석은 AWS Provider Adapter 경계에 둔다. shared contract는 v1-v4 discriminated union으로 안전한 payload shape만 제한한다.
@@ -2524,8 +2553,15 @@ type AiArchitectureDraftResult = {
 Natural Language Diagramming의 `ArchitectureDraft`는 LLM 자유 생성이 아니라 규칙 기반 요구사항 fact 조립으로 만든다. 같은 Requirement Prompt는 같은 `ArchitectureJson`을 반환해야 한다. `LlmExplanation` 문구는 보조 설명이므로 결정성 기준에 포함하지 않는다.
 
 ```ts
+type ArchitectureDraftCandidateExclusion = {
+  candidateId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
 type CreateArchitectureDraftRequest = {
   prompt: string;
+  candidateExclusions?: ArchitectureDraftCandidateExclusion[];
 };
 
 type ArchitectureDraftClarification = {
@@ -2537,15 +2573,17 @@ type ArchitectureDraftClarification = {
 
 type CreateArchitectureDraftResponse = AiArchitectureDraftResult | ArchitectureDraftClarification;
 
-type ArchitectureDraftProgressStage =
-  | "preparing_requirements"
-  | "normalizing_requirements"
-  | "querying_amazon_q"
-  | "validating_architecture"
-  | "building_diagram";
+type ArchitectureDraftProgressSnapshot = {
+  sequence: number;
+  provisionalArchitectureJson: ArchitectureJson;
+  excludableCandidateIds: string[];
+};
 
 type ArchitectureDraftStreamEvent =
-  | { type: "progress"; stage: ArchitectureDraftProgressStage }
+  | {
+      type: "progress";
+      snapshot: ArchitectureDraftProgressSnapshot;
+    }
   | { type: "result"; result: CreateArchitectureDraftResponse }
   | { type: "error"; error: ApiErrorResponse & { statusCode: number } };
 
@@ -2604,7 +2642,9 @@ type ArchitectureIntent = {
 };
 ```
 
-`POST /api/ai/architecture-draft/stream`은 newline-delimited JSON으로 실제 처리 단계와 최종 `CreateArchitectureDraftResponse`를 전달한다. 스트림이 시작된 뒤 발생한 오류도 `error` event의 표준 `ApiErrorResponse`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약은 비스트리밍 호출 호환을 위해 유지한다.
+`POST /api/ai/architecture-draft/stream`은 새 프로젝트의 첫 AI Draft 전용 newline-delimited JSON 경계다. Repository 권한을 필요로 하는 `repositoryAnalysis`와 `repositoryEvidence`는 이 경계에서 hijack 전 400으로 거부하고, 기존 JSON endpoint의 active-user·persisted Repository Analysis 해석 경로만 사용한다. `progress` event는 화면 단계나 질문 요약을 전달하지 않고, 후보 제외에 필요한 서버 발급 `provisionalArchitectureJson`과 `excludableCandidateIds`만 증가하는 `sequence`와 함께 전달한다. 해당 snapshot은 현재 요청의 이전 후보 snapshot을 완전히 대체하며, 최종 `CreateArchitectureDraftResponse`는 별도 terminal event로 전달한다. 클라이언트는 대화 원문이나 장식용 AWS icon에서 Resource 후보를 추측하지 않는다.
+
+`candidateExclusions`는 최대 32개이며 `candidateId`, `label`, 지원 `ResourceType`을 포함한다. 서버는 결정론적 후보 graph가 발급한 id·type·trimmed label tuple이 정확히 일치하고, 명시적 safe adjunct allowlist에 속하며, 그 type을 제거해도 남은 edge·nested config·Terraform reference가 유효한 후보만 `excludableCandidateIds`로 발급한다. forged·stale·구조적 후보 제외은 무시한다. 승인된 제외은 Amazon Q prompt·payload·repair validation의 binding constraint로 전달하고, 계획에 명시된 계약대로 해당 `resourceType`의 node와 incident edge를 잠정 graph와 최종 graph에서 제거한다. 제외 결과가 빈 graph, 중복 id, dangling edge/reference를 만들면 안전한 미적용 graph를 유지하고 metadata에 근거를 남긴다. 후보 snapshot 생성, 후보 제외, progress callback은 관찰 경로이므로 실패하더라도 최종 Architecture Draft 생성을 중단하지 않는다. 스트림이 시작된 뒤 발생한 오류는 `error` event의 표준 `ApiErrorResponse`와 `statusCode`로 전달한다. 기존 `POST /api/ai/architecture-draft` JSON 계약과 Repository Analysis 권한 경로는 유지한다.
 
 `ArchitectureIntent`는 자유 형식 Requirement Prompt를 표준 설계 의도로 해석한 중간 결과다. 자동 생성 흐름은 `prompt -> interpretRequirement(prompt) -> ArchitectureIntent -> planPracticeArchitecture(intent/resolution) -> ArchitectureJson` 순서로 다룬다. LLM이나 rule fallback은 intent 추출과 설명 보조에 사용할 수 있지만, 실제 보드 리소스 조립은 지원 가능한 `ResourceType`만 사용하는 deterministic planner가 담당한다.
 
@@ -3213,7 +3253,9 @@ provider callback은 브라우저 redirect이므로 SketchCatch access token hea
 
 GitHub installation access token과 GitHub App private key는 이 테이블에 저장하지 않습니다. repository 목록과 repository 개수도 요청 시 GitHub API에서 조회하며 RDS에 저장하지 않습니다.
 
-Dashboard 전역 설정은 계정 단위 GitHub App installation만 관리합니다. 연결이 없으면 `GitHub 연결하기`, 하나 이상 있으면 `권한 추가`를 표시합니다. 공개 Repository Analysis와 Board 생성에는 GitHub 연결이 필요하지 않습니다. 공개 조회 실패 뒤 exact Repository 접근이 필요할 때만 전역 installation 연결 또는 권한 추가를 안내합니다. Web은 분석 UI 상태를 schema version 1, 30분 TTL의 일회성 `sessionStorage` record로 보존하고, API는 target repository와 resume key를 project scope JWT state에 서명합니다. callback은 exact target을 연결한 뒤 설정 저장 단계 없이 원래 분석으로 돌아갑니다. browser record에는 token, GitHub state, 원본 파일 내용 또는 credential을 넣지 않습니다.
+Dashboard 전역 설정은 계정 단위 GitHub App installation만 관리합니다. 연결이 없으면 `GitHub 연결하기`, 하나가 연결되어 있으면 `권한 추가`를 표시합니다. MVP의 AWS CodeBuild 대상은 활성 installation 하나만 사용하며, 과거 데이터에 여러 활성 row가 있으면 `GitHub 연결 정리 필요`를 표시하고 CodeBuild 승인을 막습니다. `권한 추가`는 기존 installation의 Repository 접근 범위를 관리하며 임의의 두 번째 활성 installation을 선택하지 않습니다.
+
+공개 Repository Analysis와 Board 생성에는 GitHub 연결이 필요하지 않습니다. 공개 조회 실패 뒤 exact Repository 접근이 필요할 때만 전역 installation 연결 또는 권한 추가를 안내합니다. Web은 분석 UI 상태를 schema version 1, 30분 TTL의 일회성 `sessionStorage` record로 보존하고, API는 target repository와 resume key를 project scope JWT state에 서명합니다. callback은 exact target을 연결한 뒤 배포 타깃이나 GitOps 감시 설정을 자동 저장하지 않고 원래 분석으로 돌아갑니다. browser record에는 token, GitHub state, 원본 파일 내용 또는 credential을 넣지 않습니다.
 
 ```ts
 type GitHubRepositorySelection = "all" | "selected";

@@ -349,7 +349,14 @@
       "idx": 49,
       "version": "7",
       "when": 1784332800001,
-      "tag": "0049_repository_analysis_records",
+      "tag": "0049_project_repository_access_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1784332800002,
+      "tag": "0050_repository_analysis_records",
       "breakpoints": true
     }
   ]

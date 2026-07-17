@@ -314,7 +314,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-caller-identity",
-    parameterPanel: false,
     resourceType: "AWS_CALLER_IDENTITY",
     terraformBlockType: "data",
     terraformPreview: true,
@@ -323,7 +322,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-ssm-parameter",
-    parameterPanel: false,
     resourceType: "SSM_PARAMETER",
     terraformBlockType: "data",
     terraformPreview: true,
@@ -332,7 +330,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-ec2-managed-prefix-list",
-    parameterPanel: false,
     resourceType: "UNKNOWN",
     terraformBlockType: "data",
     terraformPreview: true,
@@ -425,7 +422,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-s3-website-configuration",
-    parameterPanel: false,
     resourceType: "S3",
     terraformPreview: true,
     terraformResourceType: "aws_s3_bucket_website_configuration",
@@ -783,7 +779,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-codestarconnections-connection",
-    parameterPanel: false,
     resourceType: "CODESTAR_CONNECTION",
     terraformPreview: true,
     terraformResourceType: "aws_codestarconnections_connection",
@@ -812,7 +807,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-step-functions-state-machine",
-    parameterPanel: false,
     resourceType: "STEP_FUNCTIONS_STATE_MACHINE",
     terraformPreview: true,
     terraformResourceType: "aws_sfn_state_machine",
@@ -834,7 +828,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-cognito-user-pool",
-    parameterPanel: false,
     resourceType: "COGNITO_USER_POOL",
     terraformPreview: true,
     terraformResourceType: "aws_cognito_user_pool",
@@ -842,7 +835,6 @@ export const resourceDefinitions = [
   }),
   createAwsResourceDefinition({
     id: "aws-cognito-user-pool-client",
-    parameterPanel: false,
     resourceType: "COGNITO_USER_POOL_CLIENT",
     terraformPreview: true,
     terraformResourceType: "aws_cognito_user_pool_client",

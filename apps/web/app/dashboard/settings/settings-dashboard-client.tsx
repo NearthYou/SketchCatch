@@ -15,7 +15,8 @@ import type {
   AwsConnection,
   AwsCodeConnectionResponse,
   AwsConnectionCloudFormationTemplateResponse,
-  AwsConnectionDeletionPreviewResponse
+  AwsConnectionDeletionPreviewResponse,
+  GitHubInstallationConnection
 } from "@sketchcatch/types";
 import { ProductState } from "../../../components/ui/ProductState";
 import { DashboardIcon } from "../../../components/dashboard/dashboard-icons";
@@ -37,7 +38,10 @@ import {
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
 import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
-import { useAwsConnectionSettingsQuery } from "../../../features/dashboard/connection-queries";
+import {
+  useAwsConnectionSettingsQuery,
+  useGitHubInstallationsQuery
+} from "../../../features/dashboard/connection-queries";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { invalidateAwsConnectionQueries } from "../../../components/query/dashboard-query-invalidation";
 import { getApiErrorMessage } from "../../../lib/api-client";
@@ -45,6 +49,10 @@ import {
   deriveAwsConnectionSettingsState,
   type AwsConnectionCleanupRetryDisplay
 } from "../../../features/dashboard/aws-connection-settings-state";
+import {
+  deriveGitHubCodeBuildAuthorizationTarget,
+  type GitHubCodeBuildAuthorizationTarget
+} from "../../../features/dashboard/github-codebuild-authorization-state";
 import styles from "../dashboard-tools.module.css";
 import { GitHubAccountSettings } from "./github-account-settings";
 
@@ -59,6 +67,11 @@ export function SettingsDashboardClient() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const connectionsQuery = useAwsConnectionSettingsQuery();
+  const githubInstallationsQuery = useGitHubInstallationsQuery();
+  const githubAuthorizationTarget = useMemo(
+    () => deriveGitHubCodeBuildAuthorizationTarget(githubInstallationsQuery.data ?? []),
+    [githubInstallationsQuery.data]
+  );
   const connectionSettings = useMemo(
     () =>
       connectionsQuery.data
@@ -216,12 +229,31 @@ export function SettingsDashboardClient() {
   }
 
   async function connectGitHubBuild(): Promise<void> {
+    if (githubInstallationsQuery.isPending) {
+      setErrorMessage("GitHub App 연결 상태를 확인하고 있습니다. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+    if (githubInstallationsQuery.isError) {
+      setErrorMessage("GitHub App 연결 정보를 확인한 뒤 다시 시도해 주세요.");
+      return;
+    }
+    if (githubAuthorizationTarget.status === "github_installation_required") {
+      document.getElementById("github-account-connection")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+      return;
+    }
+    if (githubAuthorizationTarget.status === "multiple_github_installations_unsupported") {
+      setErrorMessage("GitHub 연결 정리 필요: AWS 승인 전에 활성 GitHub App 연결을 하나만 남겨 주세요.");
+      return;
+    }
     if (verifiedConnections.length === 0) {
       setShowAwsRequiredModal(true);
       return;
     }
     if (!verifiedConnections.some((connection) => connection.id === selectedBuildAwsConnectionId)) {
-      setErrorMessage("GitHub 빌드에 사용할 AWS 계정을 선택해 주세요.");
+      setErrorMessage("AWS CodeBuild용 GitHub 권한을 만들 AWS 계정을 선택해 주세요.");
       return;
     }
     setActionPending(true);
@@ -233,7 +265,7 @@ export function SettingsDashboardClient() {
         [selectedBuildAwsConnectionId]: response
       }));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결을 만들지 못했습니다."));
+      setErrorMessage(getApiErrorMessage(error, "AWS CodeBuild용 GitHub 권한을 만들지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -340,6 +372,8 @@ export function SettingsDashboardClient() {
         <button className={styles.iconAction} aria-label="연결 새로고침" disabled={connectionsQuery.isFetching} onClick={() => void loadConnections()} title="새로고침" type="button"><RefreshCw size={17} /></button>
       </header>
 
+      <GitHubAccountSettings />
+
       {connectionsQuery.isPending && !connectionsQuery.data ? (
         <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
       ) : connectionsQuery.isError && connections.length === 0 && cleanupRetries.length === 0 ? (
@@ -368,14 +402,21 @@ export function SettingsDashboardClient() {
             </div>
           </section>
 
-          <section className={styles.settingsSection}>
+          <section className={styles.settingsSection} id="aws-codebuild-github-authorization">
             <header>
               <DashboardIcon name="github" />
               <div>
-                <h2>GitHub 빌드 연결</h2>
-                <p>선택한 AWS 계정에 SketchCatch 관리 CodeConnections를 한 번 만듭니다.</p>
+                <h2>AWS CodeBuild용 GitHub 권한</h2>
+                <p>위 GitHub 계정을 사용할 수 있도록 선택한 AWS 계정에서 별도 승인을 진행합니다.</p>
+                <p>AWS 또는 GitHub 승인 세션이 남아 있으면 로그인 화면이 생략될 수 있습니다.</p>
+                <p>AWS는 승인한 GitHub 계정 이름을 반환하지 않으므로, 프로젝트별 실제 Repository checkout으로 최종 접근을 검증합니다.</p>
               </div>
             </header>
+            <GitHubAuthorizationTargetNotice
+              isError={githubInstallationsQuery.isError}
+              isPending={githubInstallationsQuery.isPending}
+              target={githubAuthorizationTarget}
+            />
             <div className={styles.controlRow}>
               {verifiedConnections.length > 1 ? (
                 <div className={styles.controlField}>
@@ -454,8 +495,6 @@ export function SettingsDashboardClient() {
         </>
       )}
 
-      <GitHubAccountSettings />
-
       {showCodeConnectionDisconnectModal ? (
         <div className={styles.modalBackdrop} ref={modalOverlayRef} role="presentation">
           <section
@@ -503,7 +542,6 @@ export function SettingsDashboardClient() {
           </section>
         </div>
       ) : null}
-
       {deletionPreview ? (
         <div className={styles.modalBackdrop} ref={modalOverlayRef} role="presentation">
           <section
@@ -617,6 +655,82 @@ export function SettingsDashboardClient() {
   );
 }
 
+function GitHubAuthorizationTargetNotice({
+  isError,
+  isPending,
+  target
+}: {
+  readonly isError: boolean;
+  readonly isPending: boolean;
+  readonly target: GitHubCodeBuildAuthorizationTarget;
+}) {
+  if (isPending) {
+    return (
+      <p className={styles.githubSettingsMessage} role="status">
+        승인 대상 GitHub 계정을 확인하고 있습니다.
+      </p>
+    );
+  }
+  if (isError) {
+    return (
+      <p className={styles.githubSettingsError} role="alert">
+        GitHub App 연결 정보를 확인할 수 없어 AWS 승인을 시작할 수 없습니다.
+      </p>
+    );
+  }
+  if (target.status === "github_installation_required") {
+    return (
+      <div className={styles.githubSettingsError} role="alert">
+        <p>GitHub App 연결이 먼저 필요합니다.</p>
+        <button onClick={scrollToGitHubAccountConnection} type="button">
+          GitHub App 연결하기
+        </button>
+      </div>
+    );
+  }
+  if (target.status === "multiple_github_installations_unsupported") {
+    return (
+      <div className={styles.githubSettingsError} role="alert">
+        <p>GitHub 연결 정리 필요: 승인 대상을 확정할 수 있도록 활성 연결을 하나만 남겨 주세요.</p>
+        <button onClick={scrollToGitHubAccountConnection} type="button">
+          GitHub 연결 확인하기
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.githubInstallationList} aria-label="AWS 승인 대상 GitHub 계정">
+      <article className={styles.githubInstallationCard}>
+        <div className={styles.githubInstallationDetails}>
+          <strong>승인 대상 GitHub 계정 · {target.installation.accountLogin}</strong>
+          <p>
+            {target.installation.accountType ?? "GitHub account"} ·{
+              " "
+            }{formatGitHubRepositorySelection(target.installation)} · repository{
+              " "
+            }{target.installation.repositoryCount}개
+          </p>
+        </div>
+      </article>
+    </div>
+  );
+}
+
+function scrollToGitHubAccountConnection(): void {
+  document.getElementById("github-account-connection")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
+function formatGitHubRepositorySelection(
+  installation: GitHubInstallationConnection
+): string {
+  if (installation.repositorySelection === "all") return "모든 repository";
+  if (installation.repositorySelection === "selected") return "선택한 repository";
+  return "권한 범위 확인 필요";
+}
+
 function GitHubBuildConnectionAction({
   actionPending,
   connection,
@@ -633,14 +747,14 @@ function GitHubBuildConnectionAction({
   if (!connection?.codeConnection) {
     return (
       <button className={styles.primaryAction} disabled={actionPending} onClick={onConnect} type="button">
-        GitHub 빌드 연결
+        AWS GitHub 권한 승인 시작
       </button>
     );
   }
   if (connection.codeConnection.status === "CREATING") {
     return (
       <div className={styles.buildConnectionPending} role="status">
-        <span>GitHub 빌드 연결 생성 중</span>
+        <span>AWS GitHub 권한 생성 중</span>
         <button disabled={actionPending} onClick={onConnect} type="button">상태 확인</button>
       </div>
     );
@@ -660,7 +774,7 @@ function GitHubBuildConnectionAction({
     const cleanupRetryRequired = connection.codeConnection.cleanupRetryRequired === true;
     return (
       <div className={styles.buildConnectionPending} role="alert">
-        <span>{connection.codeConnection.statusReason ?? "GitHub 빌드 연결 생성에 실패했습니다."}</span>
+        <span>{connection.codeConnection.statusReason ?? "AWS GitHub 권한 생성에 실패했습니다."}</span>
         {hasAwsConnection && !cleanupRetryRequired ? (
           <button disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
         ) : !hasAwsConnection ? (
@@ -676,7 +790,7 @@ function GitHubBuildConnectionAction({
     return (
       <div className={styles.buildConnectionReady} role="status">
         <CheckCircle2 size={16} />
-        <span>GitHub 빌드 연결 완료</span>
+        <span>AWS GitHub 승인 완료 · Repository 접근은 프로젝트별 검증</span>
         <button disabled={actionPending} onClick={onRefresh} type="button">상태 확인</button>
         <button data-danger="true" disabled={actionPending} onClick={onDisconnect} type="button">연결 해제</button>
       </div>
@@ -687,7 +801,7 @@ function GitHubBuildConnectionAction({
       <span>GitHub 승인 필요</span>
       {connection.setupUrl ? (
         <a href={connection.setupUrl} rel="noreferrer" target="_blank">
-          AWS에서 승인하기 <ExternalLink size={14} />
+          AWS에서 GitHub 권한 승인하기 <ExternalLink size={14} />
         </a>
       ) : null}
       <button disabled={actionPending} onClick={onRefresh} type="button">승인 상태 확인</button>

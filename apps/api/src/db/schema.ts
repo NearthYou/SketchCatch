@@ -688,6 +688,21 @@ export const projectBuildEnvironments = pgTable(
       .notNull()
       .default("preparing"),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    repositoryVerificationStatus: varchar("repository_verification_status", { length: 32 })
+      .$type<"not_checked" | "verified" | "failed">()
+      .notNull()
+      .default("not_checked"),
+    repositoryVerificationRequestedCommitSha: varchar(
+      "repository_verification_requested_commit_sha",
+      { length: 64 }
+    ),
+    repositoryVerificationResolvedCommitSha: varchar(
+      "repository_verification_resolved_commit_sha",
+      { length: 64 }
+    ),
+    repositoryVerificationBuildArn: text("repository_verification_build_arn"),
+    repositoryVerificationStatusReason: text("repository_verification_status_reason"),
+    repositoryVerifiedAt: timestamp("repository_verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
@@ -702,6 +717,31 @@ export const projectBuildEnvironments = pgTable(
     check(
       "project_build_environments_status_check",
       sql`${table.status} in ('preparing', 'ready', 'verification_failed', 'disconnected')`
+    ),
+    check(
+      "project_build_environments_repository_verification_status_check",
+      sql`${table.repositoryVerificationStatus} in ('not_checked', 'verified', 'failed')`
+    ),
+    check(
+      "project_build_environments_repository_verification_requested_sha_check",
+      sql`${table.repositoryVerificationRequestedCommitSha} is null or ${table.repositoryVerificationRequestedCommitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    ),
+    check(
+      "project_build_environments_repository_verification_resolved_sha_check",
+      sql`${table.repositoryVerificationResolvedCommitSha} is null or ${table.repositoryVerificationResolvedCommitSha} ~ '^([0-9a-f]{40}|[0-9a-f]{64})$'`
+    ),
+    check(
+      "project_build_environments_repository_verification_evidence_check",
+      sql`(
+        ${table.repositoryVerificationStatus} <> 'verified'
+        or (
+          ${table.repositoryVerificationRequestedCommitSha} is not null
+          and ${table.repositoryVerificationResolvedCommitSha} = ${table.repositoryVerificationRequestedCommitSha}
+          and ${table.repositoryVerificationBuildArn} is not null
+          and ${table.repositoryVerificationStatusReason} is null
+          and ${table.repositoryVerifiedAt} is not null
+        )
+      )`
     )
   ]
 );

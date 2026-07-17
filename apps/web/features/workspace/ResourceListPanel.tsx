@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useState } from "react";
 import { Box, MoreHorizontal } from "lucide-react";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import { getResourceCardKeyboardActivation } from "./resource-card-interaction";
 import { ResourceCardMenu } from "./ResourceCardMenu";
 import type { buildResourceListItems } from "./resource-list-summary";
@@ -77,11 +78,13 @@ export function ResourceListPanel({
               <div className={styles.resourceListHeader}>
                 <span className={styles.resourceListIdentity}>
                   <span className={styles.resourceListServiceIcon}>
-                    {item.iconUrl ? (
-                      <img alt="" draggable={false} src={item.iconUrl} />
-                    ) : (
-                      <Box size={15} aria-hidden="true" />
-                    )}
+                    <ResourceIconImage
+                      alt=""
+                      className={styles.resourceListServiceIconImage}
+                      fallbackClassName={styles.resourceListServiceIconFallback}
+                      fallbackSize={15}
+                      src={item.iconUrl}
+                    />
                   </span>
                   <strong>{item.displayName}</strong>
                 </span>

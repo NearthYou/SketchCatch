@@ -5,13 +5,13 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import { repositoryAnalysisRecords } from "./schema.js";
 
 const migrationUrl = new URL(
-  "../../drizzle/0049_repository_analysis_records.sql",
+  "../../drizzle/0050_repository_analysis_records.sql",
   import.meta.url
 );
 const journalUrl = new URL("../../drizzle/meta/_journal.json", import.meta.url);
 
-test("0049 stores one current Repository Analysis Record per project", () => {
-  assert.equal(existsSync(migrationUrl), true, "0049 migration must exist");
+test("0050 stores one current Repository Analysis Record per project", () => {
+  assert.equal(existsSync(migrationUrl), true, "0050 migration must exist");
   const sql = readFileSync(migrationUrl, "utf8");
   const table = getTableConfig(repositoryAnalysisRecords);
 
@@ -33,7 +33,7 @@ test("0049 stores one current Repository Analysis Record per project", () => {
   assert.doesNotMatch(sql, /\b(?:DROP TABLE|TRUNCATE|DELETE FROM)\b/iu);
 });
 
-test("0049 is registered after migration 0048", () => {
+test("0050 is registered after migration 0049", () => {
   const journal = JSON.parse(readFileSync(journalUrl, "utf8")) as {
     entries?: Array<{
       idx?: number;
@@ -44,14 +44,14 @@ test("0049 is registered after migration 0048", () => {
     }>;
   };
   const entry = journal.entries?.find(
-    (candidate) => candidate.tag === "0049_repository_analysis_records"
+    (candidate) => candidate.tag === "0050_repository_analysis_records"
   );
 
   assert.deepEqual(entry, {
-    idx: 49,
+    idx: 50,
     version: "7",
-    when: 1784332800001,
-    tag: "0049_repository_analysis_records",
+    when: 1784332800002,
+    tag: "0050_repository_analysis_records",
     breakpoints: true
   });
 });

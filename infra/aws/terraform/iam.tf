@@ -106,6 +106,8 @@ data "aws_iam_policy_document" "ecs_task" {
       "s3:GetObjectVersion",
       "s3:DeleteObject",
       "s3:DeleteObjectVersion",
+      "s3:ListMultipartUploadParts",
+      "s3:AbortMultipartUpload",
       "s3:PutObjectTagging",
       "s3:PutObjectVersionTagging"
     ]
@@ -297,6 +299,8 @@ data "aws_iam_policy_document" "ecs_worker_task" {
       "s3:GetObjectVersion",
       "s3:DeleteObject",
       "s3:DeleteObjectVersion",
+      "s3:ListMultipartUploadParts",
+      "s3:AbortMultipartUpload",
       "s3:PutObjectTagging",
       "s3:PutObjectVersionTagging"
     ]

@@ -1040,10 +1040,7 @@ export type CreateGitCicdReleaseRunRequest = {
   workflowRunUrl: string;
 };
 
-export type GitCicdInfrastructureRunStage =
-  | "configuration"
-  | "infra_plan"
-  | "infra_apply";
+export type GitCicdInfrastructureRunStage = "configuration" | "infra_plan" | "infra_apply";
 
 export type CreateGitCicdInfrastructureRunRequest = CreateGitCicdReleaseRunRequest;
 
@@ -1448,18 +1445,12 @@ export type LambdaGitOpsReleaseEvidenceV1 = {
   outputUrl: string;
 };
 
-export type LambdaGitOpsReleaseEvidenceV2 = Omit<
-  LambdaGitOpsReleaseEvidenceV1,
-  "schemaVersion"
-> & {
+export type LambdaGitOpsReleaseEvidenceV2 = Omit<LambdaGitOpsReleaseEvidenceV1, "schemaVersion"> & {
   schemaVersion: 2;
   artifact: ApplicationArtifactEvidenceV2;
 };
 
-export type LambdaGitOpsReleaseEvidenceV3 = Omit<
-  LambdaGitOpsReleaseEvidenceV2,
-  "schemaVersion"
-> & {
+export type LambdaGitOpsReleaseEvidenceV3 = Omit<LambdaGitOpsReleaseEvidenceV2, "schemaVersion"> & {
   schemaVersion: 3;
   convergence: RuntimeConvergenceEvidence;
 };
@@ -1491,18 +1482,12 @@ export type Ec2AsgGitOpsReleaseEvidenceV1 = {
   outputUrl: string;
 };
 
-export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<
-  Ec2AsgGitOpsReleaseEvidenceV1,
-  "schemaVersion"
-> & {
+export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<Ec2AsgGitOpsReleaseEvidenceV1, "schemaVersion"> & {
   schemaVersion: 2;
   artifact: ApplicationArtifactEvidenceV2;
 };
 
-export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<
-  Ec2AsgGitOpsReleaseEvidenceV2,
-  "schemaVersion"
-> & {
+export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<Ec2AsgGitOpsReleaseEvidenceV2, "schemaVersion"> & {
   schemaVersion: 3;
   convergence: RuntimeConvergenceEvidence;
 };
@@ -1728,12 +1713,7 @@ export type ApplicationRelease = {
   updatedAt: IsoDateTimeString;
 };
 
-export type AwsCodeConnectionStatus =
-  | "CREATING"
-  | "PENDING"
-  | "AVAILABLE"
-  | "ERROR"
-  | "DELETING";
+export type AwsCodeConnectionStatus = "CREATING" | "PENDING" | "AVAILABLE" | "ERROR" | "DELETING";
 
 export type AwsCodeConnection = {
   id: string;
@@ -1758,6 +1738,11 @@ export type ProjectBuildEnvironmentStatus =
   | "verification_failed"
   | "disconnected";
 
+export type ProjectRepositoryAccessVerificationStatus =
+  | "not_checked"
+  | "verified"
+  | "failed";
+
 export type ProjectBuildEnvironment = {
   id: string;
   projectId: string;
@@ -1770,6 +1755,12 @@ export type ProjectBuildEnvironment = {
   runtimeFingerprint: string;
   status: ProjectBuildEnvironmentStatus;
   lastVerifiedAt: IsoDateTimeString | null;
+  repositoryVerificationStatus: ProjectRepositoryAccessVerificationStatus;
+  repositoryVerificationRequestedCommitSha: string | null;
+  repositoryVerificationResolvedCommitSha: string | null;
+  repositoryVerificationBuildArn: string | null;
+  repositoryVerificationStatusReason: string | null;
+  repositoryVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -2158,8 +2149,14 @@ export type AwsConnectionDeletionPreviewResponse = {
   confirmationToken: string;
 };
 
-export { AVAILABLE_BRAINBOARD_TEMPLATE_IDS, BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
-export type { AvailableBrainboardTemplateId, BrainboardTemplateId } from "./brainboard-templates/ids.ts";
+export {
+  AVAILABLE_BRAINBOARD_TEMPLATE_IDS,
+  BRAINBOARD_TEMPLATE_IDS
+} from "./brainboard-templates/ids.ts";
+export type {
+  AvailableBrainboardTemplateId,
+  BrainboardTemplateId
+} from "./brainboard-templates/ids.ts";
 export {
   BRAINBOARD_TEMPLATE_AUTHOR,
   BRAINBOARD_TEMPLATE_PROVIDER,
@@ -2240,6 +2237,15 @@ export {
   createTerraformProviderFiles,
   isTerraformDeployableNode
 } from "./terraform-provider-files.ts";
+export {
+  findTerraformRequiredProvidersBlockLocations,
+  findTerraformRequiredProvidersDeclarations
+} from "./terraform-module-structure.ts";
+export type {
+  TerraformModuleFile,
+  TerraformRequiredProvidersBlockLocation,
+  TerraformRequiredProvidersDeclaration
+} from "./terraform-module-structure.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"
@@ -3321,17 +3327,16 @@ export type CreateArchitecturePatchPreviewRequest = {
   skipConnection?: boolean | undefined;
 };
 
+export type ArchitectureDraftCandidateExclusion = {
+  candidateId: string;
+  resourceType: ResourceType;
+  label: string;
+};
+
 export type CreateArchitectureDraftRequest = {
   prompt: string;
+  candidateExclusions?: readonly ArchitectureDraftCandidateExclusion[] | undefined;
   templateId?: TemplateId | undefined;
-  dynamicQuestionAnswers?:
-    | readonly {
-        questionId: string;
-        question: string;
-        answer: string;
-      }[]
-    | undefined;
-  templateFallback?: Record<string, unknown> | undefined;
   repositoryEvidence?:
     | {
         mode: "strict";
@@ -3347,15 +3352,11 @@ export type CreateArchitectureDraftRequest = {
     | undefined;
 };
 
-export const ARCHITECTURE_DRAFT_PROGRESS_STAGES = [
-  "preparing_requirements",
-  "normalizing_requirements",
-  "querying_amazon_q",
-  "validating_architecture",
-  "building_diagram"
-] as const;
-
-export type ArchitectureDraftProgressStage = (typeof ARCHITECTURE_DRAFT_PROGRESS_STAGES)[number];
+export type ArchitectureDraftProgressSnapshot = {
+  sequence: number;
+  provisionalArchitectureJson: ArchitectureJson;
+  excludableCandidateIds: string[];
+};
 
 export type AiArchitectureDraftResult = {
   architectureJson: ArchitectureJson;
@@ -3379,7 +3380,7 @@ export type CreateArchitectureDraftResponse =
 export type ArchitectureDraftStreamEvent =
   | {
       type: "progress";
-      stage: ArchitectureDraftProgressStage;
+      snapshot: ArchitectureDraftProgressSnapshot;
     }
   | {
       type: "result";
@@ -4097,11 +4098,18 @@ export type ProjectDraft = {
 
 export type SaveProjectDraftRequest = {
   diagramJson: DiagramJson;
+  expectedRevision: number | null;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type ProjectDraftResponse = {
   draft: ProjectDraft | null;
+};
+
+export type ProjectDraftConflictResponse = ApiErrorResponse & {
+  error: "conflict";
+  currentRevision: number;
+  currentServerSavedAt: IsoDateTimeString;
 };
 
 export type TerraformGenerateRequest = {

@@ -97,11 +97,19 @@ GitHub App installation은 Dashboard 전역 설정에서 사용자 계정 단위
 
 Repository 기반 ECS/Fargate 웹 프로젝트의 최초 앱은 Direct Deployment가 배포한다. 정상 신규 흐름은 `full_stack`으로 인프라 Apply와 같은 Deployment에서 API·frontend를 활성화하고 CloudFront HTTPS URL을 확인한다. 기존 bootstrap-only 프로젝트는 Terraform을 다시 Apply하지 않는 `application` scope로 복구한다. CI/CD 설치 PR은 이 최초 릴리즈가 성공한 뒤에만 만들 수 있으며, merge는 후속 애플리케이션 변경 자동화만 설치한다.
 
-GitHub 빌드 연결은 verified AWS connection이 있을 때만 시작한다. 사용자는 AWS가 요구하는 GitHub 승인만
-수행하고 CodeConnections ARN, CodeBuild project, service role 이름을 입력하지 않는다. SketchCatch는 AWS
-connection마다 관리 CodeConnections 하나를 만들고, Source Repository가 있는 프로젝트가 첫 Plan을 요청할 때
-프로젝트별 build-only CodeBuild 환경을 lazy create한다. ECS가 정상 배포된 뒤 frontend만 실패하면 기존
+`AWS CodeBuild용 GitHub 권한`은 활성 GitHub App installation이 정확히 하나이고 verified AWS connection이 있을
+때만 시작한다. 설정 화면은 GitHub App, AWS 계정, AWS CodeBuild용 GitHub 권한 순서로 안내하고 AWS로 이동하기
+전에 승인 대상 GitHub 계정과 repository 범위를 보여준다. 사용자는 AWS가 요구하는 GitHub 승인만 수행하고
+CodeConnections ARN, CodeBuild project, service role 이름을 입력하지 않는다. CodeConnections `AVAILABLE`은 AWS
+승인 완료만 뜻하며 특정 Repository checkout 성공을 뜻하지 않는다. SketchCatch는 AWS connection마다 관리
+CodeConnections 하나를 만들고, Source Repository가 있는 프로젝트가 첫 Plan을 요청할 때 프로젝트별 build-only
+CodeBuild 환경을 lazy create한다. Plan 전 검증은 확정 commit SHA로 실제 CodeBuild checkout을 실행하고 AWS가
+반환한 resolved commit이 일치할 때만 Repository 접근 완료로 기록한다. ECS가 정상 배포된 뒤 frontend만 실패하면 기존
 CloudFront URL·QR·Live Observation을 유지하고 같은 candidate로 웹 단계만 재시도한다.
+
+AWS CodeConnections 조회 응답은 승인에 사용한 GitHub 계정 이름을 제공하지 않으므로 SketchCatch는 두 승인 화면의
+계정명이 같다고 주장하지 않는다. 대신 활성 GitHub App installation을 하나로 제한하고 예상 계정을 먼저 표시하며,
+최종 안전 조건은 AWS CodeBuild가 프로젝트의 exact Repository와 confirmed commit을 실제 checkout하는지로 판정한다.
 | Deployment 관측 | Live event, CloudWatch measured, ASG/EC2 또는 ECS/Fargate actual capacity를 서로 다른 근거로 표시하고 AWS 조회 실패 시 sample 값을 만들지 않는다. |
 
 ## AWS-first 실행 범위와 Representative Use Journey

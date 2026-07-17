@@ -9,6 +9,8 @@ import type {
 import {
   type ArchitectureDiagnostic,
   type CheckFinding,
+  type LiveObservationV2Session,
+  type LiveObservationV2Snapshot,
   type TerraformDiagnostic,
   type TerraformSourceLocation,
   type TerraformSyncFileInput
@@ -45,6 +47,23 @@ import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
 import { DeliveryCenterPanel } from "./DeliveryCenterPanel";
 import type { LiveObservationSelection } from "./live-observation";
+import {
+  createLiveObservationViewState,
+  readLiveObservationViewState,
+  selectLiveObservationDeployment,
+  storeLiveObservationViewport,
+  type LiveObservationViewport
+} from "./live-observation-view-state";
+import {
+  createLiveObservationSessionState,
+  readLiveObservationSessionState,
+  retainLiveObservationSession,
+  retainLiveObservationSnapshot
+} from "./live-observation-session-state";
+import {
+  createWorkspaceOverlayNotifications,
+  type WorkspaceOverlayNotifications
+} from "./workspace-overlay-notifications";
 import { defaultResourceWorkspaceView } from "./resource-workspace-view";
 import { getPreDeploymentFindingTerraformSourceLocation } from "./pre-deployment-finding-source";
 import {
@@ -94,6 +113,9 @@ export type WorkspaceRightPanelProps = {
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
   readonly onInitialCicdReturnCommandReady?: ((cleanedHref: string) => void) | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
+  readonly onBlockingPanelOpenChange: (isOpen: boolean) => void;
+  readonly onDeploymentConsoleOpenChange?: ((isOpen: boolean) => void) | undefined;
+  readonly onPanelOpenRequest: () => void;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
   readonly onTerraformAiInteraction: (
@@ -133,6 +155,9 @@ export function WorkspaceRightPanel({
   initialView,
   initialTerraformFiles,
   terraformFilesReplacement,
+  onBlockingPanelOpenChange,
+  onDeploymentConsoleOpenChange = noopDeploymentConsoleOpenChange,
+  onPanelOpenRequest,
   onInitialCicdReturnCommandReady,
   onSelectTerraformIssue,
   onTerraformAiContextChange,
@@ -153,6 +178,13 @@ export function WorkspaceRightPanel({
   const skipTerraformLeaveGuardRef = useRef(false);
   const latestTerraformDiagnosticsRef = useRef<TerraformDiagnostic[]>([]);
   const latestTerraformSaveRequestIdRef = useRef(0);
+  const overlayNotificationsRef = useRef<WorkspaceOverlayNotifications | null>(null);
+  if (overlayNotificationsRef.current === null) {
+    overlayNotificationsRef.current = createWorkspaceOverlayNotifications(
+      onBlockingPanelOpenChange,
+      onDeploymentConsoleOpenChange
+    );
+  }
   const [activeView, setActiveView] = useState<WorkspaceRightPanelView>(
     initialView === "deployment" ? "resource" : (initialView ?? "resource")
   );
@@ -196,13 +228,52 @@ export function WorkspaceRightPanel({
 
   useEffect(() => {
     if (deploymentOpenRequestId > 0) {
+      onPanelOpenRequest();
       setIsDeploymentConsoleOpen(true);
     }
-  }, [deploymentOpenRequestId]);
+  }, [deploymentOpenRequestId, onPanelOpenRequest]);
   const [canRenderDeploymentPortal, setCanRenderDeploymentPortal] = useState(false);
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const [liveObservationSelection, setLiveObservationSelection] =
     useState<LiveObservationSelection | null>(null);
+  const [liveObservationViewState, setLiveObservationViewState] = useState(() =>
+    createLiveObservationViewState(projectId)
+  );
+  const retainedLiveObservationView = readLiveObservationViewState(
+    liveObservationViewState,
+    projectId
+  );
+  const [liveObservationSessionState, setLiveObservationSessionState] = useState(() =>
+    createLiveObservationSessionState(projectId)
+  );
+  const retainedLiveObservationSession = readLiveObservationSessionState(
+    liveObservationSessionState,
+    projectId
+  );
+
+  useEffect(() => {
+    overlayNotificationsRef.current?.setCallbacks(
+      onBlockingPanelOpenChange,
+      onDeploymentConsoleOpenChange
+    );
+  }, [onBlockingPanelOpenChange, onDeploymentConsoleOpenChange]);
+
+  useEffect(() => {
+    overlayNotificationsRef.current?.notifyBlockingPanel(
+      isDeploymentConsoleOpen || isLiveObservationOpen
+    );
+  }, [isDeploymentConsoleOpen, isLiveObservationOpen]);
+
+  useEffect(() => {
+    overlayNotificationsRef.current?.notifyDeploymentConsole(isDeploymentConsoleOpen);
+  }, [isDeploymentConsoleOpen]);
+
+  useEffect(
+    () => () => {
+      overlayNotificationsRef.current?.reset();
+    },
+    []
+  );
   const latestTerraformSafeFixApplyRequestIdRef = useRef<number | null>(null);
   const terraformDiagnostics = useMemo(
     () => terraformIssues.map((issue) => issue.diagnostic),
@@ -457,6 +528,7 @@ export function WorkspaceRightPanel({
 
     try {
       if (pendingAction.kind === "view") {
+        onPanelOpenRequest();
         setActiveView(pendingAction.view);
         onTerraformAiInteraction(
           pendingAction.view === "terraform" ? "preview" : "draft"
@@ -465,6 +537,7 @@ export function WorkspaceRightPanel({
       }
 
       if (pendingAction.kind === "deployment-console") {
+        onPanelOpenRequest();
         setIsDeploymentConsoleOpen(true);
         return;
       }
@@ -480,16 +553,18 @@ export function WorkspaceRightPanel({
         skipTerraformLeaveGuardRef.current = false;
       }, 0);
     }
-  }, [context, onTerraformAiInteraction]);
+  }, [context, onPanelOpenRequest, onTerraformAiInteraction]);
 
   const requestView = useCallback(
     (nextView: WorkspaceRightPanelView): void => {
       if (nextView === activeView) {
+        onPanelOpenRequest();
         onTerraformAiInteraction(nextView === "terraform" ? "preview" : "draft");
         return;
       }
 
       if (nextView === "terraform") {
+        onPanelOpenRequest();
         setActiveView("terraform");
         onTerraformAiInteraction("preview");
         return;
@@ -499,10 +574,11 @@ export function WorkspaceRightPanel({
         return;
       }
 
+      onPanelOpenRequest();
       setActiveView(nextView);
       onTerraformAiInteraction("draft");
     },
-    [activeView, onTerraformAiInteraction, requestTerraformLeave]
+    [activeView, onPanelOpenRequest, onTerraformAiInteraction, requestTerraformLeave]
   );
 
   const startTerraformSplitResize = useCallback(
@@ -582,13 +658,57 @@ export function WorkspaceRightPanel({
       return;
     }
 
+    onPanelOpenRequest();
     setIsDeploymentConsoleOpen(true);
-  }, [requestTerraformLeave]);
+  }, [onPanelOpenRequest, requestTerraformLeave]);
 
   const openLiveObservation = useCallback((selection?: LiveObservationSelection): void => {
+    onPanelOpenRequest();
     setLiveObservationSelection(selection ?? null);
     setIsLiveObservationOpen(true);
-  }, []);
+  }, [onPanelOpenRequest]);
+
+  const updateLiveObservationDeployment = useCallback(
+    (deploymentId: string): void => {
+      setLiveObservationViewState((current) =>
+        selectLiveObservationDeployment(current, projectId, deploymentId)
+      );
+    },
+    [projectId]
+  );
+
+  const updateLiveObservationViewport = useCallback(
+    (viewport: LiveObservationViewport): void => {
+      setLiveObservationViewState((current) => {
+        const currentView = readLiveObservationViewState(current, projectId);
+        return storeLiveObservationViewport(
+          current,
+          projectId,
+          currentView.selectedDeploymentId,
+          viewport
+        );
+      });
+    },
+    [projectId]
+  );
+
+  const updateLiveObservationSession = useCallback(
+    (session: LiveObservationV2Session | null): void => {
+      setLiveObservationSessionState((current) =>
+        retainLiveObservationSession(current, projectId, session)
+      );
+    },
+    [projectId]
+  );
+
+  const updateLiveObservationSnapshot = useCallback(
+    (snapshot: LiveObservationV2Snapshot | null): void => {
+      setLiveObservationSessionState((current) =>
+        retainLiveObservationSnapshot(current, projectId, snapshot)
+      );
+    },
+    [projectId]
+  );
 
   const applyTerraformLeaveSaveFeedback = useCallback(
     (feedback: TerraformLeaveSaveFeedback): void => {
@@ -703,7 +823,6 @@ export function WorkspaceRightPanel({
       return saveWorkspaceTerraformArtifact({
         diagramJson: source.diagramJson,
         projectId,
-        skipValidation: true,
         source: "manual",
         terraformCode: source.terraformCode
       });
@@ -887,12 +1006,20 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
+      initialViewport={retainedLiveObservationView.viewport}
       onClose={() => {
         setIsLiveObservationOpen(false);
         setLiveObservationSelection(null);
       }}
+      onSessionChange={updateLiveObservationSession}
+      onSelectedDeploymentIdChange={updateLiveObservationDeployment}
+      onSnapshotChange={updateLiveObservationSnapshot}
+      onViewportChange={updateLiveObservationViewport}
       projectId={projectId}
+      selectedDeploymentId={retainedLiveObservationView.selectedDeploymentId}
+      session={retainedLiveObservationSession.session}
       selection={liveObservationSelection}
+      snapshot={retainedLiveObservationSession.snapshot}
     />
   ) : null;
   const terraformSplitStyle = {
@@ -949,6 +1076,7 @@ export function WorkspaceRightPanel({
             <Rocket size={18} aria-hidden="true" />
           </button>
           <button
+            aria-label="Live Observation"
             className={styles.collapsedPanelButton}
             onClick={() => openLiveObservation()}
             title="Live Observation"
@@ -1011,6 +1139,15 @@ export function WorkspaceRightPanel({
                 {issueCount}
               </span>
             </button>
+            <button
+              aria-label="Live Observation"
+              className={styles.panelModeButton}
+              onClick={() => openLiveObservation()}
+              title="Live Observation"
+              type="button"
+            >
+              <Activity size={16} aria-hidden="true" />
+            </button>
           </div>
           <button
             aria-pressed={activeView === "delivery"}
@@ -1021,15 +1158,6 @@ export function WorkspaceRightPanel({
           >
             <Workflow size={14} aria-hidden="true" />
             <span>Delivery</span>
-          </button>
-          <button
-            className={styles.panelModeTextButton}
-            onClick={() => openLiveObservation()}
-            title="Live Observation"
-            type="button"
-          >
-            <Activity size={14} aria-hidden="true" />
-            <span>Live Observation</span>
           </button>
         </div>
 
@@ -1124,6 +1252,8 @@ function clampTerraformCodePaneRatio(ratio: number): number {
     Math.max(MIN_TERRAFORM_CODE_PANE_RATIO, Math.round(ratio))
   );
 }
+
+function noopDeploymentConsoleOpenChange(): void {}
 
 function getTerraformLeaveReplayTarget(target: EventTarget | null): HTMLElement | null {
   if (!(target instanceof Element)) {

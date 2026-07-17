@@ -42,26 +42,7 @@ test("public repository AI draft keeps the selected Template and includes follow
   assert.match(relationalRequest.prompt, /direct host operations/i);
   assert.match(relationalRequest.prompt, /Application type: API server/i);
   assert.match(relationalRequest.prompt, /Required Components:/);
-  assert.deepEqual(
-    relationalRequest.dynamicQuestionAnswers,
-    [
-      {
-        questionId: "application-scope",
-        question: "아키텍처에 먼저 포함할 애플리케이션 범위를 선택해주세요.",
-        answer: "api"
-      },
-      {
-        questionId: "data-persistence",
-        question: "이 애플리케이션에 영구 데이터 저장소가 필요한가요?",
-        answer: "relational"
-      },
-      {
-        questionId: "operations-preference",
-        question: "첫 배포에서 선호하는 운영 방식을 선택해주세요.",
-        answer: "ec2"
-      }
-    ]
-  );
+  assert.equal("dynamicQuestionAnswers" in relationalRequest, false);
   assert.notEqual(relationalRequest.prompt, noPersistenceRequest.prompt);
 });
 

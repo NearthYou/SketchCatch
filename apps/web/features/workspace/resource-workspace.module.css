@@ -170,6 +170,21 @@
   width: 20px;
 }
 
+.resourceListServiceIconImage {
+  height: 20px;
+  object-fit: contain;
+  width: 20px;
+}
+
+.resourceListServiceIconFallback {
+  align-items: center;
+  color: var(--workspace-text, #171717);
+  display: inline-flex;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
+}
+
 .resourceListMoreButton {
   align-items: center;
   background: transparent;

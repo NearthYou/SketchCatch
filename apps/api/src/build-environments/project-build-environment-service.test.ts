@@ -7,6 +7,7 @@ import {
   deleteProjectBuildEnvironment,
   prepareProjectBuildEnvironment,
   synchronizeEcsFargateRuntimeConfigWithArchitecture,
+  verifyProjectRepositoryAccess,
   type ProjectBuildEnvironmentGateway,
   type ProjectBuildEnvironmentPreparationContext,
   type ProjectBuildEnvironmentRecord,
@@ -143,6 +144,120 @@ test("build environment preparation reconciles one project-scoped build environm
       repositoryUrl: "https://github.com/jh-9999/audience-live-check.git"
     }
   ]);
+});
+
+test("repository access verification records the exact CodeBuild checkout commit", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  await prepareProjectBuildEnvironment(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway(),
+    { generateId: () => "build-environment-1", now: () => now }
+  );
+  const requestedCommitSha = context.confirmedBuildConfig?.confirmedCommitSha ?? "";
+  const result = await verifyProjectRepositoryAccess(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway({
+      async verifyRepositoryAccess(_input, commitSha) {
+        return {
+          verified: true,
+          requestedCommitSha: commitSha,
+          resolvedCommitSha: commitSha,
+          buildArn: "arn:aws:codebuild:ap-northeast-2:131404649047:build/verify:1",
+          statusReason: null
+        };
+      }
+    }),
+    { now: () => now }
+  );
+
+  assert.equal(result.buildEnvironment?.repositoryVerificationStatus, "verified");
+  assert.equal(
+    result.buildEnvironment?.repositoryVerificationRequestedCommitSha,
+    requestedCommitSha
+  );
+  assert.equal(
+    result.buildEnvironment?.repositoryVerificationResolvedCommitSha,
+    requestedCommitSha
+  );
+  assert.match(result.buildEnvironment?.repositoryVerificationBuildArn ?? "", /codebuild/);
+  assert.equal(result.buildEnvironment?.repositoryVerifiedAt, now.toISOString());
+});
+
+test("repository access verification records a safe failure when CodeBuild cannot checkout", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  await prepareProjectBuildEnvironment(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway(),
+    { generateId: () => "build-environment-1", now: () => now }
+  );
+
+  const result = await verifyProjectRepositoryAccess(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway({
+      async verifyRepositoryAccess() {
+        throw new Error("Access denied\nsecretAccessKey=temporary-secret-value");
+      }
+    }),
+    { now: () => now }
+  );
+
+  assert.equal(result.buildEnvironment?.repositoryVerificationStatus, "failed");
+  assert.equal(result.buildEnvironment?.repositoryVerificationResolvedCommitSha, null);
+  assert.equal(result.buildEnvironment?.repositoryVerificationBuildArn, null);
+  assert.equal(
+    result.buildEnvironment?.repositoryVerificationStatusReason,
+    "CodeBuild repository checkout failed: Access denied [REDACTED]"
+  );
+  assert.equal(result.buildEnvironment?.repositoryVerifiedAt, null);
+});
+
+test("repository access verification checks the live CodeBuild source before starting checkout", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  await prepareProjectBuildEnvironment(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway(),
+    { generateId: () => "build-environment-1", now: () => now }
+  );
+  let checkoutStarted = false;
+
+  const result = await verifyProjectRepositoryAccess(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway({
+      async verify() {
+        return {
+          verified: false,
+          statusReason: "CodeBuild project source does not match the project contract"
+        };
+      },
+      async verifyRepositoryAccess(_input, requestedCommitSha) {
+        checkoutStarted = true;
+        return {
+          verified: true,
+          requestedCommitSha,
+          resolvedCommitSha: requestedCommitSha,
+          buildArn: "unexpected",
+          statusReason: null
+        };
+      }
+    }),
+    { now: () => now }
+  );
+
+  assert.equal(checkoutStarted, false);
+  assert.equal(result.buildEnvironment?.repositoryVerificationStatus, "failed");
+  assert.match(
+    result.buildEnvironment?.repositoryVerificationStatusReason ?? "",
+    /source does not match/
+  );
 });
 
 test("build environment preparation synchronizes the deployment target before AWS reconciliation", async () => {
@@ -282,6 +397,37 @@ test("build environment fingerprint changes when the approved frontend build sna
   const second = createDesiredProjectBuildEnvironment({
     ...requiredBase,
     confirmedBuildConfig: createConfirmedBuildConfig("apps/web/build")
+  });
+
+  assert.notEqual(first.runtimeFingerprint, second.runtimeFingerprint);
+});
+
+test("build environment fingerprint changes when the confirmed repository commit changes", () => {
+  const base = createContext();
+  assert.ok(base.sourceRepository);
+  assert.ok(base.awsConnection);
+  assert.ok(base.codeConnection);
+  assert.ok(base.codeConnection.connectionArn);
+  const requiredBase = {
+    ...base,
+    sourceRepository: base.sourceRepository,
+    awsConnection: base.awsConnection,
+    codeConnection: {
+      ...base.codeConnection,
+      connectionArn: base.codeConnection.connectionArn
+    }
+  };
+  const firstConfig = createConfirmedBuildConfig("apps/web/dist");
+  const first = createDesiredProjectBuildEnvironment({
+    ...requiredBase,
+    confirmedBuildConfig: firstConfig
+  });
+  const second = createDesiredProjectBuildEnvironment({
+    ...requiredBase,
+    confirmedBuildConfig: {
+      ...firstConfig,
+      confirmedCommitSha: "b".repeat(40)
+    }
   });
 
   assert.notEqual(first.runtimeFingerprint, second.runtimeFingerprint);
@@ -440,6 +586,15 @@ function createGateway(
     },
     async verify() {
       return { verified: true, statusReason: null };
+    },
+    async verifyRepositoryAccess(_input, requestedCommitSha) {
+      return {
+        verified: true,
+        requestedCommitSha,
+        resolvedCommitSha: requestedCommitSha,
+        buildArn: "arn:aws:codebuild:ap-northeast-2:131404649047:build/test:1",
+        statusReason: null
+      };
     },
     ...overrides
   };

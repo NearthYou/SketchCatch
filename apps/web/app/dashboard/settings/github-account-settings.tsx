@@ -32,7 +32,11 @@ export function GitHubAccountSettings() {
   }
 
   return (
-    <section className={styles.settingsSection} aria-labelledby="github-account-settings-title">
+    <section
+      aria-labelledby="github-account-settings-title"
+      className={styles.settingsSection}
+      id="github-account-connection"
+    >
       <header>
         <DashboardIcon name="github" />
         <div>
@@ -92,6 +96,14 @@ export function GitHubAccountSettings() {
               ) : null}
             </article>
           ))}
+        </div>
+      ) : null}
+
+      {installations.length > 1 ? (
+        <div className={styles.githubSettingsError} role="alert">
+          <p>
+            GitHub 연결 정리 필요: AWS CodeBuild 승인 대상을 하나로 확정하려면 활성 연결을 하나만 남겨 주세요.
+          </p>
         </div>
       ) : null}
 

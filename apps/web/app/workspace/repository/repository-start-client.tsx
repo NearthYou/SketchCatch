@@ -36,6 +36,7 @@ import {
   connectGitHubSourceRepository,
   createAiArchitectureDraft,
   createGitHubSourceRepositoryInstallUrl,
+  getProjectDraft,
   listGitHubAccountInstallations,
   listGitHubInstalledRepositories,
   listSourceRepositories,
@@ -60,7 +61,7 @@ import {
 } from "../../../features/workspace/public-repository-recommendation";
 import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/workspace-ai-diagram-adapter";
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
-import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
+import { RepositoryArchitecturePreview } from "./repository-architecture-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
 import {
   createConnectedRepositoryAnalysisResult,
@@ -111,6 +112,9 @@ export function RepositoryStartClient({
   const hasRestoredRepositoryAnalysis = useRef(false);
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [installations, setInstallations] = useState<GitHubInstallationConnection[]>([]);
+  const [projectDraftRevision, setProjectDraftRevision] = useState<number | null | undefined>(
+    undefined
+  );
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
   const [connectionOptionsLoaded, setConnectionOptionsLoaded] = useState(false);
   const [installationState, setInstallationState] = useState("");
@@ -122,23 +126,22 @@ export function RepositoryStartClient({
   const [recommendationState, setRecommendationState] = useState<RequestState>("idle");
   const [deploymentType, setDeploymentType] = useState<RepositoryDeploymentType>("serverless");
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
-  const [selectedPublicTemplateId, setSelectedPublicTemplateId] = useState<PublicRepositoryTemplateId | null>(null);
-  const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
-  const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
+  const [selectedPublicTemplateId, setSelectedPublicTemplateId] =
+    useState<PublicRepositoryTemplateId | null>(null);
+  const [publicRecommendationStage, setPublicRecommendationStage] =
+    useState<PublicRecommendationStage>("configuration");
+  const [recommendation, setRecommendation] =
+    useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [pendingAnalysisRecord, setPendingAnalysisRecord] = useState<
     SaveRepositoryAnalysisRecordRequest | null
   >(null);
   const [restoredProjectName, setRestoredProjectName] = useState("");
   const effectiveProjectName = restoredProjectName || projectName;
-  const activeRepository = useMemo(
-    () => findActiveGitHubRepository(repositories),
-    [repositories]
-  );
+  const activeRepository = useMemo(() => findActiveGitHubRepository(repositories), [repositories]);
   const activeHandoff = activeRepository?.analysis?.aiHandoff;
-  const questions = activeHandoff?.questions
-    ?.map(localizePublicRepositoryQuestion)
-    .slice(0, 5) ?? [];
+  const questions =
+    activeHandoff?.questions?.map(localizePublicRepositoryQuestion).slice(0, 5) ?? [];
   const activeRecommendation = recommendation ?? activeHandoff?.recommendation ?? null;
   const previewDiagram = createRepositoryPreviewDiagram(effectiveProjectName, activeRepository);
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
@@ -187,12 +190,16 @@ export function RepositoryStartClient({
     setErrorMessage("");
 
     try {
-      const loadedRepositories = await listSourceRepositories(projectId);
+      const [loadedRepositories, projectDraftResponse] = await Promise.all([
+        listSourceRepositories(projectId),
+        getProjectDraft(projectId)
+      ]);
       const active = findActiveGitHubRepository(loadedRepositories);
       const handoff = active?.analysis?.aiHandoff;
       let nextRecommendation = handoff?.recommendation ?? null;
 
       setRepositories(loadedRepositories);
+      setProjectDraftRevision(projectDraftResponse.draft?.revision ?? null);
 
       if (initialResumeKey && !hasRestoredRepositoryAnalysis.current) {
         hasRestoredRepositoryAnalysis.current = true;
@@ -203,7 +210,8 @@ export function RepositoryStartClient({
           const resume = consumeRepositoryAnalysisResume(window.sessionStorage, {
             resumeKey: initialResumeKey,
             projectId,
-            repositoryUrl: active.repositoryUrl ?? `https://github.com/${active.owner}/${active.name}`
+            repositoryUrl:
+              active.repositoryUrl ?? `https://github.com/${active.owner}/${active.name}`
           });
 
           if (resume) {
@@ -302,7 +310,10 @@ export function RepositoryStartClient({
     await analyzePublicRepositoryUrl(repositoryUrl, defaultBranch);
   }
 
-  async function analyzePublicRepositoryUrl(nextRepositoryUrl: string, nextDefaultBranch: string): Promise<void> {
+  async function analyzePublicRepositoryUrl(
+    nextRepositoryUrl: string,
+    nextDefaultBranch: string
+  ): Promise<void> {
     const trimmedRepositoryUrl = nextRepositoryUrl.trim();
     const trimmedDefaultBranch = nextDefaultBranch.trim();
 
@@ -402,7 +413,9 @@ export function RepositoryStartClient({
 
       if (draft.metadata.source !== "amazon_q") {
         setPublicAnalysisState("error");
-        setErrorMessage("Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요.");
+        setErrorMessage(
+          "Amazon Q가 현재 다이어그램을 생성하지 못했습니다. AWS 인증과 Amazon Q 설정을 확인해주세요."
+        );
         return;
       }
 
@@ -422,7 +435,9 @@ export function RepositoryStartClient({
     }
   }
 
-  async function createConnectedRepositoryBoard(templateId: PublicRepositoryTemplateId): Promise<void> {
+  async function createConnectedRepositoryBoard(
+    templateId: PublicRepositoryTemplateId
+  ): Promise<void> {
     if (!activeRepository?.analysis || actionState === "loading") return;
 
     setActionState("loading");
@@ -462,7 +477,9 @@ export function RepositoryStartClient({
       setActionState("idle");
     } catch (error) {
       setActionState("error");
-      setErrorMessage(getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다."));
+      setErrorMessage(
+        getApiErrorMessage(error, "Amazon Q로 저장소 다이어그램을 생성하지 못했습니다.")
+      );
     }
   }
 
@@ -500,7 +517,12 @@ export function RepositoryStartClient({
       readonly templateId: PublicRepositoryTemplateId;
     }
   ): Promise<void> {
-    await saveProjectDraft({ diagramJson, projectId });
+    const response = await saveProjectDraft({
+      diagramJson,
+      expectedRevision: requireProjectDraftRevision(),
+      projectId
+    });
+    setProjectDraftRevision(response.draft?.revision ?? null);
 
     if (provenance) {
       const payload = createRepositoryAnalysisRecordPayload({
@@ -565,6 +587,14 @@ export function RepositoryStartClient({
       setActionState("error");
       setErrorMessage(getApiErrorMessage(error, "저장소를 연결하지 못했습니다."));
     }
+  }
+
+  function requireProjectDraftRevision(): number | null {
+    if (projectDraftRevision === undefined) {
+      throw new Error("PROJECT_DRAFT_REVISION_UNAVAILABLE");
+    }
+
+    return projectDraftRevision;
   }
 
   async function analyzeRepository(): Promise<void> {
@@ -671,7 +701,11 @@ export function RepositoryStartClient({
                     </label>
                   ) : null}
                   <button disabled={isPublicAnalysisBusy || !repositoryUrl.trim()} type="submit">
-                    {isPublicAnalysisBusy ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+                    {isPublicAnalysisBusy ? (
+                      <LoaderCircle className={styles.spin} size={16} />
+                    ) : (
+                      <Search size={16} />
+                    )}
                     {isPublicAnalysisBusy ? "분석 중" : "URL 분석"}
                   </button>
                 </form>
@@ -682,7 +716,10 @@ export function RepositoryStartClient({
             ) : null}
             {publicAnalysis ? (
               <PublicRepositoryRecommendationStep
-                aiDesignHref={createWorkspaceAiStartHref({ projectId, projectName: effectiveProjectName })}
+                aiDesignHref={createWorkspaceAiStartHref({
+                  projectId,
+                  projectName: effectiveProjectName
+                })}
                 answers={answers}
                 analysis={publicAnalysis}
                 deploymentType={deploymentType}
@@ -756,11 +793,21 @@ export function RepositoryStartClient({
           <section className={styles.analysisPanel}>
             <div>
               <span>연결된 저장소</span>
-              <h2>{activeRepository.owner}/{activeRepository.name}</h2>
+              <h2>
+                {activeRepository.owner}/{activeRepository.name}
+              </h2>
               <p>{activeRepository.defaultBranch}</p>
             </div>
-            <button disabled={actionState === "loading"} onClick={() => void analyzeRepository()} type="button">
-              {actionState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+            <button
+              disabled={actionState === "loading"}
+              onClick={() => void analyzeRepository()}
+              type="button"
+            >
+              {actionState === "loading" ? (
+                <LoaderCircle className={styles.spin} size={16} />
+              ) : (
+                <Search size={16} />
+              )}
               {actionState === "loading" ? "분석 중" : "저장소 분석"}
             </button>
 
@@ -768,7 +815,12 @@ export function RepositoryStartClient({
               <section className={styles.recommendationForm} aria-label="템플릿 추천 설정">
                 <label>
                   <span>배포 방식</span>
-                  <select value={deploymentType} onChange={(event) => setDeploymentType(event.target.value as RepositoryDeploymentType)}>
+                  <select
+                    value={deploymentType}
+                    onChange={(event) =>
+                      setDeploymentType(event.target.value as RepositoryDeploymentType)
+                    }
+                  >
                     <option value="ec2_vm">EC2/VM 기반</option>
                     <option value="container">컨테이너 기반</option>
                     <option value="serverless">서버리스 기반</option>
@@ -782,8 +834,16 @@ export function RepositoryStartClient({
                   }
                   questions={questions}
                 />
-                <button disabled={recommendationState === "loading"} onClick={() => void submitRecommendation()} type="button">
-                  {recommendationState === "loading" ? <LoaderCircle className={styles.spin} size={16} /> : <Search size={16} />}
+                <button
+                  disabled={recommendationState === "loading"}
+                  onClick={() => void submitRecommendation()}
+                  type="button"
+                >
+                  {recommendationState === "loading" ? (
+                    <LoaderCircle className={styles.spin} size={16} />
+                  ) : (
+                    <Search size={16} />
+                  )}
                   템플릿 추천
                 </button>
               </section>
@@ -807,7 +867,7 @@ export function RepositoryStartClient({
                       : "분석 근거로 하나의 템플릿을 선택하지 못했습니다."}
                   </strong>
                 </div>
-                <AiDraftBoardPreview diagram={previewDiagram} />
+                <RepositoryArchitecturePreview diagram={previewDiagram} />
               </section>
             ) : null}
           </section>
@@ -932,27 +992,35 @@ function RepositoryQuestions({
           <fieldset className={styles.questionField} key={question.id}>
             <legend>{question.prompt}</legend>
             {question.answerType === "boolean" || question.answerType === "single_select" ? (
-              <span className={styles.questionChoices} role="radiogroup" aria-label={question.prompt}>
+              <span
+                className={styles.questionChoices}
+                role="radiogroup"
+                aria-label={question.prompt}
+              >
                 {(question.answerType === "boolean"
                   ? [
                       { label: "예", value: "true" },
                       { label: "아니요", value: "false" }
                     ]
-                  : question.options ?? []
+                  : (question.options ?? [])
                 ).map((option) => {
                   const selected = String(answers[question.id] ?? "") === option.value;
 
                   return (
                     <button
                       aria-checked={selected}
-                      className={selected
-                        ? `${styles.questionChoice} ${styles.questionChoiceSelected}`
-                        : styles.questionChoice}
+                      className={
+                        selected
+                          ? `${styles.questionChoice} ${styles.questionChoiceSelected}`
+                          : styles.questionChoice
+                      }
                       key={option.value}
-                      onClick={() => onAnswer(
-                        question.id,
-                        question.answerType === "boolean" ? option.value === "true" : option.value
-                      )}
+                      onClick={() =>
+                        onAnswer(
+                          question.id,
+                          question.answerType === "boolean" ? option.value === "true" : option.value
+                        )
+                      }
                       role="radio"
                       type="button"
                     >
@@ -992,7 +1060,7 @@ function RepositoryCiCdConnectedState({ repository }: { readonly repository: Sou
 function RepositoryTemplateCandidates({
   actionState,
   onCreateBoard,
-  recommendation,
+  recommendation
 }: {
   readonly actionState: RequestState;
   readonly onCreateBoard: (templateId: PublicRepositoryTemplateId) => void;
@@ -1061,9 +1129,9 @@ function PublicRepositoryRecommendationStep({
     selectedTemplateId
   });
   const shouldAskDeploymentType = shouldAskPublicRepositoryDeploymentType(analysis);
-  const selectedCandidate = recommendation.candidates.find(
-    (candidate) => candidate.templateId === selectedTemplateId
-  ) ?? recommendation.candidates[0];
+  const selectedCandidate =
+    recommendation.candidates.find((candidate) => candidate.templateId === selectedTemplateId) ??
+    recommendation.candidates[0];
 
   if (stage === "questions") {
     return (
@@ -1083,7 +1151,11 @@ function PublicRepositoryRecommendationStep({
             <strong>{selectedCandidate?.displayTitle ?? "추천 템플릿"}</strong>
           </div>
         </div>
-        <RepositoryQuestions answers={answers} onAnswer={onAnswer} questions={recommendation.questions} />
+        <RepositoryQuestions
+          answers={answers}
+          onAnswer={onAnswer}
+          questions={recommendation.questions}
+        />
         <button
           className={styles.publicBoardAction}
           disabled={isBusy || !analysis.recommendedTemplateId}
@@ -1114,7 +1186,11 @@ function PublicRepositoryRecommendationStep({
             return (
               <button
                 aria-checked={selected}
-                className={selected ? `${styles.publicCandidate} ${styles.publicCandidateSelected}` : styles.publicCandidate}
+                className={
+                  selected
+                    ? `${styles.publicCandidate} ${styles.publicCandidateSelected}`
+                    : styles.publicCandidate
+                }
                 key={candidate.templateId}
                 onClick={() => onSelectTemplate(candidate.templateId)}
                 role="radio"
@@ -1150,7 +1226,9 @@ function PublicRepositoryRecommendationStep({
           <span>원하는 배포 방식</span>
           <select
             value={deploymentType}
-            onChange={(event) => onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)}
+            onChange={(event) =>
+              onDeploymentTypeChange(event.target.value as RepositoryDeploymentType)
+            }
           >
             <option value="ec2_vm">EC2/VM 기반</option>
             <option value="container">컨테이너 기반</option>
@@ -1174,17 +1252,15 @@ function PublicRepositoryRecommendationStep({
   );
 }
 
-
-function createRepositoryPreviewDiagram(
-  projectName: string,
-  repository: SourceRepository | null
-) {
+function createRepositoryPreviewDiagram(projectName: string, repository: SourceRepository | null) {
   const handoff = repository?.analysis?.aiHandoff;
   if (!repository || handoff?.status !== "template_selected") return null;
-  return buildBoardTemplateDiagram(handoff.templateId, {
-    projectSlug: projectName,
-    shortId: repository.id.slice(0, 8)
-  }) ?? null;
+  return (
+    buildBoardTemplateDiagram(handoff.templateId, {
+      projectSlug: projectName,
+      shortId: repository.id.slice(0, 8)
+    }) ?? null
+  );
 }
 
 function createConnectedRepositoryArchitectureDraftRequest({
@@ -1199,14 +1275,16 @@ function createConnectedRepositoryArchitectureDraftRequest({
   const analysis = repository.analysis;
   const handoff = analysis?.aiHandoff;
   const architectureFacts = handoff?.architectureFacts ?? [];
-  const architectureFactLines = architectureFacts.map((fact) =>
-    `- ${fact.kind}: ${fact.value} (source: ${fact.sourcePath})`
+  const architectureFactLines = architectureFacts.map(
+    (fact) => `- ${fact.kind}: ${fact.value} (source: ${fact.sourcePath})`
   );
-  const applicationUnitLines = (handoff?.applicationUnits ?? []).map((unit) =>
-    `- ${unit.kind} at ${unit.rootPath || "."}; frameworks: ${unit.frameworks.join(", ") || "unknown"}`
+  const applicationUnitLines = (handoff?.applicationUnits ?? []).map(
+    (unit) =>
+      `- ${unit.kind} at ${unit.rootPath || "."}; frameworks: ${unit.frameworks.join(", ") || "unknown"}`
   );
-  const evidenceLines = (handoff?.evidence ?? []).map((evidence) =>
-    `- ${evidence.kind}: ${evidence.path}; signals: ${evidence.signals.join(", ") || "none"}`
+  const evidenceLines = (handoff?.evidence ?? []).map(
+    (evidence) =>
+      `- ${evidence.kind}: ${evidence.path}; signals: ${evidence.signals.join(", ") || "none"}`
   );
   const repositoryName = repository.repositoryUrl ?? `${repository.owner}/${repository.name}`;
 

@@ -3,12 +3,9 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  ApplicationRelease,
-  ArchitectureJson,
   Deployment,
   LiveObservationV2Session,
-  LiveObservationV2Snapshot,
-  TerraformOutput
+  LiveObservationV2Snapshot
 } from "@sketchcatch/types";
 import { Check, Copy, ExternalLink, Radio, X } from "lucide-react";
 import QRCode from "qrcode";
@@ -17,10 +14,6 @@ import { copyTextToClipboard } from "../../lib/clipboard";
 import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
 import {
   createLiveObservation,
-  getLiveObservationArchitecture,
-  listApplicationReleases,
-  listDeployments,
-  listTerraformOutputs,
   stopLiveObservation,
   streamLiveObservationSnapshots
 } from "./api";
@@ -32,16 +25,38 @@ import {
   type LiveObservationSelection
 } from "./live-observation";
 import { getLiveObservationCapacityMode } from "./live-observation-architecture";
+import { useLiveObservationQueries } from "./live-observation-queries";
+import type { LiveObservationViewport } from "./live-observation-view-state";
 import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
+  readonly initialViewport: LiveObservationViewport | null;
   readonly onClose: () => void;
+  readonly onSessionChange: (session: LiveObservationV2Session | null) => void;
+  readonly onSelectedDeploymentIdChange: (deploymentId: string) => void;
+  readonly onSnapshotChange: (snapshot: LiveObservationV2Snapshot | null) => void;
+  readonly onViewportChange: (viewport: LiveObservationViewport) => void;
   readonly projectId: string;
+  readonly selectedDeploymentId: string;
+  readonly session: LiveObservationV2Session | null;
   readonly selection?: LiveObservationSelection | null | undefined;
+  readonly snapshot: LiveObservationV2Snapshot | null;
 };
 
-export function LiveObservationModal({ onClose, projectId, selection }: LiveObservationModalProps) {
+export function LiveObservationModal({
+  initialViewport,
+  onClose,
+  onSessionChange,
+  onSelectedDeploymentIdChange,
+  onSnapshotChange,
+  onViewportChange,
+  projectId,
+  selectedDeploymentId,
+  session,
+  selection,
+  snapshot
+}: LiveObservationModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -49,31 +64,54 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
   const operationControllerRef = useRef<AbortController | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [releases, setReleases] = useState<ApplicationRelease[]>([]);
-  const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
-  const [architecture, setArchitecture] = useState<ArchitectureJson | null>(null);
-  const [architectureDeploymentId, setArchitectureDeploymentId] = useState("");
-  const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
-  const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
-  const [outputListState, setOutputListState] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
-  const [architectureState, setArchitectureState] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
   const [errorMessage, setErrorMessage] = useState("");
-  const [outputErrorMessage, setOutputErrorMessage] = useState("");
-  const [architectureErrorMessage, setArchitectureErrorMessage] = useState("");
+  const [selectionErrorMessage, setSelectionErrorMessage] = useState("");
   const [streamErrorMessage, setStreamErrorMessage] = useState("");
-  const [session, setSession] = useState<LiveObservationV2Session | null>(null);
-  const [snapshot, setSnapshot] = useState<LiveObservationV2Snapshot | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrState, setQrState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [copied, setCopied] = useState(false);
   const [audienceUtilityOpen, setAudienceUtilityOpen] = useState(true);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const queries = useLiveObservationQueries({
+    deploymentId: selectedDeploymentId,
+    loadOutputs: !selection,
+    projectId
+  });
+  const deployments = queries.reference.data?.deployments ?? [];
+  const releases = queries.reference.data?.releases ?? [];
+  const terraformOutputs = queries.outputs.data ?? [];
+  const selectedArchitecture = queries.architecture.data?.architecture ?? null;
+  const listState = queries.reference.data
+    ? "ready"
+    : queries.reference.isError
+      ? "error"
+      : "loading";
+  const outputListState = !selectedDeploymentId
+    ? "idle"
+    : selection
+      ? "ready"
+      : queries.outputs.data
+        ? "ready"
+        : queries.outputs.isError
+          ? "error"
+          : "loading";
+  const selectedArchitectureState = !selectedDeploymentId
+    ? "idle"
+    : queries.architecture.data
+      ? "ready"
+      : queries.architecture.isError
+        ? "error"
+        : "loading";
+  const referenceErrorMessage = queries.reference.isError
+    ? getApiErrorMessage(queries.reference.error, "배포 기록을 불러오지 못했습니다.")
+    : "";
+  const outputErrorMessage = queries.outputs.isError
+    ? getApiErrorMessage(queries.outputs.error, "배포 Output을 불러오지 못했습니다.")
+    : "";
+  const selectedArchitectureErrorMessage = queries.architecture.isError
+    ? getArchitectureErrorMessage(queries.architecture.error)
+    : "";
 
   const eligibleDeployments = useMemo(
     () => getEligibleLiveObservationDeployments(deployments),
@@ -91,16 +129,6 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
   const selectedSession =
     session?.deploymentId === selectedDeploymentId ? session : null;
   const selectedSnapshot = selectedSession ? snapshot : null;
-  const selectedArchitecture =
-    architectureDeploymentId === selectedDeploymentId ? architecture : null;
-  const selectedArchitectureState =
-    architectureDeploymentId === selectedDeploymentId
-      ? architectureState
-      : selectedDeploymentId
-        ? "loading"
-        : "idle";
-  const selectedArchitectureErrorMessage =
-    architectureDeploymentId === selectedDeploymentId ? architectureErrorMessage : "";
   const outputUrl = selectedSession
     ? getSelectedLiveObservationOutputUrl(
         selection,
@@ -117,7 +145,12 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
     : 0;
   const isSessionActive =
     selectedSession !== null && selectedSnapshot?.status === "active" && remainingSeconds > 0;
-  const visibleErrorMessage = errorMessage || outputErrorMessage || streamErrorMessage;
+  const visibleErrorMessage =
+    errorMessage ||
+    selectionErrorMessage ||
+    referenceErrorMessage ||
+    outputErrorMessage ||
+    streamErrorMessage;
   const providerSnapshot = selectedSnapshot?.latestObservation?.payload ?? null;
   const capacityModeLabel = selectedArchitecture
     ? getLiveObservationCapacityMode(selectedArchitecture, providerSnapshot?.capacity)
@@ -145,111 +178,54 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
   }, []);
 
   useEffect(() => {
-    const abortController = new AbortController();
-    setListState("loading");
-    setErrorMessage("");
+    if (!queries.reference.data) return;
 
-    void Promise.all([
-      listDeployments(projectId, { signal: abortController.signal }),
-      listApplicationReleases(projectId)
-    ])
-      .then(([items, releaseItems]) => {
-        if (abortController.signal.aborted) return;
-        const eligible = getEligibleLiveObservationDeployments(items);
-        setDeployments(items);
-        setReleases(releaseItems);
-        if (selection) {
-          const exactDeployment = eligible.find(
-            (deployment) => deployment.id === selection.deploymentId
-          );
-          setSelectedDeploymentId(exactDeployment?.id ?? "");
-          if (!exactDeployment) {
-            setErrorMessage(
-              "선택한 CI/CD 실행과 연결된 인프라 배포를 관측할 수 없습니다."
-            );
-          } else if (
-            !getSelectedLiveObservationOutputUrl(selection, exactDeployment.id, releaseItems)
-          ) {
-            setErrorMessage("선택한 CI/CD 실행의 안전한 HTTPS 주소를 확인할 수 없습니다.");
-          }
-        } else {
-          setSelectedDeploymentId((current) =>
-            eligible.some((deployment) => deployment.id === current)
-              ? current
-              : eligible[0]?.id ?? ""
-          );
-        }
-        setListState("ready");
-      })
-      .catch((error) => {
-        if (abortController.signal.aborted) return;
-        setListState("error");
-        setErrorMessage(getApiErrorMessage(error, "배포 기록을 불러오지 못했습니다."));
-      });
-
-    return () => abortController.abort();
-  }, [projectId, selection]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setTerraformOutputs([]);
-    setOutputErrorMessage("");
-
-    if (!selectedDeploymentId || selection) {
-      setOutputListState(selectedDeploymentId ? "ready" : "idle");
+    const eligible = getEligibleLiveObservationDeployments(
+      queries.reference.data.deployments
+    );
+    if (selection) {
+      const exactDeployment = eligible.find(
+        (deployment) => deployment.id === selection.deploymentId
+      );
+      const targetDeploymentId = exactDeployment?.id ?? "";
+      if (targetDeploymentId !== selectedDeploymentId) {
+        onSelectedDeploymentIdChange(targetDeploymentId);
+      }
+      if (!exactDeployment) {
+        setSelectionErrorMessage(
+          "선택한 CI/CD 실행과 연결된 인프라 배포를 관측할 수 없습니다."
+        );
+      } else if (
+        !getSelectedLiveObservationOutputUrl(
+          selection,
+          exactDeployment.id,
+          queries.reference.data.releases
+        )
+      ) {
+        setSelectionErrorMessage(
+          "선택한 CI/CD 실행의 안전한 HTTPS 주소를 확인할 수 없습니다."
+        );
+      } else {
+        setSelectionErrorMessage("");
+      }
       return;
     }
 
-    setOutputListState("loading");
-    void listTerraformOutputs(selectedDeploymentId).then(
-      (outputs) => {
-        if (cancelled) return;
-        setTerraformOutputs(outputs);
-        setOutputListState("ready");
-      },
-      (error) => {
-        if (cancelled) return;
-        setOutputListState("error");
-        setOutputErrorMessage(
-          getApiErrorMessage(error, "배포 Output을 불러오지 못했습니다.")
-        );
-      }
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedDeploymentId, selection]);
-
-  useEffect(() => {
-    const abortController = new AbortController();
-    setArchitectureDeploymentId(selectedDeploymentId);
-    setArchitecture(null);
-    setArchitectureErrorMessage("");
-
-    if (!selectedDeploymentId) {
-      setArchitectureState("idle");
-      return () => abortController.abort();
+    setSelectionErrorMessage("");
+    const fallbackDeploymentId = eligible.some(
+      (deployment) => deployment.id === selectedDeploymentId
+    )
+      ? selectedDeploymentId
+      : eligible[0]?.id ?? "";
+    if (fallbackDeploymentId !== selectedDeploymentId) {
+      onSelectedDeploymentIdChange(fallbackDeploymentId);
     }
-
-    setArchitectureState("loading");
-    void getLiveObservationArchitecture(selectedDeploymentId, abortController.signal).then(
-      (response) => {
-        if (abortController.signal.aborted) return;
-        setArchitectureDeploymentId(selectedDeploymentId);
-        setArchitecture(response.architecture);
-        setArchitectureState("ready");
-      },
-      (error) => {
-        if (abortController.signal.aborted) return;
-        setArchitectureDeploymentId(selectedDeploymentId);
-        setArchitectureState("error");
-        setArchitectureErrorMessage(getArchitectureErrorMessage(error));
-      }
-    );
-
-    return () => abortController.abort();
-  }, [selectedDeploymentId]);
+  }, [
+    onSelectedDeploymentIdChange,
+    queries.reference.data,
+    selectedDeploymentId,
+    selection
+  ]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -292,7 +268,7 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
   }, [outputUrl]);
 
   useEffect(() => {
-    if (!session) {
+    if (!selectedSession || !isSessionActive) {
       setStreamErrorMessage("");
       return;
     }
@@ -300,8 +276,8 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
     const abortController = new AbortController();
     setStreamErrorMessage("");
     void streamLiveObservationSnapshots({
-      deploymentId: session.deploymentId,
-      observationId: session.id,
+      deploymentId: selectedSession.deploymentId,
+      observationId: selectedSession.id,
       onError: () => {
         if (!abortController.signal.aborted) {
           setStreamErrorMessage("관측 상태 연결이 지연되고 있습니다. 자동으로 다시 연결합니다.");
@@ -309,14 +285,14 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
       },
       onSnapshot: (nextSnapshot) => {
         if (!abortController.signal.aborted) {
-          setSnapshot(nextSnapshot);
+          onSnapshotChange(nextSnapshot);
           setStreamErrorMessage("");
         }
       },
       signal: abortController.signal
     });
     return () => abortController.abort();
-  }, [session]);
+  }, [isSessionActive, onSnapshotChange, selectedSession]);
 
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Escape") {
@@ -351,13 +327,13 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
     if (nextDeploymentId === selectedDeploymentId) return;
 
     if (session && session.deploymentId !== nextDeploymentId) {
-      setSession(null);
-      setSnapshot(null);
+      onSessionChange(null);
+      onSnapshotChange(null);
       setErrorMessage("");
       setStreamErrorMessage("");
     }
 
-    setSelectedDeploymentId(nextDeploymentId);
+    onSelectedDeploymentIdChange(nextDeploymentId);
   }
 
   async function startObservation(): Promise<void> {
@@ -373,8 +349,8 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
         abortController.signal
       );
       if (abortController.signal.aborted) return;
-      setSession(response.session);
-      setSnapshot(response.snapshot);
+      onSessionChange(response.session);
+      onSnapshotChange(response.snapshot);
       setNowMs(Date.now());
     } catch (error) {
       if (!abortController.signal.aborted) {
@@ -398,7 +374,7 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
         session.id,
         abortController.signal
       );
-      if (!abortController.signal.aborted) setSnapshot(stoppedSnapshot);
+      if (!abortController.signal.aborted) onSnapshotChange(stoppedSnapshot);
     } catch (error) {
       if (!abortController.signal.aborted) {
         setErrorMessage(getApiErrorMessage(error, "관측 세션을 종료하지 못했습니다."));
@@ -593,6 +569,9 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
           {selectedArchitectureState === "ready" && selectedArchitecture ? (
             <LiveObservationDiagramMap
               architecture={selectedArchitecture}
+              initialViewport={initialViewport}
+              key={selectedDeploymentId}
+              onViewportChange={onViewportChange}
               snapshot={selectedSnapshot}
             />
           ) : null}

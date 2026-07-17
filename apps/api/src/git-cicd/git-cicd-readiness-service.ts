@@ -21,6 +21,7 @@ import {
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
+  awsCodeConnections,
   awsConnections,
   applicationReleases,
   deployedResources,
@@ -109,6 +110,8 @@ export type VerifiedConnectionRecord = {
 
 export type RepositoryMonitoringRecord = {
   id: string;
+  owner: string;
+  name: string;
   analysisRevision: string | null;
   analysisResult: RepositoryAnalysisAiHandoff | null;
   defaultBranch: string;
@@ -123,8 +126,13 @@ export type ProjectBuildEnvironmentRecord = {
   id: string;
   projectId: string;
   awsConnectionId: string | null;
+  sourceRepositoryUrl: string;
   codeBuildProjectName: string;
   status: "preparing" | "ready" | "verification_failed" | "disconnected";
+  repositoryVerificationStatus: "not_checked" | "verified" | "failed";
+  repositoryVerificationRequestedCommitSha: string | null;
+  repositoryVerificationResolvedCommitSha: string | null;
+  codeConnectionStatus: "CREATING" | "PENDING" | "AVAILABLE" | "ERROR" | "DELETING" | null;
 };
 
 export type TerraformOutputRecord = {
@@ -623,6 +631,8 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
       const [record] = await db
         .select({
           id: sourceRepositories.id,
+          owner: sourceRepositories.owner,
+          name: sourceRepositories.name,
           analysisRevision: sourceRepositories.analysisRevision,
           analysisResult: sourceRepositories.analysisResult,
           defaultBranch: sourceRepositories.defaultBranch,
@@ -665,10 +675,22 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
           id: projectBuildEnvironments.id,
           projectId: projectBuildEnvironments.projectId,
           awsConnectionId: projectBuildEnvironments.awsConnectionId,
+          sourceRepositoryUrl: projectBuildEnvironments.sourceRepositoryUrl,
           codeBuildProjectName: projectBuildEnvironments.codeBuildProjectName,
-          status: projectBuildEnvironments.status
+          status: projectBuildEnvironments.status,
+          repositoryVerificationStatus:
+            projectBuildEnvironments.repositoryVerificationStatus,
+          repositoryVerificationRequestedCommitSha:
+            projectBuildEnvironments.repositoryVerificationRequestedCommitSha,
+          repositoryVerificationResolvedCommitSha:
+            projectBuildEnvironments.repositoryVerificationResolvedCommitSha,
+          codeConnectionStatus: awsCodeConnections.status
         })
         .from(projectBuildEnvironments)
+        .leftJoin(
+          awsCodeConnections,
+          eq(awsCodeConnections.id, projectBuildEnvironments.awsCodeConnectionId)
+        )
         .where(eq(projectBuildEnvironments.projectId, projectId));
       return environment;
     },
@@ -810,6 +832,7 @@ async function requireReconciledDeploymentTarget(input: {
   if (
     !buildEnvironment ||
     buildEnvironment.status !== "ready" ||
+    buildEnvironment.codeConnectionStatus !== "AVAILABLE" ||
     buildEnvironment.awsConnectionId !== input.selection.connection.id
   ) {
     throw new GitCicdReadinessValidationError(
@@ -858,6 +881,17 @@ async function requireReconciledDeploymentTarget(input: {
     );
   }
   requireValidEcsFargateBuildConfig(confirmedBuildConfig);
+  if (
+    !hasCurrentRepositoryAccessVerification(
+      buildEnvironment,
+      input.sourceRepository,
+      confirmedBuildConfig
+    )
+  ) {
+    throw new GitCicdReadinessValidationError(
+      "Post-Apply synchronization requires exact Repository checkout verification"
+    );
+  }
 
   const runtimeConfig = createEcsFargateRuntimeConfig(
     buildEnvironment,
@@ -1198,6 +1232,11 @@ function createReadinessItems(input: {
   if (
     !hasValidEcsFargateBuildConfig(input.target?.confirmedBuildConfig) ||
     input.buildEnvironment?.status !== "ready" ||
+    !hasCurrentRepositoryAccessVerification(
+      input.buildEnvironment,
+      input.sourceRepository,
+      input.target?.confirmedBuildConfig ?? null
+    ) ||
     input.buildEnvironment.awsConnectionId !== deploymentConnection?.id
   ) {
     targetMissingKeys.push("build_config");
@@ -1265,6 +1304,31 @@ function createReadinessItems(input: {
   ];
 
   return items;
+}
+
+function hasCurrentRepositoryAccessVerification(
+  buildEnvironment: ProjectBuildEnvironmentRecord | undefined,
+  sourceRepository: RepositoryMonitoringRecord | undefined,
+  confirmedBuildConfig: ConfirmedBuildConfig | null
+): boolean {
+  if (
+    !buildEnvironment ||
+    !sourceRepository ||
+    !confirmedBuildConfig ||
+    buildEnvironment.repositoryVerificationStatus !== "verified" ||
+    buildEnvironment.codeConnectionStatus !== "AVAILABLE"
+  ) {
+    return false;
+  }
+  const repositoryName = sourceRepository.name.replace(/\.git$/iu, "");
+  const expectedRepositoryUrl =
+    `https://github.com/${sourceRepository.owner}/${repositoryName}.git`;
+  const expectedCommitSha = confirmedBuildConfig.confirmedCommitSha.toLowerCase();
+  return (
+    buildEnvironment.sourceRepositoryUrl.toLowerCase() === expectedRepositoryUrl.toLowerCase() &&
+    buildEnvironment.repositoryVerificationRequestedCommitSha === expectedCommitSha &&
+    buildEnvironment.repositoryVerificationResolvedCommitSha === expectedCommitSha
+  );
 }
 
 function createReadinessItem(input: {

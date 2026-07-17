@@ -21,6 +21,7 @@ const connectionArn =
 const fixedNow = new Date("2026-07-15T00:00:00.000Z");
 
 class InMemoryRepository implements AwsCodeConnectionRepository {
+  activeGitHubInstallationIds = ["github-installation-1"];
   verifiedConnection: Awaited<ReturnType<AwsCodeConnectionRepository["findVerifiedConnection"]>> = {
     id: connectionId,
     accountId: "123456789012",
@@ -49,6 +50,10 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
     ],
     codeConnectionArn: connectionArn
   };
+
+  async listActiveGitHubInstallationIds() {
+    return this.activeGitHubInstallationIds;
+  }
 
   async findVerifiedConnection() {
     return this.verifiedConnection;
@@ -244,6 +249,49 @@ test("creating a GitHub CodeConnection requires a verified AWS connection", asyn
     (error: unknown) =>
       error instanceof AwsCodeConnectionError && error.code === "AWS_CONNECTION_REQUIRED"
   );
+});
+
+test("creating a GitHub CodeConnection requires a GitHub App installation", async () => {
+  const repository = new InMemoryRepository();
+  repository.activeGitHubInstallationIds = [];
+  const gateway = new FakeGateway();
+
+  await assert.rejects(
+    createAwsCodeConnection(
+      { connectionId, userId },
+      repository,
+      gateway,
+      { generateId: () => codeConnectionId, now: () => fixedNow }
+    ),
+    (error: unknown) =>
+      error instanceof AwsCodeConnectionError &&
+      error.code === "GITHUB_INSTALLATION_REQUIRED"
+  );
+
+  assert.equal(gateway.createCalls.length, 0);
+});
+
+test("creating a GitHub CodeConnection rejects ambiguous GitHub App installations", async () => {
+  const repository = new InMemoryRepository();
+  repository.activeGitHubInstallationIds = [
+    "github-installation-1",
+    "github-installation-2"
+  ];
+  const gateway = new FakeGateway();
+
+  await assert.rejects(
+    createAwsCodeConnection(
+      { connectionId, userId },
+      repository,
+      gateway,
+      { generateId: () => codeConnectionId, now: () => fixedNow }
+    ),
+    (error: unknown) =>
+      error instanceof AwsCodeConnectionError &&
+      error.code === "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
+  );
+
+  assert.equal(gateway.createCalls.length, 0);
 });
 
 test("creating a GitHub CodeConnection stores the pending AWS connection once", async () => {

@@ -16,6 +16,7 @@
     "architecture-board-evidence-review:generate": "pnpm architecture-board-evidence:check && pnpm --dir apps/web exec tsx ../../scripts/generate-architecture-board-compiler-evidence-review.ts --write",
     "templates:validate": "pnpm --filter @sketchcatch/api exec tsx ../../scripts/validate-aws-template-terraform.ts",
     "modules:validate": "pnpm --dir apps/web exec tsx ../../scripts/validate-curated-module-terraform.ts",
+    "module-thumbnails:generate": "pnpm --dir apps/web exec tsx ../../scripts/generate-module-thumbnails.ts",
     "captured-palette:validate": "pnpm --filter @sketchcatch/api exec tsx ../../scripts/validate-captured-brainboard-palette-resources.ts",
     "harness:check": "node scripts/check-harness.mjs",
     "migration:compatibility:check": "node scripts/check-db-migration-compatibility.mjs",
