@@ -7,24 +7,76 @@ const modalSource = readFileSync(
   fileURLToPath(new URL("./LiveObservationModal.tsx", import.meta.url)),
   "utf8"
 );
+const diagramMapSource = readFileSync(
+  fileURLToPath(new URL("./LiveObservationDiagramMap.tsx", import.meta.url)),
+  "utf8"
+);
+const rightPanelSource = readFileSync(
+  fileURLToPath(new URL("./WorkspaceRightPanel.tsx", import.meta.url)),
+  "utf8"
+);
+
+test("modal re-entry restores the selected Deployment and diagram viewport", () => {
+  assert.match(rightPanelSource, /createLiveObservationViewState\(projectId\)/);
+  assert.match(
+    rightPanelSource,
+    /selectedDeploymentId=\{retainedLiveObservationView\.selectedDeploymentId\}/
+  );
+  assert.match(
+    rightPanelSource,
+    /initialViewport=\{retainedLiveObservationView\.viewport\}/
+  );
+  assert.match(
+    modalSource,
+    /<LiveObservationDiagramMap[\s\S]*?key=\{selectedDeploymentId\}/
+  );
+  assert.match(modalSource, /onSelectedDeploymentIdChange\(nextDeploymentId\)/);
+  assert.match(diagramMapSource, /defaultViewport=\{initialViewport \?\?/);
+  assert.match(diagramMapSource, /fitView=\{initialViewport === null\}/);
+  assert.match(diagramMapSource, /onMoveEnd=\{\(_event, viewport\) => onViewportChange\(viewport\)\}/);
+});
+
+test("Deployment selection effect notifies the parent only when the target changes", () => {
+  assert.match(
+    modalSource,
+    /const targetDeploymentId = exactDeployment\?\.id \?\? "";[\s\S]*?if \(targetDeploymentId !== selectedDeploymentId\) \{[\s\S]*?onSelectedDeploymentIdChange\(targetDeploymentId\);[\s\S]*?\}/
+  );
+  assert.match(
+    modalSource,
+    /const fallbackDeploymentId =[\s\S]*?if \(fallbackDeploymentId !== selectedDeploymentId\) \{[\s\S]*?onSelectedDeploymentIdChange\(fallbackDeploymentId\);[\s\S]*?\}/
+  );
+});
+
+test("modal re-entry restores only the selected, unexpired active session and aborts on close", () => {
+  assert.match(rightPanelSource, /createLiveObservationSessionState\(projectId\)/);
+  assert.match(
+    rightPanelSource,
+    /session=\{retainedLiveObservationSession\.session\}/
+  );
+  assert.match(
+    rightPanelSource,
+    /snapshot=\{retainedLiveObservationSession\.snapshot\}/
+  );
+  assert.match(modalSource, /if \(!selectedSession \|\| !isSessionActive\)/);
+  assert.match(modalSource, /deploymentId: selectedSession\.deploymentId/);
+  assert.match(modalSource, /observationId: selectedSession\.id/);
+  assert.match(modalSource, /onSnapshotChange\(nextSnapshot\)/);
+  assert.match(modalSource, /return \(\) => abortController\.abort\(\)/);
+});
 
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
-  const architectureEffect = getSourceBlock(
-    modalSource,
-    "setArchitecture(null);",
-    "}, [selectedDeploymentId]);"
-  );
   const mapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
   const evidenceIndex = modalSource.indexOf(
     '<section className={styles.liveObservationEvidenceRail}'
   );
 
-  assert.match(modalSource, /getLiveObservationArchitecture/);
+  assert.match(modalSource, /useLiveObservationQueries\(\{/);
+  assert.match(modalSource, /deploymentId: selectedDeploymentId/);
   assert.match(modalSource, /LiveObservationDiagramMap/);
-  assert.match(architectureEffect, /setArchitectureState\("loading"\)/);
-  assert.match(architectureEffect, /setArchitecture\(response\.architecture\)/);
-  assert.match(architectureEffect, /setArchitectureState\("ready"\)/);
-  assert.match(architectureEffect, /setArchitectureState\("error"\)/);
+  assert.match(
+    modalSource,
+    /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
+  );
   assert.ok(mapIndex >= 0);
   assert.ok(evidenceIndex > mapIndex, "Architecture map must render before the evidence rail");
 });
@@ -32,15 +84,15 @@ test("selected Deployment independently loads and renders its immutable Architec
 test("renders Architecture state only when it belongs to the selected Deployment", () => {
   assert.match(
     modalSource,
-    /const \[architectureDeploymentId, setArchitectureDeploymentId\] = useState\(""\);/
+    /deploymentId: selectedDeploymentId/
   );
   assert.match(
     modalSource,
-    /architectureDeploymentId === selectedDeploymentId \? architecture : null/
+    /const selectedArchitecture = queries\.architecture\.data\?\.architecture \?\? null;/
   );
   assert.match(
     modalSource,
-    /architectureDeploymentId === selectedDeploymentId[\s\S]*\? architectureState[\s\S]*: selectedDeploymentId[\s\S]*\? "loading"/
+    /const selectedArchitectureState = !selectedDeploymentId[\s\S]*queries\.architecture\.data[\s\S]*queries\.architecture\.isError/
   );
   assert.match(
     modalSource,
@@ -48,7 +100,7 @@ test("renders Architecture state only when it belongs to the selected Deployment
   );
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap\s+architecture=\{selectedArchitecture\}\s+snapshot=\{selectedSnapshot\}\s+\/>/
+    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(
     modalSource,
@@ -65,9 +117,12 @@ test("Architecture loading and errors stay separate from observation session err
 
   assert.match(
     modalSource,
-    /const \[architectureState, setArchitectureState\] = useState<\s*"idle" \| "loading" \| "ready" \| "error"\s*>\("idle"\)/
+    /const selectedArchitectureState = !selectedDeploymentId/
   );
-  assert.match(modalSource, /const \[architectureErrorMessage, setArchitectureErrorMessage\]/);
+  assert.match(
+    modalSource,
+    /const selectedArchitectureErrorMessage = queries\.architecture\.isError/
+  );
   assert.doesNotMatch(visibleSessionError, /architectureErrorMessage/);
   assert.match(modalSource, /배포 Architecture를 불러오고 있습니다\./);
   assert.match(modalSource, /이 배포의 Architecture를 찾을 수 없습니다\./);
@@ -110,12 +165,12 @@ test("session creation locks Deployment selection and observation evidence stays
   assert.match(modalSource, /const selectedSnapshot = selectedSession \? snapshot : null;/);
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap\s+architecture=\{selectedArchitecture\}\s+snapshot=\{selectedSnapshot\}\s+\/>/
+    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(evidenceBlock, /selectedSnapshot\.live\.acceptedEventCount/);
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);
-  assert.match(deploymentSelectionHandler, /setSession\(null\)/);
-  assert.match(deploymentSelectionHandler, /setSnapshot\(null\)/);
+  assert.match(deploymentSelectionHandler, /onSessionChange\(null\)/);
+  assert.match(deploymentSelectionHandler, /onSnapshotChange\(null\)/);
 });
 
 test("capacity evidence renders the provider-derived mode and matching value labels", () => {

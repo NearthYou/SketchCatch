@@ -199,10 +199,13 @@ export async function putProjectDeploymentTarget(
   return response.target;
 }
 
-export async function listApplicationReleases(projectId: string): Promise<ApplicationRelease[]> {
+export async function listApplicationReleases(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<ApplicationRelease[]> {
   const response = await apiFetch<ApplicationReleaseListResponse>(
     `/projects/${encodeURIComponent(projectId)}/releases`,
-    { auth: true }
+    { auth: true, ...(options.signal ? { signal: options.signal } : {}) }
   );
   return response.releases;
 }
@@ -1826,11 +1829,15 @@ export async function listDeploymentResources(deploymentId: string): Promise<Dep
   return response.resources;
 }
 
-export async function listTerraformOutputs(deploymentId: string): Promise<TerraformOutput[]> {
+export async function listTerraformOutputs(
+  deploymentId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<TerraformOutput[]> {
   const response = await apiFetch<TerraformOutputListResponse>(
     `/deployments/${encodeURIComponent(deploymentId)}/outputs`,
     {
-      auth: true
+      auth: true,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 

@@ -14,6 +14,12 @@ export const queryKeys = {
   dashboardOverview: (userId: string) => [...userRoot(userId), "dashboard", "overview"] as const,
   githubInstallations: (userId: string) =>
     [...userRoot(userId), "connections", "github"] as const,
+  liveObservationReference: (userId: string, projectId: string) =>
+    [...userRoot(userId), "projects", projectId, "live-observation", "reference"] as const,
+  liveObservationOutputs: (userId: string, deploymentId: string) =>
+    [...userRoot(userId), "deployments", deploymentId, "live-observation", "outputs"] as const,
+  liveObservationArchitecture: (userId: string, deploymentId: string) =>
+    [...userRoot(userId), "deployments", deploymentId, "live-observation", "architecture"] as const,
   projects: (userId: string) => [...userRoot(userId), "projects", "list"] as const,
   user: (userId: string) => userRoot(userId)
 } as const;
