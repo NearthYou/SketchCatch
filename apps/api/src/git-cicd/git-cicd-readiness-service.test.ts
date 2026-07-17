@@ -531,6 +531,44 @@ test("creates a canonical ECS Fargate target from successful outputs without AWS
   assert.match(saved.deploymentTargetFingerprint, /^[0-9a-f]{64}$/);
 });
 
+test("Git/CI/CD readiness blocks a build environment whose repository checkout was not verified", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  assert.ok(state.buildEnvironment);
+  state.buildEnvironment.repositoryVerificationStatus = "not_checked";
+
+  const result = await createGitCicdReadinessService({
+    repository: createRepository({ state }),
+    planVerifier: createPlanVerifier(),
+    now: () => new Date("2026-07-17T04:00:00.000Z")
+  }).refresh({ projectId: "project-1", userId: "user-1" });
+
+  const targetItem = getReadinessItem(result, "deployment_target");
+  assert.equal(result.ready, false);
+  assert.ok(targetItem.missingKeys.includes("build_config"));
+  assert.equal(state.savedTargets.length, 0);
+});
+
+test("Git/CI/CD readiness rejects stale Repository and commit verification evidence", async () => {
+  const state = createRepositoryState({ readyContext: true });
+  assert.ok(state.buildEnvironment);
+  state.buildEnvironment.repositoryVerificationRequestedCommitSha = "a".repeat(40);
+  state.buildEnvironment.repositoryVerificationResolvedCommitSha = "a".repeat(40);
+
+  const staleCommit = await createGitCicdReadinessService({
+    repository: createRepository({ state }),
+    planVerifier: createPlanVerifier(),
+    now: () => new Date("2026-07-17T04:00:00.000Z")
+  }).refresh({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(staleCommit.ready, false);
+  assert.ok(
+    getReadinessItem(staleCommit, "deployment_target").missingKeys.includes(
+      "build_config"
+    )
+  );
+  assert.equal(state.savedTargets.length, 0);
+});
+
 test("refresh is idempotent for the same reconciled target", async () => {
   const state = createRepositoryState({ readyContext: true });
   const service = createGitCicdReadinessService({
@@ -1438,6 +1476,8 @@ function createRepositoryState(input: {
     repositoryMonitoring: input.readyContext
       ? {
           id: "repository-1",
+          owner: "jh-9999",
+          name: "audience-live-check",
           analysisRevision: "b".repeat(40),
           analysisResult: input.analysis ?? createRepositoryAnalysis(1, { webInclusive: true }),
           defaultBranch: "main",
@@ -1451,8 +1491,14 @@ function createRepositoryState(input: {
           id: "build-environment-1",
           projectId: "project-1",
           awsConnectionId: "connection-1",
+          sourceRepositoryUrl:
+            "https://github.com/jh-9999/audience-live-check.git",
           codeBuildProjectName: "project-build",
-          status: "ready"
+          status: "ready",
+          repositoryVerificationStatus: "verified",
+          repositoryVerificationRequestedCommitSha: "b".repeat(40),
+          repositoryVerificationResolvedCommitSha: "b".repeat(40),
+          codeConnectionStatus: "AVAILABLE"
         }
       : undefined,
     targetRows,

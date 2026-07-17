@@ -1682,6 +1682,11 @@ export type ProjectBuildEnvironmentStatus =
   | "verification_failed"
   | "disconnected";
 
+export type ProjectRepositoryAccessVerificationStatus =
+  | "not_checked"
+  | "verified"
+  | "failed";
+
 export type ProjectBuildEnvironment = {
   id: string;
   projectId: string;
@@ -1694,6 +1699,12 @@ export type ProjectBuildEnvironment = {
   runtimeFingerprint: string;
   status: ProjectBuildEnvironmentStatus;
   lastVerifiedAt: IsoDateTimeString | null;
+  repositoryVerificationStatus: ProjectRepositoryAccessVerificationStatus;
+  repositoryVerificationRequestedCommitSha: string | null;
+  repositoryVerificationResolvedCommitSha: string | null;
+  repositoryVerificationBuildArn: string | null;
+  repositoryVerificationStatusReason: string | null;
+  repositoryVerifiedAt: IsoDateTimeString | null;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };

@@ -1016,6 +1016,21 @@ export async function prepareProjectBuildEnvironment(
   return response.buildEnvironment;
 }
 
+export async function verifyProjectRepositoryAccess(
+  projectId: string
+): Promise<ProjectBuildEnvironment> {
+  const response = await apiFetch<ProjectBuildEnvironmentResponse>(
+    `/projects/${encodeURIComponent(projectId)}/build-environment/verify-repository-access`,
+    { auth: true, method: "POST" }
+  );
+
+  if (!response.buildEnvironment) {
+    throw new Error("GitHub repository 접근 검증 결과를 확인하지 못했습니다.");
+  }
+
+  return response.buildEnvironment;
+}
+
 export async function listDeployments(
   projectId: string,
   options: { readonly signal?: AbortSignal | undefined } = {}

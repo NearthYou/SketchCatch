@@ -1270,6 +1270,15 @@ service role이다. service role에는 permissions boundary를 붙이고 Reposit
 SketchCatch가 발급한 presigned multipart upload 외에는 cloud mutation 권한을 주지 않는다. project, role,
 source URL, CodeConnection, build image와 compute 설정의 canonical fingerprint를 RDS에 저장한다.
 
+CodeConnections `AVAILABLE`과 Repository 접근 검증은 별도 상태다. 기존 build environment와 새로 준비한 environment는
+`repositoryVerificationStatus = not_checked`에서 시작한다. 사용자가 Plan을 요청하면 확정된
+`confirmedCommitSha`를 `sourceVersion`으로 지정해 server-generated no-op CodeBuild를 실행한다. 성공한 build의
+`resolvedSourceVersion`이 요청 SHA와 정확히 같을 때만 `verified`로 바꾸며, 요청 SHA, resolved SHA, build ARN,
+검증 시각을 함께 저장한다. checkout 실패나 SHA 불일치는 `failed`와 안전한 오류 요약을 저장한다. 이 검증은
+SketchCatch GitHub token을 AWS에 전달하거나 재사용하지 않는다. AWS API는 CodeConnections 승인에 사용한 GitHub
+계정명을 반환하지 않으므로 `AwsCodeConnection`에 추정 계정명을 저장하지 않으며, account-name 일치를 검증했다고
+표시하지 않는다. 강제 가능한 경계는 활성 GitHub App installation 하나와 exact Repository checkout 성공이다.
+
 `ReleaseCandidate`는 preflight에서 한 번 만든 API OCI archive와 frontend archive의 immutable 묶음이다. 대용량
 파일은 SketchCatch 내부 Artifact S3의 `deployments/<deployment-or-run-id>/release-candidates/<candidateId>/` 아래에 두고 RDS에는 object
 key, byte size, SHA-256, composite digest, 상태와 retention 시간만 저장한다. 승인 전 candidate는 생성 시점부터
@@ -3198,7 +3207,7 @@ provider callback은 브라우저 redirect이므로 SketchCatch access token hea
 
 GitHub installation access token과 GitHub App private key는 이 테이블에 저장하지 않습니다. repository 목록과 repository 개수도 요청 시 GitHub API에서 조회하며 RDS에 저장하지 않습니다.
 
-Dashboard 전역 설정은 계정 단위 GitHub App installation을 관리하는 보조 경로입니다. Repository Analysis에서 Architecture Draft를 시작하는 흐름은 전역 설정으로 이동시키지 않고, 추천 Template 선택 화면 안에서 프로젝트 단위 CI/CD 연결을 직접 제공합니다. Web은 분석 UI 상태를 schema version 1, 30분 TTL의 일회성 `sessionStorage` record로 보존하고, API는 target repository와 resume key를 project scope JWT state에 서명합니다. 초기 UI 검증 기간의 callback은 target을 자동 연결하고 단일 `확인`으로 배포 타깃 PUT을 먼저 호출한 뒤 성공하면 GitOps 감시 PUT을 호출합니다. 두 요청이 모두 성공해야 resume record 복귀를 시작합니다. browser record에는 token, GitHub state, 원본 파일 내용 또는 credential을 넣지 않습니다.
+Dashboard 전역 설정은 계정 단위 GitHub App installation을 관리하는 보조 경로입니다. MVP에서는 활성 installation을 하나만 허용합니다. 연결이 없으면 `GitHub 연결하기`를 표시하고, 하나가 연결되면 계정과 repository 범위 및 GitHub 권한 관리 링크만 표시합니다. 두 번째 installation의 user authorization은 `MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED`로 차단하며, 과거 데이터에 여러 활성 row가 있으면 `GitHub 연결 정리 필요`로 표시하고 AWS CodeBuild 승인을 막습니다. Repository Analysis에서 Architecture Draft를 시작하는 흐름은 전역 설정으로 이동시키지 않고, 추천 Template 선택 화면 안에서 프로젝트 단위 CI/CD 연결을 직접 제공합니다. 공개 Repository Analysis와 Board 생성에는 전역 GitHub 연결이 필요하지 않습니다. Web은 분석 UI 상태를 schema version 1, 30분 TTL의 일회성 `sessionStorage` record로 보존하고, API는 target repository와 resume key를 project scope JWT state에 서명합니다. 초기 UI 검증 기간의 callback은 target을 자동 연결하고 단일 `확인`으로 배포 타깃 PUT을 먼저 호출한 뒤 성공하면 GitOps 감시 PUT을 호출합니다. 두 요청이 모두 성공해야 resume record 복귀를 시작합니다. browser record에는 token, GitHub state, 원본 파일 내용 또는 credential을 넣지 않습니다.
 
 초기 제품 검증 기간의 callback은 선택한 추천 Template과 무관하게 `ProjectDeploymentTarget.runtimeTargetKind`를 `ecs_fargate`로 설정합니다. 기존 target이 다른 runtime이면 callback draft를 ECS Fargate로 전환하고, 기존 ECS target의 필수 좌표가 비어 있으면 분석 SHA, Dockerfile과 project slug에서 계산한 기본값으로 보충합니다. 일반 프로젝트 설정 화면은 이 임시 강제 정책을 사용하지 않습니다.
 
