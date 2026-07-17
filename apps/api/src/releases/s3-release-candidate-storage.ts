@@ -16,11 +16,13 @@ import { requireS3BucketName } from "../config/env.js";
 import { getS3Client } from "../s3/client.js";
 import type { ReleaseCandidateStorage } from "./release-candidate-service.js";
 
-export function createS3ReleaseCandidateStorage(options: {
-  bucketName?: string;
-  s3Client?: S3Client;
-  uploadUrlExpiresInSeconds?: number;
-} = {}): ReleaseCandidateStorage {
+export function createS3ReleaseCandidateStorage(
+  options: {
+    bucketName?: string;
+    s3Client?: S3Client;
+    uploadUrlExpiresInSeconds?: number;
+  } = {}
+): ReleaseCandidateStorage {
   const bucketName = options.bucketName?.trim() || requireS3BucketName();
   const s3Client = options.s3Client ?? getS3Client();
   const expiresIn = options.uploadUrlExpiresInSeconds ?? 3_600;
@@ -63,70 +65,90 @@ export function createS3ReleaseCandidateStorage(options: {
     },
 
     async completeMultipartUpload(input) {
-      const uploadedByteSize = await inspectMultipartUpload(s3Client, {
-        bucketName,
-        objectKey: input.objectKey,
-        uploadId: input.uploadId,
-        parts: input.parts
-      });
+      const uploadedByteSize = await withReleaseCandidateStorageContext(
+        "ListParts",
+        input.objectKey,
+        () =>
+          inspectMultipartUpload(s3Client, {
+            bucketName,
+            objectKey: input.objectKey,
+            uploadId: input.uploadId,
+            parts: input.parts
+          })
+      );
       if (
         uploadedByteSize <= 0 ||
         uploadedByteSize > input.maximumByteSize ||
         (input.expectedByteSize !== undefined && uploadedByteSize !== input.expectedByteSize)
       ) {
-        await s3Client.send(
-          new AbortMultipartUploadCommand({
-            Bucket: bucketName,
-            Key: input.objectKey,
-            UploadId: input.uploadId
-          })
+        await withReleaseCandidateStorageContext("AbortMultipartUpload", input.objectKey, () =>
+          s3Client.send(
+            new AbortMultipartUploadCommand({
+              Bucket: bucketName,
+              Key: input.objectKey,
+              UploadId: input.uploadId
+            })
+          )
         );
         throw new Error(`Release candidate upload size is invalid: ${input.objectKey}`);
       }
       const parts = [...input.parts]
         .sort((left, right) => left.partNumber - right.partNumber)
         .map((part) => ({ ETag: part.etag, PartNumber: part.partNumber }));
-      const completed = await s3Client.send(
-        new CompleteMultipartUploadCommand({
-          Bucket: bucketName,
-          Key: input.objectKey,
-          UploadId: input.uploadId,
-          MultipartUpload: { Parts: parts }
-        })
+      const completed = await withReleaseCandidateStorageContext(
+        "CompleteMultipartUpload",
+        input.objectKey,
+        () =>
+          s3Client.send(
+            new CompleteMultipartUploadCommand({
+              Bucket: bucketName,
+              Key: input.objectKey,
+              UploadId: input.uploadId,
+              MultipartUpload: { Parts: parts }
+            })
+          )
       );
       const versionId = completed.VersionId;
       if (!versionId) {
         throw new Error(`S3 object versioning is required for ${input.objectKey}`);
       }
-      const object = await s3Client.send(
-        new HeadObjectCommand({ Bucket: bucketName, Key: input.objectKey, VersionId: versionId })
-      );
-      if (typeof object.ContentLength !== "number" || object.ContentLength <= 0) {
-        throw new Error(`Completed release candidate object is empty: ${input.objectKey}`);
-      }
-      if (
-        object.ContentLength !== uploadedByteSize ||
-        object.ContentLength > input.maximumByteSize
-      ) {
-        await s3Client.send(
-          new DeleteObjectCommand({
+      const object = await withReleaseCandidateStorageContext("HeadObject", input.objectKey, () =>
+        s3Client.send(
+          new HeadObjectCommand({
             Bucket: bucketName,
             Key: input.objectKey,
             VersionId: versionId
           })
+        )
+      );
+      if (typeof object.ContentLength !== "number" || object.ContentLength <= 0) {
+        throw new Error(`Completed release candidate object is empty: ${input.objectKey}`);
+      }
+      const completedByteSize = object.ContentLength;
+      if (completedByteSize !== uploadedByteSize || completedByteSize > input.maximumByteSize) {
+        await withReleaseCandidateStorageContext("DeleteObject", input.objectKey, () =>
+          s3Client.send(
+            new DeleteObjectCommand({
+              Bucket: bucketName,
+              Key: input.objectKey,
+              VersionId: versionId
+            })
+          )
         );
         throw new Error(`Completed release candidate object size changed: ${input.objectKey}`);
       }
       return {
-        byteSize: object.ContentLength,
+        byteSize: completedByteSize,
         versionId,
-        sha256: await hashS3Object(s3Client, {
-          bucketName,
-          objectKey: input.objectKey,
-          versionId,
-          expectedByteSize: object.ContentLength,
-          maximumByteSize: input.maximumByteSize
-        })
+        sha256: await withReleaseCandidateStorageContext("GetObject", input.objectKey, () =>
+          hashS3Object(s3Client, {
+            bucketName,
+            objectKey: input.objectKey,
+            versionId,
+            expectedByteSize: completedByteSize,
+            maximumByteSize: input.maximumByteSize
+          })
+        )
       };
     },
 
@@ -188,6 +210,34 @@ export function createS3ReleaseCandidateStorage(options: {
       );
     }
   };
+}
+
+async function withReleaseCandidateStorageContext<T>(
+  operation: string,
+  objectKey: string,
+  execute: () => Promise<T>
+): Promise<T> {
+  try {
+    return await execute();
+  } catch (error) {
+    throw new Error(
+      `Release candidate S3 ${operation} failed for ${objectKey}: ${describeProviderError(error)}`,
+      { cause: error }
+    );
+  }
+}
+
+function describeProviderError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+
+  const details = new Set<string>();
+  if (error.name && error.name !== "Error") details.add(error.name);
+  if (error.message) details.add(error.message);
+  const statusCode = (error as Error & { $metadata?: { httpStatusCode?: unknown } }).$metadata
+    ?.httpStatusCode;
+  if (typeof statusCode === "number") details.add(`HTTP ${statusCode}`);
+
+  return [...details].join(" · ") || "Unknown provider error";
 }
 
 async function inspectMultipartUpload(

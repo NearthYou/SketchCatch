@@ -664,6 +664,11 @@ CodeBuild service role에는 Repository checkout, log 전송, SketchCatch API가
 worker가 연결 Role을 AssumeRole하면서 승인된 resource ARN으로 제한한 session policy를 사용합니다. 기존
 CloudFormation Stack은 템플릿 변경이 자동 반영되지 않으므로 개발 단계의 기존 연결은 다시 연결해야 합니다.
 
+SketchCatch API task와 trusted worker task는 내부 Artifact S3의 `deployments/*`에 한해
+`s3:ListMultipartUploadParts`와 `s3:AbortMultipartUpload`를 허용합니다. CodeBuild가 presigned URL로 candidate
+part를 올린 뒤 SketchCatch가 part 크기와 ETag를 검증하고 multipart upload를 확정하거나 안전하게 중단하는 데
+필요한 권한입니다. `CompleteMultipartUpload`는 같은 prefix에 제한된 `s3:PutObject` 권한을 사용합니다.
+
 현재 trusted worker는 ECR `BatchCheckLayerAvailability`, layer upload, `PutImage` AWS SDK API로 OCI layout을
 게시합니다. ECR 인증 capability인 `ecr:GetAuthorizationToken`은 AWS가 repository ARN scope를 지원하지 않으므로
 별도 `Resource: "*"` statement로 격리하고, 실제 layer/image action은 승인된 ECR repository ARN으로만 제한합니다.

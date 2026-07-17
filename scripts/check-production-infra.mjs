@@ -541,6 +541,30 @@ for (const sid of [
     `runtime ecs_task policy must retain ${sid}`
   );
 }
+for (const policyName of ["ecs_task", "ecs_worker_task"]) {
+  const policyBody =
+    runtimeIam.match(
+      new RegExp(
+        `data "aws_iam_policy_document" "${policyName}" \\{([\\s\\S]*?)\\n\\}\\n\\nresource "aws_iam_role_policy" "${policyName}"`
+      )
+    )?.[1] ?? "";
+  const deploymentArtifactStatement =
+    policyBody.match(
+      /statement\s*\{\s*sid\s*=\s*"AllowDeploymentArtifacts"([\s\S]*?)\n\s{2}\}/
+    )?.[0] ?? "";
+  for (const action of ["s3:PutObject", "s3:ListMultipartUploadParts", "s3:AbortMultipartUpload"]) {
+    check(
+      deploymentArtifactStatement.includes(`"${action}"`),
+      `runtime ${policyName} AllowDeploymentArtifacts must allow ${action} for release candidate finalization`
+    );
+  }
+  check(
+    deploymentArtifactStatement.includes(
+      'resources = ["arn:aws:s3:::${var.artifact_bucket_name}/deployments/*"]'
+    ),
+    `runtime ${policyName} AllowDeploymentArtifacts must stay scoped to deployments/*`
+  );
+}
 
 const deployWorkflow = fs.readFileSync(deployWorkflowPath, "utf8");
 for (const marker of [

@@ -160,3 +160,11 @@ Short English-only working log for the current agent context. Older records are 
 - Workspace typecheck passes, and focused Web deployment tests pass 48/48.
 - Focused API deployment tests pass 20 cases with one skipped; apply and plan test files remain blocked before test execution by a missing `@aws-sdk/client-ecr/dist-cjs/runtimeConfig` file in the installed dependency package.
 - Workspace lint passes. The production build reaches Next.js but is blocked by another incomplete installed package (`@tanstack/react-query/build/modern/types.js`); focused Web typecheck and lint still pass after the final merge cleanup.
+
+### 2026-07-17 - Restore release-candidate multipart S3 permissions
+
+- Added the missing `ListMultipartUploadParts` and `AbortMultipartUpload` permissions to both production API and trusted worker task policies, with structure checks that require both roles to retain them.
+- Multipart completion failures now preserve the S3 operation, object key, provider error name, and HTTP status; the public storage interface and deployment failure-stage contract are unchanged.
+- Focused release-candidate tests (3/3), production infrastructure structure checks, Terraform formatting and validation, all workspace lint/typecheck commands, API/shared-package builds, sandbox safety tests (25/25), harness, formatting, and diff checks pass.
+- Full API, web, and types suites still expose unrelated `dev` failures caused by missing test environment values/tools, sandbox socket restrictions, and pre-existing contract assertions. The API build passes; the webpack web build compiles but stops on the existing invalid Next Route export in `architecture-draft/route.ts`.
+- No Terraform plan/apply, AWS mutation, or deployment was performed. After review and merge, an operator-approved runtime Terraform plan/apply is required before the deployed task roles receive the permissions.
