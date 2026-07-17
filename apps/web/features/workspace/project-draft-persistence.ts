@@ -91,15 +91,22 @@ export function markDraftServerSaved(
   localDraft: LocalProjectDraft,
   serverDraft: ProjectDraft
 ): LocalProjectDraft {
-  return {
+  const syncedDraft: LocalProjectDraft = {
     ...localDraft,
     diagramJson: serverDraft.diagramJson,
-    ...(serverDraft.terraformFiles ? { terraformFiles: serverDraft.terraformFiles } : {}),
     baseServerRevision: serverDraft.revision,
     revision: serverDraft.revision,
     serverSavedAt: serverDraft.serverSavedAt,
     dirty: false
   };
+
+  if (serverDraft.terraformFiles) {
+    syncedDraft.terraformFiles = serverDraft.terraformFiles;
+  } else {
+    delete syncedDraft.terraformFiles;
+  }
+
+  return syncedDraft;
 }
 
 export function chooseInitialDiagram({

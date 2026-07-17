@@ -9,6 +9,10 @@ export type ProjectServerSaveState =
   | "server-conflict"
   | "server-failed";
 
+export function getDirtyProjectServerSaveState(hasConflict: boolean): ProjectServerSaveState {
+  return hasConflict ? "server-conflict" : "server-dirty";
+}
+
 export function getProjectSaveStatus(
   localSaveState: ProjectLocalSaveState,
   serverSaveState: ProjectServerSaveState

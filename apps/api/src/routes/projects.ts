@@ -31,11 +31,11 @@ import {
   projects,
   touchUpdatedAt
 } from "../db/schema.js";
+import { toProjectDraft } from "../modules/projects/project-drafts.js";
 import {
-  getNextDraftRevision,
-  hasSameProjectDraftContent,
-  toProjectDraft
-} from "../modules/projects/project-drafts.js";
+  ProjectDraftRevisionMissingError,
+  saveProjectDraftRevision
+} from "../modules/projects/project-draft-save-service.js";
 import { saveProjectDraftBodySchema } from "./project-draft-schemas.js";
 
 const createProjectBodySchema = z.object({
@@ -396,135 +396,26 @@ export async function registerProjectRoutes(
       return sendNotFound(reply, "프로젝트를 찾을 수 없습니다.");
     }
 
-    const [existingDraft] = await db
-      .select()
-      .from(projectDrafts)
-      .where(eq(projectDrafts.projectId, params.id));
-
-    if (existingDraft && body.expectedRevision !== existingDraft.revision) {
-      return sendProjectDraftConflict(reply, existingDraft);
-    }
-
-    if (!existingDraft && body.expectedRevision !== null) {
-      return sendConflict(reply, "서버에 저장된 프로젝트 draft revision이 없습니다.");
-    }
-
-    const terraformFiles = body.terraformFiles ?? null;
-    if (
-      existingDraft &&
-      hasSameProjectDraftContent(existingDraft, {
-        diagramJson: body.diagramJson,
-        terraformFiles
-      })
-    ) {
-      const [verifiedDraft] = await db
-        .update(projectDrafts)
-        .set({ revision: existingDraft.revision })
-        .where(
-          and(
-            eq(projectDrafts.projectId, params.id),
-            eq(projectDrafts.revision, body.expectedRevision)
-          )
-        )
-        .returning();
-
-      if (verifiedDraft) {
-        return {
-          draft: toProjectDraft(verifiedDraft)
-        };
-      }
-
-      const [currentDraft] = await db
-        .select()
-        .from(projectDrafts)
-        .where(eq(projectDrafts.projectId, params.id));
-
-      if (currentDraft) {
-        return sendProjectDraftConflict(reply, currentDraft);
-      }
-
-      throw new Error("Project draft disappeared during unchanged save");
-    }
-
-    const now = new Date();
-    const revision = getNextDraftRevision(existingDraft?.revision);
-
-    if (existingDraft) {
-      const [draft] = await db
-        .update(projectDrafts)
-        .set({
-          diagramJson: body.diagramJson,
-          terraformFiles,
-          revision,
-          serverSavedAt: now,
-          updatedAt: now
-        })
-        .where(
-          and(
-            eq(projectDrafts.projectId, params.id),
-            eq(projectDrafts.revision, body.expectedRevision)
-          )
-        )
-        .returning();
-
-      if (!draft) {
-        const [currentDraft] = await db
-          .select()
-          .from(projectDrafts)
-          .where(eq(projectDrafts.projectId, params.id));
-
-        if (currentDraft) {
-          return sendProjectDraftConflict(reply, currentDraft);
-        }
-
-        throw new Error("Project draft disappeared during save");
-      }
-
-      await db
-        .update(projects)
-        .set(touchUpdatedAt)
-        .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
-
-      return {
-        draft: toProjectDraft(draft)
-      };
-    }
-
-    const [draft] = await db
-      .insert(projectDrafts)
-      .values({
-        id: randomUUID(),
+    try {
+      const result = await saveProjectDraftRevision({
+        db,
+        input: body,
         projectId: params.id,
-        diagramJson: body.diagramJson,
-        terraformFiles,
-        revision,
-        serverSavedAt: now,
-        updatedAt: now
-      })
-      .onConflictDoNothing({ target: projectDrafts.projectId })
-      .returning();
+        userId: currentUserId
+      });
 
-    if (!draft) {
-      const [currentDraft] = await db
-        .select()
-        .from(projectDrafts)
-        .where(eq(projectDrafts.projectId, params.id));
-
-      if (currentDraft) {
-        return sendProjectDraftConflict(reply, currentDraft);
+      if (result.status === "conflict") {
+        return sendProjectDraftConflict(reply, result.currentDraft);
       }
 
-      throw new Error("Failed to save project draft");
+      return { draft: toProjectDraft(result.draft) };
+    } catch (error) {
+      if (error instanceof ProjectDraftRevisionMissingError) {
+        return sendConflict(reply, error.message);
+      }
+
+      throw error;
     }
-
-    await db
-      .update(projects)
-      .set(touchUpdatedAt)
-      .where(and(eq(projects.id, params.id), eq(projects.userId, currentUserId)));
-
-    return {
-      draft: toProjectDraft(draft)
-    };
   });
 
   app.post("/projects/:id/assets/presigned-upload", async (request, reply) => {

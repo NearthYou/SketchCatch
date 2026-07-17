@@ -58,6 +58,7 @@ type SaveServerProjectDiagramDraftDependencies = {
 export type LoadedProjectDiagramDraft = InitialDiagramChoice & {
   localDraft: LocalProjectDraft | null;
   serverDraft: ProjectDraftResponse["draft"];
+  shouldAutoSaveServer: boolean;
 };
 
 export type SavedProjectDiagramDraft = {
@@ -120,7 +121,11 @@ export async function loadProjectDiagramDraft(
   return {
     ...choice,
     localDraft: resolvedLocalDraft,
-    serverDraft: serverResponse.draft
+    serverDraft: serverResponse.draft,
+    shouldAutoSaveServer:
+      choice.source === "local" &&
+      localDraft !== null &&
+      Object.prototype.hasOwnProperty.call(localDraft, "baseServerRevision")
   };
 }
 

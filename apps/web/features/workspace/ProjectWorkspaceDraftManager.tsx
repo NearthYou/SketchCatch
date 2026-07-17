@@ -41,6 +41,7 @@ import {
   type ProjectBoardThumbnailLifecycleState
 } from "./project-board-thumbnail-lifecycle";
 import {
+  getDirtyProjectServerSaveState,
   getProjectSaveStatus,
   type ProjectLocalSaveState,
   type ProjectServerSaveState
@@ -338,15 +339,15 @@ function ProjectWorkspaceDraftManagerState({
               };
             }
 
-            if (draftChangeVersionRef.current === serverSaveVersion) {
-              if (result.conflict) {
-                serverConflictRef.current = true;
-                setDraftConflict(result.conflict);
-                setDraftReloadError(null);
-                setServerSaveState("server-conflict");
-                return result;
-              }
+            if (result.conflict) {
+              serverConflictRef.current = true;
+              setDraftConflict(result.conflict);
+              setDraftReloadError(null);
+              setServerSaveState("server-conflict");
+              return result;
+            }
 
+            if (draftChangeVersionRef.current === serverSaveVersion) {
               setServerSaveState("server-failed");
               return result;
             }
@@ -454,7 +455,7 @@ function ProjectWorkspaceDraftManagerState({
         latestDiagramRef.current = nextDiagram;
         latestTerraformFilesRef.current = loadedDraft.terraformFiles ?? [];
         hasPendingLocalChangesRef.current = false;
-        serverDirtyRef.current = loadedDraft.source === "local";
+        serverDirtyRef.current = loadedDraft.shouldAutoSaveServer;
         serverConflictRef.current = false;
         draftChangeVersionRef.current = 0;
         setInitialDiagram(nextDiagram);
@@ -606,7 +607,7 @@ function ProjectWorkspaceDraftManagerState({
       hasPendingLocalChangesRef.current = true;
       serverDirtyRef.current = true;
       setLocalSaveState("local-pending");
-      setServerSaveState("server-dirty");
+      setServerSaveState(getDirtyProjectServerSaveState(serverConflictRef.current));
       clearLocalSaveTimer();
       localSaveTimerRef.current = setTimeout(() => {
         void persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));
@@ -644,7 +645,7 @@ function ProjectWorkspaceDraftManagerState({
       hasPendingLocalChangesRef.current = true;
       serverDirtyRef.current = true;
       setLocalSaveState("local-pending");
-      setServerSaveState("server-dirty");
+      setServerSaveState(getDirtyProjectServerSaveState(serverConflictRef.current));
       clearLocalSaveTimer();
       localSaveTimerRef.current = setTimeout(() => {
         void persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));

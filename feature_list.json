@@ -918,7 +918,7 @@
           "pnpm harness:check",
           "git diff --check"
         ],
-        "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 26/26, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, typecheck, build, harness, and diff checks pass. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
+        "notes": "ProjectDraft focused API tests pass 32/32, focused Workspace tests pass 29/29, and AI/Repository entrypoint revision contract tests pass 2/2. Lint, typecheck, the initial full build, harness, and diff checks pass. Review follow-up extracted the API save service, blocked legacy IndexedDB auto-save, removed stale Terraform files, and preserved conflict status; focused lint, API/Web typecheck, and API bundle pass afterward. The follow-up Next build cannot run from the collision-isolation worktree because Turbopack rejects dependency symlinks outside that filesystem root. Full pnpm test was not run outside the sandbox because it includes sandbox E2E and Terraform tests; test:core was stopped after 11 minutes without runner termination and showed only unrelated existing failures in API CORS/error/schema/release-candidate tests."
       },
       "notes": "No DB schema or Drizzle migration changed. No secret, real credential, live cloud mutation, Terraform apply/destroy, deployment, or Git/CI/CD handoff was executed."
     }

@@ -128,6 +128,17 @@ test("markDraftServerSaved clears dirty state and mirrors server revision", () =
   assert.equal(syncedDraft.serverSavedAt, "2026-06-24T01:01:00.000Z");
 });
 
+test("markDraftServerSaved removes stale local Terraform files when the server draft has none", () => {
+  const savedDraft = markDraftServerSaved(
+    makeLocalProjectDraft({
+      terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_vpc" "main" {}' }]
+    }),
+    makeProjectDraft({ terraformFiles: undefined })
+  );
+
+  assert.equal("terraformFiles" in savedDraft, false);
+});
+
 test("chooseInitialDiagram prefers the server draft even when the local draft was saved later", () => {
   const serverDraft = makeProjectDraft({
     diagramJson: emptyDiagram,

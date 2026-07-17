@@ -254,6 +254,26 @@ test("loadProjectDiagramDraft rejects empty fallback when the latest server draf
   );
 });
 
+test("loadProjectDiagramDraft does not auto-save a legacy local draft without a base server revision", async () => {
+  const legacyLocalDraft = { ...localDraft } as Partial<LocalProjectDraft>;
+  delete legacyLocalDraft.baseServerRevision;
+
+  const result = await loadProjectDiagramDraft(
+    {
+      fallbackDiagram: emptyDiagram,
+      projectId: serverDraft.projectId,
+      workspaceId: "workspace-1"
+    },
+    {
+      getProjectDraft: async () => ({ draft: null }),
+      readLocalProjectDraft: async () => legacyLocalDraft as LocalProjectDraft
+    }
+  );
+
+  assert.equal(result.source, "local");
+  assert.equal(result.shouldAutoSaveServer, false);
+});
+
 test("saveProjectDiagramDraft can use authenticated server ownership without a workspace query", async () => {
   const localWrites: LocalProjectDraft[] = [];
   let saveCallCount = 0;
