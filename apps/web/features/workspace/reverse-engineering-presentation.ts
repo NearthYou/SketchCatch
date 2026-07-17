@@ -33,7 +33,11 @@ const SERVICE_LABELS: Readonly<Record<string, string>> = {
   "AWS::EC2::Instance": "EC2 인스턴스",
   "AWS::IAM::Role": "IAM 역할",
   "AWS::Lambda::Function": "Lambda 함수",
-  "AWS::ElasticLoadBalancingV2::LoadBalancer": "로드 밸런서",
+  "AWS::ElasticLoadBalancingV2::LoadBalancer": "애플리케이션 로드 밸런서(ALB)",
+  "AWS::CloudFront::Distribution": "CloudFront 배포",
+  "AWS::ECS::Cluster": "ECS 클러스터",
+  "AWS::ECS::Service": "ECS 서비스",
+  "AWS::ECS::TaskDefinition": "ECS 작업 정의",
   "AWS::RDS::DBInstance": "RDS 데이터베이스",
   "AWS::S3::Bucket": "S3 버킷"
 };

@@ -6,6 +6,7 @@ import {
   formatReverseEngineeringAwsConnectionLabel,
   getReverseEngineeringAwsConnectionRecovery
 } from "./reverse-engineering-aws-connection-readiness";
+import { createReverseEngineeringFinalRegressionFixture } from "./reverse-engineering-final-regression.fixture";
 
 function createConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
   return {
@@ -101,6 +102,38 @@ test("완전히 검증된 연결만 스캔을 시작할 수 있다", () => {
   assert.equal(recovery.readiness, "ready");
   assert.equal(recovery.canStartScan, true);
   assert.equal(recovery.selectedConnectionId, "verified-connection");
+});
+
+test("최종 혼합 fixture의 verified 연결은 저장 scan과 새 프로젝트 preview에서만 시작 가능하다", () => {
+  const { awsConnection } = createReverseEngineeringFinalRegressionFixture();
+  const recovery = getReverseEngineeringAwsConnectionRecovery({
+    connections: [awsConnection],
+    selectedConnectionId: awsConnection.id
+  });
+  const commonInput = {
+    hasSelectedVerifiedConnection: true,
+    loadState: "idle" as const,
+    recovery,
+    scanState: "idle" as const,
+    selectedResourceTypeCount: 5
+  };
+
+  assert.equal(
+    canStartReverseEngineeringScan({
+      ...commonInput,
+      createProjectOnApply: false,
+      hasSelectedProject: true
+    }),
+    true
+  );
+  assert.equal(
+    canStartReverseEngineeringScan({
+      ...commonInput,
+      createProjectOnApply: true,
+      hasSelectedProject: false
+    }),
+    true
+  );
 });
 
 test("사용자가 pending 연결을 선택하면 verified 연결이 함께 있어도 스캔을 막는다", () => {

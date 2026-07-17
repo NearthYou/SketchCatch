@@ -1864,6 +1864,10 @@ type ReverseEngineeringScanResult = {
 `providerResourceId`는 기술 원본 정보로 보존하고, 기본 화면 이름은 읽기 시점에 짧고 사람이 읽을 수 있는 이름으로
 유도한다.
 
+`AwsConnection`의 readiness 표시는 UI가 계산하지만, 스캔 권한은 API가 연결을 `verified` 상태로 확인한 경우에만 부여한다.
+
+ALB, CloudFront, ECS의 `supported` 표시는 provider type, 안정적인 import ID, Terraform fixture 검증 계약을 만족한 reader/adapter에만 부여한다. 이 계약을 만족하지 않는 다른 AWS Resource는 `review_only`다.
+
 스캔 중에 보여줄 진행 상황은 `ReverseEngineeringScanLogLine`으로 저장한다.
 
 ```ts

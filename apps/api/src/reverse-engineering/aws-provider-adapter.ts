@@ -322,6 +322,21 @@ function createImportSuggestions(
       };
     }
 
+    const missingTerraformFields = getStringArray(
+      resource.config["terraformValidationMissingFields"]
+    );
+    if (missingTerraformFields.length > 0) {
+      return {
+        id: `import-${resource.id}`,
+        resourceId: resource.id,
+        status: "manual_review",
+        terraformAddress,
+        importCommand: `terraform import ${terraformAddress} ${importId}`,
+        reason: `Terraform 생성과 배포에 필요한 ${missingTerraformFields.join(", ")} 값이 없습니다.`,
+        handoffReady: false
+      };
+    }
+
     return {
       id: `import-${resource.id}`,
       resourceId: resource.id,

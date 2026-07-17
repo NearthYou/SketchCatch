@@ -222,8 +222,9 @@ test("ECS import name 또는 Terraform 생성 입력이 부족하면 import와 �
   assert.equal(service?.config["sketchcatchReferenceTerraform"], true);
   assert.deepEqual(service?.config["terraformValidationMissingFields"], ["name"]);
 
-  assert.equal(taskDefinitionImport?.status, "ready");
-  assert.equal(taskDefinitionImport?.handoffReady, true);
+  assert.equal(taskDefinitionImport?.status, "manual_review");
+  assert.equal(taskDefinitionImport?.handoffReady, false);
+  assert.match(taskDefinitionImport?.reason ?? "", /containerDefinitions\.environment/);
   assert.equal(taskDefinition?.config["sketchcatchReferenceTerraform"], true);
   assert.deepEqual(taskDefinition?.config["terraformValidationMissingFields"], [
     "containerDefinitions.environment"
@@ -337,7 +338,7 @@ test("ALB ARN 또는 CloudFront distribution ID가 없으면 빈 import command 
   }
 });
 
-test("생성 필수값이 부족한 supported Resource는 Board와 import에 남고 Terraform 생성만 fail-closed 한다", async () => {
+test("생성 필수값이 부족한 supported Resource는 Board에 남되 handoff와 Terraform 생성은 fail-closed 한다", async () => {
   const result = await scan([
     record({
       providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
@@ -365,7 +366,14 @@ test("생성 필수값이 부족한 supported Resource는 Board와 import에 남
     ]
   );
   assert.equal(result.architectureJson.nodes.length, 2);
-  assert.equal(result.importSuggestions.every((suggestion) => suggestion.handoffReady), true);
+  assert.ok(
+    result.importSuggestions.every(
+      (suggestion) =>
+        suggestion.status === "manual_review" &&
+        suggestion.handoffReady === false &&
+        suggestion.reason?.includes("Terraform") === true
+    )
+  );
   assert.deepEqual(
     result.findings.map((finding) => finding.resourceId),
     result.discoveredResources.map((resource) => resource.id)
@@ -406,8 +414,10 @@ test("CloudFront VPC origin은 import identity를 보존하지만 reference-only
   assert.equal(resource?.analysisExcluded ?? false, false);
   assert.equal(resource?.config["sketchcatchReferenceTerraform"], true);
   assert.deepEqual(resource?.config["terraformValidationMissingFields"], ["origin.vpcOriginConfig"]);
-  assert.equal(suggestion?.handoffReady, true);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
   assert.equal(suggestion?.importCommand?.split(" ").at(-1), "EDISTRIBUTIONA");
+  assert.match(suggestion?.reason ?? "", /origin\.vpcOriginConfig/);
   assert.match(finding?.description ?? "", /origin\.vpcOriginConfig/);
 });
 

@@ -8,6 +8,11 @@ import {
   createReverseEngineeringBoardApplication
 } from "./reverse-engineering-board-application";
 import { summarizeReverseEngineeringScan } from "./reverse-engineering-presentation";
+import {
+  createReverseEngineeringFinalRegressionFixture,
+  TASK9_REVIEW_ONLY_RESOURCE_IDS,
+  TASK9_SUPPORTED_RESOURCE_IDS
+} from "./reverse-engineering-final-regression.fixture";
 import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 
 const currentDiagram: DiagramJson = {
@@ -338,6 +343,137 @@ test("관계가 있는 검토 전용 Lambda는 보호 metadata와 확인 필요 
       handoffReady: false,
       reason: "아직 정식 ResourceType으로 매핑되지 않았습니다."
     }
+  );
+});
+
+test("최종 혼합 fixture의 정식 지원 ALB, CloudFront, ECS는 Board에서 검토 전용으로 되돌아가지 않고 Lambda marker만 안전하게 남긴다", () => {
+  const { result } = createReverseEngineeringFinalRegressionFixture();
+  const supportedArchitectureTypeById = new Map([
+    ["vpc-task9", "VPC"],
+    ["subnet-task9", "SUBNET"],
+    ["security-group-task9", "SECURITY_GROUP"],
+    ["load-balancer-task9", "LOAD_BALANCER"],
+    ["cloudfront-task9", "CLOUDFRONT"],
+    ["ecs-cluster-task9", "ECS_CLUSTER"],
+    ["ecs-service-task9", "ECS_SERVICE"],
+    ["ecs-task-definition-task9", "ECS_TASK_DEFINITION"]
+  ] as const);
+
+  for (const placement of ["original", "compiled"] as const) {
+    const application = createReverseEngineeringBoardApplication({
+      currentDiagram,
+      mode: "replace",
+      placement,
+      result
+    });
+    const nodeById = new Map(application.diagram.nodes.map((node) => [node.id, node]));
+    const appliedArchitectureById = new Map(
+      convertDiagramJsonToArchitectureJson(application.diagram).nodes.map((node) => [node.id, node])
+    );
+
+    for (const resourceId of TASK9_SUPPORTED_RESOURCE_IDS) {
+      const node = nodeById.get(resourceId);
+      const appliedNode = appliedArchitectureById.get(resourceId);
+
+      assert.ok(node, `${placement} Board에 ${resourceId}가 남아야 합니다.`);
+      assert.ok(appliedNode, `${placement} 적용 결과에 ${resourceId}가 남아야 합니다.`);
+      assert.equal(appliedNode.type, supportedArchitectureTypeById.get(resourceId));
+      assert.doesNotMatch(node.label, /^확인 필요 · /);
+      assert.notEqual(node.parameters?.values["analysisExcluded"], true);
+      assert.equal(node.metadata?.reverseEngineering?.source, "aws_scan");
+    }
+
+    const lambda = nodeById.get("lambda-task9");
+    assert.ok(lambda);
+    assert.equal(lambda.label, "확인 필요 · orders-handler");
+    assert.deepEqual(lambda.style, { borderColor: "#f97316", textColor: "#9a3412" });
+    assert.equal(lambda.parameters?.values["analysisExcluded"], true);
+    assert.deepEqual(lambda.metadata?.reverseEngineering?.protectedValueKeys, [
+      "providerResourceId",
+      "providerResourceType",
+      "region",
+      "accountId",
+      "terraformResourceName",
+      "terraformResourceType"
+    ]);
+    assert.equal(nodeById.has("iam-role-task9"), false);
+    assert.equal(
+      application.comparison.manualReviews.some((item) => item.nodeId === "lambda-task9"),
+      false
+    );
+  }
+
+  assert.deepEqual(
+    result.architectureJson.edges
+      .filter((edge) => edge.targetId === "lambda-task9")
+      .map((edge) => [edge.sourceId, edge.targetId, edge.label]),
+    [["vpc-task9", "lambda-task9", "uses"]]
+  );
+  const supportedSuggestionById = new Map(
+    result.importSuggestions
+      .filter((suggestion) => TASK9_SUPPORTED_RESOURCE_IDS.includes(suggestion.resourceId as never))
+      .map((suggestion) => [suggestion.resourceId, suggestion])
+  );
+  for (const resourceId of TASK9_SUPPORTED_RESOURCE_IDS) {
+    const suggestion = supportedSuggestionById.get(resourceId);
+
+    assert.ok(suggestion);
+    assert.equal(Boolean(suggestion.importCommand), true);
+    if (resourceId === "ecs-task-definition-task9") {
+      assert.equal(suggestion.status, "manual_review");
+      assert.equal(suggestion.handoffReady, false);
+      assert.match(suggestion.reason ?? "", /containerDefinitions\.environment/);
+      assert.equal(suggestion.terraformBlockDraft, undefined);
+    } else {
+      assert.equal(suggestion.status, "ready");
+      assert.equal(suggestion.handoffReady, true);
+    }
+  }
+  assert.deepEqual(
+    result.importSuggestions
+      .filter((suggestion) =>
+        TASK9_REVIEW_ONLY_RESOURCE_IDS.includes(suggestion.resourceId as never)
+      )
+      .map((suggestion) => ({
+        id: suggestion.resourceId,
+        status: suggestion.status,
+        handoffReady: suggestion.handoffReady,
+        terraformAddress: suggestion.terraformAddress,
+        terraformBlockDraft: suggestion.terraformBlockDraft,
+        importCommand: suggestion.importCommand
+      })),
+    [
+      {
+        id: "lambda-task9",
+        status: "unsupported_resource_type",
+        handoffReady: false,
+        terraformAddress: undefined,
+        terraformBlockDraft: undefined,
+        importCommand: undefined
+      },
+      {
+        id: "iam-role-task9",
+        status: "unsupported_resource_type",
+        handoffReady: false,
+        terraformAddress: undefined,
+        terraformBlockDraft: undefined,
+        importCommand: undefined
+      }
+    ]
+  );
+  assert.deepEqual(
+    result.findings.map((finding) => [finding.resourceId, finding.category]),
+    [["ecs-task-definition-task9", "configuration"]]
+  );
+  assert.equal(
+    result.discoveredResources.find((resource) => resource.id === "ecs-task-definition-task9")
+      ?.config["sketchcatchReferenceTerraform"],
+    true
+  );
+  assert.deepEqual(
+    result.discoveredResources.find((resource) => resource.id === "ecs-task-definition-task9")
+      ?.config["terraformValidationMissingFields"],
+    ["containerDefinitions.environment"]
   );
 });
 

@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { InfrastructureGraph } from "@sketchcatch/types";
+import type { DiagramJson, InfrastructureGraph } from "@sketchcatch/types";
 import {
   TerraformDiagramValidationError,
   renderTerraformFromInfrastructureGraph
 } from "./diagram-to-terraform.js";
+import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
 
 test("renders Terraform code from InfrastructureGraph nodes", () => {
   const graph: InfrastructureGraph = {
@@ -1617,6 +1618,83 @@ test("생성 필수값이 부족한 Reverse Engineering Resource는 Terraform bl
   });
 
   assert.equal(terraform, "");
+});
+
+test("관계가 있는 Lambda와 관계 없는 IAM 검토 전용 marker는 Terraform 및 배포 후보가 되지 않는다", () => {
+  const diagram: DiagramJson = {
+    nodes: [
+      {
+        id: "vpc-task9",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "Orders VPC",
+        position: { x: 0, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 1,
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "orders",
+          fileName: "network.tf",
+          values: { cidrBlock: "10.0.0.0/16", analysisExcluded: false }
+        }
+      },
+      {
+        id: "lambda-task9",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "확인 필요 · orders-handler",
+        position: { x: 280, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 2,
+        parameters: {
+          resourceType: "aws_lambda_function",
+          resourceName: "orders_handler",
+          fileName: "review-only.tf",
+          values: { analysisExcluded: true }
+        }
+      },
+      {
+        id: "iam-role-task9",
+        type: "aws_iam_role",
+        kind: "resource",
+        label: "orders-read-only",
+        position: { x: 560, y: 0 },
+        size: { width: 240, height: 120 },
+        locked: false,
+        zIndex: 3,
+        parameters: {
+          resourceType: "aws_iam_role",
+          resourceName: "orders_read_only",
+          fileName: "review-only.tf",
+          values: { analysisExcluded: true }
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "edge-vpc-lambda-task9",
+        sourceNodeId: "vpc-task9",
+        targetNodeId: "lambda-task9",
+        label: "uses"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+  const graph = buildInfrastructureGraphFromDiagramJson(diagram);
+  const terraform = renderTerraformFromInfrastructureGraph(graph);
+
+  assert.deepEqual(
+    graph.nodes.map((node) => node.id),
+    ["vpc-task9"]
+  );
+  assert.deepEqual(graph.edges, []);
+  assert.match(terraform, /resource "aws_vpc" "orders"/);
+  assert.doesNotMatch(
+    terraform,
+    /aws_lambda_function|aws_iam_role|orders_handler|orders_read_only/
+  );
 });
 
 test("Reverse Engineering CloudFront VPC origin은 불완전한 Terraform origin block을 만들지 않는다", () => {

@@ -53,6 +53,23 @@ test("최종 replace와 append 적용은 각 검토에 사용한 application을 
   assert.doesNotMatch(applyFlow, /createReverseEngineeringBoardApplication\(/);
 });
 
+test("원본과 Compiler 후보는 미리보기만 갱신하고 명시적 적용 함수에서만 Board를 변경한다", () => {
+  const placementPreview = getSourceBlock(
+    panelSource,
+    "function previewPlacement(",
+    "function showFirstCandidatePreview("
+  );
+  const applyFlow = getSourceBlock(
+    panelSource,
+    "async function applyScanResult(",
+    "function previewPlacement("
+  );
+
+  assert.match(placementPreview, /context\.setPreviewDiagram\(application\.previewDiagram\)/);
+  assert.doesNotMatch(placementPreview, /context\.applyDiagramJson\(/);
+  assert.match(applyFlow, /context\.applyDiagramJson\(diagramToApply\)/);
+});
+
 function getSourceBlock(source: string, startMarker: string, endMarker: string): string {
   const start = source.indexOf(startMarker);
   const end = source.indexOf(endMarker, start);

@@ -15,7 +15,15 @@ const project: Project = {
   updatedAt: "2026-07-17T00:00:00.000Z"
 };
 
-const resourceTypes: ReverseEngineeringResourceSelection[] = ["ALL", "VPC"];
+const resourceTypes: ReverseEngineeringResourceSelection[] = [
+  "ALL",
+  "VPC",
+  "LOAD_BALANCER",
+  "CLOUDFRONT",
+  "ECS_CLUSTER",
+  "ECS_SERVICE",
+  "ECS_TASK_DEFINITION"
+];
 
 function createConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
   return {
@@ -129,4 +137,13 @@ test("검증된 AWS 연결은 복구 카드 없이 스캔 행동을 유지한다
   assert.match(html, /기존 AWS 가져오기/);
   assert.doesNotMatch(html, /AWS Role이 아직 준비되지 않았습니다\./);
   assert.doesNotMatch(html, /AWS Role 연결하기|설정 계속|연결 다시 확인/);
+  for (const label of [
+    "애플리케이션 로드 밸런서(ALB)",
+    "콘텐츠 전송(CloudFront)",
+    "컨테이너 클러스터(ECS)",
+    "컨테이너 서비스(ECS)",
+    "컨테이너 작업 정의(ECS)"
+  ]) {
+    assert.match(html, new RegExp(label.replace(/[()]/g, "\\$&")));
+  }
 });
