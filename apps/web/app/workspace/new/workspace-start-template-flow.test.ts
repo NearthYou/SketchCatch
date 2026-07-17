@@ -4,6 +4,7 @@ import { isBoardTemplateAvailable, listBoardTemplates } from "../../../features/
 import {
   createTemplateProjectDraft,
   createWorkspaceStartTemplateSelection,
+  resolveWorkspaceStartTemplateView,
   resolveWorkspaceStartTemplate
 } from "./workspace-start-template-flow";
 import { hasAuthoritativeTerraformSource } from "../../../features/workspace/terraform-panel-utils";
@@ -34,6 +35,14 @@ test("Template 프로젝트 생성 draft는 선택한 Board와 Terraform 파일�
   const { terraformSourceFingerprint: _fingerprint, ...presentation } =
     draft.diagramJson.presentation ?? {};
   assert.deepEqual({ ...draft.diagramJson, presentation }, template.diagramJson);
+});
+
+test("선택한 Template으로 시작하면 상세 화면을 바로 연다", () => {
+  const template = getAvailableTemplate("brainboard-aws-asg-lb-vpc-subnets");
+
+  assert.equal(resolveWorkspaceStartTemplateView("template", template), "detail");
+  assert.equal(resolveWorkspaceStartTemplateView("template", null), "catalog");
+  assert.equal(resolveWorkspaceStartTemplateView("ai", template), null);
 });
 
 function getAvailableTemplate(templateId: string) {

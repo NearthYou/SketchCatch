@@ -5,11 +5,22 @@ import {
   type BoardTemplate
 } from "../../../features/resource-settings/template-library";
 import { markTerraformSourceAuthoritative } from "../../../features/workspace/terraform-panel-utils";
+import type { WorkspaceStartKind } from "./workspace-start-options";
 
 export type WorkspaceStartTemplateSelection = {
   readonly templateId: string | null;
   readonly templateVersion: string | null;
 };
+
+export type WorkspaceStartTemplateView = "catalog" | "detail" | null;
+
+export function resolveWorkspaceStartTemplateView(
+  startKind: WorkspaceStartKind | undefined,
+  template: AvailableBoardTemplate | null
+): WorkspaceStartTemplateView {
+  if (startKind !== "template") return null;
+  return template ? "detail" : "catalog";
+}
 
 export function createWorkspaceStartTemplateSelection(
   template: AvailableBoardTemplate | null

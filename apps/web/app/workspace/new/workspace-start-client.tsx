@@ -42,7 +42,8 @@ import {
 import {
   createTemplateProjectDraft,
   createWorkspaceStartTemplateSelection,
-  resolveWorkspaceStartTemplate
+  resolveWorkspaceStartTemplate,
+  resolveWorkspaceStartTemplateView
 } from "./workspace-start-template-flow";
 import styles from "./workspace-start.module.css";
 
@@ -70,8 +71,6 @@ type WorkspaceStartForm = {
   readonly selectedTemplateId: string | null;
   readonly selectedTemplateVersion: string | null;
 };
-
-type TemplateStartView = "catalog" | "detail" | null;
 
 const startModeOptions = createWorkspaceStartOptions();
 const mainStartOptions = startModeOptions.filter((option) => option.kind !== "blank");
@@ -111,8 +110,8 @@ export function WorkspaceStartClient({
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(
     initialTemplateSelection.templateId
   );
-  const [templateStartView, setTemplateStartView] = useState<TemplateStartView>(() =>
-    initialStartKind === "template" ? "catalog" : null
+  const [templateStartView, setTemplateStartView] = useState(() =>
+    resolveWorkspaceStartTemplateView(initialStartKind, initialTemplate)
   );
   const [errorMessage, setErrorMessage] = useState("");
   const [projectNameError, setProjectNameError] = useState("");
@@ -291,6 +290,12 @@ export function WorkspaceStartClient({
     return false;
   }
 
+  function handleTitleChange(value: string): void {
+    setTitle(value);
+    setProjectNameError("");
+    setErrorMessage("");
+  }
+
   function selectTemplate(templateId: string): void {
     if (!validateProjectName()) {
       return;
@@ -319,11 +324,7 @@ export function WorkspaceStartClient({
         <TemplateCatalog
           onBack={() => setTemplateStartView(null)}
           onSelect={selectTemplate}
-          onTitleChange={(value) => {
-            setTitle(value);
-            setProjectNameError("");
-            setErrorMessage("");
-          }}
+          onTitleChange={handleTitleChange}
           projectNameError={projectNameError}
           projectNameInputRef={projectNameInputRef}
           selectedTemplateId={previewTemplateId}
@@ -342,7 +343,11 @@ export function WorkspaceStartClient({
           onStart={() => void handleContinue("template", previewTemplate)}
           errorMessage={errorMessage}
           isSubmitting={isSubmitting}
+          onTitleChange={handleTitleChange}
+          projectNameError={projectNameError}
+          projectNameInputRef={projectNameInputRef}
           template={previewTemplate}
+          title={title}
         />
       </WorkspaceStartFrame>
     );
@@ -359,11 +364,7 @@ export function WorkspaceStartClient({
           <ProjectNameField
             error={projectNameError}
             inputRef={projectNameInputRef}
-            onChange={(value) => {
-              setTitle(value);
-              setProjectNameError("");
-              setErrorMessage("");
-            }}
+            onChange={handleTitleChange}
             title={title}
           />
 
@@ -572,13 +573,21 @@ function TemplateDetail({
   onBack,
   onStart,
   isSubmitting,
-  template
+  onTitleChange,
+  projectNameError,
+  projectNameInputRef,
+  template,
+  title
 }: {
   readonly errorMessage: string;
   readonly onBack: () => void;
   readonly onStart: () => void;
   readonly isSubmitting: boolean;
+  readonly onTitleChange: (value: string) => void;
+  readonly projectNameError: string;
+  readonly projectNameInputRef: RefObject<HTMLInputElement | null>;
   readonly template: AvailableBoardTemplate;
+  readonly title: string;
 }) {
   return (
     <div className={styles.templateFlow}>
@@ -588,19 +597,35 @@ function TemplateDetail({
       </button>
 
       <section className={styles.templateDetail} aria-labelledby="template-detail-title">
-        <div className={styles.detailPreviewFrame}>
-          <BoardThumbnailImage
-            alt={`${template.title} Architecture 미리보기`}
-            className={styles.detailPreview}
-            src={template.thumbnailSrc ?? null}
-          />
-        </div>
-
         <div className={styles.detailContent}>
           <div className={styles.detailHeading}>
             <span className={styles.eyebrow}>Selected template</span>
             <h1 id="template-detail-title">{template.title}</h1>
             <p>{template.description}</p>
+          </div>
+
+          <div className={styles.detailActionArea}>
+            <ProjectNameField
+              error={projectNameError}
+              inputRef={projectNameInputRef}
+              onChange={onTitleChange}
+              title={title}
+            />
+            {errorMessage ? (
+              <p className={styles.errorMessage} role="alert">
+                {errorMessage}
+              </p>
+            ) : null}
+            <button
+              aria-busy={isSubmitting}
+              className={styles.detailStartAction}
+              disabled={isSubmitting}
+              onClick={onStart}
+              type="button"
+            >
+              {isSubmitting ? "처리 중" : "이 템플릿으로 시작"}
+              {isSubmitting ? null : <ArrowRight aria-hidden="true" size={17} />}
+            </button>
           </div>
 
           <dl className={styles.detailStats}>
@@ -619,24 +644,14 @@ function TemplateDetail({
               <span key={tag}>{tag}</span>
             ))}
           </div>
+        </div>
 
-          <div className={styles.detailActionArea}>
-            {errorMessage ? (
-              <p className={styles.errorMessage} role="alert">
-                {errorMessage}
-              </p>
-            ) : null}
-            <button
-              aria-busy={isSubmitting}
-              className={styles.detailStartAction}
-              disabled={isSubmitting}
-              onClick={onStart}
-              type="button"
-            >
-              {isSubmitting ? "처리 중" : "이 템플릿으로 시작"}
-              {isSubmitting ? null : <ArrowRight aria-hidden="true" size={17} />}
-            </button>
-          </div>
+        <div className={styles.detailPreviewFrame}>
+          <BoardThumbnailImage
+            alt={`${template.title} Architecture 미리보기`}
+            className={styles.detailPreview}
+            src={template.thumbnailSrc ?? null}
+          />
         </div>
       </section>
     </div>
