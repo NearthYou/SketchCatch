@@ -7,6 +7,30 @@ const modalSource = readFileSync(
   fileURLToPath(new URL("./LiveObservationModal.tsx", import.meta.url)),
   "utf8"
 );
+const diagramMapSource = readFileSync(
+  fileURLToPath(new URL("./LiveObservationDiagramMap.tsx", import.meta.url)),
+  "utf8"
+);
+const rightPanelSource = readFileSync(
+  fileURLToPath(new URL("./WorkspaceRightPanel.tsx", import.meta.url)),
+  "utf8"
+);
+
+test("modal re-entry restores the selected Deployment and diagram viewport", () => {
+  assert.match(rightPanelSource, /createLiveObservationViewState\(projectId\)/);
+  assert.match(
+    rightPanelSource,
+    /selectedDeploymentId=\{retainedLiveObservationView\.selectedDeploymentId\}/
+  );
+  assert.match(
+    rightPanelSource,
+    /initialViewport=\{retainedLiveObservationView\.viewport\}/
+  );
+  assert.match(modalSource, /onSelectedDeploymentIdChange\(nextDeploymentId\)/);
+  assert.match(diagramMapSource, /defaultViewport=\{initialViewport \?\?/);
+  assert.match(diagramMapSource, /fitView=\{initialViewport === null\}/);
+  assert.match(diagramMapSource, /onMoveEnd=\{\(_event, viewport\) => onViewportChange\(viewport\)\}/);
+});
 
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
   const mapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
@@ -44,7 +68,7 @@ test("renders Architecture state only when it belongs to the selected Deployment
   );
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap\s+architecture=\{selectedArchitecture\}\s+snapshot=\{selectedSnapshot\}\s+\/>/
+    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(
     modalSource,
@@ -109,7 +133,7 @@ test("session creation locks Deployment selection and observation evidence stays
   assert.match(modalSource, /const selectedSnapshot = selectedSession \? snapshot : null;/);
   assert.match(
     modalSource,
-    /<LiveObservationDiagramMap\s+architecture=\{selectedArchitecture\}\s+snapshot=\{selectedSnapshot\}\s+\/>/
+    /<LiveObservationDiagramMap[\s\S]*?architecture=\{selectedArchitecture\}[\s\S]*?snapshot=\{selectedSnapshot\}[\s\S]*?\/>/
   );
   assert.match(evidenceBlock, /selectedSnapshot\.live\.acceptedEventCount/);
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);

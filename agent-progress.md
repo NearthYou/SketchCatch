@@ -198,3 +198,9 @@ Short English-only working log for the current agent context. Older records are 
 - Moved Deployment, release, Terraform Output, and immutable Architecture reads into the shared React Query cache.
 - Fresh project and Deployment data is reused on modal re-entry while background refreshes keep cached content visible.
 - Focused Live Observation tests pass 8/8; Web lint and typecheck pass.
+
+### 2026-07-17 - Retain Live Observation view state
+
+- Retained the selected Deployment and React Flow viewport outside the modal, scoped by project and Deployment.
+- Re-entry restores the prior zoom and pan state, while switching projects starts with an isolated view state.
+- Focused Live Observation tests pass 8/8; Web lint and typecheck pass.

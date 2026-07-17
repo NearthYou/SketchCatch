@@ -44,6 +44,13 @@ import { TerraformLeaveDialog } from "./TerraformLeaveDialog";
 import { LiveObservationModal } from "./LiveObservationModal";
 import type { LiveObservationSelection } from "./live-observation";
 import {
+  createLiveObservationViewState,
+  readLiveObservationViewState,
+  selectLiveObservationDeployment,
+  storeLiveObservationViewport,
+  type LiveObservationViewport
+} from "./live-observation-view-state";
+import {
   createWorkspaceOverlayNotifications,
   type WorkspaceOverlayNotifications
 } from "./workspace-overlay-notifications";
@@ -219,6 +226,13 @@ export function WorkspaceRightPanel({
   const [isLiveObservationOpen, setIsLiveObservationOpen] = useState(false);
   const [liveObservationSelection, setLiveObservationSelection] =
     useState<LiveObservationSelection | null>(null);
+  const [liveObservationViewState, setLiveObservationViewState] = useState(() =>
+    createLiveObservationViewState(projectId)
+  );
+  const retainedLiveObservationView = readLiveObservationViewState(
+    liveObservationViewState,
+    projectId
+  );
 
   useEffect(() => {
     overlayNotificationsRef.current?.setCallbacks(
@@ -637,6 +651,30 @@ export function WorkspaceRightPanel({
     setIsLiveObservationOpen(true);
   }, [onPanelOpenRequest]);
 
+  const updateLiveObservationDeployment = useCallback(
+    (deploymentId: string): void => {
+      setLiveObservationViewState((current) =>
+        selectLiveObservationDeployment(current, projectId, deploymentId)
+      );
+    },
+    [projectId]
+  );
+
+  const updateLiveObservationViewport = useCallback(
+    (viewport: LiveObservationViewport): void => {
+      setLiveObservationViewState((current) => {
+        const currentView = readLiveObservationViewState(current, projectId);
+        return storeLiveObservationViewport(
+          current,
+          projectId,
+          currentView.selectedDeploymentId,
+          viewport
+        );
+      });
+    },
+    [projectId]
+  );
+
   const applyTerraformLeaveSaveFeedback = useCallback(
     (feedback: TerraformLeaveSaveFeedback): void => {
       setTerraformLeaveSaveState(feedback.state);
@@ -929,11 +967,15 @@ export function WorkspaceRightPanel({
     : null;
   const liveObservationModal = isLiveObservationOpen ? (
     <LiveObservationModal
+      initialViewport={retainedLiveObservationView.viewport}
       onClose={() => {
         setIsLiveObservationOpen(false);
         setLiveObservationSelection(null);
       }}
+      onSelectedDeploymentIdChange={updateLiveObservationDeployment}
+      onViewportChange={updateLiveObservationViewport}
       projectId={projectId}
+      selectedDeploymentId={retainedLiveObservationView.selectedDeploymentId}
       selection={liveObservationSelection}
     />
   ) : null;

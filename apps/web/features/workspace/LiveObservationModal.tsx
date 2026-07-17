@@ -26,16 +26,29 @@ import {
 } from "./live-observation";
 import { getLiveObservationCapacityMode } from "./live-observation-architecture";
 import { useLiveObservationQueries } from "./live-observation-queries";
+import type { LiveObservationViewport } from "./live-observation-view-state";
 import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
+  readonly initialViewport: LiveObservationViewport | null;
   readonly onClose: () => void;
+  readonly onSelectedDeploymentIdChange: (deploymentId: string) => void;
+  readonly onViewportChange: (viewport: LiveObservationViewport) => void;
   readonly projectId: string;
+  readonly selectedDeploymentId: string;
   readonly selection?: LiveObservationSelection | null | undefined;
 };
 
-export function LiveObservationModal({ onClose, projectId, selection }: LiveObservationModalProps) {
+export function LiveObservationModal({
+  initialViewport,
+  onClose,
+  onSelectedDeploymentIdChange,
+  onViewportChange,
+  projectId,
+  selectedDeploymentId,
+  selection
+}: LiveObservationModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -43,7 +56,6 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
   const operationControllerRef = useRef<AbortController | null>(null);
   const copiedTimerRef = useRef<number | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [selectionErrorMessage, setSelectionErrorMessage] = useState("");
@@ -169,7 +181,7 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
       const exactDeployment = eligible.find(
         (deployment) => deployment.id === selection.deploymentId
       );
-      setSelectedDeploymentId(exactDeployment?.id ?? "");
+      onSelectedDeploymentIdChange(exactDeployment?.id ?? "");
       if (!exactDeployment) {
         setSelectionErrorMessage(
           "선택한 CI/CD 실행과 연결된 인프라 배포를 관측할 수 없습니다."
@@ -191,12 +203,17 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
     }
 
     setSelectionErrorMessage("");
-    setSelectedDeploymentId((current) =>
-      eligible.some((deployment) => deployment.id === current)
-        ? current
+    onSelectedDeploymentIdChange(
+      eligible.some((deployment) => deployment.id === selectedDeploymentId)
+        ? selectedDeploymentId
         : eligible[0]?.id ?? ""
     );
-  }, [queries.reference.data, selection]);
+  }, [
+    onSelectedDeploymentIdChange,
+    queries.reference.data,
+    selectedDeploymentId,
+    selection
+  ]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -304,7 +321,7 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
       setStreamErrorMessage("");
     }
 
-    setSelectedDeploymentId(nextDeploymentId);
+    onSelectedDeploymentIdChange(nextDeploymentId);
   }
 
   async function startObservation(): Promise<void> {
@@ -540,6 +557,8 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
           {selectedArchitectureState === "ready" && selectedArchitecture ? (
             <LiveObservationDiagramMap
               architecture={selectedArchitecture}
+              initialViewport={initialViewport}
+              onViewportChange={onViewportChange}
               snapshot={selectedSnapshot}
             />
           ) : null}
