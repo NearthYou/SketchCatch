@@ -19,6 +19,7 @@ import type {
   AwsConnectionDeletionPreviewResponse,
   AwsConnection,
   AwsConnectionListResponse,
+  AwsCodeConnectionDisconnectPreviewResponse,
   AwsCodeConnectionResponse,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
@@ -43,6 +44,7 @@ import type {
   CreateProjectRequest,
   CreateReverseEngineeringScanRequest,
   DeleteProjectRequest,
+  DisconnectAwsCodeConnectionRequest,
   DeleteProjectResponse,
   DeleteAwsConnectionRequest,
   DesignSimulationResult,
@@ -845,6 +847,29 @@ export async function refreshAwsCodeConnection(
   return apiFetch<AwsCodeConnectionResponse>(
     `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection/refresh`,
     { auth: true, method: "POST" }
+  );
+}
+
+export async function getAwsCodeConnectionDisconnectPreview(
+  connectionId: string
+): Promise<AwsCodeConnectionDisconnectPreviewResponse> {
+  return apiFetch<AwsCodeConnectionDisconnectPreviewResponse>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection/disconnect-preview`,
+    { auth: true }
+  );
+}
+
+export async function disconnectAwsCodeConnection(
+  connectionId: string,
+  input: DisconnectAwsCodeConnectionRequest
+): Promise<void> {
+  await apiFetch<void>(
+    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection`,
+    {
+      auth: true,
+      method: "DELETE",
+      body: input
+    }
   );
 }
 

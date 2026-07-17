@@ -7,6 +7,10 @@ import type {
   AwsConnectionRecord,
   AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
+import type {
+  AwsCodeConnectionRecord,
+  AwsCodeConnectionRepository
+} from "../aws-connections/aws-codeconnection-service.js";
 import { registerAwsConnectionRoutes } from "./aws-connections.js";
 
 process.env.NODE_ENV = "test";
@@ -14,6 +18,73 @@ process.env.AUTH_TOKEN_SECRET = "test-auth-token-secret-with-at-least-32-charact
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const connectionId = "22222222-2222-4222-8222-222222222222";
+
+test("GitHub build disconnect requires an exact cleanup preview before deleting managed resources", async () => {
+  const now = new Date("2026-07-17T00:00:00.000Z");
+  let cleanupCalls = 0;
+  let record: AwsCodeConnectionRecord | undefined = {
+    id: "33333333-3333-4333-8333-333333333333",
+    awsConnectionId: connectionId,
+    connectionArn:
+      "arn:aws:codeconnections:ap-northeast-2:123456789012:connection/demo",
+    providerType: "GitHub",
+    status: "AVAILABLE",
+    statusReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+  const repository = createCodeConnectionRepository({
+    getRecord: () => record,
+    setRecord: (next) => {
+      record = next;
+    }
+  });
+  const app = Fastify();
+  await registerAwsConnectionRoutes(app, {
+    getDatabaseClient: () => createAuthDatabaseClient(),
+    createAwsCodeConnectionRepository: () => repository,
+    cleanupManagedAwsResources: async () => {
+      cleanupCalls += 1;
+    },
+    now: () => now
+  });
+  const headers = { authorization: `Bearer ${await createAccessToken(userId)}` };
+
+  const unconfirmed = await app.inject({
+    method: "DELETE",
+    url: `/aws/connections/${connectionId}/codeconnection`,
+    headers
+  });
+  assert.equal(unconfirmed.statusCode, 400);
+  assert.equal(cleanupCalls, 0);
+
+  const previewResponse = await app.inject({
+    method: "GET",
+    url: `/aws/connections/${connectionId}/codeconnection/disconnect-preview`,
+    headers
+  });
+  assert.equal(previewResponse.statusCode, 200);
+  const preview = previewResponse.json<{
+    canDisconnect: boolean;
+    confirmationToken: string;
+  }>();
+  assert.equal(preview.canDisconnect, true);
+
+  const confirmed = await app.inject({
+    method: "DELETE",
+    url: `/aws/connections/${connectionId}/codeconnection`,
+    headers,
+    payload: {
+      confirmedManagedCleanup: true,
+      confirmationToken: preview.confirmationToken
+    }
+  });
+  assert.equal(confirmed.statusCode, 204);
+  assert.equal(cleanupCalls, 1);
+  assert.equal(record, undefined);
+
+  await app.close();
+});
 
 test("AWS connection DELETE performs no managed cleanup without preview confirmation", async () => {
   let claimCalls = 0;
@@ -324,6 +395,68 @@ function createRepository(input: {
     async updateAwsConnectionVerification() {
       return undefined;
     }
+  };
+}
+
+function createCodeConnectionRepository(input: {
+  getRecord: () => AwsCodeConnectionRecord | undefined;
+  setRecord: (record: AwsCodeConnectionRecord | undefined) => void;
+}): AwsCodeConnectionRepository {
+  const managedResources = {
+    codeBuildProjects: [
+      {
+        projectId: "44444444-4444-4444-8444-444444444444",
+        projectName: "sketchcatch-demo-build",
+        serviceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-demo"
+      }
+    ],
+    codeConnectionArn:
+      "arn:aws:codeconnections:ap-northeast-2:123456789012:connection/demo"
+  };
+  return {
+    async findVerifiedConnection() {
+      return {
+        id: connectionId,
+        accountId: "123456789012",
+        roleArn:
+          "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-demo",
+        externalId: "external-id",
+        region: "ap-northeast-2"
+      };
+    },
+    async findByAwsConnectionId() {
+      return input.getRecord();
+    },
+    async reserve() {
+      throw new Error("Not used");
+    },
+    async claimCreation() {
+      return false;
+    },
+    async completeCreation() {
+      return undefined;
+    },
+    async markCreationFailed() {},
+    async save() {
+      throw new Error("Not used");
+    },
+    async findManagedResources() {
+      return managedResources;
+    },
+    async hasActiveBuildWork() {
+      return false;
+    },
+    async claimDeletion({ now }) {
+      const record = input.getRecord();
+      if (!record) return "not_found";
+      input.setRecord({ ...record, status: "DELETING", statusReason: null, updatedAt: now });
+      return "claimed";
+    },
+    async completeDeletion() {
+      input.setRecord(undefined);
+      return true;
+    },
+    async markDeletionFailed() {}
   };
 }
 

@@ -65,6 +65,13 @@ test("settings gates GitHub build connection behind a verified AWS connection", 
   assert.match(source, /AWS에서 승인하기/);
   assert.match(source, /createAwsCodeConnection/);
   assert.match(source, /refreshAwsCodeConnection/);
+  assert.match(source, /getAwsCodeConnectionDisconnectPreview/);
+  assert.match(source, /disconnectAwsCodeConnection/);
+  assert.match(source, /GitHub 빌드 연결 해제/);
+  assert.match(source, /배포된 애플리케이션 및 인프라는 유지됩니다\./);
+  assert.match(source, /confirmedManagedCleanup: true/);
+  assert.match(source, /confirmationToken: codeConnectionDeletionPreview\.confirmationToken/);
+  assert.match(source, /onDisconnect/);
   assert.match(source, /connection\.status === "verified"/);
   assert.match(source, /setupModalAccessibility/);
   assert.match(source, /ref=\{modalOverlayRef\}/);

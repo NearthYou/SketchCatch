@@ -8,17 +8,22 @@ import {
   ListTagsForResourceCommand,
   type CodeConnectionsClientConfig
 } from "@aws-sdk/client-codeconnections";
-import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
-import type {
-  AwsCodeConnectionResponse,
-  AwsCodeConnectionStatus
-} from "@sketchcatch/types";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import type { AwsCodeConnectionResponse, AwsCodeConnectionStatus } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { awsCodeConnections, awsConnections } from "../db/schema.js";
+import {
+  awsCodeConnections,
+  awsConnections,
+  projectBuildEnvironments,
+  projectDeploymentTargets,
+  projectExecutionLeases
+} from "../db/schema.js";
+import type { AwsConnectionManagedResources } from "./aws-connection-service.js";
 import { createAwsSdkStsGateway } from "./aws-connection-test-service.js";
 
 export type VerifiedAwsConnectionForCodeConnection = {
   id: string;
+  accountId: string;
   roleArn: string;
   externalId: string;
   region: string;
@@ -51,6 +56,15 @@ export type AwsCodeConnectionRepository = {
   save(
     input: Omit<AwsCodeConnectionRecord, "createdAt"> & { createdAt?: Date }
   ): Promise<AwsCodeConnectionRecord>;
+  findManagedResources(connectionId: string): Promise<AwsConnectionManagedResources>;
+  hasActiveBuildWork(connectionId: string): Promise<boolean>;
+  claimDeletion(input: {
+    id: string;
+    connectionId: string;
+    now: Date;
+  }): Promise<"claimed" | "blocked" | "busy" | "not_found">;
+  completeDeletion(input: { id: string; connectionId: string }): Promise<boolean>;
+  markDeletionFailed(input: { id: string; reason: string; now: Date }): Promise<void>;
 };
 
 export type AwsCodeConnectionGateway = {
@@ -83,7 +97,10 @@ export type AwsCodeConnectionErrorCode =
   | "AWS_CONNECTION_REQUIRED"
   | "CODECONNECTION_NOT_FOUND"
   | "CODECONNECTION_CREATE_FAILED"
-  | "CODECONNECTION_REFRESH_FAILED";
+  | "CODECONNECTION_REFRESH_FAILED"
+  | "CODECONNECTION_DELETE_BLOCKED"
+  | "CODECONNECTION_DELETE_CONFIRMATION_REQUIRED"
+  | "CODECONNECTION_DELETE_FAILED";
 
 export class AwsCodeConnectionError extends Error {
   readonly statusCode: number;
@@ -107,6 +124,7 @@ export function createPostgresAwsCodeConnectionRepository(
       const [connection] = await db
         .select({
           id: awsConnections.id,
+          accountId: awsConnections.accountId,
           roleArn: awsConnections.roleArn,
           externalId: awsConnections.externalId,
           region: awsConnections.region
@@ -118,12 +136,13 @@ export function createPostgresAwsCodeConnectionRepository(
             eq(awsConnections.userId, userId),
             eq(awsConnections.status, "verified"),
             isNull(awsConnections.deletionStartedAt),
+            isNotNull(awsConnections.accountId),
             isNotNull(awsConnections.roleArn)
           )
         );
 
-      if (!connection?.roleArn) return undefined;
-      return { ...connection, roleArn: connection.roleArn };
+      if (!connection?.accountId || !connection.roleArn) return undefined;
+      return { ...connection, accountId: connection.accountId, roleArn: connection.roleArn };
     },
 
     async findByAwsConnectionId(connectionId) {
@@ -240,6 +259,108 @@ export function createPostgresAwsCodeConnectionRepository(
         );
       }
       return connection;
+    },
+
+    async findManagedResources(connectionId) {
+      const [buildRows, codeConnectionRows] = await Promise.all([
+        db
+          .select({
+            projectId: projectBuildEnvironments.projectId,
+            projectName: projectBuildEnvironments.codeBuildProjectName,
+            serviceRoleArn: projectBuildEnvironments.codeBuildServiceRoleArn
+          })
+          .from(projectBuildEnvironments)
+          .where(eq(projectBuildEnvironments.awsConnectionId, connectionId)),
+        db
+          .select({ connectionArn: awsCodeConnections.connectionArn })
+          .from(awsCodeConnections)
+          .where(eq(awsCodeConnections.awsConnectionId, connectionId))
+      ]);
+      return {
+        codeBuildProjects: buildRows,
+        codeConnectionArn: codeConnectionRows[0]?.connectionArn ?? null
+      };
+    },
+
+    async hasActiveBuildWork(connectionId) {
+      return hasActiveBuildWork(db, connectionId);
+    },
+
+    async claimDeletion(input) {
+      return db.transaction(async (transaction) => {
+        const tx = transaction as unknown as Database;
+        const [awsConnection] = await transaction
+          .select({ deletionStartedAt: awsConnections.deletionStartedAt })
+          .from(awsConnections)
+          .where(eq(awsConnections.id, input.connectionId))
+          .for("update");
+        if (!awsConnection) return "not_found" as const;
+        if (awsConnection.deletionStartedAt) return "blocked" as const;
+        const [record] = await transaction
+          .select()
+          .from(awsCodeConnections)
+          .where(
+            and(
+              eq(awsCodeConnections.id, input.id),
+              eq(awsCodeConnections.awsConnectionId, input.connectionId)
+            )
+          )
+          .for("update");
+        if (!record) return "not_found" as const;
+        if (record.status === "CREATING" || record.status === "DELETING") {
+          return "busy" as const;
+        }
+        if (await hasActiveBuildWork(tx, input.connectionId)) {
+          return "blocked" as const;
+        }
+        const [claimed] = await transaction
+          .update(awsCodeConnections)
+          .set({ status: "DELETING", statusReason: null, updatedAt: input.now })
+          .where(
+            and(
+              eq(awsCodeConnections.id, input.id),
+              eq(awsCodeConnections.awsConnectionId, input.connectionId),
+              eq(awsCodeConnections.updatedAt, record.updatedAt)
+            )
+          )
+          .returning({ id: awsCodeConnections.id });
+        return claimed ? "claimed" as const : "busy" as const;
+      });
+    },
+
+    async completeDeletion(input) {
+      return db.transaction(async (transaction) => {
+        await transaction
+          .delete(projectBuildEnvironments)
+          .where(eq(projectBuildEnvironments.awsConnectionId, input.connectionId));
+        const [deleted] = await transaction
+          .delete(awsCodeConnections)
+          .where(
+            and(
+              eq(awsCodeConnections.id, input.id),
+              eq(awsCodeConnections.awsConnectionId, input.connectionId),
+              eq(awsCodeConnections.status, "DELETING")
+            )
+          )
+          .returning({ id: awsCodeConnections.id });
+        return Boolean(deleted);
+      });
+    },
+
+    async markDeletionFailed(input) {
+      await db
+        .update(awsCodeConnections)
+        .set({
+          status: "ERROR",
+          statusReason: input.reason.slice(0, 500),
+          updatedAt: input.now
+        })
+        .where(
+          and(
+            eq(awsCodeConnections.id, input.id),
+            eq(awsCodeConnections.status, "DELETING")
+          )
+        );
     }
   };
 }
@@ -583,4 +704,34 @@ function toSafeCreationFailureReason(error: unknown): string {
     0,
     500
   );
+}
+
+async function hasActiveBuildWork(db: Database, connectionId: string): Promise<boolean> {
+  const [leaseRows, preparingRows] = await Promise.all([
+    db
+      .select({ projectId: projectExecutionLeases.projectId })
+      .from(projectExecutionLeases)
+      .innerJoin(
+        projectDeploymentTargets,
+        eq(projectDeploymentTargets.projectId, projectExecutionLeases.projectId)
+      )
+      .where(
+        and(
+          eq(projectDeploymentTargets.connectionId, connectionId),
+          inArray(projectExecutionLeases.status, ["active", "releasing"])
+        )
+      )
+      .limit(1),
+    db
+      .select({ id: projectBuildEnvironments.id })
+      .from(projectBuildEnvironments)
+      .where(
+        and(
+          eq(projectBuildEnvironments.awsConnectionId, connectionId),
+          eq(projectBuildEnvironments.status, "preparing")
+        )
+      )
+      .limit(1)
+  ]);
+  return leaseRows.length > 0 || preparingRows.length > 0;
 }

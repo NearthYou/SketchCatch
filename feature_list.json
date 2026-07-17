@@ -767,6 +767,7 @@
         "비공개 Repository 권한 복구는 입력한 owner/name과 정확히 같은 Repository만 연결하고 여러 installation을 임의 선택하지 않는다.",
         "GitHub callback은 SourceRepository 연결까지만 수행하고 배포 타깃이나 모니터링 설정을 자동 저장하지 않는다.",
         "전역 환경설정의 GitHub 버튼은 미연결 시 GitHub 연결하기, 연결 시 권한 추가를 표시한다.",
+        "전역 환경설정의 GitHub 빌드 연결은 exact 관리 리소스 미리보기와 사용자 확인 뒤 해제할 수 있고 AWS 계정 연결과 배포 리소스는 유지한다.",
         "Workspace Delivery 조회는 GitHub, 분석 출처, SourceRepository, 환경, 배포 타깃, 모니터링, 준비 상태를 변경 없이 조합한다.",
         "기존 프로젝트 설정 URL과 배포 모달의 CI/CD 진입은 Workspace Delivery로 모인다.",
         "Board 분석 commit과 마지막 인증 분석 commit이 다르면 비차단 경고만 표시하며 현재 GitHub head라고 단정하거나 Board를 자동 변경하지 않는다."
@@ -775,13 +776,15 @@
         "lastVerified": "2026-07-17",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/db/repository-analysis-records-migration.test.ts src/routes/repository-analysis-records.test.ts src/routes/project-delivery-profile.test.ts src/delivery/project-delivery-profile-service.test.ts src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-target-connection.test.ts src/git-cicd/git-cicd-readiness-service.test.ts",
+          "pnpm --dir apps/api exec tsx --test src/aws-connections/aws-codeconnection-service.test.ts src/routes/aws-connections.test.ts",
           "pnpm --dir apps/web exec tsx --test app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-analysis-record-payload.test.ts app/workspace/repository/repository-recovery-action.test.ts app/workspace/workspace-start-mode.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/delivery-repository-freshness.test.ts features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/cicd-return-navigation.test.ts",
+          "pnpm --dir apps/web exec tsx --test features/dashboard/aws-connection-settings.test.ts",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Focused API profile, provenance, permission, public-error, migration, and read-only readiness tests pass 101/101. Focused Web Delivery target, routing, return-path, recovery, resume, and freshness regressions pass. Harness, lint, typecheck, and production build pass. The shared target editor refreshes the read-only Delivery Profile after save and uses the Board's RepositoryAnalysisRecord before later SourceRepository analysis, without starting a deployment or Git handoff. The Web full suite has one unchanged destroy-plan approval-state failure outside these files. The API full suite was stopped after extended inactivity in existing external-dependency paths; its isolated feature suite is green."
+        "notes": "Focused API profile, provenance, permission, public-error, migration, read-only readiness, and GitHub build disconnect tests pass. Focused Web Delivery target, routing, return-path, recovery, resume, freshness, and AWS settings regressions pass. Harness, lint, typecheck, and production build pass. The shared target editor refreshes the read-only Delivery Profile after save and uses the Board's RepositoryAnalysisRecord before later SourceRepository analysis, without starting a deployment or Git handoff. GitHub build disconnect reuses exact managed cleanup while preserving the AWS account connection and deployed resources. The Web full suite has one unchanged destroy-plan approval-state failure outside these files. The API full suite was stopped after extended inactivity in existing external-dependency paths; its isolated feature suite is green."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. Migration 0049 adds repository_analysis_records."
     },

@@ -17,6 +17,10 @@ import {
   type AwsCodeConnectionRepository
 } from "../aws-connections/aws-codeconnection-service.js";
 import {
+  disconnectAwsCodeConnection,
+  getAwsCodeConnectionDisconnectPreview
+} from "../aws-connections/aws-codeconnection-disconnect-service.js";
+import {
   AwsConnectionConflictError,
   AwsConnectionDeleteConflictError,
   AwsConnectionDeletionConfirmationError,
@@ -93,6 +97,8 @@ const deleteAwsConnectionBodySchema = z.object({
   confirmedManagedCleanup: z.literal(true),
   confirmationToken: z.string().regex(/^[a-f0-9]{64}$/u)
 });
+
+const disconnectAwsCodeConnectionBodySchema = deleteAwsConnectionBodySchema;
 
 export type AwsConnectionRouteOptions = {
   getDatabaseClient?: () => DatabaseClient;
@@ -209,6 +215,58 @@ export async function registerAwsConnectionRoutes(
         repository
       );
       return reply.status(200).send(result);
+    } catch (error) {
+      return handleAwsConnectionError(error, reply);
+    }
+  });
+
+  app.get(
+    "/aws/connections/:connectionId/codeconnection/disconnect-preview",
+    async (request, reply) => {
+      const params = awsConnectionParamsSchema.parse(request.params);
+      const client = getAwsConnectionDatabaseClient();
+      const currentUserId = await requireActiveUserId(request, () => client);
+      const repository =
+        options?.createAwsCodeConnectionRepository?.(client.db) ??
+        createPostgresAwsCodeConnectionRepository(client.db);
+
+      try {
+        const result = await getAwsCodeConnectionDisconnectPreview(
+          { connectionId: params.connectionId, userId: currentUserId },
+          repository
+        );
+        return reply.status(200).send(result);
+      } catch (error) {
+        return handleAwsConnectionError(error, reply);
+      }
+    }
+  );
+
+  app.delete("/aws/connections/:connectionId/codeconnection", async (request, reply) => {
+    const params = awsConnectionParamsSchema.parse(request.params);
+    const body = disconnectAwsCodeConnectionBodySchema.parse(request.body);
+    const client = getAwsConnectionDatabaseClient();
+    const currentUserId = await requireActiveUserId(request, () => client);
+    const repository =
+      options?.createAwsCodeConnectionRepository?.(client.db) ??
+      createPostgresAwsCodeConnectionRepository(client.db);
+
+    try {
+      await disconnectAwsCodeConnection(
+        {
+          connectionId: params.connectionId,
+          userId: currentUserId,
+          confirmedManagedCleanup: body.confirmedManagedCleanup,
+          confirmationToken: body.confirmationToken
+        },
+        repository,
+        {
+          cleanupManagedResources:
+            options?.cleanupManagedAwsResources ?? createAwsConnectionManagedCleanup(),
+          ...(options?.now ? { now: options.now } : {})
+        }
+      );
+      return reply.status(204).send();
     } catch (error) {
       return handleAwsConnectionError(error, reply);
     }
