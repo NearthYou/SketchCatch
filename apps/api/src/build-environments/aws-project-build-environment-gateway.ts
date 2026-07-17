@@ -13,6 +13,18 @@ import {
   type CloudWatchLogsClientConfig
 } from "@aws-sdk/client-cloudwatch-logs";
 import {
+  CreateRepositoryCommand,
+  DeleteRepositoryCommand,
+  DescribeRepositoriesCommand,
+  ECRClient,
+  GetLifecyclePolicyCommand,
+  ListTagsForResourceCommand as ListEcrTagsForResourceCommand,
+  PutImageScanningConfigurationCommand,
+  PutImageTagMutabilityCommand,
+  PutLifecyclePolicyCommand,
+  type ECRClientConfig
+} from "@aws-sdk/client-ecr";
+import {
   CreateRoleCommand,
   DeleteRoleCommand,
   DeleteRolePermissionsBoundaryCommand,
@@ -32,6 +44,10 @@ import {
   type IAMClientConfig
 } from "@aws-sdk/client-iam";
 import { createAwsSdkStsGateway } from "../aws-connections/aws-connection-test-service.js";
+import {
+  createProjectBuildCacheIdentity,
+  projectBuildCacheRepositoryActions
+} from "./project-build-cache.js";
 import type {
   DesiredProjectBuildEnvironment,
   ProjectBuildEnvironmentGateway,
@@ -51,7 +67,22 @@ phases:
     commands:
       - echo "SketchCatch server-generated buildspecOverride is required"
 `;
-const forbiddenBuildRoleActions = ["ecr:", "ecs:", "s3:", "cloudfront:", "iam:passrole"];
+const forbiddenBuildRoleActions = ["ecs:", "s3:", "cloudfront:", "iam:passrole"];
+const buildCacheLifecyclePolicy = {
+  rules: [
+    {
+      rulePriority: 1,
+      description: "Keep the three most recent SketchCatch build cache images",
+      selection: {
+        tagStatus: "any",
+        countType: "imageCountMoreThan",
+        countNumber: 3
+      },
+      action: { type: "expire" }
+    }
+  ]
+} as const;
+const buildCacheLifecyclePolicyText = JSON.stringify(buildCacheLifecyclePolicy);
 
 type AwsCommandClient = {
   send(command: unknown): Promise<Record<string, unknown>>;
@@ -62,6 +93,7 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
   assumeRole?: ReturnType<typeof createAwsSdkStsGateway>["assumeRole"];
   createIamClient?: (configuration: IAMClientConfig) => AwsCommandClient;
   createCodeBuildClient?: (configuration: CodeBuildClientConfig) => AwsCommandClient;
+  createEcrClient?: (configuration: ECRClientConfig) => AwsCommandClient;
   createCloudWatchLogsClient?: (
     configuration: CloudWatchLogsClientConfig
   ) => AwsCommandClient;
@@ -73,6 +105,9 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
   const createCodeBuildClient =
     options.createCodeBuildClient ??
     ((configuration) => new CodeBuildClient(configuration) as unknown as AwsCommandClient);
+  const createEcrClient =
+    options.createEcrClient ??
+    ((configuration) => new ECRClient(configuration) as unknown as AwsCommandClient);
   const createCloudWatchLogsClient =
     options.createCloudWatchLogsClient ??
     ((configuration) => new CloudWatchLogsClient(configuration) as unknown as AwsCommandClient);
@@ -82,6 +117,7 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
     operation: (clients: {
       iam: AwsCommandClient;
       codeBuild: AwsCommandClient;
+      ecr: AwsCommandClient;
       logs: AwsCommandClient;
     }) => Promise<T>
   ): Promise<T> {
@@ -96,31 +132,38 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
       region: input.awsConnection.region,
       credentials
     });
+    const ecr = createEcrClient({ region: input.awsConnection.region, credentials });
     const logs = createCloudWatchLogsClient({ region: input.awsConnection.region, credentials });
     try {
-      return await operation({ iam, codeBuild, logs });
+      return await operation({ iam, codeBuild, ecr, logs });
     } finally {
       iam.destroy();
       codeBuild.destroy();
+      ecr.destroy();
       logs.destroy();
     }
   }
 
   return {
     async reconcile(input) {
-      return withClients(input, async ({ iam, codeBuild }) => {
+      return withClients(input, async ({ iam, codeBuild, ecr }) => {
+        let createdCacheRepository = false;
         let createdRole = false;
         let createdProject = false;
         try {
+          createdCacheRepository = await reconcileBuildCacheRepository(ecr, input);
           createdRole = await reconcileBuildRole(iam, input);
           createdProject = await reconcileCodeBuildProject(codeBuild, input);
-          return await verifyBuildEnvironmentWithPropagationRetry({ iam, codeBuild }, input);
+          return await verifyBuildEnvironmentWithPropagationRetry({ iam, codeBuild, ecr }, input);
         } catch (error) {
           if (createdProject) {
             await cleanupOwnedCodeBuildProject(codeBuild, input).catch(() => undefined);
           }
           if (createdRole) {
             await cleanupOwnedBuildRole(iam, input).catch(() => undefined);
+          }
+          if (createdCacheRepository) {
+            await cleanupOwnedBuildCacheRepository(ecr, input).catch(() => undefined);
           }
           throw error;
         }
@@ -134,8 +177,19 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
     async remove(input) {
       return withRemovalClients(
         input,
-        { assumeRole, createIamClient, createCodeBuildClient, createCloudWatchLogsClient },
-        async ({ iam, codeBuild, logs }) => {
+        {
+          assumeRole,
+          createIamClient,
+          createCodeBuildClient,
+          createEcrClient,
+          createCloudWatchLogsClient
+        },
+        async ({ iam, codeBuild, ecr, logs }) => {
+          const buildCache = createProjectBuildCacheIdentity({
+            projectId: input.projectId,
+            accountId: input.awsConnection.accountId,
+            region: input.awsConnection.region
+          });
           const project = await getCodeBuildProject(codeBuild, input.codeBuildProjectName);
           const role = await getRole(iam, input.codeBuildServiceRoleName);
           const roleTags = role ? await getRoleTags(iam, input.codeBuildServiceRoleName) : [];
@@ -169,6 +223,10 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
             );
           }
           if (role) await cleanupBuildRole(iam, input.codeBuildServiceRoleName);
+          await cleanupOwnedBuildCacheRepository(ecr, {
+            ...input,
+            buildCache
+          });
         }
       );
     }
@@ -181,6 +239,7 @@ async function withRemovalClients<T>(
     assumeRole: ReturnType<typeof createAwsSdkStsGateway>["assumeRole"];
     createIamClient: (configuration: IAMClientConfig) => AwsCommandClient;
     createCodeBuildClient: (configuration: CodeBuildClientConfig) => AwsCommandClient;
+    createEcrClient: (configuration: ECRClientConfig) => AwsCommandClient;
     createCloudWatchLogsClient: (
       configuration: CloudWatchLogsClientConfig
     ) => AwsCommandClient;
@@ -188,6 +247,7 @@ async function withRemovalClients<T>(
   operation: (clients: {
     iam: AwsCommandClient;
     codeBuild: AwsCommandClient;
+    ecr: AwsCommandClient;
     logs: AwsCommandClient;
   }) => Promise<T>
 ): Promise<T> {
@@ -200,14 +260,234 @@ async function withRemovalClients<T>(
   const configuration = { region: input.awsConnection.region, credentials };
   const iam = dependencies.createIamClient(configuration);
   const codeBuild = dependencies.createCodeBuildClient(configuration);
+  const ecr = dependencies.createEcrClient(configuration);
   const logs = dependencies.createCloudWatchLogsClient(configuration);
   try {
-    return await operation({ iam, codeBuild, logs });
+    return await operation({ iam, codeBuild, ecr, logs });
   } finally {
     iam.destroy();
     codeBuild.destroy();
+    ecr.destroy();
     logs.destroy();
   }
+}
+
+async function reconcileBuildCacheRepository(
+  ecr: AwsCommandClient,
+  input: DesiredProjectBuildEnvironment
+): Promise<boolean> {
+  const observed = await getBuildCacheRepository(ecr, input.buildCache.repositoryName);
+  if (observed) {
+    const tags = await getBuildCacheTags(ecr, input.buildCache.repositoryArn);
+    if (!hasBuildCacheOwnershipTags(tags, input.projectId)) {
+      throw new Error("Refusing to update an unmanaged ECR build cache repository");
+    }
+    if (!hasSupportedBuildCacheEncryption(observed)) {
+      throw new Error("ECR build cache repository encryption does not match the project contract");
+    }
+    if (observed.imageTagMutability !== "MUTABLE") {
+      await ecr.send(
+        new PutImageTagMutabilityCommand({
+          repositoryName: input.buildCache.repositoryName,
+          imageTagMutability: "MUTABLE"
+        })
+      );
+    }
+    if (readScanOnPush(observed) !== false) {
+      await ecr.send(
+        new PutImageScanningConfigurationCommand({
+          repositoryName: input.buildCache.repositoryName,
+          imageScanningConfiguration: { scanOnPush: false }
+        })
+      );
+    }
+    await putBuildCacheLifecyclePolicy(ecr, input.buildCache.repositoryName);
+    return false;
+  }
+
+  await ecr.send(
+    new CreateRepositoryCommand({
+      repositoryName: input.buildCache.repositoryName,
+      imageTagMutability: "MUTABLE",
+      imageScanningConfiguration: { scanOnPush: false },
+      encryptionConfiguration: { encryptionType: "AES256" },
+      tags: buildCacheOwnershipTags(input.projectId)
+    })
+  );
+  await putBuildCacheLifecyclePolicy(ecr, input.buildCache.repositoryName);
+  return true;
+}
+
+async function putBuildCacheLifecyclePolicy(
+  ecr: AwsCommandClient,
+  repositoryName: string
+): Promise<void> {
+  await ecr.send(
+    new PutLifecyclePolicyCommand({
+      repositoryName,
+      lifecyclePolicyText: buildCacheLifecyclePolicyText
+    })
+  );
+}
+
+async function verifyBuildCacheRepository(
+  ecr: AwsCommandClient,
+  input: DesiredProjectBuildEnvironment
+): Promise<ProjectBuildEnvironmentVerification> {
+  const repository = await getBuildCacheRepository(ecr, input.buildCache.repositoryName);
+  if (!repository) return failed("ECR build cache repository was not found");
+  if (
+    repository.repositoryName !== input.buildCache.repositoryName ||
+    repository.repositoryArn !== input.buildCache.repositoryArn ||
+    repository.repositoryUri !== input.buildCache.repositoryUri
+  ) {
+    return failed("ECR build cache repository coordinates do not match the project contract");
+  }
+  if (
+    repository.imageTagMutability !== "MUTABLE" ||
+    readScanOnPush(repository) !== false ||
+    !hasSupportedBuildCacheEncryption(repository)
+  ) {
+    return failed("ECR build cache repository configuration changed from the project contract");
+  }
+  const tags = await getBuildCacheTags(ecr, input.buildCache.repositoryArn);
+  if (!hasBuildCacheOwnershipTags(tags, input.projectId)) {
+    return failed("ECR build cache repository ownership tags are missing or changed");
+  }
+  const lifecyclePolicy = await getBuildCacheLifecyclePolicy(
+    ecr,
+    input.buildCache.repositoryName
+  );
+  if (!lifecyclePolicy || !jsonDocumentsEqual(lifecyclePolicy, buildCacheLifecyclePolicyText)) {
+    return failed("ECR build cache repository lifecycle policy changed from the project contract");
+  }
+  return { verified: true, statusReason: null };
+}
+
+async function cleanupOwnedBuildCacheRepository(
+  ecr: AwsCommandClient,
+  input: { projectId: string; buildCache: DesiredProjectBuildEnvironment["buildCache"] }
+): Promise<void> {
+  const repository = await getBuildCacheRepository(ecr, input.buildCache.repositoryName);
+  if (!repository) return;
+  if (
+    repository.repositoryArn !== input.buildCache.repositoryArn ||
+    repository.repositoryUri !== input.buildCache.repositoryUri
+  ) {
+    throw new Error("Refusing to delete an unmanaged ECR build cache repository");
+  }
+  const tags = await getBuildCacheTags(ecr, input.buildCache.repositoryArn);
+  if (!hasBuildCacheOwnershipTags(tags, input.projectId)) {
+    throw new Error("Refusing to delete an unmanaged ECR build cache repository");
+  }
+  await ignoreMissing(() =>
+    ecr.send(
+      new DeleteRepositoryCommand({
+        repositoryName: input.buildCache.repositoryName,
+        force: true
+      })
+    )
+  );
+}
+
+async function getBuildCacheRepository(
+  ecr: AwsCommandClient,
+  repositoryName: string
+): Promise<Record<string, unknown> | null> {
+  try {
+    const response = await ecr.send(
+      new DescribeRepositoriesCommand({ repositoryNames: [repositoryName] })
+    );
+    return ((response.repositories as Array<Record<string, unknown>> | undefined) ?? [])[0] ?? null;
+  } catch (error) {
+    if (isEcrRepositoryMissing(error)) return null;
+    throw error;
+  }
+}
+
+async function getBuildCacheTags(
+  ecr: AwsCommandClient,
+  repositoryArn: string
+): Promise<Array<{ Key?: string; Value?: string }>> {
+  const response = await ecr.send(
+    new ListEcrTagsForResourceCommand({ resourceArn: repositoryArn })
+  );
+  return (response.tags as Array<{ Key?: string; Value?: string }> | undefined) ?? [];
+}
+
+async function getBuildCacheLifecyclePolicy(
+  ecr: AwsCommandClient,
+  repositoryName: string
+): Promise<string | null> {
+  try {
+    const response = await ecr.send(new GetLifecyclePolicyCommand({ repositoryName }));
+    return typeof response.lifecyclePolicyText === "string"
+      ? response.lifecyclePolicyText
+      : null;
+  } catch (error) {
+    if (isEcrLifecyclePolicyMissing(error)) return null;
+    throw error;
+  }
+}
+
+function buildCacheOwnershipTags(projectId: string) {
+  return [
+    { Key: "ManagedBy", Value: "SketchCatch" },
+    { Key: "SketchCatchProject", Value: projectId },
+    { Key: "SketchCatchPurpose", Value: "BuildCache" }
+  ];
+}
+
+function hasBuildCacheOwnershipTags(
+  tags: Array<{ Key?: string; Value?: string }>,
+  projectId: string
+): boolean {
+  const normalized = new Map(
+    tags.flatMap((tag) =>
+      typeof tag.Key === "string" && typeof tag.Value === "string"
+        ? [[tag.Key, tag.Value] as const]
+        : []
+    )
+  );
+  return (
+    normalized.get("ManagedBy") === "SketchCatch" &&
+    normalized.get("SketchCatchProject") === projectId &&
+    normalized.get("SketchCatchPurpose") === "BuildCache"
+  );
+}
+
+function hasSupportedBuildCacheEncryption(repository: Record<string, unknown>): boolean {
+  const encryption = repository.encryptionConfiguration as
+    | { encryptionType?: unknown }
+    | undefined;
+  return encryption?.encryptionType === "AES256";
+}
+
+function readScanOnPush(repository: Record<string, unknown>): boolean | undefined {
+  return (repository.imageScanningConfiguration as { scanOnPush?: boolean } | undefined)
+    ?.scanOnPush;
+}
+
+function jsonDocumentsEqual(left: string, right: string): boolean {
+  try {
+    return canonicalizePolicyValue(JSON.parse(left)) === canonicalizePolicyValue(JSON.parse(right));
+  } catch {
+    return false;
+  }
+}
+
+function isEcrRepositoryMissing(error: unknown): boolean {
+  return getAwsErrorName(error) === "RepositoryNotFoundException";
+}
+
+function isEcrLifecyclePolicyMissing(error: unknown): boolean {
+  return getAwsErrorName(error) === "LifecyclePolicyNotFoundException";
+}
+
+function getAwsErrorName(error: unknown): string | undefined {
+  return error && typeof error === "object" && "name" in error
+    ? String((error as { name?: unknown }).name)
+    : undefined;
 }
 
 async function reconcileBuildRole(
@@ -383,9 +663,11 @@ async function cleanupBuildRole(iam: AwsCommandClient, roleName: string): Promis
 }
 
 async function verifyBuildEnvironment(
-  clients: { iam: AwsCommandClient; codeBuild: AwsCommandClient },
+  clients: { iam: AwsCommandClient; codeBuild: AwsCommandClient; ecr: AwsCommandClient },
   input: DesiredProjectBuildEnvironment
 ): Promise<ProjectBuildEnvironmentVerification> {
+  const cacheVerification = await verifyBuildCacheRepository(clients.ecr, input);
+  if (!cacheVerification.verified) return cacheVerification;
   const role = await getRole(clients.iam, input.codeBuildServiceRoleName);
   if (!role) return failed("CodeBuild service role was not found");
   if (role.arn !== input.codeBuildServiceRoleArn) {
@@ -433,7 +715,9 @@ async function verifyBuildEnvironment(
     "codeconnections:useconnection",
     "codeconnections:getconnection",
     "codeconnections:getconnectiontoken",
-    "codestar-connections:useconnection"
+    "codestar-connections:useconnection",
+    "ecr:getauthorizationtoken",
+    ...projectBuildCacheRepositoryActions.map((action) => action.toLowerCase())
   ];
   if (requiredActions.some((action) => !actions.includes(action))) {
     return failed("CodeBuild service role is missing a build-only permission");
@@ -448,7 +732,7 @@ async function verifyBuildEnvironment(
 }
 
 async function verifyBuildEnvironmentWithPropagationRetry(
-  clients: { iam: AwsCommandClient; codeBuild: AwsCommandClient },
+  clients: { iam: AwsCommandClient; codeBuild: AwsCommandClient; ecr: AwsCommandClient },
   input: DesiredProjectBuildEnvironment
 ): Promise<ProjectBuildEnvironmentVerification> {
   for (let attempt = 0; ; attempt += 1) {
@@ -489,6 +773,16 @@ function createBuildOnlyPolicy(input: DesiredProjectBuildEnvironment): Record<st
           "codestar-connections:UseConnection"
         ],
         Resource: input.codeConnectionArn
+      },
+      {
+        Effect: "Allow",
+        Action: "ecr:GetAuthorizationToken",
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: projectBuildCacheRepositoryActions,
+        Resource: input.buildCache.repositoryArn
       }
     ]
   };
@@ -518,6 +812,17 @@ function createBuildPermissionsBoundaryPolicy(
           `arn:aws:codeconnections:${input.awsConnection.region}:${input.awsConnection.accountId}:connection/*`,
           `arn:aws:codestar-connections:${input.awsConnection.region}:${input.awsConnection.accountId}:connection/*`
         ]
+      },
+      {
+        Effect: "Allow",
+        Action: "ecr:GetAuthorizationToken",
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
+        Action: projectBuildCacheRepositoryActions,
+        Resource:
+          `arn:aws:ecr:${input.awsConnection.region}:${input.awsConnection.accountId}:repository/sketchcatch-*-build-cache`
       }
     ]
   };

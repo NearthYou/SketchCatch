@@ -1,8 +1,125 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createAwsProjectBuildEnvironmentGateway } from "./aws-project-build-environment-gateway.js";
+import {
+  createAwsProjectBuildEnvironmentGateway as createGatewayImplementation
+} from "./aws-project-build-environment-gateway.js";
 import type { DesiredProjectBuildEnvironment } from "./project-build-environment-service.js";
+
+function createAwsProjectBuildEnvironmentGateway(
+  options: Parameters<typeof createGatewayImplementation>[0]
+) {
+  return createGatewayImplementation({
+    createEcrClient: () => createVerifiedEcrClient(),
+    ...options
+  });
+}
+
+test("new build environment creates and verifies its project cache repository", async () => {
+  const calls: string[] = [];
+  const gateway = createGatewayImplementation({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createEcrClient: () => createEcrClient(calls),
+    createIamClient: () => createIamClient(calls, { completeVerification: true }),
+    createCodeBuildClient: () => createCodeBuildClient(calls, { creationSucceeds: true })
+  });
+
+  assert.deepEqual(await gateway.reconcile(desired), {
+    verified: true,
+    statusReason: null
+  });
+  assert.equal(calls.includes("ecr:CreateRepositoryCommand"), true);
+  assert.equal(calls.includes("ecr:PutLifecyclePolicyCommand"), true);
+  assert.equal(calls.includes("ecr:ListTagsForResourceCommand"), true);
+  assert.equal(calls.includes("ecr:GetLifecyclePolicyCommand"), true);
+});
+
+test("failed build role creation removes only the cache repository created by this request", async () => {
+  const calls: string[] = [];
+  const gateway = createGatewayImplementation({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createEcrClient: () => createEcrClient(calls),
+    createIamClient: () => ({
+      async send(): Promise<Record<string, unknown>> {
+        throw new Error("CreateRole failed");
+      },
+      destroy() {}
+    }),
+    createCodeBuildClient: () => createVerifiedCodeBuildClient()
+  });
+
+  await assert.rejects(gateway.reconcile(desired), /CreateRole failed/);
+  assert.equal(calls.includes("ecr:DeleteRepositoryCommand"), true);
+});
+
+test("build environment removal deletes the owned project cache repository", async () => {
+  const calls: string[] = [];
+  const gateway = createGatewayImplementation({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createEcrClient: () => createEcrClient(calls, { repositoryExists: true }),
+    createIamClient: () => createVerifiedIamClient({ includeConnectionTokenAccess: true }),
+    createCodeBuildClient: () => createVerifiedCodeBuildClient(),
+    createCloudWatchLogsClient: () => ({
+      async send(): Promise<Record<string, unknown>> {
+        return {};
+      },
+      destroy() {}
+    })
+  });
+
+  await gateway.remove?.({
+    projectId: desired.projectId,
+    awsConnection: desired.awsConnection,
+    codeBuildProjectName: desired.codeBuildProjectName,
+    codeBuildServiceRoleName: desired.codeBuildServiceRoleName,
+    codeBuildServiceRoleArn: desired.codeBuildServiceRoleArn,
+    permissionsBoundaryArn: desired.permissionsBoundaryArn
+  });
+
+  assert.equal(calls.includes("ecr:DeleteRepositoryCommand"), true);
+});
+
+test("verification rejects a cache repository without project ownership tags", async () => {
+  const gateway = createGatewayImplementation({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createEcrClient: () => ({
+      async send(command: unknown): Promise<Record<string, unknown>> {
+        const name = (command as { constructor: { name: string } }).constructor.name;
+        if (name === "DescribeRepositoriesCommand") {
+          return { repositories: [verifiedEcrRepository()] };
+        }
+        if (name === "ListTagsForResourceCommand") {
+          return { tags: [{ Key: "ManagedBy", Value: "someone-else" }] };
+        }
+        return {};
+      },
+      destroy() {}
+    }),
+    createIamClient: () => createVerifiedIamClient({ includeConnectionTokenAccess: true }),
+    createCodeBuildClient: () => createVerifiedCodeBuildClient()
+  });
+
+  assert.deepEqual(await gateway.verify(desired), {
+    verified: false,
+    statusReason: "ECR build cache repository ownership tags are missing or changed"
+  });
+});
 
 test("failed CodeBuild creation compensates only the role created by this request", async () => {
   const calls: string[] = [];
@@ -319,8 +436,101 @@ const desired: DesiredProjectBuildEnvironment = {
   sourceRepositoryUrl: "https://github.com/jh-9999/audience-live-check.git",
   image: "aws/codebuild/standard:7.0",
   computeType: "BUILD_GENERAL1_SMALL",
+  buildCache: {
+    repositoryName: "sketchcatch-12345678-build-cache",
+    repositoryArn:
+      "arn:aws:ecr:ap-northeast-2:123456789012:repository/sketchcatch-12345678-build-cache",
+    repositoryUri:
+      "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/sketchcatch-12345678-build-cache",
+    cacheTag: "buildcache-v1-linux-amd64",
+    cacheReference:
+      "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/sketchcatch-12345678-build-cache:buildcache-v1-linux-amd64"
+  },
   runtimeFingerprint: "a".repeat(64)
 };
+
+function createEcrClient(
+  calls: string[],
+  options: { repositoryExists?: boolean } = {}
+) {
+  let repositoryExists = options.repositoryExists ?? false;
+  return {
+    async send(command: unknown): Promise<Record<string, unknown>> {
+      const name = (command as { constructor: { name: string } }).constructor.name;
+      calls.push(`ecr:${name}`);
+      if (name === "DescribeRepositoriesCommand") {
+        if (!repositoryExists) throw { name: "RepositoryNotFoundException" };
+        return { repositories: [verifiedEcrRepository()] };
+      }
+      if (name === "CreateRepositoryCommand") {
+        repositoryExists = true;
+        return { repository: verifiedEcrRepository() };
+      }
+      if (name === "ListTagsForResourceCommand") {
+        return { tags: verifiedEcrTags() };
+      }
+      if (name === "GetLifecyclePolicyCommand") {
+        return { lifecyclePolicyText: verifiedEcrLifecyclePolicy() };
+      }
+      if (name === "DeleteRepositoryCommand") repositoryExists = false;
+      return {};
+    },
+    destroy() {}
+  };
+}
+
+function createVerifiedEcrClient() {
+  return {
+    async send(command: unknown): Promise<Record<string, unknown>> {
+      const name = (command as { constructor: { name: string } }).constructor.name;
+      if (name === "DescribeRepositoriesCommand") {
+        return { repositories: [verifiedEcrRepository()] };
+      }
+      if (name === "ListTagsForResourceCommand") return { tags: verifiedEcrTags() };
+      if (name === "GetLifecyclePolicyCommand") {
+        return { lifecyclePolicyText: verifiedEcrLifecyclePolicy() };
+      }
+      return {};
+    },
+    destroy() {}
+  };
+}
+
+function verifiedEcrRepository() {
+  return {
+    repositoryName: desired.buildCache.repositoryName,
+    repositoryArn: desired.buildCache.repositoryArn,
+    repositoryUri: desired.buildCache.repositoryUri,
+    imageTagMutability: "MUTABLE",
+    imageScanningConfiguration: { scanOnPush: false },
+    encryptionConfiguration: { encryptionType: "AES256" }
+  };
+}
+
+function verifiedEcrTags() {
+  return [
+    { Key: "ManagedBy", Value: "SketchCatch" },
+    { Key: "SketchCatchProject", Value: desired.projectId },
+    { Key: "SketchCatchPurpose", Value: "BuildCache" }
+  ];
+}
+
+function verifiedEcrLifecyclePolicy() {
+  return JSON.stringify({
+    rules: [
+      {
+        rulePriority: 1,
+        description: "Keep the three most recent SketchCatch build cache images",
+        selection: {
+          tagStatus: "any",
+          countType: "imageCountMoreThan",
+          countNumber: 3
+        },
+        action: { type: "expire" }
+      }
+    ]
+  });
+}
 
 function createIamClient(
   calls: string[],
@@ -501,6 +711,26 @@ function createVerifiedIamClient(input: {
                       : [])
                   ],
                   Resource: input.wildcardBuildPolicy ? "*" : desired.codeConnectionArn
+                },
+                {
+                  Effect: "Allow",
+                  Action: "ecr:GetAuthorizationToken",
+                  Resource: "*"
+                },
+                {
+                  Effect: "Allow",
+                  Action: [
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage"
+                  ],
+                  Resource: input.wildcardBuildPolicy
+                    ? "*"
+                    : desired.buildCache.repositoryArn
                 }
               ]
             })
@@ -543,6 +773,25 @@ function createVerifiedIamClient(input: {
                       `arn:aws:codeconnections:${desired.awsConnection.region}:${desired.awsConnection.accountId}:connection/*`,
                       `arn:aws:codestar-connections:${desired.awsConnection.region}:${desired.awsConnection.accountId}:connection/*`
                     ]
+                  },
+                  {
+                    Effect: "Allow",
+                    Action: "ecr:GetAuthorizationToken",
+                    Resource: "*"
+                  },
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "ecr:BatchCheckLayerAvailability",
+                      "ecr:GetDownloadUrlForLayer",
+                      "ecr:BatchGetImage",
+                      "ecr:InitiateLayerUpload",
+                      "ecr:UploadLayerPart",
+                      "ecr:CompleteLayerUpload",
+                      "ecr:PutImage"
+                    ],
+                    Resource:
+                      `arn:aws:ecr:${desired.awsConnection.region}:${desired.awsConnection.accountId}:repository/sketchcatch-*-build-cache`
                   }
                 ]
               })
