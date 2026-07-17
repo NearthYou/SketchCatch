@@ -330,11 +330,14 @@ test("compact workspace refits the board without changing the saved DiagramJson"
   );
 });
 
-test("fit view uses the unobscured board frame and visual resource bounds", () => {
+test("fit view uses the unobscured board frame and complete diagram visual bounds", () => {
   assert.match(
     diagramEditorSource,
-    /getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height/s
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,\s*fitMinimumZoom/s
   );
+  assert.match(diagramEditorSource, /getFitViewMinimumZoom\([\s\S]*?FIT_VIEW_PADDING/);
+  assert.match(diagramEditorSource, /setFlowMinimumZoom\(fitMinimumZoom\);/);
+  assert.doesNotMatch(diagramEditorSource, /flowInstance\.fitView\(fitOptions\)/);
   assert.match(diagramEditorSource, /offsetBoardViewportToFrame/);
   assert.doesNotMatch(diagramEditorSource, /const fitViewWidth = editorBounds/);
 });
@@ -739,7 +742,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
     /import \{ getDiagramVisualBounds \} from "\.\/resource-node-visual-footprint";/
   );
   assert.match(diagramEditorSource, /getDiagramVisualBounds\(\[targetNode\]\)/);
-  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes\)/);
+  assert.match(diagramEditorSource, /getDiagramVisualBounds\(currentNodes, flowEdges\)/);
   assert.match(
     diagramEditorSource,
     /getDiagramVisualBounds\(previewDiagram\?\.nodes \?\? diagramRef\.current\.nodes\)/
@@ -752,7 +755,7 @@ test("diagram editor fits and centers visual footprints inside the unobscured bo
   );
   assert.match(
     diagramEditorSource,
-    /offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*getDiagramVisualBounds\(currentNodes\),\s*frame\.width,\s*frame\.height,/s
+    /const visualBounds = getDiagramVisualBounds\(currentNodes, flowEdges\);[\s\S]*?offsetBoardViewportToFrame\(\s*getViewportForBounds\(\s*visualBounds,\s*frame\.width,\s*frame\.height,/s
   );
   assert.match(diagramEditorSource, /getUnobscuredBoardViewportFrame\(/);
   assert.match(diagramEditorSource, /BOARD_VIEWPORT_TOP_INSET/);
