@@ -6,12 +6,21 @@ export type ProjectServerSaveState =
   | "server-saving"
   | "server-checkpoint-pending"
   | "server-saved"
+  | "server-conflict"
   | "server-failed";
+
+export function getDirtyProjectServerSaveState(hasConflict: boolean): ProjectServerSaveState {
+  return hasConflict ? "server-conflict" : "server-dirty";
+}
 
 export function getProjectSaveStatus(
   localSaveState: ProjectLocalSaveState,
   serverSaveState: ProjectServerSaveState
 ): string {
+  if (serverSaveState === "server-conflict") {
+    return "최신 상태 필요";
+  }
+
   if (localSaveState === "local-failed" || serverSaveState === "server-failed") {
     return "저장 실패";
   }
