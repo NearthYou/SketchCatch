@@ -1,0 +1,223 @@
+.sectionHeading,
+.summaryHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.sectionHeading h3,
+.summaryHeading h3,
+.advancedGroupHeading h4 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.sectionHeading p,
+.summaryHeading p,
+.advancedGroupHeading p {
+  margin: 4px 0 0;
+  color: var(--color-body);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.requiredBadge,
+.readyBadge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: var(--color-surface-strong);
+  color: var(--color-body);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.readyBadge {
+  background: var(--color-success-surface);
+  color: var(--color-success);
+}
+
+.decisionGrid,
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.decisionGrid {
+  margin-top: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  color: #55585f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  min-width: 0;
+  height: 42px;
+  border: 1px solid #d7d9de;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fff;
+  color: #171717;
+  font: inherit;
+}
+
+.field span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field em,
+.field i {
+  color: var(--color-error);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.field i {
+  color: var(--color-muted);
+}
+
+.field small {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.field input[readonly] {
+  border-color: var(--color-hairline);
+  background: var(--color-surface-soft);
+  color: var(--color-body);
+  cursor: default;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: #171717;
+  outline: 2px solid rgb(23 23 23 / 10%);
+}
+
+.automaticSummary {
+  margin-top: 24px;
+  border-top: 1px solid var(--color-hairline-strong);
+}
+
+.summaryList {
+  display: grid;
+  margin: 14px 0 0;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.summaryList > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(110px, 0.32fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.summaryList dt {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.summaryList dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advancedSettings {
+  margin-top: 20px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+}
+
+.advancedSettings > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.advancedSettings > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advancedSettings > summary::after {
+  content: "+";
+  color: var(--color-muted);
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.advancedSettings[open] > summary::after {
+  content: "−";
+}
+
+.advancedSettings > summary span {
+  display: grid;
+  gap: 3px;
+}
+
+.advancedSettings > summary strong {
+  color: var(--color-ink);
+  font-size: 13px;
+}
+
+.advancedSettings > summary small {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.advancedBody {
+  padding: 0 16px 18px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.advancedGroupHeading {
+  margin: 18px 0 12px;
+}
+
+.advancedGroupHeading + .formGrid + .advancedGroupHeading {
+  padding-top: 18px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+@media (max-width: 720px) {
+  .decisionGrid,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .summaryList > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

@@ -321,6 +321,7 @@
       "evidence": {
         "lastVerified": "2026-07-14",
         "commands": [
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/cicd-return-navigation.test.ts",
           "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-service.test.ts src/routes/deployments.test.ts src/releases/application-release-identity.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/db/project-release-ledger-schema.test.ts",
           "pnpm --filter @sketchcatch/web test",
           "node scripts/check-db-migration-compatibility.mjs",
@@ -330,7 +331,7 @@
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Project target, shared release ledger, authorization, structured build evidence, migration/backfill, History UI, and legacy Deployment adapters passed. API full suite has three unrelated Windows symlink fixture setup failures (EPERM); all #371-focused tests pass."
+        "notes": "Project target, shared release ledger, authorization, structured build evidence, migration/backfill, History UI, and legacy Deployment adapters passed. The target editor now lives in the shared Workspace Delivery feature, reports Runtime-specific missing fields, accepts saved Delivery Profile values, and seeds public Board analysis evidence before a GitHub Source Repository is connected. API full suite has three unrelated Windows symlink fixture setup failures (EPERM); all target-focused tests pass."
       },
       "notes": "Implemented in issue #371 on branch feature/sw/371-project-deployment-release-ledger. No cloud mutation was performed."
     },
@@ -774,13 +775,13 @@
         "lastVerified": "2026-07-17",
         "commands": [
           "pnpm --filter @sketchcatch/api exec tsx --test src/db/repository-analysis-records-migration.test.ts src/routes/repository-analysis-records.test.ts src/routes/project-delivery-profile.test.ts src/delivery/project-delivery-profile-service.test.ts src/routes/public-repository-analysis-revision.test.ts src/source-repositories/github-target-connection.test.ts src/git-cicd/git-cicd-readiness-service.test.ts",
-          "pnpm --dir apps/web exec tsx --test app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-analysis-record-payload.test.ts app/workspace/repository/repository-recovery-action.test.ts app/workspace/workspace-start-mode.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/delivery-repository-freshness.test.ts",
+          "pnpm --dir apps/web exec tsx --test app/workspace/repository/repository-analysis-resume.test.ts app/workspace/repository/repository-analysis-record-payload.test.ts app/workspace/repository/repository-recovery-action.test.ts app/workspace/workspace-start-mode.test.ts features/workspace/delivery-center-integration.test.ts features/workspace/delivery-repository-freshness.test.ts features/workspace/delivery/project-deployment-target-state.test.ts features/workspace/cicd-return-navigation.test.ts",
           "pnpm lint",
           "pnpm typecheck",
           "pnpm build",
           "pnpm harness:check"
         ],
-        "notes": "Focused API profile, provenance, permission, public-error, migration, and read-only readiness tests pass 101/101. Focused Web recovery, resume, Delivery routing, and freshness tests pass 28/28. Harness, lint, typecheck, and production build pass. The Web full suite passes 651/652 after updating the two feature-owned static contracts; the remaining destroy-plan state failure belongs to concurrent deployment-target work and its files were not changed by this workstream. The API full suite was stopped after extended inactivity in existing external-dependency paths; its isolated feature suite is green."
+        "notes": "Focused API profile, provenance, permission, public-error, migration, and read-only readiness tests pass 101/101. Focused Web Delivery target, routing, return-path, recovery, resume, and freshness regressions pass. Harness, lint, typecheck, and production build pass. The shared target editor refreshes the read-only Delivery Profile after save and uses the Board's RepositoryAnalysisRecord before later SourceRepository analysis, without starting a deployment or Git handoff. The Web full suite has one unchanged destroy-plan approval-state failure outside these files. The API full suite was stopped after extended inactivity in existing external-dependency paths; its isolated feature suite is green."
       },
       "notes": "No deployment, Terraform mutation, Git handoff, or GitHub permission change was performed. Migration 0049 adds repository_analysis_records."
     },
