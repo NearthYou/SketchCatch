@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import {
   BatchGetProjectsCommand,
   CodeBuildClient,
@@ -39,6 +40,11 @@ import type {
 } from "./project-build-environment-service.js";
 
 const buildServicePolicyName = "SketchCatchRepositoryBuildOnly";
+const iamPropagationRetryDelaysMs = [250, 500, 1_000, 2_000, 4_000, 8_000, 16_000] as const;
+const propagationPendingVerificationReasons = new Set([
+  "CodeBuild service role was not found",
+  "CodeBuild project was not found"
+]);
 const trustedNoopBuildspec = `version: 0.2
 phases:
   build:
@@ -108,7 +114,7 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
         try {
           createdRole = await reconcileBuildRole(iam, input);
           createdProject = await reconcileCodeBuildProject(codeBuild, input);
-          return await verifyBuildEnvironment({ iam, codeBuild }, input);
+          return await verifyBuildEnvironmentWithPropagationRetry({ iam, codeBuild }, input);
         } catch (error) {
           if (createdProject) {
             await cleanupOwnedCodeBuildProject(codeBuild, input).catch(() => undefined);
@@ -265,19 +271,35 @@ async function reconcileBuildRole(
       }
     }
 
-    await iam.send(
-      new PutRolePolicyCommand({
-        RoleName: input.codeBuildServiceRoleName,
-        PolicyName: buildServicePolicyName,
-        PolicyDocument: JSON.stringify(createBuildOnlyPolicy(input))
-      })
-    );
+    await putBuildRolePolicyWithPropagationRetry(iam, input);
     return createdByThisCall;
   } catch (error) {
     if (createdByThisCall) {
       await cleanupOwnedBuildRole(iam, input).catch(() => undefined);
     }
     throw error;
+  }
+}
+
+async function putBuildRolePolicyWithPropagationRetry(
+  iam: AwsCommandClient,
+  input: DesiredProjectBuildEnvironment
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await iam.send(
+        new PutRolePolicyCommand({
+          RoleName: input.codeBuildServiceRoleName,
+          PolicyName: buildServicePolicyName,
+          PolicyDocument: JSON.stringify(createBuildOnlyPolicy(input))
+        })
+      );
+      return;
+    } catch (error) {
+      const retryDelayMs = iamPropagationRetryDelaysMs[attempt];
+      if (!isNoSuchEntity(error) || retryDelayMs === undefined) throw error;
+      await delay(retryDelayMs);
+    }
   }
 }
 
@@ -294,8 +316,24 @@ async function reconcileCodeBuildProject(
     await codeBuild.send(new UpdateProjectCommand(project));
     return false;
   }
-  await codeBuild.send(new CreateProjectCommand(project));
+  await createCodeBuildProjectWithPropagationRetry(codeBuild, project);
   return true;
+}
+
+async function createCodeBuildProjectWithPropagationRetry(
+  codeBuild: AwsCommandClient,
+  project: ReturnType<typeof createCodeBuildProjectInput>
+): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await codeBuild.send(new CreateProjectCommand(project));
+      return;
+    } catch (error) {
+      const retryDelayMs = iamPropagationRetryDelaysMs[attempt];
+      if (!isCodeBuildRolePropagationError(error) || retryDelayMs === undefined) throw error;
+      await delay(retryDelayMs);
+    }
+  }
 }
 
 async function cleanupOwnedCodeBuildProject(
@@ -392,7 +430,10 @@ async function verifyBuildEnvironment(
     "logs:createloggroup",
     "logs:createlogstream",
     "logs:putlogevents",
-    "codeconnections:useconnection"
+    "codeconnections:useconnection",
+    "codeconnections:getconnection",
+    "codeconnections:getconnectiontoken",
+    "codestar-connections:useconnection"
   ];
   if (requiredActions.some((action) => !actions.includes(action))) {
     return failed("CodeBuild service role is missing a build-only permission");
@@ -404,6 +445,29 @@ async function verifyBuildEnvironment(
     return failed("CodeBuild project configuration does not match the approved build environment");
   }
   return { verified: true, statusReason: null };
+}
+
+async function verifyBuildEnvironmentWithPropagationRetry(
+  clients: { iam: AwsCommandClient; codeBuild: AwsCommandClient },
+  input: DesiredProjectBuildEnvironment
+): Promise<ProjectBuildEnvironmentVerification> {
+  for (let attempt = 0; ; attempt += 1) {
+    const retryDelayMs = iamPropagationRetryDelaysMs[attempt];
+    try {
+      const verification = await verifyBuildEnvironment(clients, input);
+      if (
+        verification.verified ||
+        !verification.statusReason ||
+        !propagationPendingVerificationReasons.has(verification.statusReason) ||
+        retryDelayMs === undefined
+      ) {
+        return verification;
+      }
+    } catch (error) {
+      if (!isNoSuchEntity(error) || retryDelayMs === undefined) throw error;
+    }
+    await delay(retryDelayMs);
+  }
 }
 
 function createBuildOnlyPolicy(input: DesiredProjectBuildEnvironment): Record<string, unknown> {
@@ -418,7 +482,12 @@ function createBuildOnlyPolicy(input: DesiredProjectBuildEnvironment): Record<st
       },
       {
         Effect: "Allow",
-        Action: "codeconnections:UseConnection",
+        Action: [
+          "codeconnections:GetConnection",
+          "codeconnections:GetConnectionToken",
+          "codeconnections:UseConnection",
+          "codestar-connections:UseConnection"
+        ],
         Resource: input.codeConnectionArn
       }
     ]
@@ -439,8 +508,16 @@ function createBuildPermissionsBoundaryPolicy(
       },
       {
         Effect: "Allow",
-        Action: "codeconnections:UseConnection",
-        Resource: `arn:aws:codeconnections:${input.awsConnection.region}:${input.awsConnection.accountId}:connection/*`
+        Action: [
+          "codeconnections:GetConnection",
+          "codeconnections:GetConnectionToken",
+          "codeconnections:UseConnection",
+          "codestar-connections:UseConnection"
+        ],
+        Resource: [
+          `arn:aws:codeconnections:${input.awsConnection.region}:${input.awsConnection.accountId}:connection/*`,
+          `arn:aws:codestar-connections:${input.awsConnection.region}:${input.awsConnection.accountId}:connection/*`
+        ]
       }
     ]
   };
@@ -620,6 +697,7 @@ function matchesCodeBuildProject(
   const environment = project.environment as Record<string, unknown> | undefined;
   const artifacts = project.artifacts as Record<string, unknown> | undefined;
   const cache = project.cache as Record<string, unknown> | undefined;
+  const badge = project.badge as Record<string, unknown> | undefined;
   const environmentVariables = environment?.environmentVariables;
   return (
     project.name === input.codeBuildProjectName &&
@@ -642,7 +720,7 @@ function matchesCodeBuildProject(
     project.timeoutInMinutes === 30 &&
     project.queuedTimeoutInMinutes === 15 &&
     project.concurrentBuildLimit === 1 &&
-    project.badgeEnabled === false &&
+    badge?.badgeEnabled === false &&
     isEmptyArray(project.secondarySources) &&
     isEmptyArray(project.secondaryArtifacts) &&
     hasOwnershipTags(project.tags, input.projectId)
@@ -678,12 +756,9 @@ function failed(statusReason: string): ProjectBuildEnvironmentVerification {
 }
 
 function isNoSuchEntity(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    (error as { name?: unknown }).name === "NoSuchEntity"
-  );
+  if (typeof error !== "object" || error === null || !("name" in error)) return false;
+  const name = (error as { name?: unknown }).name;
+  return name === "NoSuchEntity" || name === "NoSuchEntityException";
 }
 
 async function ignoreMissing(operation: () => Promise<unknown>): Promise<void> {
@@ -702,4 +777,12 @@ function isResourceNotFound(error: unknown): boolean {
     "name" in error &&
     (error as { name?: unknown }).name === "ResourceNotFoundException"
   );
+}
+
+function isCodeBuildRolePropagationError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name !== "InvalidInput" && error.name !== "InvalidInputException") return false;
+  return error.message
+    .toLowerCase()
+    .includes("codebuild is not authorized to perform: sts:assumerole on service role");
 }

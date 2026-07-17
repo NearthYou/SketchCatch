@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  getDeploymentFailureDeveloperCheck,
   getDeploymentStatusPresentation,
   getRecentDeploymentResultTitle
 } from "./deployment-presentation";
@@ -29,6 +30,18 @@ test("deployment statuses use Korean labels and semantic tones", () => {
     label: "부분 취소",
     tone: "neutral"
   });
+});
+
+test("development deployment failures name the concrete evidence developers must inspect", () => {
+  assert.match(
+    getDeploymentFailureDeveloperCheck("application_release", "development") ?? "",
+    /CodeBuild 로그.*ECR image digest.*ECS task health.*S3·CloudFront/u
+  );
+  assert.match(
+    getDeploymentFailureDeveloperCheck("plan", "development") ?? "",
+    /Terraform plan stderr.*state refresh/u
+  );
+  assert.equal(getDeploymentFailureDeveloperCheck("plan", "production"), null);
 });
 
 test("a failed unapproved run is presented as a validation result", () => {

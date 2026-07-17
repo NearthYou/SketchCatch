@@ -105,7 +105,7 @@ test("callback creates ECS defaults even when another architecture was selected"
   };
 
   assert.deepEqual(createCallbackEcsDefaults(resume), {
-    projectName: "Audience Live Check",
+    projectName: "audience-live-check",
     repositoryRevision: "a".repeat(40),
     sourceRoot: ".",
     dockerfilePath: "apps/api/Dockerfile",

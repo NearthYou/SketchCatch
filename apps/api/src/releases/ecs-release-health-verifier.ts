@@ -43,14 +43,16 @@ export function verifyEcsReleaseHealthSnapshot(
   if (snapshot.desiredCount < 1) {
     throw new Error("ECS service desired count must be at least one");
   }
-  if (snapshot.rolloutState && snapshot.rolloutState !== "COMPLETED") {
-    throw new Error(`ECS deployment rollout is ${snapshot.rolloutState}`);
+  if (snapshot.rolloutState === "FAILED") {
+    throw new Error("ECS deployment rollout is FAILED");
   }
   const newTasks = snapshot.tasks.filter(
     (task) =>
       task.taskDefinitionArn === expectedTaskDefinitionArn &&
       task.lastStatus === "RUNNING" &&
-      (task.healthStatus === null || task.healthStatus === "HEALTHY")
+      (task.healthStatus === null ||
+        task.healthStatus === "UNKNOWN" ||
+        task.healthStatus === "HEALTHY")
   );
   if (newTasks.length < snapshot.desiredCount || snapshot.runningCount < snapshot.desiredCount) {
     throw new Error("The new ECS revision does not have enough healthy running tasks");

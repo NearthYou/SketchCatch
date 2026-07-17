@@ -2,7 +2,8 @@ import type {
   LiveObservationPressureLevel,
   LiveObservationProviderSnapshot,
   LiveObservationSnapshot,
-  LiveObservationV2Session
+  LiveObservationV2Session,
+  TerraformOutput
 } from "@sketchcatch/types";
 
 const MAX_VISIBLE_REQUEST_PARTICLES = 5;
@@ -53,7 +54,8 @@ export function getLiveObservationPressureLabel(
 }
 
 export function getLiveObservationProviderEvidence(
-  snapshot: LiveObservationProviderSnapshot
+  snapshot: LiveObservationProviderSnapshot,
+  capacityModeLabel: "고정 용량" | "Auto Scaling"
 ): {
   stateLabel: string;
   requests: string;
@@ -61,26 +63,34 @@ export function getLiveObservationProviderEvidence(
   p95Latency: string;
   availability: string;
   capacity: string;
+  capacityModeLabel: "고정 용량" | "Auto Scaling";
+  capacityDetailLabel: "정상 / 실행 / 희망" | "정상 / 실행 / 최대";
 } {
-  if (snapshot.state !== "available") {
-    return {
-      stateLabel: snapshot.state === "delayed" ? "지연" : "사용 불가",
-      requests: "—",
-      errorRate: "—",
-      p95Latency: "—",
-      availability: "—",
-      capacity: "—"
-    };
-  }
+  const fixedCapacity = capacityModeLabel === "고정 용량";
+  const unavailable = snapshot.state === "unavailable";
+  const capacity = fixedCapacity
+    ? `${formatProviderNumber(snapshot.capacity.healthy)} / ${formatProviderNumber(snapshot.capacity.running)} / ${formatProviderNumber(snapshot.capacity.desired)}`
+    : `${formatProviderNumber(snapshot.capacity.healthy)} / ${formatProviderNumber(snapshot.capacity.running)} / ${formatProviderNumber(snapshot.capacity.max)}`;
 
   return {
-    stateLabel: "정상",
-    requests: String(snapshot.requests),
-    errorRate: `${snapshot.errorRate}%`,
-    p95Latency: `${snapshot.p95LatencyMs}ms`,
-    availability: `${snapshot.availability}%`,
-    capacity: `${snapshot.capacity.healthy} / ${snapshot.capacity.running} / ${snapshot.capacity.max}`
+    stateLabel:
+      snapshot.state === "available"
+        ? "정상"
+        : snapshot.state === "delayed"
+          ? "지연"
+          : "사용 불가",
+    requests: unavailable ? "—" : formatProviderNumber(snapshot.requests),
+    errorRate: unavailable ? "—" : formatProviderNumber(snapshot.errorRate, "%"),
+    p95Latency: unavailable ? "—" : formatProviderNumber(snapshot.p95LatencyMs, "ms"),
+    availability: unavailable ? "—" : formatProviderNumber(snapshot.availability, "%"),
+    capacity: unavailable ? "—" : capacity,
+    capacityModeLabel,
+    capacityDetailLabel: fixedCapacity ? "정상 / 실행 / 희망" : "정상 / 실행 / 최대"
   };
+}
+
+function formatProviderNumber(value: number | null, suffix = ""): string {
+  return value === null ? "—" : `${value}${suffix}`;
 }
 export function getEligibleLiveObservationDeployments<
   T extends LiveObservationDeploymentCandidate
@@ -102,7 +112,8 @@ export function getEligibleLiveObservationDeployments<
 
 export function getLiveObservationOutputUrl(
   deploymentId: string,
-  releases: readonly LiveObservationReleaseCandidate[]
+  releases: readonly LiveObservationReleaseCandidate[],
+  terraformOutputs: readonly TerraformOutput[] = []
 ): string | null {
   const candidates = releases
     .filter(
@@ -142,16 +153,32 @@ export function getLiveObservationOutputUrl(
     }
   }
 
+  const outputNames = ["cloudfronturl", "staticsiteurl", "apibaseurl"] as const;
+  for (const outputName of outputNames) {
+    const output = terraformOutputs.find(
+      (candidate) =>
+        candidate.deploymentId === deploymentId &&
+        !candidate.sensitive &&
+        candidate.name.replaceAll("_", "").toLowerCase() === outputName &&
+        typeof candidate.value === "string"
+    );
+    if (output && typeof output.value === "string") {
+      const normalized = normalizeLiveObservationOutputUrl(output.value);
+      if (normalized) return normalized;
+    }
+  }
+
   return null;
 }
 
 export function getSelectedLiveObservationOutputUrl(
   selection: LiveObservationSelection | null | undefined,
   deploymentId: string,
-  releases: readonly LiveObservationReleaseCandidate[]
+  releases: readonly LiveObservationReleaseCandidate[],
+  terraformOutputs: readonly TerraformOutput[] = []
 ): string | null {
   if (!selection) {
-    return getLiveObservationOutputUrl(deploymentId, releases);
+    return getLiveObservationOutputUrl(deploymentId, releases, terraformOutputs);
   }
   if (selection.deploymentId !== deploymentId) {
     return null;

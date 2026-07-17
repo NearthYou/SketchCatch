@@ -230,7 +230,7 @@ function validateObservedState(
         observed.taskDefinitionArn
       );
   const expectedMarker = evidence.schemaVersion === 3
-    ? `sketchcatch:artifact=${evidence.artifact.artifactFingerprint};target=${evidence.convergence.deploymentTargetFingerprint}`
+    ? `sketchcatch:artifact=${evidence.artifact.artifactFingerprint}:target=${evidence.convergence.deploymentTargetFingerprint}`
     : null;
   if (
     !validRevision ||

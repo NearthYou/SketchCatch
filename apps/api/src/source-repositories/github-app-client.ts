@@ -88,6 +88,7 @@ export type GitHubWorkflowRunSummary = {
   commitMessage: string;
   branch: string;
   workflowName: string;
+  workflowPath: string;
   runUrl: string;
   status: string;
   conclusion: string | null;
@@ -343,6 +344,7 @@ type GitHubWorkflowRunApiResponse = {
   readonly head_branch?: unknown;
   readonly html_url?: unknown;
   readonly name?: unknown;
+  readonly path?: unknown;
   readonly status?: unknown;
   readonly conclusion?: unknown;
   readonly created_at?: unknown;
@@ -353,6 +355,9 @@ type GitHubWorkflowRunApiResponse = {
 
 export type GitHubActionsReadClient = {
   listBranchWorkflowRuns(input: GitHubWorkflowRunReadInput): Promise<GitHubWorkflowRunSummary[]>;
+  getWorkflowRun(
+    input: GitHubRepositoryInput & { runId: number }
+  ): Promise<GitHubWorkflowRunSummary>;
   listCommitFiles(input: GitHubRepositoryRefInput & { commitSha: string }): Promise<string[]>;
   listWorkflowJobs(
     input: GitHubRepositoryInput & { runId: number }
@@ -449,6 +454,14 @@ export function createGitHubAppClient(
         if (pageRuns.length < githubActionsRunPageSize) break;
       }
       return runs;
+    },
+
+    async getWorkflowRun(input) {
+      const response = await requestWithInstallationToken<GitHubWorkflowRunApiResponse>(
+        input.installationId,
+        createRepositoryPath(input, `/actions/runs/${input.runId}`)
+      );
+      return toWorkflowRunSummary(response);
     },
 
     async listCommitFiles(input) {
@@ -874,6 +887,7 @@ function toWorkflowRunSummary(run: GitHubWorkflowRunApiResponse): GitHubWorkflow
     commitMessage: readRequiredString(run.head_commit?.message, "workflow run commit message"),
     branch: readRequiredString(run.head_branch, "workflow run branch"),
     workflowName: readRequiredString(run.name, "workflow run name"),
+    workflowPath: readRequiredString(run.path, "workflow run path"),
     runUrl: readRequiredString(run.html_url, "workflow run url"),
     status,
     conclusion: typeof run.conclusion === "string" ? run.conclusion : null,

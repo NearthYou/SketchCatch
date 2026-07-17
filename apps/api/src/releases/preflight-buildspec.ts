@@ -42,6 +42,7 @@ export function renderPreflightBuildspec(config: ConfirmedBuildConfig): string {
 
   return `version: 0.2
 env:
+  shell: bash
   exported-variables:
 ${exportedVariables}
 phases:
@@ -49,6 +50,20 @@ phases:
     on-failure: ABORT
     commands:
       - set -euo pipefail
+      - |
+        if ! command -v zstd >/dev/null 2>&1; then
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends zstd
+          elif command -v dnf >/dev/null 2>&1; then
+            dnf install --yes zstd
+          elif command -v yum >/dev/null 2>&1; then
+            yum install --yes zstd
+          else
+            echo "zstd installation is unavailable in this CodeBuild image" >&2
+            exit 1
+          fi
+        fi
 ${packageManagerSetupCommands}
   pre_build:
     on-failure: ABORT
@@ -62,11 +77,33 @@ ${packageManagerSetupCommands}
       - export SKETCHCATCH_PREFLIGHT_STAGE=api_build
       - docker build --file "\${SKETCHCATCH_DOCKERFILE_PATH}" --tag sketchcatch-preflight-api "\${SKETCHCATCH_API_SOURCE_ROOT}"
       - export SKETCHCATCH_PREFLIGHT_STAGE=api_health
-      - CONTAINER_ID=$(docker run --detach --publish "127.0.0.1:18080:\${SKETCHCATCH_CONTAINER_PORT}" sketchcatch-preflight-api)
-      - trap 'docker rm --force "\${CONTAINER_ID}" >/dev/null 2>&1 || true' EXIT
-      - for attempt in $(seq 1 30); do curl --fail --silent --show-error "http://127.0.0.1:18080\${SKETCHCATCH_HEALTH_CHECK_PATH}" && break; test "\${attempt}" -lt 30; sleep 1; done
-      - docker rm --force "\${CONTAINER_ID}" >/dev/null
-      - trap - EXIT
+      - |
+        set -euo pipefail
+        CONTAINER_ID=$(docker run --detach --publish "127.0.0.1:18080:\${SKETCHCATCH_CONTAINER_PORT}" sketchcatch-preflight-api)
+        cleanup_container() {
+          docker rm --force "\${CONTAINER_ID}" >/dev/null 2>&1 || true
+        }
+        trap cleanup_container EXIT
+        API_HEALTHY=false
+        for attempt in $(seq 1 30); do
+          if curl --fail --silent --show-error "http://127.0.0.1:18080\${SKETCHCATCH_HEALTH_CHECK_PATH}"; then
+            API_HEALTHY=true
+            break
+          fi
+          if ! docker inspect --format '{{.State.Running}}' "\${CONTAINER_ID}" | grep --quiet '^true$'; then
+            docker logs "\${CONTAINER_ID}" >&2 || true
+            echo "API container exited before the health check passed" >&2
+            exit 1
+          fi
+          sleep 1
+        done
+        if [[ "\${API_HEALTHY}" != "true" ]]; then
+          docker logs "\${CONTAINER_ID}" >&2 || true
+          echo "API health check timed out" >&2
+          exit 1
+        fi
+        cleanup_container
+        trap - EXIT
       - export SKETCHCATCH_PREFLIGHT_STAGE=frontend_build
       - test -f "\${SKETCHCATCH_FRONTEND_PACKAGE_MANIFEST_PATH}"
       - test -f "\${SKETCHCATCH_FRONTEND_LOCKFILE_PATH}"

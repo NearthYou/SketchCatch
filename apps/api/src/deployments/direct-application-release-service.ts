@@ -852,7 +852,36 @@ export async function prepareApplicationRelease<
 
   const existing = await repository.findRelease(input.executionId);
   if (existing) {
-    if (existing.status === "pending") return existing;
+    if (existing.status === "pending") {
+      if (context.target.runtimeConfig.runtimeTargetKind !== "ecs_fargate") return existing;
+      const expectedFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(
+        context.target.runtimeConfig
+      );
+      const preparedFingerprint = readMetadataString(
+        existing.providerRevision?.metadata,
+        "ecsRuntimeCoordinatesFingerprint"
+      );
+      if (preparedFingerprint === expectedFingerprint) return existing;
+      if (
+        existing.providerRevision?.resourceType !== "codebuild_artifact" ||
+        !existing.providerRevision.artifactReference
+      ) {
+        throw new DirectApplicationReleaseError(
+          "Pending ECS application release does not retain immutable build evidence"
+        );
+      }
+      return repository.resetReleaseForRetry({
+        releaseId: existing.id,
+        providerRevision: {
+          ...existing.providerRevision,
+          metadata: {
+            ...existing.providerRevision.metadata,
+            ecsRuntimeCoordinatesFingerprint: expectedFingerprint
+          }
+        },
+        updatedAt: now()
+      });
+    }
     if (["failed", "rolled_back", "cancelled"].includes(existing.status)) {
       const preparedBuildRevisionId = readMetadataString(
         existing.providerRevision?.metadata,

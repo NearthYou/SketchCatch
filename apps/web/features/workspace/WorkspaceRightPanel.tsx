@@ -79,6 +79,7 @@ import {
 } from "./workspace-terraform-ai";
 import type { ResourceWorkspaceView, WorkspaceRightPanelView } from "./workspace-right-panel.types";
 import type { DeploymentAvailability } from "./deployment-availability";
+import type { InitialCicdReturnCommand } from "./cicd-return-command";
 import styles from "./workspace.module.css";
 
 export type WorkspaceRightPanelProps = {
@@ -86,7 +87,9 @@ export type WorkspaceRightPanelProps = {
   readonly deploymentAvailability: DeploymentAvailability;
   readonly deploymentOpenRequestId?: number | undefined;
   readonly initialView?: WorkspaceRightPanelView | undefined;
+  readonly initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   readonly initialTerraformFiles?: readonly TerraformSyncFileInput[] | undefined;
+  readonly onInitialCicdReturnCommandReady?: ((cleanedHref: string) => void) | undefined;
   readonly terraformFilesReplacement?: TerraformFilesReplacementRequest | null | undefined;
   readonly onSelectTerraformIssue: (diagnosticKey: string | null) => void;
   readonly onTerraformAiContextChange: (context: WorkspaceTerraformAiContext) => void;
@@ -121,9 +124,11 @@ export function WorkspaceRightPanel({
   context,
   deploymentAvailability,
   deploymentOpenRequestId = 0,
+  initialCicdReturnCommand,
   initialView,
   initialTerraformFiles,
   terraformFilesReplacement,
+  onInitialCicdReturnCommandReady,
   onSelectTerraformIssue,
   onTerraformAiContextChange,
   onTerraformAiInteraction,
@@ -180,7 +185,7 @@ export function WorkspaceRightPanel({
   const [preDeploymentCheckState, setPreDeploymentCheckState] =
     useState<DeploymentPreDeploymentCheckState>(initialPreDeploymentCheckState);
   const [isDeploymentConsoleOpen, setIsDeploymentConsoleOpen] = useState(
-    initialView === "deployment"
+    initialView === "deployment" || initialCicdReturnCommand?.shouldOpenDeploymentConsole === true
   );
 
   useEffect(() => {
@@ -843,7 +848,9 @@ export function WorkspaceRightPanel({
         diagramJson={context.diagram}
         fullScreenOnly
         hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
+        initialCicdReturnCommand={initialCicdReturnCommand}
         initialExpanded
+        onInitialCicdReturnCommandReady={onInitialCicdReturnCommandReady}
         onExpandedClose={() => setIsDeploymentConsoleOpen(false)}
         onOpenLiveObservation={openLiveObservation}
         onOpenFindingTerraformSource={(finding) => {

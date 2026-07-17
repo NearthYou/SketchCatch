@@ -348,16 +348,16 @@
         "Direct Deployment UI가 정확히 세 단계와 summary-first 운영 정보를 표시한다."
       ],
       "evidence": {
-        "lastVerified": "2026-07-14",
+        "lastVerified": "2026-07-15",
         "commands": [
-          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/deployment-preparation-service.test.ts src/deployments/deployment-service.test.ts src/deployments/deployment-approval-service.test.ts src/routes/deployments.test.ts src/db/deployment-preparation-schema.test.ts",
-          "pnpm --filter @sketchcatch/web test",
-          "pnpm --filter @sketchcatch/api test",
-          "node scripts/check-db-migration-compatibility.mjs",
-          "PostgreSQL 16 temporary container: apply apps/api/drizzle/0000..0036 with psql ON_ERROR_STOP=1",
-          "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/init-harness.ps1 -Full"
+          "pnpm --filter @sketchcatch/api exec tsx --test src/deployments/direct-application-release-output-url.test.ts src/deployments/ecs-fargate-output-reconciliation.test.ts src/deployments/deployment-apply-service.test.ts",
+          "pnpm --filter @sketchcatch/api exec tsx --test src/aws-connections/aws-connection-service.test.ts",
+          "pnpm lint",
+          "pnpm typecheck",
+          "pnpm build",
+          "pnpm harness:check"
         ],
-        "notes": "Focused deployment contracts, Web 1,145/1,145, migration compatibility, PostgreSQL migrations, harness, lint, typecheck, and build passed. API passed 1,456/1,459; the only failures are three unchanged Windows symlink fixture setup EPERM errors."
+        "notes": "Focused Direct deployment contracts passed 17/17 and AWS connection policy contracts passed 3/3. Full-stack ECS preparation now permits a pending artifact before the URL exists, then saves Terraform results, reconciles a safe api_base_url into the target, releases the application, and only then marks success. The generated connection Role permits the confirmed project and build names within the same account and region instead of requiring a sketchcatch-* prefix. Reconciliation failure preserves Terraform evidence and skips release. Harness, lint, typecheck, and build passed; no cloud mutation was performed."
       },
       "notes": "Implemented in issue #372 on branch feature/sw/372-direct-deploy-three-stage. No cloud mutation was performed."
     },

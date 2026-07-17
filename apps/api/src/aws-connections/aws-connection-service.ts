@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type {
   AwsConnection,
+  AwsConnectionListResponse,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnectionDeletionPreviewResponse,
   AwsRolePermissionSetup,
@@ -41,7 +42,16 @@ const terraformFargateServiceActions = [
   "ecr:*",
   "elasticloadbalancing:*",
   "cloudfront:*",
-  "logs:*"
+  "logs:*",
+  "application-autoscaling:RegisterScalableTarget",
+  "application-autoscaling:DeregisterScalableTarget",
+  "application-autoscaling:DescribeScalableTargets",
+  "application-autoscaling:PutScalingPolicy",
+  "application-autoscaling:DeleteScalingPolicy",
+  "application-autoscaling:DescribeScalingPolicies",
+  "application-autoscaling:ListTagsForResource",
+  "application-autoscaling:TagResource",
+  "application-autoscaling:UntagResource"
 ] as const;
 const directReleaseCodeBuildActions = [
   "codebuild:CreateProject",
@@ -69,6 +79,7 @@ const terraformFargateIamActions = [
   "iam:ListInstanceProfilesForRole",
   "iam:GetPolicy",
   "iam:GetPolicyVersion",
+  "iam:GetRolePolicy",
   "iam:PutRolePolicy",
   "iam:DeleteRolePolicy",
   "iam:PutRolePermissionsBoundary",
@@ -82,10 +93,13 @@ const githubCodeConnectionActions = [
   "codeconnections:CreateConnection",
   "codeconnections:GetConnection",
   "codeconnections:ListConnections",
+  "codeconnections:PassConnection",
   "codeconnections:UseConnection",
   "codeconnections:ListTagsForResource",
   "codeconnections:TagResource",
-  "codeconnections:DeleteConnection"
+  "codeconnections:DeleteConnection",
+  "codestar-connections:PassConnection",
+  "codestar-connections:UseConnection"
 ] as const;
 
 export type AwsConnectionRetentionPolicy = {
@@ -268,6 +282,13 @@ export class AwsConnectionVerificationError extends Error {
   }
 }
 
+export class AwsConnectionConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AwsConnectionConflictError";
+  }
+}
+
 export class AwsConnectionDeleteConflictError extends Error {
   constructor(message: string) {
     super(message);
@@ -321,8 +342,7 @@ export function createPostgresAwsConnectionRepository(db: Database): AwsConnecti
           and(
             eq(awsConnections.userId, accessContext.userId),
             eq(awsConnections.accountId, accountId),
-            eq(awsConnections.status, "verified"),
-            isNull(awsConnections.deletionStartedAt)
+            eq(awsConnections.status, "verified")
           )
         );
 
@@ -622,15 +642,27 @@ export async function listAwsConnections(
     accessContext: ProjectAccessContext;
   },
   repository: AwsConnectionRepository
-): Promise<AwsConnection[]> {
+): Promise<AwsConnectionListResponse> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
 
-  return awsConnectionRows
-    .filter(
-      (awsConnection) =>
-        awsConnection.status === "verified" && awsConnection.deletionStartedAt === null
-    )
-    .map(toAwsConnection);
+  return {
+    awsConnections: awsConnectionRows
+      .filter(
+        (awsConnection) =>
+          awsConnection.status === "verified" && awsConnection.deletionStartedAt === null
+      )
+      .map(toAwsConnection),
+    cleanupRetries: awsConnectionRows
+      .filter(
+        (awsConnection) =>
+          awsConnection.status === "verified" &&
+          awsConnection.deletionStartedAt !== null &&
+          awsConnection.deletionErrorSummary !== null
+      )
+      .map((awsConnection) => ({
+        awsConnection: toAwsConnection(awsConnection)
+      }))
+  };
 }
 
 export async function createAwsConnection(
@@ -945,6 +977,27 @@ export async function verifyAwsConnection(
 
   assertRecommendedAwsConnectionRoleArn(input.roleArn, awsConnection.id);
 
+  const expectedAccountId = getAwsAccountIdFromRoleArn(input.roleArn);
+  const existingVerifiedAccountConnection = await repository.findVerifiedAwsConnectionByAccountId(
+    expectedAccountId,
+    input.accessContext
+  );
+
+  if (
+    existingVerifiedAccountConnection &&
+    existingVerifiedAccountConnection.id !== awsConnection.id
+  ) {
+    if (
+      existingVerifiedAccountConnection.deletionStartedAt !== null &&
+      existingVerifiedAccountConnection.deletionErrorSummary !== null
+    ) {
+      throw new AwsConnectionConflictError(
+        "같은 AWS 계정의 이전 연결 정리가 완료되지 않았습니다. 이전 연결 정리를 재시도해 주세요."
+      );
+    }
+    throw new AwsConnectionConflictError("이미 연결된 AWS 계정입니다.");
+  }
+
   const now = options.now ?? (() => new Date());
   const markFailed = async (accountId: string | null) => {
     await repository.updateAwsConnectionVerification({
@@ -985,35 +1038,28 @@ export async function verifyAwsConnection(
     throw new AwsConnectionTestError("AWS Role connection test failed");
   }
 
-  const expectedAccountId = getAwsAccountIdFromRoleArn(input.roleArn);
-
   if (result.accountId !== expectedAccountId) {
     await markFailed(result.accountId);
     throw new AwsConnectionVerificationError("AWS Role account mismatch");
   }
 
-  const existingVerifiedAccountConnection = await repository.findVerifiedAwsConnectionByAccountId(
-    result.accountId,
-    input.accessContext
-  );
-
-  if (
-    existingVerifiedAccountConnection &&
-    existingVerifiedAccountConnection.id !== awsConnection.id
-  ) {
-    await markFailed(result.accountId);
-    throw new AwsConnectionVerificationError("AWS account is already connected");
-  }
-
   const verifiedAt = now();
-  const updatedConnection = await repository.updateAwsConnectionVerification({
-    connectionId: awsConnection.id,
-    userId: awsConnection.userId,
-    accountId: result.accountId,
-    roleArn: input.roleArn,
-    status: "verified",
-    lastVerifiedAt: verifiedAt
-  });
+  let updatedConnection: AwsConnectionRecord | undefined;
+  try {
+    updatedConnection = await repository.updateAwsConnectionVerification({
+      connectionId: awsConnection.id,
+      userId: awsConnection.userId,
+      accountId: result.accountId,
+      roleArn: input.roleArn,
+      status: "verified",
+      lastVerifiedAt: verifiedAt
+    });
+  } catch (error) {
+    if (isVerifiedAccountUniqueViolation(error)) {
+      throw new AwsConnectionConflictError("이미 연결된 AWS 계정입니다.");
+    }
+    throw error;
+  }
 
   if (!updatedConnection) {
     throw new AwsConnectionNotFoundError("AWS connection not found");
@@ -1026,6 +1072,31 @@ export async function verifyAwsConnection(
     region: result.region,
     awsConnection: toAwsConnection(updatedConnection)
   };
+}
+
+function isVerifiedAccountUniqueViolation(error: unknown): boolean {
+  const visited = new Set<object>();
+  let current: unknown = error;
+
+  while (typeof current === "object" && current !== null && !visited.has(current)) {
+    visited.add(current);
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      cause?: unknown;
+    };
+
+    if (
+      candidate.code === "23505" &&
+      candidate.constraint === "aws_connections_user_verified_account_unique"
+    ) {
+      return true;
+    }
+
+    current = candidate.cause;
+  }
+
+  return false;
 }
 
 export async function verifyAwsConnectionCreatedRole(
@@ -1464,8 +1535,14 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     '              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*"',
     '              - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*:*"',
     "          - Effect: Allow",
-    "            Action: codeconnections:UseConnection",
-    '            Resource: !Sub "arn:${AWS::Partition}:codeconnections:${AWS::Region}:${AWS::AccountId}:connection/*"',
+    "            Action:",
+    "              - codeconnections:GetConnection",
+    "              - codeconnections:GetConnectionToken",
+    "              - codeconnections:UseConnection",
+    "              - codestar-connections:UseConnection",
+    "            Resource:",
+    '              - !Sub "arn:${AWS::Partition}:codeconnections:${AWS::Region}:${AWS::AccountId}:connection/*"',
+    '              - !Sub "arn:${AWS::Partition}:codestar-connections:${AWS::Region}:${AWS::AccountId}:connection/*"',
     "  SketchCatchTerraformApplyPolicy:",
     "    Type: AWS::IAM::Policy",
     "    Properties:",

@@ -27,7 +27,7 @@ import type {
   UploadDeploymentPlanArtifactInput,
   UploadedDeploymentPlanArtifact
 } from "./deployment-plan-artifact-storage.js";
-import { terraformMutationTimeoutMs } from "./terraform-runner.js";
+import { terraformInitTimeoutMs, terraformMutationTimeoutMs } from "./terraform-runner.js";
 import { DirectApplicationReleaseError } from "./direct-application-release-service.js";
 import type {
   ProjectExecutionLeaseRecord,
@@ -902,7 +902,8 @@ test("runDeploymentPlan saves a tfplan artifact, summary, warnings, logs, and cu
         };
       },
       prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
-      runTerraformInit: async () => {
+      runTerraformInit: async (_workdir, options) => {
+        assert.equal(options?.timeoutMs, terraformInitTimeoutMs);
         runnerStages.push("init");
         return createRunnerResult("init");
       },

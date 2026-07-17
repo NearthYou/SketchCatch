@@ -53,6 +53,7 @@ import type {
   DeploymentListResponse,
   DeploymentLog,
   DeploymentLogListResponse,
+  DeploymentLiveObservationArchitectureResponse,
   DeploymentResourceListResponse,
   DeploymentResponse,
   DiagramJson,
@@ -70,6 +71,8 @@ import type {
   GitCicdPipelineRunListResponse,
   GitCicdPipelineRunRefreshResponse,
   GitCicdPipelineRunResponse,
+  GitCicdReadinessResponse,
+  GitCicdReadinessSnapshot,
   GitCicdReleaseRunResponse,
   GitCicdRepositorySettingsApplyResponse,
   GitCicdAwsRoleDiffApplyResponse,
@@ -685,12 +688,20 @@ export async function createAwsConnectionSetup({
 export async function listAwsConnections(
   options: { readonly signal?: AbortSignal | undefined } = {}
 ): Promise<AwsConnection[]> {
+  const response = await listAwsConnectionSettings(options);
+
+  return response.awsConnections;
+}
+
+export async function listAwsConnectionSettings(
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<AwsConnectionListResponse> {
   const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
     auth: true,
     ...(options.signal ? { signal: options.signal } : {})
   });
 
-  return response.awsConnections;
+  return response;
 }
 
 export async function testAwsConnection(
@@ -1025,6 +1036,16 @@ export async function createLiveObservation(
   );
 }
 
+export function getLiveObservationArchitecture(
+  deploymentId: string,
+  signal?: AbortSignal
+): Promise<DeploymentLiveObservationArchitectureResponse> {
+  return apiFetch(
+    `/deployments/${encodeURIComponent(deploymentId)}/live-observation-architecture`,
+    { auth: true, ...(signal ? { signal } : {}) }
+  );
+}
+
 export async function getLiveObservationSnapshot(
   deploymentId: string,
   observationId: string,
@@ -1199,6 +1220,17 @@ export async function getGitCicdMonitoringConfig(
   );
 
   return response.config;
+}
+
+export async function refreshGitCicdReadiness(
+  projectId: string
+): Promise<GitCicdReadinessSnapshot> {
+  const response = await apiFetch<GitCicdReadinessResponse>(
+    `/projects/${encodeURIComponent(projectId)}/git-cicd/readiness/refresh`,
+    { auth: true, method: "POST" }
+  );
+
+  return response.readiness;
 }
 
 export async function updateGitCicdMonitoringConfig(

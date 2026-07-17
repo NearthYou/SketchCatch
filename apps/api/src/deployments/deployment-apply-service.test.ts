@@ -21,6 +21,7 @@ import type {
   ProjectRecord,
   ReleaseCandidateRecord,
   SaveDeploymentApplyResultsInput,
+  SaveDeploymentApplyStateInput,
   SaveDeploymentPlanInput,
   TerraformArtifactRecord,
   TerraformOutputRecord
@@ -61,6 +62,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
   completedInput: SaveDeploymentApplyResultsInput | undefined;
   savedInput: SaveDeploymentApplyResultsInput | undefined;
   lifecycleEvents: string[] = [];
+  synchronizeDeploymentTargetAfterApply?: NonNullable<
+    DeploymentRepository["synchronizeDeploymentTargetAfterApply"]
+  >;
   failedInput:
     | {
         deploymentId: string;
@@ -262,6 +266,21 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   };
 
+  async saveDeploymentApplyState(
+    candidateDeploymentId: string,
+    input: SaveDeploymentApplyStateInput
+  ): Promise<DeploymentRecord | undefined> {
+    this.lifecycleEvents.push("state-save");
+    if (!this.deployment || this.deployment.id !== candidateDeploymentId) return undefined;
+    this.deployment = {
+      ...this.deployment,
+      stateObjectKey: input.stateObjectKey,
+      resultWarningSummary: input.resultWarningSummary,
+      updatedAt: fixedNow
+    };
+    return this.deployment;
+  }
+
   completeDeploymentDestroy: DeploymentRepository["completeDeploymentDestroy"] = async (
     candidateDeploymentId,
     input
@@ -285,6 +304,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   };
 
   failDeployment: DeploymentRepository["failDeployment"] = async (candidateDeploymentId, input) => {
+    this.lifecycleEvents.push("terminal-fail");
     this.failedInput = {
       deploymentId: candidateDeploymentId,
       failureStage: input.failureStage,
@@ -539,6 +559,15 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
         repository.lifecycleEvents.push("application-release");
         runnerStages.push("application-release");
       },
+      synchronizeDeploymentTargetAfterApply: async (input) => {
+        assert.deepEqual(input, {
+          projectId,
+          deploymentId,
+          accessContext: createAccessContext()
+        });
+        assert.ok(repository.savedInput);
+        repository.lifecycleEvents.push("target-sync");
+      },
       reconcileApplicationOutput: async ({ outputs }) => {
         assert.equal(
           outputs.find((output) => output.name === "api_base_url")?.value,
@@ -553,6 +582,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   assert.deepEqual(runnerStages, ["init", "apply", "output", "show-state", "application-release"]);
   assert.deepEqual(repository.lifecycleEvents, [
     "results-save",
+    "target-sync",
     "output-reconcile",
     "application-release",
     "terminal-complete"
@@ -630,6 +660,207 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
   );
 });
 
+test("infrastructure ECS apply synchronizes target metadata after result storage", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "infrastructure",
+    targetKind: "ecs_fargate"
+  });
+  const synchronizationInputs: unknown[] = [];
+  repository.synchronizeDeploymentTargetAfterApply = async (input) => {
+    assert.ok(repository.savedInput);
+    repository.lifecycleEvents.push("target-sync");
+    synchronizationInputs.push(input);
+  };
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-infrastructure-target-sync",
+        mainFilePath: "C:/tmp/sketchcatch-infrastructure-target-sync/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        })
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.deepEqual(synchronizationInputs, [
+    { projectId, deploymentId, accessContext: createAccessContext() }
+  ]);
+  assert.deepEqual(repository.lifecycleEvents, [
+    "results-save",
+    "target-sync",
+    "terminal-complete"
+  ]);
+});
+
+test("target metadata sync failure records a warning without failing successful apply", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "infrastructure",
+    targetKind: "ecs_fargate"
+  });
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-target-sync-warning",
+        mainFilePath: "C:/tmp/sketchcatch-target-sync-warning/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary metadata store outage");
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assert.equal(
+    repository.logs.some(
+      (log) =>
+        log.level === "WARN" &&
+        log.message ===
+          "Deployment target metadata synchronization failed after successful apply: temporary metadata store outage"
+    ),
+    true
+  );
+});
+
+test("successful full-stack apply continues release when target sync warning storage also fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((log) =>
+        log.message.startsWith("Deployment target metadata synchronization failed")
+      )
+    ) {
+      throw new Error("warning persistence unavailable");
+    }
+    return createDeploymentLogs(logs);
+  };
+  let releaseCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-target-sync-warning-storage-failure",
+        mainFilePath: "C:/tmp/sketchcatch-target-sync-warning-storage-failure/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      reconcileApplicationOutput: async () => undefined,
+      executeApplicationRelease: async () => {
+        releaseCalls += 1;
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(releaseCalls, 1);
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assertContiguousDeploymentLogSequences(repository);
+});
+
+test("successful full-stack apply continues release when warning persistence commits before rejecting", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate"
+  });
+  installCommitAfterRejectingWarningPersistence(repository);
+  let releaseCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage: new FakeApplyArtifactStorage(),
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      writePlanFile: async () => undefined,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-target-sync-warning-ambiguous-commit",
+        mainFilePath:
+          "C:/tmp/sketchcatch-target-sync-warning-ambiguous-commit/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+      runTerraformInit: async () => createRunnerResult("init"),
+      runTerraformApply: async () => createRunnerResult("apply"),
+      runTerraformOutputJson: async () => createRunnerResult("output", { stdout: "{}" }),
+      runTerraformShowStateJson: async () =>
+        createRunnerResult("show", {
+          stdout: JSON.stringify({ values: { root_module: { resources: [] } } })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      reconcileApplicationOutput: async () => undefined,
+      executeApplicationRelease: async () => {
+        releaseCalls += 1;
+      }
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(releaseCalls, 1);
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assertContiguousDeploymentLogSequences(repository);
+});
+
 test("full-stack output reconciliation failure preserves Terraform results and skips release", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createApprovedDeploymentRecord({
@@ -695,10 +926,73 @@ test("full-stack output reconciliation failure preserves Terraform results and s
   assert.match(repository.failedInput?.errorSummary ?? "", /DEPLOYMENT_OUTPUT_URL_CONFLICT/);
 });
 
-test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", async () => {
+function createVerifiedNoChangeApplyScenario(): {
+  repository: FakeDeploymentRepository;
+  applyArtifactStorage: FakeApplyArtifactStorage;
+  existingStateObjectKey: string;
+} {
   const repository = new FakeDeploymentRepository();
   const existingStateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
   repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
+    stateObjectKey: existingStateObjectKey,
+    planSummary: {
+      createCount: 0,
+      updateCount: 0,
+      deleteCount: 0,
+      replaceCount: 0,
+      blocked: false,
+      warnings: []
+    }
+  });
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  applyArtifactStorage.optimizationEvidenceContent = Buffer.from(
+    JSON.stringify(
+      createDeploymentPlanOptimizationEvidence({
+        projectId,
+        deploymentId,
+        planArtifactId,
+        planArtifactSha256: tfplanSha256,
+        desiredStateIdentity: createTerraformDesiredStateIdentity({
+          projectId,
+          canonicalTerraformBundle: terraformArtifactContent,
+          terraformFiles: [{ fileName: "main.tf", terraformCode: terraformArtifactContent }],
+          providerLockContent: null,
+          target: {
+            provider: "aws",
+            accountId: "123456789012",
+            region: "ap-northeast-2"
+          },
+          state: { lineage: null, serial: null }
+        }),
+        driftVerifiedAt: fixedNow.toISOString(),
+        planSummary: repository.deployment.planSummary!,
+        preDeploymentResult: { findings: [] },
+        resourceChanges: []
+      })
+    )
+  );
+  return { repository, applyArtifactStorage, existingStateObjectKey };
+}
+
+test("no-change Apply preserves release when target sync warning storage fails", async () => {
+  const repository = new FakeDeploymentRepository();
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((log) =>
+        log.message.startsWith("Deployment target metadata synchronization failed")
+      )
+    ) {
+      throw new Error("warning persistence unavailable");
+    }
+    return createDeploymentLogs(logs);
+  };
+  const existingStateObjectKey = `deployments/${deploymentId}/state/terraform.tfstate`;
+  repository.deployment = createApprovedDeploymentRecord({
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
     stateObjectKey: existingStateObjectKey,
     planSummary: {
       createCount: 0,
@@ -764,6 +1058,12 @@ test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", 
         terraformRan = true;
         throw new Error("No-change Apply must not run Terraform apply");
       },
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      executeApplicationRelease: async () => {
+        repository.lifecycleEvents.push("application-release");
+      },
       now: () => fixedNow
     }
   );
@@ -772,13 +1072,64 @@ test("runDeploymentApply skips Terraform Apply for an approved no-change Plan", 
   assert.equal(credentialsPrepared, false);
   assert.equal(terraformRan, false);
   assert.equal(repository.savedInput?.stateObjectKey, existingStateObjectKey);
+  assert.deepEqual(repository.lifecycleEvents, [
+    "results-save",
+    "application-release",
+    "terminal-complete"
+  ]);
   assert(
     repository.logs.some(
       (log) =>
         log.message ===
         "[optimization] event=apply_decision outcome=no_change reason=terraform_plan_no_changes"
-    )
+      )
   );
+  assertContiguousDeploymentLogSequences(repository);
+});
+
+test("no-change Apply remains successful when warning persistence commits before rejecting", async () => {
+  const { repository, applyArtifactStorage, existingStateObjectKey } =
+    createVerifiedNoChangeApplyScenario();
+  installCommitAfterRejectingWarningPersistence(repository);
+  let releaseCalls = 0;
+
+  const result = await runDeploymentApply(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      applyArtifactStorage,
+      readTerraformArtifactFile: async () => terraformArtifactContent,
+      prepareTerraformWorkspace: async () => ({
+        workdir: "C:/tmp/sketchcatch-no-change-warning-ambiguous-commit",
+        mainFilePath: "C:/tmp/sketchcatch-no-change-warning-ambiguous-commit/main.tf",
+        terraformFiles: [],
+        cleanup: async () => undefined
+      }),
+      prepareTerraformAwsCredentialEnv: async () => {
+        throw new Error("No-change Apply must not prepare Terraform credentials");
+      },
+      runTerraformInit: async () => {
+        throw new Error("No-change Apply must not run Terraform init");
+      },
+      runTerraformApply: async () => {
+        throw new Error("No-change Apply must not run Terraform apply");
+      },
+      synchronizeDeploymentTargetAfterApply: async () => {
+        throw new Error("temporary target metadata failure");
+      },
+      executeApplicationRelease: async () => {
+        releaseCalls += 1;
+      },
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(result.deployment.status, "SUCCESS");
+  assert.equal(repository.savedInput?.stateObjectKey, existingStateObjectKey);
+  assert.equal(releaseCalls, 1);
+  assert.equal(repository.completeCalls, 1);
+  assert.equal(repository.failedInput, undefined);
+  assertContiguousDeploymentLogSequences(repository);
 });
 
 test("runDeploymentApply safely falls back when no-change evidence cannot be verified", async () => {
@@ -839,6 +1190,7 @@ test("application scope releases the approved artifact without Terraform init or
   });
   const applyArtifactStorage = new FakeApplyArtifactStorage();
   const stages: string[] = [];
+  let targetSyncCalls = 0;
 
   const result = await runDeploymentApply(
     { deploymentId, accessContext: createAccessContext() },
@@ -869,6 +1221,9 @@ test("application scope releases the approved artifact without Terraform init or
       runTerraformShowStateJson: async () => {
         throw new Error("application scope must not inspect Terraform state");
       },
+      synchronizeDeploymentTargetAfterApply: async () => {
+        targetSyncCalls += 1;
+      },
       executeApplicationRelease: async () => {
         stages.push("application-release");
       }
@@ -887,6 +1242,7 @@ test("application scope releases the approved artifact without Terraform init or
   assert.equal(repository.savedInput, undefined);
   assert.equal(repository.completeCalls, 1);
   assert.equal(applyArtifactStorage.uploadedStates.length, 0);
+  assert.equal(targetSyncCalls, 0);
 });
 
 test("application partial failure preserves the successful ECS state without completing Deployment", async () => {
@@ -1232,6 +1588,7 @@ test("runDeploymentApply rejects approval snapshot drift before credentials or T
 test("runDeploymentApply marks apply failures failed and masks secret output", async () => {
   const repository = new FakeDeploymentRepository();
   const applyArtifactStorage = new FakeApplyArtifactStorage();
+  let targetSyncCalls = 0;
 
   const result = await runDeploymentApply(
     {
@@ -1256,7 +1613,10 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
           exitCode: 1,
           stdout: "",
           stderr: "aws_secret_access_key=very-secret\napply failed\n"
-        })
+        }),
+      synchronizeDeploymentTargetAfterApply: async () => {
+        targetSyncCalls += 1;
+      }
     }
   );
 
@@ -1266,7 +1626,14 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
   assert.equal(repository.failedInput?.errorSummary, "[REDACTED]");
   assert.equal(repository.failedInput?.stateObjectKey, applyArtifactStorage.stateObjectKey);
   assert.match(repository.failedInput?.resultWarningSummary ?? "", /Partial Terraform state/);
+  assert.equal(result.deployment.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.equal(
+    result.deployment.resultWarningSummary,
+    "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
+  );
+  assert.deepEqual(repository.lifecycleEvents, ["state-save", "terminal-fail"]);
   assert.equal(applyArtifactStorage.uploadedStates.length, 1);
+  assert.equal(targetSyncCalls, 0);
   assert.equal(applyArtifactStorage.uploadedStates[0]?.deploymentId, deploymentId);
   assert.match(
     applyArtifactStorage.uploadedStates[0]?.stateFilePath ?? "",
@@ -1294,6 +1661,61 @@ test("runDeploymentApply marks apply failures failed and masks secret output", a
     repository.logs.some((log) =>
       log.message.startsWith("[duration] partial terraform state upload completed in ")
     )
+  );
+});
+
+test("runDeploymentApply persists partial state before terminal failure recording", async () => {
+  const repository = new FakeDeploymentRepository();
+  const applyArtifactStorage = new FakeApplyArtifactStorage();
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((log) =>
+        log.message.startsWith("[duration] partial terraform state upload completed in ")
+      )
+    ) {
+      throw new Error("simulated interruption immediately after partial state upload");
+    }
+    return createDeploymentLogs(logs);
+  };
+  repository.failDeployment = async () => {
+    throw new Error("simulated process interruption before terminal failure recording");
+  };
+
+  await assert.rejects(
+    runDeploymentApply(
+      {
+        deploymentId,
+        accessContext: createAccessContext()
+      },
+      repository,
+      {
+        applyArtifactStorage,
+        readTerraformArtifactFile: async () => terraformArtifactContent,
+        writePlanFile: async () => undefined,
+        prepareTerraformWorkspace: async () => ({
+          workdir: "C:/tmp/sketchcatch-terraform-partial-state",
+          mainFilePath: "C:/tmp/sketchcatch-terraform-partial-state/main.tf",
+          terraformFiles: [],
+          cleanup: async () => undefined
+        }),
+        prepareTerraformAwsCredentialEnv: async () => createPreparedCredentials(),
+        runTerraformInit: async () => createRunnerResult("init"),
+        runTerraformApply: async () =>
+          createRunnerResult("apply", {
+            exitCode: 1,
+            stderr: "apply failed after changing resources"
+          })
+      }
+    ),
+    /simulated process interruption before terminal failure recording/
+  );
+
+  assert.equal(applyArtifactStorage.uploadedStates.length, 1);
+  assert.equal(repository.deployment?.stateObjectKey, applyArtifactStorage.stateObjectKey);
+  assert.equal(
+    repository.deployment?.resultWarningSummary,
+    "Partial Terraform state was saved after failed apply for explicit cleanup destroy."
   );
 });
 
@@ -1463,6 +1885,47 @@ function createApprovedDeploymentRecord(
     };
   }
   return deployment;
+}
+
+function installCommitAfterRejectingWarningPersistence(
+  repository: FakeDeploymentRepository
+): void {
+  const createDeploymentLogs = repository.createDeploymentLogs.bind(repository);
+  repository.createDeploymentLogs = async (logs) => {
+    if (
+      logs.some((candidate) =>
+        repository.logs.some(
+          (persisted) =>
+            persisted.deploymentId === candidate.deploymentId &&
+            persisted.sequence === candidate.sequence
+        )
+      )
+    ) {
+      throw new Error("duplicate deployment log sequence");
+    }
+    const persisted = await createDeploymentLogs(logs);
+    if (
+      logs.some((log) =>
+        log.message.startsWith("Deployment target metadata synchronization failed")
+      )
+    ) {
+      throw new Error("warning persistence response unavailable after commit");
+    }
+    return persisted;
+  };
+}
+
+function assertContiguousDeploymentLogSequences(
+  repository: FakeDeploymentRepository
+): void {
+  const sequences = repository.logs
+    .filter((log) => log.deploymentId === deploymentId)
+    .map((log) => log.sequence)
+    .sort((left, right) => left - right);
+  assert.deepEqual(
+    sequences,
+    Array.from({ length: sequences.length }, (_, index) => index + 1)
+  );
 }
 
 test("infrastructure rollback apply restores the same current state used by the approved plan", async () => {

@@ -7,9 +7,11 @@ import {
   getAwsConnectionDeletionPreview,
   getAwsConnectionCloudFormationTemplate,
   listAwsConnections,
+  AwsConnectionConflictError,
   type AwsConnectionRecord,
   shouldBlockAwsConnectionDeletion,
-  type AwsConnectionRepository
+  type AwsConnectionRepository,
+  verifyAwsConnection
 } from "./aws-connection-service.js";
 
 const accessContext: ProjectAccessContext = {
@@ -20,12 +22,25 @@ const apiCallerPrincipalArn = "arn:aws:iam::555980271919:role/sketchcatch-produc
 const workerCallerPrincipalArn =
   "arn:aws:iam::555980271919:role/sketchcatch-production-ecs-worker-task";
 
-test("listAwsConnections hides pending and failed connection attempts", async () => {
+test("listAwsConnections separates active connections from cleanup retries", async () => {
   const result = await listAwsConnections(
     { accessContext },
     createListRepository([
       createAwsConnectionRecord({ id: "pending", status: "pending" }),
       createAwsConnectionRecord({ id: "failed", status: "failed" }),
+      createAwsConnectionRecord({
+        id: "deleting",
+        status: "verified",
+        deletionStartedAt: new Date("2026-07-16T00:00:00.000Z")
+      }),
+      createAwsConnectionRecord({
+        id: "cleanup-retry",
+        accountId: "123456789012",
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-cleanup",
+        status: "verified",
+        deletionStartedAt: new Date("2026-07-16T00:00:00.000Z"),
+        deletionErrorSummary: "AWS managed resource cleanup failed"
+      }),
       createAwsConnectionRecord({
         id: "verified",
         accountId: "123456789012",
@@ -35,7 +50,170 @@ test("listAwsConnections hides pending and failed connection attempts", async ()
     ])
   );
 
-  assert.deepEqual(result.map((connection) => connection.id), ["verified"]);
+  assert.deepEqual(result.awsConnections.map((connection) => connection.id), ["verified"]);
+  assert.deepEqual(result.cleanupRetries, [
+    {
+      awsConnection: {
+        id: "cleanup-retry",
+        userId: "user-1",
+        accountId: "123456789012",
+        roleArn:
+          "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-cleanup",
+        externalId: "sc_conn_connection_example",
+        region: "ap-northeast-2",
+        status: "verified",
+        lastVerifiedAt: null,
+        createdAt: "2026-07-15T00:00:00.000Z",
+        updatedAt: "2026-07-15T00:00:00.000Z"
+      }
+    }
+  ]);
+});
+
+test("verifyAwsConnection requires cleanup retry before connecting the same AWS account", async () => {
+  const pendingConnection = createAwsConnectionRecord({
+    id: "22222222-2222-4222-8222-222222222222",
+    status: "pending"
+  });
+  const cleanupRetryConnection = createAwsConnectionRecord({
+    id: "11111111-1111-4111-8111-111111111111",
+    accountId: "123456789012",
+    status: "verified",
+    deletionStartedAt: new Date("2026-07-16T00:00:00.000Z"),
+    deletionErrorSummary: "cleanup failed"
+  });
+  let testerCalls = 0;
+  let verificationUpdates = 0;
+  const repository = createListRepository([pendingConnection, cleanupRetryConnection]);
+  repository.findAccessibleAwsConnection = async () => pendingConnection;
+  repository.findVerifiedAwsConnectionByAccountId = async () => cleanupRetryConnection;
+  repository.updateAwsConnectionVerification = async (input) => {
+    verificationUpdates += 1;
+    return { ...pendingConnection, ...input, updatedAt: new Date() };
+  };
+
+  await assert.rejects(
+    verifyAwsConnection(
+      {
+        connectionId: pendingConnection.id,
+        accessContext,
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+      },
+      repository,
+      {
+        async testConnection() {
+          testerCalls += 1;
+          return {
+            ok: true,
+            accountId: "123456789012",
+            callerArn:
+              "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/session",
+            region: "ap-northeast-2"
+          };
+        }
+      }
+    ),
+    {
+      message:
+        "같은 AWS 계정의 이전 연결 정리가 완료되지 않았습니다. 이전 연결 정리를 재시도해 주세요."
+    }
+  );
+  assert.equal(testerCalls, 0);
+  assert.equal(verificationUpdates, 0);
+});
+
+test("verifyAwsConnection rejects an already active AWS account with a conflict", async () => {
+  const pendingConnection = createAwsConnectionRecord({
+    id: "22222222-2222-4222-8222-222222222222",
+    status: "pending"
+  });
+  const activeConnection = createAwsConnectionRecord({
+    id: "11111111-1111-4111-8111-111111111111",
+    accountId: "123456789012",
+    status: "verified"
+  });
+  let testerCalls = 0;
+  let verificationUpdates = 0;
+  const repository = createListRepository([pendingConnection, activeConnection]);
+  repository.findAccessibleAwsConnection = async () => pendingConnection;
+  repository.findVerifiedAwsConnectionByAccountId = async () => activeConnection;
+  repository.updateAwsConnectionVerification = async (input) => {
+    verificationUpdates += 1;
+    return {
+      ...pendingConnection,
+      ...input,
+      updatedAt: new Date()
+    };
+  };
+
+  await assert.rejects(
+    verifyAwsConnection(
+      {
+        connectionId: pendingConnection.id,
+        accessContext,
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+      },
+      repository,
+      {
+        async testConnection() {
+          testerCalls += 1;
+          return {
+            ok: true,
+            accountId: "123456789012",
+            callerArn:
+              "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/session",
+            region: "ap-northeast-2"
+          };
+        }
+      }
+    ),
+    (error: unknown) =>
+      error instanceof AwsConnectionConflictError &&
+      error.message === "이미 연결된 AWS 계정입니다."
+  );
+  assert.equal(testerCalls, 0);
+  assert.equal(verificationUpdates, 0);
+});
+
+test("verifyAwsConnection converts a concurrent verified-account unique violation to a conflict", async () => {
+  const pendingConnection = createAwsConnectionRecord({
+    id: "22222222-2222-4222-8222-222222222222",
+    status: "pending"
+  });
+  const repository = createListRepository([pendingConnection]);
+  repository.findAccessibleAwsConnection = async () => pendingConnection;
+  repository.updateAwsConnectionVerification = async () => {
+    const postgresError = Object.assign(new Error("duplicate key value"), {
+      code: "23505",
+      constraint: "aws_connections_user_verified_account_unique"
+    });
+    throw new Error("Failed query: update aws_connections", { cause: postgresError });
+  };
+
+  await assert.rejects(
+    verifyAwsConnection(
+      {
+        connectionId: pendingConnection.id,
+        accessContext,
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole"
+      },
+      repository,
+      {
+        async testConnection() {
+          return {
+            ok: true,
+            accountId: "123456789012",
+            callerArn:
+              "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/session",
+            region: "ap-northeast-2"
+          };
+        }
+      }
+    ),
+    (error: unknown) =>
+      error instanceof AwsConnectionConflictError &&
+      error.message === "이미 연결된 AWS 계정입니다."
+  );
 });
 
 test("AWS connection templates trust every configured runtime caller role", async () => {
@@ -147,11 +325,63 @@ test("AWS connection policy authorizes only SketchCatch-managed CodeBuild names"
     "the deployable CloudFormation policy must cover only SketchCatch-managed builds"
   );
   assert.match(template.templateBody, /codeconnections:CreateConnection/);
+  assert.match(template.templateBody, /codeconnections:PassConnection/);
   assert.match(template.templateBody, /codeconnections:UseConnection/);
+  assert.match(template.templateBody, /codestar-connections:PassConnection/);
+  assert.match(template.templateBody, /codestar-connections:UseConnection/);
   assert.match(template.templateBody, /codeconnections:ListTagsForResource/);
   assert.match(template.templateBody, /SketchCatchCodeBuildBoundary/);
   assert.match(template.templateBody, /PermissionsBoundary/);
   assert.match(template.templateBody, /iam:PutRolePolicy/);
+  assert.match(template.templateBody, /iam:GetRolePolicy/);
+});
+
+test("AWS connection policy supports ECS Service Auto Scaling apply and destroy", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const result = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "a11ca1e0-1111-4222-8333-444444444444",
+      generateExternalId: () => "test-external-id"
+    }
+  );
+  const requiredActions = [
+    "application-autoscaling:RegisterScalableTarget",
+    "application-autoscaling:DeregisterScalableTarget",
+    "application-autoscaling:DescribeScalableTargets",
+    "application-autoscaling:PutScalingPolicy",
+    "application-autoscaling:DeleteScalingPolicy",
+    "application-autoscaling:DescribeScalingPolicies",
+    "application-autoscaling:ListTagsForResource",
+    "application-autoscaling:TagResource",
+    "application-autoscaling:UntagResource"
+  ];
+  const policy = result.roleSetup.permissionSetup.terraformPolicyDocument as {
+    Statement: Array<{ Action: string | readonly string[] }>;
+  };
+  const policyActions = policy.Statement.flatMap((statement) => toStringArray(statement.Action));
+
+  for (const action of requiredActions) {
+    assert.equal(policyActions.includes(action), true, `${action} must be in the Terraform policy`);
+  }
+
+  const template = await getAwsConnectionCloudFormationTemplate(
+    {
+      connectionId: result.awsConnection.id,
+      accessContext,
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository
+  );
+
+  for (const action of requiredActions) {
+    assert.match(template.templateBody, new RegExp(action.replace(":", "\\:")));
+  }
 });
 
 test("AWS connection deletion ignores failed history without cloud state", () => {

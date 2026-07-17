@@ -51,6 +51,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   terraformArtifact: TerraformArtifactRecord | undefined = createTerraformArtifactRecord();
   planArtifact: DeploymentPlanArtifactRecord | undefined = createPlanArtifactRecord();
   awsConnection: AwsConnection | undefined = createVerifiedAwsConnection();
+  releaseCandidate: ReleaseCandidateRecord | undefined;
   readonly approvals: Array<{
     deploymentId: string;
     input: Parameters<DeploymentRepository["approveDeployment"]>[1];
@@ -120,6 +121,10 @@ class FakeDeploymentRepository implements DeploymentRepository {
     }
 
     return this.planArtifact;
+  }
+
+  async findReleaseCandidateById(candidateId: string) {
+    return this.releaseCandidate?.id === candidateId ? this.releaseCandidate : undefined;
   }
 
   async findRunningDeploymentInProject(): Promise<DeploymentRecord | undefined> {
@@ -601,6 +606,41 @@ test("approveDeploymentPlan preserves failed cleanup state for destroy approvals
     status: "FAILED",
     preserveFailureDetails: true
   });
+});
+
+test("approveDeploymentPlan allows full-stack destroy after its ReleaseCandidate failed", async () => {
+  const repository = new FakeDeploymentRepository();
+  const candidate = { ...createReleaseCandidateRecord(), status: "failed" as const };
+  const preparedSnapshotHash = createPreparedReleaseSnapshotHash({
+    candidateId: candidate.id,
+    commitSha: candidate.commitSha,
+    compositeDigest: candidate.compositeDigest,
+    configFingerprint: candidate.configFingerprint
+  });
+  repository.releaseCandidate = candidate;
+  repository.deployment = createDeploymentRecord(undefined, {
+    status: "FAILED",
+    scope: "full_stack",
+    targetKind: "ecs_fargate",
+    releaseCandidateId: candidate.id,
+    preparedSnapshotHash,
+    stateObjectKey,
+    failureStage: "destroy",
+    errorSummary: "previous destroy lost its execution lease"
+  });
+  repository.planArtifact = createPlanArtifactRecord({ operation: "destroy" });
+
+  const deployment = await approveDeploymentPlan(
+    { deploymentId, accessContext: createAccessContext() },
+    repository,
+    {
+      downloadTerraformArtifact: async () => artifactContent,
+      now: () => fixedNow
+    }
+  );
+
+  assert.equal(deployment.status, "FAILED");
+  assert.equal(deployment.approvedPreparedSnapshotHash, preparedSnapshotHash);
 });
 
 test("approveDeploymentPlan allows plans with legacy blocking safety warnings", async () => {

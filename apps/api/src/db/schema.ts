@@ -39,6 +39,7 @@ import type {
   GitCicdMonitoredPath,
   GitCicdMonitoringValidationStatus,
   GitCicdPipelineChangeScope,
+  GitCicdPipelineExecutionKind,
   GitCicdPipelineDetailStatus,
   GitCicdPipelineRunStatus,
   GitCicdPipelineStageKind,
@@ -1018,6 +1019,10 @@ export const gitCicdPipelineRuns = pgTable(
     handoffId: varchar("handoff_id", { length: 36 }).references(() => gitCicdHandoffs.id, {
       onDelete: "set null"
     }),
+    executionKind: varchar("execution_kind", { length: 16 })
+      .$type<GitCicdPipelineExecutionKind>()
+      .notNull()
+      .default("app"),
     commitSha: varchar("commit_sha", { length: 64 }).notNull(),
     commitMessage: text("commit_message").notNull(),
     branch: varchar("branch", { length: 255 }).notNull(),
@@ -1047,9 +1052,19 @@ export const gitCicdPipelineRuns = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [
-    uniqueIndex("git_cicd_pipeline_runs_repository_commit_unique")
-      .on(table.sourceRepositoryId, table.commitSha)
-      .where(sql`${table.releaseRequestKey} is null`),
+    check(
+      "git_cicd_pipeline_runs_execution_kind_check",
+      sql`${table.executionKind} in ('app', 'infra')`
+    ),
+    uniqueIndex("git_cicd_pipeline_runs_github_run_unique")
+      .on(
+        table.sourceRepositoryId,
+        table.githubWorkflowRunId,
+        table.githubWorkflowRunAttempt
+      )
+      .where(
+        sql`${table.githubWorkflowRunId} is not null and ${table.githubWorkflowRunAttempt} is not null`
+      ),
     uniqueIndex("git_cicd_pipeline_runs_release_request_key_unique")
       .on(table.releaseRequestKey)
       .where(sql`${table.releaseRequestKey} is not null`),

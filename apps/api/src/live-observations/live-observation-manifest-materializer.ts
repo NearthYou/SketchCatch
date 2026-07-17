@@ -1,9 +1,14 @@
 import type {
+  ArchitectureJson,
+  DeploymentLiveObservationAwsAdapterV4,
   DeploymentLiveObservationManifestRecord,
   DeploymentLiveObservationManifestV2
 } from "@sketchcatch/types";
 import { parseDeploymentLiveObservationManifestV2 } from "./live-observation-manifest.js";
-import type { DeploymentLiveObservationManifestRepository } from "./live-observation-manifest-repository.js";
+import {
+  LiveObservationManifestPersistenceConflictError,
+  type DeploymentLiveObservationManifestRepository
+} from "./live-observation-manifest-repository.js";
 
 type DeploymentEvidence = {
   readonly id: string;
@@ -43,6 +48,7 @@ export type VerifiedCloudFrontLiveObservationTopology = {
 
 type ManifestMaterializationInput = {
   readonly audienceBaseUrl: string;
+  readonly architecture: ArchitectureJson;
   readonly deployment: DeploymentEvidence;
   readonly connection: ConnectionEvidence | null;
   readonly outputs: Readonly<Record<string, unknown>>;
@@ -57,12 +63,33 @@ export async function materializeDeploymentLiveObservationManifest(
   try {
     manifest = createDeploymentLiveObservationManifest(input);
   } catch {
-    return repository.saveInvalid({
-      deploymentId: input.deployment.id,
-      reason: "manifest materialization failed"
-    });
+    return persistOrReadManifestWinner(input.deployment.id, repository, () =>
+      repository.saveInvalid({
+        deploymentId: input.deployment.id,
+        reason: "manifest materialization failed"
+      })
+    );
   }
-  return repository.saveValid(manifest);
+  return persistOrReadManifestWinner(input.deployment.id, repository, () =>
+    repository.saveValid(manifest)
+  );
+}
+
+async function persistOrReadManifestWinner(
+  deploymentId: string,
+  repository: DeploymentLiveObservationManifestRepository,
+  persist: () => Promise<DeploymentLiveObservationManifestRecord>
+): Promise<DeploymentLiveObservationManifestRecord> {
+  try {
+    return await persist();
+  } catch (error) {
+    if (!(error instanceof LiveObservationManifestPersistenceConflictError)) {
+      throw error;
+    }
+    const winner = await repository.findByDeploymentId(deploymentId);
+    if (!winner) throw error;
+    return winner;
+  }
 }
 
 export function createDeploymentLiveObservationManifest(
@@ -92,6 +119,7 @@ export function createDeploymentLiveObservationManifest(
   if (input.topology) {
     return createCloudFrontDeploymentManifest({
       audienceBaseUrl,
+      architecture: input.architecture,
       connection,
       deployment,
       outputs,
@@ -106,15 +134,10 @@ export function createDeploymentLiveObservationManifest(
     accountId,
     region: connection.region
   });
-  const targetGroupArn = readAwsArn(
-    outputs,
-    "target_group_arn",
-    "target_group_arn_suffix",
-    {
-      accountId,
-      region: connection.region
-    }
-  );
+  const targetGroupArn = readAwsArn(outputs, "target_group_arn", "target_group_arn_suffix", {
+    accountId,
+    region: connection.region
+  });
   if (readPositiveNumber(outputs, "scale_out_threshold") !== 60) {
     throw new Error("Unsupported pressure target");
   }
@@ -155,6 +178,7 @@ export function createDeploymentLiveObservationManifest(
 
 function createCloudFrontDeploymentManifest(input: {
   readonly audienceBaseUrl: string;
+  readonly architecture: ArchitectureJson;
   readonly connection: ConnectionEvidence;
   readonly deployment: DeploymentEvidence;
   readonly outputs: Readonly<Record<string, unknown>>;
@@ -166,10 +190,7 @@ function createCloudFrontDeploymentManifest(input: {
   const cloudFrontDomainName = readString(outputs, "cloudfront_domain_name");
   const frontendBucketName = readString(outputs, "static_bucket_name");
   const loadBalancerArn = readFirstString(outputs, ["alb_arn", "load_balancer_arn"]);
-  const loadBalancerDnsName = readFirstString(outputs, [
-    "alb_dns_name",
-    "load_balancer_dns_name"
-  ]);
+  const loadBalancerDnsName = readFirstString(outputs, ["alb_dns_name", "load_balancer_dns_name"]);
   const targetGroupArn = readString(outputs, "target_group_arn");
   const clusterName = readString(outputs, "ecs_cluster_name");
   const serviceName = readString(outputs, "ecs_service_name");
@@ -230,12 +251,12 @@ function createCloudFrontDeploymentManifest(input: {
     },
     pressure: {
       metric: "requests_per_target_per_minute",
-      target: requirePressureTarget(outputs),
+      target: 60,
       windowSeconds: 60
     },
     adapter: {
       kind: "aws-live-observation",
-      version: 3,
+      version: 4,
       payload: {
         cloudFrontDistributionId,
         cloudFrontDomainName,
@@ -248,8 +269,7 @@ function createCloudFrontDeploymentManifest(input: {
         frontendBucketPublicAccessBlocked: true,
         bucketPolicyAllowsCloudFrontRead: true,
         topologyVerifiedAt: toIsoDateTime(topology.topologyVerifiedAt),
-        frontendState:
-          input.deployment.status === "SUCCESS" ? "current" : "may_be_previous",
+        frontendState: input.deployment.status === "SUCCESS" ? "current" : "may_be_previous",
         loadBalancerDnsName,
         loadBalancerArn,
         targetGroupArn,
@@ -258,7 +278,7 @@ function createCloudFrontDeploymentManifest(input: {
           kind: "ecs_fargate",
           clusterName,
           serviceName,
-          maxCapacity: readPositiveNumber(outputs, "max_capacity")
+          scaling: createEcsScalingEvidence(input.architecture, outputs)
         }
       }
     }
@@ -279,14 +299,15 @@ export function assertDeploymentLiveObservationManifestReusable(input: {
   if (
     record.status !== "valid" ||
     !manifest ||
-    (manifest.adapter.version !== 2 && manifest.adapter.version !== 3) ||
+    (manifest.adapter.version !== 2 &&
+      manifest.adapter.version !== 3 &&
+      manifest.adapter.version !== 4) ||
     normalizeBaseUrl(manifest.endpoints.audienceBaseUrl) !==
       normalizeBaseUrl(input.audienceBaseUrl) ||
     record.deploymentId !== deployment.id ||
     manifest.provenance.deploymentId !== deployment.id ||
     !isLiveObservationEligibleDeploymentStatus(deployment.status) ||
-    manifest.provenance.terraformArtifactSha256 !==
-      deployment.approvedTerraformArtifactHash ||
+    manifest.provenance.terraformArtifactSha256 !== deployment.approvedTerraformArtifactHash ||
     deployment.awsConnectionId !== connection?.id ||
     manifest.provenance.awsConnectionId !== connection?.id ||
     connection?.status !== "verified" ||
@@ -315,15 +336,158 @@ function isLiveObservationEligibleDeploymentStatus(status: string): boolean {
   return status === "SUCCESS" || status === "PARTIALLY_FAILED" || status === "PARTIALLY_CANCELED";
 }
 
-function requirePressureTarget(outputs: Readonly<Record<string, unknown>>): 60 {
-  if (readPositiveNumber(outputs, "scale_out_threshold") !== 60) {
-    throw new Error("Unsupported pressure target");
-  }
-  return 60;
-}
-
 function normalizeBaseUrl(value: string): string {
   return new URL(value).toString().replace(/\/$/, "");
+}
+
+function createEcsScalingEvidence(
+  architecture: ArchitectureJson,
+  outputs: Readonly<Record<string, unknown>>
+): DeploymentLiveObservationAwsAdapterV4["payload"]["capacityTarget"]["scaling"] {
+  const targets = architecture.nodes.filter(
+    (node) => node.type === "APPLICATION_AUTO_SCALING_TARGET"
+  );
+  if (targets.length === 0) return { mode: "fixed" };
+  if (targets.length !== 1) {
+    throw new Error("Ambiguous ECS Service Auto Scaling target evidence");
+  }
+
+  const target = targets[0]!;
+  const connectedServices = architecture.edges
+    .filter((edge) => edge.targetId === target.id)
+    .map((edge) => architecture.nodes.find((node) => node.id === edge.sourceId))
+    .filter((node) => node?.type === "ECS_SERVICE");
+  if (connectedServices.length !== 1) {
+    throw new Error("Incomplete ECS Service Auto Scaling target evidence");
+  }
+
+  const connectedPolicies = architecture.edges
+    .filter((edge) => edge.sourceId === target.id)
+    .map((edge) => architecture.nodes.find((node) => node.id === edge.targetId))
+    .filter((node) => node?.type === "APPLICATION_AUTO_SCALING_POLICY");
+  if (connectedPolicies.length !== 1) {
+    throw new Error("Incomplete ECS Service Auto Scaling policy evidence");
+  }
+
+  const minCapacity = readNonNegativeIntegerConfig(target.config, "minCapacity");
+  const maxCapacity = readPositiveIntegerConfig(target.config, "maxCapacity");
+  if (minCapacity > maxCapacity) {
+    throw new Error("Invalid ECS Service Auto Scaling capacity evidence");
+  }
+  assertOptionalNonNegativeIntegerOutputMatches(outputs, "min_capacity", minCapacity);
+  assertRequiredOutputMatches(outputs, "max_capacity", maxCapacity, { requireInteger: true });
+
+  const policy = connectedPolicies[0]!;
+  if (policy.config["policyType"] !== "TargetTrackingScaling") {
+    throw new Error("Unsupported ECS Service Auto Scaling policy evidence");
+  }
+  const configuration = readConfigRecord(
+    policy.config["targetTrackingScalingPolicyConfiguration"],
+    "targetTrackingScalingPolicyConfiguration"
+  );
+  const targetValue = readPositiveConfigNumber(configuration, "targetValue");
+  assertOptionalOutputMatches(outputs, "scale_out_threshold", targetValue);
+
+  return {
+    mode: "service_auto_scaling",
+    minCapacity,
+    maxCapacity,
+    metric: readTargetTrackingMetric(configuration),
+    targetValue
+  };
+}
+
+function readPositiveIntegerConfig(
+  config: Readonly<Record<string, unknown>>,
+  name: string
+): number {
+  const value = config[name];
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`Invalid ${name} architecture evidence`);
+  }
+  return value;
+}
+
+function readNonNegativeIntegerConfig(
+  config: Readonly<Record<string, unknown>>,
+  name: string
+): number {
+  const value = config[name];
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new Error(`Invalid ${name} architecture evidence`);
+  }
+  return value;
+}
+
+function readPositiveConfigNumber(config: Readonly<Record<string, unknown>>, name: string): number {
+  const value = config[name];
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`Invalid ${name} architecture evidence`);
+  }
+  return value;
+}
+
+function readConfigRecord(value: unknown, name: string): Readonly<Record<string, unknown>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Invalid ${name} architecture evidence`);
+  }
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function readTargetTrackingMetric(configuration: Readonly<Record<string, unknown>>): string {
+  const rawSpecifications = configuration["predefinedMetricSpecification"];
+  const specifications = Array.isArray(rawSpecifications)
+    ? rawSpecifications
+    : rawSpecifications === undefined
+      ? []
+      : [rawSpecifications];
+  if (specifications.length !== 1) {
+    throw new Error("Invalid target tracking metric architecture evidence");
+  }
+  const specification = readConfigRecord(specifications[0], "predefinedMetricSpecification");
+  const metric = specification["predefinedMetricType"];
+  if (typeof metric !== "string" || !metric.trim()) {
+    throw new Error("Invalid target tracking metric architecture evidence");
+  }
+  return metric.trim();
+}
+
+function assertOptionalOutputMatches(
+  outputs: Readonly<Record<string, unknown>>,
+  name: string,
+  expected: number,
+  options: { readonly requireInteger?: boolean } = {}
+): void {
+  if (outputs[name] === undefined || outputs[name] === null || outputs[name] === "") {
+    return;
+  }
+  assertRequiredOutputMatches(outputs, name, expected, options);
+}
+
+function assertOptionalNonNegativeIntegerOutputMatches(
+  outputs: Readonly<Record<string, unknown>>,
+  name: string,
+  expected: number
+): void {
+  const raw = outputs[name];
+  if (raw === undefined || raw === null || raw === "") return;
+
+  const value = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value !== expected) {
+    throw new Error(`${name} output does not match architecture evidence`);
+  }
+}
+
+function assertRequiredOutputMatches(
+  outputs: Readonly<Record<string, unknown>>,
+  name: string,
+  expected: number,
+  options: { readonly requireInteger?: boolean } = {}
+): void {
+  const value = readPositiveNumber(outputs, name);
+  if ((options.requireInteger && !Number.isInteger(value)) || value !== expected) {
+    throw new Error(`${name} output does not match architecture evidence`);
+  }
 }
 
 function readCapacityTarget(outputs: Readonly<Record<string, unknown>>) {

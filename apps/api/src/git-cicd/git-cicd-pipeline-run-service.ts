@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, lt, notInArray, or, sql } from "drizzle-orm";
 import type {
   GitCicdMonitoredPath,
   GitCicdPipelineChangeScope,
+  GitCicdPipelineExecutionKind,
   GitCicdPipelineRunStatus,
   GitCicdPipelineStageKind,
   GitCicdPipelineStageStatus
@@ -46,6 +47,8 @@ const terminalPipelineRunStatuses: readonly GitCicdPipelineRunStatus[] = [
   "failed",
   "cancelled"
 ];
+const projectReleaseInProgressMessage =
+  "현재 이 프로젝트에서 다른 배포가 진행 중입니다. 완료 후 다시 실행해 주세요.";
 
 export type PipelineRefreshTarget = {
   projectId: string;
@@ -60,6 +63,9 @@ export type PipelineRefreshTarget = {
   appUrl: string | null;
   apiUrl: string | null;
   commitSha?: string;
+  workflowRunId?: string;
+  workflowRunAttempt?: number;
+  executionKind?: GitCicdPipelineExecutionKind;
 };
 
 export type PersistedPipelineRun = {
@@ -68,6 +74,9 @@ export type PersistedPipelineRun = {
   infrastructureDeploymentId: string | null;
   sourceRepositoryId: string;
   handoffId: string | null;
+  executionKind: GitCicdPipelineExecutionKind;
+  githubWorkflowRunId: string | null;
+  githubWorkflowRunAttempt: number | null;
   commitSha: string;
   commitMessage: string;
   branch: string;
@@ -122,9 +131,12 @@ export type GitCicdPipelinePersistenceRepository = {
     limit: number;
   }): Promise<PipelineRunWithStages[]>;
   listPipelineLogs(pipelineRunId: string, sinceSequence: number): Promise<PersistedPipelineLog[]>;
-  findPipelineRunsByCommitShas(
+  findPipelineRunsByWorkflowRuns(
     sourceRepositoryId: string,
-    commitShas: readonly string[]
+    keys: readonly {
+      workflowRunId: string;
+      workflowRunAttempt: number;
+    }[]
   ): Promise<Map<string, PersistedPipelineRun>>;
   persistSnapshot(input: {
     run: PersistedPipelineRun;
@@ -153,6 +165,52 @@ export class GitCicdPipelineRunRefreshUnavailableError extends Error {
   }
 }
 
+export function createWorkflowRunKey(
+  workflowRunId: string,
+  workflowRunAttempt: number
+): string {
+  return `${workflowRunId}:${workflowRunAttempt}`;
+}
+
+export function createGitCicdPipelineStatusMessage(input: {
+  executionKind: GitCicdPipelineExecutionKind;
+  status: GitCicdPipelineRunStatus;
+  stages: readonly PersistedPipelineStage[];
+}): string {
+  if (input.status === "failed") {
+    const failedStages = new Set(
+      input.stages.filter((stage) => stage.status === "failed").map((stage) => stage.kind)
+    );
+    if (input.executionKind === "infra") {
+      if (failedStages.has("infra_plan")) {
+        return "인프라 Plan 생성에 실패했습니다. Terraform Apply는 실행되지 않았습니다.";
+      }
+      if (failedStages.has("infra_apply")) {
+        return "인프라 적용 중 실패했습니다. 일부 리소스가 변경되었을 수 있으므로 실행 로그를 확인해 주세요.";
+      }
+      return "인프라 배포 준비에 실패했습니다. GitHub Actions 설정과 AWS 연결을 확인해 주세요.";
+    }
+    if (failedStages.has("verify")) {
+      return "새 버전 Health Check에 실패해 애플리케이션을 이전 정상 버전으로 복구했습니다.";
+    }
+    if (failedStages.has("app_deploy")) return "애플리케이션 배포에 실패했습니다.";
+    return "애플리케이션 빌드에 실패했습니다.";
+  }
+  if (input.status === "succeeded") {
+    return input.executionKind === "infra"
+      ? "인프라 배포가 완료되었습니다."
+      : "애플리케이션 배포가 완료되었습니다.";
+  }
+  if (input.status === "cancelled") {
+    return input.executionKind === "infra"
+      ? "인프라 배포가 취소되었습니다."
+      : "애플리케이션 배포가 취소되었습니다.";
+  }
+  return input.executionKind === "infra"
+    ? "인프라 배포가 진행 중입니다."
+    : "애플리케이션 배포가 진행 중입니다.";
+}
+
 export function createGitCicdPipelineRunService(options: {
   repository: GitCicdPipelinePersistenceRepository;
   provider: GitCicdRunProvider;
@@ -165,7 +223,12 @@ export function createGitCicdPipelineRunService(options: {
 
   async function refreshTarget(
     target: PipelineRefreshTarget,
-    onlyCommitSha?: string
+    onlyWorkflow?: {
+      commitSha: string;
+      workflowRunId: string;
+      workflowRunAttempt: number;
+      executionKind: GitCicdPipelineExecutionKind;
+    }
   ): Promise<PipelineRefreshResult> {
     try {
       const snapshots = await options.provider.listSnapshots({
@@ -173,45 +236,47 @@ export function createGitCicdPipelineRunService(options: {
         owner: target.owner,
         name: target.name,
         branch: target.monitorBranch,
-        ...(onlyCommitSha ? { commitSha: onlyCommitSha } : {})
+        ...(onlyWorkflow ? { commitSha: onlyWorkflow.commitSha } : {})
       });
-      const relevantSnapshots = onlyCommitSha
-        ? snapshots.filter((snapshot) => snapshot.commitSha === onlyCommitSha)
+      const relevantSnapshots = onlyWorkflow
+        ? snapshots.filter(
+            (snapshot) =>
+              snapshot.commitSha === onlyWorkflow.commitSha &&
+              snapshot.workflowRunId === onlyWorkflow.workflowRunId &&
+              snapshot.workflowRunAttempt === onlyWorkflow.workflowRunAttempt &&
+              snapshot.executionKind === onlyWorkflow.executionKind
+          )
         : snapshots;
-      const existingRuns = await options.repository.findPipelineRunsByCommitShas(
+      const existingRuns = await options.repository.findPipelineRunsByWorkflowRuns(
         target.sourceRepositoryId,
-        [...new Set(relevantSnapshots.map((snapshot) => snapshot.commitSha))]
+        relevantSnapshots.map((snapshot) => ({
+          workflowRunId: snapshot.workflowRunId,
+          workflowRunAttempt: snapshot.workflowRunAttempt
+        }))
       );
       const refreshed: PipelineRunWithStages[] = [];
-      let latestApplicableCommitSha: string | null = null;
+      let latestApplicableWorkflowKey: string | null = null;
       let projectRuns: PipelineRunWithStages[] | null = null;
       for (const snapshot of relevantSnapshots) {
-        const existingRun = existingRuns.get(snapshot.commitSha);
-        const changeScope =
-          existingRun?.changeScope ??
-          classifyPipelineChangeScope(
-            await options.provider.listCommitFiles({
-              installationId: target.installationId,
-              owner: target.owner,
-              name: target.name,
-              branch: target.monitorBranch,
-              commitSha: snapshot.commitSha
-            }),
-            target
-          );
-        if (!changeScope) continue;
-        latestApplicableCommitSha ??= snapshot.commitSha;
+        const workflowKey = createWorkflowRunKey(
+          snapshot.workflowRunId,
+          snapshot.workflowRunAttempt
+        );
+        const existingRun = existingRuns.get(workflowKey);
+        latestApplicableWorkflowKey ??= workflowKey;
         try {
-          refreshed.push(await persistSnapshot(target, snapshot, changeScope));
+          refreshed.push(await persistSnapshot(target, snapshot, existingRun));
         } catch (error) {
-          if (!isReleaseVerificationError(error) || snapshot.commitSha === latestApplicableCommitSha) {
+          if (!isReleaseVerificationError(error) || workflowKey === latestApplicableWorkflowKey) {
             throw error;
           }
           projectRuns ??= await options.repository.listProjectPipelineRuns(target.projectId);
           const persisted = projectRuns.find(
             (run) =>
               run.sourceRepositoryId === target.sourceRepositoryId &&
-              run.commitSha === snapshot.commitSha
+              run.githubWorkflowRunId === snapshot.workflowRunId &&
+              run.githubWorkflowRunAttempt === snapshot.workflowRunAttempt &&
+              run.executionKind === snapshot.executionKind
           );
           if (persisted) refreshed.push(maskRun(persisted));
         }
@@ -219,8 +284,13 @@ export function createGitCicdPipelineRunService(options: {
       return { runs: refreshed, stale: false, errorMessage: null };
     } catch (error) {
       const persisted = await options.repository.listProjectPipelineRuns(target.projectId);
-      const runs = onlyCommitSha
-        ? persisted.filter((run) => run.commitSha === onlyCommitSha)
+      const runs = onlyWorkflow
+        ? persisted.filter(
+            (run) =>
+              run.githubWorkflowRunId === onlyWorkflow.workflowRunId &&
+              run.githubWorkflowRunAttempt === onlyWorkflow.workflowRunAttempt &&
+              run.executionKind === onlyWorkflow.executionKind
+          )
         : persisted;
       return {
         runs: maskRuns(runs),
@@ -236,22 +306,36 @@ export function createGitCicdPipelineRunService(options: {
   async function persistSnapshot(
     target: PipelineRefreshTarget,
     snapshot: GitCicdRunProviderSnapshot,
-    changeScope: GitCicdPipelineChangeScope
+    existingRun?: PersistedPipelineRun
   ): Promise<PipelineRunWithStages> {
+    if (existingRun && existingRun.executionKind !== snapshot.executionKind) {
+      throw new Error("GitHub Workflow execution kind changed for the same run attempt");
+    }
     const refreshedAt = now();
-    const runId = createId();
+    const runId = existingRun?.id ?? createId();
+    const stages = buildStages(runId, snapshot, snapshot.executionKind, createId);
     const run: PersistedPipelineRun = {
       id: runId,
       projectId: target.projectId,
       infrastructureDeploymentId: null,
       sourceRepositoryId: target.sourceRepositoryId,
       handoffId: target.handoffId,
+      executionKind: snapshot.executionKind,
+      githubWorkflowRunId: snapshot.workflowRunId,
+      githubWorkflowRunAttempt: snapshot.workflowRunAttempt,
       commitSha: snapshot.commitSha,
       commitMessage: maskDeploymentMessage(snapshot.commitMessage),
       branch: snapshot.branch,
-      changeScope,
+      changeScope: snapshot.executionKind,
       status: snapshot.status,
-      statusMessage: `${snapshot.workflowName}: ${snapshot.status}`,
+      statusMessage:
+        existingRun?.statusMessage === projectReleaseInProgressMessage
+          ? projectReleaseInProgressMessage
+          : createGitCicdPipelineStatusMessage({
+              executionKind: snapshot.executionKind,
+              status: snapshot.status,
+              stages
+            }),
       pipelineRunUrl: snapshot.runUrl,
       appUrl: normalizeNonSensitiveHttpUrl(target.appUrl),
       apiUrl: normalizeNonSensitiveHttpUrl(target.apiUrl),
@@ -260,9 +344,8 @@ export function createGitCicdPipelineRunService(options: {
       upstreamOrderingToken: snapshot.upstreamOrderingToken,
       logRevision: snapshot.logRevision,
       lastRefreshedAt: refreshedAt,
-      createdAt: refreshedAt
+      createdAt: existingRun?.createdAt ?? refreshedAt
     };
-    const stages = buildStages(runId, snapshot, changeScope, createId);
     const stageIds = new Map(stages.map((stage) => [stage.kind, stage.id]));
     const logs = snapshot.logs.map(
       (log, index): PersistedPipelineLog => ({
@@ -335,11 +418,23 @@ export function createGitCicdPipelineRunService(options: {
       authorizeProject?: (projectId: string) => Promise<boolean>;
     }): Promise<{ run: PipelineRunWithStages; stale: boolean; errorMessage: string | null }> {
       const target = await options.repository.findRunRefreshTarget(input.pipelineRunId);
-      if (!target?.commitSha) throw new GitCicdPipelineRunRefreshUnavailableError();
+      if (
+        !target?.commitSha ||
+        !target.workflowRunId ||
+        !target.workflowRunAttempt ||
+        !target.executionKind
+      ) {
+        throw new GitCicdPipelineRunRefreshUnavailableError();
+      }
       if (input.authorizeProject && !(await input.authorizeProject(target.projectId))) {
         throw new GitCicdPipelineRunRefreshUnavailableError();
       }
-      const result = await refreshTarget(target, target.commitSha);
+      const result = await refreshTarget(target, {
+        commitSha: target.commitSha,
+        workflowRunId: target.workflowRunId,
+        workflowRunAttempt: target.workflowRunAttempt,
+        executionKind: target.executionKind
+      });
       const run =
         result.runs.find((candidate) => candidate.id === input.pipelineRunId) ??
         (await options.repository.findPipelineRun(input.pipelineRunId));
@@ -570,7 +665,10 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
         .select({
           projectId: gitCicdPipelineRuns.projectId,
           sourceRepositoryId: gitCicdPipelineRuns.sourceRepositoryId,
-          commitSha: gitCicdPipelineRuns.commitSha
+          commitSha: gitCicdPipelineRuns.commitSha,
+          workflowRunId: gitCicdPipelineRuns.githubWorkflowRunId,
+          workflowRunAttempt: gitCicdPipelineRuns.githubWorkflowRunAttempt,
+          executionKind: gitCicdPipelineRuns.executionKind
         })
         .from(gitCicdPipelineRuns)
         .where(eq(gitCicdPipelineRuns.id, pipelineRunId));
@@ -585,7 +683,15 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
           eq(gitCicdMonitoringConfigs.validationStatus, "valid")
         )
       );
-      return target ? { ...target, commitSha: run.commitSha } : undefined;
+      return target && run.workflowRunId && run.workflowRunAttempt
+        ? {
+            ...target,
+            commitSha: run.commitSha,
+            workflowRunId: run.workflowRunId,
+            workflowRunAttempt: run.workflowRunAttempt,
+            executionKind: run.executionKind
+          }
+        : undefined;
     },
     listProjectPipelineRuns: listRuns,
     listProjectPipelineRunPage: listRunPage,
@@ -601,19 +707,33 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
         )
         .orderBy(asc(gitCicdPipelineLogs.sequence));
     },
-    async findPipelineRunsByCommitShas(sourceRepositoryId, commitShas) {
-      if (!commitShas.length) return new Map();
+    async findPipelineRunsByWorkflowRuns(sourceRepositoryId, keys) {
+      if (!keys.length) return new Map();
+      const workflowRunIds = [...new Set(keys.map((key) => key.workflowRunId))];
       const runs = await db
         .select()
         .from(gitCicdPipelineRuns)
         .where(
           and(
             eq(gitCicdPipelineRuns.sourceRepositoryId, sourceRepositoryId),
-            inArray(gitCicdPipelineRuns.commitSha, [...commitShas]),
-            isNull(gitCicdPipelineRuns.releaseRequestKey)
+            inArray(gitCicdPipelineRuns.githubWorkflowRunId, workflowRunIds)
           )
         );
-      return new Map(runs.map((run) => [run.commitSha, run]));
+      const requestedKeys = new Set(
+        keys.map((key) =>
+          createWorkflowRunKey(key.workflowRunId, key.workflowRunAttempt)
+        )
+      );
+      return new Map(
+        runs.flatMap((run) => {
+          if (!run.githubWorkflowRunId || !run.githubWorkflowRunAttempt) return [];
+          const key = createWorkflowRunKey(
+            run.githubWorkflowRunId,
+            run.githubWorkflowRunAttempt
+          );
+          return requestedKeys.has(key) ? [[key, run] as const] : [];
+        })
+      );
     },
     persistSnapshot(input) {
       return db.transaction(async (tx) => {
@@ -622,8 +742,15 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
           .insert(gitCicdPipelineRuns)
           .values(input.run)
           .onConflictDoUpdate({
-            target: [gitCicdPipelineRuns.sourceRepositoryId, gitCicdPipelineRuns.commitSha],
-            targetWhere: isNull(gitCicdPipelineRuns.releaseRequestKey),
+            target: [
+              gitCicdPipelineRuns.sourceRepositoryId,
+              gitCicdPipelineRuns.githubWorkflowRunId,
+              gitCicdPipelineRuns.githubWorkflowRunAttempt
+            ],
+            targetWhere: and(
+              sql`${gitCicdPipelineRuns.githubWorkflowRunId} is not null`,
+              sql`${gitCicdPipelineRuns.githubWorkflowRunAttempt} is not null`
+            )!,
             set: {
               ...(input.run.handoffId === null
                 ? {}
@@ -645,6 +772,7 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
               lastRefreshedAt: input.run.lastRefreshedAt
             },
             setWhere: or(
+              eq(gitCicdPipelineRuns.logRevision, ""),
               lt(gitCicdPipelineRuns.upstreamOrderingToken, input.run.upstreamOrderingToken),
               and(
                 eq(gitCicdPipelineRuns.upstreamOrderingToken, input.run.upstreamOrderingToken),
@@ -662,11 +790,17 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
             .where(
               and(
                 eq(gitCicdPipelineRuns.sourceRepositoryId, input.run.sourceRepositoryId),
-                eq(gitCicdPipelineRuns.commitSha, input.run.commitSha),
-                isNull(gitCicdPipelineRuns.releaseRequestKey)
+                eq(gitCicdPipelineRuns.githubWorkflowRunId, input.run.githubWorkflowRunId!),
+                eq(
+                  gitCicdPipelineRuns.githubWorkflowRunAttempt,
+                  input.run.githubWorkflowRunAttempt!
+                )
               )
             );
           if (!persistedRun) throw new Error("Failed to read persisted Pipeline Run");
+          if (persistedRun.executionKind !== input.run.executionKind) {
+            throw new Error("GitHub Workflow execution kind changed for the same run attempt");
+          }
           const persistedStages = await tx
             .select()
             .from(gitCicdPipelineStages)
@@ -677,6 +811,10 @@ export function createPostgresGitCicdPipelinePersistenceRepository(
               (left, right) => stageKinds.indexOf(left.kind) - stageKinds.indexOf(right.kind)
             )
           };
+        }
+
+        if (run.executionKind !== input.run.executionKind) {
+          throw new Error("GitHub Workflow execution kind changed for the same run attempt");
         }
 
         const persistedStages: PersistedPipelineStage[] = [];
@@ -730,7 +868,7 @@ function isReleaseVerificationError(error: unknown): boolean {
 function buildStages(
   runId: string,
   snapshot: GitCicdRunProviderSnapshot,
-  scope: GitCicdPipelineChangeScope,
+  executionKind: GitCicdPipelineExecutionKind,
   createId: () => string
 ): PersistedPipelineStage[] {
   return stageKinds.map((kind) => {
@@ -739,9 +877,9 @@ function buildStages(
       Boolean(job) ||
       kind === "detect" ||
       kind === "verify" ||
-      (scope !== "infra" &&
+      (executionKind === "app" &&
         (kind === "app_build" || kind === "artifact_publish" || kind === "app_deploy")) ||
-      (scope !== "app" && (kind === "infra_plan" || kind === "infra_apply"));
+      (executionKind === "infra" && (kind === "infra_plan" || kind === "infra_apply"));
     return {
       id: createId(),
       pipelineRunId: runId,

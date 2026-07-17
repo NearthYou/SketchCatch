@@ -42,7 +42,9 @@ export function createLiveObservationV2Service(options: {
       if (
         record?.status !== "valid" ||
         !record.manifest ||
-        (record.manifest.adapter.version !== 2 && record.manifest.adapter.version !== 3)
+        (record.manifest.adapter.version !== 2 &&
+          record.manifest.adapter.version !== 3 &&
+          record.manifest.adapter.version !== 4)
       ) {
         throw serviceError("LIVE_OBSERVATION_DEPLOYMENT_NOT_ELIGIBLE");
       }
@@ -149,13 +151,7 @@ function toTerminalSnapshot(
 
 function parseAudienceBaseUrl(value: string): string {
   const url = new URL(value);
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash
-  ) {
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
     throw new Error("Invalid Live Observation audience base URL");
   }
   return url.toString().replace(/\/$/, "");

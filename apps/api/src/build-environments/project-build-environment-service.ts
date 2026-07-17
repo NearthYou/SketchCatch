@@ -1,14 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import type {
+  ArchitectureJson,
   AwsCodeConnectionStatus,
   ConfirmedBuildConfig,
+  EcsFargateRuntimeConfig,
   ProjectBuildEnvironmentResponse
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
 import {
   awsCodeConnections,
   awsConnections,
+  architectures,
   projectBuildEnvironments,
   projectDeploymentTargets,
   projectExecutionLeases,
@@ -63,6 +66,12 @@ export type ProjectBuildEnvironmentRepository = {
     awsConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["awsConnection"]>;
   } | undefined>;
   hasActiveExecution(projectId: string): Promise<boolean>;
+  synchronizeEcsRuntimeConfig(input: {
+    architectureId: string;
+    codeBuildProjectName: string;
+    projectId: string;
+    userId: string;
+  }): Promise<void>;
   deleteByProjectId(projectId: string): Promise<void>;
   save(input: SaveProjectBuildEnvironmentInput): Promise<ProjectBuildEnvironmentRecord>;
 };
@@ -285,6 +294,64 @@ export function createPostgresProjectBuildEnvironmentRepository(
       return Boolean(lease);
     },
 
+    async synchronizeEcsRuntimeConfig(input) {
+      await db.transaction(async (transaction) => {
+        const [row] = await transaction
+          .select({
+            architectureJson: architectures.architectureJson,
+            runtimeConfig: projectDeploymentTargets.runtimeConfig,
+            runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind
+          })
+          .from(projects)
+          .innerJoin(
+            architectures,
+            and(
+              eq(architectures.id, input.architectureId),
+              eq(architectures.projectId, projects.id)
+            )
+          )
+          .innerJoin(
+            projectDeploymentTargets,
+            eq(projectDeploymentTargets.projectId, projects.id)
+          )
+          .where(
+            and(
+              eq(projects.id, input.projectId),
+              eq(projects.userId, input.userId),
+              isNull(projects.deletionStartedAt)
+            )
+          )
+          .for("update");
+
+        if (
+          row?.runtimeTargetKind !== "ecs_fargate" ||
+          row.runtimeConfig?.runtimeTargetKind !== "ecs_fargate"
+        ) {
+          throw new ProjectBuildEnvironmentError(
+            "BUILD_CONFIG_REQUIRED",
+            "승인된 ECS Fargate 배포 타깃을 확인할 수 없습니다."
+          );
+        }
+
+        const runtimeConfig = synchronizeEcsFargateRuntimeConfigWithArchitecture(
+          row.runtimeConfig,
+          row.architectureJson,
+          input.codeBuildProjectName
+        );
+        if (JSON.stringify(runtimeConfig) === JSON.stringify(row.runtimeConfig)) return;
+
+        await transaction
+          .update(projectDeploymentTargets)
+          .set({ runtimeConfig, updatedAt: new Date() })
+          .where(
+            and(
+              eq(projectDeploymentTargets.projectId, input.projectId),
+              eq(projectDeploymentTargets.runtimeTargetKind, "ecs_fargate")
+            )
+          );
+      });
+    },
+
     async deleteByProjectId(projectId) {
       await db
         .delete(projectBuildEnvironments)
@@ -319,13 +386,21 @@ export function createPostgresProjectBuildEnvironmentRepository(
 }
 
 export async function prepareProjectBuildEnvironment(
-  input: { projectId: string; userId: string },
+  input: { projectId: string; userId: string; architectureId?: string },
   repository: ProjectBuildEnvironmentRepository,
   gateway: ProjectBuildEnvironmentGateway,
   options: ProjectBuildEnvironmentServiceOptions = {}
 ): Promise<ProjectBuildEnvironmentResponse> {
   const context = await requirePreparationContext(input, repository);
   const desired = createDesiredProjectBuildEnvironment(context);
+  if (input.architectureId) {
+    await repository.synchronizeEcsRuntimeConfig({
+      architectureId: input.architectureId,
+      codeBuildProjectName: desired.codeBuildProjectName,
+      projectId: input.projectId,
+      userId: input.userId
+    });
+  }
   const existing = await repository.findByProjectId(input.projectId);
   const now = options.now?.() ?? new Date();
 
@@ -545,7 +620,7 @@ export function createDesiredProjectBuildEnvironment(
   context: RequiredPreparationContext
 ): DesiredProjectBuildEnvironment {
   const projectSuffix = context.projectId.replaceAll("-", "").slice(0, 8).toLowerCase();
-  const codeBuildProjectName = `sketchcatch-${projectSuffix}-build`;
+  const codeBuildProjectName = createProjectCodeBuildProjectName(context.projectId);
   const codeBuildServiceRoleName = `SketchCatchCodeBuild-${projectSuffix}`;
   const codeBuildServiceRoleArn = `arn:aws:iam::${context.awsConnection.accountId}:role/${codeBuildServiceRoleName}`;
   const permissionsBoundaryArn = `arn:aws:iam::${context.awsConnection.accountId}:policy/${createCodeBuildPermissionsBoundaryName(context.awsConnection.id)}`;
@@ -572,6 +647,93 @@ export function createDesiredProjectBuildEnvironment(
     codeBuildServiceRoleName,
     runtimeFingerprint
   };
+}
+
+export function createProjectCodeBuildProjectName(projectId: string): string {
+  const projectSuffix = projectId.replaceAll("-", "").slice(0, 8).toLowerCase();
+  return `sketchcatch-${projectSuffix}-build`;
+}
+
+export function synchronizeEcsFargateRuntimeConfigWithArchitecture(
+  current: EcsFargateRuntimeConfig,
+  architectureJson: ArchitectureJson,
+  codeBuildProjectName: string
+): EcsFargateRuntimeConfig {
+  const ecrConfig = getSingleArchitectureResourceConfig(
+    architectureJson,
+    "ECR_REPOSITORY"
+  );
+  const clusterConfig = getSingleArchitectureResourceConfig(architectureJson, "ECS_CLUSTER");
+  const serviceConfig = getSingleArchitectureResourceConfig(architectureJson, "ECS_SERVICE");
+  const loadBalancer = readArchitectureBlock(serviceConfig, "loadBalancer");
+  const coordinates = {
+    ecrRepositoryName: readArchitectureString(ecrConfig, "name"),
+    clusterName: readArchitectureString(clusterConfig, "name"),
+    serviceName: readArchitectureString(serviceConfig, "name"),
+    containerName: readArchitectureString(loadBalancer, "containerName")
+  };
+
+  if (
+    !codeBuildProjectName.trim() ||
+    Object.values(coordinates).some((value) => !value)
+  ) {
+    throw new ProjectBuildEnvironmentError(
+      "BUILD_CONFIG_REQUIRED",
+      "승인된 Board에서 ECR, ECS cluster, ECS service, container 좌표를 하나씩 확인할 수 없습니다."
+    );
+  }
+
+  const infrastructureCoordinatesChanged =
+    current.ecrRepositoryName !== coordinates.ecrRepositoryName ||
+    current.clusterName !== coordinates.clusterName ||
+    current.serviceName !== coordinates.serviceName ||
+    current.containerName !== coordinates.containerName;
+
+  if (!infrastructureCoordinatesChanged) {
+    return current.codeBuildProjectName === codeBuildProjectName
+      ? current
+      : { ...current, codeBuildProjectName };
+  }
+
+  return {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName,
+    ...coordinates,
+    outputUrl: null
+  };
+}
+
+function getSingleArchitectureResourceConfig(
+  architectureJson: ArchitectureJson,
+  resourceType: ArchitectureJson["nodes"][number]["type"]
+): Record<string, unknown> | null {
+  const matches = architectureJson.nodes.filter((node) => node.type === resourceType);
+  return matches.length === 1 ? matches[0]?.config ?? null : null;
+}
+
+function readArchitectureBlock(
+  values: Record<string, unknown> | null,
+  key: string
+): Record<string, unknown> | null {
+  const value = values?.[key];
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (
+    Array.isArray(value) &&
+    value.length === 1 &&
+    value[0] &&
+    typeof value[0] === "object" &&
+    !Array.isArray(value[0])
+  ) {
+    return value[0] as Record<string, unknown>;
+  }
+  return null;
+}
+
+function readArchitectureString(values: Record<string, unknown> | null, key: string): string {
+  const value = values?.[key];
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function toProjectBuildEnvironment(

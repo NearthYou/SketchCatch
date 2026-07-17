@@ -129,6 +129,31 @@ const awsLiveObservationAdapterPayloadV3Schema = z
   })
   .strict();
 
+const awsLiveObservationAdapterPayloadV4Schema = awsLiveObservationAdapterPayloadV3Schema
+  .omit({ capacityTarget: true })
+  .extend({
+    capacityTarget: z
+      .object({
+        kind: z.literal("ecs_fargate"),
+        clusterName: z.string().regex(ecsNamePattern),
+        serviceName: z.string().regex(ecsNamePattern),
+        scaling: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("fixed") }).strict(),
+          z
+            .object({
+              mode: z.literal("service_auto_scaling"),
+              minCapacity: z.number().int().nonnegative(),
+              maxCapacity: z.number().int().positive(),
+              metric: nonBlankStringSchema.nullable(),
+              targetValue: z.number().positive().nullable()
+            })
+            .strict()
+        ])
+      })
+      .strict()
+  })
+  .strict();
+
 const awsLiveObservationAdapterSchema = z.discriminatedUnion("version", [
   z
     .object({
@@ -149,6 +174,13 @@ const awsLiveObservationAdapterSchema = z.discriminatedUnion("version", [
       kind: z.literal("aws-live-observation"),
       version: z.literal(3),
       payload: awsLiveObservationAdapterPayloadV3Schema
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("aws-live-observation"),
+      version: z.literal(4),
+      payload: awsLiveObservationAdapterPayloadV4Schema
     })
     .strict()
 ]);
@@ -303,7 +335,7 @@ export const deploymentLiveObservationManifestV2Schema: z.ZodType<DeploymentLive
         }
       }
 
-      if (manifest.adapter.version === 3) {
+      if (manifest.adapter.version === 3 || manifest.adapter.version === 4) {
         const trafficUrl = new URL(manifest.endpoints.trafficUrl);
         const payload = manifest.adapter.payload;
         if (
@@ -368,7 +400,7 @@ export function requireLiveObservationTrafficTargetEvidence(value: unknown): {
       routingKind: "alb_custom_domain"
     };
   }
-  if (manifest.adapter.version === 3) {
+  if (manifest.adapter.version === 3 || manifest.adapter.version === 4) {
     return {
       trafficUrl: manifest.endpoints.trafficUrl,
       trafficHostname: manifest.adapter.payload.cloudFrontDomainName,
@@ -376,7 +408,7 @@ export function requireLiveObservationTrafficTargetEvidence(value: unknown): {
       routingKind: "cloudfront"
     };
   }
-  throw new Error("Live Observation traffic target requires adapter v2 or v3 evidence");
+  throw new Error("Live Observation traffic target requires adapter v2, v3, or v4 evidence");
 }
 
 type ElasticLoadBalancingArnIdentity = {

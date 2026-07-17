@@ -161,8 +161,10 @@ export async function approveDeploymentPlan(
     throw new DeploymentConflictError("Terraform artifact changed after plan");
   }
 
-  const releaseCandidate = await findCurrentReleaseCandidate(deployment, repository);
-  assertReleaseCandidateSnapshot(deployment, releaseCandidate, now());
+  if (currentPlanArtifact.operation === "apply") {
+    const releaseCandidate = await findCurrentReleaseCandidate(deployment, repository);
+    assertReleaseCandidateSnapshot(deployment, releaseCandidate, now());
+  }
 
   const approvedDeployment = await repository.approveDeployment(deployment.id, {
     approvedByUserId: input.accessContext.userId,

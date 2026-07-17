@@ -10,6 +10,7 @@ import {
   resolveEcsFargateRuntimeOutputs,
   type TerraformOutputForEcsReconciliation
 } from "./ecs-fargate-output-reconciliation.js";
+import { extractDeployedResourcesFromTerraformStateJson } from "./deployment-apply-results.js";
 
 test("ECS runtime fingerprint ignores output URL but changes with runtime coordinates", () => {
   const base = {
@@ -188,6 +189,42 @@ test("ECS inventory must contain the output resources in the approved account an
     (error: unknown) =>
       error instanceof EcsFargateOutputReconciliationError &&
       error.code === "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+  );
+});
+
+test("ECS inventory accepts the task definition ARN stored separately from Terraform state id", () => {
+  const outputs = resolveEcsFargateRuntimeOutputs(createTerraformOutputs());
+  const parsedTaskDefinition = extractDeployedResourcesFromTerraformStateJson(
+    JSON.stringify({
+      values: {
+        root_module: {
+          resources: [
+            {
+              address: "aws_ecs_task_definition.api",
+              mode: "managed",
+              type: "aws_ecs_task_definition",
+              provider_name: "registry.terraform.io/hashicorp/aws",
+              values: {
+                id: "app-task",
+                arn: outputs.taskDefinitionArn,
+                family: "app-task"
+              }
+            }
+          ]
+        }
+      }
+    }),
+    "ap-northeast-2"
+  );
+  const resources = createTerraformResources(outputs).filter(
+    (resource) => resource.terraformType !== "aws_ecs_task_definition"
+  );
+
+  assert.doesNotThrow(() =>
+    assertEcsFargateRuntimeInventory(outputs, [...resources, ...parsedTaskDefinition], {
+      accountId: "131404649047",
+      region: "ap-northeast-2"
+    })
   );
 });
 

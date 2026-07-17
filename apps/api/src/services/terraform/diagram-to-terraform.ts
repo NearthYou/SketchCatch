@@ -6,6 +6,7 @@ import type {
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
   isGenericTerraformNestedBlock,
+  isTerraformLifecycleIgnoreChangesAttribute,
   isTerraformNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
 
@@ -1161,6 +1162,13 @@ function renderNestedBlockEntry(
   indentLevel: number
 ): string[] {
   if (
+    isTerraformLifecycleIgnoreChangesAttribute(resourceType, key, parentPath) &&
+    Array.isArray(value)
+  ) {
+    return [renderLifecycleIgnoreChanges(value, indentLevel)];
+  }
+
+  if (
     (isTerraformNestedBlockAttribute(resourceType, key, parentPath) ||
       isGenericTerraformNestedBlock(key)) &&
     ((Array.isArray(value) && value.every(isRecord)) || isRecord(value))
@@ -1169,6 +1177,24 @@ function renderNestedBlockEntry(
   }
 
   return [renderAttribute(key, value, indentLevel)];
+}
+
+function renderLifecycleIgnoreChanges(value: unknown[], indentLevel: number): string {
+  const renderedValue = value.length === 0
+    ? "[]"
+    : [
+        "[",
+        ...value.map((item) =>
+          `${indent(indentLevel + 1)}${
+            typeof item === "string" && TERRAFORM_IDENTIFIER_PATTERN.test(item)
+              ? item
+              : renderValue(item, indentLevel + 1)
+          },`
+        ),
+        `${indent(indentLevel)}]`
+      ].join("\n");
+
+  return `${indent(indentLevel)}ignore_changes = ${renderedValue}`;
 }
 
 function renderAttribute(key: string, value: unknown, indentLevel: number): string {

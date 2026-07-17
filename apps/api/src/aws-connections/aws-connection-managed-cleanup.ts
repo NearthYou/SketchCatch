@@ -51,8 +51,8 @@ export function createAwsConnectionManagedCleanup(options: {
     new IAMClient(configuration) as unknown as CleanupClient);
 
   return async ({ connection, resources }) => {
+    if (resources.codeBuildProjects.length === 0 && !resources.codeConnectionArn) return;
     if (!connection.roleArn) {
-      if (resources.codeBuildProjects.length === 0 && !resources.codeConnectionArn) return;
       throw new Error("AWS 연결 Role ARN이 없어 관리 리소스를 안전하게 삭제할 수 없습니다.");
     }
     const credentials = await assumeRole({

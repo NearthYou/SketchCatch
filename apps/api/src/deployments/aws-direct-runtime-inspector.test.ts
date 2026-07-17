@@ -63,6 +63,14 @@ test("Direct ECS inspector derives no-op state only from read-only provider evid
     context,
     preparedArtifact
   );
+  const convergenceMarker = registration.tags?.find(
+    (tag) => tag.key === "sketchcatch:runtime-convergence"
+  )?.value;
+  assert.match(convergenceMarker ?? "", /^[A-Za-z0-9_./=+\-:@]+$/u);
+  assert.equal(
+    convergenceMarker,
+    `sketchcatch:artifact=${artifactFingerprint}:target=${targetFingerprint}`
+  );
   let calls = 0;
   let serviceStatus = "ACTIVE";
   let deploymentConfiguration:

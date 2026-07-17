@@ -124,7 +124,10 @@ export async function publishOciLayoutToEcr(
   artifact: VerifiedOciLayout,
   target: { repositoryName: string; imageTag: string },
   client: EcrPublisherClient,
-  options: { beforeMutation?: () => Promise<void> } = {}
+  options: {
+    beforeMutation?: () => Promise<void>;
+    readClient?: EcrPublisherClient;
+  } = {}
 ): Promise<{ imageDigest: string; imageTag: string }> {
   if (!target.repositoryName.trim()) throw new Error("ECR repository name is required");
   if (!target.imageTag.trim()) throw new Error("ECR image tag is required");
@@ -132,7 +135,7 @@ export async function publishOciLayoutToEcr(
   const existingDigest = await findTaggedImageDigest(
     target.repositoryName,
     target.imageTag,
-    client
+    options.readClient ?? client
   );
   if (existingDigest) {
     if (existingDigest === expectedDigest) {
@@ -167,7 +170,7 @@ export async function publishOciLayoutToEcr(
     const racedDigest = await findTaggedImageDigest(
       target.repositoryName,
       target.imageTag,
-      client
+      options.readClient ?? client
     );
     if (racedDigest === expectedDigest) {
       return { imageDigest: expectedDigest, imageTag: target.imageTag };
@@ -260,7 +263,7 @@ async function findMissingBlobDigests(
     for (const digest of batch) {
       const availability = availabilityByDigest.get(digest);
       if (availability === "AVAILABLE") continue;
-      if (availability === "MISSING") {
+      if (availability === "UNAVAILABLE") {
         missing.add(digest);
         continue;
       }

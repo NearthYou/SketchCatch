@@ -33,6 +33,79 @@ test("failed CodeBuild creation compensates only the role created by this reques
   ]);
 });
 
+test("new build role tolerates a transient IAM propagation delay", async () => {
+  const calls: string[] = [];
+  const gateway = createAwsProjectBuildEnvironmentGateway({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createIamClient: () => createIamClient(calls, { putRolePolicyMissingAttempts: 1 }),
+    createCodeBuildClient: () => createCodeBuildClient(calls)
+  });
+
+  await assert.rejects(gateway.reconcile(desired), /CreateProject failed/);
+  assert.equal(
+    calls.filter((call) => call === "iam:PutRolePolicyCommand").length,
+    2
+  );
+});
+
+test("new build environment tolerates a transient IAM read delay during verification", async () => {
+  const calls: string[] = [];
+  const gateway = createAwsProjectBuildEnvironmentGateway({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createIamClient: () =>
+      createIamClient(calls, {
+        listRoleTagsMissingAttempts: 1,
+        completeVerification: true
+      }),
+    createCodeBuildClient: () =>
+      createCodeBuildClient(calls, { creationSucceeds: true })
+  });
+
+  assert.deepEqual(await gateway.reconcile(desired), {
+    verified: true,
+    statusReason: null
+  });
+  assert.equal(
+    calls.filter((call) => call === "iam:ListRoleTagsCommand").length,
+    2
+  );
+});
+
+test("new build environment tolerates a transient CodeBuild service-role delay", async () => {
+  const calls: string[] = [];
+  const gateway = createAwsProjectBuildEnvironmentGateway({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createIamClient: () =>
+      createIamClient(calls, { completeVerification: true }),
+    createCodeBuildClient: () =>
+      createCodeBuildClient(calls, {
+        creationSucceeds: true,
+        createProjectRolePropagationAttempts: 1
+      })
+  });
+
+  assert.deepEqual(await gateway.reconcile(desired), {
+    verified: true,
+    statusReason: null
+  });
+  assert.equal(
+    calls.filter((call) => call === "codebuild:CreateProjectCommand").length,
+    2
+  );
+});
+
 test("existing unmanaged build role is never modified", async () => {
   const calls: string[] = [];
   const gateway = createAwsProjectBuildEnvironmentGateway({
@@ -187,6 +260,44 @@ test("verification rejects a wildcard build role policy even when action names l
   });
 });
 
+test("verification rejects a build role missing the CodeBuild-compatible connection permission", async () => {
+  const gateway = createAwsProjectBuildEnvironmentGateway({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createIamClient: () =>
+      createVerifiedIamClient({
+        omitLegacyConnectionUse: true,
+        includeConnectionTokenAccess: true
+      }),
+    createCodeBuildClient: () => createVerifiedCodeBuildClient()
+  });
+
+  assert.deepEqual(await gateway.verify(desired), {
+    verified: false,
+    statusReason: "CodeBuild service role policy does not match the build-only contract"
+  });
+});
+
+test("verification rejects a build role missing GitHub connection token access", async () => {
+  const gateway = createAwsProjectBuildEnvironmentGateway({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createIamClient: () => createVerifiedIamClient(),
+    createCodeBuildClient: () => createVerifiedCodeBuildClient()
+  });
+
+  assert.deepEqual(await gateway.verify(desired), {
+    verified: false,
+    statusReason: "CodeBuild service role policy does not match the build-only contract"
+  });
+});
+
 const desired: DesiredProjectBuildEnvironment = {
   projectId: "12345678-1234-1234-1234-1234567890ab",
   awsConnection: {
@@ -211,14 +322,23 @@ const desired: DesiredProjectBuildEnvironment = {
   runtimeFingerprint: "a".repeat(64)
 };
 
-function createIamClient(calls: string[]) {
+function createIamClient(
+  calls: string[],
+  options: {
+    putRolePolicyMissingAttempts?: number;
+    listRoleTagsMissingAttempts?: number;
+    completeVerification?: boolean;
+  } = {}
+) {
   let roleCreated = false;
+  let remainingPutRolePolicyMissingAttempts = options.putRolePolicyMissingAttempts ?? 0;
+  let remainingListRoleTagsMissingAttempts = options.listRoleTagsMissingAttempts ?? 0;
   return {
     async send(command: unknown): Promise<Record<string, unknown>> {
       const name = (command as { constructor: { name: string } }).constructor.name;
       calls.push(`iam:${name}`);
       if (name === "GetRoleCommand") {
-        if (!roleCreated) throw { name: "NoSuchEntity" };
+        if (!roleCreated) throw { name: "NoSuchEntityException" };
         return {
           Role: {
             Arn: desired.codeBuildServiceRoleArn,
@@ -229,13 +349,41 @@ function createIamClient(calls: string[]) {
         };
       }
       if (name === "CreateRoleCommand") roleCreated = true;
+      if (name === "PutRolePolicyCommand" && remainingPutRolePolicyMissingAttempts > 0) {
+        remainingPutRolePolicyMissingAttempts -= 1;
+        throw Object.assign(
+          new Error(`The role with name ${desired.codeBuildServiceRoleName} cannot be found.`),
+          { name: "NoSuchEntityException" }
+        );
+      }
       if (name === "ListRoleTagsCommand") {
+        if (remainingListRoleTagsMissingAttempts > 0) {
+          remainingListRoleTagsMissingAttempts -= 1;
+          throw Object.assign(
+            new Error(`The role with name ${desired.codeBuildServiceRoleName} cannot be found.`),
+            { name: "NoSuchEntityException" }
+          );
+        }
         return {
           Tags: [
             { Key: "ManagedBy", Value: "SketchCatch" },
             { Key: "SketchCatchProject", Value: desired.projectId }
           ]
         };
+      }
+      if (options.completeVerification && name === "ListRolePoliciesCommand") {
+        return { PolicyNames: ["SketchCatchRepositoryBuildOnly"] };
+      }
+      if (options.completeVerification && name === "ListAttachedRolePoliciesCommand") {
+        return { AttachedPolicies: [] };
+      }
+      if (
+        options.completeVerification &&
+        (name === "GetRolePolicyCommand" ||
+          name === "GetPolicyCommand" ||
+          name === "GetPolicyVersionCommand")
+      ) {
+        return createVerifiedIamClient({ includeConnectionTokenAccess: true }).send(command);
       }
       return {};
     },
@@ -245,13 +393,36 @@ function createIamClient(calls: string[]) {
   };
 }
 
-function createCodeBuildClient(calls: string[]) {
+function createCodeBuildClient(
+  calls: string[],
+  options: {
+    creationSucceeds?: boolean;
+    createProjectRolePropagationAttempts?: number;
+  } = {}
+) {
+  let projectCreated = false;
+  let remainingRolePropagationAttempts = options.createProjectRolePropagationAttempts ?? 0;
   return {
     async send(command: unknown): Promise<Record<string, unknown>> {
       const name = (command as { constructor: { name: string } }).constructor.name;
       calls.push(`codebuild:${name}`);
-      if (name === "BatchGetProjectsCommand") return { projects: [] };
-      if (name === "CreateProjectCommand") throw new Error("CreateProject failed");
+      if (name === "BatchGetProjectsCommand") {
+        if (projectCreated) return createVerifiedCodeBuildClient().send(command);
+        return { projects: [] };
+      }
+      if (name === "CreateProjectCommand") {
+        if (!options.creationSucceeds) throw new Error("CreateProject failed");
+        if (remainingRolePropagationAttempts > 0) {
+          remainingRolePropagationAttempts -= 1;
+          throw Object.assign(
+            new Error(
+              "CodeBuild is not authorized to perform: sts:AssumeRole on service role."
+            ),
+            { name: "InvalidInputException" }
+          );
+        }
+        projectCreated = true;
+      }
       return {};
     },
     destroy() {
@@ -263,6 +434,8 @@ function createCodeBuildClient(calls: string[]) {
 function createVerifiedIamClient(input: {
   attachedPolicyArns?: string[];
   wildcardBuildPolicy?: boolean;
+  omitLegacyConnectionUse?: boolean;
+  includeConnectionTokenAccess?: boolean;
 } = {}) {
   return {
     async send(command: unknown): Promise<Record<string, unknown>> {
@@ -315,7 +488,18 @@ function createVerifiedIamClient(input: {
                 },
                 {
                   Effect: "Allow",
-                  Action: "codeconnections:UseConnection",
+                  Action: [
+                    "codeconnections:UseConnection",
+                    ...(input.omitLegacyConnectionUse
+                      ? []
+                      : ["codestar-connections:UseConnection"]),
+                    ...(input.includeConnectionTokenAccess
+                      ? [
+                          "codeconnections:GetConnection",
+                          "codeconnections:GetConnectionToken"
+                        ]
+                      : [])
+                  ],
                   Resource: input.wildcardBuildPolicy ? "*" : desired.codeConnectionArn
                 }
               ]
@@ -345,8 +529,20 @@ function createVerifiedIamClient(input: {
                   },
                   {
                     Effect: "Allow",
-                    Action: "codeconnections:UseConnection",
-                    Resource: `arn:aws:codeconnections:${desired.awsConnection.region}:${desired.awsConnection.accountId}:connection/*`
+                    Action: [
+                      ...(input.includeConnectionTokenAccess
+                        ? [
+                            "codeconnections:GetConnection",
+                            "codeconnections:GetConnectionToken"
+                          ]
+                        : []),
+                      "codeconnections:UseConnection",
+                      "codestar-connections:UseConnection"
+                    ],
+                    Resource: [
+                      `arn:aws:codeconnections:${desired.awsConnection.region}:${desired.awsConnection.accountId}:connection/*`,
+                      `arn:aws:codestar-connections:${desired.awsConnection.region}:${desired.awsConnection.accountId}:connection/*`
+                    ]
                   }
                 ]
               })
@@ -395,7 +591,7 @@ phases:
             timeoutInMinutes: 30,
             queuedTimeoutInMinutes: 15,
             concurrentBuildLimit: 1,
-            badgeEnabled: false,
+            badge: { badgeEnabled: false },
             tags: [
               { key: "ManagedBy", value: "SketchCatch" },
               { key: "SketchCatchProject", value: desired.projectId }

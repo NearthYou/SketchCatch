@@ -407,7 +407,8 @@ function createContext(): TrustedReleaseContext {
       cloudFrontDomainName: "example.cloudfront.net",
       outputUrl: "https://example.cloudfront.net",
       healthCheckPath: "/health",
-      apiProbePath: "/api/check-ins"
+      apiProbePath: "/api/check-ins",
+      runtimeEntrypoint: null
     }
   };
 }

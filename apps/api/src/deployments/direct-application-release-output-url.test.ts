@@ -115,6 +115,101 @@ test("Full-stack ECS preparation stores a pending artifact before its output URL
   assert.equal(release, savedRelease);
 });
 
+test("Full-stack ECS retry refreshes a pending artifact fingerprint after target synchronization", async () => {
+  const runtimeConfig = {
+    runtimeTargetKind: "ecs_fargate" as const,
+    codeBuildProjectName: "sketchcatch-5ac411f8-build",
+    ecrRepositoryName: "audience-live-check-api",
+    clusterName: "audience-live-check-cluster",
+    serviceName: "audience-live-check-service",
+    containerName: "api",
+    outputUrl: null
+  };
+  const currentFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(runtimeConfig);
+  const existing = {
+    id: "release-1",
+    deploymentId: "deployment-1",
+    status: "pending",
+    providerRevision: {
+      provider: "aws",
+      resourceType: "codebuild_artifact",
+      revisionId: "build-1",
+      artifactReference: "s3://release-candidate/artifact",
+      metadata: { ecsRuntimeCoordinatesFingerprint: "stale-demo-fingerprint" }
+    }
+  } as unknown as Awaited<ReturnType<DirectApplicationReleaseRepository["findRelease"]>>;
+  let resetInput:
+    | Parameters<DirectApplicationReleaseRepository["resetReleaseForRetry"]>[0]
+    | undefined;
+  const repository = {
+    async findContext() {
+      return {
+        sourceRepository: {
+          provider: "github",
+          installationId: "installation-1",
+          owner: "jh-9999",
+          name: "audience-live-check"
+        },
+        deployment: {
+          id: "deployment-1",
+          projectId: "project-1",
+          scope: "full_stack",
+          source: "direct",
+          targetKind: "ecs_fargate"
+        },
+        target: {
+          runtimeTargetKind: "ecs_fargate",
+          confirmedBuildConfig: {
+            confirmedCommitSha: "a".repeat(40)
+          },
+          runtimeConfig
+        },
+        connection: {
+          accountId: "123456789012",
+          roleArn: "arn:aws:iam::123456789012:role/SketchCatch",
+          externalId: "external-id",
+          region: "ap-northeast-2"
+        }
+      } as unknown as DirectApplicationReleaseContext;
+    },
+    async findRelease() {
+      return existing;
+    },
+    async resetReleaseForRetry(
+      input: Parameters<DirectApplicationReleaseRepository["resetReleaseForRetry"]>[0]
+    ) {
+      resetInput = input;
+      return {
+        ...existing,
+        providerRevision: input.providerRevision,
+        updatedAt: input.updatedAt
+      };
+    }
+  } as unknown as DirectApplicationReleaseRepository;
+  const gateway = {
+    async prepareArtifact() {
+      throw new Error("unchanged immutable artifact must be reused");
+    }
+  } as unknown as DirectApplicationReleaseGateway;
+
+  const release = await prepareDirectApplicationRelease(
+    { deploymentId: "deployment-1", userId: "user-1" },
+    repository,
+    gateway,
+    () => "unused",
+    () => new Date("2026-07-16T10:00:00.000Z")
+  );
+
+  assert.equal(
+    resetInput?.providerRevision.metadata["ecsRuntimeCoordinatesFingerprint"],
+    currentFingerprint
+  );
+  assert.equal(
+    release?.providerRevision?.metadata["ecsRuntimeCoordinatesFingerprint"],
+    currentFingerprint
+  );
+});
+
 test("Direct application preparation fails before CodeBuild without an output URL", async () => {
   let prepareCalls = 0;
   const context = {

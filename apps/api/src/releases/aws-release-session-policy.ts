@@ -26,9 +26,8 @@ export type AwsReleaseRuntimeCoordinates = {
 };
 
 export function createReadOnlyReleaseSessionPolicy(
-  input: AwsReleaseRuntimeCoordinates
+  _input: AwsReleaseRuntimeCoordinates
 ): string {
-  const partition = input.partition ?? "aws";
   const statements: JsonPolicyStatement[] = [
     {
       Sid: "R",
@@ -46,25 +45,12 @@ export function createReadOnlyReleaseSessionPolicy(
         "elasticloadbalancing:DescribeTargetHealth",
         "s3:GetBucketLocation",
         "s3:GetBucketPolicy",
-        "s3:GetPublicAccessBlock",
+        "s3:GetBucketPublicAccessBlock",
         "s3:GetBucketVersioning",
         "cloudfront:GetDistribution",
-        "cloudfront:GetOriginAccessControl",
-        "cloudfront:GetInvalidation"
+        "cloudfront:GetOriginAccessControl"
       ],
       Resource: "*"
-    },
-    {
-      Sid: "I",
-      Effect: "Allow",
-      Action: "iam:GetRole",
-      Resource: nonEmpty([input.taskRoleArn, input.executionRoleArn])
-    },
-    {
-      Sid: "S",
-      Effect: "Allow",
-      Action: ["s3:GetObject", "s3:GetObjectVersion"],
-      Resource: `arn:${partition}:s3:::${input.frontendBucketName}/*`
     }
   ];
   return stringifyPolicy({
@@ -81,11 +67,7 @@ export function createEcsDeployReleaseSessionPolicy(
       Effect: "Allow",
       Action: [
         "ecs:RegisterTaskDefinition",
-        "ecs:DescribeTaskDefinition",
-        "ecs:DescribeServices",
-        "ecs:ListTasks",
-        "ecs:DescribeTasks",
-        "elasticloadbalancing:DescribeTargetHealth"
+        "ecr:GetAuthorizationToken"
       ],
       Resource: "*"
     },
@@ -96,15 +78,9 @@ export function createEcsDeployReleaseSessionPolicy(
         "ecr:InitiateLayerUpload",
         "ecr:UploadLayerPart",
         "ecr:CompleteLayerUpload",
-        "ecr:PutImage",
-        "ecr:BatchGetImage"
+        "ecr:PutImage"
       ],
       Resource: input.ecrRepositoryArn
-    },
-    {
-      Effect: "Allow",
-      Action: "ecr:GetAuthorizationToken",
-      Resource: "*"
     },
     {
       Effect: "Allow",

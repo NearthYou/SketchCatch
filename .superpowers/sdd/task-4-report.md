@@ -1,84 +1,115 @@
-# Task 4 RED/GREEN Report
+# Task 4 Report — Immutable Deployment Architecture GET API
 
-## Status
+## Outcome
 
-Complete. Pipeline Runs are discovered from read-only GitHub Actions data, grouped by commit SHA, classified against segment-safe monitored paths, and persisted idempotently with six deterministic stages and masked logs.
+Implemented the owner-scoped, immutable Deployment Architecture read path:
 
-## RED evidence
+- `getDeploymentLiveObservationArchitecture(input, repository)` first calls `getDeployment` so inaccessible deployments remain hidden as `404`.
+- The service loads `deployment.architectureId` through `findArchitectureInProject`; it never reads the mutable project draft.
+- The service returns the saved `ArchitectureJson` together with the Deployment ID, Architecture ID, and approved Terraform artifact SHA-256.
+- Missing Architecture snapshots map to `404`; missing or malformed 64-character hexadecimal approval hashes map to `409`.
+- `GET /api/deployments/:deploymentId/live-observation-architecture` is always registered and performs no AWS SDK or Terraform operation.
 
-1. `pnpm --dir apps/api exec tsx --test src/git-cicd/git-cicd-pipeline-run-service.test.ts`
-   - Failed with `ERR_MODULE_NOT_FOUND` for `git-cicd-pipeline-run-service.js` before the classifier existed.
-2. `pnpm --dir apps/api exec tsx --test src/source-repositories/github-app-client.test.ts`
-   - Failed because `listBranchWorkflowRuns` and `readWorkflowJobLog` did not exist.
-3. `pnpm --dir apps/api exec tsx --test src/git-cicd/github-actions-run-provider.test.ts`
-   - Failed with `ERR_MODULE_NOT_FOUND` before the provider existed.
-4. The service persistence tests then failed because `createGitCicdPipelineRunService` was not exported.
+## Files
 
-Each failure was caused by the intended missing behavior rather than a typo or test setup error.
+Task 4 changes:
 
-## GREEN implementation
+- `apps/api/src/deployments/deployment-service.ts`
+  - Consumes `DeploymentLiveObservationArchitectureResponse`.
+  - Adds `getDeploymentLiveObservationArchitecture`.
+- `apps/api/src/routes/deployments.ts`
+  - Adds the authenticated GET route and existing deployment error mapping.
+- `apps/api/src/routes/deployments.test.ts`
+  - Adds focused route coverage for immutable snapshot success, owner isolation, missing Architecture, and invalid approved hash.
+- `.superpowers/sdd/task-4-report.md`
+  - This handoff report.
 
-- Added segment-safe app/infra change classification, including negative coverage for `apps/web-old` and `infra/terraform-old`.
-- Added focused GitHub read models and GET-only calls for branch workflow runs, commit files, workflow jobs, and job logs.
-- Reused `maskDeploymentMessage` in the GitHub client, provider, persistence input, and response paths.
-- Grouped only exact `SketchCatch Infra` and `SketchCatch App` workflows by commit SHA.
-- Mapped known job names to app build/deploy, Terraform plan/apply, and verify stages. Unknown jobs keep a null stage association rather than inventing semantics.
-- Read job logs only after job completion so an unavailable in-progress log archive cannot turn a valid running snapshot stale.
-- Added one `(sourceRepositoryId, commitSha)` run upsert, six `(pipelineRunId, kind)` stage upserts, and deterministic log replacement by sequence in one database transaction.
-- Preserved prior status and `lastRefreshedAt` on provider failure and returned `stale: true` with a stable message.
-- Added injected provider/fetch and in-memory persistence fakes; no external GitHub request or real database migration was run.
+Consumed but not edited by Task 4:
 
-## Verification
+- `packages/types/src/index.ts`
+  - Concurrent Task 1 added `DeploymentLiveObservationArchitectureResponse` in the shared worktree.
 
-- Focused pipeline/client tests: 29 passed.
-- `pnpm --filter @sketchcatch/api typecheck`: passed.
-- `pnpm --filter @sketchcatch/api lint`: passed with one pre-existing `setNow` warning.
-- `pnpm build`: passed (5 packages).
-- `pnpm harness:check`: passed before and after implementation.
-- `git diff --check`: passed with CRLF conversion warnings only.
+Existing unrelated changes in `apps/api/src/routes/deployments.ts` and `apps/api/src/routes/deployments.test.ts` (the `prepareProjectBuildEnvironment` `architectureId` work) were preserved.
 
-## Concerns
+## Commands and Results
 
-- The PostgreSQL transaction was typechecked and exercised through its repository contract, but no real database migration or database integration run was performed, as required by the task.
-- GitHub Actions job-to-stage mapping deliberately recognizes only Plan, Apply, Build, Deploy, and Verify names within the two exact SketchCatch workflows. Expanding workflow semantics should be a planned contract change.
-- No GitHub, AWS, Terraform, deployment, or repository mutation occurred.
+Startup requirement:
 
-## Reviewer Fixes RED/GREEN
+```bash
+pnpm harness:check
+```
 
-### RED
+Result: PASS (`Harness check passed.`)
 
-The combined focused suite produced five expected failures:
+RED verification after adding the focused tests and before registering the route:
 
-- The exact generated App job `release` mapped to a null stage instead of its real steps.
-- An older failed workflow attempt overrode a successful rerun.
-- A queued run was reported as running.
-- Runs, jobs, and commit files stopped after one page (`1` result instead of `101`).
-- The same immutable commit files were fetched twice, and the second lookup failure made the refresh stale.
+```bash
+pnpm --filter @sketchcatch/api exec tsx --test --test-name-pattern="live-observation-architecture" src/routes/deployments.test.ts
+```
 
-### GREEN
+Result: expected FAIL, 0 passed / 4 failed. Every request reached Fastify's unregistered-route `404` behavior.
 
-- Extended the focused GitHub job model with real step names and states. The existing generated steps map exactly as follows: `Upload release artifact` to `app_build`, `Refresh Auto Scaling Group` to `app_deploy`, and `Verify URLs` to `verify`. No stage is marked successful unless its corresponding GitHub step succeeded.
-- Consolidated workflow reruns by `(commitSha, workflowName)` using `run_attempt`, then `updated_at`, then run id. Only the selected attempt supplies jobs, logs, URLs, and aggregate status.
-- Implemented explicit queued, running, succeeded, skipped, cancelled, and failed stage semantics. All unrecognized completed conclusions fail closed; unknown nonterminal stage states remain `not_started` rather than being fabricated as running.
-- Added complete `per_page=100&page=N` pagination for branch workflow runs, workflow jobs, and commit files, with two-page 101-item regression coverage for each endpoint.
-- Added repository lookup of existing commit SHAs/scopes before immutable file discovery. Two refreshes perform two repository existence lookups but only one provider commit-file lookup, and the second refresh remains fresh.
-- Reviewer-fix focused suite: 34 tests passed. API typecheck and lint passed; lint retains the pre-existing `setNow` warning.
+GREEN verification after the implementation:
 
-### Deferred Minor
+```bash
+pnpm --filter @sketchcatch/api exec tsx --test --test-name-pattern="live-observation-architecture" src/routes/deployments.test.ts
+```
 
-- `run_started_at` remains based on the GitHub workflow run `created_at` field. A separate follow-up may adopt a more precise provider timestamp if the GitHub contract and stored model are expanded; this minor issue was recorded and not changed here.
+Result: PASS, 4 passed / 0 failed.
 
-## Final Important Fixes RED/GREEN
+Final verification after nullable-hash type narrowing:
 
-### RED
+```bash
+pnpm --filter @sketchcatch/api exec tsx --test --test-name-pattern="live-observation-architecture" src/routes/deployments.test.ts
+```
 
-- Mixed `failed + in_progress` workflows incorrectly aggregated to `failed` instead of remaining `running`.
-- A distinct older run with `run_attempt=2` incorrectly beat a newer distinct run with `run_attempt=1`.
+Result: PASS, 4 passed / 0 failed.
 
-### GREEN
+No broad test suite, lint, typecheck, or build command was run because the task explicitly limited verification to focused route tests. No test outside `src/routes/deployments.test.ts` was run.
 
-- Aggregate status now gives active selected workflows precedence: `in_progress` wins as `running`, then queued-like states win as `queued`; terminal failed/cancelled/succeeded evaluation occurs only after every selected workflow is terminal.
-- Added mixed Infra/App regressions for failed/running, cancelled/running, failed/queued, failed/success, cancelled/success, and success/success combinations.
-- `run_attempt` is compared only for the same GitHub run id. Distinct runs are ordered by `updated_at`, then `created_at`, then numeric run id.
-- Replaced the unsafe distinct-id attempt test with a same-id rerun test and a newer-distinct-id attempt-one regression.
-- Final focused suite: 36 tests passed. The deferred `run_started_at` Minor remains unchanged.
+## Self-review
+
+- Spec: all Task 4 response fields and error boundaries are covered.
+- Ownership: the service reuses `getDeployment`; Architecture lookup occurs only after the Project access check succeeds.
+- Immutability: the success test makes draft access throw, yet the route returns the persisted Architecture snapshot.
+- Side effects: the route only reads the deployment, owning project, and Architecture snapshot; no feature flag, cloud gateway, Terraform runner, or draft repository is involved.
+- Scope: no schema, migration, Terraform, certificate, shared type, harness tracker, progress, or handoff file was edited by Task 4.
+- Shared dirty files: unrelated hunks in both route files were left intact.
+
+No Task 4 correctness or scope finding remains from self-review.
+
+## Concerns / Handoff
+
+- The response type is supplied by concurrent Task 1 and is currently an uncommitted shared-worktree dependency. Task 4 must land with that shared type.
+- Focused `tsx --test` execution transpiles and runs the route tests but is not a substitute for the repository's full lint/typecheck/build gates. The root integrator should run the broader required checks after all concurrent tasks settle.
+- Per instruction, nothing was staged or committed.
+
+## Integration Follow-up — ResourceType Fixture
+
+The success fixture originally used `type: "S3_BUCKET"`, which is not part of the shared `ResourceType` contract. Only that fixture value was changed to the valid `type: "S3"`; production behavior was unchanged.
+
+RED reproduction before the fixture change:
+
+```bash
+pnpm --filter @sketchcatch/api typecheck
+```
+
+Result: expected FAIL with `TS2322` at `src/routes/deployments.test.ts(1848,56)`, specifically reporting that `"S3_BUCKET"` is not assignable to `ResourceType`.
+
+Final focused route verification:
+
+```bash
+pnpm --filter @sketchcatch/api exec tsx --test --test-name-pattern="live-observation-architecture" src/routes/deployments.test.ts
+```
+
+Result: PASS, 4 passed / 0 failed.
+
+Final API type verification:
+
+```bash
+pnpm --filter @sketchcatch/api typecheck
+```
+
+Result: PASS (`tsc --noEmit -p tsconfig.json`, exit code 0).
+
+This follow-up supersedes the earlier statement that typecheck was not run: API typecheck now passes. Full lint and build remain intentionally unrun. Nothing was staged or committed.

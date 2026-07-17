@@ -5,6 +5,7 @@ import type {
   DeployedResource,
   DeploymentBlockedBy,
   DeploymentFailureStage,
+  DeploymentLiveObservationArchitectureResponse,
   DeploymentLiveProfile,
   DeploymentLogLevel,
   DeploymentPlanSummary,
@@ -16,6 +17,10 @@ import type {
   TerraformOutput
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
+import {
+  createGitCicdReadinessService,
+  createPostgresGitCicdReadinessRepository
+} from "../git-cicd/git-cicd-readiness-service.js";
 import {
   createPostgresProjectExecutionLeaseRepository,
   type LeaseFence,
@@ -188,6 +193,11 @@ export type SaveDeploymentApplyResultsInput = {
   outputs: CreateTerraformOutputRecordInput[];
 };
 
+export type SaveDeploymentApplyStateInput = Pick<
+  SaveDeploymentApplyResultsInput,
+  "stateObjectKey" | "resultWarningSummary"
+>;
+
 export type CompleteDeploymentDestroyInput = {
   resultWarningSummary: string | null;
 };
@@ -292,6 +302,15 @@ export type DeploymentRepository = {
     deploymentId: string,
     input: SaveDeploymentApplyResultsInput
   ): Promise<DeploymentRecord | undefined>;
+  saveDeploymentApplyState?(
+    deploymentId: string,
+    input: SaveDeploymentApplyStateInput
+  ): Promise<DeploymentRecord | undefined>;
+  synchronizeDeploymentTargetAfterApply?(input: {
+    projectId: string;
+    deploymentId: string;
+    accessContext: ProjectAccessContext;
+  }): Promise<void>;
   completeDeploymentApply(
     deploymentId: string,
     input?: { leaseFence?: LeaseFence; fenceCheckedAt?: Date }
@@ -423,6 +442,16 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
   return {
     ...directReleaseRepository,
     projectExecutionLeaseRepository: createPostgresProjectExecutionLeaseRepository(db),
+    async synchronizeDeploymentTargetAfterApply(input) {
+      const gitCicdReadinessService = createGitCicdReadinessService({
+        repository: createPostgresGitCicdReadinessRepository(db)
+      });
+      await gitCicdReadinessService.synchronizeDeploymentTargetAfterSuccessfulApply({
+        projectId: input.projectId,
+        deploymentId: input.deploymentId,
+        userId: input.accessContext.userId
+      });
+    },
     async findAccessibleProject(projectId, accessContext) {
       const [project] = await db
         .select()
@@ -881,6 +910,20 @@ export function createPostgresDeploymentRepository(db: Database): DeploymentRepo
       });
     },
 
+    async saveDeploymentApplyState(deploymentId, input) {
+      const [deployment] = await db
+        .update(deployments)
+        .set({
+          stateObjectKey: input.stateObjectKey,
+          resultWarningSummary: input.resultWarningSummary,
+          ...touchUpdatedAt
+        })
+        .where(eq(deployments.id, deploymentId))
+        .returning();
+
+      return deployment;
+    },
+
     async completeDeploymentApply(deploymentId, input = {}) {
       return runWithOptionalDeploymentFence(
         db,
@@ -1160,6 +1203,36 @@ export async function getDeployment(
   );
 
   return deployment;
+}
+
+export async function getDeploymentLiveObservationArchitecture(
+  input: { deploymentId: string; accessContext: ProjectAccessContext },
+  repository: DeploymentRepository
+): Promise<DeploymentLiveObservationArchitectureResponse> {
+  const deployment = await getDeployment(input, repository);
+  const architecture = await repository.findArchitectureInProject(
+    deployment.architectureId,
+    deployment.projectId
+  );
+
+  if (!architecture) {
+    throw new DeploymentNotFoundError("Architecture not found for deployment");
+  }
+
+  const terraformArtifactSha256 = deployment.approvedTerraformArtifactHash;
+
+  if (!terraformArtifactSha256 || !/^[a-f0-9]{64}$/i.test(terraformArtifactSha256)) {
+    throw new DeploymentConflictError(
+      "Deployment does not have a valid approved Terraform artifact hash"
+    );
+  }
+
+  return {
+    deploymentId: deployment.id,
+    architectureId: deployment.architectureId,
+    terraformArtifactSha256,
+    architecture: architecture.architectureJson
+  };
 }
 
 export async function listProjectDeployments(

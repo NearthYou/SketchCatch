@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { ArchitectureJson, EcsFargateRuntimeConfig } from "@sketchcatch/types";
 import {
   ProjectBuildEnvironmentError,
   createDesiredProjectBuildEnvironment,
   deleteProjectBuildEnvironment,
   prepareProjectBuildEnvironment,
+  synchronizeEcsFargateRuntimeConfigWithArchitecture,
   type ProjectBuildEnvironmentGateway,
   type ProjectBuildEnvironmentPreparationContext,
   type ProjectBuildEnvironmentRecord,
@@ -12,6 +14,48 @@ import {
 } from "./project-build-environment-service.js";
 
 const now = new Date("2026-07-15T12:00:00.000Z");
+
+test("approved Architecture replaces stale ECS target coordinates before Plan", () => {
+  const current: EcsFargateRuntimeConfig = {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName: "demo-app-build",
+    ecrRepositoryName: "demo-app",
+    ecrRepositoryArn: "arn:aws:ecr:ap-northeast-2:131404649047:repository/demo-app",
+    clusterName: "demo-cluster",
+    serviceName: "demo-service",
+    containerName: "api",
+    taskDefinitionArn:
+      "arn:aws:ecs:ap-northeast-2:131404649047:task-definition/demo-app:1",
+    outputUrl: "https://old.example.com"
+  };
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      architectureNode("ECR_REPOSITORY", { name: "audience-live-check-api" }),
+      architectureNode("ECS_CLUSTER", { name: "audience-live-check-cluster" }),
+      architectureNode("ECS_SERVICE", {
+        name: "audience-live-check-service",
+        loadBalancer: [{ containerName: "api", containerPort: 8080 }]
+      })
+    ],
+    edges: []
+  };
+
+  const result = synchronizeEcsFargateRuntimeConfigWithArchitecture(
+    current,
+    architectureJson,
+    "sketchcatch-5ac411f8-build"
+  );
+
+  assert.deepEqual(result, {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName: "sketchcatch-5ac411f8-build",
+    ecrRepositoryName: "audience-live-check-api",
+    clusterName: "audience-live-check-cluster",
+    serviceName: "audience-live-check-service",
+    containerName: "api",
+    outputUrl: null
+  });
+});
 
 test("build environment preparation requires an active GitHub repository", async () => {
   const context = createContext({ sourceRepository: null });
@@ -86,6 +130,46 @@ test("build environment preparation reconciles one project-scoped build environm
       repositoryUrl: "https://github.com/jh-9999/audience-live-check.git"
     }
   ]);
+});
+
+test("build environment preparation synchronizes the deployment target before AWS reconciliation", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  const calls: string[] = [];
+  Object.assign(repository, {
+    async synchronizeEcsRuntimeConfig(input: {
+      architectureId: string;
+      codeBuildProjectName: string;
+      projectId: string;
+      userId: string;
+    }) {
+      assert.deepEqual(input, {
+        architectureId: "architecture-1",
+        codeBuildProjectName: "sketchcatch-12345678-build",
+        projectId: context.projectId,
+        userId: "user-1"
+      });
+      calls.push("synchronize_runtime");
+    }
+  });
+
+  await prepareProjectBuildEnvironment(
+    {
+      projectId: context.projectId,
+      userId: "user-1",
+      architectureId: "architecture-1"
+    } as Parameters<typeof prepareProjectBuildEnvironment>[0] & { architectureId: string },
+    repository,
+    createGateway({
+      async reconcile() {
+        calls.push("reconcile_aws");
+        return { verified: true, statusReason: null };
+      }
+    }),
+    { generateId: () => "build-environment-1", now: () => now }
+  );
+
+  assert.deepEqual(calls, ["synchronize_runtime", "reconcile_aws"]);
 });
 
 test("build environment preparation records verification failures without reporting ready", async () => {
@@ -315,6 +399,9 @@ function createRepository(
     async hasActiveExecution() {
       return false;
     },
+    async synchronizeEcsRuntimeConfig() {
+      return;
+    },
     async deleteByProjectId() {
       record = undefined;
     },
@@ -381,5 +468,19 @@ function createConfirmedBuildConfig(outputPath: string) {
         outputPath
       }
     }
+  };
+}
+
+function architectureNode(
+  type: ArchitectureJson["nodes"][number]["type"],
+  config: Record<string, unknown>
+) {
+  return {
+    id: type,
+    type,
+    label: type,
+    positionX: 0,
+    positionY: 0,
+    config
   };
 }

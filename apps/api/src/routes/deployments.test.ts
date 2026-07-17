@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import type {
   AwsConnection,
   DeploymentFailureExplanationResponse,
+  DeploymentLiveObservationArchitectureResponse,
   RecentSuccessfulDeploymentProjectListResponse
 } from "@sketchcatch/types";
 import { createAccessToken } from "../auth/tokens.js";
@@ -29,6 +30,8 @@ import type {
   RunDeploymentDestroyResult
 } from "../deployments/deployment-destroy-service.js";
 import type { ApproveDeploymentPlanInput } from "../deployments/deployment-approval-service.js";
+import type { DeploymentPreparationDraft } from "../deployments/deployment-preparation-service.js";
+import { TerraformArtifactSafetyError } from "../deployments/terraform-artifact-safety.js";
 import type { PruneProjectDeploymentStorageResult } from "../deployments/deployment-retention.js";
 import { users } from "../db/schema.js";
 import type { CreateLlmExplanation } from "../services/aiLlmExplanation.js";
@@ -439,13 +442,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
   logs: DeploymentLogRecord[] = [];
   resources: DeployedResourceRecord[] = [];
   outputs: TerraformOutputRecord[] = [];
-  projectDraft:
-    | {
-        revision: number;
-        diagramJson: { nodes: []; edges: []; viewport: { x: number; y: number; zoom: number } };
-        terraformFiles: Array<{ fileName: string; terraformCode: string }>;
-      }
-    | undefined = {
+  projectDraft: DeploymentPreparationDraft | undefined = {
     revision: 7,
     diagramJson: { nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } },
     terraformFiles: [{ fileName: "main.tf", terraformCode: 'resource "aws_s3_bucket" "assets" {}' }]
@@ -1181,6 +1178,7 @@ type DeploymentRouteTestOptions = {
     repository: DeploymentRepository
   ) => Promise<RunDeploymentPlanResult>;
   prepareProjectBuildEnvironment?: (input: {
+    architectureId: string;
     db: DatabaseClient["db"];
     projectId: string;
     userId: string;
@@ -1687,6 +1685,72 @@ test("POST /api/projects/:projectId/deployments/prepare locks the saved draft re
   await app.close();
 });
 
+test("POST /api/projects/:projectId/deployments/prepare selects the ECS web-service profile for Application Auto Scaling", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.projectDraft = {
+    revision: 7,
+    diagramJson: {
+      nodes: [
+        {
+          id: "autoscaling-target",
+          type: "aws_appautoscaling_target",
+          kind: "resource",
+          position: { x: 0, y: 0 },
+          size: { width: 124, height: 96 },
+          label: "ECS scaling target",
+          locked: false,
+          zIndex: 1
+        },
+        {
+          id: "autoscaling-policy",
+          type: "aws_appautoscaling_policy",
+          kind: "resource",
+          position: { x: 160, y: 0 },
+          size: { width: 124, height: 96 },
+          label: "ECS scaling policy",
+          locked: false,
+          zIndex: 1
+        }
+      ],
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 }
+    },
+    terraformFiles: [
+      {
+        fileName: "main.tf",
+        terraformCode: [
+          'resource "aws_ecs_service" "web" {}',
+          'resource "aws_appautoscaling_target" "web" {}',
+          'resource "aws_appautoscaling_policy" "web" {}'
+        ].join("\n")
+      }
+    ]
+  };
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  });
+
+  assert.equal(response.statusCode, 201);
+  const createCall = repository.calls.find((call) => call.name === "createDeployment");
+  assert.equal(createCall?.name, "createDeployment");
+  if (createCall?.name === "createDeployment") {
+    assert.equal(createCall.input.liveProfile, "demo_web_service");
+  }
+
+  await app.close();
+});
+
 test("POST /api/projects/:projectId/deployments/prepare rejects a stale draft", async () => {
   const repository = new FakeDeploymentRepository();
   const app = await buildDeploymentTestApp(repository);
@@ -1817,6 +1881,149 @@ test("GET /api/deployments/:deploymentId returns a deployment", async () => {
       }
     }
   ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/live-observation-architecture returns the approved immutable architecture snapshot", async () => {
+  const terraformArtifactSha256 = "a".repeat(64);
+  const architecture = {
+    nodes: [
+      {
+        id: "approved-bucket",
+        type: "S3" as const,
+        label: "Approved bucket",
+        positionX: 120,
+        positionY: 80,
+        config: { versioning: true }
+      }
+    ],
+    edges: []
+  };
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: terraformArtifactSha256
+  });
+  repository.architecture = createArchitectureRecord({ architectureJson: architecture });
+  repository.findProjectDraftForPreparation = async () => {
+    throw new Error("The mutable project draft must not be read");
+  };
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json() as DeploymentLiveObservationArchitectureResponse, {
+    deploymentId,
+    architectureId,
+    terraformArtifactSha256,
+    architecture
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    },
+    {
+      name: "findArchitectureInProject",
+      architectureId,
+      projectId
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/live-observation-architecture hides another user's deployment", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.project = undefined;
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: "b".repeat(64)
+  });
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Deployment not found"
+  });
+  assert.deepEqual(repository.calls, [
+    {
+      name: "findDeploymentById",
+      deploymentId
+    },
+    {
+      name: "findAccessibleProject",
+      projectId,
+      accessContext: {
+        kind: "user",
+        userId
+      }
+    }
+  ]);
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/live-observation-architecture maps a missing architecture snapshot to not_found", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: "c".repeat(64)
+  });
+  repository.architecture = undefined;
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.json(), {
+    error: "not_found",
+    message: "Architecture not found for deployment"
+  });
+
+  await app.close();
+});
+
+test("GET /api/deployments/:deploymentId/live-observation-architecture rejects an invalid approved artifact hash", async () => {
+  const repository = new FakeDeploymentRepository();
+  repository.deployment = createDeploymentRecord(deploymentId, {
+    approvedTerraformArtifactHash: "not-a-sha256"
+  });
+  const app = await buildDeploymentTestApp(repository);
+
+  const response = await app.inject({
+    method: "GET",
+    url: `/api/deployments/${deploymentId}/live-observation-architecture`,
+    headers: await authHeaders()
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message: "Deployment does not have a valid approved Terraform artifact hash"
+  });
 
   await app.close();
 });
@@ -2249,6 +2456,7 @@ test("POST plan prepares an ECS project build environment before starting prefli
   });
   const app = await buildDeploymentTestApp(repository, {
     prepareProjectBuildEnvironment: async (input) => {
+      assert.equal(input.architectureId, architectureId);
       assert.equal(input.projectId, projectId);
       assert.equal(input.userId, userId);
       calls.push("prepare_build_environment");
@@ -2588,6 +2796,33 @@ test("POST /api/deployments/:deploymentId/approve approves the current plan", as
       }
     }
   ]);
+
+  await app.close();
+});
+
+test("POST /api/deployments/:deploymentId/approve exposes Terraform safety conflicts instead of returning 500", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository, {
+    approveDeploymentPlan: async () => {
+      throw new TerraformArtifactSafetyError(
+        'Terraform resource "aws_appautoscaling_target" is not allowed before live deployment at line 305'
+      );
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/deployments/${deploymentId}/approve`,
+    headers: await authHeaders(),
+    payload: {}
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "terraform_artifact_unsafe",
+    message:
+      'Terraform resource "aws_appautoscaling_target" is not allowed before live deployment at line 305'
+  });
 
   await app.close();
 });

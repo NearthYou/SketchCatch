@@ -90,6 +90,7 @@ import {
   type DirectDeploymentStepId
 } from "./deployment-console-state";
 import {
+  getDeploymentFailureDeveloperCheck,
   getDeploymentStatusPresentation,
   getRecentDeploymentResultTitle,
   type DeploymentStatusTone
@@ -136,6 +137,7 @@ export type DirectDeploymentScreenProps = {
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onCancel?: (() => void) | undefined;
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
+  readonly onApplyPlanApproved?: ((deployment: Deployment) => void) | undefined;
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
   readonly onOpenLiveObservation?: (() => void) | undefined;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
@@ -153,6 +155,7 @@ export function DirectDeploymentScreen({
   deploymentAvailability,
   diagramJson,
   hasUnsavedDeploymentBaseline,
+  onApplyPlanApproved,
   onCancel,
   onConfirmationStateChange,
   onOpenFindingTerraformSource,
@@ -294,6 +297,9 @@ export function DirectDeploymentScreen({
   const recentResultStage = selectedDeployment
     ? (selectedDeployment.failureStage ?? selectedDeployment.activeStage)
     : null;
+  const deploymentFailureDeveloperCheck = getDeploymentFailureDeveloperCheck(
+    selectedDeployment?.failureStage ?? null
+  );
   const needsBuildEnvironment = requiresProjectBuildEnvironment(selectedDeployment);
   const planActionLabel = getDeploymentPlanActionLabel({
     buildEnvironmentStatus: buildEnvironment?.status ?? null,
@@ -850,6 +856,9 @@ export function DirectDeploymentScreen({
         )
       );
       setSelectedDeploymentId(deployment.id);
+      if (deployment.currentPlanOperation === "apply") {
+        onApplyPlanApproved?.(deployment);
+      }
       const [logs, resources, outputs] = await Promise.all([
         listDeploymentLogs(deployment.id),
         listDeploymentResources(deployment.id),
@@ -1463,6 +1472,9 @@ export function DirectDeploymentScreen({
             <p className={styles.deploymentStageAlert} role="alert">
               {selectedDeployment.errorSummary ??
                 "배포가 실패했습니다. 배포 기록에서 원인을 확인하세요."}
+              {deploymentFailureDeveloperCheck
+                ? ` 개발자 확인: ${deploymentFailureDeveloperCheck}`
+                : ""}
             </p>
           ) : null}
         </article>
@@ -1504,7 +1516,12 @@ export function DirectDeploymentScreen({
               {selectedDeployment.errorSummary ? (
                 <p className={styles.deploymentRecentResultError}>
                   <AlertCircle size={16} aria-hidden="true" />
-                  <span>{selectedDeployment.errorSummary}</span>
+                  <span>
+                    {selectedDeployment.errorSummary}
+                    {deploymentFailureDeveloperCheck
+                      ? ` 개발자 확인: ${deploymentFailureDeveloperCheck}`
+                      : ""}
+                  </span>
                 </p>
               ) : null}
             </>

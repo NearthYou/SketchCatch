@@ -25,7 +25,7 @@ test("verified OCI layout uploads missing blobs and requires the expected ECR di
       if (name === "BatchCheckLayerAvailabilityCommand") {
         return {
           layers: (command.input as { layerDigests: string[] }).layerDigests.map(
-            (layerDigest) => ({ layerDigest, layerAvailability: "MISSING" })
+            (layerDigest) => ({ layerDigest, layerAvailability: "UNAVAILABLE" })
           )
         };
       }
@@ -95,6 +95,45 @@ test("an existing immutable ECR tag is reused only when its digest matches", asy
     assert.equal(result.imageDigest, `sha256:${fixture.manifestDigest}`);
     assert.deepEqual(commands, ["BatchGetImageCommand"]);
     assert.equal(mutationGuardCount, 0);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("immutable tag reads use the read-only ECR client", async () => {
+  const fixture = await createOciFixture();
+  const writerCommands: string[] = [];
+  const readerCommands: string[] = [];
+  const writer: EcrPublisherClient = {
+    async send(command) {
+      writerCommands.push(command.constructor.name);
+      throw new Error("the mutation session must not read immutable ECR tags");
+    }
+  };
+  const reader: EcrPublisherClient = {
+    async send(command) {
+      readerCommands.push(command.constructor.name);
+      if (command.constructor.name === "BatchGetImageCommand") {
+        return {
+          images: [{ imageId: { imageDigest: `sha256:${fixture.manifestDigest}` } }]
+        };
+      }
+      throw new Error("the read-only session only verifies immutable ECR tags");
+    }
+  };
+
+  try {
+    const artifact = await loadVerifiedOciLayout(fixture.root, fixture.manifestDigest);
+    const result = await publishOciLayoutToEcr(
+      artifact,
+      { repositoryName: "demo-api", imageTag: "a".repeat(40) },
+      writer,
+      { readClient: reader }
+    );
+
+    assert.equal(result.imageDigest, `sha256:${fixture.manifestDigest}`);
+    assert.deepEqual(readerCommands, ["BatchGetImageCommand"]);
+    assert.deepEqual(writerCommands, []);
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }

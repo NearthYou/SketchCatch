@@ -143,7 +143,7 @@ type WaitForCodeBuildPoll = (milliseconds: number, abortSignal?: AbortSignal) =>
 
 const runtimeConvergenceTagKey = "sketchcatch:runtime-convergence";
 const runtimeConvergenceMarkerPattern =
-  /^sketchcatch:artifact=([a-f0-9]{64});target=([a-f0-9]{64})$/u;
+  /^sketchcatch:artifact=([a-f0-9]{64}):target=([a-f0-9]{64})$/u;
 
 export function createAwsCodeBuildDirectApplicationReleaseGateway(
   options: {
@@ -511,7 +511,7 @@ function resolveRuntimeConvergenceMarker(
   return {
     artifactFingerprint,
     targetFingerprint,
-    value: `sketchcatch:artifact=${artifactFingerprint};target=${targetFingerprint}`
+    value: `sketchcatch:artifact=${artifactFingerprint}:target=${targetFingerprint}`
   };
 }
 
@@ -674,7 +674,8 @@ async function deployEcsWebTrustedRelease(input: {
       cloudFrontDomainName: runtime.cloudFrontDomainName,
       outputUrl: runtime.outputUrl,
       healthCheckPath: build.api.healthCheckPath,
-      apiProbePath: "/api/check-ins"
+      apiProbePath: "/api/check-ins",
+      runtimeEntrypoint: input.context.target.confirmedBuildConfig.runtimeEntrypoint
     }
   };
   const result = await executeTrustedRelease(
@@ -1058,7 +1059,8 @@ function createTrustedReleaseContext(input: {
       cloudFrontDomainName: runtime.cloudFrontDomainName,
       outputUrl: runtime.outputUrl,
       healthCheckPath: build.api.healthCheckPath,
-      apiProbePath: "/api/check-ins"
+      apiProbePath: "/api/check-ins",
+      runtimeEntrypoint: input.context.target.confirmedBuildConfig.runtimeEntrypoint
     }
   };
 }
@@ -1435,7 +1437,6 @@ export function createPreflightCodeBuildSessionPolicy(input: {
   projectName: string;
 }): string {
   const projectArn = `arn:aws:codebuild:${input.region}:${input.accountId}:project/${input.projectName}`;
-  const buildArn = `arn:aws:codebuild:${input.region}:${input.accountId}:build/${input.projectName}:*`;
   return JSON.stringify({
     Version: "2012-10-17",
     Statement: [
@@ -1447,7 +1448,7 @@ export function createPreflightCodeBuildSessionPolicy(input: {
       {
         Effect: "Allow",
         Action: ["codebuild:BatchGetBuilds", "codebuild:StopBuild"],
-        Resource: buildArn
+        Resource: projectArn
       }
     ]
   });
@@ -2131,7 +2132,7 @@ phases:
         with open("task-next.json", "w", encoding="utf-8") as handle:
             json.dump(task, handle)
         PY
-        NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://task-next.json --tags key=sketchcatch:runtime-convergence,value="sketchcatch:artifact=$SKETCHCATCH_ARTIFACT_FINGERPRINT;target=$SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT" --query taskDefinition.taskDefinitionArn --output text)
+        NEW_TASK_DEFINITION=$(aws ecs register-task-definition --cli-input-json file://task-next.json --tags key=sketchcatch:runtime-convergence,value="sketchcatch:artifact=$SKETCHCATCH_ARTIFACT_FINGERPRINT:target=$SKETCHCATCH_DEPLOYMENT_TARGET_FINGERPRINT" --query taskDefinition.taskDefinitionArn --output text)
         set +e
         aws ecs update-service --cluster "$SKETCHCATCH_ECS_CLUSTER" --service "$SKETCHCATCH_ECS_SERVICE" --task-definition "$NEW_TASK_DEFINITION" --deployment-configuration 'minimumHealthyPercent=0,maximumPercent=100,deploymentCircuitBreaker={enable=true,rollback=true}' --force-new-deployment >/dev/null
         aws ecs wait services-stable --cluster "$SKETCHCATCH_ECS_CLUSTER" --services "$SKETCHCATCH_ECS_SERVICE"

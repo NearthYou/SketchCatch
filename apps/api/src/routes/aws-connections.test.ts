@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import Fastify from "fastify";
-import { ZodError } from "zod";
 import { createAccessToken } from "../auth/tokens.js";
 import type { DatabaseClient } from "../db/client.js";
 import type {
@@ -35,12 +34,6 @@ test("AWS connection DELETE performs no managed cleanup without preview confirma
     }
   });
   const app = Fastify();
-  app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof ZodError) {
-      return reply.status(400).send({ error: "bad_request", message: "Invalid request" });
-    }
-    throw error;
-  });
   await registerAwsConnectionRoutes(app, {
     getDatabaseClient: () => createAuthDatabaseClient(),
     createAwsConnectionRepository: () => repository,
@@ -86,6 +79,194 @@ test("AWS connection DELETE performs no managed cleanup without preview confirma
   assert.equal(confirmed.statusCode, 204);
   assert.equal(claimCalls, 1);
   assert.equal(cleanupCalls, 1);
+
+  await app.close();
+});
+
+test("AWS connection verification returns 409 when a previous connection needs cleanup retry", async () => {
+  const pendingConnection = createConnectionRecord({
+    accountId: null,
+    roleArn: null,
+    status: "pending",
+    lastVerifiedAt: null
+  });
+  const cleanupRetryConnection = createConnectionRecord({
+    id: "33333333-3333-4333-8333-333333333333",
+    deletionStartedAt: new Date("2026-07-16T01:00:00.000Z"),
+    deletionErrorSummary: "cleanup failed"
+  });
+  const repository = createRepository({
+    getRecord: () => pendingConnection,
+    onClaim: () => undefined,
+    onDelete: () => undefined
+  });
+  repository.findVerifiedAwsConnectionByAccountId = async () => cleanupRetryConnection;
+  repository.updateAwsConnectionVerification = async (input) => ({
+    ...pendingConnection,
+    accountId: input.accountId,
+    roleArn: input.roleArn,
+    status: input.status,
+    lastVerifiedAt: input.lastVerifiedAt
+  });
+  const app = Fastify();
+  await registerAwsConnectionRoutes(app, {
+    getDatabaseClient: () => createAuthDatabaseClient(),
+    createAwsConnectionRepository: () => repository,
+    awsConnectionTester: {
+      async testConnection() {
+        return {
+          ok: true,
+          accountId: "123456789012",
+          callerArn:
+            "arn:aws:sts::123456789012:assumed-role/SketchCatchTerraformExecutionRole/session",
+          region: "ap-northeast-2"
+        };
+      }
+    }
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: `/aws/connections/${connectionId}/verify-created-role`,
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` },
+    payload: { accountId: "123456789012" }
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.deepEqual(response.json(), {
+    error: "conflict",
+    message:
+      "같은 AWS 계정의 이전 연결 정리가 완료되지 않았습니다. 이전 연결 정리를 재시도해 주세요."
+  });
+
+  await app.close();
+});
+
+test("AWS connection routes do not expose unexpected database query details", async () => {
+  const repository = createRepository({
+    getRecord: () => undefined,
+    onClaim: () => undefined,
+    onDelete: () => undefined
+  });
+  repository.listAccessibleAwsConnections = async () => {
+    throw new Error(
+      'Failed query: update "aws_connections" params: secret-account-and-role-details'
+    );
+  };
+  const app = Fastify();
+  await registerAwsConnectionRoutes(app, {
+    getDatabaseClient: () => createAuthDatabaseClient(),
+    createAwsConnectionRepository: () => repository
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/aws/connections",
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` }
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.deepEqual(response.json(), {
+    error: "internal_server_error",
+    message: "AWS 연결 요청을 처리하지 못했습니다."
+  });
+  assert.doesNotMatch(response.body, /Failed query|secret-account|aws_connections/u);
+
+  await app.close();
+});
+
+test("AWS connection routes sanitize database setup errors before repository creation", async () => {
+  const app = Fastify();
+  app.register(registerAwsConnectionRoutes, {
+    getDatabaseClient: () => {
+      throw new Error(
+        'Failed query: select "users" params: secret-auth-database-details'
+      );
+    }
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/aws/connections",
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` }
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.deepEqual(response.json(), {
+    error: "internal_server_error",
+    message: "AWS 연결 요청을 처리하지 못했습니다."
+  });
+  assert.doesNotMatch(response.body, /Failed query|secret-auth|select.*users/u);
+
+  await app.close();
+});
+
+test("AWS connection routes do not trust arbitrary 4xx status codes on database errors", async () => {
+  const app = Fastify();
+  app.register(registerAwsConnectionRoutes, {
+    getDatabaseClient: () => {
+      throw Object.assign(
+        new Error('Failed query: select "users" params: raw-database-details'),
+        { statusCode: 400 }
+      );
+    }
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/aws/connections",
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` }
+  });
+
+  assert.equal(response.statusCode, 500);
+  assert.deepEqual(response.json(), {
+    error: "internal_server_error",
+    message: "AWS 연결 요청을 처리하지 못했습니다."
+  });
+  assert.doesNotMatch(response.body, /Failed query|raw-database|select.*users/u);
+
+  await app.close();
+});
+
+test("AWS connection plugin error boundary preserves authentication errors", async () => {
+  const app = Fastify();
+  app.register(registerAwsConnectionRoutes, {
+    getDatabaseClient: () => createAuthDatabaseClient()
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/aws/connections"
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.json(), {
+    error: "unauthorized",
+    message: "인증이 필요합니다."
+  });
+
+  await app.close();
+});
+
+test("AWS connection plugin error boundary stays encapsulated", async () => {
+  const app = Fastify();
+  app.setErrorHandler((_error, _request, reply) =>
+    reply.status(418).send({ error: "parent_error_handler" })
+  );
+  app.register(registerAwsConnectionRoutes, {
+    getDatabaseClient: () => createAuthDatabaseClient()
+  });
+  app.get("/outside-aws-connections", async () => {
+    throw new Error("outside error");
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/outside-aws-connections"
+  });
+
+  assert.equal(response.statusCode, 418);
+  assert.deepEqual(response.json(), { error: "parent_error_handler" });
 
   await app.close();
 });
@@ -146,7 +327,9 @@ function createRepository(input: {
   };
 }
 
-function createConnectionRecord(): AwsConnectionRecord {
+function createConnectionRecord(
+  overrides: Partial<AwsConnectionRecord> = {}
+): AwsConnectionRecord {
   const now = new Date("2026-07-16T00:00:00.000Z");
   return {
     id: connectionId,
@@ -161,7 +344,8 @@ function createConnectionRecord(): AwsConnectionRecord {
     deletionStartedAt: null,
     deletionErrorSummary: null,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    ...overrides
   };
 }
 

@@ -4,19 +4,23 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ApplicationRelease,
+  ArchitectureJson,
   Deployment,
   LiveObservationV2Session,
-  LiveObservationV2Snapshot
+  LiveObservationV2Snapshot,
+  TerraformOutput
 } from "@sketchcatch/types";
 import { Check, Copy, ExternalLink, Radio, X } from "lucide-react";
 import QRCode from "qrcode";
 import { createPortal } from "react-dom";
 import { copyTextToClipboard } from "../../lib/clipboard";
-import { getApiErrorMessage } from "../../lib/api-client";
+import { ApiClientError, getApiErrorMessage } from "../../lib/api-client";
 import {
   createLiveObservation,
+  getLiveObservationArchitecture,
   listApplicationReleases,
   listDeployments,
+  listTerraformOutputs,
   stopLiveObservation,
   streamLiveObservationSnapshots
 } from "./api";
@@ -27,6 +31,8 @@ import {
   getLiveObservationPressureLabel,
   type LiveObservationSelection
 } from "./live-observation";
+import { getLiveObservationCapacityMode } from "./live-observation-architecture";
+import { LiveObservationDiagramMap } from "./LiveObservationDiagramMap";
 import styles from "./workspace.module.css";
 
 export type LiveObservationModalProps = {
@@ -45,10 +51,21 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
   const [mounted, setMounted] = useState(false);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [releases, setReleases] = useState<ApplicationRelease[]>([]);
+  const [terraformOutputs, setTerraformOutputs] = useState<TerraformOutput[]>([]);
+  const [architecture, setArchitecture] = useState<ArchitectureJson | null>(null);
+  const [architectureDeploymentId, setArchitectureDeploymentId] = useState("");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState("");
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
+  const [outputListState, setOutputListState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [architectureState, setArchitectureState] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
   const [requestState, setRequestState] = useState<"idle" | "loading">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [outputErrorMessage, setOutputErrorMessage] = useState("");
+  const [architectureErrorMessage, setArchitectureErrorMessage] = useState("");
   const [streamErrorMessage, setStreamErrorMessage] = useState("");
   const [session, setSession] = useState<LiveObservationV2Session | null>(null);
   const [snapshot, setSnapshot] = useState<LiveObservationV2Snapshot | null>(null);
@@ -68,20 +85,45 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
   const selectedOutputUrl = getSelectedLiveObservationOutputUrl(
     selection,
     selectedDeploymentId,
-    releases
+    releases,
+    terraformOutputs
   );
-  const outputUrl = session
-    ? getSelectedLiveObservationOutputUrl(selection, session.deploymentId, releases)
+  const selectedSession =
+    session?.deploymentId === selectedDeploymentId ? session : null;
+  const selectedSnapshot = selectedSession ? snapshot : null;
+  const selectedArchitecture =
+    architectureDeploymentId === selectedDeploymentId ? architecture : null;
+  const selectedArchitectureState =
+    architectureDeploymentId === selectedDeploymentId
+      ? architectureState
+      : selectedDeploymentId
+        ? "loading"
+        : "idle";
+  const selectedArchitectureErrorMessage =
+    architectureDeploymentId === selectedDeploymentId ? architectureErrorMessage : "";
+  const outputUrl = selectedSession
+    ? getSelectedLiveObservationOutputUrl(
+        selection,
+        selectedSession.deploymentId,
+        releases,
+        terraformOutputs
+      )
     : selectedOutputUrl;
-  const remainingSeconds = session
-    ? Math.max(0, Math.ceil((new Date(session.expiresAt).getTime() - nowMs) / 1_000))
+  const remainingSeconds = selectedSession
+    ? Math.max(
+        0,
+        Math.ceil((new Date(selectedSession.expiresAt).getTime() - nowMs) / 1_000)
+      )
     : 0;
   const isSessionActive =
-    session !== null && snapshot?.status === "active" && remainingSeconds > 0;
-  const visibleErrorMessage = errorMessage || streamErrorMessage;
-  const providerSnapshot = snapshot?.latestObservation?.payload ?? null;
-  const providerEvidence = providerSnapshot
-    ? getLiveObservationProviderEvidence(providerSnapshot)
+    selectedSession !== null && selectedSnapshot?.status === "active" && remainingSeconds > 0;
+  const visibleErrorMessage = errorMessage || outputErrorMessage || streamErrorMessage;
+  const providerSnapshot = selectedSnapshot?.latestObservation?.payload ?? null;
+  const capacityModeLabel = selectedArchitecture
+    ? getLiveObservationCapacityMode(selectedArchitecture, providerSnapshot?.capacity)
+    : null;
+  const providerEvidence = providerSnapshot && capacityModeLabel
+    ? getLiveObservationProviderEvidence(providerSnapshot, capacityModeLabel)
     : null;
 
   useEffect(() => {
@@ -147,6 +189,67 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
 
     return () => abortController.abort();
   }, [projectId, selection]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTerraformOutputs([]);
+    setOutputErrorMessage("");
+
+    if (!selectedDeploymentId || selection) {
+      setOutputListState(selectedDeploymentId ? "ready" : "idle");
+      return;
+    }
+
+    setOutputListState("loading");
+    void listTerraformOutputs(selectedDeploymentId).then(
+      (outputs) => {
+        if (cancelled) return;
+        setTerraformOutputs(outputs);
+        setOutputListState("ready");
+      },
+      (error) => {
+        if (cancelled) return;
+        setOutputListState("error");
+        setOutputErrorMessage(
+          getApiErrorMessage(error, "배포 Output을 불러오지 못했습니다.")
+        );
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDeploymentId, selection]);
+
+  useEffect(() => {
+    const abortController = new AbortController();
+    setArchitectureDeploymentId(selectedDeploymentId);
+    setArchitecture(null);
+    setArchitectureErrorMessage("");
+
+    if (!selectedDeploymentId) {
+      setArchitectureState("idle");
+      return () => abortController.abort();
+    }
+
+    setArchitectureState("loading");
+    void getLiveObservationArchitecture(selectedDeploymentId, abortController.signal).then(
+      (response) => {
+        if (abortController.signal.aborted) return;
+        setArchitectureDeploymentId(selectedDeploymentId);
+        setArchitecture(response.architecture);
+        setArchitectureState("ready");
+      },
+      (error) => {
+        if (abortController.signal.aborted) return;
+        setArchitectureDeploymentId(selectedDeploymentId);
+        setArchitectureState("error");
+        setArchitectureErrorMessage(getArchitectureErrorMessage(error));
+      }
+    );
+
+    return () => abortController.abort();
+  }, [selectedDeploymentId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -244,6 +347,19 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
     onClose();
   }
 
+  function selectDeployment(nextDeploymentId: string): void {
+    if (nextDeploymentId === selectedDeploymentId) return;
+
+    if (session && session.deploymentId !== nextDeploymentId) {
+      setSession(null);
+      setSnapshot(null);
+      setErrorMessage("");
+      setStreamErrorMessage("");
+    }
+
+    setSelectedDeploymentId(nextDeploymentId);
+  }
+
   async function startObservation(): Promise<void> {
     if (!selectedDeploymentId || !selectedOutputUrl || requestState === "loading") return;
     operationControllerRef.current?.abort();
@@ -319,7 +435,7 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
         aria-labelledby="live-observation-title"
         aria-modal="true"
         className={styles.liveObservationDialog}
-        data-pressure-level={snapshot?.live.pressureLevel ?? "normal"}
+        data-pressure-level={selectedSnapshot?.live.pressureLevel ?? "normal"}
         onKeyDown={handleDialogKeyDown}
         ref={dialogRef}
         role="dialog"
@@ -333,8 +449,13 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
             <label>
               <span>Deployment</span>
               <select
-                disabled={Boolean(selection) || isSessionActive || listState !== "ready"}
-                onChange={(event) => setSelectedDeploymentId(event.target.value)}
+                disabled={
+                  Boolean(selection) ||
+                  requestState === "loading" ||
+                  isSessionActive ||
+                  listState !== "ready"
+                }
+                onChange={(event) => selectDeployment(event.target.value)}
                 value={selectedDeploymentId}
               >
                 {eligibleDeployments.map((deployment) => (
@@ -351,11 +472,11 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
             ) : null}
             <div
               className={styles.liveObservationSessionStatus}
-              data-status={snapshot?.status ?? "ready"}
+              data-status={selectedSnapshot?.status ?? "ready"}
             >
               <Radio size={15} aria-hidden="true" />
-              <span>{getSessionStatusLabel(snapshot, remainingSeconds)}</span>
-              {session ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
+              <span>{getSessionStatusLabel(selectedSnapshot, remainingSeconds)}</span>
+              {selectedSession ? <strong>{formatRemainingTime(remainingSeconds)}</strong> : null}
             </div>
             <div className={styles.liveObservationTargetActions}>
               <button
@@ -445,28 +566,48 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
           {visibleErrorMessage ? (
             <div className={styles.liveObservationError} role="alert">{visibleErrorMessage}</div>
           ) : null}
-          {!session && selectedDeployment && !selectedOutputUrl ? (
+          {!selectedSession &&
+          selectedDeployment &&
+          outputListState === "ready" &&
+          !selectedOutputUrl ? (
             <div className={styles.liveObservationError} role="alert">
               선택한 배포에 안전한 HTTPS Output URL이 없습니다.
             </div>
           ) : null}
-          {session && !outputUrl ? (
+          {selectedSession && !outputUrl ? (
             <div className={styles.liveObservationError} role="alert">
               이 관측 세션의 배포 Output URL을 안전하게 확인하지 못했습니다.
             </div>
           ) : null}
 
-          {snapshot ? (
+          {selectedArchitectureState === "loading" ? (
+            <div className={styles.liveObservationMessage} role="status">
+              배포 Architecture를 불러오고 있습니다.
+            </div>
+          ) : null}
+          {selectedArchitectureState === "error" && selectedArchitectureErrorMessage ? (
+            <div className={styles.liveObservationError} role="alert">
+              {selectedArchitectureErrorMessage}
+            </div>
+          ) : null}
+          {selectedArchitectureState === "ready" && selectedArchitecture ? (
+            <LiveObservationDiagramMap
+              architecture={selectedArchitecture}
+              snapshot={selectedSnapshot}
+            />
+          ) : null}
+
+          {selectedSnapshot ? (
             <section className={styles.liveObservationEvidenceRail} aria-label="관측 근거">
               <div data-source="browser">
                 <span>수락 요청</span>
-                <strong>{snapshot.live.acceptedEventCount}</strong>
+                <strong>{selectedSnapshot.live.acceptedEventCount}</strong>
                 <p>공개 요청 API가 수락한 요청</p>
               </div>
               <div data-source="runtime">
                 <span>현재 요청률</span>
-                <strong>{snapshot.live.rollingRequestsPerSecond.toFixed(1)} req/s</strong>
-                <p>{getLiveObservationPressureLabel(snapshot.live.pressureLevel)}</p>
+                <strong>{selectedSnapshot.live.rollingRequestsPerSecond.toFixed(1)} req/s</strong>
+                <p>{getLiveObservationPressureLabel(selectedSnapshot.live.pressureLevel)}</p>
               </div>
               <div data-source="aws">
                 <span>요청</span>
@@ -490,9 +631,9 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
                 <p>RequestCount와 Target 5xx 기반</p>
               </div>
               <div data-source="aws">
-                <span>용량</span>
+                <span>{providerEvidence?.capacityModeLabel ?? "용량"}</span>
                 <strong>{providerEvidence?.capacity ?? "—"}</strong>
-                <p>정상 / 실행 / 최대</p>
+                <p>{providerEvidence?.capacityDetailLabel ?? "수집 대기"}</p>
               </div>
             </section>
           ) : (
@@ -521,13 +662,15 @@ export function LiveObservationModal({ onClose, projectId, selection }: LiveObse
           ) : null}
         </main>
 
-        {session ? (
+        {selectedSession ? (
           <footer className={styles.liveObservationControlRail}>
             <div className={styles.liveObservationControlActivity}>
               <span className={styles.liveObservationSectionLabel}>세션</span>
-              <strong>{snapshot?.status === "active" ? "요청 수집 중" : "수집 종료"}</strong>
+              <strong>{selectedSnapshot?.status === "active" ? "요청 수집 중" : "수집 종료"}</strong>
               <span className={styles.liveObservationMuted}>
-                {snapshot?.terminalAt ? formatTimestamp(snapshot.terminalAt) : "종료 시각 없음"}
+                {selectedSnapshot?.terminalAt
+                  ? formatTimestamp(selectedSnapshot.terminalAt)
+                  : "종료 시각 없음"}
               </span>
             </div>
             <div className={styles.liveObservationControlActions}>
@@ -553,6 +696,14 @@ function getFocusableElements(container: HTMLElement | null): HTMLElement[] {
       'button:not(:disabled), a[href], select:not(:disabled), [tabindex]:not([tabindex="-1"])'
     )
   );
+}
+
+function getArchitectureErrorMessage(error: unknown): string {
+  if (error instanceof ApiClientError && error.status === 404) {
+    return "이 배포의 Architecture를 찾을 수 없습니다.";
+  }
+
+  return getApiErrorMessage(error, "배포 Architecture를 불러오지 못했습니다.");
 }
 
 function formatDeploymentOption(deployment: Deployment): string {

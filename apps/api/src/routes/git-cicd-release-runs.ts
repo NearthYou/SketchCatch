@@ -5,6 +5,10 @@ import type {
 } from "@sketchcatch/types";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { requireActiveUserId } from "../auth/current-user.js";
+import {
+  getDeploymentWorkerMode,
+  type DeploymentWorkerMode
+} from "../config/env.js";
 import type { DatabaseClient } from "../db/client.js";
 import { getDatabaseClient } from "../db/client.js";
 import { createPostgresGitHubReleaseExecutionRepository, createGitHubReleaseRunExecutor } from "../git-cicd/github-release-run-executor.js";
@@ -58,6 +62,12 @@ export type GitHubReleaseRunRouteOptions = {
   generateId?: () => string;
 };
 
+export function shouldDispatchGitHubReleaseWorker(
+  mode: DeploymentWorkerMode = getDeploymentWorkerMode()
+): boolean {
+  return mode === "ecs";
+}
+
 export async function registerGitHubReleaseRunRoutes(
   app: FastifyInstance,
   options: GitHubReleaseRunRouteOptions = {}
@@ -76,7 +86,7 @@ export async function registerGitHubReleaseRunRoutes(
       db: database!,
       repository: createPostgresGitHubReleaseExecutionRepository(database!),
       executionLeaseRepository: executionLeaseRepository!,
-      dispatchToWorker: true
+      dispatchToWorker: shouldDispatchGitHubReleaseWorker()
     });
   const verifyIdentity = options.verifyIdentity ?? createGitHubReleaseIdentityVerifier();
   const requireOwnerUserId =

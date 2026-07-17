@@ -67,6 +67,7 @@ import {
   runTerraformInit as defaultRunTerraformInit,
   runTerraformPlan as defaultRunTerraformPlan,
   runTerraformShowJson as defaultRunTerraformShowJson,
+  terraformInitTimeoutMs,
   terraformMutationTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
@@ -462,7 +463,8 @@ async function runDeploymentPlanOnce(
 
     terraform.init = await runTerraformInit(workspace.workdir, {
       env: awsCredentials.env,
-      signal: executionSignal
+      signal: executionSignal,
+      timeoutMs: terraformInitTimeoutMs
     });
     sequence = await appendTerraformOutput({
       deploymentId: deployment.id,

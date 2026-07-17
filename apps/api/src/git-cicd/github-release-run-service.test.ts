@@ -63,6 +63,29 @@ test("GitHub release request is persisted once and enqueued once", async () => {
   assert.deepEqual(enqueued, [first.run.id]);
 });
 
+test("GitHub release accepts the immutable subject used by newly created repositories", async () => {
+  const repository = createMemoryRepository();
+  const immutableIdentity = {
+    ...identity,
+    subject:
+      "repo:jh-9999@172338385/audience-live-check@123456789:environment:sketchcatch-production"
+  };
+
+  const result = await createGitHubReleaseRun(
+    {
+      projectId,
+      requestKey: `123456789:${commitSha}:987654321:1`,
+      request,
+      identity: immutableIdentity
+    },
+    repository,
+    createExecutor([]),
+    { generateId: () => "22222222-2222-4222-8222-222222222222" }
+  );
+
+  assert.equal(result.created, true);
+});
+
 test("an idempotency key can only replay the exact stored workflow identity", async () => {
   const repository = createMemoryRepository();
   const executor = createExecutor([]);
@@ -168,6 +191,36 @@ test("GitHub release request reserves the project lease before persisting the ru
   assert.equal(repository.records.has(runId), true);
   assert.deepEqual(enqueued, [runId]);
   assert.equal(result.created, true);
+});
+
+test("a monitoring row ID is reused before reserving the App release lease", async () => {
+  const repository = createMemoryRepository();
+  const monitoringRunId = "99999999-9999-4999-8999-999999999999";
+  repository.workflowRecordIds.set(
+    `${request.workflowRunId}:${request.workflowRunAttempt}`,
+    monitoringRunId
+  );
+  const reserved: string[] = [];
+
+  const result = await createGitHubReleaseRun(
+    {
+      projectId,
+      requestKey: `123456789:${commitSha}:987654321:1`,
+      request,
+      identity
+    },
+    repository,
+    createExecutor([]),
+    {
+      generateId: () => "22222222-2222-4222-8222-222222222222",
+      reserveExecution: async ({ runId }) => {
+        reserved.push(runId);
+      }
+    }
+  );
+
+  assert.equal(result.run.id, monitoringRunId);
+  assert.deepEqual(reserved, [monitoringRunId]);
 });
 
 test("every new workflow run creates a distinct release even for the same commit", async () => {
@@ -294,6 +347,30 @@ test("GitHub release request rejects a repository or commit not signed by OIDC",
   );
 });
 
+test("GitHub release request requires the exact App workflow file and branch ref", async () => {
+  for (const invalidWorkflow of [
+    "jh-9999/audience-live-check/.github/workflows/sketchcatch-app.yml@refs/heads/release",
+    "jh-9999/audience-live-check/.github/workflows/SketchCatch-App.yml@refs/heads/main",
+    "jh-9999/audience-live-check/.github/workflows/sketchcatch-app.yml.backup@refs/heads/main"
+  ]) {
+    await assert.rejects(
+      createGitHubReleaseRun(
+        {
+          projectId,
+          requestKey: `123456789:${commitSha}:987654321:1`,
+          request: { ...request, workflow: invalidWorkflow },
+          identity: { ...identity, workflowRef: invalidWorkflow }
+        },
+        createMemoryRepository(),
+        createExecutor([])
+      ),
+      (error: unknown) =>
+        error instanceof GitHubReleaseRunError &&
+        error.errorCode === "GITHUB_RELEASE_REQUEST_INVALID"
+    );
+  }
+});
+
 test("GitHub release status exposes partial failure and cancellation requests", async () => {
   const repository = createMemoryRepository();
   const executor = createExecutor([]);
@@ -334,11 +411,14 @@ test("GitHub release status exposes partial failure and cancellation requests", 
 
 function createMemoryRepository(): GitHubReleaseRunRepository & {
   records: Map<string, GitHubReleaseRunRecord>;
+  workflowRecordIds: Map<string, string>;
 } {
   const records = new Map<string, GitHubReleaseRunRecord>();
   const requestKeys = new Map<string, string>();
+  const workflowRecordIds = new Map<string, string>();
   return {
     records,
+    workflowRecordIds,
     async findProjectContext(id) {
       return id === projectId
         ? {
@@ -359,6 +439,9 @@ function createMemoryRepository(): GitHubReleaseRunRepository & {
     async findByRequestKey(key) {
       const id = requestKeys.get(key);
       return id ? records.get(id) : undefined;
+    },
+    async findWorkflowRunRecordId(input) {
+      return workflowRecordIds.get(`${input.workflowRunId}:${input.workflowRunAttempt}`);
     },
     async findById(id) {
       return records.get(id);
@@ -393,6 +476,10 @@ function createMemoryRepository(): GitHubReleaseRunRepository & {
       };
       records.set(record.id, record);
       requestKeys.set(input.requestKey, record.id);
+      workflowRecordIds.set(
+        `${input.request.workflowRunId}:${input.request.workflowRunAttempt}`,
+        record.id
+      );
       return record;
     },
     async requestCancellation(input) {

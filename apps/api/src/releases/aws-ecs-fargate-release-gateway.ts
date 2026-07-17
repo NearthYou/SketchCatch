@@ -232,13 +232,20 @@ export function createAwsEcsFargateReleaseGateway(options: {
       }
       const runtime = requireState(observation, "AWS runtime was not verified");
       const clients = requireState(deployClients, "AWS deploy session is unavailable");
+      const readers = requireState(readClients, "AWS read session is unavailable");
       const published = await publishOciLayoutToEcr(
         loaded.oci,
-        { repositoryName: context.runtime.ecrRepositoryName, imageTag: context.candidate.commitSha },
+        {
+          repositoryName: context.runtime.ecrRepositoryName,
+          imageTag: context.candidate.apiOciDigest
+        },
         clients.ecr as unknown as EcrPublisherClient,
-        { beforeMutation: control.beforeMutation }
+        {
+          beforeMutation: control.beforeMutation,
+          readClient: readers.ecr as unknown as EcrPublisherClient
+        }
       );
-      const verified = await clients.ecr.send(
+      const verified = await readers.ecr.send(
         new BatchGetImageCommand({
           repositoryName: context.runtime.ecrRepositoryName,
           imageIds: [{ imageDigest: published.imageDigest }],
@@ -290,12 +297,12 @@ export function createAwsEcsFargateReleaseGateway(options: {
 
     async verifyEcsHealth({ context, taskDefinitionArn }) {
       const runtime = requireState(observation, "AWS runtime was not verified");
-      const clients = requireState(deployClients, "AWS deploy session is unavailable");
+      const readers = requireState(readClients, "AWS read session is unavailable");
       return verifyEcsHealthUntilTerminal(
         context,
         runtime,
         taskDefinitionArn,
-        { ecs: clients.ecs, elb: clients.elb },
+        { ecs: readers.ecs, elb: readers.elb },
         wait
       );
     },
@@ -303,6 +310,7 @@ export function createAwsEcsFargateReleaseGateway(options: {
     async rollbackEcs({ context, taskDefinitionArn, beforeMutation }) {
       const runtime = requireState(observation, "AWS runtime was not verified");
       const clients = requireState(deployClients, "AWS deploy session is unavailable");
+      const readers = requireState(readClients, "AWS read session is unavailable");
       if (taskDefinitionArn !== runtime.rollbackTaskDefinitionArn) {
         throw new Error("Rollback Task Definition does not match the verified baseline");
       }
@@ -319,7 +327,7 @@ export function createAwsEcsFargateReleaseGateway(options: {
         context,
         runtime,
         taskDefinitionArn,
-        { ecs: clients.ecs, elb: clients.elb },
+        { ecs: readers.ecs, elb: readers.elb },
         wait
       );
       return { state: "restored", taskDefinitionArn, health } as JsonValue;
@@ -587,9 +595,15 @@ function createTaskDefinitionRegistration(
   context: TrustedReleaseContext,
   imageUri: string
 ): RegisterTaskDefinitionCommandInput {
-  const containerDefinitions = taskDefinition.containerDefinitions?.map((container) =>
-    container.name === context.runtime.containerName ? { ...container, image: imageUri } : container
-  );
+  const containerDefinitions = taskDefinition.containerDefinitions?.map((container) => {
+    if (container.name !== context.runtime.containerName) return container;
+    const replacement = { ...container, image: imageUri };
+    if (context.runtime.runtimeEntrypoint === null) {
+      delete replacement.entryPoint;
+      delete replacement.command;
+    }
+    return replacement;
+  });
   if (
     !taskDefinition.family ||
     !containerDefinitions?.some((container) => container.name === context.runtime.containerName)

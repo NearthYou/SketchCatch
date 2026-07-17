@@ -16,6 +16,7 @@ const descriptor = {
   deploymentId: "deployment-1",
   userId: "user-1",
   deploymentStatus: "RUNNING" as const,
+  activeStage: "application_release" as const,
   failureStage: "application_release" as const
 };
 const data = {
@@ -87,6 +88,34 @@ test("startup recovery excludes deployments whose worker is still active", async
 
   assert.deepEqual(result, { recoveredDeploymentIds: [], retryDeploymentIds: [] });
   assert.equal(loadCalls, 0);
+});
+
+test("startup recovery does not take the lease from a running destroy", async () => {
+  let loadCalls = 0;
+  let recoveryCalls = 0;
+  const dependencies = createDependencies({
+    recoverRelease: async () => {
+      recoveryCalls += 1;
+    }
+  });
+  dependencies.store = {
+    async listInterrupted() {
+      return [{ ...descriptor, activeStage: "destroy" }];
+    },
+    async load() {
+      loadCalls += 1;
+      return data;
+    }
+  };
+
+  const result = await recoverInterruptedDirectReleaseBatch(
+    { excludeDeploymentIds: [] },
+    dependencies
+  );
+
+  assert.deepEqual(result, { recoveredDeploymentIds: [], retryDeploymentIds: [] });
+  assert.equal(loadCalls, 0);
+  assert.equal(recoveryCalls, 0);
 });
 
 test("ECS startup recovery dispatches a trusted recovery worker instead of mutating AWS", async () => {

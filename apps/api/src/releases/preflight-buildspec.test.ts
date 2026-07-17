@@ -9,9 +9,13 @@ import {
 test("preflight buildspec builds and checks API/frontend without deployment permissions", () => {
   const buildspec = renderPreflightBuildspec(createBuildConfig());
 
+  assert.match(buildspec, /env:\n {2}shell: bash\n/);
+  assert.match(buildspec, /command -v zstd/);
   assert.match(buildspec, /CODEBUILD_RESOLVED_SOURCE_VERSION/);
   assert.match(buildspec, /docker build/);
   assert.match(buildspec, /docker run/);
+  assert.match(buildspec, /docker logs/);
+  assert.match(buildspec, /API container exited before the health check passed/);
   assert.match(buildspec, /curl --fail/);
   assert.match(buildspec, /pnpm .* install --frozen-lockfile/);
   assert.match(buildspec, /pnpm .* run build/);

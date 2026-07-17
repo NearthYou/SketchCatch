@@ -127,7 +127,7 @@ test("HTTPS transport validates DNS, pins the validated address, and preserves T
 });
 
 test("HTTPS transport sends CloudFront adapter traffic through the verified public CloudFront hostname", async () => {
-  let requestOptions: PinnedHttpsRequestOptions | undefined;
+  const seenRequestOptions: PinnedHttpsRequestOptions[] = [];
   let cnameCalled = false;
   const cloudFrontManifest = {
     ...manifest,
@@ -163,6 +163,22 @@ test("HTTPS transport sends CloudFront adapter traffic through the verified publ
       }
     }
   };
+  const fixedCloudFrontManifest = {
+    ...cloudFrontManifest,
+    adapter: {
+      ...cloudFrontManifest.adapter,
+      version: 4 as const,
+      payload: {
+        ...cloudFrontManifest.adapter.payload,
+        capacityTarget: {
+          kind: "ecs_fargate" as const,
+          clusterName: "audience-live-check-cluster",
+          serviceName: "audience-live-check-service",
+          scaling: { mode: "fixed" as const }
+        }
+      }
+    }
+  };
   const transport = createLiveObservationHttpsTransport({
     resolveCname: async () => {
       cnameCalled = true;
@@ -174,7 +190,7 @@ test("HTTPS transport sends CloudFront adapter traffic through the verified publ
     },
     resolve6: async () => [],
     request(options, onResponse) {
-      requestOptions = options;
+      seenRequestOptions.push(options);
       const request = {
         destroy() {},
         end() {
@@ -190,9 +206,17 @@ test("HTTPS transport sends CloudFront adapter traffic through the verified publ
 
   assert.deepEqual(await transport.post(cloudFrontManifest), { status: 204 });
   assert.equal(cnameCalled, false);
-  assert.equal(requestOptions?.hostname, "d111111abcdef8.cloudfront.net");
-  assert.equal(requestOptions?.servername, "d111111abcdef8.cloudfront.net");
-  assert.equal(requestOptions?.path, "/api/traffic");
+  assert.equal(seenRequestOptions[0]?.hostname, "d111111abcdef8.cloudfront.net");
+  assert.equal(seenRequestOptions[0]?.servername, "d111111abcdef8.cloudfront.net");
+  assert.equal(seenRequestOptions[0]?.path, "/api/traffic");
+
+  cnameCalled = false;
+  assert.deepEqual(await transport.post(fixedCloudFrontManifest), { status: 204 });
+  assert.equal(cnameCalled, false);
+  assert.equal(seenRequestOptions.length, 2);
+  assert.equal(seenRequestOptions[1]?.hostname, "d111111abcdef8.cloudfront.net");
+  assert.equal(seenRequestOptions[1]?.servername, "d111111abcdef8.cloudfront.net");
+  assert.equal(seenRequestOptions[1]?.path, "/api/traffic");
 });
 
 test("HTTPS pins IPv6 with a single-address lookup contract", async () => {

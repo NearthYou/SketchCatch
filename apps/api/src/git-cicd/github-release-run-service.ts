@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, notInArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import type {
   ApplicationReleaseFailureStage,
   ApplicationReleaseStatus,
@@ -20,7 +20,11 @@ import {
   projects,
   sourceRepositories
 } from "../db/schema.js";
-import type { GitHubReleaseIdentity } from "./github-oidc-release-identity.js";
+import {
+  isExpectedGitHubEnvironmentSubject,
+  isExactGitHubWorkflowRef,
+  type GitHubReleaseIdentity
+} from "./github-oidc-release-identity.js";
 
 const commitShaPattern = /^([0-9a-f]{40}|[0-9a-f]{64})$/u;
 const idempotencyKeyPattern = /^[A-Za-z0-9._:-]{8,160}$/u;
@@ -67,6 +71,11 @@ export type GitHubReleaseRunRecord = {
 export type GitHubReleaseRunRepository = {
   findProjectContext(projectId: string): Promise<GitHubReleaseProjectContext | undefined>;
   findByRequestKey(requestKey: string): Promise<GitHubReleaseRunRecord | undefined>;
+  findWorkflowRunRecordId(input: {
+    sourceRepositoryId: string;
+    workflowRunId: string;
+    workflowRunAttempt: number;
+  }): Promise<string | undefined>;
   findById(runId: string): Promise<GitHubReleaseRunRecord | undefined>;
   findByIdForOwner(input: {
     runId: string;
@@ -236,6 +245,21 @@ export function createPostgresGitHubReleaseRunRepository(
     findByRequestKey(requestKey) {
       return findRun(eq(gitCicdPipelineRuns.releaseRequestKey, requestKey));
     },
+    async findWorkflowRunRecordId(input) {
+      const [row] = await db
+        .select({ id: gitCicdPipelineRuns.id })
+        .from(gitCicdPipelineRuns)
+        .where(
+          and(
+            eq(gitCicdPipelineRuns.sourceRepositoryId, input.sourceRepositoryId),
+            eq(gitCicdPipelineRuns.githubWorkflowRunId, input.workflowRunId),
+            eq(gitCicdPipelineRuns.githubWorkflowRunAttempt, input.workflowRunAttempt),
+            eq(gitCicdPipelineRuns.executionKind, "app")
+          )
+        )
+        .limit(1);
+      return row?.id;
+    },
     findById(runId) {
       return findRun(eq(gitCicdPipelineRuns.id, runId));
     },
@@ -260,7 +284,6 @@ export function createPostgresGitHubReleaseRunRepository(
           and(
             eq(deployments.projectId, input.projectId),
             eq(deployments.status, "SUCCESS"),
-            eq(deployments.targetKind, "ecs_fargate"),
             inArray(deployments.scope, ["full_stack", "infrastructure"])
           )
         )
@@ -273,12 +296,13 @@ export function createPostgresGitHubReleaseRunRepository(
           409
         );
       }
-      await db.insert(gitCicdPipelineRuns).values({
+      const [claimed] = await db.insert(gitCicdPipelineRuns).values({
         id: input.id,
         projectId: input.projectId,
         sourceRepositoryId: input.sourceRepositoryId,
         infrastructureDeploymentId: infrastructureDeployment.id,
         handoffId: null,
+        executionKind: "app",
         commitSha: input.request.commitSha,
         commitMessage: `GitHub release request ${input.request.workflowRunId}`,
         branch: input.branch,
@@ -302,8 +326,41 @@ export function createPostgresGitHubReleaseRunRepository(
         logRevision: "",
         lastRefreshedAt: input.now,
         createdAt: input.now
-      });
-      const created = await findRun(eq(gitCicdPipelineRuns.id, input.id));
+      }).onConflictDoUpdate({
+        target: [
+          gitCicdPipelineRuns.sourceRepositoryId,
+          gitCicdPipelineRuns.githubWorkflowRunId,
+          gitCicdPipelineRuns.githubWorkflowRunAttempt
+        ],
+        targetWhere: and(
+          sql`${gitCicdPipelineRuns.githubWorkflowRunId} is not null`,
+          sql`${gitCicdPipelineRuns.githubWorkflowRunAttempt} is not null`
+        )!,
+        set: {
+          infrastructureDeploymentId: infrastructureDeployment.id,
+          releaseRequestKey: input.requestKey,
+          githubRepositoryId: input.request.repositoryId,
+          githubWorkflowRef: input.request.workflow,
+          githubOidcSubject: input.identity.subject,
+          githubEnvironment: input.identity.environment,
+          pipelineRunUrl: input.request.workflowRunUrl,
+          branch: input.branch,
+          commitSha: input.request.commitSha,
+          status: "queued",
+          statusMessage: "SketchCatch에서 코드 사전 검증을 준비하고 있습니다.",
+          lastRefreshedAt: input.now
+        },
+        setWhere: and(
+          eq(gitCicdPipelineRuns.executionKind, "app"),
+          or(
+            isNull(gitCicdPipelineRuns.releaseRequestKey),
+            eq(gitCicdPipelineRuns.releaseRequestKey, input.requestKey)
+          )
+        )!
+      }).returning({ id: gitCicdPipelineRuns.id });
+      const created = claimed
+        ? await findRun(eq(gitCicdPipelineRuns.id, claimed.id))
+        : await findRun(eq(gitCicdPipelineRuns.releaseRequestKey, input.requestKey));
       if (!created) throw new Error("GitHub release run was not saved");
       return created;
     },
@@ -362,8 +419,14 @@ export async function createGitHubReleaseRun(
     return { run: toGitHubReleaseRun(existingByKey), created: false };
   }
 
-  const runId = options.generateId?.() ?? randomUUID();
+  const existingWorkflowRunId = await repository.findWorkflowRunRecordId({
+    sourceRepositoryId: context.sourceRepositoryId,
+    workflowRunId: input.request.workflowRunId,
+    workflowRunAttempt: input.request.workflowRunAttempt
+  });
+  const runId = existingWorkflowRunId ?? options.generateId?.() ?? randomUUID();
   await options.reserveExecution?.({ projectId: input.projectId, runId });
+  let reservedRunId = runId;
   let record: GitHubReleaseRunRecord;
   try {
     record = await repository.create({
@@ -376,9 +439,17 @@ export async function createGitHubReleaseRun(
       branch: branchFromRef(input.request.ref),
       now: options.now?.() ?? new Date()
     });
+    if (record.id !== reservedRunId) {
+      await options.releaseReservedExecution?.({
+        projectId: input.projectId,
+        runId: reservedRunId
+      });
+      await options.reserveExecution?.({ projectId: input.projectId, runId: record.id });
+      reservedRunId = record.id;
+    }
   } catch (error) {
     await options
-      .releaseReservedExecution?.({ projectId: input.projectId, runId })
+      .releaseReservedExecution?.({ projectId: input.projectId, runId: reservedRunId })
       .catch(() => undefined);
     throw error;
   }
@@ -582,8 +653,6 @@ function assertIdentityMatches(
   const expectedBranch = context.monitorBranch ?? context.defaultBranch;
   const environmentName = context.environmentName;
   if (!environmentName) throw invalidRequest();
-  const expectedWorkflowPrefix = `${normalizeRepository(expectedRepository)}/.github/workflows/sketchcatch-app.yml@`;
-  const expectedSubject = `repo:${expectedRepository}:environment:${environmentName.replaceAll(":", "%3A")}`;
   if (
     normalizeRepository(request.repository) !== normalizeRepository(expectedRepository) ||
     normalizeRepository(identity.repository) !== normalizeRepository(expectedRepository) ||
@@ -595,12 +664,20 @@ function assertIdentityMatches(
     request.workflowRunId !== identity.workflowRunId ||
     request.workflowRunAttempt !== identity.workflowRunAttempt ||
     identity.environment !== environmentName ||
-    identity.subject !== expectedSubject ||
+    !isExpectedGitHubEnvironmentSubject({
+      subject: identity.subject,
+      repository: identity.repository,
+      repositoryId: identity.repositoryId,
+      environment: identity.environment
+    }) ||
     branchFromRef(request.ref) !== expectedBranch ||
-    !normalizeRepository(request.workflow).startsWith(expectedWorkflowPrefix)
-  ) {
-    throw invalidRequest();
-  }
+    !isExactGitHubWorkflowRef({
+      workflowRef: request.workflow,
+      repository: expectedRepository,
+      workflowPath: ".github/workflows/sketchcatch-app.yml",
+      ref: request.ref
+    })
+  ) throw invalidRequest();
 }
 
 function toGitHubReleaseRun(record: GitHubReleaseRunRecord): GitCicdReleaseRun {

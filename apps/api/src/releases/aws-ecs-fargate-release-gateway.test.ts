@@ -144,6 +144,44 @@ test("ECS activation clones the approved Terraform task definition, not mutable 
 
   assert.match(JSON.stringify(registeredEnvironment), /terraform-approved/u);
   assert.doesNotMatch(JSON.stringify(registeredEnvironment), /service-drift/u);
+  assert.doesNotMatch(JSON.stringify(registeredEnvironment), /bootstrap-command/u);
+});
+
+test("ECR publishes with the approved OCI digest tag instead of the commit SHA", async () => {
+  const context = createContext();
+  let imageTag: string | undefined;
+  const gateway = createAwsEcsFargateReleaseGateway({
+    now: () => new Date("2026-07-15T12:00:00.000Z"),
+    stsGateway: createStsGateway(context),
+    clients: createRuntimeClients(context, {
+      onEcrCommand(name, input) {
+        if (name === "BatchGetImageCommand") {
+          const imageId = (input["imageIds"] as Array<Record<string, unknown>> | undefined)?.[0];
+          if (typeof imageId?.["imageTag"] === "string") {
+            imageTag = imageId["imageTag"];
+            return { failures: [] };
+          }
+          if (typeof imageId?.["imageDigest"] === "string") {
+            return { images: [{ imageId: { imageDigest: imageId["imageDigest"] } }] };
+          }
+          return { failures: [] };
+        }
+        if (name === "PutImageCommand") {
+          return {
+            image: { imageId: { imageDigest: `sha256:${context.candidate.apiOciDigest}` } }
+          };
+        }
+        return undefined;
+      }
+    }),
+    topologyVerifier: createTopologyVerifier(context),
+    loadArtifacts: async () => createLoadedArtifacts()
+  });
+
+  await gateway.verifyCandidate(context);
+  await gateway.publishApi(context, { beforeMutation: async () => undefined });
+
+  assert.equal(imageTag, context.candidate.apiOciDigest);
 });
 
 function createRuntimeClients(
@@ -155,6 +193,10 @@ function createRuntimeClients(
     currentContainerEnvironment?: Array<{ name: string; value: string }>;
     approvedContainerEnvironment?: Array<{ name: string; value: string }>;
     onRegister?: (input: Record<string, unknown>) => void;
+    onEcrCommand?: (
+      name: string,
+      input: Record<string, unknown>
+    ) => Record<string, unknown> | undefined;
   } = {}
 ) {
   const approvedTaskDefinition = {
@@ -172,6 +214,8 @@ function createRuntimeClients(
         image: "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/demo-api@sha256:" +
           "9".repeat(64),
         portMappings: [{ containerPort: 3000, protocol: "tcp" }],
+        entryPoint: ["/bin/sh", "-c"],
+        command: ["bootstrap-command"],
         environment: overrides.approvedContainerEnvironment
       }
     ]
@@ -187,6 +231,10 @@ function createRuntimeClients(
   };
   const create = (service: string) => () => ({
     async send(command: { constructor: { name: string }; input: Record<string, unknown> }) {
+      if (service === "ecr") {
+        const response = overrides.onEcrCommand?.(command.constructor.name, command.input);
+        if (response !== undefined) return response;
+      }
       switch (`${service}:${command.constructor.name}`) {
         case "ecr:DescribeRepositoriesCommand":
           return {
@@ -380,7 +428,8 @@ function createContext(): TrustedReleaseContext {
       cloudFrontDomainName: "demo.cloudfront.net",
       outputUrl: "https://demo.cloudfront.net",
       healthCheckPath: "/health",
-      apiProbePath: "/api/check-ins"
+      apiProbePath: "/api/check-ins",
+      runtimeEntrypoint: null
     }
   };
 }

@@ -7,6 +7,7 @@ import type {
   DeployedResource,
   Deployment,
   DeploymentFailureExplanationResponse,
+  DeploymentLiveObservationArchitectureResponse,
   DeploymentLog,
   Project,
   RecentSuccessfulDeploymentProject,
@@ -53,6 +54,7 @@ import {
   DeploymentNotFoundError,
   getDeployment,
   getDeploymentDeployedAt,
+  getDeploymentLiveObservationArchitecture,
   listDeployedResources,
   listProjectDeployments,
   listDeploymentLogs,
@@ -93,6 +95,7 @@ import {
   createLocalDeploymentWorkerDispatcher,
   type DeploymentWorkerDispatcher
 } from "../deployments/deployment-worker-dispatcher.js";
+import { TerraformArtifactSafetyError } from "../deployments/terraform-artifact-safety.js";
 import type {
   CreateLlmExplanation,
   LlmExplanationInput
@@ -194,6 +197,7 @@ type DeploymentRouteOptions = {
     repository: DeploymentRepository
   ) => Promise<RunDeploymentPlanResult>;
   prepareProjectBuildEnvironment?: (input: {
+    architectureId: string;
     db: DatabaseClient["db"];
     projectId: string;
     userId: string;
@@ -513,6 +517,13 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
     });
   }
 
+  if (error instanceof TerraformArtifactSafetyError) {
+    return reply.status(409).send({
+      error: "terraform_artifact_unsafe",
+      message: error.message
+    });
+  }
+
   if (error instanceof DeploymentNotFoundError) {
     return reply.status(404).send({
       error: "not_found",
@@ -742,7 +753,7 @@ export async function registerDeploymentRoutes(
           architectureId: body.architectureId,
           terraformArtifactId: body.terraformArtifactId,
           awsConnectionId: body.awsConnectionId,
-          liveProfile: "practice",
+          liveProfile: preparation.liveProfile,
           scope: preparation.scope,
           targetKind: preparation.targetKind,
           source: "direct",
@@ -839,6 +850,35 @@ export async function registerDeploymentRoutes(
       return handleDeploymentError(error, reply);
     }
   });
+
+  app.get(
+    "/deployments/:deploymentId/live-observation-architecture",
+    async (
+      request,
+      reply
+    ): Promise<DeploymentLiveObservationArchitectureResponse | FastifyReply> => {
+      const params = deploymentParamsSchema.parse(request.params);
+      const { accessContext, repository } = await getDeploymentRequestContext(
+        request,
+        options,
+        getDeploymentDatabaseClient
+      );
+
+      try {
+        return reply.status(200).send(
+          await getDeploymentLiveObservationArchitecture(
+            {
+              deploymentId: params.deploymentId,
+              accessContext
+            },
+            repository
+          )
+        );
+      } catch (error) {
+        return handleDeploymentError(error, reply);
+      }
+    }
+  );
 
   app.get(
     "/deployments/:deploymentId/failure-explanation",
@@ -1035,14 +1075,24 @@ export async function registerDeploymentRoutes(
       ) {
         const prepareProjectBuildEnvironment =
           options?.prepareProjectBuildEnvironment ??
-          (async (input: { db: DatabaseClient["db"]; projectId: string; userId: string }) => {
+          (async (input: {
+            architectureId: string;
+            db: DatabaseClient["db"];
+            projectId: string;
+            userId: string;
+          }) => {
             await prepareProjectBuildEnvironmentService(
-              { projectId: input.projectId, userId: input.userId },
+              {
+                architectureId: input.architectureId,
+                projectId: input.projectId,
+                userId: input.userId
+              },
               createPostgresProjectBuildEnvironmentRepository(input.db),
               createAwsProjectBuildEnvironmentGateway()
             );
           });
         await prepareProjectBuildEnvironment({
+          architectureId: deployment.architectureId,
           db,
           projectId: deployment.projectId,
           userId: accessContext.userId

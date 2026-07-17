@@ -23,7 +23,9 @@ import {
   parseTerraformOutputsJson
 } from "./deployment-apply-results.js";
 import {
+  appendDeploymentDurationLog,
   appendTerraformDurationLog,
+  measureDeploymentDuration,
   runLoggedDeploymentOperation
 } from "./deployment-duration-logs.js";
 import { maskDeploymentMessage } from "./log-masking.js";
@@ -132,6 +134,11 @@ export type RunDeploymentApplyOptions = {
     region: string;
     repository: DeploymentRepository;
   }) => Promise<void>;
+  synchronizeDeploymentTargetAfterApply?: (input: {
+    projectId: string;
+    deploymentId: string;
+    accessContext: ProjectAccessContext;
+  }) => Promise<void>;
   projectExecutionLeaseRepository?: ProjectExecutionLeaseRepository;
   leaseHeartbeatIntervalMs?: number;
 };
@@ -179,6 +186,9 @@ export async function runDeploymentApply(
     options.executeApplicationRelease ?? defaultExecuteApplicationRelease;
   const reconcileApplicationOutput =
     options.reconcileApplicationOutput ?? defaultReconcileApplicationOutput;
+  const synchronizeDeploymentTargetAfterApply =
+    options.synchronizeDeploymentTargetAfterApply ??
+    repository.synchronizeDeploymentTargetAfterApply;
 
   let workspace: PreparedTerraformWorkspace | undefined;
   let deploymentId: string | undefined;
@@ -353,25 +363,6 @@ export async function runDeploymentApply(
         repository
       });
 
-      if (deployment.scope !== "infrastructure") {
-        const releaseExecution = await runLoggedDeploymentOperation({
-          deploymentId: deployment.id,
-          accessContext: input.accessContext,
-          sequence,
-          stage: "apply",
-          label: "application runtime release",
-          repository,
-          operation: () =>
-            executeApplicationRelease({
-              deployment,
-              accessContext: input.accessContext,
-              repository,
-              ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
-            })
-        });
-        sequence = releaseExecution.sequence;
-      }
-
       const [existingResources, existingOutputs] = await Promise.all([
         repository.listDeployedResources(deployment.id),
         repository.listTerraformOutputs(deployment.id)
@@ -408,6 +399,34 @@ export async function runDeploymentApply(
 
       if (!applyResultSave.result) {
         throw new DeploymentNotFoundError("Deployment not found");
+      }
+      sequence = applyResultSave.sequence;
+
+      sequence = await synchronizeEcsDeploymentTargetAfterApply({
+        deployment,
+        accessContext: input.accessContext,
+        sequence,
+        repository,
+        synchronizeDeploymentTargetAfterApply
+      });
+
+      if (deployment.scope !== "infrastructure") {
+        const releaseExecution = await runLoggedDeploymentOperation({
+          deploymentId: deployment.id,
+          accessContext: input.accessContext,
+          sequence,
+          stage: "apply",
+          label: "application runtime release",
+          repository,
+          operation: () =>
+            executeApplicationRelease({
+              deployment,
+              accessContext: input.accessContext,
+              repository,
+              ...(input.abortSignal ? { abortSignal: input.abortSignal } : {})
+            })
+        });
+        sequence = releaseExecution.sequence;
       }
 
       const completedDeployment = await repository.completeDeploymentApply(deployment.id, {
@@ -732,6 +751,14 @@ export async function runDeploymentApply(
     if (!applyResultSave.result) {
       throw new DeploymentNotFoundError("Deployment not found");
     }
+
+    sequence = await synchronizeEcsDeploymentTargetAfterApply({
+      deployment,
+      accessContext: input.accessContext,
+      sequence,
+      repository,
+      synchronizeDeploymentTargetAfterApply
+    });
 
     if (deployment.scope === "full_stack") {
       try {
@@ -1388,52 +1415,77 @@ async function uploadPartialStateAfterFailedApply(input: {
   applyArtifactStorage: DeploymentApplyArtifactStorage;
   repository: DeploymentRepository;
 }): Promise<{ stateObjectKey: string | null; warningSummary: string | null }> {
+  const warningSummary =
+    "Partial Terraform state was saved after failed apply for explicit cleanup destroy.";
+  let stateUpload: Awaited<
+    ReturnType<typeof input.applyArtifactStorage.uploadDeploymentState>
+  >;
+  let stateUploadDurationMs: number;
+
   try {
-    const stateUpload = await runLoggedDeploymentOperation({
-      deploymentId: input.deploymentId,
-      accessContext: input.accessContext,
-      sequence: input.sequence,
-      stage: "apply",
-      label: "partial terraform state upload",
-      repository: input.repository,
-      operation: () =>
-        input.applyArtifactStorage.uploadDeploymentState({
-          deploymentId: input.deploymentId,
-          stateFilePath: join(input.workspace.workdir, "terraform.tfstate")
-        })
-    });
-    const uploadedState = stateUpload.result;
-    const warningSummary =
-      "Partial Terraform state was saved after failed apply for explicit cleanup destroy.";
-
-    await appendApplyWarnings({
-      deploymentId: input.deploymentId,
-      accessContext: input.accessContext,
-      sequence: stateUpload.sequence,
-      warnings: [warningSummary],
-      repository: input.repository
-    });
-
-    return {
-      stateObjectKey: uploadedState.objectKey,
-      warningSummary
-    };
+    const measuredStateUpload = await measureDeploymentDuration(() =>
+      input.applyArtifactStorage.uploadDeploymentState({
+        deploymentId: input.deploymentId,
+        stateFilePath: join(input.workspace.workdir, "terraform.tfstate")
+      })
+    );
+    stateUpload = measuredStateUpload.result;
+    stateUploadDurationMs = measuredStateUpload.durationMs;
   } catch (error) {
-    const warningSummary = summarizePostApplyWarning("Partial Terraform state upload", error);
+    const uploadWarningSummary = summarizePostApplyWarning("Partial Terraform state upload", error);
 
     await appendApplyWarnings({
       deploymentId: input.deploymentId,
       accessContext: input.accessContext,
       sequence: input.sequence,
-      warnings: [warningSummary],
+      warnings: [uploadWarningSummary],
       repository: input.repository
     }).catch(() => undefined);
 
     return {
       stateObjectKey: null,
-      warningSummary
+      warningSummary: uploadWarningSummary
     };
   }
+
+  const saveDeploymentApplyState = input.repository.saveDeploymentApplyState;
+  if (!saveDeploymentApplyState) {
+    throw new DeploymentConflictError("Deployment apply state persistence is unavailable");
+  }
+  const persistedDeployment = await saveDeploymentApplyState.call(
+    input.repository,
+    input.deploymentId,
+    {
+      stateObjectKey: stateUpload.objectKey,
+      resultWarningSummary: warningSummary
+    }
+  );
+  if (!persistedDeployment) {
+    throw new DeploymentNotFoundError("Deployment not found");
+  }
+
+  const nextSequence = await appendDeploymentDurationLog({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: input.sequence,
+    stage: "apply",
+    label: "partial terraform state upload",
+    durationMs: stateUploadDurationMs,
+    repository: input.repository
+  }).catch(() => input.sequence);
+
+  await appendApplyWarnings({
+    deploymentId: input.deploymentId,
+    accessContext: input.accessContext,
+    sequence: nextSequence,
+    warnings: [warningSummary],
+    repository: input.repository
+  }).catch(() => undefined);
+
+  return {
+    stateObjectKey: stateUpload.objectKey,
+    warningSummary
+  };
 }
 
 async function appendApplyPreconditionFailureLog(input: {
@@ -1554,6 +1606,51 @@ async function appendApplyWarnings(input: {
   );
 
   return input.sequence + input.warnings.length;
+}
+
+async function synchronizeEcsDeploymentTargetAfterApply(input: {
+  deployment: DeploymentRecord;
+  accessContext: ProjectAccessContext;
+  sequence: number;
+  repository: DeploymentRepository;
+  synchronizeDeploymentTargetAfterApply:
+    | NonNullable<RunDeploymentApplyOptions["synchronizeDeploymentTargetAfterApply"]>
+    | undefined;
+}): Promise<number> {
+  if (
+    !input.synchronizeDeploymentTargetAfterApply ||
+    input.deployment.scope === "application" ||
+    input.deployment.targetKind !== "ecs_fargate"
+  ) {
+    return input.sequence;
+  }
+
+  try {
+    await input.synchronizeDeploymentTargetAfterApply({
+      projectId: input.deployment.projectId,
+      deploymentId: input.deployment.id,
+      accessContext: input.accessContext
+    });
+    return input.sequence;
+  } catch (error) {
+    try {
+      return await appendApplyWarnings({
+        deploymentId: input.deployment.id,
+        accessContext: input.accessContext,
+        sequence: input.sequence,
+        warnings: [
+          summarizePostApplyWarning("Deployment target metadata synchronization", error)
+        ],
+        repository: input.repository
+      });
+    } catch {
+      try {
+        return await input.repository.getNextDeploymentLogSequence(input.deployment.id);
+      } catch {
+        return input.sequence;
+      }
+    }
+  }
 }
 
 async function appendOutputLines(input: {

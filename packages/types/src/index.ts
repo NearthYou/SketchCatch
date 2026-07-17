@@ -773,6 +773,53 @@ export type AnalyzeSourceRepositoryResponse = {
 
 export type SourceRepositoryAnalysis = Omit<AnalyzeSourceRepositoryResponse, "sourceRepositoryId">;
 
+export type GitCicdReadinessStatus = "ready" | "action_required";
+
+export type GitCicdReadinessItemKey =
+  | "approved_apply_plan"
+  | "source_repository"
+  | "monitoring_config"
+  | "deployment_target";
+
+export type GitCicdDeploymentTargetReadinessKey =
+  | "aws_connection"
+  | "build_config"
+  | "runtime_config"
+  | "output_url";
+
+export type GitCicdReadinessAction =
+  | "approve_apply_plan"
+  | "select_repository"
+  | "confirm_monitoring_config"
+  | "select_aws_connection"
+  | "confirm_build_config"
+  | "inspect_runtime_outputs"
+  | "inspect_output_url";
+
+export type GitCicdReadinessItem = {
+  key: GitCicdReadinessItemKey;
+  label: string;
+  status: GitCicdReadinessStatus;
+  completedCount?: number | undefined;
+  totalCount?: number | undefined;
+  missingKeys: GitCicdDeploymentTargetReadinessKey[];
+  action: GitCicdReadinessAction | null;
+};
+
+export type GitCicdReadinessSnapshot = {
+  projectId: string;
+  checkedAt: IsoDateTimeString;
+  ready: boolean;
+  requiredActionCount: number;
+  sourceDeploymentId: string | null;
+  approvedApplyPlanArtifactId: string | null;
+  items: GitCicdReadinessItem[];
+};
+
+export type GitCicdReadinessResponse = {
+  readiness: GitCicdReadinessSnapshot;
+};
+
 export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
 
 export type GitCicdMonitoredPath = {
@@ -801,6 +848,8 @@ export type GitCicdPipelineRunStatus =
   | "cancelled";
 
 export type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
+
+export type GitCicdPipelineExecutionKind = "app" | "infra";
 
 export type GitCicdPipelineStageKind =
   | "detect"
@@ -836,6 +885,9 @@ export type GitCicdPipelineRun = {
   infrastructureDeploymentId: string | null;
   sourceRepositoryId: string;
   handoffId: string | null;
+  executionKind: GitCicdPipelineExecutionKind;
+  githubWorkflowRunId: string | null;
+  githubWorkflowRunAttempt: number | null;
   commitSha: string;
   commitMessage: string;
   branch: string;
@@ -927,6 +979,22 @@ export type CreateGitCicdReleaseRunRequest = {
   workflowRunId: string;
   workflowRunAttempt: number;
   workflowRunUrl: string;
+};
+
+export type GitCicdInfrastructureRunStage =
+  | "configuration"
+  | "infra_plan"
+  | "infra_apply";
+
+export type CreateGitCicdInfrastructureRunRequest = CreateGitCicdReleaseRunRequest;
+
+export type CompleteGitCicdInfrastructureRunRequest = {
+  conclusion: "succeeded" | "failed" | "cancelled";
+  stage: GitCicdInfrastructureRunStage;
+};
+
+export type GitCicdInfrastructureRunResponse = {
+  run: GitCicdPipelineRun;
 };
 
 export type GitCicdPipelineRunRefreshResponse = {
@@ -2005,6 +2073,11 @@ export type DeploymentPlanArtifact = {
 
 export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
+  cleanupRetries: AwsConnectionCleanupRetry[];
+};
+
+export type AwsConnectionCleanupRetry = {
+  awsConnection: AwsConnection;
 };
 
 export type AwsConnectionDeletionPreviewResponse = {
@@ -2341,6 +2414,40 @@ export type DeploymentLiveObservationAwsAdapterV3 = {
   };
 };
 
+export type DeploymentLiveObservationAwsAdapterV4 = {
+  kind: "aws-live-observation";
+  version: 4;
+  payload: Omit<DeploymentLiveObservationAwsAdapterV3["payload"], "capacityTarget"> & {
+    capacityTarget: {
+      kind: "ecs_fargate";
+      clusterName: string;
+      serviceName: string;
+      scaling:
+        | { mode: "fixed" }
+        | {
+            mode: "service_auto_scaling";
+            minCapacity: number;
+            maxCapacity: number;
+            metric: string | null;
+            targetValue: number | null;
+          };
+    };
+  };
+};
+
+export type DeploymentLiveObservationArchitectureResponse = {
+  deploymentId: string;
+  architectureId: string;
+  terraformArtifactSha256: string;
+  architecture: ArchitectureJson;
+};
+
+export type DeploymentResourceObservationState =
+  | "observed"
+  | "delayed"
+  | "unavailable"
+  | "not_supported";
+
 export type DeploymentLiveObservationManifestV2 = {
   schemaVersion: 2;
   provider: "aws";
@@ -2366,6 +2473,7 @@ export type DeploymentLiveObservationManifestV2 = {
     | DeploymentLiveObservationAwsAdapterV1
     | DeploymentLiveObservationAwsAdapterV2
     | DeploymentLiveObservationAwsAdapterV3
+    | DeploymentLiveObservationAwsAdapterV4
   );
 };
 

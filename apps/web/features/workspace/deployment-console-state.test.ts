@@ -14,9 +14,12 @@ const idleActions = {
   canApply: false,
   canApprovePlan: false,
   canRunApplyPlan: false,
+  canRunDestroyPlan: false,
   shouldShowApplyButton: false,
   shouldShowApprovePlanButton: false,
-  shouldShowApplyPlanButton: false
+  shouldShowApplyPlanButton: false,
+  shouldShowDestroyButton: false,
+  shouldShowDestroyPlanButton: false
 };
 
 function createInput(
@@ -277,6 +280,55 @@ test("destroy uses the same approval and deployment phases", () => {
 
   assert.equal(flow.activeStepId, "approval");
   assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("failed apply cleanup uses its saved deployment snapshot instead of the current Board state", () => {
+  const cleanupActions = {
+    ...idleActions,
+    canRunDestroyPlan: true,
+    shouldShowDestroyPlanButton: true
+  };
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: cleanupActions,
+      deployment: {
+        approvedAt: "2026-07-11T00:00:00.000Z",
+        currentPlanArtifactId: "apply-plan",
+        currentPlanOperation: "apply",
+        status: "FAILED"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[0]?.state, "done");
+  assert.equal(flow.steps[2]?.state, "active");
+});
+
+test("approved destroy cleanup keeps the execution step open when the current Board is unsaved", () => {
+  const cleanupActions = {
+    ...idleActions,
+    shouldShowDestroyButton: true
+  };
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: cleanupActions,
+      deployment: {
+        approvedAt: "2026-07-11T00:00:00.000Z",
+        currentPlanArtifactId: "destroy-plan",
+        currentPlanOperation: "destroy",
+        status: "FAILED"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[0]?.state, "done");
+  assert.equal(flow.steps[2]?.state, "error");
 });
 
 test("a queued deployment starts its apply plan after init returns to PENDING", () => {

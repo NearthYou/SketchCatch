@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 import {
   LiveObservationV2ServiceError,
   type LiveObservationV2Service
@@ -185,7 +186,10 @@ async function streamSnapshots(input: {
         input.reply.raw.write(
           `event: error\ndata: ${JSON.stringify({
             error: "LIVE_OBSERVATION_CACHE_UNAVAILABLE",
-            message: "Live Observation session request failed"
+            message: getDeveloperErrorMessage(
+              error,
+              "Live Observation session request failed"
+            )
           })}\n\n`
         );
       }
@@ -224,7 +228,7 @@ function handleError(error: unknown, reply: FastifyReply) {
   if (error instanceof LiveObservationV2ServiceError) {
     return reply.status(statusFor(error.code)).send({
       error: error.code,
-      message: "Live Observation session request failed"
+      message: getDeveloperErrorMessage(error, "Live Observation session request failed")
     });
   }
   throw error;

@@ -28,7 +28,7 @@ test("ECS GitOps setup fails before rendering settings without an output URL", (
   );
 });
 
-test("ECS application workflow calls only the SketchCatch release-run API", () => {
+test("ECS application and infrastructure workflows have independent triggers", () => {
   const files = createGitCicdAutomationFiles({
     projectId: "11111111-1111-4111-8111-111111111111",
     projectSlug: "audience-live-check",
@@ -84,15 +84,51 @@ test("ECS application workflow calls only the SketchCatch release-run API", () =
     }
   });
   const workflow = files.find((file) => file.path === ".github/workflows/sketchcatch-app.yml");
+  const infraWorkflow = files.find(
+    (file) => file.path === ".github/workflows/sketchcatch-infra.yml"
+  );
 
   assert(workflow);
+  assert(infraWorkflow);
   assert.match(workflow.content, /\/api\/git-cicd\/projects\/\$SKETCHCATCH_PROJECT_ID\/release-runs/);
   assert.match(workflow.content, /permissions:\n {2}id-token: write/);
   assert.match(workflow.content, /sketchcatch-release-run/);
   assert.match(workflow.content, /on:\n {2}push:\n {4}branches: \["main"\]/);
   assert.match(workflow.content, /SKETCHCATCH_RELEASE_SHA: \$\{\{ github\.sha \}\}/);
   assert.doesNotMatch(workflow.content, /workflow_run|head_sha/);
+  assert.doesNotMatch(workflow.content, /workflow_dispatch/);
   assert.doesNotMatch(workflow.content, /configure-aws-credentials|\baws (codebuild|ecr|ecs|s3|cloudfront)\b/);
+  assert.match(infraWorkflow.content, /on:\n {2}workflow_dispatch:/);
+  assert.match(infraWorkflow.content, /SKETCHCATCH_OIDC_AUDIENCE: sketchcatch-infrastructure-run/);
+  assert.doesNotMatch(infraWorkflow.content, /SKETCHCATCH_OIDC_AUDIENCE: sketchcatch-release-run/);
+  assert.doesNotMatch(infraWorkflow.content, /\n {2}push:/);
+  assert.doesNotMatch(infraWorkflow.content, /workflow_run/);
+  assert.match(infraWorkflow.content, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(infraWorkflow.content, /\/infrastructure-runs/);
+  assert.match(infraWorkflow.content, /\/heartbeat/);
+  assert.match(infraWorkflow.content, /\/complete/);
+  assert.match(
+    infraWorkflow.content,
+    /send_heartbeat\n {10}if ! run_with_heartbeat aws s3api head-bucket/
+  );
+  assert.match(
+    infraWorkflow.content,
+    /send_heartbeat\n {10}run_with_heartbeat terraform plan -out=tfplan\n {10}send_heartbeat/
+  );
+  assert.match(
+    infraWorkflow.content,
+    /send_heartbeat\n {10}run_with_heartbeat terraform apply -auto-approve tfplan\n {10}send_heartbeat/
+  );
+  assert.match(infraWorkflow.content, /terraform plan -out=tfplan/);
+  assert.match(infraWorkflow.content, /steps\.plan\.outcome == 'success'/);
+  assert.match(infraWorkflow.content, /terraform apply -auto-approve tfplan/);
+  assert.match(
+    infraWorkflow.content,
+    /if \[ "\$\{\{ job\.status \}\}" = "cancelled" \]; then/
+  );
+  assert.doesNotMatch(infraWorkflow.content, /\$\{\{ cancelled\(\) \}\}/);
+  assert.match(infraWorkflow.content, /actions\/upload-artifact/);
+  assert.doesNotMatch(infraWorkflow.content, /actions\/download-artifact/);
   assert.equal(
     files.some((file) => file.path.endsWith("buildspec-ecs.yml")),
     false

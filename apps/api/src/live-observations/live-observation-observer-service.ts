@@ -62,6 +62,10 @@ export function createLiveObservationObserverService(options: {
           snapshot = unavailableSnapshot(claim.evaluatedAt);
         }
       }
+      snapshot = mergeDelayedSnapshotWithStoredEvidence(
+        snapshot,
+        read.session.latestObservation?.payload ?? null
+      );
 
       await mapStoreOperation(() =>
         options.store.commitObservation({
@@ -78,6 +82,65 @@ export function createLiveObservationObserverService(options: {
   });
 }
 
+function mergeDelayedSnapshotWithStoredEvidence(
+  snapshot: LiveObservationProviderSnapshot,
+  storedSnapshot: LiveObservationProviderSnapshot | null
+): LiveObservationProviderSnapshot {
+  if (
+    snapshot.state !== "delayed" ||
+    !hasNoQuantitativeEvidence(snapshot) ||
+    !hasCompleteReusableEvidence(storedSnapshot)
+  ) {
+    return snapshot;
+  }
+
+  return parseLiveObservationProviderSnapshot({
+    ...snapshot,
+    requests: storedSnapshot.requests,
+    errorRate: storedSnapshot.errorRate,
+    p95LatencyMs: storedSnapshot.p95LatencyMs,
+    availability: storedSnapshot.availability,
+    capacity: { ...storedSnapshot.capacity }
+  });
+}
+
+function hasNoQuantitativeEvidence(
+  snapshot: LiveObservationProviderSnapshot
+): boolean {
+  return [
+    snapshot.requests,
+    snapshot.errorRate,
+    snapshot.p95LatencyMs,
+    snapshot.availability,
+    snapshot.capacity.desired,
+    snapshot.capacity.running,
+    snapshot.capacity.healthy,
+    snapshot.capacity.max
+  ].every((value) => value === null);
+}
+
+function hasCompleteReusableEvidence(
+  snapshot: LiveObservationProviderSnapshot | null
+): snapshot is LiveObservationProviderSnapshot {
+  if (
+    !snapshot ||
+    (snapshot.state !== "available" && snapshot.state !== "delayed") ||
+    snapshot.observedAt === null
+  ) {
+    return false;
+  }
+
+  return [
+    snapshot.requests,
+    snapshot.errorRate,
+    snapshot.p95LatencyMs,
+    snapshot.availability,
+    snapshot.capacity.desired,
+    snapshot.capacity.running,
+    snapshot.capacity.healthy
+  ].every((value) => value !== null);
+}
+
 async function mapStoreOperation<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
@@ -90,7 +153,7 @@ export function createProviderTarget(
   manifest: DeploymentLiveObservationManifestV2,
   connection: LiveObservationAwsConnectionEvidence | null
 ): AwsLiveObservationSnapshotTarget | null {
-  if ((manifest.adapter.version !== 2 && manifest.adapter.version !== 3) || !connection) {
+  if (manifest.adapter.version === 1 || !connection) {
     return null;
   }
   const loadBalancer = parseAlbArn(manifest.adapter.payload.loadBalancerArn);
@@ -120,17 +183,27 @@ export function createProviderTarget(
     return null;
   }
 
-  const capacityTarget = manifest.adapter.payload.capacityTarget.kind === "asg"
+  const capacityTarget = manifest.adapter.version === 4
     ? {
-        kind: "asg" as const,
-        autoScalingGroupName: manifest.adapter.payload.capacityTarget.autoScalingGroupName
-      }
-    : {
         kind: "ecs_fargate" as const,
         clusterName: manifest.adapter.payload.capacityTarget.clusterName,
         serviceName: manifest.adapter.payload.capacityTarget.serviceName,
-        maxCapacity: manifest.adapter.payload.capacityTarget.maxCapacity
-      };
+        maxCapacity:
+          manifest.adapter.payload.capacityTarget.scaling.mode === "fixed"
+            ? null
+            : manifest.adapter.payload.capacityTarget.scaling.maxCapacity
+      }
+    : manifest.adapter.payload.capacityTarget.kind === "asg"
+      ? {
+          kind: "asg" as const,
+          autoScalingGroupName: manifest.adapter.payload.capacityTarget.autoScalingGroupName
+        }
+      : {
+          kind: "ecs_fargate" as const,
+          clusterName: manifest.adapter.payload.capacityTarget.clusterName,
+          serviceName: manifest.adapter.payload.capacityTarget.serviceName,
+          maxCapacity: manifest.adapter.payload.capacityTarget.maxCapacity
+        };
 
   return {
     awsConnectionId: connection.id,

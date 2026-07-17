@@ -50,6 +50,7 @@ export type InterruptedDirectReleaseDescriptor = {
   deploymentId: string;
   userId: string;
   deploymentStatus: DeploymentStatus;
+  activeStage: DeploymentFailureStage | null;
   failureStage: DeploymentFailureStage | null;
 };
 
@@ -102,6 +103,7 @@ export async function recoverInterruptedDirectReleaseBatch(
   for (const descriptor of descriptors) {
     if (excluded.has(descriptor.deploymentId)) continue;
     if (included && !included.has(descriptor.deploymentId)) continue;
+    if (!isApplicationReleaseRecoveryDescriptor(descriptor)) continue;
     try {
       const data = await dependencies.store.load(descriptor);
       const lease = await dependencies.leaseRepository.find(
@@ -171,6 +173,7 @@ export function createPostgresInterruptedDirectReleaseRecoveryStore(
           deploymentId: deployments.id,
           userId: projects.userId,
           deploymentStatus: deployments.status,
+          activeStage: deployments.activeStage,
           failureStage: deployments.failureStage
         })
         .from(applicationReleases)
@@ -294,6 +297,7 @@ export function createEcsInterruptedDirectReleaseRecoveryDispatcher(input: {
     for (const descriptor of descriptors) {
       if (excluded.has(descriptor.deploymentId)) continue;
       if (included && !included.has(descriptor.deploymentId)) continue;
+      if (!isApplicationReleaseRecoveryDescriptor(descriptor)) continue;
       let job: Awaited<ReturnType<typeof createDeploymentJob>> | undefined;
       try {
         job = await createDeploymentJob(
@@ -354,6 +358,16 @@ export function createEcsInterruptedDirectReleaseRecoveryDispatcher(input: {
       retryDeploymentIds
     };
   };
+}
+
+function isApplicationReleaseRecoveryDescriptor(
+  descriptor: InterruptedDirectReleaseDescriptor
+): boolean {
+  return (
+    descriptor.activeStage === "application_release" ||
+    (descriptor.deploymentStatus === "PARTIALLY_FAILED" &&
+      descriptor.failureStage === "application_release")
+  );
 }
 
 export function createInterruptedDirectApplicationReleaseRecovery(input: {

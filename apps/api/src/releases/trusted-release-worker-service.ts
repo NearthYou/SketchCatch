@@ -75,6 +75,7 @@ export type TrustedReleaseContext = {
     outputUrl: string;
     healthCheckPath: string;
     apiProbePath: string;
+    runtimeEntrypoint: string | null;
   };
 };
 

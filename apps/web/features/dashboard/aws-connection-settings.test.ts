@@ -4,7 +4,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import type {
   AwsConnection,
-  AwsConnectionCloudFormationTemplateResponse
+  AwsConnectionCloudFormationTemplateResponse,
+  AwsConnectionListResponse
 } from "@sketchcatch/types";
 import { restoreAwsConnectionSetup } from "./aws-connection-setup";
 
@@ -88,4 +89,76 @@ test("settings previews exact SketchCatch managed cleanup before AWS connection 
   assert.match(source, /confirmationToken: deletionPreview\.confirmationToken/);
   assert.match(source, /관리 리소스 정리 후 연결 삭제/);
   assert.doesNotMatch(source, /한 번 더 눌러 삭제/);
+});
+
+test("settings separates failed cleanup retries from connections that can run GitHub builds", () => {
+  const source = readFileSync(
+    fileURLToPath(
+      new URL("../../app/dashboard/settings/settings-dashboard-client.tsx", import.meta.url)
+    ),
+    "utf8"
+  );
+
+  assert.match(source, /listAwsConnectionSettings/);
+  assert.match(source, /deriveAwsConnectionSettingsState/);
+  assert.match(source, /setConnections\(loadedState\.activeConnections\)/);
+  assert.match(source, /setCleanupRetries\(loadedState\.cleanupRetries\)/);
+  assert.match(source, /정리 재시도 필요/);
+  assert.match(source, /이전 AWS 연결 정리를 완료해야 같은 계정을 다시 연결할 수 있습니다\./);
+  assert.match(source, /onClick=\{\(\) => void removeConnection\(retry\.id\)\}/);
+  assert.match(source, /AWS 연결 정리 재시도/);
+  assert.match(source, /관리 리소스 정리 재시도/);
+  assert.match(source, /connections\.length === 0 && cleanupRetries\.length === 0/);
+  assert.match(source, /AWS 연결 정리 재시도 닫기/);
+});
+
+test("settings state keeps cleanup retries out of verified build candidates", async () => {
+  const helperModulePath = "./aws-connection-settings-state.ts";
+  const helperModule = await import(helperModulePath).catch(() => null);
+  assert.ok(helperModule, "AWS connection settings state helper should exist");
+
+  const verifiedConnection: AwsConnection = {
+    ...pendingConnection,
+    id: "active-verified",
+    accountId: "111122223333",
+    roleArn: "arn:aws:iam::111122223333:role/SketchCatchRole",
+    status: "verified"
+  };
+  const cleanupRetryConnection: AwsConnection = {
+    ...verifiedConnection,
+    id: "cleanup-retry",
+    accountId: "444455556666",
+    region: "us-east-1"
+  };
+  const settings: AwsConnectionListResponse = {
+    awsConnections: [verifiedConnection, pendingConnection],
+    cleanupRetries: [
+      {
+        awsConnection: cleanupRetryConnection
+      }
+    ]
+  };
+
+  const result = helperModule.deriveAwsConnectionSettingsState(settings);
+
+  assert.deepEqual(
+    result.activeConnections.map((connection: AwsConnection) => connection.id),
+    [verifiedConnection.id, pendingConnection.id]
+  );
+  assert.deepEqual(
+    result.verifiedConnections.map((connection: AwsConnection) => connection.id),
+    [verifiedConnection.id]
+  );
+  assert.deepEqual(result.cleanupRetries, [
+    {
+      id: cleanupRetryConnection.id,
+      accountId: cleanupRetryConnection.accountId,
+      region: cleanupRetryConnection.region
+    }
+  ]);
+  assert.deepEqual(Object.keys(result.cleanupRetries[0] ?? {}).sort(), [
+    "accountId",
+    "id",
+    "region"
+  ]);
 });

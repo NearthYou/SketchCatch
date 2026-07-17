@@ -569,7 +569,8 @@ function createTrustedRecoveryContext(
       cloudFrontDomainName: runtime.cloudFrontDomainName,
       outputUrl: runtime.outputUrl,
       healthCheckPath: build.ecsWeb.api.healthCheckPath,
-      apiProbePath: "/api/check-ins"
+      apiProbePath: "/api/check-ins",
+      runtimeEntrypoint: build.runtimeEntrypoint
     }
   };
 }

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { requireActiveUserId } from "../auth/current-user.js";
 import {
   getRuntimeEnv,
@@ -17,6 +17,7 @@ import {
   type AwsCodeConnectionRepository
 } from "../aws-connections/aws-codeconnection-service.js";
 import {
+  AwsConnectionConflictError,
   AwsConnectionDeleteConflictError,
   AwsConnectionDeletionConfirmationError,
   AwsConnectionCloudFormationTemplateError,
@@ -46,6 +47,8 @@ import {
   type AwsConnectionTester
 } from "../aws-connections/aws-connection-test-service.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { maskDeploymentMessage } from "../deployments/log-masking.js";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 import type { ProjectAccessContext } from "../deployments/deployment-service.js";
 import {
   createInMemoryRateLimiter,
@@ -126,6 +129,25 @@ export async function registerAwsConnectionRoutes(
 ): Promise<void> {
   const getAwsConnectionDatabaseClient = options?.getDatabaseClient ?? getDatabaseClient;
 
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof ZodError) {
+      return reply.status(400).send({
+        error: "bad_request",
+        message: error.message
+      });
+    }
+
+    const authenticationError = getAwsConnectionAuthenticationError(error);
+    if (authenticationError) {
+      return reply.status(authenticationError.statusCode).send({
+        error: authenticationError.errorCode,
+        message: authenticationError.message
+      });
+    }
+
+    return handleAwsConnectionError(error, reply);
+  });
+
   app.get("/aws/connections", async (request, reply) => {
     const client = getAwsConnectionDatabaseClient();
     const currentUserId = await requireActiveUserId(request, () => client);
@@ -134,16 +156,14 @@ export async function registerAwsConnectionRoutes(
       createPostgresAwsConnectionRepository(client.db);
 
     try {
-      const awsConnections = await listAwsConnections(
+      const awsConnectionSettings = await listAwsConnections(
         {
           accessContext: createUserProjectAccessContext(currentUserId)
         },
         repository
       );
 
-      return reply.status(200).send({
-        awsConnections
-      });
+      return reply.status(200).send(awsConnectionSettings);
     } catch (error) {
       return handleAwsConnectionError(error, reply);
     }
@@ -511,6 +531,30 @@ export async function registerAwsConnectionRoutes(
 
 }
 
+function getAwsConnectionAuthenticationError(error: unknown): {
+  statusCode: 401;
+  errorCode: "unauthorized";
+  message: string;
+} | null {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+
+  const candidate = error as {
+    statusCode?: unknown;
+    errorCode?: unknown;
+  };
+  if (candidate.statusCode !== 401 || candidate.errorCode !== "unauthorized") {
+    return null;
+  }
+
+  return {
+    statusCode: 401,
+    errorCode: "unauthorized",
+    message: "인증이 필요합니다."
+  };
+}
+
 function createS3CloudFormationTemplatePublisher(
   bucketName: string | undefined
 ): AwsConnectionCloudFormationTemplatePublisher | undefined {
@@ -549,6 +593,13 @@ function handleAwsConnectionError(error: unknown, reply: FastifyReply) {
     });
   }
 
+  if (error instanceof AwsConnectionConflictError) {
+    return reply.status(409).send({
+      error: "conflict",
+      message: error.message
+    });
+  }
+
   if (error instanceof AwsConnectionDeletionConfirmationError) {
     return reply.status(400).send({
       error: "bad_request",
@@ -577,7 +628,20 @@ function handleAwsConnectionError(error: unknown, reply: FastifyReply) {
     });
   }
 
-  throw error;
+  reply.request.log.error(
+    {
+      errorMessage: maskDeploymentMessage(
+        error instanceof Error ? error.message : "Unknown AWS connection error"
+      ),
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      requestId: reply.request.id
+    },
+    "AWS connection request failed"
+  );
+  return reply.status(500).send({
+    error: "internal_server_error",
+    message: getDeveloperErrorMessage(error, "AWS 연결 요청을 처리하지 못했습니다.")
+  });
 }
 
 function createUserProjectAccessContext(userId: string): ProjectAccessContext {

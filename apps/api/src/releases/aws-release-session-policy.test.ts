@@ -38,17 +38,14 @@ test("ECS deploy session policy limits mutation coordinates", () => {
     (statement) => statement["Action"] === "ecs:UpdateService"
   );
   const authorizationToken = policy.Statement.find(
-    (statement) => statement["Action"] === "ecr:GetAuthorizationToken"
-  );
-  const verifyEcs = policy.Statement.find(
     (statement) =>
       Array.isArray(statement["Action"]) &&
-      (statement["Action"] as string[]).includes("ecs:DescribeTasks")
+      (statement["Action"] as string[]).includes("ecr:GetAuthorizationToken")
   );
-  const verifyTargets = policy.Statement.find(
+  const registerTaskDefinition = policy.Statement.find(
     (statement) =>
       Array.isArray(statement["Action"]) &&
-      (statement["Action"] as string[]).includes("elasticloadbalancing:DescribeTargetHealth")
+      (statement["Action"] as string[]).includes("ecs:RegisterTaskDefinition")
   );
   const tagTaskDefinition = policy.Statement.find(
     (statement) => statement["Action"] === "ecs:TagResource"
@@ -57,11 +54,16 @@ test("ECS deploy session policy limits mutation coordinates", () => {
   assert.equal(publish?.["Resource"], coordinates.ecrRepositoryArn);
   assert.equal(activateService?.["Resource"], coordinates.ecsServiceArn);
   assert.equal(authorizationToken?.["Resource"], "*");
-  assert.equal(verifyEcs?.["Resource"], "*");
-  assert.equal(verifyTargets?.["Resource"], "*");
+  assert.equal(authorizationToken, registerTaskDefinition);
+  assert.doesNotMatch(
+    JSON.stringify(policy),
+    /ecs:DescribeServices|ecs:ListTasks|ecs:DescribeTasks|elasticloadbalancing:DescribeTargetHealth/u
+  );
   assert.match(JSON.stringify(tagTaskDefinition?.["Condition"]), /RegisterTaskDefinition/u);
   assert.deepEqual(passRole?.["Resource"], [coordinates.taskRoleArn, coordinates.executionRoleArn]);
   assert.match(JSON.stringify(passRole?.["Condition"]), /ecs-tasks\.amazonaws\.com/u);
+  assert.doesNotMatch(JSON.stringify(policy), /ecs:DescribeTaskDefinition/u);
+  assert.doesNotMatch(JSON.stringify(policy), /ecr:BatchGetImage/u);
 });
 
 test("split deploy policies stay within the STS inline-session limit for maximum valid names", () => {
@@ -104,4 +106,14 @@ test("read-only verification policy contains no mutating release action", () => 
   const value = createReadOnlyReleaseSessionPolicy(coordinates);
   assert.doesNotMatch(value, /PutImage|UpdateService|PutObject|CreateInvalidation|PassRole/u);
   assert.match(value, /DescribeTargetHealth/u);
+  assert.match(value, /ecs:DescribeServices/u);
+  assert.match(value, /ecs:ListTasks/u);
+  assert.match(value, /ecs:DescribeTasks/u);
+  assert.match(value, /s3:GetBucketPublicAccessBlock/u);
+  assert.doesNotMatch(value, /"s3:GetPublicAccessBlock"/u);
+  assert.doesNotMatch(
+    value,
+    /iam:GetRole|s3:GetObject|cloudfront:GetInvalidation/u
+  );
+  assert.match(value, /ecr:BatchGetImage/u);
 });

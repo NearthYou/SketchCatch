@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type {
   GitCicdMonitoringConfig,
@@ -36,6 +37,7 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
     } | undefined;
     readonly onDirty?: (() => void) | undefined;
     readonly onSaved?: (() => void) | undefined;
+    readonly safeReturnTo?: string | null | undefined;
     readonly showSaveButton?: boolean | undefined;
   }
 >(function ProjectCicdMonitoringSettingsClient({
@@ -43,8 +45,10 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
   initialDraft,
   onDirty,
   onSaved,
+  safeReturnTo = null,
   showSaveButton = true
 }, ref) {
+  const router = useRouter();
   const { status: authStatus } = useAuth();
   const monitoringSettingsRef = useRef<CicdMonitoringSettingsHandle>(null);
   const [repository, setRepository] = useState<SourceRepository | null>(null);
@@ -93,8 +97,11 @@ export const ProjectCicdMonitoringSettingsClient = forwardRef<
       const saved = await updateGitCicdMonitoringConfig(projectId, repository.id, request);
       setConfig(saved);
       setRequestState("idle");
-      setMessage("CI/CD branch와 경로를 저장했습니다.");
       onSaved?.();
+      setMessage("CI/CD branch와 경로를 저장했습니다.");
+      if (safeReturnTo) {
+        router.replace(safeReturnTo);
+      }
       return true;
     } catch (error) {
       setRequestState("error");

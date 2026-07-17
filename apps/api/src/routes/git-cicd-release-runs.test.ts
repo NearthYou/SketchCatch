@@ -7,7 +7,10 @@ import type {
   GitHubReleaseRunRecord,
   GitHubReleaseRunRepository
 } from "../git-cicd/github-release-run-service.js";
-import { registerGitHubReleaseRunRoutes } from "./git-cicd-release-runs.js";
+import {
+  registerGitHubReleaseRunRoutes,
+  shouldDispatchGitHubReleaseWorker
+} from "./git-cicd-release-runs.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const runId = "22222222-2222-4222-8222-222222222222";
@@ -24,6 +27,11 @@ const identity: GitHubReleaseIdentity = {
   workflowRunAttempt: 1,
   environment: "sketchcatch-production"
 };
+
+test("local GitHub releases run in-process while production releases use the ECS worker", () => {
+  assert.equal(shouldDispatchGitHubReleaseWorker("in_process"), false);
+  assert.equal(shouldDispatchGitHubReleaseWorker("ecs"), true);
+});
 
 test("release-run routes authenticate GitHub OIDC and return an idempotent run", async () => {
   const repository = createRepository();
@@ -228,6 +236,9 @@ function createRepository(): GitHubReleaseRunRepository {
     async findByRequestKey(key) {
       const id = requestKeys.get(key);
       return id ? records.get(id) : undefined;
+    },
+    async findWorkflowRunRecordId() {
+      return undefined;
     },
     async findById(id) {
       return records.get(id);

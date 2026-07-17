@@ -62,6 +62,8 @@ test("ECS GitHub Actions delegates deployment and runtime convergence to the Ske
   );
   assert.match(workflow, /SKETCHCATCH_OIDC_AUDIENCE: sketchcatch-release-run/u);
   assert.match(workflow, /succeeded\) exit 0/u);
+  assert.match(workflow, /--retry 5 --retry-all-errors/u);
+  assert.match(workflow, /--connect-timeout 10 --max-time 30/u);
   assert.match(
     workflow,
     /failed\|cancelled\|partially_failed\|partially_cancelled/u

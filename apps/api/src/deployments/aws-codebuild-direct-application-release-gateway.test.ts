@@ -24,7 +24,7 @@ test("preflight CodeBuild session policy is limited to the selected project and 
     {
       Effect: "Allow",
       Action: ["codebuild:BatchGetBuilds", "codebuild:StopBuild"],
-      Resource: `arn:aws:codebuild:ap-northeast-2:123456789012:build/${projectName}:*`
+      Resource: `arn:aws:codebuild:ap-northeast-2:123456789012:project/${projectName}`
     }
   ]);
   assert.equal(JSON.stringify(policy).includes("unmanaged-build"), false);

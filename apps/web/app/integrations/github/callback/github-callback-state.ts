@@ -59,10 +59,19 @@ export function createCallbackEcsDefaults(
   const ecsWeb = inferEcsWebBuildConfig(resume.publicAnalysis.aiHandoff);
 
   return {
-    projectName: resume.projectName,
+    projectName: getRepositoryName(resume.repositoryUrl),
     repositoryRevision: resume.publicAnalysis.repositoryRevision,
     sourceRoot: ecsWeb?.api.sourceRoot ?? sourceRoot,
     dockerfilePath,
     ...(ecsWeb ? { ecsWeb } : {})
   };
+}
+
+function getRepositoryName(repositoryUrl: string): string {
+  const pathname = new URL(repositoryUrl).pathname;
+  const rawName = pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const name = rawName.replace(/\.git$/iu, "").trim();
+
+  if (!name) throw new Error("Repository 이름을 확인할 수 없습니다.");
+  return name;
 }

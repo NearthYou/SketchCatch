@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -19,6 +20,16 @@ const verifiedConnection = {
   createdAt: "2026-07-15T00:00:00.000Z",
   updatedAt: "2026-07-15T00:00:00.000Z"
 };
+
+test("settings loader preserves callback ECS web build defaults", () => {
+  const clientSource = readFileSync(
+    new URL("./project-deployment-target-settings-client.tsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(clientSource, /const ecsDefaultsEcsWeb = ecsDefaults\?\.ecsWeb;/);
+  assert.match(clientSource, /ecsWeb: ecsDefaultsEcsWeb/);
+});
 
 test("ECS defaults use project slug and analyzed Dockerfile evidence", () => {
   assert.deepEqual(
@@ -77,6 +88,13 @@ test("ECS defaults are immediately saveable without a fabricated output URL", ()
   );
 
   assert.equal(request.runtimeConfig?.runtimeTargetKind, "ecs_fargate");
+  if (request.runtimeConfig?.runtimeTargetKind === "ecs_fargate") {
+    assert.equal(request.runtimeConfig.codeBuildProjectName, "audience-live-check-api-build");
+    assert.equal(request.runtimeConfig.ecrRepositoryName, "audience-live-check-api");
+    assert.equal(request.runtimeConfig.clusterName, "audience-live-check-cluster");
+    assert.equal(request.runtimeConfig.serviceName, "audience-live-check-service");
+    assert.equal(request.runtimeConfig.containerName, "api");
+  }
   assert.equal(request.runtimeConfig?.outputUrl, null);
   assert.equal(request.confirmedBuildConfig.healthCheckPath, "/health");
   assert.deepEqual(request.confirmedBuildConfig.ecsWeb, {

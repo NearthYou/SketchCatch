@@ -32,6 +32,21 @@ test("Live Observation uses the selected Deployment's successful Release Output 
   assert.equal(outputUrl, "https://app.example.com/");
 });
 
+test("Live Observation falls back to the selected infrastructure Deployment CloudFront Output", () => {
+  const outputUrl = getLiveObservationOutputUrl("deployment-1", [], [
+    {
+      id: "output-1",
+      deploymentId: "deployment-1",
+      name: "cloudfront_url",
+      value: "https://d111111abcdef8.cloudfront.net",
+      sensitive: false,
+      createdAt: "2026-07-16T11:03:55.301Z"
+    }
+  ]);
+
+  assert.equal(outputUrl, "https://d111111abcdef8.cloudfront.net/");
+});
+
 test("Live Observation selects the newest safe HTTPS Output URL", () => {
   const outputUrl = getLiveObservationOutputUrl("deployment-1", [
     {

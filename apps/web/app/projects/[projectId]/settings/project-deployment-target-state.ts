@@ -416,14 +416,17 @@ export function createEcsFargateDeploymentDefaults(
   | "ecsWeb"
 > {
   const runtimeNames = createEcsFargateRuntimeNames(input.projectName);
+  const ecrRepositoryName = input.ecsWeb
+    ? runtimeNames.ecrRepositoryName.replace(/-app$/u, "-api")
+    : runtimeNames.ecrRepositoryName;
 
   return {
     runtimeTargetKind: "ecs_fargate",
     sourceRoot: input.ecsWeb?.api.sourceRoot ?? (input.sourceRoot.trim() || "."),
     evidencePath: input.dockerfilePath.trim() || "Dockerfile",
     commitSha: input.repositoryRevision.trim().toLowerCase(),
-    codeBuildProjectName: `${runtimeNames.ecrRepositoryName}-build`,
-    ecrRepositoryName: runtimeNames.ecrRepositoryName,
+    codeBuildProjectName: `${ecrRepositoryName}-build`,
+    ecrRepositoryName,
     clusterName: runtimeNames.clusterName,
     serviceName: runtimeNames.serviceName,
     containerName: input.ecsWeb ? "api" : runtimeNames.containerName,

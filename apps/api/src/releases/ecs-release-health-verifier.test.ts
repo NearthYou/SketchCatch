@@ -13,6 +13,39 @@ test("new revision succeeds only when its own task IP is healthy in the Target G
   assert.deepEqual(result.healthyTargetIds, ["10.0.1.10"]);
 });
 
+test("healthy new tasks can converge while the previous revision is still draining", () => {
+  const result = verifyEcsReleaseHealthSnapshot(
+    createSnapshot({ rolloutState: "IN_PROGRESS", runningCount: 2 }),
+    newRevision
+  );
+  assert.deepEqual(result.taskArns, ["arn:task/new"]);
+});
+
+test("an ECS task without a container health check can use Target Group health", () => {
+  const result = verifyEcsReleaseHealthSnapshot(
+    createSnapshot({
+      tasks: [
+        {
+          taskArn: "arn:task/new",
+          taskDefinitionArn: newRevision,
+          lastStatus: "RUNNING",
+          healthStatus: "UNKNOWN",
+          privateIpv4Addresses: ["10.0.1.10"]
+        }
+      ]
+    }),
+    newRevision
+  );
+  assert.deepEqual(result.taskArns, ["arn:task/new"]);
+});
+
+test("a failed ECS rollout cannot be accepted even if a target still looks healthy", () => {
+  assert.throws(
+    () => verifyEcsReleaseHealthSnapshot(createSnapshot({ rolloutState: "FAILED" }), newRevision),
+    /rollout is FAILED/u
+  );
+});
+
 test("healthy targets from the previous revision cannot satisfy new revision health", () => {
   const snapshot = createSnapshot({
     targets: [{ id: "10.0.1.9", port: 3000, state: "healthy", reason: null }]

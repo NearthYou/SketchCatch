@@ -1,6 +1,14 @@
 "use client";
 
-import { CheckCircle2, Cloud, ExternalLink, RefreshCw, Trash2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Cloud,
+  ExternalLink,
+  RefreshCw,
+  Trash2,
+  X
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type {
   AwsConnection,
@@ -22,12 +30,17 @@ import {
   getAwsCodeConnection,
   getAwsConnectionDeletionPreview,
   getAwsConnectionCloudFormationTemplate,
-  listAwsConnections,
+  listAwsConnectionSettings,
   refreshAwsCodeConnection,
   testAwsConnection,
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
 import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
+import { getApiErrorMessage } from "../../../lib/api-client";
+import {
+  deriveAwsConnectionSettingsState,
+  type AwsConnectionCleanupRetryDisplay
+} from "../../../features/dashboard/aws-connection-settings-state";
 import styles from "../dashboard-tools.module.css";
 import { GitHubAccountSettings } from "./github-account-settings";
 
@@ -42,6 +55,9 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
 // AWS Role 생성 안내, CloudFormation 이동, 연결 검증과 삭제를 관리합니다.
 export function SettingsDashboardClient() {
   const [connections, setConnections] = useState<readonly AwsConnection[]>([]);
+  const [verifiedConnections, setVerifiedConnections] = useState<readonly AwsConnection[]>([]);
+  const [cleanupRetries, setCleanupRetries] =
+    useState<readonly AwsConnectionCleanupRetryDisplay[]>([]);
   const [loadState, setLoadState] = useState<SettingsLoadState>("loading");
   const [actionPending, setActionPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -59,19 +75,16 @@ export function SettingsDashboardClient() {
   const modalOverlayRef = useRef<HTMLDivElement>(null);
   const modalDialogRef = useRef<HTMLElement>(null);
   const modalCloseButtonRef = useRef<HTMLButtonElement>(null);
-  const verifiedConnections = connections.filter(
-    (connection) => connection.status === "verified"
-  );
-
   // 저장된 AWS 연결 목록을 다시 읽고 현재 상태를 최신으로 맞춥니다.
   async function loadConnections(): Promise<void> {
     setErrorMessage("");
     try {
-      const loadedConnections = await listAwsConnections();
-      const loadedVerifiedConnections = loadedConnections.filter(
-        (connection) => connection.status === "verified"
-      );
-      setConnections(loadedConnections);
+      const loadedSettings = await listAwsConnectionSettings();
+      const loadedState = deriveAwsConnectionSettingsState(loadedSettings);
+      const loadedVerifiedConnections = loadedState.verifiedConnections;
+      setConnections(loadedState.activeConnections);
+      setVerifiedConnections(loadedVerifiedConnections);
+      setCleanupRetries(loadedState.cleanupRetries);
       setSelectedBuildAwsConnectionId((current) =>
         loadedVerifiedConnections.some((connection) => connection.id === current)
           ? current
@@ -88,7 +101,7 @@ export function SettingsDashboardClient() {
       setCodeConnections(Object.fromEntries(codeConnectionEntries));
       setLoadState("ready");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 불러오지 못했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 불러오지 못했습니다."));
       setLoadState("error");
     }
   }
@@ -106,7 +119,7 @@ export function SettingsDashboardClient() {
       setCloudFormation(template);
       await loadConnections();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "AWS 연결 준비에 실패했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결 준비에 실패했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -128,7 +141,7 @@ export function SettingsDashboardClient() {
       setAccountId(restored.accountId);
       setRegion(restored.region);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "AWS 연결 설정을 불러오지 못했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결 설정을 불러오지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -149,7 +162,7 @@ export function SettingsDashboardClient() {
       setAccountId("");
       await loadConnections();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "AWS Role 검증에 실패했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "AWS Role 검증에 실패했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -164,7 +177,7 @@ export function SettingsDashboardClient() {
       await testAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
       await loadConnections();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "AWS 연결 테스트에 실패했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결 테스트에 실패했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -177,7 +190,7 @@ export function SettingsDashboardClient() {
     try {
       setDeletionPreview(await getAwsConnectionDeletionPreview(connectionId));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "삭제 대상을 불러오지 못했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "삭제 대상을 불러오지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -197,7 +210,7 @@ export function SettingsDashboardClient() {
       await loadConnections();
     } catch (error) {
       setDeletionPreview(null);
-      setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 삭제하지 못했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "AWS 연결을 삭제하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -221,7 +234,7 @@ export function SettingsDashboardClient() {
         [selectedBuildAwsConnectionId]: response
       }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "GitHub 빌드 연결을 만들지 못했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결을 만들지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -238,7 +251,7 @@ export function SettingsDashboardClient() {
         [selectedBuildAwsConnectionId]: response
       }));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "GitHub 승인 상태를 확인하지 못했습니다.");
+      setErrorMessage(getApiErrorMessage(error, "GitHub 승인 상태를 확인하지 못했습니다."));
     } finally {
       setActionPending(false);
     }
@@ -277,7 +290,7 @@ export function SettingsDashboardClient() {
 
       {loadState === "loading" ? (
         <ProductState description="AWS Role 연결 상태를 확인하고 있습니다." kind="loading" title="AWS 환경설정 불러오는 중" />
-      ) : loadState === "error" && connections.length === 0 ? (
+      ) : loadState === "error" && connections.length === 0 && cleanupRetries.length === 0 ? (
         <ProductState action={<button onClick={() => void loadConnections()} type="button">다시 시도</button>} description={errorMessage} kind="error" title="AWS 환경설정을 불러오지 못했습니다" />
       ) : (
         <>
@@ -347,6 +360,39 @@ export function SettingsDashboardClient() {
             </section>
           ) : null}
 
+          {cleanupRetries.length > 0 ? (
+            <section className={`${styles.connectionList} ${styles.cleanupRetryList}`}>
+              <div className={styles.sectionHeading}>
+                <h2>정리 재시도 필요</h2>
+                <span>{cleanupRetries.length}개</span>
+              </div>
+              <p className={styles.cleanupRetryGuidance}>
+                이전 AWS 연결 정리를 완료해야 같은 계정을 다시 연결할 수 있습니다.
+              </p>
+              {cleanupRetries.map((retry) => (
+                <article key={retry.id}>
+                  <div className={styles.connectionStatus} data-status="cleanup-retry">
+                    <AlertTriangle size={16} />
+                    <span>정리 필요</span>
+                  </div>
+                  <div>
+                    <strong>{retry.accountId ?? "계정 확인 전"}</strong>
+                    <p>{retry.region}</p>
+                  </div>
+                  <div className={styles.rowActions}>
+                    <button
+                      disabled={actionPending}
+                      onClick={() => void removeConnection(retry.id)}
+                      type="button"
+                    >
+                      정리 재시도
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </section>
+          ) : null}
+
           <section className={styles.connectionList}>
             <div className={styles.sectionHeading}><h2>연결된 AWS 계정</h2><span>{connections.length}개</span></div>
             {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : <button disabled={actionPending} onClick={() => void resumeConnectionSetup(connection)} type="button">설정 계속</button>}<button data-danger="true" disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />삭제</button></div></article>)}
@@ -367,7 +413,11 @@ export function SettingsDashboardClient() {
             role="dialog"
           >
             <button
-              aria-label="AWS 연결 삭제 닫기"
+              aria-label={
+                deletionPreview.cleanupRetry
+                  ? "AWS 연결 정리 재시도 닫기"
+                  : "AWS 연결 삭제 닫기"
+              }
               className={styles.modalClose}
               disabled={actionPending}
               onClick={() => setDeletionPreview(null)}
@@ -376,10 +426,14 @@ export function SettingsDashboardClient() {
             >
               <X size={18} />
             </button>
-            <Trash2 size={24} />
-            <h2 id="aws-deletion-title">AWS 연결 삭제 대상 확인</h2>
+            {deletionPreview.cleanupRetry ? <AlertTriangle size={24} /> : <Trash2 size={24} />}
+            <h2 id="aws-deletion-title">
+              {deletionPreview.cleanupRetry ? "AWS 연결 정리 재시도" : "AWS 연결 삭제 대상 확인"}
+            </h2>
             <p id="aws-deletion-description">
-              삭제를 승인하면 아래 SketchCatch 관리 리소스만 AWS에서 정리한 뒤 연결 기록을 삭제합니다.
+              {deletionPreview.cleanupRetry
+                ? "이전에 완료되지 않은 SketchCatch 관리 리소스 정리를 다시 시도합니다."
+                : "삭제를 승인하면 아래 SketchCatch 관리 리소스만 AWS에서 정리한 뒤 연결 기록을 삭제합니다."}
             </p>
             <div className={styles.cleanupPreview}>
               <strong>정리할 리소스</strong>
@@ -404,7 +458,9 @@ export function SettingsDashboardClient() {
                   onClick={() => void confirmRemoveConnection()}
                   type="button"
                 >
-                  관리 리소스 정리 후 연결 삭제
+                  {deletionPreview.cleanupRetry
+                    ? "관리 리소스 정리 재시도"
+                    : "관리 리소스 정리 후 연결 삭제"}
                 </button>
               ) : null}
             </div>

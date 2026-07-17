@@ -2,6 +2,34 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createAwsConnectionManagedCleanup } from "./aws-connection-managed-cleanup.js";
 
+test("managed AWS cleanup succeeds without AWS access when no managed resources remain", async () => {
+  const cleanup = createAwsConnectionManagedCleanup({
+    assumeRole: async () => {
+      throw new Error("AssumeRole must not be called");
+    },
+    createCodeBuildClient: () => {
+      throw new Error("CodeBuild client must not be created");
+    },
+    createCloudWatchLogsClient: () => {
+      throw new Error("CloudWatch Logs client must not be created");
+    },
+    createIamClient: () => {
+      throw new Error("IAM client must not be created");
+    },
+    createCodeConnectionsClient: () => {
+      throw new Error("CodeConnections client must not be created");
+    }
+  });
+
+  await cleanup({
+    connection: createConnection(),
+    resources: {
+      codeBuildProjects: [],
+      codeConnectionArn: null
+    }
+  });
+});
+
 test("managed AWS cleanup deletes CodeBuild, its role, then CodeConnection", async () => {
   const calls: string[] = [];
   const cleanup = createAwsConnectionManagedCleanup({
