@@ -545,7 +545,7 @@ for (const policyName of ["ecs_task", "ecs_worker_task"]) {
   const policyBody =
     runtimeIam.match(
       new RegExp(
-        `data "aws_iam_policy_document" "${policyName}" \\{([\\s\\S]*?)\\n\\}\\n\\nresource "aws_iam_role_policy" "${policyName}"`
+        "data\\s+\"aws_iam_policy_document\"\\s+\"" + policyName + "\"\\s*\\{([\\s\\S]*?)\\}\\s*resource\\s+\"aws_iam_role_policy\"\\s+\"" + policyName + "\""
       )
     )?.[1] ?? "";
   const deploymentArtifactStatement =
