@@ -128,6 +128,13 @@ Short English-only working log for the current agent context. Older records are 
 - Promoted missing or unverifiable Well-Architected evidence to medium severity and strengthened yellow/red card surfaces while preserving white for normal checks.
 - Focused Workbench tests pass 31/31; web lint passes with one unrelated Direct Deployment warning. Chrome confirmed medium cards render yellow on the current localhost review result.
 
+### 2026-07-17 - Normalize Direct Deployment action buttons
+
+- Fixed Direct Deployment action buttons at 152x44 so two actions plus their gap stay within the 320px result rail.
+- Kept the action group anchored to a stable start position while centering icon and label content inside each button.
+- Idle buttons use a white surface with inherited dark icon color; running actions use filled state colors.
+- Focused Direct Deployment tests pass 15/15, and browser-computed layout confirms a 312px two-button footprint inside the 320px rail. No Terraform or AWS mutation was performed.
+
 ### 2026-07-17 - Separate Agent Review strengths and required fixes
 
 - Replaced mixed and repeated Review Summary entries with exactly two groups: verified strengths and required fixes.
