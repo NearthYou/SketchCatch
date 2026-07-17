@@ -5,7 +5,8 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import type { DiagramJson } from "../../../../packages/types/src";
 import { isAreaNode } from "../diagram-editor/area-nodes";
-import { curatedModules } from "./module-catalog";
+import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
+import { curatedModules, materializeCuratedModulePattern } from "./module-catalog";
 import {
   createModuleThumbnailDiagram,
   serializeModuleThumbnailDiagram
@@ -31,7 +32,14 @@ test("Module thumbnail diagrams are deterministic and materialize every source n
     if (!first) {
       assert.fail(`${pattern.id} should materialize`);
     }
+    const expected = materializeCuratedModulePattern({
+      diagram: structuredClone(EMPTY_DIAGRAM),
+      expandedAt: FIXED_EXPANDED_AT,
+      pattern
+    });
+
     assert.deepEqual(first, second, `${pattern.id} should be deterministic`);
+    assert.deepEqual(first, expected, `${pattern.id} should match empty-Board materialization`);
     assert.equal(first.nodes.length, pattern.nodes.length, `${pattern.id} node count`);
     assert.equal(first.edges.length, pattern.edges.length, `${pattern.id} edge count`);
 
@@ -111,11 +119,25 @@ test("Module thumbnail serialization sorts nested object keys without reordering
   );
 });
 
+test("Module thumbnail serialization orders non-ASCII object keys by UTF-16 code unit", () => {
+  const diagram = {
+    viewport: { x: 0, y: 0, zoom: 1 },
+    edges: [],
+    nodes: [{ ä: "umlaut", z: "ascii" }]
+  } as unknown as DiagramJson;
+
+  assert.equal(
+    serializeModuleThumbnailDiagram(diagram),
+    '{"edges":[],"nodes":[{"z":"ascii","ä":"umlaut"}],"viewport":{"x":0,"y":0,"zoom":1}}'
+  );
+});
+
 test("Module thumbnail route is dev-only and rejects an invalid Module", () => {
   assert.match(pageSource, /process\.env\.NODE_ENV === "production"/);
   assert.match(pageSource, /notFound\(\)/);
   assert.match(pageSource, /createModuleThumbnailDiagram\(moduleId\)/);
   assert.match(pageSource, /if \(!diagram\)\s*\{\s*notFound\(\);\s*\}/s);
+  assert.match(pageSource, /if \(Array\.isArray\(value\)\) return undefined;/);
 });
 
 test("Module thumbnail capture stages the real viewer and exposes a 1280 by 720 WebP data image", () => {
@@ -129,6 +151,9 @@ test("Module thumbnail capture stages the real viewer and exposes a 1280 by 720 
   assert.match(captureClientSource, /rightPanel=\{null\}/);
   assert.match(captureClientSource, /showSaveAction=\{false\}/);
   assert.match(captureClientSource, /data-module-thumbnail-ready="true"/);
+  assert.match(captureClientSource, /data-module-thumbnail-error="true"/);
+  assert.match(captureClientSource, /captureBoard\(element\).*\.catch\(/s);
+  assert.match(captureClientSource, /Module thumbnail capture failed\./);
   assert.match(captureClientSource, /const THUMBNAIL_WIDTH = 1280/);
   assert.match(captureClientSource, /const THUMBNAIL_HEIGHT = 720/);
   assert.match(captureClientSource, /width=\{THUMBNAIL_WIDTH\}/);

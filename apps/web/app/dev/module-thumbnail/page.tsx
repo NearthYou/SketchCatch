@@ -25,5 +25,6 @@ export default async function ModuleThumbnailPage({ searchParams }: ModuleThumbn
 }
 
 function getSingleSearchParam(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
+  if (Array.isArray(value)) return undefined;
+  return value;
 }

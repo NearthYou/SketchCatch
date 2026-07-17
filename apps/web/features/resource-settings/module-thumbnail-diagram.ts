@@ -26,7 +26,13 @@ function sortDiagramValue(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareObjectKeys(left, right))
       .map(([key, nestedValue]) => [key, sortDiagramValue(nestedValue)])
   );
+}
+
+function compareObjectKeys(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }

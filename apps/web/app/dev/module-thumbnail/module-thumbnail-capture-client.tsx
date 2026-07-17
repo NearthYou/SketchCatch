@@ -11,18 +11,23 @@ const THUMBNAIL_HEIGHT = 720;
 
 export function ModuleThumbnailCaptureClient({ diagram }: { readonly diagram: DiagramJson }) {
   const captureStartedRef = useRef(false);
+  const [captureFailed, setCaptureFailed] = useState(false);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
 
   const handleBoardReady = useCallback((element: HTMLElement) => {
     if (captureStartedRef.current) return;
     captureStartedRef.current = true;
 
-    void captureBoard(element).then(setImageDataUrl);
+    void captureBoard(element)
+      .then(setImageDataUrl)
+      .catch(() => setCaptureFailed(true));
   }, []);
 
   return (
     <main className={styles.thumbnailFrame}>
-      {imageDataUrl ? (
+      {captureFailed ? (
+        <p data-module-thumbnail-error="true">Module thumbnail capture failed.</p>
+      ) : imageDataUrl ? (
         <img
           alt=""
           className={styles.thumbnailImage}
