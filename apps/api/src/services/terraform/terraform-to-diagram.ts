@@ -14,6 +14,7 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
+import { findAnalysisExcludedTerraformConflicts } from "./analysis-excluded-terraform-guard.js";
 import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
@@ -25,6 +26,8 @@ import {
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*$/;
+const TERRAFORM_IDENTITY_HEADER_PATTERN =
+  /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{/;
 const PROVIDER_BLOCK_HEADER_PATTERN = /^\s*provider\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
 const TERRAFORM_BLOCK_HEADER_PATTERN = /^\s*terraform\s*\{\s*(?:\}\s*)?$/;
 const TOP_LEVEL_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\b.*\{\s*$/;
@@ -66,6 +69,13 @@ type TerraformSyncInput =
       terraformFiles?: TerraformSyncFileInput[] | undefined;
     };
 
+export type TerraformBlockIdentityInput =
+  | string
+  | {
+      terraformCode: string;
+      terraformFiles?: TerraformSyncFileInput[] | undefined;
+    };
+
 type CreateCandidateProposal = Extract<
   TerraformDiagramChangeProposal,
   { kind: "create_candidate" }
@@ -88,6 +98,28 @@ export function syncTerraformToDiagramJson(
       .map((block) => block.address)
   );
   const getPreservedResourceAddresses = (): string[] => Array.from(preservedResourceAddressSet);
+  const analysisExcludedConflicts = findAnalysisExcludedTerraformConflicts(
+    diagramJson,
+    listTerraformBlockIdentities(input)
+  );
+
+  if (analysisExcludedConflicts.length > 0) {
+    return {
+      diagramJson,
+      diagnostics: [
+        ...parseResult.diagnostics,
+        ...analysisExcludedConflicts.map((conflict) => ({
+          severity: "error" as const,
+          code: "terraform.sync.analysis_excluded_resource",
+          nodeId: conflict.nodeId,
+          resourceAddress: conflict.resourceAddress,
+          message: `${conflict.resourceAddress}는 확인 필요 Resource와 일치하므로 Terraform 동기화를 진행할 수 없습니다.`
+        }))
+      ],
+      preservedResourceAddresses: getPreservedResourceAddresses(),
+      proposals: []
+    };
+  }
 
   if (parseResult.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
     return {
@@ -661,13 +693,53 @@ function parseTerraformInput(input: TerraformSyncInput): ParseResult {
   return { blocks, diagnostics, ignoredConfigurationBlockCount };
 }
 
+export function listTerraformBlockIdentities(
+  input: TerraformBlockIdentityInput
+): TerraformBlockIdentity[] {
+  const files = toTerraformSyncFiles(input);
+  const parseResult = parseTerraformInput(input);
+  const identities = new Map<string, TerraformBlockIdentity>();
+
+  for (const identity of parseResult.blocks.map((block) => block.identity)) {
+    identities.set(createTerraformBlockIdentityKey(identity), identity);
+  }
+
+  // Deployment safety needs resource identity even when the broader sync subset cannot
+  // parse an otherwise valid inline or opaque Terraform body.
+  for (const file of files) {
+    for (const line of splitTerraformLines(file.terraformCode)) {
+      const match = TERRAFORM_IDENTITY_HEADER_PATTERN.exec(stripLineComment(line));
+      const terraformBlockType = match?.[1] as TerraformBlockType | undefined;
+      const resourceType = match?.[2];
+      const resourceName = match?.[3];
+
+      if (!terraformBlockType || !resourceType || !resourceName) {
+        continue;
+      }
+
+      const identity = { terraformBlockType, resourceType, resourceName };
+      identities.set(createTerraformBlockIdentityKey(identity), identity);
+    }
+  }
+
+  return [...identities.values()];
+}
+
 function isTerraformSyncInputBlank(input: TerraformSyncInput): boolean {
-  const files =
-    typeof input === "string" || input.terraformFiles === undefined || input.terraformFiles.length === 0
-      ? [typeof input === "string" ? input : input.terraformCode]
-      : input.terraformFiles.map((file) => file.terraformCode);
+  const files = toTerraformSyncFiles(input).map((file) => file.terraformCode);
 
   return files.every((terraformCode) => terraformCode.trim().length === 0);
+}
+
+function toTerraformSyncFiles(input: TerraformBlockIdentityInput): TerraformSyncFileInput[] {
+  return typeof input === "string" || input.terraformFiles === undefined || input.terraformFiles.length === 0
+    ? [
+        {
+          fileName: "main.tf",
+          terraformCode: typeof input === "string" ? input : input.terraformCode
+        }
+      ]
+    : input.terraformFiles;
 }
 
 function parseTerraformBlocks(sourceFileName: string, terraformCode: string): ParseResult {

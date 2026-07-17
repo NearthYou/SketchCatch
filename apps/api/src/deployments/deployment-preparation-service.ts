@@ -9,6 +9,8 @@ import type {
   TerraformSyncFileInput
 } from "@sketchcatch/types";
 import { DeploymentConflictError } from "./deployment-service.js";
+import { findAnalysisExcludedTerraformConflicts } from "../services/terraform/analysis-excluded-terraform-guard.js";
+import { listTerraformBlockIdentities } from "../services/terraform/terraform-to-diagram.js";
 
 export type DeploymentPreparationDraft = {
   revision: number;
@@ -59,6 +61,8 @@ export async function resolveDeploymentPreparation(
     );
   }
 
+  assertDraftTerraformDoesNotIncludeAnalysisExcludedResource(draft);
+
   const target = await repository.findProjectTargetForPreparation(input.projectId);
   const scope =
     input.requestedScope === "auto"
@@ -84,6 +88,28 @@ export async function resolveDeploymentPreparation(
     preparedDraftRevision: draft.revision,
     preparedSnapshotHash: createPreparedDraftSnapshotHash(draft)
   };
+}
+
+export function assertDraftTerraformDoesNotIncludeAnalysisExcludedResource(
+  draft: DeploymentPreparationDraft
+): void {
+  const terraformFiles = draft.terraformFiles?.filter((file) => file.fileName.endsWith(".tf")) ?? [];
+  const conflicts = findAnalysisExcludedTerraformConflicts(
+    draft.diagramJson,
+    listTerraformBlockIdentities({ terraformCode: "", terraformFiles })
+  );
+
+  if (conflicts.length === 0) {
+    return;
+  }
+
+  throw new DeploymentConflictError(createAnalysisExcludedDeploymentMessage(conflicts[0]!));
+}
+
+export function createAnalysisExcludedDeploymentMessage(conflict: {
+  resourceAddress: string;
+}): string {
+  return `${conflict.resourceAddress} matches an analysis-excluded resource and cannot be prepared for deployment`;
 }
 
 export function detectDeploymentScope({

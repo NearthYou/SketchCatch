@@ -65,6 +65,88 @@ test("updates values for a matching generated resource block", () => {
   assert.deepEqual(result.diagramJson.viewport, diagramJson.viewport);
 });
 
+test("keeps an analysis-excluded legacy resource unchanged when matching Terraform is saved", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "legacy-lambda",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "Legacy Lambda",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "legacy_lambda",
+          fileName: "compute.tf",
+          values: {
+            analysisExcluded: true,
+            functionName: "legacy-lambda"
+          }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_lambda_function" "legacy_lambda" {
+  function_name = "would-remove-review-marker"
+}`
+  );
+
+  assert.equal(result.diagramJson, diagramJson);
+  assert.deepEqual(result.proposals, []);
+  assert.deepEqual(result.diagnostics, [
+    {
+      severity: "error",
+      code: "terraform.sync.analysis_excluded_resource",
+      nodeId: "legacy-lambda",
+      resourceAddress: "aws_lambda_function.legacy_lambda",
+      message:
+        "aws_lambda_function.legacy_lambda는 확인 필요 Resource와 일치하므로 Terraform 동기화를 진행할 수 없습니다."
+    }
+  ]);
+  assert.equal(
+    result.diagramJson.nodes[0]?.parameters?.values["analysisExcluded"],
+    true
+  );
+});
+
+test("blocks an analysis-excluded resource before an opaque Terraform body can bypass sync", () => {
+  const diagramJson: DiagramJson = {
+    nodes: [
+      makeNode({
+        id: "legacy-lambda",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "Legacy Lambda",
+        parameters: {
+          terraformBlockType: "resource",
+          resourceType: "aws_lambda_function",
+          resourceName: "legacy_lambda",
+          fileName: "compute.tf",
+          values: { analysisExcluded: true }
+        }
+      })
+    ],
+    edges: [],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const result = syncTerraformToDiagramJson(
+    diagramJson,
+    `resource "aws_lambda_function" "legacy_lambda" {
+  function_name = format("legacy-%s", "lambda")
+}`
+  );
+
+  assert.equal(result.diagramJson, diagramJson);
+  assert.deepEqual(result.proposals, []);
+  assert.equal(result.diagnostics.at(-1)?.code, "terraform.sync.analysis_excluded_resource");
+});
+
 test("updates data block values", () => {
   const diagramJson: DiagramJson = {
     nodes: [
