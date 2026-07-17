@@ -3,8 +3,10 @@ import { test } from "node:test";
 
 import {
   parseCostEstimatePeriod,
+  parseExpectedUserCount,
   parseCostDashboardTab,
   writeCostEstimatePeriod,
+  writeExpectedUserCount,
   writeCostDashboardTab
 } from "./cost-dashboard-url-state";
 
@@ -36,4 +38,18 @@ test("estimate period round-trips supported values and omits the monthly default
   assert.equal(weekly.get("period"), "week");
   assert.equal(weekly.get("tab"), "usage");
   assert.equal(monthly.has("period"), false);
+});
+
+test("expected user count stores only normalized committed values", () => {
+  assert.equal(parseExpectedUserCount(new URLSearchParams("users=1")), 1);
+  assert.equal(parseExpectedUserCount(new URLSearchParams("users=1000000")), 1_000_000);
+  assert.equal(parseExpectedUserCount(new URLSearchParams("users=invalid")), 1000);
+  assert.equal(parseExpectedUserCount(new URLSearchParams("users=0")), 1000);
+
+  const custom = writeExpectedUserCount(new URLSearchParams("period=week"), 2500);
+  const defaultUsers = writeExpectedUserCount(custom, 1000);
+
+  assert.equal(custom.get("users"), "2500");
+  assert.equal(custom.get("period"), "week");
+  assert.equal(defaultUsers.has("users"), false);
 });

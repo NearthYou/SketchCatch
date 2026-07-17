@@ -9,8 +9,10 @@ import { CostUsagePanel } from "./cost-usage-panel";
 import {
   parseCostEstimatePeriod,
   parseCostDashboardTab,
+  parseExpectedUserCount,
   writeCostEstimatePeriod,
   writeCostDashboardTab,
+  writeExpectedUserCount,
   type CostDashboardTab
 } from "./cost-dashboard-url-state";
 import styles from "../dashboard-tools.module.css";
@@ -25,8 +27,13 @@ export function CostDashboardClient() {
   const [estimatePeriod, setEstimatePeriod] = useState<CostEstimatePeriod>(() =>
     parseCostEstimatePeriod(searchParams)
   );
-  const [expectedUserCount, setExpectedUserCount] = useState(1000);
-  const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
+  const [expectedUserCount, setExpectedUserCount] = useState(() =>
+    parseExpectedUserCount(searchParams)
+  );
+  const [expectedUserCountInput, setExpectedUserCountInput] = useState(() =>
+    String(parseExpectedUserCount(searchParams))
+  );
+  const expectedUserCountRef = useRef(expectedUserCount);
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
   const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>("30d");
@@ -35,6 +42,13 @@ export function CostDashboardClient() {
   useEffect(() => {
     setActiveTab(parseCostDashboardTab(searchParams));
     setEstimatePeriod(parseCostEstimatePeriod(searchParams));
+    const nextExpectedUserCount = parseExpectedUserCount(searchParams);
+
+    if (expectedUserCountRef.current !== nextExpectedUserCount) {
+      expectedUserCountRef.current = nextExpectedUserCount;
+      setExpectedUserCount(nextExpectedUserCount);
+      setExpectedUserCountInput(String(nextExpectedUserCount));
+    }
   }, [searchParams]);
 
   const pushCostSearchParams = useCallback(
@@ -58,6 +72,15 @@ export function CostDashboardClient() {
     (nextPeriod: CostEstimatePeriod): void => {
       setEstimatePeriod(nextPeriod);
       pushCostSearchParams(writeCostEstimatePeriod(searchParams, nextPeriod));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeExpectedUserCount = useCallback(
+    (nextExpectedUserCount: number): void => {
+      expectedUserCountRef.current = nextExpectedUserCount;
+      setExpectedUserCount(nextExpectedUserCount);
+      pushCostSearchParams(writeExpectedUserCount(searchParams, nextExpectedUserCount));
     },
     [pushCostSearchParams, searchParams]
   );
@@ -139,7 +162,7 @@ export function CostDashboardClient() {
             <CostEstimatePanel
               expectedUserCount={expectedUserCount}
               expectedUserCountInput={expectedUserCountInput}
-              onExpectedUserCountChange={setExpectedUserCount}
+              onExpectedUserCountChange={changeExpectedUserCount}
               onExpectedUserCountInputChange={setExpectedUserCountInput}
               onPeriodChange={changeEstimatePeriod}
               period={estimatePeriod}
