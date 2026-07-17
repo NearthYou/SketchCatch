@@ -25,6 +25,7 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 import type { ResourceArea, ResourceItem } from "../../../../packages/types/src/index";
+import { BoardThumbnailImage } from "../../components/architecture-board/BoardThumbnailImage";
 import { TemplateGallery } from "../../components/templates/TemplateGallery";
 import { clearActiveResourceDragPayload, writeResourceDragPayload } from "../diagram-editor/diagram-utils";
 import {
@@ -44,6 +45,8 @@ import {
 import {
   isBoardTemplateAvailable,
   listBoardTemplates,
+  getBoardTemplateRelationshipCount,
+  getBoardTemplateResourceCount,
   type AvailableBoardTemplate,
   type BoardTemplate
 } from "./template-library";
@@ -351,13 +354,14 @@ export function ResourceSettingsPanel({
   );
 }
 
-// 왼쪽 목록의 즉시 적용과 템플릿 전체보기를 서로 다른 동작으로 제공합니다.
+// 왼쪽 목록과 전체보기 모두 선택한 템플릿의 상세 미리보기로 연결합니다.
 function TemplatesPanel({
   onTemplateApply
 }: {
   readonly onTemplateApply?: ((template: AvailableBoardTemplate) => void) | undefined;
 }) {
   const [isModalOpen, setModalOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<AvailableBoardTemplate | null>(null);
   const templates = listBoardTemplates();
 
   return (
@@ -376,12 +380,12 @@ function TemplatesPanel({
         </button>
         {templates.map((template) => (
           <button
-            aria-label={`${template.title} Template 적용`}
-            className="templateCatalogCard templateApplyCard"
+            aria-label={`${template.title} 상세 미리보기`}
+            className="templateCatalogCard templatePreviewCard"
             disabled={!isBoardTemplateAvailable(template)}
             key={template.id}
             onClick={() => {
-              if (isBoardTemplateAvailable(template)) onTemplateApply?.(template);
+              if (isBoardTemplateAvailable(template)) setSelectedTemplate(template);
             }}
             title={isBoardTemplateAvailable(template) ? template.title : template.unavailableReason}
             type="button"
@@ -399,25 +403,36 @@ function TemplatesPanel({
       {isModalOpen ? (
         <TemplateLibraryModal
           onClose={() => setModalOpen(false)}
-          onTemplateApply={(template) => {
-            onTemplateApply?.(template);
+          onTemplateSelect={(template) => {
             setModalOpen(false);
+            setSelectedTemplate(template);
           }}
           templates={templates}
+        />
+      ) : null}
+
+      {selectedTemplate ? (
+        <TemplateDetailPreviewModal
+          onApply={() => {
+            onTemplateApply?.(selectedTemplate);
+            setSelectedTemplate(null);
+          }}
+          onClose={() => setSelectedTemplate(null)}
+          template={selectedTemplate}
         />
       ) : null}
     </>
   );
 }
 
-// 현재 Board에 적용할 Template을 공통 Gallery에서 고르게 합니다.
+// 전체보기에서는 Template을 찾기만 하고, 적용 결정은 개별 상세 창으로 넘깁니다.
 function TemplateLibraryModal({
   onClose,
-  onTemplateApply,
+  onTemplateSelect,
   templates
 }: {
   readonly onClose: () => void;
-  readonly onTemplateApply: (template: AvailableBoardTemplate) => void;
+  readonly onTemplateSelect: (template: AvailableBoardTemplate) => void;
   readonly templates: readonly BoardTemplate[];
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -458,7 +473,7 @@ function TemplateLibraryModal({
           <div>
             <span>Template library</span>
             <h2>템플릿 전체보기</h2>
-            <p>선택하면 현재 보드를 백업하고 템플릿 구조로 덮어씁니다.</p>
+            <p>템플릿을 선택해 예시 이미지와 구성 정보를 먼저 확인하세요.</p>
           </div>
           <button
             className={modalStyles.closeButton}
@@ -471,13 +486,112 @@ function TemplateLibraryModal({
         </div>
 
         <TemplateGallery
-          actionLabel="현재 Board에 적용"
+          actionLabel="상세 미리보기"
           onSelect={(templateId) => {
             const template = templates.find((candidate) => candidate.id === templateId);
-            if (template && isBoardTemplateAvailable(template)) onTemplateApply(template);
+            if (template && isBoardTemplateAvailable(template)) onTemplateSelect(template);
           }}
           templates={templates}
         />
+      </section>
+    </div>,
+    document.body
+  );
+}
+
+function TemplateDetailPreviewModal({
+  onApply,
+  onClose,
+  template
+}: {
+  readonly onApply: () => void;
+  readonly onClose: () => void;
+  readonly template: AvailableBoardTemplate;
+}) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+
+    if (!overlay || !dialog || !closeButton) return;
+
+    return setupModalAccessibility({
+      closeButton,
+      dialog,
+      documentRoot: document,
+      onClose: () => onCloseRef.current(),
+      overlay
+    });
+  }, []);
+
+  return createPortal(
+    <div className={modalStyles.overlay} ref={overlayRef} role="presentation">
+      <section
+        aria-label={`${template.title} 템플릿 상세 미리보기`}
+        aria-modal="true"
+        className={`${modalStyles.dialog} ${modalStyles.detailDialog}`}
+        ref={dialogRef}
+        role="dialog"
+      >
+        <div className={modalStyles.header}>
+          <div>
+            <span>Template preview</span>
+            <h2>{template.title}</h2>
+            <p>보드에 적용하기 전에 구성과 예시 이미지를 확인하세요.</p>
+          </div>
+          <button
+            className={modalStyles.closeButton}
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
+            닫기
+          </button>
+        </div>
+
+        <div className={modalStyles.detailContent}>
+          <BoardThumbnailImage
+            alt={`${template.title} Architecture 미리보기`}
+            className={modalStyles.detailPreview}
+            src={template.thumbnailSrc ?? null}
+          />
+          <div className={modalStyles.detailInfo}>
+            <p>{template.description}</p>
+            <dl className={modalStyles.detailStats}>
+              <div>
+                <dt>Resource</dt>
+                <dd>{getBoardTemplateResourceCount(template)}</dd>
+              </div>
+              <div>
+                <dt>관계</dt>
+                <dd>{getBoardTemplateRelationshipCount(template)}</dd>
+              </div>
+            </dl>
+            <div aria-label="템플릿 태그" className={modalStyles.detailTags}>
+              {template.tags.map((tag) => (
+                <span key={tag}>{tag}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className={modalStyles.actions}>
+          <button className={modalStyles.secondaryButton} onClick={onClose} type="button">
+            취소
+          </button>
+          <button className={modalStyles.primaryButton} onClick={onApply} type="button">
+            보드에 적용
+          </button>
+        </div>
       </section>
     </div>,
     document.body
