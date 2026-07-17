@@ -14,6 +14,7 @@ import {
   createTerraformBlockAddress,
   createTerraformBlockIdentityKey
 } from "./terraform-identity.js";
+import { scanTerraformBlockIdentities } from "./terraform-block-identity-parser.js";
 import { findAnalysisExcludedTerraformConflicts } from "./analysis-excluded-terraform-guard.js";
 import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration-blocks.js";
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
@@ -26,8 +27,6 @@ import {
 const DEFAULT_TERRAFORM_BLOCK_TYPE: TerraformBlockType = "resource";
 const BLOCK_HEADER_PATTERN =
   /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{\s*$/;
-const TERRAFORM_IDENTITY_HEADER_PATTERN =
-  /^\s*(resource|data)\s+"([^"]+)"\s+"([^"]+)"\s*\{/;
 const PROVIDER_BLOCK_HEADER_PATTERN = /^\s*provider\s+"([^"]+)"\s*\{\s*(?:\}\s*)?$/;
 const TERRAFORM_BLOCK_HEADER_PATTERN = /^\s*terraform\s*\{\s*(?:\}\s*)?$/;
 const TOP_LEVEL_BLOCK_PATTERN = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\b.*\{\s*$/;
@@ -697,27 +696,10 @@ export function listTerraformBlockIdentities(
   input: TerraformBlockIdentityInput
 ): TerraformBlockIdentity[] {
   const files = toTerraformSyncFiles(input);
-  const parseResult = parseTerraformInput(input);
   const identities = new Map<string, TerraformBlockIdentity>();
 
-  for (const identity of parseResult.blocks.map((block) => block.identity)) {
-    identities.set(createTerraformBlockIdentityKey(identity), identity);
-  }
-
-  // Deployment safety needs resource identity even when the broader sync subset cannot
-  // parse an otherwise valid inline or opaque Terraform body.
   for (const file of files) {
-    for (const line of splitTerraformLines(file.terraformCode)) {
-      const match = TERRAFORM_IDENTITY_HEADER_PATTERN.exec(stripLineComment(line));
-      const terraformBlockType = match?.[1] as TerraformBlockType | undefined;
-      const resourceType = match?.[2];
-      const resourceName = match?.[3];
-
-      if (!terraformBlockType || !resourceType || !resourceName) {
-        continue;
-      }
-
-      const identity = { terraformBlockType, resourceType, resourceName };
+    for (const identity of scanTerraformBlockIdentities(file.terraformCode)) {
       identities.set(createTerraformBlockIdentityKey(identity), identity);
     }
   }

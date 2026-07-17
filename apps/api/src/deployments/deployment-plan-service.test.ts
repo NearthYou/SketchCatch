@@ -1069,7 +1069,11 @@ resource "aws_lambda_function" "legacy_lambda" {}`;
               { fileName: "network.tf", terraformCode: 'resource "aws_vpc" "main" {}' },
               {
                 fileName: "compute.tf",
-                terraformCode: 'resource "aws_lambda_function" "legacy_lambda" {}'
+                terraformCode: `resource /* provider type */
+"aws_lambda_function"
+// logical name
+"legacy_lambda"
+{}`
               }
             ],
             cleanup: async () => undefined
