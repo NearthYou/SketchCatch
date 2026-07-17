@@ -6,17 +6,32 @@ import type {
   ReverseEngineeringScanResult
 } from "@sketchcatch/types";
 import { toReverseEngineeringScanReadResponse } from "../routes/reverse-engineering.js";
+import { findAnalysisExcludedTerraformConflicts } from "../services/terraform/analysis-excluded-terraform-guard.js";
 import { normalizeReverseEngineeringScanResult } from "./reverse-engineering-service.js";
+
+const LEGACY_LAMBDA_ARN =
+  "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler";
 
 const architectureJson: ArchitectureJson = {
   nodes: [
     {
       id: "legacy-lambda",
       type: "LAMBDA",
-      label: "orders-handler",
+      label: LEGACY_LAMBDA_ARN,
       positionX: 120,
       positionY: 80,
-      config: {}
+      config: { legacyConfigMarker: "keep-lambda-raw" }
+    },
+    {
+      id: "legacy-safe-bucket-node",
+      type: "S3",
+      label: "safe-bucket",
+      positionX: 420,
+      positionY: 80,
+      config: {
+        legacyConfigMarker: "keep-bucket-raw",
+        providerResourceId: "sketchcatch-safe-bucket"
+      }
     }
   ],
   edges: []
@@ -54,11 +69,11 @@ function createLegacyResult(): LegacyReverseEngineeringScanResult {
         id: "legacy-lambda",
         provider: "aws",
         providerResourceType: "AWS::Lambda::Function",
-        providerResourceId: "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler",
+        providerResourceId: LEGACY_LAMBDA_ARN,
         region: "ap-northeast-2",
-        displayName: "orders-handler",
+        displayName: LEGACY_LAMBDA_ARN,
         resourceType: "LAMBDA",
-        config: {},
+        config: { functionName: "orders-handler", rawRuntime: "nodejs20.x" },
         analysisExcluded: true
       },
       {
@@ -116,26 +131,39 @@ function createLegacyResult(): LegacyReverseEngineeringScanResult {
 
 test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호환 draft를 만든다", () => {
   const legacyResult = createLegacyResult();
+  const persistedArchitectureBeforeRead = structuredClone(legacyResult.architectureJson);
+  const persistedLambdaBeforeRead = structuredClone(legacyResult.discoveredResources[0]);
 
   const result = normalizeReverseEngineeringScanResult(persistedScan, legacyResult);
+  const lambdaNode = result.architectureJson.nodes.find((node) => node.id === "legacy-lambda");
+  const bucketNode = result.architectureJson.nodes.find(
+    (node) => node.id === "legacy-safe-bucket-node"
+  );
 
   assert.equal("reverseEngineeringDraft" in legacyResult, false);
   assert.equal(result.scan, persistedScan);
-  assert.deepEqual(result.reverseEngineeringDraft, {
-    id: "draft-scan-legacy",
-    scanId: "scan-legacy",
-    architectureJson,
-    protectedValueKeys: [
-      "providerResourceId",
-      "providerResourceType",
-      "region",
-      "accountId",
-      "terraformResourceName",
-      "terraformResourceType"
-    ],
-    editableValueKeys: ["displayName", "description"],
-    createdAt: "2026-07-17T01:01:00.000Z"
+  assert.equal(lambdaNode?.label, "orders-handler");
+  assert.deepEqual(lambdaNode?.config, {
+    legacyConfigMarker: "keep-lambda-raw",
+    providerResourceType: "AWS::Lambda::Function",
+    providerResourceId: LEGACY_LAMBDA_ARN,
+    analysisExcluded: true
   });
+  assert.equal(bucketNode?.label, "safe-bucket");
+  assert.equal(bucketNode?.config["legacyConfigMarker"], "keep-bucket-raw");
+  assert.equal(bucketNode?.config["providerResourceId"], "sketchcatch-safe-bucket");
+  assert.equal(bucketNode?.config["analysisExcluded"], false);
+  assert.equal(result.reverseEngineeringDraft.architectureJson, result.architectureJson);
+  assert.deepEqual(result.reverseEngineeringDraft.protectedValueKeys, [
+    "providerResourceId",
+    "providerResourceType",
+    "region",
+    "accountId",
+    "terraformResourceName",
+    "terraformResourceType"
+  ]);
+  assert.deepEqual(result.reverseEngineeringDraft.editableValueKeys, ["displayName", "description"]);
+  assert.equal(result.reverseEngineeringDraft.createdAt, "2026-07-17T01:01:00.000Z");
   assert.equal(result.importSuggestions[0]?.status, "manual_review");
   assert.equal(result.importSuggestions[0]?.handoffReady, false);
   assert.equal("terraformAddress" in (result.importSuggestions[0] ?? {}), false);
@@ -145,13 +173,42 @@ test("과거 draft 없는 결과는 원본을 바꾸지 않고 안정적인 호�
   assert.equal(result.importSuggestions[2], legacyResult.importSuggestions[2]);
   assert.equal(legacyResult.importSuggestions[0]?.status, "ready");
   assert.equal(legacyResult.importSuggestions[0]?.handoffReady, true);
+  assert.deepEqual(legacyResult.architectureJson, persistedArchitectureBeforeRead);
+  assert.deepEqual(legacyResult.discoveredResources[0], persistedLambdaBeforeRead);
+  assert.equal(legacyResult.discoveredResources[0]?.providerResourceId, LEGACY_LAMBDA_ARN);
+
+  assert.deepEqual(
+    findAnalysisExcludedTerraformConflicts(result.architectureJson, [
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_lambda_function",
+        resourceName: "orders_handler"
+      },
+      {
+        terraformBlockType: "resource",
+        resourceType: "aws_s3_bucket",
+        resourceName: "safe_bucket"
+      }
+    ]),
+    [
+      {
+        nodeId: "legacy-lambda",
+        resourceAddress: "aws_lambda_function.orders_handler",
+        excludedResourceAddress: "aws_lambda_function"
+      }
+    ]
+  );
 });
 
-test("현재의 완전한 draft는 결과를 읽어도 그대로 유지한다", () => {
+test("현재의 완전하고 안전한 draft는 결과를 읽어도 그대로 유지한다", () => {
+  const safeArchitectureJson = normalizeReverseEngineeringScanResult(
+    persistedScan,
+    createLegacyResult()
+  ).architectureJson;
   const currentDraft: ReverseEngineeringScanResult["reverseEngineeringDraft"] = {
     id: "draft-current",
     scanId: "scan-legacy",
-    architectureJson,
+    architectureJson: safeArchitectureJson,
     protectedValueKeys: ["providerResourceId"],
     editableValueKeys: ["displayName"],
     createdAt: "2026-07-17T01:00:30.000Z"
@@ -193,7 +250,43 @@ test("구조가 깨진 과거 draft는 보존하지 않고 호환 draft로 다�
   const result = normalizeReverseEngineeringScanResult(persistedScan, malformedResult);
 
   assert.equal(result.reverseEngineeringDraft.id, "draft-scan-legacy");
-  assert.equal(result.reverseEngineeringDraft.architectureJson, architectureJson);
+  assert.equal(result.reverseEngineeringDraft.architectureJson, result.architectureJson);
+  assert.equal(
+    result.reverseEngineeringDraft.architectureJson.nodes[0]?.config["analysisExcluded"],
+    true
+  );
+});
+
+test("discovered Resource와 신뢰할 수 있게 연결되지 않는 과거 노드는 안전하게 검토 전용으로 닫는다", () => {
+  const malformedResult = createLegacyResult();
+  const malformedProviderResourceId =
+    "arn:aws:lambda:ap-northeast-2:123456789012:function:unmatched-handler";
+  const malformedArchitecture: ArchitectureJson = {
+    nodes: [
+      {
+        id: "malformed-lambda-node",
+        type: "LAMBDA",
+        label: LEGACY_LAMBDA_ARN,
+        positionX: 10,
+        positionY: 20,
+        config: {
+          legacyConfigMarker: "keep-malformed-raw",
+          providerResourceId: malformedProviderResourceId
+        }
+      }
+    ],
+    edges: []
+  };
+  malformedResult.architectureJson = malformedArchitecture;
+
+  const result = normalizeReverseEngineeringScanResult(persistedScan, malformedResult);
+  const node = result.architectureJson.nodes[0];
+
+  assert.equal(node?.config["analysisExcluded"], true);
+  assert.equal(node?.config["legacyConfigMarker"], "keep-malformed-raw");
+  assert.equal(node?.config["providerResourceId"], malformedProviderResourceId);
+  assert.equal(node?.label, "orders-handler");
+  assert.deepEqual(malformedResult.architectureJson, malformedArchitecture);
 });
 
 test("단일 스캔 GET 응답 도우미는 과거 결과를 보정한 값만 반환한다", () => {

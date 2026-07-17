@@ -24,6 +24,10 @@ import {
 import type { ProjectAccessContext, ProjectRecord } from "../deployments/deployment-service.js";
 import { createAwsProviderAdapter, type AwsProviderAdapter } from "./aws-provider-adapter.js";
 import { createAwsReverseEngineeringGateway } from "./aws-reverse-engineering-gateway.js";
+import {
+  createAwsResourceDisplayName,
+  createAwsResourceDisplayNameMap
+} from "./aws-resource-display-name.js";
 
 export type ReverseEngineeringScanRecord = typeof reverseEngineeringScans.$inferSelect;
 export type ReverseEngineeringScanLogRecord = typeof reverseEngineeringScanLogs.$inferSelect;
@@ -155,19 +159,202 @@ export function normalizeReverseEngineeringScanResult(
   scan: ReverseEngineeringScan,
   persistedResult: PersistedReverseEngineeringScanResult
 ): ReverseEngineeringScanResult {
-  const draft = isUsableReverseEngineeringDraft(persistedResult.reverseEngineeringDraft, scan.id)
-    ? persistedResult.reverseEngineeringDraft
-    : createReadCompatibilityDraft(scan, persistedResult.architectureJson);
+  const normalizationContext = createReadCompatibilityNormalizationContext(persistedResult);
+  const architectureJson = normalizeReadCompatibilityArchitecture(
+    persistedResult.architectureJson,
+    normalizationContext
+  );
+  const persistedDraft = persistedResult.reverseEngineeringDraft;
+  const draft = isUsableReverseEngineeringDraft(persistedDraft, scan.id)
+    ? normalizeReadCompatibilityDraft(persistedDraft, normalizationContext)
+    : createReadCompatibilityDraft(scan, architectureJson);
 
   return {
     ...persistedResult,
     scan,
+    architectureJson,
     reverseEngineeringDraft: draft,
     importSuggestions: sanitizeImportSuggestions(
       persistedResult.discoveredResources,
       persistedResult.importSuggestions
     )
   };
+}
+
+type ReadCompatibilityNormalizationContext = {
+  readonly discoveredResourceById: ReadonlyMap<string, DiscoveredResource | null>;
+  readonly discoveredResourceByProviderResourceId: ReadonlyMap<
+    string,
+    DiscoveredResource | null
+  >;
+  readonly displayNameByProviderResourceId: ReadonlyMap<string, string>;
+  readonly reviewOnlyResourceIds: ReadonlySet<string>;
+};
+
+function createReadCompatibilityNormalizationContext(
+  persistedResult: PersistedReverseEngineeringScanResult
+): ReadCompatibilityNormalizationContext {
+  return {
+    discoveredResourceById: createUniqueDiscoveredResourceMap(
+      persistedResult.discoveredResources,
+      (resource) => resource.id
+    ),
+    discoveredResourceByProviderResourceId: createUniqueDiscoveredResourceMap(
+      persistedResult.discoveredResources,
+      (resource) => resource.providerResourceId
+    ),
+    displayNameByProviderResourceId: createAwsResourceDisplayNameMap(
+      persistedResult.discoveredResources
+    ),
+    reviewOnlyResourceIds: new Set([
+      ...persistedResult.discoveredResources
+        .filter(isReviewOnlyDiscoveredResource)
+        .map((resource) => resource.id),
+      ...persistedResult.analysisExclusions.map((exclusion) => exclusion.resourceId)
+    ])
+  };
+}
+
+function createUniqueDiscoveredResourceMap(
+  resources: readonly DiscoveredResource[],
+  getKey: (resource: DiscoveredResource) => string
+): ReadonlyMap<string, DiscoveredResource | null> {
+  const result = new Map<string, DiscoveredResource | null>();
+
+  for (const resource of resources) {
+    const key = getKey(resource).trim();
+
+    if (!key) {
+      continue;
+    }
+
+    result.set(key, result.has(key) ? null : resource);
+  }
+
+  return result;
+}
+
+function normalizeReadCompatibilityArchitecture(
+  architectureJson: ArchitectureJson,
+  context: ReadCompatibilityNormalizationContext
+): ArchitectureJson {
+  let changed = false;
+  const nodes = architectureJson.nodes.map((node) => {
+    const normalizedNode = normalizeReadCompatibilityNode(node, context);
+
+    changed ||= normalizedNode !== node;
+    return normalizedNode;
+  });
+
+  return changed ? { ...architectureJson, nodes } : architectureJson;
+}
+
+function normalizeReadCompatibilityNode(
+  node: ArchitectureJson["nodes"][number],
+  context: ReadCompatibilityNormalizationContext
+): ArchitectureJson["nodes"][number] {
+  const resource = findCorrelatedDiscoveredResource(node, context);
+
+  if (!resource) {
+    const label = createFailClosedLegacyNodeLabel(node);
+
+    if (node.config["analysisExcluded"] === true && node.label === label) {
+      return node;
+    }
+
+    return {
+      ...node,
+      label,
+      config: { ...node.config, analysisExcluded: true }
+    };
+  }
+
+  const analysisExcluded =
+    node.config["analysisExcluded"] === true || context.reviewOnlyResourceIds.has(resource.id);
+  const label =
+    context.displayNameByProviderResourceId.get(resource.providerResourceId) ??
+    createAwsResourceDisplayName(resource);
+
+  if (
+    node.label === label &&
+    node.config["providerResourceType"] === resource.providerResourceType &&
+    node.config["providerResourceId"] === resource.providerResourceId &&
+    node.config["analysisExcluded"] === analysisExcluded
+  ) {
+    return node;
+  }
+
+  return {
+    ...node,
+    label,
+    config: {
+      ...node.config,
+      providerResourceType: resource.providerResourceType,
+      providerResourceId: resource.providerResourceId,
+      analysisExcluded
+    }
+  };
+}
+
+function findCorrelatedDiscoveredResource(
+  node: ArchitectureJson["nodes"][number],
+  context: ReadCompatibilityNormalizationContext
+): DiscoveredResource | null {
+  const idMatch = context.discoveredResourceById.get(node.id);
+  const nodeProviderResourceId = readNonEmptyConfigString(
+    node.config["providerResourceId"]
+  );
+  const providerResourceIdMatch = nodeProviderResourceId
+    ? context.discoveredResourceByProviderResourceId.get(nodeProviderResourceId)
+    : undefined;
+
+  if (idMatch === null || providerResourceIdMatch === null) {
+    return null;
+  }
+
+  if (idMatch && providerResourceIdMatch && idMatch !== providerResourceIdMatch) {
+    return null;
+  }
+
+  if (idMatch && nodeProviderResourceId && idMatch.providerResourceId !== nodeProviderResourceId) {
+    return null;
+  }
+
+  return providerResourceIdMatch ?? idMatch ?? null;
+}
+
+function createFailClosedLegacyNodeLabel(
+  node: ArchitectureJson["nodes"][number]
+): string {
+  const label = node.label?.trim() || node.id;
+  const providerResourceId = label.startsWith("arn:")
+    ? label
+    : readNonEmptyConfigString(node.config["providerResourceId"]) ?? node.id;
+  const providerResourceType =
+    readNonEmptyConfigString(node.config["providerResourceType"]) ?? `AWS::${node.type}`;
+
+  return createAwsResourceDisplayName({
+    displayName: label,
+    providerResourceId,
+    providerResourceType
+  });
+}
+
+function readNonEmptyConfigString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function isReviewOnlyDiscoveredResource(resource: DiscoveredResource): boolean {
+  return resource.resourceType === "UNKNOWN" || resource.analysisExcluded === true;
+}
+
+function normalizeReadCompatibilityDraft(
+  draft: ReverseEngineeringDraft,
+  context: ReadCompatibilityNormalizationContext
+): ReverseEngineeringDraft {
+  const architectureJson = normalizeReadCompatibilityArchitecture(draft.architectureJson, context);
+
+  return architectureJson === draft.architectureJson ? draft : { ...draft, architectureJson };
 }
 
 function createReadCompatibilityDraft(
