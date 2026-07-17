@@ -22,6 +22,9 @@ export type ReverseEngineeringScanSummary = {
 const SERVICE_LABELS: Readonly<Record<string, string>> = {
   "AWS::EC2::VPC": "VPC",
   "AWS::EC2::Subnet": "서브넷",
+  "AWS::EC2::InternetGateway": "인터넷 게이트웨이",
+  "AWS::EC2::RouteTable": "라우팅 테이블",
+  "AWS::EC2::SecurityGroup": "보안 그룹",
   "AWS::EC2::Instance": "EC2 인스턴스",
   "AWS::IAM::Role": "IAM 역할",
   "AWS::Lambda::Function": "Lambda 함수",
@@ -94,9 +97,7 @@ function getFallbackDisplayName(providerResourceId: string, serviceLabel: string
   const arnResource = providerResourceId.split(":").slice(5).join(":");
   const arnResourceName = arnResource.split(/[/:]/).filter(Boolean).at(-1);
 
-  return arnResourceName
-    ? shortenDisplayName(arnResourceName)
-    : `이름 미확인 ${serviceLabel}`;
+  return arnResourceName ? shortenDisplayName(arnResourceName) : `이름 미확인 ${serviceLabel}`;
 }
 
 function shortenDisplayName(displayName: string): string {

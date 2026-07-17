@@ -75,7 +75,8 @@ function ReverseBoardCandidateSelectionPanel({
   readonly state: ReverseEngineeringCandidatePanelState;
 }) {
   const hasMultipleCandidates = state.candidates.length > 1;
-  const panelTitle = state.hasScanResult && !hasMultipleCandidates ? "자동 감지된 구조" : "보드 후보 선택";
+  const panelTitle =
+    state.hasScanResult && !hasMultipleCandidates ? "자동 감지된 구조" : "보드 후보 선택";
   const panelDescription =
     state.hasScanResult && !hasMultipleCandidates
       ? "자동으로 묶은 결과입니다. 헷갈릴 때만 여러 후보가 표시됩니다."
@@ -121,7 +122,8 @@ function ReverseBoardCandidateSelectionPanel({
           <strong>{state.candidates[0].title}</strong>
           <span>{state.candidates[0].description}</span>
           <small>
-            Resource {state.candidates[0].resourceCount}개 · 연결선 {state.candidates[0].edgeCount}개
+            Resource {state.candidates[0].resourceCount}개 · 연결선 {state.candidates[0].edgeCount}
+            개
           </small>
         </div>
       ) : (
@@ -152,12 +154,7 @@ function ReverseDockedPanel({
   const inspectedNode = context.nodes.find((node) => node.id === context.inspectedNodeId) ?? null;
 
   if (inspectedNode) {
-    return (
-      <ReverseResourceInspector
-        node={inspectedNode}
-        onBack={context.closeInspectedNode}
-      />
-    );
+    return <ReverseResourceInspector node={inspectedNode} onBack={context.closeInspectedNode} />;
   }
 
   return (
@@ -247,9 +244,7 @@ function ReverseResourceInspector({
               </dd>
             </div>
           </dl>
-          <p className={styles.inspectorPurpose}>
-            {getInspectorPurpose(node.type, isReviewOnly)}
-          </p>
+          <p className={styles.inspectorPurpose}>{getInspectorPurpose(node.type, isReviewOnly)}</p>
         </section>
 
         {coreValues.length > 0 ? (
@@ -278,7 +273,9 @@ function ReverseResourceInspector({
             >
               원본 식별자 복사
             </button>
-            <span aria-live="polite" className={styles.hint}>{copyMessage ?? ""}</span>
+            <span aria-live="polite" className={styles.hint}>
+              {copyMessage ?? ""}
+            </span>
           </div>
         </details>
 
@@ -334,14 +331,40 @@ type InspectorCoreValue = {
 };
 
 const INSPECTOR_CORE_VALUE_ALLOWLIST: Readonly<Record<string, readonly [string, string][]>> = {
-  EC2: [["instanceType", "인스턴스 유형"], ["subnetId", "Subnet ID"], ["placementAvailabilityZone", "Availability Zone"], ["privateIpAddress", "사설 IP"]],
+  EC2: [
+    ["instanceType", "인스턴스 유형"],
+    ["subnetId", "Subnet ID"],
+    ["placementAvailabilityZone", "Availability Zone"],
+    ["privateIpAddress", "사설 IP"]
+  ],
   INTERNET_GATEWAY: [],
-  RDS: [["dbInstanceClass", "DB 인스턴스 유형"], ["engine", "DB 엔진"], ["availabilityZone", "Availability Zone"], ["dbName", "DB 이름"]],
+  RDS: [
+    ["dbInstanceClass", "DB 인스턴스 유형"],
+    ["engine", "DB 엔진"],
+    ["availabilityZone", "Availability Zone"],
+    ["dbName", "DB 이름"]
+  ],
   ROUTE_TABLE: [["vpcId", "VPC ID"]],
-  S3: [["bucketRegion", "Bucket 리전"], ["versioningStatus", "버전 관리"], ["websiteIndexDocument", "웹 사이트 문서"]],
-  SECURITY_GROUP: [["groupName", "보안 그룹 이름"], ["vpcId", "VPC ID"], ["description", "설명"]],
-  SUBNET: [["vpcId", "VPC ID"], ["availabilityZone", "Availability Zone"], ["cidrBlock", "CIDR"], ["availableIpAddressCount", "사용 가능 IP"]],
-  VPC: [["cidrBlock", "CIDR"], ["isDefault", "기본 VPC"]]
+  S3: [
+    ["bucketRegion", "Bucket 리전"],
+    ["versioningStatus", "버전 관리"],
+    ["websiteIndexDocument", "웹 사이트 문서"]
+  ],
+  SECURITY_GROUP: [
+    ["groupName", "보안 그룹 이름"],
+    ["vpcId", "VPC ID"],
+    ["description", "설명"]
+  ],
+  SUBNET: [
+    ["vpcId", "VPC ID"],
+    ["availabilityZone", "Availability Zone"],
+    ["cidrBlock", "CIDR"],
+    ["availableIpAddressCount", "사용 가능 IP"]
+  ],
+  VPC: [
+    ["cidrBlock", "CIDR"],
+    ["isDefault", "기본 VPC"]
+  ]
 };
 
 function getInspectorCoreValues(
@@ -349,17 +372,34 @@ function getInspectorCoreValues(
   values: Readonly<Record<string, unknown>>
 ): InspectorCoreValue[] {
   return (INSPECTOR_CORE_VALUE_ALLOWLIST[resourceType] ?? [])
-    .map(([key, label]) => ({ key, label, value: formatMeaningfulInspectorValue(values[key]) }))
+    .map(([key, label]) => ({
+      key,
+      label,
+      value: formatMeaningfulInspectorValue(key, values[key])
+    }))
     .filter((value): value is InspectorCoreValue => value.value !== null)
     .slice(0, 4);
 }
 
-function formatMeaningfulInspectorValue(value: unknown): string | null {
+function formatMeaningfulInspectorValue(key: string, value: unknown): string | null {
+  if (key === "versioningStatus" && typeof value === "string") {
+    const versioningStatusLabels: Readonly<Record<string, string>> = {
+      Enabled: "사용 중",
+      Suspended: "일시 중지"
+    };
+
+    return versioningStatusLabels[value] ?? "설정 상태 확인 필요";
+  }
+
+  if (key === "isDefault" && typeof value === "boolean") {
+    return value ? "예" : "아니요";
+  }
+
   if (typeof value === "string" && value.trim().length > 0) {
     return value;
   }
 
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (typeof value === "number") {
     return String(value);
   }
 
