@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  parseCostEstimatePeriod,
   parseCostDashboardTab,
+  writeCostEstimatePeriod,
   writeCostDashboardTab
 } from "./cost-dashboard-url-state";
 
@@ -21,4 +23,17 @@ test("cost tab serialization omits the default and preserves unrelated parameter
   assert.equal(usage.get("source"), "notification");
   assert.equal(estimate.has("tab"), false);
   assert.equal(estimate.get("source"), "notification");
+});
+
+test("estimate period round-trips supported values and omits the monthly default", () => {
+  assert.equal(parseCostEstimatePeriod(new URLSearchParams("period=day")), "day");
+  assert.equal(parseCostEstimatePeriod(new URLSearchParams("period=week")), "week");
+  assert.equal(parseCostEstimatePeriod(new URLSearchParams("period=invalid")), "month");
+
+  const weekly = writeCostEstimatePeriod(new URLSearchParams("tab=usage"), "week");
+  const monthly = writeCostEstimatePeriod(weekly, "month");
+
+  assert.equal(weekly.get("period"), "week");
+  assert.equal(weekly.get("tab"), "usage");
+  assert.equal(monthly.has("period"), false);
 });

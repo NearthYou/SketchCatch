@@ -7,7 +7,9 @@ import { COST_USAGE_ALL_PROJECTS_KEY } from "../../../features/costs/cost-usage-
 import { CostEstimatePanel } from "./cost-estimate-panel";
 import { CostUsagePanel } from "./cost-usage-panel";
 import {
+  parseCostEstimatePeriod,
   parseCostDashboardTab,
+  writeCostEstimatePeriod,
   writeCostDashboardTab,
   type CostDashboardTab
 } from "./cost-dashboard-url-state";
@@ -20,7 +22,9 @@ export function CostDashboardClient() {
   const [activeTab, setActiveTab] = useState<CostDashboardTab>(() =>
     parseCostDashboardTab(searchParams)
   );
-  const [estimatePeriod, setEstimatePeriod] = useState<CostEstimatePeriod>("month");
+  const [estimatePeriod, setEstimatePeriod] = useState<CostEstimatePeriod>(() =>
+    parseCostEstimatePeriod(searchParams)
+  );
   const [expectedUserCount, setExpectedUserCount] = useState(1000);
   const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
@@ -30,16 +34,32 @@ export function CostDashboardClient() {
 
   useEffect(() => {
     setActiveTab(parseCostDashboardTab(searchParams));
+    setEstimatePeriod(parseCostEstimatePeriod(searchParams));
   }, [searchParams]);
+
+  const pushCostSearchParams = useCallback(
+    (nextSearchParams: URLSearchParams): void => {
+      const nextQuery = nextSearchParams.toString();
+      router.push(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    },
+    [pathname, router]
+  );
 
   const changeActiveTab = useCallback(
     (nextTab: CostDashboardTab): void => {
       setActiveTab(nextTab);
       const nextSearchParams = writeCostDashboardTab(searchParams, nextTab);
-      const nextQuery = nextSearchParams.toString();
-      router.push(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+      pushCostSearchParams(nextSearchParams);
     },
-    [pathname, router, searchParams]
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeEstimatePeriod = useCallback(
+    (nextPeriod: CostEstimatePeriod): void => {
+      setEstimatePeriod(nextPeriod);
+      pushCostSearchParams(writeCostEstimatePeriod(searchParams, nextPeriod));
+    },
+    [pushCostSearchParams, searchParams]
   );
 
   function selectTabFromKeyboard(
@@ -121,7 +141,7 @@ export function CostDashboardClient() {
               expectedUserCountInput={expectedUserCountInput}
               onExpectedUserCountChange={setExpectedUserCount}
               onExpectedUserCountInputChange={setExpectedUserCountInput}
-              onPeriodChange={setEstimatePeriod}
+              onPeriodChange={changeEstimatePeriod}
               period={estimatePeriod}
             />
           ) : (
