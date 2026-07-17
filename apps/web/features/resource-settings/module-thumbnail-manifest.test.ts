@@ -12,25 +12,15 @@ import {
   createModuleThumbnailDiagram,
   serializeModuleThumbnailDiagram
 } from "./module-thumbnail-diagram";
+import { curatedModules } from "./module-catalog";
 
-const MODULE_IDS = [
-  "container-image-delivery",
-  "container-runtime",
-  "identity-access-boundary",
-  "load-balanced-compute",
-  "network-foundation",
-  "operations-monitoring",
-  "relational-data-layer",
-  "secure-object-storage",
-  "serverless-api",
-  "static-web-delivery"
-] as const;
+const currentModuleIds = curatedModules.map(({ id }) => id).sort();
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 test("Module thumbnail manifest binds the exact current Modules to verified versioned WebP captures", () => {
-  assert.deepEqual(Object.keys(MODULE_THUMBNAIL_ASSETS).sort(), [...MODULE_IDS].sort());
+  assert.deepEqual(Object.keys(MODULE_THUMBNAIL_ASSETS).sort(), currentModuleIds);
 
-  for (const moduleId of MODULE_IDS) {
+  for (const moduleId of currentModuleIds) {
     const asset = getModuleThumbnailAsset(moduleId);
     const diagram = createModuleThumbnailDiagram(moduleId);
 

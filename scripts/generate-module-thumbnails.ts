@@ -169,30 +169,35 @@ function readDevToolsEndpoint(chrome: ChildProcessWithoutNullStreams): Promise<s
 async function captureModuleThumbnail(cdp: CdpConnection, moduleId: ModuleThumbnailId): Promise<Buffer> {
   const target = await cdp.send("Target.createTarget", { url: "about:blank" });
   const targetId = requireString(target.targetId, "Chrome did not create a target");
-  const attached = await cdp.send("Target.attachToTarget", { flatten: true, targetId });
-  const sessionId = requireString(attached.sessionId, "Chrome did not attach to the target");
-  const url = new URL("/dev/module-thumbnail", baseUrl);
-  url.searchParams.set("moduleId", moduleId);
 
-  await cdp.send("Page.enable", {}, sessionId);
-  await cdp.send("Runtime.enable", {}, sessionId);
-  await cdp.send("Page.navigate", { url: url.toString() }, sessionId);
+  try {
+    const attached = await cdp.send("Target.attachToTarget", { flatten: true, targetId });
+    const sessionId = requireString(attached.sessionId, "Chrome did not attach to the target");
+    const url = new URL("/dev/module-thumbnail", baseUrl);
+    url.searchParams.set("moduleId", moduleId);
 
-  const deadline = Date.now() + CAPTURE_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const state = await getCaptureState(cdp, sessionId);
+    await cdp.send("Page.enable", {}, sessionId);
+    await cdp.send("Runtime.enable", {}, sessionId);
+    await cdp.send("Page.navigate", { url: url.toString() }, sessionId);
 
-    if (state.error) {
-      throw new Error(`${moduleId} capture page reported data-module-thumbnail-error`);
+    const deadline = Date.now() + CAPTURE_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const state = await getCaptureState(cdp, sessionId);
+
+      if (state.error) {
+        throw new Error(`${moduleId} capture page reported data-module-thumbnail-error`);
+      }
+      if (state.ready && state.src) {
+        return decodeWebpDataUrl(state.src, moduleId);
+      }
+
+      await delay(POLL_INTERVAL_MS);
     }
-    if (state.ready && state.src) {
-      return decodeWebpDataUrl(state.src, moduleId);
-    }
 
-    await delay(POLL_INTERVAL_MS);
+    throw new Error(`${moduleId} capture timed out after ${CAPTURE_TIMEOUT_MS}ms without a ready marker`);
+  } finally {
+    await cdp.send("Target.closeTarget", { targetId }).catch(() => undefined);
   }
-
-  throw new Error(`${moduleId} capture timed out after ${CAPTURE_TIMEOUT_MS}ms without a ready marker`);
 }
 
 async function getCaptureState(cdp: CdpConnection, sessionId: string): Promise<CaptureState> {
