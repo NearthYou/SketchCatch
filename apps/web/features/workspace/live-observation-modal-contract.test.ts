@@ -36,6 +36,17 @@ test("modal re-entry restores the selected Deployment and diagram viewport", () 
   assert.match(diagramMapSource, /onMoveEnd=\{\(_event, viewport\) => onViewportChange\(viewport\)\}/);
 });
 
+test("Deployment selection effect notifies the parent only when the target changes", () => {
+  assert.match(
+    modalSource,
+    /const targetDeploymentId = exactDeployment\?\.id \?\? "";[\s\S]*?if \(targetDeploymentId !== selectedDeploymentId\) \{[\s\S]*?onSelectedDeploymentIdChange\(targetDeploymentId\);[\s\S]*?\}/
+  );
+  assert.match(
+    modalSource,
+    /const fallbackDeploymentId =[\s\S]*?if \(fallbackDeploymentId !== selectedDeploymentId\) \{[\s\S]*?onSelectedDeploymentIdChange\(fallbackDeploymentId\);[\s\S]*?\}/
+  );
+});
+
 test("modal re-entry restores only the selected, unexpired active session and aborts on close", () => {
   assert.match(rightPanelSource, /createLiveObservationSessionState\(projectId\)/);
   assert.match(

@@ -187,7 +187,10 @@ export function LiveObservationModal({
       const exactDeployment = eligible.find(
         (deployment) => deployment.id === selection.deploymentId
       );
-      onSelectedDeploymentIdChange(exactDeployment?.id ?? "");
+      const targetDeploymentId = exactDeployment?.id ?? "";
+      if (targetDeploymentId !== selectedDeploymentId) {
+        onSelectedDeploymentIdChange(targetDeploymentId);
+      }
       if (!exactDeployment) {
         setSelectionErrorMessage(
           "선택한 CI/CD 실행과 연결된 인프라 배포를 관측할 수 없습니다."
@@ -209,11 +212,14 @@ export function LiveObservationModal({
     }
 
     setSelectionErrorMessage("");
-    onSelectedDeploymentIdChange(
-      eligible.some((deployment) => deployment.id === selectedDeploymentId)
-        ? selectedDeploymentId
-        : eligible[0]?.id ?? ""
-    );
+    const fallbackDeploymentId = eligible.some(
+      (deployment) => deployment.id === selectedDeploymentId
+    )
+      ? selectedDeploymentId
+      : eligible[0]?.id ?? "";
+    if (fallbackDeploymentId !== selectedDeploymentId) {
+      onSelectedDeploymentIdChange(fallbackDeploymentId);
+    }
   }, [
     onSelectedDeploymentIdChange,
     queries.reference.data,

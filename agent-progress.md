@@ -15,23 +15,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-16 - Implement provider-verified Runtime Convergence v1
-
-- Added provider-neutral shared targets, strict Zod DTOs, canonical target identity, nullable RDS release evidence, and legacy target reconstruction with fail-closed canonical/legacy consistency checks.
-- Added a ten-adapter registry with current-state reads, provider/target and artifact comparison, rollout, health, rollback evidence, already-active decisions, and secret-shaped evidence rejection.
-- Added adversarial regressions for cross-provider revisions, pre-provider stale target rejection, inactive ECS services, non-Fargate GitOps observations, unhealthy Lambda versions, GitOps region drift, v3 rollback evidence, and divergent handoff targets.
-- Integrated Direct releases with read-only ECS/Fargate inspection, a DNS-pinned public HTTPS health probe, safe rollout fallback, and persisted convergence outcomes.
-- Extended generated GitOps workflows and v3 evidence for ECS, Lambda, EC2 ASG, and Static S3/CloudFront. Mutations are skipped only after provider preflight and independently rechecked by reconcilers.
-- Kept static artifact bytes target-independent by storing convergence markers on the CloudFront origin rather than in the artifact manifest.
-- Added explicit coverage for all ten runtime adapters across deployable ResourceDefinitions and documented the contract, safety boundaries, compatibility behavior, and operational flow.
-- No real credentials, live AWS mutation, Terraform apply/destroy, user artifact upload, or user Git/CI/CD handoff was performed.
-
-### 2026-07-17 - Address PR #446 review feedback
-
-- Kept missing ECS deployment configuration fail-closed, made every nested access explicit, and guarded unexpected DNS lookup result shapes before address processing.
-- Converted malformed health URLs into Zod validation errors and malformed provider revision metadata into `provider_revision_unverified` rather than native runtime errors.
-- Review regressions pass with the full focused runtime/resource/API set at 79/79. Harness, migration compatibility, lint, typecheck, build, and diff checks pass.
-
 ### 2026-07-16 - Implement ApplicationArtifact Registry v1
 
 - Added all seven artifact kinds, strict v2 evidence DTOs, canonical identity, persistent Postgres claims, read-only AWS verification, and project-scoped artifact listing.
@@ -217,3 +200,10 @@ Short English-only working log for the current agent context. Older records are 
 - Limited SSE reconnection to the selected, unexpired active session and abort the prior stream when that eligibility changes.
 - Focused re-entry tests pass 10/10; root harness, lint, typecheck, and build pass. Local browser smoke verification restored the selected Deployment and Architecture immediately after close and re-entry without changing the workspace URL.
 - Standards and Spec re-reviews report no remaining findings. No observation session, AWS mutation, or DB migration was performed.
+
+### 2026-07-17 - Address Live Observation state update review feedback
+
+- Preserved the existing view-state reference when a Deployment viewport is stored with unchanged x, y, and zoom values.
+- Prevented the reference-data effect from notifying the parent when its CI/CD target or fallback Deployment is already selected.
+- Focused viewport tests pass 2/2 and modal contract tests pass 9/9. Harness, lint, typecheck, and build pass; Standards and Spec reviews report no findings.
+- The full test command remains blocked by the existing Git/CI/CD readiness contract assertion (`null !== 0`) in `packages/types`, unrelated to these Web-only changes. No DB migration or external mutation was performed.
