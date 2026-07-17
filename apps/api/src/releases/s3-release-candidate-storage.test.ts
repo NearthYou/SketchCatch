@@ -76,3 +76,35 @@ test("candidate checksum is calculated from the S3 stream without buffering the 
     sha256: createHash("sha256").update("abcdef").digest("hex")
   });
 });
+
+test("multipart finalization preserves S3 context when the provider reports UnknownError", async () => {
+  const providerError = Object.assign(new Error("UnknownError"), {
+    name: "UnknownError",
+    $metadata: { httpStatusCode: 403 }
+  });
+  const storage = createS3ReleaseCandidateStorage({
+    bucketName: "sketchcatch-artifacts",
+    s3Client: {
+      async send() {
+        throw providerError;
+      }
+    } as unknown as S3Client
+  });
+
+  await assert.rejects(
+    storage.completeMultipartUpload({
+      objectKey: "deployments/deployment-1/release-candidates/candidate-1/api-image.oci.tar",
+      uploadId: "upload-1",
+      parts: [{ partNumber: 1, etag: "etag-1" }],
+      expectedByteSize: 6,
+      maximumByteSize: 6
+    }),
+    (error) => {
+      assert(error instanceof Error);
+      assert.match(error.message, /release candidate S3 ListParts failed/i);
+      assert.match(error.message, /UnknownError/);
+      assert.match(error.message, /HTTP 403/);
+      return true;
+    }
+  );
+});
