@@ -1,9 +1,11 @@
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  BatchGetBuildsCommand,
   BatchGetProjectsCommand,
   CodeBuildClient,
   CreateProjectCommand,
   DeleteProjectCommand,
+  StartBuildCommand,
   UpdateProjectCommand,
   type CodeBuildClientConfig
 } from "@aws-sdk/client-codebuild";
@@ -66,6 +68,12 @@ phases:
   build:
     commands:
       - echo "SketchCatch server-generated buildspecOverride is required"
+`;
+const repositoryAccessVerificationBuildspec = `version: 0.2
+phases:
+  build:
+    commands:
+      - echo "SketchCatch repository access verified"
 `;
 const forbiddenBuildRoleActions = ["ecs:", "s3:", "cloudfront:", "iam:passrole"];
 const buildCacheLifecyclePolicy = {
@@ -174,6 +182,39 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
       return withClients(input, (clients) => verifyBuildEnvironment(clients, input));
     },
 
+    async verifyRepositoryAccess(input, requestedCommitSha) {
+      return withClients(input, async ({ codeBuild }) => {
+        const started = await codeBuild.send(
+          new StartBuildCommand({
+            projectName: input.codeBuildProjectName,
+            sourceVersion: requestedCommitSha,
+            buildspecOverride: repositoryAccessVerificationBuildspec,
+            artifactsOverride: { type: "NO_ARTIFACTS" }
+          })
+        );
+        const startedBuild = started["build"] as
+          | { id?: string; arn?: string }
+          | undefined;
+        const buildId = startedBuild?.id?.trim();
+        const initialBuildArn = startedBuild?.arn?.trim() || null;
+        if (!buildId) {
+          return {
+            verified: false,
+            requestedCommitSha,
+            resolvedCommitSha: null,
+            buildArn: initialBuildArn,
+            statusReason: "AWS CodeBuild did not return a repository verification build ID"
+          };
+        }
+        return waitForRepositoryAccessVerification(
+          codeBuild,
+          buildId,
+          initialBuildArn,
+          requestedCommitSha
+        );
+      });
+    },
+
     async remove(input) {
       return withRemovalClients(
         input,
@@ -230,6 +271,55 @@ export function createAwsProjectBuildEnvironmentGateway(options: {
         }
       );
     }
+  };
+}
+
+async function waitForRepositoryAccessVerification(
+  codeBuild: AwsCommandClient,
+  buildId: string,
+  initialBuildArn: string | null,
+  requestedCommitSha: string
+) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const response = await codeBuild.send(new BatchGetBuildsCommand({ ids: [buildId] }));
+    const build = (response["builds"] as
+      | Array<{
+          arn?: string;
+          buildStatus?: string;
+          resolvedSourceVersion?: string;
+        }>
+      | undefined)?.[0];
+    const buildArn = build?.arn?.trim() || initialBuildArn;
+    const resolvedCommitSha = build?.resolvedSourceVersion?.trim().toLowerCase() || null;
+    if (build?.buildStatus === "SUCCEEDED") {
+      const exactCommit = resolvedCommitSha === requestedCommitSha.toLowerCase();
+      return {
+        verified: exactCommit,
+        requestedCommitSha,
+        resolvedCommitSha,
+        buildArn,
+        statusReason: exactCommit
+          ? null
+          : "CodeBuild checkout commit did not match the confirmed repository commit"
+      };
+    }
+    if (["FAILED", "FAULT", "STOPPED", "TIMED_OUT"].includes(build?.buildStatus ?? "")) {
+      return {
+        verified: false,
+        requestedCommitSha,
+        resolvedCommitSha,
+        buildArn,
+        statusReason: `CodeBuild repository checkout failed with status ${build?.buildStatus}`
+      };
+    }
+    await delay(2_000);
+  }
+  return {
+    verified: false,
+    requestedCommitSha,
+    resolvedCommitSha: null,
+    buildArn: initialBuildArn,
+    statusReason: "CodeBuild repository checkout verification timed out"
   };
 }
 

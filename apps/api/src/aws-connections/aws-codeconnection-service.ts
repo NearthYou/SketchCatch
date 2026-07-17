@@ -14,7 +14,11 @@ import type {
   AwsCodeConnectionStatus
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { awsCodeConnections, awsConnections } from "../db/schema.js";
+import {
+  awsCodeConnections,
+  awsConnections,
+  githubInstallationConnections
+} from "../db/schema.js";
 import { createAwsSdkStsGateway } from "./aws-connection-test-service.js";
 
 export type VerifiedAwsConnectionForCodeConnection = {
@@ -27,6 +31,7 @@ export type VerifiedAwsConnectionForCodeConnection = {
 export type AwsCodeConnectionRecord = typeof awsCodeConnections.$inferSelect;
 
 export type AwsCodeConnectionRepository = {
+  listActiveGitHubInstallationIds(userId: string): Promise<string[]>;
   findVerifiedConnection(
     connectionId: string,
     userId: string
@@ -80,6 +85,8 @@ export type AwsCodeConnectionServiceOptions = {
 const defaultCreationReservationTtlMs = 2 * 60 * 1000;
 
 export type AwsCodeConnectionErrorCode =
+  | "GITHUB_INSTALLATION_REQUIRED"
+  | "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED"
   | "AWS_CONNECTION_REQUIRED"
   | "CODECONNECTION_NOT_FOUND"
   | "CODECONNECTION_CREATE_FAILED"
@@ -103,6 +110,19 @@ export function createPostgresAwsCodeConnectionRepository(
   db: Database
 ): AwsCodeConnectionRepository {
   return {
+    async listActiveGitHubInstallationIds(userId) {
+      const installations = await db
+        .select({ id: githubInstallationConnections.id })
+        .from(githubInstallationConnections)
+        .where(
+          and(
+            eq(githubInstallationConnections.userId, userId),
+            eq(githubInstallationConnections.status, "active")
+          )
+        );
+      return installations.map((installation) => installation.id);
+    },
+
     async findVerifiedConnection(connectionId, userId) {
       const [connection] = await db
         .select({
@@ -374,6 +394,20 @@ export async function createAwsCodeConnection(
   gateway: AwsCodeConnectionGateway = createAwsCodeConnectionGateway(),
   options: AwsCodeConnectionServiceOptions = {}
 ): Promise<AwsCodeConnectionResponse> {
+  const activeGitHubInstallationIds =
+    await repository.listActiveGitHubInstallationIds(input.userId);
+  if (activeGitHubInstallationIds.length === 0) {
+    throw new AwsCodeConnectionError(
+      "GITHUB_INSTALLATION_REQUIRED",
+      "Connect a GitHub App installation before authorizing AWS CodeBuild"
+    );
+  }
+  if (activeGitHubInstallationIds.length > 1) {
+    throw new AwsCodeConnectionError(
+      "MULTIPLE_GITHUB_INSTALLATIONS_UNSUPPORTED",
+      "Keep exactly one active GitHub App installation before authorizing AWS CodeBuild"
+    );
+  }
   const connection = await requireVerifiedConnection(input, repository);
   const now = options.now?.() ?? new Date();
   const connectionName = createAwsCodeConnectionName(connection.id);
