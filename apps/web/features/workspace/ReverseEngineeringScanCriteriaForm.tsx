@@ -1,4 +1,5 @@
 import { LoaderCircle, RefreshCw } from "lucide-react";
+import Link from "next/link";
 import type { AwsConnection, Project, ReverseEngineeringResourceSelection } from "@sketchcatch/types";
 import { isReverseEngineeringResourceSelectionChecked } from "./reverse-engineering-resource-types";
 import styles from "./reverse-engineering.module.css";
@@ -104,9 +105,9 @@ export function ReverseEngineeringScanCriteriaForm({
         {awsConnections.length === 0 ? (
           <div className={styles.notice}>
             <p>환경설정에서 AWS Role을 먼저 연결해 주세요.</p>
-            <a href="/dashboard/settings?tab=aws&next=reverse">
+            <Link href="/dashboard/settings?tab=aws&next=reverse">
               환경설정으로 이동
-            </a>
+            </Link>
           </div>
         ) : null}
       </section>

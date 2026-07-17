@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type {
   Deployment,
@@ -741,17 +742,17 @@ export function CicdConsoleScreen({
       </div>
 
       {config?.validationStatus === "required" ? (
-        <a className={styles.cicdRequiredState} href={projectSettingsHref}>
+        <Link className={styles.cicdRequiredState} href={projectSettingsHref}>
           프로젝트 설정에서 CI/CD branch와 경로를 확인하세요.
-        </a>
+        </Link>
       ) : null}
       {permissionFailure ? (
         <section className={styles.deploymentStageAlert} role="alert">
           <strong>GitHub 권한을 확인해 주세요.</strong>
           <p>{screenErrorMessage}</p>
-          <a className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
+          <Link className={styles.deploymentPrimaryButton} href={githubAccountSettingsHref}>
             GitHub App 설정 열기
-          </a>
+          </Link>
           <button
             className={styles.deploymentSecondaryButton}
             onClick={requestReadinessReload}
@@ -771,12 +772,12 @@ export function CicdConsoleScreen({
             GitHub App 연결이 필요합니다. 현재 로그인 방식과 관계없이 GitHub App을 연결한 뒤
             이 프로젝트의 저장소를 선택할 수 있습니다.
           </span>
-          <a href={githubAccountSettingsHref}>GitHub App 설정 열기</a>
+          <Link href={githubAccountSettingsHref}>GitHub App 설정 열기</Link>
         </section>
       ) : !repository ? (
         <section className={handoffStyles.notice} role="status">
           <span>이 프로젝트에서 사용할 Source Repository를 연결해 주세요.</span>
-          <a href={repositoryHref}>Repository 연결</a>
+          <Link href={repositoryHref}>Repository 연결</Link>
         </section>
       ) : null}
 
@@ -857,9 +858,9 @@ export function CicdConsoleScreen({
                       {item.actionLabel}
                     </button>
                   ) : !item.ready && item.href ? (
-                    <a className={styles.deploymentSecondaryButton} href={item.href}>
+                    <Link className={styles.deploymentSecondaryButton} href={item.href}>
                       {item.actionLabel}
-                    </a>
+                    </Link>
                   ) : null}
                 </li>
               ))}
