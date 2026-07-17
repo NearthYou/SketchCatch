@@ -27,6 +27,7 @@ export function useReverseEngineeringOptions({
 
   // 프로젝트와 AWS 연결 목록을 다시 읽고 선택값을 가능한 한 유지합니다.
   const loadOptions = useCallback(async () => {
+    const recoveryAwsConnectionId = getRecoveryAwsConnectionIdFromCurrentLocation();
     setLoadState("loading");
 
     try {
@@ -45,7 +46,7 @@ export function useReverseEngineeringOptions({
         return (
           getReverseEngineeringAwsConnectionRecovery({
             connections: nextAwsConnections,
-            selectedConnectionId: currentAwsConnectionId
+            selectedConnectionId: currentAwsConnectionId || recoveryAwsConnectionId
           }).selectedConnectionId ?? ""
         );
       });
@@ -71,4 +72,25 @@ export function useReverseEngineeringOptions({
     setSelectedProjectId,
     verifiedAwsConnections
   };
+}
+
+export function getReverseEngineeringAwsConnectionIdSearchParam(
+  values: readonly string[]
+): string {
+  if (values.length !== 1) {
+    return "";
+  }
+
+  return values[0]?.trim() ?? "";
+}
+
+function getRecoveryAwsConnectionIdFromCurrentLocation(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  return getReverseEngineeringAwsConnectionIdSearchParam(
+    searchParams.getAll("awsConnectionId")
+  );
 }

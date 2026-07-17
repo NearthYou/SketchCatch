@@ -1,6 +1,6 @@
 import type { AwsConnection } from "@sketchcatch/types";
 
-const settingsHref = "/dashboard/settings?tab=aws&next=reverse" as const;
+const SETTINGS_HREF = "/dashboard/settings?tab=aws&next=reverse" as const;
 
 export type ReverseEngineeringAwsConnectionReadiness =
   | "ready"
@@ -14,7 +14,7 @@ export type ReverseEngineeringAwsConnectionRecovery = {
   readonly title: string;
   readonly description: string;
   readonly actionLabel: string;
-  readonly settingsHref: typeof settingsHref;
+  readonly settingsHref: string;
   readonly selectedConnectionId: string | null;
 };
 
@@ -110,9 +110,18 @@ function createRecovery(input: {
     title: "AWS Role이 아직 준비되지 않았습니다.",
     description: input.description,
     actionLabel: input.actionLabel,
-    settingsHref,
+    settingsHref: createSettingsHref(input.selectedConnectionId),
     selectedConnectionId: input.selectedConnectionId
   };
+}
+
+function createSettingsHref(selectedConnectionId: string | null): string {
+  if (!selectedConnectionId) {
+    return SETTINGS_HREF;
+  }
+
+  const searchParams = new URLSearchParams({ awsConnectionId: selectedConnectionId });
+  return `${SETTINGS_HREF}&${searchParams.toString()}`;
 }
 
 function resolveSelectedConnection(input: {

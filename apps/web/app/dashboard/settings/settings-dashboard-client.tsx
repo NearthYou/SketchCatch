@@ -43,6 +43,7 @@ export function SettingsDashboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const recoveryNavigation = getSettingsAwsRecoveryNavigation({
+    awsConnectionId: getSingleSearchParam(searchParams.getAll("awsConnectionId")),
     next: getSingleSearchParam(searchParams.getAll("next")),
     tab: getSingleSearchParam(searchParams.getAll("tab"))
   });

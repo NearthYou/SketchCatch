@@ -80,7 +80,10 @@ test("pending AWS 연결은 정확한 복구 CTA와 새로고침을 보여주고
   assert.match(html, /AWS Role이 아직 준비되지 않았습니다\./);
   assert.match(html, /설정 계속/);
   assert.match(html, /AWS 연결 새로고침/);
-  assert.match(html, /\/dashboard\/settings\?tab=aws&amp;next=reverse/);
+  assert.match(
+    html,
+    /\/dashboard\/settings\?tab=aws&amp;next=reverse&amp;awsConnectionId=connection-1/
+  );
   assert.match(html, /disabled/);
   assert.doesNotMatch(html, /123456789012/);
   assert.doesNotMatch(html, /SketchCatchTerraformExecutionRole/);
@@ -95,6 +98,10 @@ test("검증 실패 연결은 연결 다시 확인 CTA를 보여준다", () => {
 
   assert.match(html, /재확인 필요/);
   assert.match(html, /연결 다시 확인/);
+  assert.match(
+    html,
+    /\/dashboard\/settings\?tab=aws&amp;next=reverse&amp;awsConnectionId=connection-1/
+  );
   assert.match(html, /disabled/);
   assert.doesNotMatch(html, /123456789012/);
   assert.doesNotMatch(html, /SketchCatchTerraformExecutionRole/);
