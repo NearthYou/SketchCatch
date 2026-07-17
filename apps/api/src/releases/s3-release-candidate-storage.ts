@@ -126,16 +126,20 @@ export function createS3ReleaseCandidateStorage(
       }
       const completedByteSize = object.ContentLength;
       if (completedByteSize !== uploadedByteSize || completedByteSize > input.maximumByteSize) {
-        await withReleaseCandidateStorageContext("DeleteObject", input.objectKey, () =>
-          s3Client.send(
-            new DeleteObjectCommand({
-              Bucket: bucketName,
-              Key: input.objectKey,
-              VersionId: versionId
-            })
-          )
-        );
-        throw new Error(`Completed release candidate object size changed: ${input.objectKey}`);
+        try {
+          await withReleaseCandidateStorageContext("DeleteObject", input.objectKey, () =>
+            s3Client.send(
+              new DeleteObjectCommand({
+                Bucket: bucketName,
+                Key: input.objectKey,
+                VersionId: versionId
+              })
+            )
+          );
+        } catch (cleanupError) {
+          throw new Error("Completed release candidate object size changed: " + input.objectKey, { cause: cleanupError });
+        }
+        throw new Error("Completed release candidate object size changed: " + input.objectKey);
       }
       return {
         byteSize: completedByteSize,
