@@ -29,7 +29,11 @@ export class TerraformDiagramValidationError extends Error {
 export function renderTerraformFromInfrastructureGraph(graph: InfrastructureGraph): string {
   const renderableNodeIds = new Set(
     graph.nodes
-      .filter((node) => node.config["sketchcatchReferenceTerraform"] !== true)
+      .filter(
+        (node) =>
+          node.config["sketchcatchReferenceTerraform"] !== true &&
+          !hasUnsupportedReverseEngineeringCloudFrontVpcOrigin(node)
+      )
       .map((node) => node.id)
   );
   const renderableGraph: InfrastructureGraph = {
@@ -235,6 +239,24 @@ function isReverseEngineeringResourceConfig(config: Record<string, unknown>): bo
     config["providerResourceType"] === "AWS::ElasticLoadBalancingV2::LoadBalancer" ||
     config["providerResourceType"] === "AWS::CloudFront::Distribution"
   );
+}
+
+// The AWS summary proves a VPC origin exists, but not enough provider configuration to recreate it.
+// Omit the whole reverse-engineered distribution rather than emit an invalid origin block.
+function hasUnsupportedReverseEngineeringCloudFrontVpcOrigin(
+  node: InfrastructureGraphNode
+): boolean {
+  return (
+    node.iac.resourceType === "aws_cloudfront_distribution" &&
+    isReverseEngineeringResourceConfig(node.config) &&
+    normalizeRecordList(node.config["origin"]).some(
+      (origin) => hasCloudFrontVpcOriginConfig(origin)
+    )
+  );
+}
+
+function hasCloudFrontVpcOriginConfig(origin: Record<string, unknown>): boolean {
+  return isRecord(origin["vpcOriginConfig"]) || isRecord(origin["VpcOriginConfig"]);
 }
 
 function normalizeReverseEngineeringLoadBalancerConfig(

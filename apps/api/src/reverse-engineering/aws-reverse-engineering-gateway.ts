@@ -1509,6 +1509,14 @@ function normalizeCloudFrontOrigins(distribution: DistributionSummary): Record<s
       originPath: origin.OriginPath,
       s3OriginConfig: origin.S3OriginConfig
         ? compactRecord({ originAccessIdentity: origin.S3OriginConfig.OriginAccessIdentity })
+        : undefined,
+      vpcOriginConfig: origin.VpcOriginConfig
+        ? compactRecord({
+            originKeepaliveTimeout: origin.VpcOriginConfig.OriginKeepaliveTimeout,
+            originReadTimeout: origin.VpcOriginConfig.OriginReadTimeout,
+            ownerAccountId: origin.VpcOriginConfig.OwnerAccountId,
+            vpcOriginId: origin.VpcOriginConfig.VpcOriginId
+          })
         : undefined
     })
   );
@@ -2092,13 +2100,54 @@ function originExplicitlyReferencesResource(
 function isS3OriginDomainForBucket(domainName: string, bucketName: string): boolean {
   const normalizedDomainName = domainName.toLowerCase().replace(/\.$/, "");
   const normalizedBucketName = bucketName.toLowerCase();
-  const virtualHostedPrefix = `${normalizedBucketName}.s3`;
+  const endpointSuffix = normalizedDomainName.endsWith(".amazonaws.com.cn")
+    ? ".amazonaws.com.cn"
+    : normalizedDomainName.endsWith(".amazonaws.com")
+      ? ".amazonaws.com"
+      : null;
 
-  return (
-    normalizedDomainName === `${virtualHostedPrefix}.amazonaws.com` ||
-    normalizedDomainName.startsWith(`${virtualHostedPrefix}.`) ||
-    normalizedDomainName.startsWith(`${virtualHostedPrefix}-`)
+  if (!endpointSuffix || !normalizedDomainName.startsWith(`${normalizedBucketName}.`)) {
+    return false;
+  }
+
+  const endpoint = normalizedDomainName.slice(
+    normalizedBucketName.length + 1,
+    -endpointSuffix.length
   );
+
+  return isAwsS3Endpoint(endpoint);
+}
+
+function isAwsS3Endpoint(endpoint: string): boolean {
+  if (
+    endpoint === "s3" ||
+    endpoint === "s3-accelerate" ||
+    endpoint === "s3-accelerate.dualstack"
+  ) {
+    return true;
+  }
+
+  if (endpoint.startsWith("s3.dualstack.")) {
+    return isAwsRegion(endpoint.slice("s3.dualstack.".length));
+  }
+
+  if (endpoint.startsWith("s3-website.")) {
+    return isAwsRegion(endpoint.slice("s3-website.".length));
+  }
+
+  if (endpoint.startsWith("s3-website-")) {
+    return isAwsRegion(endpoint.slice("s3-website-".length));
+  }
+
+  if (endpoint.startsWith("s3.")) {
+    return isAwsRegion(endpoint.slice("s3.".length));
+  }
+
+  return endpoint.startsWith("s3-") && isAwsRegion(endpoint.slice("s3-".length));
+}
+
+function isAwsRegion(value: string): boolean {
+  return /^[a-z]{2}(?:-gov)?-[a-z0-9-]+-\d+$/.test(value);
 }
 
 function uniqueDiscoveredRelationships(

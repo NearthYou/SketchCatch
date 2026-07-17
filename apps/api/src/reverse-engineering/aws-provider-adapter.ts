@@ -176,7 +176,7 @@ function toDiscoveredResource(
   idMap: ReadonlyMap<string, string>,
   displayName: string
 ): DiscoveredResource {
-  const resourceType = awsResourceTypeMap.get(record.providerResourceType) ?? "UNKNOWN";
+  const resourceType = resolveAwsResourceType(record);
   const terraformResourceType = terraformResourceTypeMap.get(resourceType);
   const terraformResourceName = createTerraformResourceName(record.providerResourceId);
   const missingTerraformFields = getMissingTerraformCreationFields(resourceType, record.config);
@@ -216,6 +216,35 @@ function toDiscoveredResource(
     analysisExcluded: true,
     importSuggestionStatus: "unsupported_resource_type"
   };
+}
+
+function resolveAwsResourceType(record: AwsDiscoveredResourceRecord): ResourceType {
+  const resourceType = awsResourceTypeMap.get(record.providerResourceType) ?? "UNKNOWN";
+
+  return resourceType === "LOAD_BALANCER" && !hasNormalizedApplicationLoadBalancerType(record)
+    ? "UNKNOWN"
+    : resourceType;
+}
+
+// Resource Explorer/Tagging inventory only proves an ELBv2 identifier exists.
+// Promote it only after the dedicated reader has normalized an application type.
+function hasNormalizedApplicationLoadBalancerType(record: AwsDiscoveredResourceRecord): boolean {
+  if (isNetworkLoadBalancerArn(record.providerResourceId)) {
+    return false;
+  }
+
+  const { config } = record;
+  const loadBalancerTypes = [config["loadBalancerType"], config["type"]].filter(
+    (value): value is string => typeof value === "string"
+  );
+
+  return loadBalancerTypes.length > 0 && loadBalancerTypes.every((value) => value === "application");
+}
+
+function isNetworkLoadBalancerArn(providerResourceId: string): boolean {
+  return /^arn:[^:]+:elasticloadbalancing:[^:]+:[^:]+:loadbalancer\/net\//.test(
+    providerResourceId
+  );
 }
 
 // AWS의 attached_to 같은 관계 이름을 내부 관계 이름으로 줄여서 보드와 분석기가 같이 쓰게 합니다.
@@ -357,16 +386,24 @@ function getMissingTerraformCreationFields(
   if (resourceType === "LOAD_BALANCER") {
     return [
       ...(getNonEmptyString(config["name"]) ? [] : ["name"]),
-      ...(getNonEmptyString(config["type"]) ? [] : ["type"]),
+      ...(
+        getNonEmptyString(config["loadBalancerType"]) ?? getNonEmptyString(config["type"])
+          ? []
+          : ["type"]
+      ),
       ...(getNonEmptyString(config["scheme"]) ? [] : ["scheme"]),
       ...(hasLoadBalancerSubnetPlacement(config) ? [] : ["subnetIds/subnetMapping"])
     ];
   }
 
   if (resourceType === "CLOUDFRONT") {
+    const hasVpcOrigin = hasCloudFrontVpcOrigin(config["origin"]);
+
     return [
       ...(typeof config["enabled"] === "boolean" ? [] : ["enabled"]),
-      ...(hasCloudFrontOrigin(config["origin"]) ? [] : ["origin"]),
+      ...(hasCloudFrontOrigin(config["origin"])
+        ? []
+        : [hasVpcOrigin ? "origin.vpcOriginConfig" : "origin"]),
       ...(hasCloudFrontDefaultCacheBehavior(config["defaultCacheBehavior"])
         ? []
         : ["defaultCacheBehavior"]),
@@ -387,10 +424,21 @@ function hasCloudFrontOrigin(value: unknown): boolean {
     value.every(
       (origin) =>
         isRecord(origin) &&
+        !hasCloudFrontVpcOriginConfig(origin) &&
         getNonEmptyString(origin["originId"]) !== null &&
         getNonEmptyString(origin["domainName"]) !== null
     )
   );
+}
+
+function hasCloudFrontVpcOrigin(value: unknown): boolean {
+  return Array.isArray(value) && value.some(
+    (origin) => isRecord(origin) && hasCloudFrontVpcOriginConfig(origin)
+  );
+}
+
+function hasCloudFrontVpcOriginConfig(origin: Record<string, unknown>): boolean {
+  return isRecord(origin["vpcOriginConfig"]) || isRecord(origin["VpcOriginConfig"]);
 }
 
 function hasLoadBalancerSubnetPlacement(config: Record<string, unknown>): boolean {

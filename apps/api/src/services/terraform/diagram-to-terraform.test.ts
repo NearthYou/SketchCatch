@@ -1457,3 +1457,24 @@ test("생성 필수값이 부족한 Reverse Engineering Resource는 Terraform bl
 
   assert.equal(terraform, "");
 });
+
+test("Reverse Engineering CloudFront VPC origin은 불완전한 Terraform origin block을 만들지 않는다", () => {
+  const terraform = renderTerraformFromInfrastructureGraph({
+    nodes: [
+      createLiveObservationNode("aws_cloudfront_distribution", "private_origin", {
+        providerResourceType: "AWS::CloudFront::Distribution",
+        enabled: true,
+        origin: [
+          {
+            originId: "private-origin",
+            domainName: "internal.example.com",
+            VpcOriginConfig: { VpcOriginId: "vo_0123456789abcdef0" }
+          }
+        ]
+      })
+    ],
+    edges: []
+  });
+
+  assert.equal(terraform, "");
+});

@@ -71,6 +71,77 @@ test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform imp
   }
 });
 
+test("정규화된 application 증거가 없는 ELBv2 record는 NLB를 포함해 review-only로 남긴다", async () => {
+  const nlbArn =
+    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/net/shared/1111111111111111";
+  const contradictoryNlbArn =
+    "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/net/conflicting/2222222222222222";
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: nlbArn,
+      displayName: "resource-explorer-nlb",
+      config: { arn: nlbArn, type: "network" }
+    }),
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: ALB_ARN,
+      displayName: "unnormalized-load-balancer",
+      config: { arn: ALB_ARN }
+    }),
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: contradictoryNlbArn,
+      displayName: "contradictory-nlb",
+      config: { arn: contradictoryNlbArn, type: "application" }
+    })
+  ]);
+
+  assert.deepEqual(
+    result.discoveredResources.map((resource) => ({
+      resourceType: resource.resourceType,
+      analysisExcluded: resource.analysisExcluded,
+      terraformResourceType: resource.config["terraformResourceType"]
+    })),
+    [
+      { resourceType: "UNKNOWN", analysisExcluded: true, terraformResourceType: undefined },
+      { resourceType: "UNKNOWN", analysisExcluded: true, terraformResourceType: undefined },
+      { resourceType: "UNKNOWN", analysisExcluded: true, terraformResourceType: undefined }
+    ]
+  );
+  assert.deepEqual(result.architectureJson.nodes, []);
+  assert.ok(
+    result.importSuggestions.every(
+      (suggestion) =>
+        suggestion.status === "unsupported_resource_type" &&
+        suggestion.handoffReady === false &&
+        suggestion.importCommand === undefined
+    )
+  );
+});
+
+test("loadBalancerType application 정규화 값도 ALB 지원과 생성 가능성 판단에 쓴다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: ALB_ARN,
+      displayName: "normalized-alb",
+      config: {
+        arn: ALB_ARN,
+        name: "normalized-alb",
+        loadBalancerType: "application",
+        scheme: "internet-facing",
+        subnetIds: ["subnet-a"]
+      }
+    })
+  ]);
+
+  assert.equal(result.discoveredResources[0]?.resourceType, "LOAD_BALANCER");
+  assert.equal(result.discoveredResources[0]?.config["sketchcatchReferenceTerraform"], undefined);
+  assert.deepEqual(result.findings, []);
+  assert.equal(result.importSuggestions[0]?.handoffReady, true);
+});
+
 test("ALB ARN 또는 CloudFront distribution ID가 없으면 빈 import command 대신 수동 검토 이유를 반환한다", async () => {
   const result = await scan([
     record({
@@ -138,6 +209,42 @@ test("생성 필수값이 부족한 supported Resource는 Board와 import에 남
   assert.ok(result.findings.every((finding) => finding.category === "configuration"));
   assert.match(result.findings[0]?.description ?? "", /scheme.*subnetIds/);
   assert.match(result.findings[1]?.description ?? "", /origin.*defaultCacheBehavior/);
+});
+
+test("CloudFront VPC origin은 import identity를 보존하지만 reference-only로 fail-close 한다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::CloudFront::Distribution",
+      providerResourceId: CLOUDFRONT_ARN_A,
+      displayName: "private-origin-edge",
+      region: "global",
+      config: {
+        ...createCloudFrontConfig("EDISTRIBUTIONA"),
+        origin: [
+          {
+            originId: "private-origin",
+            domainName: "internal.example.com",
+            vpcOriginConfig: {
+              vpcOriginId: "vo_0123456789abcdef0",
+              ownerAccountId: "123456789012"
+            }
+          }
+        ]
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  const [suggestion] = result.importSuggestions;
+  const [finding] = result.findings;
+
+  assert.equal(resource?.resourceType, "CLOUDFRONT");
+  assert.equal(resource?.analysisExcluded ?? false, false);
+  assert.equal(resource?.config["sketchcatchReferenceTerraform"], true);
+  assert.deepEqual(resource?.config["terraformValidationMissingFields"], ["origin.vpcOriginConfig"]);
+  assert.equal(suggestion?.handoffReady, true);
+  assert.equal(suggestion?.importCommand?.split(" ").at(-1), "EDISTRIBUTIONA");
+  assert.match(finding?.description ?? "", /origin\.vpcOriginConfig/);
 });
 
 test("ALB subnet_mapping은 subnets 대신 새 Terraform 생성 위치 정보로 인정한다", async () => {
