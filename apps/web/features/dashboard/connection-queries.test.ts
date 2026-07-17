@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
-import { QueryObserver } from "@tanstack/react-query";
+import { fileURLToPath } from "node:url";
+import { keepPreviousData, QueryObserver } from "@tanstack/react-query";
 import type { AwsConnection } from "@sketchcatch/types";
 import { createAppQueryClient } from "../../components/query/create-query-client";
 import { queryKeys } from "../../lib/query-keys";
-import { getAwsConnectionsQueryPlaceholderData } from "./connection-queries";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const connectionQuerySource = readFileSync(join(currentDir, "connection-queries.ts"), "utf8");
 
 function createConnection(overrides: Partial<AwsConnection> = {}): AwsConnection {
   return {
@@ -35,27 +40,41 @@ test("recovery Settings에서 기본 Settings로 전환할 때 미검증 연결�
       status: "verified"
     })
   ];
-  const observer = new QueryObserver(queryClient, {
-    placeholderData: getAwsConnectionsQueryPlaceholderData(true),
+  const observer = new QueryObserver<AwsConnection[]>(queryClient, {
+    placeholderData: keepPreviousData,
     queryFn: async () => recoveryRows,
     queryKey: recoveryKey,
     staleTime: Infinity
   });
   const unsubscribe = observer.subscribe(() => undefined);
 
-  queryClient.setQueryData(recoveryKey, recoveryRows);
-  assert.deepEqual(observer.getCurrentResult().data, recoveryRows);
+  try {
+    queryClient.setQueryData(recoveryKey, recoveryRows);
+    assert.deepEqual(observer.getCurrentResult().data, recoveryRows);
 
-  observer.setOptions({
-    placeholderData: getAwsConnectionsQueryPlaceholderData(false),
-    queryFn: () => new Promise<AwsConnection[]>(() => undefined),
-    queryKey: verifiedOnlyKey
-  });
+    observer.setOptions({
+      enabled: false,
+      queryFn: async () => [],
+      queryKey: verifiedOnlyKey
+    });
 
-  const result = observer.getCurrentResult();
-  assert.equal(result.data, undefined);
-  assert.equal(result.isPlaceholderData, false);
+    const result = observer.getCurrentResult();
+    assert.equal(result.data, undefined);
+    assert.equal(result.isPlaceholderData, false);
+  } finally {
+    unsubscribe();
+    queryClient.clear();
+  }
+});
 
-  unsubscribe();
-  queryClient.clear();
+test("AWS 연결 query는 복구 화면에서만 이전 목록을 유지한다", () => {
+  const awsConnectionsQuerySource = connectionQuerySource.slice(
+    connectionQuerySource.indexOf("export function useAwsConnectionsQuery"),
+    connectionQuerySource.indexOf("export function useGitHubInstallationsQuery")
+  );
+
+  assert.match(
+    awsConnectionsQuerySource,
+    /\.\.\.\(includeUnverified\s*\?\s*\{\s*placeholderData:\s*keepPreviousData\s*\}\s*:\s*\{\s*\}\)/
+  );
 });
