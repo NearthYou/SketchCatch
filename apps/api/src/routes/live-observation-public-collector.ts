@@ -6,6 +6,7 @@ import {
   type LiveObservationPublicCollector,
   type LiveObservationPublicCollectorErrorCode
 } from "../live-observations/live-observation-public-collector.js";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 
 const paramsSchema = z.object({ observationId: z.uuid() });
 const bodySchema = z.object({ eventId: z.uuid() }).strict();
@@ -23,10 +24,10 @@ export async function registerLiveObservationPublicCollectorRoutes(
 
   app.setErrorHandler((error, _request, reply) => {
     if (hasErrorCode(error, "FST_ERR_CTP_BODY_TOO_LARGE")) {
-      return sendPublicError(reply, "bad_request", 413);
+      return sendPublicError(reply, "bad_request", 413, error);
     }
     if (hasErrorCode(error, "FST_ERR_CTP_INVALID_JSON_BODY")) {
-      return sendPublicError(reply, "bad_request", 400);
+      return sendPublicError(reply, "bad_request", 400, error);
     }
     throw error;
   });
@@ -106,10 +107,10 @@ function applyCors(reply: FastifyReply, audienceOrigin: string): void {
 
 function handlePublicError(error: unknown, reply: FastifyReply) {
   if (error instanceof z.ZodError) {
-    return sendPublicError(reply, "bad_request", 400);
+    return sendPublicError(reply, "bad_request", 400, error);
   }
   if (error instanceof LiveObservationPublicCollectorError) {
-    return sendPublicError(reply, error.code, statusFor(error.code));
+    return sendPublicError(reply, error.code, statusFor(error.code), error);
   }
   throw error;
 }
@@ -117,11 +118,12 @@ function handlePublicError(error: unknown, reply: FastifyReply) {
 function sendPublicError(
   reply: FastifyReply,
   code: LiveObservationPublicCollectorErrorCode,
-  status: 400 | 401 | 403 | 404 | 410 | 413 | 429 | 503
+  status: 400 | 401 | 403 | 404 | 410 | 413 | 429 | 503,
+  error?: unknown
 ) {
   return reply.status(status).send({
     error: `LIVE_OBSERVATION_COLLECTOR_${code.toUpperCase()}`,
-    message: "Live Observation collector request failed"
+    message: getDeveloperErrorMessage(error, "Live Observation collector request failed")
   });
 }
 

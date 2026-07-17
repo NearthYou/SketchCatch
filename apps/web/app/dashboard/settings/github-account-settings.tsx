@@ -1,39 +1,22 @@
 "use client";
 
 import { CheckCircle2, ExternalLink } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { GitHubInstallationConnection } from "@sketchcatch/types";
-import { useAuth } from "../../../components/auth/auth-provider";
 import { DashboardIcon } from "../../../components/dashboard/dashboard-icons";
 import {
-  createGitHubAccountInstallUrl,
-  listGitHubAccountInstallations
+  createGitHubAccountInstallUrl
 } from "../../../features/workspace/api";
 import { getApiErrorMessage } from "../../../lib/api-client";
+import { useGitHubInstallationsQuery } from "../../../features/dashboard/connection-queries";
 import styles from "../dashboard-tools.module.css";
-
-type GitHubSettingsState = "loading" | "ready" | "error";
 
 // GitHub App installation과 repository 접근 권한을 사용자 계정 단위로 관리합니다.
 export function GitHubAccountSettings() {
-  const { status: authStatus } = useAuth();
-  const [installations, setInstallations] = useState<readonly GitHubInstallationConnection[]>([]);
-  const [loadState, setLoadState] = useState<GitHubSettingsState>("loading");
+  const installationsQuery = useGitHubInstallationsQuery();
+  const installations: readonly GitHubInstallationConnection[] = installationsQuery.data ?? [];
   const [actionPending, setActionPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-
-  async function loadInstallations(): Promise<void> {
-    setLoadState("loading");
-    setErrorMessage("");
-
-    try {
-      setInstallations(await listGitHubAccountInstallations());
-      setLoadState("ready");
-    } catch (error) {
-      setLoadState("error");
-      setErrorMessage(getApiErrorMessage(error, "GitHub 연결 정보를 불러오지 못했습니다."));
-    }
-  }
 
   async function openGitHubInstallation(): Promise<void> {
     setActionPending(true);
@@ -48,14 +31,12 @@ export function GitHubAccountSettings() {
     }
   }
 
-  useEffect(() => {
-    if (authStatus === "authenticated") {
-      void loadInstallations();
-    }
-  }, [authStatus]);
-
   return (
-    <section className={styles.settingsSection} aria-labelledby="github-account-settings-title">
+    <section
+      aria-labelledby="github-account-settings-title"
+      className={styles.settingsSection}
+      id="github-account-connection"
+    >
       <header>
         <DashboardIcon name="github" />
         <div>
@@ -64,25 +45,31 @@ export function GitHubAccountSettings() {
         </div>
       </header>
 
-      {loadState === "loading" ? (
+      {installationsQuery.isPending && installations.length === 0 ? (
         <p className={styles.githubSettingsMessage} role="status">
           GitHub 연결 상태를 확인하고 있습니다.
         </p>
       ) : null}
 
-      {loadState === "error" ? (
+      {installationsQuery.isError ? (
         <div className={styles.githubSettingsError} role="alert">
-          <p>{errorMessage}</p>
-          <button disabled={actionPending} onClick={() => void loadInstallations()} type="button">
+          <p>{getApiErrorMessage(installationsQuery.error, "GitHub 연결 정보를 불러오지 못했습니다.")}</p>
+          <button disabled={actionPending} onClick={() => void installationsQuery.refetch()} type="button">
             다시 시도
           </button>
         </div>
       ) : null}
 
-      {loadState === "ready" && installations.length === 0 ? (
+      {installationsQuery.isSuccess && installations.length === 0 ? (
         <p className={styles.githubSettingsMessage} role="status">
           아직 연결된 GitHub App installation이 없습니다.
         </p>
+      ) : null}
+
+      {errorMessage ? (
+        <div className={styles.githubSettingsError} role="alert">
+          <p>{errorMessage}</p>
+        </div>
       ) : null}
 
       {installations.length > 0 ? (
@@ -112,17 +99,27 @@ export function GitHubAccountSettings() {
         </div>
       ) : null}
 
-      <div className={styles.githubSettingsActions}>
-        <button
-          className={styles.primaryAction}
-          disabled={actionPending}
-          onClick={() => void openGitHubInstallation()}
-          type="button"
-        >
-          <DashboardIcon name="github" />
-          {actionPending ? "GitHub로 이동 중" : "GitHub App 설치/권한 추가"}
-        </button>
-      </div>
+      {installations.length > 1 ? (
+        <div className={styles.githubSettingsError} role="alert">
+          <p>
+            GitHub 연결 정리 필요: AWS CodeBuild 승인 대상을 하나로 확정하려면 활성 연결을 하나만 남겨 주세요.
+          </p>
+        </div>
+      ) : null}
+
+      {installations.length === 0 ? (
+        <div className={styles.githubSettingsActions}>
+          <button
+            className={styles.primaryAction}
+            disabled={actionPending}
+            onClick={() => void openGitHubInstallation()}
+            type="button"
+          >
+            <DashboardIcon name="github" />
+            {actionPending ? "GitHub로 이동 중" : "GitHub 연결하기"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -953,8 +953,15 @@ function createDefaultProviderPrompt(target: LlmExplanationTarget, payload: unkn
           "For Terraform preview explanations, review the Terraform code and deterministic preview result as IaC evidence.",
           "Use the AWS Well-Architected Framework pillars to evaluate the preview: operational excellence, security, reliability, performance efficiency, cost optimization, and sustainability.",
           "Return exactly six highlights, in this order: operational excellence, security, reliability, performance efficiency, cost optimization, sustainability.",
+          'Start every highlight with exactly one severity marker: "[보통]", "[확인 필요]", or "[심각]".',
+          'Use "[심각]" for an immediate material risk, "[확인 필요]" for missing evidence or a recommended correction, and "[보통]" when no issue is identified.',
+          'Format every highlight as three lines: "[등급] 기준\\n판단: concrete issue or confirmed strength\\n확인: exact setting, value, or action". Use JSON escaped newlines and never use | separators.',
+          "Keep each highlight within 110 Korean characters as complete plain Korean sentences: explain impact first, then one exact setting and action or evidence; avoid unexplained Terraform terms and vague fragments.",
+          "Return one nextActions item within 80 Korean characters and keep summary within 30 Korean characters.",
           "Each highlight must name the pillar in Korean and include both an observation and a recommendation.",
-          "Set wellArchitectedConclusion to an overall Korean evaluation that synthesizes the six pillar reviews.",
+          "Write wellArchitectedConclusion as exactly 3 complete Korean sentences and 200 to 380 Korean characters.",
+          "Use specific Terraform evidence to explain what is configured well and what is missing or risky, weaving strengths and problems naturally into a single paragraph without headings or bullet points.",
+          "Only claim a strength or problem when the payload supports it. If evidence is absent, say that it cannot be verified instead of claiming the setting is absent.",
           "Do not include codeSuggestion for Terraform preview explanations."
         ]
       : [];
@@ -962,7 +969,7 @@ function createDefaultProviderPrompt(target: LlmExplanationTarget, payload: unkn
   return [
     "Return JSON only. Do not wrap the response in markdown.",
     "The JSON shape must be:",
-    '{"target":"TARGET","summary":"short summary","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
+    '{"target":"TARGET","summary":"brief result label","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":"detailed paragraph or null"}',
     "For Terraform errors, codeSuggestion may be an object with currentCode, suggestedCode, and rationale, and wellArchitectedConclusion must stay null.",
     "For Terraform preview explanations, highlights must contain the six Well-Architected pillar reviews and wellArchitectedConclusion must contain the overall evaluation. For other cases, keep codeSuggestion null.",
     `TARGET must be "${target}".`,
@@ -988,12 +995,20 @@ function createAmazonQProviderPrompt(target: LlmExplanationTarget, payload: unkn
         ? [
             "Review the Terraform preview using the six AWS Well-Architected pillars.",
             "Return exactly six highlights and an overall wellArchitectedConclusion.",
+            'Start every highlight with exactly one severity marker: "[보통]", "[확인 필요]", or "[심각]".',
+            'Use "[심각]" for an immediate material risk, "[확인 필요]" for missing evidence or a recommended correction, and "[보통]" when no issue is identified.',
+            'Format every highlight as three lines: "[등급] 기준\\n판단: concrete issue or confirmed strength\\n확인: exact setting, value, or action". Use JSON escaped newlines and never use | separators.',
+            "Keep each highlight within 110 Korean characters as complete plain Korean sentences: explain impact first, then one exact setting and action or evidence; avoid unexplained Terraform terms and vague fragments.",
+            "Return one nextActions item within 80 Korean characters and keep summary within 30 Korean characters.",
+            "Write wellArchitectedConclusion as exactly 3 complete Korean sentences and 200 to 380 Korean characters.",
+            "Use specific Terraform evidence to explain what is configured well and what is missing or risky, weaving strengths and problems naturally into a single paragraph without headings or bullet points.",
+            "Only claim a strength or problem when the payload supports it; describe unavailable evidence as not verifiable.",
             "Do not include codeSuggestion."
           ]
         : ["Use the deterministic payload as source of truth."];
   const header = [
     "Return Korean JSON only, no markdown.",
-    '{"target":"TARGET","summary":"short","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":null}',
+    '{"target":"TARGET","summary":"brief label","highlights":["item"],"nextActions":["item"],"fallbackUsed":false,"codeSuggestion":null,"wellArchitectedConclusion":"detailed paragraph or null"}',
     `TARGET="${target}".`,
     ...targetInstructions,
     "Payload:"
@@ -1068,11 +1083,10 @@ function compactPayloadForAmazonQ(target: LlmExplanationTarget, payload: unknown
   if (target === "terraform_preview_explanation") {
     return {
       target,
-      summary: trimProviderPayloadValue(payload.summary, 220),
-      findings: trimProviderPayloadArray(payload.findings, 6, 140),
-      checklist: trimProviderPayloadArray(payload.checklist, 6, 140),
-      wellArchitectedGuidance: trimProviderPayloadArray(payload.wellArchitectedGuidance, 6, 160),
-      consensusRecommendation: trimProviderPayloadValue(payload.consensusRecommendation, 220)
+      terraformEvidence: trimProviderPayloadValue(payload.terraformEvidence, 600),
+      resourceTypes: trimProviderPayloadArray(payload.resourceTypes, 12, 60),
+      findings: trimProviderPayloadArray(payload.findings, 4, 90),
+      summary: trimProviderPayloadValue(payload.summary, 100)
     };
   }
 

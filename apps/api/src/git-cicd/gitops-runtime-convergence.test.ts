@@ -129,7 +129,7 @@ test("ECS reconciler rejects convergence when the observed service is not health
           containerName: evidence.containerName,
           imageUri: evidence.imageUri,
           runtimeConvergenceMarker:
-            `sketchcatch:artifact=${artifactFingerprint};target=${targetFingerprint}`
+            `sketchcatch:artifact=${artifactFingerprint}:target=${targetFingerprint}`
         };
       }
     }

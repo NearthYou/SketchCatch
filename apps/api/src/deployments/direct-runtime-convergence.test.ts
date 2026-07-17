@@ -108,6 +108,7 @@ test("Direct preparation rejects a stale target fingerprint before artifact prov
     async savePreparedRelease() { throw new Error("not used"); },
     async saveCompletedRelease() { throw new Error("not used"); },
     async saveFailedRelease() { throw new Error("not used"); },
+    async savePartialRelease() { throw new Error("not used"); },
     async resetReleaseForRetry() { throw new Error("not used"); }
   } satisfies DirectApplicationReleaseRepository;
   const gateway = {
@@ -175,6 +176,7 @@ function createHarness(options: {
       return release;
     },
     async saveFailedRelease() { throw new Error("unexpected failure"); },
+    async savePartialRelease() { throw new Error("unexpected partial release"); },
     async resetReleaseForRetry() { throw new Error("not used"); }
   } satisfies DirectApplicationReleaseRepository;
   const gateway = {
@@ -280,6 +282,8 @@ function createPreparedRelease(): DirectApplicationReleaseRecord {
     commitSha,
     artifactDigestAlgorithm: "sha256",
     artifactDigest: digest,
+    releaseCandidateId: null,
+    compositeDigest: null,
     providerRevision: {
       provider: "aws",
       resourceType: "application_artifact",
@@ -287,6 +291,8 @@ function createPreparedRelease(): DirectApplicationReleaseRecord {
       artifactReference: reference,
       metadata: { artifactFingerprint }
     },
+    frontendEvidence: null,
+    failureStage: null,
     outputUrl: null,
     status: "pending",
     healthEvidence: null,

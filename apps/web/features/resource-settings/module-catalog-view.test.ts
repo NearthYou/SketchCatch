@@ -16,6 +16,23 @@ const modulePanelSource = panelSource.slice(
   panelSource.indexOf("function ModuleCatalogCard")
 );
 
+test("resource panel keeps its icon-only Resources and Modules view switch", () => {
+  assert.match(panelSource, /useState<"resources" \| "modules">\("resources"\)/);
+  assert.match(panelSource, /aria-label="리소스 보기 방식"/);
+  assert.match(
+    panelSource,
+    /aria-label="리소스 목록 보기"[\s\S]*?onClick=\{\(\) => setActiveResourceView\("resources"\)\}/
+  );
+  assert.match(
+    panelSource,
+    /aria-label="모듈 목록 보기"[\s\S]*?onClick=\{\(\) => setActiveResourceView\("modules"\)\}/
+  );
+  assert.match(
+    panelSource,
+    /activeResourceView === "modules" \? \([\s\S]*?<ModuleCatalogPanel onModuleAdd=\{onModuleAdd\} \/>[\s\S]*?\) : \(/
+  );
+});
+
 test("catalog view는 기능별·용도별 사용자 언어로 모든 Module을 노출한다", () => {
   assert.deepEqual(moduleCatalogViews, [
     { id: "functional", label: "기능별" },

@@ -93,6 +93,26 @@ export function registerLiveObservationStoreContract(input: {
     assert.equal(read.session.live.observedAt, iso(START_MS + 1_234));
   });
 
+  contractTest("creates and reads a fixed Fargate V4 manifest", async ({ store }) => {
+    const createValue = createInput();
+    createValue.manifest = createFixedV4Manifest();
+
+    const created = await store.createSession(createValue);
+    assertKind(created, "created");
+    assert.deepEqual(created.session.manifest, createValue.manifest);
+
+    const read = await store.readSession({ observationId: OBSERVATION_ID });
+    assertKind(read, "active");
+    assert.deepEqual(read.session.manifest, createValue.manifest);
+    assert.equal(read.session.manifest.adapter.version, 4);
+    if (read.session.manifest.adapter.version !== 4) {
+      assert.fail("Expected adapter V4");
+    }
+    assert.deepEqual(read.session.manifest.adapter.payload.capacityTarget.scaling, {
+      mode: "fixed"
+    });
+  });
+
   contractTest("atomically creates one session for concurrent Deployment claims", async ({
     store
   }) => {
@@ -1341,6 +1361,64 @@ function createManifest(
         capacityTarget: {
           kind: "asg",
           autoScalingGroupName: "sc-lo-asg-" + resourceSuffix
+        }
+      }
+    }
+  };
+}
+
+function createFixedV4Manifest(
+  deploymentId: string = DEPLOYMENT_ID
+): DeploymentLiveObservationManifestV2 {
+  return {
+    schemaVersion: 2,
+    provider: "aws",
+    provenance: {
+      deploymentId,
+      terraformArtifactSha256: ARTIFACT_SHA,
+      awsConnectionId: AWS_CONNECTION_ID,
+      region: "ap-northeast-2",
+      verifiedAt: "2026-07-11T00:00:00.000Z"
+    },
+    endpoints: {
+      audienceBaseUrl: "https://audience.example.com",
+      trafficUrl: "https://d111111abcdef8.cloudfront.net/api/traffic"
+    },
+    pressure: {
+      metric: "requests_per_target_per_minute",
+      target: 60,
+      windowSeconds: 60
+    },
+    adapter: {
+      kind: "aws-live-observation",
+      version: 4,
+      payload: {
+        cloudFrontDistributionId: "E123456789ABC",
+        cloudFrontDomainName: "d111111abcdef8.cloudfront.net",
+        frontendBucketName: "audience-live-check-web-assets",
+        defaultOriginId: "web-assets",
+        originAccessControlId: "E123456789OAC",
+        apiOriginId: "api-alb",
+        apiPathPattern: "/api/*",
+        healthPathPattern: "/health",
+        frontendBucketPublicAccessBlocked: true,
+        bucketPolicyAllowsCloudFrontRead: true,
+        topologyVerifiedAt: "2026-07-11T00:00:00.000Z",
+        frontendState: "current",
+        loadBalancerDnsName:
+          "demo-1234567890.ap-northeast-2.elb.amazonaws.com",
+        loadBalancerArn:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:" +
+          "loadbalancer/app/demo/50dc6c495c0c9188",
+        targetGroupArn:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:" +
+          "targetgroup/demo/6d0ecf831eec9f09",
+        logGroupNames: ["/ecs/demo"],
+        capacityTarget: {
+          kind: "ecs_fargate",
+          clusterName: "demo-cluster",
+          serviceName: "demo-service",
+          scaling: { mode: "fixed" }
         }
       }
     }

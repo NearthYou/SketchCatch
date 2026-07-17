@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type {
   DiagramJson,
+  ProjectDraftConflictResponse,
   TerraformSyncFileInput
 } from "../../../../packages/types/src";
 import { useAuth } from "../../components/auth/auth-provider";
@@ -39,6 +41,7 @@ import {
   type ProjectBoardThumbnailLifecycleState
 } from "./project-board-thumbnail-lifecycle";
 import {
+  getDirtyProjectServerSaveState,
   getProjectSaveStatus,
   type ProjectLocalSaveState,
   type ProjectServerSaveState
@@ -50,6 +53,13 @@ import {
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
+import type { InitialCicdReturnCommand } from "./cicd-return-command";
+import { ProjectDraftConflictDialog } from "./ProjectDraftConflictDialog";
+import { ProjectDraftRecoveryDialog } from "./ProjectDraftRecoveryDialog";
+import {
+  claimProjectDraftTabCacheWorkspaceId,
+  type ProjectDraftTabCacheClaim
+} from "./project-draft-tab-cache";
 import styles from "./workspace.module.css";
 
 const LOCAL_SAVE_DEBOUNCE_MS = 800;
@@ -78,6 +88,7 @@ export type ProjectDraftPersistenceController = {
 export type ProjectWorkspaceDraftManagerProps = {
   cloudPlatform?: WorkspaceCloudPlatform | undefined;
   initialRightPanelView?: WorkspaceRightPanelView | undefined;
+  initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   localCacheWorkspaceId?: string | undefined;
   localSaveDebounceMs?: number | undefined;
   onDraftPersistenceReady?: ((controller: ProjectDraftPersistenceController) => void) | undefined;
@@ -90,12 +101,60 @@ export type ProjectWorkspaceDraftManagerProps = {
 };
 
 export function ProjectWorkspaceDraftManager(props: ProjectWorkspaceDraftManagerProps) {
-  return <ProjectWorkspaceDraftManagerState key={props.projectId} {...props} />;
+  return <ProjectWorkspaceDraftManagerCacheScope key={props.projectId} {...props} />;
+}
+
+function ProjectWorkspaceDraftManagerCacheScope(props: ProjectWorkspaceDraftManagerProps) {
+  const explicitWorkspaceId = props.localCacheWorkspaceId ?? props.workspaceId;
+  const [cacheClaim, setCacheClaim] = useState<ProjectDraftTabCacheClaim | null>(() =>
+    explicitWorkspaceId
+      ? {
+          release: () => undefined,
+          workspaceId: explicitWorkspaceId
+        }
+      : null
+  );
+
+  useEffect(() => {
+    if (explicitWorkspaceId) {
+      return;
+    }
+
+    let activeClaim: ProjectDraftTabCacheClaim | null = null;
+    let cancelled = false;
+
+    void claimProjectDraftTabCacheWorkspaceId({}).then((claim) => {
+      if (cancelled) {
+        claim.release();
+        return;
+      }
+
+      activeClaim = claim;
+      setCacheClaim(claim);
+    });
+
+    return () => {
+      cancelled = true;
+      activeClaim?.release();
+    };
+  }, [explicitWorkspaceId]);
+
+  if (!cacheClaim) {
+    return <WorkspaceNotice title="Project workspace" body="프로젝트 복구 상태를 확인하고 있습니다." />;
+  }
+
+  return (
+    <ProjectWorkspaceDraftManagerState
+      {...props}
+      resolvedLocalCacheWorkspaceId={cacheClaim.workspaceId}
+    />
+  );
 }
 
 function ProjectWorkspaceDraftManagerState({
+  initialCicdReturnCommand,
   initialRightPanelView,
-  localCacheWorkspaceId,
+  localCacheWorkspaceId: providedLocalCacheWorkspaceId,
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
   onDraftPersistenceReady,
   projectId,
@@ -103,16 +162,28 @@ function ProjectWorkspaceDraftManagerState({
   repository = defaultProjectDraftRepository,
   repositoryAnalysisHandoff,
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
-  workspaceId
-}: ProjectWorkspaceDraftManagerProps) {
+  workspaceId,
+  resolvedLocalCacheWorkspaceId: localCacheWorkspaceId
+}: ProjectWorkspaceDraftManagerProps & { resolvedLocalCacheWorkspaceId: string }) {
+  const router = useRouter();
   const { user } = useAuth();
+  const legacyLocalCacheWorkspaceId =
+    providedLocalCacheWorkspaceId || workspaceId ? undefined : `project:${projectId}`;
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialDiagram, setInitialDiagram] = useState<DiagramJson | null>(null);
   const [repositoryTemplateId, setRepositoryTemplateId] = useState<string | null>(null);
   const [localSaveState, setLocalSaveState] = useState<ProjectLocalSaveState>("idle");
   const [serverSaveState, setServerSaveState] = useState<ProjectServerSaveState>("server-idle");
+  const [projectDraftRevision, setProjectDraftRevision] = useState<number | null>(null);
+  const [draftConflict, setDraftConflict] = useState<ProjectDraftConflictResponse | null>(null);
+  const [draftRecoveryRequired, setDraftRecoveryRequired] = useState(false);
+  const [isReloadingLatestDraft, setReloadingLatestDraft] = useState(false);
+  const [draftReloadError, setDraftReloadError] = useState<string | null>(null);
   const [thumbnailLifecycleState, setThumbnailLifecycleState] =
     useState<ProjectBoardThumbnailLifecycleState>("idle");
+  const [isAiChatOpen, setAiChatOpen] = useState(false);
+  const [isBlockingPanelOpen, setBlockingPanelOpen] = useState(false);
+  const [isDeploymentConsoleOpen, setDeploymentConsoleOpen] = useState(false);
   const [deploymentOpenRequestId, setDeploymentOpenRequestId] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [terraformAiContext, setTerraformAiContext] = useState<WorkspaceTerraformAiContext>(
@@ -128,6 +199,7 @@ function ProjectWorkspaceDraftManagerState({
   const [displayProjectName, setDisplayProjectName] = useState(() =>
     resolveProjectWorkspaceTitle(projectName)
   );
+  const consumedCicdReturnRef = useRef(false);
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>([]);
   const [initialTerraformFiles, setInitialTerraformFiles] = useState<TerraformSyncFileInput[]>([]);
@@ -141,6 +213,8 @@ function ProjectWorkspaceDraftManagerState({
   const draftReadyRef = useRef(false);
   const draftChangeVersionRef = useRef(0);
   const serverDirtyRef = useRef(false);
+  const serverConflictRef = useRef(false);
+  const draftRecoveryRequiredRef = useRef(false);
   const serverSavingRef = useRef(false);
   const serverSavePromiseRef = useRef<Promise<FlushDraftToServerResult> | null>(null);
   const boardElementRef = useRef<HTMLElement | null>(null);
@@ -170,6 +244,27 @@ function ProjectWorkspaceDraftManagerState({
       cancelled = true;
     };
   }, [projectId, projectName]);
+
+  const closeAiChat = useCallback((): void => {
+    setAiChatOpen(false);
+  }, []);
+
+  const acknowledgeInitialCicdReturnCommand = useCallback(
+    (cleanedHref: string) => {
+      if (
+        consumedCicdReturnRef.current ||
+        !initialCicdReturnCommand ||
+        initialCicdReturnCommand.projectId !== projectId ||
+        initialCicdReturnCommand.cleanedHref !== cleanedHref
+      ) {
+        return;
+      }
+
+      consumedCicdReturnRef.current = true;
+      router.replace(cleanedHref, { scroll: false });
+    },
+    [initialCicdReturnCommand, projectId, router]
+  );
 
   useEffect(() => {
     const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
@@ -242,6 +337,17 @@ function ProjectWorkspaceDraftManagerState({
         return Promise.resolve({
           ok: false,
           error: new Error("Project draft is not loaded yet."),
+          conflict: null,
+          localDraft: localDraftRef.current,
+          serverDraft: null
+        });
+      }
+
+      if (draftRecoveryRequiredRef.current) {
+        return Promise.resolve({
+          ok: false,
+          error: new Error("Choose a project draft recovery source before saving."),
+          conflict: null,
           localDraft: localDraftRef.current,
           serverDraft: null
         });
@@ -269,6 +375,7 @@ function ProjectWorkspaceDraftManagerState({
                 return {
                   ok: false,
                   error: new Error("Draft changed while preparing server save."),
+                  conflict: null,
                   localDraft: localDraftRef.current,
                   serverDraft: null
                 };
@@ -279,6 +386,7 @@ function ProjectWorkspaceDraftManagerState({
               return {
                 ok: false,
                 error,
+                conflict: null,
                 localDraft: localDraftRef.current,
                 serverDraft: null
               };
@@ -299,7 +407,11 @@ function ProjectWorkspaceDraftManagerState({
             if (result.ok) {
               if (draftChangeVersionRef.current === serverSaveVersion) {
                 setCurrentLocalDraft(result.localDraft);
+                setProjectDraftRevision(result.serverDraft.revision);
                 serverDirtyRef.current = false;
+                serverConflictRef.current = false;
+                setDraftConflict(null);
+                setDraftReloadError(null);
                 setLocalSaveState("local-saved");
                 setServerSaveState("server-saved");
                 const thumbnailLifecycle = thumbnailLifecycleRef.current;
@@ -321,9 +433,18 @@ function ProjectWorkspaceDraftManagerState({
               return {
                 ok: false,
                 error: new Error("Draft changed while server save was in progress."),
+                conflict: null,
                 localDraft: localDraftRef.current,
                 serverDraft: null
               };
+            }
+
+            if (result.conflict) {
+              serverConflictRef.current = true;
+              setDraftConflict(result.conflict);
+              setDraftReloadError(null);
+              setServerSaveState("server-conflict");
+              return result;
             }
 
             if (draftChangeVersionRef.current === serverSaveVersion) {
@@ -341,6 +462,7 @@ function ProjectWorkspaceDraftManagerState({
             return {
               ok: false,
               error,
+              conflict: null,
               localDraft: localDraftRef.current,
               serverDraft: null
             };
@@ -368,7 +490,8 @@ function ProjectWorkspaceDraftManagerState({
         hasPendingLocalChanges: hasPendingLocalChangesRef.current,
         serverDirty: serverDirtyRef.current,
         serverSaving: serverSavingRef.current
-      })
+      }) ||
+      serverConflictRef.current
     ) {
       return;
     }
@@ -389,6 +512,11 @@ function ProjectWorkspaceDraftManagerState({
     setTerraformAiInteraction(null);
     setTerraformSafeFixApplyRequest(null);
     setTerraformSafeFixApplyResult(null);
+    setDraftConflict(null);
+    setDraftRecoveryRequired(false);
+    setDraftReloadError(null);
+    serverConflictRef.current = false;
+    draftRecoveryRequiredRef.current = false;
 
     async function loadWorkspace() {
       try {
@@ -417,6 +545,7 @@ function ProjectWorkspaceDraftManagerState({
         const loadedDraft = await repository.load({
           workspaceId,
           localCacheWorkspaceId,
+          legacyLocalCacheWorkspaceId,
           projectId,
           fallbackDiagram
         });
@@ -429,14 +558,22 @@ function ProjectWorkspaceDraftManagerState({
         latestDiagramRef.current = nextDiagram;
         latestTerraformFilesRef.current = loadedDraft.terraformFiles ?? [];
         hasPendingLocalChangesRef.current = false;
-        serverDirtyRef.current = loadedDraft.source === "local";
+        serverDirtyRef.current = loadedDraft.shouldAutoSaveServer;
+        serverConflictRef.current = loadedDraft.recoveryDecisionRequired;
+        draftRecoveryRequiredRef.current = loadedDraft.recoveryDecisionRequired;
         draftChangeVersionRef.current = 0;
         setInitialDiagram(nextDiagram);
         setInitialTerraformFiles(loadedDraft.terraformFiles ?? []);
         setRepositoryTemplateId(verifiedRepositoryTemplateId);
         setCurrentLocalDraft(loadedDraft.localDraft);
+        setProjectDraftRevision(loadedDraft.serverDraft?.revision ?? null);
         setLocalSaveState(loadedDraft.localDraft ? "local-saved" : "idle");
-        setServerSaveState(sourceServerSaveState[loadedDraft.source]);
+        setServerSaveState(
+          loadedDraft.recoveryDecisionRequired
+            ? "server-conflict"
+            : sourceServerSaveState[loadedDraft.source]
+        );
+        setDraftRecoveryRequired(loadedDraft.recoveryDecisionRequired);
 
         if (loadedDraft.source === "server" && loadedDraft.serverDraft) {
           void thumbnailLifecycleRef.current
@@ -465,6 +602,7 @@ function ProjectWorkspaceDraftManagerState({
     };
   }, [
     clearLocalSaveTimer,
+    legacyLocalCacheWorkspaceId,
     localCacheWorkspaceId,
     projectId,
     projectSlug,
@@ -495,7 +633,7 @@ function ProjectWorkspaceDraftManagerState({
     }
 
     const checkpointTimer = setInterval(() => {
-      if (!serverDirtyRef.current || serverSavingRef.current) {
+      if (!serverDirtyRef.current || serverSavingRef.current || serverConflictRef.current) {
         return;
       }
 
@@ -517,6 +655,82 @@ function ProjectWorkspaceDraftManagerState({
     });
   }, [flushDraftToServer, initialDiagram, loadState]);
 
+  const reloadLatestProjectDraft = useCallback(async (): Promise<void> => {
+    setReloadingLatestDraft(true);
+    setDraftReloadError(null);
+
+    try {
+      const loadedDraft = await repository.load({
+        workspaceId,
+        localCacheWorkspaceId,
+        legacyLocalCacheWorkspaceId,
+        projectId,
+        recoveryPreference: "server",
+        fallbackDiagram: EMPTY_DIAGRAM
+      });
+
+      if (loadedDraft.source !== "server" || !loadedDraft.serverDraft) {
+        throw new Error("Latest server draft is unavailable.");
+      }
+
+      clearLocalSaveTimer();
+      const nextDiagram = restoreSavedDiagram(loadedDraft.diagramJson, EMPTY_DIAGRAM);
+      const nextTerraformFiles = (loadedDraft.terraformFiles ?? []).map((file) => ({ ...file }));
+      latestDiagramRef.current = nextDiagram;
+      latestTerraformFilesRef.current = nextTerraformFiles;
+      hasPendingLocalChangesRef.current = false;
+      serverDirtyRef.current = false;
+      serverConflictRef.current = false;
+      draftRecoveryRequiredRef.current = false;
+      draftChangeVersionRef.current = 0;
+      setInitialDiagram(nextDiagram);
+      setInitialTerraformFiles(nextTerraformFiles);
+      terraformFilesReplacementIdRef.current += 1;
+      setTerraformFilesReplacement({
+        diagramFingerprint: toTerraformRefreshFingerprint(nextDiagram),
+        files: nextTerraformFiles,
+        id: terraformFilesReplacementIdRef.current,
+        notifyFilesChange: false
+      });
+      setCurrentLocalDraft(loadedDraft.localDraft);
+      setProjectDraftRevision(loadedDraft.serverDraft.revision);
+      setLocalSaveState("local-saved");
+      setServerSaveState("server-saved");
+      setDraftConflict(null);
+      setDraftRecoveryRequired(false);
+      setDraftReloadError(null);
+      void thumbnailLifecycleRef.current
+        ?.requestInitialServerRevision(loadedDraft.serverDraft.revision)
+        .catch(() => undefined);
+    } catch {
+      setDraftReloadError("최신 프로젝트 상태를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setReloadingLatestDraft(false);
+    }
+  }, [
+    clearLocalSaveTimer,
+    legacyLocalCacheWorkspaceId,
+    localCacheWorkspaceId,
+    projectId,
+    repository,
+    setCurrentLocalDraft,
+    workspaceId
+  ]);
+
+  const keepCurrentDraftEditing = useCallback((): void => {
+    setDraftConflict(null);
+    setDraftReloadError(null);
+  }, []);
+
+  const restoreLocalRecoveryDraft = useCallback((): void => {
+    draftRecoveryRequiredRef.current = false;
+    serverConflictRef.current = false;
+    serverDirtyRef.current = true;
+    setDraftRecoveryRequired(false);
+    setDraftReloadError(null);
+    setServerSaveState("server-dirty");
+  }, []);
+
   const handleDiagramChange = useCallback(
     (diagram: DiagramJson) => {
       latestDiagramRef.current = diagram;
@@ -524,7 +738,7 @@ function ProjectWorkspaceDraftManagerState({
       hasPendingLocalChangesRef.current = true;
       serverDirtyRef.current = true;
       setLocalSaveState("local-pending");
-      setServerSaveState("server-dirty");
+      setServerSaveState(getDirtyProjectServerSaveState(serverConflictRef.current));
       clearLocalSaveTimer();
       localSaveTimerRef.current = setTimeout(() => {
         void persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));
@@ -543,10 +757,7 @@ function ProjectWorkspaceDraftManagerState({
   }, []);
 
   const notifyTerraformAiInteraction = useCallback(
-    (
-      scope: WorkspaceAiContextInteraction["scope"],
-      diagnosticKey?: string | undefined
-    ): void => {
+    (scope: WorkspaceAiContextInteraction["scope"], diagnosticKey?: string | undefined): void => {
       terraformAiInteractionIdRef.current += 1;
       setTerraformAiInteraction({
         ...(diagnosticKey ? { diagnosticKey } : {}),
@@ -565,7 +776,7 @@ function ProjectWorkspaceDraftManagerState({
       hasPendingLocalChangesRef.current = true;
       serverDirtyRef.current = true;
       setLocalSaveState("local-pending");
-      setServerSaveState("server-dirty");
+      setServerSaveState(getDirtyProjectServerSaveState(serverConflictRef.current));
       clearLocalSaveTimer();
       localSaveTimerRef.current = setTimeout(() => {
         void persistLocalDraftNow().catch(() => setLocalSaveState("local-failed"));
@@ -646,7 +857,10 @@ function ProjectWorkspaceDraftManagerState({
         floatingPanel={(context) => (
           <WorkspaceAiChatDock
             context={context}
+            isBlockedByWorkspaceOverlay={isBlockingPanelOpen}
+            isOpen={isAiChatOpen}
             onApplyTerraformIssueFix={requestTerraformSafeFixApply}
+            onOpenChange={setAiChatOpen}
             projectId={projectId}
             repositoryAnalysisSourceRepositoryId={repositoryAnalysisHandoff?.sourceRepositoryId}
             repositoryTemplateId={repositoryTemplateId ?? undefined}
@@ -658,9 +872,11 @@ function ProjectWorkspaceDraftManagerState({
           />
         )}
         initialDiagram={initialDiagram}
+        isDeploymentConsoleOpen={isDeploymentConsoleOpen}
         onBoardReady={handleBoardReady}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
+        onWorkspacePanelOpen={closeAiChat}
         onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
         onSaveAndDeployRequest={saveAndOpenDeployment}
         projectName={displayProjectName}
@@ -670,8 +886,20 @@ function ProjectWorkspaceDraftManagerState({
             context={context}
             deploymentOpenRequestId={deploymentOpenRequestId}
             deploymentAvailability="enabled"
+            hasUnsavedProjectDraft={
+              serverSaveState === "server-dirty" ||
+              serverSaveState === "server-saving" ||
+              serverSaveState === "server-checkpoint-pending" ||
+              serverSaveState === "server-conflict" ||
+              serverSaveState === "server-failed"
+            }
             initialView={initialRightPanelView}
+            initialCicdReturnCommand={initialCicdReturnCommand}
             initialTerraformFiles={initialTerraformFiles}
+            onBlockingPanelOpenChange={setBlockingPanelOpen}
+            onDeploymentConsoleOpenChange={setDeploymentConsoleOpen}
+            onPanelOpenRequest={closeAiChat}
+            onInitialCicdReturnCommandReady={acknowledgeInitialCicdReturnCommand}
             onSelectTerraformIssue={setSelectedTerraformIssueKey}
             onTerraformAiContextChange={setTerraformAiContext}
             onTerraformAiInteraction={notifyTerraformAiInteraction}
@@ -679,6 +907,7 @@ function ProjectWorkspaceDraftManagerState({
             onTerraformFilesChange={handleTerraformFilesChange}
             onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
             projectId={projectId}
+            projectDraftRevision={projectDraftRevision}
             projectName={displayProjectName}
             selectedTerraformIssueKey={selectedTerraformIssueKey}
             terraformFilesReplacement={terraformFilesReplacement}
@@ -687,6 +916,22 @@ function ProjectWorkspaceDraftManagerState({
         )}
         saveStatus={getProjectSaveStatus(localSaveState, serverSaveState)}
       />
+      {draftConflict ? (
+        <ProjectDraftConflictDialog
+          errorMessage={draftReloadError ?? undefined}
+          isReloading={isReloadingLatestDraft}
+          onKeepEditing={keepCurrentDraftEditing}
+          onReloadLatest={() => void reloadLatestProjectDraft()}
+        />
+      ) : null}
+      {draftRecoveryRequired ? (
+        <ProjectDraftRecoveryDialog
+          errorMessage={draftReloadError ?? undefined}
+          isLoading={isReloadingLatestDraft}
+          onRestoreLocal={restoreLocalRecoveryDraft}
+          onUseServer={() => void reloadLatestProjectDraft()}
+        />
+      ) : null}
     </>
   );
 }

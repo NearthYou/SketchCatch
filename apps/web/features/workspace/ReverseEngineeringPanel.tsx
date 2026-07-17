@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
@@ -12,6 +13,8 @@ import type {
   Project
 } from "../../../../packages/types/src";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
+import { useAuth } from "../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../components/query/dashboard-query-invalidation";
 import {
   cancelReverseEngineeringScan,
   createArchitectureSnapshot,
@@ -51,7 +54,9 @@ import styles from "./reverse-engineering.module.css";
 export type ReverseEngineeringPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly createProjectOnApply?: boolean | undefined;
-  readonly onCandidatePanelChange?: ((state: ReverseEngineeringCandidatePanelState) => void) | undefined;
+  readonly onCandidatePanelChange?:
+    | ((state: ReverseEngineeringCandidatePanelState) => void)
+    | undefined;
   readonly projectId: string;
   readonly projectName: string;
 };
@@ -75,10 +80,12 @@ export function ReverseEngineeringPanel({
   projectId,
   projectName
 }: ReverseEngineeringPanelProps) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const router = useRouter();
-  const [selectedResourceTypes, setSelectedResourceTypes] = useState<ReverseEngineeringResourceSelection[]>([
-    REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
-  ]);
+  const [selectedResourceTypes, setSelectedResourceTypes] = useState<
+    ReverseEngineeringResourceSelection[]
+  >([REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION]);
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
@@ -136,7 +143,9 @@ export function ReverseEngineeringPanel({
     return createReverseEngineeringBoardCandidates(scanResponse.result);
   }, [scanResponse]);
   const selectedCandidate =
-    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? boardCandidates[0] ?? null;
+    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
+    boardCandidates[0] ??
+    null;
   const selectedCandidateResult = useMemo(() => {
     if (!scanResponse?.result || !selectedCandidate) {
       return null;
@@ -166,12 +175,7 @@ export function ReverseEngineeringPanel({
   }, [previewSourceDiagram, selectedCandidateResult]);
   const comparison = selectedCandidateApplication?.comparison ?? null;
   const hasDeletedSourceScan = useMemo(
-    () =>
-      hasDeletedReverseEngineeringSourceScan(
-        context.diagram,
-        scanHistory,
-        scanHistoryState
-      ),
+    () => hasDeletedReverseEngineeringSourceScan(context.diagram, scanHistory, scanHistoryState),
     [context.diagram, scanHistory, scanHistoryState]
   );
   const selectBoardCandidate = useCallback(
@@ -367,13 +371,20 @@ export function ReverseEngineeringPanel({
     setPreviewBaseDiagram(diagramToApply);
 
     try {
-      const targetProject = createProjectOnApply ? await createProject({ name: projectName }) : null;
+      const targetProject = createProjectOnApply
+        ? await createProject({ name: projectName })
+        : null;
       const targetProjectId = targetProject?.id ?? projectId;
+
+      if (targetProject) {
+        await invalidateProjectQueries(queryClient, user?.id);
+      }
 
       if (createProjectOnApply && targetProject) {
         await saveProjectDraft({
           projectId: targetProject.id,
-          diagramJson: diagramToApply
+          diagramJson: diagramToApply,
+          expectedRevision: null
         });
       }
 
@@ -454,7 +465,8 @@ export function ReverseEngineeringPanel({
         {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
         {hasDeletedSourceScan ? (
           <p className={styles.warning}>
-            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은 삭제됐습니다.
+            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은
+            삭제됐습니다.
           </p>
         ) : null}
 
@@ -472,7 +484,10 @@ export function ReverseEngineeringPanel({
           />
         )}
 
-        {selectedCandidateResponse?.result && comparison && selectedCandidate && selectedCandidateApplication ? (
+        {selectedCandidateResponse?.result &&
+        comparison &&
+        selectedCandidate &&
+        selectedCandidateApplication ? (
           <ReverseEngineeringResultPanel
             applyMessage={applyMessage}
             applyState={applyState}
@@ -549,7 +564,9 @@ async function runSavedScan({
     resourceTypes
   });
   const response =
-    startedResponse.result || startedResponse.scan.status === "failed" || startedResponse.scan.status === "cancelled"
+    startedResponse.result ||
+    startedResponse.scan.status === "failed" ||
+    startedResponse.scan.status === "cancelled"
       ? startedResponse
       : await pollReverseEngineeringScan(projectId, startedResponse.scan.id);
   const logs = await listReverseEngineeringScanLogs({
@@ -576,7 +593,11 @@ async function pollReverseEngineeringScan(
   for (let attempt = 0; attempt < SCAN_POLL_ATTEMPT_COUNT; attempt += 1) {
     const response = await getReverseEngineeringScan({ projectId, scanId });
 
-    if (response.result || response.scan.status === "failed" || response.scan.status === "cancelled") {
+    if (
+      response.result ||
+      response.scan.status === "failed" ||
+      response.scan.status === "cancelled"
+    ) {
       return response;
     }
 

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import type {
   AiArchitectureDraftResult,
   ArchitectureBoardCompilationProposal,
@@ -8,6 +11,8 @@ import type {
 import { WorkspaceAiChatRequestRegistry } from "../../../features/workspace/workspace-ai-chat-request";
 import { getAiStartDraftTransport } from "./ai-start-request-policy";
 import { resolveFinalArchitectureDiagram } from "./workspace-ai-presentation";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
 
 test("새 프로젝트는 progress stream, 기존 프로젝트는 JSON transport를 선택한다", () => {
   assert.equal(getAiStartDraftTransport(undefined), "stream");
@@ -44,4 +49,20 @@ test("Compiler 성공 전에는 final Preview Diagram을 공개하지 않는다"
   assert.equal(resolveFinalArchitectureDiagram(null, proposal), null);
   assert.equal(resolveFinalArchitectureDiagram(draft, null), null);
   assert.equal(resolveFinalArchitectureDiagram(draft, proposal), diagram);
+});
+
+test("AI 시작 Draft와 Patch는 Compiler proposal과 ProjectDraft revision 승인 경계를 함께 사용한다", () => {
+  const source = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+
+  assert.match(source, /compileArchitectureDraftProposal/);
+  assert.doesNotMatch(source, /getDiagramJsonForArchitectureDraft/);
+  assert.match(source, /showDraft\(nextDraft, baseDiagram, createPatchSummary\(response\)\)/);
+  assert.match(source, /getProjectDraft\(existingProjectId\)/);
+  assert.match(
+    source,
+    /expectedRevision:\s*existingProjectId \? \(existingProjectDraftRevision \?\? null\) : null/
+  );
+  assert.match(source, /diagramJson: compilationProposal\.diagram/);
+  assert.match(source, /canApprove:[\s\S]*compilationProposal !== null/);
+  assert.equal((source.match(/await saveProjectDraft\(/g) ?? []).length, 1);
 });

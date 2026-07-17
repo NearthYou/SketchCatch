@@ -2,15 +2,20 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Database } from "../db/client.js";
 import {
+  awsConnections,
   architectures,
   deployedResources,
+  deploymentJobs,
   deploymentLogs,
   deploymentPlanArtifacts,
   deployments,
   gitCicdHandoffs,
   projectAssets,
   projectDrafts,
+  projectBuildEnvironments,
+  projectExecutionLeases,
   projects,
+  releaseCandidates,
   terraformOutputs
 } from "../db/schema.js";
 import {
@@ -57,6 +62,26 @@ test("createProjectDeletePreview blocks deletion while a deployment is running",
 
   assert.equal(preview.mode, "blocked_running_deployment");
   assert.deepEqual(preview.availableActions, []);
+});
+
+test("createProjectDeletePreview blocks deletion while a project release lease is active", () => {
+  const preview = createProjectDeletePreview(
+    createSnapshot({ hasActiveExecutionLease: true })
+  );
+
+  assert.equal(preview.mode, "blocked_running_deployment");
+  assert.deepEqual(preview.availableActions, []);
+  assert.match(preview.message, /릴리즈|배포/);
+});
+
+test("createProjectDeletePreview blocks deletion while a deployment worker job is active", () => {
+  const preview = createProjectDeletePreview(
+    createSnapshot({ hasActiveDeploymentJob: true })
+  );
+
+  assert.equal(preview.mode, "blocked_running_deployment");
+  assert.deepEqual(preview.availableActions, []);
+  assert.match(preview.message, /릴리즈|배포/);
 });
 
 test("createProjectDeletePreview blocks automatic destroy when multiple deployments need cleanup", () => {
@@ -170,6 +195,7 @@ test("deleteProjectRecords removes Git/CI/CD handoffs before deleting referenced
   await deleteProjectRecords({
     action: "delete_project",
     db: fakeDb.db,
+    deletionGuard: fakeDb.deletionGuard,
     projectId,
     storage: {
       async deleteObject(objectKey) {
@@ -195,11 +221,156 @@ test("deleteProjectRecords removes Git/CI/CD handoffs before deleting referenced
   assert(handoffDeleteIndex < architectureDeleteIndex);
 });
 
+test("deleteProjectRecords cleans the project CodeBuild environment before deleting database records", async () => {
+  const fakeDb = new FakeProjectDeletionDb({
+    awsConnections: [
+      {
+        id: "connection-1",
+        userId,
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+        externalId: "external-id",
+        region: "ap-northeast-2"
+      }
+    ],
+    projectBuildEnvironments: [
+      {
+        projectId,
+        awsConnectionId: "connection-1",
+        codeBuildProjectName: "sketchcatch-project-build",
+        codeBuildServiceRoleArn:
+          "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-project"
+      }
+    ]
+  });
+
+  await deleteProjectRecords({
+    action: "delete_project",
+    db: fakeDb.db,
+    deletionGuard: fakeDb.deletionGuard,
+    projectId,
+    storage: { async deleteObject() {} },
+    userId,
+    async cleanupManagedResources(input) {
+      fakeDb.operations.push("cleanup:managed-build-environment");
+      assert.equal(input.resources.codeBuildProjects[0]?.projectName, "sketchcatch-project-build");
+      assert.equal(input.resources.codeConnectionArn, null);
+    }
+  });
+
+  assert(
+    fakeDb.operations.indexOf("claim:projects") !== -1 &&
+      fakeDb.operations.indexOf("claim:projects") <
+      fakeDb.operations.indexOf("cleanup:managed-build-environment") &&
+      fakeDb.operations.indexOf("cleanup:managed-build-environment") !== -1 &&
+      fakeDb.operations.indexOf("cleanup:managed-build-environment") <
+      fakeDb.operations.indexOf("delete:projects")
+  );
+});
+
+test("deleteProjectRecords preserves project records when managed AWS cleanup fails", async () => {
+  const fakeDb = new FakeProjectDeletionDb({
+    awsConnections: [
+      {
+        id: "connection-1",
+        userId,
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+        externalId: "external-id",
+        region: "ap-northeast-2"
+      }
+    ],
+    projectBuildEnvironments: [
+      {
+        projectId,
+        awsConnectionId: "connection-1",
+        codeBuildProjectName: "sketchcatch-project-build",
+        codeBuildServiceRoleArn:
+          "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-project"
+      }
+    ]
+  });
+
+  await assert.rejects(
+    deleteProjectRecords({
+      action: "delete_project",
+      db: fakeDb.db,
+      deletionGuard: fakeDb.deletionGuard,
+      projectId,
+      storage: { async deleteObject() {} },
+      userId,
+      async cleanupManagedResources() {
+        throw new Error("AccessDenied");
+      }
+    }),
+    /CodeBuild/i
+  );
+
+  assert.equal(fakeDb.operations.includes("delete:projects"), false);
+  assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), true);
+  assert.equal(fakeDb.operations.includes("release:projects"), false);
+
+  await deleteProjectRecords({
+    action: "delete_project",
+    db: fakeDb.db,
+    deletionGuard: fakeDb.deletionGuard,
+    projectId,
+    storage: { async deleteObject() {} },
+    userId,
+    async cleanupManagedResources() {}
+  });
+  assert.equal(fakeDb.operations.includes("delete:projects"), true);
+});
+
+test("deleteProjectRecords deletes immutable ReleaseCandidate object versions", async () => {
+  const deletedVersions: string[] = [];
+  const fakeDb = new FakeProjectDeletionDb({
+    releaseCandidates: [
+      {
+        apiArchiveObjectKey: "deployments/deployment-1/release-candidates/candidate-1/api.tar",
+        apiArchiveObjectVersionId: "api-v1",
+        frontendArchiveObjectKey:
+          "deployments/deployment-1/release-candidates/candidate-1/frontend.tar.zst",
+        frontendArchiveObjectVersionId: "frontend-v1",
+        frontendManifestObjectKey:
+          "deployments/deployment-1/release-candidates/candidate-1/frontend-manifest.json",
+        frontendManifestObjectVersionId: "frontend-manifest-v1",
+        manifestObjectKey:
+          "deployments/deployment-1/release-candidates/candidate-1/candidate.json",
+        manifestObjectVersionId: "candidate-v1"
+      }
+    ]
+  });
+
+  await deleteProjectRecords({
+    action: "delete_project",
+    db: fakeDb.db,
+    deletionGuard: fakeDb.deletionGuard,
+    projectId,
+    storage: {
+      async deleteObject() {},
+      async deleteObjectVersion(objectKey, versionId) {
+        deletedVersions.push(`${objectKey}@${versionId}`);
+      }
+    },
+    userId
+  });
+
+  assert.deepEqual(deletedVersions.sort(), [
+    "deployments/deployment-1/release-candidates/candidate-1/api.tar@api-v1",
+    "deployments/deployment-1/release-candidates/candidate-1/candidate.json@candidate-v1",
+    "deployments/deployment-1/release-candidates/candidate-1/frontend-manifest.json@frontend-manifest-v1",
+    "deployments/deployment-1/release-candidates/candidate-1/frontend.tar.zst@frontend-v1"
+  ]);
+});
+
 function createSnapshot(
   overrides: Partial<ProjectDeleteSnapshot> = {}
 ): ProjectDeleteSnapshot {
   return {
+    candidateObjectVersions: [],
     deployments: [],
+    hasActiveDeploymentJob: false,
+    hasActiveExecutionLease: false,
+    managedBuildEnvironment: null,
     planArtifacts: [],
     projectAssets: [],
     projectId,
@@ -209,24 +380,44 @@ function createSnapshot(
 
 const tableNames = new Map<unknown, string>([
   [architectures, "architectures"],
+  [awsConnections, "aws_connections"],
   [deployedResources, "deployed_resources"],
+  [deploymentJobs, "deployment_jobs"],
   [deploymentLogs, "deployment_logs"],
   [deploymentPlanArtifacts, "deployment_plan_artifacts"],
   [deployments, "deployments"],
   [gitCicdHandoffs, "git_cicd_handoffs"],
   [projectAssets, "project_assets"],
   [projectDrafts, "project_drafts"],
+  [projectBuildEnvironments, "project_build_environments"],
+  [projectExecutionLeases, "project_execution_leases"],
   [projects, "projects"],
+  [releaseCandidates, "release_candidates"],
   [terraformOutputs, "terraform_outputs"]
 ]);
 
 type FakeProjectDeletionDbInput = {
+  awsConnections?: unknown[];
   deployments?: unknown[];
+  projectBuildEnvironments?: unknown[];
   projectAssets?: unknown[];
+  releaseCandidates?: unknown[];
 };
 
 class FakeProjectDeletionDb {
   readonly db: Database;
+  readonly deletionGuard = {
+    claim: async () => {
+      this.operations.push("claim:projects");
+      return { startedAt: fixedDate };
+    },
+    release: async () => {
+      this.operations.push("release:projects");
+    },
+    markCleanupFailed: async () => {
+      this.operations.push("mark-cleanup-failed:projects");
+    }
+  };
   readonly operations: string[] = [];
 
   constructor(private readonly input: FakeProjectDeletionDbInput = {}) {
@@ -272,6 +463,18 @@ class FakeProjectDeletionDb {
 
     if (table === projectAssets) {
       return this.input.projectAssets ?? [];
+    }
+
+    if (table === projectBuildEnvironments) {
+      return this.input.projectBuildEnvironments ?? [];
+    }
+
+    if (table === awsConnections) {
+      return this.input.awsConnections ?? [];
+    }
+
+    if (table === releaseCandidates) {
+      return this.input.releaseCandidates ?? [];
     }
 
     return [];

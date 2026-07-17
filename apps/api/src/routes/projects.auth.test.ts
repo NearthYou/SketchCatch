@@ -198,7 +198,7 @@ test("DELETE /api/projects/:id deletes a project owned by the active user", asyn
     headers: await authHeaders(ACTIVE_USER_ID)
   });
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 200, response.body);
   assert.deepEqual(response.json(), {
     deleted: true,
     cleanup: {
@@ -1002,6 +1002,8 @@ function makeProject(overrides: Partial<ProjectRow> = {}): ProjectRow {
     userId: ACTIVE_USER_ID,
     name: "Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: new Date("2026-06-24T00:00:00.000Z"),
     updatedAt: new Date("2026-06-24T00:00:00.000Z"),
     ...overrides
@@ -1071,11 +1073,17 @@ function makeDeployment(overrides: Partial<DeploymentRow> = {}): DeploymentRow {
     approvedPreparedSnapshotHash: null,
     architectureId: "55555555-5555-4555-8555-555555555555",
     awsConnectionId: null,
+    awsAccountIdSnapshot: null,
+    awsRegionSnapshot: null,
+    awsConnectionNameSnapshot: null,
     liveProfile: "practice",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     blockedBy: null,
     blockedReason: null,
     cancelRequestedAt: null,
@@ -1185,9 +1193,28 @@ class ProjectRouteFakeDb {
         })
       }),
       update: (table: unknown) => ({
-        set: (values: Partial<DeploymentRow> | Partial<ProjectAssetRow>) => ({
+        set: (
+          values: Partial<DeploymentRow> | Partial<ProjectAssetRow> | Partial<ProjectRow>
+        ) => ({
           where: () => {
             let updatedRows: unknown[] = [];
+
+            if (table === projects) {
+              const projectValues = values as Partial<ProjectRow>;
+
+              this.projectRows = this.projectRows.map((project) => {
+                const shouldUpdate =
+                  project.userId === this.activeUserId &&
+                  (!this.requestedProjectId || project.id === this.requestedProjectId);
+
+                return shouldUpdate ? { ...project, ...projectValues } : project;
+              });
+              updatedRows = this.projectRows.filter(
+                (project) =>
+                  project.userId === this.activeUserId &&
+                  (!this.requestedProjectId || project.id === this.requestedProjectId)
+              );
+            }
 
             if (table === deployments) {
               const deploymentValues = values as Partial<DeploymentRow>;
@@ -1250,7 +1277,15 @@ class ProjectRouteFakeDb {
             }
 
             return {
-              returning: async () => updatedRows
+              returning: async (selection?: Record<string, unknown>) => {
+                if (table === projects && selection && "startedAt" in selection) {
+                  return (updatedRows as ProjectRow[]).map((project) => ({
+                    startedAt: project.deletionStartedAt
+                  }));
+                }
+
+                return updatedRows;
+              }
             };
           }
         })
@@ -1342,9 +1377,17 @@ class ProjectRouteFakeDb {
     }
 
     if (table === deployments) {
-      return this.deploymentRows.filter(
+      const rows = this.deploymentRows.filter(
         (deployment) => !this.requestedProjectId || deployment.projectId === this.requestedProjectId
       );
+
+      if (selection && Object.keys(selection).length === 1 && "id" in selection) {
+        return rows.filter(
+          (deployment) => deployment.status === "RUNNING" || deployment.activeStage !== null
+        );
+      }
+
+      return rows;
     }
 
     if (table === deployedResources) {
@@ -1364,6 +1407,18 @@ class SelectQuery {
 
   where(): this {
     return this;
+  }
+
+  for(): this {
+    return this;
+  }
+
+  innerJoin(): this {
+    return this;
+  }
+
+  limit(count: number): Promise<unknown[]> {
+    return Promise.resolve(this.resolveRows().slice(0, count));
   }
 
   orderBy(): Promise<unknown[]> {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import type {
   AwsConnection,
@@ -48,6 +49,7 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
     readonly onDirty?: (() => void) | undefined;
     readonly onSaved?: (() => void) | undefined;
     readonly preferEcsDefaults?: boolean | undefined;
+    readonly safeReturnTo?: string | null | undefined;
     readonly showSaveButton?: boolean | undefined;
   }
 >(function ProjectDeploymentTargetSettingsClient({
@@ -56,8 +58,10 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
   onDirty,
   onSaved,
   preferEcsDefaults = false,
+  safeReturnTo = null,
   showSaveButton = true
 }, ref) {
+  const router = useRouter();
   const { status: authStatus } = useAuth();
   const [connections, setConnections] = useState<AwsConnection[]>([]);
   const [target, setTarget] = useState<ProjectDeploymentTarget | null>(null);
@@ -71,6 +75,7 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
   const ecsDefaultsRepositoryRevision = ecsDefaults?.repositoryRevision;
   const ecsDefaultsSourceRoot = ecsDefaults?.sourceRoot;
   const ecsDefaultsDockerfilePath = ecsDefaults?.dockerfilePath;
+  const ecsDefaultsEcsWeb = ecsDefaults?.ecsWeb;
   const verifiedConnections = useMemo(
     () => connections.filter((connection) => connection.status === "verified"),
     [connections]
@@ -113,7 +118,8 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
                 projectName: ecsDefaultsProjectName,
                 repositoryRevision: ecsDefaultsRepositoryRevision,
                 sourceRoot: ecsDefaultsSourceRoot,
-                dockerfilePath: ecsDefaultsDockerfilePath
+                dockerfilePath: ecsDefaultsDockerfilePath,
+                ecsWeb: ecsDefaultsEcsWeb ?? null
               }
             : null;
         setDraft(
@@ -141,6 +147,7 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
   }, [
     authStatus,
     ecsDefaultsDockerfilePath,
+    ecsDefaultsEcsWeb,
     ecsDefaultsProjectName,
     ecsDefaultsRepositoryRevision,
     ecsDefaultsSourceRoot,
@@ -180,8 +187,11 @@ export const ProjectDeploymentTargetSettingsClient = forwardRef<
       setTarget(saved);
       setDraft(createDeploymentTargetDraft(saved, connections));
       setRequestState("idle");
-      setMessage("배포 타깃을 저장했습니다.");
       onSaved?.();
+      setMessage("배포 타깃을 저장했습니다.");
+      if (safeReturnTo) {
+        router.replace(safeReturnTo);
+      }
       return true;
     } catch (error) {
       setRequestState("error");

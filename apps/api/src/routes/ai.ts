@@ -40,6 +40,7 @@ import {
   type CreateArchitectureDraftResponseFactory,
   createArchitectureDraftFromRepositoryEvidence
 } from "../services/aiArchitectureDrafts.js";
+import { getDeveloperErrorMessage } from "../network/developer-error-message.js";
 import { simulateDesign } from "../services/aiDesignSimulation.js";
 import {
   createConfiguredAiExplanation,
@@ -900,7 +901,7 @@ function createArchitectureDraftStreamError(
 
   return {
     error: "internal_server_error",
-    message: "아키텍처 초안 생성 중 오류가 발생했습니다.",
+    message: getDeveloperErrorMessage(error, "아키텍처 초안 생성 중 오류가 발생했습니다."),
     statusCode: 500
   };
 }
@@ -965,8 +966,8 @@ function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepository {
   const repo = rawRepo?.replace(/\.git$/i, "");
 
   return {
-    owner: owner ?? "",
-    repo: repo ?? ""
+    owner: owner?.toLowerCase() ?? "",
+    repo: repo?.toLowerCase() ?? ""
   };
 }
 

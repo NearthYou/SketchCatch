@@ -29,8 +29,7 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
     "이 배포는 실시간 관측을 시작할 수 있는 상태가 아닙니다.",
   LIVE_OBSERVATION_GONE: "실시간 관측 세션이 종료되었거나 만료되었습니다.",
   LIVE_OBSERVATION_NOT_FOUND: "실시간 관측 세션을 찾을 수 없습니다.",
-  LIVE_OBSERVATION_OUTPUT_INVALID:
-    "배포 결과에 실시간 관측에 필요한 Terraform output이 없습니다.",
+  LIVE_OBSERVATION_OUTPUT_INVALID: "배포 결과에 실시간 관측에 필요한 Terraform output이 없습니다.",
   LIVE_OBSERVATION_RATE_LIMITED: "실시간 관측 요청 한도를 초과했습니다.",
   not_found: "요청한 정보를 찾을 수 없습니다.",
   service_unavailable: "AI 생성 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해주세요.",
@@ -41,39 +40,39 @@ const DEFAULT_API_ERROR_MESSAGES: Partial<Record<ApiErrorCode, string>> = {
 const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
   "API request failed": "요청 처리 중 오류가 발생했습니다.",
   "Authentication required": "인증이 필요합니다.",
-  "DATABASE_MIGRATION_REQUIRED":
+  DATABASE_MIGRATION_REQUIRED:
     "API 데이터베이스 마이그레이션이 필요합니다. 서버에서 pnpm --filter @sketchcatch/api db:migrate를 실행한 뒤 다시 시도해주세요.",
-  "DEPLOYMENT_OUTPUT_URL_REQUIRED":
+  DEPLOYMENT_OUTPUT_URL_REQUIRED:
     "ECS 배포 결과 URL이 설정되지 않았습니다. 프로젝트 배포 대상 설정에서 외부 HTTPS URL을 입력한 뒤 다시 시도해주세요.",
   "GitOps application handoff requires a confirmed project deployment target":
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
-  "PROJECT_DEPLOYMENT_TARGET_REQUIRED":
+  PROJECT_DEPLOYMENT_TARGET_REQUIRED:
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
-  "GIT_APP_AUTHENTICATION_FAILED":
+  GIT_APP_AUTHENTICATION_FAILED:
     "GitHub App 인증에 실패했습니다. GitHub App 설치와 서버 설정을 확인해주세요.",
-  "GIT_APP_INSTALLATION_FORBIDDEN":
+  GIT_APP_INSTALLATION_FORBIDDEN:
     "이 GitHub App installation은 다른 SketchCatch 계정에 연결되어 있거나 접근할 수 없습니다. GitHub App 연결을 다시 진행해주세요.",
-  "GIT_APP_USER_AUTHORIZATION_CANCELLED":
+  GIT_APP_USER_AUTHORIZATION_CANCELLED:
     "GitHub 사용자 권한 확인이 취소됐습니다. GitHub App 연결을 다시 진행해주세요.",
-  "GIT_APP_USER_AUTHORIZATION_FAILED":
+  GIT_APP_USER_AUTHORIZATION_FAILED:
     "GitHub 사용자 권한을 확인하지 못했습니다. GitHub App 설정과 Client Secret을 확인해주세요.",
-  "GIT_APP_USER_AUTHORIZATION_INVALID":
+  GIT_APP_USER_AUTHORIZATION_INVALID:
     "GitHub 사용자 권한 확인 정보가 만료됐거나 올바르지 않습니다. 연결을 다시 진행해주세요.",
-  "GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE":
+  GIT_APP_REPOSITORY_ACCESS_UNAVAILABLE:
     "GitHub App 연결이 해제됐거나 repository 접근 권한이 없습니다. 다시 연결해주세요.",
-  "GIT_APP_REPOSITORY_ARCHIVED":
+  GIT_APP_REPOSITORY_ARCHIVED:
     "연결된 GitHub repository가 archived 상태라 분석할 수 없습니다. 다른 repository를 연결해주세요.",
-  "GIT_APP_REPOSITORY_EVIDENCE_LIMIT_EXCEEDED":
+  GIT_APP_REPOSITORY_EVIDENCE_LIMIT_EXCEEDED:
     "repository가 안전한 정적 분석 범위를 초과했습니다. 분석 범위를 줄여주세요.",
-  "GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED":
+  GIT_APP_REPOSITORY_FILE_ENCODING_UNSUPPORTED:
     "분석 파일의 문자 인코딩을 읽을 수 없어 Repository Analysis를 중단했습니다.",
-  "GIT_APP_REPOSITORY_IDENTITY_MISMATCH":
+  GIT_APP_REPOSITORY_IDENTITY_MISMATCH:
     "연결 당시와 다른 GitHub repository가 감지되었습니다. repository를 다시 연결한 뒤 분석해주세요.",
-  "GIT_APP_REPOSITORY_TREE_TRUNCATED":
+  GIT_APP_REPOSITORY_TREE_TRUNCATED:
     "GitHub가 repository tree 일부만 반환해 안전하게 분석할 수 없습니다.",
-  "REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH":
+  REPOSITORY_ANALYSIS_TEMPLATE_MISMATCH:
     "Repository Analysis가 선택한 Template과 요청한 Template이 다릅니다. 분석 결과 화면에서 다시 시작해주세요.",
-  "REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE":
+  REPOSITORY_ANALYSIS_TEMPLATE_UNAVAILABLE:
     "저장된 Repository Analysis Template을 확인할 수 없습니다. repository를 다시 분석해주세요.",
   "AWS account ID must be 12 digits": "AWS Account ID는 12자리 숫자여야 합니다.",
   "AWS account is already connected": "이미 연결된 AWS Account입니다.",
@@ -99,7 +98,8 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "분석 중 repository 연결 상태가 바뀌었습니다. 현재 연결을 확인하고 다시 시도해주세요.",
   "GitHub repository analysis is not configured":
     "GitHub Repository Analysis 설정이 준비되지 않았습니다. GitHub App 설정을 확인해주세요.",
-  "Too many failed login attempts. Try again later.": "로그인 시도가 잠시 차단되었습니다. 잠시 후 다시 시도해주세요.",
+  "Too many failed login attempts. Try again later.":
+    "로그인 시도가 잠시 차단되었습니다. 잠시 후 다시 시도해주세요.",
   "Username already exists": "이미 사용 중인 아이디입니다.",
   "Username or password is incorrect": "아이디 또는 비밀번호가 올바르지 않습니다."
 };
@@ -122,6 +122,7 @@ export type ApiRequestContext = Readonly<{
 export class ApiClientError extends Error {
   readonly status: number;
   readonly code: ApiErrorCode;
+  readonly response: ApiErrorResponse | LoginLockedErrorResponse;
   readonly lockedUntil?: string;
   readonly requestContext: ApiRequestContext | undefined;
 
@@ -134,6 +135,7 @@ export class ApiClientError extends Error {
     this.name = "ApiClientError";
     this.status = status;
     this.code = response.error;
+    this.response = response;
     this.requestContext = requestContext;
 
     if ("lockedUntil" in response) {
@@ -188,11 +190,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   if (response.status === 401 && auth && retryOnUnauthorized) {
     const latestSession = readStoredAuthSession();
 
-    if (
-      requestAccessToken &&
-      latestSession &&
-      latestSession.accessToken !== requestAccessToken
-    ) {
+    if (requestAccessToken && latestSession && latestSession.accessToken !== requestAccessToken) {
       return apiFetch<T>(path, {
         ...options,
         retryOnUnauthorized: false
@@ -220,14 +218,25 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   return (await readJson(response)) as T;
 }
 
-export function getApiErrorMessage(error: unknown, fallbackMessage: string): string {
+export function getApiErrorMessage(
+  error: unknown,
+  fallbackMessage: string,
+  options: { developerMode?: boolean } = {}
+): string {
+  const developerMode = options.developerMode ?? process.env.NODE_ENV === "development";
   if (!(error instanceof ApiClientError)) {
-    return error instanceof Error
-      ? API_MESSAGE_TRANSLATIONS[error.message] ?? fallbackMessage
-      : fallbackMessage;
+    const message =
+      error instanceof Error
+        ? (API_MESSAGE_TRANSLATIONS[error.message] ?? fallbackMessage)
+        : fallbackMessage;
+    return appendDeveloperDiagnostic(message, error, developerMode);
   }
 
-  const message = getBaseApiErrorMessage(error, fallbackMessage);
+  const message = appendDeveloperDiagnostic(
+    getBaseApiErrorMessage(error, fallbackMessage),
+    error,
+    developerMode
+  );
   return appendApiDiagnostic(message, error);
 }
 
@@ -283,20 +292,21 @@ async function toApiClientError(
   response: Response,
   requestContext: ApiRequestContext
 ): Promise<ApiClientError> {
-  const responseContext = withRequestId(
-    requestContext,
-    response.headers.get("x-request-id")
-  );
+  const responseContext = withRequestId(requestContext, response.headers.get("x-request-id"));
   const responseBody = await readJson(response);
 
   if (isApiErrorResponse(responseBody)) {
     return new ApiClientError(response.status, responseBody, responseContext);
   }
 
-  return new ApiClientError(response.status, {
-    error: response.status >= 500 ? "internal_server_error" : "bad_request",
-    message: "요청 처리 중 오류가 발생했습니다."
-  }, responseContext);
+  return new ApiClientError(
+    response.status,
+    {
+      error: response.status >= 500 ? "internal_server_error" : "bad_request",
+      message: "요청 처리 중 오류가 발생했습니다."
+    },
+    responseContext
+  );
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -324,10 +334,14 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse | LoginLo
 }
 
 function createConnectionError(requestContext: ApiRequestContext): ApiClientError {
-  return new ApiClientError(0, {
-    error: "internal_server_error",
-    message: API_CONNECTION_ERROR_MESSAGE
-  }, requestContext);
+  return new ApiClientError(
+    0,
+    {
+      error: "internal_server_error",
+      message: API_CONNECTION_ERROR_MESSAGE
+    },
+    requestContext
+  );
 }
 
 function getBaseApiErrorMessage(error: ApiClientError, fallbackMessage: string): string {
@@ -357,14 +371,9 @@ function getSafeApiPath(value: string): string {
   }
 }
 
-function withRequestId(
-  context: ApiRequestContext,
-  requestId: string | null
-): ApiRequestContext {
+function withRequestId(context: ApiRequestContext, requestId: string | null): ApiRequestContext {
   const normalizedRequestId = requestId?.trim();
-  return normalizedRequestId
-    ? { ...context, requestId: normalizedRequestId }
-    : context;
+  return normalizedRequestId ? { ...context, requestId: normalizedRequestId } : context;
 }
 
 function appendApiDiagnostic(message: string, error: ApiClientError): string {
@@ -374,6 +383,126 @@ function appendApiDiagnostic(message: string, error: ApiClientError): string {
   const response = error.status === 0 ? "응답 없음" : `HTTP ${error.status}`;
   const requestId = context.requestId ? ` · 요청 ID ${context.requestId}` : "";
   return `${message} [${context.method} ${context.path} · ${response} · ${error.code}${requestId}]`;
+}
+
+type DeveloperErrorArea = Readonly<{
+  stage: string;
+  check: string;
+}>;
+
+function appendDeveloperDiagnostic(
+  message: string,
+  error: unknown,
+  developerMode: boolean
+): string {
+  if (!developerMode) return message;
+
+  const apiError = error instanceof ApiClientError ? error : undefined;
+  const area = getDeveloperErrorArea(apiError?.requestContext?.path);
+  const cause = sanitizeDeveloperCause(error instanceof Error ? error.message : "알 수 없는 오류");
+
+  return `${message} 개발자 진단 — 실패 단계: ${area.stage} · 서버 원인: ${cause} · 확인: ${area.check}`;
+}
+
+function getDeveloperErrorArea(path: string | undefined): DeveloperErrorArea {
+  const normalizedPath = path?.toLowerCase() ?? "";
+
+  if (normalizedPath.includes("live-observation")) {
+    return {
+      stage: "실시간 서비스 관측",
+      check:
+        "Deployment output과 관측 manifest, HTTPS Output URL, LIVE_OBSERVATION_* 설정, Redis 연결, AWS 관측 권한을 확인하세요."
+    };
+  }
+
+  if (
+    normalizedPath.includes("git-cicd") ||
+    normalizedPath.includes("release-runs") ||
+    normalizedPath.includes("infrastructure-runs")
+  ) {
+    return {
+      stage: "GitHub CI/CD 실행",
+      check:
+        "GitHub App installation과 repository 권한, Actions variables, OIDC claim, pipeline run DB 기록, ECS worker와 CodeBuild 실행 로그를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("build-environment") || normalizedPath.includes("codeconnection")) {
+    return {
+      stage: "AWS 빌드 환경 준비",
+      check:
+        "AWS에서 CodeBuild project와 service role이 존재하는지, Role trust/policy와 Permissions Boundary, CodeConnections 상태를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("deployment-target")) {
+    return {
+      stage: "프로젝트 배포 타깃 저장",
+      check:
+        "RDS의 deployment target, verified AWS connection, Repository build evidence, ECS/S3/CloudFront runtime 좌표를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("deployments")) {
+    return {
+      stage: "Terraform 및 애플리케이션 배포",
+      check:
+        "Deployment의 failureStage·errorSummary와 worker 로그를 먼저 보고 Terraform state/output, CodeBuild, ECS target health, S3와 CloudFront 결과를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("aws-connections") || normalizedPath.includes("/aws/connections")) {
+    return {
+      stage: "AWS 계정 연결",
+      check:
+        "CloudFormation Stack 상태와 생성 Role ARN, Account ID, Trust Policy의 Principal·External ID, 필요한 IAM 권한을 확인하세요."
+    };
+  }
+
+  if (
+    normalizedPath.includes("source-repositories") ||
+    normalizedPath.includes("repository-analysis") ||
+    normalizedPath.includes("github")
+  ) {
+    return {
+      stage: "GitHub Repository 연결 및 분석",
+      check:
+        "GitHub App installation 대상 계정·Repository, App 권한, 사용자 OAuth 승인, 분석 commit SHA와 Repository 접근 로그를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("terraform")) {
+    return {
+      stage: "Terraform 생성 및 검증",
+      check:
+        "검증 결과의 파일·행 번호와 생성 Terraform, 승인 snapshot, terraform init/validate/plan stderr를 확인하세요."
+    };
+  }
+
+  if (normalizedPath.includes("/ai/") || normalizedPath.includes("architecture")) {
+    return {
+      stage: "AI 아키텍처 생성 및 검증",
+      check:
+        "요청 payload와 모델 provider 설정, timeout·quota, API 서버의 동일 request ID 로그와 반환 스키마 검증 오류를 확인하세요."
+    };
+  }
+
+  return {
+    stage: "SketchCatch API 요청",
+    check:
+      "브라우저 Network 응답과 API 서버의 동일 request ID 로그, RDS 연결, 해당 route의 입력 검증 및 외부 서비스 응답을 확인하세요."
+  };
+}
+
+function sanitizeDeveloperCause(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim() || "구체 원인이 전달되지 않았습니다.";
+  const masked = normalized
+    .replace(
+      /\b(?:authorization|password|token|secret|client_secret|private_key|database_url|external_id)\b\s*[:=]\s*[^\s,}\]]+/gi,
+      "[REDACTED]"
+    )
+    .replace(/\/\/([^:\s/@]+):([^@\s]+)@/g, "//[REDACTED]@[REDACTED]");
+  return masked.length > 800 ? `${masked.slice(0, 797)}...` : masked;
 }
 
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {
@@ -409,7 +538,11 @@ function containsKorean(value: string): boolean {
 function setCsrfHeader(headers: Headers, method: string | undefined): void {
   const normalizedMethod = (method ?? "GET").toUpperCase();
 
-  if (normalizedMethod === "GET" || normalizedMethod === "HEAD" || headers.has(CSRF_TOKEN_HEADER_NAME)) {
+  if (
+    normalizedMethod === "GET" ||
+    normalizedMethod === "HEAD" ||
+    headers.has(CSRF_TOKEN_HEADER_NAME)
+  ) {
     return;
   }
 

@@ -5,6 +5,39 @@ export type WorkspaceAiChatDockStatus = {
   readonly label: string;
 };
 
+export type TerraformPreviewReviewStep = {
+  readonly description: string;
+  readonly label: string;
+};
+
+export const TERRAFORM_PREVIEW_REVIEW_STEP_DURATION_MS = 3_500;
+
+export const terraformPreviewReviewSteps: readonly TerraformPreviewReviewStep[] = [
+  {
+    label: "Terraform 코드 구조 분석",
+    description: "리소스와 참조 관계를 확인하고 있습니다."
+  },
+  {
+    label: "배포 전 위험 신호 점검",
+    description: "보안·비용·운영 위험과 누락된 설정을 찾고 있습니다."
+  },
+  {
+    label: "Amazon Q 6가지 기준 검토",
+    description: "Amazon Q가 전체 Terraform 구성을 검토하고 있습니다."
+  },
+  {
+    label: "검토 결과 정리",
+    description: "판단과 확인할 내용을 읽기 쉽게 정리하고 있습니다."
+  }
+];
+
+export function getTerraformPreviewReviewProgressStep(elapsedMs: number): number {
+  return Math.min(
+    Math.max(0, Math.floor(elapsedMs / TERRAFORM_PREVIEW_REVIEW_STEP_DURATION_MS)),
+    terraformPreviewReviewSteps.length - 1
+  );
+}
+
 export function getWorkspaceAiChatDockStatus({
   hasPendingApproval,
   isStale,

@@ -7,8 +7,12 @@ const source = readFileSync(
   fileURLToPath(new URL("./CicdConsoleScreen.tsx", import.meta.url)),
   "utf8"
 );
+const handoffSource = readFileSync(
+  fileURLToPath(new URL("./cicd-handoff.ts", import.meta.url)),
+  "utf8"
+);
 
-test("CI/CD sends users without a GitHub account installation to global settings", () => {
+test("CI/CD keeps GitHub account recovery available without hiding the readiness checklist", () => {
   assert.match(source, /listGitHubAccountInstallations/);
   assert.match(source, /hasGitHubAccountConnection/);
   assert.doesNotMatch(source, /isGitHubIdentityRequiredError/);
@@ -18,11 +22,14 @@ test("CI/CD sends users without a GitHub account installation to global settings
   assert.match(source, /GitHub App 설정 열기/);
 });
 
-test("CI/CD sends connected GitHub accounts without a repository to source repository", () => {
-  assert.match(source, /GitHub 저장소 연결이 필요합니다\./);
-  assert.match(source, /프로젝트 소스 저장소 열기/);
+test("CI/CD keeps the four server readiness rows visible when no repository is connected", () => {
+  assert.match(source, /getGitCicdHandoffReadiness/);
+  assert.match(source, /isGitCicdHandoffReady/);
+  assert.match(source, /GitCicdReadinessSnapshot/);
+  assert.match(source, /aria-label="CI\/CD PR 준비 상태"/);
+  assert.match(source, /readinessItems\.map/);
   assert.match(source, /\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/repository/);
-  assert.doesNotMatch(source, /settings\?tab=github/);
+  assert.doesNotMatch(source, /if \(!repository\) \{\s*return \(\s*<div/u);
 });
 
 test("CI/CD exposes the Git handoff action that creates the deployment pull request", () => {
@@ -31,9 +38,24 @@ test("CI/CD exposes the Git handoff action that creates the deployment pull requ
   assert.match(source, /CI\/CD PR 생성/);
 });
 
-test("CI/CD blocks PR creation until the project deployment target is ready", () => {
-  assert.match(source, /getProjectDeploymentTarget/);
-  assert.match(source, /getGitCicdDeploymentTargetBlocker/);
-  assert.match(source, /deploymentTargetBlocker !== null/);
-  assert.match(source, /프로젝트 배포 대상 설정 열기/);
+test("CI/CD blocks PR creation until every readiness item is ready", () => {
+  assert.match(source, /refreshGitCicdReadiness/);
+  assert.doesNotMatch(source, /getProjectDeploymentTarget/);
+  assert.match(source, /handoffReady/);
+  assert.match(source, /isReadinessReady: handoffReady/);
+  assert.match(handoffSource, /#project-cicd-settings-title/);
+  assert.match(handoffSource, /#deployment-target-title/);
+});
+
+test("CI/CD applies the same creation gate before and after opening PR review", () => {
+  assert.match(source, /isGitCicdHandoffCreationEnabled/);
+  assert.match(source, /isConsoleDataFresh,/);
+  assert.match(source, /if \(\s*!canCreateHandoff/gu);
+  assert.equal(source.match(/disabled=\{!canCreateHandoff\}/gu)?.length, 2);
+});
+
+test("CI/CD reloads have one owner and disable manual refresh for either loading state", () => {
+  assert.match(source, /isGitCicdReloadOwner/);
+  assert.match(source, /reloadReservedOrInFlightRef/);
+  assert.match(source, /disabled=\{isRefreshing \|\| isReadinessRefreshing\}/);
 });

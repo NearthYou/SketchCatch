@@ -34,20 +34,27 @@ export const liveObservationProviderSnapshotSchema: z.ZodType<LiveObservationPro
   })
   .strict()
   .superRefine((snapshot, context) => {
-    const capacityValues = [
+    const requiredCapacityValues = [
       snapshot.capacity.desired,
       snapshot.capacity.running,
-      snapshot.capacity.healthy,
-      snapshot.capacity.max
+      snapshot.capacity.healthy
     ];
+    const requiredQuantitativeValues = [
+      snapshot.requests,
+      snapshot.errorRate,
+      snapshot.p95LatencyMs,
+      snapshot.availability,
+      ...requiredCapacityValues
+    ];
+    const hasCompleteQuantitativeEvidence = requiredQuantitativeValues.every(
+      (value) => value !== null
+    );
+    const hasAnyQuantitativeEvidence =
+      requiredQuantitativeValues.some((value) => value !== null) ||
+      snapshot.capacity.max !== null;
     if (
       snapshot.state === "available" &&
-      (snapshot.requests === null ||
-        snapshot.errorRate === null ||
-        snapshot.p95LatencyMs === null ||
-        snapshot.availability === null ||
-        snapshot.observedAt === null ||
-        capacityValues.some((value) => value === null))
+      (!hasCompleteQuantitativeEvidence || snapshot.observedAt === null)
     ) {
       context.addIssue({
         code: "custom",
@@ -56,16 +63,20 @@ export const liveObservationProviderSnapshotSchema: z.ZodType<LiveObservationPro
     }
 
     if (
-      snapshot.state !== "available" &&
-      (snapshot.requests !== null ||
-        snapshot.errorRate !== null ||
-        snapshot.p95LatencyMs !== null ||
-        snapshot.availability !== null ||
-        capacityValues.some((value) => value !== null))
+      snapshot.state === "delayed" &&
+      hasAnyQuantitativeEvidence &&
+      (!hasCompleteQuantitativeEvidence || snapshot.observedAt === null)
     ) {
       context.addIssue({
         code: "custom",
-        message: "Delayed or unavailable snapshots must not retain quantitative evidence"
+        message: "Delayed snapshots require complete last-known provider evidence"
+      });
+    }
+
+    if (snapshot.state === "unavailable" && hasAnyQuantitativeEvidence) {
+      context.addIssue({
+        code: "custom",
+        message: "Unavailable snapshots must not retain quantitative evidence"
       });
     }
 

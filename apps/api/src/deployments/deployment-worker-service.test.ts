@@ -39,6 +39,8 @@ test("runDeploymentWorkerJob executes a running job with validated access contex
     {
       operation: "apply",
       deploymentId,
+      workerTaskArn:
+        "arn:aws:ecs:ap-northeast-2:555980271919:task/sketchcatch-production-cluster/task-id",
       accessContext: { kind: "user", userId },
       startedFromStatus: "PENDING",
       startedFromFailureStage: null

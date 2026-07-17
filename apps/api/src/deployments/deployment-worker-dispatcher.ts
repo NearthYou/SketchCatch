@@ -1,6 +1,7 @@
 import {
   DescribeTasksCommand,
   ECSClient,
+  ListTasksCommand,
   RunTaskCommand,
   StopTaskCommand,
   type KeyValuePair
@@ -68,8 +69,11 @@ export function createConfiguredDeploymentWorkerDispatcher(): DeploymentWorkerDi
 export function createEcsDeploymentWorkerDispatcher(input: {
   ecsClient: Pick<ECSClient, "send">;
   config: EcsWorkerDispatcherConfig;
+  wait?: (milliseconds: number) => Promise<void>;
 }): DeploymentWorkerDispatcher {
   const { ecsClient, config } = input;
+  const wait = input.wait ?? ((milliseconds: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
 
   return {
     async dispatch({ job }) {
@@ -126,14 +130,14 @@ export function createEcsDeploymentWorkerDispatcher(input: {
     },
 
     async inspect({ job }) {
-      if (!job.ecsTaskArn) {
-        return { state: "MISSING", lastStatus: null };
-      }
+      const taskArn =
+        job.ecsTaskArn ?? (await findRunningTaskByJobId(ecsClient, config.cluster, job.id));
+      if (!taskArn) return { state: "MISSING", lastStatus: null };
 
       const result = await ecsClient.send(
         new DescribeTasksCommand({
           cluster: config.cluster,
-          tasks: [job.ecsTaskArn]
+          tasks: [taskArn]
         })
       );
       const task = result.tasks?.[0];
@@ -151,15 +155,14 @@ export function createEcsDeploymentWorkerDispatcher(input: {
     },
 
     async stop({ job, reason }) {
-      if (!job.ecsTaskArn) {
-        return { stopped: false };
-      }
-
       try {
+        const taskArn =
+          job.ecsTaskArn ?? (await findRunningTaskByJobId(ecsClient, config.cluster, job.id));
+        if (!taskArn) return { stopped: false };
         const activeTask = await ecsClient.send(
           new DescribeTasksCommand({
             cluster: config.cluster,
-            tasks: [job.ecsTaskArn]
+            tasks: [taskArn]
           })
         );
         const task = activeTask.tasks?.[0];
@@ -171,12 +174,27 @@ export function createEcsDeploymentWorkerDispatcher(input: {
         await ecsClient.send(
           new StopTaskCommand({
             cluster: config.cluster,
-            task: job.ecsTaskArn,
+            task: taskArn,
             reason
           })
         );
-
-        return { stopped: true };
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          const result = await ecsClient.send(
+            new DescribeTasksCommand({
+              cluster: config.cluster,
+              tasks: [taskArn]
+            })
+          );
+          if (result.failures?.length) {
+            throw new Error("ECS worker task terminal state could not be verified");
+          }
+          const stoppedTask = result.tasks?.[0];
+          if (!stoppedTask || stoppedTask.lastStatus === "STOPPED") {
+            return { stopped: true };
+          }
+          await wait(1_000);
+        }
+        throw new Error("ECS worker task did not reach STOPPED after cancellation");
       } catch {
         return {
           stopped: false,
@@ -185,6 +203,21 @@ export function createEcsDeploymentWorkerDispatcher(input: {
       }
     }
   };
+}
+
+async function findRunningTaskByJobId(
+  ecsClient: Pick<ECSClient, "send">,
+  cluster: string,
+  jobId: string
+): Promise<string | null> {
+  const result = await ecsClient.send(
+    new ListTasksCommand({
+      cluster,
+      startedBy: `sketchcatch:${jobId}`,
+      desiredStatus: "RUNNING"
+    })
+  );
+  return result.taskArns?.[0] ?? null;
 }
 
 function createWorkerEnvironment(

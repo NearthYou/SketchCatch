@@ -1090,7 +1090,12 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_eks_cluster: ["vpcConfig"],
     aws_eks_node_group: ["scalingConfig"],
     aws_ecs_cluster: ["setting"],
-    aws_ecs_service: ["deploymentCircuitBreaker", "loadBalancer", "networkConfiguration"],
+    aws_ecs_service: [
+      "deploymentCircuitBreaker",
+      "lifecycle",
+      "loadBalancer",
+      "networkConfiguration"
+    ],
     aws_lambda_function: ["environment"],
     aws_launch_template: [
       "iamInstanceProfile",
@@ -1103,6 +1108,7 @@ test("tracks curated nested block parameters as canonical camelCase keys", () =>
     aws_s3_bucket_server_side_encryption_configuration: ["rule"],
     aws_s3_bucket_lifecycle_configuration: ["rule"],
     aws_s3_bucket_versioning: ["versioningConfiguration"],
+    aws_s3_object: ["lifecycle"],
     aws_scheduler_schedule: ["flexibleTimeWindow", "target"],
     aws_security_group: ["egress", "ingress"],
     aws_wafv2_web_acl: ["defaultAction", "visibilityConfig"]

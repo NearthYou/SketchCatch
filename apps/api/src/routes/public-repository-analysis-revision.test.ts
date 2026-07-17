@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import Fastify from "fastify";
+import type { SourceRepositoryAnalysisResult } from "@sketchcatch/types";
 
-import { resolvePublicRepositoryRevision } from "./ai.js";
+import { registerAiRoutes, resolvePublicRepositoryRevision } from "./ai.js";
 
 test("public Repository analysis resolves the selected branch head SHA", () => {
   assert.equal(
@@ -19,3 +21,116 @@ test("public Repository analysis resolves the selected branch head SHA", () => {
 test("public Repository analysis rejects a branch without a commit SHA", () => {
   assert.equal(resolvePublicRepositoryRevision([{ name: "main", revision: null }], "main"), null);
 });
+
+test("public Repository analysis keeps owner-only golden-path forks on the same ECS flow", async () => {
+  const requestedUrls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+
+  process.env.OPENAI_API_KEY = "";
+  globalThis.fetch = createGoldenPathRepositoryFetch(requestedUrls);
+
+  const app = Fastify({ logger: false });
+
+  try {
+    await registerAiRoutes(app);
+    await app.ready();
+
+    for (const repositoryUrl of [
+      "https://github.com/Whiskend/audience-live-check.git",
+      "https://github.com/JH-9999/audience-live-check.git"
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/ai/source-repository-analysis",
+        payload: { repositoryUrl }
+      });
+      const result = response.json<SourceRepositoryAnalysisResult>();
+
+      assert.equal(response.statusCode, 200, repositoryUrl);
+      assert.equal(result.repositoryRevision, "a".repeat(40), repositoryUrl);
+      assert.equal(result.recommendedTemplateId, "ecs-fargate-container-app", repositoryUrl);
+      assert.equal(
+        result.aiHandoff?.recommendation?.candidates[0]?.templateId,
+        "ecs-fargate-container-app",
+        repositoryUrl
+      );
+    }
+
+    assert.equal(requestedUrls.some((url) => /Whiskend|JH-9999/u.test(url)), false);
+    assert.equal(
+      requestedUrls.some((url) => url.includes("/repos/whiskend/audience-live-check")),
+      true
+    );
+    assert.equal(
+      requestedUrls.some((url) => url.includes("/repos/jh-9999/audience-live-check")),
+      true
+    );
+  } finally {
+    await app.close();
+    globalThis.fetch = originalFetch;
+
+    if (originalOpenAiApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    }
+  }
+});
+
+function createGoldenPathRepositoryFetch(requestedUrls: string[]): typeof fetch {
+  const files: Readonly<Record<string, string>> = {
+    "package.json": JSON.stringify({ private: true, workspaces: ["apps/*", "packages/*"] }),
+    "apps/api/package.json": JSON.stringify({ dependencies: { express: "latest" } }),
+    "apps/web/package.json": JSON.stringify({
+      dependencies: { react: "latest" },
+      devDependencies: { vite: "latest" }
+    }),
+    "apps/api/Dockerfile": [
+      "FROM node:24",
+      "EXPOSE 8080",
+      "HEALTHCHECK CMD curl -f http://localhost:8080/health"
+    ].join("\n"),
+    "README.md": [
+      "apps/web은 S3와 CloudFront로 정적 배포합니다.",
+      "apps/api는 Docker image를 ECR에 push한 뒤 ECS/Fargate Service로 실행합니다.",
+      "데이터베이스는 사용하지 않습니다."
+    ].join(" ")
+  };
+
+  return (async (input) => {
+    const url = typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+
+    requestedUrls.push(url);
+
+    if (url.includes("/branches?")) {
+      return Response.json([{ name: "main", commit: { sha: "a".repeat(40) } }]);
+    }
+
+    if (url.includes("/git/trees/main?recursive=1")) {
+      return Response.json({
+        truncated: false,
+        tree: Object.keys(files).map((path) => ({ path, type: "blob" }))
+      });
+    }
+
+    if (url.startsWith("https://raw.githubusercontent.com/")) {
+      const path = decodeURIComponent(new URL(url).pathname.split("/").slice(4).join("/"));
+      const content = files[path];
+
+      return content === undefined
+        ? new Response("", { status: 404 })
+        : new Response(content, { status: 200 });
+    }
+
+    if (/\/repos\/(?:whiskend|jh-9999)\/audience-live-check$/u.test(url)) {
+      return Response.json({ default_branch: "main" });
+    }
+
+    return new Response("", { status: 404 });
+  }) as typeof fetch;
+}

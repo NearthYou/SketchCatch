@@ -773,6 +773,57 @@ export type AnalyzeSourceRepositoryResponse = {
 
 export type SourceRepositoryAnalysis = Omit<AnalyzeSourceRepositoryResponse, "sourceRepositoryId">;
 
+export type GitCicdReadinessStatus = "ready" | "action_required";
+
+export type GitCicdReadinessItemKey =
+  | "approved_apply_plan"
+  | "initial_application_release"
+  | "source_repository"
+  | "monitoring_config"
+  | "deployment_target";
+
+export type GitCicdDeploymentTargetReadinessKey =
+  | "aws_connection"
+  | "build_config"
+  | "runtime_config"
+  | "output_url";
+
+export type GitCicdReadinessAction =
+  | "approve_apply_plan"
+  | "deploy_initial_application"
+  | "select_repository"
+  | "confirm_monitoring_config"
+  | "select_aws_connection"
+  | "confirm_build_config"
+  | "inspect_runtime_outputs"
+  | "inspect_output_url";
+
+export type GitCicdReadinessItem = {
+  key: GitCicdReadinessItemKey;
+  label: string;
+  status: GitCicdReadinessStatus;
+  completedCount?: number | undefined;
+  totalCount?: number | undefined;
+  missingKeys: GitCicdDeploymentTargetReadinessKey[];
+  action: GitCicdReadinessAction | null;
+  recommendedDeploymentScope?: "application" | "full_stack" | undefined;
+};
+
+export type GitCicdReadinessSnapshot = {
+  projectId: string;
+  checkedAt: IsoDateTimeString;
+  ready: boolean;
+  requiredActionCount: number;
+  sourceDeploymentId: string | null;
+  approvedApplyPlanArtifactId: string | null;
+  initialApplicationReleaseId: string | null;
+  items: GitCicdReadinessItem[];
+};
+
+export type GitCicdReadinessResponse = {
+  readiness: GitCicdReadinessSnapshot;
+};
+
 export type GitCicdMonitoringValidationStatus = "required" | "valid" | "invalid";
 
 export type GitCicdMonitoredPath = {
@@ -801,6 +852,8 @@ export type GitCicdPipelineRunStatus =
   | "cancelled";
 
 export type GitCicdPipelineChangeScope = "app" | "infra" | "app_and_infra";
+
+export type GitCicdPipelineExecutionKind = "app" | "infra";
 
 export type GitCicdPipelineStageKind =
   | "detect"
@@ -833,8 +886,12 @@ export type GitCicdPipelineStage = {
 export type GitCicdPipelineRun = {
   id: string;
   projectId: string;
+  infrastructureDeploymentId: string | null;
   sourceRepositoryId: string;
   handoffId: string | null;
+  executionKind: GitCicdPipelineExecutionKind;
+  githubWorkflowRunId: string | null;
+  githubWorkflowRunAttempt: number | null;
   commitSha: string;
   commitMessage: string;
   branch: string;
@@ -882,6 +939,62 @@ export type GitCicdPipelineRunListResponse = {
 };
 
 export type GitCicdPipelineRunResponse = {
+  run: GitCicdPipelineRun;
+};
+
+export type GitCicdReleaseRunStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "partially_failed"
+  | "partially_cancelled";
+
+export type GitCicdReleaseRun = {
+  id: string;
+  projectId: string;
+  infrastructureDeploymentId: string | null;
+  sourceRepositoryId: string;
+  commitSha: string;
+  branch: string;
+  workflowRunId: string;
+  workflowRunUrl: string | null;
+  status: GitCicdReleaseRunStatus;
+  statusMessage: string | null;
+  releaseId: string | null;
+  outputUrl: string | null;
+  failureStage: ApplicationReleaseFailureStage | null;
+  cancellationRequestedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  finishedAt: IsoDateTimeString | null;
+};
+
+export type GitCicdReleaseRunResponse = {
+  run: GitCicdReleaseRun;
+};
+
+export type CreateGitCicdReleaseRunRequest = {
+  repository: string;
+  repositoryId: string;
+  commitSha: string;
+  ref: string;
+  workflow: string;
+  workflowRunId: string;
+  workflowRunAttempt: number;
+  workflowRunUrl: string;
+};
+
+export type GitCicdInfrastructureRunStage = "configuration" | "infra_plan" | "infra_apply";
+
+export type CreateGitCicdInfrastructureRunRequest = CreateGitCicdReleaseRunRequest;
+
+export type CompleteGitCicdInfrastructureRunRequest = {
+  conclusion: "succeeded" | "failed" | "cancelled";
+  stage: GitCicdInfrastructureRunStage;
+};
+
+export type GitCicdInfrastructureRunResponse = {
   run: GitCicdPipelineRun;
 };
 
@@ -1090,6 +1203,31 @@ export type BuildExecutionPreset =
   | "codedeploy_bundle"
   | "static_export";
 
+export type PackageManagerKind = "npm" | "pnpm" | "yarn";
+
+export type ApiBuildConfig = {
+  sourceRoot: string;
+  dockerfilePath: string;
+  containerPort: number;
+  healthCheckPath: string;
+};
+
+export type FrontendBuildConfig = {
+  sourceRoot: string;
+  packageManifestPath: string;
+  lockfilePath: string;
+  packageManager: PackageManagerKind;
+  packageManagerVersion: string;
+  installPreset: Exclude<BuildInstallPreset, "none">;
+  buildPreset: Extract<BuildExecutionPreset, "pnpm_build" | "npm_build" | "yarn_build">;
+  outputPath: string;
+};
+
+export type EcsWebBuildConfig = {
+  api: ApiBuildConfig;
+  frontend: FrontendBuildConfig;
+};
+
 export type ConfirmedBuildConfig = {
   sourceRoot: string;
   evidence: BuildEvidence[];
@@ -1107,6 +1245,24 @@ export type ConfirmedBuildConfig = {
   manifestVersion: string | null;
   confirmedCommitSha: string;
   confirmedAt: IsoDateTimeString;
+  /** Required for newly confirmed web-inclusive ECS/Fargate targets. */
+  ecsWeb?: EcsWebBuildConfig | null | undefined;
+};
+
+export type CompositeReleaseDigest = {
+  algorithm: "sha256";
+  value: string;
+  apiOciDigest: string;
+  frontendManifestDigest: string;
+};
+
+export type FrontendReleaseEvidence = {
+  manifestObjectKey: string;
+  manifestVersionId: string;
+  indexObjectKey: string;
+  indexVersionId: string;
+  invalidationId: string;
+  commitMarker: string;
 };
 
 export const APPLICATION_ARTIFACT_CONTRACT_VERSION = "application-artifact/v1" as const;
@@ -1234,18 +1390,12 @@ export type LambdaGitOpsReleaseEvidenceV1 = {
   outputUrl: string;
 };
 
-export type LambdaGitOpsReleaseEvidenceV2 = Omit<
-  LambdaGitOpsReleaseEvidenceV1,
-  "schemaVersion"
-> & {
+export type LambdaGitOpsReleaseEvidenceV2 = Omit<LambdaGitOpsReleaseEvidenceV1, "schemaVersion"> & {
   schemaVersion: 2;
   artifact: ApplicationArtifactEvidenceV2;
 };
 
-export type LambdaGitOpsReleaseEvidenceV3 = Omit<
-  LambdaGitOpsReleaseEvidenceV2,
-  "schemaVersion"
-> & {
+export type LambdaGitOpsReleaseEvidenceV3 = Omit<LambdaGitOpsReleaseEvidenceV2, "schemaVersion"> & {
   schemaVersion: 3;
   convergence: RuntimeConvergenceEvidence;
 };
@@ -1277,18 +1427,12 @@ export type Ec2AsgGitOpsReleaseEvidenceV1 = {
   outputUrl: string;
 };
 
-export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<
-  Ec2AsgGitOpsReleaseEvidenceV1,
-  "schemaVersion"
-> & {
+export type Ec2AsgGitOpsReleaseEvidenceV2 = Omit<Ec2AsgGitOpsReleaseEvidenceV1, "schemaVersion"> & {
   schemaVersion: 2;
   artifact: ApplicationArtifactEvidenceV2;
 };
 
-export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<
-  Ec2AsgGitOpsReleaseEvidenceV2,
-  "schemaVersion"
-> & {
+export type Ec2AsgGitOpsReleaseEvidenceV3 = Omit<Ec2AsgGitOpsReleaseEvidenceV2, "schemaVersion"> & {
   schemaVersion: 3;
   convergence: RuntimeConvergenceEvidence;
 };
@@ -1353,10 +1497,26 @@ export type GitOpsReleaseEvidence =
 export type EcsFargateRuntimeConfig = {
   runtimeTargetKind: "ecs_fargate";
   codeBuildProjectName: string;
+  buildEnvironmentId?: string | null | undefined;
   ecrRepositoryName: string;
+  ecrRepositoryArn?: string | null | undefined;
+  ecrRepositoryUrl?: string | null | undefined;
   clusterName: string;
   serviceName: string;
   containerName: string;
+  containerPort?: number | undefined;
+  taskDefinitionFamily?: string | null | undefined;
+  taskDefinitionArn?: string | null | undefined;
+  taskRoleArn?: string | null | undefined;
+  executionRoleArn?: string | null | undefined;
+  targetGroupArn?: string | null | undefined;
+  loadBalancerArn?: string | null | undefined;
+  loadBalancerDnsName?: string | null | undefined;
+  apiOriginUrl?: string | null | undefined;
+  frontendBucketName?: string | null | undefined;
+  cloudFrontDistributionId?: string | null | undefined;
+  cloudFrontDomainName?: string | null | undefined;
+  logGroupNames?: string[] | undefined;
   outputUrl: string | null;
 };
 
@@ -1398,7 +1558,7 @@ export type ProjectDeploymentRuntimeConfig =
 export type ProjectDeploymentTarget = {
   projectId: string;
   provider: DeploymentTargetProvider;
-  connectionId: string;
+  connectionId: string | null;
   region: string;
   runtimeTargetKind: RuntimeTargetKind;
   confirmedBuildConfig: ConfirmedBuildConfig | null;
@@ -1413,6 +1573,7 @@ export type ProjectDeploymentTarget = {
 export type PutProjectDeploymentTargetRequest = Omit<
   ProjectDeploymentTarget,
   | "projectId"
+  | "connectionId"
   | "confirmedBuildConfig"
   | "runtimeConfig"
   | "runtimeTarget"
@@ -1420,6 +1581,7 @@ export type PutProjectDeploymentTargetRequest = Omit<
   | "createdAt"
   | "updatedAt"
 > & {
+  connectionId: string;
   confirmedBuildConfig: ConfirmedBuildConfig;
   runtimeConfig: ProjectDeploymentRuntimeConfig | null;
   runtimeTarget?: RuntimeDeploymentTarget | null | undefined;
@@ -1433,10 +1595,29 @@ export type ApplicationReleaseStatus =
   | "pending"
   | "building"
   | "deploying"
+  | "retrying"
+  | "partially_failed"
+  | "partially_cancelled"
   | "succeeded"
   | "failed"
   | "rolled_back"
   | "cancelled";
+
+export type ApplicationReleaseFailureStage =
+  | "preflight_checkout"
+  | "preflight_api_build"
+  | "preflight_api_health"
+  | "preflight_frontend_build"
+  | "candidate_upload"
+  | "runtime_verification"
+  | "ecr_publish"
+  | "ecs_activation"
+  | "ecs_health"
+  | "frontend_upload"
+  | "frontend_activation"
+  | "cloudfront_invalidation"
+  | "public_health"
+  | "rollback";
 
 export type ApplicationReleaseProviderRevision = {
   provider: DeploymentTargetProvider;
@@ -1461,13 +1642,130 @@ export type ApplicationRelease = {
   commitSha: string;
   artifactDigestAlgorithm: "sha256";
   artifactDigest: string;
+  releaseCandidateId?: string | null | undefined;
+  compositeDigest?: CompositeReleaseDigest | null | undefined;
   providerRevision: ApplicationReleaseProviderRevision | null;
+  frontendEvidence?: FrontendReleaseEvidence | null | undefined;
+  failureStage?: ApplicationReleaseFailureStage | null | undefined;
+  baselineReleaseId?: string | null | undefined;
   outputUrl: string | null;
   status: ApplicationReleaseStatus;
   healthEvidence: JsonValue | null;
   rollbackEvidence: JsonValue | null;
   startedAt: IsoDateTimeString | null;
   completedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type AwsCodeConnectionStatus = "CREATING" | "PENDING" | "AVAILABLE" | "ERROR" | "DELETING";
+
+export type AwsCodeConnection = {
+  id: string;
+  awsConnectionId: string;
+  connectionArn: string | null;
+  providerType: "GitHub";
+  status: AwsCodeConnectionStatus;
+  statusReason: string | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type AwsCodeConnectionResponse = {
+  codeConnection: AwsCodeConnection | null;
+  setupUrl?: string | null | undefined;
+};
+
+export type ProjectBuildEnvironmentStatus =
+  | "preparing"
+  | "ready"
+  | "verification_failed"
+  | "disconnected";
+
+export type ProjectRepositoryAccessVerificationStatus =
+  | "not_checked"
+  | "verified"
+  | "failed";
+
+export type ProjectBuildEnvironment = {
+  id: string;
+  projectId: string;
+  awsConnectionId: string | null;
+  awsCodeConnectionId: string | null;
+  codeBuildProjectName: string;
+  codeBuildServiceRoleArn: string;
+  permissionsBoundaryArn: string;
+  sourceRepositoryUrl: string;
+  runtimeFingerprint: string;
+  status: ProjectBuildEnvironmentStatus;
+  lastVerifiedAt: IsoDateTimeString | null;
+  repositoryVerificationStatus: ProjectRepositoryAccessVerificationStatus;
+  repositoryVerificationRequestedCommitSha: string | null;
+  repositoryVerificationResolvedCommitSha: string | null;
+  repositoryVerificationBuildArn: string | null;
+  repositoryVerificationStatusReason: string | null;
+  repositoryVerifiedAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ProjectBuildEnvironmentResponse = {
+  buildEnvironment: ProjectBuildEnvironment | null;
+};
+
+export type ReleaseCandidateStatus =
+  | "building"
+  | "pending"
+  | "activating"
+  | "partially_failed"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export type ReleaseCandidate = {
+  id: string;
+  projectId: string;
+  deploymentId: string | null;
+  pipelineRunId: string | null;
+  buildEnvironmentId: string | null;
+  commitSha: string;
+  compositeDigest: CompositeReleaseDigest;
+  apiOciDigest: string;
+  apiArchiveDigest: string;
+  frontendArchiveDigest: string;
+  frontendManifestDigest: string;
+  frontendIndexDigest: string;
+  apiArchiveObjectKey: string;
+  apiArchiveObjectVersionId: string;
+  apiArchiveByteSize: number;
+  frontendArchiveObjectKey: string;
+  frontendArchiveObjectVersionId: string;
+  frontendArchiveByteSize: number;
+  frontendManifestObjectKey: string;
+  frontendManifestObjectVersionId: string;
+  manifestObjectKey: string;
+  manifestObjectVersionId: string;
+  status: ReleaseCandidateStatus;
+  expiresAt: IsoDateTimeString;
+  frontendRetryExpiresAt: IsoDateTimeString | null;
+  createdAt: IsoDateTimeString;
+  updatedAt: IsoDateTimeString;
+};
+
+export type ProjectExecutionLeaseSource = "direct" | "gitops";
+export type ProjectExecutionLeaseStatus = "active" | "releasing" | "released";
+
+export type ProjectExecutionLease = {
+  projectId: string;
+  holderId: string;
+  source: ProjectExecutionLeaseSource;
+  fencingVersion: number;
+  status: ProjectExecutionLeaseStatus;
+  activeCodeBuildId: string | null;
+  activeWorkerTaskArn: string | null;
+  heartbeatAt: IsoDateTimeString;
+  expiresAt: IsoDateTimeString;
   createdAt: IsoDateTimeString;
   updatedAt: IsoDateTimeString;
 };
@@ -1547,6 +1845,8 @@ export type DeploymentStatus =
   | "PENDING"
   | "RUNNING"
   | "SUCCESS"
+  | "PARTIALLY_FAILED"
+  | "PARTIALLY_CANCELED"
   | "FAILED"
   | "CANCELLED"
   | "DESTROYED";
@@ -1557,11 +1857,17 @@ export type Deployment = DeploymentBlock & {
   architectureId: string;
   terraformArtifactId: string;
   awsConnectionId: string | null;
+  awsAccountIdSnapshot: string | null;
+  awsRegionSnapshot: string | null;
+  awsConnectionNameSnapshot: string | null;
   liveProfile: DeploymentLiveProfile;
   scope: DeploymentScope;
   targetKind: RuntimeTargetKind | null;
   source: DeploymentSource;
   releaseId: string | null;
+  releaseCandidateId: string | null;
+  rollbackOfDeploymentId: string | null;
+  rollbackTargetDeploymentId: string | null;
   consolePhase?: DeploymentConsolePhase | undefined;
   preparedDraftRevision?: number | null | undefined;
   preparedSnapshotHash?: string | null | undefined;
@@ -1712,7 +2018,15 @@ export type ApproveDeploymentPlanRequest = {
   acknowledgedWarningIds: string[];
 };
 
-export type DeploymentStage = "init" | "validate" | "plan" | "apply" | "destroy";
+export type DeploymentStage =
+  | "init"
+  | "preflight"
+  | "validate"
+  | "plan"
+  | "apply"
+  | "application_release"
+  | "rollback"
+  | "destroy";
 
 export type Template = {
   id: string;
@@ -1754,10 +2068,39 @@ export type DeploymentPlanArtifact = {
 
 export type AwsConnectionListResponse = {
   awsConnections: AwsConnection[];
+  cleanupRetries: AwsConnectionCleanupRetry[];
 };
 
-export { AVAILABLE_BRAINBOARD_TEMPLATE_IDS, BRAINBOARD_TEMPLATE_IDS } from "./brainboard-templates/ids.ts";
-export type { AvailableBrainboardTemplateId, BrainboardTemplateId } from "./brainboard-templates/ids.ts";
+export type AwsConnectionCleanupRetry = {
+  awsConnection: AwsConnection;
+};
+
+export type AwsConnectionDeletionPreviewResponse = {
+  connectionId: string;
+  canDelete: boolean;
+  blockerMessage: string | null;
+  cleanupRetry: boolean;
+  managedResources: {
+    codeBuildProjects: Array<{
+      projectId: string;
+      projectName: string;
+      serviceRoleName: string;
+      logGroupName: string;
+    }>;
+    codeConnection: boolean;
+  };
+  preservedResources: ["CloudFormation Stack", "Terraform Execution Role"];
+  confirmationToken: string;
+};
+
+export {
+  AVAILABLE_BRAINBOARD_TEMPLATE_IDS,
+  BRAINBOARD_TEMPLATE_IDS
+} from "./brainboard-templates/ids.ts";
+export type {
+  AvailableBrainboardTemplateId,
+  BrainboardTemplateId
+} from "./brainboard-templates/ids.ts";
 export {
   BRAINBOARD_TEMPLATE_AUTHOR,
   BRAINBOARD_TEMPLATE_PROVIDER,
@@ -2043,6 +2386,69 @@ export type DeploymentLiveObservationAwsAdapterV2 = {
   };
 };
 
+export type DeploymentLiveObservationAwsAdapterV3 = {
+  kind: "aws-live-observation";
+  version: 3;
+  payload: {
+    cloudFrontDistributionId: string;
+    cloudFrontDomainName: string;
+    frontendBucketName: string;
+    defaultOriginId: string;
+    originAccessControlId: string;
+    apiOriginId: string;
+    apiPathPattern: "/api/*";
+    healthPathPattern: "/health";
+    frontendBucketPublicAccessBlocked: true;
+    bucketPolicyAllowsCloudFrontRead: true;
+    topologyVerifiedAt: IsoDateTimeString;
+    frontendState: "current" | "may_be_previous";
+    loadBalancerDnsName: string;
+    loadBalancerArn: string;
+    targetGroupArn: string;
+    logGroupNames?: string[] | undefined;
+    capacityTarget: {
+      kind: "ecs_fargate";
+      clusterName: string;
+      serviceName: string;
+      maxCapacity: number;
+    };
+  };
+};
+
+export type DeploymentLiveObservationAwsAdapterV4 = {
+  kind: "aws-live-observation";
+  version: 4;
+  payload: Omit<DeploymentLiveObservationAwsAdapterV3["payload"], "capacityTarget"> & {
+    capacityTarget: {
+      kind: "ecs_fargate";
+      clusterName: string;
+      serviceName: string;
+      scaling:
+        | { mode: "fixed" }
+        | {
+            mode: "service_auto_scaling";
+            minCapacity: number;
+            maxCapacity: number;
+            metric: string | null;
+            targetValue: number | null;
+          };
+    };
+  };
+};
+
+export type DeploymentLiveObservationArchitectureResponse = {
+  deploymentId: string;
+  architectureId: string;
+  terraformArtifactSha256: string;
+  architecture: ArchitectureJson;
+};
+
+export type DeploymentResourceObservationState =
+  | "observed"
+  | "delayed"
+  | "unavailable"
+  | "not_supported";
+
 export type DeploymentLiveObservationManifestV2 = {
   schemaVersion: 2;
   provider: "aws";
@@ -2064,7 +2470,12 @@ export type DeploymentLiveObservationManifestV2 = {
   };
   adapter: {
     kind: "aws-live-observation";
-  } & (DeploymentLiveObservationAwsAdapterV1 | DeploymentLiveObservationAwsAdapterV2);
+  } & (
+    | DeploymentLiveObservationAwsAdapterV1
+    | DeploymentLiveObservationAwsAdapterV2
+    | DeploymentLiveObservationAwsAdapterV3
+    | DeploymentLiveObservationAwsAdapterV4
+  );
 };
 
 export type DeploymentLiveObservationManifestStatus = "valid" | "manifest_invalid";
@@ -2425,6 +2836,11 @@ export type CreateAwsConnectionRequest = {
   region: string;
 };
 
+export type DeleteAwsConnectionRequest = {
+  confirmedManagedCleanup: true;
+  confirmationToken: string;
+};
+
 export type AwsRolePermissionSetup = {
   verificationActions: string[];
   initialPolicyDocument: Record<string, unknown> | null;
@@ -2504,12 +2920,16 @@ export type DeploymentLog = {
 
 export type DeploymentFailureStage =
   | "init"
+  | "build_environment"
+  | "preflight"
   | "validate"
   | "plan"
   | "approval"
   | "aws_connection"
   | "mock_run"
   | "apply"
+  | "application_release"
+  | "rollback"
   | "destroy";
 
 export type Activity = {
@@ -3609,11 +4029,18 @@ export type ProjectDraft = {
 
 export type SaveProjectDraftRequest = {
   diagramJson: DiagramJson;
+  expectedRevision: number | null;
   terraformFiles?: TerraformSyncFileInput[] | undefined;
 };
 
 export type ProjectDraftResponse = {
   draft: ProjectDraft | null;
+};
+
+export type ProjectDraftConflictResponse = ApiErrorResponse & {
+  error: "conflict";
+  currentRevision: number;
+  currentServerSavedAt: IsoDateTimeString;
 };
 
 export type TerraformGenerateRequest = {

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useEffect,
   useMemo,
@@ -18,13 +19,14 @@ import { MoreHorizontal, Search } from "lucide-react";
 import { SelectMenu, type SelectMenuOption } from "../../components/ui/SelectMenu";
 import { ApiProjectCard, getWorkspaceHref } from "../../components/dashboard/api-project-card";
 import { getApiErrorMessage } from "../../lib/api-client";
+import { useAuth } from "../../components/auth/auth-provider";
+import { invalidateProjectQueries } from "../../components/query/dashboard-query-invalidation";
+import { queryKeys } from "../../lib/query-keys";
 import {
   approveDeploymentPlan,
   deleteProject,
   getProjectDeletePreview,
   listDeployments,
-  listProjects,
-  listRecentSuccessfulDeploymentProjects,
   runDeploymentDestroy,
   runDeploymentDestroyPlan
 } from "../../features/workspace/api";
@@ -38,6 +40,11 @@ import {
   shouldShowProjectOnlyDeleteFallback
 } from "../../features/projects/project-delete-flow";
 import { filterProjectsByName } from "../../features/projects/project-search";
+import {
+  type ProjectsQueryData,
+  removeProjectFromQueryData,
+  useProjectsQuery
+} from "../../features/projects/projects-query";
 
 const DELETE_DEPLOYMENT_POLL_INTERVAL_MS = 2500;
 const DELETE_DEPLOYMENT_POLL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -51,7 +58,6 @@ const PROJECT_DEPLOYMENT_FILTER_OPTIONS: SelectMenuOption[] = [
   { label: "미배포", value: "not_deployed" }
 ];
 
-type ProjectsLoadState = "loading" | "ready" | "error";
 type ProjectDeploymentFilter = "all" | "deployed" | "not_deployed";
 type ProjectSortMode = "recent_work" | "recent_created";
 type DeleteDialogState =
@@ -76,13 +82,12 @@ type ProjectActionMenuState =
   | { readonly errorMessage: string; readonly project: Project; readonly status: "error" };
 
 export function ProjectsClient() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [deploymentStatusByProjectId, setDeploymentStatusByProjectId] = useState<
-    Record<string, boolean>
-  >({});
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const projectsQuery = useProjectsQuery();
+  const projects = projectsQuery.data?.projects ?? [];
+  const deploymentStatusByProjectId = projectsQuery.data?.deploymentStatusByProjectId ?? {};
   const [deploymentFilter, setDeploymentFilter] = useState<ProjectDeploymentFilter>("all");
-  const [loadState, setLoadState] = useState<ProjectsLoadState>("loading");
-  const [errorMessage, setErrorMessage] = useState("");
   const [sortMode, setSortMode] = useState<ProjectSortMode>("recent_work");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
@@ -115,49 +120,6 @@ export function ProjectsClient() {
 
     return () => {
       isMountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadProjects(): Promise<void> {
-      setLoadState("loading");
-      setErrorMessage("");
-
-      try {
-        const [nextProjects, nextRecentDeploymentItems] = await Promise.all([
-          listProjects(),
-          listRecentSuccessfulDeploymentProjects()
-        ]);
-        const deployedProjectIds = new Set(
-          nextRecentDeploymentItems.map((item) => item.project.id)
-        );
-        const nextDeploymentStatusEntries = nextProjects.map(
-          (project) => [project.id, deployedProjectIds.has(project.id)] as const
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        setProjects(nextProjects);
-        setDeploymentStatusByProjectId(Object.fromEntries(nextDeploymentStatusEntries));
-        setLoadState("ready");
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        setErrorMessage(getApiErrorMessage(error, "프로젝트 목록을 불러오지 못했습니다."));
-        setLoadState("error");
-      }
-    }
-
-    void loadProjects();
-
-    return () => {
-      cancelled = true;
     };
   }, []);
 
@@ -200,16 +162,14 @@ export function ProjectsClient() {
   }
 
   function removeProjectFromList(projectId: string): void {
-    setProjects((currentProjects) =>
-      currentProjects.filter((currentProject) => currentProject.id !== projectId)
+    if (!user) {
+      return;
+    }
+
+    queryClient.setQueryData<ProjectsQueryData>(queryKeys.projects(user.id), (currentData) =>
+      currentData ? removeProjectFromQueryData(currentData, projectId) : currentData
     );
-    setDeploymentStatusByProjectId((currentStatusByProjectId) => {
-      const nextStatusByProjectId = { ...currentStatusByProjectId };
-
-      delete nextStatusByProjectId[projectId];
-
-      return nextStatusByProjectId;
-    });
+    void invalidateProjectQueries(queryClient, user.id);
   }
 
   async function openProjectDeleteDialog(
@@ -648,7 +608,7 @@ export function ProjectsClient() {
     </div>
   );
 
-  if (loadState === "loading") {
+  if (projectsQuery.isPending) {
     return (
       <section className="dashboardPanel" aria-label="프로젝트 목록 로딩">
         {projectControls}
@@ -657,13 +617,16 @@ export function ProjectsClient() {
     );
   }
 
-  if (loadState === "error") {
+  if (projectsQuery.isError && !projectsQuery.data) {
     return (
       <section className="dashboardPanel" aria-label="프로젝트 목록 오류">
         {projectControls}
         <p className="dashboardMessage" role="alert">
-          {errorMessage}
+          {getApiErrorMessage(projectsQuery.error, "프로젝트 목록을 불러오지 못했습니다.")}
         </p>
+        <button onClick={() => void projectsQuery.refetch()} type="button">
+          다시 시도
+        </button>
       </section>
     );
   }
