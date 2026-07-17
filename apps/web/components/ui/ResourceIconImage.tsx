@@ -12,7 +12,7 @@ export function ResourceIconImage({
   src
 }: {
   readonly alt: string;
-  readonly className: string;
+  readonly className: string | undefined;
   readonly fallbackClassName?: string | undefined;
   readonly fallbackSize?: number | undefined;
   readonly src: string | undefined;

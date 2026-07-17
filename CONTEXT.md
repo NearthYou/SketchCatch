@@ -52,17 +52,21 @@ _Avoid_: Template candidate list, AI-owned Template selection
 A proposed Practice Architecture that has not yet been accepted, corrected, or saved by the user.
 _Avoid_: AI result, generated diagram, draft infrastructure
 
-**Draft Progress View**:
-A preview shown while AI Architecture Recommendation is forming an Architecture Draft. It separates confirmed requirement evidence from provisional structure and permits viewport navigation plus excluding a provisional candidate; it cannot reposition or connect Resources, edit configuration, modify the Architecture Board, or be accepted or applied. Superseded provisional structure leaves the current projection and remains only as conversation history. An interrupted view retains the last valid projection but is explicitly marked as no longer updating. When the Architecture Draft arrives, the transition identifies material differences before the final draft becomes the current result.
-_Avoid_: Loading preview, incomplete Architecture Draft, interactive Board
+**Selected Option Trail**:
+An ordered, current-conversation record of assistant-provided options that the user explicitly selected. A single-choice question contributes at most one selection. Direct Requirement Input, Voice Requirement Input, and Draft Candidate Exclusion are not part of the trail, and the trail does not express progress, completeness, or approval.
+_Avoid_: Progress tracker, requirement checklist, saved preference profile
 
-**Draft Progress Snapshot**:
-A sequenced, structured intermediate result containing the complete current confirmed requirement evidence and provisional structure for a Draft Progress View. Each snapshot supersedes older snapshots from the same Architecture Draft request.
-_Avoid_: Token stream, partial patch, incomplete Architecture Draft
+**Decorative Resource Orbit**:
+A presentation-only arrangement of actual AWS Resource icons that responds deterministically to the Selected Option Trail while an Architecture Draft is being explored. It does not assert Resource accuracy, recommendation, candidacy, relationships, quantities, or completion and is discarded when the final compiled result becomes available.
+_Avoid_: Architecture Draft, Resource recommendation, Draft Progress View, provisional Architecture Board
+
+**Compiled Architecture Preview**:
+A read-only view of the Architecture Board Compiler proposal produced from an Architecture Draft and represented with the Resource Catalog's actual icons. It is available only after successful compilation, shows the same Diagram proposed for saving, and cannot change a Project or Architecture Board until the user explicitly applies it.
+_Avoid_: Decorative Resource Orbit, editable Architecture Board, applied Architecture
 
 **Draft Candidate Exclusion**:
-An explicit, reversible user choice to remove one provisional candidate from the Draft Progress View and constrain subsequent Architecture Draft recommendations during the current conversation. It never modifies the Architecture Board or accepts the remaining candidates.
-_Avoid_: Resource deletion, Architecture Draft acceptance, Board mutation
+An explicit, reversible user choice tied to an actual server-provided candidate identity and label that constrains subsequent Architecture Draft recommendations during the current conversation. It is independent of the Selected Option Trail and Decorative Resource Orbit, and it never modifies the Architecture Board or accepts the remaining candidates.
+_Avoid_: Selected option, decorative Resource removal, Resource deletion, Architecture Draft acceptance
 
 **AI Architecture Recommendation**:
 The service capability that interprets a Requirement Prompt, proposes an Architecture Draft, explains the trade-offs, and lets the user accept it onto the Architecture Board.

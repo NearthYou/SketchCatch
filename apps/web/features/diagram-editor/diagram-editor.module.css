@@ -52,6 +52,17 @@
   width: 100%;
 }
 
+.editorShellViewer {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  height: 100%;
+}
+
+.editorShellViewer .workspace {
+  grid-column: 1;
+  grid-row: 1;
+}
+
 .editorShellLeftCollapsed {
   grid-template-columns: 0 minmax(0, 1fr) var(--right-panel-width);
 }
@@ -2129,6 +2140,11 @@ button.rightRailResizeHandle {
   transition: opacity 120ms ease;
 }
 
+.edgeAnchorHandle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .connectionHandleSource {
   z-index: 11;
 }
@@ -2815,6 +2831,10 @@ button.rightRailResizeHandle {
   .editorShell {
     grid-template-columns: 0 minmax(0, 1fr) 0;
     overflow: hidden;
+  }
+
+  .editorShellViewer {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .leftRail {

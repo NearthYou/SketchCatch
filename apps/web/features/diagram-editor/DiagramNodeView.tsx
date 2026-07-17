@@ -45,7 +45,11 @@ import {
   getNodeDisplayBorderStyle
 } from "./node-style";
 import { getResourceNodePresentation } from "./resource-node-presentation";
-import type { DiagramFlowNode } from "./types";
+import {
+  shouldRenderDiagramNodeEdgeAnchors,
+  shouldRenderDiagramNodeInteractionHandles,
+  type DiagramFlowNode
+} from "./types";
 import styles from "./diagram-editor.module.css";
 
 const CONNECTION_HANDLES = [
@@ -438,12 +442,13 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           </>
         ) : null}
 
-        {CONNECTION_HANDLES.map((handle) => {
-          const canStartFromHandle = canConnect && !data.isConnectionActive;
-          const canEndAtHandle = data.isValidConnectionTarget;
+        {shouldRenderDiagramNodeInteractionHandles(data.isPreview)
+          ? CONNECTION_HANDLES.map((handle) => {
+              const canStartFromHandle = canConnect && !data.isConnectionActive;
+              const canEndAtHandle = data.isValidConnectionTarget;
 
-          return (
-            <Fragment key={handle.id}>
+              return (
+                <Fragment key={handle.id}>
               <Handle
                 aria-label={`${resourceNodeLabel} ${handle.label} 연결 시작`}
                 className={[
@@ -483,9 +488,38 @@ export const DiagramNodeView = memo(function DiagramNodeView(
                 tabIndex={canEndAtHandle ? 0 : -1}
                 type="target"
               />
-            </Fragment>
-          );
-        })}
+                </Fragment>
+              );
+            })
+          : null}
+        {shouldRenderDiagramNodeEdgeAnchors(data.isPreview)
+          ? CONNECTION_HANDLES.map((handle) => (
+              <Fragment key={`preview-${handle.id}`}>
+                <Handle
+                  aria-hidden="true"
+                  className={styles.edgeAnchorHandle}
+                  id={`source-${handle.id}`}
+                  isConnectable={false}
+                  isConnectableEnd={false}
+                  isConnectableStart={false}
+                  position={handle.position}
+                  tabIndex={-1}
+                  type="source"
+                />
+                <Handle
+                  aria-hidden="true"
+                  className={styles.edgeAnchorHandle}
+                  id={`target-${handle.id}`}
+                  isConnectable={false}
+                  isConnectableEnd={false}
+                  isConnectableStart={false}
+                  position={handle.position}
+                  tabIndex={-1}
+                  type="target"
+                />
+              </Fragment>
+            ))
+          : null}
       </div>
     </>
   );

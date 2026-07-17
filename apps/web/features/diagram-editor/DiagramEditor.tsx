@@ -145,6 +145,7 @@ import {
   normalizeSelectedNodeIds,
   stabilizeSelectedIds
 } from "./selection-utils";
+import { getDiagramEditorViewerPolicy, resolveDiagramEditorVisibleDiagram } from "./types";
 import type {
   DiagramEditorPanelContext,
   DiagramEditorProps,
@@ -261,6 +262,7 @@ function DiagramEditorInner({
   initialSelectedEdgeIds,
   initialSelectedNodeIds,
   leftPanel,
+  mode = "editor",
   onBoardReady,
   onDiagramChange,
   onDiagramSaveRequest,
@@ -272,6 +274,10 @@ function DiagramEditorInner({
   showSaveAction = true,
   workspaceUserName = "Personal workspace"
 }: DiagramEditorProps) {
+  const viewerPolicy = getDiagramEditorViewerPolicy(mode);
+  if (viewerPolicy.isViewer) {
+    allowPreviewInspection = false;
+  }
   const reactFlow = useReactFlow<DiagramFlowNode, DiagramFlowEdge>();
   const fallbackFlowInstanceRef = useRef(reactFlow);
   fallbackFlowInstanceRef.current = reactFlow;
@@ -383,9 +389,15 @@ function DiagramEditorInner({
   }, []);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
-  const hasRightRail = rightPanel !== null;
-  const isPreviewActive = previewDiagram !== null;
-  const visibleDiagram = previewDiagram ?? diagram;
+  const hasRightRail = viewerPolicy.showPanels && rightPanel !== null;
+  const isPreviewActive = previewDiagram !== null || viewerPolicy.isPreview;
+  const visibleDiagram = resolveDiagramEditorVisibleDiagram({
+    currentDiagram: diagram,
+    initialDiagram,
+    initialPreviewDiagram,
+    mode,
+    previewDiagram
+  });
   const hasSourceViewBoxViewport =
     visibleDiagram.presentation?.geometryPolicy === "source-exact" &&
     visibleDiagram.presentation.sourceViewBox !== undefined;
@@ -2531,8 +2543,8 @@ function DiagramEditorInner({
   );
 
   const handleFitView = useCallback(() => {
-    fitVisibleDiagram(previewDiagram === null);
-  }, [fitVisibleDiagram, previewDiagram]);
+    fitVisibleDiagram(!isPreviewActive);
+  }, [fitVisibleDiagram, isPreviewActive]);
 
   useEffect(() => {
     if (
@@ -2886,9 +2898,12 @@ function DiagramEditorInner({
   } as CSSProperties;
   const editorShellClassName = [
     styles.editorShell,
-    !isLeftPanelOpen ? styles.editorShellLeftCollapsed : undefined,
-    !hasRightRail ? styles.editorShellRightHidden : undefined,
-    hasRightRail && !isRightPanelOpen ? styles.editorShellRightCollapsed : undefined
+    viewerPolicy.usesContainerHeight ? styles.editorShellViewer : undefined,
+    !viewerPolicy.isViewer && !isLeftPanelOpen ? styles.editorShellLeftCollapsed : undefined,
+    !viewerPolicy.isViewer && !hasRightRail ? styles.editorShellRightHidden : undefined,
+    !viewerPolicy.isViewer && hasRightRail && !isRightPanelOpen
+      ? styles.editorShellRightCollapsed
+      : undefined
   ]
     .filter(Boolean)
     .join(" ");
@@ -2911,33 +2926,35 @@ function DiagramEditorInner({
   return (
     <section
       className={editorShellClassName}
-      onKeyDown={handleShellKeyDown}
+      onKeyDown={viewerPolicy.canSelectNodes ? handleShellKeyDown : undefined}
       ref={editorShellRef}
       style={editorShellStyle}
       tabIndex={0}
     >
-      <WorkspaceProjectBar
-        actions={{
-          onSave: onDiagramSaveRequest,
-          onSaveAndDeploy: onSaveAndDeployRequest,
-          onToggleLeftPanel: toggleLeftPanel,
-          onToggleRightPanel: toggleRightPanel
-        }}
-        panels={{
-          hasRightPanel: hasRightRail,
-          isLeftPanelOpen,
-          isRightPanelOpen: hasRightRail && isRightPanelOpen
-        }}
-        workspace={{
-          dashboardHref,
-          projectName,
-          saveStatus,
-          showSaveAction,
-          userName: workspaceUserName
-        }}
-      />
+      {viewerPolicy.showWorkspaceChrome ? (
+        <WorkspaceProjectBar
+          actions={{
+            onSave: onDiagramSaveRequest,
+            onSaveAndDeploy: onSaveAndDeployRequest,
+            onToggleLeftPanel: toggleLeftPanel,
+            onToggleRightPanel: toggleRightPanel
+          }}
+          panels={{
+            hasRightPanel: hasRightRail,
+            isLeftPanelOpen,
+            isRightPanelOpen: hasRightRail && isRightPanelOpen
+          }}
+          workspace={{
+            dashboardHref,
+            projectName,
+            saveStatus,
+            showSaveAction,
+            userName: workspaceUserName
+          }}
+        />
+      ) : null}
 
-      {isLeftPanelOpen ? (
+      {viewerPolicy.showPanels && isLeftPanelOpen ? (
         <div className={styles.leftRail} ref={leftRailRef}>
           {leftPanel === undefined ? (
             <ResourceSettingsPanel
@@ -2969,73 +2986,77 @@ function DiagramEditorInner({
 
       <div className={styles.workspace}>
         <header className={styles.canvasToolbar}>
-          <div className={styles.toolbarGroup} aria-label="편집 도구">
-            <button
-              aria-label="선택 모드"
-              aria-pressed={interactionMode === "select"}
-              className={
-                interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton
-              }
-              onClick={() => setInteractionMode("select")}
-              title="선택 모드"
-              type="button"
-            >
-              <MousePointer2 aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="캔버스 이동"
-              aria-pressed={interactionMode === "pan"}
-              className={interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton}
-              onClick={() => setInteractionMode("pan")}
-              title="캔버스 이동"
-              type="button"
-            >
-              <Move aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="영역 자동 확장"
-              aria-pressed={autoExpandAreasEnabled}
-              className={autoExpandAreasEnabled ? styles.iconButtonSelected : styles.iconButton}
-              onClick={toggleAutoExpandAreas}
-              title={autoExpandAreasEnabled ? "영역 자동 확장 켜짐" : "영역 자동 확장 꺼짐"}
-              type="button"
-            >
-              <Expand aria-hidden="true" size={16} />
-            </button>
-          </div>
+          {viewerPolicy.showEditingControls ? (
+            <>
+              <div className={styles.toolbarGroup} aria-label="편집 도구">
+                <button
+                  aria-label="선택 모드"
+                  aria-pressed={interactionMode === "select"}
+                  className={
+                    interactionMode === "select" ? styles.iconButtonSelected : styles.iconButton
+                  }
+                  onClick={() => setInteractionMode("select")}
+                  title="선택 모드"
+                  type="button"
+                >
+                  <MousePointer2 aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="캔버스 이동"
+                  aria-pressed={interactionMode === "pan"}
+                  className={interactionMode === "pan" ? styles.iconButtonSelected : styles.iconButton}
+                  onClick={() => setInteractionMode("pan")}
+                  title="캔버스 이동"
+                  type="button"
+                >
+                  <Move aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="영역 자동 확장"
+                  aria-pressed={autoExpandAreasEnabled}
+                  className={autoExpandAreasEnabled ? styles.iconButtonSelected : styles.iconButton}
+                  onClick={toggleAutoExpandAreas}
+                  title={autoExpandAreasEnabled ? "영역 자동 확장 켜짐" : "영역 자동 확장 꺼짐"}
+                  type="button"
+                >
+                  <Expand aria-hidden="true" size={16} />
+                </button>
+              </div>
 
-          <div className={styles.toolbarGroup} aria-label="History">
-            <button
-              aria-label="Architecture Board 자동 정리 미리보기"
-              className={styles.iconButton}
-              disabled={isPreviewActive || diagram.nodes.length === 0}
-              onClick={previewAutomaticOrganization}
-              title="자동 정리"
-              type="button"
-            >
-              <Sparkles aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="Undo"
-              className={styles.iconButton}
-              disabled={isPreviewActive || history.past.length === 0}
-              onClick={undo}
-              title="Undo"
-              type="button"
-            >
-              <Undo2 aria-hidden="true" size={16} />
-            </button>
-            <button
-              aria-label="Redo"
-              className={styles.iconButton}
-              disabled={isPreviewActive || history.future.length === 0}
-              onClick={redo}
-              title="Redo"
-              type="button"
-            >
-              <Redo2 aria-hidden="true" size={16} />
-            </button>
-          </div>
+              <div className={styles.toolbarGroup} aria-label="History">
+                <button
+                  aria-label="Architecture Board 자동 정리 미리보기"
+                  className={styles.iconButton}
+                  disabled={isPreviewActive || diagram.nodes.length === 0}
+                  onClick={previewAutomaticOrganization}
+                  title="자동 정리"
+                  type="button"
+                >
+                  <Sparkles aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="Undo"
+                  className={styles.iconButton}
+                  disabled={isPreviewActive || history.past.length === 0}
+                  onClick={undo}
+                  title="Undo"
+                  type="button"
+                >
+                  <Undo2 aria-hidden="true" size={16} />
+                </button>
+                <button
+                  aria-label="Redo"
+                  className={styles.iconButton}
+                  disabled={isPreviewActive || history.future.length === 0}
+                  onClick={redo}
+                  title="Redo"
+                  type="button"
+                >
+                  <Redo2 aria-hidden="true" size={16} />
+                </button>
+              </div>
+            </>
+          ) : null}
 
           <div className={styles.toolbarGroup} aria-label="Viewport">
             <button
@@ -3068,11 +3089,11 @@ function DiagramEditorInner({
           </div>
         </header>
 
-        {draftStatusPanel ? (
+        {!viewerPolicy.isViewer && draftStatusPanel ? (
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        {compilerPreviewSummary ? (
+        {!viewerPolicy.isViewer && compilerPreviewSummary ? (
           <section
             aria-label="자동 정리 미리보기"
             className={`${styles.previewNotice} ${styles.compilerPreviewNotice}`}
@@ -3127,7 +3148,7 @@ function DiagramEditorInner({
               </p>
             ) : null}
           </section>
-        ) : isPreviewActive ? (
+        ) : !viewerPolicy.isViewer && isPreviewActive ? (
           <div className={styles.previewNotice} role="status">
             미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
           </div>
@@ -3135,10 +3156,10 @@ function DiagramEditorInner({
 
         <div
           className={canvasPanelClassName}
-          onAuxClickCapture={handleCanvasAuxClick}
+          onAuxClickCapture={viewerPolicy.showEditingControls ? handleCanvasAuxClick : undefined}
           onDoubleClickCapture={isPreviewActive ? undefined : handleCanvasDoubleClick}
-          onMouseDownCapture={handleCanvasMouseDown}
-          onMouseLeave={handleCanvasMouseLeave}
+          onMouseDownCapture={viewerPolicy.showEditingControls ? handleCanvasMouseDown : undefined}
+          onMouseLeave={viewerPolicy.showEditingControls ? handleCanvasMouseLeave : undefined}
           onPointerCancelCapture={isPreviewActive ? undefined : handleCanvasPointerCancel}
           onPointerDownCapture={isPreviewActive ? undefined : handleCanvasPointerDown}
           onPointerMoveCapture={isPreviewActive ? undefined : handleCanvasPointerMove}
@@ -3146,7 +3167,7 @@ function DiagramEditorInner({
           ref={canvasPanelRef}
           style={canvasPanelStyle}
         >
-          {selectedEdge ? (
+          {viewerPolicy.showEditingControls && selectedEdge ? (
             <DiagramEdgeToolbar
               edge={selectedEdge}
               key={selectedEdge.id}
@@ -3182,7 +3203,7 @@ function DiagramEditorInner({
             nodesConnectable={interactionMode === "select" && !isPreviewActive}
             nodesDraggable={interactionMode === "select" && !isPreviewActive}
             onInit={handleInit}
-            panOnDrag={isPreviewActive || interactionMode === "pan"}
+            panOnDrag={viewerPolicy.canPanAndZoom && (isPreviewActive || interactionMode === "pan")}
             panOnScroll
             panOnScrollMode={PanOnScrollMode.Free}
             proOptions={{ hideAttribution: true }}
@@ -3218,25 +3239,29 @@ function DiagramEditorInner({
                 }
               : {})}
           >
-            <Background
-              id="board-grid-major"
-              color="rgba(101, 116, 139, 0.18)"
-              gap={80}
-              size={1.15}
-              variant={BackgroundVariant.Dots}
-            />
-            <Background
-              id="board-grid-minor"
-              color="rgba(101, 116, 139, 0.1)"
-              gap={16}
-              size={0.8}
-              variant={BackgroundVariant.Dots}
-            />
+            {viewerPolicy.showBoardGrid ? (
+              <>
+                <Background
+                  id="board-grid-major"
+                  color="rgba(101, 116, 139, 0.18)"
+                  gap={80}
+                  size={1.15}
+                  variant={BackgroundVariant.Dots}
+                />
+                <Background
+                  id="board-grid-minor"
+                  color="rgba(101, 116, 139, 0.1)"
+                  gap={16}
+                  size={0.8}
+                  variant={BackgroundVariant.Dots}
+                />
+              </>
+            ) : null}
           </ReactFlow>
         </div>
       </div>
 
-      {hasRightRail ? (
+      {viewerPolicy.showPanels && hasRightRail ? (
         <div className={styles.rightRail}>
           <button
             aria-label="Resize right panel"
@@ -3265,7 +3290,7 @@ function DiagramEditorInner({
         </div>
       ) : null}
 
-      {floatingPanel ? (
+      {viewerPolicy.showPanels && floatingPanel ? (
         <div className={styles.floatingPanelSlot}>{floatingPanel?.(panelContext)}</div>
       ) : null}
     </section>

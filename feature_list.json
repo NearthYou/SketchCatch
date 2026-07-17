@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "lastUpdated": "2026-07-15",
+  "lastUpdated": "2026-07-17",
   "purpose": "Tracks agent-harness hardening work and active cross-session workstreams. Product scope remains in docs/product.md.",
   "statusRules": {
     "allowedStatuses": ["not_started", "in_progress", "blocked", "passing"],
@@ -557,7 +557,8 @@
         "AI Draft, Board 자동 정리, Reverse Engineering, Template 검토가 동일한 Compiler Interface를 사용한다.",
         "Template variant는 source fingerprint와 visual-only approval 범위가 일치할 때만 authored source 위에 적용된다.",
         "자동 정리는 미리보기·적용·취소·Undo 경계를 유지하며 승인 전 Board를 변경하지 않는다.",
-        "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다."
+        "Workspace AI Chat의 세 대화 범위와 stale proposal 차단이 실제 상태·접근성 동작과 일치한다.",
+        "Workspace AI는 클릭한 option만 의미 기록으로 누적하고 실제 Resource icon Orbit과 Compiler Diagram 최종 Preview를 분리하며 승인 전 Board를 변경하지 않는다."
       ],
       "evidence": {
         "lastVerified": "2026-07-17",
@@ -566,14 +567,16 @@
           "pnpm architecture-board-knowledge:check",
           "pnpm architecture-board-evidence:check",
           "pnpm architecture-board-evidence-review:check",
-          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/ai-start-model.test.ts app/workspace/ai/ai-draft-progress-model.test.ts app/workspace/ai/ai-draft-progress-coordinator.test.ts app/workspace/ai/use-ai-start-workflow.test.ts features/workspace/workspace-ai-chat-storage.test.ts features/architecture-board-compiler/architecture-board-compiler.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
-          "pnpm --dir apps/web exec tsx --test features/workspace/workspace-ai-chat-consolidation.test.ts features/workspace/workspace-ai-chat-conversation.test.ts features/workspace/workspace-ai-chat-request.test.ts features/workspace/workspace-ai-chat-status.test.ts features/workspace/workspace-ai-context-bridge.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/workspace/workspace-ai-result-presentation.test.ts features/workspace/workspace-ai-workbench-contract.test.ts features/workspace/workspace-ai-workbench-state.test.ts features/workspace/workspace-api-abort.test.ts",
-          "pnpm --dir apps/api exec tsx --test src/services/aiLlmExplanation.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test app/workspace/ai/ai-start-model.test.ts app/workspace/ai/ai-draft-progress-model.test.ts app/workspace/ai/ai-draft-progress-coordinator.test.ts app/workspace/ai/use-ai-start-workflow.test.ts app/workspace/ai/selected-option-model.test.ts app/workspace/ai/option-resource-presentation.test.ts app/workspace/ai/workspace-ai-presentation.test.ts app/workspace/ai/workspace-ai-route-entry.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/workspace/workspace-ai-chat-request.test.ts features/workspace/workspace-ai-diagram-adapter.test.ts features/architecture-board-compiler/architecture-board-integrations.test.ts features/architecture-board-compiler/architecture-board-compilation-preview.test.ts",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/DiagramNodeView.test.ts features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts",
+          "pnpm --filter @sketchcatch/web test",
+          "in-app Browser QA at 1440x900, 1024x768, 960x768, 958x768, and 390x844",
           "pnpm lint",
           "pnpm typecheck",
-          "pnpm build"
+          "pnpm build",
+          "git diff --check"
         ],
-        "notes": "000 Compiler implementation is complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. The 001 Workspace AI Workbench is also complete: three isolated modes, immutable proposal source guards, request cancellation identity, fresh-only Terraform approval, conditional transcript scrolling, desktop/mobile accessibility, and legacy chat CSS removal are verified. Workspace AI tests passed 100/100, Terraform provider-chain tests passed 8/8, root harness/lint/typecheck/build passed, and final review reported no findings. Chrome QA covered 375px, 768px, 1024px, and 1920px with no new console error. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue."
+        "notes": "000 Compiler implementation remains complete: the checked-in 29+1 knowledge artifact expands bounded geometry candidates, keeps source/requested-original/presentation/semantic selection explicit, forwards Reverse Engineering diagnostics, and fingerprint-gates visual-only Template variants. `/workspace/ai` was rebuilt from the cleanup baseline with a semantic clicked-option trail, deterministic presentation-only Orbit sourced only from actual `/Resource-Icons_07312025/` catalog entries, and a Compiler-authoritative read-only final Diagram. The deleted progress card, requirement list, history panel, mobile tabs, and unused backend progress features remain absent. Focused Workspace AI/Compiler tests passed 94/94, full Web regression passed 545/545, and harness/lint/typecheck/build/diff checks passed. Browser QA covered desktop, breakpoint, tablet, and 390x844 mobile layouts, continuous Orbit response motion, the independent final reveal, pan/zoom, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix; Board application was not used. The aggregate feature remains in_progress only for the separately owned Compiler evidence and human-review queue."
       },
       "notes": "Compiler proposals may diagnose but do not hard-reject requirement, deployment, Provider, or Terraform conflicts; application remains user-accepted and Deployment safety remains unchanged."
     },

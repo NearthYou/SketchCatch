@@ -4,14 +4,25 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Current Verified State
 
-- `/workspace/ai` is intentionally a buildable `null` route shell while its UI is rebuilt from a clean baseline.
-- The previous client JSX, CSS, progress/preview presentation, mobile pane, route-only Compiler summary, and source/CSS UI test are deleted rather than retained as reference code.
-- The remaining stream contract carries only the server-owned provisional Architecture and excludable candidate IDs; lifecycle cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save contracts remain in functional code.
-- Dead progress stages, requirement/question summaries, history/final diff, `dynamicQuestionAnswers`, `templateFallback`, and unused hook/model exports are removed end-to-end.
-- Repository keeps its production preview through a Repository-local read-only component, and the chat storage-key helper is now presentation-neutral.
-- The rebuild baseline records the actual entry paths, retained/shared/removed contracts, known gaps, option accumulation rules, decorative AWS icon rules, and final Preview authority.
+- `/workspace/ai` is rebuilt as a new conversation surface with a selected-option trail, a decorative AWS Resource Orbit, and a Compiler-authoritative final Preview.
+- Clicked assistant options are semantic, current-session selections; direct input, voice input, retry, and candidate exclusion remain separate concerns.
+- The Orbit uses deterministic presentation-only selections from the actual AWS Resource icon catalog and does not restore or depend on backend progress stages.
+- A final Preview appears only from a successful Architecture Board Compiler proposal and renders that proposal's Diagram read-only until explicit Board application.
+- The deleted progress card, requirement list, history panel, mobile tabs, route-only summary, and other unused presentation/progress contracts remain deleted.
+- Cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save boundaries remain in functional code.
 
 ## Session Record
+
+### 2026-07-17 - Rebuild Workspace AI conversation and compiled preview
+
+- Added a responsibility-separated route shell, transcript, composer, selected-option model and accessible trail, deterministic option-to-resource mapper, decorative AWS Resource Orbit, and read-only final Architecture Preview.
+- Recorded exactly one clicked assistant option per single-select question before submitting it; direct and voice input do not enter the trail, while failed, cancelled, and retried requests retain the click record.
+- Built the Orbit only from enabled `resourceCatalog` entries whose icon URLs use `/Resource-Icons_07312025/`; stable option state produces stable composition and each click changes only a bounded subset.
+- Kept the Orbit explicitly decorative and replaced it, without a fake morph, only after the Compiler returns the actual Diagram used by the final pan/zoom Preview.
+- Preserved actual candidate exclusion/undo and the explicit Board-application boundary without reviving server progress APIs or the deleted Workspace AI presentation.
+- Browser QA covered 1440x900, 1024x768, both sides of the 959px breakpoint, and 390x844. It verified option accumulation, bounded Orbit changes, continuous multi-ring motion, the click pulse/kick/excursion response, the separate Orbit exit and final Diagram reveal, pan/zoom, mobile reachability, zero horizontal overflow, and zero new console errors or warnings after the viewer-anchor fix. Board application was not used.
+- Passed focused Workspace AI/Compiler tests 94/94, full Web regression 545/545, `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+- No real cloud apply, deployment, user-project mutation, Git handoff, push, or PR was performed.
 
 ### 2026-07-17 - Clear the Workspace AI rebuild baseline
 
@@ -102,10 +113,9 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Broken Or Unverified
 
-- `apps/web/app/workspace/repository/repository-start-client.test.ts` has two stale source-contract assertions for `compileArchitectureDraftProposal` and explicit approval code that are absent at the unchanged baseline HEAD as well as this cleanup. It is not used as evidence for this change and the unrelated Repository workflow was not altered to satisfy it.
-- `pnpm test:core` does not terminate in the unchanged `apps/api/src/app.test.ts` logger-stream test. The isolated run passed 17 assertions with zero failures, then remained pending at `await once(stream, "finish")` and was interrupted after 31 seconds. Consequently root `pnpm test` was not continued into sandbox/Terraform suites.
-- No real cloud apply, deployment, Git handoff, user project creation, or persistent QA account remains.
+- Full Web regression completed at 545/545. Root `pnpm test` was not retried because the unchanged `pnpm test:core` baseline remains known to stay pending in `apps/api/src/app.test.ts` after its logger-stream assertions pass.
+- No real cloud apply, deployment, Git handoff, user project creation, or Board mutation occurred. The disposable local QA account was signed out and owns no project.
 
 ## Next Action
 
-- Rebuild `/workspace/ai` from the documented baseline when requested; do not restore the deleted presentation layer or UI-only progress contracts.
+- No implementation continuation is required. Keep push and PR creation intentionally out of scope.

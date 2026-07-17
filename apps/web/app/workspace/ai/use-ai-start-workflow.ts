@@ -34,6 +34,10 @@ import {
   createWorkspaceAiPromptGateMessage
 } from "../../../features/workspace/workspace-ai-chat-routing";
 import {
+  isWorkspaceAiChatAbortError,
+  WorkspaceAiChatRequestRegistry
+} from "../../../features/workspace/workspace-ai-chat-request";
+import {
   clearAiStartProjectDraft,
   createAiStartMessage,
   createDraftFromPatch,
@@ -50,11 +54,9 @@ import {
   type AiStartMessage,
   type AiStartProjectDraft
 } from "./ai-start-model";
-import {
-  type DraftProgressState,
-  type DraftProgressStatus
-} from "./ai-draft-progress-model";
+import { type DraftProgressState, type DraftProgressStatus } from "./ai-draft-progress-model";
 import { AiDraftProgressCoordinator } from "./ai-draft-progress-coordinator";
+import { getAiStartDraftTransport } from "./ai-start-request-policy";
 
 type PendingDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
@@ -66,12 +68,19 @@ type PendingPatchClarification = {
   readonly clarification: ArchitecturePatchClarification;
 };
 
-type RequestState = "idle" | "loading" | "error";
+type RequestState = "idle" | "loading" | "error" | "cancelled";
+type ApprovalState = "idle" | "loading" | "error";
 
 type PatchTargetOptions = {
   readonly connectionTargetResourceId?: string | undefined;
   readonly selectedTargetResourceId?: string | undefined;
   readonly skipConnection?: boolean | undefined;
+};
+
+type RetryablePatchRequest = {
+  readonly baseDiagram: DiagramJson;
+  readonly instruction: string;
+  readonly options: PatchTargetOptions;
 };
 
 export function useAiStartWorkflow({
@@ -88,14 +97,19 @@ export function useAiStartWorkflow({
   const [messages, setMessages] = useState<AiStartMessage[]>([]);
   const messagesRef = useRef<AiStartMessage[]>([]);
   const draftProgressCoordinatorRef = useRef(new AiDraftProgressCoordinator());
+  const requestRegistryRef = useRef(new WorkspaceAiChatRequestRegistry());
+  const lastPatchRequestRef = useRef<RetryablePatchRequest | null>(null);
+  const approvalRequestRef = useRef(false);
   const [draft, setDraft] = useState<AiArchitectureDraftResult | null>(null);
   const [compilationProposal, setCompilationProposal] =
     useState<ArchitectureBoardCompilationProposal | null>(null);
   const [previewDiagram, setPreviewDiagram] = useState<DiagramJson | null>(null);
-  const [draftClarification, setDraftClarification] =
-    useState<PendingDraftClarification | null>(null);
-  const [patchClarification, setPatchClarification] =
-    useState<PendingPatchClarification | null>(null);
+  const [draftClarification, setDraftClarification] = useState<PendingDraftClarification | null>(
+    null
+  );
+  const [patchClarification, setPatchClarification] = useState<PendingPatchClarification | null>(
+    null
+  );
   const [draftFollowUp, setDraftFollowUp] = useState<ArchitectureDraftFollowUpSession | null>(null);
   const [lastDraftRequest, setLastDraftRequest] = useState<CreateArchitectureDraftRequest | null>(
     null
@@ -103,10 +117,13 @@ export function useAiStartWorkflow({
   const [progressSnapshot, setProgressSnapshot] =
     useState<ArchitectureDraftProgressSnapshot | null>(null);
   const [progressStatus, setProgressStatus] = useState<DraftProgressStatus>("idle");
-  const [lastExclusion, setLastExclusion] =
-    useState<ArchitectureDraftCandidateExclusion | null>(null);
+  const [lastExclusion, setLastExclusion] = useState<ArchitectureDraftCandidateExclusion | null>(
+    null
+  );
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
   const [requestState, setRequestState] = useState<RequestState>("idle");
+  const [approvalState, setApprovalState] = useState<ApprovalState>("idle");
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const [voiceTranscriptNeedsConfirmation, setVoiceTranscriptNeedsConfirmation] = useState(false);
   const voiceInput = useBrowserVoiceInput({
     onChange: handleVoiceTranscriptChange,
@@ -114,13 +131,14 @@ export function useAiStartWorkflow({
   });
 
   useEffect(() => {
-    const storedDraft = existingProjectId && existingProjectName
-      ? {
-          projectName: existingProjectName,
-          startMode: "ai" as const,
-          updatedAt: new Date().toISOString()
-        }
-      : readAiStartProjectDraft();
+    const storedDraft =
+      existingProjectId && existingProjectName
+        ? {
+            projectName: existingProjectName,
+            startMode: "ai" as const,
+            updatedAt: new Date().toISOString()
+          }
+        : readAiStartProjectDraft();
 
     if (storedDraft === null) {
       router.replace("/workspace/new");
@@ -140,6 +158,7 @@ export function useAiStartWorkflow({
   useEffect(() => {
     return () => {
       draftProgressCoordinatorRef.current.dispose();
+      requestRegistryRef.current.cancelAll();
     };
   }, []);
 
@@ -149,6 +168,7 @@ export function useAiStartWorkflow({
     if (
       prompt.length === 0 ||
       requestState === "loading" ||
+      approvalRequestRef.current ||
       voiceTranscriptNeedsConfirmation
     ) {
       return;
@@ -210,19 +230,32 @@ export function useAiStartWorkflow({
   async function requestDraft(request: CreateArchitectureDraftRequest): Promise<void> {
     beginRequest();
 
-    if (existingProjectId !== undefined) {
+    if (getAiStartDraftTransport(existingProjectId) === "json") {
       abortActiveDraftRequest();
       rememberDraftRequest(request);
+      const controller = requestRegistryRef.current.begin("draft");
 
       try {
-        const response = await createAiArchitectureDraft(request);
+        const response = await createAiArchitectureDraft(request, { signal: controller.signal });
+        if (!requestRegistryRef.current.isActive("draft", controller)) {
+          return;
+        }
         handleDraftResponse(request, response);
       } catch (error) {
+        if (
+          isWorkspaceAiChatAbortError(error) ||
+          !requestRegistryRef.current.isActive("draft", controller)
+        ) {
+          return;
+        }
         failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
+      } finally {
+        requestRegistryRef.current.complete("draft", controller);
       }
       return;
     }
 
+    requestRegistryRef.current.cancel("draft");
     const progressRequest = draftProgressCoordinatorRef.current.begin(request);
     rememberDraftRequest(progressRequest.request);
     publishDraftProgressState(draftProgressCoordinatorRef.current.state);
@@ -286,6 +319,7 @@ export function useAiStartWorkflow({
 
   function rememberDraftRequest(request: CreateArchitectureDraftRequest): void {
     setLastDraftRequest(request);
+    lastPatchRequestRef.current = null;
   }
 
   function abortActiveDraftRequest(markInterrupted = false): void {
@@ -302,6 +336,8 @@ export function useAiStartWorkflow({
   }
 
   function excludeCandidateFromProgress(candidateId: string): void {
+    if (approvalRequestRef.current) return;
+
     const restart = draftProgressCoordinatorRef.current.exclude(candidateId);
     if (restart === null) {
       return;
@@ -313,6 +349,8 @@ export function useAiStartWorkflow({
   }
 
   function undoLastExclusion(): void {
+    if (approvalRequestRef.current) return;
+
     const restart = draftProgressCoordinatorRef.current.undoLastExclusion();
     if (restart === null) {
       return;
@@ -324,7 +362,15 @@ export function useAiStartWorkflow({
   }
 
   async function retryDraft(): Promise<void> {
-    const retryRequest = draftProgressCoordinatorRef.current.retryRequest();
+    if (approvalRequestRef.current) return;
+
+    const patchRequest = lastPatchRequestRef.current;
+    if (patchRequest !== null) {
+      await requestPatch(patchRequest.instruction, patchRequest.baseDiagram, patchRequest.options);
+      return;
+    }
+
+    const retryRequest = draftProgressCoordinatorRef.current.retryRequest() ?? lastDraftRequest;
     if (retryRequest !== null) {
       await requestDraft(retryRequest);
     }
@@ -336,13 +382,23 @@ export function useAiStartWorkflow({
     options: PatchTargetOptions = {}
   ): Promise<void> {
     beginRequest(false);
+    abortActiveDraftRequest();
+    lastPatchRequestRef.current = { baseDiagram, instruction, options };
+    const controller = requestRegistryRef.current.begin("draft");
 
     try {
-      const response = await createAiArchitecturePatchPreview({
-        architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
-        instruction,
-        ...options
-      });
+      const response = await createAiArchitecturePatchPreview(
+        {
+          architectureJson: convertDiagramJsonToArchitectureJson(baseDiagram),
+          instruction,
+          ...options
+        },
+        { signal: controller.signal }
+      );
+
+      if (!requestRegistryRef.current.isActive("draft", controller)) {
+        return;
+      }
 
       if (isArchitecturePatchClarification(response)) {
         setPatchClarification({ baseDiagram, clarification: response });
@@ -358,16 +414,31 @@ export function useAiStartWorkflow({
       const nextDraft = createDraftFromPatch(response, draft);
       showDraft(nextDraft, baseDiagram, createPatchSummary(response));
     } catch (error) {
+      if (
+        isWorkspaceAiChatAbortError(error) ||
+        !requestRegistryRef.current.isActive("draft", controller)
+      ) {
+        return;
+      }
       failRequest(getApiErrorMessage(error, "수정 PREVIEW를 만들지 못했습니다."));
+    } finally {
+      requestRegistryRef.current.complete("draft", controller);
     }
   }
 
   async function approveDraft(): Promise<void> {
-    if (projectDraft === null || draft === null || compilationProposal === null) {
+    if (
+      projectDraft === null ||
+      draft === null ||
+      compilationProposal === null ||
+      approvalRequestRef.current
+    ) {
       return;
     }
 
-    beginRequest(false);
+    approvalRequestRef.current = true;
+    setApprovalState("loading");
+    setApprovalError(null);
 
     try {
       let projectId = existingProjectId ?? createdProjectId;
@@ -378,10 +449,10 @@ export function useAiStartWorkflow({
         setCreatedProjectId(project.id);
       }
 
+      await saveProjectDraft({ diagramJson: compilationProposal.diagram, projectId });
       const approvedMessages = appendMessage(
         createAiStartMessage("assistant", "status", `${draft.title}을 Board에 적용했습니다.`)
       );
-      await saveProjectDraft({ diagramJson: compilationProposal.diagram, projectId });
       storeApprovedAiStartMessages(projectId, approvedMessages);
       if (!existingProjectId) {
         clearAiStartProjectDraft();
@@ -393,21 +464,23 @@ export function useAiStartWorkflow({
         }).toString()}`
       );
     } catch (error) {
-      failRequest(getApiErrorMessage(error, "승인한 Draft를 저장하지 못했습니다."));
+      setApprovalState("error");
+      setApprovalError(getApiErrorMessage(error, "Board에 적용하지 못했습니다."));
+    } finally {
+      approvalRequestRef.current = false;
     }
   }
 
   async function regenerateDraft(): Promise<void> {
+    if (approvalRequestRef.current) return;
+
     if (lastDraftRequest !== null) {
       await requestDraft(lastDraftRequest);
     }
   }
 
   function cancelDraftProgress(): void {
-    if (
-      existingProjectId !== undefined ||
-      !draftProgressCoordinatorRef.current.hasActiveRequest
-    ) {
+    if (existingProjectId !== undefined || !draftProgressCoordinatorRef.current.hasActiveRequest) {
       return;
     }
 
@@ -415,8 +488,26 @@ export function useAiStartWorkflow({
     finishRequest();
   }
 
+  function cancelRequest(): void {
+    const hadProgressRequest = draftProgressCoordinatorRef.current.hasActiveRequest;
+    const progressState = draftProgressCoordinatorRef.current.cancel(hadProgressRequest);
+    const hadJsonRequest = requestRegistryRef.current.cancel("draft");
+
+    if (!hadProgressRequest && !hadJsonRequest) {
+      return;
+    }
+
+    if (hadProgressRequest) {
+      publishDraftProgressState(progressState);
+    }
+    setRequestState("cancelled");
+  }
+
   function cancelStart(): void {
+    if (approvalRequestRef.current) return;
+
     abortActiveDraftRequest(true);
+    requestRegistryRef.current.cancelAll();
     router.push(existingProjectReturnHref ?? "/workspace/new");
   }
 
@@ -500,6 +591,8 @@ export function useAiStartWorkflow({
 
   function beginRequest(clearPreview = true): void {
     setRequestState("loading");
+    setApprovalState("idle");
+    setApprovalError(null);
     setDraftClarification(null);
     setPatchClarification(null);
     setDraftFollowUp(null);
@@ -541,14 +634,22 @@ export function useAiStartWorkflow({
   }
 
   return {
+    approvalError,
+    approvalState,
     approveDraft,
     canApprove:
-      draft !== null && compilationProposal !== null && previewDiagram !== null && requestState !== "loading",
+      draft !== null &&
+      compilationProposal !== null &&
+      previewDiagram !== null &&
+      requestState !== "loading" &&
+      approvalState !== "loading",
     canSubmit:
       composerValue.trim().length > 0 &&
       requestState !== "loading" &&
+      approvalState !== "loading" &&
       !voiceTranscriptNeedsConfirmation,
     cancelDraftProgress,
+    cancelRequest,
     cancelStart,
     composerValue,
     compilationProposal,
