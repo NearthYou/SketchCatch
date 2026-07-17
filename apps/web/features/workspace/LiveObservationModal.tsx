@@ -33,21 +33,29 @@ import styles from "./workspace.module.css";
 export type LiveObservationModalProps = {
   readonly initialViewport: LiveObservationViewport | null;
   readonly onClose: () => void;
+  readonly onSessionChange: (session: LiveObservationV2Session | null) => void;
   readonly onSelectedDeploymentIdChange: (deploymentId: string) => void;
+  readonly onSnapshotChange: (snapshot: LiveObservationV2Snapshot | null) => void;
   readonly onViewportChange: (viewport: LiveObservationViewport) => void;
   readonly projectId: string;
   readonly selectedDeploymentId: string;
+  readonly session: LiveObservationV2Session | null;
   readonly selection?: LiveObservationSelection | null | undefined;
+  readonly snapshot: LiveObservationV2Snapshot | null;
 };
 
 export function LiveObservationModal({
   initialViewport,
   onClose,
+  onSessionChange,
   onSelectedDeploymentIdChange,
+  onSnapshotChange,
   onViewportChange,
   projectId,
   selectedDeploymentId,
-  selection
+  session,
+  selection,
+  snapshot
 }: LiveObservationModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -60,8 +68,6 @@ export function LiveObservationModal({
   const [errorMessage, setErrorMessage] = useState("");
   const [selectionErrorMessage, setSelectionErrorMessage] = useState("");
   const [streamErrorMessage, setStreamErrorMessage] = useState("");
-  const [session, setSession] = useState<LiveObservationV2Session | null>(null);
-  const [snapshot, setSnapshot] = useState<LiveObservationV2Snapshot | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [qrState, setQrState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [copied, setCopied] = useState(false);
@@ -256,7 +262,7 @@ export function LiveObservationModal({
   }, [outputUrl]);
 
   useEffect(() => {
-    if (!session) {
+    if (!session || snapshot?.status !== "active") {
       setStreamErrorMessage("");
       return;
     }
@@ -273,14 +279,14 @@ export function LiveObservationModal({
       },
       onSnapshot: (nextSnapshot) => {
         if (!abortController.signal.aborted) {
-          setSnapshot(nextSnapshot);
+          onSnapshotChange(nextSnapshot);
           setStreamErrorMessage("");
         }
       },
       signal: abortController.signal
     });
     return () => abortController.abort();
-  }, [session]);
+  }, [onSnapshotChange, session, snapshot?.status]);
 
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
     if (event.key === "Escape") {
@@ -315,8 +321,8 @@ export function LiveObservationModal({
     if (nextDeploymentId === selectedDeploymentId) return;
 
     if (session && session.deploymentId !== nextDeploymentId) {
-      setSession(null);
-      setSnapshot(null);
+      onSessionChange(null);
+      onSnapshotChange(null);
       setErrorMessage("");
       setStreamErrorMessage("");
     }
@@ -337,8 +343,8 @@ export function LiveObservationModal({
         abortController.signal
       );
       if (abortController.signal.aborted) return;
-      setSession(response.session);
-      setSnapshot(response.snapshot);
+      onSessionChange(response.session);
+      onSnapshotChange(response.snapshot);
       setNowMs(Date.now());
     } catch (error) {
       if (!abortController.signal.aborted) {
@@ -362,7 +368,7 @@ export function LiveObservationModal({
         session.id,
         abortController.signal
       );
-      if (!abortController.signal.aborted) setSnapshot(stoppedSnapshot);
+      if (!abortController.signal.aborted) onSnapshotChange(stoppedSnapshot);
     } catch (error) {
       if (!abortController.signal.aborted) {
         setErrorMessage(getApiErrorMessage(error, "관측 세션을 종료하지 못했습니다."));

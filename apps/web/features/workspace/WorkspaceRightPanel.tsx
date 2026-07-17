@@ -9,6 +9,8 @@ import type {
 import {
   type ArchitectureDiagnostic,
   type CheckFinding,
+  type LiveObservationV2Session,
+  type LiveObservationV2Snapshot,
   type TerraformDiagnostic,
   type TerraformSourceLocation,
   type TerraformSyncFileInput
@@ -50,6 +52,12 @@ import {
   storeLiveObservationViewport,
   type LiveObservationViewport
 } from "./live-observation-view-state";
+import {
+  createLiveObservationSessionState,
+  readLiveObservationSessionState,
+  retainLiveObservationSession,
+  retainLiveObservationSnapshot
+} from "./live-observation-session-state";
 import {
   createWorkspaceOverlayNotifications,
   type WorkspaceOverlayNotifications
@@ -231,6 +239,13 @@ export function WorkspaceRightPanel({
   );
   const retainedLiveObservationView = readLiveObservationViewState(
     liveObservationViewState,
+    projectId
+  );
+  const [liveObservationSessionState, setLiveObservationSessionState] = useState(() =>
+    createLiveObservationSessionState(projectId)
+  );
+  const retainedLiveObservationSession = readLiveObservationSessionState(
+    liveObservationSessionState,
     projectId
   );
 
@@ -675,6 +690,24 @@ export function WorkspaceRightPanel({
     [projectId]
   );
 
+  const updateLiveObservationSession = useCallback(
+    (session: LiveObservationV2Session | null): void => {
+      setLiveObservationSessionState((current) =>
+        retainLiveObservationSession(current, projectId, session)
+      );
+    },
+    [projectId]
+  );
+
+  const updateLiveObservationSnapshot = useCallback(
+    (snapshot: LiveObservationV2Snapshot | null): void => {
+      setLiveObservationSessionState((current) =>
+        retainLiveObservationSnapshot(current, projectId, snapshot)
+      );
+    },
+    [projectId]
+  );
+
   const applyTerraformLeaveSaveFeedback = useCallback(
     (feedback: TerraformLeaveSaveFeedback): void => {
       setTerraformLeaveSaveState(feedback.state);
@@ -972,11 +1005,15 @@ export function WorkspaceRightPanel({
         setIsLiveObservationOpen(false);
         setLiveObservationSelection(null);
       }}
+      onSessionChange={updateLiveObservationSession}
       onSelectedDeploymentIdChange={updateLiveObservationDeployment}
+      onSnapshotChange={updateLiveObservationSnapshot}
       onViewportChange={updateLiveObservationViewport}
       projectId={projectId}
       selectedDeploymentId={retainedLiveObservationView.selectedDeploymentId}
+      session={retainedLiveObservationSession.session}
       selection={liveObservationSelection}
+      snapshot={retainedLiveObservationSession.snapshot}
     />
   ) : null;
   const terraformSplitStyle = {

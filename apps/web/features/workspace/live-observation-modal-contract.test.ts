@@ -32,6 +32,21 @@ test("modal re-entry restores the selected Deployment and diagram viewport", () 
   assert.match(diagramMapSource, /onMoveEnd=\{\(_event, viewport\) => onViewportChange\(viewport\)\}/);
 });
 
+test("modal re-entry restores an active session while closing aborts its stream", () => {
+  assert.match(rightPanelSource, /createLiveObservationSessionState\(projectId\)/);
+  assert.match(
+    rightPanelSource,
+    /session=\{retainedLiveObservationSession\.session\}/
+  );
+  assert.match(
+    rightPanelSource,
+    /snapshot=\{retainedLiveObservationSession\.snapshot\}/
+  );
+  assert.match(modalSource, /if \(!session \|\| snapshot\?\.status !== "active"\)/);
+  assert.match(modalSource, /onSnapshotChange\(nextSnapshot\)/);
+  assert.match(modalSource, /return \(\) => abortController\.abort\(\)/);
+});
+
 test("selected Deployment independently loads and renders its immutable Architecture", () => {
   const mapIndex = modalSource.indexOf("<LiveObservationDiagramMap");
   const evidenceIndex = modalSource.indexOf(
@@ -137,8 +152,8 @@ test("session creation locks Deployment selection and observation evidence stays
   );
   assert.match(evidenceBlock, /selectedSnapshot\.live\.acceptedEventCount/);
   assert.match(deploymentSelectionHandler, /session\.deploymentId !== nextDeploymentId/);
-  assert.match(deploymentSelectionHandler, /setSession\(null\)/);
-  assert.match(deploymentSelectionHandler, /setSnapshot\(null\)/);
+  assert.match(deploymentSelectionHandler, /onSessionChange\(null\)/);
+  assert.match(deploymentSelectionHandler, /onSnapshotChange\(null\)/);
 });
 
 test("capacity evidence renders the provider-derived mode and matching value labels", () => {

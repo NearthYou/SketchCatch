@@ -204,3 +204,9 @@ Short English-only working log for the current agent context. Older records are 
 - Retained the selected Deployment and React Flow viewport outside the modal, scoped by project and Deployment.
 - Re-entry restores the prior zoom and pan state, while switching projects starts with an isolated view state.
 - Focused Live Observation tests pass 8/8; Web lint and typecheck pass.
+
+### 2026-07-17 - Retain active Live Observation sessions on re-entry
+
+- Retained the active observation session and latest snapshot outside the modal, isolated by project.
+- Closing the modal aborts the SSE stream; reopening an active session reconnects with the retained session instead of creating a new one.
+- Focused Live Observation tests pass 9/9; Web lint and typecheck pass.
