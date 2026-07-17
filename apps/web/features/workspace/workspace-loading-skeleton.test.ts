@@ -9,6 +9,7 @@ function readSource(relativePath: string): string {
 
 const skeletonSource = readSource("./WorkspaceLoadingSkeleton.tsx");
 const projectManagerSource = readSource("./ProjectWorkspaceDraftManager.tsx");
+const localManagerSource = readSource("./WorkspaceDraftManager.tsx");
 const stylesSource = readSource("./workspace.module.css");
 
 test("Workspace loading keeps the project bar, panels, and Architecture Board regions mounted", () => {
@@ -23,4 +24,12 @@ test("Workspace loading keeps the project bar, panels, and Architecture Board re
 test("Project Workspace uses the structural skeleton for every initial loading boundary", () => {
   assert.equal(projectManagerSource.match(/<WorkspaceLoadingSkeleton/g)?.length, 2);
   assert.match(projectManagerSource, /projectName=\{displayProjectName\}/);
+});
+
+test("Local Workspace uses the same structural skeleton while restoring its Draft", () => {
+  assert.match(
+    localManagerSource,
+    /if \(loadState === "loading"\) \{[\s\S]*?<WorkspaceLoadingSkeleton/
+  );
+  assert.match(localManagerSource, /projectName=\{projectName\}/);
 });

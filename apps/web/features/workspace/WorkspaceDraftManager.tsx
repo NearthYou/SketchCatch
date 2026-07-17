@@ -17,6 +17,7 @@ import {
 } from "./project-draft-persistence";
 import type { LocalProjectDraft } from "./project-draft-persistence";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
+import { WorkspaceLoadingSkeleton } from "./WorkspaceLoadingSkeleton";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
@@ -327,7 +328,12 @@ export function WorkspaceDraftManager({
   );
 
   if (loadState === "loading") {
-    return <WorkspaceNotice title="Workspace loading" body="로컬 저장 정보를 불러오는 중입니다." />;
+    return (
+      <WorkspaceLoadingSkeleton
+        message="로컬 저장 정보를 불러오는 중입니다."
+        projectName={projectName}
+      />
+    );
   }
 
   if (loadState === "error" || !initialDiagram) {
