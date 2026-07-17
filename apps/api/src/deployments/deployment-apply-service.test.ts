@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { AwsConnection, TerraformArtifactBundle } from "@sketchcatch/types";
 import { runDeploymentApply } from "./deployment-apply-service.js";
+import { selectDeploymentStateBaseline } from "./deployment-service.js";
 import type {
   DeploymentApplyArtifactStorage,
   UploadDeploymentStateInput
@@ -384,6 +385,23 @@ class FakeApplyArtifactStorage implements DeploymentApplyArtifactStorage {
   }
 }
 
+test("selectDeploymentStateBaseline sorts serialized creation dates", () => {
+  const current = createApprovedDeploymentRecord({
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    createdAt: "2026-01-02T00:00:00.000Z" as unknown as Date,
+    stateObjectKey: "deployments/current/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+  const previous = createApprovedDeploymentRecord({
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    createdAt: "2026-01-01T00:00:00.000Z" as unknown as Date,
+    stateObjectKey: "deployments/previous/state/terraform.tfstate",
+    status: "SUCCESS"
+  });
+
+  assert.equal(selectDeploymentStateBaseline(current, [previous]), current);
+});
+
 test("runDeploymentApply applies the approved tfplan and stores state resources and outputs", async () => {
   const repository = new FakeDeploymentRepository();
   repository.deployment = createApprovedDeploymentRecord({
@@ -397,7 +415,7 @@ test("runDeploymentApply applies the approved tfplan and stores state resources 
     createApprovedDeploymentRecord({
       id: previousDeploymentId,
       approvedPlanArtifactId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-      createdAt: new Date("2025-12-31T00:00:00.000Z"),
+      createdAt: "2025-12-31T00:00:00.000Z" as unknown as Date,
       currentPlanArtifactId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       stateObjectKey: previousStateObjectKey,
       status: "SUCCESS"

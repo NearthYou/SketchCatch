@@ -146,7 +146,7 @@ export function createDeploymentTerraformLiveLogWriter(
   }
 
   const onOutputLine = async (output: TerraformOutputLine): Promise<void> => {
-    if (output.stream !== "stdout" || livePersistenceFailed) {
+    if (output.stream !== "stdout" || livePersistenceFailed || completed) {
       return;
     }
 

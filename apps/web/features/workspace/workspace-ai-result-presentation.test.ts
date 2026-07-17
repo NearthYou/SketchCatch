@@ -338,3 +338,16 @@ function readWorkbenchResultSource(): string {
     throw error;
   }
 }
+
+test("Agent Review remains renderable when Well-Architected guidance is missing", () => {
+  const result = createTerraformPreviewPresentation({
+    ...preview,
+    findings: [],
+    wellArchitectedGuidance: undefined
+  } as unknown as AiTerraformPreviewExplanationResult);
+
+  assert.equal(result.checks.length, 6);
+  assert.ok(
+    result.checks.every((check) => check.summary.length > 0 && (check.action?.length ?? 0) > 0)
+  );
+});

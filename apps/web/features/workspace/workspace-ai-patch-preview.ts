@@ -103,13 +103,13 @@ export function createWorkspaceAiPatchPreviewModel(
 }
 
 export function getWorkspaceAiPatchParameterChanges(
-  baseArchitectureJson: ArchitectureJson,
-  proposedArchitectureJson: ArchitectureJson
+  baseArchitectureJson: ArchitectureJson | null | undefined,
+  proposedArchitectureJson: ArchitectureJson | null | undefined
 ): readonly WorkspaceAiPatchParameterChange[] {
-  const baseNodeById = new Map(baseArchitectureJson.nodes.map((node) => [node.id, node]));
+  const baseNodeById = new Map((baseArchitectureJson?.nodes ?? []).map((node) => [node.id, node]));
   const changes: WorkspaceAiPatchParameterChange[] = [];
 
-  for (const proposedNode of proposedArchitectureJson.nodes) {
+  for (const proposedNode of proposedArchitectureJson?.nodes ?? []) {
     const baseNode = baseNodeById.get(proposedNode.id);
 
     if (!baseNode) {

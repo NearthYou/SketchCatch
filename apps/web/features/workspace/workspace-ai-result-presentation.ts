@@ -236,7 +236,7 @@ export function createTerraformPreviewPresentation(
   const findingCount = preview.findings.length;
   const checks = WELL_ARCHITECTED_PILLARS.map<WorkspaceAiResultCheck>((pillar, index) => {
     const copy = CHECK_COPY[pillar];
-    const guidance = preview.wellArchitectedGuidance.find((item) => item.pillar === pillar);
+    const guidance = preview.wellArchitectedGuidance?.find((item) => item.pillar === pillar);
     const aiReview = getAiPillarReview(preview, index);
 
     return {
@@ -451,7 +451,7 @@ function getPillarRiskLevel(
   }, "low");
   const aiRisk = getAiPillarRiskLevel(preview, pillarIndex);
   const guidanceRisk = getReviewEvidenceRiskLevel(
-    preview.wellArchitectedGuidance.find((item) => item.pillar === pillar)?.observation
+    preview.wellArchitectedGuidance?.find((item) => item.pillar === pillar)?.observation
   );
 
   return [deterministicRisk, aiRisk, guidanceRisk].reduce<RiskLevel>(

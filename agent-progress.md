@@ -146,3 +146,9 @@ Short English-only working log for the current agent context. Older records are 
 - Isolated the heartbeat scheduler behind a Node-only timer adapter so DOM timer overloads cannot widen its handle to `number | Timeout`.
 - Captured the injected heartbeat callback through an asserted collection so strict control-flow analysis no longer narrows the test call to `never`.
 - API typecheck, focused live-log tests (2/2), API lint, API build, and harness pass. Root typecheck remains blocked by malformed ignored `.next` route types in the local web build cache.
+
+### 2026-07-17 - Address PR #455 review feedback
+
+- Normalized serialized deployment timestamps, tolerated missing AI review and architecture arrays, and ignored Terraform output arriving after live-log completion.
+- Added red/green regressions for all six unresolved review threads; focused API tests pass 15/15 and focused Web tests pass 11/11.
+- Harness, workspace typecheck, workspace lint, and API build pass. The root build timed out after four minutes while local Next processes remained active; no Terraform or AWS mutation was performed.

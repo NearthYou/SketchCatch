@@ -393,7 +393,8 @@ export function selectDeploymentStateBaseline(
     )
     .sort(
       (left, right) =>
-        right.createdAt.getTime() - left.createdAt.getTime() || right.id.localeCompare(left.id)
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime() ||
+        right.id.localeCompare(left.id)
     );
 
   for (const candidate of candidates) {

@@ -89,6 +89,10 @@ test("live Terraform logs emit a heartbeat while Terraform is silent", async () 
       timedOut: false
     }
   });
+  await writer.onOutputLine({
+    line: "late line 1\nlate line 2\nlate line 3\nlate line 4\nlate line 5",
+    stream: "stdout"
+  });
 
   assert.deepEqual(appendedMessages, [
     "[progress] Terraform apply is still running (10s elapsed)",
