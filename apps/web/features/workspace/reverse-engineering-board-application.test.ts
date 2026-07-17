@@ -87,7 +87,7 @@ test("Reverse Engineering은 Compiler proposal을 생성하고 적용 후보와 
   assert.deepEqual(scanResult, inputBefore);
 });
 
-test("Reverse Engineering은 scan finding·제외·provider error를 Compiler context signal로 보존한다", () => {
+test("Reverse Engineering은 raw scan enum 없이 Compiler context 진단을 사용자 언어로 보존한다", () => {
   const proposal = compileReverseEngineeringArchitecture({
     ...scanResult,
     findings: [
@@ -122,8 +122,46 @@ test("Reverse Engineering은 scan finding·제외·provider error를 Compiler co
   });
 
   assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.deployment:finding-public-vpc"));
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:excluded-unknown"));
-  assert.ok(proposal.diagnostics.some(({ code }) => code === "compiler.context.provider:scan-permission"));
+
+  const exclusionDiagnostic = proposal.diagnostics.find(
+    ({ code }) => code === "compiler.context.provider:excluded-unknown"
+  );
+  const scanErrorDiagnostic = proposal.diagnostics.find(
+    ({ code }) => code === "compiler.context.provider:scan-permission"
+  );
+
+  assert.deepEqual(
+    exclusionDiagnostic,
+    {
+      code: "compiler.context.provider:excluded-unknown",
+      level: "warning",
+      summary: "자동 분석 제외: 자동 분석 범위 밖",
+      message: "이 Resource는 현재 자동 분석 범위에 포함되지 않습니다.",
+      relatedChangeIds: [],
+      relatedResourceIds: ["unknown-1"],
+      penalty: 150
+    }
+  );
+  assert.deepEqual(
+    scanErrorDiagnostic,
+    {
+      code: "compiler.context.provider:scan-permission",
+      level: "error",
+      summary: "스캔 실패: AWS 서비스 조회 · 권한 부족",
+      message: "AWS 서비스 조회 중 권한 부족으로 완료하지 못했습니다. AWS 연결과 권한을 확인하세요.",
+      relatedChangeIds: [],
+      relatedResourceIds: [],
+      penalty: 500
+    }
+  );
+
+  for (const diagnostic of [exclusionDiagnostic, scanErrorDiagnostic]) {
+    assert.ok(diagnostic);
+    for (const rawEnum of ["unsupported_resource_type", "provider_api", "permission_denied"]) {
+      assert.equal(diagnostic.summary.includes(rawEnum), false);
+      assert.equal(diagnostic.message.includes(rawEnum), false);
+    }
+  }
 });
 
 test("관계가 있는 검토 전용 Lambda는 보호 metadata와 확인 필요 상태로 보드에 남기고 관계 없는 IAM Role은 목록에만 남긴다", () => {

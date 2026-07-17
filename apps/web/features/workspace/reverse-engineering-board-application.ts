@@ -170,8 +170,8 @@ function createReverseEngineeringContextSignals(
       id: exclusion.id,
       kind: "provider" as const,
       level: "warning" as const,
-      summary: `분석 제외: ${exclusion.reason}`,
-      message: exclusion.message,
+      summary: `자동 분석 제외: ${formatAnalysisExclusionReason(exclusion.reason)}`,
+      message: formatAnalysisExclusionMessage(exclusion.reason),
       relatedResourceIds: [exclusion.resourceId],
       penalty: 150
     })),
@@ -179,11 +179,64 @@ function createReverseEngineeringContextSignals(
       id: error.id,
       kind: "provider" as const,
       level: error.retryable ? "warning" as const : "error" as const,
-      summary: `스캔 ${error.stage}: ${error.reason}`,
-      message: error.message,
+      summary: `스캔 실패: ${formatScanStage(error.stage)} · ${formatScanErrorReason(error.reason)}`,
+      message: formatScanErrorMessage(error.stage, error.reason, error.retryable),
       penalty: error.retryable ? 200 : 500
     }))
   ].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function formatAnalysisExclusionReason(
+  reason: ReverseEngineeringScanResult["analysisExclusions"][number]["reason"]
+): string {
+  return reason === "unsupported_resource_type" ? "자동 분석 범위 밖" : "필수 정보 부족";
+}
+
+function formatAnalysisExclusionMessage(
+  reason: ReverseEngineeringScanResult["analysisExclusions"][number]["reason"]
+): string {
+  return reason === "unsupported_resource_type"
+    ? "이 Resource는 현재 자동 분석 범위에 포함되지 않습니다."
+    : "이 Resource에 필요한 정보가 없어 자동 분석에 포함되지 않습니다.";
+}
+
+function formatScanStage(stage: ReverseEngineeringScanResult["scanErrors"][number]["stage"]): string {
+  const labels: Readonly<Record<ReverseEngineeringScanResult["scanErrors"][number]["stage"], string>> = {
+    credential: "AWS 인증 정보 확인",
+    region: "리전 확인",
+    provider_api: "AWS 서비스 조회",
+    normalize: "스캔 결과 정리",
+    draft: "보드 초안 생성",
+    analysis: "자동 분석",
+    import_suggestion: "import 제안 생성"
+  };
+
+  return labels[stage];
+}
+
+function formatScanErrorReason(
+  reason: ReverseEngineeringScanResult["scanErrors"][number]["reason"]
+): string {
+  const labels: Readonly<Record<ReverseEngineeringScanResult["scanErrors"][number]["reason"], string>> = {
+    permission_denied: "권한 부족",
+    invalid_region: "리전을 확인할 수 없음",
+    expired_credential: "인증 정보 만료",
+    throttled: "요청 제한",
+    provider_error: "AWS 서비스 오류",
+    unknown: "알 수 없는 오류"
+  };
+
+  return labels[reason];
+}
+
+function formatScanErrorMessage(
+  stage: ReverseEngineeringScanResult["scanErrors"][number]["stage"],
+  reason: ReverseEngineeringScanResult["scanErrors"][number]["reason"],
+  retryable: boolean
+): string {
+  return `${formatScanStage(stage)} 중 ${formatScanErrorReason(reason)}으로 완료하지 못했습니다. ${
+    retryable ? "잠시 후 다시 시도할 수 있습니다." : "AWS 연결과 권한을 확인하세요."
+  }`;
 }
 
 function toFindingDiagnosticLevel(
