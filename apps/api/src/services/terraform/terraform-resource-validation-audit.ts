@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
+  CloudProvider,
   DiagramJson,
   DiagramNode,
   ResourceItem,
@@ -10,6 +11,7 @@ import type {
 } from "@sketchcatch/types";
 import {
   createTerraformParameterCatalogKey,
+  getResourceDefinitionById,
   getResourceDefinitionByTerraform,
   type ResourceDefinition
 } from "@sketchcatch/types/resource-definitions";
@@ -23,10 +25,13 @@ import {
 import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 
 const providerAddress = "registry.terraform.io/hashicorp/aws";
+const kubernetesProviderAddress = "registry.terraform.io/hashicorp/kubernetes";
 const defaultProviderVersion = "6.51.0";
+const defaultArchiveProviderVersion = "~> 2.0";
+const defaultKubernetesProviderVersion = "~> 2.0";
 const defaultProviderRegion = "ap-northeast-2";
 const defaultTerraformAuditOutputMaxBytes = 200 * 1024 * 1024;
-const defaultTerraformTimeoutMs = 60_000;
+const defaultTerraformTimeoutMs = 300_000;
 const areaResourceTypes = new Set(["aws_region", "aws_availability_zone"]);
 
 export type TerraformAuditParameterDefinition = ResourceParameterDefinition & {
@@ -54,6 +59,7 @@ export type TerraformResourceValidationAuditCandidate = {
   readonly enabled: boolean;
   readonly label: string;
   readonly name: string;
+  readonly provider: CloudProvider;
   readonly terraformBlockType: TerraformBlockType;
   readonly terraformResourceType: string;
 };
@@ -70,6 +76,8 @@ export type TerraformResourceValidationAuditResult = {
 };
 
 export type TerraformResourceValidationAuditReport = {
+  readonly archiveProviderVersion: string;
+  readonly kubernetesProviderVersion: string;
   readonly providerVersion: string;
   readonly results: readonly TerraformResourceValidationAuditResult[];
   readonly workdir?: string | undefined;
@@ -80,6 +88,7 @@ export type TerraformResourceValidationAuditOptions = {
   readonly candidates: readonly TerraformResourceValidationAuditCandidate[];
   readonly includeDataSources?: boolean | undefined;
   readonly keepWorkdir?: boolean | undefined;
+  readonly kubernetesProviderVersion?: string | undefined;
   readonly providerRegion?: string | undefined;
   readonly providerVersion?: string | undefined;
   readonly terraformBinary?: string | undefined;
@@ -128,27 +137,40 @@ export function createTerraformResourceValidationCandidates(
   resourceCatalog: readonly ResourceItem[]
 ): TerraformResourceValidationAuditCandidate[] {
   return resourceCatalog
-    .filter((item) => item.enabled && item.nodeDefaults.type.startsWith("aws_"))
-    .map((item) => ({
-      definitionId: item.id,
-      enabled: item.enabled,
-      label: item.nodeDefaults.label,
-      name: item.name,
-      terraformBlockType: item.nodeDefaults.terraformBlockType ?? "resource",
-      terraformResourceType: item.nodeDefaults.type
-    }));
+    .flatMap((item) => {
+      const definition = getResourceDefinitionById(item.id);
+
+      if (!item.enabled || !definition) {
+        return [];
+      }
+
+      return [{
+        definitionId: item.id,
+        enabled: item.enabled,
+        label: item.nodeDefaults.label,
+        name: item.name,
+        provider: definition.provider,
+        terraformBlockType: definition.terraform.blockType,
+        terraformResourceType: definition.terraform.resourceType
+      }];
+    });
 }
 
 export async function runTerraformResourceValidationAudit(
   options: TerraformResourceValidationAuditOptions
 ): Promise<TerraformResourceValidationAuditReport> {
   const providerVersion = options.providerVersion ?? defaultProviderVersion;
+  const archiveProviderVersion = defaultArchiveProviderVersion;
+  const kubernetesProviderVersion =
+    options.kubernetesProviderVersion ?? defaultKubernetesProviderVersion;
   const workdir = await mkdtemp(join(tmpdir(), "sketchcatch-terraform-resource-audit-"));
 
   try {
     await writeFile(
       join(workdir, "provider.tf"),
       renderProviderTerraform({
+        archiveProviderVersion,
+        kubernetesProviderVersion,
         providerRegion: options.providerRegion ?? defaultProviderRegion,
         providerVersion
       }),
@@ -160,6 +182,8 @@ export async function runTerraformResourceValidationAudit(
 
     if (initResult.exitCode !== 0) {
       return {
+        archiveProviderVersion,
+        kubernetesProviderVersion,
         providerVersion,
         results: options.candidates.map((candidate) =>
           createCliFailureResult(candidate, "terraform init failed", initResult)
@@ -169,10 +193,12 @@ export async function runTerraformResourceValidationAudit(
     }
 
     const schemaResult = await runTerraformProvidersSchemaJson(workdir, commandOptions);
-    const providerSchema = parseProviderSchema(schemaResult);
+    const providerSchemas = parseProviderSchemas(schemaResult);
 
-    if (!providerSchema) {
+    if (!providerSchemas) {
       return {
+        archiveProviderVersion,
+        kubernetesProviderVersion,
         providerVersion,
         results: options.candidates.map((candidate) =>
           createCliFailureResult(candidate, "terraform providers schema -json failed", schemaResult)
@@ -189,13 +215,15 @@ export async function runTerraformResourceValidationAudit(
           catalog: options.catalog,
           commandOptions,
           includeDataSources: Boolean(options.includeDataSources),
-          providerSchema,
+          providerSchemas,
           workdir
         })
       );
     }
 
     return {
+      archiveProviderVersion,
+      kubernetesProviderVersion,
       providerVersion,
       results,
       ...(options.keepWorkdir ? { workdir } : {})
@@ -223,7 +251,9 @@ export function renderTerraformResourceValidationAuditMarkdown(
   const lines = [
     "# Terraform Resource Validation Audit",
     "",
+    `- Archive provider: hashicorp/archive ${report.archiveProviderVersion}`,
     `- AWS provider: hashicorp/aws ${report.providerVersion}`,
+    `- Kubernetes provider: hashicorp/kubernetes ${report.kubernetesProviderVersion}`,
     `- Total: ${report.results.length}`,
     ""
   ];
@@ -269,7 +299,7 @@ async function auditCandidate(
     readonly catalog: TerraformAuditParameterCatalog;
     readonly commandOptions: RunTerraformCommandOptions;
     readonly includeDataSources: boolean;
-    readonly providerSchema: TerraformProviderSchema;
+    readonly providerSchemas: Readonly<Record<string, TerraformProviderSchema>>;
     readonly workdir: string;
   }
 ): Promise<TerraformResourceValidationAuditResult> {
@@ -316,7 +346,7 @@ async function auditCandidate(
     )
   ];
 
-  if (!definitions || definitions.length === 0) {
+  if (!definitions) {
     return {
       ...baseResult,
       dependencyResourceTypes: [],
@@ -326,7 +356,12 @@ async function auditCandidate(
     };
   }
 
-  const schemaBlock = getSchemaBlock(context.providerSchema, candidate.terraformBlockType, candidate.terraformResourceType);
+  const schemaBlock = getSchemaBlock(
+    context.providerSchemas,
+    definition.provider,
+    candidate.terraformBlockType,
+    candidate.terraformResourceType
+  );
   const missingParameters = schemaBlock
     ? findMissingRequiredPanelParameters(schemaBlock, definitions)
     : [`${candidate.terraformResourceType} provider schema`];
@@ -546,9 +581,12 @@ function createReferenceSampleValue(
     };
   }
 
-  const targetDefinition = getResourceDefinitionByTerraform("resource", targetType);
+  const targetDefinition =
+    getResourceDefinitionByTerraform("resource", targetType) ??
+    getResourceDefinitionByTerraform("data", targetType);
+  const targetBlockType = targetDefinition?.terraform.blockType ?? "resource";
   const targetDefinitions = context.catalog.resources[
-    createTerraformParameterCatalogKey("resource", targetType)
+    createTerraformParameterCatalogKey(targetBlockType, targetType)
   ];
 
   if (!targetDefinition?.capabilities.terraformPreview || !targetDefinitions) {
@@ -578,7 +616,7 @@ function createReferenceSampleValue(
     };
   }
 
-  const reference = `aws_${targetType.replace(/^aws_/, "")}.${resourceName}.${
+  const reference = `${targetBlockType === "data" ? "data." : ""}${targetType}.${resourceName}.${
     definition.referenceAttribute ?? "id"
   }`;
 
@@ -826,17 +864,27 @@ function collectPanelSchemaPaths(
 }
 
 function getSchemaBlock(
-  providerSchema: TerraformProviderSchema,
+  providerSchemas: Readonly<Record<string, TerraformProviderSchema>>,
+  provider: CloudProvider,
   blockType: TerraformBlockType,
   resourceType: string
 ): TerraformSchemaBlock | null {
+  const address = provider === "kubernetes" ? kubernetesProviderAddress : providerAddress;
+  const providerSchema = providerSchemas[address];
+
+  if (!providerSchema) {
+    return null;
+  }
+
   const collection =
     blockType === "data" ? providerSchema.data_source_schemas : providerSchema.resource_schemas;
 
   return collection?.[resourceType]?.block ?? null;
 }
 
-function parseProviderSchema(result: TerraformRunResult): TerraformProviderSchema | null {
+function parseProviderSchemas(
+  result: TerraformRunResult
+): Record<string, TerraformProviderSchema> | null {
   if (result.exitCode !== 0) {
     return null;
   }
@@ -846,24 +894,40 @@ function parseProviderSchema(result: TerraformRunResult): TerraformProviderSchem
       provider_schemas?: Record<string, TerraformProviderSchema> | undefined;
     };
 
-    return parsed.provider_schemas?.[providerAddress] ?? null;
+    return parsed.provider_schemas ?? null;
   } catch {
     return null;
   }
 }
 
 function renderProviderTerraform(input: {
+  readonly archiveProviderVersion: string;
+  readonly kubernetesProviderVersion: string;
   readonly providerRegion: string;
   readonly providerVersion: string;
 }): string {
   return [
     "terraform {",
     "  required_providers {",
+    "    archive = {",
+    '      source = "hashicorp/archive"',
+    `      version = "${input.archiveProviderVersion}"`,
+    "    }",
     "    aws = {",
     '      source = "hashicorp/aws"',
     `      version = "${input.providerVersion}"`,
     "    }",
+    "    kubernetes = {",
+    '      source = "hashicorp/kubernetes"',
+    `      version = "${input.kubernetesProviderVersion}"`,
+    "    }",
     "  }",
+    "}",
+    "",
+    'provider "kubernetes" {',
+    '  host     = "https://127.0.0.1"',
+    '  token    = "sketchcatch-audit"',
+    "  insecure = true",
     "}",
     "",
     'provider "aws" {',

@@ -2170,6 +2170,13 @@ export {
   createTerraformProviderFiles,
   isTerraformDeployableNode
 } from "./terraform-provider-files.ts";
+export {
+  findTerraformRequiredProvidersDeclarations
+} from "./terraform-module-structure.ts";
+export type {
+  TerraformModuleFile,
+  TerraformRequiredProvidersDeclaration
+} from "./terraform-module-structure.ts";
 
 export type ReverseEngineeringScanStatus =
   | "queued"

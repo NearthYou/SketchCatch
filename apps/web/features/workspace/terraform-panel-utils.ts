@@ -1,5 +1,6 @@
 import {
   createTerraformProviderFiles,
+  findTerraformRequiredProvidersDeclarations,
   isTerraformDeployableNode,
   type DiagramJson,
   type DiagramNode,
@@ -247,8 +248,22 @@ export function mergeGeneratedTerraformFiles(
   generatedFiles: readonly TerraformVirtualFile[],
   preservedResourceAddresses: ReadonlySet<string>
 ): TerraformVirtualFile[] {
+  const hasExistingRequiredProviders = findTerraformRequiredProvidersDeclarations(
+    existingFiles.map((file) => ({
+      fileName: file.fileName,
+      terraformCode: file.code
+    }))
+  ).length > 0;
+  const effectiveGeneratedFiles = hasExistingRequiredProviders
+    ? generatedFiles.filter(
+        (file) =>
+          findTerraformRequiredProvidersDeclarations([
+            { fileName: file.fileName, terraformCode: file.code }
+          ]).length === 0
+      )
+    : generatedFiles;
   const generatedAddresses = new Set(
-    generatedFiles.flatMap((file) =>
+    effectiveGeneratedFiles.flatMap((file) =>
       parseTerraformBlocks(file.fileName, file.code).map((block) => block.address)
     )
   );
@@ -261,9 +276,9 @@ export function mergeGeneratedTerraformFiles(
     (file) => ({ ...file })
   );
 
-  upsertGeneratedTerraformOutputs(nextFiles, generatedFiles);
+  upsertGeneratedTerraformOutputs(nextFiles, effectiveGeneratedFiles);
 
-  for (const generatedFile of generatedFiles) {
+  for (const generatedFile of effectiveGeneratedFiles) {
     const generatedBlocks = parseTerraformBlocks(generatedFile.fileName, generatedFile.code);
 
     if (generatedBlocks.length === 0) {
