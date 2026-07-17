@@ -45,6 +45,7 @@ async function main(): Promise<void> {
 
   try {
     const terraform = renderTerraformFromInfrastructureGraph(createFixture());
+    assertStrictFixtureTerraform(fixtureName, terraform);
     await Promise.all([
       writeFile(join(workingDirectory, "main.tf"), `${terraform}\n`, "utf8"),
       writeFile(join(workingDirectory, "providers.tf"), PROVIDERS_TF, "utf8")
@@ -67,6 +68,18 @@ async function main(): Promise<void> {
     );
   } finally {
     await rm(workingDirectory, { recursive: true, force: true });
+  }
+}
+
+function assertStrictFixtureTerraform(fixtureName: string | undefined, terraform: string): void {
+  if (fixtureName !== REVERSE_ENGINEERING_ALB_CLOUDFRONT_FIXTURE) {
+    return;
+  }
+
+  if (!/^\s*ip_address_type\s+=\s+"dualstack"\s*$/m.test(terraform)) {
+    throw new Error(
+      "ALB CloudFront fixture must preserve dualstack as aws_lb.ip_address_type before Terraform validation."
+    );
   }
 }
 
@@ -146,6 +159,7 @@ function createAlbCloudFrontFixture(): InfrastructureGraph {
         config: {
           arn: albArn,
           dnsName: albDomainName,
+          ipAddressType: "dualstack",
           name: "orders",
           providerResourceId: albArn,
           providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",

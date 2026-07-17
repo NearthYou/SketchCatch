@@ -325,6 +325,7 @@ function normalizeReverseEngineeringLoadBalancerConfig(
 
   return compactTerraformConfig({
     internal,
+    ipAddressType: readSupportedLoadBalancerIpAddressType(config["ipAddressType"]),
     loadBalancerType:
       readNonEmptyString(config["loadBalancerType"]) ?? readNonEmptyString(config["type"]),
     name: readNonEmptyString(config["name"]),
@@ -332,6 +333,14 @@ function normalizeReverseEngineeringLoadBalancerConfig(
     subnetMapping: normalizeLoadBalancerSubnetMappings(config["subnetMapping"]),
     subnets: readStringArray(config["subnets"] ?? config["subnetIds"])
   });
+}
+
+function readSupportedLoadBalancerIpAddressType(value: unknown): string | undefined {
+  return value === "ipv4" ||
+    value === "dualstack" ||
+    value === "dualstack-without-public-ipv4"
+    ? value
+    : undefined;
 }
 
 function normalizeLoadBalancerSubnetMappings(value: unknown): Record<string, unknown>[] | undefined {

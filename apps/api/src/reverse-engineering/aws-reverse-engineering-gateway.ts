@@ -1821,6 +1821,7 @@ function toApplicationLoadBalancerRecord(
         arn,
         availabilityZones,
         dnsName: loadBalancer.DNSName,
+        ipAddressType: loadBalancer.IpAddressType,
         name: loadBalancer.LoadBalancerName,
         scheme: loadBalancer.Scheme,
         securityGroupIds,

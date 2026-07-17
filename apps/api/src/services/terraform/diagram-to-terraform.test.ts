@@ -1374,6 +1374,7 @@ test("Reverse Engineering ALB와 CloudFront fixture는 AWS snapshot을 최소 Te
         providerResourceId:
           "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
         providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        ipAddressType: "dualstack",
         scheme: "internet-facing",
         securityGroupIds: ["sg-web"],
         subnetIds: ["subnet-public-a", "subnet-public-b"],
@@ -1422,6 +1423,7 @@ test("Reverse Engineering ALB와 CloudFront fixture는 AWS snapshot을 최소 Te
   assert.match(terraform, /name\s+= "orders"/);
   assert.match(terraform, /internal\s+= false/);
   assert.match(terraform, /load_balancer_type\s+= "application"/);
+  assert.match(terraform, /ip_address_type\s+= "dualstack"/);
   assert.match(terraform, /security_groups = \[[\s\S]*"sg-web"/);
   assert.match(terraform, /subnets = \[[\s\S]*"subnet-public-a"[\s\S]*"subnet-public-b"/);
   assert.match(terraform, /resource "aws_cloudfront_distribution" "orders" \{/);

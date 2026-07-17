@@ -25,6 +25,7 @@ test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform imp
         arn: ALB_ARN,
         name: "shared-entry",
         type: "application",
+        ipAddressType: "ipv4",
         scheme: "internet-facing",
         securityGroupIds: ["sg-shared"],
         subnetIds: ["subnet-a", "subnet-b"]
@@ -73,6 +74,37 @@ test("ALB와 CloudFront를 supported ResourceType 및 안정적인 Terraform imp
     assert.equal(suggestion?.handoffReady, false);
     assert.equal(suggestion?.importCommand, undefined);
   }
+});
+
+test("IpAddressType 증거가 없는 ALB는 supported 상태를 유지하지만 handoff-ready가 아니다", async () => {
+  const result = await scan([
+    record({
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      providerResourceId: ALB_ARN,
+      displayName: "missing-ip-address-type",
+      config: {
+        arn: ALB_ARN,
+        name: "missing-ip-address-type",
+        type: "application",
+        scheme: "internet-facing",
+        securityGroupIds: ["sg-shared"],
+        subnetIds: ["subnet-a", "subnet-b"]
+      }
+    })
+  ]);
+
+  const [resource] = result.discoveredResources;
+  const [suggestion] = result.importSuggestions;
+  const [finding] = result.findings;
+
+  assert.equal(resource?.resourceType, "LOAD_BALANCER");
+  assert.equal(resource?.analysisExcluded ?? false, false);
+  assert.equal(resource?.config["sketchcatchReferenceTerraform"], true);
+  assert.deepEqual(resource?.config["terraformValidationMissingFields"], ["ipAddressType"]);
+  assert.equal(suggestion?.status, "manual_review");
+  assert.equal(suggestion?.handoffReady, false);
+  assert.match(suggestion?.reason ?? "", /ipAddressType/);
+  assert.match(finding?.description ?? "", /ipAddressType/);
 });
 
 test("ECS Cluster Service Task Definition을 known type과 provider import identity로 변환한다", async () => {
@@ -295,6 +327,7 @@ test("loadBalancerType application 정규화 값도 ALB 지원과 생성 가능�
         arn: ALB_ARN,
         name: "normalized-alb",
         loadBalancerType: "application",
+        ipAddressType: "ipv4",
         scheme: "internet-facing",
         subnetIds: ["subnet-a"]
       }
@@ -431,6 +464,7 @@ test("ALB subnet_mapping은 subnets 대신 새 Terraform 생성 위치 정보로
         arn: ALB_ARN,
         name: "mapped-alb",
         type: "application",
+        ipAddressType: "ipv4",
         scheme: "internet-facing",
         subnetMapping: [{ subnetId: "subnet-a", allocationId: "eipalloc-a" }]
       }

@@ -470,7 +470,10 @@ function getMissingTerraformCreationFields(
           : ["type"]
       ),
       ...(getNonEmptyString(config["scheme"]) ? [] : ["scheme"]),
-      ...(hasLoadBalancerSubnetPlacement(config) ? [] : ["subnetIds/subnetMapping"])
+      ...(hasLoadBalancerSubnetPlacement(config) ? [] : ["subnetIds/subnetMapping"]),
+      ...(hasSupportedLoadBalancerIpAddressType(config["ipAddressType"])
+        ? []
+        : ["ipAddressType"])
     ];
   }
 
@@ -608,6 +611,14 @@ function hasLoadBalancerSubnetPlacement(config: Record<string, unknown>): boolea
     config["subnetMapping"].every(
       (mapping) => isRecord(mapping) && getNonEmptyString(mapping["subnetId"]) !== null
     )
+  );
+}
+
+function hasSupportedLoadBalancerIpAddressType(value: unknown): boolean {
+  return (
+    value === "ipv4" ||
+    value === "dualstack" ||
+    value === "dualstack-without-public-ipv4"
   );
 }
 

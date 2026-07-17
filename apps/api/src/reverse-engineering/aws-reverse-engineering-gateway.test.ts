@@ -383,6 +383,7 @@ test("ALB reader는 pagination을 끝까지 읽고 실제 VPC, Security Group, S
         arn: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders/one",
         name: "orders",
         type: "application",
+        ipAddressType: "ipv4",
         scheme: "internet-facing",
         dnsName: "orders-123.ap-northeast-2.elb.amazonaws.com",
         vpcId: "vpc-orders",
