@@ -25,7 +25,7 @@ export async function invalidateAwsConnectionQueries(
   }
 
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.awsConnections(userId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.awsConnectionsRoot(userId) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(userId) }),
     queryClient.invalidateQueries({ queryKey: queryKeys.costs(userId) })
   ]);

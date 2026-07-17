@@ -142,7 +142,12 @@ function compareConnectionsByRecency(left: AwsConnection, right: AwsConnection):
     return updatedAtDifference;
   }
 
-  return Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  const createdAtDifference = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  if (createdAtDifference !== 0) {
+    return createdAtDifference;
+  }
+
+  return left.id.localeCompare(right.id);
 }
 
 function getAwsConnectionStatusLabel(status: AwsConnection["status"]): string {

@@ -9,8 +9,7 @@
     "start": "next start --port ${PORT:-3000}",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test \"features/**/*.test.ts\" \"components/**/*.test.ts\"",
-    "test:reverse-engineering-form": "node --import ./test-css-register.mjs --import tsx --test features/workspace/ReverseEngineeringScanCriteriaForm.test.tsx"
+    "test": "node --import ./test-css-register.mjs --import tsx --test features/workspace/ReverseEngineeringScanCriteriaForm.test.tsx && tsx --test \"app/dashboard/settings/*.test.ts\" \"features/**/*.test.ts\" \"components/**/*.test.ts\""
   },
   "dependencies": {
     "@sketchcatch/types": "workspace:*",

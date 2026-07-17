@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Cloud, ExternalLink, RefreshCw, Trash2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type {
   AwsConnection,
@@ -17,6 +18,7 @@ import {
   deleteAwsConnection,
   getAwsConnectionCloudFormationTemplate,
   testAwsConnection,
+  verifyAwsConnection,
   verifyAwsConnectionCreatedRole
 } from "../../../features/workspace/api";
 import { restoreAwsConnectionSetup } from "../../../features/dashboard/aws-connection-setup";
@@ -24,7 +26,9 @@ import { useAwsConnectionsQuery } from "../../../features/dashboard/connection-q
 import { useAuth } from "../../../components/auth/auth-provider";
 import { invalidateAwsConnectionQueries } from "../../../components/query/dashboard-query-invalidation";
 import styles from "../dashboard-tools.module.css";
+import { getSettingsAwsConnectionAction } from "./settings-aws-connection-action";
 import { GitHubAccountSettings } from "./github-account-settings";
+import { getSettingsAwsRecoveryNavigation } from "./settings-aws-recovery-navigation";
 
 const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
   { label: "서울", value: "ap-northeast-2" },
@@ -36,7 +40,15 @@ const AWS_REGION_OPTIONS: readonly SelectMenuOption[] = [
 export function SettingsDashboardClient() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const connectionsQuery = useAwsConnectionsQuery();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const recoveryNavigation = getSettingsAwsRecoveryNavigation({
+    next: getSingleSearchParam(searchParams.getAll("next")),
+    tab: getSingleSearchParam(searchParams.getAll("tab"))
+  });
+  const connectionsQuery = useAwsConnectionsQuery({
+    includeUnverified: recoveryNavigation.includeUnverifiedAwsConnections
+  });
   const connections: readonly AwsConnection[] = connectionsQuery.data ?? [];
   const [actionPending, setActionPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -45,6 +57,12 @@ export function SettingsDashboardClient() {
   const [cloudFormation, setCloudFormation] = useState<AwsConnectionCloudFormationTemplateResponse | null>(null);
   const [accountId, setAccountId] = useState("");
   const [deleteCandidateId, setDeleteCandidateId] = useState("");
+
+  function returnToReverseEngineeringAfterRecovery(): void {
+    if (recoveryNavigation.returnHref) {
+      router.replace(recoveryNavigation.returnHref);
+    }
+  }
 
   // 새 연결의 External ID와 Role 이름을 만들고 CloudFormation 실행 정보를 준비합니다.
   async function createConnection(): Promise<void> {
@@ -101,6 +119,7 @@ export function SettingsDashboardClient() {
       setCloudFormation(null);
       setAccountId("");
       await invalidateAwsConnectionQueries(queryClient, user?.id);
+      returnToReverseEngineeringAfterRecovery();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS Role 검증에 실패했습니다.");
     } finally {
@@ -116,8 +135,29 @@ export function SettingsDashboardClient() {
     try {
       await testAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
       await invalidateAwsConnectionQueries(queryClient, user?.id);
+      returnToReverseEngineeringAfterRecovery();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "AWS 연결 테스트에 실패했습니다.");
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  // 실패한 연결은 단순 연결 테스트가 아니라 저장된 Role을 다시 검증해 verified 상태로 복구합니다.
+  async function reverifyConnection(connection: AwsConnection): Promise<void> {
+    if (!connection.roleArn) {
+      await resumeConnectionSetup(connection);
+      return;
+    }
+
+    setActionPending(true);
+    setErrorMessage("");
+    try {
+      await verifyAwsConnection({ connectionId: connection.id, roleArn: connection.roleArn });
+      await invalidateAwsConnectionQueries(queryClient, user?.id);
+      returnToReverseEngineeringAfterRecovery();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "AWS 연결을 다시 확인하지 못했습니다.");
     } finally {
       setActionPending(false);
     }
@@ -186,9 +226,54 @@ export function SettingsDashboardClient() {
             </section>
           ) : null}
 
-          <section className={styles.connectionList}>
+          <section className={styles.connectionList} id="aws-connections">
             <div className={styles.sectionHeading}><h2>연결된 AWS 계정</h2><span>{connections.length}개</span></div>
-            {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => <article key={connection.id}><div className={styles.connectionStatus} data-status={connection.status}>{connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}<span>{connection.status === "verified" ? "검증됨" : "확인 필요"}</span></div><div><strong>{connection.accountId ?? "계정 확인 전"}</strong><p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p></div><div className={styles.rowActions}>{connection.status === "verified" ? <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">연결 테스트</button> : <button disabled={actionPending} onClick={() => void resumeConnectionSetup(connection)} type="button">설정 계속</button>}<button data-danger={deleteCandidateId === connection.id} disabled={actionPending} onClick={() => void removeConnection(connection.id)} type="button"><Trash2 size={15} />{deleteCandidateId === connection.id ? "한 번 더 눌러 삭제" : "삭제"}</button></div></article>)}
+            {connections.length === 0 ? <p>아직 연결된 AWS 계정이 없습니다.</p> : connections.map((connection) => {
+              const connectionAction = getSettingsAwsConnectionAction(connection);
+
+              return (
+                <article key={connection.id}>
+                  <div className={styles.connectionStatus} data-status={connection.status}>
+                    {connection.status === "verified" ? <CheckCircle2 size={16} /> : <Cloud size={16} />}
+                    <span>
+                      {connection.status === "verified"
+                        ? "검증됨"
+                        : connection.status === "failed"
+                          ? "재확인 필요"
+                          : "확인 필요"}
+                    </span>
+                  </div>
+                  <div>
+                    <strong>{connection.accountId ?? "계정 확인 전"}</strong>
+                    <p>{connection.region} · {connection.roleArn ?? "Role ARN 없음"}</p>
+                  </div>
+                  <div className={styles.rowActions}>
+                    {connectionAction.kind === "test" ? (
+                      <button disabled={actionPending} onClick={() => void retestConnection(connection)} type="button">
+                        {connectionAction.label}
+                      </button>
+                    ) : connectionAction.kind === "reverify" ? (
+                      <button disabled={actionPending} onClick={() => void reverifyConnection(connection)} type="button">
+                        {connectionAction.label}
+                      </button>
+                    ) : (
+                      <button disabled={actionPending} onClick={() => void resumeConnectionSetup(connection)} type="button">
+                        {connectionAction.label}
+                      </button>
+                    )}
+                    <button
+                      data-danger={deleteCandidateId === connection.id}
+                      disabled={actionPending}
+                      onClick={() => void removeConnection(connection.id)}
+                      type="button"
+                    >
+                      <Trash2 size={15} />
+                      {deleteCandidateId === connection.id ? "한 번 더 눌러 삭제" : "삭제"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </section>
         </>
       )}
@@ -196,4 +281,12 @@ export function SettingsDashboardClient() {
       <GitHubAccountSettings />
     </div>
   );
+}
+
+function getSingleSearchParam(values: readonly string[]): string | readonly string[] | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  return values.length === 1 ? values[0] : values;
 }
