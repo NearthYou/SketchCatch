@@ -35,38 +35,12 @@
   min-width: 0;
 }
 
-.topBarBrand strong {
-  font-size: 15px;
-  letter-spacing: -0.02em;
-}
-
-.topBarBrand span {
+.topBarProjectName {
   color: var(--ai-muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.brandMark {
-  background: #171717;
-  border-radius: 5px;
-  display: block;
-  flex: 0 0 auto;
-  height: 18px;
-  position: relative;
-  width: 18px;
-}
-
-.brandMark::after {
-  background: #ffffff;
-  border-radius: 50%;
-  content: "";
-  height: 5px;
-  position: absolute;
-  right: 3px;
-  top: 3px;
-  width: 5px;
 }
 
 .topBarTitle {
@@ -81,7 +55,7 @@
   justify-content: flex-end;
 }
 
-.topBarState span {
+.topBarState > span {
   align-items: center;
   background: var(--ai-surface);
   border: 1px solid var(--ai-line);
@@ -94,7 +68,7 @@
   padding: 6px 10px;
 }
 
-.topBarState span::before {
+.topBarState > span::before {
   background: #171717;
   border-radius: 50%;
   content: "";
@@ -102,7 +76,7 @@
   width: 5px;
 }
 
-.topBarState button {
+.topBarState > button {
   background: transparent;
   border: 0;
   border-radius: 8px;
@@ -113,14 +87,14 @@
   padding: 7px 9px;
 }
 
-.topBarState button:hover,
-.topBarState button:focus-visible {
+.topBarState > button:hover,
+.topBarState > button:focus-visible {
   background: var(--ai-soft);
   color: var(--ai-text);
   outline: none;
 }
 
-.topBarState button:disabled {
+.topBarState > button:disabled {
   cursor: default;
   opacity: 0.4;
 }
@@ -136,18 +110,11 @@
   background: var(--ai-surface);
   border-right: 1px solid var(--ai-line);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   min-width: 0;
 }
 
-.conversationHeader {
-  border-bottom: 1px solid var(--ai-line);
-  padding: 24px 28px 20px;
-}
-
-.conversationHeader p,
-.stageHeader p,
 .selectionTrailHeader p,
 .candidateActions > div > p,
 .previewHeader p {
@@ -159,8 +126,6 @@
   text-transform: uppercase;
 }
 
-.conversationHeader h1,
-.stageHeader h2,
 .previewHeader h2 {
   font-size: clamp(21px, 2vw, 28px);
   letter-spacing: -0.035em;
@@ -168,8 +133,6 @@
   margin: 0;
 }
 
-.conversationHeader span,
-.stageHeader > span,
 .previewHeader > span {
   color: var(--ai-muted);
   display: block;
@@ -538,7 +501,7 @@
 .visualStage {
   background: var(--ai-canvas);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   min-width: 0;
   overflow: auto;
@@ -549,7 +512,6 @@
   display: block;
 }
 
-.stageHeader,
 .previewHeader {
   max-width: 720px;
 }
@@ -1025,7 +987,7 @@
     z-index: 20;
   }
 
-  .topBarBrand span,
+  .topBarProjectName,
   .topBarTitle,
   .topBarState span {
     display: none;
@@ -1041,14 +1003,6 @@
     border-right: 0;
     min-height: calc(100dvh - 58px);
     overflow: visible;
-  }
-
-  .conversationHeader {
-    padding: 22px 18px 18px;
-  }
-
-  .conversationHeader h1 {
-    font-size: 23px;
   }
 
   .transcript {
@@ -1075,7 +1029,6 @@
     padding: 30px 18px max(28px, env(safe-area-inset-bottom));
   }
 
-  .stageHeader h2,
   .previewHeader h2 {
     font-size: 23px;
   }

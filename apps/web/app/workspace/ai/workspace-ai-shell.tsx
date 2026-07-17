@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { WorkspaceDeploymentNotificationCenterSlot } from "../../../components/notifications/DeploymentNotificationCenter";
+import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ConversationTranscript } from "./conversation-transcript";
 import { DecorativeAwsOrbit } from "./decorative-aws-orbit";
 import { FinalArchitecturePreview } from "./final-architecture-preview";
@@ -95,13 +97,13 @@ export function WorkspaceAiShell({
     <main className={styles.page}>
       <header className={styles.topBar}>
         <div className={styles.topBarBrand}>
-          <span aria-hidden="true" className={styles.brandMark} />
-          <strong>SketchCatch</strong>
-          <span>{projectName}</span>
+          <ProductBrand />
+          <span className={styles.topBarProjectName}>{projectName}</span>
         </div>
-        <p className={styles.topBarTitle}>AI Architecture</p>
+        <p className={styles.topBarTitle}>AI 초안</p>
         <div className={styles.topBarState}>
           <span>{stageState}</span>
+          <WorkspaceDeploymentNotificationCenterSlot />
           <button
             disabled={workflow.approvalState === "loading"}
             onClick={workflow.cancelStart}
@@ -113,11 +115,7 @@ export function WorkspaceAiShell({
       </header>
 
       <div className={styles.splitLayout}>
-        <section aria-labelledby="conversation-heading" className={styles.conversationPanel}>
-          <header className={styles.conversationHeader}>
-            <h1 id="conversation-heading">Architecture 요구사항</h1>
-          </header>
-
+        <section aria-label="AI 대화" className={styles.conversationPanel} id="conversation">
           <ConversationTranscript
             hasFinalPreview={showFinalPreview}
             isInteractionLocked={workflow.approvalState === "loading"}
@@ -168,11 +166,6 @@ export function WorkspaceAiShell({
             />
           ) : (
             <>
-              <header className={styles.stageHeader}>
-                <p>Exploration</p>
-                <h2>Resource Orbit</h2>
-                <span>실제 AWS icon을 쓰는 탐색용 장면이며 추천 결과가 아닙니다.</span>
-              </header>
               <div className={styles.stageCanvas}>
                 <DecorativeAwsOrbit
                   composition={orbitComposition}
