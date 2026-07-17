@@ -1303,7 +1303,7 @@ function hasCurrentRepositoryAccessVerification(
     `https://github.com/${sourceRepository.owner}/${repositoryName}.git`;
   const expectedCommitSha = confirmedBuildConfig.confirmedCommitSha.toLowerCase();
   return (
-    buildEnvironment.sourceRepositoryUrl === expectedRepositoryUrl &&
+    buildEnvironment.sourceRepositoryUrl.toLowerCase() === expectedRepositoryUrl.toLowerCase() &&
     buildEnvironment.repositoryVerificationRequestedCommitSha === expectedCommitSha &&
     buildEnvironment.repositoryVerificationResolvedCommitSha === expectedCommitSha
   );
