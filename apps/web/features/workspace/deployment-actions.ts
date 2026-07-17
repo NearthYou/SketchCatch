@@ -137,7 +137,7 @@ export function getDeploymentActionState(
     ),
     shouldShowDestroyPlanButton: canShowDestroyPlanAction,
     shouldShowDestroyButton: Boolean(deployment && isDestroyPlan && isPlanApproved),
-    approvePlanLabel: isDestroyPlan ? "Destroy Plan 승인" : "Plan 승인"
+    approvePlanLabel: isDestroyPlan ? "삭제 Plan 승인" : "Plan 승인"
   };
 }
 

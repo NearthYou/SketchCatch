@@ -170,7 +170,7 @@ test("destroy plan waits for approval before showing destroy execution", () => {
 
   assert.equal(state.shouldShowApprovePlanButton, true);
   assert.equal(state.canApprovePlan, true);
-  assert.equal(state.approvePlanLabel, "Destroy Plan 승인");
+  assert.equal(state.approvePlanLabel, "삭제 Plan 승인");
   assert.equal(state.shouldShowApplyPlanButton, false);
   assert.equal(state.shouldShowDestroyPlanButton, false);
   assert.equal(state.canRunDestroyPlan, false);

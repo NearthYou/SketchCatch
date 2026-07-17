@@ -162,3 +162,9 @@ Short English-only working log for the current agent context. Older records are 
 - The cleanup action no longer offers another Destroy Plan while a current Destroy Plan is already available; approval remains required before execution.
 - Verification: focused Web deployment action and flow tests passed 45/45, and authenticated Chrome showed Step 2 with no duplicate Destroy Plan action.
 - No Plan approval or Destroy execution was performed during verification.
+
+### 2026-07-17 - Label cleanup Plan approval explicitly
+
+- The approval CTA now reads `?? Plan ??` for Destroy Plans while regular Apply Plans keep `Plan ??`.
+- Verification: focused deployment action tests passed 27/27 and `pnpm harness:check` passed.
+- Visual verification was skipped because the local Web server was not running; no deployment action was executed.

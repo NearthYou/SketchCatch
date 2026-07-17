@@ -1395,7 +1395,7 @@ export function DirectDeploymentScreen({
               type="button"
             >
               <ShieldCheck size={16} aria-hidden="true" />
-              {requestState === "loading" ? "승인 처리 중" : "Plan 승인"}
+              {requestState === "loading" ? "승인 처리 중" : deploymentActions.approvePlanLabel}
             </button>
           </div>
         );
