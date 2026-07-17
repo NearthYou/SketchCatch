@@ -30,3 +30,10 @@ test("Cost panels receive controlled values and change callbacks", () => {
   assert.match(usagePanelSource, /readonly onProjectChange:/);
   assert.match(usagePanelSource, /readonly onRangeChange:/);
 });
+
+test("user changes push history while URL and data normalization replace it", () => {
+  assert.match(dashboardSource, /router\.push\(/);
+  assert.match(dashboardSource, /router\.replace\(/);
+  assert.match(usagePanelSource, /readonly onConnectionNormalize:/);
+  assert.match(usagePanelSource, /readonly onProjectNormalize:/);
+});

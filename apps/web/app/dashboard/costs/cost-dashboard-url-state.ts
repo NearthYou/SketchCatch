@@ -134,3 +134,17 @@ export function writeCostUsageRange(
 
   return next;
 }
+
+export function normalizeCostDashboardSearchParams(
+  searchParams: CostDashboardSearchParams
+): URLSearchParams {
+  let normalized = writeCostDashboardTab(searchParams, parseCostDashboardTab(searchParams));
+  normalized = writeCostEstimatePeriod(normalized, parseCostEstimatePeriod(normalized));
+  normalized = writeExpectedUserCount(normalized, parseExpectedUserCount(normalized));
+  normalized = writeCostUsageConnectionId(
+    normalized,
+    parseCostUsageConnectionId(normalized)
+  );
+  normalized = writeCostUsageProjectKey(normalized, parseCostUsageProjectKey(normalized));
+  return writeCostUsageRange(normalized, parseCostUsageRange(normalized));
+}

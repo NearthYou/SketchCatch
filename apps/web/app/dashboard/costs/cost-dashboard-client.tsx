@@ -6,6 +6,7 @@ import type { CostEstimatePeriod, CostUsageAnalysisRange } from "@sketchcatch/ty
 import { CostEstimatePanel } from "./cost-estimate-panel";
 import { CostUsagePanel } from "./cost-usage-panel";
 import {
+  normalizeCostDashboardSearchParams,
   parseCostEstimatePeriod,
   parseCostDashboardTab,
   parseCostUsageConnectionId,
@@ -50,21 +51,6 @@ export function CostDashboardClient() {
   );
   const tabRefs = useRef<Partial<Record<CostDashboardTab, HTMLButtonElement | null>>>({});
 
-  useEffect(() => {
-    setActiveTab(parseCostDashboardTab(searchParams));
-    setEstimatePeriod(parseCostEstimatePeriod(searchParams));
-    setSelectedConnectionId(parseCostUsageConnectionId(searchParams));
-    setSelectedProjectKey(parseCostUsageProjectKey(searchParams));
-    setUsageRange(parseCostUsageRange(searchParams));
-    const nextExpectedUserCount = parseExpectedUserCount(searchParams);
-
-    if (expectedUserCountRef.current !== nextExpectedUserCount) {
-      expectedUserCountRef.current = nextExpectedUserCount;
-      setExpectedUserCount(nextExpectedUserCount);
-      setExpectedUserCountInput(String(nextExpectedUserCount));
-    }
-  }, [searchParams]);
-
   const pushCostSearchParams = useCallback(
     (nextSearchParams: URLSearchParams): void => {
       const nextQuery = nextSearchParams.toString();
@@ -72,6 +58,35 @@ export function CostDashboardClient() {
     },
     [pathname, router]
   );
+
+  const replaceCostSearchParams = useCallback(
+    (nextSearchParams: URLSearchParams): void => {
+      const nextQuery = nextSearchParams.toString();
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    },
+    [pathname, router]
+  );
+
+  useEffect(() => {
+    const normalizedSearchParams = normalizeCostDashboardSearchParams(searchParams);
+
+    if (normalizedSearchParams.toString() !== searchParams.toString()) {
+      replaceCostSearchParams(normalizedSearchParams);
+    }
+
+    setActiveTab(parseCostDashboardTab(normalizedSearchParams));
+    setEstimatePeriod(parseCostEstimatePeriod(normalizedSearchParams));
+    setSelectedConnectionId(parseCostUsageConnectionId(normalizedSearchParams));
+    setSelectedProjectKey(parseCostUsageProjectKey(normalizedSearchParams));
+    setUsageRange(parseCostUsageRange(normalizedSearchParams));
+    const nextExpectedUserCount = parseExpectedUserCount(normalizedSearchParams);
+
+    if (expectedUserCountRef.current !== nextExpectedUserCount) {
+      expectedUserCountRef.current = nextExpectedUserCount;
+      setExpectedUserCount(nextExpectedUserCount);
+      setExpectedUserCountInput(String(nextExpectedUserCount));
+    }
+  }, [replaceCostSearchParams, searchParams]);
 
   const changeActiveTab = useCallback(
     (nextTab: CostDashboardTab): void => {
@@ -107,12 +122,28 @@ export function CostDashboardClient() {
     [pushCostSearchParams, searchParams]
   );
 
+  const normalizeSelectedConnection = useCallback(
+    (nextConnectionId: string): void => {
+      setSelectedConnectionId(nextConnectionId);
+      replaceCostSearchParams(writeCostUsageConnectionId(searchParams, nextConnectionId));
+    },
+    [replaceCostSearchParams, searchParams]
+  );
+
   const changeSelectedProject = useCallback(
     (nextProjectKey: string): void => {
       setSelectedProjectKey(nextProjectKey);
       pushCostSearchParams(writeCostUsageProjectKey(searchParams, nextProjectKey));
     },
     [pushCostSearchParams, searchParams]
+  );
+
+  const normalizeSelectedProject = useCallback(
+    (nextProjectKey: string): void => {
+      setSelectedProjectKey(nextProjectKey);
+      replaceCostSearchParams(writeCostUsageProjectKey(searchParams, nextProjectKey));
+    },
+    [replaceCostSearchParams, searchParams]
   );
 
   const changeUsageRange = useCallback(
@@ -208,7 +239,9 @@ export function CostDashboardClient() {
           ) : (
             <CostUsagePanel
               onConnectionChange={changeSelectedConnection}
+              onConnectionNormalize={normalizeSelectedConnection}
               onProjectChange={changeSelectedProject}
+              onProjectNormalize={normalizeSelectedProject}
               onRangeChange={changeUsageRange}
               range={usageRange}
               selectedConnectionId={selectedConnectionId}

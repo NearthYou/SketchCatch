@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  normalizeCostDashboardSearchParams,
   parseCostEstimatePeriod,
   parseCostUsageConnectionId,
   parseCostUsageProjectKey,
@@ -105,4 +106,29 @@ test("usage range restores supported values and omits the 30 day default", () =>
   assert.equal(sevenDays.get("range"), "7d");
   assert.equal(sevenDays.get("tab"), "usage");
   assert.equal(thirtyDays.has("range"), false);
+});
+
+test("cost URL normalization removes invalid defaults and preserves unmanaged parameters", () => {
+  const normalized = normalizeCostDashboardSearchParams(
+    new URLSearchParams(
+      "tab=invalid&period=month&users=invalid&connection=%20&project=all-projects&range=30d&source=notification"
+    )
+  );
+
+  assert.equal(normalized.toString(), "source=notification");
+});
+
+test("cost URL normalization canonicalizes supported non-default values", () => {
+  const normalized = normalizeCostDashboardSearchParams(
+    new URLSearchParams(
+      "tab=usage&period=week&users=00042&connection=%20aws-1%20&project=%20project-id%3A1%20&range=7d"
+    )
+  );
+
+  assert.equal(normalized.get("tab"), "usage");
+  assert.equal(normalized.get("period"), "week");
+  assert.equal(normalized.get("users"), "42");
+  assert.equal(normalized.get("connection"), "aws-1");
+  assert.equal(normalized.get("project"), "project-id:1");
+  assert.equal(normalized.get("range"), "7d");
 });

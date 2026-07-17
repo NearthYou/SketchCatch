@@ -46,14 +46,18 @@ const COST_USAGE_RANGE_OPTIONS: readonly SelectMenuOption[] = [
 
 export function CostUsagePanel({
   onConnectionChange,
+  onConnectionNormalize,
   onProjectChange,
+  onProjectNormalize,
   onRangeChange,
   range,
   selectedConnectionId,
   selectedProjectKey
 }: {
   readonly onConnectionChange: (connectionId: string) => void;
+  readonly onConnectionNormalize: (connectionId: string) => void;
   readonly onProjectChange: (projectKey: string) => void;
+  readonly onProjectNormalize: (projectKey: string) => void;
   readonly onRangeChange: (range: CostUsageAnalysisRange) => void;
   readonly range: CostUsageAnalysisRange;
   readonly selectedConnectionId: string;
@@ -176,12 +180,12 @@ export function CostUsagePanel({
       connectionsQuery.isSuccess &&
       effectiveConnectionId !== selectedConnectionId
     ) {
-      onConnectionChange(effectiveConnectionId);
+      onConnectionNormalize(effectiveConnectionId);
     }
   }, [
     connectionsQuery.isSuccess,
     effectiveConnectionId,
-    onConnectionChange,
+    onConnectionNormalize,
     selectedConnectionId
   ]);
 
@@ -193,10 +197,10 @@ export function CostUsagePanel({
       );
 
       if (normalizedProjectKey !== selectedProjectKey) {
-        onProjectChange(normalizedProjectKey);
+        onProjectNormalize(normalizedProjectKey);
       }
     }
-  }, [data, onProjectChange, selectedProjectKey]);
+  }, [data, onProjectNormalize, selectedProjectKey]);
 
   if (queryError && !data) {
     return <ProductState action={<button onClick={() => void refetchUsage()} type="button">다시 시도</button>} description={queryError instanceof Error ? queryError.message : "실제 사용량을 불러오지 못했습니다."} kind="error" title="실제 사용량을 불러오지 못했습니다" />;
