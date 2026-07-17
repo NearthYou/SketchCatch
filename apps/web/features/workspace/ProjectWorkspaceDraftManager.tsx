@@ -643,7 +643,7 @@ function ProjectWorkspaceDraftManagerState({
         onBoardReady={handleBoardReady}
         onDiagramChange={handleDiagramChange}
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
-        onRightPanelOpen={closeAiChat}
+        onWorkspacePanelOpen={closeAiChat}
         onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
         onSaveAndDeployRequest={saveAndOpenDeployment}
         projectName={projectName}

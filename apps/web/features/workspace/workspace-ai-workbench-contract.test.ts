@@ -4,6 +4,7 @@ import test from "node:test";
 
 const controllerSource = read("WorkspaceAiChatDock.tsx");
 const conversationSource = read("workspace-ai-chat-conversation.ts");
+const diagramEditorSource = read("../diagram-editor/DiagramEditor.tsx");
 const launcherSource = read("WorkspaceAiChatLauncher.tsx");
 const launcherStyles = read("workspace-ai-chat-launcher.module.css");
 const projectManagerSource = read("ProjectWorkspaceDraftManager.tsx");
@@ -162,7 +163,7 @@ test("opening another workspace panel closes the controlled AI Workbench", () =>
       managerSource,
       /<WorkspaceAiChatDock[\s\S]*?isBlockedByWorkspaceOverlay=\{isBlockingPanelOpen\}[\s\S]*?isOpen=\{isAiChatOpen\}[\s\S]*?onOpenChange=\{setAiChatOpen\}/
     );
-    assert.match(managerSource, /onRightPanelOpen=\{closeAiChat\}/);
+    assert.match(managerSource, /onWorkspacePanelOpen=\{closeAiChat\}/);
     assert.match(
       managerSource,
       /<WorkspaceRightPanel[\s\S]*?onBlockingPanelOpenChange=\{setBlockingPanelOpen\}[\s\S]*?onPanelOpenRequest=\{closeAiChat\}/
@@ -175,6 +176,10 @@ test("opening another workspace panel closes the controlled AI Workbench", () =>
     /onBlockingPanelOpenChange\(isDeploymentConsoleOpen \|\| isLiveObservationOpen\);/
   );
   assert.match(rightPanelSource, /const openLiveObservation[\s\S]*?onPanelOpenRequest\(\);/);
+  assert.match(
+    diagramEditorSource,
+    /const previewAutomaticOrganization = useCallback\(\(\) => \{\s*onWorkspacePanelOpen\?\.\(\);/
+  );
 });
 
 test("mobile focus trap ignores roving tabs that are not keyboard focusable", () => {

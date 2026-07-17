@@ -266,7 +266,7 @@ function DiagramEditorInner({
   onBoardReady,
   onDiagramChange,
   onDiagramSaveRequest,
-  onRightPanelOpen,
+  onWorkspacePanelOpen,
   onTemplateWorkspaceApply,
   onSaveAndDeployRequest,
   projectName = "Project workspace",
@@ -386,21 +386,21 @@ function DiagramEditorInner({
     const nextOpen = !isRightPanelOpen;
 
     if (nextOpen) {
-      onRightPanelOpen?.();
+      onWorkspacePanelOpen?.();
     }
 
     setRightPanelOpen(nextOpen);
-  }, [isRightPanelOpen, onRightPanelOpen]);
+  }, [isRightPanelOpen, onWorkspacePanelOpen]);
 
   const updateRightPanelOpen = useCallback(
     (nextOpen: boolean): void => {
       if (nextOpen) {
-        onRightPanelOpen?.();
+        onWorkspacePanelOpen?.();
       }
 
       setRightPanelOpen(nextOpen);
     },
-    [onRightPanelOpen]
+    [onWorkspacePanelOpen]
   );
 
   const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
@@ -968,12 +968,13 @@ function DiagramEditorInner({
   );
 
   const previewAutomaticOrganization = useCallback(() => {
+    onWorkspacePanelOpen?.();
     const currentDiagram = diagramRef.current;
     const proposal = createBoardAutoOrganizeProposal(currentDiagram);
 
     setPreviewDiagram(proposal.diagram);
     setCompilerPreview(proposal);
-  }, [setPreviewDiagram]);
+  }, [onWorkspacePanelOpen, setPreviewDiagram]);
 
   const applyAutomaticOrganization = useCallback(() => {
     if (compilerPreview === null) return;

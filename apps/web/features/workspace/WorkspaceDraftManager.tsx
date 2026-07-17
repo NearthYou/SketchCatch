@@ -365,7 +365,7 @@ export function WorkspaceDraftManager({
       initialSelectedNodeIds={initialSelectedNodeIds}
       onDiagramChange={handleDiagramChange}
       onDiagramSaveRequest={saveCurrentDraftLocally}
-      onRightPanelOpen={closeAiChat}
+      onWorkspacePanelOpen={closeAiChat}
       onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
       projectName={projectName}
       workspaceUserName={workspaceUserName}
