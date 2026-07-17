@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Box,
   BringToFront,
   Layers2,
   Lock,
@@ -27,6 +26,7 @@ import type {
   ReactNode
 } from "react";
 
+import { ResourceIconImage } from "../../components/ui/ResourceIconImage";
 import { getBoardNodeStateBadge, getBoardZoomLevel } from "./board-visual-state";
 import { BORDER_COLOR_SWATCHES, NODE_COLOR_SWATCHES } from "./constants";
 import {
@@ -345,9 +345,13 @@ export const DiagramNodeView = memo(function DiagramNodeView(
                 />
               ))}
               <div className={styles.areaNodeHeader} style={{ color: textColor }}>
-                {areaNodeIconUrl ? (
-                  <img alt="" className={styles.areaNodeHeaderIcon} draggable={false} src={areaNodeIconUrl} />
-                ) : null}
+                <ResourceIconImage
+                  alt=""
+                  className={styles.areaNodeHeaderIcon}
+                  fallbackClassName={styles.areaNodeHeaderIcon}
+                  fallbackSize={16}
+                  src={areaNodeIconUrl}
+                />
                 <span className={styles.areaNodeHeaderText}>{resourceNodeLabel}</span>
                 {areaNodeMetaLabel ? <span className={styles.areaNodeHeaderMeta}>{areaNodeMetaLabel}</span> : null}
               </div>
@@ -355,13 +359,13 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           ) : usesIconTileLayout ? (
             <>
               <div className={styles.resourceNodeIconFrame} data-icon-family={resourcePresentation.icon.family}>
-                {displayIconUrl ? (
-                  <img alt="" className={styles.resourceNodeIcon} draggable={false} src={displayIconUrl} />
-                ) : (
-                  <div className={styles.resourceNodeIconFallback} aria-hidden="true">
-                    <Box size={18} strokeWidth={1.75} />
-                  </div>
-                )}
+                <ResourceIconImage
+                  alt=""
+                  className={styles.resourceNodeIcon}
+                  fallbackClassName={styles.resourceNodeIconFallback}
+                  fallbackSize={18}
+                  src={displayIconUrl}
+                />
               </div>
               <div className={styles.resourceNodeLabel} style={{ color: textColor }} title={resourceNodeLabel}>
                 {resourceNodeLabel}
@@ -370,11 +374,13 @@ export const DiagramNodeView = memo(function DiagramNodeView(
           ) : (
             <>
               <div className={styles.nodeGlyph} aria-hidden="true">
-                {displayIconUrl ? (
-                  <img alt="" className={styles.nodeGlyphIcon} draggable={false} src={displayIconUrl} />
-                ) : (
-                  "D"
-                )}
+                <ResourceIconImage
+                  alt=""
+                  className={styles.nodeGlyphIcon}
+                  fallbackClassName={styles.nodeGlyphIcon}
+                  fallbackSize={28}
+                  src={displayIconUrl}
+                />
               </div>
               <div className={styles.nodeContent}>
                 <div className={styles.nodeType}>Design</div>

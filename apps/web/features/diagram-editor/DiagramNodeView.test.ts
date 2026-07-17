@@ -236,11 +236,13 @@ test("resource labels stay four pixels below the icon and metadata is not render
 test("icon-less resources use a neutral glyph instead of provider metadata", () => {
   assert.match(
     diagramNodeViewSource,
-    /className=\{styles\.resourceNodeIconFallback\} aria-hidden="true">\s*<Box[^>]*size=\{18\}[^>]*\/>\s*<\/div>/s
+    /<ResourceIconImage[\s\S]*?fallbackClassName=\{styles\.resourceNodeIconFallback\}[\s\S]*?fallbackSize=\{18\}/
   );
+  assert.match(diagramNodeViewSource, /fallbackClassName=\{styles\.areaNodeHeaderIcon\}/);
+  assert.match(diagramNodeViewSource, /fallbackClassName=\{styles\.nodeGlyphIcon\}/);
   assert.doesNotMatch(
     diagramNodeViewSource,
-    /className=\{styles\.resourceNodeIconFallback\}[\s\S]*?resourcePresentation\.providerLabel[\s\S]*?<\/div>/
+    /resourcePresentation\.providerLabel/
   );
 });
 
