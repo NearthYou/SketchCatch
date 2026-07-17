@@ -20,6 +20,7 @@ import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
 import { WorkspaceLoadingSkeleton } from "./WorkspaceLoadingSkeleton";
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
+import { areTerraformSyncFilesEqual } from "./terraform-file-equality";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
@@ -264,6 +265,10 @@ export function WorkspaceDraftManager({
   const handleTerraformFilesChange = useCallback(
     (files: readonly TerraformSyncFileInput[]): void => {
       if (!workspaceId) return;
+
+      if (areTerraformSyncFilesEqual(latestTerraformFilesRef.current, files)) {
+        return;
+      }
 
       latestTerraformFilesRef.current = files.map((file) => ({ ...file }));
       setInitialTerraformFiles(files.map((file) => ({ ...file })));

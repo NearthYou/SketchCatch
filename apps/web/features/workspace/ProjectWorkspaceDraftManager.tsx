@@ -21,6 +21,7 @@ import {
 import { WorkspaceRightPanel } from "./WorkspaceRightPanel";
 import { WorkspaceLoadingSkeleton } from "./WorkspaceLoadingSkeleton";
 import type { TerraformFilesReplacementRequest } from "./TerraformCodePanel";
+import { areTerraformSyncFilesEqual } from "./terraform-file-equality";
 import { toTerraformRefreshFingerprint } from "./terraform-panel-utils";
 import { restoreSavedDiagram } from "./workspace-draft-restore";
 import type {
@@ -776,6 +777,10 @@ function ProjectWorkspaceDraftManagerState({
 
   const handleTerraformFilesChange = useCallback(
     (files: readonly TerraformSyncFileInput[]): void => {
+      if (areTerraformSyncFilesEqual(latestTerraformFilesRef.current, files)) {
+        return;
+      }
+
       latestTerraformFilesRef.current = files.map((file) => ({ ...file }));
       setInitialTerraformFiles(files.map((file) => ({ ...file })));
       draftChangeVersionRef.current += 1;
