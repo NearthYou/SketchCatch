@@ -620,7 +620,13 @@ function DiagramEditorInner({
 
   const applyLiveDiagramUpdate = useCallback(
     (updater: (currentDiagram: DiagramJson) => DiagramJson) => {
-      const after = updater(diagramRef.current);
+      const before = diagramRef.current;
+      const after = updater(before);
+
+      if (areDiagramsEqual(before, after)) {
+        return;
+      }
+
       replaceDiagram(after);
     },
     [replaceDiagram]

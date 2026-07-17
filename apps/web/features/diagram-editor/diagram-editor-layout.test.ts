@@ -334,6 +334,13 @@ test("compact workspace refits the board without changing the saved DiagramJson"
   );
 });
 
+test("live Diagram updates ignore structurally unchanged results", () => {
+  assert.match(
+    diagramEditorSource,
+    /const applyLiveDiagramUpdate[\s\S]*?const before = diagramRef\.current;[\s\S]*?if \(areDiagramsEqual\(before, after\)\) \{\s*return;/
+  );
+});
+
 test("fit view uses the unobscured board frame and complete diagram visual bounds", () => {
   assert.match(
     diagramEditorSource,
