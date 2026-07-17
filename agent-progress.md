@@ -74,11 +74,6 @@ Short English-only working log for the current agent context. Older records are 
 - Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
 - No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
 
-### 2026-07-16 - Production runtime plan drift review
-
-- Review-only Plan 29498864502 succeeded with 3 add, 7 change, and only 2 task-definition replacement destroys. Worker Secret wiring and the Live Observation capability Secret preservation were added without exposing Secret values.
-- Verification passed: harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Local Terraform validation/test could not initialize the uncached AWS provider within the timeout.
-
 ### 2026-07-16 - Follow up merged PR #439 review
 
 - Scoped runtime Secret contract regexes to their Terraform set literals, selected the named worker container, and used `try(..., [])` for nullable Secret lists so unrelated markers cannot satisfy the checks.
@@ -214,3 +209,9 @@ Short English-only working log for the current agent context. Older records are 
 - Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
 - Added a call-recording regression for callback replacement and cleanup behavior.
 - Focused workspace tests pass 20/20; Web lint and typecheck pass.
+
+### 2026-07-17 - Merge issue #448 work with current dev
+
+- Merged `origin/dev` at `404d30a9` and resolved five Workspace/Diagram conflicts without dropping viewer, Live Observation, saved-title, draft-revision, CI/CD return, or AI patch-preview behavior.
+- Updated the cached GitHub settings contract and restored the Destroy Plan approval/retry boundary using `failedAt`.
+- Focused Module/Template regressions and full Web tests pass; harness, knowledge check, lint, typecheck, and build pass. Local full API tests remain environment-blocked by missing `DATABASE_URL` and `zstd`; affected API files match `origin/dev`.

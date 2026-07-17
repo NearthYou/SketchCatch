@@ -11,10 +11,15 @@ const githubSettingsUrl = new URL(
 test("global settings owns GitHub App installation without project repository behavior", () => {
   assert.equal(existsSync(fileURLToPath(githubSettingsUrl)), true);
   const source = readFileSync(fileURLToPath(githubSettingsUrl), "utf8");
+  const connectionQueriesSource = readWorkspaceFile(
+    "features/dashboard/connection-queries.ts"
+  );
 
   assert.match(source, /GitHub App 연결/);
   assert.match(source, /로그인 방식과 관계없이/);
-  assert.match(source, /listGitHubAccountInstallations/);
+  assert.match(source, /useGitHubInstallationsQuery/);
+  assert.match(connectionQueriesSource, /export function useGitHubInstallationsQuery/);
+  assert.match(connectionQueriesSource, /queryFn:\s*listGitHubAccountInstallations/);
   assert.match(source, /createGitHubAccountInstallUrl/);
   assert.doesNotMatch(
     source,
