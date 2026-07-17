@@ -18,7 +18,10 @@ import {
   projectDeploymentTargets,
   projectExecutionLeases
 } from "../db/schema.js";
-import type { AwsConnectionManagedResources } from "./aws-connection-service.js";
+import type {
+  AwsConnectionManagedResources,
+  AwsConnectionRecord
+} from "./aws-connection-service.js";
 import { createAwsSdkStsGateway } from "./aws-connection-test-service.js";
 
 export type VerifiedAwsConnectionForCodeConnection = {
@@ -29,13 +32,18 @@ export type VerifiedAwsConnectionForCodeConnection = {
   region: string;
 };
 
+type VerifiedAwsConnectionRecord = AwsConnectionRecord & {
+  accountId: string;
+  roleArn: string;
+};
+
 export type AwsCodeConnectionRecord = typeof awsCodeConnections.$inferSelect;
 
 export type AwsCodeConnectionRepository = {
   findVerifiedConnection(
     connectionId: string,
     userId: string
-  ): Promise<VerifiedAwsConnectionForCodeConnection | undefined>;
+  ): Promise<VerifiedAwsConnectionRecord | undefined>;
   findByAwsConnectionId(
     connectionId: string
   ): Promise<AwsCodeConnectionRecord | undefined>;
@@ -57,7 +65,6 @@ export type AwsCodeConnectionRepository = {
     input: Omit<AwsCodeConnectionRecord, "createdAt"> & { createdAt?: Date }
   ): Promise<AwsCodeConnectionRecord>;
   findManagedResources(connectionId: string): Promise<AwsConnectionManagedResources>;
-  hasActiveBuildWork(connectionId: string): Promise<boolean>;
   claimDeletion(input: {
     id: string;
     connectionId: string;
@@ -122,13 +129,7 @@ export function createPostgresAwsCodeConnectionRepository(
   return {
     async findVerifiedConnection(connectionId, userId) {
       const [connection] = await db
-        .select({
-          id: awsConnections.id,
-          accountId: awsConnections.accountId,
-          roleArn: awsConnections.roleArn,
-          externalId: awsConnections.externalId,
-          region: awsConnections.region
-        })
+        .select()
         .from(awsConnections)
         .where(
           and(
@@ -280,10 +281,6 @@ export function createPostgresAwsCodeConnectionRepository(
         codeBuildProjects: buildRows,
         codeConnectionArn: codeConnectionRows[0]?.connectionArn ?? null
       };
-    },
-
-    async hasActiveBuildWork(connectionId) {
-      return hasActiveBuildWork(db, connectionId);
     },
 
     async claimDeletion(input) {

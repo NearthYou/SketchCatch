@@ -13,7 +13,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AwsConnection,
-  AwsCodeConnectionDisconnectPreviewResponse,
   AwsCodeConnectionResponse,
   AwsConnectionCloudFormationTemplateResponse,
   AwsConnectionDeletionPreviewResponse
@@ -31,7 +30,6 @@ import {
   deleteAwsConnection,
   disconnectAwsCodeConnection,
   getAwsCodeConnection,
-  getAwsCodeConnectionDisconnectPreview,
   getAwsConnectionDeletionPreview,
   getAwsConnectionCloudFormationTemplate,
   refreshAwsCodeConnection,
@@ -83,8 +81,8 @@ export function SettingsDashboardClient() {
   const [accountId, setAccountId] = useState("");
   const [deletionPreview, setDeletionPreview] =
     useState<AwsConnectionDeletionPreviewResponse | null>(null);
-  const [codeConnectionDeletionPreview, setCodeConnectionDeletionPreview] =
-    useState<AwsCodeConnectionDisconnectPreviewResponse | null>(null);
+  const [showCodeConnectionDisconnectModal, setShowCodeConnectionDisconnectModal] =
+    useState(false);
   const [codeConnections, setCodeConnections] = useState<
     Record<string, AwsCodeConnectionResponse>
   >({});
@@ -258,37 +256,24 @@ export function SettingsDashboardClient() {
     }
   }
 
-  async function previewGitHubBuildDisconnect(): Promise<void> {
-    if (!selectedBuildAwsConnectionId) return;
-    setActionPending(true);
-    setErrorMessage("");
-    try {
-      setCodeConnectionDeletionPreview(
-        await getAwsCodeConnectionDisconnectPreview(selectedBuildAwsConnectionId)
-      );
-    } catch (error) {
-      setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결 해제 대상을 확인하지 못했습니다."));
-    } finally {
-      setActionPending(false);
-    }
+  function openGitHubBuildDisconnect(): void {
+    if (selectedBuildAwsConnectionId) setShowCodeConnectionDisconnectModal(true);
   }
 
   async function confirmGitHubBuildDisconnect(): Promise<void> {
-    if (!codeConnectionDeletionPreview?.canDisconnect) return;
+    if (!selectedBuildAwsConnectionId) return;
+    const connectionId = selectedBuildAwsConnectionId;
     setActionPending(true);
     setErrorMessage("");
     try {
-      await disconnectAwsCodeConnection(codeConnectionDeletionPreview.connectionId, {
-        confirmedManagedCleanup: true,
-        confirmationToken: codeConnectionDeletionPreview.confirmationToken
-      });
+      await disconnectAwsCodeConnection(connectionId, { confirmedManagedCleanup: true });
       setCodeConnections((current) => ({
         ...current,
-        [codeConnectionDeletionPreview.connectionId]: { codeConnection: null }
+        [connectionId]: { codeConnection: null }
       }));
-      setCodeConnectionDeletionPreview(null);
+      setShowCodeConnectionDisconnectModal(false);
     } catch (error) {
-      setCodeConnectionDeletionPreview(null);
+      setShowCodeConnectionDisconnectModal(false);
       setErrorMessage(getApiErrorMessage(error, "GitHub 빌드 연결을 해제하지 못했습니다."));
     } finally {
       setActionPending(false);
@@ -329,7 +314,7 @@ export function SettingsDashboardClient() {
   }, [verifiedConnections]);
 
   useEffect(() => {
-    if (!showAwsRequiredModal && !deletionPreview && !codeConnectionDeletionPreview) return;
+    if (!showAwsRequiredModal && !deletionPreview && !showCodeConnectionDisconnectModal) return;
     const overlay = modalOverlayRef.current;
     const dialog = modalDialogRef.current;
     const closeButton = modalCloseButtonRef.current;
@@ -342,11 +327,11 @@ export function SettingsDashboardClient() {
       onClose: () => {
         setShowAwsRequiredModal(false);
         setDeletionPreview(null);
-        setCodeConnectionDeletionPreview(null);
+        setShowCodeConnectionDisconnectModal(false);
       },
       overlay
     });
-  }, [codeConnectionDeletionPreview, deletionPreview, showAwsRequiredModal]);
+  }, [deletionPreview, showAwsRequiredModal, showCodeConnectionDisconnectModal]);
 
   return (
     <div className="dashboardRouteStack">
@@ -414,7 +399,7 @@ export function SettingsDashboardClient() {
                 actionPending={actionPending}
                 connection={codeConnections[selectedBuildAwsConnectionId]}
                 onConnect={() => void connectGitHubBuild()}
-                onDisconnect={() => void previewGitHubBuildDisconnect()}
+                onDisconnect={openGitHubBuildDisconnect}
                 onRefresh={() => void refreshGitHubBuildConnection()}
               />
             </div>
@@ -471,7 +456,7 @@ export function SettingsDashboardClient() {
 
       <GitHubAccountSettings />
 
-      {codeConnectionDeletionPreview ? (
+      {showCodeConnectionDisconnectModal ? (
         <div className={styles.modalBackdrop} ref={modalOverlayRef} role="presentation">
           <section
             aria-describedby="github-build-disconnect-description"
@@ -485,7 +470,7 @@ export function SettingsDashboardClient() {
               aria-label="GitHub 빌드 연결 해제 닫기"
               className={styles.modalClose}
               disabled={actionPending}
-              onClick={() => setCodeConnectionDeletionPreview(null)}
+              onClick={() => setShowCodeConnectionDisconnectModal(false)}
               ref={modalCloseButtonRef}
               type="button"
             >
@@ -494,35 +479,26 @@ export function SettingsDashboardClient() {
             <Trash2 size={24} />
             <h2 id="github-build-disconnect-title">GitHub 빌드 연결 해제</h2>
             <p id="github-build-disconnect-description">
-              아래 SketchCatch 관리 빌드 리소스만 AWS에서 정리합니다. AWS 계정 연결과 배포된 애플리케이션 및 인프라는 유지됩니다.
+              SketchCatch가 만든 GitHub 빌드 리소스를 AWS에서 정리합니다. AWS 계정 연결과 배포된 애플리케이션 및 인프라는 유지됩니다.
             </p>
             <div className={styles.cleanupPreview}>
               <strong>정리할 리소스</strong>
               <ul>
-                <li>CodeBuild 프로젝트 {codeConnectionDeletionPreview.managedResources.codeBuildProjects.length}개</li>
-                <li>CodeBuild Service Role {codeConnectionDeletionPreview.managedResources.codeBuildProjects.length}개</li>
-                <li>CodeBuild 로그 그룹 {codeConnectionDeletionPreview.managedResources.codeBuildProjects.length}개</li>
-                <li>빌드 캐시 ECR Repository {codeConnectionDeletionPreview.managedResources.buildCacheRepositories}개</li>
-                <li>GitHub CodeConnection {codeConnectionDeletionPreview.managedResources.codeConnection ? "1개" : "없음"}</li>
+                <li>CodeBuild 프로젝트, 전용 Role과 로그</li>
+                <li>빌드 캐시 ECR Repository</li>
+                <li>GitHub CodeConnection</li>
               </ul>
-              <strong>유지할 리소스</strong>
-              <p>{codeConnectionDeletionPreview.preservedResources.join(", ")}</p>
             </div>
-            {codeConnectionDeletionPreview.blockerMessage ? (
-              <p className={styles.cleanupBlocker}>{codeConnectionDeletionPreview.blockerMessage}</p>
-            ) : null}
             <div className={styles.modalActions}>
-              <button disabled={actionPending} onClick={() => setCodeConnectionDeletionPreview(null)} type="button">취소</button>
-              {codeConnectionDeletionPreview.canDisconnect ? (
-                <button
-                  className={styles.dangerAction}
-                  disabled={actionPending}
-                  onClick={() => void confirmGitHubBuildDisconnect()}
-                  type="button"
-                >
-                  관리 리소스 정리 후 연결 해제
-                </button>
-              ) : null}
+              <button disabled={actionPending} onClick={() => setShowCodeConnectionDisconnectModal(false)} type="button">취소</button>
+              <button
+                className={styles.dangerAction}
+                disabled={actionPending}
+                onClick={() => void confirmGitHubBuildDisconnect()}
+                type="button"
+              >
+                연결 해제
+              </button>
             </div>
           </section>
         </div>

@@ -194,21 +194,8 @@ export type AwsConnectionManagedResources = {
   codeConnectionArn: string | null;
 };
 
-type AwsManagedResourceCleanupConnectionRequiredKey =
-  | "id"
-  | "accountId"
-  | "roleArn"
-  | "externalId"
-  | "region";
-
-export type AwsManagedResourceCleanupConnection = Pick<
-  AwsConnectionRecord,
-  AwsManagedResourceCleanupConnectionRequiredKey
-> &
-  Partial<Omit<AwsConnectionRecord, AwsManagedResourceCleanupConnectionRequiredKey>>;
-
 export type CleanupAwsConnectionManagedResources = (input: {
-  connection: AwsManagedResourceCleanupConnection;
+  connection: AwsConnectionRecord;
   resources: AwsConnectionManagedResources;
 }) => Promise<void>;
 

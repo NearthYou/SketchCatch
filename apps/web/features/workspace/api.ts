@@ -19,7 +19,6 @@ import type {
   AwsConnectionDeletionPreviewResponse,
   AwsConnection,
   AwsConnectionListResponse,
-  AwsCodeConnectionDisconnectPreviewResponse,
   AwsCodeConnectionResponse,
   CostEstimatePeriod,
   CostProjectEstimateListResponse,
@@ -847,15 +846,6 @@ export async function refreshAwsCodeConnection(
   return apiFetch<AwsCodeConnectionResponse>(
     `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection/refresh`,
     { auth: true, method: "POST" }
-  );
-}
-
-export async function getAwsCodeConnectionDisconnectPreview(
-  connectionId: string
-): Promise<AwsCodeConnectionDisconnectPreviewResponse> {
-  return apiFetch<AwsCodeConnectionDisconnectPreviewResponse>(
-    `/aws/connections/${encodeURIComponent(connectionId)}/codeconnection/disconnect-preview`,
-    { auth: true }
   );
 }
 

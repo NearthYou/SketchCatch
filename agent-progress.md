@@ -176,6 +176,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ### 2026-07-17 - Add GitHub build disconnect
 
-- Added a confirmed settings action that previews and removes only SketchCatch-managed CodeBuild projects, roles, logs, build caches, and the shared CodeConnection while preserving the AWS account connection and deployed resources.
-- Disconnect claims the CodeConnection, blocks active build/deployment work, rechecks the exact cleanup token, and keeps retryable metadata after cleanup failure.
+- Added a confirmed settings action that removes only SketchCatch-managed CodeBuild projects, roles, logs, build caches, and the shared CodeConnection while preserving the AWS account connection and deployed resources.
+- Disconnect claims the CodeConnection, blocks active build/deployment work, and keeps retryable metadata after cleanup failure.
 - Focused API and Web settings tests plus workspace lint, typecheck, production build, harness, and diff checks pass. No DB migration or live AWS cleanup was performed.

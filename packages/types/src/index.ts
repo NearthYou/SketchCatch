@@ -1751,24 +1751,6 @@ export type AwsCodeConnectionResponse = {
   setupUrl?: string | null | undefined;
 };
 
-export type AwsCodeConnectionDisconnectPreviewResponse = {
-  connectionId: string;
-  canDisconnect: boolean;
-  blockerMessage: string | null;
-  managedResources: {
-    codeBuildProjects: Array<{
-      projectId: string;
-      projectName: string;
-      serviceRoleName: string;
-      logGroupName: string;
-    }>;
-    buildCacheRepositories: number;
-    codeConnection: boolean;
-  };
-  preservedResources: ["AWS 계정 연결", "배포된 애플리케이션 및 인프라"];
-  confirmationToken: string;
-};
-
 export type ProjectBuildEnvironmentStatus =
   | "preparing"
   | "ready"
@@ -2919,7 +2901,6 @@ export type DeleteAwsConnectionRequest = {
 
 export type DisconnectAwsCodeConnectionRequest = {
   confirmedManagedCleanup: true;
-  confirmationToken: string;
 };
 
 export type AwsRolePermissionSetup = {

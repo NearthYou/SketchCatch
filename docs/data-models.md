@@ -1235,11 +1235,11 @@ artifact reference, 비민감 metadata를 담고 canonical fingerprint 비교로
 Repository를 고르는 별도 사용자 입력을 받지 않고 active `SourceRepository`와 연결한다. AWS가 `AVAILABLE`로
 확인한 connection만 build environment에서 사용할 수 있다.
 
-환경설정의 GitHub 빌드 연결 해제는 `GET /api/aws/connections/:connectionId/codeconnection/disconnect-preview`로
-SketchCatch 관리 CodeBuild project, 전용 Role, log group, build cache ECR, CodeConnection을 먼저 보여준다.
-사용자가 이 exact 집합의 `confirmationToken`을 확인한 뒤
-`DELETE /api/aws/connections/:connectionId/codeconnection`을 호출해야만 관리 리소스와 metadata를 정리한다.
-AWS 계정 연결과 이미 배포된 애플리케이션·인프라는 유지하며, 앱 빌드나 배포가 진행 중이면 해제를 차단한다.
+환경설정의 GitHub 빌드 연결 해제는 사용자가 확인한 뒤
+`DELETE /api/aws/connections/:connectionId/codeconnection`에 `confirmedManagedCleanup: true`를 보내면 실행한다.
+기존 managed cleanup이 SketchCatch 관리 CodeBuild project, 전용 Role, log group, build cache ECR,
+CodeConnection과 metadata를 정리한다. AWS 계정 연결과 이미 배포된 애플리케이션·인프라는 유지하며,
+앱 빌드나 배포가 진행 중이면 해제를 차단한다.
 
 생성은 AWS API보다 먼저 RDS에 `CREATING` row를 예약한다. 같은 AWS connection의 동시 요청은 이 row를 보고
 AWS Resource를 하나만 만들며, API가 AWS 생성 뒤 중단되면 결정적 이름과 `ManagedBy=SketchCatch`,

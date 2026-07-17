@@ -11,10 +11,7 @@ import {
   type AwsCodeConnectionRecord,
   type AwsCodeConnectionRepository
 } from "./aws-codeconnection-service.js";
-import {
-  disconnectAwsCodeConnection,
-  getAwsCodeConnectionDisconnectPreview
-} from "./aws-codeconnection-disconnect-service.js";
+import { disconnectAwsCodeConnection } from "./aws-codeconnection-disconnect-service.js";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const connectionId = "22222222-2222-4222-8222-222222222222";
@@ -30,7 +27,14 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
     roleArn:
       "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole-22222222",
     externalId: "external-id",
-    region: "ap-northeast-2"
+    region: "ap-northeast-2",
+    userId,
+    status: "verified",
+    lastVerifiedAt: fixedNow,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
+    createdAt: fixedNow,
+    updatedAt: fixedNow
   };
   record: AwsCodeConnectionRecord | undefined;
   activeBuildWork = false;
@@ -121,10 +125,6 @@ class InMemoryRepository implements AwsCodeConnectionRepository {
 
   async findManagedResources() {
     return this.managedResources;
-  }
-
-  async hasActiveBuildWork() {
-    return this.activeBuildWork;
   }
 
   async claimDeletion(input: { id: string; now: Date }) {
@@ -440,41 +440,16 @@ test("refreshing a GitHub CodeConnection persists the AWS handshake status", asy
   assert.equal(repository.record?.updatedAt.toISOString(), "2026-07-15T00:05:00.000Z");
 });
 
-test("disconnect preview lists only SketchCatch managed build resources and preserves the AWS connection", async () => {
-  const repository = new InMemoryRepository();
-  repository.record = createAvailableRecord();
-
-  const preview = await getAwsCodeConnectionDisconnectPreview(
-    { connectionId, userId },
-    repository
-  );
-
-  assert.equal(preview.canDisconnect, true);
-  assert.equal(preview.managedResources.codeBuildProjects.length, 1);
-  assert.equal(preview.managedResources.codeConnection, true);
-  assert.equal(preview.managedResources.buildCacheRepositories, 1);
-  assert.deepEqual(preview.preservedResources, [
-    "AWS 계정 연결",
-    "배포된 애플리케이션 및 인프라"
-  ]);
-  assert.match(preview.confirmationToken, /^[a-f0-9]{64}$/u);
-});
-
 test("disconnect removes the confirmed managed build resources and metadata", async () => {
   const repository = new InMemoryRepository();
   repository.record = createAvailableRecord();
-  const preview = await getAwsCodeConnectionDisconnectPreview(
-    { connectionId, userId },
-    repository
-  );
   const cleanupCalls: unknown[] = [];
 
   await disconnectAwsCodeConnection(
     {
       connectionId,
       userId,
-      confirmedManagedCleanup: true,
-      confirmationToken: preview.confirmationToken
+      confirmedManagedCleanup: true
     },
     repository,
     {
@@ -494,20 +469,12 @@ test("disconnect is blocked while a project build or deployment is active", asyn
   const repository = new InMemoryRepository();
   repository.record = createAvailableRecord();
   repository.activeBuildWork = true;
-  const preview = await getAwsCodeConnectionDisconnectPreview(
-    { connectionId, userId },
-    repository
-  );
-
-  assert.equal(preview.canDisconnect, false);
-  assert.match(preview.blockerMessage ?? "", /빌드 또는 배포가 진행 중/u);
   await assert.rejects(
     disconnectAwsCodeConnection(
       {
         connectionId,
         userId,
-        confirmedManagedCleanup: true,
-        confirmationToken: preview.confirmationToken
+        confirmedManagedCleanup: true
       },
       repository,
       { cleanupManagedResources: async () => undefined }
@@ -521,18 +488,13 @@ test("disconnect is blocked while a project build or deployment is active", asyn
 test("disconnect keeps retryable metadata when AWS cleanup fails", async () => {
   const repository = new InMemoryRepository();
   repository.record = createAvailableRecord();
-  const preview = await getAwsCodeConnectionDisconnectPreview(
-    { connectionId, userId },
-    repository
-  );
 
   await assert.rejects(
     disconnectAwsCodeConnection(
       {
         connectionId,
         userId,
-        confirmedManagedCleanup: true,
-        confirmationToken: preview.confirmationToken
+        confirmedManagedCleanup: true
       },
       repository,
       {
