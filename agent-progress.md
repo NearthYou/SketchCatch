@@ -13,6 +13,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-18 - Correct Cross-account AWS S3 Template mapping
+
+- Verified the public Brainboard Template and its cloned Board in Chrome: one Region, two Group areas (`Prod account` and `Test account`), one S3 Bucket, two S3 Object Resources, and two authored relationships.
+- Replaced the incorrect AWS Account presentation mapping and empty text primitives with the existing Palette Group area while preserving the three Terraform Resources, containment, and source geometry.
+- Recaptured the committed WebP from the actual SketchCatch Board and bound its manifest hash to the corrected Diagram.
+- Added regression coverage for the source-capture `design-group` Area identity, Palette-backed Resources, containment, and thumbnail Diagram hash.
+- Focused tests, harness, lint, typecheck, build, and Architecture Board knowledge checks pass. The aggregate Compiler evidence check still rejects an unrelated `repository:three-tier-web-app` candidate switch (`siblingAreaOverlapCount` 8 > 6 and `backwardEdgeCount` 6 > 4); the baseline was not relaxed.
+
 ### 2026-07-17 - Rebuild Workspace AI conversation and compiled preview
 
 - Added a responsibility-separated route shell, transcript, composer, selected-option model and accessible trail, deterministic option-to-resource mapper, decorative AWS Resource Orbit, and read-only final Architecture Preview.
@@ -181,35 +189,3 @@ Short English-only working log for the current agent context. Older records are 
 - Focused release-candidate tests (3/3), production infrastructure structure checks, Terraform formatting and validation, all workspace lint/typecheck commands, API/shared-package builds, sandbox safety tests (25/25), harness, formatting, and diff checks pass.
 - Full API, web, and types suites still expose unrelated `dev` failures caused by missing test environment values/tools, sandbox socket restrictions, and pre-existing contract assertions. The API build passes; the webpack web build compiles but stops on the existing invalid Next Route export in `architecture-draft/route.ts`.
 - No Terraform plan/apply, AWS mutation, or deployment was performed. After review and merge, an operator-approved runtime Terraform plan/apply is required before the deployed task roles receive the permissions.
-
-### 2026-07-17 - Unify workspace observation and deployment controls
-
-- Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
-- Converted the project-bar Deployment action to the shared icon-button treatment and kept its black active state scoped only to the open Deployment console.
-- Focused workspace tests pass 17/17; Web lint and typecheck pass; root lint, typecheck, and build pass. The full test run stops on the unrelated existing `git-cicd-readiness-contract` `null !== 0` failure in `packages/types`.
-- Chrome visual automation was unavailable, so final signed-in visual confirmation remains manual. No Deployment, Terraform, AWS, or database mutation was performed.
-
-### 2026-07-17 - Stabilize workspace overlay notifications
-
-- Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
-- Added a call-recording regression for callback replacement and cleanup behavior.
-- Focused workspace tests pass 20/20; Web lint and typecheck pass.
-
-### 2026-07-17 - Merge issue #448 work with current dev
-
-- Merged `origin/dev` through `f2f0c8ff` and resolved Workspace, Diagram, AI start, ProjectDraft, and GitHub settings conflicts without dropping either branch's behavior.
-- Updated the cached GitHub settings contract and restored the Destroy Plan approval/retry boundary using `failedAt`.
-- Focused Module/Template regressions and full Web tests pass; harness, knowledge check, lint, typecheck, and build pass. Local full API tests remain environment-blocked by missing `DATABASE_URL` and `zstd`; affected API files match `origin/dev`.
-
-### 2026-07-17 - Refocus the repository README
-
-- Reworked the README around the problem, approval flow, and boundary between AI suggestions, deterministic validation, and user-authorized cloud mutation.
-- Kept the AWS/Terraform-first MVP and provider-neutral product direction explicit while removing repeated implementation detail.
-- Verified every relative README link and ran `pnpm harness:check` successfully. This was documentation-only, so runtime builds and product tests were not rerun.
-
-### 2026-07-17 - Preserve dirty local ProjectDraft recovery
-
-- Preserved dirty IndexedDB drafts during Workspace reload regardless of client/server clock skew and added an explicit choice between restoring one and replacing it with the latest server draft.
-- Blocked manual, checkpoint, and page-exit server saves until recovery is decided; server replacement now updates IndexedDB only after explicit selection.
-- Fixed the ProjectDraft save service CI type error by narrowing conditional updates to the observed non-null server revision; API typecheck and focused API tests pass 32/32.
-- Focused ProjectDraft Web tests pass 37/37. Changed-file lint and direct API/Web typechecks pass. The local full Turbo wrapper could not start API/Web tasks because pnpm refused to purge copied temporary-worktree `node_modules` without a TTY. The Webpack build compiled, then the generated Next route check failed on pre-existing helper exports in architecture-draft and architecture-patch-preview routes. No DB migration, cloud mutation, deployment, or Git handoff was performed.
