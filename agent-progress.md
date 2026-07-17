@@ -187,3 +187,8 @@ Short English-only working log for the current agent context. Older records are 
 - Prevented callback identity changes from triggering overlay cleanup notifications during rerenders; reset notifications now run only on unmount and target the latest callbacks.
 - Added a call-recording regression for callback replacement and cleanup behavior.
 - Focused workspace tests pass 20/20; Web lint and typecheck pass.
+
+### 2026-07-17 - Guard missing template tags
+
+- Made detail-preview tag rendering tolerate templates whose runtime data omits `tags`.
+- Focused template preview tests pass 3/3; Web lint and typecheck pass.

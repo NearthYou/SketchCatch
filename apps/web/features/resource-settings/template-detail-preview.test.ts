@@ -37,6 +37,7 @@ test("개별 상세 창에서만 선택한 템플릿을 보드에 적용한다",
   assert.match(detailSource, /\{template\.description\}/);
   assert.match(detailSource, /getBoardTemplateResourceCount\(template\)/);
   assert.match(detailSource, /getBoardTemplateRelationshipCount\(template\)/);
+  assert.match(detailSource, /template\.tags\?\.map\(\(tag\) =>/);
   assert.match(detailSource, />\s*보드에 적용\s*<\/button>/);
   assert.match(detailSource, /onClick=\{onApply\}/);
 });

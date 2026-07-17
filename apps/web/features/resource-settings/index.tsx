@@ -577,7 +577,7 @@ function TemplateDetailPreviewModal({
               </div>
             </dl>
             <div aria-label="템플릿 태그" className={modalStyles.detailTags}>
-              {template.tags.map((tag) => (
+              {template.tags?.map((tag) => (
                 <span key={tag}>{tag}</span>
               ))}
             </div>
