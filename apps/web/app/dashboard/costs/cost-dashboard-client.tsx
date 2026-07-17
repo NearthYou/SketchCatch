@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { CostEstimatePeriod, CostUsageAnalysisRange } from "@sketchcatch/types";
+import { COST_USAGE_ALL_PROJECTS_KEY } from "../../../features/costs/cost-usage-project-view";
 import { CostEstimatePanel } from "./cost-estimate-panel";
 import { CostUsagePanel } from "./cost-usage-panel";
 import styles from "../dashboard-tools.module.css";
@@ -9,6 +11,12 @@ type CostDashboardTab = "estimate" | "usage";
 
 export function CostDashboardClient() {
   const [activeTab, setActiveTab] = useState<CostDashboardTab>("estimate");
+  const [estimatePeriod, setEstimatePeriod] = useState<CostEstimatePeriod>("month");
+  const [expectedUserCount, setExpectedUserCount] = useState(1000);
+  const [expectedUserCountInput, setExpectedUserCountInput] = useState("1000");
+  const [selectedConnectionId, setSelectedConnectionId] = useState("");
+  const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
+  const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>("30d");
   const tabRefs = useRef<Partial<Record<CostDashboardTab, HTMLButtonElement | null>>>({});
 
   function selectTabFromKeyboard(
@@ -84,7 +92,25 @@ export function CostDashboardClient() {
           id={`cost-panel-${activeTab}`}
           role="tabpanel"
         >
-          {activeTab === "estimate" ? <CostEstimatePanel /> : <CostUsagePanel />}
+          {activeTab === "estimate" ? (
+            <CostEstimatePanel
+              expectedUserCount={expectedUserCount}
+              expectedUserCountInput={expectedUserCountInput}
+              onExpectedUserCountChange={setExpectedUserCount}
+              onExpectedUserCountInputChange={setExpectedUserCountInput}
+              onPeriodChange={setEstimatePeriod}
+              period={estimatePeriod}
+            />
+          ) : (
+            <CostUsagePanel
+              onConnectionChange={setSelectedConnectionId}
+              onProjectChange={setSelectedProjectKey}
+              onRangeChange={setUsageRange}
+              range={usageRange}
+              selectedConnectionId={selectedConnectionId}
+              selectedProjectKey={selectedProjectKey}
+            />
+          )}
         </section>
       </div>
     </div>
