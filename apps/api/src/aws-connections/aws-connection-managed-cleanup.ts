@@ -16,6 +16,13 @@ import {
   type CloudWatchLogsClientConfig
 } from "@aws-sdk/client-cloudwatch-logs";
 import {
+  DeleteRepositoryCommand,
+  DescribeRepositoriesCommand,
+  ECRClient,
+  ListTagsForResourceCommand as ListEcrTagsForResourceCommand,
+  type ECRClientConfig
+} from "@aws-sdk/client-ecr";
+import {
   DeleteRoleCommand,
   DeleteRolePermissionsBoundaryCommand,
   DeleteRolePolicyCommand,
@@ -25,6 +32,7 @@ import {
 } from "@aws-sdk/client-iam";
 import type { CleanupAwsConnectionManagedResources } from "./aws-connection-service.js";
 import { createAwsSdkStsGateway } from "./aws-connection-test-service.js";
+import { createProjectBuildCacheIdentity } from "../build-environments/project-build-cache.js";
 
 const buildServicePolicyName = "SketchCatchRepositoryBuildOnly";
 
@@ -37,6 +45,7 @@ export function createAwsConnectionManagedCleanup(options: {
   assumeRole?: ReturnType<typeof createAwsSdkStsGateway>["assumeRole"];
   createCodeBuildClient?: (configuration: CodeBuildClientConfig) => CleanupClient;
   createCodeConnectionsClient?: (configuration: CodeConnectionsClientConfig) => CleanupClient;
+  createEcrClient?: (configuration: ECRClientConfig) => CleanupClient;
   createCloudWatchLogsClient?: (configuration: CloudWatchLogsClientConfig) => CleanupClient;
   createIamClient?: (configuration: IAMClientConfig) => CleanupClient;
 } = {}): CleanupAwsConnectionManagedResources {
@@ -45,6 +54,8 @@ export function createAwsConnectionManagedCleanup(options: {
     new CodeBuildClient(configuration) as unknown as CleanupClient);
   const createCodeConnectionsClient = options.createCodeConnectionsClient ?? ((configuration) =>
     new CodeConnectionsClient(configuration) as unknown as CleanupClient);
+  const createEcrClient = options.createEcrClient ?? ((configuration) =>
+    new ECRClient(configuration) as unknown as CleanupClient);
   const createCloudWatchLogsClient = options.createCloudWatchLogsClient ?? ((configuration) =>
     new CloudWatchLogsClient(configuration) as unknown as CleanupClient);
   const createIamClient = options.createIamClient ?? ((configuration) =>
@@ -55,6 +66,9 @@ export function createAwsConnectionManagedCleanup(options: {
     if (!connection.roleArn) {
       throw new Error("AWS 연결 Role ARN이 없어 관리 리소스를 안전하게 삭제할 수 없습니다.");
     }
+    if (!connection.accountId) {
+      throw new Error("AWS 계정 ID가 없어 관리 리소스를 안전하게 삭제할 수 없습니다.");
+    }
     const credentials = await assumeRole({
       roleArn: connection.roleArn,
       externalId: connection.externalId,
@@ -64,6 +78,7 @@ export function createAwsConnectionManagedCleanup(options: {
     const configuration = { region: connection.region, credentials };
     const codeBuild = createCodeBuildClient(configuration);
     const codeConnections = createCodeConnectionsClient(configuration);
+    const ecr = createEcrClient(configuration);
     const logs = createCloudWatchLogsClient(configuration);
     const iam = createIamClient(configuration);
     try {
@@ -95,6 +110,11 @@ export function createAwsConnectionManagedCleanup(options: {
           );
           await ignoreMissing(() => iam.send(new DeleteRoleCommand({ RoleName: roleName })));
         }
+        await deleteOwnedBuildCache(ecr, {
+          projectId: build.projectId,
+          accountId: connection.accountId,
+          region: connection.region
+        });
       }
       if (resources.codeConnectionArn) {
         const connectionArn = resources.codeConnectionArn;
@@ -111,8 +131,51 @@ export function createAwsConnectionManagedCleanup(options: {
       codeConnections.destroy();
       logs.destroy();
       iam.destroy();
+      ecr.destroy();
     }
   };
+}
+
+async function deleteOwnedBuildCache(
+  client: CleanupClient,
+  input: { projectId: string; accountId: string; region: string }
+): Promise<void> {
+  const cache = createProjectBuildCacheIdentity(input);
+  let repository:
+    | { repositoryArn?: string; repositoryName?: string }
+    | undefined;
+  try {
+    const response = await client.send(
+      new DescribeRepositoriesCommand({ repositoryNames: [cache.repositoryName] })
+    ) as { repositories?: Array<{ repositoryArn?: string; repositoryName?: string }> };
+    repository = response.repositories?.[0];
+  } catch (error) {
+    if (isMissingAwsResource(error)) return;
+    throw error;
+  }
+  if (!repository) return;
+  if (
+    repository.repositoryArn !== cache.repositoryArn ||
+    repository.repositoryName !== cache.repositoryName
+  ) {
+    throw new Error("SketchCatch 빌드 캐시 ECR Repository 좌표가 관리 계약과 다릅니다.");
+  }
+  const response = await client.send(
+    new ListEcrTagsForResourceCommand({ resourceArn: cache.repositoryArn })
+  ) as { tags?: Array<{ Key?: string; Value?: string }> };
+  const tags = normalizeTags(response.tags);
+  if (
+    tags.get("ManagedBy") !== "SketchCatch" ||
+    tags.get("SketchCatchProject") !== input.projectId ||
+    tags.get("SketchCatchPurpose") !== "BuildCache"
+  ) {
+    throw new Error("SketchCatch 빌드 캐시 ECR Repository 소유권 태그가 일치하지 않습니다.");
+  }
+  await ignoreMissing(() =>
+    client.send(
+      new DeleteRepositoryCommand({ repositoryName: cache.repositoryName, force: true })
+    )
+  );
 }
 
 async function verifyCodeBuildOwnership(
@@ -230,6 +293,7 @@ function isMissingAwsResource(error: unknown): boolean {
   const name = "name" in error && typeof error.name === "string" ? error.name : "";
   return [
     "ResourceNotFoundException",
+    "RepositoryNotFoundException",
     "NoSuchEntity",
     "ResourceNotFound"
   ].includes(name);
