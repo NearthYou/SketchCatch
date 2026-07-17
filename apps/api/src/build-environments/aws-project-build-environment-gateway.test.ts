@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  createAwsProjectBuildEnvironmentGateway as createGatewayImplementation
-} from "./aws-project-build-environment-gateway.js";
+import { createAwsProjectBuildEnvironmentGateway as createGatewayImplementation } from "./aws-project-build-environment-gateway.js";
 import type { DesiredProjectBuildEnvironment } from "./project-build-environment-service.js";
 
 function createAwsProjectBuildEnvironmentGateway(
@@ -201,6 +199,27 @@ test("verification rejects a cache repository without project ownership tags", a
   });
 });
 
+test("verification accepts the pre-cache permissions boundary for cold-build fallback", async () => {
+  const gateway = createAwsProjectBuildEnvironmentGateway({
+    assumeRole: async () => ({
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      sessionToken: "session-token"
+    }),
+    createIamClient: () =>
+      createVerifiedIamClient({
+        includeConnectionTokenAccess: true,
+        legacyBoundary: true
+      }),
+    createCodeBuildClient: () => createVerifiedCodeBuildClient()
+  });
+
+  assert.deepEqual(await gateway.verify(desired), {
+    verified: true,
+    statusReason: null
+  });
+});
+
 test("failed CodeBuild creation compensates only the role created by this request", async () => {
   const calls: string[] = [];
   const gateway = createAwsProjectBuildEnvironmentGateway({
@@ -243,10 +262,7 @@ test("new build role tolerates a transient IAM propagation delay", async () => {
   });
 
   await assert.rejects(gateway.reconcile(desired), /CreateProject failed/);
-  assert.equal(
-    calls.filter((call) => call === "iam:PutRolePolicyCommand").length,
-    2
-  );
+  assert.equal(calls.filter((call) => call === "iam:PutRolePolicyCommand").length, 2);
 });
 
 test("new build environment tolerates a transient IAM read delay during verification", async () => {
@@ -262,18 +278,14 @@ test("new build environment tolerates a transient IAM read delay during verifica
         listRoleTagsMissingAttempts: 1,
         completeVerification: true
       }),
-    createCodeBuildClient: () =>
-      createCodeBuildClient(calls, { creationSucceeds: true })
+    createCodeBuildClient: () => createCodeBuildClient(calls, { creationSucceeds: true })
   });
 
   assert.deepEqual(await gateway.reconcile(desired), {
     verified: true,
     statusReason: null
   });
-  assert.equal(
-    calls.filter((call) => call === "iam:ListRoleTagsCommand").length,
-    2
-  );
+  assert.equal(calls.filter((call) => call === "iam:ListRoleTagsCommand").length, 2);
 });
 
 test("new build environment tolerates a transient CodeBuild service-role delay", async () => {
@@ -284,8 +296,7 @@ test("new build environment tolerates a transient CodeBuild service-role delay",
       secretAccessKey: "secret-key",
       sessionToken: "session-token"
     }),
-    createIamClient: () =>
-      createIamClient(calls, { completeVerification: true }),
+    createIamClient: () => createIamClient(calls, { completeVerification: true }),
     createCodeBuildClient: () =>
       createCodeBuildClient(calls, {
         creationSucceeds: true,
@@ -297,10 +308,7 @@ test("new build environment tolerates a transient CodeBuild service-role delay",
     verified: true,
     statusReason: null
   });
-  assert.equal(
-    calls.filter((call) => call === "codebuild:CreateProjectCommand").length,
-    2
-  );
+  assert.equal(calls.filter((call) => call === "codebuild:CreateProjectCommand").length, 2);
 });
 
 test("existing unmanaged build role is never modified", async () => {
@@ -428,9 +436,10 @@ test("verification rejects attached managed policies on the build role", async (
       secretAccessKey: "secret-key",
       sessionToken: "session-token"
     }),
-    createIamClient: () => createVerifiedIamClient({
-      attachedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"]
-    }),
+    createIamClient: () =>
+      createVerifiedIamClient({
+        attachedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"]
+      }),
     createCodeBuildClient: () => createVerifiedCodeBuildClient()
   });
 
@@ -505,14 +514,11 @@ const desired: DesiredProjectBuildEnvironment = {
     region: "ap-northeast-2"
   },
   awsCodeConnectionId: "codeconnection-1",
-  codeConnectionArn:
-    "arn:aws:codeconnections:ap-northeast-2:123456789012:connection/connection-1",
+  codeConnectionArn: "arn:aws:codeconnections:ap-northeast-2:123456789012:connection/connection-1",
   codeBuildProjectName: "sketchcatch-12345678-build",
   codeBuildServiceRoleName: "SketchCatchCodeBuild-12345678",
-  codeBuildServiceRoleArn:
-    "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678",
-  permissionsBoundaryArn:
-    "arn:aws:iam::123456789012:policy/SketchCatchCodeBuildBoundary",
+  codeBuildServiceRoleArn: "arn:aws:iam::123456789012:role/SketchCatchCodeBuild-12345678",
+  permissionsBoundaryArn: "arn:aws:iam::123456789012:policy/SketchCatchCodeBuildBoundary",
   sourceRepositoryUrl: "https://github.com/jh-9999/audience-live-check.git",
   image: "aws/codebuild/standard:7.0",
   computeType: "BUILD_GENERAL1_SMALL",
@@ -709,9 +715,7 @@ function createCodeBuildClient(
         if (remainingRolePropagationAttempts > 0) {
           remainingRolePropagationAttempts -= 1;
           throw Object.assign(
-            new Error(
-              "CodeBuild is not authorized to perform: sts:AssumeRole on service role."
-            ),
+            new Error("CodeBuild is not authorized to perform: sts:AssumeRole on service role."),
             { name: "InvalidInputException" }
           );
         }
@@ -725,12 +729,15 @@ function createCodeBuildClient(
   };
 }
 
-function createVerifiedIamClient(input: {
-  attachedPolicyArns?: string[];
-  wildcardBuildPolicy?: boolean;
-  omitLegacyConnectionUse?: boolean;
-  includeConnectionTokenAccess?: boolean;
-} = {}) {
+function createVerifiedIamClient(
+  input: {
+    attachedPolicyArns?: string[];
+    wildcardBuildPolicy?: boolean;
+    omitLegacyConnectionUse?: boolean;
+    includeConnectionTokenAccess?: boolean;
+    legacyBoundary?: boolean;
+  } = {}
+) {
   return {
     async send(command: unknown): Promise<Record<string, unknown>> {
       const name = (command as { constructor: { name: string } }).constructor.name;
@@ -768,11 +775,7 @@ function createVerifiedIamClient(input: {
               Statement: [
                 {
                   Effect: "Allow",
-                  Action: [
-                    "logs:CreateLogGroup",
-                    "logs:CreateLogStream",
-                    "logs:PutLogEvents"
-                  ],
+                  Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
                   Resource: input.wildcardBuildPolicy
                     ? "*"
                     : [
@@ -788,10 +791,7 @@ function createVerifiedIamClient(input: {
                       ? []
                       : ["codestar-connections:UseConnection"]),
                     ...(input.includeConnectionTokenAccess
-                      ? [
-                          "codeconnections:GetConnection",
-                          "codeconnections:GetConnectionToken"
-                        ]
+                      ? ["codeconnections:GetConnection", "codeconnections:GetConnectionToken"]
                       : [])
                   ],
                   Resource: input.wildcardBuildPolicy ? "*" : desired.codeConnectionArn
@@ -812,9 +812,7 @@ function createVerifiedIamClient(input: {
                     "ecr:CompleteLayerUpload",
                     "ecr:PutImage"
                   ],
-                  Resource: input.wildcardBuildPolicy
-                    ? "*"
-                    : desired.buildCache.repositoryArn
+                  Resource: input.wildcardBuildPolicy ? "*" : desired.buildCache.repositoryArn
                 }
               ]
             })
@@ -834,21 +832,14 @@ function createVerifiedIamClient(input: {
                 Statement: [
                   {
                     Effect: "Allow",
-                    Action: [
-                      "logs:CreateLogGroup",
-                      "logs:CreateLogStream",
-                      "logs:PutLogEvents"
-                    ],
+                    Action: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
                     Resource: [logsPrefix, `${logsPrefix}:*`]
                   },
                   {
                     Effect: "Allow",
                     Action: [
                       ...(input.includeConnectionTokenAccess
-                        ? [
-                            "codeconnections:GetConnection",
-                            "codeconnections:GetConnectionToken"
-                          ]
+                        ? ["codeconnections:GetConnection", "codeconnections:GetConnectionToken"]
                         : []),
                       "codeconnections:UseConnection",
                       "codestar-connections:UseConnection"
@@ -858,25 +849,28 @@ function createVerifiedIamClient(input: {
                       `arn:aws:codestar-connections:${desired.awsConnection.region}:${desired.awsConnection.accountId}:connection/*`
                     ]
                   },
-                  {
-                    Effect: "Allow",
-                    Action: "ecr:GetAuthorizationToken",
-                    Resource: "*"
-                  },
-                  {
-                    Effect: "Allow",
-                    Action: [
-                      "ecr:BatchCheckLayerAvailability",
-                      "ecr:GetDownloadUrlForLayer",
-                      "ecr:BatchGetImage",
-                      "ecr:InitiateLayerUpload",
-                      "ecr:UploadLayerPart",
-                      "ecr:CompleteLayerUpload",
-                      "ecr:PutImage"
-                    ],
-                    Resource:
-                      `arn:aws:ecr:${desired.awsConnection.region}:${desired.awsConnection.accountId}:repository/sketchcatch-*-build-cache`
-                  }
+                  ...(input.legacyBoundary
+                    ? []
+                    : [
+                        {
+                          Effect: "Allow",
+                          Action: "ecr:GetAuthorizationToken",
+                          Resource: "*"
+                        },
+                        {
+                          Effect: "Allow",
+                          Action: [
+                            "ecr:BatchCheckLayerAvailability",
+                            "ecr:GetDownloadUrlForLayer",
+                            "ecr:BatchGetImage",
+                            "ecr:InitiateLayerUpload",
+                            "ecr:UploadLayerPart",
+                            "ecr:CompleteLayerUpload",
+                            "ecr:PutImage"
+                          ],
+                          Resource: `arn:aws:ecr:${desired.awsConnection.region}:${desired.awsConnection.accountId}:repository/sketchcatch-*-build-cache`
+                        }
+                      ])
                 ]
               })
             )

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// 기존 프로젝트 설정 bookmark는 Workspace의 단일 Delivery 관리 화면으로 이어진다.
+// 기존 프로젝트 설정 bookmark는 Workspace 배포 모달의 CI/CD Delivery 화면으로 이어진다.
 export default async function ProjectSettingsPage({
   params
 }: {
