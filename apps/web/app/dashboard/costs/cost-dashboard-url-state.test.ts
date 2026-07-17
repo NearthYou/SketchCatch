@@ -3,9 +3,11 @@ import { test } from "node:test";
 
 import {
   parseCostEstimatePeriod,
+  parseCostUsageConnectionId,
   parseExpectedUserCount,
   parseCostDashboardTab,
   writeCostEstimatePeriod,
+  writeCostUsageConnectionId,
   writeExpectedUserCount,
   writeCostDashboardTab
 } from "./cost-dashboard-url-state";
@@ -52,4 +54,23 @@ test("expected user count stores only normalized committed values", () => {
   assert.equal(custom.get("users"), "2500");
   assert.equal(custom.get("period"), "week");
   assert.equal(defaultUsers.has("users"), false);
+});
+
+test("AWS connection selection round-trips without dropping other filters", () => {
+  assert.equal(
+    parseCostUsageConnectionId(new URLSearchParams("connection=connection%3Aseoul")),
+    "connection:seoul"
+  );
+  assert.equal(parseCostUsageConnectionId(new URLSearchParams()), "");
+
+  const selected = writeCostUsageConnectionId(
+    new URLSearchParams("tab=usage&range=7d"),
+    "connection:seoul"
+  );
+  const cleared = writeCostUsageConnectionId(selected, "");
+
+  assert.equal(selected.get("connection"), "connection:seoul");
+  assert.equal(selected.get("tab"), "usage");
+  assert.equal(selected.get("range"), "7d");
+  assert.equal(cleared.has("connection"), false);
 });

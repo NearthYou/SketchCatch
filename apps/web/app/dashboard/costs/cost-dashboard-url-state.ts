@@ -71,3 +71,23 @@ export function writeExpectedUserCount(
 
   return next;
 }
+
+export function parseCostUsageConnectionId(searchParams: CostDashboardSearchParams): string {
+  return searchParams.get("connection")?.trim() ?? "";
+}
+
+export function writeCostUsageConnectionId(
+  searchParams: CostDashboardSearchParams,
+  connectionId: string
+): URLSearchParams {
+  const next = new URLSearchParams(searchParams.toString());
+  const normalizedConnectionId = connectionId.trim();
+
+  if (normalizedConnectionId) {
+    next.set("connection", normalizedConnectionId);
+  } else {
+    next.delete("connection");
+  }
+
+  return next;
+}

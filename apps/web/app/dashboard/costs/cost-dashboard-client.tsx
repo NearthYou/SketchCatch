@@ -9,9 +9,11 @@ import { CostUsagePanel } from "./cost-usage-panel";
 import {
   parseCostEstimatePeriod,
   parseCostDashboardTab,
+  parseCostUsageConnectionId,
   parseExpectedUserCount,
   writeCostEstimatePeriod,
   writeCostDashboardTab,
+  writeCostUsageConnectionId,
   writeExpectedUserCount,
   type CostDashboardTab
 } from "./cost-dashboard-url-state";
@@ -34,7 +36,9 @@ export function CostDashboardClient() {
     String(parseExpectedUserCount(searchParams))
   );
   const expectedUserCountRef = useRef(expectedUserCount);
-  const [selectedConnectionId, setSelectedConnectionId] = useState("");
+  const [selectedConnectionId, setSelectedConnectionId] = useState(() =>
+    parseCostUsageConnectionId(searchParams)
+  );
   const [selectedProjectKey, setSelectedProjectKey] = useState(COST_USAGE_ALL_PROJECTS_KEY);
   const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>("30d");
   const tabRefs = useRef<Partial<Record<CostDashboardTab, HTMLButtonElement | null>>>({});
@@ -42,6 +46,7 @@ export function CostDashboardClient() {
   useEffect(() => {
     setActiveTab(parseCostDashboardTab(searchParams));
     setEstimatePeriod(parseCostEstimatePeriod(searchParams));
+    setSelectedConnectionId(parseCostUsageConnectionId(searchParams));
     const nextExpectedUserCount = parseExpectedUserCount(searchParams);
 
     if (expectedUserCountRef.current !== nextExpectedUserCount) {
@@ -81,6 +86,14 @@ export function CostDashboardClient() {
       expectedUserCountRef.current = nextExpectedUserCount;
       setExpectedUserCount(nextExpectedUserCount);
       pushCostSearchParams(writeExpectedUserCount(searchParams, nextExpectedUserCount));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeSelectedConnection = useCallback(
+    (nextConnectionId: string): void => {
+      setSelectedConnectionId(nextConnectionId);
+      pushCostSearchParams(writeCostUsageConnectionId(searchParams, nextConnectionId));
     },
     [pushCostSearchParams, searchParams]
   );
@@ -169,7 +182,7 @@ export function CostDashboardClient() {
             />
           ) : (
             <CostUsagePanel
-              onConnectionChange={setSelectedConnectionId}
+              onConnectionChange={changeSelectedConnection}
               onProjectChange={setSelectedProjectKey}
               onRangeChange={setUsageRange}
               range={usageRange}

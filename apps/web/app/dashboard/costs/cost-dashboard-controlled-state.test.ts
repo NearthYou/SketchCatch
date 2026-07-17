@@ -16,7 +16,7 @@ test("Cost Dashboard owns the navigation and filter state", () => {
   assert.match(dashboardSource, /useState<CostEstimatePeriod>\(\(\) =>/);
   assert.match(dashboardSource, /const \[expectedUserCount,[\s\S]*?useState\(\(\) =>/);
   assert.match(dashboardSource, /const \[expectedUserCountInput,[\s\S]*?useState\(\(\) =>/);
-  assert.match(dashboardSource, /useState\(""\)/);
+  assert.match(dashboardSource, /const \[selectedConnectionId,[\s\S]*?useState\(\(\) =>/);
   assert.match(dashboardSource, /useState\(COST_USAGE_ALL_PROJECTS_KEY\)/);
   assert.match(dashboardSource, /useState<CostUsageAnalysisRange>\("30d"\)/);
 });

@@ -172,6 +172,20 @@ export function CostUsagePanel({
   );
 
   useEffect(() => {
+    if (
+      connectionsQuery.isSuccess &&
+      effectiveConnectionId !== selectedConnectionId
+    ) {
+      onConnectionChange(effectiveConnectionId);
+    }
+  }, [
+    connectionsQuery.isSuccess,
+    effectiveConnectionId,
+    onConnectionChange,
+    selectedConnectionId
+  ]);
+
+  useEffect(() => {
     if (data) {
       const normalizedProjectKey = normalizeCostUsageProjectKey(
         data.projectCosts,
