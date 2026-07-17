@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Deployment, ProjectDeletePreview } from "@sketchcatch/types";
 import {
   getDestroyDeleteAcknowledgedWarningIds,
+  getProjectDeleteProgress,
   isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "./project-delete-flow";
@@ -55,9 +56,55 @@ test("destroy delete failures expose a project-only fallback", () => {
       errorMessage: "Terraform destroy failed because the resource no longer exists.",
       preview,
       selectedAction: "destroy_then_delete",
-      status: "approval"
+      status: "approving"
     }),
-    true
+    false
+  );
+});
+
+test("resource-inclusive deletion exposes compact progress for every automatic stage", () => {
+  assert.equal(getProjectDeleteProgress("ready"), null);
+  assert.deepEqual(
+    ["planning", "approving", "destroying", "deleting"].map((status) => {
+      const progress = getProjectDeleteProgress(
+        status as "planning" | "approving" | "destroying" | "deleting"
+      );
+      return [progress?.label, progress?.percent];
+    }),
+    [
+      ["Destroy Plan 생성 중", 20],
+      ["Destroy Plan 승인 중", 45],
+      ["클라우드 리소스 삭제 중", 70],
+      ["프로젝트 정리 중", 92]
+    ]
+  );
+});
+
+test("one confirmation continues from Destroy Plan through project deletion", () => {
+  const workflowSource = getSourceBetween(
+    projectsClientSource,
+    "async function startDestroyThenDelete(): Promise<void> {",
+    "function closeDeleteDialog(): void {"
+  );
+  const orderedSteps = [
+    "await runDeploymentDestroyPlan(",
+    "await approveDestroyAndDelete({",
+    "await approveDeploymentPlan(",
+    "await runDeploymentDestroy(",
+    "await deleteProject(project.id, \"delete_project\")"
+  ];
+
+  assert.deepEqual(
+    [...orderedSteps].sort(
+      (left, right) => workflowSource.indexOf(left) - workflowSource.indexOf(right)
+    ),
+    orderedSteps
+  );
+  assert.match(projectsClientSource, /role="progressbar"/);
+  assert.match(projectsClientSource, /리소스를 포함해 정말 삭제할까요\?/);
+  assert.doesNotMatch(
+    projectsClientSource,
+    /onClick=\{\(\) => void approveDestroyAndDelete\(\)\}/
   );
 });
 

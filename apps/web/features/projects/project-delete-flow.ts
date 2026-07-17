@@ -3,9 +3,46 @@ import type { Deployment, ProjectDeleteAction, ProjectDeletePreview } from "@ske
 export type ProjectDeleteWorkflowStatus =
   | "ready"
   | "planning"
-  | "approval"
+  | "approving"
   | "destroying"
   | "deleting";
+
+export type ProjectDeleteProgress = {
+  readonly detail: string;
+  readonly label: string;
+  readonly percent: number;
+};
+
+const PROJECT_DELETE_PROGRESS: Partial<
+  Record<ProjectDeleteWorkflowStatus, ProjectDeleteProgress>
+> = {
+  planning: {
+    detail: "삭제 범위를 계산하고 실행 가능한 Destroy Plan을 준비하고 있습니다.",
+    label: "Destroy Plan 생성 중",
+    percent: 20
+  },
+  approving: {
+    detail: "생성된 Plan을 프로젝트 삭제 요청에 연결하고 승인하고 있습니다.",
+    label: "Destroy Plan 승인 중",
+    percent: 45
+  },
+  destroying: {
+    detail: "Terraform이 추적 중인 클라우드 리소스를 안전한 순서로 삭제하고 있습니다.",
+    label: "클라우드 리소스 삭제 중",
+    percent: 70
+  },
+  deleting: {
+    detail: "S3 내부 산출물과 프로젝트 기록을 마지막으로 정리하고 있습니다.",
+    label: "프로젝트 정리 중",
+    percent: 92
+  }
+};
+
+export function getProjectDeleteProgress(
+  status: ProjectDeleteWorkflowStatus
+): ProjectDeleteProgress | null {
+  return PROJECT_DELETE_PROGRESS[status] ?? null;
+}
 
 export function shouldShowProjectOnlyDeleteFallback(input: {
   readonly errorMessage?: string | undefined;
@@ -16,7 +53,7 @@ export function shouldShowProjectOnlyDeleteFallback(input: {
   return (
     input.selectedAction === "destroy_then_delete" &&
     input.preview.availableActions.includes("delete_project_only") &&
-    (input.status === "ready" || input.status === "approval") &&
+    input.status === "ready" &&
     input.errorMessage !== undefined &&
     input.errorMessage.trim().length > 0
   );

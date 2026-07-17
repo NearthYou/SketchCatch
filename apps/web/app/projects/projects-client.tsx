@@ -37,6 +37,7 @@ import {
 } from "../../features/projects/project-action-menu";
 import {
   getDestroyDeleteAcknowledgedWarningIds,
+  getProjectDeleteProgress,
   isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "../../features/projects/project-delete-flow";
@@ -74,7 +75,7 @@ type DeleteDialogState =
       readonly preview: ProjectDeletePreview;
       readonly project: Project;
       readonly selectedAction?: ProjectDeleteAction | undefined;
-      readonly status: "ready" | "planning" | "approval" | "destroying" | "deleting";
+      readonly status: "ready" | "planning" | "approving" | "destroying" | "deleting";
     };
 type ProjectActionMenuState =
   | { readonly status: "closed" }
@@ -291,12 +292,11 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         return;
       }
 
-      setDeleteDialog({
+      await approveDestroyAndDelete({
         deployment,
         preview,
         project,
-        selectedAction,
-        status: "approval"
+        selectedAction
       });
     } catch (error) {
       if (!isMountedRef.current) {
@@ -314,19 +314,19 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     }
   }
 
-  async function approveDestroyAndDelete(): Promise<void> {
-    if (deleteDialog.status !== "approval" || !deleteDialog.deployment) {
-      return;
-    }
-
-    const { deployment, preview, project, selectedAction } = deleteDialog;
-
+  async function approveDestroyAndDelete(input: {
+    readonly deployment: Deployment;
+    readonly preview: ProjectDeletePreview;
+    readonly project: Project;
+    readonly selectedAction?: ProjectDeleteAction | undefined;
+  }): Promise<void> {
+    const { deployment, preview, project, selectedAction } = input;
     setDeleteDialog({
       deployment,
       preview,
       project,
       selectedAction,
-      status: "destroying"
+      status: "approving"
     });
 
     try {
@@ -334,6 +334,14 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         deployment.id,
         getDestroyDeleteAcknowledgedWarningIds(deployment)
       );
+      setDeleteDialog({
+        deployment,
+        preview,
+        project,
+        selectedAction,
+        status: "destroying"
+      });
+
       await runDeploymentDestroy(deployment.id);
       await waitForProjectDeployment({
         checkMounted: () => isMountedRef.current,
@@ -348,6 +356,13 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         return;
       }
 
+      setDeleteDialog({
+        deployment,
+        preview,
+        project,
+        selectedAction,
+        status: "deleting"
+      });
       const result = await deleteProject(project.id, "delete_project");
 
       if (!isMountedRef.current) {
@@ -374,7 +389,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         preview,
         project,
         selectedAction,
-        status: "approval"
+        status: "ready"
       });
     } finally {
       if (isMountedRef.current) {
@@ -386,6 +401,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   function closeDeleteDialog(): void {
     if (
       deleteDialog.status === "planning" ||
+      deleteDialog.status === "approving" ||
       deleteDialog.status === "destroying" ||
       deleteDialog.status === "deleting"
     ) {
@@ -404,6 +420,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     const isBusy =
       deleteDialog.status === "loading" ||
       deleteDialog.status === "planning" ||
+      deleteDialog.status === "approving" ||
       deleteDialog.status === "destroying" ||
       deleteDialog.status === "deleting";
     const projectName = deleteDialog.project.name;
@@ -420,6 +437,9 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       deleteDialog.status !== "loading" &&
       deleteDialog.preview.availableActions.includes(action) &&
       (!selectedAction || selectedAction === action);
+    const progress =
+      deleteDialog.status !== "loading" ? getProjectDeleteProgress(deleteDialog.status) : null;
+
 
     return (
       <div
@@ -451,6 +471,17 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
             <>
               <p className="projectDeleteDialogText">{deleteDialog.preview.message}</p>
 
+              {deleteDialog.status === "ready" &&
+              shouldShowDeleteAction("destroy_then_delete") ? (
+                <div className="projectDeleteDialogConfirmation" role="note">
+                  <strong>리소스를 포함해 정말 삭제할까요?</strong>
+                  <p>
+                    계속하면 Destroy Plan 생성과 승인, 리소스 Destroy, 프로젝트 정리를 자동으로
+                    진행합니다. 시작 후에는 취소할 수 없습니다.
+                  </p>
+                </div>
+              ) : null}
+
               {deleteDialog.preview.activeResourceCount > 0 ? (
                 <dl className="projectDeleteDialogFacts">
                   <div>
@@ -464,7 +495,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
                 </dl>
               ) : null}
 
-              {deleteDialog.status === "approval" && deleteDialog.deployment?.planSummary ? (
+              {deleteDialog.status === "approving" && deleteDialog.deployment?.planSummary ? (
                 <dl className="projectDeleteDialogFacts">
                   <div>
                     <dt>삭제</dt>
@@ -483,16 +514,23 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
                 </p>
               ) : null}
 
-              {deleteDialog.status === "planning" ? (
-                <p className="projectDeleteDialogText">Destroy Plan을 생성하는 중입니다.</p>
-              ) : null}
-
-              {deleteDialog.status === "destroying" ? (
-                <p className="projectDeleteDialogText">AWS 리소스를 삭제한 뒤 프로젝트 기록을 삭제하는 중입니다.</p>
-              ) : null}
-
-              {deleteDialog.status === "deleting" ? (
-                <p className="projectDeleteDialogText">프로젝트 기록을 삭제하는 중입니다.</p>
+              {progress ? (
+                <section aria-live="polite" className="projectDeleteDialogProgress">
+                  <header className="projectDeleteDialogProgressHeader">
+                    <strong>{progress.label}</strong>
+                    <span>{progress.percent}%</span>
+                  </header>
+                  <div
+                    aria-valuemax={100}
+                    aria-valuemin={0}
+                    aria-valuenow={progress.percent}
+                    className="projectDeleteDialogProgressTrack"
+                    role="progressbar"
+                  >
+                    <span style={{ width: `${progress.percent}%` }} />
+                  </div>
+                  <p>{progress.detail}</p>
+                </section>
               ) : null}
             </>
           )}
@@ -507,7 +545,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               취소
             </button>
 
-            {deleteDialog.status !== "loading" &&
+            {deleteDialog.status === "ready" &&
             shouldShowDeleteAction("delete_project") ? (
               <button
                 className="dashboardDangerButton"
@@ -520,7 +558,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               </button>
             ) : null}
 
-            {deleteDialog.status !== "loading" &&
+            {deleteDialog.status === "ready" &&
             shouldShowDeleteAction("delete_project_only") ? (
               <button
                 className="dashboardDangerButton"
@@ -545,9 +583,8 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
               </button>
             ) : null}
 
-            {deleteDialog.status !== "loading" &&
-            shouldShowDeleteAction("destroy_then_delete") &&
-            deleteDialog.status !== "approval" ? (
+            {deleteDialog.status === "ready" &&
+            shouldShowDeleteAction("destroy_then_delete") ? (
               <button
                 className="dashboardDangerButton"
                 disabled={isBusy}
@@ -555,18 +592,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
                 type="button"
               >
                 <DashboardIcon name="cloud" />
-                <span>리소스 포함 삭제</span>
-              </button>
-            ) : null}
-
-            {deleteDialog.status === "approval" ? (
-              <button
-                className="dashboardDangerButton"
-                onClick={() => void approveDestroyAndDelete()}
-                type="button"
-              >
-                <DashboardIcon name="check" />
-                <span>Destroy 승인</span>
+                <span>리소스 포함 삭제 시작</span>
               </button>
             ) : null}
           </footer>
