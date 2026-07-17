@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createProjectThumbnailImageLifecycle } from "../../features/dashboard/project-thumbnail-image-lifecycle";
-import { loadProjectThumbnail } from "../../features/dashboard/project-thumbnail-loader";
-import { fetchProjectThumbnail } from "../../features/workspace/api";
+import { useProjectThumbnailQuery } from "../../features/dashboard/project-thumbnail-query";
 import { BoardThumbnailImage, type BoardThumbnailImageState } from "../architecture-board/BoardThumbnailImage";
 
 // 저장 시 캡처한 실제 Board image를 Project 카드에서 안전하게 수명 관리해 표시합니다.
@@ -17,62 +16,51 @@ export function ProjectArchitectureThumbnail({
 }) {
   const [state, setState] = useState<BoardThumbnailImageState>("loading");
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const thumbnailLifecycleRef = useRef<
+    ReturnType<typeof createProjectThumbnailImageLifecycle> | undefined
+  >(undefined);
+  const thumbnailQuery = useProjectThumbnailQuery(projectId);
 
   useEffect(() => {
-    let cancelled = false;
-    let latestRequest = 0;
     const thumbnailLifecycle = createProjectThumbnailImageLifecycle({
       createObjectUrl: URL.createObjectURL,
       revokeObjectUrl: URL.revokeObjectURL,
       setState,
       setThumbnailUrl
     });
-
-    function refreshThumbnail(): void {
-      const request = latestRequest + 1;
-      latestRequest = request;
-
-      setState("loading");
-      setThumbnailUrl(null);
-
-      void loadProjectThumbnail({
-        fetchThumbnail: fetchProjectThumbnail,
-        isCancelled: () => cancelled || latestRequest !== request,
-        projectId
-      })
-        .then((result) => {
-          if (cancelled || latestRequest !== request) {
-            return;
-          }
-
-          thumbnailLifecycle.apply(result);
-        })
-        .catch(() => {
-          if (cancelled || latestRequest !== request) {
-            return;
-          }
-
-          thumbnailLifecycle.apply({ state: "error" });
-        });
-    }
-
-    function handlePageShow(event: PageTransitionEvent): void {
-      if (!event.persisted) {
-        return;
-      }
-
-      refreshThumbnail();
-    }
-
-    refreshThumbnail();
-    window.addEventListener("pageshow", handlePageShow);
+    thumbnailLifecycleRef.current = thumbnailLifecycle;
+    setState("loading");
+    setThumbnailUrl(null);
 
     return () => {
-      cancelled = true;
-      window.removeEventListener("pageshow", handlePageShow);
+      if (thumbnailLifecycleRef.current === thumbnailLifecycle) {
+        thumbnailLifecycleRef.current = undefined;
+      }
       thumbnailLifecycle.dispose();
     };
   }, [projectId]);
+
+  useEffect(() => {
+    if (thumbnailQuery.data) {
+      thumbnailLifecycleRef.current?.apply(thumbnailQuery.data);
+      return;
+    }
+
+    if (thumbnailQuery.isError) {
+      thumbnailLifecycleRef.current?.apply({ state: "error" });
+    }
+  }, [thumbnailQuery.data, thumbnailQuery.isError]);
+
+  useEffect(() => {
+    function handlePageShow(event: PageTransitionEvent): void {
+      if (event.persisted) {
+        void thumbnailQuery.refetch();
+      }
+    }
+
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, [thumbnailQuery.refetch]);
 
   return (
     <BoardThumbnailImage

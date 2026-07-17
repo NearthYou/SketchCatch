@@ -288,7 +288,10 @@ class ProjectThumbnailFetchError extends Error {
 }
 
 // 인증된 Project의 최신 실제 Board 캡처를 raster Blob으로 읽습니다.
-export async function fetchProjectThumbnail(projectId: string): Promise<Blob | null> {
+export async function fetchProjectThumbnail(
+  projectId: string,
+  options: { readonly signal?: AbortSignal | undefined } = {}
+): Promise<Blob | null> {
   const headers = new Headers({ Accept: "image/webp,image/png" });
   const session = readStoredAuthSession();
 
@@ -301,7 +304,8 @@ export async function fetchProjectThumbnail(projectId: string): Promise<Blob | n
     {
       cache: "no-store",
       credentials: "include",
-      headers
+      headers,
+      ...(options.signal ? { signal: options.signal } : {})
     }
   );
 
