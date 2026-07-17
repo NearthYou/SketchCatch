@@ -10,11 +10,13 @@ import {
   parseCostDashboardTab,
   parseCostUsageConnectionId,
   parseCostUsageProjectKey,
+  parseCostUsageRange,
   parseExpectedUserCount,
   writeCostEstimatePeriod,
   writeCostDashboardTab,
   writeCostUsageConnectionId,
   writeCostUsageProjectKey,
+  writeCostUsageRange,
   writeExpectedUserCount,
   type CostDashboardTab
 } from "./cost-dashboard-url-state";
@@ -43,7 +45,9 @@ export function CostDashboardClient() {
   const [selectedProjectKey, setSelectedProjectKey] = useState(() =>
     parseCostUsageProjectKey(searchParams)
   );
-  const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>("30d");
+  const [usageRange, setUsageRange] = useState<CostUsageAnalysisRange>(() =>
+    parseCostUsageRange(searchParams)
+  );
   const tabRefs = useRef<Partial<Record<CostDashboardTab, HTMLButtonElement | null>>>({});
 
   useEffect(() => {
@@ -51,6 +55,7 @@ export function CostDashboardClient() {
     setEstimatePeriod(parseCostEstimatePeriod(searchParams));
     setSelectedConnectionId(parseCostUsageConnectionId(searchParams));
     setSelectedProjectKey(parseCostUsageProjectKey(searchParams));
+    setUsageRange(parseCostUsageRange(searchParams));
     const nextExpectedUserCount = parseExpectedUserCount(searchParams);
 
     if (expectedUserCountRef.current !== nextExpectedUserCount) {
@@ -106,6 +111,14 @@ export function CostDashboardClient() {
     (nextProjectKey: string): void => {
       setSelectedProjectKey(nextProjectKey);
       pushCostSearchParams(writeCostUsageProjectKey(searchParams, nextProjectKey));
+    },
+    [pushCostSearchParams, searchParams]
+  );
+
+  const changeUsageRange = useCallback(
+    (nextRange: CostUsageAnalysisRange): void => {
+      setUsageRange(nextRange);
+      pushCostSearchParams(writeCostUsageRange(searchParams, nextRange));
     },
     [pushCostSearchParams, searchParams]
   );
@@ -196,7 +209,7 @@ export function CostDashboardClient() {
             <CostUsagePanel
               onConnectionChange={changeSelectedConnection}
               onProjectChange={changeSelectedProject}
-              onRangeChange={setUsageRange}
+              onRangeChange={changeUsageRange}
               range={usageRange}
               selectedConnectionId={selectedConnectionId}
               selectedProjectKey={selectedProjectKey}

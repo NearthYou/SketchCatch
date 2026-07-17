@@ -1,4 +1,4 @@
-import type { CostEstimatePeriod } from "@sketchcatch/types";
+import type { CostEstimatePeriod, CostUsageAnalysisRange } from "@sketchcatch/types";
 import { normalizeExpectedUserCount } from "../../../features/costs/cost-estimate-input";
 import { COST_USAGE_ALL_PROJECTS_KEY } from "../../../features/costs/cost-usage-project-view";
 
@@ -108,6 +108,28 @@ export function writeCostUsageProjectKey(
     next.delete("project");
   } else {
     next.set("project", normalizedProjectKey);
+  }
+
+  return next;
+}
+
+export function parseCostUsageRange(
+  searchParams: CostDashboardSearchParams
+): CostUsageAnalysisRange {
+  const range = searchParams.get("range");
+  return range === "7d" || range === "month_to_date" ? range : "30d";
+}
+
+export function writeCostUsageRange(
+  searchParams: CostDashboardSearchParams,
+  range: CostUsageAnalysisRange
+): URLSearchParams {
+  const next = new URLSearchParams(searchParams.toString());
+
+  if (range === "30d") {
+    next.delete("range");
+  } else {
+    next.set("range", range);
   }
 
   return next;

@@ -18,7 +18,7 @@ test("Cost Dashboard owns the navigation and filter state", () => {
   assert.match(dashboardSource, /const \[expectedUserCountInput,[\s\S]*?useState\(\(\) =>/);
   assert.match(dashboardSource, /const \[selectedConnectionId,[\s\S]*?useState\(\(\) =>/);
   assert.match(dashboardSource, /const \[selectedProjectKey,[\s\S]*?useState\(\(\) =>/);
-  assert.match(dashboardSource, /useState<CostUsageAnalysisRange>\("30d"\)/);
+  assert.match(dashboardSource, /useState<CostUsageAnalysisRange>\(\(\) =>/);
 });
 
 test("Cost panels receive controlled values and change callbacks", () => {

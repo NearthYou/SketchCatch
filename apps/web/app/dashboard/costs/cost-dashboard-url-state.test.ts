@@ -5,11 +5,13 @@ import {
   parseCostEstimatePeriod,
   parseCostUsageConnectionId,
   parseCostUsageProjectKey,
+  parseCostUsageRange,
   parseExpectedUserCount,
   parseCostDashboardTab,
   writeCostEstimatePeriod,
   writeCostUsageConnectionId,
   writeCostUsageProjectKey,
+  writeCostUsageRange,
   writeExpectedUserCount,
   writeCostDashboardTab
 } from "./cost-dashboard-url-state";
@@ -87,4 +89,20 @@ test("usage project keys are encoded, restored, and omitted for all projects", (
   assert.equal(selected.get("tab"), "usage");
   assert.equal(parseCostUsageProjectKey(new URLSearchParams()), "all-projects");
   assert.equal(allProjects.has("project"), false);
+});
+
+test("usage range restores supported values and omits the 30 day default", () => {
+  assert.equal(parseCostUsageRange(new URLSearchParams("range=7d")), "7d");
+  assert.equal(
+    parseCostUsageRange(new URLSearchParams("range=month_to_date")),
+    "month_to_date"
+  );
+  assert.equal(parseCostUsageRange(new URLSearchParams("range=invalid")), "30d");
+
+  const sevenDays = writeCostUsageRange(new URLSearchParams("tab=usage"), "7d");
+  const thirtyDays = writeCostUsageRange(sevenDays, "30d");
+
+  assert.equal(sevenDays.get("range"), "7d");
+  assert.equal(sevenDays.get("tab"), "usage");
+  assert.equal(thirtyDays.has("range"), false);
 });
