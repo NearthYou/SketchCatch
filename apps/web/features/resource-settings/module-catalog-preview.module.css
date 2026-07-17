@@ -1,0 +1,159 @@
+.moduleCatalogCard {
+  gap: 0 !important;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.moduleCatalogSummary {
+  align-items: start;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  list-style: none;
+  padding: 10px;
+}
+
+.moduleCatalogSummary::-webkit-details-marker {
+  display: none;
+}
+
+.moduleCatalogSummary::marker {
+  content: "";
+}
+
+.moduleCatalogCard[open] .moduleCatalogSummary {
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.moduleCatalogSummaryCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.moduleCatalogCard .moduleCatalogSummaryCopy strong {
+  color: var(--workspace-text);
+}
+
+.moduleCatalogCard .moduleCatalogSummaryCopy span {
+  color: var(--workspace-muted);
+}
+
+.moduleCatalogPreview {
+  background: var(--workspace-surface-muted);
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.moduleCatalogTopology {
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-line);
+  border-radius: 7px;
+  display: block;
+  height: 90px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.moduleCatalogTopologyEdge {
+  stroke: var(--workspace-line-strong);
+  stroke-width: 1.5;
+}
+
+.moduleCatalogTopologyNode rect {
+  fill: var(--workspace-accent);
+}
+
+.moduleCatalogTopologyNode text {
+  fill: #ffffff;
+  font-size: 7px;
+  font-weight: 800;
+}
+
+.moduleCatalogPreviewGrid {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.moduleCatalogPreviewSection {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.moduleCatalogPreviewSectionWide {
+  grid-column: 1 / -1;
+}
+
+.moduleCatalogPreviewSection h3 {
+  color: var(--workspace-text);
+  font-size: 11px;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.moduleCatalogPreviewSection p {
+  color: var(--workspace-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.moduleCatalogPreviewList {
+  display: grid;
+  gap: 3px;
+  list-style: none;
+  margin: 0;
+  max-height: 108px;
+  overflow: auto;
+  padding: 0;
+}
+
+.moduleCatalogPreviewList li {
+  align-items: baseline;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.moduleCatalogCard .moduleCatalogPreviewList li span {
+  color: var(--workspace-text);
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moduleCatalogPreviewList code {
+  color: var(--workspace-muted);
+  flex: 0 1 auto;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moduleCatalogAddButton {
+  background: var(--workspace-text);
+  border: 0;
+  border-radius: 6px;
+  color: var(--workspace-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  min-height: 32px;
+}
+
+.moduleCatalogAddButton:hover,
+.moduleCatalogAddButton:focus-visible {
+  background: var(--workspace-accent);
+  outline: none;
+}
