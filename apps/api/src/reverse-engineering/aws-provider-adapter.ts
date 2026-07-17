@@ -12,6 +12,7 @@ import type {
 } from "@sketchcatch/types";
 import { createReverseEngineeringArchitectureJson } from "./aws-provider-architecture-layout.js";
 import { createReverseEngineeringFindings } from "./aws-reverse-engineering-findings.js";
+import { createAwsResourceDisplayNameMap } from "./aws-resource-display-name.js";
 
 export type AwsProviderScanInput = {
   provider: CloudProvider;
@@ -88,7 +89,10 @@ export function createAwsProviderAdapter(gateway: AwsProviderScanGateway): AwsPr
       const discoveryResult = normalizeDiscoveryResult(await gateway.discoverResources(input));
       const records = discoveryResult.records;
       const idMap = createResourceIdMap(records);
-      const discoveredResources = records.map((record) => toDiscoveredResource(record, idMap));
+      const displayNameMap = createAwsResourceDisplayNameMap(records);
+      const discoveredResources = records.map((record) =>
+        toDiscoveredResource(record, idMap, displayNameMap.get(record.providerResourceId) ?? record.displayName)
+      );
       const architectureJson = createReverseEngineeringArchitectureJson(discoveredResources);
       const scan = createEmptyScan(input);
 
@@ -157,7 +161,8 @@ function createResourceIdMap(records: AwsDiscoveredResourceRecord[]): ReadonlyMa
 
 function toDiscoveredResource(
   record: AwsDiscoveredResourceRecord,
-  idMap: ReadonlyMap<string, string>
+  idMap: ReadonlyMap<string, string>,
+  displayName: string
 ): DiscoveredResource {
   const resourceType = awsResourceTypeMap.get(record.providerResourceType) ?? "UNKNOWN";
   const baseResource: DiscoveredResource = {
@@ -166,7 +171,7 @@ function toDiscoveredResource(
     providerResourceType: record.providerResourceType,
     providerResourceId: record.providerResourceId,
     region: record.region,
-    displayName: record.displayName,
+    displayName,
     resourceType,
     config: record.config,
     relationships: record.relationships.flatMap((relationship) =>

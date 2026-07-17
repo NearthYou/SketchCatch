@@ -1,0 +1,87 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
+  createAwsResourceDisplayName,
+  createAwsResourceDisplayNameMap
+} from "./aws-resource-display-name.js";
+
+test("keeps reader-provided ALB and Lambda names while their ARN IDs stay separate", () => {
+  const albArn = "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/orders-alb/50dc6c495c0c9188";
+  const lambdaArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:checkout";
+
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: "orders-alb",
+      providerResourceId: albArn,
+      providerResourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    }),
+    "orders-alb"
+  );
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: "checkout",
+      providerResourceId: lambdaArn,
+      providerResourceType: "AWS::Lambda::Function"
+    }),
+    "checkout"
+  );
+});
+
+test("derives a readable IAM role name from an ARN instead of displaying the ARN", () => {
+  const iamRoleArn = "arn:aws:iam::123456789012:role/service-role/very-long-production-role-name";
+
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: iamRoleArn,
+      providerResourceId: iamRoleArn,
+      providerResourceType: "AWS::IAM::Role"
+    }),
+    "very-long-production-role-name"
+  );
+});
+
+test("uses a human-readable fallback for an ARN without a resource name", () => {
+  const namelessArn = "arn:aws:iam::123456789012:role/";
+
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: "",
+      providerResourceId: namelessArn,
+      providerResourceType: "AWS::Resource"
+    }),
+    "AWS Resource · 2:role/"
+  );
+});
+
+test("distinguishes duplicate base names by the final seven original-ID characters", () => {
+  const firstArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:checkout-abcdef1";
+  const secondArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:checkout-abcdef2";
+  const displayNames = createAwsResourceDisplayNameMap([
+    {
+      displayName: "checkout",
+      providerResourceId: firstArn,
+      providerResourceType: "AWS::Lambda::Function"
+    },
+    {
+      displayName: "checkout",
+      providerResourceId: secondArn,
+      providerResourceType: "AWS::Lambda::Function"
+    }
+  ]);
+
+  assert.equal(displayNames.get(firstArn), "checkout · abcdef1");
+  assert.equal(displayNames.get(secondArn), "checkout · abcdef2");
+});
+
+test("shortens names beyond 42 characters to the first 34 characters and final seven", () => {
+  const longName = `${"a".repeat(34)}0123456789`;
+
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: longName,
+      providerResourceId: "arn:aws:s3:::orders-assets",
+      providerResourceType: "AWS::S3::Bucket"
+    }),
+    `${"a".repeat(34)}…3456789`
+  );
+});
