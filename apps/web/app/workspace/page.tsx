@@ -44,7 +44,7 @@ export default async function WorkspacePage({ searchParams }: WorkspacePageProps
           initialRightPanelView={initialRightPanelView}
           localCacheWorkspaceId={localCacheWorkspaceId || undefined}
           projectId={projectId}
-          projectName={projectName || "Project workspace"}
+          projectName={projectName || undefined}
           repositoryAnalysisHandoff={
             sourceRepositoryId
               ? {

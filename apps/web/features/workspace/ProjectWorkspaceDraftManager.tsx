@@ -10,7 +10,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import { DiagramEditor } from "../diagram-editor";
 import { EMPTY_DIAGRAM } from "../diagram-editor/constants";
 import { WorkspaceAiChatDock } from "./WorkspaceAiChatDock";
-import { listSourceRepositories } from "./api";
+import { getProject, listSourceRepositories } from "./api";
 import { buildBoardTemplateDiagram } from "../resource-settings/template-library";
 import {
   resolveRepositoryAnalysisTemplate,
@@ -43,6 +43,10 @@ import {
   type ProjectLocalSaveState,
   type ProjectServerSaveState
 } from "./project-draft-save-status";
+import {
+  loadProjectWorkspaceTitle,
+  resolveProjectWorkspaceTitle
+} from "./project-workspace-title";
 import type { WorkspaceCloudPlatform } from "./project-draft-persistence";
 import type { SavedServerProjectDiagramDraft } from "./project-draft-sync";
 import type { WorkspaceRightPanelView } from "./workspace-right-panel.types";
@@ -95,7 +99,7 @@ function ProjectWorkspaceDraftManagerState({
   localSaveDebounceMs = LOCAL_SAVE_DEBOUNCE_MS,
   onDraftPersistenceReady,
   projectId,
-  projectName = "Project workspace",
+  projectName,
   repository = defaultProjectDraftRepository,
   repositoryAnalysisHandoff,
   serverCheckpointIntervalMs = SERVER_CHECKPOINT_INTERVAL_MS,
@@ -121,6 +125,9 @@ function ProjectWorkspaceDraftManagerState({
     useState<TerraformSafeFixApplyRequest | null>(null);
   const [terraformSafeFixApplyResult, setTerraformSafeFixApplyResult] =
     useState<TerraformSafeFixApplyResult | null>(null);
+  const [displayProjectName, setDisplayProjectName] = useState(() =>
+    resolveProjectWorkspaceTitle(projectName)
+  );
   const latestDiagramRef = useRef<DiagramJson>(EMPTY_DIAGRAM);
   const latestTerraformFilesRef = useRef<TerraformSyncFileInput[]>([]);
   const [initialTerraformFiles, setInitialTerraformFiles] = useState<TerraformSyncFileInput[]>([]);
@@ -144,6 +151,25 @@ function ProjectWorkspaceDraftManagerState({
     useRef<ProjectWorkspaceDraftManagerProps["onDraftPersistenceReady"]>(onDraftPersistenceReady);
   const workspaceUserName =
     user?.nickname?.trim() || user?.username?.trim() || user?.email?.trim() || "Personal workspace";
+  const projectSlug = resolveProjectWorkspaceTitle(projectName);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDisplayProjectName(resolveProjectWorkspaceTitle(projectName));
+
+    void loadProjectWorkspaceTitle({
+      fallbackProjectName: projectName,
+      loadProject: () => getProject(projectId)
+    }).then((nextProjectName) => {
+      if (!cancelled) {
+        setDisplayProjectName(nextProjectName);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, projectName]);
 
   useEffect(() => {
     const thumbnailLifecycle = createProjectBoardThumbnailLifecycle({
@@ -376,7 +402,7 @@ function ProjectWorkspaceDraftManagerState({
             repositoryAnalysisHandoff
           );
           const templateDiagram = buildBoardTemplateDiagram(template.id, {
-            projectSlug: projectName,
+            projectSlug,
             shortId: "workspace"
           });
 
@@ -441,7 +467,7 @@ function ProjectWorkspaceDraftManagerState({
     clearLocalSaveTimer,
     localCacheWorkspaceId,
     projectId,
-    projectName,
+    projectSlug,
     repository,
     repositoryAnalysisHandoff,
     setCurrentLocalDraft,
@@ -637,7 +663,7 @@ function ProjectWorkspaceDraftManagerState({
         onDiagramSaveRequest={() => flushDraftToServer("manual")}
         onTemplateWorkspaceApply={handleTemplateWorkspaceApply}
         onSaveAndDeployRequest={saveAndOpenDeployment}
-        projectName={projectName}
+        projectName={displayProjectName}
         workspaceUserName={workspaceUserName}
         rightPanel={(context) => (
           <WorkspaceRightPanel
@@ -653,7 +679,7 @@ function ProjectWorkspaceDraftManagerState({
             onTerraformFilesChange={handleTerraformFilesChange}
             onTerraformFilesReplacementApplied={handleTerraformFilesReplacementApplied}
             projectId={projectId}
-            projectName={projectName}
+            projectName={displayProjectName}
             selectedTerraformIssueKey={selectedTerraformIssueKey}
             terraformFilesReplacement={terraformFilesReplacement}
             terraformSafeFixApplyRequest={terraformSafeFixApplyRequest}
