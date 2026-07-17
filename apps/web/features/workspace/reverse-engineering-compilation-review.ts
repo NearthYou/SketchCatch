@@ -2,13 +2,25 @@ import type {
   ArchitectureBoardCompilationDiagnostic,
   ArchitectureBoardCompilationProposal
 } from "@sketchcatch/types";
+import {
+  createArchitectureBoardCompilationPreview,
+  type ArchitectureBoardCompilationOutcome
+} from "../architecture-board-compiler/architecture-board-compilation-preview";
 
 const MAX_VISIBLE_DIAGNOSTICS = 3;
+const DIAGNOSTIC_LEVEL_RANK: Readonly<
+  Record<ArchitectureBoardCompilationDiagnostic["level"], number>
+> = {
+  error: 0,
+  warning: 1,
+  info: 2
+};
 
 export type ReverseEngineeringCompilationReview = {
   readonly changeCount: number;
   readonly diagnostics: readonly ReverseEngineeringCompilationReviewDiagnostic[];
   readonly hiddenDiagnosticCount: number;
+  readonly outcome: ArchitectureBoardCompilationOutcome;
   readonly quality: ArchitectureBoardCompilationProposal["quality"];
   readonly referenceTemplateIds: readonly string[];
 };
@@ -17,20 +29,34 @@ export type ReverseEngineeringCompilationReviewDiagnostic = Pick<
   ArchitectureBoardCompilationDiagnostic,
   "code" | "level"
 > & {
+  readonly key: string;
   readonly summary: string;
   readonly message: string;
 };
+
+type PresentedCompilationDiagnostic = Omit<ReverseEngineeringCompilationReviewDiagnostic, "key">;
 
 // 결과 패널은 제안 전체를 다시 해석하지 않고, 사용자가 확인할 최소 검토 정보만 뽑아냅니다.
 export function createReverseEngineeringCompilationReview(
   proposal: ArchitectureBoardCompilationProposal
 ): ReverseEngineeringCompilationReview {
+  const preview = createArchitectureBoardCompilationPreview(proposal);
+  const diagnostics = proposal.diagnostics
+    .map((diagnostic, originalIndex) => ({ diagnostic, originalIndex }))
+    .sort(
+      (left, right) =>
+        DIAGNOSTIC_LEVEL_RANK[left.diagnostic.level] -
+          DIAGNOSTIC_LEVEL_RANK[right.diagnostic.level] || left.originalIndex - right.originalIndex
+    );
+
   return {
     changeCount: proposal.changes.length,
-    diagnostics: proposal.diagnostics
-      .slice(0, MAX_VISIBLE_DIAGNOSTICS)
-      .map(presentCompilationDiagnostic),
+    diagnostics: diagnostics.slice(0, MAX_VISIBLE_DIAGNOSTICS).map(({ diagnostic }, index) => ({
+      ...presentCompilationDiagnostic(diagnostic),
+      key: `${diagnostic.code}:${index}`
+    })),
     hiddenDiagnosticCount: Math.max(proposal.diagnostics.length - MAX_VISIBLE_DIAGNOSTICS, 0),
+    outcome: preview.outcome,
     quality: proposal.quality,
     referenceTemplateIds: proposal.provenance.referenceTemplateIds
   };
@@ -38,7 +64,7 @@ export function createReverseEngineeringCompilationReview(
 
 function presentCompilationDiagnostic(
   diagnostic: ArchitectureBoardCompilationDiagnostic
-): ReverseEngineeringCompilationReviewDiagnostic {
+): PresentedCompilationDiagnostic {
   if (!diagnostic.code.startsWith("compiler.") || diagnostic.code.startsWith("compiler.context.")) {
     return {
       code: diagnostic.code,

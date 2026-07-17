@@ -8,33 +8,27 @@ export function ArchitectureBoardCompilationSummary({
   readonly proposal: ArchitectureBoardCompilationProposal;
 }) {
   const preview = createArchitectureBoardCompilationPreview(proposal);
-  const changeCount = proposal.changes.length;
-  const diagnosticCount = proposal.diagnostics.length;
-  const scoreImproved = preview.quality.afterScore <= preview.quality.beforeScore;
 
   return (
-    <section aria-label="Compiler 제안 요약" className={styles.summary}>
+    <section aria-label="배치 컴파일러 결과" className={styles.summary}>
       <div className={styles.heading}>
-        <span>LAYOUT COMPILER</span>
-        <strong>{changeCount === 0 ? "현재 배치 유지" : `변경 ${changeCount}`}</strong>
+        <span>배치 정리 결과</span>
+        <strong>{preview.outcome.headline}</strong>
+        <p>{preview.outcome.reviewSummary}</p>
       </div>
 
-      <dl className={styles.metrics}>
-        <div>
-          <dt>정리 점수</dt>
-          <dd data-improved={scoreImproved}>
-            {formatScore(preview.quality.beforeScore)} → {formatScore(preview.quality.afterScore)}
-          </dd>
-        </div>
-        <div>
-          <dt>변경 거리</dt>
-          <dd>{formatScore(preview.quality.compilationDistance)}</dd>
-        </div>
-        <div>
-          <dt>진단</dt>
-          <dd>{diagnosticCount}</dd>
-        </div>
-      </dl>
+      {preview.outcome.items.length > 0 ? (
+        <ul className={styles.outcomes}>
+          {preview.outcome.items.map((item) => (
+            <li data-tone={item.tone} key={item.key}>
+              <span>{item.label}</span>
+              <strong>{item.summary}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={styles.emptyOutcome}>추적 지표에서 표시할 배치 문제가 없습니다.</p>
+      )}
 
       <div className={styles.detailGrid}>
         <SummaryDetail
@@ -45,24 +39,39 @@ export function ArchitectureBoardCompilationSummary({
         <SummaryDetail
           emptyLabel="진단 없음"
           items={preview.diagnosticGroups.map(({ count, label }) => `${label} ${count}`)}
-          label="진단"
-        />
-        <SummaryDetail
-          emptyLabel="일반 규칙"
-          items={preview.referenceTemplateIds}
-          label="근거"
-          title={`후보 ${preview.candidateId} · ${preview.compilerVersion}`}
+          label="확인"
         />
       </div>
 
-      {preview.diagnosticSummaries.length > 0 ? (
-        <p className={styles.diagnostics}>
-          {preview.diagnosticSummaries.slice(0, 2).join(" · ")}
-          {preview.diagnosticSummaries.length > 2
-            ? ` 외 ${preview.diagnosticSummaries.length - 2}`
-            : ""}
-        </p>
-      ) : null}
+      <details className={styles.technical}>
+        <summary>기술 세부 정보</summary>
+        <div className={styles.technicalBody}>
+          <dl className={styles.metrics}>
+            <div>
+              <dt>내부 cost (낮을수록 우선)</dt>
+              <dd>
+                {formatScore(preview.quality.beforeScore)} →{" "}
+                {formatScore(preview.quality.afterScore)}
+              </dd>
+            </div>
+            <div>
+              <dt>변경 cost</dt>
+              <dd>{formatScore(preview.quality.compilationDistance)}</dd>
+            </div>
+          </dl>
+          <SummaryDetail emptyLabel="일반 규칙" items={preview.referenceTemplateIds} label="참고" />
+          <p>후보: {preview.candidateId}</p>
+          <p>Compiler: {preview.compilerVersion}</p>
+          {preview.diagnosticSummaries.length > 0 ? (
+            <p>
+              진단: {preview.diagnosticSummaries.slice(0, 2).join(" · ")}
+              {preview.diagnosticSummaries.length > 2
+                ? ` 외 ${preview.diagnosticSummaries.length - 2}`
+                : ""}
+            </p>
+          ) : null}
+        </div>
+      </details>
     </section>
   );
 }
@@ -70,16 +79,14 @@ export function ArchitectureBoardCompilationSummary({
 function SummaryDetail({
   emptyLabel,
   items,
-  label,
-  title
+  label
 }: {
   readonly emptyLabel: string;
   readonly items: readonly string[];
   readonly label: string;
-  readonly title?: string | undefined;
 }) {
   return (
-    <div className={styles.detail} title={title}>
+    <div className={styles.detail}>
       <span>{label}</span>
       <strong>{items.length === 0 ? emptyLabel : items.join(" · ")}</strong>
     </div>

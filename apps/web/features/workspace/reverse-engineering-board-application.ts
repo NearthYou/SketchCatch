@@ -9,9 +9,13 @@ import {
   compileArchitectureBoard,
   type ArchitectureBoardCompilationProposal
 } from "../architecture-board-compiler";
-import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
+import {
+  convertArchitectureJsonToDiagramJson,
+  convertDiagramJsonToArchitectureJson
+} from "./workspace-ai-diagram-adapter";
 
 export type ReverseEngineeringBoardApplicationMode = "replace" | "append";
+export type ReverseEngineeringPlacement = "original" | "compiled";
 
 export type ReverseEngineeringBoardComparisonItem = {
   readonly nodeId: string;
@@ -45,7 +49,7 @@ const UNKNOWN_RESOURCE_STYLE = {
 const UNKNOWN_MANUAL_REVIEW_LABEL_PREFIX = "확인 필요";
 
 export type ReverseEngineeringBoardApplication = {
-  readonly compilation: ArchitectureBoardCompilationProposal;
+  readonly compilation: ArchitectureBoardCompilationProposal | null;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly diagram: DiagramJson;
   readonly previewDiagram: DiagramJson;
@@ -54,6 +58,7 @@ export type ReverseEngineeringBoardApplication = {
 export type CreateReverseEngineeringBoardApplicationInput = {
   readonly currentDiagram: DiagramJson;
   readonly mode: ReverseEngineeringBoardApplicationMode;
+  readonly placement: ReverseEngineeringPlacement;
   readonly result: ReverseEngineeringScanResult;
 };
 
@@ -66,7 +71,10 @@ export type CreateReverseEngineeringBoardComparisonInput = {
 export function createReverseEngineeringBoardApplication(
   input: CreateReverseEngineeringBoardApplicationInput
 ): ReverseEngineeringBoardApplication {
-  const preview = createReverseEngineeringPreview(input.result);
+  const preview =
+    input.placement === "compiled"
+      ? createCompiledReverseEngineeringPreview(input.result)
+      : createOriginalReverseEngineeringPreview(input.result);
   const previewDiagram = preview.diagram;
   const comparison = compareDiagrams(input.currentDiagram, previewDiagram);
 
@@ -79,7 +87,21 @@ export function createReverseEngineeringBoardApplication(
     };
   }
 
-  const appendDiagram = appendAdditionsToCurrentDiagram(input.currentDiagram, previewDiagram, comparison);
+  const appendDiagram = appendAdditionsToCurrentDiagram(
+    input.currentDiagram,
+    previewDiagram,
+    comparison
+  );
+
+  if (input.placement === "original") {
+    return {
+      compilation: null,
+      comparison,
+      diagram: appendDiagram,
+      previewDiagram: appendDiagram
+    };
+  }
+
   const compilation = compileReverseEngineeringAppendArchitecture(
     input.currentDiagram,
     appendDiagram,
@@ -99,15 +121,41 @@ export function createReverseEngineeringBoardApplication(
 export function createReverseEngineeringBoardComparison(
   input: CreateReverseEngineeringBoardComparisonInput
 ): ReverseEngineeringBoardComparison {
-  return compareDiagrams(input.currentDiagram, createReverseEngineeringPreviewDiagram(input.result));
+  return compareDiagrams(
+    input.currentDiagram,
+    createOriginalReverseEngineeringPreview(input.result).diagram
+  );
 }
 
-// 오래된 scan 기록에 UNKNOWN 노드가 남아 있어도 보드 중앙에는 올리지 않습니다.
-function createReverseEngineeringPreviewDiagram(result: ReverseEngineeringScanResult): DiagramJson {
-  return createReverseEngineeringPreview(result).diagram;
+// AWS가 만든 Architecture 좌표와 관계를 Compiler 후보 선택 전에 Board 모델로 옮깁니다.
+function createOriginalReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
+  readonly compilation: null;
+  readonly diagram: DiagramJson;
+} {
+  const materializedDiagram = convertArchitectureJsonToDiagramJson(result.architectureJson);
+  const sourcePositionByNodeId = new Map(
+    result.architectureJson.nodes.map((node) => [node.id, { x: node.positionX, y: node.positionY }])
+  );
+  const sourcePositionDiagram: DiagramJson = {
+    ...materializedDiagram,
+    nodes: materializedDiagram.nodes.map((node) => {
+      const sourcePosition = sourcePositionByNodeId.get(node.id);
+
+      return sourcePosition ? { ...node, position: sourcePosition } : node;
+    })
+  };
+
+  return {
+    compilation: null,
+    diagram: markReverseEngineeringDiagram(
+      convertArchitectureJsonToDiagramJson(result.architectureJson, {
+        preserveLayoutFrom: sourcePositionDiagram
+      })
+    )
+  };
 }
 
-function createReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
+function createCompiledReverseEngineeringPreview(result: ReverseEngineeringScanResult): {
   readonly compilation: ArchitectureBoardCompilationProposal;
   readonly diagram: DiagramJson;
 } {
@@ -178,7 +226,7 @@ function createReverseEngineeringContextSignals(
     ...result.scanErrors.map((error) => ({
       id: error.id,
       kind: "provider" as const,
-      level: error.retryable ? "warning" as const : "error" as const,
+      level: error.retryable ? ("warning" as const) : ("error" as const),
       summary: `스캔 실패: ${formatScanStage(error.stage)} · ${formatScanErrorReason(error.reason)}`,
       message: formatScanErrorMessage(error.stage, error.reason, error.retryable),
       penalty: error.retryable ? 200 : 500
@@ -200,8 +248,12 @@ function formatAnalysisExclusionMessage(
     : "이 Resource에 필요한 정보가 없어 자동 분석에 포함되지 않습니다.";
 }
 
-function formatScanStage(stage: ReverseEngineeringScanResult["scanErrors"][number]["stage"]): string {
-  const labels: Readonly<Record<ReverseEngineeringScanResult["scanErrors"][number]["stage"], string>> = {
+function formatScanStage(
+  stage: ReverseEngineeringScanResult["scanErrors"][number]["stage"]
+): string {
+  const labels: Readonly<
+    Record<ReverseEngineeringScanResult["scanErrors"][number]["stage"], string>
+  > = {
     credential: "AWS 인증 정보 확인",
     region: "리전 확인",
     provider_api: "AWS 서비스 조회",
@@ -217,7 +269,9 @@ function formatScanStage(stage: ReverseEngineeringScanResult["scanErrors"][numbe
 function formatScanErrorReason(
   reason: ReverseEngineeringScanResult["scanErrors"][number]["reason"]
 ): string {
-  const labels: Readonly<Record<ReverseEngineeringScanResult["scanErrors"][number]["reason"], string>> = {
+  const labels: Readonly<
+    Record<ReverseEngineeringScanResult["scanErrors"][number]["reason"], string>
+  > = {
     permission_denied: "권한 부족",
     invalid_region: "리전을 확인할 수 없음",
     expired_credential: "인증 정보 만료",
@@ -375,7 +429,9 @@ function appendAdditionsToCurrentDiagram(
   return {
     edges: [
       ...currentDiagram.edges,
-      ...previewDiagram.edges.filter((edge) => shouldAppendEdge(edge, currentDiagram, nodeIdsAfterAppend))
+      ...previewDiagram.edges.filter((edge) =>
+        shouldAppendEdge(edge, currentDiagram, nodeIdsAfterAppend)
+      )
     ],
     nodes,
     viewport: currentDiagram.viewport

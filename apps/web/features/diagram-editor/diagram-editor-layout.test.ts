@@ -28,6 +28,23 @@ const workspaceProjectBarSource = readFileSync(
   "utf8"
 );
 
+test("automatic organization preview leads with metric outcomes and collapses internal costs", () => {
+  const previewBlock = getSourceBlock(
+    diagramEditorSource,
+    "{compilerPreviewSummary ? (",
+    ") : isPreviewActive ? ("
+  );
+  const technicalDetailsIndex = previewBlock.indexOf("기술 세부 정보");
+
+  assert.notEqual(technicalDetailsIndex, -1);
+  assert.match(previewBlock, /compilerPreviewSummary\.outcome\.headline/);
+  assert.match(previewBlock, /compilerPreviewSummary\.outcome\.items/);
+  assert.doesNotMatch(
+    previewBlock.slice(0, technicalDetailsIndex),
+    /quality\.beforeScore|quality\.afterScore|quality\.compilationDistance|candidateId|compilerVersion|referenceTemplateIds/
+  );
+});
+
 test("diagram editor uses partial box selection for overlapping area nodes", () => {
   assert.match(diagramEditorSource, /selectionOnDrag=\{interactionMode === "select" && !isPreviewActive\}/);
   assert.match(diagramEditorSource, /selectionMode=\{SelectionMode\.Partial\}/);

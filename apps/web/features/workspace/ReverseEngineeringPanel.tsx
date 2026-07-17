@@ -28,7 +28,8 @@ import {
 } from "./api";
 import {
   createReverseEngineeringBoardApplication,
-  type ReverseEngineeringBoardApplicationMode
+  type ReverseEngineeringBoardApplicationMode,
+  type ReverseEngineeringPlacement
 } from "./reverse-engineering-board-application";
 import {
   createReverseEngineeringBoardCandidates,
@@ -58,7 +59,9 @@ import styles from "./reverse-engineering.module.css";
 export type ReverseEngineeringPanelProps = {
   readonly context: DiagramEditorPanelContext;
   readonly createProjectOnApply?: boolean | undefined;
-  readonly onCandidatePanelChange?: ((state: ReverseEngineeringCandidatePanelState) => void) | undefined;
+  readonly onCandidatePanelChange?:
+    | ((state: ReverseEngineeringCandidatePanelState) => void)
+    | undefined;
   readonly projectId: string;
   readonly projectName: string;
 };
@@ -85,9 +88,9 @@ export function ReverseEngineeringPanel({
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const [selectedResourceTypes, setSelectedResourceTypes] = useState<ReverseEngineeringResourceSelection[]>([
-    REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION
-  ]);
+  const [selectedResourceTypes, setSelectedResourceTypes] = useState<
+    ReverseEngineeringResourceSelection[]
+  >([REVERSE_ENGINEERING_ALL_RESOURCE_SELECTION]);
   const [scanState, setScanState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [scanResponse, setScanResponse] = useState<ReverseEngineeringScanResponse | null>(null);
@@ -96,6 +99,7 @@ export function ReverseEngineeringPanel({
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [previewBaseDiagram, setPreviewBaseDiagram] = useState<DiagramJson | null>(null);
+  const [placement, setPlacement] = useState<ReverseEngineeringPlacement>("original");
   const handleRequestError = useCallback((error: unknown) => {
     setErrorMessage(toErrorMessage(error));
   }, []);
@@ -158,7 +162,9 @@ export function ReverseEngineeringPanel({
     return createReverseEngineeringBoardCandidates(scanResponse.result);
   }, [scanResponse]);
   const selectedCandidate =
-    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? boardCandidates[0] ?? null;
+    boardCandidates.find((candidate) => candidate.id === selectedCandidateId) ??
+    boardCandidates[0] ??
+    null;
   const selectedCandidateResult = useMemo(() => {
     if (!scanResponse?.result || !selectedCandidate) {
       return null;
@@ -183,17 +189,25 @@ export function ReverseEngineeringPanel({
     return createReverseEngineeringBoardApplication({
       currentDiagram: previewSourceDiagram,
       mode: "replace",
+      placement,
       result: selectedCandidateResult
     });
-  }, [previewSourceDiagram, selectedCandidateResult]);
+  }, [placement, previewSourceDiagram, selectedCandidateResult]);
+  const selectedCandidateAppendApplication = useMemo(() => {
+    if (!selectedCandidateResult || previewSourceDiagram.nodes.length === 0) {
+      return null;
+    }
+
+    return createReverseEngineeringBoardApplication({
+      currentDiagram: previewSourceDiagram,
+      mode: "append",
+      placement,
+      result: selectedCandidateResult
+    });
+  }, [placement, previewSourceDiagram, selectedCandidateResult]);
   const comparison = selectedCandidateApplication?.comparison ?? null;
   const hasDeletedSourceScan = useMemo(
-    () =>
-      hasDeletedReverseEngineeringSourceScan(
-        context.diagram,
-        scanHistory,
-        scanHistoryState
-      ),
+    () => hasDeletedReverseEngineeringSourceScan(context.diagram, scanHistory, scanHistoryState),
     [context.diagram, scanHistory, scanHistoryState]
   );
   const selectBoardCandidate = useCallback(
@@ -209,9 +223,11 @@ export function ReverseEngineeringPanel({
       const application = createReverseEngineeringBoardApplication({
         currentDiagram: previewSourceDiagram,
         mode: "replace",
+        placement: "original",
         result: candidateResult
       });
 
+      setPlacement("original");
       setSelectedCandidateId(candidateId);
       context.setPreviewDiagram(application.previewDiagram);
     },
@@ -250,6 +266,7 @@ export function ReverseEngineeringPanel({
     setErrorMessage(null);
     setApplyMessage(null);
     setApplyState("idle");
+    setPlacement("original");
     setSelectedCandidateId(null);
     setScanResponse(null);
     setLogs([]);
@@ -318,6 +335,7 @@ export function ReverseEngineeringPanel({
         setScanResponse(null);
         setLogs([]);
         setSelectedCandidateId(null);
+        setPlacement("original");
         setPreviewBaseDiagram(null);
         context.setPreviewDiagram(null);
       }
@@ -332,6 +350,7 @@ export function ReverseEngineeringPanel({
     setErrorMessage(null);
     setApplyMessage(null);
     setApplyState("idle");
+    setPlacement("original");
     const baseDiagram = previewBaseDiagram ?? context.diagram;
     setPreviewBaseDiagram(baseDiagram);
 
@@ -370,11 +389,12 @@ export function ReverseEngineeringPanel({
       return;
     }
 
-    const application = createReverseEngineeringBoardApplication({
-      currentDiagram: previewSourceDiagram,
-      mode,
-      result
-    });
+    const application =
+      mode === "replace" ? selectedCandidateApplication : selectedCandidateAppendApplication;
+
+    if (!application) {
+      return;
+    }
     const diagramToApply = createProjectOnApply
       ? application.diagram
       : attachReverseEngineeringSourceToDiagram(
@@ -389,7 +409,9 @@ export function ReverseEngineeringPanel({
     setPreviewBaseDiagram(diagramToApply);
 
     try {
-      const targetProject = createProjectOnApply ? await createProject({ name: projectName }) : null;
+      const targetProject = createProjectOnApply
+        ? await createProject({ name: projectName })
+        : null;
       const targetProjectId = targetProject?.id ?? projectId;
 
       if (targetProject) {
@@ -430,6 +452,25 @@ export function ReverseEngineeringPanel({
     }
   }
 
+  // 선택만으로 저장하지 않고, 사용자가 요청한 배치만 Board 미리보기에 올립니다.
+  function previewPlacement(nextPlacement: ReverseEngineeringPlacement): void {
+    const result = selectedCandidateResult;
+
+    if (!result) {
+      return;
+    }
+
+    const application = createReverseEngineeringBoardApplication({
+      currentDiagram: previewSourceDiagram,
+      mode: "replace",
+      placement: nextPlacement,
+      result
+    });
+
+    setPlacement(nextPlacement);
+    context.setPreviewDiagram(application.previewDiagram);
+  }
+
   // 스캔 직후에는 가장 앞의 후보를 기본 미리보기로 보여줍니다.
   function showFirstCandidatePreview(
     result: ReverseEngineeringScanResult,
@@ -449,9 +490,11 @@ export function ReverseEngineeringPanel({
     const application = createReverseEngineeringBoardApplication({
       currentDiagram: baseDiagram,
       mode: "replace",
+      placement: "original",
       result: candidateResult
     });
 
+    setPlacement("original");
     setSelectedCandidateId(nextCandidate.id);
     context.setPreviewDiagram(application.previewDiagram);
   }
@@ -481,7 +524,8 @@ export function ReverseEngineeringPanel({
         {errorMessage ? <p className={styles.error}>{errorMessage}</p> : null}
         {hasDeletedSourceScan ? (
           <p className={styles.warning}>
-            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은 삭제됐습니다.
+            이 보드는 Reverse Engineering scan에서 시작됐습니다. 하지만 원본 scan 기록은
+            삭제됐습니다.
           </p>
         ) : null}
 
@@ -499,21 +543,28 @@ export function ReverseEngineeringPanel({
           />
         )}
 
-        {selectedCandidateResponse?.result && comparison && selectedCandidate && selectedCandidateApplication ? (
+        {selectedCandidateResponse?.result &&
+        comparison &&
+        selectedCandidate &&
+        selectedCandidateApplication ? (
           <ReverseEngineeringResultPanel
             applyMessage={applyMessage}
             applyState={applyState}
             boardCandidates={boardCandidates}
+            appendCompilation={selectedCandidateAppendApplication?.compilation ?? null}
             compilation={selectedCandidateApplication.compilation}
             comparison={comparison}
             createProjectOnApply={createProjectOnApply}
             hasCurrentBoardResources={previewSourceDiagram.nodes.length > 0}
             logs={logs}
             onAppendToCurrentBoard={() => void applyScanResult("append")}
+            onCompilePlacement={() => previewPlacement("compiled")}
+            onKeepOriginalPlacement={() => previewPlacement("original")}
             onOpenAsNewBoard={() => void applyScanResult("replace")}
             onRetryScan={() => void runScan()}
             response={selectedCandidateResponse}
             selectedCandidateId={selectedCandidate.id}
+            placement={placement}
           />
         ) : (
           <section className={styles.section}>
@@ -576,7 +627,9 @@ async function runSavedScan({
     resourceTypes
   });
   const response =
-    startedResponse.result || startedResponse.scan.status === "failed" || startedResponse.scan.status === "cancelled"
+    startedResponse.result ||
+    startedResponse.scan.status === "failed" ||
+    startedResponse.scan.status === "cancelled"
       ? startedResponse
       : await pollReverseEngineeringScan(projectId, startedResponse.scan.id);
   const logs = await listReverseEngineeringScanLogs({
@@ -603,7 +656,11 @@ async function pollReverseEngineeringScan(
   for (let attempt = 0; attempt < SCAN_POLL_ATTEMPT_COUNT; attempt += 1) {
     const response = await getReverseEngineeringScan({ projectId, scanId });
 
-    if (response.result || response.scan.status === "failed" || response.scan.status === "cancelled") {
+    if (
+      response.result ||
+      response.scan.status === "failed" ||
+      response.scan.status === "cancelled"
+    ) {
       return response;
     }
 

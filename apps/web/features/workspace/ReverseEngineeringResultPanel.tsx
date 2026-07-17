@@ -6,7 +6,10 @@ import type {
   ReverseEngineeringScanError
 } from "@sketchcatch/types";
 import type { ReactNode } from "react";
-import type { ReverseEngineeringBoardComparison } from "./reverse-engineering-board-application";
+import type {
+  ReverseEngineeringBoardComparison,
+  ReverseEngineeringPlacement
+} from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
 import {
   createReverseEngineeringCompilationReview,
@@ -25,32 +28,39 @@ export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error"
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
   readonly applyState: ReverseEngineeringApplyState;
+  readonly appendCompilation: ArchitectureBoardCompilationProposal | null;
   readonly boardCandidates: readonly ReverseEngineeringBoardCandidate[];
-  readonly compilation: ArchitectureBoardCompilationProposal;
+  readonly compilation: ArchitectureBoardCompilationProposal | null;
   readonly comparison: ReverseEngineeringBoardComparison;
   readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
   readonly logs: ReverseEngineeringScanLogLine[];
   readonly onAppendToCurrentBoard: () => void;
+  readonly onCompilePlacement: () => void;
+  readonly onKeepOriginalPlacement: () => void;
   readonly onOpenAsNewBoard: () => void;
   readonly onRetryScan: () => void;
   readonly response: ReverseEngineeringScanResponse;
   readonly selectedCandidateId: string;
+  readonly placement: ReverseEngineeringPlacement;
 };
 
 // 스캔 결과와 사용자가 누를 적용 버튼을 한 화면에 모아 보여줍니다.
 export function ReverseEngineeringResultPanel({
   applyMessage,
   applyState,
-  boardCandidates,
+  appendCompilation,
   compilation,
   comparison,
   createProjectOnApply,
   hasCurrentBoardResources,
   logs,
   onAppendToCurrentBoard,
+  onCompilePlacement,
+  onKeepOriginalPlacement,
   onOpenAsNewBoard,
   onRetryScan,
+  placement,
   response
 }: ReverseEngineeringResultPanelProps) {
   const result = response.result;
@@ -64,8 +74,10 @@ export function ReverseEngineeringResultPanel({
   const unsupportedResources = result.discoveredResources.filter(
     (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
   );
-  const primaryApplyLabel = getPrimaryApplyLabel({ createProjectOnApply, hasCurrentBoardResources });
-  const compilationReview = createReverseEngineeringCompilationReview(compilation);
+  const primaryApplyLabel = getPrimaryApplyLabel({
+    createProjectOnApply,
+    hasCurrentBoardResources
+  });
 
   return (
     <>
@@ -89,9 +101,7 @@ export function ReverseEngineeringResultPanel({
             <strong>{summary.unreadableServiceCount}</strong>
           </span>
         </div>
-        <p className={styles.hint}>
-          현재 보이는 구조로 프로젝트를 만듭니다.
-        </p>
+        <p className={styles.hint}>AWS에서 읽은 범위와 확인이 필요한 Resource를 먼저 검토하세요.</p>
         {comparison.manualReviews.length > 0 ? (
           <p className={styles.warning}>
             AWS 원본 ID가 없거나 Terraform 이름만 겹치는 Resource는 자동으로 합치지 않습니다.
@@ -106,9 +116,75 @@ export function ReverseEngineeringResultPanel({
         ) : null}
         {summary.unreadableServiceCount > 0 ? (
           <p className={styles.warning}>
-            일부 AWS 서비스를 읽지 못했습니다. 이 결과는 전체 AWS 환경을 완전히 보여주지 않을 수 있습니다.
+            일부 AWS 서비스를 읽지 못했습니다. 이 결과는 전체 AWS 환경을 완전히 보여주지 않을 수
+            있습니다.
           </p>
         ) : null}
+      </section>
+
+      <section className={styles.placementDecision} aria-label="배치 선택">
+        <div
+          aria-atomic="true"
+          aria-live="polite"
+          className={styles.placementDecisionHeader}
+        >
+          <span className={styles.placementBadge}>
+            {placement === "compiled" ? "컴파일러 미리보기" : "AWS 원본 배치"}
+          </span>
+          <h3>
+            {placement === "compiled" ? "배치 컴파일러 결과 미리보기" : "AWS에서 읽어온 원래 배치"}
+          </h3>
+        </div>
+        <p className={styles.placementDescription}>
+          {placement === "compiled"
+            ? "AWS 원본과 비교해 선택된 배치 후보를 보여드립니다. 아래의 실제 변화와 남은 확인 항목을 검토하세요."
+            : "아직 배치 컴파일러를 실행하지 않았습니다. AWS에서 읽은 Resource와 관계를 원래 배치로 먼저 보여드립니다."}
+        </p>
+        <div className={styles.placementActions} role="group" aria-label="배치 미리보기 선택">
+          <button
+            aria-pressed={placement === "compiled"}
+            className={styles.primaryButton}
+            onClick={onCompilePlacement}
+            type="button"
+          >
+            배치 컴파일러 실행
+          </button>
+          <button
+            aria-pressed={placement === "original"}
+            className={styles.secondaryButton}
+            onClick={onKeepOriginalPlacement}
+            type="button"
+          >
+            원래 배치 유지
+          </button>
+        </div>
+        <p className={styles.placementSaveBoundary}>
+          배치를 고르거나 컴파일러를 실행해도 저장되지 않습니다. 마지막 적용 버튼을 눌러야 보드에
+          반영됩니다.
+        </p>
+      </section>
+
+      {placement === "compiled" && compilation ? (
+        <section className={styles.compilationReview} aria-label="배치 컴파일러 검토">
+          <ReverseEngineeringCompilationModeReview
+            proposal={compilation}
+            title={hasCurrentBoardResources ? "새 보드로 열 때" : primaryApplyLabel}
+          />
+          {hasCurrentBoardResources && appendCompilation ? (
+            <ReverseEngineeringCompilationModeReview
+              proposal={appendCompilation}
+              title="현재 보드에 추가할 때"
+            />
+          ) : null}
+        </section>
+      ) : null}
+
+      <section className={styles.section} aria-label="선택한 배치 적용">
+        <h3>선택한 배치 적용</h3>
+        <p className={styles.sectionDescription}>
+          {placement === "compiled" ? "컴파일러 결과" : "원래 AWS 배치"}를 확인한 뒤 원하는 적용
+          방식을 선택하세요.
+        </p>
         <div className={styles.buttonRow}>
           <button
             className={styles.primaryButton}
@@ -130,50 +206,13 @@ export function ReverseEngineeringResultPanel({
           ) : null}
         </div>
         {applyMessage ? (
-          <p className={applyState === "error" ? styles.error : styles.success}>
+          <p
+            className={applyState === "error" ? styles.error : styles.success}
+            role={applyState === "error" ? "alert" : "status"}
+          >
             {applyMessage}
           </p>
         ) : null}
-      </section>
-
-      <section className={styles.compilationReview} aria-label="보드 정리 검토">
-        <div className={styles.compilationReviewHeader}>
-          <h3>보드 정리 검토</h3>
-          <strong>{compilationReview.changeCount}개 변경 제안</strong>
-        </div>
-        <div className={styles.compilationStats}>
-          <span>
-            정리 점수 ↓
-            <strong>
-              {formatCompilationScore(compilationReview.quality.before.score)} → {" "}
-              {formatCompilationScore(compilationReview.quality.after.score)}
-            </strong>
-          </span>
-          <span>
-            변경 거리
-            <strong>{formatCompilationScore(compilationReview.quality.compilationDistance)}</strong>
-          </span>
-        </div>
-        {compilationReview.diagnostics.length > 0 ? (
-          <ul className={styles.compilationDiagnostics}>
-            {compilationReview.diagnostics.map((presentation) => (
-              <li key={presentation.code} data-level={presentation.level}>
-                <strong>{presentation.summary}</strong>
-                <span>{presentation.message}</span>
-              </li>
-            ))}
-            {compilationReview.hiddenDiagnosticCount > 0 ? (
-              <li className={styles.compilationDiagnosticRemainder}>
-                진단 {compilationReview.hiddenDiagnosticCount}개 더 있음
-              </li>
-            ) : null}
-          </ul>
-        ) : (
-          <p className={styles.compilationHint}>확인할 진단이 없습니다.</p>
-        )}
-        <p className={styles.compilationProvenance}>
-          근거: {compilationReview.referenceTemplateIds.join(" · ") || "일반 배치 규칙"}
-        </p>
       </section>
 
       <ReverseEngineeringDetailGroup title="부분 실패">
@@ -206,6 +245,77 @@ export function ReverseEngineeringResultPanel({
         <ReverseEngineeringLogList logs={logs} />
       </ReverseEngineeringDetailGroup>
     </>
+  );
+}
+
+function ReverseEngineeringCompilationModeReview({
+  proposal,
+  title
+}: {
+  readonly proposal: ArchitectureBoardCompilationProposal;
+  readonly title: string;
+}) {
+  const review = createReverseEngineeringCompilationReview(proposal);
+
+  return (
+    <article className={styles.compilationModeReview} aria-label={`${title} 배치 결과`}>
+      <div className={styles.compilationReviewHeader}>
+        <div>
+          <span>{title}</span>
+          <h3>{review.outcome.headline}</h3>
+        </div>
+        <strong>{review.changeCount}개 변경</strong>
+      </div>
+      <p className={styles.compilationReviewSummary}>{review.outcome.reviewSummary}</p>
+      {review.outcome.items.length > 0 ? (
+        <ul className={styles.compilationOutcomes}>
+          {review.outcome.items.map((item) => (
+            <li data-tone={item.tone} key={item.key}>
+              <span>{item.label}</span>
+              <strong>{item.summary}</strong>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className={styles.compilationHint}>추적 지표에서 표시할 배치 문제가 없습니다.</p>
+      )}
+      {review.diagnostics.length > 0 ? (
+        <ul className={styles.compilationDiagnostics}>
+          {review.diagnostics.map((presentation) => (
+            <li key={presentation.key} data-level={presentation.level}>
+              <strong>{presentation.summary}</strong>
+              <span>{presentation.message}</span>
+            </li>
+          ))}
+          {review.hiddenDiagnosticCount > 0 ? (
+            <li className={styles.compilationDiagnosticRemainder}>
+              확인 항목 {review.hiddenDiagnosticCount}개 더 있음
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+      <details className={styles.compilationTechnical}>
+        <summary>기술 세부 정보</summary>
+        <div className={styles.compilationTechnicalBody}>
+          <dl>
+            <div>
+              <dt>내부 cost (낮을수록 우선)</dt>
+              <dd>
+                {formatCompilationScore(review.quality.before.score)} →{" "}
+                {formatCompilationScore(review.quality.after.score)}
+              </dd>
+            </div>
+            <div>
+              <dt>변경 cost</dt>
+              <dd>{formatCompilationScore(review.quality.compilationDistance)}</dd>
+            </div>
+          </dl>
+          <p>후보: {proposal.provenance.candidateId}</p>
+          <p>Compiler: {proposal.provenance.compilerVersion}</p>
+          <p>참고 규칙: {review.referenceTemplateIds.join(" · ") || "일반 배치 규칙"}</p>
+        </div>
+      </details>
+    </article>
   );
 }
 
@@ -253,9 +363,7 @@ function ReverseEngineeringScanCoveragePanel({
 
   return (
     <div>
-      <p className={scanErrors.length > 0 ? styles.warning : styles.hint}>
-        {notice}
-      </p>
+      <p className={scanErrors.length > 0 ? styles.warning : styles.hint}>{notice}</p>
       {scanErrors.length > 0 ? (
         <details className={styles.detail}>
           <summary className={styles.detailSummary}>못 읽은 서비스 자세히 보기</summary>
@@ -263,14 +371,17 @@ function ReverseEngineeringScanCoveragePanel({
             <ul className={styles.resultList}>
               {scanErrors.map((scanError, index) => (
                 <li key={`${scanError.id}-${index}`} className={styles.resultItem}>
-                  <strong>{formatReverseEngineeringResourceTypeLabel(scanError.resourceType)}</strong>
+                  <strong>
+                    {formatReverseEngineeringResourceTypeLabel(scanError.resourceType)}
+                  </strong>
                   <span className={styles.errorBadge}>읽기 실패</span>
                   <span>{scanError.message}</span>
                   <span>{formatRetryableStatus(scanError.retryable)}</span>
                   <details className={styles.diagnosticDetails}>
                     <summary>진단 정보</summary>
                     <span>
-                      stage: {scanError.stage} · reason: {scanError.reason} · retryable: {String(scanError.retryable)}
+                      stage: {scanError.stage} · reason: {scanError.reason} · retryable:{" "}
+                      {String(scanError.retryable)}
                     </span>
                   </details>
                 </li>
@@ -326,7 +437,11 @@ function UnsupportedResourceList({ resources }: { readonly resources: Discovered
 }
 
 // 이번 스캔에서 발견한 Resource는 사람이 읽는 이름과 상태만 기본 목록에 보여줍니다.
-function DiscoveredResourcePreview({ resources }: { readonly resources: readonly DiscoveredResource[] }) {
+function DiscoveredResourcePreview({
+  resources
+}: {
+  readonly resources: readonly DiscoveredResource[];
+}) {
   if (resources.length === 0) {
     return <p className={styles.hint}>아직 발견한 Resource가 없습니다.</p>;
   }
@@ -362,7 +477,11 @@ function ResourceListIdentity({ resource }: { readonly resource: DiscoveredResou
 }
 
 // 스캔 진행 중 서버가 남긴 단계별 로그를 시간 순서대로 보여줍니다.
-function ReverseEngineeringLogList({ logs }: { readonly logs: readonly ReverseEngineeringScanLogLine[] }) {
+function ReverseEngineeringLogList({
+  logs
+}: {
+  readonly logs: readonly ReverseEngineeringScanLogLine[];
+}) {
   if (logs.length === 0) {
     return <p className={styles.hint}>표시할 로그가 없습니다.</p>;
   }

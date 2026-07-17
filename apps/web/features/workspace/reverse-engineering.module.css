@@ -252,25 +252,106 @@ button.candidateCardSelected {
   border-bottom: 0;
 }
 
+.placementDecision {
+  background: linear-gradient(145deg, #f7f9ff 0%, var(--reverse-surface) 72%);
+  border-bottom: 1px solid var(--reverse-line);
+  display: grid;
+  gap: 14px;
+  padding: 20px 18px;
+}
+
+.placementDecisionHeader {
+  display: grid;
+  gap: 7px;
+}
+
+.placementDecisionHeader h3 {
+  color: var(--reverse-text);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.placementBadge {
+  background: #edf2ff;
+  border: 1px solid #c7d5ff;
+  border-radius: 999px;
+  color: #284b9b;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+  padding: 5px 8px;
+  width: fit-content;
+}
+
+.placementDescription,
+.placementSaveBoundary {
+  color: var(--reverse-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  word-break: keep-all;
+}
+
+.placementSaveBoundary {
+  background: var(--reverse-surface-muted);
+  border-left: 3px solid #8da4d8;
+  padding: 9px 10px;
+}
+
+.placementActions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.placementActions button[aria-pressed="true"] {
+  box-shadow: 0 0 0 3px rgba(40, 75, 155, 0.14);
+}
+
 .compilationReview {
   background: var(--reverse-surface-muted);
   border-bottom: 1px solid var(--reverse-line);
   display: grid;
-  gap: 10px;
+  gap: 12px;
   padding: 18px;
 }
 
+.compilationModeReview {
+  background: var(--reverse-surface);
+  border: 1px solid var(--reverse-line-strong);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 15px;
+}
+
 .compilationReviewHeader {
-  align-items: baseline;
+  align-items: flex-start;
   display: flex;
   gap: 12px;
   justify-content: space-between;
 }
 
+.compilationReviewHeader > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.compilationReviewHeader span {
+  color: #284b9b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
 .compilationReviewHeader h3 {
   color: var(--reverse-text);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 750;
   line-height: 1.4;
   margin: 0;
 }
@@ -282,43 +363,54 @@ button.candidateCardSelected {
   text-align: right;
 }
 
-.compilationStats {
-  border: 1px solid var(--reverse-line-strong);
-  border-radius: 8px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  overflow: hidden;
-}
-
-.compilationStats > span {
-  background: var(--reverse-surface);
-  color: var(--reverse-muted);
-  display: flex;
-  flex-direction: column-reverse;
-  font-size: 12px;
-  gap: 4px;
-  min-width: 0;
-  padding: 11px;
-}
-
-.compilationStats > span + span {
-  border-left: 1px solid var(--reverse-line);
-}
-
-.compilationStats strong {
-  color: var(--reverse-text);
-  font-size: 14px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.compilationHint,
-.compilationProvenance {
+.compilationReviewSummary,
+.compilationHint {
   color: var(--reverse-muted);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.compilationOutcomes {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compilationOutcomes li {
+  align-items: center;
+  background: var(--reverse-surface-muted);
+  border-left: 3px solid var(--reverse-line-strong);
+  border-radius: 6px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.compilationOutcomes li[data-tone="improved"] {
+  border-left-color: var(--reverse-success);
+}
+
+.compilationOutcomes li[data-tone="regressed"] {
+  border-left-color: var(--reverse-error);
+}
+
+.compilationOutcomes span {
+  color: var(--reverse-muted);
+  font-size: 12px;
+  min-width: 0;
+}
+
+.compilationOutcomes strong {
+  color: var(--reverse-text);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .compilationDiagnostics {
@@ -365,6 +457,53 @@ button.candidateCardSelected {
   display: block;
 }
 
+.compilationTechnical {
+  border-top: 1px solid var(--reverse-line);
+  color: var(--reverse-muted);
+  font-size: 12px;
+  padding-top: 2px;
+}
+
+.compilationTechnical > summary {
+  cursor: pointer;
+  font-weight: 700;
+  list-style-position: inside;
+  min-height: 38px;
+  padding-top: 10px;
+}
+
+.compilationTechnical > summary:focus-visible {
+  outline: 3px solid rgba(13, 116, 206, 0.38);
+  outline-offset: 2px;
+}
+
+.compilationTechnicalBody {
+  background: var(--reverse-surface-muted);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.compilationTechnicalBody dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.compilationTechnicalBody dl > div {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.compilationTechnicalBody dd,
+.compilationTechnicalBody p {
+  color: var(--reverse-text);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .section h3,
 .detailSummary,
 .fieldLabel {
@@ -403,6 +542,12 @@ button.candidateCardSelected {
   background: var(--reverse-accent-active);
   border-color: var(--reverse-accent-active);
   outline: none;
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.iconButton:focus-visible {
+  box-shadow: 0 0 0 3px rgba(40, 75, 155, 0.22);
 }
 
 .secondaryButton {
@@ -949,6 +1094,20 @@ button.candidateCardSelected {
   .summaryStats > span + span {
     border-top: 1px solid var(--reverse-line);
   }
+
+  .placementActions {
+    grid-template-columns: 1fr;
+  }
+
+  .compilationReviewHeader,
+  .compilationOutcomes li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .compilationReviewHeader > strong {
+    text-align: left;
+  }
 }
 
 @media (max-width: 760px) {
@@ -958,6 +1117,8 @@ button.candidateCardSelected {
 
   .panelHeader,
   .section,
+  .placementDecision,
+  .compilationReview,
   .inspectorHeader {
     padding: 14px;
   }
