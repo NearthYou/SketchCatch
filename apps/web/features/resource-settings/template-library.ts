@@ -736,7 +736,7 @@ const brainboardBoardTemplates: readonly AvailableBoardTemplate[] = brainboardTe
   .map((entry) => {
     const evidence = entry.source;
     const descriptions: Readonly<Record<string, string>> = {
-      "[Training] AWS onboarding": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
+      "AWS onboarding": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
       "AWS Kubernetes cluster with native CNIs": "AWS에서 EKS 클러스터와 노드 그룹, 네이티브 VPC CNI 네트워크를 구성합니다. 클러스터와 노드 그룹에 필요한 IAM 역할을 포함하며, 인터넷 게이트웨이를 통해 서브넷으로 트래픽을 전달합니다.",
       "AWS VPC with subnet and security groups on 2 AZs": "여러 서비스와 인스턴스, 데이터베이스를 호스팅할 수 있는 기본 네트워크 구성입니다. 하나의 리전에 있는 두 가용 영역과 VPC, 서브넷, 보안 그룹으로 구성하며 필요에 따라 가용 영역을 추가할 수 있습니다.",
       "AWS serverless architecture with CDN": "S3와 API Gateway, CloudFront를 사용해 정적 콘텐츠를 제공하는 서버리스 아키텍처입니다.",
