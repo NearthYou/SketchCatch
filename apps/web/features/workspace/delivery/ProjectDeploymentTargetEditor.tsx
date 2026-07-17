@@ -23,6 +23,7 @@ import {
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
   formatDeploymentTargetUpdatedAt,
+  getDeploymentTargetOutputUrlSummary,
   getLockedSystemFields,
   getLockedSystemFieldsAfterRuntimeChange,
   getMissingDeploymentTargetFieldKeys,
@@ -260,15 +261,16 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
     onDirty?.();
-    setLockedSystemFields(getLockedSystemFieldsAfterRuntimeChange);
-    setDraft((current) =>
-      changeDeploymentTargetRuntime(
-        current,
-        runtimeTargetKind,
-        sourceRepository,
-        initialRepositoryAnalysisTarget
-      )
+    const nextDraft = changeDeploymentTargetRuntime(
+      draft,
+      runtimeTargetKind,
+      sourceRepository,
+      initialRepositoryAnalysisTarget
     );
+    setLockedSystemFields((current) =>
+      getLockedSystemFieldsAfterRuntimeChange(current, nextDraft.commitSha)
+    );
+    setDraft(nextDraft);
     setMessage("");
   }
 
@@ -348,7 +350,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
             실행 방식 <em>필수</em>
           </span>
           <select
-            disabled={requestState === "saving"}
+            disabled={requestState === "loading" || requestState === "saving"}
             onChange={(event) => changeRuntime(event.target.value as RuntimeTargetKind)}
             value={draft.runtimeTargetKind}
           >
@@ -395,7 +397,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
           </div>
           <div>
             <dt>공개 주소</dt>
-            <dd>{draft.outputUrl || "첫 배포 후 자동 입력"}</dd>
+            <dd>{getDeploymentTargetOutputUrlSummary(draft)}</dd>
           </div>
           {target ? (
             <div>
@@ -412,6 +414,11 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         updateDraft={updateDraft}
       />
 
+      {requestState === "loading" ? (
+        <p className="dashboardMessage" role="status">
+          배포 타깃 정보를 불러오는 중입니다.
+        </p>
+      ) : null}
       {verifiedConnections.length === 0 && requestState !== "loading" ? (
         <p className="dashboardMessage" role="status">
           검증된 AWS connection이 필요합니다.

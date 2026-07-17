@@ -536,9 +536,19 @@ export function getLockedSystemFields(
 }
 
 export function getLockedSystemFieldsAfterRuntimeChange(
-  current: ReadonlySet<SystemManagedField>
+  current: ReadonlySet<SystemManagedField>,
+  nextCommitSha: string
 ): ReadonlySet<SystemManagedField> {
-  return new Set(current.has("commitSha") ? ["commitSha"] : []);
+  return new Set(current.has("commitSha") && nextCommitSha.trim() ? ["commitSha"] : []);
+}
+
+export function getDeploymentTargetOutputUrlSummary(
+  draft: Pick<ProjectDeploymentTargetDraft, "runtimeTargetKind" | "outputUrl">
+): string {
+  if (draft.outputUrl.trim()) return draft.outputUrl.trim();
+  return draft.runtimeTargetKind === "ecs_fargate"
+    ? "첫 배포 후 자동 입력"
+    : "저장 전 입력 필요";
 }
 
 export function formatDeploymentTargetUpdatedAt(value: string): string {

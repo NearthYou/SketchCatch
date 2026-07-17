@@ -7,6 +7,7 @@ import {
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
   createEcsFargateDeploymentDefaults,
+  getDeploymentTargetOutputUrlSummary,
   getLockedSystemFields,
   getLockedSystemFieldsAfterRuntimeChange,
   getMissingDeploymentTargetFieldKeys,
@@ -53,7 +54,10 @@ test("editor keeps required decisions visible and moves inferred values behind a
   assert.match(advancedSettingsSource, /<details className=\{styles\.advancedSettings\}>/);
   assert.match(advancedSettingsSource, /<span>Source root<\/span>/);
   assert.match(advancedSettingsSource, /readOnly=\{lockedSystemFields\.has\("commitSha"\)\}/);
-  assert.match(editorSource, /setLockedSystemFields\(getLockedSystemFieldsAfterRuntimeChange\)/);
+  assert.match(
+    editorSource,
+    /getLockedSystemFieldsAfterRuntimeChange\(current, nextDraft\.commitSha\)/
+  );
   assert.match(advancedSettingsSource, /Output URL/);
   assert.match(advancedSettingsSource, /readOnly=\{draft\.runtimeTargetKind === "ecs_fargate"\}/);
   assert.doesNotMatch(
@@ -170,9 +174,48 @@ test("inferred system values stay editable while confirmed SHA remains locked ac
   assert.equal(inferredLocks.has("commitSha"), true);
   assert.equal(inferredLocks.has("clusterName"), false);
   assert.deepEqual(
-    [...getLockedSystemFieldsAfterRuntimeChange(new Set(["commitSha", "clusterName"]))],
+    [
+      ...getLockedSystemFieldsAfterRuntimeChange(
+        new Set(["commitSha", "clusterName"]),
+        "a".repeat(40)
+      )
+    ],
     ["commitSha"]
   );
+  assert.deepEqual(
+    [...getLockedSystemFieldsAfterRuntimeChange(new Set(["commitSha"]), "")],
+    []
+  );
+});
+
+test("output URL summary distinguishes automatic ECS output from required external URLs", () => {
+  assert.equal(
+    getDeploymentTargetOutputUrlSummary({ runtimeTargetKind: "ecs_fargate", outputUrl: "" }),
+    "첫 배포 후 자동 입력"
+  );
+  assert.equal(
+    getDeploymentTargetOutputUrlSummary({ runtimeTargetKind: "lambda", outputUrl: "" }),
+    "저장 전 입력 필요"
+  );
+  assert.equal(
+    getDeploymentTargetOutputUrlSummary({
+      runtimeTargetKind: "static_site",
+      outputUrl: "https://example.com"
+    }),
+    "https://example.com"
+  );
+});
+
+test("editor blocks both required decisions while deployment target data is loading", () => {
+  const runtimeSelectStart = editorSource.indexOf("실행 방식 <em>필수</em>");
+  const runtimeSelectEnd = editorSource.indexOf("</select>", runtimeSelectStart);
+  const runtimeSelectSource = editorSource.slice(runtimeSelectStart, runtimeSelectEnd);
+
+  assert.match(
+    runtimeSelectSource,
+    /disabled=\{requestState === "loading" \|\| requestState === "saving"\}/
+  );
+  assert.match(editorSource, /배포 타깃 정보를 불러오는 중입니다\./);
 });
 
 test("ECS defaults are immediately saveable without a fabricated output URL", () => {
