@@ -19,8 +19,10 @@ import {
   type DeploymentPlanArtifactRecord,
   type DeploymentRecord,
   type DeploymentRepository,
-  type ProjectAccessContext
+  type ProjectAccessContext,
+  type ReleaseCandidateRecord
 } from "./deployment-service.js";
+import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
 
 export type ApproveDeploymentPlanInput = {
   deploymentId: string;
@@ -40,6 +42,8 @@ export type AssertDeploymentApplyPreconditionsInput = {
   currentTerraformArtifactHash: string;
   currentTfplanHash: string;
   currentAwsConnection: AwsConnection;
+  currentReleaseCandidate?: ReleaseCandidateRecord | undefined;
+  now?: Date | undefined;
 };
 
 export type AssertDeploymentDestroyPreconditionsInput = AssertDeploymentApplyPreconditionsInput & {
@@ -52,6 +56,7 @@ export type DeploymentApplyPreconditionReason =
   | "plan_operation"
   | "terraform_artifact"
   | "terraform_plan"
+  | "release_candidate"
   | "aws_account"
   | "aws_region";
 
@@ -156,6 +161,11 @@ export async function approveDeploymentPlan(
     throw new DeploymentConflictError("Terraform artifact changed after plan");
   }
 
+  if (currentPlanArtifact.operation === "apply") {
+    const releaseCandidate = await findCurrentReleaseCandidate(deployment, repository);
+    assertReleaseCandidateSnapshot(deployment, releaseCandidate, now());
+  }
+
   const approvedDeployment = await repository.approveDeployment(deployment.id, {
     approvedByUserId: input.accessContext.userId,
     approvedAt: now(),
@@ -189,6 +199,12 @@ export function assertDeploymentApplyPreconditions(
 
   assertDeploymentApprovalSnapshot(deployment, "apply");
   assertPreparedSnapshotMatchesApproval(deployment, "apply");
+  assertReleaseCandidateSnapshot(
+    deployment,
+    input.currentReleaseCandidate,
+    input.now ?? new Date(),
+    true
+  );
 
   if (input.currentPlanArtifact.operation !== "apply") {
     throw new DeploymentApplyPreconditionError(
@@ -441,6 +457,57 @@ async function requireDeploymentAwsConnection(
     ...awsConnection,
     accountId: awsConnection.accountId
   };
+}
+
+async function findCurrentReleaseCandidate(
+  deployment: DeploymentRecord,
+  repository: DeploymentRepository
+): Promise<ReleaseCandidateRecord | undefined> {
+  if (deployment.scope === "infrastructure") return undefined;
+  if (!deployment.releaseCandidateId || !repository.findReleaseCandidateById) {
+    throw new DeploymentConflictError(
+      "A finalized ReleaseCandidate is required before application approval"
+    );
+  }
+  return repository.findReleaseCandidateById(deployment.releaseCandidateId);
+}
+
+function assertReleaseCandidateSnapshot(
+  deployment: DeploymentRecord,
+  candidate: ReleaseCandidateRecord | undefined,
+  now: Date,
+  requireApprovedSnapshot = false
+): void {
+  if (deployment.scope === "infrastructure") return;
+  if (
+    !candidate ||
+    candidate.id !== deployment.releaseCandidateId ||
+    candidate.projectId !== deployment.projectId ||
+    candidate.deploymentId !== deployment.id ||
+    candidate.pipelineRunId !== null ||
+    candidate.status !== "pending" ||
+    candidate.expiresAt <= now
+  ) {
+    throw new DeploymentApplyPreconditionError(
+      "release_candidate",
+      "ReleaseCandidate changed or expired; run preflight and approve the new result"
+    );
+  }
+  const expectedSnapshot = createPreparedReleaseSnapshotHash({
+    candidateId: candidate.id,
+    commitSha: candidate.commitSha,
+    compositeDigest: candidate.compositeDigest,
+    configFingerprint: candidate.configFingerprint
+  });
+  if (
+    deployment.preparedSnapshotHash !== expectedSnapshot ||
+    (requireApprovedSnapshot && deployment.approvedPreparedSnapshotHash !== expectedSnapshot)
+  ) {
+    throw new DeploymentApplyPreconditionError(
+      "release_candidate",
+      "Approved ReleaseCandidate digest or build configuration no longer matches"
+    );
+  }
 }
 
 function createSha256(value: Buffer | Uint8Array | string): string {

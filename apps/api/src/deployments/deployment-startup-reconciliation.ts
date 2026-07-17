@@ -31,6 +31,16 @@ export type DeploymentStartupReconciliationResult = {
   recoveredDeploymentCount: number;
 };
 
+export type InterruptedApplicationReleaseRecovery = (input: {
+  excludeDeploymentIds: readonly string[];
+  onlyDeploymentIds?: readonly string[];
+  stopActiveCodeBuild?: boolean;
+}) => Promise<{
+  recoveredDeploymentIds: string[];
+  protectedDeploymentIds?: string[];
+  retryDeploymentIds: string[];
+}>;
+
 export async function reconcileDeploymentStartup(
   input: {
     workerMode: DeploymentWorkerMode;
@@ -40,12 +50,28 @@ export async function reconcileDeploymentStartup(
   jobs: DeploymentStartupJobStore,
   deployments: InterruptedDeploymentRecoveryStore,
   inspectTask: InspectDeploymentWorkerTask,
-  logger?: DeploymentStartupReconciliationLogger
+  logger?: DeploymentStartupReconciliationLogger,
+  recoverApplicationReleases?: InterruptedApplicationReleaseRecovery
 ): Promise<DeploymentStartupReconciliationResult> {
   if (input.workerMode === "in_process") {
-    const recoveredDeployments = await deployments.recoverInterruptedDeployments();
+    const applicationRecovery = recoverApplicationReleases
+      ? await recoverApplicationReleases({ excludeDeploymentIds: [] })
+      : { recoveredDeploymentIds: [], retryDeploymentIds: [] };
+    const protectedIds = [
+      ...applicationRecovery.recoveredDeploymentIds,
+      ...(applicationRecovery.protectedDeploymentIds ?? []),
+      ...applicationRecovery.retryDeploymentIds
+    ];
+    const recoveredDeployments = await deployments.recoverInterruptedDeployments(
+      protectedIds.length > 0 ? { excludeDeploymentIds: protectedIds } : undefined
+    );
 
-    return createResult({ recoveredDeploymentCount: recoveredDeployments.length });
+    return createResult({
+      deferredInspectionCount: applicationRecovery.retryDeploymentIds.length,
+      recoveryRetryCount: applicationRecovery.retryDeploymentIds.length,
+      recoveredDeploymentCount:
+        applicationRecovery.recoveredDeploymentIds.length + recoveredDeployments.length
+    });
   }
 
   const activeJobs = await jobs.listActiveDeploymentJobs();
@@ -62,18 +88,6 @@ export async function reconcileDeploymentStartup(
         recoveryRetryCount += 1;
         continue;
       }
-
-      const failedJob = await jobs.failDeploymentJob(job.id, {
-        errorSummary: createMissingTaskSummary(job, input.dispatchGracePeriodMs)
-      });
-      if (failedJob) {
-        failedJobCount += 1;
-      } else {
-        protectedDeploymentIds.add(job.deploymentId);
-        deferredInspectionCount += 1;
-        recoveryRetryCount += 1;
-      }
-      continue;
     }
 
     let inspection: InspectDeploymentWorkerResult;
@@ -110,7 +124,9 @@ export async function reconcileDeploymentStartup(
 
     const failedJob = await jobs.failDeploymentJob(job.id, {
       errorSummary: maskDeploymentMessage(
-        `ECS worker task is ${inspection.state}; lastStatus=${inspection.lastStatus ?? "unknown"}`
+        job.ecsTaskArn
+          ? `ECS worker task is ${inspection.state}; lastStatus=${inspection.lastStatus ?? "unknown"}`
+          : createMissingTaskSummary(job, input.dispatchGracePeriodMs)
       )
     });
     if (failedJob) {
@@ -122,6 +138,21 @@ export async function reconcileDeploymentStartup(
     }
   }
 
+  const applicationRecovery = recoverApplicationReleases
+    ? await recoverApplicationReleases({
+        excludeDeploymentIds: [...protectedDeploymentIds]
+      })
+    : { recoveredDeploymentIds: [], retryDeploymentIds: [] };
+  for (const deploymentId of [
+    ...applicationRecovery.recoveredDeploymentIds,
+    ...(applicationRecovery.protectedDeploymentIds ?? []),
+    ...applicationRecovery.retryDeploymentIds
+  ]) {
+    protectedDeploymentIds.add(deploymentId);
+  }
+  deferredInspectionCount += applicationRecovery.retryDeploymentIds.length;
+  recoveryRetryCount += applicationRecovery.retryDeploymentIds.length;
+
   const recoveredDeployments = await deployments.recoverInterruptedDeployments({
     excludeDeploymentIds: [...protectedDeploymentIds]
   });
@@ -131,7 +162,8 @@ export async function reconcileDeploymentStartup(
     deferredInspectionCount,
     failedJobCount,
     recoveryRetryCount,
-    recoveredDeploymentCount: recoveredDeployments.length
+    recoveredDeploymentCount:
+      applicationRecovery.recoveredDeploymentIds.length + recoveredDeployments.length
   };
 }
 

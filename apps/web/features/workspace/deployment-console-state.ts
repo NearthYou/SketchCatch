@@ -1,4 +1,9 @@
-import type { AiPreDeploymentAnalysisResult, CheckFinding, Deployment } from "@sketchcatch/types";
+import type {
+  AiPreDeploymentAnalysisResult,
+  CheckFinding,
+  Deployment,
+  ProjectBuildEnvironmentStatus
+} from "@sketchcatch/types";
 import type { RequestState } from "./workspace-right-panel.types";
 
 export type DirectDeploymentStepId = "validation" | "approval" | "deployment";
@@ -22,9 +27,12 @@ export type DirectDeploymentActionState = {
   readonly canApply: boolean;
   readonly canApprovePlan: boolean;
   readonly canRunApplyPlan: boolean;
+  readonly canRunDestroyPlan: boolean;
   readonly shouldShowApplyButton: boolean;
   readonly shouldShowApprovePlanButton: boolean;
   readonly shouldShowApplyPlanButton: boolean;
+  readonly shouldShowDestroyButton: boolean;
+  readonly shouldShowDestroyPlanButton: boolean;
 };
 
 export type DirectDeploymentSummary = Pick<
@@ -65,6 +73,14 @@ export type DirectDeploymentPreflightInput = {
   readonly errorMessage: string;
   readonly hasStaleAnalysis: boolean;
   readonly requestState: RequestState;
+};
+
+export type DeploymentBuildEnvironmentTarget = Pick<Deployment, "scope" | "targetKind">;
+
+export type DeploymentPlanActionLabelInput = {
+  readonly buildEnvironmentStatus: ProjectBuildEnvironmentStatus | null;
+  readonly deployment: DeploymentBuildEnvironmentTarget | null;
+  readonly isLoading: boolean;
 };
 
 const STEP_META: Readonly<
@@ -114,6 +130,28 @@ export function getDirectDeploymentPreflightState(
   return "passed";
 }
 
+export function requiresProjectBuildEnvironment(
+  deployment: DeploymentBuildEnvironmentTarget | null
+): boolean {
+  return Boolean(
+    deployment &&
+      deployment.scope !== "infrastructure" &&
+      deployment.targetKind === "ecs_fargate"
+  );
+}
+
+export function getDeploymentPlanActionLabel(input: DeploymentPlanActionLabelInput): string {
+  const needsPreparation =
+    requiresProjectBuildEnvironment(input.deployment) &&
+    input.buildEnvironmentStatus !== "ready";
+
+  if (input.isLoading) {
+    return needsPreparation ? "빌드 환경 준비 및 Plan 생성 중" : "Plan 생성 중";
+  }
+
+  return needsPreparation ? "빌드 환경 준비 후 Plan 생성" : "Plan 생성";
+}
+
 function isBlockingPreDeploymentFinding(finding: CheckFinding | undefined): boolean {
   if (!finding) {
     return true;
@@ -123,25 +161,46 @@ function isBlockingPreDeploymentFinding(finding: CheckFinding | undefined): bool
 }
 
 export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): DirectDeploymentFlow {
+  const deployment = input.deployment;
+  const usesSavedCleanupSnapshot =
+    input.actions.shouldShowDestroyPlanButton || input.actions.shouldShowDestroyButton;
   const validation = getValidationStep(input);
   if (
-    input.hasUnsavedBaseline ||
-    input.preflightState === "idle" ||
-    input.preflightState === "loading" ||
-    input.preflightState === "blocked" ||
-    input.preflightState === "error" ||
-    !input.deployment ||
-    !input.deployment.currentPlanArtifactId
+    !deployment ||
+    (!usesSavedCleanupSnapshot &&
+      (input.hasUnsavedBaseline ||
+        input.preflightState === "idle" ||
+        input.preflightState === "loading" ||
+        input.preflightState === "blocked" ||
+        input.preflightState === "error" ||
+        !deployment.currentPlanArtifactId))
   ) {
     return createFlow("validation", validation, idleApproval(), idleDeployment());
   }
 
-  const completedValidation =
-    input.preflightState === "warning"
+  const completedValidation = usesSavedCleanupSnapshot
+    ? step("validation", "done", "저장된 배포 사용")
+    : input.preflightState === "warning"
       ? step("validation", "warning", "주의 항목 있음")
       : step("validation", "done", "검증 완료");
 
-  if (!input.deployment.approvedAt) {
+  if (usesSavedCleanupSnapshot && deployment.currentPlanOperation !== "destroy") {
+    return createFlow(
+      "deployment",
+      completedValidation,
+      step("approval", "idle", "Destroy Plan 후 진행", "Destroy Plan을 먼저 생성하세요."),
+      step(
+        "deployment",
+        input.requestState === "loading" ? "running" : "active",
+        input.requestState === "loading" ? "Destroy Plan 생성 중" : "Destroy Plan 필요",
+        input.actions.canRunDestroyPlan || input.requestState === "loading"
+          ? null
+          : "저장된 배포 state를 확인하세요."
+      )
+    );
+  }
+
+  if (!deployment.approvedAt) {
     return createFlow(
       "approval",
       completedValidation,
@@ -155,7 +214,7 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
     );
   }
 
-  const finalState = getDeploymentState(input.deployment.status, input.requestState);
+  const finalState = getDeploymentState(deployment.status, input.requestState);
   return createFlow(
     "deployment",
     completedValidation,
@@ -163,7 +222,7 @@ export function getDirectDeploymentFlow(input: DirectDeploymentFlowInput): Direc
     step(
       "deployment",
       finalState,
-      getDeploymentStatusLabel(input.deployment.status, input.deployment.currentPlanOperation),
+      getDeploymentStatusLabel(deployment.status, deployment.currentPlanOperation),
       input.actions.canApply || finalState !== "active"
         ? null
         : "승인 snapshot과 실행 대상을 확인하세요."
@@ -229,6 +288,7 @@ function getDeploymentState(
 ): DirectDeploymentStepState {
   if (status === "RUNNING" || requestState === "loading") return "running";
   if (status === "FAILED" || status === "CANCELLED") return "error";
+  if (status === "PARTIALLY_FAILED" || status === "PARTIALLY_CANCELED") return "warning";
   if (status === "SUCCESS" || status === "DESTROYED") return "done";
   return "active";
 }
@@ -241,6 +301,8 @@ function getDeploymentStatusLabel(
   if (status === "RUNNING") return `${action} 중`;
   if (status === "FAILED") return `${action} 실패`;
   if (status === "CANCELLED") return `${action} 취소됨`;
+  if (status === "PARTIALLY_FAILED") return "웹 배포 부분 실패";
+  if (status === "PARTIALLY_CANCELED") return "웹 배포 부분 취소";
   if (status === "SUCCESS") return "배포 완료";
   if (status === "DESTROYED") return "정리 완료";
   return `${action} 실행 가능`;

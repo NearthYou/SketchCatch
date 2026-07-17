@@ -22,8 +22,9 @@ import { requireActiveUserId } from "../auth/current-user.js";
 import { getDatabaseClient, type DatabaseClient } from "../db/client.js";
 import {
   applyGitCicdAwsRoleDiff,
+  applyGitCicdAwsRoleDiffUsingProjectConnection,
   AwsRoleDiffApplyError,
-  createIamAwsRoleDiffGateway,
+  createPostgresAwsRoleDiffConnectionRepository,
   type AwsRoleDiffGateway
 } from "../git-cicd/aws-role-diff-apply-service.js";
 import {
@@ -262,6 +263,7 @@ type GitCicdHandoffRouteOptions = {
 
 type GitCicdHandoffRequestContext = {
   accessContext: ProjectAccessContext;
+  db: DatabaseClient["db"];
   repository: GitCicdHandoffRepository;
   provider: GitCicdHandoffProvider;
 };
@@ -705,21 +707,24 @@ export async function registerGitCicdHandoffRoutes(
 
   app.post("/git-cicd-handoffs/:handoffId/aws-role-diff/apply", async (request, reply) => {
     const params = handoffParamsSchema.parse(request.params);
-    const { accessContext, repository } = await getGitCicdHandoffRequestContext(
+    const { accessContext, db, repository } = await getGitCicdHandoffRequestContext(
       request,
       options,
       getGitCicdDatabaseClient
     );
 
     try {
-      const response: GitCicdAwsRoleDiffApplyResponse = await applyGitCicdAwsRoleDiff(
-        {
-          handoffId: params.handoffId,
-          accessContext
-        },
-        repository,
-        options?.awsRoleDiffGateway ?? createIamAwsRoleDiffGateway()
-      );
+      const input = {
+        handoffId: params.handoffId,
+        accessContext
+      };
+      const response: GitCicdAwsRoleDiffApplyResponse = options?.awsRoleDiffGateway
+        ? await applyGitCicdAwsRoleDiff(input, repository, options.awsRoleDiffGateway)
+        : await applyGitCicdAwsRoleDiffUsingProjectConnection(
+            input,
+            repository,
+            createPostgresAwsRoleDiffConnectionRepository(db)
+          );
 
       return reply.status(200).send(response);
     } catch (error) {
@@ -1022,14 +1027,55 @@ async function requireAccessiblePipelineRun(
 
 function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
   return {
-    ...row,
+    id: row.id,
+    projectId: row.projectId,
+    infrastructureDeploymentId: row.infrastructureDeploymentId,
+    sourceRepositoryId: row.sourceRepositoryId,
+    handoffId: row.handoffId,
+    executionKind: row.executionKind,
+    githubWorkflowRunId: row.githubWorkflowRunId,
+    githubWorkflowRunAttempt: row.githubWorkflowRunAttempt,
+    commitSha: row.commitSha,
+    commitMessage: row.commitMessage,
+    branch: row.branch,
+    changeScope: row.changeScope,
+    status: row.status,
+    statusMessage: row.statusMessage,
+    pipelineRunUrl: row.pipelineRunUrl,
+    appUrl: row.appUrl,
+    apiUrl: row.apiUrl,
     startedAt: row.startedAt?.toISOString() ?? null,
     finishedAt: row.finishedAt?.toISOString() ?? null,
+    upstreamOrderingToken: row.upstreamOrderingToken,
+    logRevision: row.logRevision,
     lastRefreshedAt: row.lastRefreshedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     release: row.release
       ? {
-          ...row.release,
+          id: row.release.id,
+          projectId: row.release.projectId,
+          artifactId: row.release.artifactId,
+          deploymentId: row.release.deploymentId,
+          pipelineRunId: row.release.pipelineRunId,
+          source: row.release.source,
+          runtimeTargetKind: row.release.runtimeTargetKind,
+          runtimeAdapterKind: row.release.runtimeAdapterKind,
+          deploymentTargetFingerprint: row.release.deploymentTargetFingerprint,
+          convergenceOutcome: row.release.convergenceOutcome,
+          version: row.release.version,
+          commitSha: row.release.commitSha,
+          artifactDigestAlgorithm: row.release.artifactDigestAlgorithm,
+          artifactDigest: row.release.artifactDigest,
+          releaseCandidateId: row.release.releaseCandidateId,
+          compositeDigest: row.release.compositeDigest,
+          providerRevision: row.release.providerRevision,
+          frontendEvidence: row.release.frontendEvidence,
+          failureStage: row.release.failureStage,
+          baselineReleaseId: row.release.baselineReleaseId,
+          outputUrl: row.release.outputUrl,
+          status: row.release.status,
+          healthEvidence: row.release.healthEvidence,
+          rollbackEvidence: row.release.rollbackEvidence,
           startedAt: row.release.startedAt?.toISOString() ?? null,
           completedAt: row.release.completedAt?.toISOString() ?? null,
           createdAt: row.release.createdAt.toISOString(),
@@ -1037,7 +1083,11 @@ function toGitCicdPipelineRun(row: PipelineRunWithStages): GitCicdPipelineRun {
         }
       : null,
     stages: row.stages.map((stage) => ({
-      ...stage,
+      id: stage.id,
+      pipelineRunId: stage.pipelineRunId,
+      kind: stage.kind,
+      status: stage.status,
+      runUrl: stage.runUrl,
       startedAt: stage.startedAt?.toISOString() ?? null,
       finishedAt: stage.finishedAt?.toISOString() ?? null
     }))
@@ -1061,6 +1111,7 @@ async function getGitCicdHandoffRequestContext(
       kind: "user",
       userId: currentUserId
     },
+    db: client.db,
     repository:
       options?.createGitCicdHandoffRepository?.(client.db) ??
       createPostgresGitCicdHandoffRepository(client.db),

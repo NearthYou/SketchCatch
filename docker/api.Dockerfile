@@ -42,6 +42,7 @@ RUN apk add --no-cache ca-certificates curl tar \
 FROM node:24-alpine AS runner
 ARG TRIVY_VERSION
 WORKDIR /app
+RUN apk add --no-cache tar zstd
 ENV NODE_ENV=production
 ENV TRIVY_CACHE_DIR=/var/cache/sketchcatch/trivy
 ENV TRIVY_SKIP_CHECK_UPDATE=true

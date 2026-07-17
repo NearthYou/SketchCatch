@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  getDeploymentFailureDeveloperCheck,
   getDeploymentStatusPresentation,
   getRecentDeploymentResultTitle
 } from "./deployment-presentation";
@@ -21,6 +22,26 @@ test("deployment statuses use Korean labels and semantic tones", () => {
   assert.equal(getDeploymentStatusPresentation("PENDING").label, "대기 중");
   assert.equal(getDeploymentStatusPresentation("CANCELLED").label, "취소됨");
   assert.equal(getDeploymentStatusPresentation("DESTROYED").label, "정리 완료");
+  assert.deepEqual(getDeploymentStatusPresentation("PARTIALLY_FAILED"), {
+    label: "부분 실패",
+    tone: "error"
+  });
+  assert.deepEqual(getDeploymentStatusPresentation("PARTIALLY_CANCELED"), {
+    label: "부분 취소",
+    tone: "neutral"
+  });
+});
+
+test("development deployment failures name the concrete evidence developers must inspect", () => {
+  assert.match(
+    getDeploymentFailureDeveloperCheck("application_release", "development") ?? "",
+    /CodeBuild 로그.*ECR image digest.*ECS task health.*S3·CloudFront/u
+  );
+  assert.match(
+    getDeploymentFailureDeveloperCheck("plan", "development") ?? "",
+    /Terraform plan stderr.*state refresh/u
+  );
+  assert.equal(getDeploymentFailureDeveloperCheck("plan", "production"), null);
 });
 
 test("a failed unapproved run is presented as a validation result", () => {

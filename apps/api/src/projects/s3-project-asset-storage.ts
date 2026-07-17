@@ -61,6 +61,16 @@ export function createS3ProjectAssetStorage(
       );
     },
 
+    async deleteObjectVersion(input) {
+      await s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: input.objectKey,
+          VersionId: input.versionId
+        })
+      );
+    },
+
     async objectExists(input) {
       try {
         const object = await s3Client.send(

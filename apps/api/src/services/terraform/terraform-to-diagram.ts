@@ -18,6 +18,7 @@ import { isSilentlyPreservedTerraformBlockType } from "./terraform-configuration
 import { isSupportedTerraformFunctionExpression } from "./terraform-function-expressions.js";
 import {
   isGenericTerraformNestedBlock,
+  isTerraformLifecycleIgnoreChangesAttribute,
   isTerraformNestedBlockAttribute,
   isTerraformSingleNestedBlockAttribute
 } from "./terraform-nested-blocks.js";
@@ -1038,7 +1039,9 @@ function parseAttributes(
       valueText,
       bodyLine.line,
       resourceAddress,
-      terraformName === "depends_on"
+      terraformName === "depends_on",
+      resourceType !== undefined &&
+        isTerraformLifecycleIgnoreChangesAttribute(resourceType, terraformName, parentPath)
     );
 
     if (parsedValue.diagnostic) {
@@ -1160,7 +1163,8 @@ function parseAttributeValue(
   valueText: string,
   line: number,
   resourceAddress: string,
-  allowDependencyAddress = false
+  allowDependencyAddress = false,
+  allowBareIdentifier = false
 ): { value?: unknown; diagnostic?: TerraformDiagnostic } {
   const trimmedValueText = valueText.trim();
 
@@ -1168,7 +1172,7 @@ function parseAttributeValue(
     return { value: trimmedValueText };
   }
 
-  const parser = new HclValueParser(valueText, allowDependencyAddress);
+  const parser = new HclValueParser(valueText, allowDependencyAddress, allowBareIdentifier);
   const value = parser.parseValue();
 
   if (value.status === "unsupported") {
@@ -1222,7 +1226,8 @@ class HclValueParser {
 
   constructor(
     private readonly source: string,
-    private readonly allowDependencyAddress = false
+    private readonly allowDependencyAddress = false,
+    private readonly allowBareIdentifier = false
   ) {}
 
   parseValue(): ValueParseResult {
@@ -1415,7 +1420,8 @@ class HclValueParser {
 
     if (
       REFERENCE_PATTERN.test(literal) ||
-      (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal))
+      (this.allowDependencyAddress && DEPENDENCY_ADDRESS_PATTERN.test(literal)) ||
+      (this.allowBareIdentifier && IDENTIFIER_PATTERN.test(literal))
     ) {
       return { status: "ok", value: literal };
     }

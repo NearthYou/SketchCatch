@@ -1,5 +1,5 @@
 import { DeleteObjectCommand, type S3Client } from "@aws-sdk/client-s3";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type {
   DeleteProjectRequest,
   DeleteProjectResponse,
@@ -9,17 +9,26 @@ import type {
   ProjectDeleteCleanupStatus,
   ProjectDeletePreview
 } from "@sketchcatch/types";
+import type {
+  AwsConnectionRecord,
+  CleanupAwsConnectionManagedResources
+} from "../aws-connections/aws-connection-service.js";
 import type { Database } from "../db/client.js";
 import {
   architectures,
+  awsConnections,
   deployedResources,
+  deploymentJobs,
   deploymentLogs,
   deploymentPlanArtifacts,
   deployments,
   gitCicdHandoffs,
   projectAssets,
+  projectBuildEnvironments,
   projectDrafts,
+  projectExecutionLeases,
   projects,
+  releaseCandidates,
   terraformOutputs
 } from "../db/schema.js";
 import { buildDeploymentStateObjectKey } from "../deployments/deployment-apply-artifact-storage.js";
@@ -48,10 +57,19 @@ export type ProjectDeleteSnapshot = {
   deployments: ProjectDeleteDeploymentSummary[];
   planArtifacts: DeploymentPlanArtifactRecord[];
   projectAssets: ProjectAssetRecord[];
+  candidateObjectVersions: Array<{ objectKey: string; versionId: string }>;
+  hasActiveDeploymentJob: boolean;
+  hasActiveExecutionLease: boolean;
+  managedBuildEnvironment: {
+    connection: AwsConnectionRecord;
+    codeBuildProjectName: string;
+    codeBuildServiceRoleArn: string;
+  } | null;
 };
 
 export type ProjectDeletionStorage = {
   deleteObject(objectKey: string): Promise<void>;
+  deleteObjectVersion?(objectKey: string, versionId: string): Promise<void>;
 };
 
 export type CreateS3ProjectDeletionStorageOptions = {
@@ -65,6 +83,31 @@ export type DeleteProjectRecordsInput = {
   userId: string;
   action: DeleteProjectRequest["action"];
   storage: ProjectDeletionStorage;
+  cleanupManagedResources?: CleanupAwsConnectionManagedResources;
+  deletionGuard?: ProjectDeletionGuard;
+};
+
+export type ProjectDeletionClaim = {
+  startedAt: Date;
+};
+
+export type ProjectDeletionGuard = {
+  claim(input: {
+    projectId: string;
+    userId: string;
+    now: Date;
+  }): Promise<ProjectDeletionClaim | undefined>;
+  release(input: {
+    projectId: string;
+    userId: string;
+    claim: ProjectDeletionClaim;
+  }): Promise<void>;
+  markCleanupFailed?(input: {
+    projectId: string;
+    userId: string;
+    claim: ProjectDeletionClaim;
+    errorSummary: string;
+  }): Promise<void>;
 };
 
 export class ProjectDeletionNotFoundError extends Error {
@@ -85,6 +128,16 @@ export class ProjectDeletionConflictError extends Error {
   }
 }
 
+export class ProjectDeletionManagedCleanupError extends Error {
+  readonly statusCode = 502;
+  readonly errorCode = "managed_cleanup_failed";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ProjectDeletionManagedCleanupError";
+  }
+}
+
 export function createS3ProjectDeletionStorage(
   options: CreateS3ProjectDeletionStorageOptions
 ): ProjectDeletionStorage {
@@ -94,6 +147,15 @@ export function createS3ProjectDeletionStorage(
         new DeleteObjectCommand({
           Bucket: options.bucketName,
           Key: objectKey
+        })
+      );
+    },
+    async deleteObjectVersion(objectKey, versionId) {
+      await options.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: options.bucketName,
+          Key: objectKey,
+          VersionId: versionId
         })
       );
     }
@@ -125,20 +187,173 @@ export async function deleteProjectRecords(
 
   const preview = createProjectDeletePreview(snapshot);
   requireAllowedDeleteAction(preview, input.action);
-
-  const objectKeys = collectProjectDeletionObjectKeys(snapshot);
-  const failedObjectKeys = await deleteObjectsBestEffort(input.storage, objectKeys);
-
-  await deleteProjectDatabaseRows({
-    db: input.db,
-    deploymentIds: snapshot.deployments.map((deployment) => deployment.id),
+  const deletionGuard = input.deletionGuard ?? createPostgresProjectDeletionGuard(input.db);
+  const claim = await deletionGuard.claim({
     projectId: input.projectId,
-    userId: input.userId
+    userId: input.userId,
+    now: new Date()
   });
+  if (!claim) throw new ProjectDeletionNotFoundError();
 
+  try {
+    await cleanupProjectManagedBuildEnvironment(snapshot, input.cleanupManagedResources);
+    await cleanupCandidateObjectVersions(input.storage, snapshot.candidateObjectVersions);
+
+    const objectKeys = collectProjectDeletionObjectKeys(snapshot);
+    const failedObjectKeys = await deleteObjectsBestEffort(input.storage, objectKeys);
+
+    await deleteProjectDatabaseRows({
+      db: input.db,
+      deletionStartedAt: claim.startedAt,
+      deploymentIds: snapshot.deployments.map((deployment) => deployment.id),
+      projectId: input.projectId,
+      userId: input.userId
+    });
+
+    return {
+      deleted: true,
+      cleanup: createCleanupResult(objectKeys.length, failedObjectKeys.length)
+    };
+  } catch (error) {
+    await deletionGuard.markCleanupFailed?.({
+      projectId: input.projectId,
+      userId: input.userId,
+      claim,
+      errorSummary: error instanceof Error ? error.message : "Project cleanup failed"
+    });
+    throw error;
+  }
+}
+
+export function createPostgresProjectDeletionGuard(db: Database): ProjectDeletionGuard {
   return {
-    deleted: true,
-    cleanup: createCleanupResult(objectKeys.length, failedObjectKeys.length)
+    async claim(input) {
+      return db.transaction(async (transaction) => {
+        const [project] = await transaction
+          .select({
+            id: projects.id,
+            deletionStartedAt: projects.deletionStartedAt,
+            deletionErrorSummary: projects.deletionErrorSummary
+          })
+          .from(projects)
+          .where(and(eq(projects.id, input.projectId), eq(projects.userId, input.userId)))
+          .for("update");
+        if (!project) return undefined;
+        if (project.deletionStartedAt && project.deletionErrorSummary) {
+          const [reclaimed] = await transaction
+            .update(projects)
+            .set({ deletionErrorSummary: null, updatedAt: input.now })
+            .where(
+              and(
+                eq(projects.id, input.projectId),
+                eq(projects.userId, input.userId),
+                eq(projects.deletionStartedAt, project.deletionStartedAt)
+              )
+            )
+            .returning({ startedAt: projects.deletionStartedAt });
+          return reclaimed?.startedAt ? { startedAt: reclaimed.startedAt } : undefined;
+        }
+        if (project.deletionStartedAt) {
+          throw new ProjectDeletionConflictError("프로젝트 삭제가 이미 진행 중입니다.");
+        }
+
+        const [activeLease, runningDeployment, activeDeploymentJob, preparingBuildEnvironment] =
+          await Promise.all([
+          transaction
+            .select({ projectId: projectExecutionLeases.projectId })
+            .from(projectExecutionLeases)
+            .where(
+              and(
+                eq(projectExecutionLeases.projectId, input.projectId),
+                eq(projectExecutionLeases.status, "active")
+              )
+            )
+            .limit(1),
+          transaction
+            .select({ id: deployments.id })
+            .from(deployments)
+            .where(
+              and(
+                eq(deployments.projectId, input.projectId),
+                or(eq(deployments.status, "RUNNING"), isNotNull(deployments.activeStage))
+              )
+            )
+            .limit(1),
+          transaction
+            .select({ id: deploymentJobs.id })
+            .from(deploymentJobs)
+            .innerJoin(deployments, eq(deployments.id, deploymentJobs.deploymentId))
+            .where(
+              and(
+                eq(deployments.projectId, input.projectId),
+                inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING", "RUNNING"])
+              )
+            )
+            .limit(1),
+          transaction
+            .select({ id: projectBuildEnvironments.id })
+            .from(projectBuildEnvironments)
+            .where(
+              and(
+                eq(projectBuildEnvironments.projectId, input.projectId),
+                eq(projectBuildEnvironments.status, "preparing")
+              )
+            )
+            .limit(1)
+        ]);
+        if (
+          activeLease.length > 0 ||
+          runningDeployment.length > 0 ||
+          activeDeploymentJob.length > 0 ||
+          preparingBuildEnvironment.length > 0
+        ) {
+          throw new ProjectDeletionConflictError(
+            "현재 배포 또는 앱 릴리즈가 진행 중입니다. 완료되거나 취소된 뒤 프로젝트를 삭제해 주세요."
+          );
+        }
+
+        const [claimed] = await transaction
+          .update(projects)
+          .set({ deletionStartedAt: input.now, updatedAt: input.now })
+          .where(
+            and(
+              eq(projects.id, input.projectId),
+              eq(projects.userId, input.userId),
+              isNull(projects.deletionStartedAt)
+            )
+          )
+          .returning({ startedAt: projects.deletionStartedAt });
+        return claimed?.startedAt ? { startedAt: claimed.startedAt } : undefined;
+      });
+    },
+
+    async release(input) {
+      await db
+        .update(projects)
+        .set({ deletionStartedAt: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(projects.id, input.projectId),
+            eq(projects.userId, input.userId),
+            eq(projects.deletionStartedAt, input.claim.startedAt)
+          )
+        );
+    },
+    async markCleanupFailed(input) {
+      await db
+        .update(projects)
+        .set({
+          deletionErrorSummary: input.errorSummary.slice(0, 500),
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(projects.id, input.projectId),
+            eq(projects.userId, input.userId),
+            eq(projects.deletionStartedAt, input.claim.startedAt)
+          )
+        );
+    }
   };
 }
 
@@ -161,6 +376,21 @@ export function createProjectDeletePreview(snapshot: ProjectDeleteSnapshot): Pro
     (sum, deployment) => sum + deployment.resourceCount,
     0
   );
+
+  if (snapshot.hasActiveExecutionLease || snapshot.hasActiveDeploymentJob) {
+    return buildPreview({
+      activeDeploymentCount: activeResourceDeployments.length,
+      activeDeploymentId: null,
+      activeResourceCount,
+      availableActions: [],
+      hasDeploymentHistory,
+      hasPlanHistory,
+      latestDeploymentStatus: latestDeployment?.status ?? null,
+      message: "현재 앱 릴리즈 또는 CI/CD 배포가 진행 중입니다. 완료되거나 취소된 뒤 프로젝트를 삭제할 수 있습니다.",
+      mode: "blocked_running_deployment",
+      projectId: snapshot.projectId
+    });
+  }
 
   if (runningDeployments.length > 0) {
     return buildPreview({
@@ -298,7 +528,15 @@ async function loadProjectDeleteSnapshot(input: {
     .where(eq(deployments.projectId, input.projectId))
     .orderBy(desc(deployments.createdAt));
   const deploymentIds = deploymentRows.map((deployment) => deployment.id);
-  const [resourceRows, planArtifacts, assetRows] = await Promise.all([
+  const [
+    resourceRows,
+    planArtifacts,
+    assetRows,
+    buildEnvironmentRows,
+    candidateRows,
+    executionLeaseRows,
+    activeDeploymentJobRows
+  ] = await Promise.all([
     deploymentIds.length > 0
       ? input.db
           .select({ deploymentId: deployedResources.deploymentId })
@@ -311,8 +549,62 @@ async function loadProjectDeleteSnapshot(input: {
           .from(deploymentPlanArtifacts)
           .where(inArray(deploymentPlanArtifacts.deploymentId, deploymentIds))
       : [],
-    input.db.select().from(projectAssets).where(eq(projectAssets.projectId, input.projectId))
+    input.db.select().from(projectAssets).where(eq(projectAssets.projectId, input.projectId)),
+    input.db
+      .select({
+        awsConnectionId: projectBuildEnvironments.awsConnectionId,
+        codeBuildProjectName: projectBuildEnvironments.codeBuildProjectName,
+        codeBuildServiceRoleArn: projectBuildEnvironments.codeBuildServiceRoleArn
+      })
+      .from(projectBuildEnvironments)
+      .where(eq(projectBuildEnvironments.projectId, input.projectId)),
+    input.db
+      .select({
+        apiArchiveObjectKey: releaseCandidates.apiArchiveObjectKey,
+        apiArchiveObjectVersionId: releaseCandidates.apiArchiveObjectVersionId,
+        frontendArchiveObjectKey: releaseCandidates.frontendArchiveObjectKey,
+        frontendArchiveObjectVersionId: releaseCandidates.frontendArchiveObjectVersionId,
+        frontendManifestObjectKey: releaseCandidates.frontendManifestObjectKey,
+        frontendManifestObjectVersionId: releaseCandidates.frontendManifestObjectVersionId,
+        manifestObjectKey: releaseCandidates.manifestObjectKey,
+        manifestObjectVersionId: releaseCandidates.manifestObjectVersionId
+      })
+      .from(releaseCandidates)
+      .where(eq(releaseCandidates.projectId, input.projectId)),
+    input.db
+      .select({ projectId: projectExecutionLeases.projectId })
+      .from(projectExecutionLeases)
+      .where(
+        and(
+          eq(projectExecutionLeases.projectId, input.projectId),
+          eq(projectExecutionLeases.status, "active")
+        )
+      ),
+    deploymentIds.length > 0
+      ? input.db
+          .select({ id: deploymentJobs.id })
+          .from(deploymentJobs)
+          .where(
+            and(
+              inArray(deploymentJobs.deploymentId, deploymentIds),
+              inArray(deploymentJobs.status, ["QUEUED", "DISPATCHING", "RUNNING"])
+            )
+          )
+      : []
   ]);
+  const buildEnvironment = buildEnvironmentRows[0];
+  const buildEnvironmentConnectionId = buildEnvironment?.awsConnectionId;
+  const [managedConnection] = buildEnvironmentConnectionId
+    ? await input.db
+        .select()
+        .from(awsConnections)
+        .where(
+          and(
+            eq(awsConnections.id, buildEnvironmentConnectionId),
+            eq(awsConnections.userId, input.userId)
+          )
+        )
+    : [];
   const resourceCounts = new Map<string, number>();
 
   for (const resource of resourceRows) {
@@ -325,8 +617,89 @@ async function loadProjectDeleteSnapshot(input: {
       toProjectDeleteDeploymentSummary(deployment, resourceCounts.get(deployment.id) ?? 0)
     ),
     planArtifacts,
-    projectAssets: assetRows
+    projectAssets: assetRows,
+    candidateObjectVersions: candidateRows.flatMap((candidate) => [
+      {
+        objectKey: candidate.apiArchiveObjectKey,
+        versionId: candidate.apiArchiveObjectVersionId
+      },
+      {
+        objectKey: candidate.frontendArchiveObjectKey,
+        versionId: candidate.frontendArchiveObjectVersionId
+      },
+      {
+        objectKey: candidate.frontendManifestObjectKey,
+        versionId: candidate.frontendManifestObjectVersionId
+      },
+      {
+        objectKey: candidate.manifestObjectKey,
+        versionId: candidate.manifestObjectVersionId
+      }
+    ]),
+    hasActiveDeploymentJob: activeDeploymentJobRows.length > 0,
+    hasActiveExecutionLease: executionLeaseRows.length > 0,
+    managedBuildEnvironment:
+      buildEnvironment && managedConnection
+        ? {
+            connection: managedConnection,
+            codeBuildProjectName: buildEnvironment.codeBuildProjectName,
+            codeBuildServiceRoleArn: buildEnvironment.codeBuildServiceRoleArn
+          }
+        : null
   };
+}
+
+async function cleanupCandidateObjectVersions(
+  storage: ProjectDeletionStorage,
+  objects: ReadonlyArray<{ objectKey: string; versionId: string }>
+): Promise<void> {
+  const uniqueObjects = [
+    ...new Map(objects.map((object) => [`${object.objectKey}\0${object.versionId}`, object])).values()
+  ];
+  const results = await Promise.allSettled(
+    uniqueObjects.map((object) =>
+      storage.deleteObjectVersion
+        ? storage.deleteObjectVersion(object.objectKey, object.versionId)
+        : storage.deleteObject(object.objectKey)
+    )
+  );
+  if (results.some((result) => result.status === "rejected")) {
+    throw new ProjectDeletionManagedCleanupError(
+      "검증된 앱 산출물 정리에 실패했습니다. 내부 S3 상태를 확인한 뒤 다시 삭제해 주세요."
+    );
+  }
+}
+
+async function cleanupProjectManagedBuildEnvironment(
+  snapshot: ProjectDeleteSnapshot,
+  cleanupManagedResources: CleanupAwsConnectionManagedResources | undefined
+): Promise<void> {
+  const environment = snapshot.managedBuildEnvironment;
+  if (!environment) return;
+  if (!cleanupManagedResources) {
+    throw new ProjectDeletionManagedCleanupError(
+      "프로젝트 CodeBuild 정리 기능을 사용할 수 없어 프로젝트 삭제를 중단했습니다."
+    );
+  }
+  try {
+    await cleanupManagedResources({
+      connection: environment.connection,
+      resources: {
+        codeBuildProjects: [
+          {
+            projectId: snapshot.projectId,
+            projectName: environment.codeBuildProjectName,
+            serviceRoleArn: environment.codeBuildServiceRoleArn
+          }
+        ],
+        codeConnectionArn: null
+      }
+    });
+  } catch {
+    throw new ProjectDeletionManagedCleanupError(
+      "프로젝트 CodeBuild와 전용 IAM Role 정리에 실패했습니다. AWS 권한을 확인한 뒤 다시 삭제해 주세요."
+    );
+  }
 }
 
 function toProjectDeleteDeploymentSummary(
@@ -399,6 +772,7 @@ function collectProjectDeletionObjectKeys(snapshot: ProjectDeleteSnapshot): stri
 
 async function deleteProjectDatabaseRows(input: {
   db: Database;
+  deletionStartedAt: Date;
   deploymentIds: string[];
   projectId: string;
   userId: string;
@@ -434,7 +808,13 @@ async function deleteProjectDatabaseRows(input: {
     await tx.delete(architectures).where(eq(architectures.projectId, input.projectId));
     await tx
       .delete(projects)
-      .where(and(eq(projects.id, input.projectId), eq(projects.userId, input.userId)));
+      .where(
+        and(
+          eq(projects.id, input.projectId),
+          eq(projects.userId, input.userId),
+          eq(projects.deletionStartedAt, input.deletionStartedAt)
+        )
+      );
   });
 }
 

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import {
   createTerraformApplyArgs,
   createTerraformDestroyPlanArgs,
-  createTerraformPlanArgs
+  createTerraformPlanArgs,
+  createTerraformProcessEnv
 } from "./terraform-runner.js";
 
 test("Plan, destroy Plan, and Apply commands never use Terraform -target", () => {
@@ -14,6 +17,24 @@ test("Plan, destroy Plan, and Apply commands never use Terraform -target", () =>
   ];
 
   for (const command of commands) {
-    assert.equal(command.some((argument) => argument === "-target" || argument.startsWith("-target=")), false);
+    assert.equal(
+      command.some((argument) => argument === "-target" || argument.startsWith("-target=")),
+      false
+    );
   }
 });
+
+test(
+  "Terraform runner replaces a Windows-only plugin cache path on POSIX",
+  { skip: process.platform === "win32" },
+  () => {
+    const env = createTerraformProcessEnv(
+      {},
+      {
+        TF_PLUGIN_CACHE_DIR: "C:\\terraform-plugin-cache"
+      }
+    );
+
+    assert.equal(env.TF_PLUGIN_CACHE_DIR, join(tmpdir(), "sketchcatch-terraform-plugin-cache"));
+  }
+);

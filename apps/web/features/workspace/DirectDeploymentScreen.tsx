@@ -12,6 +12,7 @@ import type {
   DeploymentScope,
   DiagramJson,
   DeploymentLog,
+  ProjectBuildEnvironment,
   TerraformDiagnostic,
   TerraformSourceLocation,
   TerraformOutput
@@ -26,6 +27,7 @@ import {
   Clock3,
   Code2,
   Info,
+  RotateCw,
   ShieldCheck,
   Trash2
 } from "lucide-react";
@@ -37,6 +39,7 @@ import {
   cancelDeployment as cancelDeploymentRun,
   executeDeployment,
   getAiPreDeploymentDeepScan,
+  getProjectBuildEnvironment,
   listApplicationReleases,
   listAwsConnections,
   listDeploymentResources,
@@ -44,6 +47,9 @@ import {
   listDeployments,
   listTerraformOutputs,
   prepareDeployment,
+  prepareInfrastructureRollback,
+  prepareProjectBuildEnvironment,
+  retryDeploymentFrontend,
   runDeploymentInit,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
@@ -54,6 +60,7 @@ import {
 } from "./api";
 import {
   getDeploymentActionState,
+  getInfrastructureRollbackTarget,
   getDeploymentLogMessageTokens,
   getDeploymentLogTone,
   hasCompleteDeploymentApprovalSnapshot,
@@ -75,12 +82,15 @@ import { getDeploymentPreparationErrorMessage } from "./deployment-preparation-e
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
+  getDeploymentPlanActionLabel,
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
+  requiresProjectBuildEnvironment,
   shouldStartQueuedApplyPlan,
   type DirectDeploymentStepId
 } from "./deployment-console-state";
 import {
+  getDeploymentFailureDeveloperCheck,
   getDeploymentStatusPresentation,
   getRecentDeploymentResultTitle,
   type DeploymentStatusTone
@@ -104,6 +114,7 @@ type DeploymentRuntimeSnapshot = {
 };
 type DeploymentPanelSnapshot = DeploymentRuntimeSnapshot & {
   readonly awsConnections: AwsConnection[];
+  readonly buildEnvironment: ProjectBuildEnvironment | null;
 };
 
 export type DeploymentPreDeploymentCheckState = {
@@ -126,7 +137,9 @@ export type DirectDeploymentScreenProps = {
   readonly hasUnsavedDeploymentBaseline: boolean;
   readonly onCancel?: (() => void) | undefined;
   readonly onConfirmationStateChange?: ((isOpen: boolean) => void) | undefined;
+  readonly onApplyPlanApproved?: ((deployment: Deployment) => void) | undefined;
   readonly onOpenFindingTerraformSource: (finding: CheckFinding) => TerraformSourceLocation | null;
+  readonly onOpenLiveObservation?: (() => void) | undefined;
   readonly onPrepareDeploymentArtifacts: () => Promise<PreparedWorkspaceDeploymentArtifacts>;
   readonly onPreDeploymentCheckStateChange: Dispatch<
     SetStateAction<DeploymentPreDeploymentCheckState>
@@ -142,9 +155,11 @@ export function DirectDeploymentScreen({
   deploymentAvailability,
   diagramJson,
   hasUnsavedDeploymentBaseline,
+  onApplyPlanApproved,
   onCancel,
   onConfirmationStateChange,
   onOpenFindingTerraformSource,
+  onOpenLiveObservation,
   onPrepareDeploymentArtifacts,
   onPreDeploymentCheckStateChange,
   onValidateTerraformDiagnostics,
@@ -152,6 +167,8 @@ export function DirectDeploymentScreen({
   projectId
 }: DirectDeploymentScreenProps) {
   const [awsConnections, setAwsConnections] = useState<AwsConnection[]>([]);
+  const [buildEnvironment, setBuildEnvironment] =
+    useState<ProjectBuildEnvironment | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [applicationReleases, setApplicationReleases] = useState<ApplicationRelease[]>([]);
   const [deploymentLogs, setDeploymentLogs] = useState<DeploymentLog[]>([]);
@@ -166,6 +183,8 @@ export function DirectDeploymentScreen({
   const [queuedApplyPlanDeploymentId, setQueuedApplyPlanDeploymentId] = useState("");
   const [showApplyConfirmation, setShowApplyConfirmation] = useState(false);
   const [showDestroyConfirmation, setShowDestroyConfirmation] = useState(false);
+  const [showInfrastructureRollbackConfirmation, setShowInfrastructureRollbackConfirmation] =
+    useState(false);
   const [requestState, setRequestState] = useState<RequestState>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedDirectStepId, setSelectedDirectStepId] =
@@ -211,6 +230,17 @@ export function DirectDeploymentScreen({
   const selectedDeployment = useMemo(
     () => deployments.find((deployment) => deployment.id === selectedDeploymentId) ?? null,
     [deployments, selectedDeploymentId]
+  );
+  const selectedApplicationRelease = useMemo(
+    () =>
+      sortedApplicationReleases.find(
+        (release) => release.deploymentId === selectedDeployment?.id
+      ) ?? null,
+    [selectedDeployment?.id, sortedApplicationReleases]
+  );
+  const infrastructureRollbackTarget = useMemo(
+    () => getInfrastructureRollbackTarget(selectedDeployment, deployments),
+    [deployments, selectedDeployment]
   );
   const terraformOutputs = useMemo(
     () => getVisibleDeploymentOutputs(terraformOutputState, selectedDeploymentId),
@@ -267,6 +297,15 @@ export function DirectDeploymentScreen({
   const recentResultStage = selectedDeployment
     ? (selectedDeployment.failureStage ?? selectedDeployment.activeStage)
     : null;
+  const deploymentFailureDeveloperCheck = getDeploymentFailureDeveloperCheck(
+    selectedDeployment?.failureStage ?? null
+  );
+  const needsBuildEnvironment = requiresProjectBuildEnvironment(selectedDeployment);
+  const planActionLabel = getDeploymentPlanActionLabel({
+    buildEnvironmentStatus: buildEnvironment?.status ?? null,
+    deployment: selectedDeployment,
+    isLoading: requestState === "loading"
+  });
 
   useEffect(() => {
     setSelectedDirectStepId(directDeploymentFlow.activeStepId);
@@ -316,13 +355,23 @@ export function DirectDeploymentScreen({
   }, [shouldShowApplyButton]);
 
   useEffect(() => {
-    onConfirmationStateChange?.(showApplyConfirmation || showDestroyConfirmation);
-  }, [onConfirmationStateChange, showApplyConfirmation, showDestroyConfirmation]);
+    onConfirmationStateChange?.(
+      showApplyConfirmation ||
+        showDestroyConfirmation ||
+        showInfrastructureRollbackConfirmation
+    );
+  }, [
+    onConfirmationStateChange,
+    showApplyConfirmation,
+    showDestroyConfirmation,
+    showInfrastructureRollbackConfirmation
+  ]);
 
   useEffect(() => {
     if (confirmationDismissRequestId > 0) {
       setShowApplyConfirmation(false);
       setShowDestroyConfirmation(false);
+      setShowInfrastructureRollbackConfirmation(false);
     }
   }, [confirmationDismissRequestId]);
 
@@ -369,16 +418,18 @@ export function DirectDeploymentScreen({
   );
 
   const loadDeploymentPanelSnapshot = useCallback(async (): Promise<DeploymentPanelSnapshot> => {
-    const [nextConnections, runtimeSnapshot] = await Promise.all([
+    const [nextConnections, nextBuildEnvironment, runtimeSnapshot] = await Promise.all([
       listAwsConnections(),
+      getProjectBuildEnvironment(projectId),
       loadDeploymentRuntimeSnapshot()
     ]);
 
     return {
       ...runtimeSnapshot,
-      awsConnections: nextConnections
+      awsConnections: nextConnections,
+      buildEnvironment: nextBuildEnvironment
     };
-  }, [loadDeploymentRuntimeSnapshot]);
+  }, [loadDeploymentRuntimeSnapshot, projectId]);
 
   const applyDeploymentPanelSnapshot = useCallback(
     (snapshot: DeploymentPanelSnapshot): void => {
@@ -387,6 +438,7 @@ export function DirectDeploymentScreen({
       );
 
       setAwsConnections(snapshot.awsConnections);
+      setBuildEnvironment(snapshot.buildEnvironment);
       applyDeploymentRuntimeSnapshot(snapshot);
       setSelectedAwsConnectionId((currentId) =>
         snapshot.awsConnections.some((connection) => connection.id === currentId)
@@ -755,6 +807,18 @@ export function DirectDeploymentScreen({
       deploymentId: selectedDeployment.id
     });
     await runRequest(async () => {
+      if (requiresProjectBuildEnvironment(selectedDeployment)) {
+        const preparedBuildEnvironment =
+          buildEnvironment?.status === "ready"
+            ? buildEnvironment
+            : await prepareProjectBuildEnvironment(projectId);
+        setBuildEnvironment(preparedBuildEnvironment);
+        if (preparedBuildEnvironment.status !== "ready") {
+          throw new Error(
+            "빌드 환경 검증을 완료하지 못했습니다. GitHub 빌드 연결과 AWS 권한을 확인해 주세요."
+          );
+        }
+      }
       const deployment = await runDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>
@@ -792,6 +856,9 @@ export function DirectDeploymentScreen({
         )
       );
       setSelectedDeploymentId(deployment.id);
+      if (deployment.currentPlanOperation === "apply") {
+        onApplyPlanApproved?.(deployment);
+      }
       const [logs, resources, outputs] = await Promise.all([
         listDeploymentLogs(deployment.id),
         listDeploymentResources(deployment.id),
@@ -893,6 +960,42 @@ export function DirectDeploymentScreen({
     }, "Terraform Destroy를 시작하지 못했습니다.");
   }
 
+  async function startInfrastructureRollbackPlan(): Promise<void> {
+    if (!selectedDeployment || !infrastructureRollbackTarget || requestState === "loading") {
+      return;
+    }
+
+    dispatchTerraformOutputState({ type: "clear", deploymentId: null });
+    await runRequest(async () => {
+      const prepared = await prepareInfrastructureRollback(selectedDeployment.id);
+      setDeployments((currentDeployments) => [
+        prepared,
+        ...currentDeployments.filter((deployment) => deployment.id !== prepared.id)
+      ]);
+      setSelectedDeploymentId(prepared.id);
+      setDeploymentLogs([]);
+      setDeploymentResources([]);
+      setShowInfrastructureRollbackConfirmation(false);
+      setShowApplyConfirmation(false);
+      setShowDestroyConfirmation(false);
+
+      const planned = await runDeploymentPlan(prepared.id);
+      setDeployments((currentDeployments) =>
+        currentDeployments.map((deployment) =>
+          deployment.id === planned.id ? planned : deployment
+        )
+      );
+      const [logs, resources, outputs] = await Promise.all([
+        listDeploymentLogs(planned.id),
+        listDeploymentResources(planned.id),
+        listTerraformOutputs(planned.id)
+      ]);
+      setDeploymentLogs(logs);
+      setDeploymentResources(resources);
+      dispatchTerraformOutputState({ type: "loaded", deploymentId: planned.id, outputs });
+    }, "이전 인프라 버전의 Terraform Plan을 생성하지 못했습니다.");
+  }
+
   async function cancelSelectedDeployment(): Promise<void> {
     if (!selectedDeployment || !canCancelDeployment) {
       return;
@@ -913,6 +1016,20 @@ export function DirectDeploymentScreen({
       const logs = await listDeploymentLogs(deployment.id);
       setDeploymentLogs(logs);
     }, "Deployment 실행 취소를 요청하지 못했습니다.");
+  }
+
+  async function retrySelectedDeploymentFrontend(): Promise<void> {
+    if (
+      !selectedDeployment ||
+      selectedDeployment.status !== "PARTIALLY_FAILED" ||
+      selectedApplicationRelease?.status !== "partially_failed"
+    ) {
+      return;
+    }
+    await runRequest(async () => {
+      await retryDeploymentFrontend(selectedDeployment.id);
+      applyDeploymentRuntimeSnapshot(await loadDeploymentRuntimeSnapshot());
+    }, "웹 배포를 다시 시도하지 못했습니다.");
   }
 
   const renderSetupSection = () => {
@@ -987,6 +1104,14 @@ export function DirectDeploymentScreen({
                 <DeploymentSummaryItem label="Terraform Plan">
                   <DeploymentStatusBadge label={planStatus.label} tone={planStatus.tone} />
                 </DeploymentSummaryItem>
+                {needsBuildEnvironment ? (
+                  <DeploymentSummaryItem label="빌드 환경">
+                    <DeploymentStatusBadge
+                      label={formatBuildEnvironmentStatus(buildEnvironment)}
+                      tone={getBuildEnvironmentStatusTone(buildEnvironment)}
+                    />
+                  </DeploymentSummaryItem>
+                ) : null}
               </div>
               {selectedDeployment?.planSummary ? (
                 <PlanSummaryRows deployment={selectedDeployment} />
@@ -1037,7 +1162,7 @@ export function DirectDeploymentScreen({
                   type="button"
                 >
                   <DashboardIcon name="rocket" />
-                  {requestState === "loading" ? "Plan 생성 중" : "Plan 생성"}
+                  {planActionLabel}
                 </button>
               ) : null}
             </div>
@@ -1113,18 +1238,33 @@ export function DirectDeploymentScreen({
             ) : null}
             <OptionalInfoRow
               label="릴리즈"
-              value={
-                applicationReleases.find(
-                  (release) => release.deploymentId === selectedDeployment?.id
-                )?.version ?? null
-              }
+              value={selectedApplicationRelease?.version ?? null}
             />
           </div>
           {deploymentOutputLinks.length > 0 ? (
             <DeploymentOutputLinks
               links={deploymentOutputLinks}
+              onOpenLiveObservation={onOpenLiveObservation}
               scopeKey={selectedDeploymentId || null}
             />
+          ) : null}
+          {selectedDeployment?.status === "PARTIALLY_FAILED" &&
+          selectedApplicationRelease?.status === "partially_failed" ? (
+            <div className={styles.deploymentPartialFailureCallout} role="alert">
+              <AlertCircle size={18} aria-hidden="true" />
+              <div>
+                <strong>앱 API는 새 버전이지만 웹 화면 반영이 완료되지 않았습니다.</strong>
+                <p>
+                  현재 주소와 QR, Live Observation은 계속 사용할 수 있지만 웹 화면은 이전
+                  버전일 수 있습니다. 같은 검증 Artifact로 웹 배포 단계만 다시 실행합니다.
+                </p>
+                {selectedApplicationRelease.failureStage ? (
+                  <small>
+                    실패 단계: {formatApplicationReleaseFailureStage(selectedApplicationRelease.failureStage)}
+                  </small>
+                ) : null}
+              </div>
+            </div>
           ) : null}
           {showApplyConfirmation && selectedDeployment ? (
             <div className={styles.deploymentApplyConfirm}>
@@ -1179,6 +1319,39 @@ export function DirectDeploymentScreen({
               </div>
             </div>
           ) : null}
+          {showInfrastructureRollbackConfirmation &&
+          selectedDeployment &&
+          infrastructureRollbackTarget ? (
+            <div className={styles.deploymentApplyConfirm} role="dialog">
+              <h3>이전 인프라 버전으로 Plan 생성</h3>
+              <p>
+                {formatDate(infrastructureRollbackTarget.createdAt)}에 성공한 Terraform 구성을
+                현재 state에 대입해 새로운 Plan을 만듭니다.
+              </p>
+              <p>
+                예전 Plan을 재사용하거나 자동 Apply하지 않습니다. 새 Plan의 생성·변경·삭제
+                내용을 확인하고 다시 승인해야 합니다.
+              </p>
+              <div className={styles.deploymentApplyActions}>
+                <button
+                  className={styles.deploymentSecondaryButton}
+                  onClick={() => setShowInfrastructureRollbackConfirmation(false)}
+                  type="button"
+                >
+                  취소
+                </button>
+                <button
+                  className={styles.deploymentPrimaryButton}
+                  disabled={requestState === "loading"}
+                  onClick={() => void startInfrastructureRollbackPlan()}
+                  type="button"
+                >
+                  <RotateCw size={16} aria-hidden="true" />
+                  새 Rollback Plan 생성
+                </button>
+              </div>
+            </div>
+          ) : null}
           <div className={styles.deploymentStepActionBar}>
             <p>{selectedStep.disabledReason ?? deploymentActionHint}</p>
             {selectedDeployment?.status === "RUNNING" ? (
@@ -1189,6 +1362,30 @@ export function DirectDeploymentScreen({
                 type="button"
               >
                 실행 취소
+              </button>
+            ) : selectedDeployment?.status === "PARTIALLY_FAILED" &&
+              selectedApplicationRelease?.status === "partially_failed" ? (
+              <button
+                aria-busy={requestState === "loading"}
+                className={styles.deploymentPrimaryButton}
+                disabled={requestState === "loading"}
+                onClick={() => void retrySelectedDeploymentFrontend()}
+                type="button"
+              >
+                <RotateCw size={16} aria-hidden="true" />
+                {requestState === "loading"
+                  ? "웹 배포 다시 시도 중"
+                  : "같은 빌드 결과로 웹 배포 재시도"}
+              </button>
+            ) : infrastructureRollbackTarget ? (
+              <button
+                className={styles.deploymentPrimaryButton}
+                disabled={requestState === "loading"}
+                onClick={() => setShowInfrastructureRollbackConfirmation(true)}
+                type="button"
+              >
+                <RotateCw size={16} aria-hidden="true" />
+                이전 인프라 버전으로 Plan 생성
               </button>
             ) : shouldShowDestroyPlanButton ? (
               <button
@@ -1275,6 +1472,9 @@ export function DirectDeploymentScreen({
             <p className={styles.deploymentStageAlert} role="alert">
               {selectedDeployment.errorSummary ??
                 "배포가 실패했습니다. 배포 기록에서 원인을 확인하세요."}
+              {deploymentFailureDeveloperCheck
+                ? ` 개발자 확인: ${deploymentFailureDeveloperCheck}`
+                : ""}
             </p>
           ) : null}
         </article>
@@ -1316,7 +1516,12 @@ export function DirectDeploymentScreen({
               {selectedDeployment.errorSummary ? (
                 <p className={styles.deploymentRecentResultError}>
                   <AlertCircle size={16} aria-hidden="true" />
-                  <span>{selectedDeployment.errorSummary}</span>
+                  <span>
+                    {selectedDeployment.errorSummary}
+                    {deploymentFailureDeveloperCheck
+                      ? ` 개발자 확인: ${deploymentFailureDeveloperCheck}`
+                      : ""}
+                  </span>
                 </p>
               ) : null}
             </>
@@ -1354,6 +1559,7 @@ export function DirectDeploymentScreen({
         <>
           <DeploymentOutputLinks
             links={deploymentOutputLinks}
+            onOpenLiveObservation={onOpenLiveObservation}
             scopeKey={selectedDeploymentId || null}
           />
           <div className={styles.deploymentResultRows}>
@@ -1819,16 +2025,39 @@ function formatDeploymentStage(
 
   const labels: Record<NonNullable<Deployment["failureStage"]>, string> = {
     apply: "Terraform Apply",
+    application_release: "애플리케이션 릴리즈",
     approval: "승인",
     aws_connection: "AWS 연결",
+    build_environment: "빌드 환경 준비",
     destroy: "Terraform Destroy",
     init: "초기화",
     mock_run: "실행 점검",
     plan: "Terraform Plan",
+    preflight: "코드 사전 검증",
+    rollback: "애플리케이션 롤백",
     validate: "검증"
   };
 
   return labels[stage];
+}
+
+function formatBuildEnvironmentStatus(
+  buildEnvironment: ProjectBuildEnvironment | null
+): string {
+  if (!buildEnvironment) return "준비 필요";
+  if (buildEnvironment.status === "ready") return "사용 가능";
+  if (buildEnvironment.status === "preparing") return "준비 중";
+  if (buildEnvironment.status === "verification_failed") return "확인 실패";
+  return "AWS 재연결 필요";
+}
+
+function getBuildEnvironmentStatusTone(
+  buildEnvironment: ProjectBuildEnvironment | null
+): DeploymentStatusTone | "warning" {
+  if (buildEnvironment?.status === "ready") return "success";
+  if (buildEnvironment?.status === "preparing") return "running";
+  if (buildEnvironment?.status === "verification_failed") return "error";
+  return "warning";
 }
 
 function formatDeploymentSource(source: ApplicationRelease["source"]): string {
@@ -1841,12 +2070,37 @@ function formatApplicationReleaseStatus(status: ApplicationRelease["status"]): s
     cancelled: "취소됨",
     deploying: "배포 중",
     failed: "실패",
+    partially_cancelled: "부분 취소",
+    partially_failed: "부분 실패",
     pending: "대기 중",
+    retrying: "웹 배포 재시도 중",
     rolled_back: "롤백됨",
     succeeded: "성공"
   };
 
   return labels[status];
+}
+
+function formatApplicationReleaseFailureStage(
+  stage: NonNullable<ApplicationRelease["failureStage"]>
+): string {
+  const labels: Record<NonNullable<ApplicationRelease["failureStage"]>, string> = {
+    candidate_upload: "검증 Artifact 저장",
+    cloudfront_invalidation: "CloudFront 캐시 갱신",
+    ecr_publish: "ECR 이미지 반영",
+    ecs_activation: "ECS 새 버전 활성화",
+    ecs_health: "ECS Health Check",
+    frontend_activation: "웹 index 활성화",
+    frontend_upload: "웹 asset 업로드",
+    preflight_api_build: "API 사전 빌드",
+    preflight_api_health: "API 사전 Health Check",
+    preflight_checkout: "Repository checkout",
+    preflight_frontend_build: "웹 사전 빌드",
+    public_health: "공개 URL 최종 확인",
+    rollback: "ECS 자동 복구",
+    runtime_verification: "배포 Resource 재검증"
+  };
+  return labels[stage];
 }
 
 function getPrimaryDeploymentStepStatus(deployment: Deployment | null): string {

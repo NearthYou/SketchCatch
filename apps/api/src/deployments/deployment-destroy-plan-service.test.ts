@@ -180,6 +180,9 @@ class FakeDeploymentRepository implements DeploymentRepository {
 
   approveDeployment: DeploymentRepository["approveDeployment"] = async () => this.deployment;
 
+  saveDeploymentApplyResults: DeploymentRepository["saveDeploymentApplyResults"] = async () =>
+    this.deployment;
+
   completeDeploymentApply: DeploymentRepository["completeDeploymentApply"] = async () =>
     this.deployment;
 
@@ -529,11 +532,17 @@ function createDeploymentRecord(
     architectureId,
     terraformArtifactId,
     awsConnectionId,
+    awsAccountIdSnapshot: "123456789012",
+    awsRegionSnapshot: "ap-northeast-2",
+    awsConnectionNameSnapshot: "123456789012",
     liveProfile: "practice",
     scope: "infrastructure",
     targetKind: null,
     source: "direct",
     releaseId: null,
+    releaseCandidateId: null,
+    rollbackOfDeploymentId: null,
+    rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
     currentPlanArtifactId: planArtifactId,
@@ -591,6 +600,8 @@ function createProjectRecord(overrides: Partial<ProjectRecord> = {}): ProjectRec
     userId,
     name: "Test Project",
     description: null,
+    deletionStartedAt: null,
+    deletionErrorSummary: null,
     createdAt: fixedNow,
     updatedAt: fixedNow,
     ...overrides

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AiPreDeploymentAnalysisResult } from "@sketchcatch/types";
 import {
+  getDeploymentPlanActionLabel,
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
+  requiresProjectBuildEnvironment,
   shouldStartQueuedApplyPlan,
   type DirectDeploymentFlowInput
 } from "./deployment-console-state";
@@ -12,9 +14,12 @@ const idleActions = {
   canApply: false,
   canApprovePlan: false,
   canRunApplyPlan: false,
+  canRunDestroyPlan: false,
   shouldShowApplyButton: false,
   shouldShowApprovePlanButton: false,
-  shouldShowApplyPlanButton: false
+  shouldShowApplyPlanButton: false,
+  shouldShowDestroyButton: false,
+  shouldShowDestroyPlanButton: false
 };
 
 function createInput(
@@ -63,6 +68,53 @@ test("a created deployment without a plan advances to Plan", () => {
 
   assert.equal(flow.activeStepId, "validation");
   assert.equal(flow.steps[0]?.state, "active");
+});
+
+test("an ECS application plan prepares the project build environment only until it is ready", () => {
+  const deployment = {
+    scope: "full_stack" as const,
+    targetKind: "ecs_fargate" as const
+  };
+
+  assert.equal(requiresProjectBuildEnvironment(deployment), true);
+  assert.equal(
+    getDeploymentPlanActionLabel({
+      buildEnvironmentStatus: null,
+      deployment,
+      isLoading: false
+    }),
+    "빌드 환경 준비 후 Plan 생성"
+  );
+  assert.equal(
+    getDeploymentPlanActionLabel({
+      buildEnvironmentStatus: "ready",
+      deployment,
+      isLoading: false
+    }),
+    "Plan 생성"
+  );
+});
+
+test("infrastructure-only and non-ECS plans do not prepare an ECS build environment", () => {
+  assert.equal(
+    requiresProjectBuildEnvironment({ scope: "infrastructure", targetKind: "ecs_fargate" }),
+    false
+  );
+  assert.equal(
+    requiresProjectBuildEnvironment({ scope: "full_stack", targetKind: "lambda" }),
+    false
+  );
+});
+
+test("the Plan action names the build-environment work while the first request is running", () => {
+  assert.equal(
+    getDeploymentPlanActionLabel({
+      buildEnvironmentStatus: "preparing",
+      deployment: { scope: "application", targetKind: "ecs_fargate" },
+      isLoading: true
+    }),
+    "빌드 환경 준비 및 Plan 생성 중"
+  );
 });
 
 test("a warning Preflight still advances a created deployment to Plan", () => {
@@ -228,6 +280,55 @@ test("destroy uses the same approval and deployment phases", () => {
 
   assert.equal(flow.activeStepId, "approval");
   assert.equal(flow.steps[1]?.state, "active");
+});
+
+test("failed apply cleanup uses its saved deployment snapshot instead of the current Board state", () => {
+  const cleanupActions = {
+    ...idleActions,
+    canRunDestroyPlan: true,
+    shouldShowDestroyPlanButton: true
+  };
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: cleanupActions,
+      deployment: {
+        approvedAt: "2026-07-11T00:00:00.000Z",
+        currentPlanArtifactId: "apply-plan",
+        currentPlanOperation: "apply",
+        status: "FAILED"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[0]?.state, "done");
+  assert.equal(flow.steps[2]?.state, "active");
+});
+
+test("approved destroy cleanup keeps the execution step open when the current Board is unsaved", () => {
+  const cleanupActions = {
+    ...idleActions,
+    shouldShowDestroyButton: true
+  };
+  const flow = getDirectDeploymentFlow(
+    createInput({
+      actions: cleanupActions,
+      deployment: {
+        approvedAt: "2026-07-11T00:00:00.000Z",
+        currentPlanArtifactId: "destroy-plan",
+        currentPlanOperation: "destroy",
+        status: "FAILED"
+      },
+      hasUnsavedBaseline: true,
+      preflightState: "idle"
+    })
+  );
+
+  assert.equal(flow.activeStepId, "deployment");
+  assert.equal(flow.steps[0]?.state, "done");
+  assert.equal(flow.steps[2]?.state, "error");
 });
 
 test("a queued deployment starts its apply plan after init returns to PENDING", () => {

@@ -24,6 +24,7 @@ import {
 } from "./terraform-workspace.js";
 import {
   runTerraformInit as defaultRunTerraformInit,
+  terraformInitTimeoutMs,
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { maskDeploymentMessage } from "./log-masking.js";
@@ -155,7 +156,8 @@ export async function runDeploymentInit(
 
     const terraform = await runTerraformInit(workspace.workdir, {
       env: awsCredentials.env,
-      signal: input.abortSignal
+      signal: input.abortSignal,
+      timeoutMs: terraformInitTimeoutMs
     });
     let sequence = await getNextLogSequence(deployment.id, repository);
 

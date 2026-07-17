@@ -46,6 +46,13 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
+test("Direct Deployment keeps the URL visible and offers frontend-only retry after partial failure", () => {
+  assert.match(directDeploymentSource, /PARTIALLY_FAILED/);
+  assert.match(directDeploymentSource, /같은 빌드 결과로 웹 배포 재시도/);
+  assert.match(directDeploymentSource, /retryDeploymentFrontend\(selectedDeployment\.id\)/);
+  assert.match(directDeploymentSource, /현재 주소와 QR, Live Observation은 계속 사용할 수 있지만/);
+});
+
 test("Direct Deployment auto-selects the verified AWS connection without rendering a selector", () => {
   assert.doesNotMatch(directDeploymentSource, /ariaLabel="AWS 연결 선택"/);
   assert.match(directDeploymentSource, /awsConnectionId: selectedAwsConnectionId/);
