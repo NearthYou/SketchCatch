@@ -53,3 +53,30 @@ test("컴파일 점수는 불필요한 소수점 없이 읽기 좋게 표시한�
   assert.equal(formatCompilationScore(12), "12");
   assert.equal(formatCompilationScore(4.56), "4.6");
 });
+
+test("일반 Compiler 진단은 원본 식별자를 숨긴 화면용 안내로 투영한다", () => {
+  const rawDiagnostic = {
+    code: "compiler.invalid_containment_parent",
+    level: "warning" as const,
+    summary: "존재하지 않는 containment parent",
+    message: "Resource resource-vpc-0123456789abcdef0의 parent resource-i-0123456789abcdef0를 찾지 못했습니다.",
+    relatedChangeIds: ["configuration:resource-vpc-0123456789abcdef0"],
+    relatedResourceIds: ["resource-vpc-0123456789abcdef0", "resource-i-0123456789abcdef0"],
+    penalty: 1_000
+  };
+  const review = createReverseEngineeringCompilationReview({
+    ...proposal,
+    diagnostics: [rawDiagnostic]
+  });
+
+  assert.deepEqual(review.diagnostics, [
+    {
+      code: "compiler.invalid_containment_parent",
+      level: "warning",
+      summary: "Resource 배치 관계 확인 필요",
+      message: "Resource의 상위 배치 대상을 확인해 주세요."
+    }
+  ]);
+  assert.equal(rawDiagnostic.message.includes("resource-vpc-0123456789abcdef0"), true);
+  assert.equal(rawDiagnostic.relatedResourceIds[0], "resource-vpc-0123456789abcdef0");
+});

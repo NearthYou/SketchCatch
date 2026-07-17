@@ -53,6 +53,28 @@ test("uses a human-readable fallback for an ARN without a resource name", () => 
   );
 });
 
+test("does not use untagged VPC and EC2 provider IDs as display names", () => {
+  const vpcId = "vpc-0123456789abcdef0";
+  const instanceId = "i-0123456789abcdef0";
+
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: vpcId,
+      providerResourceId: vpcId,
+      providerResourceType: "AWS::EC2::VPC"
+    }),
+    "AWS EC2 VPC · abcdef0"
+  );
+  assert.equal(
+    createAwsResourceDisplayName({
+      displayName: instanceId,
+      providerResourceId: instanceId,
+      providerResourceType: "AWS::EC2::Instance"
+    }),
+    "AWS EC2 Instance · abcdef0"
+  );
+});
+
 test("distinguishes duplicate base names by the final seven original-ID characters", () => {
   const firstArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:checkout-abcdef1";
   const secondArn = "arn:aws:lambda:ap-northeast-2:123456789012:function:checkout-abcdef2";

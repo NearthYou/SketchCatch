@@ -184,6 +184,11 @@ function ReverseResourceInspector({
   const isReviewOnly = node.type === "UNKNOWN" || values["analysisExcluded"] === true;
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const coreValues = getInspectorCoreValues(node.type, values);
+  const displayName = getInspectorDisplayName(
+    node.label,
+    providerResourceId,
+    providerResourceType
+  );
 
   async function copyProviderResourceId(): Promise<void> {
     if (providerResourceId === "확인되지 않음") {
@@ -213,7 +218,7 @@ function ReverseResourceInspector({
           </button>
           <div className={styles.panelHeaderTitle}>
             <p className={styles.eyebrow}>Resource Inspector</p>
-            <h2>{getInspectorDisplayName(node.label)}</h2>
+            <h2>{displayName}</h2>
           </div>
         </div>
         <p className={styles.hint}>AWS에서 읽은 원본 값입니다. 이 화면에서는 변경하지 않습니다.</p>
@@ -225,7 +230,7 @@ function ReverseResourceInspector({
           <dl className={styles.identityList}>
             <div>
               <dt>이름</dt>
-              <dd>{getInspectorDisplayName(node.label)}</dd>
+              <dd>{displayName}</dd>
             </div>
             <div>
               <dt>AWS 서비스</dt>
@@ -297,12 +302,28 @@ function formatInspectorValue(value: unknown): string {
   return typeof value === "string" && value.trim().length > 0 ? value : "확인되지 않음";
 }
 
-function getInspectorDisplayName(label: string): string {
+function getInspectorDisplayName(
+  label: string,
+  providerResourceId: string,
+  providerResourceType: string
+): string {
   const displayName = label.replace(/^확인 필요 · /, "").trim();
 
-  return displayName.startsWith("arn:") || displayName.startsWith("resource-")
-    ? "이름 미확인 AWS Resource"
-    : displayName || "이름 미확인 AWS Resource";
+  return isHumanInspectorDisplayName(displayName, providerResourceId)
+    ? displayName
+    : `이름 미확인 ${getReverseEngineeringServiceLabel(providerResourceType)}`;
+}
+
+function isHumanInspectorDisplayName(displayName: string, providerResourceId: string): boolean {
+  return !(
+    !displayName ||
+    displayName === providerResourceId ||
+    displayName.startsWith("arn:") ||
+    displayName.startsWith("resource-") ||
+    /^(?:vpc|subnet|i|igw|rtb|sg|eni|nat|eipalloc|eipassoc|vol|ami|snap|acl|vpce)-[0-9a-f]{8,}$/i.test(
+      displayName
+    )
+  );
 }
 
 function getInspectorPurpose(resourceType: string, isReviewOnly: boolean): string {

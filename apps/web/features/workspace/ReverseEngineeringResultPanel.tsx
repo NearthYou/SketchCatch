@@ -156,10 +156,10 @@ export function ReverseEngineeringResultPanel({
         </div>
         {compilationReview.diagnostics.length > 0 ? (
           <ul className={styles.compilationDiagnostics}>
-            {compilationReview.diagnostics.map((diagnostic) => (
-              <li key={diagnostic.code} data-level={diagnostic.level}>
-                <strong>{diagnostic.summary}</strong>
-                <span>{diagnostic.message}</span>
+            {compilationReview.diagnostics.map((presentation) => (
+              <li key={presentation.code} data-level={presentation.level}>
+                <strong>{presentation.summary}</strong>
+                <span>{presentation.message}</span>
               </li>
             ))}
             {compilationReview.hiddenDiagnosticCount > 0 ? (

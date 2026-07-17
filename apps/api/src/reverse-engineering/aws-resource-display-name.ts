@@ -40,11 +40,27 @@ export function createAwsResourceDisplayNameMap(
 function createBaseDisplayName(input: AwsResourceDisplayNameInput): string {
   const displayName = input.displayName.trim();
 
-  if (displayName && !isArn(displayName)) {
+  if (isHumanDisplayName(displayName, input.providerResourceId)) {
     return displayName;
   }
 
   return extractArnResourceName(input.providerResourceId) ?? createFallbackDisplayName(input);
+}
+
+function isHumanDisplayName(displayName: string, providerResourceId: string): boolean {
+  return (
+    displayName.length > 0 &&
+    displayName !== providerResourceId &&
+    !isArn(displayName) &&
+    !displayName.startsWith("resource-") &&
+    !isAwsProviderId(displayName)
+  );
+}
+
+function isAwsProviderId(value: string): boolean {
+  return /^(?:vpc|subnet|i|igw|rtb|sg|eni|nat|eipalloc|eipassoc|vol|ami|snap|acl|vpce)-[0-9a-f]{8,}$/i.test(
+    value
+  );
 }
 
 function extractArnResourceName(providerResourceId: string): string | undefined {
