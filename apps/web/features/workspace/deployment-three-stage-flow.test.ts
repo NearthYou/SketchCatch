@@ -155,7 +155,7 @@ test("deployment action buttons use one size and fill only while active", () => 
   );
   assert.match(
     workspaceStyles,
-    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
+    /\.deploymentConsoleGrid > \.deploymentStepActionBar > button,[\s\S]*?font-size:\s*14px;[\s\S]*?height:\s*44px;[\s\S]*?justify-content:\s*center;[\s\S]*?justify-self:\s*start;[\s\S]*?min-width:\s*152px;[\s\S]*?width:\s*152px;/
   );
   assert.match(
     workspaceStyles,
