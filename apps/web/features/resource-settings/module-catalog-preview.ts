@@ -1,162 +1,103 @@
-import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
+import { resourceCatalog } from "./catalog";
 import type { CuratedModuleDefinition } from "./module-catalog";
 
-export type ModuleCatalogPreviewResource = {
-  readonly id: string;
-  readonly label: string;
-  readonly type: string;
-};
-
-export type ModuleCatalogPreviewRelationship = {
-  readonly id: string;
-  readonly label: string;
-  readonly sourceLabel: string;
-  readonly targetLabel: string;
-};
-
-export type ModuleCatalogPreviewInput = {
-  readonly name: string;
-  readonly type: string;
-};
-
-export type ModuleCatalogPreviewThumbnailNode = {
-  readonly id: string;
-  readonly label: string;
-  readonly x: number;
-  readonly y: number;
-};
-
-export type ModuleCatalogPreviewThumbnailEdge = {
-  readonly id: string;
-  readonly sourceNodeId: string;
-  readonly targetNodeId: string;
-};
-
 export type ModuleCatalogPreview = {
-  readonly resources: readonly ModuleCatalogPreviewResource[];
-  readonly relationships: readonly ModuleCatalogPreviewRelationship[];
-  readonly providers: readonly string[];
-  readonly inputs: readonly ModuleCatalogPreviewInput[];
-  /** Board Modules do not currently model Terraform output blocks. */
-  readonly outputs: readonly string[];
-  readonly version: string;
-  readonly thumbnail: {
-    readonly nodes: readonly ModuleCatalogPreviewThumbnailNode[];
-    readonly edges: readonly ModuleCatalogPreviewThumbnailEdge[];
-  };
+  readonly title: string;
+  readonly description: string;
+  readonly provider: "AWS";
+  readonly resourceCount: number;
+  readonly relationshipCount: number;
+  readonly resourceSummary: string;
 };
 
-/**
- * Produces only facts that the checked-in Board Module pattern owns. In particular, outputs stay
- * empty instead of inventing Terraform outputs from resource references.
- */
+const userCopyByModuleId: Readonly<Record<string, Pick<ModuleCatalogPreview, "title" | "description">>> = {
+  "container-image-delivery": {
+    title: "Container Image 준비",
+    description: "ECR 저장소와 ECS Task Definition, 실행 권한, 로그 설정을 함께 추가합니다."
+  },
+  "container-runtime": {
+    title: "ECS Container 실행",
+    description: "ECS Cluster, Task Definition, Service를 함께 추가합니다."
+  },
+  "identity-access-boundary": {
+    title: "IAM 사용자 권한",
+    description: "IAM 사용자와 Group을 만들고 사용자를 Group에 연결합니다."
+  },
+  "load-balanced-compute": {
+    title: "Auto Scaling 웹 서버",
+    description: "Classic Load Balancer와 Auto Scaling Group을 함께 추가합니다."
+  },
+  "network-foundation": {
+    title: "VPC 기본 네트워크",
+    description: "VPC에 Public·App·DB Subnet과 Internet/NAT 경로를 구성합니다."
+  },
+  "operations-monitoring": {
+    title: "Auto Scaling 모니터링",
+    description: "CPU 경보가 Auto Scaling 정책을 실행하도록 연결합니다."
+  },
+  "relational-data-layer": {
+    title: "RDS 데이터베이스",
+    description: "RDS와 DB Subnet, Security Group을 함께 추가합니다."
+  },
+  "secure-object-storage": {
+    title: "S3 버전 관리",
+    description: "S3 Bucket과 Versioning 설정을 함께 추가합니다."
+  },
+  "serverless-api": {
+    title: "Serverless API",
+    description: "API Gateway 요청을 Lambda 함수로 연결합니다."
+  },
+  "static-web-delivery": {
+    title: "Static Web 배포",
+    description: "S3의 웹 파일을 CloudFront로 제공하고 공개 접근을 제한합니다."
+  }
+};
+
 export function createModuleCatalogPreview(
   moduleDefinition: CuratedModuleDefinition
 ): ModuleCatalogPreview {
-  const resourceNodes = moduleDefinition.nodes.filter(({ kind }) => kind === "resource");
-  const resourceById = new Map(resourceNodes.map((node) => [node.id, node]));
-  const resources = resourceNodes.map((node) => ({
-    id: node.id,
-    label: node.label,
-    type: getResourceType(node)
-  }));
-  const relationships = moduleDefinition.edges.flatMap((edge) => {
-    const sourceNode = resourceById.get(edge.sourceNodeId);
-    const targetNode = resourceById.get(edge.targetNodeId);
+  const resources = moduleDefinition.nodes.filter(({ kind }) => kind === "resource");
+  const resourceIds = new Set(resources.map(({ id }) => id));
+  const copy = userCopyByModuleId[moduleDefinition.id];
 
-    if (!sourceNode || !targetNode) return [];
-
-    return [{
-      id: edge.id,
-      label: edge.label?.trim() || "연결",
-      sourceLabel: sourceNode.label,
-      targetLabel: targetNode.label
-    }];
-  });
-  const providers = [
-    ...new Set(
-      resourceNodes.flatMap((node) =>
-        getProviderLabel(
-          node.parameters?.terraformBlockType ?? "resource",
-          getResourceType(node)
-        )
-      )
-    )
-  ].sort(compareText);
+  if (!copy) {
+    throw new Error(`Missing user-facing Module copy: ${moduleDefinition.id}`);
+  }
 
   return {
-    resources,
-    relationships,
-    providers,
-    inputs: moduleDefinition.variables.map(({ name, type }) => ({ name, type })),
-    outputs: [],
-    version: moduleDefinition.version,
-    thumbnail: createThumbnail(resourceNodes, moduleDefinition.edges)
+    ...copy,
+    provider: "AWS",
+    resourceCount: resources.length,
+    relationshipCount: moduleDefinition.edges.filter(
+      ({ sourceNodeId, targetNodeId }) =>
+        resourceIds.has(sourceNodeId) && resourceIds.has(targetNodeId)
+    ).length,
+    resourceSummary: createResourceSummary(resources)
   };
 }
 
-function getResourceType(node: CuratedModuleDefinition["nodes"][number]): string {
-  return node.parameters?.resourceType ?? node.type;
+function createResourceSummary(
+  resources: readonly CuratedModuleDefinition["nodes"][number][]
+): string {
+  const names = [...new Set(resources.map(getPublicResourceName))];
+  const visibleNames = names.slice(0, 3).join(" · ");
+
+  if (names.length <= 3) return visibleNames;
+  return `${visibleNames} 외 ${names.length - 3}개`;
 }
 
-function getProviderLabel(
-  blockType: "resource" | "data",
-  resourceType: string
-): string[] {
-  const definition = getResourceDefinitionByTerraform(blockType, resourceType);
-  if (definition) return [definition.provider.toUpperCase()];
+function getPublicResourceName(
+  resource: CuratedModuleDefinition["nodes"][number]
+): string {
+  const catalogItemId = resource.metadata?.presentationCatalogItemId;
+  const catalogItem =
+    (catalogItemId ? resourceCatalog.find(({ id }) => id === catalogItemId) : undefined) ??
+    resourceCatalog.find(
+      (candidate) =>
+        (candidate.nodeDefaults.terraformBlockType ?? "resource") ===
+          (resource.parameters?.terraformBlockType ?? "resource") &&
+        candidate.nodeDefaults.type === (resource.parameters?.resourceType ?? resource.type)
+    );
 
-  const normalizedResourceType = resourceType.replace(/^data\./u, "");
-  const provider = normalizedResourceType.split("_", 1)[0];
-
-  if (!provider) return [];
-  return [provider === "aws" ? "AWS" : provider.toUpperCase()];
-}
-
-function createThumbnail(
-  resourceNodes: readonly CuratedModuleDefinition["nodes"][number][],
-  edges: readonly CuratedModuleDefinition["edges"][number][]
-): ModuleCatalogPreview["thumbnail"] {
-  if (resourceNodes.length === 0) return { nodes: [], edges: [] };
-
-  const nodeCenters = resourceNodes.map((node) => ({
-    id: node.id,
-    label: node.label,
-    x: node.position.x + node.size.width / 2,
-    y: node.position.y + node.size.height / 2
-  }));
-  const minX = Math.min(...nodeCenters.map(({ x }) => x));
-  const maxX = Math.max(...nodeCenters.map(({ x }) => x));
-  const minY = Math.min(...nodeCenters.map(({ y }) => y));
-  const maxY = Math.max(...nodeCenters.map(({ y }) => y));
-  const nodeIds = new Set(nodeCenters.map(({ id }) => id));
-
-  return {
-    nodes: nodeCenters.map((node) => ({
-      ...node,
-      x: scaleThumbnailCoordinate(node.x, minX, maxX, 18, 202),
-      y: scaleThumbnailCoordinate(node.y, minY, maxY, 18, 72)
-    })),
-    edges: edges.flatMap(({ id, sourceNodeId, targetNodeId }) =>
-      nodeIds.has(sourceNodeId) && nodeIds.has(targetNodeId)
-        ? [{ id, sourceNodeId, targetNodeId }]
-        : []
-    )
-  };
-}
-
-function scaleThumbnailCoordinate(
-  value: number,
-  min: number,
-  max: number,
-  start: number,
-  end: number
-): number {
-  if (min === max) return (start + end) / 2;
-  return start + ((value - min) / (max - min)) * (end - start);
-}
-
-function compareText(left: string, right: string): number {
-  if (left === right) return 0;
-  return left < right ? -1 : 1;
+  return catalogItem?.name ?? resource.label;
 }
