@@ -465,7 +465,7 @@
         "commands": [
           "pnpm --filter api exec tsx --test src/db/project-release-ledger-schema.test.ts src/releases/project-release-ledger-service.test.ts src/routes/project-release-ledger.test.ts src/source-repositories/repository-analysis.test.ts src/source-repositories/repository-analysis-failure.test.ts src/routes/git-cicd-handoffs.test.ts src/git-cicd/git-cicd-workflows.test.ts src/git-cicd/github-actions-run-provider.test.ts src/git-cicd/static-site-gitops-release-reconciler.test.ts",
           "pnpm --filter @sketchcatch/web exec tsx --test features/workspace/deployment-cicd-console-layout.test.ts features/workspace/workspace-right-panel-layout.test.ts",
-          "pnpm --dir apps/web exec tsx app/projects/[projectId]/settings/project-deployment-target-state.test.ts",
+          "pnpm --dir apps/web exec tsx --test features/workspace/delivery/project-deployment-target-state.test.ts",
           "generated static workflow run blocks validated with Git for Windows bash -n",
           "pnpm migration:compatibility:check",
           "pnpm --filter api db:migrate (temporary PostgreSQL 16, migrations 0000-0040)",

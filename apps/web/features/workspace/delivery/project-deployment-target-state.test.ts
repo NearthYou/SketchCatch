@@ -7,6 +7,8 @@ import {
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
   createEcsFargateDeploymentDefaults,
+  getLockedSystemFields,
+  getLockedSystemFieldsAfterRuntimeChange,
   getMissingDeploymentTargetFieldKeys,
   isDeploymentTargetDraftReady
 } from "./project-deployment-target-state.js";
@@ -28,6 +30,10 @@ const editorSource = readFileSync(
   new URL("./ProjectDeploymentTargetEditor.tsx", import.meta.url),
   "utf8"
 );
+const advancedSettingsSource = readFileSync(
+  new URL("./ProjectDeploymentTargetAdvancedSettings.tsx", import.meta.url),
+  "utf8"
+);
 const editorStyles = readFileSync(
   new URL("./project-deployment-target-editor.module.css", import.meta.url),
   "utf8"
@@ -39,25 +45,26 @@ test("shared editor preserves optional ECS web build defaults", () => {
 });
 
 test("editor keeps required decisions visible and moves inferred values behind advanced disclosure", () => {
-  const advancedSettingsIndex = editorSource.indexOf(
-    "<details className={styles.advancedSettings}>"
-  );
+  const advancedSettingsIndex = editorSource.indexOf("<ProjectDeploymentTargetAdvancedSettings");
   assert.ok(advancedSettingsIndex > 0);
   assert.ok(editorSource.indexOf("AWS 연결 <em>필수</em>") < advancedSettingsIndex);
   assert.ok(editorSource.indexOf("실행 방식 <em>필수</em>") < advancedSettingsIndex);
   assert.ok(editorSource.indexOf("자동 설정 결과") < advancedSettingsIndex);
-  assert.ok(editorSource.indexOf("<span>Source root</span>") > advancedSettingsIndex);
-  assert.match(editorSource, /readOnly=\{lockedSystemFields\.has\("commitSha"\)\}/);
-  assert.match(editorSource, /setLockedSystemFields\(new Set\(\)\)/);
-  const outputUrlIndex = editorSource.indexOf("Output URL <i>배포 후</i>");
-  assert.ok(outputUrlIndex > advancedSettingsIndex);
-  assert.ok(editorSource.indexOf("readOnly", outputUrlIndex) > outputUrlIndex);
-  assert.doesNotMatch(editorSource, /<details className=\{styles\.advancedSettings\} open/);
+  assert.match(advancedSettingsSource, /<details className=\{styles\.advancedSettings\}>/);
+  assert.match(advancedSettingsSource, /<span>Source root<\/span>/);
+  assert.match(advancedSettingsSource, /readOnly=\{lockedSystemFields\.has\("commitSha"\)\}/);
+  assert.match(editorSource, /setLockedSystemFields\(getLockedSystemFieldsAfterRuntimeChange\)/);
+  assert.match(advancedSettingsSource, /Output URL/);
+  assert.match(advancedSettingsSource, /readOnly=\{draft\.runtimeTargetKind === "ecs_fargate"\}/);
+  assert.doesNotMatch(
+    advancedSettingsSource,
+    /<details className=\{styles\.advancedSettings\} open/
+  );
 });
 
 test("editor renders only the selected Runtime section and stacks fields on small screens", () => {
   for (const runtime of ["ecs_fargate", "lambda", "ec2_asg", "static_site"]) {
-    assert.match(editorSource, new RegExp(`draft\\.runtimeTargetKind === "${runtime}"`));
+    assert.match(advancedSettingsSource, new RegExp(`${runtime}: \\[`));
   }
   assert.match(editorStyles, /@media \(max-width: 720px\)/);
   assert.match(editorStyles, /grid-template-columns: 1fr/);
@@ -76,7 +83,10 @@ test("typing a missing system value stays editable until a successful save locks
   );
 
   assert.doesNotMatch(updateDraftSource, /setLockedSystemFields/);
-  assert.match(saveTargetSource, /setLockedSystemFields\(getLockedSystemFields\(savedDraft\)\)/);
+  assert.match(
+    saveTargetSource,
+    /setLockedSystemFields\(getLockedSystemFields\(savedDraft, saved\)\)/
+  );
 });
 
 test("ECS defaults use project slug and analyzed Dockerfile evidence", () => {
@@ -101,6 +111,67 @@ test("ECS defaults use project slug and analyzed Dockerfile evidence", () => {
       outputUrl: "",
       ecsWeb: null
     }
+  );
+});
+
+test("a new target auto-selects an AWS connection only when exactly one is verified", () => {
+  const secondConnection = {
+    ...verifiedConnection,
+    id: "abcdef12-3456-4789-8abc-def012345679",
+    accountId: "210987654321"
+  };
+
+  assert.equal(
+    createDeploymentTargetDraft(null, [verifiedConnection]).connectionId,
+    verifiedConnection.id
+  );
+  assert.equal(
+    createDeploymentTargetDraft(null, [verifiedConnection, secondConnection]).connectionId,
+    ""
+  );
+});
+
+test("Architecture selects the initial Runtime without inventing missing build evidence", () => {
+  const cases = [
+    ["aws_lambda_function", "lambda"],
+    ["aws_autoscaling_group", "ec2_asg"],
+    ["aws_cloudfront_distribution", "static_site"]
+  ] as const;
+
+  for (const [resourceType, runtimeTargetKind] of cases) {
+    const draft = createDeploymentTargetDraft(
+      null,
+      [verifiedConnection],
+      null,
+      null,
+      "preserve_target",
+      {
+        nodes: [deploymentNode(resourceType, {})],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 }
+      }
+    );
+
+    assert.equal(draft.runtimeTargetKind, runtimeTargetKind);
+    assert.equal(draft.evidencePath, "");
+    assert.equal(isDeploymentTargetDraftReady(draft, [verifiedConnection]), false);
+  }
+});
+
+test("inferred system values stay editable while confirmed SHA remains locked across Runtime changes", () => {
+  const draft = createDeploymentTargetDraft(null, [verifiedConnection], null, {
+    projectName: "Lock Scope",
+    repositoryRevision: "a".repeat(40),
+    sourceRoot: ".",
+    dockerfilePath: "Dockerfile"
+  });
+  const inferredLocks = getLockedSystemFields(draft, null);
+
+  assert.equal(inferredLocks.has("commitSha"), true);
+  assert.equal(inferredLocks.has("clusterName"), false);
+  assert.deepEqual(
+    [...getLockedSystemFieldsAfterRuntimeChange(new Set(["commitSha", "clusterName"]))],
+    ["commitSha"]
   );
 });
 
@@ -175,6 +246,7 @@ test("Runtime validation reports only the selected Runtime's missing fields", ()
   const lambdaDraft = {
     ...changeDeploymentTargetRuntime(ecsDraft, "lambda"),
     commitSha: "b".repeat(40),
+    evidencePath: "template.yaml",
     functionLogicalId: "ApiFunction",
     functionName: "runtime-switch-api",
     aliasName: "live",

@@ -50,6 +50,26 @@ export type EcsFargateDeploymentDefaultsInput = {
   readonly ecsWeb?: EcsWebBuildConfig | null;
 };
 
+export const systemManagedFields = [
+  "commitSha",
+  "codeBuildProjectName",
+  "ecrRepositoryName",
+  "clusterName",
+  "serviceName",
+  "containerName",
+  "functionLogicalId",
+  "functionName",
+  "aliasName",
+  "codeDeployApplicationName",
+  "codeDeployDeploymentGroupName",
+  "autoScalingGroupName",
+  "hostingBucketName",
+  "cloudFrontDistributionId",
+  "cloudFrontOriginId"
+] as const;
+
+export type SystemManagedField = (typeof systemManagedFields)[number];
+
 type ProjectDeploymentRepositoryEvidence = {
   readonly name: string;
   readonly repositoryRevision: string;
@@ -58,27 +78,23 @@ type ProjectDeploymentRepositoryEvidence = {
 
 const runtimeBuildConfig: Record<
   RuntimeTargetKind,
-  { buildPreset: BuildExecutionPreset; evidenceKind: BuildEvidenceKind; defaultPath: string }
+  { buildPreset: BuildExecutionPreset; evidenceKind: BuildEvidenceKind }
 > = {
   ecs_fargate: {
     buildPreset: "docker_build",
-    evidenceKind: "dockerfile",
-    defaultPath: "Dockerfile"
+    evidenceKind: "dockerfile"
   },
   lambda: {
     buildPreset: "sam_build",
-    evidenceKind: "sam_template",
-    defaultPath: "template.yaml"
+    evidenceKind: "sam_template"
   },
   ec2_asg: {
     buildPreset: "codedeploy_bundle",
-    evidenceKind: "appspec",
-    defaultPath: "appspec.yml"
+    evidenceKind: "appspec"
   },
   static_site: {
     buildPreset: "static_export",
-    evidenceKind: "static_output",
-    defaultPath: "dist"
+    evidenceKind: "static_output"
   }
 };
 
@@ -102,7 +118,10 @@ export function createDeploymentTargetDraft(
   const preferEcsDefaults = mode === "prefer_ecs_defaults" && ecsDefaults !== null;
   const runtimeTargetKind = preferEcsDefaults
     ? "ecs_fargate"
-    : (target?.runtimeTargetKind ?? ecsDefaults?.runtimeTargetKind ?? "ecs_fargate");
+    : (target?.runtimeTargetKind ??
+      ecsDefaults?.runtimeTargetKind ??
+      inferRuntimeTargetKind(diagramJson, repositoryEvidence) ??
+      "ecs_fargate");
   const config = preferEcsDefaults ? null : target?.confirmedBuildConfig;
   const ecsConfig =
     target?.runtimeConfig?.runtimeTargetKind === "ecs_fargate" ? target.runtimeConfig : null;
@@ -172,9 +191,10 @@ export function createDeploymentTargetDraft(
         architectureDefaults?.containerName,
         repositoryRuntimeNames?.containerName
       );
+  const verifiedConnections = connections.filter((item) => item.status === "verified");
   return {
     connectionId:
-      target?.connectionId ?? connections.find((item) => item.status === "verified")?.id ?? "",
+      target?.connectionId ?? (verifiedConnections.length === 1 ? verifiedConnections[0]!.id : ""),
     runtimeTargetKind,
     sourceRoot: firstNonBlank(
       ecsWeb?.api.sourceRoot,
@@ -186,8 +206,7 @@ export function createDeploymentTargetDraft(
     evidencePath: firstNonBlank(
       config?.evidence[0]?.path,
       ecsDefaults?.evidencePath,
-      suggestion?.evidencePath,
-      getDefaultDeploymentEvidencePath(runtimeTargetKind)
+      suggestion?.evidencePath
     ),
     commitSha: firstNonBlank(
       config?.confirmedCommitSha,
@@ -243,6 +262,38 @@ function hasWebInclusiveEcsArchitecture(diagramJson?: DiagramJson | null): boole
     resourceTypes.has("aws_cloudfront_distribution") &&
     resourceTypes.has("aws_ecs_service")
   );
+}
+
+function inferRuntimeTargetKind(
+  diagramJson: DiagramJson | null | undefined,
+  repositoryEvidence: ProjectDeploymentRepositoryEvidence | null
+): RuntimeTargetKind | null {
+  const resourceTypes = new Set(
+    diagramJson?.nodes.map((node) => node.parameters?.resourceType).filter(Boolean) ?? []
+  );
+  if (resourceTypes.has("aws_ecs_service")) return "ecs_fargate";
+  if (resourceTypes.has("aws_lambda_function")) return "lambda";
+  if (resourceTypes.has("aws_autoscaling_group")) return "ec2_asg";
+  if (resourceTypes.has("aws_cloudfront_distribution")) return "static_site";
+
+  const evidence = repositoryEvidence?.aiHandoff?.evidence ?? [];
+  if (evidence.some((item) => item.kind === "dockerfile")) return "ecs_fargate";
+  if (
+    evidence.some(
+      (item) => item.kind === "framework_config" && /(?:^|\/)template\.ya?ml$/i.test(item.path)
+    )
+  ) {
+    return "lambda";
+  }
+  if (
+    evidence.some(
+      (item) => item.kind === "framework_config" && /(?:^|\/)appspec\.ya?ml$/i.test(item.path)
+    )
+  ) {
+    return "ec2_asg";
+  }
+  if (evidence.some((item) => item.kind === "static_output")) return "static_site";
+  return null;
 }
 
 export function inferEcsWebBuildConfig(
@@ -461,7 +512,7 @@ export function changeDeploymentTargetRuntime(
     ...draft,
     runtimeTargetKind,
     sourceRoot: suggestion?.sourceRoot ?? ".",
-    evidencePath: suggestion?.evidencePath ?? getDefaultDeploymentEvidencePath(runtimeTargetKind),
+    evidencePath: suggestion?.evidencePath ?? "",
     commitSha: suggestion?.commitSha ?? "",
     installPreset: suggestion?.installPreset ?? "none",
     healthCheckPath:
@@ -476,8 +527,18 @@ export function changeDeploymentTargetRuntime(
   };
 }
 
-export function getDefaultDeploymentEvidencePath(runtimeTargetKind: RuntimeTargetKind): string {
-  return runtimeBuildConfig[runtimeTargetKind].defaultPath;
+export function getLockedSystemFields(
+  draft: ProjectDeploymentTargetDraft,
+  savedTarget: ProjectDeploymentTarget | null
+): ReadonlySet<SystemManagedField> {
+  const lockableFields = savedTarget ? systemManagedFields : (["commitSha"] as const);
+  return new Set(lockableFields.filter((field) => draft[field].trim().length > 0));
+}
+
+export function getLockedSystemFieldsAfterRuntimeChange(
+  current: ReadonlySet<SystemManagedField>
+): ReadonlySet<SystemManagedField> {
+  return new Set(current.has("commitSha") ? ["commitSha"] : []);
 }
 
 export function formatDeploymentTargetUpdatedAt(value: string): string {

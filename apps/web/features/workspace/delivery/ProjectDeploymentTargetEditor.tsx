@@ -23,11 +23,15 @@ import {
   createDeploymentTargetDraft,
   createDeploymentTargetRequest,
   formatDeploymentTargetUpdatedAt,
+  getLockedSystemFields,
+  getLockedSystemFieldsAfterRuntimeChange,
   getMissingDeploymentTargetFieldKeys,
   type EcsFargateDeploymentDefaultsInput,
   type MissingDeploymentTargetFieldKey,
-  type ProjectDeploymentTargetDraft
+  type ProjectDeploymentTargetDraft,
+  type SystemManagedField
 } from "./project-deployment-target-state";
+import { ProjectDeploymentTargetAdvancedSettings } from "./ProjectDeploymentTargetAdvancedSettings";
 import styles from "./project-deployment-target-editor.module.css";
 
 type RequestState = "idle" | "loading" | "saving" | "error";
@@ -85,32 +89,6 @@ function getRuntimeTargetSummary(draft: ProjectDeploymentTargetDraft): string {
 
 function getShortCommitSha(commitSha: string): string {
   return commitSha ? `${commitSha.slice(0, 10)}…` : "저장 시 입력 필요";
-}
-
-const systemManagedFields = [
-  "commitSha",
-  "codeBuildProjectName",
-  "ecrRepositoryName",
-  "clusterName",
-  "serviceName",
-  "containerName",
-  "functionLogicalId",
-  "functionName",
-  "aliasName",
-  "codeDeployApplicationName",
-  "codeDeployDeploymentGroupName",
-  "autoScalingGroupName",
-  "hostingBucketName",
-  "cloudFrontDistributionId",
-  "cloudFrontOriginId"
-] as const;
-
-type SystemManagedField = (typeof systemManagedFields)[number];
-
-function getLockedSystemFields(
-  draft: ProjectDeploymentTargetDraft
-): ReadonlySet<SystemManagedField> {
-  return new Set(systemManagedFields.filter((field) => draft[field].trim().length > 0));
 }
 
 export type ProjectDeploymentTargetEditorHandle = {
@@ -243,7 +221,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
           initialRepositoryAnalysisTarget
         );
         setDraft(nextDraft);
-        setLockedSystemFields(getLockedSystemFields(nextDraft));
+        setLockedSystemFields(getLockedSystemFields(nextDraft, nextTarget));
         setRequestState("idle");
       } catch (error) {
         if (cancelled) return;
@@ -282,7 +260,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
 
   function changeRuntime(runtimeTargetKind: RuntimeTargetKind) {
     onDirty?.();
-    setLockedSystemFields(new Set());
+    setLockedSystemFields(getLockedSystemFieldsAfterRuntimeChange);
     setDraft((current) =>
       changeDeploymentTargetRuntime(
         current,
@@ -311,7 +289,7 @@ export const ProjectDeploymentTargetEditor = forwardRef<
       setTarget(saved);
       const savedDraft = createDeploymentTargetDraft(saved, connections);
       setDraft(savedDraft);
-      setLockedSystemFields(getLockedSystemFields(savedDraft));
+      setLockedSystemFields(getLockedSystemFields(savedDraft, saved));
       setRequestState("idle");
       onSaved?.();
       setMessage("배포 타깃을 저장했습니다.");
@@ -428,271 +406,11 @@ export const ProjectDeploymentTargetEditor = forwardRef<
         </dl>
       </section>
 
-      <details className={styles.advancedSettings}>
-        <summary>
-          <span>
-            <strong>고급 설정</strong>
-            <small>저장소 분석이 틀렸거나 자동 입력에 실패한 경우에만 수정하세요.</small>
-          </span>
-        </summary>
-        <div className={styles.advancedBody}>
-          <div className={styles.advancedGroupHeading}>
-            <h4>분석 결과 수정</h4>
-            <p>프로젝트 구조가 다를 때만 변경합니다.</p>
-          </div>
-          <div className={styles.formGrid}>
-            <label className={styles.field}>
-              <span>Source root</span>
-              <input
-                onChange={(event) => updateDraft("sourceRoot", event.target.value)}
-                value={draft.sourceRoot}
-              />
-              <small>빌드 명령을 시작할 저장소 폴더입니다.</small>
-            </label>
-            <label className={styles.field}>
-              <span>Build evidence path</span>
-              <input
-                onChange={(event) => updateDraft("evidencePath", event.target.value)}
-                value={draft.evidencePath}
-              />
-              <small>
-                {draft.evidenceSuggested
-                  ? "저장소 분석에서 감지했습니다."
-                  : "빌드 방식을 증명하는 파일 또는 폴더입니다."}
-              </small>
-            </label>
-            <label className={styles.field}>
-              <span>
-                Release version <i>선택</i>
-              </span>
-              <input
-                onChange={(event) => updateDraft("version", event.target.value)}
-                placeholder="예: v1.2.3"
-                value={draft.version}
-              />
-              <small>비워두면 commit SHA를 버전으로 사용합니다.</small>
-            </label>
-            {draft.runtimeTargetKind !== "static_site" ? (
-              <label className={styles.field}>
-                <span>Health check path</span>
-                <input
-                  onChange={(event) => updateDraft("healthCheckPath", event.target.value)}
-                  value={draft.healthCheckPath}
-                />
-                <small>배포 성공 여부를 확인할 HTTP 경로입니다.</small>
-              </label>
-            ) : (
-              <label className={styles.field}>
-                <span>Package install</span>
-                <select
-                  onChange={(event) =>
-                    updateDraft(
-                      "installPreset",
-                      event.target.value as ProjectDeploymentTargetDraft["installPreset"]
-                    )
-                  }
-                  value={draft.installPreset}
-                >
-                  <option value="none">검증된 lockfile 선택 필요</option>
-                  <option value="pnpm_frozen_lockfile">pnpm frozen lockfile</option>
-                  <option value="npm_ci">npm ci</option>
-                  <option value="yarn_frozen_lockfile">Yarn frozen lockfile</option>
-                </select>
-                <small>저장소 lockfile과 일치해야 합니다.</small>
-              </label>
-            )}
-          </div>
-
-          <div className={styles.advancedGroupHeading}>
-            <h4>배포 시스템 값</h4>
-            <p>값이 이미 확인되었다면 잠기며, 비어 있는 필수 값만 직접 입력합니다.</p>
-          </div>
-          <div className={styles.formGrid}>
-            <label className={styles.field}>
-              <span>Confirmed commit SHA</span>
-              <input
-                autoComplete="off"
-                onChange={(event) => updateDraft("commitSha", event.target.value)}
-                placeholder="40 or 64 character SHA"
-                readOnly={lockedSystemFields.has("commitSha")}
-                spellCheck={false}
-                value={draft.commitSha}
-              />
-              <small>
-                {draft.commitSha
-                  ? "연결된 저장소에서 확인한 값입니다."
-                  : "자동으로 확인하지 못해 입력이 필요합니다."}
-              </small>
-            </label>
-            <label className={styles.field}>
-              <span>CodeBuild project</span>
-              <input
-                onChange={(event) => updateDraft("codeBuildProjectName", event.target.value)}
-                readOnly={lockedSystemFields.has("codeBuildProjectName")}
-                value={draft.codeBuildProjectName}
-              />
-            </label>
-            {draft.runtimeTargetKind === "ecs_fargate" ? (
-              <>
-                <label className={styles.field}>
-                  <span>ECR repository</span>
-                  <input
-                    onChange={(event) => updateDraft("ecrRepositoryName", event.target.value)}
-                    readOnly={lockedSystemFields.has("ecrRepositoryName")}
-                    value={draft.ecrRepositoryName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>ECS cluster</span>
-                  <input
-                    onChange={(event) => updateDraft("clusterName", event.target.value)}
-                    readOnly={lockedSystemFields.has("clusterName")}
-                    value={draft.clusterName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>ECS service</span>
-                  <input
-                    onChange={(event) => updateDraft("serviceName", event.target.value)}
-                    readOnly={lockedSystemFields.has("serviceName")}
-                    value={draft.serviceName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>Container</span>
-                  <input
-                    onChange={(event) => updateDraft("containerName", event.target.value)}
-                    readOnly={lockedSystemFields.has("containerName")}
-                    value={draft.containerName}
-                  />
-                </label>
-              </>
-            ) : null}
-            {draft.runtimeTargetKind === "lambda" ? (
-              <>
-                <label className={styles.field}>
-                  <span>SAM function logical ID</span>
-                  <input
-                    onChange={(event) => updateDraft("functionLogicalId", event.target.value)}
-                    readOnly={lockedSystemFields.has("functionLogicalId")}
-                    value={draft.functionLogicalId}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>Lambda function</span>
-                  <input
-                    onChange={(event) => updateDraft("functionName", event.target.value)}
-                    readOnly={lockedSystemFields.has("functionName")}
-                    value={draft.functionName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>Lambda alias</span>
-                  <input
-                    onChange={(event) => updateDraft("aliasName", event.target.value)}
-                    readOnly={lockedSystemFields.has("aliasName")}
-                    value={draft.aliasName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>CodeDeploy application</span>
-                  <input
-                    onChange={(event) =>
-                      updateDraft("codeDeployApplicationName", event.target.value)
-                    }
-                    readOnly={lockedSystemFields.has("codeDeployApplicationName")}
-                    value={draft.codeDeployApplicationName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>CodeDeploy deployment group</span>
-                  <input
-                    onChange={(event) =>
-                      updateDraft("codeDeployDeploymentGroupName", event.target.value)
-                    }
-                    readOnly={lockedSystemFields.has("codeDeployDeploymentGroupName")}
-                    value={draft.codeDeployDeploymentGroupName}
-                  />
-                </label>
-              </>
-            ) : null}
-            {draft.runtimeTargetKind === "ec2_asg" ? (
-              <>
-                <label className={styles.field}>
-                  <span>CodeDeploy application</span>
-                  <input
-                    onChange={(event) =>
-                      updateDraft("codeDeployApplicationName", event.target.value)
-                    }
-                    readOnly={lockedSystemFields.has("codeDeployApplicationName")}
-                    value={draft.codeDeployApplicationName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>CodeDeploy deployment group</span>
-                  <input
-                    onChange={(event) =>
-                      updateDraft("codeDeployDeploymentGroupName", event.target.value)
-                    }
-                    readOnly={lockedSystemFields.has("codeDeployDeploymentGroupName")}
-                    value={draft.codeDeployDeploymentGroupName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>Auto Scaling group</span>
-                  <input
-                    onChange={(event) => updateDraft("autoScalingGroupName", event.target.value)}
-                    readOnly={lockedSystemFields.has("autoScalingGroupName")}
-                    value={draft.autoScalingGroupName}
-                  />
-                </label>
-              </>
-            ) : null}
-            {draft.runtimeTargetKind === "static_site" ? (
-              <>
-                <label className={styles.field}>
-                  <span>Versioned hosting bucket</span>
-                  <input
-                    onChange={(event) => updateDraft("hostingBucketName", event.target.value)}
-                    readOnly={lockedSystemFields.has("hostingBucketName")}
-                    value={draft.hostingBucketName}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>CloudFront distribution ID</span>
-                  <input
-                    onChange={(event) =>
-                      updateDraft("cloudFrontDistributionId", event.target.value)
-                    }
-                    readOnly={lockedSystemFields.has("cloudFrontDistributionId")}
-                    value={draft.cloudFrontDistributionId}
-                  />
-                </label>
-                <label className={styles.field}>
-                  <span>CloudFront origin ID</span>
-                  <input
-                    onChange={(event) => updateDraft("cloudFrontOriginId", event.target.value)}
-                    readOnly={lockedSystemFields.has("cloudFrontOriginId")}
-                    value={draft.cloudFrontOriginId}
-                  />
-                </label>
-              </>
-            ) : null}
-            <label className={styles.field}>
-              <span>
-                Output URL <i>배포 후</i>
-              </span>
-              <input
-                onChange={(event) => updateDraft("outputUrl", event.target.value)}
-                placeholder="첫 배포 후 자동 입력"
-                readOnly
-                value={draft.outputUrl}
-              />
-              <small>실제 배포에서 확인한 HTTPS 주소만 사용합니다.</small>
-            </label>
-          </div>
-        </div>
-      </details>
+      <ProjectDeploymentTargetAdvancedSettings
+        draft={draft}
+        lockedSystemFields={lockedSystemFields}
+        updateDraft={updateDraft}
+      />
 
       {verifiedConnections.length === 0 && requestState !== "loading" ? (
         <p className="dashboardMessage" role="status">
