@@ -14,13 +14,13 @@ import {
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  ApiErrorCode,
   CreateArchitectureDraftRequest,
   GitHubInstallationConnection,
   GitHubInstalledRepositoryCandidate,
   RepositoryAnalysisQuestion,
   RepositoryDeploymentType,
   RepositoryTemplateRecommendationResult,
+  SaveRepositoryAnalysisRecordRequest,
   DiagramJson,
   SourceRepositoryAnalysisResult,
   SourceRepository,
@@ -29,7 +29,7 @@ import type {
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ProductState } from "../../../components/ui/ProductState";
 import { SelectMenu } from "../../../components/ui/SelectMenu";
-import { ApiClientError, getApiErrorMessage } from "../../../lib/api-client";
+import { getApiErrorMessage } from "../../../lib/api-client";
 import {
   analyzePublicSourceRepository,
   analyzeSourceRepository,
@@ -62,7 +62,10 @@ import { getDiagramJsonForArchitectureDraft } from "../../../features/workspace/
 import { createWorkspaceAiStartHref } from "../../../features/workspace/workspace-ai-start-entry";
 import { AiDraftBoardPreview } from "../ai/ai-draft-board-preview";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
-import { createRepositoryAnalysisRecordPayload } from "./repository-analysis-record-payload";
+import {
+  createConnectedRepositoryAnalysisResult,
+  createRepositoryAnalysisRecordPayload
+} from "./repository-analysis-record-payload";
 import {
   selectRepositoryRecoveryAction,
   type RepositoryRecoveryAction
@@ -109,10 +112,10 @@ export function RepositoryStartClient({
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [installations, setInstallations] = useState<GitHubInstallationConnection[]>([]);
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
+  const [connectionOptionsLoaded, setConnectionOptionsLoaded] = useState(false);
   const [installationState, setInstallationState] = useState("");
   const [actionState, setActionState] = useState<RequestState>("idle");
   const [publicAnalysisState, setPublicAnalysisState] = useState<RequestState>("idle");
-  const [publicAnalysisErrorCode, setPublicAnalysisErrorCode] = useState<ApiErrorCode | null>(null);
   const [repositoryUrl, setRepositoryUrl] = useState(initialRepositoryUrl);
   const [defaultBranch, setDefaultBranch] = useState(initialDefaultBranch);
   const [publicAnalysis, setPublicAnalysis] = useState<SourceRepositoryAnalysisResult | null>(null);
@@ -123,6 +126,9 @@ export function RepositoryStartClient({
   const [publicRecommendationStage, setPublicRecommendationStage] = useState<PublicRecommendationStage>("configuration");
   const [recommendation, setRecommendation] = useState<RepositoryTemplateRecommendationResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
+  const [pendingAnalysisRecord, setPendingAnalysisRecord] = useState<
+    SaveRepositoryAnalysisRecordRequest | null
+  >(null);
   const [restoredProjectName, setRestoredProjectName] = useState("");
   const effectiveProjectName = restoredProjectName || projectName;
   const activeRepository = useMemo(
@@ -138,13 +144,6 @@ export function RepositoryStartClient({
   const isPublicAnalysisBusy = publicAnalysisState === "loading";
   const showUrlAnalysis = Boolean(projectId && (!activeRepository || publicAnalysis));
   const recoveryAction = useMemo<RepositoryRecoveryAction>(() => {
-    if (
-      publicAnalysisErrorCode !== "PUBLIC_REPOSITORY_UNAVAILABLE" &&
-      publicAnalysisErrorCode !== "PUBLIC_REPOSITORY_RATE_LIMITED"
-    ) {
-      return { kind: "retry_only" };
-    }
-
     try {
       return selectRepositoryRecoveryAction({
         repositoryUrl,
@@ -155,7 +154,7 @@ export function RepositoryStartClient({
     } catch {
       return { kind: "retry_only" };
     }
-  }, [activeRepository, candidates, installations, publicAnalysisErrorCode, repositoryUrl]);
+  }, [activeRepository, candidates, installations, repositoryUrl]);
 
   useEffect(() => {
     if (!projectId) {
@@ -257,6 +256,7 @@ export function RepositoryStartClient({
       setCandidates(result.repositories);
       setInstallations(loadedInstallations);
       setInstallationState(result.state);
+      setConnectionOptionsLoaded(true);
       setActionState("idle");
     } catch (error) {
       setActionState("error");
@@ -314,7 +314,6 @@ export function RepositoryStartClient({
     setSelectedPublicTemplateId(null);
     setPublicRecommendationStage("configuration");
     setErrorMessage("");
-    setPublicAnalysisErrorCode(null);
 
     try {
       const result = await analyzePublicSourceRepository({
@@ -322,7 +321,6 @@ export function RepositoryStartClient({
         ...(trimmedDefaultBranch ? { defaultBranch: trimmedDefaultBranch } : {})
       });
       setPublicAnalysis(result);
-      setPublicAnalysisErrorCode(null);
       setDefaultBranch(result.defaultBranch);
       const nextDeploymentType = getPublicRepositoryDeploymentDefault(result);
       setDeploymentType(nextDeploymentType);
@@ -337,7 +335,6 @@ export function RepositoryStartClient({
       void loadCandidates();
     } catch (error) {
       setPublicAnalysisState("error");
-      setPublicAnalysisErrorCode(error instanceof ApiClientError ? error.code : null);
       setErrorMessage(
         getApiErrorMessage(
           error,
@@ -433,7 +430,11 @@ export function RepositoryStartClient({
 
     try {
       if (!isBuiltInTemplateId(templateId)) {
-        await saveTemplateBoard(templateId);
+        await saveTemplateBoard(
+          templateId,
+          createConnectedRepositoryAnalysisResult(activeRepository, templateId),
+          activeRepository.analysis.analyzedAt
+        );
         setActionState("idle");
         return;
       }
@@ -453,7 +454,11 @@ export function RepositoryStartClient({
       }
 
       const diagram = getDiagramJsonForArchitectureDraft(draft);
-      await saveRepositoryBoard(diagram);
+      await saveRepositoryBoard(diagram, {
+        analysis: createConnectedRepositoryAnalysisResult(activeRepository, templateId),
+        analyzedAt: activeRepository.analysis.analyzedAt,
+        templateId
+      });
       setActionState("idle");
     } catch (error) {
       setActionState("error");
@@ -463,7 +468,8 @@ export function RepositoryStartClient({
 
   async function saveTemplateBoard(
     templateId: PublicRepositoryTemplateId,
-    publicRepositoryAnalysis?: SourceRepositoryAnalysisResult
+    publicRepositoryAnalysis?: SourceRepositoryAnalysisResult,
+    analyzedAt?: string
   ): Promise<void> {
     const diagram = buildBoardTemplateDiagram(templateId, {
       projectSlug: effectiveProjectName,
@@ -477,7 +483,11 @@ export function RepositoryStartClient({
     await saveRepositoryBoard(
       diagram,
       publicRepositoryAnalysis
-        ? { analysis: publicRepositoryAnalysis, templateId }
+        ? {
+          analysis: publicRepositoryAnalysis,
+          ...(analyzedAt ? { analyzedAt } : {}),
+          templateId
+        }
         : undefined
     );
   }
@@ -486,22 +496,23 @@ export function RepositoryStartClient({
     diagramJson: DiagramJson,
     provenance?: {
       readonly analysis: SourceRepositoryAnalysisResult;
+      readonly analyzedAt?: string;
       readonly templateId: PublicRepositoryTemplateId;
     }
   ): Promise<void> {
     await saveProjectDraft({ diagramJson, projectId });
 
     if (provenance) {
+      const payload = createRepositoryAnalysisRecordPayload({
+        analysis: provenance.analysis,
+        analyzedAt: provenance.analyzedAt ?? new Date().toISOString(),
+        selectedTemplateId: provenance.templateId
+      });
       try {
-        await saveRepositoryAnalysisRecord(
-          projectId,
-          createRepositoryAnalysisRecordPayload({
-            analysis: provenance.analysis,
-            analyzedAt: new Date().toISOString(),
-            selectedTemplateId: provenance.templateId
-          })
-        );
+        await saveRepositoryAnalysisRecord(projectId, payload);
+        setPendingAnalysisRecord(null);
       } catch (cause) {
+        setPendingAnalysisRecord(payload);
         throw new RepositoryAnalysisRecordPersistenceError(cause);
       }
     }
@@ -512,6 +523,23 @@ export function RepositoryStartClient({
         projectName: effectiveProjectName
       }).toString()}`
     );
+  }
+
+  async function retryRepositoryAnalysisRecord(): Promise<void> {
+    if (!pendingAnalysisRecord || actionState === "loading") return;
+    setActionState("loading");
+    setErrorMessage("");
+    try {
+      await saveRepositoryAnalysisRecord(projectId, pendingAnalysisRecord);
+      setPendingAnalysisRecord(null);
+      router.push(`/workspace?${new URLSearchParams({
+        projectId,
+        projectName: effectiveProjectName
+      }).toString()}`);
+    } catch (error) {
+      setActionState("error");
+      setErrorMessage(getApiErrorMessage(error, "Repository 정보를 저장하지 못했습니다."));
+    }
   }
 
   async function connectRepository(candidate: GitHubInstalledRepositoryCandidate): Promise<void> {
@@ -679,7 +707,7 @@ export function RepositoryStartClient({
                 stage={publicRecommendationStage}
               />
             ) : null}
-            {publicAnalysisState === "error" ? (
+            {publicAnalysisState === "error" && !pendingAnalysisRecord ? (
               <RepositoryAnalysisRecovery
                 action={recoveryAction}
                 errorMessage={errorMessage}
@@ -693,6 +721,33 @@ export function RepositoryStartClient({
                 onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
                 onVerifyPermission={() => void loadCandidates()}
               />
+            ) : null}
+            {publicAnalysis && publicAnalysisState === "idle" ? (
+              connectionOptionsLoaded ? (
+                <RepositoryAnalysisRecovery
+                  action={recoveryAction}
+                  errorMessage=""
+                  isBusy={actionState === "loading"}
+                  onAddPermission={(managementUrl) => {
+                    window.open(managementUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  onAnalyzeConnected={() => void analyzeRepository()}
+                  onConnect={(candidate) => void connectRepository(candidate)}
+                  onConnectGitHub={() => void openGitHubConnection()}
+                  onRetry={() => void loadCandidates()}
+                  onVerifyPermission={() => void loadCandidates()}
+                  title="Delivery용 Repository 연결"
+                />
+              ) : (
+                <button
+                  className={styles.secondaryAction}
+                  disabled={actionState === "loading"}
+                  onClick={() => void loadCandidates()}
+                  type="button"
+                >
+                  Delivery용 Repository 연결 확인
+                </button>
+              )
             ) : null}
           </section>
         ) : null}
@@ -758,8 +813,22 @@ export function RepositoryStartClient({
           </section>
         ) : null}
 
-        {errorMessage && publicAnalysisState !== "error" ? (
-          <ProductState compact description={errorMessage} kind="error" title="작업 실패" />
+        {errorMessage && (publicAnalysisState !== "error" || pendingAnalysisRecord) ? (
+          <ProductState
+            action={pendingAnalysisRecord ? (
+              <button
+                disabled={actionState === "loading"}
+                onClick={() => void retryRepositoryAnalysisRecord()}
+                type="button"
+              >
+                Repository 정보 저장 재시도
+              </button>
+            ) : undefined}
+            compact
+            description={errorMessage}
+            kind="error"
+            title="작업 실패"
+          />
         ) : null}
       </section>
     </main>
@@ -775,7 +844,8 @@ function RepositoryAnalysisRecovery({
   onConnect,
   onConnectGitHub,
   onRetry,
-  onVerifyPermission
+  onVerifyPermission,
+  title = "Repository를 확인할 수 없습니다"
 }: {
   readonly action: RepositoryRecoveryAction;
   readonly errorMessage: string;
@@ -786,6 +856,7 @@ function RepositoryAnalysisRecovery({
   readonly onConnectGitHub: () => void;
   readonly onRetry: () => void;
   readonly onVerifyPermission: () => void;
+  readonly title?: string;
 }) {
   let guidance = "URL과 branch를 확인한 뒤 다시 분석해주세요.";
   let primaryAction: ReactNode = (
@@ -834,8 +905,8 @@ function RepositoryAnalysisRecovery({
     <ProductState
       action={primaryAction}
       description={`${errorMessage} ${guidance}`.trim()}
-      kind="error"
-      title="Repository를 확인할 수 없습니다"
+      kind={errorMessage ? "error" : "empty"}
+      title={title}
     />
   );
 }

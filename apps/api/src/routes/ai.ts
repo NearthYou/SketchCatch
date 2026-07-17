@@ -472,7 +472,7 @@ export async function registerAiRoutes(app: FastifyInstance, options: AiRouteOpt
             evidence: aiHandoff.evidence,
             missingEvidence: aiHandoff.missingEvidence,
             deploymentType: aiHandoff.deploymentTypeDefault,
-            usesCiCd: true,
+            usesCiCd: false,
             answers: []
           })
         : aiHandoff.recommendation;
@@ -1104,6 +1104,18 @@ function requirePublicRepositoryBranchResponse(response: Response): void {
   throwPublicRepositoryProviderResponse(response);
 }
 
+function requirePublicRepositoryEvidenceResponse(response: Response): void {
+  if (response.ok) return;
+  if (response.status === 404) {
+    throw new PublicRepositoryAnalysisError(
+      "분석할 branch 또는 Repository 파일을 확인할 수 없습니다.",
+      422,
+      "PUBLIC_REPOSITORY_BRANCH_UNAVAILABLE"
+    );
+  }
+  throwPublicRepositoryProviderResponse(response);
+}
+
 function throwPublicRepositoryProviderResponse(response: Response): never {
   if (
     response.status === 429 ||
@@ -1173,13 +1185,10 @@ async function fetchRepositoryEvidence(
   const evidence = await Promise.all(
     evidencePaths.map(async (path) => {
       const url = `https://raw.githubusercontent.com/${repository.owner}/${repository.repo}/${encodeURIComponent(defaultBranch)}/${path}`;
-      const response = await fetch(url, {
+      const response = await fetchPublicGitHubResponse(url, {
         signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
-      }).catch(() => null);
-
-      if (!response?.ok) {
-        return null;
-      }
+      });
+      requirePublicRepositoryEvidenceResponse(response);
 
       return { content: await response.text(), path };
     })
@@ -1198,22 +1207,23 @@ async function fetchPublicRepositoryTreePaths(
   const url = `${PUBLIC_GITHUB_API_BASE_URL}/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(
     repository.repo
   )}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`;
-  const response = await fetch(url, {
+  const response = await fetchPublicGitHubResponse(url, {
     headers: {
       Accept: "application/vnd.github+json",
       "User-Agent": "SketchCatch"
     },
     signal: AbortSignal.timeout(PUBLIC_GITHUB_REQUEST_TIMEOUT_MS)
-  }).catch(() => null);
-
-  if (!response?.ok) {
-    return [];
-  }
+  });
+  requirePublicRepositoryEvidenceResponse(response);
 
   const tree = (await response.json()) as PublicGitHubRecursiveTreeResponse;
 
   if (tree.truncated === true) {
-    return [];
+    throw new PublicRepositoryAnalysisError(
+      "GitHub Repository tree가 너무 커서 안전하게 분석할 수 없습니다.",
+      502,
+      "PUBLIC_REPOSITORY_PROVIDER_UNAVAILABLE"
+    );
   }
 
   return (tree.tree ?? [])

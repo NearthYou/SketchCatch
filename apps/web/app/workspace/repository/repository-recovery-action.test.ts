@@ -70,6 +70,19 @@ test("Repository recovery does not guess between multiple installations", () => 
   );
 });
 
+test("Repository recovery does not pick an exact candidate from multiple installations", () => {
+  assert.deepEqual(
+    selectRepositoryRecoveryAction(createInput({
+      candidates: [createCandidate()],
+      installations: [
+        installation,
+        { ...installation, installationId: "installation-2", accountLogin: "another" }
+      ]
+    })),
+    { kind: "resolve_multiple_installations" }
+  );
+});
+
 function createInput(overrides: Partial<Parameters<typeof selectRepositoryRecoveryAction>[0]> = {}) {
   return {
     repositoryUrl: "https://github.com/SketchCatch/service",

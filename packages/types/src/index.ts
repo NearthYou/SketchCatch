@@ -866,7 +866,7 @@ export type GitCicdReadinessResponse = {
 };
 
 export type ProjectDeliveryProfile = {
-  githubInstallations: GitHubInstallationConnection[];
+  githubInstallations: Array<Omit<GitHubInstallationConnection, "repositoryCount">>;
   repositoryAnalysisTarget: RepositoryAnalysisRecord | null;
   sourceRepository: SourceRepository | null;
   monitoringConfig: GitCicdMonitoringConfig | null;

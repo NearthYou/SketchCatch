@@ -73,7 +73,9 @@ export type SourceRepositoryRepository = {
   attachRepositoryAnalysisRecord?(
     projectId: string,
     recordId: string,
-    sourceRepositoryId: string
+    sourceRepositoryId: string,
+    owner: string,
+    name: string
   ): Promise<boolean>;
 };
 
@@ -374,13 +376,15 @@ export function createPostgresSourceRepositoryRepository(
       return record;
     },
 
-    async attachRepositoryAnalysisRecord(projectId, recordId, sourceRepositoryId) {
+    async attachRepositoryAnalysisRecord(projectId, recordId, sourceRepositoryId, owner, name) {
       const [record] = await db
         .update(repositoryAnalysisRecords)
         .set({ sourceRepositoryId, ...touchUpdatedAt })
         .where(and(
           eq(repositoryAnalysisRecords.id, recordId),
-          eq(repositoryAnalysisRecords.projectId, projectId)
+          eq(repositoryAnalysisRecords.projectId, projectId),
+          eq(repositoryAnalysisRecords.owner, owner.toLowerCase()),
+          eq(repositoryAnalysisRecords.name, name.toLowerCase())
         ))
         .returning({ id: repositoryAnalysisRecords.id });
       return Boolean(record);
@@ -432,7 +436,9 @@ export function createPostgresSourceRepositoryRepository(
             .set({ sourceRepositoryId: repository.id, ...touchUpdatedAt })
             .where(and(
               eq(repositoryAnalysisRecords.id, input.repositoryAnalysisRecordId),
-              eq(repositoryAnalysisRecords.projectId, input.projectId)
+              eq(repositoryAnalysisRecords.projectId, input.projectId),
+              eq(repositoryAnalysisRecords.owner, input.repository.owner.toLowerCase()),
+              eq(repositoryAnalysisRecords.name, input.repository.name.toLowerCase())
             ))
             .returning({ id: repositoryAnalysisRecords.id });
 
@@ -855,7 +861,9 @@ export async function connectGitHubSourceRepository(
       const attached = await repository.attachRepositoryAnalysisRecord(
         input.projectId,
         analysisTarget.id,
-        existingRepository.id
+        existingRepository.id,
+        selectedRepository.owner,
+        selectedRepository.name
       );
       if (!attached) {
         throw new SourceRepositoryConflictError("GIT_APP_REPOSITORY_ANALYSIS_CHANGED");

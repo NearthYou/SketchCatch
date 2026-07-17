@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import {
   type ApplicationReleaseStatus,
   type CompositeReleaseDigest,
@@ -30,6 +30,7 @@ import {
   projectBuildEnvironments,
   projectDeploymentTargets,
   projects,
+  repositoryAnalysisRecords,
   sourceRepositories,
   terraformOutputs
 } from "../db/schema.js";
@@ -634,11 +635,19 @@ function createRepositoryQueries(db: ReadinessDatabase): GitCicdReadinessReposit
           gitCicdMonitoringConfigs,
           eq(gitCicdMonitoringConfigs.sourceRepositoryId, sourceRepositories.id)
         )
+        .leftJoin(
+          repositoryAnalysisRecords,
+          eq(repositoryAnalysisRecords.projectId, sourceRepositories.projectId)
+        )
         .where(
           and(
             eq(sourceRepositories.projectId, projectId),
             eq(sourceRepositories.status, "active"),
-            eq(sourceRepositories.provider, "github")
+            eq(sourceRepositories.provider, "github"),
+            or(
+              isNull(repositoryAnalysisRecords.id),
+              eq(repositoryAnalysisRecords.sourceRepositoryId, sourceRepositories.id)
+            )
           )
         );
       return record;

@@ -21,9 +21,14 @@ import {
 
 export type ProjectDeliveryProfileStore = {
   isProjectAccessible(projectId: string, userId: string): Promise<boolean>;
-  listGitHubInstallations(userId: string): Promise<GitHubInstallationConnection[]>;
+  listGitHubInstallations(
+    userId: string
+  ): Promise<Array<Omit<GitHubInstallationConnection, "repositoryCount">>>;
   findRepositoryAnalysisTarget(projectId: string): Promise<RepositoryAnalysisRecord | null>;
-  findActiveSourceRepository(projectId: string): Promise<SourceRepository | null>;
+  findActiveSourceRepository(
+    projectId: string,
+    sourceRepositoryId?: string
+  ): Promise<SourceRepository | null>;
   findMonitoringConfig(sourceRepositoryId: string): Promise<GitCicdMonitoringConfig | null>;
   findDeploymentTarget(projectId: string): Promise<ProjectDeploymentTarget | null>;
   findEnvironmentName(projectId: string): Promise<string | null>;
@@ -52,15 +57,22 @@ export function createProjectDeliveryProfileService(options: {
         throw new ProjectDeliveryProfileNotFoundError();
       }
 
-      const [githubInstallations, repositoryAnalysisTarget, sourceRepository, deploymentTarget,
+      const [githubInstallations, repositoryAnalysisTarget, deploymentTarget,
         environmentName, readiness] = await Promise.all([
         options.store.listGitHubInstallations(input.userId),
         options.store.findRepositoryAnalysisTarget(input.projectId),
-        options.store.findActiveSourceRepository(input.projectId),
         options.store.findDeploymentTarget(input.projectId),
         options.store.findEnvironmentName(input.projectId),
         options.inspectReadiness(input)
       ]);
+      const sourceRepository = repositoryAnalysisTarget
+        ? repositoryAnalysisTarget.sourceRepositoryId
+          ? await options.store.findActiveSourceRepository(
+            input.projectId,
+            repositoryAnalysisTarget.sourceRepositoryId
+          )
+          : null
+        : await options.store.findActiveSourceRepository(input.projectId);
       const monitoringConfig = sourceRepository
         ? await options.store.findMonitoringConfig(sourceRepository.id)
         : null;
@@ -104,7 +116,6 @@ export function createPostgresProjectDeliveryProfileStore(
         accountLogin: row.accountLogin,
         accountType: row.accountType,
         repositorySelection: row.repositorySelection,
-        repositoryCount: 0,
         htmlUrl: row.htmlUrl
       }));
     },
@@ -117,7 +128,7 @@ export function createPostgresProjectDeliveryProfileStore(
       return row ? mapRepositoryAnalysisRecord(row) : null;
     },
 
-    async findActiveSourceRepository(projectId) {
+    async findActiveSourceRepository(projectId, sourceRepositoryId) {
       const [row] = await db
         .select()
         .from(sourceRepositories)
@@ -125,7 +136,8 @@ export function createPostgresProjectDeliveryProfileStore(
           eq(sourceRepositories.projectId, projectId),
           eq(sourceRepositories.provider, "github"),
           eq(sourceRepositories.status, "active"),
-          eq(sourceRepositories.archived, false)
+          eq(sourceRepositories.archived, false),
+          ...(sourceRepositoryId ? [eq(sourceRepositories.id, sourceRepositoryId)] : [])
         ))
         .orderBy(desc(sourceRepositories.createdAt));
       return row ? mapSourceRepository(row) : null;

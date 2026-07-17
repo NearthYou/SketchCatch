@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, getTableColumns, isNotNull } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, isNotNull, isNull, or } from "drizzle-orm";
 import {
   APPLICATION_ARTIFACT_CONTRACT_VERSION
 } from "@sketchcatch/types";
@@ -34,6 +34,7 @@ import {
   projectAssets,
   projectDeploymentTargets,
   projects,
+  repositoryAnalysisRecords,
   sourceRepositories,
   touchUpdatedAt
 } from "../db/schema.js";
@@ -1065,11 +1066,19 @@ export function createPostgresGitCicdHandoffRepository(
           analyzedAt: sourceRepositories.analyzedAt
         })
         .from(sourceRepositories)
+        .leftJoin(
+          repositoryAnalysisRecords,
+          eq(repositoryAnalysisRecords.projectId, sourceRepositories.projectId)
+        )
         .where(
           and(
             eq(sourceRepositories.id, sourceRepositoryId),
             eq(sourceRepositories.projectId, projectId),
-            eq(sourceRepositories.status, "active")
+            eq(sourceRepositories.status, "active"),
+            or(
+              isNull(repositoryAnalysisRecords.id),
+              eq(repositoryAnalysisRecords.sourceRepositoryId, sourceRepositories.id)
+            )
           )
         );
 

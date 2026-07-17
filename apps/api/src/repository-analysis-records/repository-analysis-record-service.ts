@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type {
   ApiErrorCode,
   RepositoryAnalysisRecord,
   SaveRepositoryAnalysisRecordRequest
 } from "@sketchcatch/types";
 import type { Database } from "../db/client.js";
-import { projects, repositoryAnalysisRecords } from "../db/schema.js";
+import { projects, repositoryAnalysisRecords, sourceRepositories } from "../db/schema.js";
 
 export type ReplaceRepositoryAnalysisRecordInput = Omit<
   RepositoryAnalysisRecord,
@@ -102,26 +102,40 @@ export function createPostgresRepositoryAnalysisRecordStore(
     },
 
     async replaceCurrent(input) {
-      const [record] = await db
-        .insert(repositoryAnalysisRecords)
-        .values(input)
-        .onConflictDoUpdate({
-          target: repositoryAnalysisRecords.projectId,
-          set: {
-            provider: input.provider,
-            repositoryUrl: input.repositoryUrl,
-            owner: input.owner,
-            name: input.name,
-            branch: input.branch,
-            repositoryRevision: input.repositoryRevision,
-            analysisResult: input.analysisResult,
-            selectedTemplateId: input.selectedTemplateId,
-            sourceRepositoryId: null,
-            analyzedAt: input.analyzedAt,
-            updatedAt: input.updatedAt
-          }
-        })
-        .returning();
+      const record = await db.transaction(async (tx) => {
+        const [exactSourceRepository] = await tx
+          .select({ id: sourceRepositories.id })
+          .from(sourceRepositories)
+          .where(and(
+            eq(sourceRepositories.projectId, input.projectId),
+            eq(sourceRepositories.provider, "github"),
+            eq(sourceRepositories.status, "active"),
+            eq(sourceRepositories.archived, false),
+            eq(sql`lower(${sourceRepositories.owner})`, input.owner),
+            eq(sql`lower(${sourceRepositories.name})`, input.name)
+          ));
+        const [saved] = await tx
+          .insert(repositoryAnalysisRecords)
+          .values({ ...input, sourceRepositoryId: exactSourceRepository?.id ?? null })
+          .onConflictDoUpdate({
+            target: repositoryAnalysisRecords.projectId,
+            set: {
+              provider: input.provider,
+              repositoryUrl: input.repositoryUrl,
+              owner: input.owner,
+              name: input.name,
+              branch: input.branch,
+              repositoryRevision: input.repositoryRevision,
+              analysisResult: input.analysisResult,
+              selectedTemplateId: input.selectedTemplateId,
+              sourceRepositoryId: exactSourceRepository?.id ?? null,
+              analyzedAt: input.analyzedAt,
+              updatedAt: input.updatedAt
+            }
+          })
+          .returning();
+        return saved;
+      });
 
       if (!record) {
         throw new Error("Repository Analysis Record upsert failed");

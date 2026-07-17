@@ -86,6 +86,39 @@ test("Repository Analysis Record routes hide projects owned by another user", as
   });
 });
 
+test("Repository Analysis Record accepts 64-character revisions and rejects malformed AI handoff", async (t) => {
+  const store = createMemoryStore();
+  const app = Fastify();
+  await app.register(registerRepositoryAnalysisRecordRoutes, {
+    createService: () => createRepositoryAnalysisRecordService(store),
+    requireUserId: async () => userId
+  });
+  t.after(() => app.close());
+
+  const revision = "a".repeat(64);
+  const accepted = await app.inject({
+    method: "PUT",
+    url: `/projects/${projectId}/repository-analysis-record`,
+    payload: createRequest({ repositoryRevision: revision })
+  });
+  assert.equal(accepted.statusCode, 200);
+
+  const validRequest = createRequest();
+  const malformed = {
+    ...validRequest,
+    analysisResult: {
+      ...validRequest.analysisResult,
+      aiHandoff: { status: "template_selected" }
+    }
+  };
+  const rejected = await app.inject({
+    method: "PUT",
+    url: `/projects/${projectId}/repository-analysis-record`,
+    payload: malformed
+  });
+  assert.equal(rejected.statusCode, 400);
+});
+
 function createRequest(
   overrides: Partial<SaveRepositoryAnalysisRecordRequest> = {}
 ): SaveRepositoryAnalysisRecordRequest {

@@ -72,8 +72,25 @@ test("does not disclose a profile for an inaccessible project", async () => {
   );
 });
 
+test("does not reuse an unrelated active Repository when current Board provenance is unattached", async () => {
+  const calls: string[] = [];
+  const profile = await createProjectDeliveryProfileService({
+    store: createStore({
+      analysisTarget: { sourceRepositoryId: null } as RepositoryAnalysisRecord,
+      calls,
+      sourceRepository: { id: "old-source" } as SourceRepository
+    }),
+    inspectReadiness: async () => readiness
+  }).get({ projectId: "project-1", userId: "user-1" });
+
+  assert.equal(profile.sourceRepository, null);
+  assert.equal(calls.includes("find-source"), false);
+  assert.equal(calls.includes("find-monitoring"), false);
+});
+
 function createStore(input: {
   accessible?: boolean;
+  analysisTarget?: RepositoryAnalysisRecord | null;
   calls?: string[];
   sourceRepository?: SourceRepository | null;
 } = {}): ProjectDeliveryProfileStore {
@@ -86,9 +103,10 @@ function createStore(input: {
       return [];
     },
     async findRepositoryAnalysisTarget() {
-      return null as RepositoryAnalysisRecord | null;
+      return input.analysisTarget ?? null;
     },
     async findActiveSourceRepository() {
+      calls.push("find-source");
       return input.sourceRepository ?? null;
     },
     async findMonitoringConfig(sourceRepositoryId) {

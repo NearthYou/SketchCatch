@@ -1,8 +1,39 @@
 import type {
   RepositoryAnalysisTemplateId,
   SaveRepositoryAnalysisRecordRequest,
+  SourceRepository,
   SourceRepositoryAnalysisResult
 } from "@sketchcatch/types";
+
+export function createConnectedRepositoryAnalysisResult(
+  repository: SourceRepository,
+  selectedTemplateId: RepositoryAnalysisTemplateId | null
+): SourceRepositoryAnalysisResult {
+  if (!repository.repositoryUrl || !repository.analysis) {
+    throw new Error("Connected Repository analysis is required");
+  }
+  const handoff = repository.analysis.aiHandoff;
+  const recommendationReason = handoff.status === "template_selected"
+    ? handoff.selectionReasons.join(" ")
+    : handoff.mismatchReasons.join(" ");
+
+  return {
+    repositoryUrl: repository.repositoryUrl,
+    repositoryRevision: repository.analysis.repositoryRevision,
+    defaultBranch: repository.defaultBranch,
+    availableBranches: [repository.defaultBranch],
+    evidenceFiles: handoff.evidence.slice(0, 2_000).map((evidence) => ({
+      path: evidence.path,
+      found: true
+    })),
+    detectedSignals: [...new Set(
+      handoff.evidence.flatMap((evidence) => evidence.signals)
+    )].slice(0, 2_000),
+    recommendedTemplateId: selectedTemplateId,
+    recommendationReason,
+    aiHandoff: handoff
+  };
+}
 
 export function createRepositoryAnalysisRecordPayload(input: {
   readonly analysis: SourceRepositoryAnalysisResult;

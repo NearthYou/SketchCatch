@@ -30,6 +30,10 @@ export function selectRepositoryRecoveryAction(input: {
 }): RepositoryRecoveryAction {
   const target = parseGitHubRepositoryIdentity(input.repositoryUrl);
 
+  if (input.installations.length > 1) {
+    return { kind: "resolve_multiple_installations" };
+  }
+
   if (input.activeRepository && isExactRepository(
     target,
     input.activeRepository.owner,
@@ -49,8 +53,6 @@ export function selectRepositoryRecoveryAction(input: {
   }
 
   if (input.installations.length === 0) return { kind: "connect_github" };
-  if (input.installations.length > 1) return { kind: "resolve_multiple_installations" };
-
   const [installation] = input.installations;
   if (installation?.htmlUrl) {
     return {
