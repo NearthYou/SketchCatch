@@ -126,9 +126,12 @@ export function hasSameBoardAutoOrganizeSemantics(
 }
 
 function toSemanticSnapshot(diagram: DiagramJson): unknown {
+  const nodes = [...diagram.nodes].sort(compareById);
+  const edges = [...diagram.edges].sort(compareById);
+
   return {
-    nodes: diagram.nodes.map(({ position: _position, size: _size, ...node }) => node),
-    edges: diagram.edges.map(({ route, ...edge }) => ({
+    nodes: nodes.map(({ position: _position, size: _size, ...node }) => node),
+    edges: edges.map(({ route, ...edge }) => ({
       ...edge,
       routeArrowDirection: route?.arrowDirection
     })),
@@ -137,6 +140,10 @@ function toSemanticSnapshot(diagram: DiagramJson): unknown {
       terraformSourceFingerprint: diagram.presentation?.terraformSourceFingerprint
     }
   };
+}
+
+function compareById(left: { readonly id: string }, right: { readonly id: string }): number {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
 function isFinitePoint(value: { readonly x: number; readonly y: number }): boolean {
