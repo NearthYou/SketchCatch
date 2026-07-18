@@ -75,6 +75,11 @@ test("AI chat controller uses only the new Workbench transcript and workflow pre
   assert.match(controllerSource, /styles\.composer/);
 });
 
+test("Board approval actions keep their explanation readable in the chat panel", () => {
+  assert.doesNotMatch(workbenchStyles, /\.approvalTray\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto;/s);
+  assert.doesNotMatch(workbenchStyles, /\.approvalActions\s*\{[^}]*justify-content:\s*flex-end;/s);
+});
+
 test("AI Workbench owns dedicated result primitives and code-diff presentation", () => {
   assert.match(resultSource, /createTerraformPreviewPresentation/);
   assert.match(resultSource, /createTerraformIssuePresentation/);

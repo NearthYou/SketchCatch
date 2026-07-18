@@ -542,12 +542,12 @@
 }
 
 .approvalTray {
-  align-items: center;
+  align-items: stretch;
   background: var(--ai-workbench-surface-muted);
   border-top: 1px solid var(--ai-workbench-line);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   padding: 12px 14px;
 }
 
@@ -573,7 +573,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .issueSelect {
