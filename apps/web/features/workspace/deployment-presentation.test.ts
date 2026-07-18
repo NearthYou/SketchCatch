@@ -1,13 +1,81 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  filterDeploymentHistoryEntries,
   getDeploymentHistoryEntries,
   getDeploymentFailureDeveloperCheck,
+  getDeploymentHistoryMetrics,
   getDeploymentStatusPresentation,
   getLatestCompletedDeploymentStep,
   getRecentDeploymentResultTitle,
   resolveDeploymentHistorySelection
 } from "./deployment-presentation";
+
+test("Deployment History filters unchanged versions and aggregates only measured durations", () => {
+  const entries = getDeploymentHistoryEntries([
+    {
+      id: "deployment-changed",
+      createdAt: "2026-07-18T10:00:00.000Z",
+      status: "SUCCESS" as const,
+      startedAt: "2026-07-18T10:00:00.000Z",
+      completedAt: "2026-07-18T10:02:00.000Z",
+      failedAt: null,
+      cancelledAt: null,
+      updatedAt: "2026-07-18T10:02:00.000Z",
+      planSummary: {
+        createCount: 2,
+        updateCount: 0,
+        deleteCount: 1,
+        replaceCount: 0,
+        blocked: false,
+        warnings: []
+      }
+    },
+    {
+      id: "deployment-unchanged",
+      createdAt: "2026-07-18T09:00:00.000Z",
+      status: "DESTROYED" as const,
+      startedAt: null,
+      completedAt: null,
+      failedAt: null,
+      cancelledAt: null,
+      updatedAt: "2026-07-18T09:00:00.000Z",
+      planSummary: {
+        createCount: 0,
+        updateCount: 0,
+        deleteCount: 0,
+        replaceCount: 0,
+        blocked: false,
+        warnings: []
+      }
+    }
+  ]);
+
+  assert.deepEqual(
+    filterDeploymentHistoryEntries(entries, "unchanged").map(({ deployment }) => deployment.id),
+    ["deployment-unchanged"]
+  );
+  assert.equal(filterDeploymentHistoryEntries(entries, "complete").length, 2);
+  assert.deepEqual(getDeploymentHistoryMetrics(entries), {
+    averageDurationMs: 120_000,
+    completedCount: 2,
+    totalChangeCount: 3,
+    totalCount: 2
+  });
+});
+
+test("Deployment History does not infer unchanged state when a Plan summary is unavailable", () => {
+  const entries = getDeploymentHistoryEntries([
+    {
+      id: "deployment-without-plan-summary",
+      createdAt: "2026-07-18T11:00:00.000Z",
+      status: "SUCCESS" as const,
+      planSummary: null
+    }
+  ]);
+
+  assert.deepEqual(filterDeploymentHistoryEntries(entries, "unchanged"), []);
+});
 
 test("infrastructure deployments appear as versioned Deployment History entries", () => {
   const entries = getDeploymentHistoryEntries([
@@ -160,6 +228,29 @@ test("development deployment failures name the concrete evidence developers must
     /Terraform plan stderr.*state refresh/u
   );
   assert.equal(getDeploymentFailureDeveloperCheck("plan", "production"), null);
+});
+
+test("deployment target identity failures do not point developers to CodeBuild logs", () => {
+  const check = getDeploymentFailureDeveloperCheck(
+    "apply",
+    "development",
+    "Application runtime release failed: Prepared release deployment target fingerprint no longer matches the confirmed target"
+  );
+
+  assert.match(check ?? "", /runtimeConfig.*runtimeTarget.*deploymentTargetFingerprint/u);
+  assert.doesNotMatch(check ?? "", /CodeBuild/u);
+});
+
+test("output reconciliation failures do not point developers to Terraform apply stderr", () => {
+  const check = getDeploymentFailureDeveloperCheck(
+    "apply",
+    "development",
+    "Application output reconciliation failed: ECS web runtime coordinates conflict with the Terraform outputs"
+  );
+
+  assert.match(check ?? "", /ecrRepositoryName.*containerPort.*Terraform state/u);
+  assert.doesNotMatch(check ?? "", /taskDefinitionArn revision/u);
+  assert.doesNotMatch(check ?? "", /apply stderr|tfplan hash|AWS 권한/u);
 });
 
 test("a failed unapproved run is presented as a validation result", () => {

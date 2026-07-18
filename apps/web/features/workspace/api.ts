@@ -67,7 +67,6 @@ import type {
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
-  GitCicdGitHubOAuthStartResponse,
   GitCicdMonitoringConfig,
   GitCicdMonitoringConfigResponse,
   GitCicdPipelineLogListResponse,
@@ -154,7 +153,7 @@ const API_ERROR_CODES = [
   "unauthorized",
   "not_found",
   "conflict",
-  "github_oauth_required",
+  "github_app_permission_required",
   "too_many_requests",
   "unprocessable_entity",
   "bad_gateway",
@@ -1960,34 +1959,6 @@ export async function applyGitCicdRepositorySettings(
 ): Promise<GitCicdRepositorySettingsApplyResponse> {
   return apiFetch<GitCicdRepositorySettingsApplyResponse>(
     `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/repository-settings/apply`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
-export async function createGitCicdGitHubOAuthStartUrl(
-  handoffId: string
-): Promise<GitCicdGitHubOAuthStartResponse> {
-  return apiFetch<GitCicdGitHubOAuthStartResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/github-oauth/start`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
-export async function applyGitCicdRepositorySettingsWithGitHubOAuth(
-  handoffId: string
-): Promise<GitCicdRepositorySettingsApplyResponse> {
-  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(
-      handoffId
-    )}/repository-settings/apply-with-github-oauth`,
     {
       auth: true,
       method: "POST",

@@ -14,8 +14,6 @@ import { copyTextToClipboard } from "../../lib/clipboard";
 import {
   applyGitCicdAwsRoleDiff,
   applyGitCicdRepositorySettings,
-  applyGitCicdRepositorySettingsWithGitHubOAuth,
-  createGitCicdGitHubOAuthStartUrl,
   createGitCicdHandoff,
   getProjectDeliveryProfile,
   getGitCicdMonitoringConfig,
@@ -310,24 +308,6 @@ export function CicdConsoleScreen({
     },
     [refreshHandoffs]
   );
-
-  const startGitHubOAuth = useCallback(async (): Promise<void> => {
-    if (!currentHandoff) {
-      return;
-    }
-
-    setIsHandoffBusy(true);
-    setHandoffErrorMessage("");
-    try {
-      const result = await createGitCicdGitHubOAuthStartUrl(currentHandoff.id);
-      window.location.assign(result.authorizationUrl);
-    } catch (error) {
-      setHandoffErrorMessage(
-        getApiErrorMessage(error, "GitHub OAuth 승인 화면을 열지 못했습니다.")
-      );
-      setIsHandoffBusy(false);
-    }
-  }, [currentHandoff]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -810,7 +790,11 @@ export function CicdConsoleScreen({
           설치합니다. PR merge만으로 최초 앱 배포를 시작하지 않습니다.
         </p>
 
-        <div className={handoffStyles.readiness} aria-label="CI/CD PR 준비 상태">
+        <div
+          className={handoffStyles.readiness}
+          id="cicd-pr-readiness"
+          aria-label="CI/CD PR 준비 상태"
+        >
           <div className={handoffStyles.readinessHeader}>
             <div>
               <strong>배포 PR 준비</strong>
@@ -839,6 +823,10 @@ export function CicdConsoleScreen({
                 상태 새로고침
               </button>
             </div>
+          ) : readiness?.ready ? (
+            <p className={handoffStyles.readinessComplete} role="status">
+              모든 필수 항목 완료
+            </p>
           ) : (
             <ul className={handoffStyles.readinessList}>
               {readinessItems.map((item) => (
@@ -1005,30 +993,6 @@ export function CicdConsoleScreen({
                 >
                   Repository 설정 적용
                 </button>
-              ) : null}
-              {currentHandoff.githubOAuthRequired ? (
-                <>
-                  <button
-                    className={styles.deploymentSecondaryButton}
-                    disabled={isHandoffBusy}
-                    onClick={() => void startGitHubOAuth()}
-                    type="button"
-                  >
-                    GitHub OAuth 승인
-                  </button>
-                  <button
-                    className={styles.deploymentSecondaryButton}
-                    disabled={isHandoffBusy}
-                    onClick={() =>
-                      void runHandoffAction(() =>
-                        applyGitCicdRepositorySettingsWithGitHubOAuth(currentHandoff.id)
-                      )
-                    }
-                    type="button"
-                  >
-                    승인 후 Repository 설정 재적용
-                  </button>
-                </>
               ) : null}
               {currentHandoff.awsRoleDiff && !currentHandoff.awsRoleDiff.applied ? (
                 <button

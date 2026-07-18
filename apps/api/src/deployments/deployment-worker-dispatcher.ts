@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   DescribeTasksCommand,
   ECSClient,
@@ -43,18 +46,120 @@ export type DeploymentWorkerDispatcher = {
   stop(input: StopDeploymentWorkerInput): Promise<StopDeploymentWorkerResult>;
 };
 
-export function createLocalDeploymentWorkerDispatcher(): DeploymentWorkerDispatcher {
+type LocalWorkerProcess = {
+  pid?: number;
+  unref(): void;
+};
+
+type LocalWorkerSpawnOptions = {
+  detached: boolean;
+  env: NodeJS.ProcessEnv;
+  stdio: "ignore";
+};
+
+export function createLocalDeploymentWorkerDispatcher(options: {
+  command?: string;
+  commandArgs?: string[];
+  spawnWorker?: (
+    command: string,
+    args: string[],
+    options: LocalWorkerSpawnOptions
+  ) => LocalWorkerProcess;
+  isProcessActive?: (pid: number) => boolean;
+  stopProcess?: (pid: number) => void;
+  wait?: (milliseconds: number) => Promise<void>;
+} = {}): DeploymentWorkerDispatcher {
+  const command = options.command ?? process.execPath;
+  const commandArgs = options.commandArgs ?? createLocalWorkerCommandArgs();
+  const spawnWorker =
+    options.spawnWorker ??
+    ((workerCommand, workerArgs, workerOptions) =>
+      spawn(workerCommand, workerArgs, workerOptions));
+  const isProcessActive = options.isProcessActive ?? isLocalProcessActive;
+  const stopProcess = options.stopProcess ?? ((pid: number) => process.kill(pid, "SIGTERM"));
+  const wait =
+    options.wait ??
+    ((milliseconds: number) => new Promise<void>((resolveWait) => setTimeout(resolveWait, milliseconds)));
+
   return {
-    async dispatch() {
-      return { taskArn: null };
+    async dispatch({ job }) {
+      const child = spawnWorker(command, commandArgs, {
+        detached: true,
+        env: {
+          ...process.env,
+          SKETCHCATCH_DEPLOYMENT_ID: job.deploymentId,
+          SKETCHCATCH_DEPLOYMENT_JOB_ID: job.id,
+          SKETCHCATCH_DEPLOYMENT_OPERATION: job.operation
+        },
+        stdio: "ignore"
+      });
+      if (!child.pid) {
+        throw new Error("Local deployment worker did not return a process id");
+      }
+      child.unref();
+      return { taskArn: createLocalProcessReference(child.pid) };
     },
-    async inspect() {
-      return { state: "MISSING", lastStatus: null };
+    async inspect({ job }) {
+      const pid = parseLocalProcessReference(job.ecsTaskArn);
+      if (!pid || !isProcessActive(pid)) {
+        return { state: "MISSING", lastStatus: null };
+      }
+      return { state: "ACTIVE", lastStatus: "RUNNING" };
     },
-    async stop() {
-      return { stopped: false };
+    async stop({ job }) {
+      const pid = parseLocalProcessReference(job.ecsTaskArn);
+      if (!pid || !isProcessActive(pid)) return { stopped: false };
+
+      try {
+        stopProcess(pid);
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          if (!isProcessActive(pid)) return { stopped: true };
+          await wait(100);
+        }
+      } catch {
+        if (!isProcessActive(pid)) return { stopped: false };
+      }
+
+      return {
+        stopped: false,
+        errorSummary: "Local deployment worker could not be verified or stopped; retry cancellation."
+      };
     }
   };
+}
+
+function createLocalWorkerCommandArgs(): string[] {
+  const sourceEntry = resolve(process.cwd(), "src/deployment-worker.ts");
+  const builtEntry = resolve(process.cwd(), "dist/deployment-worker.cjs");
+  const hasTypeScriptLoader = process.execArgv.some((argument) => argument.includes("tsx"));
+
+  if (hasTypeScriptLoader && existsSync(sourceEntry)) {
+    return [...process.execArgv, sourceEntry];
+  }
+  if (existsSync(builtEntry)) {
+    return [builtEntry];
+  }
+  throw new Error("Local deployment worker entrypoint was not found");
+}
+
+function createLocalProcessReference(pid: number): string {
+  return `local-process:${pid}`;
+}
+
+function parseLocalProcessReference(reference: string | null): number | null {
+  const match = /^local-process:(\d+)$/u.exec(reference ?? "");
+  if (!match?.[1]) return null;
+  const pid = Number(match[1]);
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : null;
+}
+
+function isLocalProcessActive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !(error instanceof Error && "code" in error && error.code === "ESRCH");
+  }
 }
 
 export function createConfiguredDeploymentWorkerDispatcher(): DeploymentWorkerDispatcher {

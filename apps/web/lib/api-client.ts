@@ -54,6 +54,10 @@ const API_MESSAGE_TRANSLATIONS: Partial<Record<string, string>> = {
     "ECS 배포 결과 URL이 설정되지 않았습니다. 프로젝트 배포 대상 설정에서 외부 HTTPS URL을 입력한 뒤 다시 시도해주세요.",
   "GitOps application handoff requires a confirmed project deployment target":
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
+  "A confirmed project deployment target is required for automatic ECS application deployment":
+    "전체 스택 배포 전에 Source Repository를 연결하고 프로젝트 배포 타깃과 ECS 빌드 설정을 저장해 주세요.",
+  "A confirmed project deployment target is required for application deployment":
+    "전체 스택 또는 애플리케이션 배포 전에 Source Repository를 연결하고 프로젝트 배포 타깃과 빌드 설정을 저장해 주세요.",
   PROJECT_DEPLOYMENT_TARGET_REQUIRED:
     "프로젝트 배포 대상이 확정되지 않았습니다. 프로젝트 설정에서 검증된 AWS 연결과 Repository 빌드 근거를 저장한 뒤 다시 시도해주세요.",
   GIT_APP_AUTHENTICATION_FAILED:
@@ -415,6 +419,14 @@ function appendDeveloperDiagnostic(
 function getDeveloperErrorArea(path: string | undefined): DeveloperErrorArea {
   const normalizedPath = path?.toLowerCase() ?? "";
 
+  if (normalizedPath.endsWith("/deployments/prepare")) {
+    return {
+      stage: "배포 범위 및 타깃 확인",
+      check:
+        "이 단계에서는 worker가 시작되지 않습니다. worker 로그 대신 저장된 ProjectDraft의 ECS 리소스, 프로젝트 배포 타깃의 빌드 설정, 선택한 AWS 연결의 일치 여부를 확인하세요."
+    };
+  }
+
   if (normalizedPath.includes("live-observation")) {
     return {
       stage: "실시간 서비스 관측",
@@ -514,7 +526,7 @@ function sanitizeDeveloperCause(value: string): string {
 }
 
 function getKoreanApiMessage(error: ApiClientError, fallbackMessage: string): string {
-  if (error.code === "github_oauth_required") {
+  if (error.code === "github_app_permission_required") {
     if (error.message.includes("environments or Actions variables")) {
       return "GitHub App 권한이 부족해서 repository settings를 적용할 수 없습니다. GitHub App repository permissions에서 Administration 권한과 Variables 권한을 Read and write로 승인한 뒤 다시 시도해주세요.";
     }

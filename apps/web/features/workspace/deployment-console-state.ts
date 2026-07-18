@@ -74,12 +74,6 @@ export type DirectDeploymentFlow = {
   readonly steps: readonly DirectDeploymentStep[];
 };
 
-export type QueuedApplyPlanInput = {
-  readonly deployment: Pick<Deployment, "currentPlanArtifactId" | "id" | "status"> | null;
-  readonly queuedDeploymentId: string;
-  readonly requestState: RequestState;
-};
-
 export type DirectDeploymentPreflightInput = {
   readonly analysis: AiPreDeploymentAnalysisResult | null;
   readonly errorMessage: string;
@@ -273,16 +267,6 @@ export function hasDeploymentDraftChanges(input: DeploymentDraftChangeInput): bo
     input.currentDraftRevision !== null &&
     input.preparedDraftRevision !== null &&
     input.currentDraftRevision !== input.preparedDraftRevision
-  );
-}
-
-export function shouldStartQueuedApplyPlan(input: QueuedApplyPlanInput): boolean {
-  return Boolean(
-    input.deployment &&
-    input.queuedDeploymentId === input.deployment.id &&
-    input.deployment.status === "PENDING" &&
-    !input.deployment.currentPlanArtifactId &&
-    input.requestState === "idle"
   );
 }
 

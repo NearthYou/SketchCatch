@@ -583,7 +583,6 @@ function createGitCicdHandoff(status: GitCicdHandoff["status"]): GitCicdHandoff 
     apiBaseUrl: null,
     repositorySettingsPreview: null,
     awsRoleDiff: null,
-    githubOAuthRequired: true,
     status,
     statusMessage: null,
     userAcceptedChangeId: "accepted-change-1",

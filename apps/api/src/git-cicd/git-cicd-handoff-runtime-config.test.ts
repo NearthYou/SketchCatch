@@ -44,6 +44,55 @@ test("ECS GitOps handoff reports the required output URL for a null runtime conf
   );
 });
 
+test("ECS GitOps handoff accepts current Docker evidence from the linked repository analysis record", () => {
+  const commitSha = "a".repeat(40);
+  const target = {
+    runtimeTargetKind: "ecs_fargate",
+    confirmedBuildConfig: {
+      buildPreset: "docker_build",
+      sourceRoot: ".",
+      dockerfilePath: "apps/api/Dockerfile",
+      confirmedCommitSha: commitSha
+    },
+    runtimeConfig: {
+      runtimeTargetKind: "ecs_fargate",
+      outputUrl: "https://app.example.com"
+    },
+    awsRoleArn: "arn:aws:iam::123456789012:role/SketchCatch"
+  } as unknown as GitCicdHandoffDeploymentTargetRecord;
+  const sourceRepository = {
+    analysisRevision: null,
+    analysisResult: null,
+    repositoryAnalysisRevision: commitSha,
+    repositoryAnalysisResult: {
+      repositoryUrl: "https://github.com/sketchcatch/app",
+      repositoryRevision: commitSha,
+      defaultBranch: "main",
+      availableBranches: ["main"],
+      evidenceFiles: [],
+      detectedSignals: [],
+      recommendedTemplateId: null,
+      recommendationReason: "",
+      aiHandoff: {
+        status: "template_selection_failed",
+        templateId: null,
+        mismatchReasons: [],
+        applicationUnits: [],
+        evidence: [{ kind: "dockerfile", path: "apps/api/Dockerfile" }],
+        missingEvidence: []
+      }
+    }
+  } as unknown as GitCicdHandoffSourceRepositoryRecord;
+
+  assert.doesNotThrow(() =>
+    assertGitOpsTarget(
+      target,
+      sourceRepository,
+      { mode: "repository_root", path: "." }
+    )
+  );
+});
+
 test("GitOps handoff rejects divergent canonical and legacy runtime targets", () => {
   const runtimeConfig = {
     runtimeTargetKind: "ecs_fargate" as const,
