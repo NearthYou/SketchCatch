@@ -17,15 +17,11 @@ test("project detail separates source repository, project settings, and Board ac
   assert.match(source, /Architecture Board 열기/);
 });
 
-test("legacy GitHub settings URL redirects to the project source repository page", () => {
+test("legacy project settings URL redirects to the Workspace Delivery panel", () => {
   const source = readWorkspaceFile("app/dashboard/projects/[projectId]/settings/page.tsx");
 
-  assert.match(source, /searchParams/);
-  assert.match(source, /tab === "github"/);
-  assert.match(
-    source,
-    /redirect\(`\/dashboard\/projects\/\$\{encodeURIComponent\(projectId\)\}\/repository`\)/
-  );
+  assert.match(source, /startMode: "delivery"/);
+  assert.match(source, /redirect\(`\/workspace\?/);
 });
 
 test("dashboard shell labels the repository route as source repository", () => {

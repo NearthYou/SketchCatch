@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, X } from "lucide-react";
-import { CicdConsoleScreen } from "./CicdConsoleScreen";
+import { DeliveryCenterPanel } from "./DeliveryCenterPanel";
 import { DirectDeploymentScreen, type DirectDeploymentScreenProps } from "./DirectDeploymentScreen";
 import type { LiveObservationSelection } from "./live-observation";
 import {
@@ -8,7 +8,6 @@ import {
   cancelPendingCicdReturn,
   completePendingCicdReturn,
   completePendingCicdReturnAfterDeployment,
-  createPendingCicdReturn,
   type InitialCicdReturnCommand,
   type PendingCicdReturn
 } from "./cicd-return-command";
@@ -22,6 +21,7 @@ export type DeploymentConsoleShellProps = Omit<
 > & {
   readonly activeScreen?: DeploymentConsoleScreen | undefined;
   readonly fullScreenOnly?: boolean | undefined;
+  readonly initialActiveScreen?: DeploymentConsoleScreen | undefined;
   readonly initialExpanded?: boolean | undefined;
   readonly initialCicdReturnCommand?: InitialCicdReturnCommand | undefined;
   readonly onActiveScreenChange?: ((screen: DeploymentConsoleScreen) => void) | undefined;
@@ -34,6 +34,7 @@ export type DeploymentConsoleShellProps = Omit<
 export function DeploymentConsoleShell({
   activeScreen: controlledActiveScreen,
   fullScreenOnly = false,
+  initialActiveScreen,
   initialCicdReturnCommand,
   initialExpanded = false,
   onActiveScreenChange,
@@ -44,8 +45,9 @@ export function DeploymentConsoleShell({
   ...directProps
 }: DeploymentConsoleShellProps) {
   const storageKey = `sketchcatch:deployment-console-screen:${directProps.projectId}`;
-  const [storedActiveScreen, setStoredActiveScreen] =
-    useState<DeploymentConsoleScreen>(initialCicdReturnCommand?.activeScreen ?? "deployment");
+  const [storedActiveScreen, setStoredActiveScreen] = useState<DeploymentConsoleScreen>(
+    initialCicdReturnCommand?.activeScreen ?? initialActiveScreen ?? "deployment"
+  );
   const [pendingCicdReturn, setPendingCicdReturn] = useState<PendingCicdReturn | null>(null);
   const [requestedDirectScope, setRequestedDirectScope] = useState<
     "application" | "full_stack" | null
@@ -68,9 +70,14 @@ export function DeploymentConsoleShell({
       window.localStorage.setItem(storageKey, "cicd");
       return;
     }
+    if (initialActiveScreen) {
+      setStoredActiveScreen(initialActiveScreen);
+      window.localStorage.setItem(storageKey, initialActiveScreen);
+      return;
+    }
     const storedValue = window.localStorage.getItem(storageKey);
     setStoredActiveScreen(isDeploymentConsoleScreen(storedValue) ? storedValue : "deployment");
-  }, [directProps.projectId, initialCicdReturnCommand, storageKey]);
+  }, [directProps.projectId, initialActiveScreen, initialCicdReturnCommand, storageKey]);
 
   useEffect(() => {
     if (!initialCicdReturnCommand || !onInitialCicdReturnCommandReady) {
@@ -214,19 +221,12 @@ export function DeploymentConsoleShell({
         />
       </div>
       <div hidden={activeScreen !== "cicd"}>
-        <CicdConsoleScreen
-          isVisible={activeScreen === "cicd"}
+        <DeliveryCenterPanel
           onOpenDirectDeployment={(scope) => {
-            setPendingCicdReturn(
-              createPendingCicdReturn(
-                directProps.projectId,
-                scope ? "initial_application_release" : "approved_apply_plan"
-              )
-            );
             setRequestedDirectScope(scope);
-            selectScreen("deployment", { preservePendingCicdReturn: true });
+            selectScreen("deployment");
           }}
-          onOpenLiveObservation={onOpenLiveObservation}
+          {...(onOpenLiveObservation ? { onOpenLiveObservation } : {})}
           projectId={directProps.projectId}
           readinessRefreshRequestId={readinessRefreshRequestId}
         />

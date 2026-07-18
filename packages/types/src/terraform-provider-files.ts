@@ -95,6 +95,7 @@ data "aws_eks_cluster_auth" "sketchcatch" {
 }
 
 provider "kubernetes" {
+  # sketchcatch:managed-provider
   host                   = ${clusterAddress}.endpoint
   cluster_ca_certificate = base64decode(${clusterAddress}.certificate_authority[0].data)
   token                  = data.aws_eks_cluster_auth.sketchcatch.token

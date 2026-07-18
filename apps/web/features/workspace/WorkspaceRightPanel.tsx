@@ -821,7 +821,6 @@ export function WorkspaceRightPanel({
       return saveWorkspaceTerraformArtifact({
         diagramJson: source.diagramJson,
         projectId,
-        skipValidation: true,
         source: "manual",
         terraformCode: source.terraformCode
       });
@@ -973,6 +972,7 @@ export function WorkspaceRightPanel({
         fullScreenOnly
         hasUnsavedDeploymentBaseline={hasUnsavedDeploymentBaseline}
         initialCicdReturnCommand={initialCicdReturnCommand}
+        initialActiveScreen={initialView === "deployment" ? "cicd" : undefined}
         initialExpanded
         onInitialCicdReturnCommandReady={onInitialCicdReturnCommandReady}
         onExpandedClose={() => setIsDeploymentConsoleOpen(false)}

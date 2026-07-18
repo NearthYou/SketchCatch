@@ -17,6 +17,7 @@ import {
   applyGitCicdRepositorySettingsWithGitHubOAuth,
   createGitCicdGitHubOAuthStartUrl,
   createGitCicdHandoff,
+  getProjectDeliveryProfile,
   getGitCicdMonitoringConfig,
   getGitCicdPipelineRun,
   listGitHubAccountInstallations,
@@ -25,7 +26,6 @@ import {
   listGitCicdPipelineLogs,
   listGitCicdPipelineRuns,
   listSourceRepositories,
-  refreshGitCicdReadiness,
   refreshProjectGitCicdPipelineRuns,
   retryGitCicdFrontendRelease
 } from "./api";
@@ -384,7 +384,7 @@ export function CicdConsoleScreen({
 
       const [consoleResult, readinessResult] = await Promise.allSettled([
         loadConsoleData(),
-        refreshGitCicdReadiness(projectId)
+        getProjectDeliveryProfile(projectId).then((profile) => profile.readiness)
       ]);
       if (
         cancelled ||
@@ -519,7 +519,7 @@ export function CicdConsoleScreen({
         listDeployments(projectId),
         listGitCicdHandoffs(projectId)
       ]),
-      refreshGitCicdReadiness(projectId)
+      getProjectDeliveryProfile(projectId).then((profile) => profile.readiness)
     ]);
 
     if (!isGitCicdReloadOwner(reloadCoordinatorRef.current, reloadGeneration)) return;

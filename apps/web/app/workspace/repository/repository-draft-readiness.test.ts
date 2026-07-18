@@ -2,25 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getRepositoryDraftBlockingIssue } from "./repository-draft-readiness";
 
-test("Repository draft requires a CI/CD connection before any later validation", () => {
+test("public Repository draft does not require a CI/CD connection", () => {
+  assert.deepEqual(
+    getRepositoryDraftBlockingIssue({
+      answers: { include_frontend: true },
+      hasConnectedRepository: false,
+      questions: [{ id: "include_frontend" }]
+    }),
+    null
+  );
+});
+
+test("Repository draft validates follow-up answers independently from CI/CD", () => {
   assert.deepEqual(
     getRepositoryDraftBlockingIssue({
       answers: {},
       hasConnectedRepository: false,
-      questions: [{ id: "include_frontend" }]
-    }),
-    {
-      field: "ci_cd_connection",
-      message: "CI/CD 연결을 완료해야 다음 단계로 이동할 수 있습니다."
-    }
-  );
-});
-
-test("Repository draft validates follow-up answers after CI/CD is connected", () => {
-  assert.deepEqual(
-    getRepositoryDraftBlockingIssue({
-      answers: {},
-      hasConnectedRepository: true,
       questions: [{ id: "include_frontend" }]
     }),
     {
@@ -32,7 +29,7 @@ test("Repository draft validates follow-up answers after CI/CD is connected", ()
   assert.equal(
     getRepositoryDraftBlockingIssue({
       answers: { include_frontend: false },
-      hasConnectedRepository: true,
+      hasConnectedRepository: false,
       questions: [{ id: "include_frontend" }]
     }),
     null

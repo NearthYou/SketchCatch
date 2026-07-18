@@ -81,6 +81,7 @@ import {
 import type { AiRequestState } from "./WorkspaceAiPanelPieces";
 import type { PreparedWorkspaceDeploymentArtifacts } from "./workspace-deployment-artifacts";
 import { getDeploymentPreparationErrorMessage } from "./deployment-preparation-error";
+import { verifyRepositoryAccessForPlan } from "./repository-access-verification";
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
@@ -770,6 +771,8 @@ export function DirectDeploymentScreen({
     } catch (error) {
       setRequestState("error");
       setErrorMessage(getApiErrorMessage(error, fallbackMessage));
+    } finally {
+      setActiveProgress(null);
     }
   }
 
@@ -971,27 +974,12 @@ export function DirectDeploymentScreen({
     });
     await runRequest(async () => {
       if (requiresProjectBuildEnvironment(selectedDeployment)) {
-        const preparedBuildEnvironment =
-          buildEnvironment?.status === "ready"
-            ? buildEnvironment
-            : await prepareProjectBuildEnvironment(projectId);
-        setBuildEnvironment(preparedBuildEnvironment);
-        if (preparedBuildEnvironment.status !== "ready") {
-          throw new Error(
-            "빌드 환경 검증을 완료하지 못했습니다. AWS CodeBuild용 GitHub 권한과 AWS 연결을 확인해 주세요."
-          );
-        }
-        const repositoryVerifiedBuildEnvironment =
-          await verifyProjectRepositoryAccess(projectId);
-        setBuildEnvironment(repositoryVerifiedBuildEnvironment);
-        if (
-          repositoryVerifiedBuildEnvironment.repositoryVerificationStatus !== "verified"
-        ) {
-          throw new Error(
-            repositoryVerifiedBuildEnvironment.repositoryVerificationStatusReason ??
-              "CodeBuild가 프로젝트 GitHub repository의 확정 commit을 checkout하지 못했습니다."
-          );
-        }
+        await verifyRepositoryAccessForPlan({
+          currentBuildEnvironment: buildEnvironment,
+          onBuildEnvironmentChange: setBuildEnvironment,
+          prepare: () => prepareProjectBuildEnvironment(projectId),
+          verify: () => verifyProjectRepositoryAccess(projectId)
+        });
       }
       const deployment = await runDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>

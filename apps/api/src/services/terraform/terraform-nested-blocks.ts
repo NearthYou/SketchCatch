@@ -2,6 +2,8 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES: Record<string, ReadonlySet<string>> = {
   aws_ami: new Set(["filter"]),
   aws_api_gateway_rest_api: new Set(["endpointConfiguration"]),
   aws_appautoscaling_policy: new Set(["targetTrackingScalingPolicyConfiguration"]),
+  aws_ecs_capacity_provider: new Set(["autoScalingGroupProvider"]),
+  aws_eks_fargate_profile: new Set(["selector"]),
   aws_autoscaling_group: new Set(["launchTemplate", "tag"]),
   aws_autoscaling_policy: new Set(["stepAdjustment", "targetTrackingConfiguration"]),
   aws_codebuild_project: new Set([
@@ -90,7 +92,17 @@ const TERRAFORM_NESTED_BLOCK_ATTRIBUTES_BY_PATH: Record<string, ReadonlySet<stri
   "aws_autoscaling_policy.targetTrackingConfiguration": new Set(["predefinedMetricSpecification"]),
   "aws_cloudfront_distribution.origin": new Set(["customOriginConfig", "s3OriginConfig"]),
   "aws_cloudfront_distribution.restrictions": new Set(["geoRestriction"]),
+  "aws_cloudfront_cache_policy.parametersInCacheKeyAndForwardedToOrigin": new Set([
+    "cookiesConfig",
+    "headersConfig",
+    "queryStringsConfig"
+  ]),
+  "aws_s3_bucket_lifecycle_configuration.rule": new Set(["expiration", "filter"]),
+  "aws_s3_bucket_server_side_encryption_configuration.rule": new Set([
+    "applyServerSideEncryptionByDefault"
+  ]),
   "aws_s3_bucket_replication_configuration.rule": new Set(["destination"]),
+  "aws_wafv2_web_acl.defaultAction": new Set(["allow", "block"]),
   "kubernetes_deployment.spec": new Set(["selector"])
 };
 
