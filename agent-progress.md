@@ -195,3 +195,10 @@ Short English-only working log for the current agent context. Older records are 
 - Removed the keyword-only clarification bypass and applied question-specific validation to all 15 required Architecture Draft questions; explanation requests and unrelated answers now repeat the same question.
 - Preserved the originating assistant question in both Workspace chat surfaces so accepted free-form answers select the matching existing option or add a disabled selected custom option.
 - Focused API regressions pass 5/5, focused Web clarification tests pass 6/6, and paired chat selection/locking contracts pass 21/21; direct API and Web typechecks pass. Full suites and builds were intentionally not run per user request. No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff was performed.
+### 2026-07-18 - Probe natural-language architecture changes
+
+- Added five new clarification examples and five real diagram patch examples outside the existing cases.
+- Website type and traffic answers already passed; database storage, country-level region, and conversational photo-upload answers were expanded and now pass.
+- EC2 sizing, RDS removal, S3 addition, EC2-to-Lambda replacement, and connected CloudFront addition all produce the requested Preview graph.
+- Added complete Korean natural-language names and generated variants for every supported resource type, plus common service aliases and abbreviations. The exact `로드 밸런서 넣어줘` request now adds and connects a load balancer when there is one unambiguous compute target.
+- Focused clarification regressions pass 6/6, patch regressions pass 3/3, complete alias coverage passes 2/2, and API typecheck passes.
