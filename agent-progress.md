@@ -13,6 +13,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-16 - Address PR #438 review feedback
+
+- Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
+- Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
+- Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
+- No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
+
 ### 2026-07-16 - Follow up merged PR #439 review
 
 - Scoped runtime Secret contract regexes to their Terraform set literals, selected the named worker container, and used `try(..., [])` for nullable Secret lists so unrelated markers cannot satisfy the checks.
@@ -201,19 +208,9 @@ Short English-only working log for the current agent context. Older records are 
 - The focused gateway suite passes 17/17; formatting, API lint/typecheck, root lint/typecheck/build, harness, and diff checks pass. Live dev verification and Terraform Plan completed successfully and stopped before Apply.
 - No Terraform Apply, deployment, Git commit, push, or DB migration was performed. Existing environments can use the cold Docker-build fallback; the next action is user approval only if Apply is intended.
 
-### 2026-07-18 - Remove duplicate Workspace top-bar panel toggles
+### 2026-07-18 - Align deployment safety documentation with current enforcement
 
-- Removed the legacy left and right panel toggle buttons and their divider from the Workspace project bar; the accessible edge handles remain the single panel toggle surface.
-- The focused Diagram Editor layout suite passes 52/52, and harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 785/789 with four unrelated existing generated Architecture Board knowledge and contract failures.
-- The controllable local browser had no authenticated session and Chrome control was unavailable, so signed-in visual confirmation remains manual. No DB migration, deployment, Terraform, AWS, or Git handoff action was performed.
-
-### 2026-07-18 - Keep Fit View out of ProjectDraft changes
-
-- Fixed the editable Architecture Board Fit View action so its automatic viewport move no longer marks the ProjectDraft dirty; direct user viewport movement remains persistent.
-- Signed-in localhost checks confirmed cost tab, period, user count, usage range, connection, direct URL entry, and browser history restoration already work, so the cost URL implementation was left unchanged.
-- Focused dirty and cost regressions pass 77/77. The full Web suite passes 786/790; the four failures are unchanged generated Architecture Board artifact line-ending and Resource catalog contract failures.
-
-### 2026-07-18 - Merge Reverse Engineering result UX
-
-- Resolved the scan criteria conflict by retaining the new AWS connection recovery UI and the existing client-side settings navigation.
-- Focused regressions pass 20/20; harness, lint, typecheck, build, and diff checks pass. No DB migration or cloud mutation was performed.
+- Clarified that deterministic High findings are recorded and shown before approval, while severity-only Plan approval blocking remains planned; the separate approval/apply boundary still prevents unapproved execution.
+- Updated the root README, glossary, and ADR without changing the already-accurate canonical deployment policy or the active Architecture Board Compiler feature ownership.
+- The safety-gate suite passes 8/8. Safety-gate plus deployment-plan suites pass 28/28 with the non-secret test setting `S3_BUCKET_NAME=test-project-assets`; the initial no-env run stopped 19 plan tests during setup.
+- Harness and diff checks pass. No source, dependency, lockfile, migration, cloud mutation, deployment, or Git handoff changed; next action is documentation review and PR.
