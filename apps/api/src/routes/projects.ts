@@ -304,7 +304,17 @@ export async function registerProjectRoutes(
       );
     }
 
-    return reply.status(200).send(result);
+    if (!result.managedCleanupCompleted) {
+      request.log.warn(
+        { projectId: params.id },
+        "AWS managed project build cleanup was incomplete; local project records were deleted"
+      );
+    }
+
+    return reply.status(200).send({
+      deleted: result.deleted,
+      cleanup: result.cleanup
+    });
   });
 
   app.post("/projects/:id/architectures", async (request, reply) => {

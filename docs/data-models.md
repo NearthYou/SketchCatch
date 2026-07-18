@@ -620,7 +620,12 @@ type DeleteProjectResponse = {
 };
 ```
 
-프로젝트 삭제 시 `projects/{projectId}/`와 연결된 모든 `deployments/{deploymentId}/` prefix에서 현재 object, 이전 version, delete marker를 먼저 삭제한다. 내부 S3 산출물을 하나라도 모두 삭제하지 못하면 `managed_cleanup_failed`로 중단하고 RDS의 프로젝트·배포 기록을 유지해 재시도할 수 있게 한다. 모든 prefix 정리가 성공한 뒤에만 RDS 기록을 삭제하며, `cleanup` 필드는 기존 응답 호환성을 위해 유지한다.
+프로젝트 삭제 시 `projects/{projectId}/`와 연결된 모든 `deployments/{deploymentId}/` prefix의 현재 object,
+이전 version, delete marker와 프로젝트 전용 CodeBuild·IAM Role 정리를 먼저 시도한다. 이 외부 정리는
+best-effort이므로 S3 또는 AWS 권한/API 오류가 발생해도 RDS의 프로젝트·배포 기록 삭제를 막거나
+`managed_cleanup_failed`를 반환하지 않는다. S3 정리 실패는 응답의 `cleanup`에 남기고, CodeBuild·IAM 정리
+실패는 비밀값 없이 서버 경고 로그에 남긴다. 진행 중인 Deployment, worker job 또는 project execution lease는
+별도 동시성 보호이므로 계속 삭제를 차단한다.
 
 ## ArchitectureSnapshot
 

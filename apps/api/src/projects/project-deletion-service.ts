@@ -84,6 +84,10 @@ export type DeleteProjectRecordsInput = {
   deletionGuard?: ProjectDeletionGuard;
 };
 
+export type DeleteProjectRecordsResult = DeleteProjectResponse & {
+  managedCleanupCompleted: boolean;
+};
+
 export type ProjectDeletionClaim = {
   startedAt: Date;
 };
@@ -148,7 +152,7 @@ export async function getProjectDeletePreview(input: {
 
 export async function deleteProjectRecords(
   input: DeleteProjectRecordsInput
-): Promise<DeleteProjectResponse> {
+): Promise<DeleteProjectRecordsResult> {
   const snapshot = await loadProjectDeleteSnapshot(input);
 
   if (!snapshot) {
@@ -166,7 +170,10 @@ export async function deleteProjectRecords(
   if (!claim) throw new ProjectDeletionNotFoundError();
 
   try {
-    await cleanupProjectManagedBuildEnvironment(snapshot, input.cleanupManagedResources);
+    const managedCleanupCompleted = await cleanupProjectManagedBuildEnvironment(
+      snapshot,
+      input.cleanupManagedResources
+    );
     const objectKeys = collectProjectDeletionObjectKeys(snapshot);
     let failedObjectCount = 0;
 
@@ -195,7 +202,8 @@ export async function deleteProjectRecords(
 
     return {
       deleted: true,
-      cleanup: createCleanupResult(objectKeys.length, failedObjectCount)
+      cleanup: createCleanupResult(objectKeys.length, failedObjectCount),
+      managedCleanupCompleted
     };
   } catch (error) {
     await deletionGuard.markCleanupFailed?.({
@@ -680,14 +688,10 @@ async function cleanupCandidateObjectVersions(
 async function cleanupProjectManagedBuildEnvironment(
   snapshot: ProjectDeleteSnapshot,
   cleanupManagedResources: CleanupAwsConnectionManagedResources | undefined
-): Promise<void> {
+): Promise<boolean> {
   const environment = snapshot.managedBuildEnvironment;
-  if (!environment) return;
-  if (!cleanupManagedResources) {
-    throw new ProjectDeletionManagedCleanupError(
-      "프로젝트 CodeBuild 정리 기능을 사용할 수 없어 프로젝트 삭제를 중단했습니다."
-    );
-  }
+  if (!environment) return true;
+  if (!cleanupManagedResources) return false;
   try {
     await cleanupManagedResources({
       connection: environment.connection,
@@ -702,11 +706,9 @@ async function cleanupProjectManagedBuildEnvironment(
         codeConnectionArn: null
       }
     });
-  } catch (error) {
-    throw new ProjectDeletionManagedCleanupError(
-      "프로젝트 CodeBuild와 전용 IAM Role 정리에 실패했습니다. AWS 권한을 확인한 뒤 다시 삭제해 주세요.",
-      { cause: error }
-    );
+    return true;
+  } catch {
+    return false;
   }
 }
 

@@ -13,6 +13,13 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-18 - Let project deletion survive managed AWS cleanup failures
+
+- Project deletion now treats the project CodeBuild and dedicated IAM Role cleanup as best-effort, while still attempting it before deleting local records.
+- AWS cleanup or inventory failure no longer returns `managed_cleanup_failed`; the API returns the normal deletion response, removes project records, and writes a non-secret warning for possible remote leftovers.
+- Active Deployment, worker-job, and execution-lease deletion guards remain unchanged. Focused project deletion tests pass 40/40; harness, lint, typecheck, build, and diff checks pass.
+- No live AWS cleanup, cloud mutation, deployment, migration, commit, or push was performed.
+
 ### 2026-07-18 - Merge current origin/dev into local dev
 
 - Merged the 10 incoming `origin/dev` commits into the 2 local `dev` commits without rewriting either history.
