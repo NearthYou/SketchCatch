@@ -119,7 +119,6 @@ export function RepositoryStartClient({
     undefined
   );
   const [candidates, setCandidates] = useState<GitHubInstalledRepositoryCandidate[]>([]);
-  const [connectionOptionsLoaded, setConnectionOptionsLoaded] = useState(false);
   const [installationState, setInstallationState] = useState("");
   const [actionState, setActionState] = useState<RequestState>("idle");
   const [publicAnalysisState, setPublicAnalysisState] = useState<RequestState>("idle");
@@ -267,7 +266,6 @@ export function RepositoryStartClient({
       if (loadedInstallations.availability.installationRead !== "ready") {
         setCandidates([]);
         setInstallationState("");
-        setConnectionOptionsLoaded(true);
         setActionState("idle");
         return;
       }
@@ -275,7 +273,6 @@ export function RepositoryStartClient({
       const result = await listGitHubInstalledRepositories(projectId);
       setCandidates(result.repositories);
       setInstallationState(result.state);
-      setConnectionOptionsLoaded(true);
       setActionState("idle");
     } catch (error) {
       setActionState("error");
@@ -373,7 +370,6 @@ export function RepositoryStartClient({
         }).candidates[0]?.templateId ?? null
       );
       setPublicAnalysisState("idle");
-      void loadCandidates();
     } catch (error) {
       setPublicAnalysisState("error");
       setErrorMessage(
@@ -789,34 +785,6 @@ export function RepositoryStartClient({
                 onRetry={() => void analyzePublicRepositoryUrl(repositoryUrl, defaultBranch)}
                 onVerifyPermission={() => void loadCandidates()}
               />
-            ) : null}
-            {publicAnalysis && publicAnalysisState === "idle" ? (
-              connectionOptionsLoaded ? (
-                <RepositoryAnalysisRecovery
-                  action={recoveryAction}
-                  connectionSetupAvailability={githubAppAvailability?.connectionSetup}
-                  errorMessage=""
-                  isBusy={actionState === "loading"}
-                  onAddPermission={(managementUrl) => {
-                    window.open(managementUrl, "_blank", "noopener,noreferrer");
-                  }}
-                  onAnalyzeConnected={() => void analyzeRepository()}
-                  onConnect={(candidate) => void connectRepository(candidate)}
-                  onConnectGitHub={() => void openGitHubConnection()}
-                  onRetry={() => void loadCandidates()}
-                  onVerifyPermission={() => void loadCandidates()}
-                  title="Delivery용 Repository 연결"
-                />
-              ) : (
-                <button
-                  className={styles.secondaryAction}
-                  disabled={actionState === "loading"}
-                  onClick={() => void loadCandidates()}
-                  type="button"
-                >
-                  Delivery용 Repository 연결 확인
-                </button>
-              )
             ) : null}
           </section>
         ) : null}

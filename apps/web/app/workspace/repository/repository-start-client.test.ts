@@ -81,6 +81,8 @@ test("Repository draft defers CI/CD connection until Delivery", () => {
   assert.doesNotMatch(source, /CI\/CD 인계 사용/);
   assert.doesNotMatch(source, /환경설정에서 권한 관리/);
   assert.doesNotMatch(source, /추천 결과를 아키텍처에 맞게 조정합니다\./);
+  assert.doesNotMatch(source, /title="Delivery용 Repository 연결"/);
+  assert.doesNotMatch(source, /Delivery용 Repository 연결 확인/);
 });
 
 test("GitHub connection preserves and restores public analysis without reanalysis", () => {

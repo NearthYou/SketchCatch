@@ -209,3 +209,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Deployment Plan creates S3-backed plan and rollback storage only when those paths need it, so validation and mocked Plan tests no longer require a local `.env` or CI bucket setting.
 - The no-bucket Plan suite passes 25/25 and the exact CI API transition command passes 536/536; API lint, typecheck, and build pass. No S3 or cloud operation was executed.
+
+### 2026-07-18 - Remove the post-analysis Delivery card
+
+- Removed the post-analysis Delivery card and preload; error recovery remains. Risk: no browser QA.
+- Focused 7/7, Web lint/typecheck/build, harness, and diff checks pass. Next: review and push; no deployment or migration.
