@@ -107,6 +107,31 @@ test("unknown conflicts use a neutral state-conflict message", () => {
   );
 });
 
+test("deployment prepare explains a missing application target before worker execution", () => {
+  const error = new ApiClientError(
+    409,
+    {
+      error: "conflict",
+      message: "A confirmed project deployment target is required for application deployment"
+    },
+    {
+      method: "POST",
+      path: "/api/projects/project-id/deployments/prepare",
+      requestId: "req-target-required"
+    }
+  );
+
+  const message = getApiErrorMessage(error, "배포 검토를 시작하지 못했습니다.", {
+    developerMode: true
+  });
+
+  assert.match(message, /Source Repository/u);
+  assert.match(message, /프로젝트 배포 타깃/u);
+  assert.match(message, /실패 단계: 배포 범위 및 타깃 확인/u);
+  assert.match(message, /worker 로그/u);
+  assert.doesNotMatch(message, /Terraform state\/output/u);
+});
+
 test("public AI requests use the same visible request diagnostics", async (context) => {
   const originalFetch = globalThis.fetch;
   context.after(() => {

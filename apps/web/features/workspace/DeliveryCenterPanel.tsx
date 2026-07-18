@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ProjectDeliveryProfile } from "@sketchcatch/types";
 import {
   AlertCircle,
@@ -16,6 +16,7 @@ import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[project
 import { getApiErrorMessage } from "../../lib/api-client";
 import { getProjectDeliveryProfile } from "./api";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
+import { createGitCicdReadinessNavigation } from "./cicd-handoff";
 import { ProjectDeploymentTargetEditor } from "./delivery/ProjectDeploymentTargetEditor";
 import { getDeliveryRepositoryFreshness } from "./delivery-repository-freshness";
 import type { LiveObservationSelection } from "./live-observation";
@@ -59,16 +60,13 @@ export function DeliveryCenterPanel({
     return () => {
       cancelled = true;
     };
-  }, [projectId, reloadKey]);
+  }, [projectId, readinessRefreshRequestId, reloadKey]);
 
-  const repositoryHref = useMemo(() => {
-    const params = new URLSearchParams({ projectId });
-    if (profile?.repositoryAnalysisTarget) {
-      params.set("repositoryUrl", profile.repositoryAnalysisTarget.repositoryUrl);
-      params.set("defaultBranch", profile.repositoryAnalysisTarget.branch);
-    }
-    return `/workspace/repository?${params.toString()}`;
-  }, [profile?.repositoryAnalysisTarget, projectId]);
+  const repositoryHref =
+    createGitCicdReadinessNavigation({
+      projectId,
+      readinessAction: "select_repository"
+    }).href ?? `/dashboard/projects/${encodeURIComponent(projectId)}/repository`;
   const freshness = getDeliveryRepositoryFreshness(
     profile?.repositoryAnalysisTarget ?? null,
     profile?.sourceRepository ?? null
@@ -106,7 +104,12 @@ export function DeliveryCenterPanel({
           </div>
         </div>
         <div className={styles.headerActions}>
-          <strong className={styles.overallStatus} data-ready={profile.readiness.ready}>
+          <a
+            aria-label={`${profile.readiness.ready ? "배포 준비 완료" : `${profile.readiness.requiredActionCount}개 확인 필요`} — 배포 PR 준비로 이동`}
+            className={styles.overallStatus}
+            data-ready={profile.readiness.ready}
+            href="#cicd-pr-readiness"
+          >
             {profile.readiness.ready ? (
               <CheckCircle2 aria-hidden="true" size={15} />
             ) : (
@@ -115,7 +118,7 @@ export function DeliveryCenterPanel({
             {profile.readiness.ready
               ? "배포 준비 완료"
               : `${profile.readiness.requiredActionCount}개 확인 필요`}
-          </strong>
+          </a>
           <button aria-label="Delivery 정보 새로고침" onClick={reload} type="button">
             <RefreshCw aria-hidden="true" size={16} />
           </button>
@@ -125,7 +128,6 @@ export function DeliveryCenterPanel({
       <nav className={styles.sectionNavigation} aria-label="CI/CD Delivery 섹션">
         <a href="#delivery-connections">연결</a>
         <a href="#delivery-configuration">Pipeline 설정</a>
-        <a href="#delivery-readiness">준비 상태</a>
         <a href="#delivery-execution">실행 기록</a>
       </nav>
 
@@ -255,42 +257,6 @@ export function DeliveryCenterPanel({
             />
           </div>
         </div>
-      </section>
-
-      <section
-        className={`${styles.sectionGroup} ${styles.readinessSection}`}
-        id="delivery-readiness"
-        aria-labelledby="delivery-readiness-title"
-      >
-        <div className={styles.groupHeading}>
-          <div>
-            <p>준비 상태</p>
-            <h3 id="delivery-readiness-title">실행 전 필수 항목을 확인하세요</h3>
-          </div>
-          <strong className={styles.readinessSummary} data-ready={profile.readiness.ready}>
-            {profile.readiness.ready
-              ? "준비됨"
-              : `${profile.readiness.requiredActionCount}개 확인 필요`}
-          </strong>
-        </div>
-        <ul className={styles.readinessList}>
-          {profile.readiness.items.map((item) => (
-            <li key={item.key} data-ready={item.status === "ready"}>
-              {item.status === "ready" ? (
-                <CheckCircle2 aria-hidden="true" size={18} />
-              ) : (
-                <AlertCircle aria-hidden="true" size={18} />
-              )}
-              <span>{item.label}</span>
-              <strong>{item.status === "ready" ? "완료" : "확인 필요"}</strong>
-            </li>
-          ))}
-        </ul>
-        {profile.environmentName ? (
-          <p>
-            GitHub Environment: <strong>{profile.environmentName}</strong>
-          </p>
-        ) : null}
       </section>
 
       <section

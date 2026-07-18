@@ -26,10 +26,12 @@ test("trusted Direct release uses only the baseline ID persisted at preparation"
         id: "release-baseline",
         projectId: "project-1",
         runtimeTargetKind: "ecs_fargate",
+        deploymentTargetFingerprint: "a".repeat(64),
         status: "succeeded",
         providerRevision
       },
-      projectId: "project-1"
+      projectId: "project-1",
+      deploymentTargetFingerprint: "a".repeat(64)
     }),
     {
       releaseId: "release-baseline",
@@ -44,7 +46,8 @@ test("trusted Direct release has no rollback baseline when preparation persisted
     resolvePersistedEcsReleaseBaseline({
       baselineReleaseId: null,
       baseline: undefined,
-      projectId: "project-1"
+      projectId: "project-1",
+      deploymentTargetFingerprint: "a".repeat(64)
     }),
     null
   );
@@ -59,12 +62,34 @@ test("trusted Direct release rejects a baseline that differs from the persisted 
           id: "release-latest-but-not-approved",
           projectId: "project-1",
           runtimeTargetKind: "ecs_fargate",
+          deploymentTargetFingerprint: "a".repeat(64),
           status: "succeeded",
           providerRevision
         },
-        projectId: "project-1"
+        projectId: "project-1",
+        deploymentTargetFingerprint: "a".repeat(64)
       }),
     /persisted rollback baseline/i
+  );
+});
+
+test("trusted Direct release rejects a rollback baseline from a replaced deployment target", () => {
+  assert.throws(
+    () =>
+      resolvePersistedEcsReleaseBaseline({
+        baselineReleaseId: "release-baseline",
+        baseline: {
+          id: "release-baseline",
+          projectId: "project-1",
+          runtimeTargetKind: "ecs_fargate",
+          deploymentTargetFingerprint: "a".repeat(64),
+          status: "succeeded",
+          providerRevision
+        },
+        projectId: "project-1",
+        deploymentTargetFingerprint: "b".repeat(64)
+      }),
+    /deployment target/i
   );
 });
 

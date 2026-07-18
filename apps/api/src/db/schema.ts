@@ -1039,7 +1039,7 @@ export const gitCicdHandoffs = pgTable(
     repositorySettingsPreview:
       jsonb("repository_settings_preview").$type<GitCicdRepositorySettingsPreview>(),
     awsRoleDiff: jsonb("aws_role_diff").$type<GitCicdAwsRoleDiff>(),
-    githubOAuthRequired: boolean("github_oauth_required").notNull().default(true),
+    githubAppPermissionRequired: boolean("github_oauth_required").notNull().default(true),
     status: gitCicdHandoffStatusEnum("status").notNull().default("draft"),
     statusMessage: text("status_message"),
     userAcceptedChangeId: varchar("user_accepted_change_id", { length: 128 }).notNull(),

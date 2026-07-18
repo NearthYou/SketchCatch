@@ -10,7 +10,10 @@ import {
   reconcileDeploymentStartup,
   type DeploymentStartupReconciliationResult
 } from "./deployments/deployment-startup-reconciliation.js";
-import { createConfiguredDeploymentWorkerDispatcher } from "./deployments/deployment-worker-dispatcher.js";
+import {
+  createConfiguredDeploymentWorkerDispatcher,
+  createLocalDeploymentWorkerDispatcher
+} from "./deployments/deployment-worker-dispatcher.js";
 import {
   createEcsInterruptedDirectReleaseRecoveryDispatcher,
   createInterruptedDirectApplicationReleaseRecovery,
@@ -104,9 +107,13 @@ async function defaultRecoverInterruptedDeployments(
   const jobRepository = createPostgresDeploymentJobRepository(client.db);
   const workerMode = getDeploymentWorkerMode();
   const dispatcher =
-    workerMode === "ecs" ? createConfiguredDeploymentWorkerDispatcher() : undefined;
+    workerMode === "ecs"
+      ? createConfiguredDeploymentWorkerDispatcher()
+      : workerMode === "local_process"
+        ? createLocalDeploymentWorkerDispatcher()
+        : undefined;
   const recoverApplicationReleases =
-    workerMode === "ecs" && dispatcher
+    workerMode !== "in_process" && dispatcher
       ? createEcsInterruptedDirectReleaseRecoveryDispatcher({
           store: createPostgresInterruptedDirectReleaseRecoveryStore(client.db),
           jobs: jobRepository,

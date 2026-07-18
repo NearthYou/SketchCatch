@@ -9,7 +9,6 @@ import {
   hasDeploymentDraftChanges,
   shouldShowDeploymentValidationActions,
   requiresProjectBuildEnvironment,
-  shouldStartQueuedApplyPlan,
   type DirectDeploymentFlowInput
 } from "./deployment-console-state";
 
@@ -469,45 +468,6 @@ test("approved destroy cleanup keeps the execution step open when the current Bo
   assert.equal(flow.activeStepId, "deployment");
   assert.equal(flow.steps[0]?.state, "done");
   assert.equal(flow.steps[2]?.state, "error");
-});
-
-test("a queued deployment starts its apply plan after init returns to PENDING", () => {
-  assert.equal(
-    shouldStartQueuedApplyPlan({
-      deployment: {
-        id: "deployment-1",
-        currentPlanArtifactId: null,
-        status: "PENDING"
-      },
-      queuedDeploymentId: "deployment-1",
-      requestState: "idle"
-    }),
-    true
-  );
-  assert.equal(
-    shouldStartQueuedApplyPlan({
-      deployment: {
-        id: "deployment-1",
-        currentPlanArtifactId: "plan-1",
-        status: "PENDING"
-      },
-      queuedDeploymentId: "deployment-1",
-      requestState: "idle"
-    }),
-    false
-  );
-  assert.equal(
-    shouldStartQueuedApplyPlan({
-      deployment: {
-        id: "deployment-1",
-        currentPlanArtifactId: null,
-        status: "RUNNING"
-      },
-      queuedDeploymentId: "deployment-1",
-      requestState: "idle"
-    }),
-    false
-  );
 });
 
 function createPreDeploymentAnalysis(

@@ -182,7 +182,7 @@ export function getWebPushRuntimeConfig(
   };
 }
 
-export type DeploymentWorkerMode = "in_process" | "ecs";
+export type DeploymentWorkerMode = "in_process" | "local_process" | "ecs";
 
 export function isLiveObservationEnabled(env: RuntimeEnv = getRuntimeEnv()): boolean {
   return env.liveObservationEnabled?.trim().toLowerCase() === "true";
@@ -245,11 +245,11 @@ export type EcsWorkerDispatcherConfig = {
 export function getDeploymentWorkerMode(env: RuntimeEnv = getRuntimeEnv()): DeploymentWorkerMode {
   const mode = env.deploymentWorkerMode?.trim() || "in_process";
 
-  if (mode === "in_process" || mode === "ecs") {
+  if (mode === "in_process" || mode === "local_process" || mode === "ecs") {
     return mode;
   }
 
-  throw new Error("DEPLOYMENT_WORKER_MODE must be one of: in_process, ecs");
+  throw new Error("DEPLOYMENT_WORKER_MODE must be one of: in_process, local_process, ecs");
 }
 
 export function requireEcsWorkerDispatcherConfig(

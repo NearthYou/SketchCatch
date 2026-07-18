@@ -196,7 +196,6 @@ export async function runDeploymentApply(
   let workspace: PreparedTerraformWorkspace | undefined;
   let workspacePromise: Promise<PreparedTerraformWorkspace> | undefined;
   let deploymentId: string | undefined;
-  let applySucceeded = false;
   let failureRecorded = false;
   let applyLeaseFence: LeaseFence | undefined;
   let leaseHeartbeatTimer: ReturnType<typeof setInterval> | undefined;
@@ -445,8 +444,6 @@ export async function runDeploymentApply(
         throw new DeploymentNotFoundError("Deployment not found");
       }
 
-      applySucceeded = true;
-
       return {
         deployment: completedDeployment,
         terraform
@@ -537,7 +534,7 @@ export async function runDeploymentApply(
     }
 
     if (terraform.init.exitCode !== 0) {
-      return failDeploymentApplyRun({
+      return await failDeploymentApplyRun({
         deployment,
         repository,
         terraform,
@@ -593,7 +590,7 @@ export async function runDeploymentApply(
       }
 
       if (materializeResult.exitCode !== 0) {
-        return failDeploymentApplyRun({
+        return await failDeploymentApplyRun({
           deployment,
           repository,
           terraform,
@@ -635,7 +632,7 @@ export async function runDeploymentApply(
         repository
       });
 
-      return failDeploymentApplyRun({
+      return await failDeploymentApplyRun({
         deployment,
         repository,
         terraform,
@@ -657,7 +654,7 @@ export async function runDeploymentApply(
         repository
       });
 
-      return failDeploymentApplyRun({
+      return await failDeploymentApplyRun({
         deployment,
         repository,
         terraform,
@@ -667,8 +664,6 @@ export async function runDeploymentApply(
         ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
       });
     }
-
-    applySucceeded = true;
 
     const warnings: string[] = [];
     let stateObjectKey: string | null = null;
@@ -816,7 +811,7 @@ export async function runDeploymentApply(
         });
         sequence = reconciliation.sequence;
       } catch (error) {
-        return failDeploymentApplyRun({
+        return await failDeploymentApplyRun({
           deployment,
           repository,
           terraform,
@@ -860,7 +855,7 @@ export async function runDeploymentApply(
         sequence = releaseExecution.sequence;
         applicationReleaseOutcome = releaseExecution.result;
       } catch (error) {
-        return failDeploymentApplyRun({
+        return await failDeploymentApplyRun({
           deployment,
           repository,
           terraform,
@@ -914,11 +909,11 @@ export async function runDeploymentApply(
       terraform
     };
   } catch (error) {
-    if (leaseHeartbeatError) throw leaseHeartbeatError;
-    if (deploymentId && !applySucceeded && !failureRecorded) {
-      const errorSummary = summarizeUnexpectedApplyFailure(error);
+    const terminalError = leaseHeartbeatError ?? error;
+    if (deploymentId && !failureRecorded) {
+      const errorSummary = summarizeUnexpectedApplyFailure(terminalError);
 
-      if (error instanceof DeploymentApplyPreconditionError) {
+      if (terminalError instanceof DeploymentApplyPreconditionError) {
         await appendApplyPreconditionFailureLog({
           deploymentId,
           accessContext: input.accessContext,
@@ -929,14 +924,15 @@ export async function runDeploymentApply(
 
       await repository
         .failDeployment(deploymentId, {
-          failureStage: error instanceof DeploymentApplyPreconditionError ? "approval" : "apply",
+          failureStage:
+            terminalError instanceof DeploymentApplyPreconditionError ? "approval" : "apply",
           errorSummary,
           ...(applyLeaseFence ? { leaseFence: applyLeaseFence } : {})
         })
         .catch(() => undefined);
     }
 
-    throw error;
+    throw terminalError;
   } finally {
     if (leaseHeartbeatTimer) clearInterval(leaseHeartbeatTimer);
     await leaseHeartbeatPromise?.catch(() => undefined);
@@ -1057,7 +1053,7 @@ async function runApplicationOnlyDeploymentApply(input: {
         });
       }
     } catch (error) {
-      return failDeploymentApplyRun({
+      return await failDeploymentApplyRun({
         deployment: input.deployment,
         repository: input.repository,
         terraform: input.terraform,
@@ -1624,7 +1620,7 @@ async function synchronizeEcsDeploymentTargetAfterApply(input: {
 }): Promise<number> {
   if (
     !input.synchronizeDeploymentTargetAfterApply ||
-    input.deployment.scope === "application" ||
+    input.deployment.scope !== "infrastructure" ||
     input.deployment.targetKind !== "ecs_fargate"
   ) {
     return input.sequence;

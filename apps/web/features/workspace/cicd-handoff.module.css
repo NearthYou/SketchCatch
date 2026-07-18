@@ -147,6 +147,7 @@
   display: grid;
   gap: 12px;
   padding: 16px;
+  scroll-margin-top: 56px;
   width: 100%;
 }
 
@@ -268,6 +269,17 @@
   font-size: 12px;
   margin: 0;
   padding: 12px 0;
+}
+
+.readinessComplete {
+  background: var(--workspace-surface, #fff);
+  border: 1px solid #aceebb;
+  border-radius: 8px;
+  color: #116329;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0;
+  padding: 12px;
 }
 
 .readinessError {

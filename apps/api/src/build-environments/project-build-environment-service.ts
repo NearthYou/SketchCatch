@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import type {
   ArchitectureJson,
@@ -20,6 +21,9 @@ import {
 } from "../db/schema.js";
 import { createCodeBuildPermissionsBoundaryName } from "../aws-connections/aws-connection-service.js";
 import { maskDeploymentMessage } from "../deployments/log-masking.js";
+import {
+  resolveAwsDeploymentTargetIdentity
+} from "../runtime-convergence/deployment-target-identity.js";
 import {
   createProjectBuildCacheIdentity,
   type ProjectBuildCacheIdentity
@@ -318,8 +322,14 @@ export function createPostgresProjectBuildEnvironmentRepository(
       await db.transaction(async (transaction) => {
         const [row] = await transaction
           .select({
+            accountId: awsConnections.accountId,
             architectureJson: architectures.architectureJson,
+            confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
+            deploymentTargetFingerprint:
+              projectDeploymentTargets.deploymentTargetFingerprint,
+            region: projectDeploymentTargets.region,
             runtimeConfig: projectDeploymentTargets.runtimeConfig,
+            runtimeTarget: projectDeploymentTargets.runtimeTarget,
             runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind
           })
           .from(projects)
@@ -334,6 +344,10 @@ export function createPostgresProjectBuildEnvironmentRepository(
             projectDeploymentTargets,
             eq(projectDeploymentTargets.projectId, projects.id)
           )
+          .innerJoin(
+            awsConnections,
+            eq(awsConnections.id, projectDeploymentTargets.connectionId)
+          )
           .where(
             and(
               eq(projects.id, input.projectId),
@@ -345,7 +359,9 @@ export function createPostgresProjectBuildEnvironmentRepository(
 
         if (
           row?.runtimeTargetKind !== "ecs_fargate" ||
-          row.runtimeConfig?.runtimeTargetKind !== "ecs_fargate"
+          row.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
+          !row.confirmedBuildConfig ||
+          !row.accountId
         ) {
           throw new ProjectBuildEnvironmentError(
             "BUILD_CONFIG_REQUIRED",
@@ -358,11 +374,29 @@ export function createPostgresProjectBuildEnvironmentRepository(
           row.architectureJson,
           input.codeBuildProjectName
         );
-        if (JSON.stringify(runtimeConfig) === JSON.stringify(row.runtimeConfig)) return;
+        const identity = resolveAwsDeploymentTargetIdentity({
+          projectId: input.projectId,
+          accountId: row.accountId,
+          region: row.region,
+          runtimeConfig,
+          healthCheckPath: row.confirmedBuildConfig.healthCheckPath
+        });
+        if (
+          isDeepStrictEqual(runtimeConfig, row.runtimeConfig) &&
+          isDeepStrictEqual(identity.target, row.runtimeTarget) &&
+          identity.deploymentTargetFingerprint === row.deploymentTargetFingerprint
+        ) {
+          return;
+        }
 
         await transaction
           .update(projectDeploymentTargets)
-          .set({ runtimeConfig, updatedAt: new Date() })
+          .set({
+            runtimeConfig,
+            runtimeTarget: identity.target,
+            deploymentTargetFingerprint: identity.deploymentTargetFingerprint,
+            updatedAt: new Date()
+          })
           .where(
             and(
               eq(projectDeploymentTargets.projectId, input.projectId),
@@ -446,6 +480,33 @@ export async function prepareProjectBuildEnvironment(
   }
   const existing = await repository.findByProjectId(input.projectId);
   const now = options.now?.() ?? new Date();
+  const confirmedCommitSha = desired.confirmedCommitSha.toLowerCase();
+  const preserveRepositoryVerification =
+    existing?.runtimeFingerprint === desired.runtimeFingerprint &&
+    existing.repositoryVerificationStatus === "verified" &&
+    existing.repositoryVerificationRequestedCommitSha?.toLowerCase() === confirmedCommitSha &&
+    existing.repositoryVerificationResolvedCommitSha?.toLowerCase() === confirmedCommitSha &&
+    Boolean(existing.repositoryVerificationBuildArn) &&
+    Boolean(existing.repositoryVerifiedAt);
+  const repositoryVerification = preserveRepositoryVerification
+    ? {
+        repositoryVerificationStatus: existing.repositoryVerificationStatus,
+        repositoryVerificationRequestedCommitSha:
+          existing.repositoryVerificationRequestedCommitSha,
+        repositoryVerificationResolvedCommitSha:
+          existing.repositoryVerificationResolvedCommitSha,
+        repositoryVerificationBuildArn: existing.repositoryVerificationBuildArn,
+        repositoryVerificationStatusReason: existing.repositoryVerificationStatusReason,
+        repositoryVerifiedAt: existing.repositoryVerifiedAt
+      }
+    : {
+        repositoryVerificationStatus: "not_checked" as const,
+        repositoryVerificationRequestedCommitSha: null,
+        repositoryVerificationResolvedCommitSha: null,
+        repositoryVerificationBuildArn: null,
+        repositoryVerificationStatusReason: null,
+        repositoryVerifiedAt: null
+      };
 
   const preparing = await repository.save({
     id: existing?.id ?? options.generateId?.() ?? randomUUID(),
@@ -459,12 +520,7 @@ export async function prepareProjectBuildEnvironment(
     runtimeFingerprint: desired.runtimeFingerprint,
     status: "preparing",
     lastVerifiedAt: null,
-    repositoryVerificationStatus: "not_checked",
-    repositoryVerificationRequestedCommitSha: null,
-    repositoryVerificationResolvedCommitSha: null,
-    repositoryVerificationBuildArn: null,
-    repositoryVerificationStatusReason: null,
-    repositoryVerifiedAt: null,
+    ...repositoryVerification,
     ...(existing ? { createdAt: existing.createdAt } : {}),
     updatedAt: now
   });
@@ -499,12 +555,7 @@ export async function prepareProjectBuildEnvironment(
     runtimeFingerprint: desired.runtimeFingerprint,
     status: verification.verified ? "ready" : "verification_failed",
     lastVerifiedAt: verification.verified ? now : null,
-    repositoryVerificationStatus: "not_checked",
-    repositoryVerificationRequestedCommitSha: null,
-    repositoryVerificationResolvedCommitSha: null,
-    repositoryVerificationBuildArn: null,
-    repositoryVerificationStatusReason: null,
-    repositoryVerifiedAt: null,
+    ...repositoryVerification,
     createdAt: preparing.createdAt,
     updatedAt: now
   });
@@ -805,28 +856,39 @@ export function synchronizeEcsFargateRuntimeConfigWithArchitecture(
   const clusterConfig = getSingleArchitectureResourceConfig(architectureJson, "ECS_CLUSTER");
   const serviceConfig = getSingleArchitectureResourceConfig(architectureJson, "ECS_SERVICE");
   const loadBalancer = readArchitectureBlock(serviceConfig, "loadBalancer");
-  const coordinates = {
-    ecrRepositoryName: readArchitectureString(ecrConfig, "name"),
-    clusterName: readArchitectureString(clusterConfig, "name"),
-    serviceName: readArchitectureString(serviceConfig, "name"),
-    containerName: readArchitectureString(loadBalancer, "containerName")
-  };
+  const containerPort = readArchitecturePositiveInteger(loadBalancer, "containerPort");
+  const ecrRepositoryName = readArchitectureString(ecrConfig, "name");
+  const clusterName = readArchitectureString(clusterConfig, "name");
+  const serviceName = readArchitectureString(serviceConfig, "name");
+  const containerName = readArchitectureString(loadBalancer, "containerName");
 
   if (
     !codeBuildProjectName.trim() ||
-    Object.values(coordinates).some((value) => !value)
+    !ecrRepositoryName ||
+    !clusterName ||
+    !serviceName ||
+    !containerName ||
+    containerPort === null
   ) {
     throw new ProjectBuildEnvironmentError(
       "BUILD_CONFIG_REQUIRED",
       "승인된 Board에서 ECR, ECS cluster, ECS service, container 좌표를 하나씩 확인할 수 없습니다."
     );
   }
+  const coordinates = {
+    ecrRepositoryName,
+    clusterName,
+    serviceName,
+    containerName,
+    containerPort
+  };
 
   const infrastructureCoordinatesChanged =
     current.ecrRepositoryName !== coordinates.ecrRepositoryName ||
     current.clusterName !== coordinates.clusterName ||
     current.serviceName !== coordinates.serviceName ||
-    current.containerName !== coordinates.containerName;
+    current.containerName !== coordinates.containerName ||
+    current.containerPort !== coordinates.containerPort;
 
   if (!infrastructureCoordinatesChanged) {
     return current.codeBuildProjectName === codeBuildProjectName
@@ -873,6 +935,14 @@ function readArchitectureBlock(
 function readArchitectureString(values: Record<string, unknown> | null, key: string): string {
   const value = values?.[key];
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readArchitecturePositiveInteger(
+  values: Record<string, unknown> | null,
+  key: string
+): number | null {
+  const value = values?.[key];
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function toProjectBuildEnvironment(

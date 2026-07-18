@@ -38,6 +38,12 @@ test("CI/CD exposes the Git handoff action that creates the deployment pull requ
   assert.match(source, /CI\/CD PR 생성/);
 });
 
+test("CI/CD uses GitHub App permissions without exposing login OAuth for repository changes", () => {
+  assert.doesNotMatch(source, /GitHub OAuth 승인/);
+  assert.doesNotMatch(source, /startGitHubOAuth/);
+  assert.doesNotMatch(source, /applyGitCicdRepositorySettingsWithGitHubOAuth/);
+});
+
 test("CI/CD blocks PR creation until every read-only Delivery readiness item is ready", () => {
   assert.match(source, /getProjectDeliveryProfile/);
   assert.doesNotMatch(source, /refreshGitCicdReadiness/);

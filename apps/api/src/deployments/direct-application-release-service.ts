@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   APPLICATION_ARTIFACT_CONTRACT_VERSION,
   type ApplicationArtifact,
@@ -45,6 +46,7 @@ import type { LeaseFence } from "../releases/project-execution-lease-service.js"
 import { resolveApplicationReleaseVersion } from "../releases/application-release-identity.js";
 import { createPreparedReleaseSnapshotHash } from "./deployment-preparation-service.js";
 import {
+  EcsFargateOutputReconciliationError,
   assertEcsFargateRuntimeInventory,
   createEcsFargateRuntimeCoordinatesFingerprint,
   reconcileEcsFargateRuntimeConfig,
@@ -219,6 +221,7 @@ export type ApplicationReleaseExecutionRepository<
   resetReleaseForRetry(input: {
     releaseId: string;
     providerRevision: ApplicationReleaseProviderRevision;
+    deploymentTargetFingerprint?: string;
     updatedAt: Date;
   }): Promise<TRelease>;
 };
@@ -231,6 +234,7 @@ export type DirectApplicationOutputReconciliationRepository = Pick<
   "findContext" | "findRelease"
 > & {
   reconcileEcsFargateOutput(input: {
+    releaseId: string;
     projectId: string;
     expectedCoordinatesFingerprint: string;
     outputs: ResolvedEcsFargateRuntimeOutputs;
@@ -474,39 +478,157 @@ export function createPostgresDirectApplicationReleaseRepository(
       return db.transaction(async (transaction) => {
         const [target] = await transaction
           .select({
+            accountId: awsConnections.accountId,
+            confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
+            deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
+            region: projectDeploymentTargets.region,
             runtimeTargetKind: projectDeploymentTargets.runtimeTargetKind,
-            runtimeConfig: projectDeploymentTargets.runtimeConfig
+            runtimeConfig: projectDeploymentTargets.runtimeConfig,
+            runtimeTarget: projectDeploymentTargets.runtimeTarget
           })
           .from(projectDeploymentTargets)
+          .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
           .where(eq(projectDeploymentTargets.projectId, input.projectId))
           .for("update");
         if (
           target?.runtimeTargetKind !== "ecs_fargate" ||
-          target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate"
+          target.runtimeConfig?.runtimeTargetKind !== "ecs_fargate" ||
+          !target.confirmedBuildConfig ||
+          !target.accountId
         ) {
           throw new DirectApplicationReleaseError(
             "Direct deployment runtime does not match the confirmed project target"
           );
         }
 
-        const reconciliation = reconcileEcsFargateRuntimeConfig(target.runtimeConfig, input);
-        if (!reconciliation.changed) return "unchanged";
-
-        const [updated] = await transaction
-          .update(projectDeploymentTargets)
-          .set({
-            runtimeConfig: reconciliation.runtimeConfig,
-            updatedAt: input.updatedAt
+        const [preparedRelease] = await transaction
+          .select({
+            id: applicationReleases.id,
+            deploymentTargetFingerprint: applicationReleases.deploymentTargetFingerprint,
+            providerRevision: applicationReleases.providerRevision
           })
+          .from(applicationReleases)
           .where(
             and(
-              eq(projectDeploymentTargets.projectId, input.projectId),
-              eq(projectDeploymentTargets.runtimeTargetKind, "ecs_fargate")
+              eq(applicationReleases.id, input.releaseId),
+              eq(applicationReleases.projectId, input.projectId),
+              eq(applicationReleases.source, "direct"),
+              eq(applicationReleases.status, "pending")
             )
           )
-          .returning({ projectId: projectDeploymentTargets.projectId });
-        if (!updated) {
-          throw new DirectApplicationReleaseError("ECS runtime output URL target was not updated");
+          .for("update");
+        const preparedCoordinatesFingerprint = readMetadataString(
+          preparedRelease?.providerRevision?.metadata,
+          "ecsRuntimeCoordinatesFingerprint"
+        );
+        const preparedOutputUrl = readMetadataString(
+          preparedRelease?.providerRevision?.metadata,
+          "ecsPreparedOutputUrl"
+        );
+        if (
+          !preparedRelease?.providerRevision ||
+          preparedCoordinatesFingerprint !== input.expectedCoordinatesFingerprint
+        ) {
+          throw new DirectApplicationReleaseError(
+            "Prepared ECS release changed before output synchronization",
+            "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+          );
+        }
+
+        const reconciliation = reconcileEcsFargateOutputAfterPartialSynchronization(
+          target.runtimeConfig,
+          input
+        );
+        const preparedRuntimeConfig = reconciliation.recoveredPartialSynchronization
+          ? toPreparedEcsFargateRuntimeConfig(reconciliation.runtimeConfig, preparedOutputUrl)
+          : target.runtimeConfig;
+        const preparedTargetIdentity = resolveAwsDeploymentTargetIdentity({
+          projectId: input.projectId,
+          accountId: target.accountId,
+          region: target.region,
+          runtimeConfig: preparedRuntimeConfig,
+          healthCheckPath: target.confirmedBuildConfig.healthCheckPath
+        });
+        if (
+          preparedRelease.deploymentTargetFingerprint !==
+          preparedTargetIdentity.deploymentTargetFingerprint
+        ) {
+          throw new DirectApplicationReleaseError(
+            "Prepared release deployment target no longer matches the Terraform output transition",
+            "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+          );
+        }
+        const identity = resolveAwsDeploymentTargetIdentity({
+          projectId: input.projectId,
+          accountId: target.accountId,
+          region: target.region,
+          runtimeConfig: reconciliation.runtimeConfig,
+          healthCheckPath: target.confirmedBuildConfig.healthCheckPath
+        });
+        const reconciledCoordinatesFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(
+          reconciliation.runtimeConfig
+        );
+        const targetChanged =
+          reconciliation.changed ||
+          !isDeepStrictEqual(identity.target, target.runtimeTarget) ||
+          identity.deploymentTargetFingerprint !== target.deploymentTargetFingerprint;
+        const preparedReleaseChanged =
+          preparedRelease.deploymentTargetFingerprint !== identity.deploymentTargetFingerprint ||
+          preparedCoordinatesFingerprint !== reconciledCoordinatesFingerprint;
+        if (!targetChanged && !preparedReleaseChanged) {
+          return "unchanged";
+        }
+
+        if (targetChanged) {
+          const [updated] = await transaction
+            .update(projectDeploymentTargets)
+            .set({
+              runtimeConfig: reconciliation.runtimeConfig,
+              runtimeTarget: identity.target,
+              deploymentTargetFingerprint: identity.deploymentTargetFingerprint,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(projectDeploymentTargets.projectId, input.projectId),
+                eq(projectDeploymentTargets.runtimeTargetKind, "ecs_fargate")
+              )
+            )
+            .returning({ projectId: projectDeploymentTargets.projectId });
+          if (!updated) {
+            throw new DirectApplicationReleaseError(
+              "ECS runtime output URL target was not updated"
+            );
+          }
+        }
+        if (preparedReleaseChanged) {
+          const [updatedRelease] = await transaction
+            .update(applicationReleases)
+            .set({
+              deploymentTargetFingerprint: identity.deploymentTargetFingerprint,
+              providerRevision: {
+                ...preparedRelease.providerRevision,
+                metadata: {
+                  ...preparedRelease.providerRevision.metadata,
+                  ecsRuntimeCoordinatesFingerprint: reconciledCoordinatesFingerprint
+                }
+              },
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, preparedRelease.id),
+                eq(applicationReleases.projectId, input.projectId),
+                eq(applicationReleases.source, "direct"),
+                eq(applicationReleases.status, "pending")
+              )
+            )
+            .returning({ id: applicationReleases.id });
+          if (!updatedRelease) {
+            throw new DirectApplicationReleaseError(
+              "Prepared application release target fingerprint was not updated"
+            );
+          }
         }
         return "updated";
       });
@@ -549,18 +671,24 @@ export function createPostgresDirectApplicationReleaseRepository(
             configFingerprint: candidate.configFingerprint
           });
         }
-        const [baseline] = await transaction
-          .select({ id: applicationReleases.id })
-          .from(applicationReleases)
-          .where(
-            and(
-              eq(applicationReleases.projectId, input.projectId),
-              eq(applicationReleases.runtimeTargetKind, input.runtimeTargetKind),
-              eq(applicationReleases.status, "succeeded")
-            )
-          )
-          .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
-          .limit(1);
+        const [baseline] = input.deploymentTargetFingerprint
+          ? await transaction
+              .select({ id: applicationReleases.id })
+              .from(applicationReleases)
+              .where(
+                and(
+                  eq(applicationReleases.projectId, input.projectId),
+                  eq(applicationReleases.runtimeTargetKind, input.runtimeTargetKind),
+                  eq(
+                    applicationReleases.deploymentTargetFingerprint,
+                    input.deploymentTargetFingerprint
+                  ),
+                  eq(applicationReleases.status, "succeeded")
+                )
+              )
+              .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
+              .limit(1)
+          : [];
         const [release] = await transaction
           .insert(applicationReleases)
           .values({
@@ -748,6 +876,9 @@ export function createPostgresDirectApplicationReleaseRepository(
         .update(applicationReleases)
         .set({
           providerRevision: input.providerRevision,
+          ...(input.deploymentTargetFingerprint
+            ? { deploymentTargetFingerprint: input.deploymentTargetFingerprint }
+            : {}),
           status: "pending",
           convergenceOutcome: null,
           healthEvidence: null,
@@ -817,6 +948,7 @@ export async function reconcileDirectApplicationReleaseOutput(
     region: input.region
   });
   await repository.reconcileEcsFargateOutput({
+    releaseId: release.id,
     projectId: context.deployment.projectId,
     expectedCoordinatesFingerprint,
     outputs: resolvedOutputs,
@@ -856,6 +988,10 @@ export async function prepareApplicationRelease<
   if (existing) {
     if (existing.status === "pending") {
       if (context.target.runtimeConfig.runtimeTargetKind !== "ecs_fargate") return existing;
+      const retryDeploymentTargetFingerprint = resolveFullStackRetryDeploymentTargetFingerprint(
+        context,
+        existing
+      );
       const expectedFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(
         context.target.runtimeConfig
       );
@@ -863,7 +999,14 @@ export async function prepareApplicationRelease<
         existing.providerRevision?.metadata,
         "ecsRuntimeCoordinatesFingerprint"
       );
-      if (preparedFingerprint === expectedFingerprint) return existing;
+      if (
+        preparedFingerprint === expectedFingerprint &&
+        hasPreparedEcsOutputUrlMetadata(existing.providerRevision?.metadata) &&
+        (!retryDeploymentTargetFingerprint ||
+          existing.deploymentTargetFingerprint === retryDeploymentTargetFingerprint)
+      ) {
+        return existing;
+      }
       if (
         existing.providerRevision?.resourceType !== "codebuild_artifact" ||
         !existing.providerRevision.artifactReference
@@ -874,17 +1017,25 @@ export async function prepareApplicationRelease<
       }
       return repository.resetReleaseForRetry({
         releaseId: existing.id,
+        ...(retryDeploymentTargetFingerprint
+          ? { deploymentTargetFingerprint: retryDeploymentTargetFingerprint }
+          : {}),
         providerRevision: {
           ...existing.providerRevision,
           metadata: {
             ...existing.providerRevision.metadata,
-            ecsRuntimeCoordinatesFingerprint: expectedFingerprint
+            ecsRuntimeCoordinatesFingerprint: expectedFingerprint,
+            ...createEcsPreparedOutputUrlMetadata(context.target.runtimeConfig)
           }
         },
         updatedAt: now()
       });
     }
     if (["failed", "rolled_back", "cancelled"].includes(existing.status)) {
+      const retryDeploymentTargetFingerprint = resolveFullStackRetryDeploymentTargetFingerprint(
+        context,
+        existing
+      );
       const preparedBuildRevisionId = readMetadataString(
         existing.providerRevision?.metadata,
         "preparedBuildRevisionId"
@@ -902,6 +1053,9 @@ export async function prepareApplicationRelease<
       }
       return repository.resetReleaseForRetry({
         releaseId: existing.id,
+        ...(retryDeploymentTargetFingerprint
+          ? { deploymentTargetFingerprint: retryDeploymentTargetFingerprint }
+          : {}),
         providerRevision: {
           provider: "aws",
           resourceType: existing.artifactId ? "application_artifact" : "codebuild_artifact",
@@ -913,7 +1067,8 @@ export async function prepareApplicationRelease<
               ? {
                   ecsRuntimeCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(
                     context.target.runtimeConfig
-                  )
+                  ),
+                  ...createEcsPreparedOutputUrlMetadata(context.target.runtimeConfig)
                 }
               : {}),
             ...(preparedBuildRevisionId ? { preparedBuildRevisionId } : {})
@@ -1052,7 +1207,8 @@ export async function prepareApplicationRelease<
           ? {
               ecsRuntimeCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(
                 context.target.runtimeConfig
-              )
+              ),
+              ...createEcsPreparedOutputUrlMetadata(context.target.runtimeConfig)
             }
           : {})
       }
@@ -1564,6 +1720,97 @@ function readMetadataString(metadata: JsonValue | undefined, key: string): strin
   if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) return null;
   const value = metadata[key];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function hasPreparedEcsOutputUrlMetadata(metadata: JsonValue | undefined): boolean {
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) return false;
+  const value = metadata["ecsPreparedOutputUrl"];
+  return value === null || (typeof value === "string" && value.trim().length > 0);
+}
+
+function reconcileEcsFargateOutputAfterPartialSynchronization(
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>,
+  input: {
+    expectedCoordinatesFingerprint: string;
+    outputs: ResolvedEcsFargateRuntimeOutputs;
+  }
+) {
+  try {
+    return {
+      ...reconcileEcsFargateRuntimeConfig(runtimeConfig, input),
+      recoveredPartialSynchronization: false
+    };
+  } catch (error) {
+    if (!(error instanceof EcsFargateOutputReconciliationError)) throw error;
+    const currentCoordinatesFingerprint =
+      createEcsFargateRuntimeCoordinatesFingerprint(runtimeConfig);
+    if (currentCoordinatesFingerprint === input.expectedCoordinatesFingerprint) throw error;
+    try {
+      const recovered = reconcileEcsFargateRuntimeConfig(runtimeConfig, {
+        ...input,
+        expectedCoordinatesFingerprint: currentCoordinatesFingerprint
+      });
+      if (!recovered.changed) {
+        return { ...recovered, recoveredPartialSynchronization: true };
+      }
+    } catch {
+      // The original mismatch remains the most accurate failure.
+    }
+    throw error;
+  }
+}
+
+function toPreparedEcsFargateRuntimeConfig(
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>,
+  preparedOutputUrl: string | null
+): Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }> {
+  return {
+    ...runtimeConfig,
+    outputUrl: preparedOutputUrl
+  };
+}
+
+function createEcsPreparedOutputUrlMetadata(
+  runtimeConfig: Extract<ProjectDeploymentRuntimeConfig, { runtimeTargetKind: "ecs_fargate" }>
+): { ecsPreparedOutputUrl: string | null } {
+  return { ecsPreparedOutputUrl: runtimeConfig.outputUrl };
+}
+
+function resolveFullStackRetryDeploymentTargetFingerprint(
+  context: DirectApplicationReleaseContext,
+  release: ApplicationReleaseRecord
+): string | undefined {
+  if (
+    context.deployment.scope !== "full_stack" ||
+    context.target.runtimeConfig.runtimeTargetKind !== "ecs_fargate"
+  ) {
+    return undefined;
+  }
+
+  const currentIdentity = resolveDirectTargetIdentity(context);
+  if (
+    !release.deploymentTargetFingerprint ||
+    release.deploymentTargetFingerprint === currentIdentity.deploymentTargetFingerprint
+  ) {
+    return currentIdentity.deploymentTargetFingerprint;
+  }
+
+  const preparedIdentity = resolveAwsDeploymentTargetIdentity({
+    projectId: context.deployment.projectId,
+    accountId: context.connection.accountId,
+    region: context.connection.region,
+    runtimeConfig: toPreparedEcsFargateRuntimeConfig(
+      context.target.runtimeConfig,
+      readMetadataString(release.providerRevision?.metadata, "ecsPreparedOutputUrl")
+    ),
+    healthCheckPath: context.target.confirmedBuildConfig.healthCheckPath
+  });
+  if (release.deploymentTargetFingerprint !== preparedIdentity.deploymentTargetFingerprint) {
+    throw new DirectApplicationReleaseError(
+      "Prepared release deployment target fingerprint no longer matches the confirmed target"
+    );
+  }
+  return currentIdentity.deploymentTargetFingerprint;
 }
 
 async function requireContext(
