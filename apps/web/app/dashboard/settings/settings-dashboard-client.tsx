@@ -410,10 +410,15 @@ export function SettingsDashboardClient() {
     let active = true;
 
     void Promise.all(
-      displayedVerifiedConnections.map(async (connection) => [
-        connection.id,
-        await getAwsCodeConnection(connection.id)
-      ] as const)
+      displayedVerifiedConnections.map(async (connection) => {
+        const savedConnection = await getAwsCodeConnection(connection.id);
+        return [
+          connection.id,
+          savedConnection.codeConnection
+            ? await refreshAwsCodeConnection(connection.id)
+            : savedConnection
+        ] as const;
+      })
     )
       .then((entries) => {
         if (active) setCodeConnections(Object.fromEntries(entries));
@@ -524,6 +529,11 @@ export function SettingsDashboardClient() {
                 actionPending={actionPending}
                 connection={codeConnections[selectedBuildAwsConnectionId]}
                 disabled={githubAuthorizationTarget.status === "github_app_not_configured"}
+                installationManagementUrl={
+                  githubAuthorizationTarget.status === "ready"
+                    ? githubAuthorizationTarget.installation.htmlUrl
+                    : null
+                }
                 onConnect={() => void connectGitHubBuild()}
                 onDisconnect={openGitHubBuildDisconnect}
                 onRefresh={() => void refreshGitHubBuildConnection()}
@@ -888,6 +898,7 @@ function GitHubBuildConnectionAction({
   actionPending,
   connection,
   disabled,
+  installationManagementUrl,
   onConnect,
   onDisconnect,
   onRefresh
@@ -895,6 +906,7 @@ function GitHubBuildConnectionAction({
   readonly actionPending: boolean;
   readonly connection: AwsCodeConnectionResponse | undefined;
   readonly disabled: boolean;
+  readonly installationManagementUrl: string | null;
   readonly onConnect: () => void;
   readonly onDisconnect: () => void;
   readonly onRefresh: () => void;
@@ -942,7 +954,8 @@ function GitHubBuildConnectionAction({
     );
   }
   const repositoryAccessState = deriveAwsCodeConnectionRepositoryAccessState(
-    connection.codeConnection.status
+    connection.codeConnection.status,
+    installationManagementUrl
   );
   if (repositoryAccessState) {
     return (

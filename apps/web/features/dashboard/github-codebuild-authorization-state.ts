@@ -22,12 +22,13 @@ export type AwsCodeConnectionRepositoryAccessState = Readonly<{
 }>;
 
 export function deriveAwsCodeConnectionRepositoryAccessState(
-  status: AwsCodeConnectionStatus
+  status: AwsCodeConnectionStatus,
+  installationManagementUrl?: string | null
 ): AwsCodeConnectionRepositoryAccessState | null {
   if (status !== "AVAILABLE") return null;
   return {
-    actionHref: "https://github.com/apps/aws-connector-for-github/installations/new",
-    actionLabel: "AWS Connector 설치·권한 설정",
+    actionHref: installationManagementUrl ?? "https://github.com/settings/installations",
+    actionLabel: "GitHub Repository 권한 관리",
     description: "Repository 접근은 아직 확인되지 않았습니다",
     status: "repository_access_unverified",
     title: "AWS OAuth 연결됨"
