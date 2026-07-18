@@ -330,7 +330,6 @@
 
 .candidateActions button,
 .exclusionUndo button,
-.requestStatus button,
 .retryButton,
 .previewArrival button {
   align-items: center;
@@ -357,7 +356,6 @@
 }
 
 .exclusionUndo,
-.requestStatus,
 .previewArrival {
   align-items: center;
   border: 1px solid var(--ai-line);
@@ -368,19 +366,6 @@
   gap: 10px;
   justify-content: space-between;
   padding: 10px 12px;
-}
-
-.requestStatusDot {
-  animation: requestPulse 1.4s ease-in-out infinite;
-  background: #171717;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  height: 6px;
-  width: 6px;
-}
-
-.requestStatus > span:nth-child(2) {
-  margin-right: auto;
 }
 
 .retryButton {
@@ -1032,13 +1017,6 @@
   }
 }
 
-@keyframes requestPulse {
-  50% {
-    opacity: 0.3;
-    transform: scale(0.78);
-  }
-}
-
 @media (max-width: 959px) {
   .page {
     display: grid;
@@ -1233,7 +1211,6 @@
   }
 
   .exclusionUndo,
-  .requestStatus,
   .previewArrival,
   .voiceConfirmation {
     align-items: flex-start;
@@ -1248,8 +1225,7 @@
   .orbitGlyphCounter,
   .orbitGlyphPlate,
   .orbitCore,
-  .previewShell,
-  .requestStatusDot {
+  .previewShell {
     animation: none !important;
   }
 

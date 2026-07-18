@@ -23,6 +23,7 @@ import { getApiErrorMessage } from "../../lib/api-client";
 import { compileArchitectureDraftProposal } from "../architecture-board-compiler";
 import type { DiagramEditorPanelContext } from "../diagram-editor";
 import {
+  createAiArchitectureDraftStream,
   createAiArchitecturePatchPreview,
   createAiArchitectureDraft,
   runAiTerraformPreviewExplanation,
@@ -50,6 +51,7 @@ import {
 } from "./workspace-ai-workbench-state";
 import {
   WorkspaceAiWorkbenchExplanation,
+  WorkspaceAiWorkbenchDraftProgress,
   WorkspaceAiWorkbenchRequestMessage,
   WorkspaceAiWorkbenchReviewProgress,
   WorkspaceAiWorkbenchTerraformIssueResult,
@@ -62,7 +64,6 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "./workspace-ai-draft-follow-up";
 import {
-  createArchitectureDraftClarificationAnswerReceipt,
   createArchitectureDraftClarificationMessage,
   resolveAcceptedArchitectureDraftClarificationSelection,
   withArchitectureDraftClarificationAnswer
@@ -338,6 +339,7 @@ export function WorkspaceAiChatDock({
     readonly string[]
   >([]);
   const [draftState, setDraftState] = useState<AiRequestState>("idle");
+  const [draftGenerationProgressVisible, setDraftGenerationProgressVisible] = useState(false);
   const [draftErrorMessage, setDraftErrorMessage] = useState("");
   const repositoryTemplate = useMemo(
     () =>
@@ -621,11 +623,19 @@ export function WorkspaceAiChatDock({
     (activeChatTab === "errors" &&
       (selectedTerraformIssue?.isStale === true || selectedTerraformIssueAnalysisIsStale)) ||
     (activeChatTab === "preview" && terraformPreviewExplanationIsStale);
-  const chatDockStatus = getWorkspaceAiChatDockStatus({
-    hasPendingApproval: activeHasPendingApproval,
-    isStale: activeProposalIsStale,
-    requestState: activeRequestState
-  });
+  const chatDockStatus =
+    activeChatTab === "draft" && activeRequestState === "loading"
+      ? draftGenerationProgressVisible
+        ? {
+            description: "아래에서 현재 다이어그램 생성 단계를 확인할 수 있습니다.",
+            label: "다이어그램 생성 중"
+          }
+        : null
+      : getWorkspaceAiChatDockStatus({
+          hasPendingApproval: activeHasPendingApproval,
+          isStale: activeProposalIsStale,
+          requestState: activeRequestState
+        });
   const isChatBusy = activeRequestState === "loading";
   const isSelectedTerraformFixCompleted =
     selectedTerraformIssue !== null &&
@@ -733,7 +743,6 @@ export function WorkspaceAiChatDock({
     return () => window.clearInterval(timerId);
   }, [terraformPreviewExplanation?.state, terraformPreviewExplanation?.terraformFingerprint]);
 
-
   useEffect(() => {
     if (
       terraformAiInteraction === null ||
@@ -840,8 +849,7 @@ export function WorkspaceAiChatDock({
   useEffect(() => {
     const previousScrollContext = transcriptScrollContextRef.current;
     const shouldForceTranscriptScroll =
-      isOpen &&
-      (!previousScrollContext.isOpen || previousScrollContext.scope !== activeChatTab);
+      isOpen && (!previousScrollContext.isOpen || previousScrollContext.scope !== activeChatTab);
 
     transcriptScrollContextRef.current = { isOpen, scope: activeChatTab };
 
@@ -960,7 +968,14 @@ export function WorkspaceAiChatDock({
     selectionMode: WorkspaceAiChatSelectionMode = "single",
     scope: WorkspaceAiChatScope = activeChatTab
   ): WorkspaceAiChatMessage {
-    const message = createChatMessage("assistant", kind, content, suggestions, selectionMode, scope);
+    const message = createChatMessage(
+      "assistant",
+      kind,
+      content,
+      suggestions,
+      selectionMode,
+      scope
+    );
     setMessages((currentMessages) => trimChatMessages([...currentMessages, message]));
     return message;
   }
@@ -1602,6 +1617,7 @@ export function WorkspaceAiChatDock({
     const controller = requestRegistryRef.current.begin("draft");
 
     setDraftState("loading");
+    setDraftGenerationProgressVisible(false);
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
@@ -1772,6 +1788,7 @@ export function WorkspaceAiChatDock({
     const controller = requestRegistryRef.current.begin("draft");
 
     setDraftState("loading");
+    setDraftGenerationProgressVisible(false);
     setDraftErrorMessage("");
     setDraft(null);
     setPatchPreviewModel(null);
@@ -1785,9 +1802,17 @@ export function WorkspaceAiChatDock({
     context.setPreviewDiagram(null);
 
     try {
-      const result = await createAiArchitectureDraft(normalizedDraftRequest, {
-        signal: controller.signal
-      });
+      const result =
+        normalizedDraftRequest.repositoryAnalysis || normalizedDraftRequest.repositoryEvidence
+          ? await createAiArchitectureDraft(normalizedDraftRequest, { signal: controller.signal })
+          : await createAiArchitectureDraftStream(normalizedDraftRequest, {
+              signal: controller.signal,
+              onProgress: () => {
+                if (requestRegistryRef.current.isActive("draft", controller)) {
+                  setDraftGenerationProgressVisible(true);
+                }
+              }
+            });
 
       if (!requestRegistryRef.current.isActive("draft", controller)) {
         return;
@@ -1795,26 +1820,25 @@ export function WorkspaceAiChatDock({
 
       if (submittedAnswer !== undefined) {
         const selection = resolveAcceptedArchitectureDraftClarificationSelection(
-          submittedAnswer.clarification, submittedAnswer.answer, result
-        );
-        if (selection !== null) {
-          setMessages((currentMessages) => markChatMessageSuggestionsSelected(currentMessages, {
-            messageId: submittedAnswer.questionMessageId, suggestions: [selection.label]
-          }));
-        }
-        const receipt = createArchitectureDraftClarificationAnswerReceipt(
           submittedAnswer.clarification,
           submittedAnswer.answer,
           result
         );
-        if (receipt !== null) {
-          appendAssistantMessage("status", receipt);
+        if (selection !== null) {
+          setMessages((currentMessages) =>
+            markChatMessageSuggestionsSelected(currentMessages, {
+              messageId: submittedAnswer.questionMessageId,
+              suggestions: [selection.label]
+            })
+          );
         }
       }
 
       if (isArchitectureDraftClarification(result)) {
         const questionMessage = appendAssistantMessage(
-          "question", createArchitectureDraftClarificationMessage(result), result.suggestions
+          "question",
+          createArchitectureDraftClarificationMessage(result),
+          result.suggestions
         );
         setDraftClarification({
           request: normalizedDraftRequest,
@@ -2350,18 +2374,18 @@ export function WorkspaceAiChatDock({
                 ) : null}
               </div>
             ) : null}
-            {hasSubmittedSuggestion ? (
-              <div className={styles.acceptedAnswer} role="status">
-                <span>반영된 답변</span>
-                <strong>{submittedSuggestions.join(", ")}</strong>
-              </div>
-            ) : null}
           </div>
         );
       })}
 
       {activeChatTab === "draft" ? (
-        <WorkspaceAiWorkbenchRequestMessage state={draftState} message={draftErrorMessage} />
+        draftState === "loading" ? (
+          draftGenerationProgressVisible ? (
+            <WorkspaceAiWorkbenchDraftProgress />
+          ) : null
+        ) : (
+          <WorkspaceAiWorkbenchRequestMessage state={draftState} message={draftErrorMessage} />
+        )
       ) : null}
 
       {activeChatTab === "preview" ? (
@@ -2384,7 +2408,9 @@ export function WorkspaceAiChatDock({
               }
               onClick={() => void runTerraformAgentReview()}
               type="button"
-            >에이전트 리뷰</button>
+            >
+              에이전트 리뷰
+            </button>
           </div>
           {terraformPreviewExplanationIsStale ? (
             <p className={styles.staleNotice} role="status">
@@ -2392,9 +2418,7 @@ export function WorkspaceAiChatDock({
             </p>
           ) : null}
           {terraformPreviewExplanation?.state === "loading" ? (
-            <WorkspaceAiWorkbenchReviewProgress
-              elapsedMs={terraformPreviewReviewElapsedMs}
-            />
+            <WorkspaceAiWorkbenchReviewProgress elapsedMs={terraformPreviewReviewElapsedMs} />
           ) : null}
           {terraformPreviewExplanation?.state === "error" ||
           (terraformPreviewExplanation?.message &&
@@ -2449,7 +2473,9 @@ export function WorkspaceAiChatDock({
                 disabled={selectedTerraformIssue === null || isTerraformIssueAnalysisRunning}
                 onClick={() => void analyzeSelectedTerraformIssue()}
                 type="button"
-              >선택 오류 분석</button>
+              >
+                선택 오류 분석
+              </button>
               <button
                 className={styles.secondaryAction}
                 disabled={
@@ -2457,7 +2483,9 @@ export function WorkspaceAiChatDock({
                 }
                 onClick={() => void analyzeAllTerraformIssues()}
                 type="button"
-              >모두 분석</button>
+              >
+                모두 분석
+              </button>
             </div>
             {terraformIssueBatchProgress ? (
               <p aria-live="polite" className={styles.progress} role="status">
@@ -2481,7 +2509,9 @@ export function WorkspaceAiChatDock({
                     }
                     onClick={applyAllTerraformIssueFixes}
                     type="button"
-                  >적용 가능한 항목 모두 수정</button>
+                  >
+                    적용 가능한 항목 모두 수정
+                  </button>
                 </div>
               </div>
             ) : (
@@ -2490,7 +2520,10 @@ export function WorkspaceAiChatDock({
           </section>
 
           {selectedTerraformIssue ? (
-            <section className={styles.artifact} aria-labelledby="workspace-ai-selected-error-title">
+            <section
+              className={styles.artifact}
+              aria-labelledby="workspace-ai-selected-error-title"
+            >
               <header className={styles.artifactHeader}>
                 <div>
                   <span>분석 대상</span>
@@ -2593,12 +2626,12 @@ export function WorkspaceAiChatDock({
                 disabled={draftIsStale}
                 onClick={applyDraftToBoard}
                 type="button"
-              >Board에 적용</button>
-              <button
-                className={styles.secondaryAction}
-                onClick={cancelDraftPreview}
-                type="button"
-              >취소</button>
+              >
+                Board에 적용
+              </button>
+              <button className={styles.secondaryAction} onClick={cancelDraftPreview} type="button">
+                취소
+              </button>
               <button
                 className={styles.secondaryAction}
                 disabled={isChatBusy}
@@ -2627,7 +2660,9 @@ export function WorkspaceAiChatDock({
             </p>
           </header>
           <div className={styles.artifactBody}>
-            <WorkspaceAiWorkbenchExplanation explanation={patchPreviewModel.preview.llmExplanation} />
+            <WorkspaceAiWorkbenchExplanation
+              explanation={patchPreviewModel.preview.llmExplanation}
+            />
             {patchPreviewModel.isParameterOnly ? (
               <WorkspaceAiPatchParameterPreview changes={patchPreviewModel.parameterChanges} />
             ) : (
@@ -2658,19 +2693,21 @@ export function WorkspaceAiChatDock({
                 disabled={patchPreviewIsStale}
                 onClick={applyPatchPreviewToBoard}
                 type="button"
-              >Board에 적용</button>
-              <button
-                className={styles.secondaryAction}
-                onClick={cancelPatchPreview}
-                type="button"
-              >취소</button>
+              >
+                Board에 적용
+              </button>
+              <button className={styles.secondaryAction} onClick={cancelPatchPreview} type="button">
+                취소
+              </button>
               {patchPreviewIsStale ? (
                 <button
                   className={styles.secondaryAction}
                   disabled={isChatBusy}
                   onClick={() => void regeneratePatchPreview()}
                   type="button"
-                >최신 기준으로 다시 생성</button>
+                >
+                  최신 기준으로 다시 생성
+                </button>
               ) : null}
             </div>
           </div>

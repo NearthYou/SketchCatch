@@ -5,10 +5,33 @@ export type WorkspaceAiChatDockStatus = {
   readonly label: string;
 };
 
-export type TerraformPreviewReviewStep = {
+export type WorkspaceAiProgressStep = {
   readonly description: string;
   readonly label: string;
 };
+
+export type TerraformPreviewReviewStep = WorkspaceAiProgressStep;
+
+export const ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS = 3_000;
+
+export const architectureDraftGenerationSteps: readonly WorkspaceAiProgressStep[] = [
+  {
+    label: "요청 의도 정리",
+    description: "입력한 요구사항과 선택 답변을 아키텍처 조건으로 정리하고 있습니다."
+  },
+  {
+    label: "리소스 후보 구성",
+    description: "조건에 맞는 클라우드 리소스와 구성 패턴을 고르고 있습니다."
+  },
+  {
+    label: "연결 구조 설계",
+    description: "리소스 사이의 흐름과 의존 관계를 구성하고 있습니다."
+  },
+  {
+    label: "아키텍처 결과 검증",
+    description: "요구사항 누락과 구조 오류를 확인하고 초안을 정리하고 있습니다."
+  }
+];
 
 export const TERRAFORM_PREVIEW_REVIEW_STEP_DURATION_MS = 3_500;
 
@@ -30,6 +53,13 @@ export const terraformPreviewReviewSteps: readonly TerraformPreviewReviewStep[] 
     description: "판단과 확인할 내용을 읽기 쉽게 정리하고 있습니다."
   }
 ];
+
+export function getArchitectureDraftGenerationProgressStep(elapsedMs: number): number {
+  return Math.min(
+    Math.max(0, Math.floor(elapsedMs / ARCHITECTURE_DRAFT_GENERATION_STEP_DURATION_MS)),
+    architectureDraftGenerationSteps.length - 1
+  );
+}
 
 export function getTerraformPreviewReviewProgressStep(elapsedMs: number): number {
   return Math.min(

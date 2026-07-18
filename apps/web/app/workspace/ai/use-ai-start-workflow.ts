@@ -33,7 +33,6 @@ import {
   type ArchitectureDraftFollowUpSession
 } from "../../../features/workspace/workspace-ai-draft-follow-up";
 import {
-  createArchitectureDraftClarificationAnswerReceipt,
   createArchitectureDraftClarificationMessage,
   resolveAcceptedArchitectureDraftClarificationSelection,
   withArchitectureDraftClarificationAnswer
@@ -311,7 +310,7 @@ export function useAiStartWorkflow({
         if (!requestRegistryRef.current.isActive("draft", controller)) {
           return;
         }
-        appendDraftClarificationAnswerReceipt(submittedAnswer, response);
+        markDraftClarificationAnswerSelection(submittedAnswer, response);
         handleDraftResponse(request, response);
       } catch (error) {
         if (
@@ -353,7 +352,7 @@ export function useAiStartWorkflow({
         return;
       }
 
-      appendDraftClarificationAnswerReceipt(submittedAnswer, response);
+      markDraftClarificationAnswerSelection(submittedAnswer, response);
       handleDraftResponse(progressRequest.request, response);
       draftProgressCoordinatorRef.current.complete(progressRequest);
     } catch (error) {
@@ -368,14 +367,16 @@ export function useAiStartWorkflow({
     }
   }
 
-  function appendDraftClarificationAnswerReceipt(
+  function markDraftClarificationAnswerSelection(
     submittedAnswer: SubmittedDraftClarificationAnswer | undefined,
     response: CreateArchitectureDraftResponse
   ): void {
     if (submittedAnswer === undefined) return;
 
     const selection = resolveAcceptedArchitectureDraftClarificationSelection(
-      submittedAnswer.clarification, submittedAnswer.answer, response
+      submittedAnswer.clarification,
+      submittedAnswer.answer,
+      response
     );
     if (selection !== null) {
       setAcceptedClarificationSelection({
@@ -383,14 +384,6 @@ export function useAiStartWorkflow({
         questionMessageId: submittedAnswer.questionMessageId,
         selectedAt: new Date().toISOString()
       });
-    }
-    const receipt = createArchitectureDraftClarificationAnswerReceipt(
-      submittedAnswer.clarification,
-      submittedAnswer.answer,
-      response
-    );
-    if (receipt !== null) {
-      appendAssistantMessage("status", receipt);
     }
   }
 
@@ -400,7 +393,9 @@ export function useAiStartWorkflow({
   ): void {
     if (isArchitectureDraftClarification(response)) {
       const questionMessages = appendAssistantMessage(
-        "question", createArchitectureDraftClarificationMessage(response), response.suggestions
+        "question",
+        createArchitectureDraftClarificationMessage(response),
+        response.suggestions
       );
       const questionMessageId = questionMessages.at(-1)?.id;
       if (questionMessageId !== undefined) {
@@ -544,9 +539,7 @@ export function useAiStartWorkflow({
     }
 
     if (existingProjectId && existingProjectDraftRevision === undefined) {
-      failRequest(
-        "현재 프로젝트의 최신 초안을 확인하고 있어요. 잠시 후 다시 시도해 주세요."
-      );
+      failRequest("현재 프로젝트의 최신 초안을 확인하고 있어요. 잠시 후 다시 시도해 주세요.");
       return;
     }
 

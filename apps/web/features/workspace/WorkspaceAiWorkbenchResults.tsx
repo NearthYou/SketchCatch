@@ -4,8 +4,8 @@ import type {
   LlmExplanation,
   TerraformDiagnostic
 } from "@sketchcatch/types";
-import { useState, type ReactNode } from "react";
-import { ArrowRight, Code2, ListChecks } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ArrowRight, Code2, ListChecks, X } from "lucide-react";
 import {
   createTerraformIssuePresentation,
   createWorkspaceAiExplanationBadge,
@@ -14,8 +14,11 @@ import {
   type WorkspaceAiResultCheck
 } from "./workspace-ai-result-presentation";
 import {
+  architectureDraftGenerationSteps,
+  getArchitectureDraftGenerationProgressStep,
   getTerraformPreviewReviewProgressStep,
-  terraformPreviewReviewSteps
+  terraformPreviewReviewSteps,
+  type WorkspaceAiProgressStep
 } from "./workspace-ai-chat-status";
 import styles from "./workspace-ai-workbench.module.css";
 
@@ -47,21 +50,61 @@ export function WorkspaceAiWorkbenchRequestMessage({
   return null;
 }
 
+export function WorkspaceAiWorkbenchDraftProgress({
+  onCancel
+}: {
+  readonly onCancel?: (() => void) | undefined;
+}) {
+  const elapsedMs = useWorkspaceAiProgressElapsed();
+
+  return (
+    <WorkspaceAiWorkbenchProgress
+      currentStep={getArchitectureDraftGenerationProgressStep(elapsedMs)}
+      notice="AI 응답이 도착하면 검증된 다이어그램 초안을 바로 표시합니다."
+      onCancel={onCancel}
+      steps={architectureDraftGenerationSteps}
+      title="AI가 다이어그램을 구성하고 있습니다"
+    />
+  );
+}
+
 export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly elapsedMs: number }) {
-  const currentStep = getTerraformPreviewReviewProgressStep(elapsedMs);
-  const activeStep = terraformPreviewReviewSteps[currentStep];
+  return (
+    <WorkspaceAiWorkbenchProgress
+      currentStep={getTerraformPreviewReviewProgressStep(elapsedMs)}
+      notice="Amazon Q 응답이 도착하면 여섯 가지 기준의 검토 결과를 바로 표시합니다."
+      steps={terraformPreviewReviewSteps}
+      title="Amazon Q 검토를 진행하고 있습니다"
+    />
+  );
+}
+
+function WorkspaceAiWorkbenchProgress({
+  currentStep,
+  notice,
+  onCancel,
+  steps,
+  title
+}: {
+  readonly currentStep: number;
+  readonly notice: string;
+  readonly onCancel?: (() => void) | undefined;
+  readonly steps: readonly WorkspaceAiProgressStep[];
+  readonly title: string;
+}) {
+  const activeStep = steps[currentStep];
 
   return (
     <div className={styles.reviewProgress}>
       <div aria-live="polite" className={styles.reviewProgressHeader} role="status">
         <span aria-hidden="true" className={styles.reviewProgressSpinner} />
         <div>
-          <strong>Amazon Q 검토를 진행하고 있습니다</strong>
+          <strong>{title}</strong>
           <span>{activeStep?.description}</span>
         </div>
       </div>
       <ol className={styles.reviewProgressSteps}>
-        {terraformPreviewReviewSteps.map((step, index) => {
+        {steps.map((step, index) => {
           const state =
             index < currentStep ? "complete" : index === currentStep ? "active" : "pending";
 
@@ -80,13 +123,32 @@ export function WorkspaceAiWorkbenchReviewProgress({ elapsedMs }: { readonly ela
           );
         })}
       </ol>
-      <p className={styles.reviewProgressNotice}>
-        Amazon Q 응답이 도착하면 여섯 가지 기준의 검토 결과를 바로 표시합니다.
-      </p>
+      <div className={styles.reviewProgressFooter}>
+        <p className={styles.reviewProgressNotice}>{notice}</p>
+        {onCancel ? (
+          <button className={styles.cancelButton} onClick={onCancel} type="button">
+            <X aria-hidden="true" size={14} /> 요청 취소
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
 
+function useWorkspaceAiProgressElapsed(): number {
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timerId = window.setInterval(() => {
+      setElapsedMs(Date.now() - startedAt);
+    }, 500);
+
+    return () => window.clearInterval(timerId);
+  }, []);
+
+  return elapsedMs;
+}
 
 export function WorkspaceAiWorkbenchExplanation({
   explanation
@@ -220,7 +282,9 @@ export function WorkspaceAiWorkbenchTerraformIssueResult({
             <section>
               <strong>수정할 코드</strong>
               <pre>
-                <code>{formatTerraformIssuePreviewCode(result.technical.codePreview.nextCode)}</code>
+                <code>
+                  {formatTerraformIssuePreviewCode(result.technical.codePreview.nextCode)}
+                </code>
               </pre>
             </section>
           </div>

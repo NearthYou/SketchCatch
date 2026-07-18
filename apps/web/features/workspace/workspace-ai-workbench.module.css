@@ -760,6 +760,21 @@
   padding-top: 11px;
 }
 
+.reviewProgressFooter {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.reviewProgressFooter .reviewProgressNotice {
+  flex: 1 1 220px;
+}
+
+.reviewProgressFooter .cancelButton {
+  flex: 0 0 auto;
+}
+
 @keyframes review-progress-spin {
   to {
     transform: rotate(360deg);

@@ -1,7 +1,8 @@
 "use client";
 
-import { RotateCcw, Undo2, X } from "lucide-react";
+import { RotateCcw, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
+import { WorkspaceAiWorkbenchDraftProgress } from "../../../features/workspace/WorkspaceAiWorkbenchResults";
 import type {
   ArchitectureDraftCandidateExclusion,
   ArchitectureDraftProgressSnapshot
@@ -121,7 +122,10 @@ export function ConversationTranscript({
             ({ questionMessageId }) => questionMessageId === message.id
           );
           const visibleSuggestions = [...(message.suggestions ?? [])];
-          if (selectedForQuestion !== undefined && !visibleSuggestions.includes(selectedForQuestion.label)) {
+          if (
+            selectedForQuestion !== undefined &&
+            !visibleSuggestions.includes(selectedForQuestion.label)
+          ) {
             visibleSuggestions.push(selectedForQuestion.label);
           }
 
@@ -165,12 +169,6 @@ export function ConversationTranscript({
                   })}
                 </div>
               ) : null}
-              {selectedForQuestion !== undefined ? (
-                <div className={styles.acceptedAnswer} role="status">
-                  <span>반영된 답변</span>
-                  <strong>{selectedForQuestion.label}</strong>
-                </div>
-              ) : null}
             </article>
           );
         })}
@@ -209,14 +207,8 @@ export function ConversationTranscript({
           </div>
         ) : null}
 
-        {requestState === "loading" ? (
-          <div className={styles.requestStatus} role="status">
-            <span className={styles.requestStatusDot} />
-            <span>응답 생성 중</span>
-            <button onClick={onCancelRequest} type="button">
-              <X aria-hidden="true" size={14} /> 요청 취소
-            </button>
-          </div>
+        {requestState === "loading" && progressSnapshot !== null ? (
+          <WorkspaceAiWorkbenchDraftProgress onCancel={onCancelRequest} />
         ) : null}
 
         {retryRequestLabel ? (
