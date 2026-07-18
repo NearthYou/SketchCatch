@@ -26,6 +26,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-18 - Simplify AI Workbench mode navigation
+
+- Reduced the desktop AI Workbench mode rail to icon-only tabs and narrowed it from 68px to 48px; retained accessible names and native tooltips while keeping mobile tab labels visible.
+- Replaced the fixed `AI 작업실` heading with the active mode title: `설계 제안`, `오류 분석`, or `에이전트 리뷰`.
+- Verification passed: focused AI Workbench contract tests 21/21, workspace lint, typecheck, production build, final harness check, and diff check. Broad test suites were not run; lint retains one unrelated existing API test warning.
+- No DB schema, migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+- Next action: refresh the active Workspace and visually confirm the icon-only desktop rail; no further code change is pending.
+
 ### 2026-07-18 - Minimize the automatic organization result
 
 - Reduced the automatic organization preview to its title, outcome headline, and the existing revert/apply actions.
@@ -72,14 +80,6 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-18 - Confirm presentation typography on the target display
 
 - Refresh the running local Web app and confirm the 6px increase and Pretendard rendering on the presentation TV; no further code change is pending unless visual acceptance requests one.
-
-### 2026-07-18 - Expand project destroy recovery and AWS connection permissions
-
-- Refreshed the project deletion preview after a successful Terraform Destroy when final SketchCatch cleanup fails, preventing retries from starting a stale Destroy Plan.
-- Preserved managed-cleanup causes and logged masked AWS cause metadata for request-correlated diagnosis.
-- Expanded generated AWS Connection policies and CloudFormation templates to cover every currently deployable AWS service family and required IAM lifecycle operations.
-- Updated the live `chaekang` execution-role inline policy successfully. The other verified DB connection points to a role that no longer exists; pending connections have no role yet and will receive the new template when created.
-- Focused Web tests pass 12/12 and focused API tests pass 31/31. Workspace lint and typecheck pass. The root build was stopped at the user's request after running without output for over two minutes.
 
 ### 2026-07-18 - Finish resource-inclusive project deletion cleanly
 

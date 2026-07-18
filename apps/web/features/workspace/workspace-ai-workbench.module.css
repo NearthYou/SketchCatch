@@ -35,7 +35,7 @@
   color: var(--ai-workbench-text);
   display: grid;
   font-family: var(--ai-workbench-font);
-  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -62,6 +62,15 @@
   grid-auto-rows: min-content;
   min-width: 0;
   padding: 10px 7px;
+}
+
+.desktopModeRail {
+  padding-inline: 5px;
+}
+
+.desktopModeRail .modeButton {
+  min-height: 40px;
+  padding: 0;
 }
 
 .modeButton {

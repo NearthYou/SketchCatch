@@ -36,6 +36,16 @@ test("AI Workbench exposes the desktop mode rail and active work panel accessibl
   assert.match(workbenchSource, /aria-labelledby=\{`workspace-ai-chat-tab-/);
 });
 
+test("desktop AI Workbench navigation is icon-only and names the active mode in the header", () => {
+  assert.match(workbenchSource, /className=\{styles\.mobileTabList\}[\s\S]*?showLabels=\{true\}/);
+  assert.match(workbenchSource, /className=\{styles\.desktopModeRail\}[\s\S]*?showLabels=\{false\}/);
+  assert.match(workbenchSource, /aria-label=\{label\}/);
+  assert.match(workbenchSource, /title=\{label\}/);
+  assert.match(workbenchSource, /\{showLabels \? <span>\{label\}<\/span> : null\}/);
+  assert.match(workbenchSource, /<h2 id="workspace-ai-chat-title">\{activeScopeLabel\}<\/h2>/);
+  assert.match(workbenchStyles, /\.workWindow\s*\{[^}]*grid-template-columns:\s*48px minmax\(0, 1fr\);/s);
+});
+
 test("AI Workbench owns status, transcript, footer, and nonmodal desktop pointer behavior", () => {
   assert.match(workbenchSource, /aria-live="polite"/);
   assert.match(workbenchSource, /role="status"/);
