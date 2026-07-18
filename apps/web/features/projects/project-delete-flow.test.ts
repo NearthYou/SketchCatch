@@ -80,6 +80,18 @@ test("resource-inclusive deletion exposes compact progress for every automatic s
   );
 });
 
+test("resource-inclusive deletion advances gradually inside each automatic stage", () => {
+  for (const status of ["planning", "approving", "destroying", "deleting"] as const) {
+    const initial = getProjectDeleteProgress(status, 0);
+    const later = getProjectDeleteProgress(status, 5_000);
+
+    assert.ok(initial);
+    assert.ok(later);
+    assert.ok(later.percent > initial.percent, status);
+    assert.ok(later.percent <= later.maxPercent, status);
+  }
+});
+
 test("one confirmation continues from Destroy Plan through project deletion", () => {
   const workflowSource = getSourceBetween(
     projectsClientSource,

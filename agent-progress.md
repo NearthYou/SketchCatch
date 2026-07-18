@@ -189,3 +189,10 @@ Short English-only working log for the current agent context. Older records are 
 - Expanded generated AWS Connection policies and CloudFormation templates to cover every currently deployable AWS service family and required IAM lifecycle operations.
 - Updated the live `chaekang` execution-role inline policy successfully. The other verified DB connection points to a role that no longer exists; pending connections have no role yet and will receive the new template when created.
 - Focused Web tests pass 12/12 and focused API tests pass 31/31. Workspace lint and typecheck pass. The root build was stopped at the user's request after running without output for over two minutes.
+
+### 2026-07-18 - Finish resource-inclusive project deletion cleanly
+
+- Made project deletion progress advance gradually within each planning, approval, destroy, and final cleanup stage without showing 100% before completion.
+- Changed SketchCatch artifact cleanup to best-effort after managed AWS cleanup, so an internal S3 prefix failure is logged but no longer preserves an otherwise deletable project record.
+- Removed the post-success cleanup warning from the project list UI; managed AWS cleanup and database deletion failures remain blocking errors.
+- Focused Web flow tests pass 13/13 and focused API deletion tests pass 16/16. Web and API workspace typechecks pass; no full build or broad integration suite was run per user request.

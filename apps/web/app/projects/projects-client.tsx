@@ -38,6 +38,7 @@ import {
 import {
   getDestroyDeleteAcknowledgedWarningIds,
   getProjectDeleteProgress,
+  type ProjectDeleteWorkflowStatus,
   isDestroyPlanReadyForApproval,
   shouldShowProjectOnlyDeleteFallback
 } from "../../features/projects/project-delete-flow";
@@ -94,6 +95,20 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
   const [deleteErrorMessage, setDeleteErrorMessage] = useState("");
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ status: "closed" });
+  const [deleteProgressClock, setDeleteProgressClock] = useState<{
+    readonly elapsedMs: number;
+    readonly status: ProjectDeleteWorkflowStatus | null;
+  }>({
+    elapsedMs: 0,
+    status: null
+  });
+  const deleteProgressStatus =
+    deleteDialog.status === "planning" ||
+    deleteDialog.status === "approving" ||
+    deleteDialog.status === "destroying" ||
+    deleteDialog.status === "deleting"
+      ? deleteDialog.status
+      : null;
   const [projectActionMenu, setProjectActionMenu] = useState<ProjectActionMenuState>({
     status: "closed"
   });
@@ -123,6 +138,24 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       isMountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (deleteProgressStatus === null) {
+      setDeleteProgressClock({ elapsedMs: 0, status: null });
+      return;
+    }
+
+    const startedAt = Date.now();
+    setDeleteProgressClock({ elapsedMs: 0, status: deleteProgressStatus });
+    const intervalId = window.setInterval(() => {
+      setDeleteProgressClock({
+        elapsedMs: Date.now() - startedAt,
+        status: deleteProgressStatus
+      });
+    }, 500);
+
+    return () => window.clearInterval(intervalId);
+  }, [deleteProgressStatus]);
 
   async function toggleProjectActionMenu(project: Project): Promise<void> {
     if (projectActionMenu.status !== "closed" && projectActionMenu.project.id === project.id) {
@@ -226,17 +259,11 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
     });
 
     try {
-      const result = await deleteProject(project.id, action);
+      await deleteProject(project.id, action);
 
       removeProjectFromList(project.id);
       setDeleteDialog({ status: "closed" });
 
-      if (result.cleanup.failedObjectCount > 0) {
-        setDeleteErrorMessage(
-          result.cleanup.message ??
-            "프로젝트 기록은 삭제됐지만 일부 SketchCatch 내부 S3 산출물 정리에 실패했습니다. 이 경고는 클라우드 리소스가 남았다는 의미가 아닙니다."
-        );
-      }
     } catch (error) {
       setDeleteDialog({
         errorMessage: getApiErrorMessage(error, "프로젝트를 삭제하지 못했습니다."),
@@ -367,7 +394,7 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
         selectedAction,
         status: "deleting"
       });
-      const result = await deleteProject(project.id, "delete_project");
+      await deleteProject(project.id, "delete_project");
 
       if (!isMountedRef.current) {
         return;
@@ -376,12 +403,6 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       removeProjectFromList(project.id);
       setDeleteDialog({ status: "closed" });
 
-      if (result.cleanup.failedObjectCount > 0) {
-        setDeleteErrorMessage(
-          result.cleanup.message ??
-            "프로젝트 기록은 삭제됐지만 일부 SketchCatch 내부 S3 산출물 정리에 실패했습니다. 이 경고는 클라우드 리소스가 남았다는 의미가 아닙니다."
-        );
-      }
     } catch (error) {
       if (!isMountedRef.current) {
         return;
@@ -467,8 +488,12 @@ export function ProjectsClient({ searchQuery }: { readonly searchQuery: string }
       deleteDialog.status !== "loading" &&
       deleteDialog.preview.availableActions.includes(action) &&
       (!selectedAction || selectedAction === action);
-    const progress =
-      deleteDialog.status !== "loading" ? getProjectDeleteProgress(deleteDialog.status) : null;
+    const deleteProgressElapsedMs =
+      deleteProgressClock.status === deleteProgressStatus ? deleteProgressClock.elapsedMs : 0;
+
+    const progress = deleteProgressStatus
+      ? getProjectDeleteProgress(deleteProgressStatus, deleteProgressElapsedMs)
+      : null;
 
     return (
       <div
