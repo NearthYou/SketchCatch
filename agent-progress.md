@@ -1,18 +1,5 @@
 # Agent Progress
 
-## 2026-07-17 - Repair project resource-inclusive deletion
-
-- Updated project deletion polling to recognize the current completed, unapproved Destroy Plan contract without relying on the retired `missing_approval` block state.
-- Preserved the valid recovery path for failed Apply deployments with Terraform state and rejected stale Destroy Plan pointers while planning is still running.
-- Kept Direct Deployment actions sequenced as Destroy Plan -> approval -> Destroy, without showing a second Destroy Plan action while approval is pending.
-- Project deletion now removes every current object, historical version, and delete marker under the project and linked deployment S3 prefixes before deleting RDS records.
-- Internal artifact cleanup is fail-closed: any S3 cleanup failure returns `managed_cleanup_failed`, retains project records, and allows a safe retry.
-- Extended the API task IAM policy and production infrastructure check for prefix-scoped `s3:ListBucketVersions` and `s3:DeleteObjectVersion`.
-- Aligned project deletion preview eligibility with the Destroy Plan contract: infrastructure cleanup now requires a persisted Terraform state pointer, while application cleanup remains state-independent.
-- Added regressions for the missing-state race that previously exposed an impossible resource-inclusive delete action; focused project deletion and Destroy Plan tests pass 23/23.
-- Verification passed: focused API tests 18/18, route contract tests 2/2, focused Web tests 37/37, production infrastructure structure check, workspace lint, typecheck, build, and `git diff --check`.
-- No real cloud mutation, Terraform apply/destroy, project deletion, DB migration, or Git/CI/CD handoff was performed.
-
 Short English-only working log for the current agent context. Older records are archived under `docs/agent-history/`.
 
 ## Current Verified State
@@ -25,122 +12,6 @@ Short English-only working log for the current agent context. Older records are 
 - Cancellation, stale-response rejection, retry, candidate exclusion/undo, clarification, Compiler, explicit approval, and save boundaries remain in functional code.
 
 ## Session Record
-
-### 2026-07-18 - Correct Cross-account AWS S3 Template mapping
-
-- Replaced the incorrect AWS Account presentation mapping and empty text primitives with existing Palette Group areas while preserving the three Terraform Resources, containment, and source geometry.
-- Recaptured the committed WebP and bound its manifest hash to the corrected Diagram.
-- Kept the existing Compiler visual baseline by excluding visual Security Group scope, summary links, and launch dependencies from main-flow quality.
-
-### 2026-07-16 - Address PR #438 review feedback
-
-- Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
-- Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
-- Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
-- No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
-
-### 2026-07-16 - Follow up merged PR #439 review
-
-- Scoped runtime Secret contract regexes to their Terraform set literals, selected the named worker container, and used `try(..., [])` for nullable Secret lists so unrelated markers cannot satisfy the checks.
-- Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
-
-### 2026-07-16 - Complete runtime Apply validator repair
-
-- Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for valid and invalid forms.
-- Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed.
-
-### 2026-07-16 - Complete runtime deployment reconciliation
-
-- Complete runtime Apply validation compares planned API and worker Secret references with Terraform state and verifies that the worker execution policy retains every existing secret reference.
-- The API ECS service reconciles task definition changes while retaining autoscaling ownership of desired count.
-- Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed.
-
-### 2026-07-16 - Complete runtime policy and post-apply verification
-
-- Complete runtime Apply validation reads the existing worker execution inline policy from state when Plan JSON masks prior policy data, then verifies every worker Task Definition Secret reference after Apply.
-- Synthetic jq checks passed when prior permissions were retained and failed when a prior permission or Secret reference was removed; no Secret value was emitted.
-
-### 2026-07-17 - Complete runtime post-apply task definition verification
-
-- Plan JSON also masks the desired task definition payload, so the complete Apply guard verifies GitHub App runtime inputs in the applied API and worker task definitions from Terraform state.
-- Synthetic jq checks passed with both required inputs and failed when the worker Client ID environment entry was removed.
-
-### 2026-07-17 - Complete runtime partial-apply resume guard
-
-- The first approved Apply partially completed the reviewed runtime plan, then stopped because the deploy role lacked ELB tag readback and task-definition deregistration authorization.
-- The deploy-policy source now grants only those two missing actions, and the complete runtime guard accepts either the original full reviewed envelope or the exact residual envelope. No state operation, import, or unreviewed apply was used.
-- Harness, production infrastructure structure check, Terraform formatting, lint, typecheck, and build pass. Local Terraform validate/test remain blocked by the uncached AWS provider package.
-
-### 2026-07-17 - Improve Architecture Board UI interactions
-
-- Closed the controlled AI Workbench before competing observation, deployment, right-panel, and auto-organize preview surfaces open.
-- Corrected Fit View visual bounds, anchored the auto-organize preview beside the left panel, scaled resource contents with their containers, and removed the empty-board `Resource` guidance while preserving view switching.
-- Added a single-template detail preview with image, description, metrics, and tags. Sidebar and full-library selection no longer apply immediately; only the preview confirmation applies the template.
-- Focused contract tests, browser smoke checks, lint, typecheck, and build pass. No DB migration, infrastructure mutation, deployment, or Git handoff was performed.
-
-## Broken Or Unverified
-
-- The session-wide `pnpm test` run originally reported three Web failures. The owned AI chat contract failure is fixed and its focused suite passes; two unchanged failures remain in the generated architecture artifact line-ending assertion and GitHub account settings contract. The full suite was not rerun after the focused fix.
-- `pnpm test` stops in `@sketchcatch/types` at 40/43 on the same three pre-existing three-tier Template security-scope/position/parent assertions. This branch does not modify those Template sources or failing tests.
-- `pnpm --filter @sketchcatch/api test` passes 710/713. The remaining three unchanged filesystem security tests fail during Windows symlink setup with `EPERM`, before their assertions.
-- Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
-
-## Next Action
-### 2026-07-17 - Automate resource-inclusive project deletion
-
-- Replaced the two-step Destroy approval UI with one explicit confirmation that continues through plan, approval, destroy, S3 artifact cleanup, and project deletion.
-- Added compact stage and percentage progress for planning, approval, cloud cleanup, and final project cleanup.
-- Unified terminal Destroy eligibility so approved FAILED/aws_connection deployments with Terraform state are not rejected between approval and execution.
-- Exact route and service regressions pass (55/55 and 7/7); approval and destroy-plan services pass (18/18 and 7/7); focused Web flow tests pass (11/11).
-- Workspace lint and typecheck pass. API, types, and UI builds pass; the Web production build compiles successfully, then this Windows sandbox blocks the Next.js child process with spawn EPERM.
-
-### 2026-07-18 - Expand project destroy recovery and AWS connection permissions
-
-- Refreshed the project deletion preview after a successful Terraform Destroy when final SketchCatch cleanup fails, preventing retries from starting a stale Destroy Plan.
-- Preserved managed-cleanup causes and logged masked AWS cause metadata for request-correlated diagnosis.
-- Expanded generated AWS Connection policies and CloudFormation templates to cover every currently deployable AWS service family and required IAM lifecycle operations.
-- Updated the live `chaekang` execution-role inline policy successfully. The other verified DB connection points to a role that no longer exists; pending connections have no role yet and will receive the new template when created.
-- Focused Web tests pass 12/12 and focused API tests pass 31/31. Workspace lint and typecheck pass. The root build was stopped at the user's request after running without output for over two minutes.
-
-### 2026-07-18 - Finish resource-inclusive project deletion cleanly
-
-- Made project deletion progress advance gradually within each planning, approval, destroy, and final cleanup stage without showing 100% before completion.
-- Changed SketchCatch artifact cleanup to best-effort after managed AWS cleanup, so an internal S3 prefix failure is logged but no longer preserves an otherwise deletable project record.
-- Removed the post-success cleanup warning from the project list UI; managed AWS cleanup and database deletion failures remain blocking errors.
-- Focused Web flow tests pass 13/13 and focused API deletion tests pass 16/16. Web and API workspace typechecks pass; no full build or broad integration suite was run per user request.
-
-### 2026-07-18 - Prevent stale Terraform outputs from reaching Plan
-
-- Removed generated Terraform output blocks when their managed resources disappear, including legacy output-only artifacts and direct node deletion.
-- Upgraded module-wide undeclared resource references to blocking validation errors while preserving valid cross-file references.
-- Added a server-side Plan preflight that rejects dangling references before AWS credential preparation or Terraform execution.
-- Focused Web regression passes 1/1; focused API regressions pass 3/3; Web and API typechecks pass. Full build and broad suites were intentionally not run per user request.
-### 2026-07-17 - Integrate Repository analysis with Workspace Delivery
-
-- Public Repository analysis now creates a Board without GitHub authorization and persists one project-scoped Repository Analysis Record with repository, branch, commit, and selected template provenance.
-- Added migration 0050, exact private Repository permission recovery, a read-only Project Delivery Profile, and one Workspace Delivery panel for GitHub, source, target, monitoring, and readiness settings.
-- Focused API regressions pass 101/101 and focused Web regressions pass 28/28; harness, lint, typecheck, and production build pass. The Web full suite has one unrelated failure in concurrent deployment target work, and the API full suite was stopped after extended inactivity in existing external-dependency paths. No GitHub, cloud, deployment, or Terraform mutation was performed.
-
-### 2026-07-17 - Centralize the Delivery deployment target editor
-
-- Moved the deployment target client, state, styles, and tests from the compatibility route into one Workspace Delivery feature module and supplied the current Delivery Profile as its initial state.
-- Added Repository Analysis Record evidence fallback, Runtime-specific missing-field reporting, saved-value locking, and post-save Delivery Profile/readiness refresh without starting a deployment, PR, or pipeline.
-- Focused target, Delivery integration, and return-path regressions pass 31/31. Independent review fixes cover multi-connection selection, Runtime inference, non-fabricated evidence, non-ECS URL entry and summary, confirmed-field locking across Runtime changes, loading-state protection, and component responsibility separation. Workspace lint, typecheck, production build, harness, and diff checks pass.
-- The Web full suite has one unchanged failure in `deployment-actions.test.ts` for the existing Destroy approval-state expectation; this work does not modify that module. No DB migration, GitHub mutation, cloud mutation, Terraform execution, deployment, or Git handoff was performed.
-
-### 2026-07-17 - Add GitHub build disconnect
-
-- Added a confirmed settings action that removes only SketchCatch-managed CodeBuild projects, roles, logs, build caches, and the shared CodeConnection while preserving the AWS account connection and deployed resources.
-- Disconnect claims the CodeConnection, blocks active and newly starting build/deployment work, and keeps retryable metadata after cleanup failure.
-- Review hardening added refresh CAS and cleanup-failure protection, atomic build-preparation and Direct/GitOps lease fencing, generation-safe one-hour stale-claim retry, preserved build history, and an explicit cleanup retry UI.
-- Focused API and Web settings tests plus workspace lint, typecheck, production build, harness, and diff checks pass. No DB migration or live AWS cleanup was performed.
-### 2026-07-17 - Restore release-candidate multipart S3 permissions
-
-- Added the missing `ListMultipartUploadParts` and `AbortMultipartUpload` permissions to both production API and trusted worker task policies, with structure checks that require both roles to retain them.
-- Multipart completion failures now preserve the S3 operation, object key, provider error name, and HTTP status; the public storage interface and deployment failure-stage contract are unchanged.
-- Focused release-candidate tests (3/3), production infrastructure structure checks, Terraform formatting and validation, all workspace lint/typecheck commands, API/shared-package builds, sandbox safety tests (25/25), harness, formatting, and diff checks pass.
-- Full API, web, and types suites still expose unrelated `dev` failures caused by missing test environment values/tools, sandbox socket restrictions, and pre-existing contract assertions. The API build passes; the webpack web build compiles but stops on the existing invalid Next Route export in `architecture-draft/route.ts`.
-- No Terraform plan/apply, AWS mutation, or deployment was performed. After review and merge, an operator-approved runtime Terraform plan/apply is required before the deployed task roles receive the permissions.
 
 ### 2026-07-17 - Unify workspace observation and deployment controls
 
@@ -237,3 +108,104 @@ Short English-only working log for the current agent context. Older records are 
 - Restricted project and deployment artifact deletion prefixes to the explicit identifier character set before issuing any S3 list or delete command.
 - Added regressions for traversal-like, whitespace, dotted, and encoded-separator prefixes; the focused storage suite passes 4/4.
 - API typecheck and harness pass. API lint passes with one unrelated existing unused-import warning in `project-deletion-service.test.ts`. No AWS, Terraform, deployment, project deletion, or database mutation was performed.
+
+### 2026-07-18 - Gate full-stack preparation on a confirmed deployment target
+
+- Direct Deployment now checks the current project deployment target before saving or preparing a Full Stack/Application run and links missing setup to the existing CI/CD Delivery surface.
+- Deployment prepare conflicts now explain the Source Repository, build configuration, and AWS connection prerequisites and identify the failure as target selection before any worker starts.
+- Focused Web tests pass 32/32; root lint, typecheck, build, harness, and diff checks pass. No Deployment, Terraform execution, AWS mutation, Git handoff, push, or DB migration was performed.
+
+### 2026-07-18 - Separate GitHub login from Repository authorization
+
+- GitHub OAuth remains a SketchCatch login mechanism only; Git/CI/CD Repository settings now use the connected GitHub App installation token with no user OAuth fallback endpoints or UI.
+- Removed the legacy public OAuth-required handoff state, replaced the permission recovery code with `github_app_permission_required`, and documented the required GitHub App user-authorization credentials.
+- Focused API tests pass 18/18 and focused Web tests pass 37/37. Root harness, lint, typecheck, build, and diff checks pass.
+- The legacy physical `github_oauth_required` database column remains mapped under an internal compatibility name, while new handoffs write `false`; no migration, GitHub mutation, cloud mutation, commit, or push was performed.
+
+### 2026-07-18 - Update the GitHub authorization branch from dev
+
+- Fast-forwarded local `dev` and `codex/fix-github-auth-boundary` to `origin/dev` at `ba5bb2ec` while preserving the branch's staged work and separate unstaged UI changes.
+- Kept the newer dev AWS connection envelope and client compatibility fix where it superseded the branch-local duplicate; harness, typecheck, and staged/unstaged diff checks pass.
+- No commit or push was performed.
+
+### 2026-07-18 - Keep CI/CD Repository connection project-scoped
+
+- Replaced the Delivery card's new-project analysis link with the shared `select_repository` navigation so users select a GitHub App Repository for the current project and return to CI/CD afterward.
+- The focused Repository navigation regressions pass 27/27. Root lint and typecheck pass, and the Web and API production builds complete successfully.
+- No Repository connection, GitHub mutation, deployment, DB migration, commit, or push was performed.
+
+### 2026-07-18 - Keep deployment target persistence synchronized
+
+- Board ECS synchronization and Terraform output reconciliation now persist `runtimeConfig`, canonical `runtimeTarget`, and `deploymentTargetFingerprint` together using the locked project's AWS account and region.
+- Both paths repair stale target identity even when the runtime configuration is already current; development diagnostics now point fingerprint preflight failures to the persisted target fields instead of CodeBuild logs.
+- Focused regressions pass 33/33 and the runtime identity contract passes 8/8. Root lint and typecheck pass; direct API and Web production builds exit successfully. No database migration, deployment, cloud mutation, commit, or push was performed.
+
+### 2026-07-18 - Synchronize the prepared release after Terraform outputs
+
+- Terraform output reconciliation now locks and updates the pending ApplicationRelease together with the Project Deployment Target, including both target and ECS coordinate fingerprints.
+- A partially synchronized or failed full-stack retry repairs the prepared release only when its previous target matches the reconstructed pre-Terraform target in the same AWS account, region, health path, and ECS coordinates; real target drift remains blocked.
+- Latest focused API regressions pass 20/20 and failure-presentation tests pass 10/10. API/Web typechecks, changed-file API lint, API bundling, harness, and diff checks pass. No database migration, deployment retry, cloud mutation, commit, or push was performed.
+
+### 2026-07-18 - Remove the demo deployment from AWS
+
+- Removed the user-approved 36-resource `audience-live-check` deployment from account `724702275121`; exact-ID verification reported `CLEANUP_RESULT remaining=0`.
+- Removed the CloudShell helper files. Repository and Git state were unchanged.
+
+### 2026-07-18 - Accept Terraform-managed ECS runtime replacements
+
+- Fixed full-stack output reconciliation so an approved Terraform Apply can replace Task Definition, IAM role, ALB/Target Group, S3, CloudFront, and derived URL coordinates while stable prepared ECR, cluster, service, container, and port coordinates remain fail-closed and state-inventory verified.
+- Removed the duplicate full-stack target synchronization writer, made target and pending ApplicationRelease metadata reconcile atomically, synchronized Board container-port changes before Plan, and corrected the developer diagnostic for post-Apply output conflicts.
+- Added the harness and 212 deployment/GitOps transition checks to CI. Focused checks, lint, typecheck, build, and harness pass; the broader `pnpm test:core` still exposes unrelated pre-existing API/Web failures. No deployment, AWS mutation, DB migration, commit, or push was performed.
+
+### 2026-07-18 - Detach local workers and simplify deployment results
+
+- Added `local_process` mode so Terraform survives API hot reload, with persisted PIDs, cancellation, and dispatch-race protection; worker/startup tests pass 23/23 and route tests pass 2/2.
+- Deployment logs have an internal scroll area.
+- Removed the duplicate recent-result card and redesigned Deployment History as a large responsive table and detail panel; zero counts are omitted, completed Destroy counts stay neutral, and release IDs are collapsed.
+- The focused deployment-flow suite passes 20/20. Root lint and typecheck pass, Web and root builds complete compilation, harness and diff checks pass; root lint retains one unrelated existing API test warning. No Terraform, AWS, database, migration, commit, or push action was performed.
+
+### 2026-07-18 - Close Direct and GitOps redeploy transition gaps
+
+- Reproduced and fixed target-only partial-write recovery during an ECS full-stack redeploy by persisting the prepared Output URL snapshot, including explicit `null`, beside the prepared coordinates fingerprint.
+- Legacy pending releases now add that snapshot on their next preparation without rebuilding the immutable artifact; Direct/GitOps activation, restart recovery, and manual rollback reject baselines from a different deployment target fingerprint.
+- CI now runs every API deployment and Git/CI/CD test instead of a selected subset. The CI-equivalent matrix passes 446 API and 65 Web checks; lint, typecheck, and build pass with one unrelated existing API test-file unused-import warning.
+- No Terraform, AWS, database, migration, Git commit, or push action was performed.
+
+### 2026-07-18 - Remove the Init-to-Plan race and make deployment commands idempotent
+
+- Confirmed deployment `e1b99057-9e2d-414c-b65d-c9ddb829dbe0` received its Plan request while the durable Init job was still running; Init later succeeded and returned the Deployment to `PENDING`, so Terraform and worker recovery were not the cause.
+- Direct review now starts one Plan worker, whose existing Plan service performs Terraform init, instead of starting a separate Init worker and queuing Plan in client state. Matching durable Init, Plan, Apply, Destroy Plan, Destroy, and frontend retry requests return the current `202` snapshot without dispatching a duplicate; a different active operation remains a conflict.
+- GitHub Actions now includes the Direct Deployment route suite and all four Git/CI/CD route suites. The CI-equivalent matrix passes 523 API and 66 Web checks, the deployment route suite passes 64/64, and root typecheck passes.
+- The broader API suite still has unrelated existing artifact-heartbeat/project-deletion failures, and the broader Web suite still has three Resource Catalog failures plus one external-link contract failure. No Terraform, AWS, database, migration, deployment, GitHub handoff, commit, or push action was performed.
+
+### 2026-07-18 - Repair CI/CD readiness after successful Direct deployment
+
+- Initial release readiness now validates the producer's exact `commitSha:releaseCandidateId` marker, and read-only Delivery inspection recognizes a persisted target only after canonical fingerprint verification.
+- Legacy ECS web targets derive missing duplicate evidence from their confirmed paths; an explicit refresh persists that normalized evidence while GET remains read-only.
+- The focused readiness suite passes 89 checks; API lint, typecheck, and build pass. The live project profile is ready with zero required actions. No database, AWS, deployment, migration, commit, or push mutation was performed.
+
+### 2026-07-18 - Redesign deployment console
+
+- Added the approved executive Direct Deployment layout and real-data Deployment History KPIs, filters, and master-detail view without changing deployment gates or handlers.
+- Focused Web tests pass 47/47; Web lint/typecheck and diff checks pass. Root build and API lint were stopped per user request. No external mutation was performed.
+
+### 2026-07-18 - Use canonical Repository analysis for GitOps handoff
+
+- Reproduced the live 409: the linked RepositoryAnalysisRecord contained the current commit and one `apps/api/Dockerfile`, but handoff and readiness joined that row without selecting it and validated only nullable legacy SourceRepository analysis fields.
+- Added one canonical/legacy analysis resolver, made the linked record authoritative with record/payload revision fail-closed checks, fixed the left join scope, and covered the live record shape. Updated the stale initial-release fixture and isolated Direct route tests from local worker-mode and Postgres job-repository configuration.
+- The live project passes read-only `assertGitOpsTarget`; 97 focused analysis/readiness checks, the full Git/CI/CD focused matrix, 64 Direct route checks, and 69 Web deployment checks pass. Harness, lint, typecheck, root build tasks, and diff checks pass. No database migration, AWS mutation, deployment, GitHub handoff, PR creation, commit, or push was performed.
+
+### 2026-07-18 - Keep Delivery readable during Plan artifact outages
+
+- Read-only Delivery inspection now degrades a classified S3 Apply Plan download failure to unverified Plan readiness instead of returning HTTP 500; explicit refresh and unexpected verifier defects still fail closed.
+- The focused readiness suite passes 91 checks, and a live-project simulated S3 outage returns the profile with only the approved Plan unresolved. Root lint, typecheck, and build pass with one unrelated existing API test warning. No database, S3, AWS, deployment, migration, commit, or push mutation was performed.
+
+### 2026-07-18 - Merge latest dev and prepare the GitHub/deployment PR
+
+- Merged `origin/dev` at `fcee2825`, preserved both workstreams, removed duplicated GitHub App environment entries, and repaired two semantic auto-merge regressions in the Git/CI/CD health check and GitHub authorization fixture.
+- Harness, lint, all package typechecks, Web build, API build, diff checks, and the two affected focused suites pass; broad test suites were skipped at the user's request. No DB migration, cloud mutation, deployment, or GitHub handoff was performed.
+
+### 2026-07-18 - Remove CI-only S3 configuration coupling
+
+- Deployment Plan creates S3-backed plan and rollback storage only when those paths need it, so validation and mocked Plan tests no longer require a local `.env` or CI bucket setting.
+- The no-bucket Plan suite passes 25/25 and the exact CI API transition command passes 536/536; API lint, typecheck, and build pass. No S3 or cloud operation was executed.

@@ -83,8 +83,7 @@ export function reconcileEcsFargateRuntimeConfig(
     outputs: ResolvedEcsFargateRuntimeOutputs;
   }
 ): { runtimeConfig: EcsFargateRuntimeConfig; changed: boolean } {
-  const currentFingerprint =
-    createEcsFargateRuntimeCoordinatesFingerprint(currentRuntimeConfig);
+  const currentFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(currentRuntimeConfig);
   if (currentFingerprint !== input.expectedCoordinatesFingerprint) {
     throw new EcsFargateOutputReconciliationError(
       "ECS runtime coordinates changed after artifact preparation",
@@ -93,33 +92,23 @@ export function reconcileEcsFargateRuntimeConfig(
   }
 
   const resolved = input.outputs;
-  if (
-    currentRuntimeConfig.ecrRepositoryName !== resolved.ecrRepositoryName ||
-    currentRuntimeConfig.clusterName !== resolved.clusterName ||
-    currentRuntimeConfig.serviceName !== resolved.serviceName ||
-    currentRuntimeConfig.containerName !== resolved.containerName ||
-    (currentRuntimeConfig.containerPort !== undefined &&
-      currentRuntimeConfig.containerPort !== resolved.containerPort) ||
-    hasConflictingCoordinate(currentRuntimeConfig.outputUrl, resolved.outputUrl) ||
-    hasConflictingCoordinate(currentRuntimeConfig.ecrRepositoryArn, resolved.ecrRepositoryArn) ||
-    hasConflictingCoordinate(currentRuntimeConfig.ecrRepositoryUrl, resolved.ecrRepositoryUrl) ||
-    hasConflictingCoordinate(currentRuntimeConfig.taskDefinitionFamily, resolved.taskDefinitionFamily) ||
-    hasConflictingCoordinate(currentRuntimeConfig.taskDefinitionArn, resolved.taskDefinitionArn) ||
-    hasConflictingCoordinate(currentRuntimeConfig.taskRoleArn, resolved.taskRoleArn) ||
-    hasConflictingCoordinate(currentRuntimeConfig.executionRoleArn, resolved.executionRoleArn) ||
-    hasConflictingCoordinate(currentRuntimeConfig.targetGroupArn, resolved.targetGroupArn) ||
-    hasConflictingCoordinate(currentRuntimeConfig.loadBalancerArn, resolved.loadBalancerArn) ||
-    hasConflictingCoordinate(currentRuntimeConfig.loadBalancerDnsName, resolved.loadBalancerDnsName) ||
-    hasConflictingCoordinate(currentRuntimeConfig.apiOriginUrl, resolved.apiOriginUrl) ||
-    hasConflictingCoordinate(currentRuntimeConfig.frontendBucketName, resolved.frontendBucketName) ||
-    hasConflictingCoordinate(
-      currentRuntimeConfig.cloudFrontDistributionId,
-      resolved.cloudFrontDistributionId
-    ) ||
-    hasConflictingCoordinate(currentRuntimeConfig.cloudFrontDomainName, resolved.cloudFrontDomainName)
-  ) {
+  // These values select the prepared release target. Remaining runtime values are
+  // Terraform-managed results verified against the approved state inventory by the caller.
+  const conflictingCoordinates = [
+    currentRuntimeConfig.ecrRepositoryName !== resolved.ecrRepositoryName
+      ? "ecrRepositoryName"
+      : null,
+    currentRuntimeConfig.clusterName !== resolved.clusterName ? "clusterName" : null,
+    currentRuntimeConfig.serviceName !== resolved.serviceName ? "serviceName" : null,
+    currentRuntimeConfig.containerName !== resolved.containerName ? "containerName" : null,
+    currentRuntimeConfig.containerPort !== undefined &&
+    currentRuntimeConfig.containerPort !== resolved.containerPort
+      ? "containerPort"
+      : null
+  ].filter((coordinate): coordinate is string => coordinate !== null);
+  if (conflictingCoordinates.length > 0) {
     throw new EcsFargateOutputReconciliationError(
-      "ECS web runtime coordinates conflict with the Terraform outputs",
+      `ECS web runtime coordinates conflict with the Terraform outputs: ${conflictingCoordinates.join(", ")}`,
       "DEPLOYMENT_OUTPUT_URL_CONFLICT"
     );
   }
@@ -204,7 +193,9 @@ export function assertEcsFargateRuntimeInventory(
   ]) {
     const identity = parseAwsArnIdentity(arn);
     if (identity.accountId !== input.accountId || identity.region !== input.region) {
-      throwOutputConflict("Terraform output ARN does not match the approved AWS account and region");
+      throwOutputConflict(
+        "Terraform output ARN does not match the approved AWS account and region"
+      );
     }
   }
   for (const roleArn of [outputs.taskRoleArn, outputs.executionRoleArn]) {
@@ -382,13 +373,6 @@ function requireStringArrayOutput(
   return output.value as string[];
 }
 
-function hasConflictingCoordinate(
-  current: string | null | undefined,
-  observed: string
-): boolean {
-  return current !== null && current !== undefined && current !== observed;
-}
-
 function throwOutputUrlRequired(): never {
   throw new EcsFargateOutputReconciliationError(
     "DEPLOYMENT_OUTPUT_URL_REQUIRED",
@@ -419,8 +403,5 @@ function matchesIamRole(resourceId: string, roleArn: string): boolean {
 }
 
 function throwOutputConflict(message: string): never {
-  throw new EcsFargateOutputReconciliationError(
-    message,
-    "DEPLOYMENT_OUTPUT_URL_CONFLICT"
-  );
+  throw new EcsFargateOutputReconciliationError(message, "DEPLOYMENT_OUTPUT_URL_CONFLICT");
 }

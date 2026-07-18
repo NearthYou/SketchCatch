@@ -20,7 +20,7 @@ export type ApiErrorCode =
   | "unauthorized"
   | "not_found"
   | "conflict"
-  | "github_oauth_required"
+  | "github_app_permission_required"
   | "too_many_requests"
   | "unprocessable_entity"
   | "bad_gateway"
@@ -1160,7 +1160,6 @@ export type GitCicdHandoff = {
   apiBaseUrl: string | null;
   repositorySettingsPreview: GitCicdRepositorySettingsPreview | null;
   awsRoleDiff: GitCicdAwsRoleDiff | null;
-  githubOAuthRequired: boolean;
   status: GitCicdHandoffStatus;
   statusMessage: string | null;
   userAcceptedChangeId: string;
@@ -1883,18 +1882,12 @@ export type WebPushSubscriptionResponse = {
   expiresAt: IsoDateTimeString | null;
 };
 
-export type GitCicdGitHubOAuthStartResponse = {
-  authorizationUrl: string;
-  expiresAt: IsoDateTimeString;
-};
-
 export type GitCicdRepositorySettingsApplyResponse = {
   applied: boolean;
   environmentName: string;
   variables: string[];
   secrets: string[];
   workflowFiles: string[];
-  githubOAuthRequired: boolean;
 };
 
 export type GitCicdAwsRoleDiffApplyResponse = {

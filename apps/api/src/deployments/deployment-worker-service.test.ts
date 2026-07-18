@@ -67,6 +67,37 @@ test("runDeploymentWorkerJob rejects a job that is not running", async () => {
   assert.equal(repository.get(jobId)?.status, "QUEUED");
 });
 
+test("runDeploymentWorkerJob waits for a locally spawned job to finish dispatching", async () => {
+  const repository = new FakeDeploymentJobRepository();
+  const calls: DeploymentWorkerOperationInput[] = [];
+  let reads = 0;
+  repository.add(createJob({ status: "DISPATCHING", ecsTaskArn: null }));
+  const findDeploymentJobById = repository.findDeploymentJobById.bind(repository);
+  repository.findDeploymentJobById = async (candidateJobId) => {
+    reads += 1;
+    if (reads === 2) {
+      await repository.markDeploymentJobRunning(candidateJobId, {
+        ecsTaskArn: "local-process:4321"
+      });
+    }
+    return findDeploymentJobById(candidateJobId);
+  };
+
+  const finalJob = await runDeploymentWorkerJob(
+    { jobId },
+    repository,
+    async (input) => {
+      calls.push(input);
+      return { status: "PENDING", errorSummary: null };
+    },
+    { wait: async () => undefined, dispatchWaitAttempts: 2 }
+  );
+
+  assert.equal(reads, 2);
+  assert.equal(calls[0]?.workerTaskArn, "local-process:4321");
+  assert.equal(finalJob.status, "SUCCEEDED");
+});
+
 test("runDeploymentWorkerJob rejects an access context that does not match the requester", async () => {
   const repository = new FakeDeploymentJobRepository();
   repository.add(

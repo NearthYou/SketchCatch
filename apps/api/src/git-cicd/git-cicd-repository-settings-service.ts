@@ -1,4 +1,7 @@
-import type { GitCicdRepositorySettingsApplyResponse } from "@sketchcatch/types";
+import type {
+  GitCicdRepositorySettingsApplyResponse,
+  GitCicdRepositorySettingsPreview
+} from "@sketchcatch/types";
 import { requireGitHubAppConfig } from "../config/env.js";
 import {
   createGitHubAppClient,
@@ -14,6 +17,7 @@ import {
   getGitCicdHandoff,
   GitCicdHandoffNotFoundError
 } from "./git-cicd-handoff-service.js";
+import { normalizeGitCicdReleaseApiUrl } from "./git-cicd-workflows.js";
 
 export type GitCicdRepositorySettingsApplier = {
   applyRepositorySettings(input: {
@@ -29,6 +33,15 @@ export class GitCicdRepositorySettingsPermissionError extends Error {
   }
 }
 
+export class GitCicdRepositorySettingsConflictError extends Error {
+  readonly code = "GIT_CICD_REPOSITORY_SETTINGS_STALE";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "GitCicdRepositorySettingsConflictError";
+  }
+}
+
 export function createGitHubRepositorySettingsApplier(
   githubAppClient: GitHubAppClient = createGitHubAppClientFromEnv()
 ): GitCicdRepositorySettingsApplier {
@@ -39,6 +52,8 @@ export function createGitHubRepositorySettingsApplier(
       if (!preview) {
         throw new GitCicdHandoffNotFoundError("Git/CI/CD repository settings preview not found");
       }
+
+      assertCurrentGitCicdRepositorySettings(preview, handoff.projectId);
 
       if (!sourceRepository.githubInstallationId) {
         throw new GitCicdRepositorySettingsPermissionError(
@@ -60,8 +75,7 @@ export function createGitHubRepositorySettingsApplier(
           environmentName: result.environmentName,
           variables: result.variables,
           secrets: preview.secrets,
-          workflowFiles: preview.workflowFiles,
-          githubOAuthRequired: false
+          workflowFiles: preview.workflowFiles
         };
       } catch (error) {
         if (isGitHubPermissionError(error)) {
@@ -76,58 +90,20 @@ export function createGitHubRepositorySettingsApplier(
   };
 }
 
-export function createGitHubOAuthRepositorySettingsApplier(
-  accessToken: string,
-  fetchImpl: typeof fetch = fetch
-): GitCicdRepositorySettingsApplier {
-  return {
-    async applyRepositorySettings({ handoff, sourceRepository }) {
-      const preview = handoff.repositorySettingsPreview;
+export function assertCurrentGitCicdRepositorySettings(
+  preview: GitCicdRepositorySettingsPreview,
+  expectedProjectId: string
+): void {
+  const projectId = preview.variables.SKETCHCATCH_PROJECT_ID?.trim();
+  const releaseApiUrl = normalizeGitCicdReleaseApiUrl(
+    preview.variables.SKETCHCATCH_RELEASE_API_URL
+  );
 
-      if (!preview) {
-        throw new GitCicdHandoffNotFoundError("Git/CI/CD repository settings preview not found");
-      }
-
-      try {
-        await requestGitHubWithOAuth(fetchImpl, accessToken, {
-          method: "PUT",
-          owner: sourceRepository.owner,
-          name: sourceRepository.name,
-          path: `/environments/${encodeURIComponent(preview.environmentName)}`,
-          body: {}
-        });
-
-        const variables = removeBlankVariableValues(preview.variables);
-        const variableNames = Object.keys(variables).sort();
-
-        for (const variableName of variableNames) {
-          await upsertRepositoryVariableWithOAuth(fetchImpl, accessToken, {
-            owner: sourceRepository.owner,
-            name: sourceRepository.name,
-            variableName,
-            value: variables[variableName] ?? ""
-          });
-        }
-
-        return {
-          applied: true,
-          environmentName: preview.environmentName,
-          variables: variableNames,
-          secrets: preview.secrets,
-          workflowFiles: preview.workflowFiles,
-          githubOAuthRequired: false
-        };
-      } catch (error) {
-        if (isGitHubPermissionError(error)) {
-          throw new GitCicdRepositorySettingsPermissionError(
-            "GitHub OAuth token does not have permission to create environments or Actions variables. Approve Administration and Variables repository permissions as Read and write."
-          );
-        }
-
-        throw error;
-      }
-    }
-  };
+  if (projectId !== expectedProjectId || !releaseApiUrl) {
+    throw new GitCicdRepositorySettingsConflictError(
+      "Stored Git/CI/CD repository settings are stale. Create a new handoff after configuring a public HTTPS SKETCHCATCH_PUBLIC_BASE_URL."
+    );
+  }
 }
 
 export async function applyGitCicdRepositorySettings(
@@ -156,11 +132,6 @@ export async function applyGitCicdRepositorySettings(
   }
 
   const result = await applier.applyRepositorySettings({ handoff, sourceRepository });
-
-  await repository.updateHandoffAutomationMetadata?.(handoff.id, {
-    githubOAuthRequired: result.githubOAuthRequired
-  });
-
   return result;
 }
 
@@ -200,95 +171,5 @@ function removeBlankVariableValues(variables: Record<string, string>): Record<st
     Object.entries(variables).filter(
       ([, value]) => typeof value === "string" && value.trim().length > 0
     )
-  );
-}
-
-async function upsertRepositoryVariableWithOAuth(
-  fetchImpl: typeof fetch,
-  accessToken: string,
-  input: {
-    owner: string;
-    name: string;
-    variableName: string;
-    value: string;
-  }
-): Promise<void> {
-  const body = {
-    name: input.variableName,
-    value: input.value
-  };
-
-  try {
-    await requestGitHubWithOAuth(fetchImpl, accessToken, {
-      method: "PATCH",
-      owner: input.owner,
-      name: input.name,
-      path: `/actions/variables/${encodeURIComponent(input.variableName)}`,
-      body
-    });
-  } catch (error) {
-    if (!isGitHubStatus(error, 404)) {
-      throw error;
-    }
-
-    await requestGitHubWithOAuth(fetchImpl, accessToken, {
-      method: "POST",
-      owner: input.owner,
-      name: input.name,
-      path: "/actions/variables",
-      body
-    });
-  }
-}
-
-async function requestGitHubWithOAuth(
-  fetchImpl: typeof fetch,
-  accessToken: string,
-  input: {
-    owner: string;
-    name: string;
-    path: string;
-    method?: string;
-    body?: Record<string, unknown>;
-  }
-): Promise<unknown> {
-  const response = await fetchImpl(
-    `https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(
-      input.name
-    )}${input.path}`,
-    {
-      method: input.method ?? "GET",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28"
-      },
-      ...(input.body ? { body: JSON.stringify(input.body) } : {})
-    }
-  );
-
-  if (!response.ok) {
-    const error = new Error(`GitHub API request failed: ${response.status}`) as Error & {
-      statusCode?: number;
-    };
-
-    error.statusCode = response.status;
-    throw error;
-  }
-
-  if (response.status === 204) {
-    return {};
-  }
-
-  return response.json().catch(() => ({}));
-}
-
-function isGitHubStatus(error: unknown, statusCode: number): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "statusCode" in error &&
-    (error as { readonly statusCode?: unknown }).statusCode === statusCode
   );
 }

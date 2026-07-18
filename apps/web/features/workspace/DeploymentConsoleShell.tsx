@@ -191,6 +191,7 @@ export function DeploymentConsoleShell({
           onConfirmationStateChange={(isOpen) => {
             confirmationOpenRef.current = isOpen;
           }}
+          onOpenDeliverySetup={() => selectScreen("cicd")}
           onOpenLiveObservation={onOpenLiveObservation}
           requestedScope={requestedDirectScope}
           onApplyPlanApproved={(deployment) => {

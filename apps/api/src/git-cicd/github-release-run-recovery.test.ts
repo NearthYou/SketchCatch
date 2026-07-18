@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyInterruptedReleaseSteps } from "./github-release-run-recovery.js";
+import {
+  classifyInterruptedReleaseSteps,
+  isRecoveryBaselineForDeploymentTarget
+} from "./github-release-run-recovery.js";
 
 test("restart recovery rolls ECS back when activation started before frontend activation", () => {
   assert.deepEqual(
@@ -29,5 +32,22 @@ test("restart recovery preserves ECS and reports partial cancellation once index
       frontendActivationStarted: true,
       failureStage: "cloudfront_invalidation"
     }
+  );
+});
+
+test("restart recovery never reuses a rollback baseline from a replaced deployment target", () => {
+  assert.equal(
+    isRecoveryBaselineForDeploymentTarget(
+      { deploymentTargetFingerprint: "a".repeat(64) },
+      { deploymentTargetFingerprint: "b".repeat(64) }
+    ),
+    false
+  );
+  assert.equal(
+    isRecoveryBaselineForDeploymentTarget(
+      { deploymentTargetFingerprint: "a".repeat(64) },
+      { deploymentTargetFingerprint: "a".repeat(64) }
+    ),
+    true
   );
 });

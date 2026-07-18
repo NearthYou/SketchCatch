@@ -6,7 +6,10 @@ import {
   StopTaskCommand
 } from "@aws-sdk/client-ecs";
 import type { DeploymentJobRecord } from "./deployment-job-service.js";
-import { createEcsDeploymentWorkerDispatcher } from "./deployment-worker-dispatcher.js";
+import {
+  createEcsDeploymentWorkerDispatcher,
+  createLocalDeploymentWorkerDispatcher
+} from "./deployment-worker-dispatcher.js";
 
 const job: DeploymentJobRecord = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -123,4 +126,69 @@ test("ECS worker inspection discovers a running task by startedBy when ARN persi
   const result = await dispatcher.inspect({ job: { ...job, ecsTaskArn: null } });
 
   assert.deepEqual(result, { state: "ACTIVE", lastStatus: "RUNNING" });
+});
+
+test("local worker dispatch survives the API process lifecycle through a detached PID", async () => {
+  const spawned: Array<{
+    command: string;
+    args: string[];
+    options: {
+      detached: boolean;
+      env: NodeJS.ProcessEnv;
+      stdio: string;
+    };
+  }> = [];
+  let unrefCalls = 0;
+  const dispatcher = createLocalDeploymentWorkerDispatcher({
+    command: "/usr/local/bin/node",
+    commandArgs: ["--import", "tsx", "src/deployment-worker.ts"],
+    spawnWorker(command, args, options) {
+      spawned.push({ command, args, options });
+      return {
+        pid: 4321,
+        unref() {
+          unrefCalls += 1;
+        }
+      };
+    }
+  });
+
+  const result = await dispatcher.dispatch({ job });
+
+  assert.deepEqual(result, { taskArn: "local-process:4321" });
+  assert.equal(unrefCalls, 1);
+  assert.equal(spawned.length, 1);
+  assert.equal(spawned[0]?.options.detached, true);
+  assert.equal(spawned[0]?.options.stdio, "ignore");
+  assert.equal(spawned[0]?.options.env.SKETCHCATCH_DEPLOYMENT_JOB_ID, job.id);
+  assert.equal(spawned[0]?.options.env.SKETCHCATCH_DEPLOYMENT_ID, job.deploymentId);
+  assert.equal(spawned[0]?.options.env.SKETCHCATCH_DEPLOYMENT_OPERATION, job.operation);
+});
+
+test("local worker inspection and cancellation use the durable PID reference", async () => {
+  const inspectedPids: number[] = [];
+  const stoppedPids: number[] = [];
+  let active = true;
+  const dispatcher = createLocalDeploymentWorkerDispatcher({
+    isProcessActive(pid) {
+      inspectedPids.push(pid);
+      return active;
+    },
+    stopProcess(pid) {
+      stoppedPids.push(pid);
+      active = false;
+    },
+    wait: async () => undefined
+  });
+  const localJob = { ...job, ecsTaskArn: "local-process:4321" };
+
+  assert.deepEqual(await dispatcher.inspect({ job: localJob }), {
+    state: "ACTIVE",
+    lastStatus: "RUNNING"
+  });
+  assert.deepEqual(await dispatcher.stop({ job: localJob, reason: "cancel" }), {
+    stopped: true
+  });
+  assert.deepEqual(inspectedPids, [4321, 4321, 4321]);
+  assert.deepEqual(stoppedPids, [4321]);
 });

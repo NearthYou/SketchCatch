@@ -50,8 +50,8 @@ SketchCatch Architecture Board
 
 - GitHub token, Actions secret 값, GitHub App private key는 DB, 로그, API 응답, 문서에 저장하거나 노출하지 않는다.
 - repository settings apply는 승인된 권한으로만 실행한다.
-- 권한 부족은 `github_oauth_required`처럼 사용자가 이해할 수 있는 복구 상태로 반환한다.
-- GitHub user OAuth token을 사용할 경우 one-time Runtime Cache grant로만 다루고 짧은 TTL 이후 폐기한다.
+- 권한 부족은 `github_app_permission_required`처럼 사용자가 이해할 수 있는 복구 상태로 반환한다.
+- 로그인용 GitHub OAuth token은 Repository 조회나 변경에 사용하지 않는다.
 
 ### AWS 권한
 
@@ -158,7 +158,7 @@ SSM in-place overwrite만으로 앱을 배포하지 않는다. ASG scale-out 후
 Deployment Panel은 다음을 보여준다.
 
 - GitHub repository 연결 상태
-- GitHub OAuth 또는 App permission 보강 필요 여부
+- GitHub App permission 보강 필요 여부
 - AWS role trust/policy diff
 - RDS opt-in 선택
 - repository 자동 설정 preview
@@ -171,7 +171,7 @@ Deployment Panel은 다음을 보여준다.
 
 사용자 승인이 필요한 변경:
 
-- GitHub OAuth 추가 승인 또는 GitHub App 권한 보강
+- GitHub App 권한 보강
 - AWS role trust/policy 변경
 - GitHub repository Actions 설정
 - Git/CI/CD handoff PR 생성
