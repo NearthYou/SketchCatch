@@ -50,8 +50,6 @@ import {
   listTerraformOutputs,
   prepareDeployment,
   prepareInfrastructureRollback,
-  prepareProjectBuildEnvironment,
-  verifyProjectRepositoryAccess,
   retryDeploymentFrontend,
   runDeploymentDestroy,
   runDeploymentDestroyPlan,
@@ -85,7 +83,6 @@ import {
   getDeploymentTargetPrerequisite,
   type DeploymentTargetPrerequisite
 } from "./deployment-preparation-error";
-import { verifyRepositoryAccessForPlan } from "./repository-access-verification";
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
@@ -908,14 +905,6 @@ export function DirectDeploymentScreen({
         draftRevision: savedArtifacts.preparedDraftRevision,
         scope: selectedScope
       });
-      if (requiresProjectBuildEnvironment(deployment)) {
-        await verifyRepositoryAccessForPlan({
-          currentBuildEnvironment: buildEnvironment,
-          onBuildEnvironmentChange: setBuildEnvironment,
-          prepare: () => prepareProjectBuildEnvironment(projectId),
-          verify: () => verifyProjectRepositoryAccess(projectId)
-        });
-      }
       const plannedDeployment = await runDeploymentPlan(deployment.id);
       setDeployments((currentDeployments) => [plannedDeployment, ...currentDeployments]);
       setSelectedDeploymentId(plannedDeployment.id);
@@ -947,14 +936,6 @@ export function DirectDeploymentScreen({
       deploymentId: selectedDeployment.id
     });
     await runRequest(async () => {
-      if (requiresProjectBuildEnvironment(selectedDeployment)) {
-        await verifyRepositoryAccessForPlan({
-          currentBuildEnvironment: buildEnvironment,
-          onBuildEnvironmentChange: setBuildEnvironment,
-          prepare: () => prepareProjectBuildEnvironment(projectId),
-          verify: () => verifyProjectRepositoryAccess(projectId)
-        });
-      }
       const deployment = await runDeploymentPlan(selectedDeployment.id);
       setDeployments((currentDeployments) =>
         currentDeployments.map((currentDeployment) =>

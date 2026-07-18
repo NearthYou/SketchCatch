@@ -186,3 +186,9 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed progress presentation so `preflight`, `application_release`, and `rollback` no longer show misleading Plan/Apply copy. Pending GitHub authorization now identifies the exact generated AWS connection name and `Update pending connection` action.
 - The user completed Destroy after the successful verification. The former public URL now returns HTTP 403 and no longer serves the application; exact AWS inventory cleanup could not be independently enumerated because the local AWS CLI has no credentials.
 - Focused Web regressions pass 21/21. `pnpm harness:check`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, and `git diff --check` pass. The full `pnpm test` remains red on unrelated existing suites: three resource-catalog expectations, one Workspace external-link source-pattern test, and one API artifact-registry heartbeat timer cancellation.
+
+### 2026-07-19 - Make CodeBuild preparation concurrency-safe
+
+- Recovered managed CodeBuild `ResourceAlreadyExistsException` races by re-reading ownership and reconciling the project created by the competing request.
+- Made preparation start and completion atomic so stale starts and late failures cannot replace a successful `ready` state for the same runtime fingerprint. Moved ECS build preparation plus exact Repository checkout verification behind the Plan API, where concurrent requests for the same Deployment now join one RUNNING Plan sequence.
+- Focused API and Web regressions pass; `pnpm lint`, `pnpm typecheck`, `pnpm build`, formatting, and diff checks pass. Full `pnpm test` retains unrelated baseline failures in artifact heartbeat cleanup, Git/CI/CD schema expectations, resource catalog expectations, and one external-link source-pattern test. Next action is to push the approved `dev` commit and run the production ECS workflow from that exact SHA.

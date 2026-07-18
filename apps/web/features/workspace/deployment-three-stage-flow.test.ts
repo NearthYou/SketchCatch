@@ -124,6 +124,19 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
+test("successful deployment auto-refresh clears a transient polling error", () => {
+  const refreshStart = directDeploymentSource.indexOf("async function refreshSnapshot");
+  const intervalStart = directDeploymentSource.indexOf("const intervalId", refreshStart);
+  const refreshSource = directDeploymentSource.slice(refreshStart, intervalStart);
+  const applyIndex = refreshSource.indexOf("applyDeploymentRuntimeSnapshot(snapshot)");
+  const clearErrorIndex = refreshSource.indexOf('setErrorMessage("")', applyIndex);
+
+  assert.ok(refreshStart > -1);
+  assert.ok(intervalStart > refreshStart);
+  assert.ok(applyIndex > -1);
+  assert.ok(clearErrorIndex > applyIndex);
+});
+
 test("Direct Deployment uses the approved executive validation layout", () => {
   assert.match(directDeploymentSource, /deploymentExecutiveHeader/);
   assert.match(directDeploymentSource, /deploymentExecutiveMetrics/);
@@ -138,7 +151,7 @@ test("Direct Deployment uses the approved executive validation layout", () => {
   assert.match(workspaceStyles, /--deployment-navy:\s*#071a36/);
 });
 
-test("deployment review starts one Plan worker without a competing init prewarm", () => {
+test("deployment review delegates build preparation and repository verification to the Plan API", () => {
   const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
   const planActionStart = directDeploymentSource.indexOf(
     "async function startTerraformPlan",
@@ -146,14 +159,15 @@ test("deployment review starts one Plan worker without a competing init prewarm"
   );
   const reviewSource = directDeploymentSource.slice(reviewStart, planActionStart);
   const prepareIndex = reviewSource.indexOf("await prepareDeployment({");
-  const repositoryCheckIndex = reviewSource.indexOf("await verifyRepositoryAccessForPlan({");
   const planIndex = reviewSource.indexOf("await runDeploymentPlan(deployment.id)");
 
   assert.ok(reviewStart > -1);
   assert.ok(planActionStart > reviewStart);
   assert.ok(prepareIndex > -1);
-  assert.ok(repositoryCheckIndex > prepareIndex);
-  assert.ok(planIndex > repositoryCheckIndex);
+  assert.ok(planIndex > prepareIndex);
+  assert.doesNotMatch(reviewSource, /prepareProjectBuildEnvironment/);
+  assert.doesNotMatch(reviewSource, /verifyProjectRepositoryAccess/);
+  assert.doesNotMatch(reviewSource, /verifyRepositoryAccessForPlan/);
   assert.doesNotMatch(reviewSource, /runDeploymentInit|queuedApplyPlan/);
 });
 

@@ -21,9 +21,7 @@ import {
 } from "../db/schema.js";
 import { createCodeBuildPermissionsBoundaryName } from "../aws-connections/aws-connection-service.js";
 import { maskDeploymentMessage } from "../deployments/log-masking.js";
-import {
-  resolveAwsDeploymentTargetIdentity
-} from "../runtime-convergence/deployment-target-identity.js";
+import { resolveAwsDeploymentTargetIdentity } from "../runtime-convergence/deployment-target-identity.js";
 import {
   createProjectBuildCacheIdentity,
   type ProjectBuildCacheIdentity
@@ -56,10 +54,9 @@ export type ProjectBuildEnvironmentPreparationContext = {
 
 export type ProjectBuildEnvironmentRecord = typeof projectBuildEnvironments.$inferSelect;
 
-export type SaveProjectBuildEnvironmentInput = Omit<
-  ProjectBuildEnvironmentRecord,
-  "createdAt"
-> & { createdAt?: Date };
+export type SaveProjectBuildEnvironmentInput = Omit<ProjectBuildEnvironmentRecord, "createdAt"> & {
+  createdAt?: Date;
+};
 
 export type ProjectBuildEnvironmentRepository = {
   findPreparationContext(
@@ -70,10 +67,13 @@ export type ProjectBuildEnvironmentRepository = {
   findRemovalContext(
     projectId: string,
     userId: string
-  ): Promise<{
-    environment: ProjectBuildEnvironmentRecord;
-    awsConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["awsConnection"]>;
-  } | undefined>;
+  ): Promise<
+    | {
+        environment: ProjectBuildEnvironmentRecord;
+        awsConnection: NonNullable<ProjectBuildEnvironmentPreparationContext["awsConnection"]>;
+      }
+    | undefined
+  >;
   hasActiveExecution(projectId: string): Promise<boolean>;
   synchronizeEcsRuntimeConfig(input: {
     architectureId: string;
@@ -82,7 +82,15 @@ export type ProjectBuildEnvironmentRepository = {
     userId: string;
   }): Promise<void>;
   deleteByProjectId(projectId: string): Promise<void>;
+  beginPreparation(input: SaveProjectBuildEnvironmentInput): Promise<{
+    environment: ProjectBuildEnvironmentRecord;
+    started: boolean;
+  }>;
   save(input: SaveProjectBuildEnvironmentInput): Promise<ProjectBuildEnvironmentRecord>;
+  completePreparation(
+    input: SaveProjectBuildEnvironmentInput,
+    expectedPreparingUpdatedAt: Date
+  ): Promise<ProjectBuildEnvironmentRecord>;
 };
 
 export type ProjectBuildEnvironmentRemoval = {
@@ -125,12 +133,8 @@ export type ProjectRepositoryAccessVerification = {
 };
 
 export type ProjectBuildEnvironmentGateway = {
-  reconcile(
-    input: DesiredProjectBuildEnvironment
-  ): Promise<ProjectBuildEnvironmentVerification>;
-  verify(
-    input: DesiredProjectBuildEnvironment
-  ): Promise<ProjectBuildEnvironmentVerification>;
+  reconcile(input: DesiredProjectBuildEnvironment): Promise<ProjectBuildEnvironmentVerification>;
+  verify(input: DesiredProjectBuildEnvironment): Promise<ProjectBuildEnvironmentVerification>;
   verifyRepositoryAccess(
     input: DesiredProjectBuildEnvironment,
     requestedCommitSha: string
@@ -209,10 +213,7 @@ export function createPostgresProjectBuildEnvironmentRepository(
           confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig
         })
         .from(projectDeploymentTargets)
-        .innerJoin(
-          awsConnections,
-          eq(awsConnections.id, projectDeploymentTargets.connectionId)
-        )
+        .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
         .where(
           and(
             eq(projectDeploymentTargets.projectId, projectId),
@@ -274,14 +275,8 @@ export function createPostgresProjectBuildEnvironmentRepository(
           awsConnectionId: awsConnections.id
         })
         .from(projects)
-        .innerJoin(
-          projectBuildEnvironments,
-          eq(projectBuildEnvironments.projectId, projects.id)
-        )
-        .innerJoin(
-          awsConnections,
-          eq(awsConnections.id, projectBuildEnvironments.awsConnectionId)
-        )
+        .innerJoin(projectBuildEnvironments, eq(projectBuildEnvironments.projectId, projects.id))
+        .innerJoin(awsConnections, eq(awsConnections.id, projectBuildEnvironments.awsConnectionId))
         .where(
           and(
             eq(projects.id, projectId),
@@ -326,8 +321,7 @@ export function createPostgresProjectBuildEnvironmentRepository(
             accountId: awsConnections.accountId,
             architectureJson: architectures.architectureJson,
             confirmedBuildConfig: projectDeploymentTargets.confirmedBuildConfig,
-            deploymentTargetFingerprint:
-              projectDeploymentTargets.deploymentTargetFingerprint,
+            deploymentTargetFingerprint: projectDeploymentTargets.deploymentTargetFingerprint,
             region: projectDeploymentTargets.region,
             runtimeConfig: projectDeploymentTargets.runtimeConfig,
             runtimeTarget: projectDeploymentTargets.runtimeTarget,
@@ -341,14 +335,8 @@ export function createPostgresProjectBuildEnvironmentRepository(
               eq(architectures.projectId, projects.id)
             )
           )
-          .innerJoin(
-            projectDeploymentTargets,
-            eq(projectDeploymentTargets.projectId, projects.id)
-          )
-          .innerJoin(
-            awsConnections,
-            eq(awsConnections.id, projectDeploymentTargets.connectionId)
-          )
+          .innerJoin(projectDeploymentTargets, eq(projectDeploymentTargets.projectId, projects.id))
+          .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
           .where(
             and(
               eq(projects.id, input.projectId),
@@ -413,6 +401,68 @@ export function createPostgresProjectBuildEnvironmentRepository(
         .where(eq(projectBuildEnvironments.projectId, projectId));
     },
 
+    async beginPreparation(input) {
+      return db.transaction(async (transaction) => {
+        const [codeConnection] = input.awsCodeConnectionId
+          ? await transaction
+              .select({ status: awsCodeConnections.status })
+              .from(awsCodeConnections)
+              .where(eq(awsCodeConnections.id, input.awsCodeConnectionId))
+              .for("key share")
+          : [];
+        if (input.awsCodeConnectionId && codeConnection?.status !== "AVAILABLE") {
+          throw new ProjectBuildEnvironmentError(
+            "CODECONNECTION_REQUIRED",
+            "사용 가능한 GitHub 빌드 연결이 필요합니다."
+          );
+        }
+
+        const createdAt = input.createdAt ?? input.updatedAt;
+        const [inserted] = await transaction
+          .insert(projectBuildEnvironments)
+          .values({ ...input, createdAt })
+          .onConflictDoNothing({ target: projectBuildEnvironments.projectId })
+          .returning();
+        if (inserted) return { environment: inserted, started: true };
+
+        const [current] = await transaction
+          .select()
+          .from(projectBuildEnvironments)
+          .where(eq(projectBuildEnvironments.projectId, input.projectId))
+          .for("update");
+        if (!current) throw new Error("Project build environment was not found");
+        if (current.status === "ready" && current.runtimeFingerprint === input.runtimeFingerprint) {
+          return { environment: current, started: false };
+        }
+
+        const [environment] = await transaction
+          .update(projectBuildEnvironments)
+          .set({
+            awsConnectionId: input.awsConnectionId,
+            awsCodeConnectionId: input.awsCodeConnectionId,
+            codeBuildProjectName: input.codeBuildProjectName,
+            codeBuildServiceRoleArn: input.codeBuildServiceRoleArn,
+            permissionsBoundaryArn: input.permissionsBoundaryArn,
+            sourceRepositoryUrl: input.sourceRepositoryUrl,
+            runtimeFingerprint: input.runtimeFingerprint,
+            status: input.status,
+            lastVerifiedAt: input.lastVerifiedAt,
+            repositoryVerificationStatus: input.repositoryVerificationStatus,
+            repositoryVerificationRequestedCommitSha:
+              input.repositoryVerificationRequestedCommitSha,
+            repositoryVerificationResolvedCommitSha: input.repositoryVerificationResolvedCommitSha,
+            repositoryVerificationBuildArn: input.repositoryVerificationBuildArn,
+            repositoryVerificationStatusReason: input.repositoryVerificationStatusReason,
+            repositoryVerifiedAt: input.repositoryVerifiedAt,
+            updatedAt: input.updatedAt
+          })
+          .where(eq(projectBuildEnvironments.projectId, input.projectId))
+          .returning();
+        if (!environment) throw new Error("Project build environment preparation was not started");
+        return { environment, started: true };
+      });
+    },
+
     async save(input) {
       return db.transaction(async (transaction) => {
         const [codeConnection] = input.awsCodeConnectionId
@@ -459,6 +509,66 @@ export function createPostgresProjectBuildEnvironmentRepository(
         if (!environment) throw new Error("Project build environment was not saved");
         return environment;
       });
+    },
+
+    async completePreparation(input, expectedPreparingUpdatedAt) {
+      return db.transaction(async (transaction) => {
+        const [current] = await transaction
+          .select()
+          .from(projectBuildEnvironments)
+          .where(eq(projectBuildEnvironments.projectId, input.projectId))
+          .for("update");
+        if (!current) throw new Error("Project build environment was not found");
+
+        const sameRuntime = current.runtimeFingerprint === input.runtimeFingerprint;
+        const successfulCompletion = input.status === "ready";
+        const ownsPreparingState =
+          current.status === "preparing" &&
+          current.updatedAt.getTime() === expectedPreparingUpdatedAt.getTime();
+        const canComplete =
+          sameRuntime && (successfulCompletion ? current.status !== "ready" : ownsPreparingState);
+        if (!canComplete) return current;
+
+        const [codeConnection] = input.awsCodeConnectionId
+          ? await transaction
+              .select({ status: awsCodeConnections.status })
+              .from(awsCodeConnections)
+              .where(eq(awsCodeConnections.id, input.awsCodeConnectionId))
+              .for("key share")
+          : [];
+        if (input.awsCodeConnectionId && codeConnection?.status !== "AVAILABLE") {
+          throw new ProjectBuildEnvironmentError(
+            "CODECONNECTION_REQUIRED",
+            "사용 가능한 GitHub 빌드 연결이 필요합니다."
+          );
+        }
+
+        const [environment] = await transaction
+          .update(projectBuildEnvironments)
+          .set({
+            awsConnectionId: input.awsConnectionId,
+            awsCodeConnectionId: input.awsCodeConnectionId,
+            codeBuildProjectName: input.codeBuildProjectName,
+            codeBuildServiceRoleArn: input.codeBuildServiceRoleArn,
+            permissionsBoundaryArn: input.permissionsBoundaryArn,
+            sourceRepositoryUrl: input.sourceRepositoryUrl,
+            runtimeFingerprint: input.runtimeFingerprint,
+            status: input.status,
+            lastVerifiedAt: input.lastVerifiedAt,
+            repositoryVerificationStatus: input.repositoryVerificationStatus,
+            repositoryVerificationRequestedCommitSha:
+              input.repositoryVerificationRequestedCommitSha,
+            repositoryVerificationResolvedCommitSha: input.repositoryVerificationResolvedCommitSha,
+            repositoryVerificationBuildArn: input.repositoryVerificationBuildArn,
+            repositoryVerificationStatusReason: input.repositoryVerificationStatusReason,
+            repositoryVerifiedAt: input.repositoryVerifiedAt,
+            updatedAt: input.updatedAt
+          })
+          .where(eq(projectBuildEnvironments.projectId, input.projectId))
+          .returning();
+        if (!environment) throw new Error("Project build environment was not completed");
+        return environment;
+      });
     }
   };
 }
@@ -492,10 +602,8 @@ export async function prepareProjectBuildEnvironment(
   const repositoryVerification = preserveRepositoryVerification
     ? {
         repositoryVerificationStatus: existing.repositoryVerificationStatus,
-        repositoryVerificationRequestedCommitSha:
-          existing.repositoryVerificationRequestedCommitSha,
-        repositoryVerificationResolvedCommitSha:
-          existing.repositoryVerificationResolvedCommitSha,
+        repositoryVerificationRequestedCommitSha: existing.repositoryVerificationRequestedCommitSha,
+        repositoryVerificationResolvedCommitSha: existing.repositoryVerificationResolvedCommitSha,
         repositoryVerificationBuildArn: existing.repositoryVerificationBuildArn,
         repositoryVerificationStatusReason: existing.repositoryVerificationStatusReason,
         repositoryVerifiedAt: existing.repositoryVerifiedAt
@@ -509,7 +617,7 @@ export async function prepareProjectBuildEnvironment(
         repositoryVerifiedAt: null
       };
 
-  const preparing = await repository.save({
+  const preparation = await repository.beginPreparation({
     id: existing?.id ?? options.generateId?.() ?? randomUUID(),
     projectId: input.projectId,
     awsConnectionId: context.awsConnection.id,
@@ -525,6 +633,10 @@ export async function prepareProjectBuildEnvironment(
     ...(existing ? { createdAt: existing.createdAt } : {}),
     updatedAt: now
   });
+  if (!preparation.started) {
+    return { buildEnvironment: toProjectBuildEnvironment(preparation.environment) };
+  }
+  const preparing = preparation.environment;
 
   let verification: ProjectBuildEnvironmentVerification;
   try {
@@ -532,27 +644,29 @@ export async function prepareProjectBuildEnvironment(
     verification = await gateway.reconcile(desired);
     await requirePreparationContext(input, repository);
   } catch (error) {
-    const codeConnectionRepositoryAccessRequired =
-      isCodeConnectionRepositoryAccessError(error);
+    const codeConnectionRepositoryAccessRequired = isCodeConnectionRepositoryAccessError(error);
     const repositoryAccessStatusReason = codeConnectionRepositoryAccessRequired
       ? createCodeConnectionRepositoryAccessMessage(context.sourceRepository)
       : null;
-    await repository.save({
-      ...preparing,
-      status: "verification_failed",
-      lastVerifiedAt: null,
-      ...(repositoryAccessStatusReason
-        ? {
-            repositoryVerificationStatus: "failed" as const,
-            repositoryVerificationRequestedCommitSha: confirmedCommitSha,
-            repositoryVerificationResolvedCommitSha: null,
-            repositoryVerificationBuildArn: null,
-            repositoryVerificationStatusReason: repositoryAccessStatusReason,
-            repositoryVerifiedAt: null
-          }
-        : {}),
-      updatedAt: now
-    });
+    await repository.completePreparation(
+      {
+        ...preparing,
+        status: "verification_failed",
+        lastVerifiedAt: null,
+        ...(repositoryAccessStatusReason
+          ? {
+              repositoryVerificationStatus: "failed" as const,
+              repositoryVerificationRequestedCommitSha: confirmedCommitSha,
+              repositoryVerificationResolvedCommitSha: null,
+              repositoryVerificationBuildArn: null,
+              repositoryVerificationStatusReason: repositoryAccessStatusReason,
+              repositoryVerifiedAt: null
+            }
+          : {}),
+        updatedAt: now
+      },
+      preparing.updatedAt
+    );
     if (repositoryAccessStatusReason) {
       throw new ProjectBuildEnvironmentError(
         "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED",
@@ -565,22 +679,25 @@ export async function prepareProjectBuildEnvironment(
       502
     );
   }
-  const saved = await repository.save({
-    id: preparing.id,
-    projectId: input.projectId,
-    awsConnectionId: context.awsConnection.id,
-    awsCodeConnectionId: context.codeConnection.id,
-    codeBuildProjectName: desired.codeBuildProjectName,
-    codeBuildServiceRoleArn: desired.codeBuildServiceRoleArn,
-    permissionsBoundaryArn: desired.permissionsBoundaryArn,
-    sourceRepositoryUrl: desired.sourceRepositoryUrl,
-    runtimeFingerprint: desired.runtimeFingerprint,
-    status: verification.verified ? "ready" : "verification_failed",
-    lastVerifiedAt: verification.verified ? now : null,
-    ...repositoryVerification,
-    createdAt: preparing.createdAt,
-    updatedAt: now
-  });
+  const saved = await repository.completePreparation(
+    {
+      id: preparing.id,
+      projectId: input.projectId,
+      awsConnectionId: context.awsConnection.id,
+      awsCodeConnectionId: context.codeConnection.id,
+      codeBuildProjectName: desired.codeBuildProjectName,
+      codeBuildServiceRoleArn: desired.codeBuildServiceRoleArn,
+      permissionsBoundaryArn: desired.permissionsBoundaryArn,
+      sourceRepositoryUrl: desired.sourceRepositoryUrl,
+      runtimeFingerprint: desired.runtimeFingerprint,
+      status: verification.verified ? "ready" : "verification_failed",
+      lastVerifiedAt: verification.verified ? now : null,
+      ...repositoryVerification,
+      createdAt: preparing.createdAt,
+      updatedAt: now
+    },
+    preparing.updatedAt
+  );
   return { buildEnvironment: toProjectBuildEnvironment(saved) };
 }
 
@@ -714,8 +831,8 @@ export async function verifyProjectRepositoryAccess(
   const now = options.now?.() ?? new Date();
   const statusReason = exactCommitVerified
     ? null
-    : verification.statusReason ??
-      "CodeBuild checkout commit did not match the confirmed repository commit";
+    : (verification.statusReason ??
+      "CodeBuild checkout commit did not match the confirmed repository commit");
   const saved = await repository.save({
     ...existing,
     repositoryVerificationStatus: exactCommitVerified ? "verified" : "failed",
@@ -894,10 +1011,7 @@ export function synchronizeEcsFargateRuntimeConfigWithArchitecture(
   architectureJson: ArchitectureJson,
   codeBuildProjectName: string
 ): EcsFargateRuntimeConfig {
-  const ecrConfig = getSingleArchitectureResourceConfig(
-    architectureJson,
-    "ECR_REPOSITORY"
-  );
+  const ecrConfig = getSingleArchitectureResourceConfig(architectureJson, "ECR_REPOSITORY");
   const clusterConfig = getSingleArchitectureResourceConfig(architectureJson, "ECS_CLUSTER");
   const serviceConfig = getSingleArchitectureResourceConfig(architectureJson, "ECS_SERVICE");
   const loadBalancer = readArchitectureBlock(serviceConfig, "loadBalancer");
@@ -954,7 +1068,7 @@ function getSingleArchitectureResourceConfig(
   resourceType: ArchitectureJson["nodes"][number]["type"]
 ): Record<string, unknown> | null {
   const matches = architectureJson.nodes.filter((node) => node.type === resourceType);
-  return matches.length === 1 ? matches[0]?.config ?? null : null;
+  return matches.length === 1 ? (matches[0]?.config ?? null) : null;
 }
 
 function readArchitectureBlock(
@@ -1006,10 +1120,8 @@ function toProjectBuildEnvironment(
     status: record.status,
     lastVerifiedAt: record.lastVerifiedAt?.toISOString() ?? null,
     repositoryVerificationStatus: record.repositoryVerificationStatus,
-    repositoryVerificationRequestedCommitSha:
-      record.repositoryVerificationRequestedCommitSha,
-    repositoryVerificationResolvedCommitSha:
-      record.repositoryVerificationResolvedCommitSha,
+    repositoryVerificationRequestedCommitSha: record.repositoryVerificationRequestedCommitSha,
+    repositoryVerificationResolvedCommitSha: record.repositoryVerificationResolvedCommitSha,
     repositoryVerificationBuildArn: record.repositoryVerificationBuildArn,
     repositoryVerificationStatusReason: record.repositoryVerificationStatusReason,
     repositoryVerifiedAt: record.repositoryVerifiedAt?.toISOString() ?? null,

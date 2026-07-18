@@ -122,7 +122,8 @@ import { createAwsProjectBuildEnvironmentGateway } from "../build-environments/a
 import {
   ProjectBuildEnvironmentError,
   createPostgresProjectBuildEnvironmentRepository,
-  prepareProjectBuildEnvironment as prepareProjectBuildEnvironmentService
+  prepareProjectBuildEnvironment as prepareProjectBuildEnvironmentService,
+  verifyProjectRepositoryAccess as verifyProjectRepositoryAccessService
 } from "../build-environments/project-build-environment-service.js";
 import {
   acquireProjectExecutionLease,
@@ -138,21 +139,30 @@ type DeploymentRow = DeploymentRecord & {
   readonly currentPlanOperation?: Deployment["currentPlanOperation"];
 };
 
+type RepositoryAccessVerificationResult = {
+  buildEnvironment: {
+    repositoryVerificationStatus: "not_checked" | "verified" | "failed";
+    repositoryVerificationStatusReason: string | null;
+  } | null;
+};
+
 const createDeploymentParamsSchema = z.object({
   projectId: z.uuid()
 });
 
-const createDeploymentBodySchema = z.object({
-  architectureId: z.uuid(),
-  terraformArtifactId: z.uuid(),
-  awsConnectionId: z.uuid(),
-  liveProfile: z
-    .enum(["practice", "demo_web_service", "demo_web_service_with_rds"])
-    .default("practice"),
-  scope: z.enum(["infrastructure", "application", "full_stack"]).optional(),
-  targetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]).nullable().optional(),
-  source: z.enum(["direct", "gitops"]).optional()
-}).strict();
+const createDeploymentBodySchema = z
+  .object({
+    architectureId: z.uuid(),
+    terraformArtifactId: z.uuid(),
+    awsConnectionId: z.uuid(),
+    liveProfile: z
+      .enum(["practice", "demo_web_service", "demo_web_service_with_rds"])
+      .default("practice"),
+    scope: z.enum(["infrastructure", "application", "full_stack"]).optional(),
+    targetKind: z.enum(["ecs_fargate", "lambda", "ec2_asg", "static_site"]).nullable().optional(),
+    source: z.enum(["direct", "gitops"]).optional()
+  })
+  .strict();
 
 const prepareDeploymentBodySchema = z
   .object({
@@ -209,6 +219,11 @@ type DeploymentRouteOptions = {
     projectId: string;
     userId: string;
   }) => Promise<void>;
+  verifyProjectRepositoryAccess?: (input: {
+    db: DatabaseClient["db"];
+    projectId: string;
+    userId: string;
+  }) => Promise<RepositoryAccessVerificationResult>;
   retryApplicationFrontendRelease?: (input: {
     db: DatabaseClient["db"];
     deploymentId: string;
@@ -331,9 +346,7 @@ function createDefaultProjectDeploymentStoragePruner(
     });
 }
 
-function createDeploymentWorkerDispatch(
-  options: DeploymentRouteOptions | undefined
-): {
+function createDeploymentWorkerDispatch(options: DeploymentRouteOptions | undefined): {
   dispatcher: DeploymentWorkerDispatcher;
   enabled: boolean;
 } {
@@ -354,6 +367,69 @@ function createDeploymentWorkerDispatch(
         : createLocalDeploymentWorkerDispatcher()),
     enabled: true
   };
+}
+
+async function prepareEcsBuildEnvironmentForPlan(input: {
+  db: DatabaseClient["db"];
+  deployment: DeploymentRecord;
+  options: DeploymentRouteOptions | undefined;
+  userId: string;
+}): Promise<void> {
+  if (
+    input.deployment.scope === "infrastructure" ||
+    input.deployment.targetKind !== "ecs_fargate"
+  ) {
+    return;
+  }
+
+  const prepareProjectBuildEnvironment =
+    input.options?.prepareProjectBuildEnvironment ??
+    (async (preparation: {
+      architectureId: string;
+      db: DatabaseClient["db"];
+      projectId: string;
+      userId: string;
+    }) => {
+      await prepareProjectBuildEnvironmentService(
+        {
+          architectureId: preparation.architectureId,
+          projectId: preparation.projectId,
+          userId: preparation.userId
+        },
+        createPostgresProjectBuildEnvironmentRepository(preparation.db),
+        createAwsProjectBuildEnvironmentGateway()
+      );
+    });
+  await prepareProjectBuildEnvironment({
+    architectureId: input.deployment.architectureId,
+    db: input.db,
+    projectId: input.deployment.projectId,
+    userId: input.userId
+  });
+
+  const verifyProjectRepositoryAccess =
+    input.options?.verifyProjectRepositoryAccess ??
+    (async (verification: { db: DatabaseClient["db"]; projectId: string; userId: string }) =>
+      verifyProjectRepositoryAccessService(
+        {
+          projectId: verification.projectId,
+          userId: verification.userId
+        },
+        createPostgresProjectBuildEnvironmentRepository(verification.db),
+        createAwsProjectBuildEnvironmentGateway()
+      ));
+  const verification = await verifyProjectRepositoryAccess({
+    db: input.db,
+    projectId: input.deployment.projectId,
+    userId: input.userId
+  });
+  if (verification.buildEnvironment?.repositoryVerificationStatus !== "verified") {
+    throw new ProjectBuildEnvironmentError(
+      "REPOSITORY_ACCESS_VERIFICATION_REQUIRED",
+      verification.buildEnvironment?.repositoryVerificationStatusReason ??
+        "Repository checkout verification must succeed before Terraform Plan"
+    );
+  }
 }
 
 async function isMatchingActiveDeploymentOperation(input: {
@@ -485,8 +561,7 @@ async function failStoppedDeploymentWithRecoveredLease(
   }
   if (
     interrupted.source !== "direct" ||
-    (interrupted.holderId !== deployment.id &&
-      interrupted.holderId !== `destroy:${deployment.id}`)
+    (interrupted.holderId !== deployment.id && interrupted.holderId !== `destroy:${deployment.id}`)
   ) {
     throw new ProjectExecutionLeaseError(
       "LEASE_RECOVERY_REQUIRED",
@@ -577,10 +652,7 @@ function handleDeploymentError(error: unknown, reply: FastifyReply) {
 function requireDeploymentPreparationRepository(
   repository: DeploymentRepository
 ): DeploymentRepository & DeploymentPreparationRepository {
-  if (
-    !repository.findProjectDraftForPreparation ||
-    !repository.findProjectTargetForPreparation
-  ) {
+  if (!repository.findProjectDraftForPreparation || !repository.findProjectTargetForPreparation) {
     throw new Error("Deployment preparation repository is not configured");
   }
 
@@ -594,7 +666,8 @@ async function toDeployment(
   const currentPlanOperation =
     row.currentPlanOperation ??
     (row.currentPlanArtifactId
-      ? (await repository.findDeploymentPlanArtifactById(row.currentPlanArtifactId))?.operation ?? null
+      ? ((await repository.findDeploymentPlanArtifactById(row.currentPlanArtifactId))?.operation ??
+        null)
       : null);
 
   return {
@@ -742,7 +815,10 @@ export async function registerDeploymentRoutes(
             );
           }
         } catch (error) {
-          request.log.warn({ error, projectId: params.projectId }, "Failed to prune deployment history");
+          request.log.warn(
+            { error, projectId: params.projectId },
+            "Failed to prune deployment history"
+          );
         }
       }
 
@@ -1087,6 +1163,8 @@ export async function registerDeploymentRoutes(
     const workerDispatch = createDeploymentWorkerDispatch(options);
     let reservedLease: ReservedRouteExecutionLease | undefined;
     let executionHandedOff = false;
+    let runningDeployment: DeploymentRecord | undefined;
+    let routeFailureStage: "build_environment" | "plan" = "build_environment";
 
     try {
       const deployment = await getDeployment(
@@ -1122,36 +1200,19 @@ export async function registerDeploymentRoutes(
 
       await requireNoRunningDeploymentInProject(deployment, repository);
       reservedLease = await reserveRouteExecutionLease(deployment, deployment.id, repository);
+      runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
 
-      if (
-        deployment.scope !== "infrastructure" &&
-        deployment.targetKind === "ecs_fargate"
-      ) {
-        const prepareProjectBuildEnvironment =
-          options?.prepareProjectBuildEnvironment ??
-          (async (input: {
-            architectureId: string;
-            db: DatabaseClient["db"];
-            projectId: string;
-            userId: string;
-          }) => {
-            await prepareProjectBuildEnvironmentService(
-              {
-                architectureId: input.architectureId,
-                projectId: input.projectId,
-                userId: input.userId
-              },
-              createPostgresProjectBuildEnvironmentRepository(input.db),
-              createAwsProjectBuildEnvironmentGateway()
-            );
-          });
-        await prepareProjectBuildEnvironment({
-          architectureId: deployment.architectureId,
-          db,
-          projectId: deployment.projectId,
-          userId: accessContext.userId
-        });
+      if (!runningDeployment) {
+        throw new DeploymentConflictError("Deployment plan could not be started");
       }
+
+      await prepareEcsBuildEnvironmentForPlan({
+        db,
+        deployment,
+        options,
+        userId: accessContext.userId
+      });
+      routeFailureStage = "plan";
 
       const queuedJob = workerDispatch.enabled
         ? await createDeploymentJob(
@@ -1164,21 +1225,6 @@ export async function registerDeploymentRoutes(
             jobRepository
           )
         : undefined;
-
-      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
-
-      if (!runningDeployment) {
-        if (queuedJob) {
-          await failDeploymentJob(
-            {
-              jobId: queuedJob.id,
-              errorSummary: "Deployment plan could not be started"
-            },
-            jobRepository
-          );
-        }
-        throw new DeploymentConflictError("Deployment plan could not be started");
-      }
 
       if (queuedJob) {
         await dispatchDeploymentWorkerJob(
@@ -1210,7 +1256,20 @@ export async function registerDeploymentRoutes(
         deployment: await toDeployment(runningDeployment, repository)
       });
     } catch (error) {
-      if (!executionHandedOff) await releaseReservedRouteExecutionLease(reservedLease);
+      if (!executionHandedOff) {
+        if (runningDeployment) {
+          await repository
+            .failDeployment(runningDeployment.id, {
+              failureStage: routeFailureStage,
+              errorSummary:
+                error instanceof ProjectBuildEnvironmentError
+                  ? error.message
+                  : "Deployment plan preparation failed"
+            })
+            .catch(() => undefined);
+        }
+        await releaseReservedRouteExecutionLease(reservedLease);
+      }
       return handleDeploymentError(error, reply);
     }
   });
@@ -1357,7 +1416,6 @@ export async function registerDeploymentRoutes(
     }
   });
   const handleDeploymentExecute = async (request: FastifyRequest, reply: FastifyReply) => {
-
     const params = deploymentParamsSchema.parse(request.params);
     z.object({}).parse(request.body ?? {});
     const { accessContext, jobRepository, repository } = await getDeploymentRequestContext(
@@ -1604,11 +1662,7 @@ export async function registerDeploymentRoutes(
       if (!destroyHolderId) {
         throw new DeploymentConflictError("정리할 앱 릴리즈를 찾을 수 없습니다.");
       }
-      reservedLease = await reserveRouteExecutionLease(
-        deployment,
-        destroyHolderId,
-        repository
-      );
+      reservedLease = await reserveRouteExecutionLease(deployment, destroyHolderId, repository);
 
       const queuedJob = workerDispatch.enabled
         ? await createDeploymentJob(
@@ -2230,7 +2284,10 @@ function startDeploymentDestroyPlanJob(
 ): void {
   startTrackedDeploymentRun(input.deploymentId, async (abortSignal) => {
     await runDeploymentDestroyPlan({ ...input, abortSignal }, repository).catch(() => {
-      log.error({ deploymentId: input.deploymentId }, "Deployment destroy plan background job failed");
+      log.error(
+        { deploymentId: input.deploymentId },
+        "Deployment destroy plan background job failed"
+      );
     });
   });
 }
