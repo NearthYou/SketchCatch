@@ -28,6 +28,12 @@ Short English-only working log for the current agent context. Older records are 
 - Selecting a chat option now re-enables transcript following so the next question scrolls into view; manual reading position remains preserved for non-selection updates.
 - Workbench contract tests pass 22/22 and Web typecheck passes.
 
+### 2026-07-19 - Unify both diagram-generation chat flows
+
+- Moved patch-clarification matching and option presentation into one shared module used by both the Workspace dock and `/workspace/ai`.
+- The full-page chat now shares fresh-draft routing and handles add cancellation, skipped connections, and service-purpose answers like the dock.
+- Focused routing and clarification tests pass 13/13, including five shared examples; Web typecheck passes. Full suites and build were intentionally not run per user request.
+
 ## Broken Or Unverified
 
 - The session-wide `pnpm test` run originally reported three Web failures. The owned AI chat contract failure is fixed and its focused suite passes; two unchanged failures remain in the generated architecture artifact line-ending assertion and GitHub account settings contract. The full suite was not rerun after the focused fix.
@@ -134,12 +140,6 @@ Short English-only working log for the current agent context. Older records are 
 - Moved the complete project Delivery workflow into the existing deployment modal's CI/CD tab and removed the duplicate Workspace right-panel entry and summary-only handoff.
 - Added a responsive, token-aligned connection, pipeline configuration, readiness, and execution layout; legacy Delivery bookmarks now open the CI/CD modal directly.
 - Focused Delivery tests pass 34/34; Impeccable detection, browser desktop/mobile checks, harness, lint, typecheck, build, and diff checks pass. No deployment, Git handoff, cloud mutation, or DB migration was performed.
-
-### 2026-07-18 - Accept the safe pre-cache CodeBuild boundary
-
-- Build-environment verification now accepts the exact legacy logs and CodeConnections permissions boundary used before optional ECR build caching, while continuing to reject all other boundary drift.
-- The focused gateway suite passes 17/17; formatting, API lint/typecheck, root lint/typecheck/build, harness, and diff checks pass. Live dev verification and Terraform Plan completed successfully and stopped before Apply.
-- No Terraform Apply, deployment, Git commit, push, or DB migration was performed. Existing environments can use the cold Docker-build fallback; the next action is user approval only if Apply is intended.
 
 ### 2026-07-18 - Align deployment safety documentation with current enforcement
 

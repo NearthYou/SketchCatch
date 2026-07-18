@@ -26,6 +26,8 @@ Use this file only for compact continuation context. Write it in English.
 - Focused fresh-draft routing tests pass 2/2 and Web typecheck passes.
 - Selecting a chat option re-enables transcript following so the newly appended question scrolls into view without changing manual scroll preservation for other updates.
 - Workbench contract tests pass 22/22 and Web typecheck passes.
+- Both diagram-generation chats now use one patch-clarification matcher and option presenter, plus the same fresh-draft routing and special-answer handling.
+- Focused routing/clarification tests pass 13/13, including five shared examples; Web typecheck passes.
 
 ## Broken Or Unverified
 
@@ -33,5 +35,5 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Commit the selected-option auto-scroll fix and verify a clean worktree.
+- No follow-up is required for this task; continue with the next reported AI chat issue.
 - No DB migration, cloud mutation, deployment, or Terraform execution is involved.
