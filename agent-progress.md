@@ -212,3 +212,8 @@ Short English-only working log for the current agent context. Older records are 
 - Fixed the editable Architecture Board Fit View action so its automatic viewport move no longer marks the ProjectDraft dirty; direct user viewport movement remains persistent.
 - Signed-in localhost checks confirmed cost tab, period, user count, usage range, connection, direct URL entry, and browser history restoration already work, so the cost URL implementation was left unchanged.
 - Focused dirty and cost regressions pass 77/77. The full Web suite passes 786/790; the four failures are unchanged generated Architecture Board artifact line-ending and Resource catalog contract failures.
+
+### 2026-07-18 - Merge Reverse Engineering result UX
+
+- Resolved the scan criteria conflict by retaining the new AWS connection recovery UI and the existing client-side settings navigation.
+- Focused regressions pass 20/20; harness, lint, typecheck, build, and diff checks pass. No DB migration or cloud mutation was performed.
