@@ -1240,9 +1240,23 @@ function withAcceptedArchitectureClarificationAnswers(
   return {
     ...request,
     prompt: `${request.prompt}\n\nAccepted architecture clarification answers:\n${answers
-      .map((answer) => `- ${answer.questionId}: ${answer.answer.trim()}`)
+      .map((answer) => `- ${answer.questionId}: ${formatAcceptedArchitectureClarificationAnswer(answer)}`)
       .join("\n")}`
   };
+}
+
+function formatAcceptedArchitectureClarificationAnswer(
+  answer: NonNullable<CreateArchitectureDraftRequest["clarificationAnswers"]>[number]
+): string {
+  const trimmedAnswer = answer.answer.trim();
+  if (answer.questionId !== "budget") return trimmedAnswer;
+
+  const monthlyBudgetManwon = resolveConversationalMonthlyBudgetManwon(trimmedAnswer);
+  if (monthlyBudgetManwon === undefined || /(?:원|만원|krw|usd|달러)/iu.test(trimmedAnswer)) {
+    return trimmedAnswer;
+  }
+
+  return `${trimmedAnswer} (월 ${monthlyBudgetManwon}만원으로 해석)`;
 }
 
 type MissingRequiredArchitectureQuestion = {
@@ -1368,7 +1382,29 @@ function hasBudgetClarificationEvidence(answer: string): boolean {
   return hasPromptTerm(answer, [
     "budget", "cost", "monthly", "예산", "비용", "월 비용", "저렴", "싸게",
     "최소 비용", "넉넉한 예산", "비용은 보통", "적당한 비용"
-  ]) || /(?:\$\s*\d|\d[\d,.]*\s*(?:원|만원|달러|usd|krw))/iu.test(answer);
+  ])
+    || /(?:\$\s*\d|\d[\d,.]*\s*(?:원|만원|달러|usd|krw))/iu.test(answer)
+    || resolveConversationalMonthlyBudgetManwon(answer) !== undefined;
+}
+
+function resolveConversationalMonthlyBudgetManwon(answer: string): number | undefined {
+  const normalizedAnswer = answer.normalize("NFKC").toLowerCase();
+  const monthlyAmountPattern = /(?:한\s*달|매달|매월|월간|월)(?:에|마다)?(?:\s*(?:예산|비용)(?:은|이|을|으로)?)?\s*(?:약|한)?\s*(\d+(?:[,.]\d+)?)/giu;
+
+  for (const match of normalizedAnswer.matchAll(monthlyAmountPattern)) {
+    if (match.index === undefined) continue;
+    const amountText = match[1];
+    if (amountText === undefined) continue;
+    const trailingText = normalizedAnswer.slice(match.index + match[0].length);
+    if (/^\s*(?:명|사용자|시간|분|초|일|회|건|gb|mb|tb|%|퍼센트)/iu.test(trailingText)) {
+      continue;
+    }
+
+    const amount = Number(amountText.replaceAll(",", ""));
+    if (Number.isFinite(amount) && amount >= 0) return amount;
+  }
+
+  return undefined;
 }
 
 function hasPageLoadingClarificationEvidence(answer: string): boolean {
@@ -9324,6 +9360,14 @@ function resolveAvailabilityProfile(normalizedPrompt: string): ArchitectureAnswe
 }
 
 function resolveBudgetProfile(normalizedPrompt: string): ArchitectureAnswerProfile["budget"] {
+  const conversationalMonthlyBudgetManwon = resolveConversationalMonthlyBudgetManwon(normalizedPrompt);
+  if (conversationalMonthlyBudgetManwon !== undefined) {
+    if (conversationalMonthlyBudgetManwon < 10) return "low";
+    if (conversationalMonthlyBudgetManwon <= 50) return "normal";
+    if (conversationalMonthlyBudgetManwon < 200) return "high";
+    return "enterprise";
+  }
+
   if (hasLowMonthlyBudget(normalizedPrompt) || /(minimum\s+cost|very\s+low|10만원\s*미만|최소\s*비용)/iu.test(normalizedPrompt)) {
     return "low";
   }

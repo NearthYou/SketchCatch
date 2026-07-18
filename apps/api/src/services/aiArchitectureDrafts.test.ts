@@ -1142,6 +1142,38 @@ test("createAmazonQArchitectureDraftResponse rejects answers that belong to anot
     });
   }
 });
+
+test("createAmazonQArchitectureDraftResponse accepts a conversational monthly budget without an explicit currency unit", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: "웹사이트를 만들고 싶어요.",
+      clarificationAnswers: [
+        { questionId: "website_type", answer: "동적 웹 애플리케이션 (쇼핑몰, 게시판, 회원 시스템)" },
+        { questionId: "traffic", answer: "중간 규모 (일 1,000명, 동시 50명)" },
+        { questionId: "database", answer: "간단한 데이터 (사용자 정보, 게시글 등 < 10GB)" },
+        { questionId: "frontend", answer: "React/Vue/Angular (SPA 프레임워크)" },
+        { questionId: "backend", answer: "복잡한 비즈니스 로직 (Spring Boot, Django 등)" },
+        { questionId: "region", answer: "한국만 (서울 리전)" },
+        { questionId: "budget", answer: "한달에 한 30정도로" }
+      ]
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if (!("status" in response)) assert.fail("Expected the next clarification question");
+  assert.equal(response.questionId, "ssl");
+  assert.equal(response.validationMessage, undefined);
+});
+
+test("createArchitectureDraft maps a conversational monthly budget to the matching budget profile", () => {
+  const response = createArchitectureDraft({
+    prompt: "로그인이 있는 작은 웹서비스를 만들고 싶고 월 예산은 한달에 한 30정도로 맞춰줘."
+  });
+
+  assert.equal(response.metadata.operatingProfile?.budgetLevel, "normal");
+});
+
 test("createAmazonQArchitectureDraftResponse understands five additional natural-language clarification examples", async () => {
   const provider = createFakeAmazonQProvider(() => "{}");
   const scenarios = [
