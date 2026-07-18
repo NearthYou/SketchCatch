@@ -411,11 +411,16 @@
 .rowActions button { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 10px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-size: calc(12px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .rowActions button[data-danger="true"] { border-color: var(--color-error); color: var(--color-error); }
 .buildConnectionReady,
+.buildConnectionUnverified,
 .buildConnectionPending { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
 .buildConnectionReady { color: var(--color-success); }
+.buildConnectionUnverified { color: var(--color-warning); }
 .buildConnectionReady button,
+.buildConnectionUnverified button,
 .buildConnectionPending button { min-height: 36px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-control); padding: 0 11px; background: var(--color-canvas); color: var(--color-ink); cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.buildConnectionUnverified > span,
 .buildConnectionPending > span { border-radius: var(--radius-pill); padding: 5px 8px; background: var(--color-warning-surface); color: var(--color-warning); }
+.buildConnectionUnverified a,
 .buildConnectionPending a { display: inline-flex; min-height: 36px; align-items: center; gap: 5px; border-radius: var(--radius-control); padding: 0 11px; background: var(--color-ink); color: var(--color-on-primary); text-decoration: none; }
 
 .modalBackdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: rgb(13 17 23 / 46%); z-index: 100; }
@@ -432,6 +437,11 @@
 .cleanupPreview ul { display: grid; gap: 4px; margin: 0; padding-left: 20px; color: var(--color-body); font-size: calc(13px + var(--presentation-font-size-increase)); line-height: 1.45; }
 .cleanupPreview p { font-size: calc(13px + var(--presentation-font-size-increase)); }
 .modalCard .cleanupBlocker { border-left: 3px solid var(--color-error); padding: 9px 10px; background: var(--color-error-surface); color: var(--color-ink); font-weight: calc(600 - var(--presentation-font-weight-reduction)); }
+.cleanupError { display: grid; gap: 6px; border-left: 3px solid var(--color-error); padding: 10px 12px; background: var(--color-error-surface); color: var(--color-ink); }
+.cleanupError strong { font-size: calc(13px + var(--presentation-font-size-increase)); }
+.cleanupError details { color: var(--color-body); font-size: calc(12px + var(--presentation-font-size-increase)); }
+.cleanupError summary { cursor: pointer; font-weight: calc(700 - var(--presentation-font-weight-reduction)); }
+.cleanupError details p { margin-top: 6px; overflow-wrap: anywhere; }
 
 .githubSettingsMessage {
   border-top: 1px solid var(--color-hairline);

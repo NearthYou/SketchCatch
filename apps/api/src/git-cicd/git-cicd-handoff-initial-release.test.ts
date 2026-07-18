@@ -206,6 +206,7 @@ function createTarget(): GitCicdHandoffDeploymentTargetRecord {
 }
 
 function createRelease(): GitCicdReadinessApplicationReleaseRecord {
+  const releaseCandidateId = "99999999-9999-4999-8999-999999999999";
   return {
     id: "88888888-8888-4888-8888-888888888888",
     projectId,
@@ -215,7 +216,7 @@ function createRelease(): GitCicdReadinessApplicationReleaseRecord {
     runtimeTargetKind: "ecs_fargate",
     deploymentTargetFingerprint: fingerprint,
     commitSha,
-    releaseCandidateId: "99999999-9999-4999-8999-999999999999",
+    releaseCandidateId,
     compositeDigest: {
       algorithm: "sha256",
       value: "1".repeat(64),
@@ -230,7 +231,7 @@ function createRelease(): GitCicdReadinessApplicationReleaseRecord {
       indexObjectKey: "index.html",
       indexVersionId: "index-version",
       invalidationId: "invalidation-id",
-      commitMarker: commitSha
+      commitMarker: `${commitSha}:${releaseCandidateId}`
     },
     completedAt: new Date("2026-07-17T02:00:00Z"),
     deploymentScope: "full_stack",

@@ -3,6 +3,7 @@ import test from "node:test";
 import type { ArchitectureJson, EcsFargateRuntimeConfig } from "@sketchcatch/types";
 import {
   ProjectBuildEnvironmentError,
+  createPostgresProjectBuildEnvironmentRepository,
   createDesiredProjectBuildEnvironment,
   deleteProjectBuildEnvironment,
   prepareProjectBuildEnvironment,
@@ -13,6 +14,9 @@ import {
   type ProjectBuildEnvironmentRecord,
   type ProjectBuildEnvironmentRepository
 } from "./project-build-environment-service.js";
+import {
+  resolveAwsDeploymentTargetIdentity
+} from "../runtime-convergence/deployment-target-identity.js";
 
 const now = new Date("2026-07-15T12:00:00.000Z");
 
@@ -54,8 +58,152 @@ test("approved Architecture replaces stale ECS target coordinates before Plan", 
     clusterName: "audience-live-check-cluster",
     serviceName: "audience-live-check-service",
     containerName: "api",
+    containerPort: 8080,
     outputUrl: null
   });
+});
+
+test("approved Architecture replaces a stale ECS container port before Plan", () => {
+  const current: EcsFargateRuntimeConfig = {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName: "sketchcatch-5ac411f8-build",
+    ecrRepositoryName: "audience-live-check-api",
+    clusterName: "audience-live-check-cluster",
+    serviceName: "audience-live-check-service",
+    containerName: "api",
+    containerPort: 3000,
+    taskDefinitionArn:
+      "arn:aws:ecs:ap-northeast-2:131404649047:task-definition/audience-live-check:1",
+    outputUrl: "https://old.example.com"
+  };
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      architectureNode("ECR_REPOSITORY", { name: current.ecrRepositoryName }),
+      architectureNode("ECS_CLUSTER", { name: current.clusterName }),
+      architectureNode("ECS_SERVICE", {
+        name: current.serviceName,
+        loadBalancer: [{ containerName: current.containerName, containerPort: 8080 }]
+      })
+    ],
+    edges: []
+  };
+
+  const result = synchronizeEcsFargateRuntimeConfigWithArchitecture(
+    current,
+    architectureJson,
+    current.codeBuildProjectName
+  );
+
+  assert.deepEqual(result, {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName: current.codeBuildProjectName,
+    ecrRepositoryName: current.ecrRepositoryName,
+    clusterName: current.clusterName,
+    serviceName: current.serviceName,
+    containerName: current.containerName,
+    containerPort: 8080,
+    outputUrl: null
+  });
+});
+
+test("Board ECS synchronization repairs the canonical target identity even when runtime config is unchanged", async () => {
+  const runtimeConfig: EcsFargateRuntimeConfig = {
+    runtimeTargetKind: "ecs_fargate",
+    codeBuildProjectName: "sketchcatch-5ac411f8-build",
+    ecrRepositoryName: "audience-live-check-api",
+    clusterName: "audience-live-check-cluster",
+    serviceName: "audience-live-check-service",
+    containerName: "api",
+    containerPort: 8080,
+    outputUrl: null
+  };
+  const architectureJson: ArchitectureJson = {
+    nodes: [
+      architectureNode("ECR_REPOSITORY", { name: runtimeConfig.ecrRepositoryName }),
+      architectureNode("ECS_CLUSTER", { name: runtimeConfig.clusterName }),
+      architectureNode("ECS_SERVICE", {
+        name: runtimeConfig.serviceName,
+        loadBalancer: [{ containerName: runtimeConfig.containerName, containerPort: 8080 }]
+      })
+    ],
+    edges: []
+  };
+  let persisted: Record<string, unknown> | undefined;
+  const selectQuery = {
+    from() {
+      return this;
+    },
+    innerJoin() {
+      return this;
+    },
+    where() {
+      return this;
+    },
+    async for() {
+      return [
+        {
+          accountId: "131404649047",
+          architectureJson,
+          confirmedBuildConfig: { healthCheckPath: "/health" },
+          deploymentTargetFingerprint: "f".repeat(64),
+          region: "ap-northeast-2",
+          runtimeConfig,
+          runtimeTarget: {
+            adapterKind: "ecs_service_fargate",
+            orchestrator: {
+              kind: "ecs_service",
+              clusterName: "stale-cluster",
+              serviceName: "stale-service"
+            }
+          },
+          runtimeTargetKind: "ecs_fargate"
+        }
+      ];
+    }
+  };
+  const updateQuery = {
+    set(values: Record<string, unknown>) {
+      persisted = values;
+      return this;
+    },
+    async where() {
+      return [];
+    }
+  };
+  const repository = createPostgresProjectBuildEnvironmentRepository({
+    async transaction(operation: (transaction: unknown) => Promise<unknown>) {
+      return operation({
+        select() {
+          return selectQuery;
+        },
+        update() {
+          return updateQuery;
+        }
+      });
+    }
+  } as never);
+
+  await repository.synchronizeEcsRuntimeConfig({
+    architectureId: "architecture-1",
+    codeBuildProjectName: runtimeConfig.codeBuildProjectName,
+    projectId: "project-1",
+    userId: "user-1"
+  });
+
+  const expectedIdentity = resolveAwsDeploymentTargetIdentity({
+    projectId: "project-1",
+    accountId: "131404649047",
+    region: "ap-northeast-2",
+    runtimeConfig,
+    healthCheckPath: "/health"
+  });
+  assert.ok(persisted);
+  assert.deepEqual(persisted.runtimeConfig, runtimeConfig);
+  assert.deepEqual(persisted.runtimeTarget, expectedIdentity.target);
+  assert.equal(
+    persisted.deploymentTargetFingerprint,
+    expectedIdentity.deploymentTargetFingerprint
+  );
 });
 
 test("build environment preparation requires an active GitHub repository", async () => {
@@ -186,6 +334,50 @@ test("repository access verification records the exact CodeBuild checkout commit
   assert.equal(result.buildEnvironment?.repositoryVerifiedAt, now.toISOString());
 });
 
+test("re-preparing an unchanged build environment preserves exact repository verification", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  const gateway = createGateway();
+
+  await prepareProjectBuildEnvironment(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    gateway,
+    { generateId: () => "build-environment-1", now: () => now }
+  );
+  const verified = await verifyProjectRepositoryAccess(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    gateway,
+    { now: () => now }
+  );
+  const preparedAgain = await prepareProjectBuildEnvironment(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    gateway,
+    { generateId: () => "unused", now: () => new Date("2026-07-15T12:01:00.000Z") }
+  );
+
+  assert.equal(verified.buildEnvironment?.repositoryVerificationStatus, "verified");
+  assert.equal(preparedAgain.buildEnvironment?.repositoryVerificationStatus, "verified");
+  assert.equal(
+    preparedAgain.buildEnvironment?.repositoryVerificationRequestedCommitSha,
+    context.confirmedBuildConfig?.confirmedCommitSha
+  );
+  assert.equal(
+    preparedAgain.buildEnvironment?.repositoryVerificationResolvedCommitSha,
+    context.confirmedBuildConfig?.confirmedCommitSha
+  );
+  assert.equal(
+    preparedAgain.buildEnvironment?.repositoryVerificationBuildArn,
+    verified.buildEnvironment?.repositoryVerificationBuildArn
+  );
+  assert.equal(
+    preparedAgain.buildEnvironment?.repositoryVerifiedAt,
+    verified.buildEnvironment?.repositoryVerifiedAt
+  );
+});
+
 test("repository access verification records a safe failure when CodeBuild cannot checkout", async () => {
   const context = createContext();
   const repository = createRepository(context);
@@ -215,6 +407,49 @@ test("repository access verification records a safe failure when CodeBuild canno
     "CodeBuild repository checkout failed: Access denied [REDACTED]"
   );
   assert.equal(result.buildEnvironment?.repositoryVerifiedAt, null);
+});
+
+test("repository checkout reports unavailable CodeConnection access without persisting the provider token error", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  await prepareProjectBuildEnvironment(
+    { projectId: context.projectId, userId: "user-1" },
+    repository,
+    createGateway(),
+    { generateId: () => "build-environment-1", now: () => now }
+  );
+  const providerError = new Error("The security token included in the request is invalid.");
+  providerError.name = "OAuthProviderException";
+
+  await assert.rejects(
+    verifyProjectRepositoryAccess(
+      { projectId: context.projectId, userId: "user-1" },
+      repository,
+      createGateway({
+        async verifyRepositoryAccess() {
+          throw providerError;
+        }
+      }),
+      { now: () => now }
+    ),
+    (error) =>
+      error instanceof ProjectBuildEnvironmentError &&
+      error.code === "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED" &&
+      error.statusCode === 409 &&
+      error.message.includes("AWS Connector for GitHub") &&
+      !error.message.includes("security token")
+  );
+
+  const saved = await repository.findByProjectId(context.projectId);
+  assert.equal(saved?.repositoryVerificationStatus, "failed");
+  assert.equal(
+    saved?.repositoryVerificationRequestedCommitSha,
+    context.confirmedBuildConfig?.confirmedCommitSha
+  );
+  assert.equal(saved?.repositoryVerificationResolvedCommitSha, null);
+  assert.equal(saved?.repositoryVerificationBuildArn, null);
+  assert.match(saved?.repositoryVerificationStatusReason ?? "", /AWS Connector for GitHub/);
+  assert.doesNotMatch(saved?.repositoryVerificationStatusReason ?? "", /security token/iu);
 });
 
 test("repository access verification checks the live CodeBuild source before starting checkout", async () => {
@@ -341,6 +576,45 @@ test("build environment preparation persists a retryable failure when AWS reconc
   const saved = await repository.findByProjectId(context.projectId);
   assert.equal(saved?.status, "verification_failed");
   assert.equal(saved?.lastVerifiedAt, null);
+});
+
+test("build environment preparation reports unavailable GitHub repository access without exposing the provider token error", async () => {
+  const context = createContext();
+  const repository = createRepository(context);
+  const providerError = new Error("The security token included in the request is invalid.");
+  providerError.name = "OAuthProviderException";
+
+  await assert.rejects(
+    prepareProjectBuildEnvironment(
+      { projectId: context.projectId, userId: "user-1" },
+      repository,
+      createGateway({
+        async reconcile() {
+          throw providerError;
+        }
+      }),
+      { generateId: () => "build-environment-1", now: () => now }
+    ),
+    (error) =>
+      error instanceof ProjectBuildEnvironmentError &&
+      error.code === "CODECONNECTION_REPOSITORY_ACCESS_REQUIRED" &&
+      error.statusCode === 409 &&
+      error.message.includes("AWS Connector for GitHub") &&
+      error.message.includes("jh-9999/audience-live-check") &&
+      !error.message.includes("security token")
+  );
+
+  const saved = await repository.findByProjectId(context.projectId);
+  assert.equal(saved?.status, "verification_failed");
+  assert.equal(saved?.repositoryVerificationStatus, "failed");
+  assert.equal(
+    saved?.repositoryVerificationRequestedCommitSha,
+    context.confirmedBuildConfig?.confirmedCommitSha
+  );
+  assert.equal(saved?.repositoryVerificationResolvedCommitSha, null);
+  assert.equal(saved?.repositoryVerificationBuildArn, null);
+  assert.match(saved?.repositoryVerificationStatusReason ?? "", /AWS Connector for GitHub/);
+  assert.doesNotMatch(saved?.repositoryVerificationStatusReason ?? "", /security token/iu);
 });
 
 test("build environment preparation cannot become ready after project deletion starts", async () => {

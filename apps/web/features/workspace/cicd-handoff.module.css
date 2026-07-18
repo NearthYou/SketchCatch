@@ -147,6 +147,7 @@
   display: grid;
   gap: 12px;
   padding: 16px;
+  scroll-margin-top: 56px;
   width: 100%;
 }
 
@@ -268,6 +269,17 @@
   font-size: calc(12px + var(--presentation-font-size-increase));
   margin: 0;
   padding: 12px 0;
+}
+
+.readinessComplete {
+  background: var(--workspace-surface, #fff);
+  border: 1px solid #aceebb;
+  border-radius: 8px;
+  color: #116329;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  margin: 0;
+  padding: 12px;
 }
 
 .readinessError {

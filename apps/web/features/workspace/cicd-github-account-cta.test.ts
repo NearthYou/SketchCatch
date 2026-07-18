@@ -14,12 +14,14 @@ const handoffSource = readFileSync(
 
 test("CI/CD keeps GitHub account recovery available without hiding the readiness checklist", () => {
   assert.match(source, /listGitHubAccountInstallations/);
-  assert.match(source, /hasGitHubAccountConnection/);
+  assert.match(source, /githubInstallationAccess/);
   assert.doesNotMatch(source, /isGitHubIdentityRequiredError/);
   assert.match(source, /\/dashboard\/settings#github-account-settings-title/);
   assert.match(source, /GitHub App 연결이 필요합니다\./);
   assert.match(source, /로그인 방식과 관계없이/);
   assert.match(source, /GitHub App 설정 열기/);
+  assert.match(source, /deriveGitHubInstallationAccessState/);
+  assert.match(source, /GitHub App 서버 설정이 필요합니다/);
 });
 
 test("CI/CD keeps the four server readiness rows visible when no repository is connected", () => {
@@ -36,6 +38,12 @@ test("CI/CD exposes the Git handoff action that creates the deployment pull requ
   assert.match(source, /createGitCicdHandoff/);
   assert.match(source, /listGitCicdHandoffs/);
   assert.match(source, /CI\/CD PR 생성/);
+});
+
+test("CI/CD uses GitHub App permissions without exposing login OAuth for repository changes", () => {
+  assert.doesNotMatch(source, /GitHub OAuth 승인/);
+  assert.doesNotMatch(source, /startGitHubOAuth/);
+  assert.doesNotMatch(source, /applyGitCicdRepositorySettingsWithGitHubOAuth/);
 });
 
 test("CI/CD blocks PR creation until every read-only Delivery readiness item is ready", () => {

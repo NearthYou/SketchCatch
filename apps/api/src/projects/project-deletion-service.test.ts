@@ -21,7 +21,6 @@ import {
 import {
   createProjectDeletePreview,
   deleteProjectRecords,
-  ProjectDeletionManagedCleanupError,
   type ProjectDeleteSnapshot
 } from "./project-deletion-service.js";
 
@@ -386,7 +385,7 @@ test("deleteProjectRecords cleans the project CodeBuild environment before delet
   );
 });
 
-test("deleteProjectRecords preserves project records when managed AWS cleanup fails", async () => {
+test("deleteProjectRecords deletes project records when managed AWS cleanup fails", async () => {
   const fakeDb = new FakeProjectDeletionDb({
     awsConnections: [
       {
@@ -407,35 +406,22 @@ test("deleteProjectRecords preserves project records when managed AWS cleanup fa
     ]
   });
 
-  await assert.rejects(
-    deleteProjectRecords({
-      action: "delete_project",
-      db: fakeDb.db,
-      deletionGuard: fakeDb.deletionGuard,
-      projectId,
-      storage: { async deleteObject() {} },
-      userId,
-      async cleanupManagedResources() {
-        throw new Error("AccessDenied");
-      }
-    }),
-    /CodeBuild/i
-  );
-
-  assert.equal(fakeDb.operations.includes("delete:projects"), false);
-  assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), true);
-  assert.equal(fakeDb.operations.includes("release:projects"), false);
-
-  await deleteProjectRecords({
+  const result = await deleteProjectRecords({
     action: "delete_project",
     db: fakeDb.db,
     deletionGuard: fakeDb.deletionGuard,
     projectId,
     storage: { async deleteObject() {} },
     userId,
-    async cleanupManagedResources() {}
+    async cleanupManagedResources() {
+      throw new Error("AccessDenied");
+    }
   });
+
+  assert.equal(result.deleted, true);
+  assert.equal(result.managedCleanupCompleted, false);
   assert.equal(fakeDb.operations.includes("delete:projects"), true);
+  assert.equal(fakeDb.operations.includes("mark-cleanup-failed:projects"), false);
 });
 
 test("deleteProjectRecords deletes immutable ReleaseCandidate object versions", async () => {

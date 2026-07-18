@@ -5,14 +5,17 @@ import {
   createGitCicdAutomationFiles,
   createRepositorySettingsPreview
 } from "./git-cicd-workflows.js";
+import { assertReachableGitCicdReleaseApiUrl } from "./git-cicd-handoff-service.js";
 
 test("ECS GitOps setup fails before rendering settings without an output URL", () => {
   assert.throws(
     () => createRepositorySettingsPreview({
+      projectId: "11111111-1111-4111-8111-111111111111",
       projectSlug: "audience-live-check",
       repositoryOwner: "NearthYou",
       repositoryName: "SketchCatch",
       targetBranch: "main",
+      sketchCatchPublicBaseUrl: "https://sketchcatch.example.com",
       runtimeTargetKind: "ecs_fargate",
       runtimeConfig: {
         runtimeTargetKind: "ecs_fargate",
@@ -25,6 +28,44 @@ test("ECS GitOps setup fails before rendering settings without an output URL", (
       }
     }),
     /DEPLOYMENT_OUTPUT_URL_REQUIRED/
+  );
+});
+
+test("GitOps setup rejects a release API URL that GitHub Actions cannot reach", () => {
+  assert.throws(
+    () => createRepositorySettingsPreview({
+      projectId: "11111111-1111-4111-8111-111111111111",
+      projectSlug: "audience-live-check",
+      repositoryOwner: "jh-9999",
+      repositoryName: "audience-live-check",
+      targetBranch: "main",
+      sketchCatchPublicBaseUrl: "http://localhost:3000",
+      runtimeTargetKind: "ecs_fargate",
+      runtimeConfig: {
+        runtimeTargetKind: "ecs_fargate",
+        codeBuildProjectName: "audience-live-check-app-build",
+        ecrRepositoryName: "audience-live-check-app",
+        clusterName: "audience-live-check-cluster",
+        serviceName: "audience-live-check-service",
+        containerName: "web",
+        outputUrl: "https://app.example.com"
+      }
+    }),
+    /GIT_CICD_RELEASE_API_URL_REQUIRED/u
+  );
+});
+
+test("GitOps handoff rejects a public HTTPS origin when its health endpoint is unreachable", async () => {
+  await assert.rejects(
+    () =>
+      assertReachableGitCicdReleaseApiUrl(
+        "https://expired-tunnel.trycloudflare.com",
+        async (url) => {
+          assert.equal(url, "https://expired-tunnel.trycloudflare.com/health");
+          return false;
+        }
+      ),
+    /GIT_CICD_RELEASE_API_UNREACHABLE/u
   );
 });
 

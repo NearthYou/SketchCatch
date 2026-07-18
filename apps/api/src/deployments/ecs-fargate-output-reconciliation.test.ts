@@ -38,7 +38,7 @@ test("ECS runtime fingerprint ignores output URL but changes with runtime coordi
   assert.notEqual(withDifferentService, initial);
 });
 
-test("ECS target reconciliation stores null, keeps the same URL, and rejects URL or coordinate drift", () => {
+test("ECS target reconciliation stores Terraform outputs and rejects prepared target drift", () => {
   const current = {
     runtimeTargetKind: "ecs_fargate" as const,
     codeBuildProjectName: "app-build",
@@ -48,8 +48,7 @@ test("ECS target reconciliation stores null, keeps the same URL, and rejects URL
     containerName: "web",
     outputUrl: null
   };
-  const expectedCoordinatesFingerprint =
-    createEcsFargateRuntimeCoordinatesFingerprint(current);
+  const expectedCoordinatesFingerprint = createEcsFargateRuntimeCoordinatesFingerprint(current);
   const outputs = resolveEcsFargateRuntimeOutputs(createTerraformOutputs());
 
   const first = reconcileEcsFargateRuntimeConfig(current, {
@@ -63,29 +62,13 @@ test("ECS target reconciliation stores null, keeps the same URL, and rejects URL
   assert.equal(first.runtimeConfig.taskDefinitionArn, outputs.taskDefinitionArn);
 
   const same = reconcileEcsFargateRuntimeConfig(first.runtimeConfig, {
-    expectedCoordinatesFingerprint:
-      createEcsFargateRuntimeCoordinatesFingerprint(first.runtimeConfig),
+    expectedCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(
+      first.runtimeConfig
+    ),
     outputs
   });
   assert.equal(same.changed, false);
   assert.equal(same.runtimeConfig, first.runtimeConfig);
-
-  assert.throws(
-    () =>
-      reconcileEcsFargateRuntimeConfig(
-        { ...first.runtimeConfig, outputUrl: "https://other.example.com" },
-        {
-          expectedCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint({
-            ...first.runtimeConfig,
-            outputUrl: "https://other.example.com"
-          }),
-          outputs
-        }
-      ),
-    (error: unknown) =>
-      error instanceof EcsFargateOutputReconciliationError &&
-      error.code === "DEPLOYMENT_OUTPUT_URL_CONFLICT"
-  );
 
   assert.throws(
     () =>
@@ -96,6 +79,115 @@ test("ECS target reconciliation stores null, keeps the same URL, and rejects URL
     (error: unknown) =>
       error instanceof EcsFargateOutputReconciliationError &&
       error.code === "DEPLOYMENT_OUTPUT_URL_CONFLICT"
+  );
+});
+
+test("ECS target reconciliation accepts a new Terraform task definition revision", () => {
+  const initial = {
+    runtimeTargetKind: "ecs_fargate" as const,
+    codeBuildProjectName: "app-build",
+    ecrRepositoryName: "app",
+    clusterName: "app-cluster",
+    serviceName: "app-service",
+    containerName: "web",
+    outputUrl: null
+  };
+  const initialOutputs = resolveEcsFargateRuntimeOutputs(createTerraformOutputs());
+  const current = reconcileEcsFargateRuntimeConfig(initial, {
+    expectedCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(initial),
+    outputs: initialOutputs
+  }).runtimeConfig;
+  const nextTaskDefinitionArn =
+    "arn:aws:ecs:ap-northeast-2:131404649047:task-definition/app-task:2";
+
+  const result = reconcileEcsFargateRuntimeConfig(current, {
+    expectedCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(current),
+    outputs: { ...initialOutputs, taskDefinitionArn: nextTaskDefinitionArn }
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.runtimeConfig.taskDefinitionArn, nextTaskDefinitionArn);
+});
+
+test("ECS target reconciliation accepts state-verified Terraform resource replacements", () => {
+  const initial = {
+    runtimeTargetKind: "ecs_fargate" as const,
+    codeBuildProjectName: "app-build",
+    ecrRepositoryName: "app",
+    clusterName: "app-cluster",
+    serviceName: "app-service",
+    containerName: "web",
+    outputUrl: null
+  };
+  const initialOutputs = resolveEcsFargateRuntimeOutputs(createTerraformOutputs());
+  const current = reconcileEcsFargateRuntimeConfig(initial, {
+    expectedCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(initial),
+    outputs: initialOutputs
+  }).runtimeConfig;
+  const replacementOutputs = resolveEcsFargateRuntimeOutputs(
+    createTerraformOutputs({
+      static_bucket_name: { value: "replacement-web-assets" },
+      cloudfront_distribution_id: { value: "E0987654321" },
+      cloudfront_domain_name: { value: "d222222abcdef8.cloudfront.net" },
+      cloudfront_url: { value: "https://d222222abcdef8.cloudfront.net" },
+      alb_arn: {
+        value:
+          "arn:aws:elasticloadbalancing:ap-northeast-2:131404649047:loadbalancer/app/replacement/2"
+      },
+      alb_dns_name: { value: "replacement.ap-northeast-2.elb.amazonaws.com" },
+      target_group_arn: {
+        value: "arn:aws:elasticloadbalancing:ap-northeast-2:131404649047:targetgroup/replacement/2"
+      },
+      api_origin_url: { value: "http://replacement.ap-northeast-2.elb.amazonaws.com" }
+    })
+  );
+
+  assert.doesNotThrow(() =>
+    assertEcsFargateRuntimeInventory(
+      replacementOutputs,
+      createTerraformResources(replacementOutputs),
+      { accountId: "131404649047", region: "ap-northeast-2" }
+    )
+  );
+
+  const result = reconcileEcsFargateRuntimeConfig(current, {
+    expectedCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(current),
+    outputs: replacementOutputs
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.runtimeConfig.outputUrl, replacementOutputs.outputUrl);
+  assert.equal(result.runtimeConfig.targetGroupArn, replacementOutputs.targetGroupArn);
+  assert.equal(result.runtimeConfig.loadBalancerArn, replacementOutputs.loadBalancerArn);
+  assert.equal(result.runtimeConfig.frontendBucketName, replacementOutputs.frontendBucketName);
+  assert.equal(
+    result.runtimeConfig.cloudFrontDistributionId,
+    replacementOutputs.cloudFrontDistributionId
+  );
+});
+
+test("ECS target reconciliation identifies the conflicting Terraform output field", () => {
+  const current = {
+    runtimeTargetKind: "ecs_fargate" as const,
+    codeBuildProjectName: "app-build",
+    ecrRepositoryName: "app",
+    clusterName: "app-cluster",
+    serviceName: "app-service",
+    containerName: "web",
+    outputUrl: null
+  };
+  const outputs = resolveEcsFargateRuntimeOutputs(createTerraformOutputs());
+
+  assert.throws(
+    () =>
+      reconcileEcsFargateRuntimeConfig(current, {
+        expectedCoordinatesFingerprint: createEcsFargateRuntimeCoordinatesFingerprint(current),
+        outputs: { ...outputs, serviceName: "other-service" }
+      }),
+    (error: unknown) =>
+      error instanceof EcsFargateOutputReconciliationError &&
+      error.code === "DEPLOYMENT_OUTPUT_URL_CONFLICT" &&
+      /serviceName/u.test(error.message)
   );
 });
 
@@ -128,7 +220,9 @@ test("ECS output resolver rejects missing, sensitive, non-string, and unsafe api
     },
     {
       name: "credential",
-      outputs: createTerraformOutputs({ cloudfront_url: { value: "https://user:pass@example.com" } })
+      outputs: createTerraformOutputs({
+        cloudfront_url: { value: "https://user:pass@example.com" }
+      })
     },
     {
       name: "query",
@@ -242,17 +336,14 @@ function createTerraformOutputs(
     ecs_cluster_name: "app-cluster",
     ecs_service_name: "app-service",
     ecs_task_definition_family: "app-task",
-    ecs_task_definition_arn:
-      "arn:aws:ecs:ap-northeast-2:131404649047:task-definition/app-task:1",
+    ecs_task_definition_arn: "arn:aws:ecs:ap-northeast-2:131404649047:task-definition/app-task:1",
     ecs_task_role_arn: "arn:aws:iam::131404649047:role/app-task-role",
     ecs_execution_role_arn: "arn:aws:iam::131404649047:role/app-execution-role",
     ecs_container_name: "web",
     ecs_container_port: 3000,
-    alb_arn:
-      "arn:aws:elasticloadbalancing:ap-northeast-2:131404649047:loadbalancer/app/demo/1",
+    alb_arn: "arn:aws:elasticloadbalancing:ap-northeast-2:131404649047:loadbalancer/app/demo/1",
     alb_dns_name: "demo.ap-northeast-2.elb.amazonaws.com",
-    target_group_arn:
-      "arn:aws:elasticloadbalancing:ap-northeast-2:131404649047:targetgroup/demo/1",
+    target_group_arn: "arn:aws:elasticloadbalancing:ap-northeast-2:131404649047:targetgroup/demo/1",
     api_origin_url: "http://demo.ap-northeast-2.elb.amazonaws.com",
     log_group_names: ["/ecs/demo"]
   };

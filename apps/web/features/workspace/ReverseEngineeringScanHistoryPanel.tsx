@@ -1,4 +1,5 @@
 import type { ReverseEngineeringScan } from "@sketchcatch/types";
+import React from "react";
 import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringScanHistoryPanelProps = {
@@ -50,6 +51,7 @@ export function ReverseEngineeringScanHistoryPanel({
               <strong>{formatScanLabel(scan)}</strong>
               <span>
                 {scan.status} · {scan.region} · {scan.resourceTypes.join(", ")}
+                {scan.awsConnectionId === null ? " · 연결 삭제됨" : ""}
               </span>
               {scan.status === "running" ? (
                 <button

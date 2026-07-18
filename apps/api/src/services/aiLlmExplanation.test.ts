@@ -3,6 +3,7 @@ import test from "node:test";
 import type { AiProviderAttempt, LlmExplanationTarget } from "@sketchcatch/types";
 import {
   createAiProviderBackedLlmExplanation,
+  resolveAiProviderRegions,
   type AiCreditPolicy,
   type AiProviderLimits,
   type AiTextProvider,
@@ -50,6 +51,22 @@ const TERRAFORM_PREVIEW_INPUT: LlmExplanationInput = {
     consensusRecommendation: "배포 전 검토를 계속하세요."
   }
 };
+
+test("Amazon Q uses its supported default region independently from the primary AWS region", () => {
+  assert.deepEqual(resolveAiProviderRegions({ AWS_REGION: "ap-northeast-2" }), {
+    bedrockRegion: "ap-northeast-2",
+    amazonQRegion: "ap-southeast-2",
+    transcribeRegion: "ap-northeast-2"
+  });
+
+  assert.equal(
+    resolveAiProviderRegions({
+      AWS_REGION: "ap-northeast-2",
+      AMAZON_Q_REGION: "us-east-1"
+    }).amazonQRegion,
+    "us-east-1"
+  );
+});
 
 test("Terraform error explanation skips an unavailable Amazon Q provider and succeeds with Bedrock", async () => {
   const calls: string[] = [];

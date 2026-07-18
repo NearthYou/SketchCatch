@@ -7,6 +7,10 @@ import type {
   AwsConnectionRecord,
   AwsConnectionRepository
 } from "../aws-connections/aws-connection-service.js";
+import type {
+  AwsCodeConnectionRecord,
+  AwsCodeConnectionRepository
+} from "../aws-connections/aws-codeconnection-service.js";
 import { registerAwsConnectionRoutes } from "./aws-connections.js";
 
 process.env.NODE_ENV = "test";
@@ -37,8 +41,9 @@ test("AWS connection DELETE performs no managed cleanup without preview confirma
   await registerAwsConnectionRoutes(app, {
     getDatabaseClient: () => createAuthDatabaseClient(),
     createAwsConnectionRepository: () => repository,
-    cleanupManagedAwsResources: async () => {
+    cleanupManagedAwsResources: async ({ resources }) => {
       cleanupCalls += 1;
+      assert.equal(resources.codeConnectionArn, null);
     }
   });
   const headers = { authorization: `Bearer ${await createAccessToken(userId)}` };
@@ -61,11 +66,13 @@ test("AWS connection DELETE performs no managed cleanup without preview confirma
   const preview = previewResponse.json<{
     canDelete: boolean;
     confirmationToken: string;
-    managedResources: { codeBuildProjects: unknown[]; codeConnection: boolean };
+    managedResources: { codeBuildProjects: unknown[] };
+    preservedRecords: { reverseEngineeringScans: number };
   }>();
   assert.equal(preview.canDelete, true);
   assert.equal(preview.managedResources.codeBuildProjects.length, 1);
-  assert.equal(preview.managedResources.codeConnection, true);
+  assert.equal("codeConnection" in preview.managedResources, false);
+  assert.deepEqual(preview.preservedRecords, { reverseEngineeringScans: 2 });
 
   const confirmed = await app.inject({
     method: "DELETE",
@@ -79,6 +86,68 @@ test("AWS connection DELETE performs no managed cleanup without preview confirma
   assert.equal(confirmed.statusCode, 204);
   assert.equal(claimCalls, 1);
   assert.equal(cleanupCalls, 1);
+
+  await app.close();
+});
+
+test("GitHub build disconnect returns 204 when remote AWS cleanup fails", async () => {
+  const now = new Date("2026-07-18T00:00:00.000Z");
+  let record: AwsCodeConnectionRecord | undefined = {
+    id: "33333333-3333-4333-8333-333333333333",
+    awsConnectionId: connectionId,
+    connectionArn:
+      "arn:aws:codeconnections:ap-northeast-2:123456789012:connection/demo",
+    providerType: "GitHub",
+    status: "AVAILABLE",
+    statusReason: null,
+    createdAt: now,
+    updatedAt: now
+  };
+  const repository = {
+    async findVerifiedConnection() {
+      return createConnectionRecord();
+    },
+    async findByAwsConnectionId() {
+      return record;
+    },
+    async findManagedResources() {
+      return {
+        codeBuildProjects: [],
+        codeConnectionArn: record?.connectionArn ?? null
+      };
+    },
+    async claimDeletion() {
+      if (!record) return "not_found" as const;
+      record = { ...record, status: "DELETING", updatedAt: now };
+      return "claimed" as const;
+    },
+    async completeDeletion() {
+      record = undefined;
+      return true;
+    },
+    async markDeletionFailed() {
+      throw new Error("local deletion must not be rolled back for an AWS cleanup failure");
+    }
+  } as unknown as AwsCodeConnectionRepository;
+  const app = Fastify();
+  await registerAwsConnectionRoutes(app, {
+    getDatabaseClient: () => createAuthDatabaseClient(),
+    createAwsCodeConnectionRepository: () => repository,
+    cleanupManagedAwsResources: async () => {
+      throw new Error("remote AWS cleanup failed");
+    },
+    now: () => now
+  });
+
+  const response = await app.inject({
+    method: "DELETE",
+    url: `/aws/connections/${connectionId}/codeconnection`,
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` },
+    payload: { confirmedManagedCleanup: true }
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(record, undefined);
 
   await app.close();
 });
@@ -323,6 +392,9 @@ function createRepository(input: {
     },
     async hasDeploymentUsingAwsConnection() {
       return false;
+    },
+    async countReverseEngineeringScans() {
+      return 2;
     },
     async claimAccessibleAwsConnectionDeletion() {
       return input.onClaim();

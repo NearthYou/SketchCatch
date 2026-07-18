@@ -11,7 +11,8 @@ import {
   ArchitectureDraftGenerationError,
   createAmazonQArchitectureDraftResponse,
   createArchitectureDraft,
-  createDeterministicArchitectureIntentPlan
+  createDeterministicArchitectureIntentPlan,
+  shouldWarmConfiguredAmazonQArchitectureDraftProvider
 } from "./aiArchitectureDrafts.js";
 import { analyzePreDeployment } from "./aiPreDeploymentAnalysis.js";
 
@@ -595,6 +596,73 @@ test("createAmazonQArchitectureDraftResponse asks the next required website ques
     "대규모 (일 10,000명 이상, 동시 500명 이상)",
     "급변동 (평상시 적지만 이벤트 시 급증)"
   ]);
+});
+
+test("createAmazonQArchitectureDraftResponse asks deterministic clarifications before the Amazon Q availability gate", async () => {
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: "웹 앱 하나 만들고 싶어"
+    },
+    {
+      creditPolicy: {
+        bedrock: false,
+        amazonQ: false,
+        transcribe: false,
+        billingMode: "disabled"
+      }
+    }
+  );
+
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
+  assert.ok((response.suggestions?.length ?? 0) > 0);
+  assert.equal(response.providerMetadata.provider, "fallback");
+});
+
+test("deterministic clarification never claims Amazon Q provenance when credit is unavailable", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return "{}";
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: "웹 앱 하나 만들고 싶어" },
+    {
+      provider,
+      creditPolicy: {
+        bedrock: false,
+        amazonQ: false,
+        transcribe: false,
+        billingMode: "aws_credit_only"
+      }
+    }
+  );
+
+  assert.equal(callCount, 0);
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.providerMetadata.provider, "fallback");
+});
+
+test("configured Amazon Q draft provider only warms after credit approval", () => {
+  assert.equal(
+    shouldWarmConfiguredAmazonQArchitectureDraftProvider({
+      bedrock: false,
+      amazonQ: false,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    }),
+    false
+  );
+  assert.equal(shouldWarmConfiguredAmazonQArchitectureDraftProvider(confirmedCreditPolicy), true);
 });
 
 test("createAmazonQArchitectureDraftResponse treats Play Store app prompts as mobile app backend requests", async () => {
@@ -2338,6 +2406,158 @@ test("createAmazonQArchitectureDraftResponse sizes a large self-managed API serv
       /polling.*cost.*traffic spikes/iu.test(assumption)
     )
   );
+});
+
+test("createAmazonQArchitectureDraftResponse keeps the final self-managed answer when Amazon Q also forbids EC2", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return JSON.stringify({
+      status: "plan",
+      title: "Large Self-managed Mobile API",
+      patternIds: ["multi-az-rds", "alb-asg-ec2"],
+      requiredResources: ["RDS", "S3", "EC2"],
+      forbiddenCapabilities: ["ec2_runtime", "unrelated_capability"],
+      region: "ap-northeast-2",
+      runtimeTopology: {
+        trafficEntry: "LOAD_BALANCER",
+        compute: "EC2",
+        computeCount: 4,
+        placement: "private_subnets",
+        spreadAcrossPrivateSubnets: true,
+        autoScaling: true
+      }
+    });
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: createReportedSelfManagedMobileApiPrompt() },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  const nodes = response.architectureJson.nodes;
+  const edges = response.architectureJson.edges;
+  const loadBalancer = nodes.find((node) => node.type === "LOAD_BALANCER");
+  const listener = nodes.find((node) => node.type === "LOAD_BALANCER_LISTENER");
+  const targetGroup = nodes.find((node) => node.type === "LOAD_BALANCER_TARGET_GROUP");
+  const autoScalingGroup = nodes.find((node) => node.type === "AUTO_SCALING_GROUP");
+  const launchTemplate = nodes.find((node) => node.type === "LAUNCH_TEMPLATE");
+
+  assert.equal(callCount, 1);
+  assert.equal(
+    response.metadata.guardrailWarnings?.some(
+      (warning) => warning.code === "unsupported_requirement_substituted"
+    ) ?? false,
+    false
+  );
+  assert.equal(nodes.filter((node) => node.type === "EC2").length, 4);
+  assert.equal(
+    Array.isArray(autoScalingGroup?.config.vpcZoneIdentifier)
+      ? autoScalingGroup.config.vpcZoneIdentifier.length
+      : 0,
+    2
+  );
+  assert.equal(
+    Array.isArray(autoScalingGroup?.config.targetGroupArns)
+      ? autoScalingGroup.config.targetGroupArns.length
+      : 0,
+    1
+  );
+  assert.equal(
+    (launchTemplate?.config.metadataOptions as { httpTokens?: unknown } | undefined)?.httpTokens,
+    "required"
+  );
+  assert.equal(typeof launchTemplate?.config.iamInstanceProfile, "object");
+  assert.ok(
+    edges.some(
+      (edge) => edge.sourceId === loadBalancer?.id && edge.targetId === listener?.id
+    )
+  );
+  assert.ok(
+    edges.some(
+      (edge) => edge.sourceId === listener?.id && edge.targetId === targetGroup?.id
+    )
+  );
+  assert.ok(
+    edges.some(
+      (edge) => edge.sourceId === targetGroup?.id && edge.targetId === autoScalingGroup?.id
+    )
+  );
+});
+
+test("createAmazonQArchitectureDraftResponse keeps an explicit EC2 opt-out after a self-managed answer", async () => {
+  const provider = createFakeAmazonQProvider(() =>
+    JSON.stringify({
+      status: "plan",
+      title: "EC2-free Mobile API",
+      patternIds: ["serverless-api", "multi-az-rds"],
+      requiredResources: ["API_GATEWAY_REST_API", "LAMBDA", "RDS", "S3"],
+      forbiddenCapabilities: ["ec2_runtime"],
+      region: "ap-northeast-2"
+    })
+  );
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: `${createReportedSelfManagedMobileApiPrompt()}\n\n추가 요구사항: EC2 사용 안 함`
+    },
+    { provider, creditPolicy: confirmedCreditPolicy }
+  );
+
+  if ("status" in response) {
+    assert.fail(`Expected preview, got clarification: ${response.question}`);
+  }
+
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === "EC2"), false);
+  assert.equal(response.architectureJson.nodes.some((node) => node.type === "LAMBDA"), true);
+});
+
+test("createAmazonQArchitectureDraftResponse treats equivalent future multi-region wording as roadmap only", async () => {
+  const scopeAnswers = [
+    "MVP는 단일 리전으로 시작하고 향후 다중 리전으로 확장",
+    "MVP is single region, future multi-region expansion"
+  ];
+
+  for (const scopeAnswer of scopeAnswers) {
+    const provider = createFakeAmazonQProvider(() =>
+      JSON.stringify({
+        status: "plan",
+        title: "Large Self-managed Mobile API",
+        patternIds: ["multi-az-rds", "alb-asg-ec2"],
+        requiredResources: ["RDS", "S3", "EC2"],
+        region: "ap-northeast-2",
+        runtimeTopology: {
+          trafficEntry: "LOAD_BALANCER",
+          compute: "EC2",
+          computeCount: 4,
+          placement: "private_subnets",
+          spreadAcrossPrivateSubnets: true,
+          autoScaling: true
+        }
+      })
+    );
+
+    const response = await createAmazonQArchitectureDraftResponse(
+      { prompt: createReportedSelfManagedMobileApiPrompt(scopeAnswer) },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+
+    if ("status" in response) {
+      assert.fail(`Expected preview, got clarification: ${response.question}`);
+    }
+
+    assert.equal(
+      response.metadata.guardrailWarnings?.some(
+        (warning) => warning.code === "unsupported_requirement_substituted"
+      ) ?? false,
+      false,
+      scopeAnswer
+    );
+  }
 });
 
 test("createAmazonQArchitectureDraftResponse lets low-budget DB-free API answers override earlier data sizing", async () => {
@@ -5788,6 +6008,28 @@ function createKoreanApiServerPollingQuestionnairePrompt(): string {
     "downtime tolerance: monthly 1 hour within 99.9 availability",
     "realtime notification transport: simple polling with cost warning"
   ].join("\n");
+}
+
+function createReportedSelfManagedMobileApiPrompt(
+  globalScopeAnswer = "MVP는 단일 리전, 추후 다중 리전 확장 경고 표시"
+): string {
+  return [
+    "웹사이트 배포하고 싶어",
+    "어떤 종류의 웹사이트인가요?: API 서버 (모바일 앱 백엔드)",
+    "예상 트래픽 규모는?: 대규모 (일 10,000명 이상, 동시 500명 이상)",
+    "데이터베이스가 필요한가요?: 중간 규모 데이터 (10GB ~ 100GB)",
+    "주요 사용자 지역은?: 글로벌 (미국, 유럽 포함)",
+    "월 예산 범위는?: 50-200만원 (고성능)",
+    "SSL 인증서(HTTPS)가 필요한가요?: 모르겠음 (추천해주세요)",
+    "파일 업로드 기능이 있나요? (이미지, 문서 등): 다양한 파일 (문서, 동영상 포함)",
+    "실시간 기능이 필요한가요? (채팅, 알림 등): 실시간 알림",
+    "관리 복잡도 선호도는?: 직접 관리 (서버 직접 운영)",
+    "페이지 로딩 시간 목표는?: 5초 이내 (느려도 괜찮음)",
+    "트래픽 패턴은?: 이벤트성 급증 (특정 시기에만)",
+    "서비스 중단 허용 시간은?: 상관없음",
+    `글로벌 사용자와 1초 로딩 목표를 어떤 범위로 설계할까요?: ${globalScopeAnswer}`,
+    "실시간 알림은 어떤 방식으로 표현할까요?: SSE 단방향 알림 경로"
+  ].join("\n\n");
 }
 
 function createKoreanLowBudgetDbFreeApiQuestionnairePrompt(): string {

@@ -67,7 +67,6 @@ import type {
   GitCicdHandoffPipelineStatus,
   GitCicdHandoffPipelineStatusResponse,
   GitCicdHandoffResponse,
-  GitCicdGitHubOAuthStartResponse,
   GitCicdMonitoringConfig,
   GitCicdMonitoringConfigResponse,
   GitCicdPipelineLogListResponse,
@@ -83,7 +82,6 @@ import type {
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
-  GitHubInstallationConnection,
   GitHubInstallationUserAuthorizationUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationsResponse,
@@ -155,7 +153,7 @@ const API_ERROR_CODES = [
   "unauthorized",
   "not_found",
   "conflict",
-  "github_oauth_required",
+  "github_app_permission_required",
   "too_many_requests",
   "unprocessable_entity",
   "bad_gateway",
@@ -1969,34 +1967,6 @@ export async function applyGitCicdRepositorySettings(
   );
 }
 
-export async function createGitCicdGitHubOAuthStartUrl(
-  handoffId: string
-): Promise<GitCicdGitHubOAuthStartResponse> {
-  return apiFetch<GitCicdGitHubOAuthStartResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(handoffId)}/github-oauth/start`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
-export async function applyGitCicdRepositorySettingsWithGitHubOAuth(
-  handoffId: string
-): Promise<GitCicdRepositorySettingsApplyResponse> {
-  return apiFetch<GitCicdRepositorySettingsApplyResponse>(
-    `/git-cicd-handoffs/${encodeURIComponent(
-      handoffId
-    )}/repository-settings/apply-with-github-oauth`,
-    {
-      auth: true,
-      method: "POST",
-      body: {}
-    }
-  );
-}
-
 export async function applyGitCicdAwsRoleDiff(
   handoffId: string
 ): Promise<GitCicdAwsRoleDiffApplyResponse> {
@@ -2076,13 +2046,11 @@ export async function createGitHubAccountInstallUrl(): Promise<GitHubAppInstallU
   });
 }
 
-export async function listGitHubAccountInstallations(): Promise<GitHubInstallationConnection[]> {
-  const response = await apiFetch<ListGitHubInstallationsResponse>(
+export async function listGitHubAccountInstallations(): Promise<ListGitHubInstallationsResponse> {
+  return apiFetch<ListGitHubInstallationsResponse>(
     "/source-repositories/github/installations",
     { auth: true }
   );
-
-  return response.installations;
 }
 
 export async function createGitHubExistingInstallationCallbackUrl(

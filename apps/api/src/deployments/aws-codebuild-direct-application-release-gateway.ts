@@ -573,18 +573,24 @@ async function deployEcsWebTrustedRelease(input: {
       "APPLICATION_RELEASE_CANDIDATE_MISMATCH"
     );
   }
-  const [baseline] = await db
-    .select()
-    .from(applicationReleases)
-    .where(
-      and(
-        eq(applicationReleases.projectId, release.projectId),
-        eq(applicationReleases.runtimeTargetKind, release.runtimeTargetKind),
-        eq(applicationReleases.status, "succeeded")
-      )
-    )
-    .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
-    .limit(1);
+  const [baseline] = release.deploymentTargetFingerprint
+    ? await db
+        .select()
+        .from(applicationReleases)
+        .where(
+          and(
+            eq(applicationReleases.projectId, release.projectId),
+            eq(applicationReleases.runtimeTargetKind, release.runtimeTargetKind),
+            eq(
+              applicationReleases.deploymentTargetFingerprint,
+              release.deploymentTargetFingerprint
+            ),
+            eq(applicationReleases.status, "succeeded")
+          )
+        )
+        .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
+        .limit(1)
+    : [];
   const activationBaselineReleaseId = baseline?.id ?? null;
   if (release.baselineReleaseId !== activationBaselineReleaseId) {
     await db
@@ -621,7 +627,8 @@ async function deployEcsWebTrustedRelease(input: {
   const persistedBaseline = resolvePersistedEcsReleaseBaseline({
     baselineReleaseId: activationBaselineReleaseId,
     baseline,
-    projectId: input.context.deployment.projectId
+    projectId: input.context.deployment.projectId,
+    deploymentTargetFingerprint: release.deploymentTargetFingerprint
   });
   const trustedContext = {
     projectId: input.context.deployment.projectId,
@@ -931,7 +938,8 @@ async function rollbackEcsWebTrustedRelease(input: {
   const persistedBaseline = resolvePersistedEcsReleaseBaseline({
     baselineReleaseId: release.baselineReleaseId,
     baseline,
-    projectId: input.context.deployment.projectId
+    projectId: input.context.deployment.projectId,
+    deploymentTargetFingerprint: release.deploymentTargetFingerprint
   });
   if (!persistedBaseline) {
     throw new DirectApplicationReleaseError(
@@ -1087,11 +1095,13 @@ export function resolvePersistedEcsReleaseBaseline(input: {
         id: string;
         projectId: string;
         runtimeTargetKind: RuntimeTargetKind;
+        deploymentTargetFingerprint: string | null;
         status: ApplicationReleaseStatus;
         providerRevision: ApplicationReleaseProviderRevision | null;
       }
     | undefined;
   projectId: string;
+  deploymentTargetFingerprint: string | null;
 }): TrustedReleaseContext["baseline"] {
   if (!input.baselineReleaseId) return null;
   const baseline = input.baseline;
@@ -1106,6 +1116,15 @@ export function resolvePersistedEcsReleaseBaseline(input: {
   ) {
     throw new DirectApplicationReleaseError(
       "The persisted rollback baseline is missing or no longer valid",
+      "APPLICATION_RELEASE_BASELINE_INVALID"
+    );
+  }
+  if (
+    !input.deploymentTargetFingerprint ||
+    baseline.deploymentTargetFingerprint !== input.deploymentTargetFingerprint
+  ) {
+    throw new DirectApplicationReleaseError(
+      "The persisted rollback baseline belongs to a different deployment target",
       "APPLICATION_RELEASE_BASELINE_INVALID"
     );
   }

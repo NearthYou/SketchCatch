@@ -22,9 +22,7 @@ import {
   releaseCandidates,
   sourceRepositories
 } from "../db/schema.js";
-import {
-  createAwsCodeBuildDirectApplicationReleaseGateway
-} from "../deployments/aws-codebuild-direct-application-release-gateway.js";
+import { createAwsCodeBuildDirectApplicationReleaseGateway } from "../deployments/aws-codebuild-direct-application-release-gateway.js";
 import type {
   ApplicationReleaseRecord,
   ApplicationReleaseExecutionRepository,
@@ -101,19 +99,17 @@ export type GitHubReleaseExecutionRepository = {
     now: Date;
   }): Promise<{ runId: string; projectId: string; releaseId: string } | undefined>;
   findFrontendRetryRelease?(runId: string): Promise<ApplicationReleaseRecord | undefined>;
-  failFrontendRetry?(input: {
-    runId: string;
-    errorSummary: string;
-    now: Date;
-  }): Promise<void>;
-  listInterrupted?(): Promise<ReadonlyArray<{
-    runId: string;
-    projectId: string;
-    pipelineStatus: "queued" | "running";
-    cancellationRequestedAt: Date | null;
-    releaseId?: string | null;
-    releaseStatus?: string | null;
-  }>>;
+  failFrontendRetry?(input: { runId: string; errorSummary: string; now: Date }): Promise<void>;
+  listInterrupted?(): Promise<
+    ReadonlyArray<{
+      runId: string;
+      projectId: string;
+      pipelineStatus: "queued" | "running";
+      cancellationRequestedAt: Date | null;
+      releaseId?: string | null;
+      releaseStatus?: string | null;
+    }>
+  >;
   createApplicationReleaseRepository?(
     context: GitHubReleaseExecutionContext
   ): ApplicationReleaseExecutionRepository;
@@ -132,11 +128,7 @@ export type GitHubReleaseRecoveryController = {
 };
 
 export type GitHubInterruptedCodeBuildController = {
-  stopAndConfirm(input: {
-    runId: string;
-    projectId: string;
-    buildId: string;
-  }): Promise<void>;
+  stopAndConfirm(input: { runId: string; projectId: string; buildId: string }): Promise<void>;
 };
 
 export function createPostgresGitHubReleaseExecutionRepository(
@@ -152,12 +144,7 @@ export function createPostgresGitHubReleaseExecutionRepository(
           startedAt: now,
           lastRefreshedAt: now
         })
-        .where(
-          and(
-            eq(gitCicdPipelineRuns.id, runId),
-            eq(gitCicdPipelineRuns.status, "queued")
-          )
-        )
+        .where(and(eq(gitCicdPipelineRuns.id, runId), eq(gitCicdPipelineRuns.status, "queued")))
         .returning({ id: gitCicdPipelineRuns.id });
       if (!claimed) return undefined;
 
@@ -208,10 +195,7 @@ export function createPostgresGitHubReleaseExecutionRepository(
           projectDeploymentTargets,
           eq(projectDeploymentTargets.projectId, gitCicdPipelineRuns.projectId)
         )
-        .innerJoin(
-          awsConnections,
-          eq(awsConnections.id, projectDeploymentTargets.connectionId)
-        )
+        .innerJoin(awsConnections, eq(awsConnections.id, projectDeploymentTargets.connectionId))
         .where(
           and(
             eq(gitCicdPipelineRuns.id, runId),
@@ -297,9 +281,9 @@ export function createPostgresGitHubReleaseExecutionRepository(
             ? "partially_cancelled"
             : input.result.status === "cancelled"
               ? "cancelled"
-          : input.result.status === "rolled_back"
-            ? "rolled_back"
-            : "succeeded";
+              : input.result.status === "rolled_back"
+                ? "rolled_back"
+                : "succeeded";
       const pipelineStatus =
         input.result.status === "succeeded"
           ? "succeeded"
@@ -313,13 +297,17 @@ export function createPostgresGitHubReleaseExecutionRepository(
             ? "웹 활성화 이후 취소되어 부분 취소로 기록했습니다."
             : input.result.status === "cancelled"
               ? "앱 릴리즈를 안전하게 취소하고 ECS를 복구했습니다."
-          : input.result.status === "partially_failed"
-            ? "API는 배포됐지만 웹 배포 단계가 실패했습니다. 웹 배포만 재시도할 수 있습니다."
-            : "ECS 배포가 실패해 직전 정상 버전으로 복구했습니다.";
+              : input.result.status === "partially_failed"
+                ? "API는 배포됐지만 웹 배포 단계가 실패했습니다. 웹 배포만 재시도할 수 있습니다."
+                : "ECS 배포가 실패해 직전 정상 버전으로 복구했습니다.";
       const values = completionValues(input.result);
       await db.transaction(async (transaction) => {
         if (input.fence) {
-          await requireGitHubExecutionFence(transaction as unknown as Database, input.fence, input.now);
+          await requireGitHubExecutionFence(
+            transaction as unknown as Database,
+            input.fence,
+            input.now
+          );
         }
         const [release] = await transaction
           .select({ id: applicationReleases.id, status: applicationReleases.status })
@@ -370,7 +358,11 @@ export function createPostgresGitHubReleaseExecutionRepository(
     async fail(input) {
       await db.transaction(async (transaction) => {
         if (input.fence) {
-          await requireGitHubExecutionFence(transaction as unknown as Database, input.fence, input.now);
+          await requireGitHubExecutionFence(
+            transaction as unknown as Database,
+            input.fence,
+            input.now
+          );
         }
         await transaction
           .update(applicationReleases)
@@ -444,10 +436,7 @@ export function createPostgresGitHubReleaseExecutionRepository(
             lastRefreshedAt: input.now
           })
           .where(
-            and(
-              eq(gitCicdPipelineRuns.id, input.runId),
-              eq(gitCicdPipelineRuns.status, "failed")
-            )
+            and(eq(gitCicdPipelineRuns.id, input.runId), eq(gitCicdPipelineRuns.status, "failed"))
           )
           .returning({ id: gitCicdPipelineRuns.id });
         return queued
@@ -541,14 +530,16 @@ export function createPostgresGitHubReleaseExecutionRepository(
             eq(gitCicdPipelineRuns.changeScope, "app"),
             inArray(gitCicdPipelineRuns.status, ["queued", "running"])
           )
-        ) as Promise<ReadonlyArray<{
+        ) as Promise<
+        ReadonlyArray<{
           runId: string;
           projectId: string;
           pipelineStatus: "queued" | "running";
           cancellationRequestedAt: Date | null;
           releaseId: string | null;
           releaseStatus: string | null;
-        }>>;
+        }>
+      >;
     },
 
     createApplicationReleaseRepository(context) {
@@ -568,7 +559,9 @@ function createPostgresGitHubApplicationReleaseRepository(
     if (executionId !== context.runId || userId !== context.userId) return undefined;
     return toDirectApplicationReleaseContext(context);
   };
-  const findRelease = async (executionId: string): Promise<ApplicationReleaseRecord | undefined> => {
+  const findRelease = async (
+    executionId: string
+  ): Promise<ApplicationReleaseRecord | undefined> => {
     const [release] = await db
       .select()
       .from(applicationReleases)
@@ -619,18 +612,24 @@ function createPostgresGitHubApplicationReleaseRepository(
             throw new Error("Release candidate changed or expired before activation");
           }
         }
-        const [baseline] = await transaction
-          .select({ id: applicationReleases.id })
-          .from(applicationReleases)
-          .where(
-            and(
-              eq(applicationReleases.projectId, context.projectId),
-              eq(applicationReleases.runtimeTargetKind, input.runtimeTargetKind),
-              eq(applicationReleases.status, "succeeded")
-            )
-          )
-          .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
-          .limit(1);
+        const [baseline] = input.deploymentTargetFingerprint
+          ? await transaction
+              .select({ id: applicationReleases.id })
+              .from(applicationReleases)
+              .where(
+                and(
+                  eq(applicationReleases.projectId, context.projectId),
+                  eq(applicationReleases.runtimeTargetKind, input.runtimeTargetKind),
+                  eq(
+                    applicationReleases.deploymentTargetFingerprint,
+                    input.deploymentTargetFingerprint
+                  ),
+                  eq(applicationReleases.status, "succeeded")
+                )
+              )
+              .orderBy(desc(applicationReleases.completedAt), desc(applicationReleases.createdAt))
+              .limit(1)
+          : [];
         const [saved] = await transaction
           .insert(applicationReleases)
           .values({ ...input, baselineReleaseId: baseline?.id ?? null })
@@ -642,129 +641,153 @@ function createPostgresGitHubApplicationReleaseRepository(
       });
     },
     async saveCompletedRelease(input) {
-      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
-        const [saved] = await executor
-          .update(applicationReleases)
-          .set({
-            runtimeAdapterKind: input.runtimeAdapterKind,
-            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
-            convergenceOutcome: input.convergenceOutcome,
-            providerRevision: input.providerRevision,
-            outputUrl: input.outputUrl,
-            healthEvidence: input.healthEvidence,
-            rollbackEvidence: input.rollbackEvidence,
-            frontendEvidence: input.frontendEvidence ?? null,
-            failureStage: input.failureStage ?? null,
-            status: input.status,
-            completedAt: input.completedAt,
-            updatedAt: input.updatedAt
-          })
-          .where(
-            and(
-              eq(applicationReleases.id, input.releaseId),
-              eq(applicationReleases.pipelineRunId, context.runId),
-              eq(applicationReleases.source, "gitops"),
-              input.status === "rolled_back"
-                ? inArray(applicationReleases.status, ["pending", "succeeded"])
-                : eq(applicationReleases.status, "pending")
+      return saveGitHubReleaseTerminal(
+        db,
+        context,
+        input.updatedAt,
+        input.leaseFence,
+        async (executor) => {
+          const [saved] = await executor
+            .update(applicationReleases)
+            .set({
+              runtimeAdapterKind: input.runtimeAdapterKind,
+              deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+              convergenceOutcome: input.convergenceOutcome,
+              providerRevision: input.providerRevision,
+              outputUrl: input.outputUrl,
+              healthEvidence: input.healthEvidence,
+              rollbackEvidence: input.rollbackEvidence,
+              frontendEvidence: input.frontendEvidence ?? null,
+              failureStage: input.failureStage ?? null,
+              status: input.status,
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.pipelineRunId, context.runId),
+                eq(applicationReleases.source, "gitops"),
+                input.status === "rolled_back"
+                  ? inArray(applicationReleases.status, ["pending", "succeeded"])
+                  : eq(applicationReleases.status, "pending")
+              )
             )
-          )
-          .returning();
-        if (!saved) throw new Error("GitHub application release terminal state was not saved");
-        return saved;
-      });
+            .returning();
+          if (!saved) throw new Error("GitHub application release terminal state was not saved");
+          return saved;
+        }
+      );
     },
     async saveFailedRelease(input) {
-      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
-        const [saved] = await executor
-          .update(applicationReleases)
-          .set({
-            status: "failed",
-            healthEvidence: { state: "failed" },
-            completedAt: input.completedAt,
-            updatedAt: input.updatedAt
-          })
-          .where(
-            and(
-              eq(applicationReleases.id, input.releaseId),
-              eq(applicationReleases.pipelineRunId, context.runId),
-              eq(applicationReleases.source, "gitops"),
-              inArray(applicationReleases.status, ["pending", "partially_failed"])
+      return saveGitHubReleaseTerminal(
+        db,
+        context,
+        input.updatedAt,
+        input.leaseFence,
+        async (executor) => {
+          const [saved] = await executor
+            .update(applicationReleases)
+            .set({
+              status: "failed",
+              healthEvidence: { state: "failed" },
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.pipelineRunId, context.runId),
+                eq(applicationReleases.source, "gitops"),
+                inArray(applicationReleases.status, ["pending", "partially_failed"])
+              )
             )
-          )
-          .returning();
-        if (!saved) throw new Error("Failed GitHub application release was not saved");
-        return saved;
-      });
+            .returning();
+          if (!saved) throw new Error("Failed GitHub application release was not saved");
+          return saved;
+        }
+      );
     },
     async savePartialRelease(input) {
-      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
-        const [saved] = await executor
-          .update(applicationReleases)
-          .set({
-            runtimeAdapterKind: input.runtimeAdapterKind,
-            deploymentTargetFingerprint: input.deploymentTargetFingerprint,
-            convergenceOutcome: input.convergenceOutcome,
-            providerRevision: input.providerRevision,
-            outputUrl: input.outputUrl,
-            healthEvidence: input.healthEvidence,
-            frontendEvidence: input.frontendEvidence,
-            failureStage: input.failureStage,
-            status: "partially_failed",
-            completedAt: input.completedAt,
-            updatedAt: input.updatedAt
-          })
-          .where(
-            and(
-              eq(applicationReleases.id, input.releaseId),
-              eq(applicationReleases.pipelineRunId, context.runId),
-              eq(applicationReleases.source, "gitops"),
-              eq(applicationReleases.status, "pending")
+      return saveGitHubReleaseTerminal(
+        db,
+        context,
+        input.updatedAt,
+        input.leaseFence,
+        async (executor) => {
+          const [saved] = await executor
+            .update(applicationReleases)
+            .set({
+              runtimeAdapterKind: input.runtimeAdapterKind,
+              deploymentTargetFingerprint: input.deploymentTargetFingerprint,
+              convergenceOutcome: input.convergenceOutcome,
+              providerRevision: input.providerRevision,
+              outputUrl: input.outputUrl,
+              healthEvidence: input.healthEvidence,
+              frontendEvidence: input.frontendEvidence,
+              failureStage: input.failureStage,
+              status: "partially_failed",
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.pipelineRunId, context.runId),
+                eq(applicationReleases.source, "gitops"),
+                eq(applicationReleases.status, "pending")
+              )
             )
-          )
-          .returning();
-        if (!saved) throw new Error("Partial GitHub application release was not saved");
-        return saved;
-      });
+            .returning();
+          if (!saved) throw new Error("Partial GitHub application release was not saved");
+          return saved;
+        }
+      );
     },
     async saveCancelledRelease(input) {
-      return saveGitHubReleaseTerminal(db, context, input.updatedAt, input.leaseFence, async (executor) => {
-        const [saved] = await executor
-          .update(applicationReleases)
-          .set({
-            status: input.status,
-            ...(input.runtimeAdapterKind ? { runtimeAdapterKind: input.runtimeAdapterKind } : {}),
-            ...(input.deploymentTargetFingerprint
-              ? { deploymentTargetFingerprint: input.deploymentTargetFingerprint }
-              : {}),
-            ...(input.convergenceOutcome !== undefined
-              ? { convergenceOutcome: input.convergenceOutcome }
-              : {}),
-            ...(input.providerRevision ? { providerRevision: input.providerRevision } : {}),
-            ...(input.outputUrl ? { outputUrl: input.outputUrl } : {}),
-            ...(input.healthEvidence ? { healthEvidence: input.healthEvidence } : {}),
-            ...(input.rollbackEvidence !== undefined
-              ? { rollbackEvidence: input.rollbackEvidence }
-              : {}),
-            ...(input.frontendEvidence !== undefined
-              ? { frontendEvidence: input.frontendEvidence }
-              : {}),
-            ...(input.failureStage !== undefined ? { failureStage: input.failureStage } : {}),
-            completedAt: input.completedAt,
-            updatedAt: input.updatedAt
-          })
-          .where(
-            and(
-              eq(applicationReleases.id, input.releaseId),
-              eq(applicationReleases.pipelineRunId, context.runId),
-              eq(applicationReleases.source, "gitops"),
-              inArray(applicationReleases.status, ["pending", "partially_cancelled"])
+      return saveGitHubReleaseTerminal(
+        db,
+        context,
+        input.updatedAt,
+        input.leaseFence,
+        async (executor) => {
+          const [saved] = await executor
+            .update(applicationReleases)
+            .set({
+              status: input.status,
+              ...(input.runtimeAdapterKind ? { runtimeAdapterKind: input.runtimeAdapterKind } : {}),
+              ...(input.deploymentTargetFingerprint
+                ? { deploymentTargetFingerprint: input.deploymentTargetFingerprint }
+                : {}),
+              ...(input.convergenceOutcome !== undefined
+                ? { convergenceOutcome: input.convergenceOutcome }
+                : {}),
+              ...(input.providerRevision ? { providerRevision: input.providerRevision } : {}),
+              ...(input.outputUrl ? { outputUrl: input.outputUrl } : {}),
+              ...(input.healthEvidence ? { healthEvidence: input.healthEvidence } : {}),
+              ...(input.rollbackEvidence !== undefined
+                ? { rollbackEvidence: input.rollbackEvidence }
+                : {}),
+              ...(input.frontendEvidence !== undefined
+                ? { frontendEvidence: input.frontendEvidence }
+                : {}),
+              ...(input.failureStage !== undefined ? { failureStage: input.failureStage } : {}),
+              completedAt: input.completedAt,
+              updatedAt: input.updatedAt
+            })
+            .where(
+              and(
+                eq(applicationReleases.id, input.releaseId),
+                eq(applicationReleases.pipelineRunId, context.runId),
+                eq(applicationReleases.source, "gitops"),
+                inArray(applicationReleases.status, ["pending", "partially_cancelled"])
+              )
             )
-          )
-          .returning();
-        if (!saved) throw new Error("Cancelled GitHub application release was not saved");
-        return saved;
-      });
+            .returning();
+          if (!saved) throw new Error("Cancelled GitHub application release was not saved");
+          return saved;
+        }
+      );
     },
     async resetReleaseForRetry(input) {
       const [saved] = await db
@@ -827,29 +850,31 @@ function toDirectApplicationReleaseContext(
   };
 }
 
-export function createGitHubReleaseRunExecutor(options: {
-  db?: Database;
-  repository?: GitHubReleaseExecutionRepository;
-  gateway?: DirectApplicationReleaseGateway;
-  applicationReleaseRepositoryFactory?: (
-    context: GitHubReleaseExecutionContext
-  ) => ApplicationReleaseExecutionRepository;
-  executionLeaseRepository?: ProjectExecutionLeaseRepository;
-  recoveryController?: GitHubReleaseRecoveryController;
-  interruptedCodeBuildController?: GitHubInterruptedCodeBuildController;
-  workerDispatcher?: GitHubReleaseWorkerDispatcher;
-  dispatchToWorker?: boolean;
-  leaseHeartbeatIntervalMs?: number;
-  now?: () => Date;
-} = {}): GitHubReleaseRunExecutor & {
+export function createGitHubReleaseRunExecutor(
+  options: {
+    db?: Database;
+    repository?: GitHubReleaseExecutionRepository;
+    gateway?: DirectApplicationReleaseGateway;
+    applicationReleaseRepositoryFactory?: (
+      context: GitHubReleaseExecutionContext
+    ) => ApplicationReleaseExecutionRepository;
+    executionLeaseRepository?: ProjectExecutionLeaseRepository;
+    recoveryController?: GitHubReleaseRecoveryController;
+    interruptedCodeBuildController?: GitHubInterruptedCodeBuildController;
+    workerDispatcher?: GitHubReleaseWorkerDispatcher;
+    dispatchToWorker?: boolean;
+    leaseHeartbeatIntervalMs?: number;
+    now?: () => Date;
+  } = {}
+): GitHubReleaseRunExecutor & {
   executeNow(runId: string): Promise<void>;
   executeFrontendRetryNow(runId: string): Promise<void>;
   recoverInterruptedRuns(runId?: string): Promise<void>;
 } {
   const defaultDb = options.db ?? (options.repository ? undefined : getDatabaseClient().db);
-  const shouldDispatchToWorker =
-    options.dispatchToWorker ?? options.repository === undefined;
-  const repository = options.repository ?? createPostgresGitHubReleaseExecutionRepository(defaultDb!);
+  const shouldDispatchToWorker = options.dispatchToWorker ?? options.repository === undefined;
+  const repository =
+    options.repository ?? createPostgresGitHubReleaseExecutionRepository(defaultDb!);
   const executionLeaseRepository =
     options.executionLeaseRepository ??
     (defaultDb ? createPostgresProjectExecutionLeaseRepository(defaultDb) : undefined);
@@ -870,9 +895,7 @@ export function createGitHubReleaseRunExecutor(options: {
       : undefined);
   const interruptedCodeBuildController =
     options.interruptedCodeBuildController ??
-    (defaultDb
-      ? createGitHubInterruptedCodeBuildController({ db: defaultDb, now })
-      : undefined);
+    (defaultDb ? createGitHubInterruptedCodeBuildController({ db: defaultDb, now }) : undefined);
   const workerDispatcher =
     options.workerDispatcher ??
     (shouldDispatchToWorker && defaultDb && getDeploymentWorkerMode() === "ecs"
@@ -964,9 +987,7 @@ export function createGitHubReleaseRunExecutor(options: {
       }
       await repository.fail({
         runId,
-        errorSummary: cancelled
-          ? "GitHub 앱 릴리즈가 취소됐습니다."
-          : safeErrorSummary(error),
+        errorSummary: cancelled ? "GitHub 앱 릴리즈가 취소됐습니다." : safeErrorSummary(error),
         cancelled,
         now: now(),
         ...(fence ? { fence } : {})
@@ -1111,9 +1132,7 @@ export function createGitHubReleaseRunExecutor(options: {
     lease: ProjectExecutionLeaseRecord;
   }): Promise<void> => {
     if (!workerDispatcher || !executionLeaseRepository) {
-      throw new Error(
-        "신뢰된 GitHub 릴리즈 워커가 설정되지 않아 실행을 시작하지 않았습니다."
-      );
+      throw new Error("신뢰된 GitHub 릴리즈 워커가 설정되지 않아 실행을 시작하지 않았습니다.");
     }
     const dispatched = await workerDispatcher.dispatch({
       runId: input.run.runId,
@@ -1173,10 +1192,7 @@ export function createGitHubReleaseRunExecutor(options: {
       throw new Error("GitHub 웹 재시도 프로젝트 실행 잠금 저장소가 준비되지 않았습니다.");
     }
     const existing = await executionLeaseRepository.find(run.projectId);
-    if (
-      existing?.status === "active" &&
-      existing.holderId !== run.releaseId
-    ) {
+    if (existing?.status === "active" && existing.holderId !== run.releaseId) {
       throw new Error("다른 배포 실행이 프로젝트 실행 잠금을 사용 중입니다.");
     }
     const acquired = await acquireProjectExecutionLease(
@@ -1540,11 +1556,7 @@ async function findOwnedGitHubFence(
 ): Promise<GitHubExecutionFence | undefined> {
   if (!repository) return undefined;
   const lease = await repository.find(projectId);
-  if (
-    lease?.status !== "active" ||
-    lease.holderId !== holderId ||
-    lease.expiresAt <= now
-  ) {
+  if (lease?.status !== "active" || lease.holderId !== holderId || lease.expiresAt <= now) {
     return undefined;
   }
   return {

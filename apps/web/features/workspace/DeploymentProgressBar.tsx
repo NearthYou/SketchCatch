@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Deployment, DeploymentLog } from "@sketchcatch/types";
+import { Code2 } from "lucide-react";
 import {
   advanceDisplayedDeploymentProgress,
   getDeploymentProgress,
@@ -81,26 +82,33 @@ export function DeploymentProgressBar({
     return () => window.clearInterval(intervalId);
   }, [hasProgress, progressRunKey, targetPercent]);
 
-  const displayedPercent =
-    displayedProgress.key === progressRunKey ? displayedProgress.percent : 0;
+  const displayedPercent = displayedProgress.key === progressRunKey ? displayedProgress.percent : 0;
 
   if (!progress) {
     return null;
   }
 
   return (
-    <section className={styles.deploymentProgress} aria-live="polite">
-      <strong>{progress.title}</strong>
-      <div
-        aria-label={`${progress.title} 예상 진행률`}
-        aria-valuemax={100}
-        aria-valuemin={0}
-        aria-valuenow={displayedPercent}
-        aria-valuetext={`${displayedPercent}% · ${progress.detail}`}
-        className={styles.deploymentProgressTrack}
-        role="progressbar"
-      >
-        <span style={{ width: `${displayedPercent}%` }} />
+    <section className={styles.deploymentExecutionPanel} aria-live="polite">
+      <div className={styles.deploymentExecutionIcon} aria-hidden="true">
+        <Code2 size={26} />
+      </div>
+      <div className={styles.deploymentExecutionBody}>
+        <div>
+          <strong>{progress.title}</strong>
+          <p>{progress.detail}</p>
+        </div>
+        <div
+          aria-label={`${progress.title} 예상 진행률`}
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={displayedPercent}
+          aria-valuetext={`${displayedPercent}% · ${progress.detail}`}
+          className={styles.deploymentProgressTrack}
+          role="progressbar"
+        >
+          <span style={{ width: `${displayedPercent}%` }} />
+        </div>
       </div>
       <output aria-label="예상 진행률">{displayedPercent}%</output>
     </section>

@@ -557,9 +557,10 @@ export const reverseEngineeringScans = pgTable(
     projectId: varchar("project_id", { length: 36 })
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    awsConnectionId: varchar("aws_connection_id", { length: 36 })
-      .notNull()
-      .references(() => awsConnections.id, { onDelete: "restrict" }),
+    awsConnectionId: varchar("aws_connection_id", { length: 36 }).references(
+      () => awsConnections.id,
+      { onDelete: "set null" }
+    ),
     provider: varchar("provider", { length: 32 }).notNull().default("aws"),
     region: varchar("region", { length: 32 }).notNull(),
     resourceTypes: jsonb("resource_types").$type<ReverseEngineeringResourceSelection[]>().notNull(),
@@ -1039,7 +1040,7 @@ export const gitCicdHandoffs = pgTable(
     repositorySettingsPreview:
       jsonb("repository_settings_preview").$type<GitCicdRepositorySettingsPreview>(),
     awsRoleDiff: jsonb("aws_role_diff").$type<GitCicdAwsRoleDiff>(),
-    githubOAuthRequired: boolean("github_oauth_required").notNull().default(true),
+    githubAppPermissionRequired: boolean("github_oauth_required").notNull().default(true),
     status: gitCicdHandoffStatusEnum("status").notNull().default("draft"),
     statusMessage: text("status_message"),
     userAcceptedChangeId: varchar("user_accepted_change_id", { length: 128 }).notNull(),

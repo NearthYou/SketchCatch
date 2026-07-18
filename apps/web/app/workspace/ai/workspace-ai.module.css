@@ -25,6 +25,7 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   min-width: 0;
   padding: 0 20px;
+  position: relative;
 }
 
 .topBarBrand,
@@ -55,7 +56,7 @@
   justify-content: flex-end;
 }
 
-.topBarState > span {
+.topBarState > .stageBadge {
   align-items: center;
   background: var(--ai-surface);
   border: 1px solid var(--ai-line);
@@ -68,7 +69,7 @@
   padding: 6px 10px;
 }
 
-.topBarState > span::before {
+.topBarState > .stageBadge::before {
   background: #171717;
   border-radius: 50%;
   content: "";
@@ -99,25 +100,102 @@
   opacity: 0.4;
 }
 
+.topBarState > .mobilePreviewTrigger {
+  display: none;
+}
+
+.topBarState > .mobileBackToConversation {
+  display: none;
+}
+
+.topBarState > .topBarApply {
+  align-items: center;
+  background: #171717;
+  color: #ffffff;
+  display: inline-flex;
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.topBarState > .topBarApply:hover,
+.topBarState > .topBarApply:focus-visible {
+  background: #303030;
+  color: #ffffff;
+}
+
+.topBarApplyShortLabel {
+  display: none;
+}
+
+.topBarApplyError {
+  background: #fff5f3;
+  border: 1px solid #efc9c2;
+  border-radius: 9px;
+  color: #8d2f25;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  line-height: 1.45;
+  max-width: min(360px, calc(100vw - 28px));
+  padding: 8px 10px;
+  position: absolute;
+  right: 20px;
+  top: 54px;
+  z-index: 30;
+}
+
 .splitLayout {
-  display: grid;
-  grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);
+  isolation: isolate;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.splitLayoutConversation {
+  --conversation-dock-left: 18px;
+  --conversation-dock-width: min(calc(100% - 36px), clamp(640px, 64vw, 960px));
+  --conversation-side-gap: 16px;
+  --orbit-center-x: calc(
+    var(--conversation-dock-left) + var(--conversation-dock-width) + clamp(88px, 9vw, 148px)
+  );
+  display: block;
+}
+
+.splitLayoutFinal {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.34fr) minmax(0, 1fr);
 }
 
 .conversationPanel {
   background: var(--ai-surface);
-  border-right: 1px solid var(--ai-line);
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   min-height: 0;
   min-width: 0;
+  z-index: 3;
 }
 
-.selectionTrailHeader p,
-.candidateActions > div > p,
-.previewHeader p {
+.mobileSelectionTrail {
+  display: none;
+}
+
+.conversationPanelActive {
+  border: 1px solid var(--ai-line-strong);
+  border-radius: 16px;
+  bottom: 18px;
+  box-shadow: 0 18px 48px rgba(23, 23, 23, 0.1);
+  left: var(--conversation-dock-left);
+  overflow: hidden;
+  position: absolute;
+  top: 18px;
+  width: var(--conversation-dock-width);
+}
+
+.conversationPanelFinal {
+  border-right: 1px solid var(--ai-line);
+  position: relative;
+}
+
+.selectionTrailHeader p {
   color: var(--ai-muted);
   font-size: calc(10px + var(--presentation-font-size-increase));
   font-weight: calc(750 - var(--presentation-font-weight-reduction));
@@ -141,7 +219,6 @@
   margin-top: 9px;
   max-width: 62ch;
 }
-
 .transcript {
   min-height: 0;
   overflow: auto;
@@ -315,7 +392,7 @@
 .exclusionUndo button,
 .requestStatus button,
 .retryButton,
-.previewArrival a {
+.previewArrival button {
   align-items: center;
   background: var(--ai-surface);
   border: 1px solid var(--ai-line-strong);
@@ -332,14 +409,11 @@
   text-decoration: none;
 }
 
-.candidateActions button:disabled,
-.exclusionUndo button:disabled,
 .retryButton:disabled {
   cursor: default;
   opacity: 0.4;
 }
 
-.exclusionUndo,
 .requestStatus,
 .previewArrival {
   align-items: center;
@@ -373,6 +447,7 @@
 .previewArrival {
   background: #f6f6f6;
   color: var(--ai-text);
+  display: none;
 }
 
 .composerRegion {
@@ -500,37 +575,42 @@
 
 .visualStage {
   background: var(--ai-canvas);
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
   min-height: 0;
   min-width: 0;
-  overflow: auto;
-  padding: 32px clamp(28px, 4vw, 60px) 28px;
 }
 
 .visualStageFinal {
   display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 24px clamp(24px, 3vw, 48px) 24px;
+  position: relative;
 }
 
-.previewHeader {
-  max-width: 720px;
+.visualStageOrbit {
+  display: grid;
+  inset: 0;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  z-index: 1;
 }
 
 .stageCanvas {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  min-height: 390px;
-  padding: 22px 0;
+  min-height: 0;
+  position: relative;
 }
 
 .orbitScene {
   aspect-ratio: 1;
-  max-height: min(56vh, 650px);
+  left: var(--orbit-center-x);
+  max-height: min(70vh, 650px);
   max-width: 650px;
   pointer-events: none;
-  position: relative;
-  width: min(100%, 650px);
+  position: absolute;
+  top: calc(50% - 40px);
+  translate: -50% -50%;
+  width: min(64vw, 650px);
 }
 
 .orbitSceneReacting {
@@ -553,6 +633,11 @@
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
+  transition:
+    height 440ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 440ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-width 440ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 300ms ease;
   width: 62px;
   z-index: 5;
 }
@@ -575,10 +660,16 @@
 
 .orbitLayerFrame {
   --orbit-kick: 18deg;
+  --orbit-tilt: 0deg;
+  --orbit-y-scale: 1;
+  --orbit-y-scale-inverse: 1;
   left: 50%;
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) rotate(var(--orbit-tilt));
+  transition:
+    height 680ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 680ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .orbitLayerFrame[data-layer="0"] {
@@ -606,6 +697,7 @@
   animation: orbitSpin 38s linear infinite;
   inset: 0;
   position: absolute;
+  transform: scaleY(var(--orbit-y-scale));
 }
 
 .orbitLayerFrame[data-layer="1"] .orbitLayer {
@@ -622,6 +714,53 @@
   border-radius: 50%;
   inset: 0;
   position: absolute;
+  transform: scaleY(var(--orbit-y-scale));
+  transition:
+    opacity 520ms ease,
+    transform 680ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.orbitLayerFrame[data-ring-visible="false"] .orbitRing {
+  opacity: 0;
+  transform: scaleY(var(--orbit-y-scale)) scale(0.82);
+}
+
+.orbitScene[data-convergence="1"] .orbitLayerFrame[data-layer="1"] {
+  height: 60%;
+  width: 60%;
+}
+
+.orbitScene[data-convergence="1"] .orbitLayerFrame[data-layer="2"] {
+  height: 76%;
+  width: 76%;
+}
+
+.orbitScene[data-convergence="2"] .orbitLayerFrame[data-layer="0"] {
+  height: 34%;
+  width: 34%;
+}
+
+.orbitScene[data-convergence="2"] .orbitLayerFrame[data-layer="1"] {
+  height: 43%;
+  width: 43%;
+}
+
+.orbitScene[data-convergence="2"] .orbitLayerFrame[data-layer="2"] {
+  height: 52%;
+  width: 52%;
+}
+
+.orbitScene[data-exiting="true"] .orbitLayerFrame {
+  height: 2%;
+  transition-duration: 440ms;
+  width: 2%;
+}
+
+.orbitScene[data-exiting="true"] .orbitCore {
+  border-width: 3px;
+  height: 14px;
+  opacity: 0.72;
+  width: 14px;
 }
 
 .orbitGlyphPosition {
@@ -636,7 +775,8 @@
   left: 100%;
   position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%) rotate(calc(-1 * var(--glyph-angle))) scale(var(--glyph-scale));
+  transform: translate(-50%, -50%) rotate(calc(-1 * var(--glyph-angle)))
+    scaleY(var(--orbit-y-scale-inverse)) scale(var(--glyph-scale));
 }
 
 .orbitLayerFrame[data-layer="1"] .orbitGlyphCounter {
@@ -657,6 +797,9 @@
   display: flex;
   height: clamp(44px, 4.2vw, 58px);
   justify-content: center;
+  transition:
+    opacity 360ms ease,
+    transform 440ms cubic-bezier(0.4, 0, 0.2, 1);
   width: clamp(44px, 4.2vw, 58px);
 }
 
@@ -664,8 +807,13 @@
   animation: glyphArrival 520ms ease-out both;
 }
 
-.orbitSceneReacting [data-response-glyph="true"] .orbitGlyphPlate {
+.orbitSceneOptionReacting [data-response-glyph="true"] .orbitGlyphPlate {
   animation: glyphExcursion 660ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.orbitScene[data-exiting="true"] .orbitGlyphPlate {
+  opacity: 0;
+  transform: scale(0.08);
 }
 
 .orbitGlyphPlate img {
@@ -681,6 +829,28 @@
   gap: 14px;
   grid-template-columns: minmax(145px, 0.36fr) minmax(0, 1fr);
   padding-top: 18px;
+}
+
+.visualStageOrbit > .selectionTrail {
+  background: rgba(250, 250, 250, 0.92);
+  border: 1px solid var(--ai-line);
+  border-radius: 14px;
+  bottom: 22px;
+  left: calc(
+    var(--conversation-dock-left) + var(--conversation-dock-width) +
+      var(--conversation-side-gap)
+  );
+  max-width: 600px;
+  padding: 14px;
+  position: absolute;
+  width: min(
+    38vw,
+    600px,
+    calc(
+      100% - var(--conversation-dock-left) - var(--conversation-dock-width) -
+        var(--conversation-side-gap) - 24px
+    )
+  );
 }
 
 .selectionTrailHeader h2 {
@@ -761,9 +931,11 @@
   animation: previewReveal 360ms ease-out both;
   display: grid;
   gap: 18px;
-  grid-template-rows: auto minmax(360px, 1fr) auto;
-  height: 100%;
-  min-height: 0;
+  grid-template-rows: minmax(420px, 1fr) auto;
+  height: auto;
+  min-height: 100%;
+  min-width: 0;
+  width: 100%;
 }
 
 .previewFrame {
@@ -772,7 +944,9 @@
   border-radius: 16px;
   box-shadow: 0 12px 32px rgba(23, 23, 23, 0.07);
   min-height: 360px;
+  min-width: 0;
   overflow: hidden;
+  width: 100%;
 }
 
 .previewEvidence {
@@ -869,18 +1043,22 @@
 }
 
 @keyframes orbitSpin {
+  from {
+    transform: scaleY(var(--orbit-y-scale)) rotate(0turn);
+  }
   to {
-    transform: rotate(1turn);
+    transform: scaleY(var(--orbit-y-scale)) rotate(1turn);
   }
 }
 
 @keyframes orbitLayerKick {
   0%,
   100% {
-    transform: translate(-50%, -50%) rotate(0deg);
+    transform: translate(-50%, -50%) rotate(var(--orbit-tilt));
   }
   44% {
-    transform: translate(-50%, -50%) rotate(var(--orbit-kick));
+    transform: translate(-50%, -50%)
+      rotate(calc(var(--orbit-tilt) + var(--orbit-kick)));
   }
 }
 
@@ -915,13 +1093,12 @@
 }
 
 @keyframes orbitExit {
-  from {
+  0%,
+  72% {
     opacity: 1;
-    transform: scale(1);
   }
   to {
-    opacity: 0;
-    transform: scale(1.18);
+    opacity: 0.18;
   }
 }
 
@@ -972,75 +1149,138 @@
 
 @media (max-width: 959px) {
   .page {
-    display: block;
-    height: auto;
-    min-height: 100dvh;
-    overflow-x: hidden;
-    overflow-y: auto;
+    display: grid;
+    grid-template-rows: 58px minmax(0, 1fr);
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .topBar {
-    height: 58px;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
     padding: max(8px, env(safe-area-inset-top)) 14px 8px;
-    position: sticky;
-    top: 0;
     z-index: 20;
+  }
+
+  .topBarState {
+    gap: 4px;
+  }
+
+  .topBarBrand {
+    max-width: 130px;
+    overflow: hidden;
   }
 
   .topBarProjectName,
   .topBarTitle,
-  .topBarState span {
+  .topBarState > .stageBadge {
     display: none;
   }
 
-  .splitLayout {
-    display: flex;
-    flex-direction: column;
-    overflow: visible;
+  .topBarState > .mobilePreviewTrigger {
+    border: 1px solid var(--ai-line-strong);
+    display: inline-flex;
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
   }
 
-  .conversationPanel {
-    border-right: 0;
-    min-height: calc(100dvh - 58px);
-    overflow: visible;
+  .topBarState > .mobileBackToConversation {
+    align-items: center;
+    border: 1px solid var(--ai-line-strong);
+    display: inline-flex;
+  font-weight: calc(650 - var(--presentation-font-weight-reduction));
+    gap: 4px;
+  }
+
+  .topBarState > .topBarApply {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  .topBarApplyFullLabel {
+    display: none;
+  }
+
+  .topBarApplyShortLabel {
+    display: inline;
+  }
+
+  .topBarState > .topBarApply svg {
+    display: none;
+  }
+
+  .topBarApplyError {
+    right: 14px;
+    top: 50px;
+  }
+
+  .splitLayout {
+    display: block;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .splitLayoutConversation {
+    --orbit-center-x: 64%;
+  }
+
+  .conversationPanelActive,
+  .conversationPanelFinal {
+    background: rgba(250, 250, 250, 0.9);
+    border: 0;
+    border-radius: 0;
+    bottom: 0;
+    box-shadow: none;
+    left: 0;
+    min-height: 0;
+    overflow: hidden;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: auto;
   }
 
   .transcript {
-    max-height: min(58dvh, 520px);
-    min-height: 340px;
+    max-height: none;
+    min-height: 0;
   }
 
   .transcriptInner {
-    padding: 22px 18px 30px;
+    padding: 22px 18px 34px;
   }
 
   .composerRegion {
-    bottom: 0;
     padding-left: 12px;
     padding-right: 12px;
-    position: sticky;
     z-index: 10;
   }
 
-  .visualStage {
-    border-top: 1px solid var(--ai-line);
-    min-height: 640px;
-    overflow: visible;
-    padding: 30px 18px max(28px, env(safe-area-inset-bottom));
+  .visualStageOrbit {
+    border: 0;
+    inset: 0;
+    min-height: 0;
+    opacity: 0.74;
+    padding: 0;
+    position: absolute;
   }
 
   .previewHeader h2 {
     font-size: calc(23px + var(--presentation-font-size-increase));
   }
 
+  .visualStageOrbit > .selectionTrail {
+    display: none;
+  }
+
   .stageCanvas {
-    min-height: 360px;
-    padding: 18px 0 24px;
+    height: 100%;
+    min-height: 0;
   }
 
   .orbitScene {
     max-height: none;
-    width: min(100%, 420px);
+    width: min(118vw, 430px);
   }
 
   .orbitGlyphPosition[data-mobile-hidden="true"] {
@@ -1055,40 +1295,54 @@
     max-height: 108px;
   }
 
+  .mobileSelectionTrail {
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid var(--ai-line);
+    display: block;
+    max-height: 110px;
+    overflow: auto;
+    padding: 0 14px;
+  }
+
+  .mobileSelectionTrail .selectionTrailCompact {
+    border-top: 0;
+    margin: 0;
+    padding: 10px 0;
+  }
+
+  .splitLayoutFinal .visualStageFinal {
+    display: none;
+  }
+
+  .mobilePreviewOpen .conversationPanelFinal {
+    display: none;
+  }
+
+  .mobilePreviewOpen .visualStageFinal {
+    display: block;
+    inset: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 18px 14px max(18px, env(safe-area-inset-bottom));
+    position: absolute;
+    z-index: 8;
+  }
+
+  .previewArrival {
+    display: flex;
+  }
+
   .previewShell {
-    gap: 16px;
-    grid-template-rows: auto minmax(440px, 58dvh) auto;
+    gap: 14px;
+    grid-template-rows: minmax(390px, 54dvh) auto;
+    min-height: 100%;
   }
 
   .previewFrame {
-    min-height: 440px;
+    min-height: 390px;
   }
 
-  .previewActions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .previewApprovalBoundary {
-    margin: 0;
-    order: -1;
-  }
-
-  .previewActionsGroup {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .previewSecondary,
-  .previewPrimary,
-  .backToConversation {
-    justify-content: center;
-    min-height: 44px;
-  }
-
-  .backToConversation {
-    display: inline-flex;
-  }
 }
 
 @media (max-width: 420px) {
@@ -1104,7 +1358,6 @@
     justify-content: flex-end;
   }
 
-  .exclusionUndo,
   .requestStatus,
   .previewArrival,
   .voiceConfirmation {
@@ -1131,6 +1384,13 @@
 
   .orbitGlyphPosition {
     transition: none;
+  }
+
+  .orbitCore,
+  .orbitLayerFrame,
+  .orbitRing,
+  .orbitGlyphPlate {
+    transition: none !important;
   }
 
   .suggestionButton:hover:not(:disabled),

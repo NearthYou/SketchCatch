@@ -106,12 +106,6 @@
   text-decoration: none;
 }
 
-.actions .secondaryAction {
-  border-color: var(--color-hairline-strong);
-  background: var(--color-canvas);
-  color: var(--color-ink);
-}
-
 .publicUrlForm {
   display: grid;
   align-items: end;
