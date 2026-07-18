@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useReducer, useRef } from "react";
@@ -1355,12 +1356,12 @@ export function DirectDeploymentScreen({
                       "CodeBuild가 프로젝트 Repository의 확정 commit을 checkout하지 못했습니다."}
                   </p>
                   <div className={styles.deploymentValidationActions}>
-                    <a href="/dashboard/settings#github-account-connection">
+                    <Link href="/dashboard/settings#github-account-connection">
                       GitHub Repository 권한 확인
-                    </a>
-                    <a href="/dashboard/settings#aws-codebuild-github-authorization">
+                    </Link>
+                    <Link href="/dashboard/settings#aws-codebuild-github-authorization">
                       AWS GitHub 권한 다시 연결
-                    </a>
+                    </Link>
                     <button
                       disabled={!canRunPlan || requestState === "loading"}
                       onClick={() => void startTerraformPlan()}
@@ -2193,9 +2194,9 @@ export function DirectDeploymentScreen({
           Local workspace에서는 AWS 연결과 Deployment 기록을 만들지 않습니다. 프로젝트를 만든 뒤
           저장된 Terraform artifact를 기준으로 배포를 시작하세요.
         </p>
-        <a className={styles.deploymentPrimaryButton} href="/workspace/new">
+        <Link className={styles.deploymentPrimaryButton} href="/workspace/new">
           프로젝트로 저장
-        </a>
+        </Link>
       </section>
     </div>
   );

@@ -30,6 +30,8 @@ import type {
   Viewport
 } from "@xyflow/react";
 import {
+  ChevronLeft,
+  ChevronRight,
   Expand,
   Maximize2,
   MousePointer2,
@@ -108,6 +110,14 @@ import { DiagramEdgeToolbar } from "./DiagramEdgeToolbar";
 import { DiagramEdgeView } from "./DiagramEdgeView";
 import { DiagramNodeView } from "./DiagramNodeView";
 import { WorkspaceProjectBar } from "./WorkspaceProjectBar";
+import {
+  MAX_LEFT_PANEL_WIDTH,
+  MAX_RIGHT_PANEL_WIDTH,
+  MIN_LEFT_PANEL_WIDTH,
+  MIN_RIGHT_PANEL_WIDTH,
+  readWorkspacePanelPreferences,
+  writeWorkspacePanelPreferences
+} from "./workspace-panel-preferences";
 import { isProjectDraftSaveShortcut } from "../workspace/project-draft-hotkey";
 import { persistViewportAfterMove } from "./viewport-persistence";
 import {
@@ -169,14 +179,6 @@ const EDGE_TYPES = {
 };
 
 const MAX_HISTORY_ITEMS = 80;
-const LEFT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.leftPanelWidth.brainboardV1";
-const RIGHT_PANEL_WIDTH_STORAGE_KEY = "sketchcatch.diagramEditor.rightPanelWidth.brainboardV1";
-const DEFAULT_LEFT_PANEL_WIDTH = 346;
-const DEFAULT_RIGHT_PANEL_WIDTH = 440;
-const MIN_LEFT_PANEL_WIDTH = 300;
-const MAX_LEFT_PANEL_WIDTH = 520;
-const MIN_RIGHT_PANEL_WIDTH = 360;
-const MAX_RIGHT_PANEL_WIDTH = 640;
 const MIN_WORKSPACE_WIDTH = 420;
 const DIAGRAM_SNAP_GRID_SIZE = 12;
 const DIAGRAM_SNAP_GRID: [number, number] = [DIAGRAM_SNAP_GRID_SIZE, DIAGRAM_SNAP_GRID_SIZE];
@@ -314,8 +316,20 @@ function DiagramEditorInner({
   const [terraformRefreshRequestId, setTerraformRefreshRequestId] = useState(0);
   const [history, setHistory] = useState<DiagramHistoryState>({ past: [], future: [] });
   const [inspectedNodeId, setInspectedNodeId] = useState<string | null>(null);
-  const [isLeftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [isRightPanelOpen, setRightPanelOpen] = useState(true);
+  const [isLeftPanelOpen, setLeftPanelOpen] = useState(() =>
+    viewerPolicy.isViewer
+      ? true
+      : readWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage
+        ).leftPanelOpen
+  );
+  const [isRightPanelOpen, setRightPanelOpen] = useState(() =>
+    viewerPolicy.isViewer
+      ? true
+      : readWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage
+        ).rightPanelOpen
+  );
   const [leftPanelWidth, setLeftPanelWidth] = useState(readStoredLeftPanelWidth);
   const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
   const [autoExpandAreasEnabled, setAutoExpandAreasEnabled] = useState(() =>
@@ -382,21 +396,19 @@ function DiagramEditorInner({
     []
   );
 
-  /** 왼쪽 Resource palette를 열거나 닫습니다. */
-  const toggleLeftPanel = useCallback(() => {
-    setLeftPanelOpen((isOpen) => !isOpen);
-  }, []);
+  const updateLeftPanelOpen = useCallback(
+    (nextOpen: boolean): void => {
+      if (!viewerPolicy.isViewer) {
+        writeWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage,
+          { leftPanelOpen: nextOpen }
+        );
+      }
 
-  /** 오른쪽 Inspector를 열거나 닫습니다. */
-  const toggleRightPanel = useCallback(() => {
-    const nextOpen = !isRightPanelOpen;
-
-    if (nextOpen) {
-      onWorkspacePanelOpen?.();
-    }
-
-    setRightPanelOpen(nextOpen);
-  }, [isRightPanelOpen, onWorkspacePanelOpen]);
+      setLeftPanelOpen(nextOpen);
+    },
+    [viewerPolicy.isViewer]
+  );
 
   const updateRightPanelOpen = useCallback(
     (nextOpen: boolean): void => {
@@ -404,10 +416,27 @@ function DiagramEditorInner({
         onWorkspacePanelOpen?.();
       }
 
+      if (!viewerPolicy.isViewer) {
+        writeWorkspacePanelPreferences(
+          typeof window === "undefined" ? null : window.localStorage,
+          { rightPanelOpen: nextOpen }
+        );
+      }
+
       setRightPanelOpen(nextOpen);
     },
-    [onWorkspacePanelOpen]
+    [onWorkspacePanelOpen, viewerPolicy.isViewer]
   );
+
+  /** 왼쪽 Resource palette를 열거나 닫습니다. */
+  const toggleLeftPanel = useCallback(() => {
+    updateLeftPanelOpen(!isLeftPanelOpen);
+  }, [isLeftPanelOpen, updateLeftPanelOpen]);
+
+  /** 오른쪽 Inspector를 열거나 닫습니다. */
+  const toggleRightPanel = useCallback(() => {
+    updateRightPanelOpen(!isRightPanelOpen);
+  }, [isRightPanelOpen, updateRightPanelOpen]);
 
   const selectedNodeId = selectedNodeIds.length === 1 ? (selectedNodeIds[0] ?? null) : null;
   const hasRightRail = viewerPolicy.showPanels && rightPanel !== null;
@@ -618,7 +647,13 @@ function DiagramEditorInner({
 
   const applyLiveDiagramUpdate = useCallback(
     (updater: (currentDiagram: DiagramJson) => DiagramJson) => {
-      const after = updater(diagramRef.current);
+      const before = diagramRef.current;
+      const after = updater(before);
+
+      if (areDiagramsEqual(before, after)) {
+        return;
+      }
+
       replaceDiagram(after);
     },
     [replaceDiagram]
@@ -2478,7 +2513,11 @@ function DiagramEditorInner({
   const handleMoveEnd = useCallback<OnMoveEnd>(
     (_event, viewport) => {
       persistViewportAfterMove(
-        automaticViewportMoveRequestIdRef.current,
+        {
+          automaticMoveRequestId: automaticViewportMoveRequestIdRef.current,
+          isPreviewActive,
+          isViewer: viewerPolicy.isViewer
+        },
         viewport,
         (nextViewport) => {
           applyLiveDiagramUpdate((currentDiagram) =>
@@ -2487,7 +2526,7 @@ function DiagramEditorInner({
         }
       );
     },
-    [applyLiveDiagramUpdate]
+    [applyLiveDiagramUpdate, isPreviewActive, viewerPolicy.isViewer]
   );
 
   const handleZoomIn = useCallback(() => {
@@ -2572,8 +2611,8 @@ function DiagramEditorInner({
   );
 
   const handleFitView = useCallback(() => {
-    fitVisibleDiagram(!isPreviewActive);
-  }, [fitVisibleDiagram, isPreviewActive]);
+    fitVisibleDiagram(false);
+  }, [fitVisibleDiagram]);
 
   useEffect(() => {
     if (
@@ -2828,9 +2867,20 @@ function DiagramEditorInner({
   useEffect(() => {
     const compactViewport = window.matchMedia("(max-width: 1120px)");
 
+    function restorePanelPreferencesForWideViewport(): void {
+      const preferences = readWorkspacePanelPreferences(window.localStorage);
+      setLeftPanelOpen(preferences.leftPanelOpen);
+      setRightPanelOpen(preferences.rightPanelOpen);
+    }
+
     /** 좁은 화면에서는 Board가 먼저 보이도록 양쪽 패널을 접습니다. */
     function collapsePanelsForCompactViewport(event: MediaQueryListEvent | MediaQueryList): void {
+      if (viewerPolicy.isViewer) {
+        return;
+      }
+
       if (!event.matches) {
+        restorePanelPreferencesForWideViewport();
         return;
       }
 
@@ -2842,7 +2892,7 @@ function DiagramEditorInner({
     compactViewport.addEventListener("change", collapsePanelsForCompactViewport);
 
     return () => compactViewport.removeEventListener("change", collapsePanelsForCompactViewport);
-  }, []);
+  }, [viewerPolicy.isViewer]);
 
   useEffect(() => {
     const canvasPanel = canvasPanelRef.current;
@@ -2981,14 +3031,7 @@ function DiagramEditorInner({
         <WorkspaceProjectBar
           actions={{
             onSave: onDiagramSaveRequest,
-            onSaveAndDeploy: onSaveAndDeployRequest,
-            onToggleLeftPanel: toggleLeftPanel,
-            onToggleRightPanel: toggleRightPanel
-          }}
-          panels={{
-            hasRightPanel: hasRightRail,
-            isLeftPanelOpen,
-            isRightPanelOpen: hasRightRail && isRightPanelOpen
+            onSaveAndDeploy: onSaveAndDeployRequest
           }}
           workspace={{
             dashboardHref,
@@ -3001,11 +3044,49 @@ function DiagramEditorInner({
         />
       ) : null}
 
+      {!viewerPolicy.isViewer ? (
+        <>
+          <button
+            aria-controls="workspace-left-panel"
+            aria-expanded={isLeftPanelOpen}
+            aria-label={isLeftPanelOpen ? "왼쪽 패널 닫기" : "왼쪽 패널 열기"}
+            className={`${styles.panelEdgeHandle} ${styles.leftPanelEdgeHandle}`}
+            onClick={toggleLeftPanel}
+            title={isLeftPanelOpen ? "왼쪽 패널 닫기" : "왼쪽 패널 열기"}
+            type="button"
+          >
+            {isLeftPanelOpen ? (
+              <ChevronLeft aria-hidden="true" size={16} />
+            ) : (
+              <ChevronRight aria-hidden="true" size={16} />
+            )}
+          </button>
+
+          {hasRightRail ? (
+            <button
+              aria-controls="workspace-right-panel"
+              aria-expanded={isRightPanelOpen}
+              aria-label={isRightPanelOpen ? "오른쪽 패널 닫기" : "오른쪽 패널 열기"}
+              className={`${styles.panelEdgeHandle} ${styles.rightPanelEdgeHandle}`}
+              onClick={toggleRightPanel}
+              title={isRightPanelOpen ? "오른쪽 패널 닫기" : "오른쪽 패널 열기"}
+              type="button"
+            >
+              {isRightPanelOpen ? (
+                <ChevronRight aria-hidden="true" size={16} />
+              ) : (
+                <ChevronLeft aria-hidden="true" size={16} />
+              )}
+            </button>
+          ) : null}
+        </>
+      ) : null}
+
       {viewerPolicy.showPanels && isLeftPanelOpen ? (
-        <div className={styles.leftRail} ref={leftRailRef}>
+        <div className={styles.leftRail} id="workspace-left-panel" ref={leftRailRef}>
           {leftPanel === undefined ? (
             <ResourceSettingsPanel
-              onCollapse={() => setLeftPanelOpen(false)}
+              onCollapse={() => updateLeftPanelOpen(false)}
               onModuleAdd={addCuratedModule}
               onTemplateApply={applyBoardTemplate}
             />
@@ -3342,7 +3423,7 @@ function DiagramEditorInner({
       </div>
 
       {viewerPolicy.showPanels && hasRightRail ? (
-        <div className={styles.rightRail}>
+        <div className={styles.rightRail} id="workspace-right-panel">
           <button
             aria-label="Resize right panel"
             aria-orientation="vertical"
@@ -3408,33 +3489,25 @@ function haveAnyNodePositionDifference(
 }
 
 function readStoredLeftPanelWidth(): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_LEFT_PANEL_WIDTH;
-  }
-
-  const storedWidth = Number(window.localStorage.getItem(LEFT_PANEL_WIDTH_STORAGE_KEY));
-
-  return Number.isFinite(storedWidth) ? clampLeftPanelWidth(storedWidth) : DEFAULT_LEFT_PANEL_WIDTH;
+  const preferences = readWorkspacePanelPreferences(
+    typeof window === "undefined" ? null : window.localStorage
+  );
+  return clampLeftPanelWidth(preferences.leftPanelWidth);
 }
 
 function readStoredRightPanelWidth(): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_RIGHT_PANEL_WIDTH;
-  }
-
-  const storedWidth = Number(window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY));
-
-  return Number.isFinite(storedWidth)
-    ? clampRightPanelWidth(storedWidth)
-    : DEFAULT_RIGHT_PANEL_WIDTH;
+  const preferences = readWorkspacePanelPreferences(
+    typeof window === "undefined" ? null : window.localStorage
+  );
+  return clampRightPanelWidth(preferences.rightPanelWidth);
 }
 
 function storeLeftPanelWidth(width: number): void {
-  window.localStorage.setItem(LEFT_PANEL_WIDTH_STORAGE_KEY, String(width));
+  writeWorkspacePanelPreferences(window.localStorage, { leftPanelWidth: width });
 }
 
 function storeRightPanelWidth(width: number): void {
-  window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(width));
+  writeWorkspacePanelPreferences(window.localStorage, { rightPanelWidth: width });
 }
 
 function clampLeftPanelWidth(width: number): number {

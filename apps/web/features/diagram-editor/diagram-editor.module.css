@@ -195,13 +195,6 @@
   color: var(--workspace-surface);
 }
 
-.projectBarDivider {
-  background: var(--workspace-line);
-  height: 24px;
-  margin: 0 2px;
-  width: 1px;
-}
-
 .leftRail,
 .rightRail {
   background: var(--workspace-surface);
@@ -961,6 +954,59 @@ button.rightRailResizeHandle {
 
 .editorShellRightCollapsed .rightRailResizeHandle {
   display: none;
+}
+
+.panelEdgeHandle {
+  align-items: center;
+  background: var(--workspace-surface);
+  border: 1px solid var(--workspace-line-strong);
+  color: var(--workspace-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 48px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  top: calc(50% + 32px);
+  transform: translateY(-50%);
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    left 160ms ease,
+    right 160ms ease;
+  width: 24px;
+  z-index: 44;
+}
+
+.panelEdgeHandle:hover,
+.panelEdgeHandle:focus-visible {
+  background: var(--workspace-surface-muted);
+  color: var(--workspace-text);
+  outline: none;
+}
+
+.panelEdgeHandle:focus-visible {
+  box-shadow: 0 0 0 2px var(--board-primary-soft);
+}
+
+.leftPanelEdgeHandle {
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+  left: var(--left-panel-width);
+}
+
+.rightPanelEdgeHandle {
+  border-radius: 8px 0 0 8px;
+  border-right: 0;
+  right: var(--right-panel-width);
+}
+
+.editorShellLeftCollapsed .leftPanelEdgeHandle {
+  left: 0;
+}
+
+.editorShellRightCollapsed .rightPanelEdgeHandle {
+  right: 0;
 }
 
 .workspace {
@@ -2924,6 +2970,22 @@ button.rightRailResizeHandle {
     z-index: 42;
   }
 
+  .leftPanelEdgeHandle {
+    left: min(var(--left-panel-width), calc(100vw - 56px));
+  }
+
+  .rightPanelEdgeHandle {
+    right: min(var(--right-panel-width), calc(100vw - 56px));
+  }
+
+  .editorShellLeftCollapsed .leftPanelEdgeHandle {
+    left: 0;
+  }
+
+  .editorShellRightCollapsed .rightPanelEdgeHandle {
+    right: 0;
+  }
+
   .editorShellRightCollapsed .rightRail {
     display: none;
   }
@@ -2959,10 +3021,6 @@ button.rightRailResizeHandle {
     overflow: hidden;
     padding: 0 2px;
     text-overflow: ellipsis;
-  }
-
-  .projectBarDivider {
-    display: none;
   }
 
   .projectBarActions {
@@ -3003,6 +3061,10 @@ button.rightRailResizeHandle {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .panelEdgeHandle {
+    transition: none;
+  }
+
   .canvasPanelSnapAnimating :global(.react-flow__node) {
     transition: none;
   }

@@ -4,10 +4,6 @@ import {
   AlertCircle,
   Check,
   LoaderCircle,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
   Rocket,
   Save
 } from "lucide-react";
@@ -21,13 +17,6 @@ type WorkspaceProjectBarProps = {
   readonly actions: {
     readonly onSave?: (() => Promise<unknown>) | undefined;
     readonly onSaveAndDeploy?: (() => void) | undefined;
-    readonly onToggleLeftPanel: () => void;
-    readonly onToggleRightPanel: () => void;
-  };
-  readonly panels: {
-    readonly hasRightPanel: boolean;
-    readonly isLeftPanelOpen: boolean;
-    readonly isRightPanelOpen: boolean;
   };
   readonly workspace: {
     readonly dashboardHref: string;
@@ -39,10 +28,9 @@ type WorkspaceProjectBarProps = {
   };
 };
 
-/** 프로젝트 이름, 저장 상태, 양쪽 패널 동작을 한 줄에 고정합니다. */
+/** 프로젝트 이름, 저장 상태, 주요 Workspace 작업을 한 줄에 고정합니다. */
 export function WorkspaceProjectBar({
   actions,
-  panels,
   workspace
 }: WorkspaceProjectBarProps) {
   const saveStatusTone = getSaveStatusTone(workspace.saveStatus);
@@ -105,40 +93,6 @@ export function WorkspaceProjectBar({
             type="button"
           >
             <Rocket aria-hidden="true" size={17} />
-          </button>
-        ) : null}
-
-        <span aria-hidden="true" className={styles.projectBarDivider} />
-
-        <button
-          aria-label={panels.isLeftPanelOpen ? "리소스 패널 닫기" : "리소스 패널 열기"}
-          aria-pressed={panels.isLeftPanelOpen}
-          className={styles.projectBarIconButton}
-          onClick={actions.onToggleLeftPanel}
-          title={panels.isLeftPanelOpen ? "리소스 패널 닫기" : "리소스 패널 열기"}
-          type="button"
-        >
-          {panels.isLeftPanelOpen ? (
-            <PanelLeftClose aria-hidden="true" size={17} />
-          ) : (
-            <PanelLeftOpen aria-hidden="true" size={17} />
-          )}
-        </button>
-
-        {panels.hasRightPanel ? (
-          <button
-            aria-label={panels.isRightPanelOpen ? "Inspector 닫기" : "Inspector 열기"}
-            aria-pressed={panels.isRightPanelOpen}
-            className={styles.projectBarIconButton}
-            onClick={actions.onToggleRightPanel}
-            title={panels.isRightPanelOpen ? "Inspector 닫기" : "Inspector 열기"}
-            type="button"
-          >
-            {panels.isRightPanelOpen ? (
-              <PanelRightClose aria-hidden="true" size={17} />
-            ) : (
-              <PanelRightOpen aria-hidden="true" size={17} />
-            )}
           </button>
         ) : null}
       </div>
