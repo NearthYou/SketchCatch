@@ -4,6 +4,7 @@ export * from "./architecture-board-knowledge";
 export * from "./architecture-board-module-pattern-policy";
 export * from "./architecture-draft-compilation";
 export * from "./board-auto-organize";
+export * from "./board-auto-organize-preview";
 export * from "./template-review";
 export * from "./template-review-approvals";
 export * from "./template-review-workflow";

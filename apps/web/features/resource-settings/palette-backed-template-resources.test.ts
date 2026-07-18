@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,7 @@ import type { DiagramJson } from "@sketchcatch/types";
 import { getResourceDefinitionByTerraform } from "@sketchcatch/types/resource-definitions";
 import { isAreaNode, isNodeContainedByArea } from "../diagram-editor/area-nodes";
 import { resourceCatalog } from "./catalog";
+import { getBrainboardTemplateThumbnailAsset } from "./brainboard-template-thumbnail-manifest";
 import { isBoardTemplateAvailable, listBoardTemplates } from "./template-library";
 import { materializeCatalogResourceNodes } from "./template-resource-materializer";
 
@@ -84,23 +86,58 @@ test("모든 available Template Resource는 enabled Palette item과 실제 icon 
   assert.ok(resourceCount > 0);
 });
 
-test("Cross-account Template의 AWS Account는 실제 Area와 containment를 사용한다", () => {
+// 캡처한 계정 Group은 실제 Palette Area로 유지하고 썸네일도 같은 Diagram을 가리켜야 한다.
+test("Cross-account Template은 원본의 Group 영역과 세 S3 Resource만 사용한다", () => {
+  const capturedAccountGroup = {
+    id: "captured-account-group",
+    kind: "design",
+    label: "Prod account",
+    locked: false,
+    metadata: { presentationCatalogItemId: "design-group" },
+    position: { x: 0, y: 0 },
+    size: { height: 145, width: 495 },
+    type: "brainboard_shape",
+    zIndex: 1
+  } satisfies DiagramJson["nodes"][number];
+  assert.equal(isAreaNode(capturedAccountGroup), true);
+
   const template = listBoardTemplates().find(
     (candidate) => candidate.id === "brainboard-cross-account-aws-s3"
   );
   assert.ok(template && isBoardTemplateAvailable(template));
 
-  const accountNodes = template.diagramJson.nodes.filter(
-    (node) => node.metadata?.presentationCatalogItemId === "design-aws-account"
+  const accountGroups = template.diagramJson.nodes.filter(
+    (node) => node.metadata?.presentationCatalogItemId === "design-group"
   );
-  assert.equal(accountNodes.length, 2);
-  assert.ok(accountNodes.every(isAreaNode));
+  assert.equal(accountGroups.length, 2);
+  assert.deepEqual(
+    accountGroups.map(({ label }) => label).sort(),
+    ["Prod account", "Test account"]
+  );
+  assert.ok(accountGroups.every(isAreaNode));
 
-  const accountIds = new Set(accountNodes.map(({ id }) => id));
+  const accountIds = new Set(accountGroups.map(({ id }) => id));
   const scopedNodes = template.diagramJson.nodes.filter(
     (node) => node.metadata?.parentAreaNodeId && accountIds.has(node.metadata.parentAreaNodeId)
   );
-  assert.equal(scopedNodes.length, 5);
+  assert.deepEqual(
+    scopedNodes.map(({ label }) => label).sort(),
+    ["Prod", "S3 bucket Prod", "Test"]
+  );
+  assert.equal(
+    template.diagramJson.nodes.some(
+      (node) => node.kind === "design" && !node.metadata?.presentationCatalogItemId
+    ),
+    false
+  );
+
+  const thumbnail = getBrainboardTemplateThumbnailAsset("brainboard-cross-account-aws-s3");
+  assert.equal(thumbnail.kind, "board-capture");
+  assert.equal(
+    thumbnail.diagramHash,
+    createHash("sha256").update(JSON.stringify(template.diagramJson)).digest("hex")
+  );
+  assert.equal(existsSync(`${publicDirectoryPath}${thumbnail.src}`), true);
 });
 
 test("모든 available Template의 parented node는 materialization 후에도 parent Area 안에 남는다", () => {

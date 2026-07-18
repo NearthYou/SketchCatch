@@ -12,18 +12,25 @@ import type {
 } from "./reverse-engineering-board-application";
 import type { ReverseEngineeringBoardCandidate } from "./reverse-engineering-board-candidates";
 import {
-  createReverseEngineeringCompilationReview,
-  formatCompilationScore
+  createReverseEngineeringCompilationReview
 } from "./reverse-engineering-compilation-review";
 import { ReverseEngineeringFindingsPanel } from "./ReverseEngineeringFindingsPanel";
 import {
   presentReverseEngineeringResource,
+  presentReverseEngineeringScanErrors,
   summarizeReverseEngineeringScan
 } from "./reverse-engineering-presentation";
-import { formatReverseEngineeringResourceTypeLabel } from "./reverse-engineering-resource-types";
 import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringApplyState = "idle" | "saving" | "saved" | "error";
+export type ReverseEngineeringPermissionUpdateState =
+  | "idle"
+  | "preparing"
+  | "awaiting_aws_approval"
+  | "manual_template_required"
+  | "rechecking"
+  | "success"
+  | "error";
 
 export type ReverseEngineeringResultPanelProps = {
   readonly applyMessage: string | null;
@@ -39,7 +46,11 @@ export type ReverseEngineeringResultPanelProps = {
   readonly onCompilePlacement: () => void;
   readonly onKeepOriginalPlacement: () => void;
   readonly onOpenAsNewBoard: () => void;
+  readonly onPrepareImportPermissions?: (() => void) | undefined;
+  readonly onReverifyImportPermissions?: (() => void) | undefined;
   readonly onRetryScan: () => void;
+  readonly permissionUpdateMessage?: string | null | undefined;
+  readonly permissionUpdateState?: ReverseEngineeringPermissionUpdateState | undefined;
   readonly response: ReverseEngineeringScanResponse;
   readonly selectedCandidateId: string;
   readonly placement: ReverseEngineeringPlacement;
@@ -54,12 +65,15 @@ export function ReverseEngineeringResultPanel({
   comparison,
   createProjectOnApply,
   hasCurrentBoardResources,
-  logs,
   onAppendToCurrentBoard,
   onCompilePlacement,
   onKeepOriginalPlacement,
   onOpenAsNewBoard,
+  onPrepareImportPermissions,
+  onReverifyImportPermissions,
   onRetryScan,
+  permissionUpdateMessage = null,
+  permissionUpdateState = "idle",
   placement,
   response
 }: ReverseEngineeringResultPanelProps) {
@@ -71,12 +85,18 @@ export function ReverseEngineeringResultPanel({
 
   const isApplying = applyState === "saving";
   const summary = summarizeReverseEngineeringScan(result);
+  const hasApplicableResources = summary.boardCount > 0;
+  const hasPartialFailure = result.scanErrors.length > 0;
+  const hasPermissionFailure = result.scanErrors.some(
+    (scanError) => scanError.reason === "permission_denied"
+  );
   const unsupportedResources = result.discoveredResources.filter(
     (resource) => presentReverseEngineeringResource(resource).displayState === "review_only"
   );
   const primaryApplyLabel = getPrimaryApplyLabel({
     createProjectOnApply,
-    hasCurrentBoardResources
+    hasCurrentBoardResources,
+    hasPartialFailure
   });
 
   return (
@@ -114,11 +134,37 @@ export function ReverseEngineeringResultPanel({
             보드 또는 확인 필요 목록에서 위치와 원본 정보를 확인할 수 있습니다.
           </p>
         ) : null}
-        {summary.unreadableServiceCount > 0 ? (
-          <p className={styles.warning}>
-            일부 AWS 서비스를 읽지 못했습니다. 이 결과는 전체 AWS 환경을 완전히 보여주지 않을 수
-            있습니다.
-          </p>
+        {hasPartialFailure ? (
+          <div className={styles.warning} role="alert">
+            <strong>일부 항목을 가져오지 못했어요</strong>
+            <p>가져온 항목은 그대로 확인하고 사용할 수 있어요.</p>
+            {hasPermissionFailure ? (
+              permissionUpdateState === "awaiting_aws_approval" ||
+              permissionUpdateState === "manual_template_required" ? (
+                <button
+                  className={styles.secondaryButton}
+                  disabled={permissionUpdateState === "manual_template_required"}
+                  onClick={onReverifyImportPermissions}
+                  type="button"
+                >
+                  AWS에서 승인했어요
+                </button>
+              ) : (
+                <button
+                  className={styles.secondaryButton}
+                  disabled={
+                    permissionUpdateState === "preparing" ||
+                    permissionUpdateState === "rechecking"
+                  }
+                  onClick={onPrepareImportPermissions}
+                  type="button"
+                >
+                  가져오기 권한 추가
+                </button>
+              )
+            ) : null}
+            {permissionUpdateMessage ? <p>{permissionUpdateMessage}</p> : null}
+          </div>
         ) : null}
       </section>
 
@@ -129,16 +175,16 @@ export function ReverseEngineeringResultPanel({
           className={styles.placementDecisionHeader}
         >
           <span className={styles.placementBadge}>
-            {placement === "compiled" ? "컴파일러 미리보기" : "AWS 원본 배치"}
+            {placement === "compiled" ? "정리 결과" : "원본"}
           </span>
           <h3>
-            {placement === "compiled" ? "배치 컴파일러 결과 미리보기" : "AWS에서 읽어온 원래 배치"}
+            {placement === "compiled" ? "자동 정리 미리보기" : "AWS에서 가져온 원본"}
           </h3>
         </div>
         <p className={styles.placementDescription}>
           {placement === "compiled"
-            ? "AWS 원본과 비교해 선택된 배치 후보를 보여드립니다. 아래의 실제 변화와 남은 확인 항목을 검토하세요."
-            : "아직 배치 컴파일러를 실행하지 않았습니다. AWS에서 읽은 Resource와 관계를 원래 배치로 먼저 보여드립니다."}
+            ? "Resource와 관계와 설정은 그대로 두고, 위치와 연결선만 정리한 모습입니다."
+            : "가져온 Resource와 관계와 설정을 바꾸지 않은 상태를 먼저 보여드립니다."}
         </p>
         <div className={styles.placementActions} role="group" aria-label="배치 미리보기 선택">
           <button
@@ -147,7 +193,7 @@ export function ReverseEngineeringResultPanel({
             onClick={onCompilePlacement}
             type="button"
           >
-            배치 컴파일러 실행
+            자동 정리
           </button>
           <button
             aria-pressed={placement === "original"}
@@ -155,11 +201,11 @@ export function ReverseEngineeringResultPanel({
             onClick={onKeepOriginalPlacement}
             type="button"
           >
-            원래 배치 유지
+            원본 보기
           </button>
         </div>
         <p className={styles.placementSaveBoundary}>
-          배치를 고르거나 컴파일러를 실행해도 저장되지 않습니다. 마지막 적용 버튼을 눌러야 보드에
+          원본과 정리 결과를 전환해도 저장되지 않습니다. 마지막 적용 버튼을 눌러야 보드에
           반영됩니다.
         </p>
       </section>
@@ -182,13 +228,13 @@ export function ReverseEngineeringResultPanel({
       <section className={styles.section} aria-label="선택한 배치 적용">
         <h3>선택한 배치 적용</h3>
         <p className={styles.sectionDescription}>
-          {placement === "compiled" ? "컴파일러 결과" : "원래 AWS 배치"}를 확인한 뒤 원하는 적용
+          {placement === "compiled" ? "정리 결과" : "가져온 원본"}을 확인한 뒤 원하는 적용
           방식을 선택하세요.
         </p>
         <div className={styles.buttonRow}>
           <button
             className={styles.primaryButton}
-            disabled={isApplying}
+            disabled={isApplying || !hasApplicableResources}
             onClick={onOpenAsNewBoard}
             type="button"
           >
@@ -197,14 +243,21 @@ export function ReverseEngineeringResultPanel({
           {hasCurrentBoardResources ? (
             <button
               className={styles.secondaryButton}
-              disabled={isApplying || comparison.additions.length === 0}
+              disabled={
+                isApplying || !hasApplicableResources || comparison.additions.length === 0
+              }
               onClick={onAppendToCurrentBoard}
               type="button"
             >
-              현재 보드에 추가
+              {hasPartialFailure ? "가져온 항목만 현재 보드에 추가" : "현재 보드에 추가"}
             </button>
           ) : null}
         </div>
+        {!hasApplicableResources ? (
+          <p className={styles.warning} role="status">
+            보드에 표시할 항목이 없어요. 다시 스캔해 주세요.
+          </p>
+        ) : null}
         {applyMessage ? (
           <p
             className={applyState === "error" ? styles.error : styles.success}
@@ -241,9 +294,6 @@ export function ReverseEngineeringResultPanel({
         <UnsupportedResourceList resources={unsupportedResources} />
       </ReverseEngineeringDetailGroup>
 
-      <ReverseEngineeringDetailGroup title="스캔 로그">
-        <ReverseEngineeringLogList logs={logs} />
-      </ReverseEngineeringDetailGroup>
     </>
   );
 }
@@ -294,27 +344,6 @@ function ReverseEngineeringCompilationModeReview({
           ) : null}
         </ul>
       ) : null}
-      <details className={styles.compilationTechnical}>
-        <summary>기술 세부 정보</summary>
-        <div className={styles.compilationTechnicalBody}>
-          <dl>
-            <div>
-              <dt>내부 cost (낮을수록 우선)</dt>
-              <dd>
-                {formatCompilationScore(review.quality.before.score)} →{" "}
-                {formatCompilationScore(review.quality.after.score)}
-              </dd>
-            </div>
-            <div>
-              <dt>변경 cost</dt>
-              <dd>{formatCompilationScore(review.quality.compilationDistance)}</dd>
-            </div>
-          </dl>
-          <p>후보: {proposal.provenance.candidateId}</p>
-          <p>Compiler: {proposal.provenance.compilerVersion}</p>
-          <p>참고 규칙: {review.referenceTemplateIds.join(" · ") || "일반 배치 규칙"}</p>
-        </div>
-      </details>
     </article>
   );
 }
@@ -322,11 +351,23 @@ function ReverseEngineeringCompilationModeReview({
 // 새 프로젝트 시작인지 기존 보드 작업인지에 맞춰 적용 버튼 문구를 정합니다.
 function getPrimaryApplyLabel({
   createProjectOnApply,
-  hasCurrentBoardResources
+  hasCurrentBoardResources,
+  hasPartialFailure
 }: {
   readonly createProjectOnApply: boolean;
   readonly hasCurrentBoardResources: boolean;
+  readonly hasPartialFailure: boolean;
 }): string {
+  if (hasPartialFailure) {
+    if (createProjectOnApply) {
+      return "가져온 항목으로 프로젝트 만들기";
+    }
+
+    return hasCurrentBoardResources
+      ? "현재 보드를 가져온 항목으로 바꾸기"
+      : "가져온 항목만 보드에 적용";
+  }
+
   if (createProjectOnApply) {
     return "프로젝트로 만들기";
   }
@@ -360,6 +401,7 @@ function ReverseEngineeringScanCoveragePanel({
 }) {
   const notice = getScanCoverageNotice(scanErrors);
   const hasRetryableScanError = scanErrors.some((scanError) => scanError.retryable);
+  const presentations = presentReverseEngineeringScanErrors(scanErrors);
 
   return (
     <div>
@@ -369,21 +411,11 @@ function ReverseEngineeringScanCoveragePanel({
           <summary className={styles.detailSummary}>못 읽은 서비스 자세히 보기</summary>
           <div className={styles.detailBody}>
             <ul className={styles.resultList}>
-              {scanErrors.map((scanError, index) => (
-                <li key={`${scanError.id}-${index}`} className={styles.resultItem}>
-                  <strong>
-                    {formatReverseEngineeringResourceTypeLabel(scanError.resourceType)}
-                  </strong>
+              {presentations.map((presentation) => (
+                <li key={presentation.key} className={styles.resultItem}>
+                  <strong>{presentation.serviceName}</strong>
                   <span className={styles.errorBadge}>읽기 실패</span>
-                  <span>{scanError.message}</span>
-                  <span>{formatRetryableStatus(scanError.retryable)}</span>
-                  <details className={styles.diagnosticDetails}>
-                    <summary>진단 정보</summary>
-                    <span>
-                      stage: {scanError.stage} · reason: {scanError.reason} · retryable:{" "}
-                      {String(scanError.retryable)}
-                    </span>
-                  </details>
+                  <span>{presentation.remedy}</span>
                 </li>
               ))}
             </ul>
@@ -474,31 +506,4 @@ function ResourceListIdentity({ resource }: { readonly resource: DiscoveredResou
       </span>
     </>
   );
-}
-
-// 스캔 진행 중 서버가 남긴 단계별 로그를 시간 순서대로 보여줍니다.
-function ReverseEngineeringLogList({
-  logs
-}: {
-  readonly logs: readonly ReverseEngineeringScanLogLine[];
-}) {
-  if (logs.length === 0) {
-    return <p className={styles.hint}>표시할 로그가 없습니다.</p>;
-  }
-
-  return (
-    <ul className={styles.logList}>
-      {logs.map((log) => (
-        <li className={styles.logItem} key={log.id} data-level={log.level}>
-          <strong>{log.stage}</strong>
-          <span>{log.message}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-// 서버의 재시도 가능 여부를 사용자가 바로 이해할 수 있는 말로 바꿉니다.
-function formatRetryableStatus(retryable: boolean): string {
-  return retryable ? "다시 시도 가능" : "다시 시도 어려움";
 }

@@ -724,8 +724,8 @@ button.candidateCardSelected {
   font-weight: 500;
 }
 
-.advanced[open] .advancedSummary::after,
-.detail[open] .detailSummary::after {
+.advanced[open] > .advancedSummary::after,
+.detail[open] > .detailSummary::after {
   content: "−";
 }
 

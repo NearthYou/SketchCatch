@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  Plus,
   Settings,
   Shapes,
   WalletCards,
@@ -34,8 +33,7 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
   const { isRefreshing, logout, status, user } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pageTitle = getDashboardPageTitle(pathname);
-  const shouldShowCreateAction =
-    pathname === "/dashboard" || pathname === "/dashboard/projects";
+  const shouldRenderTopbar = !DASHBOARD_NAV_ITEMS.some((item) => item.href === pathname);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -139,30 +137,41 @@ export function DashboardShell({ children }: { readonly children: ReactNode }) {
         />
       ) : null}
 
-      <div className="dashboardMainColumn">
-        <header className="dashboardTopbar">
-          <div className="dashboardTopbarTitle">
-            <button
-              aria-label="Dashboard 메뉴 열기"
-              className="dashboardMobileMenuButton"
-              onClick={() => setIsMobileMenuOpen(true)}
-              title="메뉴 열기"
-              type="button"
-            >
-              <Menu aria-hidden="true" size={20} />
-            </button>
-            <div>
-              <strong>{pageTitle}</strong>
+      <div
+        className={
+          shouldRenderTopbar
+            ? "dashboardMainColumn"
+            : "dashboardMainColumn dashboardMainColumnPrimaryRoute"
+        }
+      >
+        {shouldRenderTopbar ? (
+          <header className="dashboardTopbar">
+            <div className="dashboardTopbarTitle">
+              <button
+                aria-label="Dashboard 메뉴 열기"
+                className="dashboardMobileMenuButton"
+                onClick={() => setIsMobileMenuOpen(true)}
+                title="메뉴 열기"
+                type="button"
+              >
+                <Menu aria-hidden="true" size={20} />
+              </button>
+              <div>
+                <strong>{pageTitle}</strong>
+              </div>
             </div>
-          </div>
-
-          {shouldShowCreateAction ? (
-            <Link className="dashboardPrimaryAction" href="/workspace/new?fresh=1">
-              <Plus aria-hidden="true" size={17} />
-              <span>새 프로젝트</span>
-            </Link>
-          ) : null}
-        </header>
+          </header>
+        ) : (
+          <button
+            aria-label="Dashboard 메뉴 열기"
+            className="dashboardMobileMenuButton dashboardPrimaryRouteMenuButton"
+            onClick={() => setIsMobileMenuOpen(true)}
+            title="메뉴 열기"
+            type="button"
+          >
+            <Menu aria-hidden="true" size={20} />
+          </button>
+        )}
 
         <main className="dashboardContent">{children}</main>
       </div>

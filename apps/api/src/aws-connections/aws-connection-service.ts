@@ -83,6 +83,13 @@ const terraformManagedServiceActions = [
   "application-autoscaling:TagResource",
   "application-autoscaling:UntagResource"
 ] as const;
+const reverseEngineeringReadActions = [
+  "tag:GetResources",
+  "resource-explorer-2:Search",
+  "iam:ListRoles",
+  "iam:ListPolicies",
+  "iam:ListInstanceProfiles"
+] as const;
 const directReleaseCodeBuildActions = [
   "codebuild:CreateProject",
   "codebuild:UpdateProject",
@@ -1360,6 +1367,11 @@ export function createTerraformApplyPolicyDocument(): Record<string, unknown> {
       },
       {
         Effect: "Allow",
+        Action: reverseEngineeringReadActions,
+        Resource: "*"
+      },
+      {
+        Effect: "Allow",
         Action: directReleaseCodeBuildActions,
         Resource: directReleaseCodeBuildResourcePatterns
       },
@@ -1645,6 +1657,10 @@ function createAwsConnectionCloudFormationTemplateBody(input: {
     "          - Effect: Allow",
     "            Action:",
     ...terraformManagedServiceActions.map((action) => `              - ${action}`),
+    '            Resource: "*"',
+    "          - Effect: Allow",
+    "            Action:",
+    ...reverseEngineeringReadActions.map((action) => `              - ${action}`),
     '            Resource: "*"',
     "          - Effect: Allow",
     "            Action:",

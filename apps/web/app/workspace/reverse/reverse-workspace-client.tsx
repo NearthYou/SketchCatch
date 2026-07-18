@@ -5,7 +5,6 @@ import { ArrowLeft, CheckCircle2, ChevronLeft } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { DiagramNode } from "../../../../../packages/types/src";
 import { useAuth } from "../../../components/auth/auth-provider";
-import { copyTextToClipboard } from "../../../lib/clipboard";
 import { DiagramEditor, type DiagramEditorPanelContext } from "../../../features/diagram-editor";
 import { EMPTY_DIAGRAM } from "../../../features/diagram-editor/constants";
 import {
@@ -76,11 +75,11 @@ function ReverseBoardCandidateSelectionPanel({
 }) {
   const hasMultipleCandidates = state.candidates.length > 1;
   const panelTitle =
-    state.hasScanResult && !hasMultipleCandidates ? "자동 감지된 구조" : "보드 후보 선택";
+    state.hasScanResult && !hasMultipleCandidates ? "가져온 원본" : "보드 후보 선택";
   const panelDescription =
     state.hasScanResult && !hasMultipleCandidates
-      ? "자동으로 묶은 결과입니다. 헷갈릴 때만 여러 후보가 표시됩니다."
-      : "자동 판단이 애매할 때만 여러 후보를 보여줍니다.";
+      ? "AWS에서 가져온 Resource와 관계를 바꾸지 않은 원본입니다."
+      : "AWS에서 가져온 구조가 여기에 표시됩니다.";
 
   return (
     <aside className={styles.candidatePanel} aria-label={panelTitle}>
@@ -117,7 +116,7 @@ function ReverseBoardCandidateSelectionPanel({
         <div className={styles.recommendedStructure}>
           <span className={styles.recommendationLabel}>
             <CheckCircle2 aria-hidden="true" size={15} />
-            자동 추천
+            가져온 결과
           </span>
           <strong>{state.candidates[0].title}</strong>
           <span>{state.candidates[0].description}</span>
@@ -128,7 +127,7 @@ function ReverseBoardCandidateSelectionPanel({
         </div>
       ) : (
         <div className={styles.emptyState}>
-          <strong>아직 감지된 구조가 없습니다</strong>
+          <strong>아직 가져온 구조가 없습니다</strong>
           <span>가져온 AWS 구조가 여기에 표시됩니다.</span>
         </div>
       )}
@@ -141,7 +140,7 @@ function ReverseBoardCandidateSelectionPanel({
   );
 }
 
-// 평소에는 스캔과 적용 흐름을, Resource를 누르면 AWS 원본 값을 보여줍니다.
+// 평소에는 스캔과 적용 흐름을, Resource를 누르면 사람이 이해할 핵심 값만 보여줍니다.
 function ReverseDockedPanel({
   context,
   onCandidatePanelChange,
@@ -170,7 +169,7 @@ function ReverseDockedPanel({
   );
 }
 
-// 선택한 Resource의 provider identity와 읽어온 값을 수정 없이 보여줍니다.
+// provider identity와 전체 원본 JSON은 보존하되 사용자 화면에는 노출하지 않습니다.
 function ReverseResourceInspector({
   node,
   onBack
@@ -182,26 +181,12 @@ function ReverseResourceInspector({
   const providerResourceId = formatInspectorValue(values["providerResourceId"]);
   const providerResourceType = formatInspectorValue(values["providerResourceType"]);
   const isReviewOnly = node.type === "UNKNOWN" || values["analysisExcluded"] === true;
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const coreValues = getInspectorCoreValues(node.type, values);
   const displayName = getInspectorDisplayName(
     node.label,
     providerResourceId,
     providerResourceType
   );
-
-  async function copyProviderResourceId(): Promise<void> {
-    if (providerResourceId === "확인되지 않음") {
-      return;
-    }
-
-    try {
-      await copyTextToClipboard(providerResourceId);
-      setCopyMessage("AWS 원본 식별자를 복사했습니다.");
-    } catch {
-      setCopyMessage("복사하지 못했습니다. 원본 식별자를 직접 복사해 주세요.");
-    }
-  }
 
   return (
     <aside className={styles.inspector} aria-label="Reverse Resource 상세">
@@ -217,11 +202,11 @@ function ReverseResourceInspector({
             <ChevronLeft aria-hidden="true" size={17} />
           </button>
           <div className={styles.panelHeaderTitle}>
-            <p className={styles.eyebrow}>Resource Inspector</p>
+            <p className={styles.eyebrow}>Resource 정보</p>
             <h2>{displayName}</h2>
           </div>
         </div>
-        <p className={styles.hint}>AWS에서 읽은 원본 값입니다. 이 화면에서는 변경하지 않습니다.</p>
+        <p className={styles.hint}>AWS에서 읽은 핵심 정보입니다. 이 화면에서는 변경하지 않습니다.</p>
       </header>
 
       <div className={styles.inspectorBody}>
@@ -265,33 +250,6 @@ function ReverseResourceInspector({
             </dl>
           </section>
         ) : null}
-
-        <details className={styles.inspectorDetails}>
-          <summary>AWS 원본 식별자</summary>
-          <div className={styles.inspectorDetailsBody}>
-            <code className={styles.rawValue}>{providerResourceId}</code>
-            <button
-              className={styles.secondaryButton}
-              disabled={providerResourceId === "확인되지 않음"}
-              onClick={() => void copyProviderResourceId()}
-              type="button"
-            >
-              원본 식별자 복사
-            </button>
-            <span aria-live="polite" className={styles.hint}>
-              {copyMessage ?? ""}
-            </span>
-          </div>
-        </details>
-
-        <details className={styles.inspectorDetails}>
-          <summary>고급 원본 값</summary>
-          <div className={styles.inspectorDetailsBody}>
-            <pre className={styles.inspectorCode}>
-              <code>{JSON.stringify(values, null, 2)}</code>
-            </pre>
-          </div>
-        </details>
       </div>
     </aside>
   );
@@ -354,7 +312,6 @@ type InspectorCoreValue = {
 const INSPECTOR_CORE_VALUE_ALLOWLIST: Readonly<Record<string, readonly [string, string][]>> = {
   EC2: [
     ["instanceType", "인스턴스 유형"],
-    ["subnetId", "Subnet ID"],
     ["placementAvailabilityZone", "Availability Zone"],
     ["privateIpAddress", "사설 IP"]
   ],
@@ -365,7 +322,7 @@ const INSPECTOR_CORE_VALUE_ALLOWLIST: Readonly<Record<string, readonly [string, 
     ["availabilityZone", "Availability Zone"],
     ["dbName", "DB 이름"]
   ],
-  ROUTE_TABLE: [["vpcId", "VPC ID"]],
+  ROUTE_TABLE: [],
   S3: [
     ["bucketRegion", "Bucket 리전"],
     ["versioningStatus", "버전 관리"],
@@ -373,11 +330,9 @@ const INSPECTOR_CORE_VALUE_ALLOWLIST: Readonly<Record<string, readonly [string, 
   ],
   SECURITY_GROUP: [
     ["groupName", "보안 그룹 이름"],
-    ["vpcId", "VPC ID"],
     ["description", "설명"]
   ],
   SUBNET: [
-    ["vpcId", "VPC ID"],
     ["availabilityZone", "Availability Zone"],
     ["cidrBlock", "CIDR"],
     ["availableIpAddressCount", "사용 가능 IP"]

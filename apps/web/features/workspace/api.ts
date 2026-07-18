@@ -82,7 +82,6 @@ import type {
   GitCicdAwsRoleDiffApplyResponse,
   GitHubAppExistingInstallationCallbackUrlResponse,
   GitHubAppInstallUrlResponse,
-  GitHubInstallationConnection,
   GitHubInstallationUserAuthorizationUrlResponse,
   ListGitHubInstalledRepositoriesResponse,
   ListGitHubInstallationsResponse,
@@ -2047,13 +2046,11 @@ export async function createGitHubAccountInstallUrl(): Promise<GitHubAppInstallU
   });
 }
 
-export async function listGitHubAccountInstallations(): Promise<GitHubInstallationConnection[]> {
-  const response = await apiFetch<ListGitHubInstallationsResponse>(
+export async function listGitHubAccountInstallations(): Promise<ListGitHubInstallationsResponse> {
+  return apiFetch<ListGitHubInstallationsResponse>(
     "/source-repositories/github/installations",
     { auth: true }
   );
-
-  return response.installations;
 }
 
 export async function createGitHubExistingInstallationCallbackUrl(

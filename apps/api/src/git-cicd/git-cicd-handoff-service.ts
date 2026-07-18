@@ -448,6 +448,19 @@ export class GitCicdHandoffProviderConflictError extends Error {
   }
 }
 
+export async function assertReachableGitCicdReleaseApiUrl(
+  origin: string,
+  probeHealth: (url: string) => Promise<boolean>
+): Promise<void> {
+  const healthUrl = new URL("/health", origin).toString();
+  if (!(await probeHealth(healthUrl))) {
+    throw new GitCicdHandoffProviderConflictError(
+      "GIT_CICD_RELEASE_API_UNREACHABLE: Git/CI/CD handoff requires a reachable public release API health endpoint",
+      "GIT_CICD_RELEASE_API_UNREACHABLE"
+    );
+  }
+}
+
 export class GitCicdHandoffPlanArtifactVerificationUnavailableError extends GitCicdHandoffProviderConflictError {
   constructor() {
     super(

@@ -22,11 +22,14 @@ import {
   createReverseEngineeringPreviewScan,
   createReverseEngineeringScan,
   deleteReverseEngineeringScan,
+  getAwsConnectionCloudFormationTemplate,
   getReverseEngineeringScan,
   listReverseEngineeringScanLogs,
-  saveProjectDraft
+  saveProjectDraft,
+  verifyAwsConnection
 } from "./api";
 import {
+  convertReverseEngineeringBoardToArchitectureJson,
   createReverseEngineeringBoardApplication,
   type ReverseEngineeringBoardApplicationMode,
   type ReverseEngineeringPlacement
@@ -46,14 +49,18 @@ import {
   getReverseEngineeringAwsConnectionRecovery
 } from "./reverse-engineering-aws-connection-readiness";
 import {
+  prepareReverseEngineeringImportPermissionUpdate,
+  reverifyReverseEngineeringImportPermission
+} from "./reverse-engineering-import-permissions";
+import {
   ReverseEngineeringResultPanel,
-  type ReverseEngineeringApplyState
+  type ReverseEngineeringApplyState,
+  type ReverseEngineeringPermissionUpdateState
 } from "./ReverseEngineeringResultPanel";
 import { ReverseEngineeringScanCriteriaForm } from "./ReverseEngineeringScanCriteriaForm";
 import { ReverseEngineeringScanHistoryPanel } from "./ReverseEngineeringScanHistoryPanel";
 import { useReverseEngineeringOptions } from "./useReverseEngineeringOptions";
 import { useReverseEngineeringScanHistory } from "./useReverseEngineeringScanHistory";
-import { convertDiagramJsonToArchitectureJson } from "./workspace-ai-diagram-adapter";
 import styles from "./reverse-engineering.module.css";
 
 export type ReverseEngineeringPanelProps = {
@@ -100,6 +107,9 @@ export function ReverseEngineeringPanel({
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [previewBaseDiagram, setPreviewBaseDiagram] = useState<DiagramJson | null>(null);
   const [placement, setPlacement] = useState<ReverseEngineeringPlacement>("original");
+  const [permissionUpdateState, setPermissionUpdateState] =
+    useState<ReverseEngineeringPermissionUpdateState>("idle");
+  const [permissionUpdateMessage, setPermissionUpdateMessage] = useState<string | null>(null);
   const handleRequestError = useCallback((error: unknown) => {
     setErrorMessage(toErrorMessage(error));
   }, []);
@@ -270,6 +280,8 @@ export function ReverseEngineeringPanel({
     setSelectedCandidateId(null);
     setScanResponse(null);
     setLogs([]);
+    setPermissionUpdateState("idle");
+    setPermissionUpdateMessage(null);
     const baseDiagram = previewBaseDiagram ?? context.diagram;
     setPreviewBaseDiagram(baseDiagram);
     context.setPreviewDiagram(null);
@@ -297,9 +309,66 @@ export function ReverseEngineeringPanel({
         showFirstCandidatePreview(response.response.result, baseDiagram);
       }
       setScanState("idle");
-    } catch (error) {
+    } catch {
       setScanState("error");
-      setErrorMessage(toErrorMessage(error));
+      setErrorMessage("AWS에서 항목을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
+  // 같은 AWS 연결의 CloudFormation 권한 갱신 화면만 열고, 승인 전에는 연결을 바꾸지 않습니다.
+  async function prepareImportPermissions(): Promise<void> {
+    if (!selectedAwsConnection || permissionUpdateState === "preparing") {
+      return;
+    }
+
+    setPermissionUpdateState("preparing");
+    setPermissionUpdateMessage(null);
+
+    try {
+      const nextState = await prepareReverseEngineeringImportPermissionUpdate({
+        connection: selectedAwsConnection,
+        downloadTemplate(fileName, templateBody) {
+          downloadTextFile(fileName, templateBody);
+        },
+        getTemplate: getAwsConnectionCloudFormationTemplate,
+        openExternal(url) {
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      });
+
+      setPermissionUpdateState(nextState);
+      setPermissionUpdateMessage(
+        nextState === "awaiting_aws_approval"
+          ? "받은 파일로 기존 AWS 연결을 업데이트한 뒤 돌아와 주세요."
+          : "AWS에서 기존 연결의 권한을 업데이트한 뒤 돌아와 주세요."
+      );
+    } catch {
+      setPermissionUpdateState("error");
+      setPermissionUpdateMessage("권한 추가 화면을 열지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
+  }
+
+  // 사용자가 AWS에서 승인한 뒤에만 같은 connection id를 다시 확인하고 같은 조건으로 재스캔합니다.
+  async function reverifyImportPermissions(): Promise<void> {
+    if (!selectedAwsConnection || permissionUpdateState === "rechecking") {
+      return;
+    }
+
+    setPermissionUpdateState("rechecking");
+    setPermissionUpdateMessage("기존 AWS 연결의 가져오기 권한을 확인하고 있어요.");
+
+    try {
+      await reverifyReverseEngineeringImportPermission({
+        connection: selectedAwsConnection,
+        verify: verifyAwsConnection
+      });
+      await loadOptions();
+      setPermissionUpdateState("success");
+      setPermissionUpdateMessage("권한을 확인했습니다. 같은 연결로 다시 가져올게요.");
+      await runScan();
+    } catch {
+      setPermissionUpdateState("error");
+      setPermissionUpdateMessage("아직 가져오기 권한을 확인하지 못했습니다.");
     }
   }
 
@@ -389,6 +458,12 @@ export function ReverseEngineeringPanel({
       return;
     }
 
+    if (result.architectureJson.nodes.length === 0) {
+      setApplyState("error");
+      setApplyMessage("보드에 표시할 항목이 없어요. 다시 스캔해 주세요.");
+      return;
+    }
+
     const application =
       mode === "replace" ? selectedCandidateApplication : selectedCandidateAppendApplication;
 
@@ -437,7 +512,7 @@ export function ReverseEngineeringPanel({
                 draftId: result.reverseEngineeringDraft.id
               }
             }),
-        architectureJson: convertDiagramJsonToArchitectureJson(diagramToApply)
+        architectureJson: convertReverseEngineeringBoardToArchitectureJson(diagramToApply, result)
       });
       setApplyState("saved");
       if (createProjectOnApply && targetProject) {
@@ -562,7 +637,11 @@ export function ReverseEngineeringPanel({
             onCompilePlacement={() => previewPlacement("compiled")}
             onKeepOriginalPlacement={() => previewPlacement("original")}
             onOpenAsNewBoard={() => void applyScanResult("replace")}
+            onPrepareImportPermissions={() => void prepareImportPermissions()}
+            onReverifyImportPermissions={() => void reverifyImportPermissions()}
             onRetryScan={() => void runScan()}
+            permissionUpdateMessage={permissionUpdateMessage}
+            permissionUpdateState={permissionUpdateState}
             response={selectedCandidateResponse}
             selectedCandidateId={selectedCandidate.id}
             placement={placement}
@@ -674,6 +753,18 @@ async function pollReverseEngineeringScan(
 // scan polling 사이에 잠깐 기다려서 서버에 과하게 요청하지 않게 합니다.
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function downloadTextFile(fileName: string, contents: string): void {
+  const objectUrl = URL.createObjectURL(new Blob([contents], { type: "text/yaml;charset=utf-8" }));
+  const anchor = document.createElement("a");
+
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
 // 프로젝트 생성 뒤에는 실제 프로젝트 id가 들어간 workspace 주소로 이동합니다.

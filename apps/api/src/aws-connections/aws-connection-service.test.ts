@@ -371,6 +371,46 @@ test("AWS connection policy authorizes only SketchCatch-managed CodeBuild names"
   assert.match(template.templateBody, /repository\/sketchcatch-\*-build-cache/);
 });
 
+test("기존 AWS 연결 Template에 Reverse Engineering 읽기 권한을 포함한다", async () => {
+  const repository = createInMemoryAwsConnectionRepository();
+  const result = await createAwsConnection(
+    {
+      accessContext,
+      region: "ap-northeast-2",
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository,
+    {
+      generateId: () => "47447447-1111-4222-8333-444444444444",
+      generateExternalId: () => "test-external-id"
+    }
+  );
+  const requiredReadActions = [
+    "tag:GetResources",
+    "resource-explorer-2:Search",
+    "iam:ListRoles",
+    "iam:ListPolicies",
+    "iam:ListInstanceProfiles"
+  ];
+  const policy = result.roleSetup.permissionSetup.terraformPolicyDocument as {
+    Statement: Array<{ Action: string | readonly string[] }>;
+  };
+  const policyActions = policy.Statement.flatMap((statement) => toStringArray(statement.Action));
+  const template = await getAwsConnectionCloudFormationTemplate(
+    {
+      connectionId: result.awsConnection.id,
+      accessContext,
+      callerPrincipalArns: [apiCallerPrincipalArn, workerCallerPrincipalArn]
+    },
+    repository
+  );
+
+  for (const action of requiredReadActions) {
+    assert.equal(policyActions.includes(action), true, `${action} must be in the Role policy`);
+    assert.match(template.templateBody, new RegExp(action.replace(":", "\\:")));
+  }
+});
+
 test("AWS connection policy supports apply and destroy for every deployable AWS service family", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const result = await createAwsConnection(

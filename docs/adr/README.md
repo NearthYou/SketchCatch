@@ -21,6 +21,8 @@
 | [0012-workspace-ai-chat-통합.md](./0012-workspace-ai-chat-통합.md)                                                           | Workspace AI 작업과 결과 상태를 AI 채팅이 소유하고 오른쪽 패널은 현재 문맥만 제공한다                                                          | AI 채팅, 오류 분석, 에이전트 리뷰, 수정안 적용 흐름을 바꿀 때                              |
 | [0013-aws-credit-ai-provider-체인.md](./0013-aws-credit-ai-provider-체인.md)                                                 | AWS credit 모드에서 Amazon Q, Bedrock, rule fallback 순서로 설명 provider를 전환한다                                                           | AI provider 과금 정책, fallback 순서, provider metadata를 바꿀 때                          |
 | [0014-workspace-ai-option-orbit-compiled-preview-boundary.md](./0014-workspace-ai-option-orbit-compiled-preview-boundary.md) | Workspace AI의 Selected Option Trail, presentation-only Decorative Resource Orbit, 최종 Compiled Architecture Preview의 정확성 경계를 분리한다 | `/workspace/ai` 대화 기록, 장식 Resource icon, 최종 Compiler Diagram과 적용 경계를 바꿀 때 |
+| [0015-board-auto-arrange-is-visual-only.md](./0015-board-auto-arrange-is-visual-only.md)                         | Board 자동 정리는 Resource·관계·설정을 유지하고 시각적 배치와 연결선만 변경한다                                                               | Board 자동 정리의 미리보기, 적용 범위, Compiler 호출 경계를 바꿀 때                        |
+| [0016-workspace-ai-converging-orbit-transition.md](./0016-workspace-ai-converging-orbit-transition.md)             | Workspace AI는 대화 중 공전 장면을 수렴시킨 뒤 Compiler 성공 결과만 실제 Preview로 공개한다                                                   | Workspace AI의 채팅 Dock, Orbit motion, final Preview 전환, 모바일 흐름을 바꿀 때          |
 
 ## 추가 규칙
 

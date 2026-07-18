@@ -187,7 +187,7 @@ test("opening another workspace panel closes the controlled AI Workbench", () =>
   assert.match(rightPanelSource, /const openLiveObservation[\s\S]*?onPanelOpenRequest\(\);/);
   assert.match(
     diagramEditorSource,
-    /const previewAutomaticOrganization = useCallback\(\(\) => \{\s*onWorkspacePanelOpen\?\.\(\);/
+    /const previewAutomaticOrganization = useCallback\(\(\) => \{[\s\S]*?onWorkspacePanelOpen\?\.\(\);/
   );
 });
 

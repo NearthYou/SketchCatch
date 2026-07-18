@@ -8,40 +8,67 @@ import styles from "./workspace-ai.module.css";
 
 export function DecorativeAwsOrbit({
   composition,
-  isExiting = false
+  convergenceLevel,
+  isConverging = false,
+  reactionKey,
+  visibleRingCount
 }: {
   readonly composition: DecorativeOrbitComposition;
-  readonly isExiting?: boolean | undefined;
+  readonly convergenceLevel: 0 | 1 | 2 | 3;
+  readonly isConverging?: boolean | undefined;
+  readonly reactionKey: string;
+  readonly visibleRingCount: 0 | 1 | 2 | 3;
 }) {
   const sceneRef = useRef<HTMLDivElement | null>(null);
+  const previousFingerprintRef = useRef(composition.fingerprint);
+  const previousReactionKeyRef = useRef(reactionKey);
 
   useEffect(() => {
     const scene = sceneRef.current;
     const reactingClassName = styles.orbitSceneReacting;
-    if (!scene || !reactingClassName) return;
+    const optionReactingClassName = styles.orbitSceneOptionReacting;
+    if (!scene || !reactingClassName || !optionReactingClassName) return;
+
+    const didReactionChange = previousReactionKeyRef.current !== reactionKey;
+    const didOptionCompositionChange =
+      previousFingerprintRef.current !== composition.fingerprint;
+    previousReactionKeyRef.current = reactionKey;
+    previousFingerprintRef.current = composition.fingerprint;
 
     scene.classList.remove(reactingClassName);
-    if (composition.responseGlyphIndex === null) return;
+    scene.classList.remove(optionReactingClassName);
+    if (!didReactionChange || isConverging) return;
 
     void scene.offsetWidth;
     scene.classList.add(reactingClassName);
+    if (didOptionCompositionChange) {
+      scene.classList.add(optionReactingClassName);
+    }
 
-    return () => scene.classList.remove(reactingClassName);
-  }, [composition.fingerprint, composition.responseGlyphIndex]);
+    return () => {
+      scene.classList.remove(reactingClassName);
+      scene.classList.remove(optionReactingClassName);
+    };
+  }, [composition.fingerprint, isConverging, reactionKey]);
 
   return (
     <div
       aria-hidden="true"
       className={styles.orbitScene}
-      data-exiting={isExiting ? "true" : "false"}
+      data-convergence={convergenceLevel}
+      data-exiting={isConverging ? "true" : "false"}
       data-orbit-fingerprint={composition.fingerprint}
-      data-reacting={composition.responseGlyphIndex === null ? "false" : "true"}
       inert
       ref={sceneRef}
     >
       <span className={styles.orbitCore} />
       {[0, 1, 2].map((layer) => (
-        <span className={styles.orbitLayerFrame} data-layer={layer} key={layer}>
+        <span
+          className={styles.orbitLayerFrame}
+          data-layer={layer}
+          data-ring-visible={layer < visibleRingCount ? "true" : "false"}
+          key={layer}
+        >
           <span className={styles.orbitLayer}>
             <span className={styles.orbitRing} />
             {composition.glyphs

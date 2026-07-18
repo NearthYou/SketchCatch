@@ -13,20 +13,6 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
-### 2026-07-17 - Add GitHub build disconnect
-
-- Added a confirmed settings action that removes only SketchCatch-managed CodeBuild projects, roles, logs, build caches, and the shared CodeConnection while preserving the AWS account connection and deployed resources.
-- Disconnect claims the CodeConnection, blocks active and newly starting build/deployment work, and keeps retryable metadata after cleanup failure.
-- Review hardening added refresh CAS and cleanup-failure protection, atomic build-preparation and Direct/GitOps lease fencing, generation-safe one-hour stale-claim retry, preserved build history, and an explicit cleanup retry UI.
-- Focused API and Web settings tests plus workspace lint, typecheck, production build, harness, and diff checks pass. No DB migration or live AWS cleanup was performed.
-### 2026-07-17 - Restore release-candidate multipart S3 permissions
-
-- Added the missing `ListMultipartUploadParts` and `AbortMultipartUpload` permissions to both production API and trusted worker task policies, with structure checks that require both roles to retain them.
-- Multipart completion failures now preserve the S3 operation, object key, provider error name, and HTTP status; the public storage interface and deployment failure-stage contract are unchanged.
-- Focused release-candidate tests (3/3), production infrastructure structure checks, Terraform formatting and validation, all workspace lint/typecheck commands, API/shared-package builds, sandbox safety tests (25/25), harness, formatting, and diff checks pass.
-- Full API, web, and types suites still expose unrelated `dev` failures caused by missing test environment values/tools, sandbox socket restrictions, and pre-existing contract assertions. The API build passes; the webpack web build compiles but stops on the existing invalid Next Route export in `architecture-draft/route.ts`.
-- No Terraform plan/apply, AWS mutation, or deployment was performed. After review and merge, an operator-approved runtime Terraform plan/apply is required before the deployed task roles receive the permissions.
-
 ### 2026-07-17 - Unify workspace observation and deployment controls
 
 - Restored Live Observation in both expanded and collapsed right-panel layouts as an accessible icon-only control.
@@ -72,6 +58,13 @@ Short English-only working log for the current agent context. Older records are 
 - Preserved public Repository analysis without GitHub, ProjectDraft revision fencing, Workspace Delivery ownership, exact private Repository recovery, and confirmed GitHub build cleanup while merging `origin/dev` through `04dc1c8f`.
 - Kept dev migration 0049 and renumbered Repository Analysis Record migration to 0050 with the journal and migration contract updated.
 - Focused API tests pass 49/49 and Web tests pass 50/50; lint, typecheck, build, harness, and diff checks pass. No live GitHub, AWS, deployment, or Terraform mutation was performed.
+
+### 2026-07-18 - Restore Workspace AI and integration setup
+
+- Moved deterministic Architecture Draft clarification ahead of the Amazon Q availability gate, kept clarification provenance rule-based, blocked warm-up before credit approval, and gave Q Business its supported default region.
+- Split GitHub installation read capability from new-connection setup capability, preserving existing installations during partial configuration while blocking unavailable OAuth starts across Settings, Repository, and CI/CD consumers.
+- Verified the running local stack directly: the AI stream returns four clarification options, a complete real Amazon Q request returns an `amazon_q_business` Preview, GitHub Settings returns explicit non-error availability, and the AWS connection setup reached its CloudFormation handoff without applying it. Postgres and Redis remain healthy; no cloud mutation, deployment, or Terraform apply/destroy was performed.
+- Focused regressions pass 93/93 API and 155/155 Web; `pnpm lint`, `pnpm typecheck`, `pnpm build`, `pnpm harness:check`, and `git diff --check` pass. The broader existing suite still has unrelated schema/zstd/repository and resource-catalog failures (API 4 failures with 2 cancelled; Web 3 failures).
 
 ### 2026-07-18 - Integrate Delivery into the CI/CD deployment modal
 
@@ -206,3 +199,8 @@ Short English-only working log for the current agent context. Older records are 
 
 - Read-only Delivery inspection now degrades a classified S3 Apply Plan download failure to unverified Plan readiness instead of returning HTTP 500; explicit refresh and unexpected verifier defects still fail closed.
 - The focused readiness suite passes 91 checks, and a live-project simulated S3 outage returns the profile with only the approved Plan unresolved. Root lint, typecheck, and build pass with one unrelated existing API test warning. No database, S3, AWS, deployment, migration, commit, or push mutation was performed.
+
+### 2026-07-18 - Merge latest dev and prepare the GitHub/deployment PR
+
+- Merged `origin/dev` at `fcee2825`, preserved both workstreams, removed duplicated GitHub App environment entries, and repaired two semantic auto-merge regressions in the Git/CI/CD health check and GitHub authorization fixture.
+- Harness, lint, all package typechecks, Web build, API build, diff checks, and the two affected focused suites pass; broad test suites were skipped at the user's request. No DB migration, cloud mutation, deployment, or GitHub handoff was performed.

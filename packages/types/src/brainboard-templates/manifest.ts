@@ -16,7 +16,7 @@ export const brainboardTemplateManifest = [
   {
     id: BRAINBOARD_TEMPLATE_IDS[0],
     sourceTemplateId: "d71155af-5339-44f1-ae11-2bcd29411c2d",
-    title: "[Training] AWS onboarding",
+    title: "AWS onboarding",
     author: BRAINBOARD_TEMPLATE_AUTHOR,
     provider: BRAINBOARD_TEMPLATE_PROVIDER,
     downloads: 19_855

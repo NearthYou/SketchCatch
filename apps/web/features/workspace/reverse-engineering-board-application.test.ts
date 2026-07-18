@@ -5,9 +5,11 @@ import { ARCHITECTURE_BOARD_COMPILER_VERSION } from "../architecture-board-compi
 import { evaluateAutomaticDiagramLayout } from "./automatic-diagram-layout";
 import {
   compileReverseEngineeringArchitecture,
+  convertReverseEngineeringBoardToArchitectureJson,
   createReverseEngineeringBoardApplication
 } from "./reverse-engineering-board-application";
 import { summarizeReverseEngineeringScan } from "./reverse-engineering-presentation";
+import { createReverseEngineeringBoardCandidates } from "./reverse-engineering-board-candidates";
 import {
   createReverseEngineeringFinalRegressionFixture,
   TASK9_REVIEW_ONLY_RESOURCE_IDS,
@@ -128,6 +130,73 @@ test("Reverse Engineering은 원래 배치를 선택하면 Compiler proposal 없
   );
 });
 
+test("가져온 원본 후보는 관계가 애매해도 Resource와 연결선을 임의로 빼지 않는다", () => {
+  const result = structuredClone(scanResult);
+  result.architectureJson.edges = [
+    { id: "contains-1", sourceId: "vpc-1", targetId: "unknown-1", label: "contains" },
+    { id: "contains-2", sourceId: "unknown-1", targetId: "vpc-1", label: "contains" }
+  ];
+
+  const candidates = createReverseEngineeringBoardCandidates(result);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.title, "가져온 원본");
+  assert.deepEqual(candidates[0]?.architectureJson, result.architectureJson);
+});
+
+test("원래 배치는 AWS에서 읽은 Resource, 관계, 설정을 하나도 추가하거나 바꾸지 않는다", () => {
+  const source = structuredClone(scanResult);
+  source.architectureJson = {
+    nodes: [
+      {
+        id: "vpc-source",
+        type: "VPC",
+        label: "원본 VPC",
+        positionX: 120,
+        positionY: 80,
+        config: {
+          providerResourceId: "vpc-source",
+          providerResourceType: "AWS::EC2::VPC",
+          cidrBlock: "10.0.0.0/16"
+        }
+      },
+      {
+        id: "unknown-source",
+        type: "UNKNOWN",
+        label: "원본 미지원 Resource",
+        positionX: 360,
+        positionY: 80,
+        config: {
+          providerResourceId: "custom-source",
+          providerResourceType: "AWS::Custom::Thing",
+          opaqueSetting: "keep-me"
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "source-edge",
+        sourceId: "vpc-source",
+        targetId: "unknown-source",
+        label: "connects_to"
+      }
+    ]
+  };
+
+  const application = createReverseEngineeringBoardApplication({
+    currentDiagram,
+    mode: "replace",
+    placement: "original",
+    result: source
+  });
+  const storedArchitecture = convertReverseEngineeringBoardToArchitectureJson(
+    application.diagram,
+    source
+  );
+
+  assert.deepEqual(storedArchitecture, source.architectureJson);
+});
+
 test("Reverse Engineering Compiler는 사용자가 본 원래 배치를 품질과 변경의 기준으로 사용한다", () => {
   const overlappingResult = createOverlappingBucketScanResult();
   const originalApplication = createReverseEngineeringBoardApplication({
@@ -213,8 +282,8 @@ test("Reverse Engineering 원래 배치는 Compiler 없이 현재 Board에 추�
   assert.deepEqual(application.diagram.viewport, currentBoard.viewport);
 });
 
-test("Reverse Engineering은 raw scan enum 없이 Compiler context 진단을 사용자 언어로 보존한다", () => {
-  const proposal = compileReverseEngineeringArchitecture({
+test("Reverse Engineering 자동 정리는 scan 진단을 보드 의미 정보에 섞지 않는다", () => {
+  const result = {
     ...scanResult,
     findings: [
       {
@@ -245,50 +314,24 @@ test("Reverse Engineering은 raw scan enum 없이 Compiler context 진단을 사
         retryable: false
       }
     ]
-  });
+  } satisfies ReverseEngineeringScanResult;
+  const proposal = compileReverseEngineeringArchitecture(result);
 
-  assert.ok(
-    proposal.diagnostics.some(
-      ({ code }) => code === "compiler.context.deployment:finding-public-vpc"
-    )
+  assert.equal(proposal.diagnostics.some(({ code }) => code.startsWith("compiler.context.")), false);
+  const organizedArchitecture = convertReverseEngineeringBoardToArchitectureJson(
+    proposal.diagram,
+    result
   );
-
-  const exclusionDiagnostic = proposal.diagnostics.find(
-    ({ code }) => code === "compiler.context.provider:excluded-unknown"
+  assert.deepEqual(
+    organizedArchitecture.nodes.map(({ id, type, label, config }) => ({ id, type, label, config })),
+    result.architectureJson.nodes.map(({ id, type, label, config }) => ({
+      id,
+      type,
+      label,
+      config
+    }))
   );
-  const scanErrorDiagnostic = proposal.diagnostics.find(
-    ({ code }) => code === "compiler.context.provider:scan-permission"
-  );
-
-  assert.deepEqual(exclusionDiagnostic, {
-    code: "compiler.context.provider:excluded-unknown",
-    level: "warning",
-    summary: "자동 분석 제외: 자동 분석 범위 밖",
-    message: "이 Resource는 현재 자동 분석 범위에 포함되지 않습니다.",
-    relatedChangeIds: [
-      "configuration:modify:unknown-1",
-      "geometry:modify:unknown-1:position"
-    ],
-    relatedResourceIds: ["unknown-1"],
-    penalty: 150
-  });
-  assert.deepEqual(scanErrorDiagnostic, {
-    code: "compiler.context.provider:scan-permission",
-    level: "error",
-    summary: "스캔 실패: AWS 서비스 조회 · 권한 부족",
-    message: "AWS 서비스 조회 중 권한 부족으로 완료하지 못했습니다. AWS 연결과 권한을 확인하세요.",
-    relatedChangeIds: [],
-    relatedResourceIds: [],
-    penalty: 500
-  });
-
-  for (const diagnostic of [exclusionDiagnostic, scanErrorDiagnostic]) {
-    assert.ok(diagnostic);
-    for (const rawEnum of ["unsupported_resource_type", "provider_api", "permission_denied"]) {
-      assert.equal(diagnostic.summary.includes(rawEnum), false);
-      assert.equal(diagnostic.message.includes(rawEnum), false);
-    }
-  }
+  assert.deepEqual(organizedArchitecture.edges, result.architectureJson.edges);
 });
 
 test("관계가 있는 검토 전용 Lambda는 보호 metadata와 확인 필요 상태로 보드에 남기고 관계 없는 IAM Role은 목록에만 남긴다", () => {
@@ -313,7 +356,7 @@ test("관계가 있는 검토 전용 Lambda는 보호 metadata와 확인 필요 
     })),
     [{ sourceId: "vpc-1", targetId: "lambda-1", label: "uses" }]
   );
-  assert.equal(lambda?.label, "확인 필요 · orders-handler");
+  assert.equal(lambda?.label, "orders-handler");
   assert.deepEqual(lambda?.style, { borderColor: "#f97316", textColor: "#9a3412" });
   assert.equal(lambda?.metadata?.reverseEngineering?.source, "aws_scan");
   assert.deepEqual(lambda?.metadata?.reverseEngineering?.protectedValueKeys, [
@@ -385,7 +428,7 @@ test("최종 혼합 fixture의 정식 지원 ALB, CloudFront, ECS는 Board에서
 
     const lambda = nodeById.get("lambda-task9");
     assert.ok(lambda);
-    assert.equal(lambda.label, "확인 필요 · orders-handler");
+    assert.equal(lambda.label, "orders-handler");
     assert.deepEqual(lambda.style, { borderColor: "#f97316", textColor: "#9a3412" });
     assert.equal(lambda.parameters?.values["analysisExcluded"], true);
     assert.deepEqual(lambda.metadata?.reverseEngineering?.protectedValueKeys, [
@@ -543,7 +586,7 @@ test("과거 스캔에서 보정된 Lambda는 원래 배치에서도 짧은 확�
   const appliedLambda = appliedArchitecture.nodes.find((node) => node.id === "legacy-lambda");
 
   assert.equal(application.compilation, null);
-  assert.equal(lambda?.label, "확인 필요 · orders-handler");
+  assert.equal(lambda?.label, "orders-handler");
   assert.equal(lambda?.parameters?.values["analysisExcluded"], true);
   assert.equal(lambda?.parameters?.values["providerResourceId"], providerResourceId);
   assert.equal(lambda?.parameters?.values["legacyConfigMarker"], "keep-lambda-raw");
@@ -569,13 +612,19 @@ test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하�
     placement: "compiled",
     result: scanResult
   });
+  const originalAppendApplication = createReverseEngineeringBoardApplication({
+    currentDiagram: currentBoard,
+    mode: "append",
+    placement: "original",
+    result: scanResult
+  });
   const currentQuality = evaluateAutomaticDiagramLayout({
-    edges: currentBoard.edges.map((edge) => ({
+    edges: originalAppendApplication.diagram.edges.map((edge) => ({
       id: edge.id,
       sourceId: edge.sourceNodeId,
       targetId: edge.targetNodeId
     })),
-    nodes: currentBoard.nodes
+    nodes: originalAppendApplication.diagram.nodes
   });
 
   assert.ok(application.compilation);
@@ -589,7 +638,12 @@ test("Reverse Engineering append는 현재 Board와 새 스캔 리소스를 하�
     application.compilation.quality.before.metrics.canvasArea,
     currentQuality.canvasArea
   );
-  assert.ok(application.compilation.changes.some((change) => change.targetIds.includes("vpc-1")));
+  assert.equal(
+    application.compilation.changes.every(
+      (change) => change.kind === "geometry" || change.kind === "edge-routing"
+    ),
+    true
+  );
   assert.equal(
     application.diagram.nodes.find((node) => node.id === "vpc-1")?.metadata?.reverseEngineering
       ?.source,
