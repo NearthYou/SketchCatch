@@ -13,3 +13,12 @@ test("Settings client passes one AWS connection ID into recovery navigation", ()
     /awsConnectionId:\s*getSingleSearchParam\(searchParams\.getAll\("awsConnectionId"\)\)/
   );
 });
+
+test("Pending GitHub authorization identifies the exact AWS connection to update", () => {
+  assert.match(
+    clientSource,
+    /getAwsCodeConnectionDisplayName\(connection\.codeConnection\.awsConnectionId\)/
+  );
+  assert.match(clientSource, /Pending 연결을 선택한 뒤/);
+  assert.match(clientSource, /Update pending connection/);
+});

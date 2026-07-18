@@ -78,6 +78,47 @@ test("Plan progress advances with the server stage but never claims completion",
   assert.ok((planProgress?.percent ?? 100) < 100);
 });
 
+test("preflight progress describes safety checks instead of cloud apply", () => {
+  const progress = getDeploymentProgress({
+    deployment: createDeployment({ activeStage: "preflight", status: "RUNNING" }),
+    isStarting: false,
+    logs: [],
+    nowMs: fixedNowMs,
+    operationHint: "plan"
+  });
+
+  assert.equal(progress?.title, "배포 전 안전 검사 중");
+  assert.match(progress?.detail ?? "", /Repository 실행 조건/);
+  assert.doesNotMatch(progress?.detail ?? "", /클라우드에 적용/);
+});
+
+test("application release progress does not regress to a Plan title", () => {
+  const progress = getDeploymentProgress({
+    deployment: createDeployment({ activeStage: "application_release", status: "RUNNING" }),
+    isStarting: false,
+    logs: [],
+    nowMs: fixedNowMs,
+    operationHint: "plan"
+  });
+
+  assert.equal(progress?.title, "애플리케이션 릴리즈 중");
+  assert.match(progress?.detail ?? "", /Artifact/);
+  assert.doesNotMatch(progress?.detail ?? "", /클라우드에 적용/);
+});
+
+test("rollback progress explains recovery instead of a new Apply", () => {
+  const progress = getDeploymentProgress({
+    deployment: createDeployment({ activeStage: "rollback", status: "RUNNING" }),
+    isStarting: false,
+    logs: [],
+    nowMs: fixedNowMs,
+    operationHint: "apply"
+  });
+
+  assert.equal(progress?.title, "배포 롤백 중");
+  assert.match(progress?.detail ?? "", /이전 상태로 되돌리고/);
+});
+
 test("Apply progress uses completed Terraform resources when a Plan summary exists", () => {
   const progress = getDeploymentProgress({
     deployment: createDeployment({

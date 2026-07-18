@@ -55,6 +55,7 @@ import {
 import {
   deriveAwsCodeConnectionRepositoryAccessState,
   deriveGitHubCodeBuildAuthorizationTarget,
+  getAwsCodeConnectionDisplayName,
   type GitHubCodeBuildAuthorizationTarget
 } from "../../../features/dashboard/github-codebuild-authorization-state";
 import styles from "../dashboard-tools.module.css";
@@ -962,7 +963,10 @@ function GitHubBuildConnectionAction({
   }
   return (
     <div className={styles.buildConnectionPending} role="status">
-      <span>GitHub 승인 필요</span>
+      <span>
+        AWS에서 <strong>{getAwsCodeConnectionDisplayName(connection.codeConnection.awsConnectionId)}</strong>{" "}
+        Pending 연결을 선택한 뒤 <strong>Update pending connection</strong>을 눌러 주세요.
+      </span>
       {connection.setupUrl ? (
         <a href={connection.setupUrl} rel="noreferrer" target="_blank">
           AWS에서 GitHub 권한 승인하기 <ExternalLink size={14} />
