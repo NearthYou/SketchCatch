@@ -1109,7 +1109,8 @@ test("createAmazonQArchitectureDraftResponse rejects answers that belong to anot
 
     const answersToReject = [
       offTopicAnswer,
-      ...(["website_size", "traffic_pattern"].includes(response.questionId)
+      ...(response.questionId === "frontend" ? ["\uC77C\uC77C 500\uBA85 \uC815\uB3C4?"] : []),
+      ...(["region", "website_size", "traffic_pattern"].includes(response.questionId)
         ? ["스프링부트 썼어"]
         : [])
     ];
