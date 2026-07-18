@@ -192,4 +192,7 @@ Short English-only working log for the current agent context. Older records are 
 - Removed standalone accepted-answer receipt messages while retaining the disabled selected option or selected custom option on the answered question.
 - Budget clarification accepts conversational monthly amounts such as `한달에 한 30정도로`, forwards the interpretation as monthly KRW ten-thousands, and maps 30 to the normal budget profile while excluding time, traffic, size, and percentage units.
 - Focused Web progress/selection tests pass 11/11 and the final focused monthly-budget regressions pass 2/2; the all-question cross-category regression also passed earlier. API/Web typechecks passed before the final parser iteration. CSS parsing passes and Next.js compiled successfully; the sandbox stopped the build after compilation with `spawn EPERM`.
+- Equivalent Diagram prop replacements no longer advance the Board revision, preventing a fresh AI proposal from being falsely marked stale while preserving real fingerprint/revision invalidation.
+- Board approval content now stacks above its actions so the explanation remains readable in the narrow AI Workbench.
+- The focused stale/layout regressions pass 75/75; Web typecheck, CSS formatting, and diff checks pass.
 - No DB migration, cloud mutation, deployment, Terraform execution, or Git handoff was performed.

@@ -6,7 +6,7 @@ Use this file only for compact continuation context. Write it in English.
 
 - Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
 - The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
-- Current uncommitted work adds final-generation-only staged progress in both diagram chats and accepts conversational monthly budget amounts without explicit currency units.
+- Current uncommitted work prevents equivalent Diagram prop replacements from falsely invalidating fresh AI proposals and repairs the Board approval layout.
 
 ## Changes This Session
 
@@ -17,12 +17,14 @@ Use this file only for compact continuation context. Write it in English.
 - Both chat surfaces keep the answered question options disabled and selected, without adding standalone accepted-answer receipt messages.
 - Shared staged progress appears only after all clarification questions are complete and the server begins generating the final Architecture Draft.
 - `한달에 한 30정도로` is accepted as a monthly 30만원 budget and mapped to the normal budget profile; answers with time, traffic, size, or percentage units remain excluded.
+- Equal Board prop replacements keep the proposal revision stable; real Board content changes continue to invalidate proposals.
+- Board approval copy and actions use separate rows in the narrow Workbench.
 
 ## Broken Or Unverified
 
-- Focused Web progress/selection tests pass 11/11 and final focused monthly-budget regressions pass 2/2; the cross-question regression passed earlier. CSS parsing and Next.js compilation pass, while the sandbox blocks the build after compilation with `spawn EPERM`.
+- Focused stale/layout regressions pass 75/75, Web typecheck passes, and CSS formatting passes. Browser interaction was not rerun in this session.
 
 ## Best Next Action
 
-- Commit UI progress changes, budget parsing changes, and session records as separate logical commits; then verify a clean worktree.
+- Commit the Board stale-state and approval-layout fix, then verify a clean worktree.
 - No DB migration, cloud mutation, deployment, or Terraform execution is involved.
