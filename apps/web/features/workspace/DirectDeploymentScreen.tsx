@@ -2320,51 +2320,54 @@ function DeploymentPreDeploymentSummary({
   const gateLevel = getPreDeploymentGateLevel(analysis);
 
   return (
-    <div className={styles.deploymentPreflightSummary} data-level={gateLevel}>
-      <div className={styles.deploymentGateHeader}>
+    <details className={styles.deploymentPreflightSummary} data-level={gateLevel}>
+      <summary className={styles.deploymentGateHeader}>
         <span className={styles.deploymentGateBadge}>{gateLevel.toUpperCase()}</span>
         <strong>배포 안전성 검사 결과</strong>
+        <span className={styles.deploymentPreflightChevron} aria-hidden="true" />
+      </summary>
+      <div className={styles.deploymentPreflightBody}>
+        <p>{analysis.summary}</p>
+        {analysis.deepScan ? (
+          <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
+            {analysis.deepScan.status === "running"
+              ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
+              : analysis.deepScan.status === "complete"
+                ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
+                : analysis.deepScan.status === "failed"
+                  ? (analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다.")
+                  : "핵심 안전검사 완료"}
+          </p>
+        ) : null}
+        <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
+          <span>
+            <strong>{analysis.findings.length}</strong>
+            발견 항목
+          </span>
+          <span>
+            <strong>{failCount}</strong>
+            실패
+          </span>
+          <span>
+            <strong>{warningCount}</strong>
+            주의
+          </span>
+        </div>
+        {analysis.findings.length > 0 ? (
+          <ul className={styles.deploymentPreflightFindings}>
+            {analysis.findings.map((finding) => (
+              <DeploymentPreDeploymentFindingItem
+                finding={finding}
+                key={finding.id}
+                onOpenFindingTerraformSource={onOpenFindingTerraformSource}
+              />
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
+        )}
       </div>
-      <p>{analysis.summary}</p>
-      {analysis.deepScan ? (
-        <p className={styles.deploymentHint} data-testid="pre-deployment-deep-scan-status">
-          {analysis.deepScan.status === "running"
-            ? "핵심 안전검사 완료 · Trivy 심층검사 진행 중"
-            : analysis.deepScan.status === "complete"
-              ? "핵심 안전검사 및 Trivy 심층검사 완료 · 결과 병합됨"
-              : analysis.deepScan.status === "failed"
-                ? (analysis.deepScan.message ?? "Trivy 심층검사를 완료하지 못했습니다.")
-                : "핵심 안전검사 완료"}
-        </p>
-      ) : null}
-      <div className={styles.deploymentPreflightStats} aria-label="배포 전 검사 요약">
-        <span>
-          <strong>{analysis.findings.length}</strong>
-          발견 항목
-        </span>
-        <span>
-          <strong>{failCount}</strong>
-          실패
-        </span>
-        <span>
-          <strong>{warningCount}</strong>
-          주의
-        </span>
-      </div>
-      {analysis.findings.length > 0 ? (
-        <ul className={styles.deploymentPreflightFindings}>
-          {analysis.findings.map((finding) => (
-            <DeploymentPreDeploymentFindingItem
-              finding={finding}
-              key={finding.id}
-              onOpenFindingTerraformSource={onOpenFindingTerraformSource}
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className={styles.deploymentHint}>표시할 Check Finding이 없습니다.</p>
-      )}
-    </div>
+    </details>
   );
 }
 

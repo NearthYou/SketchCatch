@@ -111,6 +111,7 @@ test("settings previews exact SketchCatch managed cleanup before AWS connection 
   assert.match(source, /관리 리소스 정리 후 연결 삭제/);
   assert.match(source, /보존하는 기록/);
   assert.match(source, /Reverse Engineering 결과/);
+  assert.doesNotMatch(source, /GitHub CodeConnection \{deletionPreview/);
   assert.match(source, /삭제가 완료되지 않았습니다\. 연결은 유지되었습니다\./);
   assert.match(source, /삭제 중…/);
   assert.match(source, /deletionErrorMessage/);

@@ -929,16 +929,18 @@ connection ID로 이 ARN을 계산해 저장합니다. 기존에 저장됐거나
 
 `GET /api/aws/connections/:connectionId/deletion-preview`는 AWS를 변경하지 않고 RDS에 기록된 정리 대상을
 보여준다. 응답에는 SketchCatch가 만든 CodeBuild project, 그 전용 Service Role, CodeBuild log group,
-CodeConnection의 개수와 exact resource 집합에 묶인 `confirmationToken`이 포함된다. 연결 삭제 후에도 보존할
-Reverse Engineering 스캔 수는 `preservedRecords.reverseEngineeringScans`로 함께 반환한다.
+그리고 이 exact CodeBuild resource 집합에 묶인 `confirmationToken`이 포함된다. 일반 AWS 연결 삭제는
+GitHub CodeConnection을 정리 대상으로 포함하지 않는다. 연결 삭제 후에도 보존할 Reverse Engineering 스캔
+수는 `preservedRecords.reverseEngineeringScans`로 함께 반환한다.
 
 `DELETE /api/aws/connections/:connectionId`는 `confirmedManagedCleanup: true`와 방금 확인한
 `confirmationToken`을 필수로 받는다. 둘 중 하나가 없거나 대상 집합이 바뀌면 AWS API를 호출하지 않는다.
 확인이 유효할 때만 `ManagedBy=SketchCatch` ownership tag와 DB 좌표가 모두 일치하는 CodeBuild project,
-그 전용 Service Role과 log group, CodeConnection을 정리한 뒤 연결 metadata를 삭제한다. 사용자가 AWS 연결을
-위해 만든 CloudFormation Stack과 Terraform Execution Role은 자동으로 삭제하지 않는다. `Deployment`가 참조
+그 전용 Service Role과 log group을 정리한 뒤 연결 metadata를 삭제한다. GitHub CodeConnection의 AWS 원격
+리소스는 이 경로에서 삭제하지 않으며, 명시적인 GitHub 빌드 연결 해제 경로에서만 별도로 정리한다. 사용자가
+AWS 연결을 위해 만든 CloudFormation Stack과 Terraform Execution Role은 자동으로 삭제하지 않는다. `Deployment`가 참조
 중인 연결은 삭제할 수 없고 `409 conflict`를 반환한다. cleanup 실패 claim과 오류 요약은 남겨 같은 미리보기와
-명시 확인 절차로 안전하게 재시도한다. 정리할 CodeBuild project와 CodeConnection ARN이 모두 없다면 이미
+명시 확인 절차로 안전하게 재시도한다. 정리할 CodeBuild project가 없다면 이미
 삭제된 Terraform Execution Role을 다시 AssumeRole하지 않고 연결 metadata 정리를 계속한다. 연결을 참조하던
 Reverse Engineering 스캔은 삭제하지 않고 `awsConnectionId = null`로 분리해 과거 결과를 계속 열람할 수 있게 한다.
 
@@ -1305,7 +1307,8 @@ SketchCatch가 발급한 presigned multipart upload 외에는 cloud mutation 권
 source URL, CodeConnection, build image와 compute 설정의 canonical fingerprint를 RDS에 저장한다.
 
 CodeConnections `AVAILABLE`은 GitHub OAuth handshake 완료 상태이며 Repository 접근 완료를 뜻하지 않는다.
-Web은 이를 `AWS OAuth 연결됨`으로 표시하고 AWS Connector for GitHub 설치·권한 설정 경로를 함께 제공한다.
+Web은 이를 `AWS OAuth 연결됨`으로 표시하고 Marketplace 주문 화면이 아닌 AWS Connector for GitHub의 직접
+설치·Repository 권한 설정 경로를 함께 제공한다.
 CodeBuild project 생성 또는 Repository checkout이 `OAuthProviderException`으로 실패하면 API는 원래 provider
 token 문구를 노출하지 않고
 `CODECONNECTION_REPOSITORY_ACCESS_REQUIRED` 409를 반환하며, 대상 Repository와 App 설치·권한 복구 방법을

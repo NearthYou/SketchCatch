@@ -3468,10 +3468,8 @@
   background: var(--workspace-surface, #ffffff);
   border: 1px solid var(--workspace-line, #f0f0f3);
   border-radius: var(--radius-card);
-  display: grid;
-  gap: 16px;
   min-width: 0;
-  padding: 20px;
+  overflow: hidden;
 }
 
 .deploymentPreflightSummary p {
@@ -3484,9 +3482,28 @@
 
 .deploymentGateHeader {
   align-items: center;
+  cursor: pointer;
   display: flex;
   gap: 8px;
   min-width: 0;
+  padding: 20px;
+}
+
+.deploymentGateHeader::-webkit-details-marker {
+  display: none;
+}
+
+.deploymentGateHeader::marker {
+  content: "";
+}
+
+.deploymentGateHeader:hover {
+  background: var(--workspace-surface-muted, #fafafa);
+}
+
+.deploymentGateHeader:focus-visible {
+  outline: 2px solid var(--workspace-text, #171717);
+  outline-offset: -3px;
 }
 
 .deploymentGateHeader > strong {
@@ -3494,6 +3511,34 @@
   font-size: 16px;
   font-weight: 700;
   line-height: 1.4;
+}
+
+.deploymentPreflightBody {
+  display: grid;
+  gap: 16px;
+  padding: 0 20px 20px;
+}
+
+.deploymentPreflightChevron {
+  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  color: var(--workspace-muted, #60646c);
+  flex: 0 0 auto;
+  height: 8px;
+  margin-left: auto;
+  transform: rotate(45deg);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: 8px;
+}
+
+.deploymentPreflightSummary[open] .deploymentPreflightChevron {
+  transform: rotate(-135deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deploymentPreflightChevron {
+    transition: none;
+  }
 }
 
 .deploymentGateBadge {

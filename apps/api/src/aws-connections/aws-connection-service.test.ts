@@ -679,8 +679,7 @@ test("AWS connection deletion cleans managed resources before deleting metadata"
         serviceRoleName: "SketchCatchCodeBuild-55555555",
         logGroupName: "/aws/codebuild/sketchcatch-55555555-build"
       }
-    ],
-    codeConnection: true
+    ]
   });
   assert.deepEqual(preview.preservedResources, [
     "CloudFormation Stack",
@@ -700,6 +699,7 @@ test("AWS connection deletion cleans managed resources before deleting metadata"
     {
       cleanupManagedResources: async ({ resources }) => {
         calls.push(resources.codeBuildProjects[0]?.projectName ?? "missing");
+        assert.equal(resources.codeConnectionArn, null);
         const claimed = await repository.findAccessibleAwsConnection(
           created.awsConnection.id,
           accessContext

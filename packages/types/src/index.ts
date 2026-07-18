@@ -2146,7 +2146,6 @@ export type AwsConnectionDeletionPreviewResponse = {
       serviceRoleName: string;
       logGroupName: string;
     }>;
-    codeConnection: boolean;
   };
   preservedResources: ["CloudFormation Stack", "Terraform Execution Role"];
   preservedRecords: {

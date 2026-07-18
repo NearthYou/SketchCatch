@@ -87,7 +87,7 @@ test("AWS CodeBuild authorization exposes the only expected GitHub account", () 
 
 test("an available AWS CodeConnection remains visibly unverified until repository access succeeds", () => {
   assert.deepEqual(deriveAwsCodeConnectionRepositoryAccessState("AVAILABLE"), {
-    actionHref: "https://github.com/marketplace/aws-connector-for-github",
+    actionHref: "https://github.com/apps/aws-connector-for-github/installations/new",
     actionLabel: "AWS Connector 설치·권한 설정",
     description: "Repository 접근은 아직 확인되지 않았습니다",
     status: "repository_access_unverified",

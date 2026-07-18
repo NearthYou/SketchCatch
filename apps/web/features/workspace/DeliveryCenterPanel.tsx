@@ -7,7 +7,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  GitBranch,
   RefreshCw,
   Settings2,
   Workflow
@@ -16,9 +15,7 @@ import { ProjectCicdMonitoringSettingsClient } from "../../app/projects/[project
 import { getApiErrorMessage } from "../../lib/api-client";
 import { getProjectDeliveryProfile } from "./api";
 import { CicdConsoleScreen } from "./CicdConsoleScreen";
-import { createGitCicdReadinessNavigation } from "./cicd-handoff";
 import { ProjectDeploymentTargetEditor } from "./delivery/ProjectDeploymentTargetEditor";
-import { getDeliveryRepositoryFreshness } from "./delivery-repository-freshness";
 import type { LiveObservationSelection } from "./live-observation";
 import styles from "./delivery-center.module.css";
 
@@ -61,16 +58,6 @@ export function DeliveryCenterPanel({
       cancelled = true;
     };
   }, [projectId, readinessRefreshRequestId, reloadKey]);
-
-  const repositoryHref =
-    createGitCicdReadinessNavigation({
-      projectId,
-      readinessAction: "select_repository"
-    }).href ?? `/dashboard/projects/${encodeURIComponent(projectId)}/repository`;
-  const freshness = getDeliveryRepositoryFreshness(
-    profile?.repositoryAnalysisTarget ?? null,
-    profile?.sourceRepository ?? null
-  );
 
   if (!profile && loadState === "loading") {
     return (
@@ -147,7 +134,7 @@ export function DeliveryCenterPanel({
             <p>연결</p>
             <h3 id="delivery-connections-title">코드와 계정을 연결하세요</h3>
           </div>
-          <span>PR과 Pipeline이 사용할 정확한 Repository를 확인합니다.</span>
+          <span>PR과 Pipeline에 필요한 GitHub App 권한을 확인합니다.</span>
         </div>
 
         <div className={styles.connectionGrid}>
@@ -182,54 +169,6 @@ export function DeliveryCenterPanel({
             )}
           </article>
 
-          <article className={styles.card} aria-labelledby="delivery-repository-title">
-            <div className={styles.cardHeading}>
-              <h4 id="delivery-repository-title">Source Repository</h4>
-              <strong data-ready={Boolean(profile.sourceRepository)}>
-                {profile.sourceRepository ? "연결됨" : "선택 필요"}
-              </strong>
-            </div>
-            {profile.repositoryAnalysisTarget ? (
-              <dl className={styles.definitionList}>
-                <div>
-                  <dt>분석 출처</dt>
-                  <dd>
-                    {profile.repositoryAnalysisTarget.owner}/{profile.repositoryAnalysisTarget.name}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Branch · SHA</dt>
-                  <dd>
-                    {profile.repositoryAnalysisTarget.branch} ·{" "}
-                    {shortSha(profile.repositoryAnalysisTarget.repositoryRevision)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>배포 Repository</dt>
-                  <dd>
-                    {profile.sourceRepository
-                      ? `${profile.sourceRepository.owner}/${profile.sourceRepository.name}`
-                      : "아직 연결되지 않음"}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <p>이 Board에 저장된 Repository 분석 출처가 없습니다.</p>
-            )}
-            {freshness.status === "changed" ? (
-              <div className={styles.warning} role="status">
-                <strong>최근 인증 분석과 Board의 분석 SHA가 다릅니다.</strong>
-                <p>
-                  최근 인증 분석 SHA는 {shortSha(freshness.currentRevision)}입니다. Board는 자동으로
-                  변경되지 않습니다.
-                </p>
-              </div>
-            ) : null}
-            <Link className={styles.actionLink} href={repositoryHref}>
-              <GitBranch aria-hidden="true" size={15} />
-              {profile.sourceRepository ? "Repository 다시 분석" : "Repository 연결"}
-            </Link>
-          </article>
         </div>
       </section>
 
@@ -283,8 +222,4 @@ export function DeliveryCenterPanel({
       </section>
     </div>
   );
-}
-
-function shortSha(value: string): string {
-  return `${value.slice(0, 10)}…`;
 }

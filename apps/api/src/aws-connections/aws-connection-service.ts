@@ -812,6 +812,7 @@ export async function getAwsConnectionDeletionPreview(
     repository.hasDeploymentUsingAwsConnection(connection.id),
     repository.countReverseEngineeringScans(connection.id)
   ]);
+  const deletionResources = selectAwsConnectionDeletionManagedResources(resources);
   const cleanupInProgress = Boolean(
     connection.deletionStartedAt && !connection.deletionErrorSummary
   );
@@ -827,19 +828,21 @@ export async function getAwsConnectionDeletionPreview(
     blockerMessage,
     cleanupRetry: Boolean(connection.deletionStartedAt && connection.deletionErrorSummary),
     managedResources: {
-      codeBuildProjects: resources.codeBuildProjects.map((project) => ({
+      codeBuildProjects: deletionResources.codeBuildProjects.map((project) => ({
         projectId: project.projectId,
         projectName: project.projectName,
         serviceRoleName: getRoleNameForDeletionPreview(project.serviceRoleArn),
         logGroupName: `/aws/codebuild/${project.projectName}`
-      })),
-      codeConnection: resources.codeConnectionArn !== null
+      }))
     },
     preservedResources: ["CloudFormation Stack", "Terraform Execution Role"],
     preservedRecords: {
       reverseEngineeringScans: reverseEngineeringScanCount
     },
-    confirmationToken: createAwsConnectionDeletionConfirmationToken(connection.id, resources)
+    confirmationToken: createAwsConnectionDeletionConfirmationToken(
+      connection.id,
+      deletionResources
+    )
   };
 }
 
@@ -894,7 +897,9 @@ export async function deleteAwsConnection(
     );
   }
 
-  const managedResources = await repository.findManagedResources(deletionClaim.connection.id);
+  const managedResources = selectAwsConnectionDeletionManagedResources(
+    await repository.findManagedResources(deletionClaim.connection.id)
+  );
   const currentConfirmationToken = createAwsConnectionDeletionConfirmationToken(
     deletionClaim.connection.id,
     managedResources
@@ -932,6 +937,15 @@ export async function deleteAwsConnection(
     );
     throw error;
   }
+}
+
+function selectAwsConnectionDeletionManagedResources(
+  resources: AwsConnectionManagedResources
+): AwsConnectionManagedResources {
+  return {
+    codeBuildProjects: resources.codeBuildProjects,
+    codeConnectionArn: null
+  };
 }
 
 function createAwsConnectionDeletionConfirmationToken(

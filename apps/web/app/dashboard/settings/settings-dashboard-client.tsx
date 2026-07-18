@@ -709,7 +709,6 @@ export function SettingsDashboardClient() {
                 <li>CodeBuild 프로젝트 {deletionPreview.managedResources.codeBuildProjects.length}개</li>
                 <li>CodeBuild Service Role {deletionPreview.managedResources.codeBuildProjects.length}개</li>
                 <li>CodeBuild 로그 그룹 {deletionPreview.managedResources.codeBuildProjects.length}개</li>
-                <li>GitHub CodeConnection {deletionPreview.managedResources.codeConnection ? "1개" : "없음"}</li>
               </ul>
               <strong>삭제하지 않는 리소스</strong>
               <p>{deletionPreview.preservedResources.join(", ")}</p>

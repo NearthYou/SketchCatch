@@ -191,7 +191,7 @@
 .connectionGrid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .card,
@@ -283,57 +283,6 @@
 
 .actionLink {
   margin-top: 16px;
-}
-
-.definitionList {
-  display: grid;
-  margin: 14px 0 0;
-}
-
-.definitionList > div {
-  border-top: 1px solid #f0f0f3;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: 104px minmax(0, 1fr);
-  padding: 10px 0;
-}
-
-.definitionList > div:first-child {
-  border-top: 0;
-}
-
-.definitionList dt {
-  color: #60646c;
-  font-size: 12px;
-}
-
-.definitionList dd {
-  color: #171717;
-  font-size: 12px;
-  font-weight: 650;
-  margin: 0;
-  overflow-wrap: anywhere;
-  text-align: right;
-}
-
-.warning {
-  background: var(--color-warning-surface);
-  border: 1px solid color-mix(in srgb, var(--color-warning) 36%, transparent);
-  border-radius: var(--radius-control);
-  color: var(--color-warning);
-  margin-top: 14px;
-  padding: 12px;
-}
-
-.warning strong {
-  font-size: 12px;
-}
-
-.warning p {
-  color: var(--color-warning);
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 4px 0 0;
 }
 
 .settingsStack {
@@ -497,15 +446,6 @@
   .execution {
     border-radius: var(--radius-card);
     padding: 16px;
-  }
-
-  .definitionList > div {
-    gap: 4px;
-    grid-template-columns: 1fr;
-  }
-
-  .definitionList dd {
-    text-align: left;
   }
 
   .execution > .groupHeading {

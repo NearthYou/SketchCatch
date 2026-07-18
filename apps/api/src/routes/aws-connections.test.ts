@@ -41,8 +41,9 @@ test("AWS connection DELETE performs no managed cleanup without preview confirma
   await registerAwsConnectionRoutes(app, {
     getDatabaseClient: () => createAuthDatabaseClient(),
     createAwsConnectionRepository: () => repository,
-    cleanupManagedAwsResources: async () => {
+    cleanupManagedAwsResources: async ({ resources }) => {
       cleanupCalls += 1;
+      assert.equal(resources.codeConnectionArn, null);
     }
   });
   const headers = { authorization: `Bearer ${await createAccessToken(userId)}` };
@@ -65,12 +66,12 @@ test("AWS connection DELETE performs no managed cleanup without preview confirma
   const preview = previewResponse.json<{
     canDelete: boolean;
     confirmationToken: string;
-    managedResources: { codeBuildProjects: unknown[]; codeConnection: boolean };
+    managedResources: { codeBuildProjects: unknown[] };
     preservedRecords: { reverseEngineeringScans: number };
   }>();
   assert.equal(preview.canDelete, true);
   assert.equal(preview.managedResources.codeBuildProjects.length, 1);
-  assert.equal(preview.managedResources.codeConnection, true);
+  assert.equal("codeConnection" in preview.managedResources, false);
   assert.deepEqual(preview.preservedRecords, { reverseEngineeringScans: 2 });
 
   const confirmed = await app.inject({
