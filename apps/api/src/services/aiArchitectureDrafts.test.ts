@@ -778,6 +778,33 @@ test("createAmazonQArchitectureDraftResponse evaluates short natural answers in 
   assert.match(rejected.validationMessage ?? "", /다시 답해/);
 });
 
+test("createAmazonQArchitectureDraftResponse rejects text that does not answer the backend choice", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const prompt = [
+    "website type: dynamic company information website",
+    "traffic: small under 100 users",
+    "database: PostgreSQL required",
+    "frontend: HTML CSS JavaScript"
+  ].join("\n");
+
+  for (const answer of ["김치찌개 레시피 알려줘", "API가 무엇인지 설명해줘"]) {
+    const response = await createAmazonQArchitectureDraftResponse(
+      {
+        prompt,
+        clarificationAnswers: [{ questionId: "backend", answer }]
+      },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+
+    if (!("status" in response)) {
+      assert.fail("Expected the repeated clarification response");
+    }
+    assert.equal(response.questionId, "backend");
+    assert.equal(response.question, "백엔드가 필요한가요?");
+    assert.match(response.validationMessage ?? "", /다시 답해/);
+  }
+});
+
 test("createAmazonQArchitectureDraftResponse forwards accepted natural-language answers as structured Amazon Q context", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;

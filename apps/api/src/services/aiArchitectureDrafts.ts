@@ -1274,6 +1274,9 @@ function isClarificationAnswerValid(
   if (normalizedAnswer.length === 0 || isClearlyUnrelatedClarificationAnswer(normalizedAnswer)) {
     return false;
   }
+  if (question.id === "backend") {
+    return isBackendClarificationAnswerValid(normalizedAnswer);
+  }
   if (isRequiredArchitectureQuestionAnswered(question, normalizedAnswer)) return true;
   switch (question.id) {
     case "website_type":
@@ -1287,7 +1290,6 @@ function isClarificationAnswerValid(
         "적게", "적은", "많지", "보통", "많은", "몰릴", "초기", "처음"
       ]);
     case "database":
-    case "backend":
     case "ssl":
     case "file_upload":
     case "realtime":
@@ -1324,6 +1326,45 @@ function isClarificationAnswerValid(
     default:
       return false;
   }
+}
+
+function isBackendClarificationAnswerValid(answer: string): boolean {
+  if (hasUncertainPreferenceAnswer(answer)) {
+    return true;
+  }
+
+  if (/(?:무엇인지|뭐야|뭔지|알려 *줘|설명해|what +is|tell +me|explain)/iu.test(answer)) {
+    return false;
+  }
+
+  if (isNaturalBooleanAnswer(answer)) {
+    return true;
+  }
+
+  if (hasPromptTerm(answer, [
+    "no backend",
+    "backend not required",
+    "static site",
+    "simple api",
+    "complex business logic",
+    "microservice",
+    "node.js",
+    "nodejs",
+    "python flask",
+    "spring boot",
+    "django",
+    "백엔드 필요 없음",
+    "정적 사이트",
+    "간단한 api",
+    "복잡한 비즈니스 로직",
+    "마이크로서비스"
+  ])) {
+    return true;
+  }
+
+  const hasBackendSubject = hasPromptTerm(answer, ["backend", "api", "server", "백엔드", "서버"]);
+  const hasBackendDecision = /(?:필요|사용|쓰|선택|구현|만들|넣|빼|제외|없이|원해|해 *줘)/u.test(answer);
+  return hasBackendSubject && hasBackendDecision;
 }
 
 function isNaturalBooleanAnswer(answer: string): boolean {
