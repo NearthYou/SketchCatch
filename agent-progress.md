@@ -26,6 +26,14 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-18 - Minimize the automatic organization result
+
+- Reduced the automatic organization preview to its title, outcome headline, and the existing revert/apply actions.
+- Removed the review summary, outcome cards, change/diagnostic summaries, technical disclosure, and their unused rendering/CSS helpers; narrowed the notice from 560px to 520px with smaller padding.
+- Focused Diagram Editor layout tests pass 54/54; Web lint/typecheck, root lint/typecheck/build, final harness, and diff checks pass. Broad test suites were not run; root lint retains one unrelated existing API test warning.
+- Archived one older progress entry to restore the harness size limit. No DB schema, migration, cloud mutation, deployment, or Git/CI/CD handoff was performed.
+- Next action: refresh the active Workspace and visually confirm the compact result notice; no further code change is pending.
+
 ### 2026-07-18 - Separate Workspace panel and canvas controls
 
 - Offset the vertical canvas toolbar from the shared 24px panel edge handle so the controls keep a 12px desktop gap and a 10px compact-screen gap.
@@ -64,14 +72,6 @@ Short English-only working log for the current agent context. Older records are 
 ### 2026-07-18 - Confirm presentation typography on the target display
 
 - Refresh the running local Web app and confirm the 6px increase and Pretendard rendering on the presentation TV; no further code change is pending unless visual acceptance requests one.
-
-### 2026-07-17 - Automate resource-inclusive project deletion
-
-- Replaced the two-step Destroy approval UI with one explicit confirmation that continues through plan, approval, destroy, S3 artifact cleanup, and project deletion.
-- Added compact stage and percentage progress for planning, approval, cloud cleanup, and final project cleanup.
-- Unified terminal Destroy eligibility so approved FAILED/aws_connection deployments with Terraform state are not rejected between approval and execution.
-- Exact route and service regressions pass (55/55 and 7/7); approval and destroy-plan services pass (18/18 and 7/7); focused Web flow tests pass (11/11).
-- Workspace lint and typecheck pass. API, types, and UI builds pass; the Web production build compiles successfully, then this Windows sandbox blocks the Next.js child process with spawn EPERM.
 
 ### 2026-07-18 - Expand project destroy recovery and AWS connection permissions
 

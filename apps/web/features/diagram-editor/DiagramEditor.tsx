@@ -188,10 +188,6 @@ const FIT_VIEW_PADDING = 0.24;
 const SNAP_ANIMATION_MS = 110;
 const SNAP_ANIMATION_CLEAR_MS = SNAP_ANIMATION_MS + 30;
 
-function formatCompilerScore(value: number): string {
-  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value);
-}
-
 function areBoardViewportFramesEqual(left: BoardViewportFrame, right: BoardViewportFrame): boolean {
   return (
     left.x === right.x &&
@@ -231,23 +227,6 @@ export function DiagramEditor(props: DiagramEditorProps) {
     <ReactFlowProvider>
       <DiagramEditorInner {...props} />
     </ReactFlowProvider>
-  );
-}
-
-function CompilerPreviewDetail({
-  emptyLabel,
-  items,
-  label
-}: {
-  readonly emptyLabel: string;
-  readonly items: readonly string[];
-  readonly label: string;
-}) {
-  return (
-    <div className={styles.compilerPreviewDetail}>
-      <span>{label}</span>
-      <strong>{items.length > 0 ? items.join(" · ") : emptyLabel}</strong>
-    </div>
   );
 }
 
@@ -3232,7 +3211,6 @@ function DiagramEditorInner({
                   <div>
                     <span>자동 정리 결과</span>
                     <strong>{compilerPreviewSummary.outcome.headline}</strong>
-                    <p>{compilerPreviewSummary.outcome.reviewSummary}</p>
                   </div>
                   <div className={styles.compilerPreviewActions}>
                     <button onClick={cancelAutomaticOrganization} type="button">
@@ -3243,69 +3221,6 @@ function DiagramEditorInner({
                     </button>
                   </div>
                 </div>
-
-                {compilerPreviewSummary.outcome.items.length > 0 ? (
-                  <ul className={styles.compilerPreviewOutcomes}>
-                    {compilerPreviewSummary.outcome.items.map((item) => (
-                      <li data-tone={item.tone} key={item.key}>
-                        <span>{item.label}</span>
-                        <strong>{item.summary}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={styles.compilerPreviewEmptyOutcome}>
-                    추적 지표에서 표시할 배치 문제가 없습니다.
-                  </p>
-                )}
-
-                <div className={styles.compilerPreviewDetails}>
-                  <CompilerPreviewDetail
-                    emptyLabel="변경 없음"
-                    items={compilerPreviewSummary.changeGroups.map(
-                      ({ count, label }) => `${label} ${count}`
-                    )}
-                    label="변경"
-                  />
-                  <CompilerPreviewDetail
-                    emptyLabel="확인 없음"
-                    items={compilerPreviewSummary.diagnosticGroups.map(
-                      ({ count, label }) => `${label} ${count}`
-                    )}
-                    label="확인"
-                  />
-                </div>
-
-                <details className={styles.compilerPreviewTechnical}>
-                  <summary>기술 세부 정보</summary>
-                  <div className={styles.compilerPreviewTechnicalBody}>
-                    <CompilerPreviewDetail
-                      emptyLabel="계산 없음"
-                      items={[
-                        `내부 cost ${formatCompilerScore(compilerPreviewSummary.quality.beforeScore)} → ${formatCompilerScore(compilerPreviewSummary.quality.afterScore)}`,
-                        `변경 cost ${formatCompilerScore(compilerPreviewSummary.quality.compilationDistance)}`
-                      ]}
-                      label="cost"
-                    />
-                    <CompilerPreviewDetail
-                      emptyLabel="일반 규칙"
-                      items={compilerPreviewSummary.referenceTemplateIds}
-                      label="참고"
-                    />
-                    <p>
-                      후보 {compilerPreviewSummary.candidateId} · Compiler{" "}
-                      {compilerPreviewSummary.compilerVersion}
-                    </p>
-                    {compilerPreviewSummary.diagnosticSummaries.length > 0 ? (
-                      <p className={styles.compilerPreviewDiagnostic}>
-                        {compilerPreviewSummary.diagnosticSummaries.slice(0, 2).join(" · ")}
-                        {compilerPreviewSummary.diagnosticSummaries.length > 2
-                          ? ` 외 ${compilerPreviewSummary.diagnosticSummaries.length - 2}`
-                          : ""}
-                      </p>
-                    ) : null}
-                  </div>
-                </details>
               </section>
             ) : isPreviewActive ? (
               <div className={styles.previewNotice} role="status">
