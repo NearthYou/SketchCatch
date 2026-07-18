@@ -32,51 +32,14 @@ Short English-only working log for the current agent context. Older records are 
 - Recaptured the committed WebP and bound its manifest hash to the corrected Diagram.
 - Kept the existing Compiler visual baseline by excluding visual Security Group scope, summary links, and launch dependencies from main-flow quality.
 
-### 2026-07-16 - Address PR #438 review feedback
+### 2026-07-18 - Standardize presentation typography
 
-- Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
-- Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
-- Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
-- No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
-
-### 2026-07-16 - Follow up merged PR #439 review
-
-- Scoped runtime Secret contract regexes to their Terraform set literals, selected the named worker container, and used `try(..., [])` for nullable Secret lists so unrelated markers cannot satisfy the checks.
-- Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
-
-### 2026-07-16 - Complete runtime Apply validator repair
-
-- Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for valid and invalid forms.
-- Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed.
-
-### 2026-07-16 - Complete runtime deployment reconciliation
-
-- Complete runtime Apply validation compares planned API and worker Secret references with Terraform state and verifies that the worker execution policy retains every existing secret reference.
-- The API ECS service reconciles task definition changes while retaining autoscaling ownership of desired count.
-- Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed.
-
-### 2026-07-16 - Complete runtime policy and post-apply verification
-
-- Complete runtime Apply validation reads the existing worker execution inline policy from state when Plan JSON masks prior policy data, then verifies every worker Task Definition Secret reference after Apply.
-- Synthetic jq checks passed when prior permissions were retained and failed when a prior permission or Secret reference was removed; no Secret value was emitted.
-
-### 2026-07-17 - Complete runtime post-apply task definition verification
-
-- Plan JSON also masks the desired task definition payload, so the complete Apply guard verifies GitHub App runtime inputs in the applied API and worker task definitions from Terraform state.
-- Synthetic jq checks passed with both required inputs and failed when the worker Client ID environment entry was removed.
-
-### 2026-07-17 - Complete runtime partial-apply resume guard
-
-- The first approved Apply partially completed the reviewed runtime plan, then stopped because the deploy role lacked ELB tag readback and task-definition deregistration authorization.
-- The deploy-policy source now grants only those two missing actions, and the complete runtime guard accepts either the original full reviewed envelope or the exact residual envelope. No state operation, import, or unreviewed apply was used.
-- Harness, production infrastructure structure check, Terraform formatting, lint, typecheck, and build pass. Local Terraform validate/test remain blocked by the uncached AWS provider package.
-
-### 2026-07-17 - Improve Architecture Board UI interactions
-
-- Closed the controlled AI Workbench before competing observation, deployment, right-panel, and auto-organize preview surfaces open.
-- Corrected Fit View visual bounds, anchored the auto-organize preview beside the left panel, scaled resource contents with their containers, and removed the empty-board `Resource` guidance while preserving view switching.
-- Added a single-template detail preview with image, description, metrics, and tags. Sidebar and full-library selection no longer apply immediately; only the preview confirmation applies the template.
-- Focused contract tests, browser smoke checks, lint, typecheck, and build pass. No DB migration, infrastructure mutation, deployment, or Git handoff was performed.
+- Added one auditable 6px presentation increment to every explicit and browser-default Web text size, including both inline text sizes, without changing existing base values; preserved one documented shape-only zero-size exception.
+- Unified UI and code typography on the bundled Pretendard 1.3.9 family and kept the existing package-backed font loading path.
+- Reduced all 448 explicit text weights above 400 by one 100-point Pretendard step, including browser-default headings and strong text, while preserving regular body weight and font-face metadata.
+- Startup harness exposed an oversized progress log; duplicate archived records were removed, and the final harness passes.
+- Confirmed local PostgreSQL and Redis are running, focused typography and dependent Web tests pass 135/135, Web lint/typecheck pass, and the root production build passes.
+- No DB schema, migration, cloud mutation, Terraform execution, deployment, or Git/CI/CD handoff was performed.
 
 ## Broken Or Unverified
 
@@ -86,6 +49,10 @@ Short English-only working log for the current agent context. Older records are 
 - Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
 
 ## Next Action
+### 2026-07-18 - Confirm presentation typography on the target display
+
+- Refresh the running local Web app and confirm the 6px increase and Pretendard rendering on the presentation TV; no further code change is pending unless visual acceptance requests one.
+
 ### 2026-07-17 - Automate resource-inclusive project deletion
 
 - Replaced the two-step Destroy approval UI with one explicit confirmation that continues through plan, approval, destroy, S3 artifact cleanup, and project deletion.

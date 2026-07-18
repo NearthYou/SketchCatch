@@ -24,8 +24,8 @@
 
 .header p {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.08em;
   margin-bottom: 4px;
   text-transform: uppercase;
@@ -35,8 +35,8 @@
   background: #eef6ff;
   border-radius: 999px;
   color: #0969da;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   padding: 6px 10px;
   white-space: nowrap;
 }
@@ -69,13 +69,13 @@
 
 .facts dt {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .facts dd {
-  font-size: 13px;
-  font-weight: 800;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   margin: 4px 0 0;
   overflow-wrap: anywhere;
 }
@@ -88,8 +88,8 @@
   color: #633c01;
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 8px;
   margin: 0;
   padding: 10px 12px;
@@ -98,7 +98,7 @@
 
 .notice a {
   color: inherit;
-  font-weight: 900;
+  font-weight: calc(900 - var(--presentation-font-weight-reduction));
 }
 
 .review,
@@ -114,7 +114,7 @@
 
 .review ul {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.6;
   margin: 0;
   padding-left: 20px;
@@ -137,7 +137,7 @@
 
 .result > div:first-child span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .readiness {
@@ -167,15 +167,15 @@
 .readinessHeader p,
 .readinessList p {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   margin-top: 4px;
 }
 
 .readinessHeader > span,
 .readinessItemContent > div > span {
   border-radius: 999px;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   white-space: nowrap;
 }
 
@@ -248,7 +248,7 @@
   border-radius: 6px;
   color: var(--workspace-muted, #60646c);
   display: flex;
-  font-size: 11px;
+  font-size: calc(11px + var(--presentation-font-size-increase));
   gap: 8px;
   justify-content: space-between;
   padding: 8px;
@@ -265,7 +265,7 @@
 
 .readinessLoading {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   margin: 0;
   padding: 12px 0;
 }
@@ -278,8 +278,8 @@
   color: var(--workspace-error, #eb8e90);
   display: flex;
   flex-wrap: wrap;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 12px;
   justify-content: space-between;
   padding: 12px;
@@ -297,15 +297,15 @@
 
 .commandCard > div:first-child > p {
   color: var(--workspace-muted, #60646c);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: calc(11px + var(--presentation-font-size-increase));
+  font-weight: calc(800 - var(--presentation-font-weight-reduction));
   letter-spacing: 0.08em;
 }
 
 .commandCard > p,
 .commandCard > span {
   color: var(--workspace-muted, #60646c);
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 
@@ -320,7 +320,7 @@
   border-radius: 8px;
   color: #fff;
   flex: 1;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   overflow-x: auto;
   padding: 12px;
   white-space: nowrap;

@@ -40,8 +40,8 @@
 
 .searchField input,
 .searchField input::placeholder {
-  font-family: "Pretendard", "Noto Sans KR", sans-serif !important;
-  font-size: 14px;
+  font-family: var(--font-sans) !important;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1.5;
@@ -54,8 +54,8 @@
 
 .selectField > span {
   color: var(--color-body);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1.4;
 }
 
@@ -117,12 +117,12 @@
 }
 
 .cardHeading h2 {
-  font-size: 16px;
+  font-size: calc(16px + var(--presentation-font-size-increase));
 }
 
 .cardHeading p {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.55;
   margin-top: 6px;
 }
@@ -141,12 +141,12 @@
 
 .cardHeading dt {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .cardHeading dd {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   margin: 0;
 }
 
@@ -160,7 +160,7 @@
   border: 1px solid #dcdee0;
   border-radius: 6px;
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   padding: 4px 6px;
 }
 
@@ -174,8 +174,8 @@
   cursor: pointer;
   display: inline-flex;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   gap: 6px;
   justify-content: center;
   min-height: 38px;
@@ -190,7 +190,7 @@
 
 .unavailableAction span {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
   line-height: 1.5;
 }
 
@@ -201,8 +201,8 @@
   color: #60646c;
   cursor: not-allowed;
   font: inherit;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: calc(12px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   min-height: 38px;
 }
 

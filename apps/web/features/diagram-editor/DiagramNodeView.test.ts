@@ -181,8 +181,14 @@ test("diagram node view renders bounded two-line labels on a transparent backgro
   assert.match(labelBlock, /background:\s*transparent;/);
   assert.match(labelBlock, /pointer-events:\s*none;/);
   assert.match(labelBlock, /display:\s*-webkit-box;/);
-  assert.match(labelBlock, /font-size:\s*12px;/);
-  assert.match(labelBlock, /font-weight:\s*650;/);
+  assert.match(
+    labelBlock,
+    /font-size:\s*calc\(12px \+ var\(--presentation-font-size-increase\)\);/
+  );
+  assert.match(
+    labelBlock,
+    /font-weight:\s*calc\(650 - var\(--presentation-font-weight-reduction\)\);/
+  );
   assert.match(labelBlock, /line-height:\s*15px;/);
   assert.match(labelBlock, /max-height:\s*30px;/);
   assert.match(labelBlock, /max-width:\s*112px;/);
@@ -519,7 +525,7 @@ test("compound node states identify the affected resource without a placement ba
   assert.match(getCssBlock(".nodeShellResource"), /container-type:\s*size;/);
   assert.match(
     diagramEditorCssSource,
-    /@container \(max-width:\s*39px\)\s*\{[\s\S]*?\.lockBadge,\s*\.stateBadge\s*\{[^}]*height:\s*12px;[^}]*min-height:\s*12px;[^}]*min-width:\s*12px;[^}]*width:\s*12px;/
+    /@container \(max-width:\s*39px\)\s*\{[\s\S]*?\.lockBadge,\s*\.stateBadge\s*\{[^}]*height:\s*18px;[^}]*line-height:\s*16px;[^}]*min-height:\s*18px;[^}]*min-width:\s*18px;[^}]*width:\s*18px;/
   );
 });
 

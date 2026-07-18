@@ -38,8 +38,8 @@
   align-items: center;
   gap: 7px;
   color: #171717;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: calc(18px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
   line-height: 1;
   text-decoration: none;
 }
@@ -69,8 +69,8 @@
   border-radius: 8px;
   padding: 0 12px;
   color: #55585f;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: calc(14px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   text-decoration: none;
   transition:
     background-color var(--motion-fast),
@@ -107,8 +107,8 @@
   border-radius: 8px;
   background: #171717;
   color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(700 - var(--presentation-font-weight-reduction));
 }
 
 .dashboardAccountText {
@@ -125,12 +125,12 @@
 }
 
 .dashboardAccountText strong {
-  font-size: 13px;
+  font-size: calc(13px + var(--presentation-font-size-increase));
 }
 
 .dashboardAccountText span {
   color: #60646c;
-  font-size: 12px;
+  font-size: calc(12px + var(--presentation-font-size-increase));
 }
 
 .dashboardLogoutButton,
@@ -199,7 +199,7 @@
 
 .dashboardTopbarTitle strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -217,8 +217,8 @@
   gap: 8px;
   border-radius: 8px;
   padding: 0 16px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: calc(13px + var(--presentation-font-size-increase));
+  font-weight: calc(600 - var(--presentation-font-weight-reduction));
   text-decoration: none;
   white-space: nowrap;
   transition:
@@ -293,7 +293,7 @@
 
 .dashboardSessionState p {
   margin: 0;
-  font-size: 14px;
+  font-size: calc(14px + var(--presentation-font-size-increase));
 }
 
 @media (max-width: 1024px) {

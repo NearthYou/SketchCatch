@@ -336,15 +336,15 @@ test("keeps the initial map readable while preserving pan, zoom, and MiniMap exp
   assert.match(diagramMapSource, /미니맵과 드래그로 이동/);
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureResourceNode > strong\s*\{[^}]*font-size:\s*13px;/s
+    /\.liveObservationArchitectureResourceNode > strong\s*\{[^}]*font-size:\s*calc\(13px \+ var\(--presentation-font-size-increase\)\);/s
   );
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureResourceDetail\s*\{[^}]*font-size:\s*11px;/s
+    /\.liveObservationArchitectureResourceDetail\s*\{[^}]*font-size:\s*calc\(11px \+ var\(--presentation-font-size-increase\)\);/s
   );
   assert.match(
     workspaceCssSource,
-    /\.liveObservationArchitectureStateBadge\s*\{[^}]*font-size:\s*10px;/s
+    /\.liveObservationArchitectureStateBadge\s*\{[^}]*font-size:\s*calc\(10px \+ var\(--presentation-font-size-increase\)\);/s
   );
 });
 

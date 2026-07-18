@@ -548,8 +548,14 @@ test("area node header uses a rounded icon without a bottom divider", () => {
   assert.match(areaBlock, /background:\s*var\(--area-body-background\);/);
   assert.match(areaBlock, /border-radius:\s*10px;/);
   assert.match(headerBlock, /height:\s*34px;/);
-  assert.match(headerBlock, /font-size:\s*14px;/);
-  assert.match(headerBlock, /font-weight:\s*650;/);
+  assert.match(
+    headerBlock,
+    /font-size:\s*calc\(14px \+ var\(--presentation-font-size-increase\)\);/
+  );
+  assert.match(
+    headerBlock,
+    /font-weight:\s*calc\(650 - var\(--presentation-font-weight-reduction\)\);/
+  );
   assert.match(headerBlock, /left:\s*0;/);
   assert.match(headerBlock, /top:\s*0;/);
   assert.match(
@@ -624,7 +630,7 @@ test("edge labels use a quantized 75 percent canvas LOD", () => {
   assert.match(compactTextRule, /visibility:\s*hidden;/);
   assert.match(
     diagramEditorStyles,
-    /\.canvasPanelEdgeLabelsCompact :global\(\.react-flow__edge-text\)\s*\{[^}]*font-size:\s*calc\(12px \* var\(--board-lod-label-scale\)\) !important;/s
+    /\.canvasPanelEdgeLabelsCompact :global\(\.react-flow__edge-text\)\s*\{[^}]*font-size:\s*calc\(calc\(12px \* var\(--board-lod-label-scale\)\) \+ var\(--presentation-font-size-increase\)\) !important;/s
   );
   assert.match(compactBackgroundRule, /opacity:\s*0;/);
   assert.match(compactBackgroundRule, /visibility:\s*hidden;/);

@@ -53,7 +53,11 @@ test("AI Workbench shell uses only its dedicated visual token vocabulary", () =>
   assert.doesNotMatch(workbenchStyles, /gradient\(/);
   assert.doesNotMatch(workbenchStyles, /(?:text-shadow|filter:\s*drop-shadow|--[^:]*glow)/i);
 
-  const pixelFontSizes = [...workbenchStyles.matchAll(/font-size:\s*(\d+(?:\.\d+)?)px/g)].map(
+  const pixelFontSizes = [
+    ...workbenchStyles.matchAll(
+      /font-size:\s*calc\((\d+(?:\.\d+)?)px \+ var\(--presentation-font-size-increase\)\)/g
+    )
+  ].map(
     ([, size]) => Number(size)
   );
   assert.ok(pixelFontSizes.length > 0);
