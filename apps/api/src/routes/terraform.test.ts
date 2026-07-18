@@ -745,6 +745,50 @@ test("POST /api/terraform/validate resolves references and duplicate addresses a
   await app.close();
 });
 
+test("POST /api/terraform/validate returns a blocking diagnostic instead of 500 for dangling outputs", async () => {
+  const fakeDb = new AuthOnlyFakeDb({
+    users: [{ id: ACTIVE_USER_ID, deletedAt: null }]
+  });
+  const app = buildApp({ getDatabaseClient: () => fakeDb.client });
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/terraform/validate",
+    headers: await authHeaders(ACTIVE_USER_ID),
+    payload: {
+      terraformCode: "",
+      terraformFiles: [
+        {
+          fileName: "outputs.tf",
+          terraformCode: `output "cloudfront_url" {
+  value = aws_cloudfront_distribution.distribution.domain_name
+}`
+        }
+      ]
+    }
+  });
+  const body = response.json() as TerraformValidateResponse;
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.diagnostics
+      .filter((diagnostic) => diagnostic.code === "terraform.undefined_reference")
+      .map((diagnostic) => ({
+        resourceAddress: diagnostic.resourceAddress,
+        severity: diagnostic.severity,
+        sourceFileName: diagnostic.sourceFileName
+      })),
+    [
+      {
+        resourceAddress: "aws_cloudfront_distribution.distribution",
+        severity: "error",
+        sourceFileName: "outputs.tf"
+      }
+    ]
+  );
+
+  await app.close();
+});
+
 test("POST /api/terraform/validate keeps syntax validation isolated per module file", async () => {
   const fakeDb = new AuthOnlyFakeDb({
     users: [{ id: ACTIVE_USER_ID, deletedAt: null }]

@@ -85,6 +85,7 @@ import { verifyRepositoryAccessForPlan } from "./repository-access-verification"
 import type { RequestState } from "./workspace-right-panel.types";
 import { canLoadDeploymentData, type DeploymentAvailability } from "./deployment-availability";
 import {
+  createResetPreDeploymentCheckState,
   getDirectDeploymentPreflightState,
   getDirectDeploymentFlow,
   hasDeploymentDraftChanges,
@@ -782,17 +783,16 @@ export function DirectDeploymentScreen({
     const preparedBoardSnapshot = createWorkspaceAiBoardSnapshot(preparedArtifacts.diagramJson);
 
     if (!preparedBoardSnapshot.hasResources) {
-      updatePreDeploymentCheckState({
-        errorMessage: "Architecture Board에 Resource가 있어야 실행할 수 있습니다.",
-        requestState: "error"
-      });
+      onPreDeploymentCheckStateChange(
+        createResetPreDeploymentCheckState(
+          "error",
+          "Architecture Board에 Resource가 있어야 실행할 수 있습니다."
+        )
+      );
       return false;
     }
 
-    updatePreDeploymentCheckState({
-      errorMessage: "",
-      requestState: "loading"
-    });
+    onPreDeploymentCheckStateChange(createResetPreDeploymentCheckState("loading"));
 
     try {
       const currentTerraformDiagnostics = await onValidateTerraformDiagnostics();
@@ -832,10 +832,12 @@ export function DirectDeploymentScreen({
       }
       return true;
     } catch (error) {
-      updatePreDeploymentCheckState({
-        errorMessage: getApiErrorMessage(error, "배포 전 검사 중 오류가 발생했습니다."),
-        requestState: "error"
-      });
+      onPreDeploymentCheckStateChange(
+        createResetPreDeploymentCheckState(
+          "error",
+          getApiErrorMessage(error, "배포 전 검증 중 오류가 발생했습니다.")
+        )
+      );
       return false;
     }
   }
@@ -1715,16 +1717,6 @@ export function DirectDeploymentScreen({
               {showApplyConfirmation && selectedDeployment ? (
                 <>
                   <button
-                    aria-busy={requestState === "loading" && activeProgress === null}
-                    className={styles.deploymentSecondaryButton}
-                    data-active={requestState === "loading" && activeProgress === null}
-                    disabled={requestState === "loading"}
-                    onClick={() => void revokeCurrentPlanApproval()}
-                    type="button"
-                  >
-                    Plan 승인 취소
-                  </button>
-                  <button
                     aria-busy={
                       activeProgress?.operation === "apply" && requestState === "loading"
                     }
@@ -1738,6 +1730,16 @@ export function DirectDeploymentScreen({
                   >
                     <DashboardIcon name="rocket" />
                     배포 실행
+                  </button>
+                  <button
+                    aria-busy={requestState === "loading" && activeProgress === null}
+                    className={styles.deploymentSecondaryButton}
+                    data-active={requestState === "loading" && activeProgress === null}
+                    disabled={requestState === "loading"}
+                    onClick={() => void revokeCurrentPlanApproval()}
+                    type="button"
+                  >
+                    Plan 승인 취소
                   </button>
                 </>
               ) : null}
