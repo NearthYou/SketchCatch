@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import { WorkspaceDeploymentNotificationCenterSlot } from "../../../components/notifications/DeploymentNotificationCenter";
 import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ConversationTranscript } from "./conversation-transcript";
@@ -26,6 +27,7 @@ import {
 import { WorkspaceAiComposer } from "./workspace-ai-composer";
 import styles from "./workspace-ai.module.css";
 
+/** AI 대화, 장식 Orbit, 승인 전 최종 Preview의 화면 전환을 조율합니다. */
 export function WorkspaceAiShell({
   existingProject
 }: {
@@ -136,7 +138,16 @@ export function WorkspaceAiShell({
         </div>
         <p className={styles.topBarTitle}>AI 초안</p>
         <div className={styles.topBarState}>
-          <span>{stageState}</span>
+          <span className={styles.stageBadge}>{stageState}</span>
+          {mobileView === "preview" ? (
+            <button
+              className={styles.mobileBackToConversation}
+              onClick={() => setMobilePreviewRequested(false)}
+              type="button"
+            >
+              <ArrowLeft aria-hidden="true" size={14} /> 대화
+            </button>
+          ) : null}
           {showMobilePreviewTrigger ? (
             <button
               className={styles.mobilePreviewTrigger}
@@ -145,6 +156,32 @@ export function WorkspaceAiShell({
             >
               미리보기
             </button>
+          ) : null}
+          {showFinalPreview ? (
+            <button
+              aria-label={
+                workflow.approvalState === "loading" ? "보드에 적용 중" : "보드에 적용"
+              }
+              className={styles.topBarApply}
+              disabled={!workflow.canApprove}
+              onClick={() => void workflow.approveDraft()}
+              type="button"
+            >
+              <span className={styles.topBarApplyFullLabel}>
+                {workflow.approvalState === "loading" ? "적용 중" : "보드에 적용"}
+              </span>
+              <span className={styles.topBarApplyShortLabel}>
+                {workflow.approvalState === "loading" ? "적용 중" : "적용"}
+              </span>
+              {workflow.approvalState !== "loading" ? (
+                <ArrowRight aria-hidden="true" size={14} />
+              ) : null}
+            </button>
+          ) : null}
+          {showFinalPreview && workflow.approvalError ? (
+            <span className={styles.topBarApplyError} role="alert">
+              {workflow.approvalError}
+            </span>
           ) : null}
           <WorkspaceDeploymentNotificationCenterSlot />
           <button
@@ -210,16 +247,7 @@ export function WorkspaceAiShell({
         >
           {showFinalPreview && finalDiagram && workflow.draft && workflow.compilationProposal ? (
             <FinalArchitecturePreview
-              approvalError={workflow.approvalError}
-              canApprove={workflow.canApprove}
               diagram={finalDiagram}
-              isApplying={workflow.approvalState === "loading"}
-              onApply={workflow.approveDraft}
-              onBackToConversation={() => setMobilePreviewRequested(false)}
-              onRegenerate={async () => {
-                setMobilePreviewRequested(false);
-                await workflow.regenerateDraft();
-              }}
               selections={selections}
             />
           ) : (

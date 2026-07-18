@@ -6,6 +6,13 @@ import {
 } from "./option-resource-presentation";
 import styles from "./workspace-ai.module.css";
 
+const ORBIT_LAYER_GEOMETRY = [
+  { aspect: 1, layer: 0, tilt: 0 },
+  { aspect: 1, layer: 1, tilt: -11 },
+  { aspect: 1.55, layer: 2, tilt: 8 }
+] as const;
+
+/** 실제 AWS icon을 원본 목업의 비원형 궤도 위에서 장식적으로 공전시킵니다. */
 export function DecorativeAwsOrbit({
   composition,
   convergenceLevel,
@@ -62,15 +69,24 @@ export function DecorativeAwsOrbit({
       ref={sceneRef}
     >
       <span className={styles.orbitCore} />
-      {[0, 1, 2].map((layer) => (
+      {ORBIT_LAYER_GEOMETRY.map(({ aspect, layer, tilt }) => (
         <span
           className={styles.orbitLayerFrame}
           data-layer={layer}
+          data-orbit-aspect={aspect}
+          data-orbit-tilt={tilt}
           data-ring-visible={layer < visibleRingCount ? "true" : "false"}
           key={layer}
+          style={
+            {
+              "--orbit-tilt": `${tilt}deg`,
+              "--orbit-y-scale": 1 / aspect,
+              "--orbit-y-scale-inverse": aspect
+            } as CSSProperties
+          }
         >
-          <span className={styles.orbitLayer}>
-            <span className={styles.orbitRing} />
+          <span className={styles.orbitRing} data-orbit-ring="true" />
+          <span className={styles.orbitLayer} data-orbit-track="true">
             {composition.glyphs
               .map((glyph, index) => ({ glyph, index }))
               .filter(({ glyph }) => glyph.orbitLayer === layer)
