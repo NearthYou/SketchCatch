@@ -124,17 +124,32 @@ test("Direct Deployment uses prepare, approve, and execute with three external p
   assert.match(directDeploymentSource, /stepId === "approval"/);
 });
 
-test("successful deployment auto-refresh clears a transient polling error", () => {
+test("deployment polling owns snapshot feedback and cannot clear an action failure", () => {
   const refreshStart = directDeploymentSource.indexOf("async function refreshSnapshot");
   const intervalStart = directDeploymentSource.indexOf("const intervalId", refreshStart);
   const refreshSource = directDeploymentSource.slice(refreshStart, intervalStart);
-  const applyIndex = refreshSource.indexOf("applyDeploymentRuntimeSnapshot(snapshot)");
-  const clearErrorIndex = refreshSource.indexOf('setErrorMessage("")', applyIndex);
 
   assert.ok(refreshStart > -1);
   assert.ok(intervalStart > refreshStart);
-  assert.ok(applyIndex > -1);
-  assert.ok(clearErrorIndex > applyIndex);
+  assert.doesNotMatch(directDeploymentSource, /recoverableSnapshotRequestErrorRef/);
+  assert.match(directDeploymentSource, /snapshotErrorMessage/);
+  assert.match(refreshSource, /setSnapshotErrorMessage\(""\)/);
+  assert.match(refreshSource, /setSnapshotErrorMessage\(\s*getApiErrorMessage/);
+  assert.doesNotMatch(refreshSource, /setRequestState\(/);
+  assert.doesNotMatch(refreshSource, /setErrorMessage\(/);
+});
+
+test("deployment commands stop their failure boundary before secondary hydration", () => {
+  const reviewStart = directDeploymentSource.indexOf("async function startDeploymentReview");
+  const retryStart = directDeploymentSource.indexOf("async function startTerraformPlan", reviewStart);
+  const reviewSource = directDeploymentSource.slice(reviewStart, retryStart);
+  const planIndex = reviewSource.indexOf("await runDeploymentPlan(preparedDeployment.id)");
+  const detailsIndex = reviewSource.indexOf("refreshDeploymentDetails", planIndex);
+
+  assert.ok(planIndex > -1);
+  assert.ok(detailsIndex > planIndex);
+  assert.doesNotMatch(reviewSource.slice(planIndex, detailsIndex), /listDeploymentLogs|listDeploymentResources|listTerraformOutputs/);
+  assert.match(directDeploymentSource, /actionInFlightRef/);
 });
 
 test("Direct Deployment uses the approved executive validation layout", () => {
@@ -159,7 +174,7 @@ test("deployment review delegates build preparation and repository verification 
   );
   const reviewSource = directDeploymentSource.slice(reviewStart, planActionStart);
   const prepareIndex = reviewSource.indexOf("await prepareDeployment({");
-  const planIndex = reviewSource.indexOf("await runDeploymentPlan(deployment.id)");
+  const planIndex = reviewSource.indexOf("await runDeploymentPlan(preparedDeployment.id)");
 
   assert.ok(reviewStart > -1);
   assert.ok(planActionStart > reviewStart);
@@ -178,15 +193,15 @@ test("Plan responses immediately refresh the Repository verification status", ()
   const reviewSource = directDeploymentSource.slice(reviewStart, retryStart);
   const retrySource = directDeploymentSource.slice(retryStart, approveStart);
 
-  for (const source of [reviewSource, retrySource]) {
-    const planIndex = source.indexOf("await runDeploymentPlan(");
-    const refreshIndex = source.indexOf("await getProjectBuildEnvironment(projectId)", planIndex);
-    const applyIndex = source.indexOf("setBuildEnvironment(refreshedBuildEnvironment)", refreshIndex);
-
-    assert.ok(planIndex > -1);
-    assert.ok(refreshIndex > planIndex);
-    assert.ok(applyIndex > refreshIndex);
-  }
+  assert.match(reviewSource, /await runDeploymentPlan\(preparedDeployment\.id\)/);
+  assert.match(reviewSource, /preparedDeployment\.currentPlanOperation === "apply"/);
+  assert.match(reviewSource, /refreshBuildEnvironmentAfterPlan\(plannedDeployment\)/);
+  assert.match(retrySource, /runDeploymentPlan\(selectedDeployment\.id\)/);
+  assert.match(retrySource, /refreshBuildEnvironmentAfterPlan\(deployment\)/);
+  assert.match(
+    directDeploymentSource,
+    /function refreshBuildEnvironmentAfterPlan[\s\S]*getProjectBuildEnvironment\(projectId\)[\s\S]*\.then\(setBuildEnvironment\)/
+  );
 });
 
 test("full-stack validation checks the confirmed target and opens its setup surface", () => {

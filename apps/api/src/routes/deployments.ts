@@ -74,6 +74,7 @@ import {
   type ProjectAccessContext
 } from "../deployments/deployment-service.js";
 import {
+  createDeploymentPreparationKey,
   getDeploymentConsolePhase,
   resolveDeploymentPreparation,
   type DeploymentPreparationRepository
@@ -855,6 +856,15 @@ export async function registerDeploymentRoutes(
         },
         preparationRepository
       );
+      const preparationKey = createDeploymentPreparationKey({
+        awsConnectionId: body.awsConnectionId,
+        deploymentTargetFingerprint: preparation.deploymentTargetFingerprint,
+        preparedDraftRevision: preparation.preparedDraftRevision,
+        preparedSnapshotHash: preparation.preparedSnapshotHash,
+        projectId: params.projectId,
+        scope: preparation.scope,
+        targetKind: preparation.targetKind
+      });
       const deployment = await createDeployment(
         {
           projectId: params.projectId,
@@ -867,7 +877,8 @@ export async function registerDeploymentRoutes(
           targetKind: preparation.targetKind,
           source: "direct",
           preparedDraftRevision: preparation.preparedDraftRevision,
-          preparedSnapshotHash: preparation.preparedSnapshotHash
+          preparedSnapshotHash: preparation.preparedSnapshotHash,
+          preparationKey
         },
         repository
       );
@@ -1569,7 +1580,10 @@ export async function registerDeploymentRoutes(
           )
         : undefined;
 
-      const runningDeployment = await repository.markDeploymentPlanRunning(deployment.id);
+      const runningDeployment = await repository.markDeploymentPlanRunning(
+        deployment.id,
+        "destroy"
+      );
 
       if (!runningDeployment) {
         if (queuedJob) {

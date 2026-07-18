@@ -354,6 +354,7 @@ function createDeploymentRecord(): DeploymentRecord {
     projectId: "323e4567-e89b-4d3a-a456-426614174000",
     architectureId: "423e4567-e89b-4d3a-a456-426614174000",
     terraformArtifactId: "523e4567-e89b-4d3a-a456-426614174000",
+    preparationKey: null,
     awsConnectionId: "223e4567-e89b-4d3a-a456-426614174000",
     awsAccountIdSnapshot: "123456789012",
     awsRegionSnapshot: "ap-northeast-2",

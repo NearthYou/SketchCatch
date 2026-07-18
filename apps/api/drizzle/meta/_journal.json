@@ -365,6 +365,13 @@
       "when": 1784383200000,
       "tag": "0051_aws_connection_reverse_scan_detachment",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1784383200001,
+      "tag": "0052_deployment_preparation_idempotency",
+      "breakpoints": true
     }
   ]
 }

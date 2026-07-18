@@ -554,6 +554,23 @@ class FakeDeploymentRepository implements DeploymentRepository {
     return this.deployment;
   }
 
+  async findReusablePreparedDeployment(
+    candidateProjectId: string,
+    candidatePreparationKey: string
+  ) {
+    const candidate = this.deployment;
+    if (
+      !candidate ||
+      candidate.projectId !== candidateProjectId ||
+      candidate.preparationKey !== candidatePreparationKey ||
+      candidate.approvedAt !== null ||
+      !["PENDING", "RUNNING"].includes(candidate.status)
+    ) {
+      return undefined;
+    }
+    return candidate;
+  }
+
   async findDeploymentById(candidateDeploymentId: string) {
     this.calls.push({
       name: "findDeploymentById",
@@ -650,7 +667,8 @@ class FakeDeploymentRepository implements DeploymentRepository {
   };
 
   markDeploymentPlanRunning: DeploymentRepository["markDeploymentPlanRunning"] = async (
-    candidateDeploymentId
+    candidateDeploymentId,
+    operation = "apply"
   ) => {
     this.calls.push({
       name: "markDeploymentPlanRunning",
@@ -669,6 +687,7 @@ class FakeDeploymentRepository implements DeploymentRepository {
       ...this.deployment,
       status: "RUNNING",
       activeStage: "plan",
+      preparationKey: operation === "destroy" ? null : this.deployment.preparationKey,
       failureStage: null,
       errorSummary: null,
       ...clearDeploymentApprovalSnapshot()
@@ -1307,6 +1326,7 @@ function createDeploymentRecord(
     rollbackTargetDeploymentId: null,
     preparedDraftRevision: null,
     preparedSnapshotHash: null,
+    preparationKey: null,
     currentPlanArtifactId: null,
     stateObjectKey: null,
     resultWarningSummary: null,
@@ -1661,6 +1681,7 @@ test("POST /api/projects/:projectId/deployments returns a created deployment", a
         source: "direct",
         preparedDraftRevision: null,
         preparedSnapshotHash: null,
+        preparationKey: null,
         rollbackOfDeploymentId: null,
         rollbackTargetDeploymentId: null,
         status: "PENDING"
@@ -1699,6 +1720,80 @@ test("POST /api/projects/:projectId/deployments/prepare locks the saved draft re
     assert.equal(createCall.input.preparedDraftRevision, 7);
     assert.equal(createCall.input.preparedSnapshotHash, body.deployment.preparedSnapshotHash);
   }
+
+  await app.close();
+});
+
+test("POST prepare reuses one active Deployment for the same saved snapshot", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+  const request = {
+    method: "POST" as const,
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  };
+
+  const firstResponse = await app.inject(request);
+  const secondResponse = await app.inject(request);
+
+  assert.equal(firstResponse.statusCode, 201);
+  assert.equal(secondResponse.statusCode, 201);
+  assert.equal(
+    firstResponse.json<DeploymentResponse>().deployment.id,
+    secondResponse.json<DeploymentResponse>().deployment.id
+  );
+  const createCalls = repository.calls.filter((call) => call.name === "createDeployment");
+  assert.equal(createCalls.length, 1);
+  if (createCalls[0]?.name === "createDeployment") {
+    assert.match(
+      "preparationKey" in createCalls[0].input &&
+        typeof createCalls[0].input.preparationKey === "string"
+        ? createCalls[0].input.preparationKey
+        : "",
+      /^[0-9a-f]{64}$/
+    );
+  }
+
+  await app.close();
+});
+
+test("POST prepare never reuses a Deployment carrying a destroy Plan", async () => {
+  const repository = new FakeDeploymentRepository();
+  const app = await buildDeploymentTestApp(repository);
+  const request = {
+    method: "POST" as const,
+    url: `/api/projects/${projectId}/deployments/prepare`,
+    headers: await authHeaders(),
+    payload: {
+      architectureId,
+      terraformArtifactId,
+      awsConnectionId,
+      draftRevision: 7,
+      scope: "auto"
+    }
+  };
+
+  await app.inject(request);
+  repository.deployment = {
+    ...repository.deployment!,
+    currentPlanArtifactId: planArtifactId
+  };
+  repository.planArtifact = createDeploymentPlanArtifactRecord({ operation: "destroy" });
+
+  const response = await app.inject(request);
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(
+    repository.calls.filter((call) => call.name === "createDeployment").length,
+    2
+  );
 
   await app.close();
 });
@@ -3446,6 +3541,7 @@ test("POST /api/deployments/:deploymentId/apply rejects failed deployments until
   const repository = new FakeDeploymentRepository();
   repository.deployment = createDeploymentRecord(deploymentId, {
     status: "FAILED",
+    preparationKey: "a".repeat(64),
     currentPlanArtifactId: planArtifactId,
     planSummary: {
       createCount: 1,
@@ -3551,6 +3647,7 @@ test("POST /api/deployments/:deploymentId/destroy/plan starts cleanup destroy pl
   assert.equal(body.deployment.status, "RUNNING");
   assert.equal(body.deployment.activeStage, "plan");
   assert.equal(body.deployment.failureStage, null);
+  assert.equal(repository.deployment.preparationKey, null);
   assert.equal(destroyPlanCalls.length, 1);
   const { abortSignal: destroyPlanAbortSignal, ...destroyPlanCall } = destroyPlanCalls[0]!;
   assert.equal(destroyPlanAbortSignal instanceof AbortSignal, true);

@@ -1448,6 +1448,13 @@ stale revision이면 Deployment를 만들지 않는다. 승인 시 `approvedPrep
 Apply/Destroy 직전 승인 snapshot과 준비 snapshot이 다르면 실행하지 않는다. 기존 Deployment는 세 필드가
 모두 `null`인 legacy record로 호환한다.
 
+같은 저장 snapshot, revision, AWS connection, scope, `deploymentTargetFingerprint`로 `prepare` 요청이
+겹치면 서버는
+내부 `deployments.preparation_key` SHA-256과 active partial unique index를 기준으로 하나의 미승인
+`PENDING`/`RUNNING` Deployment를 재사용한다. 이 키는 중복 클릭과 탭·네트워크 재시도를 흡수하기 위한 DB
+내부 idempotency 값이며 API `Deployment` DTO에는 노출하지 않는다. 승인되거나 terminal 상태가 된 실행은
+재사용 대상이 아니므로 이후 명시적 배포 준비는 새 Deployment를 만든다.
+
 `Deployment`는 제품/문서/화면/코드에서 실제 실행 단위로 통일한다.
 
 승인 시점에는 사용자가 확인한 Plan을 이후 Apply 대상과 비교할 수 있도록
