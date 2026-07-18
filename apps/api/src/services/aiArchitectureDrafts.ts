@@ -4380,6 +4380,7 @@ function createDeterministicArchitectureAssumptions(prompt: string): string[] {
   return assumptions;
 }
 
+// 최종 `직접 관리` 선택은 Provider plan의 EC2 금지보다 우선하도록 맞춥니다.
 function normalizeArchitecturePlanTopologyInvariants(
   plan: ArchitectureIntentPlan | null,
   prompt: string
@@ -4395,6 +4396,11 @@ function normalizeArchitecturePlanTopologyInvariants(
   );
   const usesSelfManagedEc2 =
     !usesEksRuntime && requiresSelfManagedEc2Architecture(normalizedPrompt);
+  const forbiddenCapabilities = usesSelfManagedEc2
+    ? plan.forbiddenCapabilities?.filter(
+        (capability) => capability.toLowerCase() !== "ec2_runtime"
+      )
+    : plan.forbiddenCapabilities;
 
   if (usesSelfManagedEc2) {
     patternIds.delete("ecs-fargate");
@@ -4674,6 +4680,7 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   return {
     ...plan,
+    ...(forbiddenCapabilities === undefined ? {} : { forbiddenCapabilities }),
     patternIds: [...patternIds],
     requiredResources: [...requiredResources],
     resourceQuantities,
@@ -8858,6 +8865,11 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
   return hasPromptTerm(normalizedPrompt, [
     "without ec2",
     "no ec2",
+    "do not use ec2",
+    "don't use ec2",
+    "not using ec2",
+    "exclude ec2",
+    "omit ec2",
     "no ec2 capacity",
     "ec2 excluded",
     "ec2 is excluded",
@@ -8865,7 +8877,12 @@ function explicitlyForbidsEc2Runtime(normalizedPrompt: string): boolean {
     "serverless runtime",
     "lambda only",
     "ec2 없이",
+    "ec2 사용 안",
+    "ec2 안 씀",
+    "ec2 안씀",
+    "ec2 쓰지 않",
     "ec2는 사용하지 않",
+    "ec2 필요 없",
     "ec2는 필요 없",
     "ec2 제외"
   ]);
