@@ -950,22 +950,33 @@ test("Area auto expansion is a persistent pressed toolbar preference after canva
   assert.match(diagramEditorSource, /<Expand aria-hidden="true" size=\{16\} \/>/);
 });
 
-test("canvas tools dock vertically along the left center", () => {
+test("canvas tools dock vertically along the left center without overlapping panel handles", () => {
   const canvasToolbarRule = getCssBlock(".canvasToolbar");
+  const viewerCanvasToolbarRule = getCssBlock(".editorShellViewer .canvasToolbar");
+  const panelEdgeHandleRule = getCssBlock(".panelEdgeHandle");
   const toolbarGroupRule = getCssBlock(".toolbarGroup");
 
   assert.match(canvasToolbarRule, /display:\s*flex;/);
   assert.match(canvasToolbarRule, /flex-direction:\s*column;/);
-  assert.match(canvasToolbarRule, /left:\s*16px;/);
+  assert.match(
+    canvasToolbarRule,
+    /left:\s*calc\(var\(--panel-edge-handle-width\) \+ 12px\);/
+  );
   assert.match(canvasToolbarRule, /top:\s*50%;/);
   assert.match(canvasToolbarRule, /transform:\s*translateY\(-50%\);/);
   assert.doesNotMatch(canvasToolbarRule, /bottom:/);
   assert.doesNotMatch(canvasToolbarRule, /translateX/);
+  assert.match(panelEdgeHandleRule, /width:\s*var\(--panel-edge-handle-width\);/);
+  assert.match(viewerCanvasToolbarRule, /left:\s*16px;/);
   assert.match(toolbarGroupRule, /display:\s*inline-flex;/);
   assert.match(toolbarGroupRule, /flex-direction:\s*column;/);
   assert.match(
     diagramEditorStyles,
-    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*10px;[^}]*max-height:\s*calc\(100% - 20px\);/s
+    /@media \(max-width:\s*640px\)[\s\S]*?\.canvasToolbar\s*\{[^}]*left:\s*calc\(var\(--panel-edge-handle-width\) \+ 10px\);[^}]*max-height:\s*calc\(100% - 20px\);/s
+  );
+  assert.match(
+    diagramEditorStyles,
+    /@media \(max-width:\s*640px\)[\s\S]*?\.editorShellViewer \.canvasToolbar\s*\{[^}]*left:\s*10px;/s
   );
 });
 

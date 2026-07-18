@@ -1,5 +1,6 @@
 .editorShell {
   --left-panel-width: 346px;
+  --panel-edge-handle-width: 24px;
   --right-panel-width: 440px;
   --workspace-font: var(--font-sans);
   --workspace-page: #ffffff;
@@ -974,7 +975,7 @@ button.rightRailResizeHandle {
     color 140ms ease,
     left 160ms ease,
     right 160ms ease;
-  width: 24px;
+  width: var(--panel-edge-handle-width);
   z-index: 44;
 }
 
@@ -1027,7 +1028,7 @@ button.rightRailResizeHandle {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  left: 16px;
+  left: calc(var(--panel-edge-handle-width) + 12px);
   max-height: calc(100% - 32px);
   padding: 5px;
   position: absolute;
@@ -1035,6 +1036,10 @@ button.rightRailResizeHandle {
   transform: translateY(-50%);
   width: fit-content;
   z-index: 12;
+}
+
+.editorShellViewer .canvasToolbar {
+  left: 16px;
 }
 
 .toolbarGroup {
@@ -3033,8 +3038,12 @@ button.rightRailResizeHandle {
   }
 
   .canvasToolbar {
-    left: 10px;
+    left: calc(var(--panel-edge-handle-width) + 10px);
     max-height: calc(100% - 20px);
+  }
+
+  .editorShellViewer .canvasToolbar {
+    left: 10px;
   }
 
   .compilerPreviewNotice {
