@@ -76,6 +76,7 @@ import {
   classifyWorkspaceAiChatPrompt,
   resolvePendingPreviewChatAction,
   resolveWorkspaceAiChatAction,
+  shouldStartFreshDraftDuringPatchClarification,
   type WorkspaceAiChatPromptClassification
 } from "./workspace-ai-chat-routing";
 import {
@@ -1445,6 +1446,12 @@ export function WorkspaceAiChatDock({
     nextMessages: readonly WorkspaceAiChatMessage[]
   ): Promise<void> {
     if (patchClarification !== null) {
+      if (shouldStartFreshDraftDuringPatchClarification(trimmedPrompt)) {
+        setPatchClarification(null);
+        await createDraftFromConversation(nextMessages);
+        return;
+      }
+
       await handlePatchClarificationMessage(trimmedPrompt, nextMessages);
       return;
     }
