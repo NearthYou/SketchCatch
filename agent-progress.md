@@ -196,3 +196,10 @@ Short English-only working log for the current agent context. Older records are 
 - Changed SketchCatch artifact cleanup to best-effort after managed AWS cleanup, so an internal S3 prefix failure is logged but no longer preserves an otherwise deletable project record.
 - Removed the post-success cleanup warning from the project list UI; managed AWS cleanup and database deletion failures remain blocking errors.
 - Focused Web flow tests pass 13/13 and focused API deletion tests pass 16/16. Web and API workspace typechecks pass; no full build or broad integration suite was run per user request.
+
+### 2026-07-18 - Prevent stale Terraform outputs from reaching Plan
+
+- Removed generated Terraform output blocks when their managed resources disappear, including legacy output-only artifacts and direct node deletion.
+- Upgraded module-wide undeclared resource references to blocking validation errors while preserving valid cross-file references.
+- Added a server-side Plan preflight that rejects dangling references before AWS credential preparation or Terraform execution.
+- Focused Web regression passes 1/1; focused API regressions pass 3/3; Web and API typechecks pass. Full build and broad suites were intentionally not run per user request.
