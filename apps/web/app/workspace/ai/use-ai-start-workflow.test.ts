@@ -66,3 +66,19 @@ test("AI 시작 Draft와 Patch는 Compiler proposal과 ProjectDraft revision 승
   assert.match(source, /canApprove:[\s\S]*compilationProposal !== null/);
   assert.equal((source.match(/await saveProjectDraft\(/g) ?? []).length, 1);
 });
+test("두 다이어그램 생성 채팅은 같은 자연어 답변 검증과 선택 표시 경로를 사용한다", () => {
+  const aiStartSource = readFileSync(join(currentDir, "use-ai-start-workflow.ts"), "utf8");
+  const workspaceDockSource = readFileSync(
+    join(currentDir, "../../../features/workspace/WorkspaceAiChatDock.tsx"),
+    "utf8"
+  );
+
+  for (const source of [aiStartSource, workspaceDockSource]) {
+    assert.match(source, /withArchitectureDraftClarificationAnswer/);
+    assert.match(source, /resolveAcceptedArchitectureDraftClarificationSelection/);
+    assert.match(source, /questionMessageId/);
+  }
+
+  assert.match(aiStartSource, /setAcceptedClarificationSelection/);
+  assert.match(workspaceDockSource, /markChatMessageSuggestionsSelected/);
+});

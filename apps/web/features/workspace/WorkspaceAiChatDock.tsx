@@ -64,6 +64,7 @@ import {
 import {
   createArchitectureDraftClarificationAnswerReceipt,
   createArchitectureDraftClarificationMessage,
+  resolveAcceptedArchitectureDraftClarificationSelection,
   withArchitectureDraftClarificationAnswer
 } from "./workspace-ai-draft-clarification";
 import {
@@ -156,10 +157,12 @@ type WorkspaceAiChatSuggestionSelection = {
 type PendingArchitectureDraftClarification = {
   readonly request: CreateArchitectureDraftRequest;
   readonly clarification: ArchitectureDraftClarification;
+  readonly questionMessageId: string;
 };
 type SubmittedArchitectureDraftClarificationAnswer = {
   readonly answer: string;
   readonly clarification: ArchitectureDraftClarification;
+  readonly questionMessageId: string;
 };
 
 type TerraformIssueAnalysisState = {
@@ -956,13 +959,10 @@ export function WorkspaceAiChatDock({
     suggestions: readonly string[] = [],
     selectionMode: WorkspaceAiChatSelectionMode = "single",
     scope: WorkspaceAiChatScope = activeChatTab
-  ): void {
-    setMessages((currentMessages) =>
-      trimChatMessages([
-        ...currentMessages,
-        createChatMessage("assistant", kind, content, suggestions, selectionMode, scope)
-      ])
-    );
+  ): WorkspaceAiChatMessage {
+    const message = createChatMessage("assistant", kind, content, suggestions, selectionMode, scope);
+    setMessages((currentMessages) => trimChatMessages([...currentMessages, message]));
+    return message;
   }
 
   function setComposerValue(value: string, scope: WorkspaceAiChatScope = activeChatTab): void {
@@ -1583,7 +1583,8 @@ export function WorkspaceAiChatDock({
     setDraftClarification(null);
     await createDraftFromRequest(nextRequest, {
       answer: trimmedPrompt,
-      clarification: draftClarification.clarification
+      clarification: draftClarification.clarification,
+      questionMessageId: draftClarification.questionMessageId
     });
   }
 
@@ -1793,6 +1794,14 @@ export function WorkspaceAiChatDock({
       }
 
       if (submittedAnswer !== undefined) {
+        const selection = resolveAcceptedArchitectureDraftClarificationSelection(
+          submittedAnswer.clarification, submittedAnswer.answer, result
+        );
+        if (selection !== null) {
+          setMessages((currentMessages) => markChatMessageSuggestionsSelected(currentMessages, {
+            messageId: submittedAnswer.questionMessageId, suggestions: [selection.label]
+          }));
+        }
         const receipt = createArchitectureDraftClarificationAnswerReceipt(
           submittedAnswer.clarification,
           submittedAnswer.answer,
@@ -1804,16 +1813,15 @@ export function WorkspaceAiChatDock({
       }
 
       if (isArchitectureDraftClarification(result)) {
+        const questionMessage = appendAssistantMessage(
+          "question", createArchitectureDraftClarificationMessage(result), result.suggestions
+        );
         setDraftClarification({
           request: normalizedDraftRequest,
-          clarification: result
+          clarification: result,
+          questionMessageId: questionMessage.id
         });
         setDraftState("idle");
-        appendAssistantMessage(
-          "question",
-          createArchitectureDraftClarificationMessage(result),
-          result.suggestions
-        );
         return;
       }
 
@@ -3140,16 +3148,17 @@ function markChatMessageSuggestionsSelected(
 
     const existingSuggestions = message.selectedSuggestions ?? [];
     const nextSelectedSuggestions = [...existingSuggestions];
+    const nextSuggestions = [...(message.suggestions ?? [])];
 
     for (const suggestion of selectedSuggestions) {
-      if (!nextSelectedSuggestions.includes(suggestion)) {
-        nextSelectedSuggestions.push(suggestion);
-      }
+      if (!nextSelectedSuggestions.includes(suggestion)) nextSelectedSuggestions.push(suggestion);
+      if (!nextSuggestions.includes(suggestion)) nextSuggestions.push(suggestion);
     }
 
     return {
       ...message,
-      selectedSuggestions: nextSelectedSuggestions
+      selectedSuggestions: nextSelectedSuggestions,
+      suggestions: nextSuggestions
     };
   });
 }

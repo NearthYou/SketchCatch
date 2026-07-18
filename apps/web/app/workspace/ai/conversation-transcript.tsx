@@ -120,6 +120,10 @@ export function ConversationTranscript({
           const selectedForQuestion = selections.find(
             ({ questionMessageId }) => questionMessageId === message.id
           );
+          const visibleSuggestions = [...(message.suggestions ?? [])];
+          if (selectedForQuestion !== undefined && !visibleSuggestions.includes(selectedForQuestion.label)) {
+            visibleSuggestions.push(selectedForQuestion.label);
+          }
 
           return (
             <article
@@ -134,9 +138,9 @@ export function ConversationTranscript({
                 <p>{message.content}</p>
               </div>
 
-              {message.role === "assistant" && message.suggestions?.length ? (
+              {message.role === "assistant" && visibleSuggestions.length > 0 ? (
                 <div aria-label="답변 선택지" className={styles.suggestionList} role="group">
-                  {message.suggestions.map((suggestion) => {
+                  {visibleSuggestions.map((suggestion) => {
                     const selected = selectedForQuestion?.label === suggestion;
                     return (
                       <button

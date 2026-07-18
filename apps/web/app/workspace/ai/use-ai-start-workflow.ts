@@ -35,6 +35,7 @@ import {
 import {
   createArchitectureDraftClarificationAnswerReceipt,
   createArchitectureDraftClarificationMessage,
+  resolveAcceptedArchitectureDraftClarificationSelection,
   withArchitectureDraftClarificationAnswer
 } from "../../../features/workspace/workspace-ai-draft-clarification";
 import {
@@ -72,11 +73,13 @@ import {
 
 type PendingDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
+  readonly questionMessageId: string;
   readonly request: CreateArchitectureDraftRequest;
 };
 type SubmittedDraftClarificationAnswer = {
   readonly answer: string;
   readonly clarification: ArchitectureDraftClarification;
+  readonly questionMessageId: string;
 };
 
 type PendingPatchClarification = {
@@ -129,6 +132,11 @@ export function useAiStartWorkflow({
   const [draftClarification, setDraftClarification] = useState<PendingDraftClarification | null>(
     null
   );
+  const [acceptedClarificationSelection, setAcceptedClarificationSelection] = useState<{
+    readonly label: string;
+    readonly questionMessageId: string;
+    readonly selectedAt: string;
+  } | null>(null);
   const [patchClarification, setPatchClarification] = useState<PendingPatchClarification | null>(
     null
   );
@@ -249,7 +257,8 @@ export function useAiStartWorkflow({
       setDraftClarification(null);
       await requestDraft(nextRequest, {
         answer: prompt,
-        clarification: draftClarification.clarification
+        clarification: draftClarification.clarification,
+        questionMessageId: draftClarification.questionMessageId
       });
       return;
     }
@@ -365,6 +374,16 @@ export function useAiStartWorkflow({
   ): void {
     if (submittedAnswer === undefined) return;
 
+    const selection = resolveAcceptedArchitectureDraftClarificationSelection(
+      submittedAnswer.clarification, submittedAnswer.answer, response
+    );
+    if (selection !== null) {
+      setAcceptedClarificationSelection({
+        label: selection.label,
+        questionMessageId: submittedAnswer.questionMessageId,
+        selectedAt: new Date().toISOString()
+      });
+    }
     const receipt = createArchitectureDraftClarificationAnswerReceipt(
       submittedAnswer.clarification,
       submittedAnswer.answer,
@@ -380,14 +399,15 @@ export function useAiStartWorkflow({
     response: CreateArchitectureDraftResponse
   ): void {
     if (isArchitectureDraftClarification(response)) {
-      setDraftClarification({ clarification: response, request });
+      const questionMessages = appendAssistantMessage(
+        "question", createArchitectureDraftClarificationMessage(response), response.suggestions
+      );
+      const questionMessageId = questionMessages.at(-1)?.id;
+      if (questionMessageId !== undefined) {
+        setDraftClarification({ clarification: response, questionMessageId, request });
+      }
       publishDraftProgressState(draftProgressCoordinatorRef.current.awaitInput());
       finishRequest();
-      appendAssistantMessage(
-        "question",
-        createArchitectureDraftClarificationMessage(response),
-        response.suggestions
-      );
       return;
     }
 
@@ -735,6 +755,7 @@ export function useAiStartWorkflow({
   }
 
   return {
+    acceptedClarificationSelection,
     approvalError,
     approvalState,
     approveDraft,
