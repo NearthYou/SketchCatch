@@ -180,7 +180,11 @@ test("S3 project prefix deletion rejects bucket-wide and unrelated prefixes", as
     "projects/",
     "deployments/",
     "aws-connections/connection-1/",
-    "projects/project-1/extra/"
+    "projects/project-1/extra/",
+    "projects/../",
+    "projects/project 1/",
+    "projects/project.1/",
+    "deployments/deployment%2F1/"
   ]) {
     await assert.rejects(storage.deletePrefix({ prefix }), /deletion prefix is invalid/);
   }

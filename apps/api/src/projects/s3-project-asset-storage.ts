@@ -164,7 +164,7 @@ function collectObjectVersions(
 
 function assertProjectDeletionPrefix(prefix: string): void {
   if (
-    !/^(?:projects|deployments)\/[^/]+\/$/u.test(prefix) ||
+    !/^(?:projects|deployments)\/[A-Za-z0-9_-]+\/$/u.test(prefix) ||
     prefix.includes("\0") ||
     prefix.includes("\\")
   ) {
