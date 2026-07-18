@@ -210,15 +210,11 @@ export function WorkspaceAiShell({
               workflow.voiceInput.isListening ||
               workflow.voiceTranscriptNeedsConfirmation
             }
-            lastExclusion={workflow.lastExclusion}
             messages={workflow.messages}
             onCancelRequest={workflow.cancelRequest}
-            onExcludeCandidate={workflow.excludeProgressCandidate}
             onOpenPreview={() => setMobilePreviewRequested(true)}
             onRetry={workflow.retryDraft}
             onSuggestionSelect={handleSuggestionSelect}
-            onUndoExclusion={workflow.undoLastExclusion}
-            progressSnapshot={workflow.progressSnapshot}
             requestState={workflow.requestState}
             selections={selections}
           />

@@ -7,8 +7,8 @@ import {
 import styles from "./workspace-ai.module.css";
 
 const ORBIT_LAYER_GEOMETRY = [
-  { aspect: 1, layer: 0, tilt: 0 },
-  { aspect: 1, layer: 1, tilt: -11 },
+  { aspect: 1.25, layer: 0, tilt: 0 },
+  { aspect: 1.4, layer: 1, tilt: -11 },
   { aspect: 1.55, layer: 2, tilt: 8 }
 ] as const;
 

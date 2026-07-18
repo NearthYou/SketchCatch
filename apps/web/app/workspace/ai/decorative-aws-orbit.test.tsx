@@ -7,7 +7,7 @@ import { createDecorativeOrbitComposition } from "./option-resource-presentation
 
 Object.assign(globalThis, { React });
 
-test("Orbit은 원본 목업의 기울어진 타원 바깥 궤도를 유지한다", () => {
+test("Orbit의 세 궤도는 모두 서로 다른 타원으로 표시된다", () => {
   const html = renderToStaticMarkup(
     createElement(DecorativeAwsOrbit, {
       composition: createDecorativeOrbitComposition([]),
@@ -17,7 +17,12 @@ test("Orbit은 원본 목업의 기울어진 타원 바깥 궤도를 유지한�
     })
   );
 
-  assert.match(html, /data-orbit-aspect="1\.55"/);
+  const aspects = [...html.matchAll(/data-orbit-aspect="([\d.]+)"/g)].map((match) =>
+    Number(match[1])
+  );
+
+  assert.deepEqual(aspects, [1.25, 1.4, 1.55]);
+  assert.ok(aspects.every((aspect) => aspect > 1));
   assert.match(html, /data-orbit-tilt="-11"/);
   assert.match(html, /data-orbit-tilt="8"/);
 

@@ -151,6 +151,12 @@
 }
 
 .splitLayoutConversation {
+  --conversation-dock-left: 18px;
+  --conversation-dock-width: min(calc(100% - 36px), clamp(640px, 64vw, 960px));
+  --conversation-side-gap: 16px;
+  --orbit-center-x: calc(
+    var(--conversation-dock-left) + var(--conversation-dock-width) + clamp(88px, 9vw, 148px)
+  );
   display: block;
 }
 
@@ -177,11 +183,11 @@
   border-radius: 16px;
   bottom: 18px;
   box-shadow: 0 18px 48px rgba(23, 23, 23, 0.1);
-  left: 18px;
+  left: var(--conversation-dock-left);
   overflow: hidden;
   position: absolute;
   top: 18px;
-  width: min(calc(100% - 36px), clamp(640px, 64vw, 960px));
+  width: var(--conversation-dock-width);
 }
 
 .conversationPanelFinal {
@@ -189,8 +195,7 @@
   position: relative;
 }
 
-.selectionTrailHeader p,
-.candidateActions > div > p {
+.selectionTrailHeader p {
   color: var(--ai-muted);
   font-size: 10px;
   font-weight: 750;
@@ -317,59 +322,6 @@
   font-weight: 700;
 }
 
-.candidateActions {
-  background: var(--ai-canvas);
-  border: 1px solid var(--ai-line);
-  border-radius: 12px;
-  padding: 14px;
-}
-
-.candidateActions h3 {
-  font-size: 13px;
-  margin: 0;
-}
-
-.candidateActions ul {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-}
-
-.candidateActions li {
-  align-items: center;
-  background: var(--ai-surface);
-  border: 1px solid var(--ai-line);
-  border-radius: 9px;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 9px 10px;
-}
-
-.candidateActions li > span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.candidateActions strong {
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.candidateActions small {
-  color: var(--ai-muted);
-  font-size: 10px;
-}
-
-.candidateActions button,
-.exclusionUndo button,
 .requestStatus button,
 .retryButton,
 .previewArrival button {
@@ -389,14 +341,11 @@
   text-decoration: none;
 }
 
-.candidateActions button:disabled,
-.exclusionUndo button:disabled,
 .retryButton:disabled {
   cursor: default;
   opacity: 0.4;
 }
 
-.exclusionUndo,
 .requestStatus,
 .previewArrival {
   align-items: center;
@@ -580,20 +529,20 @@
 }
 
 .stageCanvas {
-  align-items: center;
-  display: flex;
-  justify-content: center;
   min-height: 0;
-  padding: 30px 0 110px 18vw;
+  position: relative;
 }
 
 .orbitScene {
   aspect-ratio: 1;
+  left: var(--orbit-center-x);
   max-height: min(70vh, 650px);
   max-width: 650px;
   pointer-events: none;
-  position: relative;
-  width: min(100%, 650px);
+  position: absolute;
+  top: calc(50% - 40px);
+  translate: -50% -50%;
+  width: min(64vw, 650px);
 }
 
 .orbitSceneReacting {
@@ -819,11 +768,21 @@
   border: 1px solid var(--ai-line);
   border-radius: 14px;
   bottom: 22px;
+  left: calc(
+    var(--conversation-dock-left) + var(--conversation-dock-width) +
+      var(--conversation-side-gap)
+  );
   max-width: 600px;
   padding: 14px;
   position: absolute;
-  right: 24px;
-  width: min(38vw, 600px);
+  width: min(
+    38vw,
+    600px,
+    calc(
+      100% - var(--conversation-dock-left) - var(--conversation-dock-width) -
+        var(--conversation-side-gap) - 24px
+    )
+  );
 }
 
 .selectionTrailHeader h2 {
@@ -1101,6 +1060,10 @@
     overflow: hidden;
   }
 
+  .splitLayoutConversation {
+    --orbit-center-x: 64%;
+  }
+
   .conversationPanelActive,
   .conversationPanelFinal {
     background: rgba(250, 250, 250, 0.9);
@@ -1148,7 +1111,6 @@
   .stageCanvas {
     height: 100%;
     min-height: 0;
-    padding: 22px 0 120px 28vw;
   }
 
   .orbitScene {
@@ -1231,7 +1193,6 @@
     justify-content: flex-end;
   }
 
-  .exclusionUndo,
   .requestStatus,
   .previewArrival,
   .voiceConfirmation {
