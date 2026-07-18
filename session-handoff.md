@@ -6,7 +6,7 @@ Use this file only for compact continuation context. Write it in English.
 
 - Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
 - The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
-- The branch includes the committed Architecture Draft Korean-explanation and `다음 행동` cleanup.
+- The branch includes the committed Architecture Draft Korean-explanation, `다음 행동` cleanup, and fresh-draft routing fix.
 
 ## Changes This Session
 
@@ -24,6 +24,8 @@ Use this file only for compact continuation context. Write it in English.
 - Focused API tests pass 86/86, Workbench contract tests pass 22/22, and API/Web typechecks pass.
 - A pending patch clarification no longer captures explicit fresh-draft requests such as `다이어그램 생성하고 싶어`; resource answers such as `서버 만들고 싶어` remain patch answers.
 - Focused fresh-draft routing tests pass 2/2 and Web typecheck passes.
+- Selecting a chat option re-enables transcript following so the newly appended question scrolls into view without changing manual scroll preservation for other updates.
+- Workbench contract tests pass 22/22 and Web typecheck passes.
 
 ## Broken Or Unverified
 
@@ -31,5 +33,5 @@ Use this file only for compact continuation context. Write it in English.
 
 ## Best Next Action
 
-- Commit the fresh-draft routing fix and verify a clean worktree.
+- Commit the selected-option auto-scroll fix and verify a clean worktree.
 - No DB migration, cloud mutation, deployment, or Terraform execution is involved.

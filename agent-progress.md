@@ -23,6 +23,11 @@ Short English-only working log for the current agent context. Older records are 
 - Explicit new-diagram requests now leave a pending patch clarification and start a fresh draft; resource answers remain in the patch flow.
 - Focused routing tests pass 2/2 and Web typecheck passes.
 
+### 2026-07-19 - Follow selected clarification questions
+
+- Selecting a chat option now re-enables transcript following so the next question scrolls into view; manual reading position remains preserved for non-selection updates.
+- Workbench contract tests pass 22/22 and Web typecheck passes.
+
 ## Broken Or Unverified
 
 - The session-wide `pnpm test` run originally reported three Web failures. The owned AI chat contract failure is fixed and its focused suite passes; two unchanged failures remain in the generated architecture artifact line-ending assertion and GitHub account settings contract. The full suite was not rerun after the focused fix.
