@@ -1027,7 +1027,22 @@ function findUnsupportedRequirementMatches(prompt: string): UnsupportedRequireme
   return UNSUPPORTED_REQUIREMENT_RULES.filter(
     (rule) =>
       rule.keywords.some((keyword) => normalizedPrompt.includes(keyword.toLowerCase())) &&
+      !isDeferredMultiRegionRoadmapSelection(normalizedPrompt, rule) &&
       !isCoveredBySupportedExplicitResource(rule, explicitResourceTypes)
+  );
+}
+
+// 현재는 단일 리전을 선택하고 다중 리전은 향후 계획으로만 남긴 답변을 구분합니다.
+function isDeferredMultiRegionRoadmapSelection(
+  normalizedPrompt: string,
+  rule: UnsupportedRequirementRule
+): boolean {
+  if (rule.label !== "멀티 리전") {
+    return false;
+  }
+
+  return /mvp(?:는|은)?\s*단일\s*리전[\s,，]*추후\s*(?:다중|멀티)\s*리전\s*확장\s*경고\s*표시/iu.test(
+    normalizedPrompt
   );
 }
 

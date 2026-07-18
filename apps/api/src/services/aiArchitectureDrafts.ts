@@ -4380,6 +4380,7 @@ function createDeterministicArchitectureAssumptions(prompt: string): string[] {
   return assumptions;
 }
 
+// 최종 `직접 관리` 선택은 Provider plan의 EC2 금지보다 우선하도록 맞춥니다.
 function normalizeArchitecturePlanTopologyInvariants(
   plan: ArchitectureIntentPlan | null,
   prompt: string
@@ -4395,6 +4396,11 @@ function normalizeArchitecturePlanTopologyInvariants(
   );
   const usesSelfManagedEc2 =
     !usesEksRuntime && requiresSelfManagedEc2Architecture(normalizedPrompt);
+  const forbiddenCapabilities = usesSelfManagedEc2
+    ? plan.forbiddenCapabilities?.filter(
+        (capability) => capability.toLowerCase() !== "ec2_runtime"
+      )
+    : plan.forbiddenCapabilities;
 
   if (usesSelfManagedEc2) {
     patternIds.delete("ecs-fargate");
@@ -4674,6 +4680,7 @@ function normalizeArchitecturePlanTopologyInvariants(
 
   return {
     ...plan,
+    ...(forbiddenCapabilities === undefined ? {} : { forbiddenCapabilities }),
     patternIds: [...patternIds],
     requiredResources: [...requiredResources],
     resourceQuantities,

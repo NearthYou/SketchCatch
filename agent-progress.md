@@ -26,50 +26,18 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-18 - Repair self-managed AI Draft generation
+
+- Resolved the contradiction where the final self-managed server choice required EC2 while the Amazon Q plan still forbade the EC2 runtime.
+- Treated `MVP single region, multi-region later` as a roadmap note instead of a current unsupported multi-region requirement.
+- Replayed the reported questionnaire in the local browser; the real preview now contains the EC2 fleet, Launch Template, Auto Scaling Group, target group, and load balancer with no new browser errors.
+- The complete AI Architecture Draft suite passes 77/77, related Workspace AI tests pass 9/9, and lint, typecheck, and build pass.
+
 ### 2026-07-18 - Correct Cross-account AWS S3 Template mapping
 
 - Replaced the incorrect AWS Account presentation mapping and empty text primitives with existing Palette Group areas while preserving the three Terraform Resources, containment, and source geometry.
 - Recaptured the committed WebP and bound its manifest hash to the corrected Diagram.
 - Kept the existing Compiler visual baseline by excluding visual Security Group scope, summary links, and launch dependencies from main-flow quality.
-
-### 2026-07-16 - Address PR #438 review feedback
-
-- Added fail-closed runtime build-input validation and normalized repeated key delimiters before secret-shape detection.
-- Preferred async streaming over full-body buffering for S3 digest verification and stopped claim heartbeats immediately after renewal failure.
-- Verified the four regressions red/green; focused PR 2 tests pass 59/59, and harness, lint, typecheck, and build pass.
-- No migration, credential use, live AWS mutation, Terraform apply/destroy, or user deployment was added.
-
-### 2026-07-16 - Follow up merged PR #439 review
-
-- Scoped runtime Secret contract regexes to their Terraform set literals, selected the named worker container, and used `try(..., [])` for nullable Secret lists so unrelated markers cannot satisfy the checks.
-- Passed harness, production infrastructure structure check, Terraform formatting, lint, typecheck, build, and diff check. Terraform validate/test remain blocked locally because AWS provider 6.54.0 is not cached; no Terraform or AWS mutation was performed.
-
-### 2026-07-16 - Complete runtime Apply validator repair
-
-- Corrected the jq resource-address escaping used by the complete runtime Apply guard and added a structural regression check for valid and invalid forms.
-- Passed harness, production infrastructure structure check, Prettier, lint, typecheck, build, and diff check. Local Terraform validate/test could not initialize the AWS provider before the timeout; no Terraform apply or AWS mutation was performed.
-
-### 2026-07-16 - Complete runtime deployment reconciliation
-
-- Complete runtime Apply validation compares planned API and worker Secret references with Terraform state and verifies that the worker execution policy retains every existing secret reference.
-- The API ECS service reconciles task definition changes while retaining autoscaling ownership of desired count.
-- Synthetic jq checks passed for retained and intentionally removed Secret references; harness, structure check, formatting, lint, typecheck, build, and diff check passed.
-
-### 2026-07-16 - Complete runtime policy and post-apply verification
-
-- Complete runtime Apply validation reads the existing worker execution inline policy from state when Plan JSON masks prior policy data, then verifies every worker Task Definition Secret reference after Apply.
-- Synthetic jq checks passed when prior permissions were retained and failed when a prior permission or Secret reference was removed; no Secret value was emitted.
-
-### 2026-07-17 - Complete runtime post-apply task definition verification
-
-- Plan JSON also masks the desired task definition payload, so the complete Apply guard verifies GitHub App runtime inputs in the applied API and worker task definitions from Terraform state.
-- Synthetic jq checks passed with both required inputs and failed when the worker Client ID environment entry was removed.
-
-### 2026-07-17 - Complete runtime partial-apply resume guard
-
-- The first approved Apply partially completed the reviewed runtime plan, then stopped because the deploy role lacked ELB tag readback and task-definition deregistration authorization.
-- The deploy-policy source now grants only those two missing actions, and the complete runtime guard accepts either the original full reviewed envelope or the exact residual envelope. No state operation, import, or unreviewed apply was used.
-- Harness, production infrastructure structure check, Terraform formatting, lint, typecheck, and build pass. Local Terraform validate/test remain blocked by the uncached AWS provider package.
 
 ### 2026-07-17 - Improve Architecture Board UI interactions
 
