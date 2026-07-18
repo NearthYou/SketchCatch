@@ -195,13 +195,6 @@
   color: var(--workspace-surface);
 }
 
-.projectBarDivider {
-  background: var(--workspace-line);
-  height: 24px;
-  margin: 0 2px;
-  width: 1px;
-}
-
 .leftRail,
 .rightRail {
   background: var(--workspace-surface);
@@ -2947,10 +2940,6 @@ button.rightRailResizeHandle {
     overflow: hidden;
     padding: 0 2px;
     text-overflow: ellipsis;
-  }
-
-  .projectBarDivider {
-    display: none;
   }
 
   .projectBarActions {

@@ -3033,14 +3033,7 @@ function DiagramEditorInner({
         <WorkspaceProjectBar
           actions={{
             onSave: onDiagramSaveRequest,
-            onSaveAndDeploy: onSaveAndDeployRequest,
-            onToggleLeftPanel: toggleLeftPanel,
-            onToggleRightPanel: toggleRightPanel
-          }}
-          panels={{
-            hasRightPanel: hasRightRail,
-            isLeftPanelOpen,
-            isRightPanelOpen: hasRightRail && isRightPanelOpen
+            onSaveAndDeploy: onSaveAndDeployRequest
           }}
           workspace={{
             dashboardHref,

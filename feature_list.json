@@ -942,6 +942,8 @@
         "lastVerified": "2026-07-18",
         "commands": [
           "per-commit focused Web contract and state tests for commits 1-26",
+          "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts",
+          "pnpm --filter @sketchcatch/web test",
           "pnpm --filter @sketchcatch/web exec tsx --test features/diagram-editor/diagram-editor-layout.test.ts features/diagram-editor/diagram-editor-viewer-policy.test.ts features/diagram-editor/workspace-panel-preferences.test.ts",
           "authenticated in-app Browser smoke check for Workspace panel edge handles",
           "pnpm harness:check",
@@ -950,7 +952,7 @@
           "pnpm build",
           "git diff --check"
         ],
-        "notes": "All 26 planned implementation commits were verified before commit. Final focused Diagram Editor tests passed 61/61, and harness, lint, typecheck, and build passed. Browser QA confirmed both edge handles are visible and the left handle closes and restores the panel; an existing local-draft recovery modal blocked the right-handle click, so its symmetric callback and accessibility behavior remain covered by automated tests."
+        "notes": "All 26 planned implementation commits were verified before commit. The follow-up removes the two redundant top-bar panel toggles while preserving the accessible edge handles and panel preference behavior. The focused Diagram Editor layout suite passes 52/52; harness, lint, typecheck, build, and diff checks pass. The full Web suite passes 785/789, with four unrelated existing generated Architecture Board knowledge and contract failures. Browser QA previously confirmed both edge handles are visible and the left handle closes and restores the panel; signed-in visual recheck of this follow-up was unavailable because the controllable browser had no session."
       },
       "notes": "No DB schema, Drizzle migration, cloud mutation, deployment, or Git/CI/CD handoff was performed."
     }

@@ -269,7 +269,7 @@ test("diagram editor restores the light canvas with a restrained two-level grid"
   );
 });
 
-test("diagram editor exposes project, save, and panel controls in one stable top bar", () => {
+test("diagram editor keeps project and save controls in the top bar without duplicate panel toggles", () => {
   const projectBarBlock = getCssBlock(".projectBar");
   const saveStatusBlock = getCssBlock(".projectBarSaveStatus");
 
@@ -278,8 +278,8 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   assert.match(diagramEditorSource, /saveStatus = "편집 중"/);
   assert.match(diagramEditorSource, /<WorkspaceProjectBar/);
   assert.match(diagramEditorSource, /onSave:\s*onDiagramSaveRequest/);
-  assert.match(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
-  assert.match(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
+  assert.doesNotMatch(diagramEditorSource, /onToggleLeftPanel:\s*toggleLeftPanel/);
+  assert.doesNotMatch(diagramEditorSource, /onToggleRightPanel:\s*toggleRightPanel/);
 
   assert.match(workspaceProjectBarSource, /import \{ ProductBrand \} from "\.\.\/\.\.\/components\/ui\/ProductBrand"/);
   assert.match(workspaceProjectBarSource, /<ProductBrand href=\{workspace\.dashboardHref\} \/>/);
@@ -289,8 +289,10 @@ test("diagram editor exposes project, save, and panel controls in one stable top
   );
   assert.match(workspaceProjectBarSource, /className=\{styles\.projectBarSaveStatus\}/);
   assert.match(workspaceProjectBarSource, /aria-label="지금 저장"/);
-  assert.match(workspaceProjectBarSource, /"리소스 패널 열기"/);
-  assert.match(workspaceProjectBarSource, /"Inspector 열기"/);
+  assert.doesNotMatch(workspaceProjectBarSource, /PanelLeft(?:Close|Open)/);
+  assert.doesNotMatch(workspaceProjectBarSource, /PanelRight(?:Close|Open)/);
+  assert.doesNotMatch(workspaceProjectBarSource, /"리소스 패널 열기"/);
+  assert.doesNotMatch(workspaceProjectBarSource, /"Inspector 열기"/);
 
   assert.match(projectBarBlock, /grid-column:\s*1 \/ -1;/);
   assert.match(projectBarBlock, /height:\s*64px;/);
