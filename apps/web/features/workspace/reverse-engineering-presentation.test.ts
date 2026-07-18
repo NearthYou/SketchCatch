@@ -7,6 +7,7 @@ import type {
 } from "@sketchcatch/types";
 import {
   getReverseEngineeringServiceLabel,
+  presentReverseEngineeringScanErrors,
   presentReverseEngineeringResource,
   summarizeReverseEngineeringScan
 } from "./reverse-engineering-presentation";
@@ -385,6 +386,50 @@ test("스캔 요약은 같은 Resource 서비스의 반복 오류를 하나의 �
   });
 
   assert.equal(summary.unreadableServiceCount, 2);
+});
+
+test("부분 실패는 실제 AWS 서비스별로 합치고 내부 오류 대신 짧은 해결 방법만 보여준다", () => {
+  const errors = presentReverseEngineeringScanErrors([
+    {
+      id: "scan-error-service-ec2",
+      resourceType: "VPC",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message:
+        "AccessDeniedException: arn:aws:iam::123456789012:role/internal cannot call ec2:DescribeVpcs",
+      retryable: false
+    },
+    {
+      id: "scan-error-service-ec2",
+      resourceType: "SUBNET",
+      stage: "provider_api",
+      reason: "permission_denied",
+      message: "RequestId: internal-request-id",
+      retryable: false
+    },
+    {
+      id: "scan-error-service-s3",
+      resourceType: "S3",
+      stage: "provider_api",
+      reason: "throttled",
+      message: "SlowDown: internal provider message",
+      retryable: true
+    }
+  ]);
+
+  assert.deepEqual(errors, [
+    {
+      key: "ec2",
+      serviceName: "EC2",
+      remedy: "가져오기 권한을 추가한 뒤 다시 시도해 주세요."
+    },
+    {
+      key: "s3",
+      serviceName: "S3",
+      remedy: "잠시 후 다시 시도해 주세요."
+    }
+  ]);
+  assert.doesNotMatch(JSON.stringify(errors), /AccessDenied|arn:aws|DescribeVpcs|RequestId|provider_api/);
 });
 
 test("최종 혼합 회귀 fixture는 지원됨, 검토 전용, 읽지 못한 서비스를 분리해 사람이 이해할 수 있게 표시한다", () => {

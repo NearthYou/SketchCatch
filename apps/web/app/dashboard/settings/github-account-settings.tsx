@@ -14,11 +14,17 @@ import styles from "../dashboard-tools.module.css";
 // GitHub App installation과 repository 접근 권한을 사용자 계정 단위로 관리합니다.
 export function GitHubAccountSettings() {
   const installationsQuery = useGitHubInstallationsQuery();
-  const installations: readonly GitHubInstallationConnection[] = installationsQuery.data ?? [];
+  const installations: readonly GitHubInstallationConnection[] =
+    installationsQuery.data?.installations ?? [];
+  const availability = installationsQuery.data?.availability;
+  const connectionSetupAvailability = availability?.connectionSetup;
+  const installationReadAvailability = availability?.installationRead;
   const [actionPending, setActionPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   async function openGitHubInstallation(): Promise<void> {
+    if (connectionSetupAvailability !== "ready") return;
+
     setActionPending(true);
     setErrorMessage("");
 
@@ -60,7 +66,24 @@ export function GitHubAccountSettings() {
         </div>
       ) : null}
 
-      {installationsQuery.isSuccess && installations.length === 0 ? (
+      {installationsQuery.isSuccess && installationReadAvailability === "not_configured" ? (
+        <p className={styles.githubSettingsMessage} role="status">
+          GitHub App 서버 설정이 필요합니다. 설정이 완료되면 이 화면에서 연결할 수 있습니다.
+        </p>
+      ) : null}
+
+      {installationsQuery.isSuccess &&
+      installationReadAvailability === "ready" &&
+      connectionSetupAvailability === "not_configured" ? (
+        <p className={styles.githubSettingsMessage} role="status">
+          새 GitHub 연결을 추가하려면 GitHub App 사용자 승인 서버 설정이 필요합니다.
+        </p>
+      ) : null}
+
+      {installationsQuery.isSuccess &&
+      installationReadAvailability === "ready" &&
+      connectionSetupAvailability === "ready" &&
+      installations.length === 0 ? (
         <p className={styles.githubSettingsMessage} role="status">
           아직 연결된 GitHub App installation이 없습니다.
         </p>
@@ -110,12 +133,14 @@ export function GitHubAccountSettings() {
       <div className={styles.githubSettingsActions}>
         <button
           className={styles.primaryAction}
-          disabled={actionPending}
+          disabled={actionPending || connectionSetupAvailability !== "ready"}
           onClick={() => void openGitHubInstallation()}
           type="button"
         >
           <DashboardIcon name="github" />
-          {actionPending
+          {connectionSetupAvailability === "not_configured"
+            ? "GitHub App 설정 대기"
+            : actionPending
             ? "GitHub로 이동 중"
             : installations.length > 0
               ? "권한 추가"

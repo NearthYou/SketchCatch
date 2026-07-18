@@ -15,6 +15,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CreateArchitectureDraftRequest,
+  GitHubAppAvailability,
   GitHubInstallationConnection,
   GitHubInstalledRepositoryCandidate,
   RepositoryAnalysisQuestion,
@@ -112,6 +113,8 @@ export function RepositoryStartClient({
   const hasRestoredRepositoryAnalysis = useRef(false);
   const [repositories, setRepositories] = useState<SourceRepository[]>([]);
   const [installations, setInstallations] = useState<GitHubInstallationConnection[]>([]);
+  const [githubAppAvailability, setGitHubAppAvailability] =
+    useState<GitHubAppAvailability | null>(null);
   const [projectDraftRevision, setProjectDraftRevision] = useState<number | null | undefined>(
     undefined
   );
@@ -257,12 +260,20 @@ export function RepositoryStartClient({
     setErrorMessage("");
 
     try {
-      const [result, loadedInstallations] = await Promise.all([
-        listGitHubInstalledRepositories(projectId),
-        listGitHubAccountInstallations()
-      ]);
+      const loadedInstallations = await listGitHubAccountInstallations();
+      setInstallations(loadedInstallations.installations);
+      setGitHubAppAvailability(loadedInstallations.availability);
+
+      if (loadedInstallations.availability.installationRead !== "ready") {
+        setCandidates([]);
+        setInstallationState("");
+        setConnectionOptionsLoaded(true);
+        setActionState("idle");
+        return;
+      }
+
+      const result = await listGitHubInstalledRepositories(projectId);
       setCandidates(result.repositories);
-      setInstallations(loadedInstallations);
       setInstallationState(result.state);
       setConnectionOptionsLoaded(true);
       setActionState("idle");
@@ -279,6 +290,25 @@ export function RepositoryStartClient({
     setErrorMessage("");
 
     try {
+      let availability = githubAppAvailability;
+      if (!availability) {
+        const response = await listGitHubAccountInstallations();
+        setInstallations(response.installations);
+        setGitHubAppAvailability(response.availability);
+        availability = response.availability;
+      }
+
+      if (
+        availability.installationRead !== "ready" ||
+        availability.connectionSetup !== "ready"
+      ) {
+        setActionState("error");
+        setErrorMessage(
+          "GitHub App 서버 설정이 필요합니다. 설정이 완료된 뒤 다시 시도해 주세요."
+        );
+        return;
+      }
+
       const resumeKey = createRepositoryAnalysisResumeKey();
       writeRepositoryAnalysisResume(window.sessionStorage, {
         schemaVersion: 1,
@@ -747,6 +777,7 @@ export function RepositoryStartClient({
             {publicAnalysisState === "error" && !pendingAnalysisRecord ? (
               <RepositoryAnalysisRecovery
                 action={recoveryAction}
+                connectionSetupAvailability={githubAppAvailability?.connectionSetup}
                 errorMessage={errorMessage}
                 isBusy={actionState === "loading" || isPublicAnalysisBusy}
                 onAddPermission={(managementUrl) => {
@@ -763,6 +794,7 @@ export function RepositoryStartClient({
               connectionOptionsLoaded ? (
                 <RepositoryAnalysisRecovery
                   action={recoveryAction}
+                  connectionSetupAvailability={githubAppAvailability?.connectionSetup}
                   errorMessage=""
                   isBusy={actionState === "loading"}
                   onAddPermission={(managementUrl) => {
@@ -897,6 +929,7 @@ export function RepositoryStartClient({
 
 function RepositoryAnalysisRecovery({
   action,
+  connectionSetupAvailability,
   errorMessage,
   isBusy,
   onAddPermission,
@@ -908,6 +941,7 @@ function RepositoryAnalysisRecovery({
   title = "Repository를 확인할 수 없습니다"
 }: {
   readonly action: RepositoryRecoveryAction;
+  readonly connectionSetupAvailability: GitHubAppAvailability["connectionSetup"] | undefined;
   readonly errorMessage: string;
   readonly isBusy: boolean;
   readonly onAddPermission: (managementUrl: string) => void;
@@ -924,10 +958,15 @@ function RepositoryAnalysisRecovery({
   );
 
   if (action.kind === "connect_github") {
-    guidance = "비공개 Repository라면 GitHub를 연결한 뒤 정확한 Repository 권한을 확인합니다.";
-    primaryAction = (
-      <button disabled={isBusy} onClick={onConnectGitHub} type="button">GitHub 연결하기</button>
-    );
+    if (connectionSetupAvailability === "not_configured") {
+      guidance = "GitHub App 서버 설정이 필요합니다. 설정이 완료된 뒤 다시 확인해 주세요.";
+      primaryAction = null;
+    } else {
+      guidance = "비공개 Repository라면 GitHub를 연결한 뒤 정확한 Repository 권한을 확인합니다.";
+      primaryAction = (
+        <button disabled={isBusy} onClick={onConnectGitHub} type="button">GitHub 연결하기</button>
+      );
+    }
   } else if (action.kind === "add_repository_permission") {
     guidance = "GitHub에서 권한을 추가한 뒤 이 화면으로 돌아오면 자동으로 다시 확인합니다.";
     primaryAction = (

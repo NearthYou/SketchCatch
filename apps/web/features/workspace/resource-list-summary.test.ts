@@ -39,3 +39,43 @@ test("IAM Policy data source summary uses the data schema instead of the resourc
     }
   ]);
 });
+
+test("Reverse Engineering Resource 목록은 보존한 AWS 원본 식별자를 화면에 노출하지 않는다", () => {
+  const node: DiagramNode = {
+    id: "imported-lambda",
+    kind: "resource",
+    label: "orders-handler",
+    locked: false,
+    metadata: {
+      reverseEngineering: {
+        source: "aws_scan",
+        protectedValueKeys: ["providerResourceId", "providerResourceType", "accountId"],
+        editableValueKeys: ["displayName", "description"]
+      }
+    },
+    parameters: {
+      fileName: "main",
+      resourceName: "orders_handler",
+      resourceType: "aws_lambda_function",
+      values: {
+        accountId: "123456789012",
+        description: "주문 처리",
+        providerResourceId:
+          "arn:aws:lambda:ap-northeast-2:123456789012:function:orders-handler",
+        providerResourceType: "AWS::Lambda::Function"
+      }
+    },
+    position: { x: 0, y: 0 },
+    size: { width: 48, height: 48 },
+    type: "aws_lambda_function",
+    zIndex: 0
+  };
+
+  const [summary] = buildResourceListItems([node], terraformParameterCatalog);
+
+  assert.ok(summary);
+  assert.deepEqual(
+    summary.rows.map(({ key, value }) => ({ key, value })),
+    [{ key: "description", value: "주문 처리" }]
+  );
+});

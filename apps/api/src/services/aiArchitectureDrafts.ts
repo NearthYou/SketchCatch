@@ -297,6 +297,7 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
   readonly runtimeCache?: RuntimeCache | undefined;
 } = {}): CreateArchitectureDraftResponseFactory {
   const regions = resolveAiProviderRegions(process.env);
+  const creditPolicy = readAiCreditPolicyFromEnv();
   const provider =
     process.env.NODE_ENV === "test"
       ? undefined
@@ -307,7 +308,10 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
   const requirementNormalizerProvider =
     process.env.NODE_ENV === "test" ? undefined : createOpenAiRequirementNormalizerProviderFromEnv();
 
-  if (provider !== undefined) {
+  if (
+    provider !== undefined
+    && shouldWarmConfiguredAmazonQArchitectureDraftProvider(creditPolicy)
+  ) {
     void warmAmazonQArchitectureDraftProvider(provider).catch((error: unknown) => {
       input.onWarmupError?.(error);
     });
@@ -317,9 +321,15 @@ export function createConfiguredAmazonQArchitectureDraftResponse(input: {
     createAmazonQArchitectureDraftResponse(request, {
       provider,
       requirementNormalizerProvider,
-      creditPolicy: readAiCreditPolicyFromEnv(),
+      creditPolicy,
       onProgress: operationOptions?.onProgress
     });
+}
+
+export function shouldWarmConfiguredAmazonQArchitectureDraftProvider(
+  creditPolicy: AiCreditPolicy
+): boolean {
+  return creditPolicy.billingMode === "aws_credit_only" && creditPolicy.amazonQ;
 }
 
 // 선택된 Template이 있으면 Amazon Q payload와 prompt에 고정 결정으로 함께 전달합니다.
@@ -334,23 +344,12 @@ export async function createAmazonQArchitectureDraftResponse(
   const provider = options.provider;
   const progressReporter = createArchitectureDraftProgressReporter(request, options.onProgress);
 
-  if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
-    await reportFallbackDraftProgress(progressReporter, options.onProgress);
-    return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
-  }
-
-  if (provider === undefined) {
-    await reportFallbackDraftProgress(progressReporter, options.onProgress);
-    return createFallbackArchitectureDraftResponse(request, "provider_not_configured", creditPolicy.billingMode);
-  }
-
   const missingQuestion = findMissingRequiredQuestion(request);
 
   if (missingQuestion !== null) {
     return createArchitectureDraftClarification(
       missingQuestion.question,
       request,
-      provider,
       creditPolicy.billingMode,
       missingQuestion.invalidAnswer
     );
@@ -363,10 +362,19 @@ export async function createAmazonQArchitectureDraftResponse(
     return createArchitectureDraftClarification(
       conditionalQuestion,
       request,
-      provider,
       creditPolicy.billingMode,
       request.clarificationAnswers?.some((answer) => answer.questionId === conditionalQuestion.id) ?? false
     );
+  }
+
+  if (creditPolicy.billingMode !== "aws_credit_only" || !creditPolicy.amazonQ) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
+    return createFallbackArchitectureDraftResponse(request, "credit_not_confirmed", creditPolicy.billingMode);
+  }
+
+  if (provider === undefined) {
+    await reportFallbackDraftProgress(progressReporter, options.onProgress);
+    return createFallbackArchitectureDraftResponse(request, "provider_not_configured", creditPolicy.billingMode);
   }
 
   progressReporter.reportCandidates();
@@ -1424,7 +1432,6 @@ function isRequiredArchitectureQuestionAnswered(question: RequiredArchitectureQu
 function createArchitectureDraftClarification(
   question: RequiredArchitectureQuestion,
   request: CreateArchitectureDraftRequest,
-  provider: AiTextProvider,
   billingMode: AiBillingMode,
   invalidAnswer = false
 ): ArchitectureDraftClarification {
@@ -1436,14 +1443,7 @@ function createArchitectureDraftClarification(
     ...(invalidAnswer
       ? { validationMessage: "입력하신 답변을 이 질문에 맞는 요구사항으로 이해하지 못했어요. 다시 답해주세요." }
       : {}),
-    providerMetadata: createAiProviderMetadata({
-      provider,
-      billingMode,
-      payload: {
-        prompt: request.prompt,
-        missingQuestionId: question.id
-      }
-    })
+    providerMetadata: createFallbackProviderMetadata(request, billingMode)
   };
 }
 

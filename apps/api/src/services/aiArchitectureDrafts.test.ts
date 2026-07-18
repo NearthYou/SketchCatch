@@ -11,7 +11,8 @@ import {
   ArchitectureDraftGenerationError,
   createAmazonQArchitectureDraftResponse,
   createArchitectureDraft,
-  createDeterministicArchitectureIntentPlan
+  createDeterministicArchitectureIntentPlan,
+  shouldWarmConfiguredAmazonQArchitectureDraftProvider
 } from "./aiArchitectureDrafts.js";
 import { analyzePreDeployment } from "./aiPreDeploymentAnalysis.js";
 
@@ -595,6 +596,73 @@ test("createAmazonQArchitectureDraftResponse asks the next required website ques
     "대규모 (일 10,000명 이상, 동시 500명 이상)",
     "급변동 (평상시 적지만 이벤트 시 급증)"
   ]);
+});
+
+test("createAmazonQArchitectureDraftResponse asks deterministic clarifications before the Amazon Q availability gate", async () => {
+  const response = await createAmazonQArchitectureDraftResponse(
+    {
+      prompt: "웹 앱 하나 만들고 싶어"
+    },
+    {
+      creditPolicy: {
+        bedrock: false,
+        amazonQ: false,
+        transcribe: false,
+        billingMode: "disabled"
+      }
+    }
+  );
+
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.question, "어떤 종류의 웹사이트인가요?");
+  assert.ok((response.suggestions?.length ?? 0) > 0);
+  assert.equal(response.providerMetadata.provider, "fallback");
+});
+
+test("deterministic clarification never claims Amazon Q provenance when credit is unavailable", async () => {
+  let callCount = 0;
+  const provider = createFakeAmazonQProvider(() => {
+    callCount += 1;
+    return "{}";
+  });
+
+  const response = await createAmazonQArchitectureDraftResponse(
+    { prompt: "웹 앱 하나 만들고 싶어" },
+    {
+      provider,
+      creditPolicy: {
+        bedrock: false,
+        amazonQ: false,
+        transcribe: false,
+        billingMode: "aws_credit_only"
+      }
+    }
+  );
+
+  assert.equal(callCount, 0);
+  if (!("status" in response)) {
+    assert.fail("Expected a clarification response");
+  }
+
+  assert.equal(response.status, "needs_clarification");
+  assert.equal(response.providerMetadata.provider, "fallback");
+});
+
+test("configured Amazon Q draft provider only warms after credit approval", () => {
+  assert.equal(
+    shouldWarmConfiguredAmazonQArchitectureDraftProvider({
+      bedrock: false,
+      amazonQ: false,
+      transcribe: false,
+      billingMode: "aws_credit_only"
+    }),
+    false
+  );
+  assert.equal(shouldWarmConfiguredAmazonQArchitectureDraftProvider(confirmedCreditPolicy), true);
 });
 
 test("createAmazonQArchitectureDraftResponse treats Play Store app prompts as mobile app backend requests", async () => {

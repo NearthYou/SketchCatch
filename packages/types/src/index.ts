@@ -640,7 +640,15 @@ export type GitHubInstallationConnection = {
   htmlUrl: string | null;
 };
 
+export type GitHubAppCapabilityAvailability = "ready" | "not_configured";
+
+export type GitHubAppAvailability = {
+  connectionSetup: GitHubAppCapabilityAvailability;
+  installationRead: GitHubAppCapabilityAvailability;
+};
+
 export type ListGitHubInstallationsResponse = {
+  availability: GitHubAppAvailability;
   installations: GitHubInstallationConnection[];
 };
 

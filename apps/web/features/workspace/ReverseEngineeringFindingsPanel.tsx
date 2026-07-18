@@ -54,12 +54,6 @@ export function ReverseEngineeringFindingsPanel({
               </span>
               <span>{finding.description}</span>
               <span>어떻게 고치면 되나요: {finding.recommendation}</span>
-              <details className={styles.diagnosticDetails}>
-                <summary>진단 정보</summary>
-                <span>
-                  severity: {finding.severity} · category: {finding.category}
-                </span>
-              </details>
             </li>
           ))}
         </ul>
@@ -72,11 +66,7 @@ export function ReverseEngineeringFindingsPanel({
             {analysisExclusions.map((exclusion) => (
               <li key={exclusion.id} className={styles.resultItem}>
                 <strong>{getResourceName(exclusion.resourceId, resourceNames)}</strong>
-                <span>{exclusion.message}</span>
-                <details className={styles.diagnosticDetails}>
-                  <summary>진단 정보</summary>
-                  <span>reason: {exclusion.reason}</span>
-                </details>
+                <span>{formatAnalysisExclusion(exclusion.reason)}</span>
               </li>
             ))}
           </ul>
@@ -84,6 +74,14 @@ export function ReverseEngineeringFindingsPanel({
       ) : null}
     </section>
   );
+}
+
+function formatAnalysisExclusion(
+  reason: ReverseEngineeringAnalysisExclusion["reason"]
+): string {
+  return reason === "unsupported_resource_type"
+    ? "아직 자동 분석하지 않는 항목이라 검토용으로만 표시합니다."
+    : "분석에 필요한 정보가 부족해 검토용으로만 표시합니다.";
 }
 
 function getResourceName(resourceId: string, resourceNames: ReadonlyMap<string, string>): string {

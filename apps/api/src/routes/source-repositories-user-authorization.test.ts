@@ -53,6 +53,9 @@ test("GitHub user authorization callback completes without a bearer token", asyn
     }) {
       connectedUserId = input.userId;
       return createConnection(input.userId, input.installation.installationId);
+    },
+    async listActiveGitHubInstallationConnections() {
+      return [];
     }
   });
   const app = Fastify();

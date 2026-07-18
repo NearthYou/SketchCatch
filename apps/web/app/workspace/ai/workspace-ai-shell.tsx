@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { WorkspaceDeploymentNotificationCenterSlot } from "../../../components/notifications/DeploymentNotificationCenter";
+import { ProductBrand } from "../../../components/ui/ProductBrand";
 import { ConversationTranscript } from "./conversation-transcript";
 import { DecorativeAwsOrbit } from "./decorative-aws-orbit";
 import { FinalArchitecturePreview } from "./final-architecture-preview";
@@ -13,8 +15,12 @@ import { SelectedOptionTrail } from "./selected-option-trail";
 import type { AiStartExistingProject, AiStartMessage } from "./ai-start-model";
 import { useAiStartWorkflow } from "./use-ai-start-workflow";
 import {
+  createWorkspaceAiOrbitReactionKey,
+  getWorkspaceAiOrbitPresentation,
   getWorkspaceAiStageTransition,
+  resolveWorkspaceAiMobileView,
   resolveFinalArchitectureDiagram,
+  shouldShowMobilePreviewTrigger,
   type WorkspaceAiStagePhase
 } from "./workspace-ai-presentation";
 import { WorkspaceAiComposer } from "./workspace-ai-composer";
@@ -28,6 +34,8 @@ export function WorkspaceAiShell({
   const workflow = useAiStartWorkflow({ existingProject });
   const [selections, setSelections] = useState<readonly SelectedAssistantOption[]>([]);
   const [stagePhase, setStagePhase] = useState<WorkspaceAiStagePhase>("orbit");
+  const [mobilePreviewRequested, setMobilePreviewRequested] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const selectionsRef = useRef<readonly SelectedAssistantOption[]>([]);
   const orbitComposition = useMemo(
     () => createDecorativeOrbitComposition(selections),
@@ -40,15 +48,39 @@ export function WorkspaceAiShell({
   const hasFinalPreview =
     finalDiagram !== null && workflow.draft !== null && workflow.compilationProposal !== null;
   const showFinalPreview = hasFinalPreview && stagePhase === "preview";
+  const answerCount = workflow.messages.filter(({ role }) => role === "user").length;
+  const orbitPresentation = getWorkspaceAiOrbitPresentation({ answerCount, stagePhase });
+  const orbitReactionKey = createWorkspaceAiOrbitReactionKey({
+    lastMessageId: workflow.messages.at(-1)?.id ?? null,
+    selectionCount: selections.length
+  });
+  const mobileView = resolveWorkspaceAiMobileView({
+    hasFinalPreview: showFinalPreview,
+    previewRequested: mobilePreviewRequested
+  });
+  const showMobilePreviewTrigger = shouldShowMobilePreviewTrigger({
+    hasFinalPreview: showFinalPreview,
+    mobileView
+  });
   const projectName =
     workflow.projectDraft?.projectName ??
     existingProject?.projectName ??
     "새 Practice Architecture";
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+
+    updatePreference();
+    mediaQuery.addEventListener("change", updatePreference);
+    return () => mediaQuery.removeEventListener("change", updatePreference);
+  }, []);
+
+  useEffect(() => {
     const transition = getWorkspaceAiStageTransition({
+      currentPhase: stagePhase,
       hasFinalPreview,
-      prefersReducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      prefersReducedMotion
     });
 
     setStagePhase(transition.phase);
@@ -59,7 +91,11 @@ export function WorkspaceAiShell({
     }, transition.delayMs);
 
     return () => window.clearTimeout(timeoutId);
-  }, [hasFinalPreview]);
+  }, [hasFinalPreview, prefersReducedMotion, stagePhase]);
+
+  useEffect(() => {
+    if (!showFinalPreview) setMobilePreviewRequested(false);
+  }, [showFinalPreview]);
 
   function handleSuggestionSelect(message: AiStartMessage, suggestion: string): void {
     if (
@@ -86,7 +122,7 @@ export function WorkspaceAiShell({
   const stageState = hasFinalPreview
     ? workflow.approvalState === "loading"
       ? "적용 중"
-      : "최종 Preview"
+      : "초안 준비됨"
     : workflow.requestState === "loading"
       ? "응답 중"
       : "탐색 중";
@@ -95,13 +131,22 @@ export function WorkspaceAiShell({
     <main className={styles.page}>
       <header className={styles.topBar}>
         <div className={styles.topBarBrand}>
-          <span aria-hidden="true" className={styles.brandMark} />
-          <strong>SketchCatch</strong>
-          <span>{projectName}</span>
+          <ProductBrand />
+          <span className={styles.topBarProjectName}>{projectName}</span>
         </div>
-        <p className={styles.topBarTitle}>AI Architecture</p>
+        <p className={styles.topBarTitle}>AI 초안</p>
         <div className={styles.topBarState}>
           <span>{stageState}</span>
+          {showMobilePreviewTrigger ? (
+            <button
+              className={styles.mobilePreviewTrigger}
+              onClick={() => setMobilePreviewRequested(true)}
+              type="button"
+            >
+              미리보기
+            </button>
+          ) : null}
+          <WorkspaceDeploymentNotificationCenterSlot />
           <button
             disabled={workflow.approvalState === "loading"}
             onClick={workflow.cancelStart}
@@ -112,12 +157,14 @@ export function WorkspaceAiShell({
         </div>
       </header>
 
-      <div className={styles.splitLayout}>
-        <section aria-labelledby="conversation-heading" className={styles.conversationPanel}>
-          <header className={styles.conversationHeader}>
-            <h1 id="conversation-heading">Architecture 요구사항</h1>
-          </header>
-
+      <div
+        className={`${styles.splitLayout} ${showFinalPreview ? styles.splitLayoutFinal : styles.splitLayoutConversation} ${mobileView === "preview" ? styles.mobilePreviewOpen : ""}`}
+      >
+        <section
+          aria-label="AI 대화"
+          className={`${styles.conversationPanel} ${showFinalPreview ? styles.conversationPanelFinal : styles.conversationPanelActive}`}
+          id="conversation"
+        >
           <ConversationTranscript
             hasFinalPreview={showFinalPreview}
             isInteractionLocked={workflow.approvalState === "loading"}
@@ -130,6 +177,7 @@ export function WorkspaceAiShell({
             messages={workflow.messages}
             onCancelRequest={workflow.cancelRequest}
             onExcludeCandidate={workflow.excludeProgressCandidate}
+            onOpenPreview={() => setMobilePreviewRequested(true)}
             onRetry={workflow.retryDraft}
             onSuggestionSelect={handleSuggestionSelect}
             onUndoExclusion={workflow.undoLastExclusion}
@@ -137,6 +185,12 @@ export function WorkspaceAiShell({
             requestState={workflow.requestState}
             selections={selections}
           />
+
+          {selections.length > 0 ? (
+            <div className={styles.mobileSelectionTrail}>
+              <SelectedOptionTrail compact selections={selections} />
+            </div>
+          ) : null}
 
           <WorkspaceAiComposer
             canSubmit={workflow.canSubmit}
@@ -150,33 +204,33 @@ export function WorkspaceAiShell({
         </section>
 
         <aside
-          aria-label={showFinalPreview ? "최종 Architecture Preview" : "장식용 AWS Resource Orbit"}
+          aria-label={showFinalPreview ? "완성된 AI 초안" : "장식용 AWS 리소스 장면"}
           aria-live="polite"
-          className={`${styles.visualStage} ${showFinalPreview ? styles.visualStageFinal : ""}`}
+          className={`${styles.visualStage} ${showFinalPreview ? styles.visualStageFinal : styles.visualStageOrbit}`}
         >
           {showFinalPreview && finalDiagram && workflow.draft && workflow.compilationProposal ? (
             <FinalArchitecturePreview
               approvalError={workflow.approvalError}
               canApprove={workflow.canApprove}
               diagram={finalDiagram}
-              draft={workflow.draft}
               isApplying={workflow.approvalState === "loading"}
               onApply={workflow.approveDraft}
-              onRegenerate={workflow.regenerateDraft}
-              proposal={workflow.compilationProposal}
+              onBackToConversation={() => setMobilePreviewRequested(false)}
+              onRegenerate={async () => {
+                setMobilePreviewRequested(false);
+                await workflow.regenerateDraft();
+              }}
               selections={selections}
             />
           ) : (
             <>
-              <header className={styles.stageHeader}>
-                <p>Exploration</p>
-                <h2>Resource Orbit</h2>
-                <span>실제 AWS icon을 쓰는 탐색용 장면이며 추천 결과가 아닙니다.</span>
-              </header>
               <div className={styles.stageCanvas}>
                 <DecorativeAwsOrbit
                   composition={orbitComposition}
-                  isExiting={stagePhase === "orbit-exiting"}
+                  convergenceLevel={orbitPresentation.convergenceLevel}
+                  isConverging={orbitPresentation.phase === "converging"}
+                  reactionKey={orbitReactionKey}
+                  visibleRingCount={orbitPresentation.visibleRingCount}
                 />
               </div>
               <SelectedOptionTrail selections={selections} />

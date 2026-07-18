@@ -313,7 +313,9 @@ export function createAwsReverseEngineeringGateway(
 
       return {
         records,
-        scanErrors: resourceGroups.flatMap((group) => group.scanErrors)
+        scanErrors: deduplicateReverseEngineeringScanErrors(
+          resourceGroups.flatMap((group) => group.scanErrors)
+        )
       };
     }
   };
@@ -697,6 +699,7 @@ export async function readResourceExplorerResourcesWithDiagnostics(
 // UNKNOWN 보조 조회 하나가 실패해도 다른 UNKNOWN 조회 결과는 계속 살립니다.
 async function readUnknownResourceRecords(
   resourceType: ResourceType,
+  serviceKey: string,
   read: () => Promise<AwsDiscoveredResourceRecord[]>
 ): Promise<AwsProviderDiscoveryResult> {
   try {
@@ -704,7 +707,7 @@ async function readUnknownResourceRecords(
   } catch (error) {
     return {
       records: [],
-      scanErrors: [toScanError(resourceType, error)]
+      scanErrors: [toScanError(resourceType, error, serviceKey)]
     };
   }
 }
@@ -719,58 +722,82 @@ async function listUnknownResources(
   if (input.resourceTypes.includes("ALL") || input.resourceTypes.includes("UNKNOWN")) {
     reads.push(
       readResourceExplorerResourcesWithDiagnostics(input.region, credentials),
-      readUnknownResourceRecords("UNKNOWN", () => listTaggedUnknownResources(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () => listIamRolesAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () => listKmsKeysAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "resource-groups-tagging", () =>
+        listTaggedUnknownResources(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "iam", () =>
+        listIamRolesAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "kms", () =>
+        listKmsKeysAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "cloudwatch-logs", () =>
         listCloudWatchLogGroupsAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "api-gateway", () =>
         listApiGatewayRestApisAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () => listAmiImagesAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () => listIamPoliciesAsUnknown(input.region, credentials)),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "ec2", () =>
+        listAmiImagesAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "iam", () =>
+        listIamPoliciesAsUnknown(input.region, credentials)
+      ),
+      readUnknownResourceRecords("UNKNOWN", "iam", () =>
         listIamInstanceProfilesAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "cloudwatch", () =>
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
       ),
-      readUnknownResourceRecords("UNKNOWN", () =>
+      readUnknownResourceRecords("UNKNOWN", "lambda", () =>
         listLambdaPermissionsAsUnknown(input.region, credentials)
       )
     );
   }
 
   if (input.resourceTypes.includes("AMI")) {
-    reads.push(readUnknownResourceRecords("AMI", () => listAmiImagesAsUnknown(input.region, credentials)));
+    reads.push(
+      readUnknownResourceRecords("AMI", "ec2", () =>
+        listAmiImagesAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("IAM_ROLE")) {
-    reads.push(readUnknownResourceRecords("IAM_ROLE", () => listIamRolesAsUnknown(input.region, credentials)));
+    reads.push(
+      readUnknownResourceRecords("IAM_ROLE", "iam", () =>
+        listIamRolesAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("IAM_POLICY")) {
     reads.push(
-      readUnknownResourceRecords("IAM_POLICY", () => listIamPoliciesAsUnknown(input.region, credentials))
+      readUnknownResourceRecords("IAM_POLICY", "iam", () =>
+        listIamPoliciesAsUnknown(input.region, credentials)
+      )
     );
   }
 
   if (input.resourceTypes.includes("IAM_INSTANCE_PROFILE")) {
     reads.push(
-      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", () =>
+      readUnknownResourceRecords("IAM_INSTANCE_PROFILE", "iam", () =>
         listIamInstanceProfilesAsUnknown(input.region, credentials)
       )
     );
   }
 
   if (input.resourceTypes.includes("KMS_KEY")) {
-    reads.push(readUnknownResourceRecords("KMS_KEY", () => listKmsKeysAsUnknown(input.region, credentials)));
+    reads.push(
+      readUnknownResourceRecords("KMS_KEY", "kms", () =>
+        listKmsKeysAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("CLOUDWATCH_LOG_GROUP")) {
     reads.push(
-      readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", () =>
+      readUnknownResourceRecords("CLOUDWATCH_LOG_GROUP", "cloudwatch-logs", () =>
         listCloudWatchLogGroupsAsUnknown(input.region, credentials)
       )
     );
@@ -778,7 +805,7 @@ async function listUnknownResources(
 
   if (input.resourceTypes.includes("CLOUDWATCH_METRIC_ALARM")) {
     reads.push(
-      readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", () =>
+      readUnknownResourceRecords("CLOUDWATCH_METRIC_ALARM", "cloudwatch", () =>
         listCloudWatchMetricAlarmsAsUnknown(input.region, credentials)
       )
     );
@@ -786,7 +813,7 @@ async function listUnknownResources(
 
   if (input.resourceTypes.includes("API_GATEWAY_REST_API")) {
     reads.push(
-      readUnknownResourceRecords("API_GATEWAY_REST_API", () =>
+      readUnknownResourceRecords("API_GATEWAY_REST_API", "api-gateway", () =>
         listApiGatewayRestApisAsUnknown(input.region, credentials)
       )
     );
@@ -797,12 +824,16 @@ async function listUnknownResources(
     input.resourceTypes.includes("UNKNOWN") ||
     input.resourceTypes.includes("LAMBDA")
   ) {
-    reads.push(readUnknownResourceRecords("LAMBDA", () => listLambdaFunctionsAsUnknown(input.region, credentials)));
+    reads.push(
+      readUnknownResourceRecords("LAMBDA", "lambda", () =>
+        listLambdaFunctionsAsUnknown(input.region, credentials)
+      )
+    );
   }
 
   if (input.resourceTypes.includes("LAMBDA_PERMISSION")) {
     reads.push(
-      readUnknownResourceRecords("LAMBDA_PERMISSION", () =>
+      readUnknownResourceRecords("LAMBDA_PERMISSION", "lambda", () =>
         listLambdaPermissionsAsUnknown(input.region, credentials)
       )
     );
@@ -816,7 +847,9 @@ async function listUnknownResources(
         .flatMap((result) => result.records)
         .filter((record) => !isReverseEngineeringPromotedResourceArn(record.providerResourceId))
     ),
-    scanErrors: discoveryResults.flatMap((result) => result.scanErrors)
+    scanErrors: deduplicateReverseEngineeringScanErrors(
+      discoveryResults.flatMap((result) => result.scanErrors)
+    )
   };
 }
 
@@ -2856,31 +2889,112 @@ export function maskReverseEngineeringSensitiveText(text: string): string {
   return text.replace(/\b(\d{4})\d{8}\b/g, "$1********");
 }
 
-// AWS 오류 메시지를 화면에 보여줄 수 있는 scanErrors reason으로 줄입니다.
-function toScanError(resourceType: ResourceType, error: unknown): ReverseEngineeringScanError {
-  const message = maskReverseEngineeringSensitiveText(
+// 동일 AWS 서비스에서 여러 reader가 함께 실패해도 사용자에게는 한 번만 알립니다.
+export function deduplicateReverseEngineeringScanErrors(
+  scanErrors: readonly ReverseEngineeringScanError[]
+): ReverseEngineeringScanError[] {
+  const uniqueErrors = new Map<string, ReverseEngineeringScanError>();
+
+  for (const scanError of scanErrors) {
+    if (!uniqueErrors.has(scanError.id)) {
+      uniqueErrors.set(scanError.id, scanError);
+    }
+  }
+
+  return [...uniqueErrors.values()];
+}
+
+function getReverseEngineeringAwsServiceKey(resourceType: ResourceType): string {
+  switch (resourceType) {
+    case "VPC":
+    case "SUBNET":
+    case "INTERNET_GATEWAY":
+    case "ROUTE_TABLE":
+    case "ROUTE_TABLE_ASSOCIATION":
+    case "SECURITY_GROUP":
+    case "EC2":
+    case "AMI":
+      return "ec2";
+    case "LOAD_BALANCER":
+      return "elastic-load-balancing";
+    case "RDS":
+      return "rds";
+    case "S3":
+      return "s3";
+    case "CLOUDFRONT":
+      return "cloudfront";
+    case "ECS_CLUSTER":
+    case "ECS_SERVICE":
+    case "ECS_TASK_DEFINITION":
+      return "ecs";
+    case "IAM_ROLE":
+    case "IAM_POLICY":
+    case "IAM_INSTANCE_PROFILE":
+      return "iam";
+    case "KMS_KEY":
+      return "kms";
+    case "CLOUDWATCH_LOG_GROUP":
+      return "cloudwatch-logs";
+    case "CLOUDWATCH_METRIC_ALARM":
+      return "cloudwatch";
+    case "API_GATEWAY_REST_API":
+      return "api-gateway";
+    case "LAMBDA":
+    case "LAMBDA_PERMISSION":
+      return "lambda";
+    default:
+      return resourceType.toLowerCase().replaceAll("_", "-");
+  }
+}
+
+function normalizeReverseEngineeringAwsServiceKey(serviceKey: string): string {
+  return serviceKey.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function formatSafeScanErrorMessage(reason: ReverseEngineeringScanError["reason"]): string {
+  switch (reason) {
+    case "permission_denied":
+      return "이 서비스를 읽을 권한이 부족합니다.";
+    case "expired_credential":
+      return "AWS 연결 확인이 필요합니다.";
+    case "invalid_region":
+      return "선택한 AWS Region을 확인해 주세요.";
+    case "throttled":
+      return "AWS 요청이 잠시 제한되었습니다.";
+    default:
+      return "이 서비스를 읽지 못했습니다.";
+  }
+}
+
+// 원문 AWS 오류는 reason 판별에만 사용하고 공개 scan 결과에는 남기지 않습니다.
+function toScanError(
+  resourceType: ResourceType,
+  error: unknown,
+  serviceKey = getReverseEngineeringAwsServiceKey(resourceType)
+): ReverseEngineeringScanError {
+  const providerMessage = maskReverseEngineeringSensitiveText(
     error instanceof Error ? error.message : "AWS 리소스를 읽지 못했습니다."
   );
-  const reason = classifyScanErrorReason(message);
+  const reason = classifyScanErrorReason(providerMessage);
 
   return {
-    id: `scan-error-${resourceType.toLowerCase()}`,
+    id: `scan-error-service-${normalizeReverseEngineeringAwsServiceKey(serviceKey)}`,
     resourceType,
     stage: "provider_api",
     reason,
-    message,
+    message: formatSafeScanErrorMessage(reason),
     retryable: reason === "throttled" || reason === "provider_error"
   };
 }
 
 // Resource Explorer 상태 문제는 전체 가져오기 범위가 줄어든다는 설명을 덧붙입니다.
 function toResourceExplorerScanError(error: unknown): ReverseEngineeringScanError {
-  const baseError = toScanError("UNKNOWN", error);
+  const baseError = toScanError("UNKNOWN", error, "resource-explorer-2");
 
   return {
     ...baseError,
     id: "scan-error-resource-explorer",
-    message: `Resource Explorer 조회 실패: ${baseError.message}. Resource Explorer가 꺼져 있거나 조회 권한이 없으면 전체 가져오기 범위가 줄어듭니다.`,
+    message: "Resource Explorer를 읽지 못했습니다.",
     retryable: baseError.reason === "throttled"
   };
 }

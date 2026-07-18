@@ -92,9 +92,9 @@ Deployment Wizard
 - Modify: `apps/web/features/workspace/workspace-right-panel-layout.test.ts`
 - Modify: `apps/web/features/parameter-input/parameter-panel-source.test.ts`
 - Modify: `apps/web/features/diagram-editor/diagram-editor-layout.test.ts`
-- Reference: `docs/gg/fix-gg-qa-followup/000_Workspace_레벨분리_배포위자드_구현마일스톤_gg.md`
-- Reference: `docs/gg/fix-gg-qa-followup/001_Workspace_오른쪽패널_현재디자인_롤백기준_gg.md`
-- Reference: `docs/gg/fix-gg-qa-followup/002_Workspace_시각개편_단계별접근_gg.md`
+- Reference: `docs/gg/old/fix-gg-qa-followup/000_Workspace_레벨분리_배포위자드_구현마일스톤_gg.md`
+- Reference: `docs/gg/old/fix-gg-qa-followup/001_Workspace_오른쪽패널_현재디자인_롤백기준_gg.md`
+- Reference: `docs/gg/old/fix-gg-qa-followup/002_Workspace_시각개편_단계별접근_gg.md`
 
 **Interfaces:**
 - Consumes: 현재 `WorkspaceRightPanel`, `DeploymentPanel`, `WorkspaceAiChatDock` source contract

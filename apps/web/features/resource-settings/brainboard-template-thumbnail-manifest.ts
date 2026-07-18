@@ -69,7 +69,7 @@ const BRAINBOARD_DIAGRAM_HASHES: Record<
   "brainboard-aws-vpc-subnets-security-groups-2az":
     "c7106a31c5540ee3e78247cfb5dd093cb991f91960b9b93453022c93914e75f3",
   "brainboard-cross-account-aws-s3":
-    "72a9f6acaf43e3768a59e99bcc05be83c165656fdae9ef937ced4f44279b694a",
+    "4911e8662c5a1894e632e55bb954ec541b2673c9cabb31b1961a4802b7f95a86",
   "brainboard-training-aws-onboarding":
     "5072bb6ea891b89ea19530a8c234d89b0fb457f161aec24a0ffec5136a5cb86f"
 };

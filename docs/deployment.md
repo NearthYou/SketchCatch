@@ -771,10 +771,12 @@ GIT_APP_ID=
 GIT_APP_SLUG=
 GIT_APP_PRIVATE_KEY_BASE64=
 GIT_APP_CALLBACK_URL=
+GIT_APP_CLIENT_ID=
+GIT_APP_CLIENT_SECRET=
 GIT_APP_STATE_SECRET=
 ```
 
-`GIT_APP_PRIVATE_KEY_BASE64`는 GitHub App private key PEM을 base64로 인코딩한 값입니다. `GIT_APP_STATE_SECRET`은 선택값이며, 비워 두면 `AUTH_TOKEN_SECRET`으로 short-lived state를 서명합니다.
+`GIT_APP_PRIVATE_KEY_BASE64`는 GitHub App private key PEM을 base64로 인코딩한 값입니다. `GIT_APP_CLIENT_ID`와 `GIT_APP_CLIENT_SECRET`은 installation을 현재 SketchCatch 사용자에게 귀속시키는 GitHub 사용자 승인에 필요합니다. `GIT_APP_STATE_SECRET`은 선택값이며, 비워 두면 `AUTH_TOKEN_SECRET`으로 short-lived state를 서명합니다.
 
 GitHub App repository permissions는 다음으로 고정합니다.
 

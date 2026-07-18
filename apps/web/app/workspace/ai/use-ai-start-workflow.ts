@@ -13,7 +13,6 @@ import type {
   CreateArchitectureDraftResponse,
   DiagramJson
 } from "@sketchcatch/types";
-import { getApiErrorMessage } from "../../../lib/api-client";
 import { useAuth } from "../../../components/auth/auth-provider";
 import { invalidateProjectQueries } from "../../../components/query/dashboard-query-invalidation";
 import {
@@ -66,6 +65,10 @@ import {
 import { type DraftProgressState, type DraftProgressStatus } from "./ai-draft-progress-model";
 import { AiDraftProgressCoordinator } from "./ai-draft-progress-coordinator";
 import { getAiStartDraftTransport } from "./ai-start-request-policy";
+import {
+  getWorkspaceAiErrorMessage,
+  type WorkspaceAiErrorStage
+} from "./workspace-ai-presentation";
 
 type PendingDraftClarification = {
   readonly clarification: ArchitectureDraftClarification;
@@ -95,6 +98,10 @@ type RetryablePatchRequest = {
   readonly instruction: string;
   readonly options: PatchTargetOptions;
 };
+
+function reportWorkspaceAiError(stage: WorkspaceAiErrorStage, error: unknown): void {
+  console.error(`[Workspace AI] ${stage} failed`, error);
+}
 
 export function useAiStartWorkflow({
   existingProject
@@ -197,9 +204,8 @@ export function useAiStartWorkflow({
       })
       .catch((error) => {
         if (!cancelled) {
-          failRequest(
-            getApiErrorMessage(error, "현재 프로젝트의 최신 Draft 상태를 불러오지 못했습니다.")
-          );
+          reportWorkspaceAiError("load", error);
+          failRequest(getWorkspaceAiErrorMessage("load"));
         }
       });
 
@@ -305,7 +311,8 @@ export function useAiStartWorkflow({
         ) {
           return;
         }
-        failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
+        reportWorkspaceAiError("draft", error);
+        failRequest(getWorkspaceAiErrorMessage("draft"));
       } finally {
         requestRegistryRef.current.complete("draft", controller);
       }
@@ -347,7 +354,8 @@ export function useAiStartWorkflow({
       }
 
       publishDraftProgressState(interrupted);
-      failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
+      reportWorkspaceAiError("draft", error);
+      failRequest(getWorkspaceAiErrorMessage("draft"));
     }
   }
 
@@ -498,7 +506,8 @@ export function useAiStartWorkflow({
       ) {
         return;
       }
-      failRequest(getApiErrorMessage(error, "수정 PREVIEW를 만들지 못했습니다."));
+      reportWorkspaceAiError("patch", error);
+      failRequest(getWorkspaceAiErrorMessage("patch"));
     } finally {
       requestRegistryRef.current.complete("draft", controller);
     }
@@ -516,7 +525,7 @@ export function useAiStartWorkflow({
 
     if (existingProjectId && existingProjectDraftRevision === undefined) {
       failRequest(
-        "현재 프로젝트의 최신 Draft 상태를 확인하는 중입니다. 잠시 후 다시 시도해주세요."
+        "현재 프로젝트의 최신 초안을 확인하고 있어요. 잠시 후 다시 시도해 주세요."
       );
       return;
     }
@@ -554,8 +563,9 @@ export function useAiStartWorkflow({
         }).toString()}`
       );
     } catch (error) {
+      reportWorkspaceAiError("apply", error);
       setApprovalState("error");
-      setApprovalError(getApiErrorMessage(error, "Board에 적용하지 못했습니다."));
+      setApprovalError(getWorkspaceAiErrorMessage("apply"));
     } finally {
       approvalRequestRef.current = false;
     }
@@ -612,8 +622,9 @@ export function useAiStartWorkflow({
       try {
         showDraft(session.pendingDraft);
       } catch (error) {
+        reportWorkspaceAiError("draft", error);
         publishDraftProgressState(draftProgressCoordinatorRef.current.markInterrupted());
-        failRequest(getApiErrorMessage(error, "Architecture Draft를 만들지 못했습니다."));
+        failRequest(getWorkspaceAiErrorMessage("draft"));
       }
       return;
     }
@@ -663,7 +674,7 @@ export function useAiStartWorkflow({
   function showDraft(
     result: AiArchitectureDraftResult,
     currentDiagram?: DiagramJson,
-    message = `${result.title} PREVIEW가 준비됐습니다.`
+    message = "초안이 준비됐어요. 미리보기에서 구조를 확인해 주세요."
   ): void {
     const completedProgress = draftProgressCoordinatorRef.current.finalize(() =>
       compileArchitectureDraftProposal(result, currentDiagram)
