@@ -1274,10 +1274,17 @@ function isClarificationAnswerValid(
   if (normalizedAnswer.length === 0 || isClearlyUnrelatedClarificationAnswer(normalizedAnswer)) {
     return false;
   }
+  if (question.suggestions.some(
+    (suggestion) => suggestion.normalize("NFKC").trim().toLowerCase() === normalizedAnswer
+  )) {
+    return true;
+  }
+  if (isClarificationInformationRequest(normalizedAnswer)) {
+    return false;
+  }
   if (question.id === "backend") {
     return isBackendClarificationAnswerValid(normalizedAnswer);
   }
-  if (isRequiredArchitectureQuestionAnswered(question, normalizedAnswer)) return true;
   switch (question.id) {
     case "website_type":
       return hasPromptTerm(normalizedAnswer, [
@@ -1290,10 +1297,19 @@ function isClarificationAnswerValid(
         "적게", "적은", "많지", "보통", "많은", "몰릴", "초기", "처음"
       ]);
     case "database":
+      return isNaturalBooleanAnswer(normalizedAnswer) || hasPromptTerm(normalizedAnswer, [
+        "database", "postgres", "postgresql", "mysql", "dynamodb", "rds", "db를", "db가",
+        "데이터베이스", "사용자 정보", "게시글"
+      ]);
     case "ssl":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["ssl", "https", "http", "인증서", "보안", "도메인"]);
     case "file_upload":
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["file upload", "upload", "파일 업로드", "이미지 업로드", "문서 업로드", "동영상 업로드", "대용량 파일", "텍스트만"]);
     case "realtime":
-      return isNaturalBooleanAnswer(normalizedAnswer);
+      return isNaturalBooleanAnswer(normalizedAnswer)
+        || hasPromptTerm(normalizedAnswer, ["realtime", "real-time", "실시간", "채팅", "알림", "websocket", "sse", "데이터 업데이트"]);
     case "frontend":
       return hasPromptTerm(normalizedAnswer, [
         "리액트", "뷰", "앵귤러", "넥스트", "일반 웹", "순수 자바스크립트"
@@ -1328,6 +1344,9 @@ function isClarificationAnswerValid(
   }
 }
 
+function isClarificationInformationRequest(answer: string): boolean {
+  return /(?:무엇인지|뭐야|뭔지|무슨 뜻|설명(?:해|해줘|해주세요)|알려\s*(?:줘|주세요)|what\s+is|tell\s+me|explain)/iu.test(answer);
+}
 function isBackendClarificationAnswerValid(answer: string): boolean {
   if (hasUncertainPreferenceAnswer(answer)) {
     return true;
@@ -1368,12 +1387,12 @@ function isBackendClarificationAnswerValid(answer: string): boolean {
 }
 
 function isNaturalBooleanAnswer(answer: string): boolean {
-  return /^(?:네|예|응|맞아|아니|아니요|필요(?:해|해요|합니다|하지 않|없)|안 필요|없어|있어|있음|없음|해줘|해주세요)/u.test(answer)
+  return /^(?:(?:네|예|응|맞아|맞아요)(?:[\s,.!]|$)|(?:아니|아니요)(?:[\s,.!]|$)|(?:필요(?:해|해요|합니다|하지\s*않(?:아|아요)?|없(?:어|어요)?)|안\s*필요(?:해|해요)?|없어|없어요|있어|있어요|있음|없음)(?:[\s,.!]|$))/u.test(answer)
     || hasUncertainPreferenceAnswer(answer);
 }
 
 function hasUncertainPreferenceAnswer(answer: string): boolean {
-  return hasPromptTerm(answer, ["모르겠", "추천", "상관없", "아무거나"]);
+  return /^(?:(?:잘\s*)?모르겠|추천(?:해\s*줘|해주세요|해줘)?|상관\s*없|아무거나)(?:[\s,.!]|$)/u.test(answer);
 }
 
 function isClearlyUnrelatedClarificationAnswer(answer: string): boolean {

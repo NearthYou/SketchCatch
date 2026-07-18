@@ -1047,6 +1047,36 @@ test("createAmazonQArchitectureDraftResponse asks clarification questions in the
   }
 });
 
+test("createAmazonQArchitectureDraftResponse re-asks every required question for explanation-only answers", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const clarificationAnswers: Array<{ questionId: string; answer: string }> = [];
+  for (let index = 0; index < 15; index += 1) {
+    const response = await createAmazonQArchitectureDraftResponse(
+      { prompt: "웹사이트를 만들고 싶어요.", clarificationAnswers },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+    if (!("status" in response)) assert.fail(`Expected clarification at index ${index}`);
+    const repeatedResponse = await createAmazonQArchitectureDraftResponse(
+      {
+        prompt: "웹사이트를 만들고 싶어요.",
+        clarificationAnswers: [
+          ...clarificationAnswers,
+          { questionId: response.questionId, answer: `${response.question} 설명해줘` }
+        ]
+      },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+    if (!("status" in repeatedResponse)) {
+      assert.fail(`Expected repeated clarification for ${response.questionId}`);
+    }
+    assert.equal(repeatedResponse.questionId, response.questionId);
+    assert.match(repeatedResponse.validationMessage ?? "", /다시 답해/);
+    clarificationAnswers.push({
+      questionId: response.questionId,
+      answer: response.suggestions[0] ?? "추천해줘"
+    });
+  }
+});
 test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture preview when requirements are complete", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;
