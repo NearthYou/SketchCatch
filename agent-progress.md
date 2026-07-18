@@ -13,6 +13,11 @@ Short English-only working log for the current agent context. Older records are 
 
 ## Session Record
 
+### 2026-07-19 - Localize Architecture Draft explanations
+
+- Removed `다음 행동` from both diagram AI explanations and normalized Amazon Q titles and highlights to Korean with a Korean fallback.
+- Focused API tests pass 86/86, Workbench contract tests pass 22/22, and API/Web typechecks pass.
+
 ## Broken Or Unverified
 
 - The session-wide `pnpm test` run originally reported three Web failures. The owned AI chat contract failure is fixed and its focused suite passes; two unchanged failures remain in the generated architecture artifact line-ending assertion and GitHub account settings contract. The full suite was not rerun after the focused fix.
@@ -21,14 +26,6 @@ Short English-only working log for the current agent context. Older records are 
 - Generated AWS workflows were syntax-checked and provider behavior was exercised with test doubles only. Live AWS acceptance was intentionally not run.
 
 ## Next Action
-### 2026-07-18 - Expand project destroy recovery and AWS connection permissions
-
-- Refreshed the project deletion preview after a successful Terraform Destroy when final SketchCatch cleanup fails, preventing retries from starting a stale Destroy Plan.
-- Preserved managed-cleanup causes and logged masked AWS cause metadata for request-correlated diagnosis.
-- Expanded generated AWS Connection policies and CloudFormation templates to cover every currently deployable AWS service family and required IAM lifecycle operations.
-- Updated the live `chaekang` execution-role inline policy successfully. The other verified DB connection points to a role that no longer exists; pending connections have no role yet and will receive the new template when created.
-- Focused Web tests pass 12/12 and focused API tests pass 31/31. Workspace lint and typecheck pass. The root build was stopped at the user's request after running without output for over two minutes.
-
 ### 2026-07-18 - Finish resource-inclusive project deletion cleanly
 
 - Made project deletion progress advance gradually within each planning, approval, destroy, and final cleanup stage without showing 100% before completion.

@@ -6,7 +6,7 @@ Use this file only for compact continuation context. Write it in English.
 
 - Branch `fix/ck/477-ai-chatting-bug-fix` includes committed all-question validation, both-chat selection synchronization, clarification probes, diagram patch probes, and complete resource alias coverage.
 - The running Web-to-API path repeats the frontend question for the reported daily-user-count phrase and the region question for the reported Spring Boot phrase, with explicit unrelated-answer feedback.
-- Current uncommitted work prevents equivalent Diagram prop replacements from falsely invalidating fresh AI proposals and repairs the Board approval layout.
+- The working tree contains the Architecture Draft Korean-explanation and `다음 행동` removal change pending commit.
 
 ## Changes This Session
 
@@ -19,12 +19,15 @@ Use this file only for compact continuation context. Write it in English.
 - `한달에 한 30정도로` is accepted as a monthly 30만원 budget and mapped to the normal budget profile; answers with time, traffic, size, or percentage units remain excluded.
 - Equal Board prop replacements keep the proposal revision stable; real Board content changes continue to invalidate proposals.
 - Board approval copy and actions use separate rows in the narrow Workbench.
+- Diagram AI results no longer render a separate `다음 행동` section in either chat surface.
+- Amazon Q is instructed to return Korean user-facing prose; English `Architecture Draft` suffixes and known English highlights are normalized, while unknown English-only highlights fall back to a Korean resource summary.
+- Focused API tests pass 86/86, Workbench contract tests pass 22/22, and API/Web typechecks pass.
 
 ## Broken Or Unverified
 
-- Focused stale/layout regressions pass 75/75, Web typecheck passes, and CSS formatting passes. Browser interaction was not rerun in this session.
+- Browser interaction was not rerun; verification is focused because the user requested limited testing.
 
 ## Best Next Action
 
-- Commit the Board stale-state and approval-layout fix, then verify a clean worktree.
+- Commit the Architecture Draft localization and explanation cleanup, then verify a clean worktree.
 - No DB migration, cloud mutation, deployment, or Terraform execution is involved.
