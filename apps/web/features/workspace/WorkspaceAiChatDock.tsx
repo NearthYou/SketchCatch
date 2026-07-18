@@ -2350,6 +2350,12 @@ export function WorkspaceAiChatDock({
                 ) : null}
               </div>
             ) : null}
+            {hasSubmittedSuggestion ? (
+              <div className={styles.acceptedAnswer} role="status">
+                <span>반영된 답변</span>
+                <strong>{submittedSuggestions.join(", ")}</strong>
+              </div>
+            ) : null}
           </div>
         );
       })}

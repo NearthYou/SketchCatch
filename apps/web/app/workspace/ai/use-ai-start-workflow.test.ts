@@ -72,6 +72,10 @@ test("두 다이어그램 생성 채팅은 같은 자연어 답변 검증과 선
     join(currentDir, "../../../features/workspace/WorkspaceAiChatDock.tsx"),
     "utf8"
   );
+  const aiStartTranscriptSource = readFileSync(
+    join(currentDir, "conversation-transcript.tsx"),
+    "utf8"
+  );
 
   for (const source of [aiStartSource, workspaceDockSource]) {
     assert.match(source, /withArchitectureDraftClarificationAnswer/);
@@ -81,4 +85,6 @@ test("두 다이어그램 생성 채팅은 같은 자연어 답변 검증과 선
 
   assert.match(aiStartSource, /setAcceptedClarificationSelection/);
   assert.match(workspaceDockSource, /markChatMessageSuggestionsSelected/);
+  assert.match(aiStartTranscriptSource, /반영된 답변/);
+  assert.match(workspaceDockSource, /반영된 답변/);
 });

@@ -165,6 +165,12 @@ export function ConversationTranscript({
                   })}
                 </div>
               ) : null}
+              {selectedForQuestion !== undefined ? (
+                <div className={styles.acceptedAnswer} role="status">
+                  <span>반영된 답변</span>
+                  <strong>{selectedForQuestion.label}</strong>
+                </div>
+              ) : null}
             </article>
           );
         })}
