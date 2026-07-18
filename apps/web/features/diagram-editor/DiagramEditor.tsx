@@ -235,18 +235,16 @@ export function DiagramEditor(props: DiagramEditorProps) {
 function CompilerPreviewDetail({
   emptyLabel,
   items,
-  label,
-  title
+  label
 }: {
   readonly emptyLabel: string;
   readonly items: readonly string[];
   readonly label: string;
-  readonly title?: string;
 }) {
   return (
     <div className={styles.compilerPreviewDetail}>
       <span>{label}</span>
-      <strong title={title}>{items.length > 0 ? items.join(" · ") : emptyLabel}</strong>
+      <strong>{items.length > 0 ? items.join(" · ") : emptyLabel}</strong>
     </div>
   );
 }
@@ -3142,65 +3140,98 @@ function DiagramEditorInner({
           <div className={styles.draftStatusPanelSlot}>{draftStatusPanel}</div>
         ) : null}
 
-        {!viewerPolicy.isViewer && compilerPreviewSummary ? (
-          <section
-            aria-label="자동 정리 미리보기"
-            className={`${styles.previewNotice} ${styles.compilerPreviewNotice}`}
-          >
-            <div className={styles.compilerPreviewHeader}>
-              <div>
-                <strong>자동 정리 미리보기</strong>
-                <span>
-                  점수 {formatCompilerScore(compilerPreviewSummary.quality.beforeScore)} →{" "}
-                  {formatCompilerScore(compilerPreviewSummary.quality.afterScore)} · 거리{" "}
-                  {formatCompilerScore(compilerPreviewSummary.quality.compilationDistance)}
-                </span>
-              </div>
-              <div className={styles.compilerPreviewActions}>
-                <button onClick={cancelAutomaticOrganization} type="button">
-                  취소
-                </button>
-                <button onClick={applyAutomaticOrganization} type="button">
-                  적용
-                </button>
-              </div>
-            </div>
+        {!viewerPolicy.isViewer ? (
+          <>
+            {compilerPreviewSummary ? (
+              <section
+                aria-label="자동 정리 미리보기"
+                className={`${styles.previewNotice} ${styles.compilerPreviewNotice}`}
+              >
+                <div className={styles.compilerPreviewHeader}>
+                  <div>
+                    <span>자동 정리 결과</span>
+                    <strong>{compilerPreviewSummary.outcome.headline}</strong>
+                    <p>{compilerPreviewSummary.outcome.reviewSummary}</p>
+                  </div>
+                  <div className={styles.compilerPreviewActions}>
+                    <button onClick={cancelAutomaticOrganization} type="button">
+                      원래대로
+                    </button>
+                    <button onClick={applyAutomaticOrganization} type="button">
+                      이 배치 적용
+                    </button>
+                  </div>
+                </div>
 
-            <div className={styles.compilerPreviewDetails}>
-              <CompilerPreviewDetail
-                emptyLabel="변경 없음"
-                items={compilerPreviewSummary.changeGroups.map(({ count, label }) => `${label} ${count}`)}
-                label="변경"
-              />
-              <CompilerPreviewDetail
-                emptyLabel="진단 없음"
-                items={compilerPreviewSummary.diagnosticGroups.map(({ count, label }) => `${label} ${count}`)}
-                label="진단"
-              />
-              <CompilerPreviewDetail
-                emptyLabel="일반 규칙"
-                items={compilerPreviewSummary.referenceTemplateIds}
-                label="근거"
-                title={[
-                  `후보 ${compilerPreviewSummary.candidateId}`,
-                  `Compiler ${compilerPreviewSummary.compilerVersion}`
-                ].join(" · ")}
-              />
-            </div>
+                {compilerPreviewSummary.outcome.items.length > 0 ? (
+                  <ul className={styles.compilerPreviewOutcomes}>
+                    {compilerPreviewSummary.outcome.items.map((item) => (
+                      <li data-tone={item.tone} key={item.key}>
+                        <span>{item.label}</span>
+                        <strong>{item.summary}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={styles.compilerPreviewEmptyOutcome}>
+                    추적 지표에서 표시할 배치 문제가 없습니다.
+                  </p>
+                )}
 
-            {compilerPreviewSummary.diagnosticSummaries.length > 0 ? (
-              <p className={styles.compilerPreviewDiagnostic}>
-                {compilerPreviewSummary.diagnosticSummaries.slice(0, 2).join(" · ")}
-                {compilerPreviewSummary.diagnosticSummaries.length > 2
-                  ? ` 외 ${compilerPreviewSummary.diagnosticSummaries.length - 2}`
-                  : ""}
-              </p>
+                <div className={styles.compilerPreviewDetails}>
+                  <CompilerPreviewDetail
+                    emptyLabel="변경 없음"
+                    items={compilerPreviewSummary.changeGroups.map(
+                      ({ count, label }) => `${label} ${count}`
+                    )}
+                    label="변경"
+                  />
+                  <CompilerPreviewDetail
+                    emptyLabel="확인 없음"
+                    items={compilerPreviewSummary.diagnosticGroups.map(
+                      ({ count, label }) => `${label} ${count}`
+                    )}
+                    label="확인"
+                  />
+                </div>
+
+                <details className={styles.compilerPreviewTechnical}>
+                  <summary>기술 세부 정보</summary>
+                  <div className={styles.compilerPreviewTechnicalBody}>
+                    <CompilerPreviewDetail
+                      emptyLabel="계산 없음"
+                      items={[
+                        `내부 cost ${formatCompilerScore(compilerPreviewSummary.quality.beforeScore)} → ${formatCompilerScore(compilerPreviewSummary.quality.afterScore)}`,
+                        `변경 cost ${formatCompilerScore(compilerPreviewSummary.quality.compilationDistance)}`
+                      ]}
+                      label="cost"
+                    />
+                    <CompilerPreviewDetail
+                      emptyLabel="일반 규칙"
+                      items={compilerPreviewSummary.referenceTemplateIds}
+                      label="참고"
+                    />
+                    <p>
+                      후보 {compilerPreviewSummary.candidateId} · Compiler{" "}
+                      {compilerPreviewSummary.compilerVersion}
+                    </p>
+                    {compilerPreviewSummary.diagnosticSummaries.length > 0 ? (
+                      <p className={styles.compilerPreviewDiagnostic}>
+                        {compilerPreviewSummary.diagnosticSummaries.slice(0, 2).join(" · ")}
+                        {compilerPreviewSummary.diagnosticSummaries.length > 2
+                          ? ` 외 ${compilerPreviewSummary.diagnosticSummaries.length - 2}`
+                          : ""}
+                      </p>
+                    ) : null}
+                  </div>
+                </details>
+              </section>
+            ) : isPreviewActive ? (
+              <div className={styles.previewNotice} role="status">
+                미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
+              </div>
             ) : null}
-          </section>
-        ) : !viewerPolicy.isViewer && isPreviewActive ? (
-          <div className={styles.previewNotice} role="status">
-            미리보기입니다. 전용 시작 패널에서 적용 또는 취소를 선택하세요.
-          </div>
+          </>
         ) : null}
 
         <div

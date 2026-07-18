@@ -216,6 +216,25 @@ test("verifyAwsConnection converts a concurrent verified-account unique violatio
   );
 });
 
+test("listAwsConnections returns pending and failed attempts only when explicitly requested", async () => {
+  const result = await listAwsConnections(
+    { accessContext },
+    createListRepository([
+      createAwsConnectionRecord({ id: "pending", status: "pending" }),
+      createAwsConnectionRecord({ id: "failed", status: "failed" }),
+      createAwsConnectionRecord({
+        id: "verified",
+        accountId: "123456789012",
+        roleArn: "arn:aws:iam::123456789012:role/SketchCatchTerraformExecutionRole",
+        status: "verified"
+      })
+    ]),
+    { includeUnverified: true }
+  );
+
+  assert.deepEqual(result.map((connection) => connection.id), ["pending", "failed", "verified"]);
+});
+
 test("AWS connection templates trust every configured runtime caller role", async () => {
   const repository = createInMemoryAwsConnectionRepository();
   const result = await createAwsConnection(

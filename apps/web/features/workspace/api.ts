@@ -1253,9 +1253,16 @@ export async function createAwsConnectionSetup({
 }
 
 export async function listAwsConnections(
-  options: { readonly signal?: AbortSignal | undefined } = {}
+  options: {
+    readonly includeUnverified?: boolean | undefined;
+    readonly signal?: AbortSignal | undefined;
+  } = {}
 ): Promise<AwsConnection[]> {
-  const response = await listAwsConnectionSettings(options);
+  const query = options.includeUnverified ? "?includeUnverified=true" : "";
+  const response = await apiFetch<AwsConnectionListResponse>(`/aws/connections${query}`, {
+    auth: true,
+    ...(options.signal ? { signal: options.signal } : {})
+  });
 
   return response.awsConnections;
 }
@@ -1263,12 +1270,10 @@ export async function listAwsConnections(
 export async function listAwsConnectionSettings(
   options: { readonly signal?: AbortSignal | undefined } = {}
 ): Promise<AwsConnectionListResponse> {
-  const response = await apiFetch<AwsConnectionListResponse>("/aws/connections", {
+  return apiFetch<AwsConnectionListResponse>("/aws/connections", {
     auth: true,
     ...(options.signal ? { signal: options.signal } : {})
   });
-
-  return response;
 }
 
 export async function testAwsConnection(

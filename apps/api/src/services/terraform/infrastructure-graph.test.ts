@@ -9,6 +9,7 @@ import {
 } from "@sketchcatch/types";
 import { resourceDefinitions } from "@sketchcatch/types/resource-definitions";
 import { buildInfrastructureGraphFromDiagramJson } from "./infrastructure-graph.js";
+import { generateTerraformFromDiagramJson } from "./terraform-preview.js";
 
 test("buildInfrastructureGraphFromDiagramJson projects renderable resource nodes", () => {
   const graph = buildInfrastructureGraphFromDiagramJson({
@@ -198,6 +199,61 @@ test("buildInfrastructureGraphFromDiagramJson omits ASG fleet visualization inst
   assert.deepEqual(
     graph.nodes.map((node) => node.iac.resourceType),
     ["aws_autoscaling_group"]
+  );
+});
+
+test("buildInfrastructureGraphFromDiagramJson fail-closes analysis-excluded resources", () => {
+  const diagramJson = {
+    nodes: [
+      makeNode({
+        id: "lambda-1",
+        type: "aws_lambda_function",
+        kind: "resource",
+        label: "Legacy Lambda",
+        parameters: {
+          resourceType: "aws_lambda_function",
+          resourceName: "legacy_lambda",
+          fileName: "compute",
+          values: {
+            analysisExcluded: true,
+            functionName: "legacy-lambda",
+            handler: "index.handler",
+            runtime: "nodejs22.x"
+          }
+        }
+      }),
+      makeNode({
+        id: "vpc-1",
+        type: "aws_vpc",
+        kind: "resource",
+        label: "main",
+        parameters: {
+          resourceType: "aws_vpc",
+          resourceName: "main",
+          fileName: "network",
+          values: {
+            cidrBlock: "10.0.0.0/16"
+          }
+        }
+      })
+    ],
+    edges: [
+      {
+        id: "legacy-lambda-connection",
+        sourceNodeId: "lambda-1",
+        targetNodeId: "vpc-1"
+      }
+    ],
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+
+  const graph = buildInfrastructureGraphFromDiagramJson(diagramJson);
+
+  assert.deepEqual(graph.nodes.map((node) => node.id), ["vpc-1"]);
+  assert.deepEqual(graph.edges, []);
+  assert.doesNotMatch(
+    generateTerraformFromDiagramJson(diagramJson),
+    /resource "aws_lambda_function" "legacy_lambda"/
   );
 });
 

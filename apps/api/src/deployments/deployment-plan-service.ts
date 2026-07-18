@@ -3,9 +3,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   AiPreDeploymentAnalysisResult,
+  ArchitectureJson,
   AwsConnection,
   DeploymentOptimizationDecision,
   TerraformDesiredStateIdentity,
+  TerraformSyncFileInput,
   DeploymentStatus
 } from "@sketchcatch/types";
 import {
@@ -74,6 +76,8 @@ import {
   type TerraformRunResult
 } from "./terraform-runner.js";
 import { assertTerraformArtifactIsSafe } from "./terraform-artifact-safety.js";
+import { findAnalysisExcludedTerraformConflicts } from "../services/terraform/analysis-excluded-terraform-guard.js";
+import { listTerraformBlockIdentities } from "../services/terraform/terraform-to-diagram.js";
 import { restoreInfrastructureRollbackState } from "./infrastructure-rollback-state.js";
 import {
   restoreTerraformLockFile,
@@ -371,11 +375,6 @@ async function runDeploymentPlanOnce(
 
     const terraformArtifactContent = await readTerraformArtifactFile(workspace.mainFilePath);
     const workspaceTerraformFiles = preparedWorkspace.terraformFiles ?? [];
-    assertTerraformArtifactIsSafe(
-      createTerraformFilesSafetyContent(workspaceTerraformFiles, terraformArtifactContent),
-      { liveProfile: deployment.liveProfile, resourceValidationMode: "plan" }
-    );
-    const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     const preDeploymentTerraformFiles = workspaceTerraformFiles.length
       ? workspaceTerraformFiles
       : [
@@ -384,6 +383,15 @@ async function runDeploymentPlanOnce(
             terraformCode: toTerraformCodeString(terraformArtifactContent)
           }
         ];
+    assertArchitectureTerraformDoesNotIncludeAnalysisExcludedResource(
+      architecture.architectureJson,
+      preDeploymentTerraformFiles
+    );
+    assertTerraformArtifactIsSafe(
+      createTerraformFilesSafetyContent(workspaceTerraformFiles, terraformArtifactContent),
+      { liveProfile: deployment.liveProfile, resourceValidationMode: "plan" }
+    );
+    const terraformArtifactSha256 = createSha256(terraformArtifactContent);
     if (deployment.scope === "application") {
       const preDeploymentAnalysis = await analyzePreDeployment({
         architectureJson: architecture.architectureJson,
@@ -862,6 +870,25 @@ async function runDeploymentPlanOnce(
       await heartbeatProjectExecutionLease(planLeaseFence, leaseRepository, { now });
     }
     if (leaseHeartbeatError) throw leaseHeartbeatError;
+  }
+}
+
+function assertArchitectureTerraformDoesNotIncludeAnalysisExcludedResource(
+  architectureJson: ArchitectureJson,
+  terraformFiles: readonly TerraformSyncFileInput[]
+): void {
+  const conflicts = findAnalysisExcludedTerraformConflicts(
+    architectureJson,
+    listTerraformBlockIdentities({
+      terraformCode: "",
+      terraformFiles: terraformFiles.filter((file) => file.fileName.endsWith(".tf"))
+    })
+  );
+
+  if (conflicts.length > 0) {
+    throw new DeploymentConflictError(
+      `${conflicts[0]!.resourceAddress} matches an analysis-excluded resource and cannot be planned for deployment`
+    );
   }
 }
 

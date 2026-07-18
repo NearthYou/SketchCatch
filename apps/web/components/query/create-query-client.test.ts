@@ -69,19 +69,24 @@ test("project invalidation stays inside the active user cache", async () => {
   queryClient.clear();
 });
 
-test("AWS connection invalidation refreshes connection, dashboard, and cost data", async () => {
+test("AWS connection invalidation refreshes verified and recovery connection caches without crossing users", async () => {
   const queryClient = createAppQueryClient();
-  const connectionKey = queryKeys.awsConnections("user-1");
+  const verifiedConnectionKey = queryKeys.awsConnections("user-1");
+  const recoveryConnectionKey = queryKeys.awsConnections("user-1", true);
   const dashboardKey = queryKeys.dashboardOverview("user-1");
   const costKey = queryKeys.costUsage("user-1", "30d", "connection-1");
 
-  queryClient.setQueryData(connectionKey, []);
+  assert.notDeepEqual(verifiedConnectionKey, recoveryConnectionKey);
+
+  queryClient.setQueryData(verifiedConnectionKey, []);
+  queryClient.setQueryData(recoveryConnectionKey, []);
   queryClient.setQueryData(dashboardKey, {});
   queryClient.setQueryData(costKey, {});
 
   await invalidateAwsConnectionQueries(queryClient, "user-1");
 
-  assert.equal(queryClient.getQueryState(connectionKey)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState(verifiedConnectionKey)?.isInvalidated, true);
+  assert.equal(queryClient.getQueryState(recoveryConnectionKey)?.isInvalidated, true);
   assert.equal(queryClient.getQueryState(dashboardKey)?.isInvalidated, true);
   assert.equal(queryClient.getQueryState(costKey)?.isInvalidated, true);
   queryClient.clear();

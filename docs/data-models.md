@@ -2125,6 +2125,18 @@ type ReverseEngineeringScanResult = {
 - `importSuggestions`: Terraform import로 넘길 수 있는 제안
 - `scanErrors`: 일부 리소스를 읽지 못했을 때의 이유
 
+화면의 `supported`/`review_only` 표시는 저장하는 상태가 아니라 읽기 시점의 presentation 값이다.
+`DiscoveredResource.resourceType`, `analysisExcluded`, 관계 유무를 바탕으로 계산하므로, 과거
+`ReverseEngineeringScanResult` JSONB의 pre-draft 저장 형태도 이 표시 계산에 필요한 기존 필드를 그대로 제공한다.
+따라서 파생 presentation 계층에는 새 표시 필드나 DB migration이 필요 없으며, 이는 과거 JSONB와의 표시 계산
+호환성 근거다. 이 범위는 별도 API 응답 또는 저장 결과 읽기 경로 전반을 보장한다는 뜻은 아니다. 원본
+`providerResourceId`는 기술 원본 정보로 보존하고, 기본 화면 이름은 읽기 시점에 짧고 사람이 읽을 수 있는 이름으로
+유도한다.
+
+`AwsConnection`의 readiness 표시는 UI가 계산하지만, 스캔 권한은 API가 연결을 `verified` 상태로 확인한 경우에만 부여한다.
+
+ALB, CloudFront, ECS의 `supported` 표시는 provider type, 안정적인 import ID, Terraform fixture 검증 계약을 만족한 reader/adapter에만 부여한다. 이 계약을 만족하지 않는 다른 AWS Resource는 `review_only`다.
+
 스캔 중에 보여줄 진행 상황은 `ReverseEngineeringScanLogLine`으로 저장한다.
 
 ```ts

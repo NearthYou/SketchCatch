@@ -1,8 +1,12 @@
 const userRoot = (userId: string) => ["user", userId] as const;
+const awsConnectionsRoot = (userId: string) =>
+  [...userRoot(userId), "connections", "aws"] as const;
 
 export const queryKeys = {
   connections: (userId: string) => [...userRoot(userId), "connections"] as const,
-  awsConnections: (userId: string) => [...userRoot(userId), "connections", "aws"] as const,
+  awsConnectionsRoot,
+  awsConnections: (userId: string, includeUnverified = false) =>
+    [...awsConnectionsRoot(userId), includeUnverified ? "all-statuses" : "verified-only"] as const,
   awsConnectionSettings: (userId: string) =>
     [...userRoot(userId), "connections", "aws", "settings"] as const,
   costs: (userId: string) => [...userRoot(userId), "costs"] as const,
