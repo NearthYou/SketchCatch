@@ -703,43 +703,22 @@ async function hasDeploymentUsingAwsConnection(
   );
 }
 
-export function listAwsConnections(
-  input: {
-    accessContext: ProjectAccessContext;
-  },
-  repository: AwsConnectionRepository
-): Promise<AwsConnectionListResponse>;
-
-export function listAwsConnections(
-  input: {
-    accessContext: ProjectAccessContext;
-  },
-  repository: AwsConnectionRepository,
-  options: ListAwsConnectionsOptions
-): Promise<AwsConnection[]>;
 export async function listAwsConnections(
   input: {
     accessContext: ProjectAccessContext;
   },
   repository: AwsConnectionRepository,
-  options?: ListAwsConnectionsOptions
-): Promise<AwsConnectionListResponse | AwsConnection[]> {
+  options: ListAwsConnectionsOptions = {}
+): Promise<AwsConnectionListResponse> {
   const awsConnectionRows = await repository.listAccessibleAwsConnections(input.accessContext);
-
-  if (options) {
-    return (options.includeUnverified
-      ? awsConnectionRows
-      : awsConnectionRows.filter((awsConnection) => awsConnection.status === "verified")
-    ).map(toAwsConnection);
-  }
+  const visibleConnections = awsConnectionRows.filter(
+    (awsConnection) =>
+      awsConnection.deletionStartedAt === null &&
+      (options.includeUnverified || awsConnection.status === "verified")
+  );
 
   return {
-    awsConnections: awsConnectionRows
-      .filter(
-        (awsConnection) =>
-          awsConnection.status === "verified" && awsConnection.deletionStartedAt === null
-      )
-      .map(toAwsConnection),
+    awsConnections: visibleConnections.map(toAwsConnection),
     cleanupRetries: awsConnectionRows
       .filter(
         (awsConnection) =>

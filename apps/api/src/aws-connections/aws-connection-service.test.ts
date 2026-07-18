@@ -232,7 +232,11 @@ test("listAwsConnections returns pending and failed attempts only when explicitl
     { includeUnverified: true }
   );
 
-  assert.deepEqual(result.map((connection) => connection.id), ["pending", "failed", "verified"]);
+  assert.deepEqual(
+    result.awsConnections.map((connection) => connection.id),
+    ["pending", "failed", "verified"]
+  );
+  assert.deepEqual(result.cleanupRetries, []);
 });
 
 test("AWS connection templates trust every configured runtime caller role", async () => {

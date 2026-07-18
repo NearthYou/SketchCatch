@@ -142,6 +142,36 @@ test("AWS connection verification returns 409 when a previous connection needs c
   await app.close();
 });
 
+test("AWS connection list route preserves the canonical response envelope", async () => {
+  const repository = createRepository({
+    getRecord: () => createConnectionRecord(),
+    onClaim: () => undefined,
+    onDelete: () => undefined
+  });
+  const app = Fastify();
+  await registerAwsConnectionRoutes(app, {
+    getDatabaseClient: () => createAuthDatabaseClient(),
+    createAwsConnectionRepository: () => repository
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/aws/connections",
+    headers: { authorization: `Bearer ${await createAccessToken(userId)}` }
+  });
+  const body = response.json<{
+    awsConnections?: Array<{ id: string }>;
+    cleanupRetries?: unknown[];
+  }>();
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(Array.isArray(body), false);
+  assert.deepEqual(body.awsConnections?.map((connection) => connection.id), [connectionId]);
+  assert.deepEqual(body.cleanupRetries, []);
+
+  await app.close();
+});
+
 test("AWS connection routes do not expose unexpected database query details", async () => {
   const repository = createRepository({
     getRecord: () => undefined,
