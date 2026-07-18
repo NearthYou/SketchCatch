@@ -32,4 +32,7 @@ test("Settings refreshes an existing CodeConnection from AWS before presenting i
   assert.ok(loadEnd > loadStart);
   assert.match(loadSource, /await getAwsCodeConnection\(connection\.id\)/);
   assert.match(loadSource, /await refreshAwsCodeConnection\(connection\.id\)/);
+  assert.match(loadSource, /catch \(error\) \{/);
+  assert.match(loadSource, /return \[connection\.id, savedConnection\] as const/);
+  assert.match(loadSource, /AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다/);
 });

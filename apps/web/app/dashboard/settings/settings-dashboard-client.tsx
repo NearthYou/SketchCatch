@@ -412,12 +412,20 @@ export function SettingsDashboardClient() {
     void Promise.all(
       displayedVerifiedConnections.map(async (connection) => {
         const savedConnection = await getAwsCodeConnection(connection.id);
-        return [
-          connection.id,
-          savedConnection.codeConnection
-            ? await refreshAwsCodeConnection(connection.id)
-            : savedConnection
-        ] as const;
+        if (!savedConnection.codeConnection) return [connection.id, savedConnection] as const;
+        try {
+          return [connection.id, await refreshAwsCodeConnection(connection.id)] as const;
+        } catch (error) {
+          if (active) {
+            setErrorMessage(
+              getApiErrorMessage(
+                error,
+                "AWS 상태를 다시 확인하지 못해 저장된 연결 상태를 표시합니다."
+              )
+            );
+          }
+          return [connection.id, savedConnection] as const;
+        }
       })
     )
       .then((entries) => {
@@ -529,11 +537,6 @@ export function SettingsDashboardClient() {
                 actionPending={actionPending}
                 connection={codeConnections[selectedBuildAwsConnectionId]}
                 disabled={githubAuthorizationTarget.status === "github_app_not_configured"}
-                installationManagementUrl={
-                  githubAuthorizationTarget.status === "ready"
-                    ? githubAuthorizationTarget.installation.htmlUrl
-                    : null
-                }
                 onConnect={() => void connectGitHubBuild()}
                 onDisconnect={openGitHubBuildDisconnect}
                 onRefresh={() => void refreshGitHubBuildConnection()}
@@ -898,7 +901,6 @@ function GitHubBuildConnectionAction({
   actionPending,
   connection,
   disabled,
-  installationManagementUrl,
   onConnect,
   onDisconnect,
   onRefresh
@@ -906,7 +908,6 @@ function GitHubBuildConnectionAction({
   readonly actionPending: boolean;
   readonly connection: AwsCodeConnectionResponse | undefined;
   readonly disabled: boolean;
-  readonly installationManagementUrl: string | null;
   readonly onConnect: () => void;
   readonly onDisconnect: () => void;
   readonly onRefresh: () => void;
@@ -954,8 +955,7 @@ function GitHubBuildConnectionAction({
     );
   }
   const repositoryAccessState = deriveAwsCodeConnectionRepositoryAccessState(
-    connection.codeConnection.status,
-    installationManagementUrl
+    connection.codeConnection.status
   );
   if (repositoryAccessState) {
     return (

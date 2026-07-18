@@ -86,17 +86,14 @@ test("AWS CodeBuild authorization exposes the only expected GitHub account", () 
   });
 });
 
-test("an available AWS CodeConnection manages the existing GitHub installation instead of starting a new one", () => {
-  assert.deepEqual(
-    deriveAwsCodeConnectionRepositoryAccessState("AVAILABLE", installation.htmlUrl),
-    {
-      actionHref: "https://github.com/settings/installations/1",
-      actionLabel: "GitHub Repository 권한 관리",
-      description: "Repository 접근은 아직 확인되지 않았습니다",
-      status: "repository_access_unverified",
-      title: "AWS OAuth 연결됨"
-    }
-  );
+test("an available AWS CodeConnection opens installed GitHub Apps instead of starting a new AWS Connector installation", () => {
+  assert.deepEqual(deriveAwsCodeConnectionRepositoryAccessState("AVAILABLE"), {
+    actionHref: "https://github.com/settings/installations",
+    actionLabel: "AWS Connector 권한 관리",
+    description: "Repository 접근은 아직 확인되지 않았습니다",
+    status: "repository_access_unverified",
+    title: "AWS OAuth 연결됨"
+  });
 });
 
 test("pending AWS CodeConnections do not expose the repository access presentation", () => {
