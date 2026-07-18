@@ -1077,6 +1077,57 @@ test("createAmazonQArchitectureDraftResponse re-asks every required question for
     });
   }
 });
+test("createAmazonQArchitectureDraftResponse understands five additional natural-language clarification examples", async () => {
+  const provider = createFakeAmazonQProvider(() => "{}");
+  const scenarios = [
+    { questionId: "website_type", answer: "당근처럼 동네 중고거래 플랫폼을 만들고 싶어" },
+    { questionId: "traffic", answer: "출시 초기에는 이용자가 많지 않을 것 같아" },
+    { questionId: "database", answer: "회원가입 정보와 주문 내역을 저장해야 해" },
+    { questionId: "region", answer: "일본과 싱가포르 사용자가 대부분이야" },
+    { questionId: "file_upload", answer: "사용자가 프로필 사진을 올릴 수 있어야 해" }
+  ] as const;
+  const targetQuestionIds = new Set(scenarios.map(({ questionId }) => questionId));
+  const answers: Array<{ questionId: string; answer: string }> = [];
+  const prefixes = new Map<string, Array<{ questionId: string; answer: string }>>();
+
+  for (let index = 0; index < 15 && prefixes.size < scenarios.length; index += 1) {
+    const response = await createAmazonQArchitectureDraftResponse(
+      { prompt: "새로운 웹 서비스를 만들고 싶어요.", clarificationAnswers: answers },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+    if (!("status" in response)) assert.fail("Expected a required clarification question");
+    if (targetQuestionIds.has(response.questionId as (typeof scenarios)[number]["questionId"])) {
+      prefixes.set(response.questionId, [...answers]);
+    }
+    answers.push({
+      questionId: response.questionId,
+      answer: response.suggestions[0] ?? "추천해줘"
+    });
+  }
+
+  const results = [];
+  for (const scenario of scenarios) {
+    const prefix = prefixes.get(scenario.questionId);
+    if (prefix === undefined) assert.fail(`Missing prefix for ${scenario.questionId}`);
+    const response = await createAmazonQArchitectureDraftResponse(
+      {
+        prompt: "새로운 웹 서비스를 만들고 싶어요.",
+        clarificationAnswers: [...prefix, scenario]
+      },
+      { provider, creditPolicy: confirmedCreditPolicy }
+    );
+    results.push({
+      questionId: scenario.questionId,
+      answer: scenario.answer,
+      accepted: !("status" in response) || response.questionId !== scenario.questionId
+    });
+  }
+
+  assert.deepEqual(
+    results,
+    scenarios.map((scenario) => ({ ...scenario, accepted: true }))
+  );
+});
 test("createAmazonQArchitectureDraftResponse returns the Amazon Q architecture preview when requirements are complete", async () => {
   let requestedPrompt = "";
   let requestedPayload: unknown;

@@ -1299,14 +1299,19 @@ function isClarificationAnswerValid(
     case "database":
       return isNaturalBooleanAnswer(normalizedAnswer) || hasPromptTerm(normalizedAnswer, [
         "database", "postgres", "postgresql", "mysql", "dynamodb", "rds", "db를", "db가",
-        "데이터베이스", "사용자 정보", "게시글"
+        "데이터베이스", "사용자 정보", "회원가입", "회원 정보", "주문 내역", "결제 내역",
+        "데이터 저장", "저장해야", "게시글"
       ]);
     case "ssl":
       return isNaturalBooleanAnswer(normalizedAnswer)
         || hasPromptTerm(normalizedAnswer, ["ssl", "https", "http", "인증서", "보안", "도메인"]);
     case "file_upload":
       return isNaturalBooleanAnswer(normalizedAnswer)
-        || hasPromptTerm(normalizedAnswer, ["file upload", "upload", "파일 업로드", "이미지 업로드", "문서 업로드", "동영상 업로드", "대용량 파일", "텍스트만"]);
+        || hasPromptTerm(normalizedAnswer, [
+          "file upload", "upload", "파일 업로드", "이미지 업로드", "문서 업로드", "동영상 업로드",
+          "대용량 파일", "텍스트만", "프로필 사진", "사진을 올", "파일을 올", "문서를 올",
+          "영상을 올", "첨부"
+        ]);
     case "realtime":
       return isNaturalBooleanAnswer(normalizedAnswer)
         || hasPromptTerm(normalizedAnswer, ["realtime", "real-time", "실시간", "채팅", "알림", "websocket", "sse", "데이터 업데이트"]);
@@ -1315,7 +1320,10 @@ function isClarificationAnswerValid(
         "리액트", "뷰", "앵귤러", "넥스트", "일반 웹", "순수 자바스크립트"
       ]) || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "region":
-      return hasPromptTerm(normalizedAnswer, ["국내", "해외", "전 세계", "전세계", "가까운 곳"])
+      return hasPromptTerm(normalizedAnswer, [
+        "국내", "해외", "전 세계", "전세계", "가까운 곳", "한국", "서울", "일본", "도쿄",
+        "싱가포르", "중국", "미국", "유럽", "아시아"
+      ])
         || hasUncertainPreferenceAnswer(normalizedAnswer);
     case "budget":
       return /\d/u.test(normalizedAnswer)
