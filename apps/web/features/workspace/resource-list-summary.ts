@@ -96,7 +96,11 @@ function buildTerraformResourceListItem(
     iconUrl: node.iconUrl,
     node,
     nodeId: node.id,
-    rows: buildTerraformResourceRows(parameters.values, definitions),
+    rows: buildTerraformResourceRows(
+      parameters.values,
+      definitions,
+      new Set(node.metadata?.reverseEngineering?.protectedValueKeys ?? [])
+    ),
     status: parameters.invalid || validation.invalid ? "invalid" : "ready",
     terraformAddress: getTerraformAddress(
       parameters.terraformBlockType,
@@ -114,7 +118,8 @@ function getTerraformResourceDisplayName(node: DiagramNode, resourceType: string
 
 function buildTerraformResourceRows(
   values: Record<string, unknown>,
-  definitions: readonly ParameterCatalogDefinition[]
+  definitions: readonly ParameterCatalogDefinition[],
+  hiddenKeys: ReadonlySet<string>
 ): ResourceListSummaryRow[] {
   const rows: ResourceListSummaryRow[] = [];
   const usedKeys = new Set<string>();
@@ -127,7 +132,11 @@ function buildTerraformResourceRows(
   for (const definition of summaryDefinitions) {
     const value = values[definition.name];
 
-    if (usedKeys.has(definition.name) || isEmptyParameterValue(value)) {
+    if (
+      hiddenKeys.has(definition.name) ||
+      usedKeys.has(definition.name) ||
+      isEmptyParameterValue(value)
+    ) {
       continue;
     }
 
@@ -141,7 +150,7 @@ function buildTerraformResourceRows(
   }
 
   for (const [key, value] of Object.entries(values)) {
-    if (usedKeys.has(key) || isEmptyParameterValue(value)) {
+    if (hiddenKeys.has(key) || usedKeys.has(key) || isEmptyParameterValue(value)) {
       continue;
     }
 

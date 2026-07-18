@@ -82,7 +82,7 @@ export function WorkspaceAiComposer({
 
       <div className={styles.composerBox}>
         <textarea
-          aria-label="Architecture 요구사항 입력"
+          aria-label="아키텍처 요구사항 입력"
           maxLength={4_000}
           onChange={handleChange}
           onCompositionEnd={handleCompositionEnd}

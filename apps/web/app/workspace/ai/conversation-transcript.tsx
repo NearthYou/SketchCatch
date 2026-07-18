@@ -13,6 +13,7 @@ import {
   getRetryRequestLabel,
   isSuggestionDisabled,
   shouldAutoFollowTranscript,
+  shouldReleaseForcedTranscriptFollow,
   type WorkspaceAiRequestState
 } from "./workspace-ai-presentation";
 import styles from "./workspace-ai.module.css";
@@ -25,6 +26,7 @@ export function ConversationTranscript({
   messages,
   onCancelRequest,
   onExcludeCandidate,
+  onOpenPreview,
   onRetry,
   onSuggestionSelect,
   onUndoExclusion,
@@ -39,6 +41,7 @@ export function ConversationTranscript({
   readonly messages: readonly AiStartMessage[];
   readonly onCancelRequest: () => void;
   readonly onExcludeCandidate: (candidateId: string) => void;
+  readonly onOpenPreview: () => void;
   readonly onRetry: () => Promise<void>;
   readonly onSuggestionSelect: (message: AiStartMessage, suggestion: string) => void;
   readonly onUndoExclusion: () => void;
@@ -81,12 +84,19 @@ export function ConversationTranscript({
     const scrollElement = scrollRef.current;
     if (!scrollElement) return;
 
-    shouldFollowRef.current = shouldAutoFollowTranscript({
+    const scrollPosition = {
       clientHeight: scrollElement.clientHeight,
       scrollHeight: scrollElement.scrollHeight,
-      scrollTop: scrollElement.scrollTop,
+      scrollTop: scrollElement.scrollTop
+    };
+    shouldFollowRef.current = shouldAutoFollowTranscript({
+      ...scrollPosition,
       source: "scroll"
     });
+
+    if (shouldReleaseForcedTranscriptFollow(scrollPosition)) {
+      forcedFollowTargetMessageCountRef.current = null;
+    }
   }
 
   function handleSuggestionSelect(message: AiStartMessage, suggestion: string): void {
@@ -125,7 +135,7 @@ export function ConversationTranscript({
               </div>
 
               {message.role === "assistant" && message.suggestions?.length ? (
-                <div aria-label="Assistant 선택지" className={styles.suggestionList} role="group">
+                <div aria-label="답변 선택지" className={styles.suggestionList} role="group">
                   {message.suggestions.map((suggestion) => {
                     const selected = selectedForQuestion?.label === suggestion;
                     return (
@@ -212,8 +222,10 @@ export function ConversationTranscript({
 
         {hasFinalPreview ? (
           <div className={styles.previewArrival} role="status">
-            <span>최종 Preview 준비됨</span>
-            <a href="#final-architecture-preview">Preview로 이동</a>
+            <span>초안이 준비됐어요</span>
+            <button onClick={onOpenPreview} type="button">
+              미리보기 보기
+            </button>
           </div>
         ) : null}
       </div>

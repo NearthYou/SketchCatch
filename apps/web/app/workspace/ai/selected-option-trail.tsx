@@ -11,7 +11,7 @@ export function SelectedOptionTrail({
   const content = (
     <div className={styles.selectionTrailBody}>
       {selections.length === 0 ? (
-        <p className={styles.selectionTrailEmpty}>선택한 option 없음</p>
+        <p className={styles.selectionTrailEmpty}>선택한 답변 없음</p>
       ) : (
         <ol className={styles.selectionTrailList}>
           {selections.map((selection) => (
@@ -30,7 +30,7 @@ export function SelectedOptionTrail({
   if (compact) {
     return (
       <details className={styles.selectionTrailCompact}>
-        <summary>선택한 option 보기</summary>
+        <summary>선택한 답변 보기</summary>
         {content}
       </details>
     );
@@ -39,7 +39,7 @@ export function SelectedOptionTrail({
   return (
     <section aria-labelledby="selected-option-trail-heading" className={styles.selectionTrail}>
       <div className={styles.selectionTrailHeader}>
-        <h2 id="selected-option-trail-heading">선택한 option</h2>
+        <h2 id="selected-option-trail-heading">선택한 답변</h2>
       </div>
       {content}
     </section>
