@@ -25,6 +25,8 @@ export type TerraformVirtualFile = {
 
 const TERRAFORM_STANDARD_FILE_NAMES = ["main.tf"] as const;
 const TERRAFORM_FILE_SORT_ORDER = ["providers.tf", "main.tf"] as const;
+const TERRAFORM_MANAGED_REFERENCE_PATTERN =
+  /\b(?:data\.(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+|(?:aws|kubernetes)_[A-Za-z0-9_]+\.[A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_-]+)*\b/g;
 
 export function toDiagramFingerprint(value: unknown): string {
   return JSON.stringify(value);
@@ -257,9 +259,10 @@ export function mergeGeneratedTerraformFiles(
     .filter(
       (address) => !generatedAddresses.has(address) && !preservedResourceAddresses.has(address)
     );
-  const nextFiles = removeTerraformBlocksByAddress(existingFiles, staleManagedAddresses).map(
-    (file) => ({ ...file })
-  );
+  const nextFiles = removeTerraformBlocksAndDependentOutputsByAddress(
+    existingFiles,
+    staleManagedAddresses
+  ).map((file) => ({ ...file }));
 
   upsertGeneratedTerraformOutputs(nextFiles, generatedFiles);
 
@@ -310,7 +313,9 @@ export function mergeGeneratedTerraformFiles(
     }
   }
 
-  return nextFiles.sort((left, right) => compareTerraformFileNames(left.fileName, right.fileName));
+  return removeTerraformOutputsWithUndeclaredManagedReferences(nextFiles).sort((left, right) =>
+    compareTerraformFileNames(left.fileName, right.fileName)
+  );
 }
 
 export function createTerraformFilesForRefresh({
@@ -566,6 +571,22 @@ export function removeTerraformBlocksByAddress(
   return didRemoveBlock ? nextFiles : [...files];
 }
 
+export function removeTerraformBlocksAndDependentOutputsByAddress(
+  files: readonly TerraformVirtualFile[],
+  addresses: Iterable<string>
+): TerraformVirtualFile[] {
+  const addressSet = new Set(addresses);
+  const nextFiles = removeTerraformBlocksByAddress(files, addressSet);
+
+  if (addressSet.size === 0) {
+    return nextFiles;
+  }
+
+  return removeTerraformOutputBlocks(nextFiles, (block) =>
+    terraformOutputReferencesAnyAddress(block.code, addressSet)
+  );
+}
+
 export type TerraformBlockLocation = {
   readonly address: string;
   readonly blockType: "resource" | "data";
@@ -784,6 +805,76 @@ function parseTerraformOutputBlocks(terraformCode: string): TerraformOutputBlock
   }
 
   return blocks;
+}
+
+function removeTerraformOutputsWithUndeclaredManagedReferences(
+  files: readonly TerraformVirtualFile[]
+): TerraformVirtualFile[] {
+  const declaredAddresses = new Set(parseTerraformFiles(files).map((block) => block.address));
+
+  return removeTerraformOutputBlocks(files, (block) =>
+    getTerraformManagedReferenceAddresses(block.code).some(
+      (address) => !declaredAddresses.has(address)
+    )
+  );
+}
+
+function removeTerraformOutputBlocks(
+  files: readonly TerraformVirtualFile[],
+  shouldRemove: (block: TerraformOutputBlockLocation) => boolean
+): TerraformVirtualFile[] {
+  let didRemoveOutput = false;
+  const nextFiles = files.map((file) => {
+    const removableOutputs = parseTerraformOutputBlocks(file.code)
+      .filter(shouldRemove)
+      .sort((left, right) => right.startOffset - left.startOffset);
+
+    if (removableOutputs.length === 0) {
+      return file;
+    }
+
+    didRemoveOutput = true;
+    let nextCode = file.code;
+
+    for (const output of removableOutputs) {
+      let removeEndOffset = output.endOffset;
+
+      if (nextCode.slice(removeEndOffset, removeEndOffset + 2) === "\r\n") {
+        removeEndOffset += 2;
+      } else if (nextCode[removeEndOffset] === "\n") {
+        removeEndOffset += 1;
+      }
+
+      nextCode = `${nextCode.slice(0, output.startOffset)}${nextCode.slice(removeEndOffset)}`;
+    }
+
+    return {
+      ...file,
+      code: normalizeTerraformCodeAfterBlockRemoval(nextCode)
+    };
+  });
+
+  return didRemoveOutput ? nextFiles : [...files];
+}
+
+function terraformOutputReferencesAnyAddress(
+  terraformCode: string,
+  addresses: ReadonlySet<string>
+): boolean {
+  return getTerraformManagedReferenceAddresses(terraformCode).some((address) =>
+    addresses.has(address)
+  );
+}
+
+function getTerraformManagedReferenceAddresses(terraformCode: string): string[] {
+  return Array.from(terraformCode.matchAll(TERRAFORM_MANAGED_REFERENCE_PATTERN), (match) => {
+    const reference = match[0];
+    const segments = reference.split(".");
+
+    return reference.startsWith("data.")
+      ? segments.slice(0, 3).join(".")
+      : segments.slice(0, 2).join(".");
+  });
 }
 
 function countBraceDelta(line: string): number {

@@ -37,7 +37,7 @@ import {
   hasAuthoritativeTerraformSource,
   markTerraformSourceAuthoritative,
   parseTerraformFiles,
-  removeTerraformBlocksByAddress,
+  removeTerraformBlocksAndDependentOutputsByAddress,
   toTerraformRefreshFingerprint,
   type TerraformSaveBanner,
   type TerraformVirtualFile
@@ -1277,7 +1277,10 @@ export const TerraformCodePanel = forwardRef<
       return;
     }
 
-    const nextFiles = removeTerraformBlocksByAddress(terraformFiles, deletedAddresses);
+    const nextFiles = removeTerraformBlocksAndDependentOutputsByAddress(
+      terraformFiles,
+      deletedAddresses
+    );
     const didRemoveBlock = nextFiles.some((file, index) => file !== terraformFiles[index]);
 
     if (!didRemoveBlock) {
