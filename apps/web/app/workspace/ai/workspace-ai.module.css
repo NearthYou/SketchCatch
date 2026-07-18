@@ -9,7 +9,7 @@
   background: var(--ai-canvas);
   color: var(--ai-text);
   display: grid;
-  font-family: var(--font-pretendard), "Pretendard", sans-serif;
+  font-family: var(--font-sans);
   grid-template-rows: 64px minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;

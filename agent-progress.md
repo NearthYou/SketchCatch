@@ -36,9 +36,12 @@ Short English-only working log for the current agent context. Older records are 
 
 - Added one auditable 6px presentation increment to every explicit and browser-default Web text size, including both inline text sizes, without changing existing base values; preserved one documented shape-only zero-size exception.
 - Unified UI and code typography on the bundled Pretendard 1.3.9 family and kept the existing package-backed font loading path.
+- Audited every CSS and inline font-family declaration, removed the landing page's duplicate font-face path, and routed the AI page through the shared Pretendard token.
+- Added the official version-pinned Pretendard 1.3.9 dynamic-subset stylesheet to the generated standalone S3 audience page, which cannot inherit the Web app token, and aligned its body/title size and title weight with the presentation adjustments.
+- Strengthened the typography contract to cover the package version, shared aliases, form-control inheritance, inline styles, and accidental local font-face reintroduction.
 - Reduced all 448 explicit text weights above 400 by one 100-point Pretendard step, including browser-default headings and strong text, while preserving regular body weight and font-face metadata.
 - Startup harness exposed an oversized progress log; duplicate archived records were removed, and the final harness passes.
-- Confirmed local PostgreSQL and Redis are running, focused typography and dependent Web tests pass 135/135, Web lint/typecheck pass, and the root production build passes.
+- Confirmed local PostgreSQL and Redis are running, focused typography and dependent Web tests pass 135/135, the strengthened typography audit passes 4/4, and root lint/typecheck/build pass.
 - No DB schema, migration, cloud mutation, Terraform execution, deployment, or Git/CI/CD handoff was performed.
 
 ## Broken Or Unverified

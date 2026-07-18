@@ -140,19 +140,52 @@ test("explicit text weights are one Pretendard step lighter", () => {
 test("all web typography resolves to the bundled Pretendard 1.3.9 family", () => {
   const layout = readFileSync(join(webRoot, "app", "layout.tsx"), "utf8");
   const globalStyles = readFileSync(join(webRoot, "app", "globals.css"), "utf8");
+  const packageJson = readFileSync(join(webRoot, "package.json"), "utf8");
+  const landingStyles = readFileSync(
+    join(webRoot, "features", "landing", "product-entry.module.css"),
+    "utf8"
+  );
+  const diagramStyles = readFileSync(
+    join(webRoot, "features", "diagram-editor", "diagram-editor.module.css"),
+    "utf8"
+  );
+  const aiWorkbenchStyles = readFileSync(
+    join(webRoot, "features", "workspace", "workspace-ai-workbench.module.css"),
+    "utf8"
+  );
+  const templateLibrarySource = readFileSync(
+    join(webRoot, "features", "resource-settings", "template-library.ts"),
+    "utf8"
+  );
 
   assert.match(layout, /pretendard\/dist\/web\/static\/pretendard-dynamic-subset\.css/);
+  assert.match(packageJson, /"pretendard":\s*"1\.3\.9"/);
   assert.match(globalStyles, /--font-sans:\s*"Pretendard",\s*sans-serif;/);
   assert.match(globalStyles, /--font-code:\s*var\(--font-sans\);/);
+  assert.match(landingStyles, /--landing-font:\s*var\(--font-sans\);/);
+  assert.match(diagramStyles, /--workspace-font:\s*var\(--font-sans\);/);
+  assert.match(aiWorkbenchStyles, /--ai-workbench-font:\s*var\(--font-sans\);/);
+  assert.match(
+    templateLibrarySource,
+    /cdn\.jsdelivr\.net\/gh\/orioncactus\/pretendard@v1\.3\.9\/dist\/web\/static\/pretendard-dynamic-subset\.min\.css/
+  );
+  assert.match(templateLibrarySource, /font:22px\/1\.6 Pretendard,sans-serif/);
+  assert.match(templateLibrarySource, /h1\{font-size:38px;font-weight:600\}/);
   assert.match(
     globalStyles,
     /code,[\s\S]*kbd,[\s\S]*pre,[\s\S]*samp\s*\{[^}]*font-family:\s*var\(--font-sans\);/s
   );
+  assert.match(
+    globalStyles,
+    /button,[\s\S]*input,[\s\S]*select,[\s\S]*textarea\s*\{[^}]*font:\s*inherit;/s
+  );
 
-  const forbiddenFallbacks = /Inter|Geist|SFMono|Consolas|Liberation Mono|ui-monospace|monospace|Noto Sans KR/;
+  const forbiddenFallbacks =
+    /Inter|Geist|SFMono|Consolas|Liberation Mono|ui-monospace|monospace|Noto Sans KR|font-pretendard|Pretendard Landing/;
 
   for (const cssFile of cssFiles) {
     const styles = readFileSync(cssFile, "utf8");
+    assert.doesNotMatch(styles, /@font-face/, `${cssFile}: use the single package-backed font source`);
     const declarations = styles.matchAll(/font-family\s*:\s*([^;}]+)(?=[;}])/g);
 
     for (const declaration of declarations) {
@@ -161,6 +194,20 @@ test("all web typography resolves to the bundled Pretendard 1.3.9 family", () =>
         value,
         forbiddenFallbacks,
         `${cssFile}: font-family must resolve to Pretendard: ${declaration[0]}`
+      );
+    }
+  }
+
+  for (const sourceFile of sourceFiles) {
+    const source = readFileSync(sourceFile, "utf8");
+    const declarations = source.matchAll(/fontFamily\s*:\s*([^,}\r\n]+)/g);
+
+    for (const declaration of declarations) {
+      const value = declaration[1] ?? "";
+      assert.match(
+        value,
+        /--workspace-font|--font-sans/,
+        `${sourceFile}: inline fontFamily must resolve to the Pretendard token: ${declaration[0]}`
       );
     }
   }
